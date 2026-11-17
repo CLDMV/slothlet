@@ -92,7 +92,7 @@ beforeAll(() => {
 			"\t\tsilent: true,",
 			'\t\tpermissions: { policy: "allow", rules: [{ caller: "caller.**", target: "vault.**", effect: "deny" }] }',
 			"\t});",
-			`\tawait api.slothlet.api.add("plug2", ${JSON.stringify(path.join(PLUGIN, "api"))}, { moduleID: "plug2" });`,
+			`\tawait api.slothlet.api.add("plug2", ${JSON.stringify(path.join(PLUGIN, "api"))}, { id: "plug2" });`,
 			"\tout[`${mode}/${runtime}`] = await api.caller.viaPlugin();",
 			"\tawait api.slothlet.shutdown();",
 			"}",
@@ -476,7 +476,7 @@ describe.each(CONFIGS)("values a module hands out that no module made (#597) —
 
 	it("keeps a plugin's own helper, reached through its package name, as the plugin's", async () => {
 		const api = await create();
-		await api.slothlet.api.add("plug", path.join(PACKAGES, "plug", "api"), { moduleID: "plug" });
+		await api.slothlet.api.add("plug", path.join(PACKAGES, "plug", "api"), { id: "plug" });
 		const helper = await api.plug.leaf.helper();
 		const own = await import(pathToFileURL(path.join(PACKAGES, "plug", "lib", "helper.mjs")).href);
 		// The permission system is off here, so nothing is wrapped: the helper is the plugin's function itself, not a

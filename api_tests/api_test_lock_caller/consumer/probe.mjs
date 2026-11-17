@@ -165,7 +165,7 @@ let hookProbedIdentity = null;
  * it and stashes the result for {@link getHookProbedIdentity} to read back.
  *
  * A pinned hook (the default) runs with a slothlet context, so `identityProbe()`
- * resolves. An opted-out (`lockCaller: false`) hook may run with no context — in
+ * resolves. An opted-out (`pin: false`) hook may run with no context — in
  * async runtime a `self.*` access then throws; the error code is stashed instead
  * so the call does not reject and the opt-out is still observable.
  * @returns {void}
@@ -182,27 +182,27 @@ function identityHook() {
 /**
  * Register {@link identityHook} as a `before` hook on `pattern`. Runs as consumer
  * module code, so the hook manager pins the consumer's caller identity onto the
- * handler unless `options` opts out with `{ lockCaller: false }`.
- * @param {string} pattern - API path pattern to hook (without the `before:` prefix).
+ * handler unless `options` opts out with `{ pin: false }`.
+ * @param {string} pattern - API path pattern to hook (without the `:before` suffix).
  * @param {object} [options] - Hook options forwarded to `hook.on`.
  * @returns {string} The registered hook ID.
  * @public
  */
 export function registerIdentityHook(pattern, options) {
 	hookProbedIdentity = null;
-	return self.slothlet.hook.on(`before:${pattern}`, identityHook, options);
+	return self.slothlet.hook.on(`${pattern}:before`, identityHook, options);
 }
 
 /**
  * Register an already `lockCaller`-wrapped {@link identityHook} as a `before` hook.
  * The hook manager must respect the existing lock and not double-wrap it.
- * @param {string} pattern - API path pattern to hook (without the `before:` prefix).
+ * @param {string} pattern - API path pattern to hook (without the `:before` suffix).
  * @returns {string} The registered hook ID.
  * @public
  */
 export function registerPreLockedHook(pattern) {
 	hookProbedIdentity = null;
-	return self.slothlet.hook.on(`before:${pattern}`, self.slothlet.lockCaller(identityHook));
+	return self.slothlet.hook.on(`${pattern}:before`, self.slothlet.lockCaller(identityHook));
 }
 
 /**
@@ -223,12 +223,12 @@ function identityShortCircuitHook() {
 
 /**
  * Register {@link identityShortCircuitHook} as a `before` hook on `pattern`.
- * @param {string} pattern - API path pattern to hook (without the `before:` prefix).
+ * @param {string} pattern - API path pattern to hook (without the `:before` suffix).
  * @returns {string} The registered hook ID.
  * @public
  */
 export function registerShortCircuitIdentityHook(pattern) {
-	return self.slothlet.hook.on(`before:${pattern}`, identityShortCircuitHook);
+	return self.slothlet.hook.on(`${pattern}:before`, identityShortCircuitHook);
 }
 
 /**
@@ -285,14 +285,14 @@ function accessHook() {
 /**
  * Register {@link accessHook} as a `before` hook.
  * @param {string} pattern - The api path to hook.
- * @param {object} [options] - Hook options (`{ lockCaller: false }` opts out of the pin).
+ * @param {object} [options] - Hook options (`{ pin: false }` opts out of the pin).
  * @returns {*} The registration.
  * @example
- * await api.consumer.probe.registerAccessHook("producer.relay.viaDirect", { lockCaller: false });
+ * await api.consumer.probe.registerAccessHook("producer.relay.viaDirect", { pin: false });
  */
 export function registerAccessHook(pattern, options) {
 	hookProbedAccess = null;
-	return self.slothlet.hook.on(`before:${pattern}`, accessHook, options);
+	return self.slothlet.hook.on(`${pattern}:before`, accessHook, options);
 }
 
 /**

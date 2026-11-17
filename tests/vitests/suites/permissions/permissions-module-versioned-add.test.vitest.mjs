@@ -55,9 +55,9 @@ describe.each(CONFIGS)("versioned and array-path api.add from module code (#625)
 	 */
 	async function load(options = {}) {
 		api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, ...options });
-		await api.slothlet.api.add("victim", VICTIM, { moduleID: "victim" });
-		await api.slothlet.api.add("guest", GUEST, { moduleID: "guest" });
-		await api.slothlet.api.add("mgr", GUEST, { moduleID: "mgr" });
+		await api.slothlet.api.add("victim", VICTIM, { id: "victim" });
+		await api.slothlet.api.add("guest", GUEST, { id: "guest" });
+		await api.slothlet.api.add("mgr", GUEST, { id: "mgr" });
 		return api;
 	}
 
@@ -95,7 +95,7 @@ describe.each(CONFIGS)("versioned and array-path api.add from module code (#625)
 
 	it("leaves the host's versioned adds as they were", async () => {
 		await load();
-		await api.slothlet.api.add("lib", GUEST, { moduleID: "hv" }, { version: "v1" });
+		await api.slothlet.api.add("lib", GUEST, { id: "hv", version: { tag: "v1" } });
 		expect(typeof api.v1.lib.x.listSelf).toBe("function");
 	});
 

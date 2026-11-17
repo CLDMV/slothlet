@@ -90,7 +90,7 @@ describe.each(getMatrixConfigs())("No base directory (#471) > $name", ({ config 
 
 	it("permissions and removal work on an api.add-built tree", async () => {
 		api = await slothlet({ ...withoutBase(), permissions: { policy: "allow", rules: [] } });
-		await api.slothlet.api.add("tools", { exports: { ping: () => "pong" } }, { moduleID: "tools-mod" });
+		await api.slothlet.api.add("tools", { exports: { ping: () => "pong" } }, { id: "tools-mod" });
 		expect(await api.tools.ping()).toBe("pong");
 		expect(await api.slothlet.api.remove("tools-mod")).toBe(true);
 		expect(api.tools).toBeUndefined();

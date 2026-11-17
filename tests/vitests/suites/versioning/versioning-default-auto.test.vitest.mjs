@@ -38,8 +38,8 @@ describe.each(getMatrixConfigs())("Versioning > Default Auto > $name", ({ config
 		api = await slothlet({ ...config, base: `${BASE}/callers` });
 
 		// Register v1 first, then v2 — neither marked as default
-		await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1" });
-		await api.slothlet.api.add("auth", `${BASE}/v2`, {}, { version: "v2" });
+		await api.slothlet.api.add("auth", `${BASE}/v1`, { version: { tag: "v1" } });
+		await api.slothlet.api.add("auth", `${BASE}/v2`, { version: { tag: "v2" } });
 
 		const info = api.slothlet.versioning.list("auth");
 		expect(info.default).toBe("v2");
@@ -55,8 +55,8 @@ describe.each(getMatrixConfigs())("Versioning > Default Auto > $name", ({ config
 			// always fall through to default
 		});
 
-		await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1" });
-		await api.slothlet.api.add("auth", `${BASE}/v2`, {}, { version: "v2" });
+		await api.slothlet.api.add("auth", `${BASE}/v1`, { version: { tag: "v1" } });
+		await api.slothlet.api.add("auth", `${BASE}/v2`, { version: { tag: "v2" } });
 
 		// Should route to v2 (auto-selected default)
 		const result = api.unversionedCaller.callLogin("testUser");
@@ -66,8 +66,8 @@ describe.each(getMatrixConfigs())("Versioning > Default Auto > $name", ({ config
 	it("handles numeric prefix versions — picks highest", async () => {
 		api = await slothlet({ ...config, base: `${BASE}/callers` });
 
-		await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1" });
-		await api.slothlet.api.add("auth", `${BASE}/v2`, {}, { version: "v8" });
+		await api.slothlet.api.add("auth", `${BASE}/v1`, { version: { tag: "v1" } });
+		await api.slothlet.api.add("auth", `${BASE}/v2`, { version: { tag: "v8" } });
 
 		const info = api.slothlet.versioning.list("auth");
 		// v8 > v1 numerically
@@ -79,8 +79,8 @@ describe.each(getMatrixConfigs())("Versioning > Default Auto > $name", ({ config
 
 		// "2.0.0" and "2.0.0-alpha" normalise to the same [2,0,0] tuple.
 		// Tiebreak (aSuffix - bSuffix) should prefer "2.0.0" (stable, no suffix) over "2.0.0-alpha".
-		await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "2.0.0-alpha" });
-		await api.slothlet.api.add("auth", `${BASE}/v2`, {}, { version: "2.0.0" });
+		await api.slothlet.api.add("auth", `${BASE}/v1`, { version: { tag: "2.0.0-alpha" } });
+		await api.slothlet.api.add("auth", `${BASE}/v2`, { version: { tag: "2.0.0" } });
 
 		const info = api.slothlet.versioning.list("auth");
 		expect(info.default).toBe("2.0.0");
@@ -89,8 +89,8 @@ describe.each(getMatrixConfigs())("Versioning > Default Auto > $name", ({ config
 	it("mounts a dotted version tag as one segment and dispatches the logical path to it", async () => {
 		api = await slothlet({ ...config, base: `${BASE}/callers` });
 
-		await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "1.0.0" });
-		await api.slothlet.api.add("auth", `${BASE}/v2`, {}, { version: "2.0.0" });
+		await api.slothlet.api.add("auth", `${BASE}/v1`, { version: { tag: "1.0.0" } });
+		await api.slothlet.api.add("auth", `${BASE}/v2`, { version: { tag: "2.0.0" } });
 
 		// The tag is a single segment: api["2.0.0"].auth, never api["2"]["0"]["0"].auth.
 		expect(Object.keys(api)).toEqual(expect.arrayContaining(["1.0.0", "2.0.0", "auth"]));

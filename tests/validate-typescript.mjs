@@ -217,12 +217,12 @@ function checkSelfProgram(dir, body) {
  * @throws {Error} If a check fails
  */
 async function testSelfRootTypes(tempDir) {
-	const { generateTypes } = await import("@cldmv/slothlet/typegen");
+	const { generate } = await import("@cldmv/slothlet/typegen");
 	const fixtures = join(process.cwd(), "api_tests", "api_test_self_parity");
 
 	const fnDir = join(tempDir, "self-fnroot");
 	mkdirSync(fnDir, { recursive: true });
-	await generateTypes({ dir: join(fixtures, "fnroot"), output: join(fnDir, "api.d.ts"), interfaceName: "FnRootApi" });
+	await generate({ base: join(fixtures, "fnroot"), output: join(fnDir, "api.d.ts"), name: "FnRootApi" });
 	checkSelfProgram(
 		fnDir,
 		[
@@ -242,7 +242,7 @@ async function testSelfRootTypes(tempDir) {
 
 	const objDir = join(tempDir, "self-objroot");
 	mkdirSync(objDir, { recursive: true });
-	await generateTypes({ dir: join(fixtures, "objroot"), output: join(objDir, "api.d.ts"), interfaceName: "ObjRootApi" });
+	await generate({ base: join(fixtures, "objroot"), output: join(objDir, "api.d.ts"), name: "ObjRootApi" });
 	checkSelfProgram(
 		objDir,
 		[

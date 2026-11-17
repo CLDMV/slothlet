@@ -180,8 +180,10 @@ describe.each([["eager"], ["lazy"]])("impl:warning / impl:error — runtime (%s 
 		// mutation is rejected and the command continues without throwing — a handled runtime error.
 		api.primitiveKey = 42;
 		await api.slothlet.api.add("primitiveKey", TEST_DIRS.API_TEST_MIXED, {
-			collisionMode: "merge",
-			moduleID: "prim-merge"
+			collision: {
+				mode: "merge"
+			},
+			id: "prim-merge"
 		});
 
 		const errors = events.filter((e) => e.event === "impl:error").map((e) => e.payload);

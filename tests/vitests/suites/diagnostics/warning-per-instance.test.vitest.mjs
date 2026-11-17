@@ -38,7 +38,7 @@ const CASES = [
  * @param {object} api - Bound api.
  * @returns {Promise<void>}
  */
-const raise = (api) => api.slothlet.api.add("extra", { exports: { ping: () => "pong" } }, { collisionMode: "replace" });
+const raise = (api) => api.slothlet.api.add("extra", { exports: { ping: () => "pong" } }, { collision: { mode: "replace" } });
 
 /**
  * Codes of an instance's captured warnings.

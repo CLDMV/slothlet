@@ -34,7 +34,7 @@ import { self } from "@cldmv/slothlet/runtime";
  */
 export async function addWhile(dir, name = "slowplug") {
 	globalThis.__slothletRound7Vault = self.vault;
-	await self.slothlet.api.add(name, dir, { moduleID: `${name}-mod` });
+	await self.slothlet.api.add(name, dir, { id: `${name}-mod` });
 	return self.vault.secret.secret();
 }
 
@@ -68,7 +68,7 @@ let detached = null;
  */
 export function addDetached(dir, name = "slowplug") {
 	globalThis.__slothletRound7Vault = self.vault;
-	detached = self.slothlet.api.add(name, dir, { moduleID: `${name}-mod` }).then(
+	detached = self.slothlet.api.add(name, dir, { id: `${name}-mod` }).then(
 		() => "added",
 		(error) => error?.code ?? "threw"
 	);

@@ -100,7 +100,7 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 
 			// Should be able to add to existing path without errors
 			await api.slothlet.api.add("math", TEST_DIRS.API_TEST, {
-				moduleID: "math-extra"
+				id: "math-extra"
 			});
 
 			// Original function should still exist
@@ -122,7 +122,7 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 
 			// Try to add collision content to math path (should be skipped by api: "skip")
 			await api.slothlet.api.add("", TEST_DIRS.API_TEST_COLLECTIONS, {
-				moduleID: "math-skip-shorthand"
+				id: "math-skip-shorthand"
 			});
 
 			// Original should still exist (collision was skipped)
@@ -146,7 +146,7 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 
 			// Add collision content to math path (should merge despite uppercase)
 			await api.slothlet.api.add("", TEST_DIRS.API_TEST_COLLECTIONS, {
-				moduleID: "math-merge-uppercase"
+				id: "math-merge-uppercase"
 			});
 
 			// Original should still exist (merged, keeps FIRST)
@@ -169,7 +169,7 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 
 			// Add collision content - should merge (invalid mode defaults to merge)
 			await api.slothlet.api.add("", TEST_DIRS.API_TEST_COLLECTIONS, {
-				moduleID: "math-invalid-mode"
+				id: "math-invalid-mode"
 			});
 
 			// Should behave like merge: both original and new exist
@@ -346,7 +346,7 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 
 			// Add math-collision.mjs content to existing math path - should merge
 			await api.slothlet.api.add("", TEST_DIRS.API_TEST_COLLECTIONS, {
-				moduleID: "math-collision"
+				id: "math-collision"
 			});
 
 			// Original function should still exist (merge keeps FIRST)
@@ -376,7 +376,7 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 			// namespace merges recursively and each side's exclusive members coexist.
 
 			await api.slothlet.api.add("", TEST_DIRS.API_TEST_COLLECTIONS, {
-				moduleID: "math-collision-replace"
+				id: "math-collision-replace"
 			});
 
 			// `add` is defined by both modules → merge-replace replaces it with the second's version.
@@ -405,7 +405,7 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 
 			// Replace math path with math-collision.mjs content
 			await api.slothlet.api.add("", TEST_DIRS.API_TEST_COLLECTIONS, {
-				moduleID: "math-collision"
+				id: "math-collision"
 			});
 
 			// Get NEW reference after replacement
@@ -444,7 +444,7 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 
 			// Try to add collision content to math path (should be skipped)
 			await api.slothlet.api.add("", TEST_DIRS.API_TEST_COLLECTIONS, {
-				moduleID: "math-skip"
+				id: "math-skip"
 			});
 
 			// Original should still exist
@@ -467,7 +467,7 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 
 			// Try to add collision content to math path (should warn and skip)
 			await api.slothlet.api.add("", TEST_DIRS.API_TEST_COLLECTIONS, {
-				moduleID: "math-warn"
+				id: "math-warn"
 			});
 
 			// Original should still exist
@@ -494,7 +494,7 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 			await withSuppressedSlothletErrorOutput(async () => {
 				await expect(
 					api.slothlet.api.add("", TEST_DIRS.API_TEST_COLLECTIONS, {
-						moduleID: "math-error"
+						id: "math-error"
 					})
 				).rejects.toThrow();
 			});
@@ -518,7 +518,7 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 			await withSuppressedSlothletErrorOutput(async () => {
 				await expect(
 					api.slothlet.api.add("", TEST_DIRS.API_TEST_COLLECTIONS, {
-						moduleID: "test-error"
+						id: "test-error"
 					})
 				).rejects.toThrow();
 			});
@@ -535,7 +535,7 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 
 			// Should be able to add (default merge mode)
 			await api.slothlet.api.add("extra", TEST_DIRS.API_TEST_MIXED, {
-				moduleID: "extra-test"
+				id: "extra-test"
 			});
 
 			expect(api.extra).toBeDefined();
@@ -560,7 +560,7 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 
 			// Add collision content to math path (should merge at all levels)
 			await api.slothlet.api.add("", TEST_DIRS.API_TEST_COLLECTIONS, {
-				moduleID: "nested-merge"
+				id: "nested-merge"
 			});
 
 			// Both original and new should coexist

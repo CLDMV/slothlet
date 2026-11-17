@@ -40,7 +40,7 @@ describe("apiCacheManager invalidation on removal", () => {
 
 		const baseCount = api.slothlet.diag.caches.getAllModuleIDs().length;
 
-		await api.slothlet.api.add("extras", ADD_DIR, { moduleID: "extras-mod" });
+		await api.slothlet.api.add("extras", ADD_DIR, { id: "extras-mod" });
 		expect(api.slothlet.diag.caches.getAllModuleIDs().length).toBe(baseCount + 1);
 
 		// Remove BY apiPath — the branch that previously orphaned the cache entry.
@@ -55,7 +55,7 @@ describe("apiCacheManager invalidation on removal", () => {
 
 		const baseCount = api.slothlet.diag.caches.getAllModuleIDs().length;
 
-		await api.slothlet.api.add("extras", ADD_DIR, { moduleID: "extras-mod" });
+		await api.slothlet.api.add("extras", ADD_DIR, { id: "extras-mod" });
 		expect(api.slothlet.diag.caches.getAllModuleIDs().length).toBe(baseCount + 1);
 
 		await api.slothlet.api.remove("extras-mod");
@@ -68,7 +68,7 @@ describe("apiCacheManager invalidation on removal", () => {
 
 		const baseCount = api.slothlet.diag.caches.getAllModuleIDs().length;
 
-		await api.slothlet.api.add("extras", ADD_DIR, { moduleID: "extras-mod" });
+		await api.slothlet.api.add("extras", ADD_DIR, { id: "extras-mod" });
 		await api.slothlet.api.remove("extras");
 		await api.slothlet.reload();
 
@@ -84,7 +84,7 @@ describe("apiCacheManager invalidation on removal", () => {
 		const baseCount = api.slothlet.diag.caches.getAllModuleIDs().length;
 
 		// api_test_self_assign exposes the `owner` module under "extras.owner".
-		await api.slothlet.api.add("extras", ADD_DIR, { moduleID: "extras-mod" });
+		await api.slothlet.api.add("extras", ADD_DIR, { id: "extras-mod" });
 		expect(api.slothlet.diag.caches.getAllModuleIDs().length).toBe(baseCount + 1);
 
 		// Remove only a sub-path; the module still owns the rest of "extras.*".

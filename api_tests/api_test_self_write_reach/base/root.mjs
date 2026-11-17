@@ -123,7 +123,7 @@ export function grantByRule() {
  */
 export async function grantByAdd(folder) {
 	try {
-		await self.slothlet.api.add("granted", folder, { moduleID: "granted", permissions: { allow: ["slothlet.**:write"] } });
+		await self.slothlet.api.add("granted", folder, { id: "granted", permissions: { allow: ["slothlet.**:write"] } });
 		return "done";
 	} catch (error) {
 		return error?.code ?? error?.name ?? String(error);

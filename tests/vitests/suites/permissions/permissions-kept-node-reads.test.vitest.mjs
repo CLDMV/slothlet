@@ -86,7 +86,7 @@ describe.each(matrix)(
 				silent: true,
 				permissions: { policy: "allow", caller: { attribution }, rules }
 			});
-			for (const name of ["secret", "reader"]) await api.slothlet.api.add(name, join(FIXTURE, name), { moduleID: name });
+			for (const name of ["secret", "reader"]) await api.slothlet.api.add(name, join(FIXTURE, name), { id: name });
 			for (const name of ["secret", "reader"]) await api[name];
 			return api;
 		};

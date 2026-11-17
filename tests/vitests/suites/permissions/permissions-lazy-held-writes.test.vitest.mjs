@@ -65,7 +65,7 @@ describe.each(getMatrixConfigs())("Permissions > writes through a held reference
 		const build = async (rules) => {
 			if (api) await api.shutdown();
 			api = await slothlet({ ...config, silent: true, base: FIXTURE, permissions: { policy: "deny", rules, caller: { attribution } } });
-			await api.slothlet.api.add("writer", WRITER, { moduleID: "writer" });
+			await api.slothlet.api.add("writer", WRITER, { id: "writer" });
 			return api;
 		};
 

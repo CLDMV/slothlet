@@ -25,7 +25,7 @@ let resolveCount = 0;
 
 /**
  * Register the "roles" principal.
- * @param {object} [options] - Extra definition fields (e.g. `maxAge`).
+ * @param {object} [options] - Extra definition fields (e.g. `ttl`).
  * @param {boolean} [options.record=false] - When true, the resolver records to `ledger.log` — a target only
  *   this plugin may call, so a successful resolve proves it ran as this plugin.
  * @param {boolean} [options.race=false] - When true, the user's roles are invalidated while the resolve

@@ -363,7 +363,7 @@ api.slothlet.hook.on("**:around", ({ path, args, next }) => {
 
 ## Pattern Matching
 
-The typePattern argument to `hook.on()` has the format `"pattern:type"` (path-first, type as trailing suffix). The old type-first form `"type:pattern"` (e.g. `"before:math.add"`) is deprecated — it still works but emits a deprecation warning and will be removed in v4.
+The typePattern argument to `hook.on()` has the format `"pattern:type"` (path-first, type as trailing suffix). A type-first string (e.g. `"before:math.add"`) names no hook type at its end and is refused with `INVALID_TYPE_PATTERN`.
 
 ```javascript
 // pattern = "math.add", type = "before"
@@ -697,12 +697,12 @@ Calls route through the [`versioning.dispatcher`](VERSIONING.md#discriminator) s
 
 ```javascript
 // Resolve through the instance's configured dispatcher, exactly as a call would:
-api.slothlet.hook.on("auth.login:before", handler, { versioned: true });
+api.slothlet.hook.on("auth.login:before", handler, { versioning: { enabled: true } });
 
 // Or override per registration — and select SEVERAL versions at once:
 api.slothlet.hook.on("auth.login:before", handler, {
 	id: "audit-login",
-	versionDispatcher: (allVersions, caller) => Object.keys(allVersions) // every installed major
+	versioning: { dispatcher: (allVersions, caller) => Object.keys(allVersions) } // every installed major
 });
 ```
 
@@ -716,7 +716,7 @@ api.slothlet.hook.on(
 	({ version, args }) => {
 		audit(`login attempt via ${version}`, args);
 	},
-	{ versioned: true }
+	{ versioning: { enabled: true } }
 );
 ```
 
@@ -805,10 +805,10 @@ self.slothlet.hook.on("math.*:before", ({ args }) => {
 });
 ```
 
-Pass `{ lockCaller: false }` to opt a hook out — the handler then runs without a pinned identity (and, like any un-pinned callback, may have no slothlet context to resolve `self` against). Opt out only for handlers that do not touch `self`. **Note:** while pin enforcement is on (the default), a `lockCaller: false` on a hook registered _from inside a module_ is ignored — it is forced back to pinned and a `HOOK_UNPINNED_IGNORED` warning fires; the opt-out takes effect only once pin enforcement is disabled via `hook: { pin: false }` at init or `api.slothlet.hook.pin.disable()`:
+Pass `{ pin: false }` to opt a hook out — the handler then runs without a pinned identity (and, like any un-pinned callback, may have no slothlet context to resolve `self` against). Opt out only for handlers that do not touch `self`. **Note:** while pin enforcement is on (the default), a `pin: false` on a hook registered _from inside a module_ is ignored — it is forced back to pinned and a `HOOK_UNPINNED_IGNORED` warning fires; the opt-out takes effect only once pin enforcement is disabled via `hook: { pin: false }` at init or `api.slothlet.hook.pin.disable()`:
 
 ```javascript
-self.slothlet.hook.on("math.*:before", logArgs, { lockCaller: false });
+self.slothlet.hook.on("math.*:before", logArgs, { pin: false });
 ```
 
 Auto-pinning applies only when the hook is registered from inside a module (there is a caller identity to capture) and the handler is not already `lockCaller`-wrapped. The remaining sections below cover the harder case slothlet **cannot** intercept: callbacks handed to a third-party framework.
@@ -894,15 +894,15 @@ Register a hook.
 
 **Parameters:**
 
-- `typePattern` (string) - Combined pattern and type, format: `"pattern:type"` (e.g. `"math.*:before"`). The legacy type-first form `"type:pattern"` (e.g. `"before:math.*"`) is deprecated — it still works but emits a deprecation warning and will be removed in v4.
+- `typePattern` (string) - Combined pattern and type, format: `"pattern:type"` (e.g. `"math.*:before"`). A type-first string (e.g. `"before:math.*"`) is refused with `INVALID_TYPE_PATTERN`.
 - `handler` (Function) - Hook handler (sync or async — see [Sync and Async Function Behavior](#sync-and-async-function-behavior))
 - `options.id` (string, optional) - Unique identifier (auto-generated if omitted)
 - `options.priority` (number, optional) - Execution priority; higher executes first (default: `0`)
 - `options.subset` (string, optional) - Execution phase: `"before"`, `"primary"` (default), or `"after"`
 - `options.pattern` (string, optional) - Path pattern that overrides the one parsed from `typePattern`
-- `options.versioned` (boolean, optional) - Resolve the pattern, written against the logical path, through the instance's configured `versioning.dispatcher` (default: `false`). See [Versioned Registration](#versioned-registration).
-- `options.versionDispatcher` (Function, optional) - `(allVersions, caller) => tag | tag[] | null` for this registration only, overriding the instance's dispatcher. Implies versioned registration.
-- `options.lockCaller` (boolean, optional) - Pin the registering module's caller identity onto the handler (default: `true`). See [Hooks auto-pin caller identity](#hooks-auto-pin-caller-identity).
+- `options.versioning.enabled` (boolean, optional) - Resolve the pattern, written against the logical path, through the instance's configured `versioning.dispatcher` (default: `false`). See [Versioned Registration](#versioned-registration).
+- `options.versioning.dispatcher` (Function, optional) - `(allVersions, caller) => tag | tag[] | null` for this registration only, overriding the instance's dispatcher. Implies versioned registration.
+- `options.pin` (boolean, optional) - Pin the registering module's caller identity onto the handler (default: `true`). See [Hooks auto-pin caller identity](#hooks-auto-pin-caller-identity).
 - `options.async` (boolean, optional) - Declare a handler asynchronous when the native async brand cannot show it (a plain function returning a Promise). Applies to `before`, `after` and `around` handlers.
 
 **Returns:** string - The hook ID

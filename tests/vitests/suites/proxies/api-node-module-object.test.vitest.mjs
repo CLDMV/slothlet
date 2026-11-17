@@ -287,7 +287,7 @@ describe.each(guarded)(
 				runtime,
 				permissions: { policy: "allow", caller: { attribution }, rules }
 			});
-			for (const name of ["owner", "reader", "writer"]) await api.slothlet.api.add(name, join(FIXTURE, name), { moduleID: name });
+			for (const name of ["owner", "reader", "writer"]) await api.slothlet.api.add(name, join(FIXTURE, name), { id: name });
 			for (const node of [api.owner, api.owner.config, api.owner.config.nested, api.reader, api.writer]) await node;
 			return api;
 		};

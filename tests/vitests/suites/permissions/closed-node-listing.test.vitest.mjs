@@ -95,7 +95,7 @@ describe.each(configs)("closed node listing (#825) > $mode / $runtime", ({ mode,
 		 */
 		const closedNode = async (give, how) => {
 			api = await slothlet({ base: NODE_FIXTURE, silent: true, mode, runtime, permissions: { policy: "deny", rules } });
-			await api.slothlet.api.add("lister", LISTER, { moduleID: "lister" });
+			await api.slothlet.api.add("lister", LISTER, { id: "lister" });
 			await api.leaf.only;
 			await api.lister;
 			if (give) Object.setPrototypeOf(api.leaf.only, { inherited: 5, unruled: 6 });
@@ -139,7 +139,7 @@ describe.each(configs)("closed node listing (#825) > $mode / $runtime", ({ mode,
 		 */
 		const closedRoot = async (rules, how) => {
 			api = await slothlet({ base: join(ROOT_FIXTURE, root), silent: true, mode, runtime, permissions: { policy: "deny", rules } });
-			await api.slothlet.api.add("lister", LISTER, { moduleID: "lister" });
+			await api.slothlet.api.add("lister", LISTER, { id: "lister" });
 			for (const member of ["data", "pnum", "tool"]) await api[member];
 			await api.lister;
 			Object[how](api);

@@ -175,12 +175,12 @@ describe.each(CONFIGS)("Permissions > a host leaf's own body runs as the leaf (#
 		await api.slothlet.api.add(
 			["host", "access"],
 			makeAccess(() => api),
-			{ moduleID: "host-access" }
+			{ id: "host-access" }
 		);
 		await api.slothlet.api.add(
 			["host", "inline"],
 			inlineLeaves(() => api),
-			{ moduleID: "host-inline" }
+			{ id: "host-inline" }
 		);
 	});
 

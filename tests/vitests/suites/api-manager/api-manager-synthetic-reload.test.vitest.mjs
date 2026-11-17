@@ -50,8 +50,8 @@ describe.each(CONFIGS)("synthetic add survives reload() — $name", ({ config })
 
 	it("keeps every add and remove across repeated reloads, not just the first", async () => {
 		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST, api: mutations });
-		await api.slothlet.api.add("probe", () => "P", { moduleID: "synthRepeat" });
-		await api.slothlet.api.add("gone", () => "G", { moduleID: "synthGone" });
+		await api.slothlet.api.add("probe", () => "P", { id: "synthRepeat" });
+		await api.slothlet.api.add("gone", () => "G", { id: "synthGone" });
 		await api.slothlet.api.remove("gone");
 		for (let round = 0; round < 3; round++) {
 			await api.slothlet.reload();
@@ -65,7 +65,7 @@ describe.each(CONFIGS)("synthetic add survives reload() — $name", ({ config })
 
 	it("re-runs an inline-function add across reload", async () => {
 		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST, api: mutations });
-		await api.slothlet.api.add("probe", () => "P", { moduleID: "synthFn" });
+		await api.slothlet.api.add("probe", () => "P", { id: "synthFn" });
 		expect(api.probe()).toBe("P");
 
 		await api.slothlet.reload();
@@ -74,7 +74,7 @@ describe.each(CONFIGS)("synthetic add survives reload() — $name", ({ config })
 
 	it("re-runs an export-map add across reload", async () => {
 		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST, api: mutations });
-		await api.slothlet.api.add("bag", { one: () => 1, two: () => 2 }, { moduleID: "synthObj" });
+		await api.slothlet.api.add("bag", { one: () => 1, two: () => 2 }, { id: "synthObj" });
 		expect(api.bag.one()).toBe(1);
 		expect(api.bag.two()).toBe(2);
 
@@ -85,7 +85,7 @@ describe.each(CONFIGS)("synthetic add survives reload() — $name", ({ config })
 
 	it("re-runs a { exports, ...options } shorthand add across reload", async () => {
 		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST, api: mutations });
-		await api.slothlet.api.add("short", { exports: { hi: () => "hi" }, moduleID: "synthShort" });
+		await api.slothlet.api.add("short", { exports: { hi: () => "hi" }, id: "synthShort" });
 		expect(api.short.hi()).toBe("hi");
 
 		await api.slothlet.reload();
@@ -94,7 +94,7 @@ describe.each(CONFIGS)("synthetic add survives reload() — $name", ({ config })
 
 	it("keeps the synthetic mount removable by its moduleID after reload", async () => {
 		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST, api: mutations });
-		await api.slothlet.api.add("probe", () => "P", { moduleID: "synthFn" });
+		await api.slothlet.api.add("probe", () => "P", { id: "synthFn" });
 		await api.slothlet.reload();
 
 		expect(await api.slothlet.api.remove("synthFn")).toBe(true); // id survived the reload

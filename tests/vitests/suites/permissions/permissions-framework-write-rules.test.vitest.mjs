@@ -64,13 +64,13 @@ describe.each(CONFIGS)("lifting the built-in write rules (#625) — $mode / $run
 		 */
 		async function load() {
 			api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, ...options });
-			await api.slothlet.api.add("victim", path.join(FIXTURE, "victim"), { moduleID: "victim" });
+			await api.slothlet.api.add("victim", path.join(FIXTURE, "victim"), { id: "victim" });
 			return api;
 		}
 
 		it("lets a module's manifest lift a built-in write rule", async () => {
 			await load();
-			await api.slothlet.api.modules.addModule("@local/lifter", { discover: { scanRoot: path.join(FIXTURE, "modules", "lifter") } });
+			await api.slothlet.api.modules.addModule("@local/lifter", { discover: { root: path.join(FIXTURE, "modules", "lifter") } });
 			expect(api.lifter.info.name()).toBe("lifter");
 			expect(await api.root.writeNamespace()).toBe("done");
 			expect(api.slothlet.lifted).toBe(1);
@@ -78,9 +78,9 @@ describe.each(CONFIGS)("lifting the built-in write rules (#625) — $mode / $run
 
 		it("lets a manifest's lift grant the write to a module that owns none of the namespace", async () => {
 			await load();
-			await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { moduleID: "guest" });
+			await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { id: "guest" });
 			expect(withSuppressedSlothletErrorOutputSync(() => api.guest.x.writeNamespaceMember("lifted", 2))).toBe("PERMISSION_DENIED");
-			await api.slothlet.api.modules.addModule("@local/lifter", { discover: { scanRoot: path.join(FIXTURE, "modules", "lifter") } });
+			await api.slothlet.api.modules.addModule("@local/lifter", { discover: { root: path.join(FIXTURE, "modules", "lifter") } });
 			expect(await api.guest.x.writeNamespaceMember("lifted", 2)).toBe("done");
 			expect(api.slothlet.lifted).toBe(2);
 		});
@@ -119,9 +119,9 @@ describe.each(CONFIGS)("lifting the built-in write rules (#625) — $mode / $run
 
 		it("lets a manifest's lift grant the write to a module that owns none of the namespace", async () => {
 			await load();
-			await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { moduleID: "guest" });
+			await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { id: "guest" });
 			expect(withSuppressedSlothletErrorOutputSync(() => api.guest.x.writeNamespaceMember("lifted", 2))).toBe("PERMISSION_DENIED");
-			await api.slothlet.api.modules.addModule("@local/lifter", { discover: { scanRoot: path.join(FIXTURE, "modules", "lifter") } });
+			await api.slothlet.api.modules.addModule("@local/lifter", { discover: { root: path.join(FIXTURE, "modules", "lifter") } });
 			expect(await api.guest.x.writeNamespaceMember("lifted", 2)).toBe("done");
 			expect(api.slothlet.lifted).toBe(2);
 		});
@@ -143,8 +143,8 @@ describe.each(CONFIGS)("the built-in write rules with the permission system off 
 	 */
 	async function load(options = {}) {
 		api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, ...options });
-		await api.slothlet.api.add("victim", path.join(FIXTURE, "victim"), { moduleID: "victim" });
-		await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { moduleID: "guest" });
+		await api.slothlet.api.add("victim", path.join(FIXTURE, "victim"), { id: "victim" });
+		await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { id: "guest" });
 		return api;
 	}
 
@@ -202,7 +202,7 @@ describe.each([
 
 	it("refuses a rule from code the live runtime cannot attribute to one call", async () => {
 		api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, permissions: {} });
-		await api.slothlet.api.add("twin", path.join(FIXTURE, "twin"), { moduleID: "twin" });
+		await api.slothlet.api.add("twin", path.join(FIXTURE, "twin"), { id: "twin" });
 		const [goGate, releaseGo] = gate();
 		const [peerGate, releasePeer] = gate();
 		// twin.go resumes in resume.mjs, which twin.peer imports too, while both are suspended.

@@ -172,7 +172,7 @@ This needs vitest's `forks` pool, which is vitest's default. Under the `threads`
 
 ## Fake timers and the instance's clock
 
-slothlet reads `Date.now` and the timers from the copies it took when it loaded, so `vi.useFakeTimers()` after an instance exists does not move it: a principal's `maxAge` still runs on real time, and the timestamps it records are real. To drive an instance's time from a test, give it the `clock` option ([CONFIGURATION.md](CONFIGURATION.md#clock)): `clock: { now: () => time }` for a time you set yourself, or, with fake timers installed before the instance is created, `clock: { now: Date.now, setTimeout, clearTimeout }`.
+slothlet reads `Date.now` and the timers from the copies it took when it loaded, so `vi.useFakeTimers()` after an instance exists does not move it: a principal's `ttl` still runs on real time, and the timestamps it records are real. To drive an instance's time from a test, give it the `clock` option ([CONFIGURATION.md](CONFIGURATION.md#clock)): `clock: { now: () => time }` for a time you set yourself, or, with fake timers installed before the instance is created, `clock: { now: Date.now, setTimeout, clearTimeout }`.
 
 ## Scope
 

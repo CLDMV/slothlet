@@ -56,7 +56,7 @@ const COLLECTIONS = ["dmap", "dset"];
  */
 async function mount(options) {
 	const api = await slothlet({ base: join(FIXTURE, "host"), silent: true, hook: true, ...options });
-	for (const name of ["single", "reader", "writer"]) await api.slothlet.api.add(name, join(FIXTURE, name), { moduleID: name });
+	for (const name of ["single", "reader", "writer"]) await api.slothlet.api.add(name, join(FIXTURE, name), { id: name });
 	for (const name of ["single", "reader", "writer"]) await api[name];
 	for (const key of COLLECTIONS) await api.single[key];
 	return api;

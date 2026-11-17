@@ -84,8 +84,8 @@ describe.each(CONFIGS)("ownership across a permission toggle (#625) — $mode / 
 	 */
 	async function load(options = {}) {
 		api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, diagnostics: true, ...options });
-		await api.slothlet.api.add("victim", path.join(FIXTURE, "victim"), { moduleID: "victim" });
-		for (const name of ["guest", "other"]) await api.slothlet.api.add(name, path.join(FIXTURE, "guest"), { moduleID: name });
+		await api.slothlet.api.add("victim", path.join(FIXTURE, "victim"), { id: "victim" });
+		for (const name of ["guest", "other"]) await api.slothlet.api.add(name, path.join(FIXTURE, "guest"), { id: name });
 		return api;
 	}
 
@@ -132,7 +132,7 @@ describe.each(CONFIGS)("ownership across a permission toggle (#625) — $mode / 
 		"refuses a change through the api a module is handed from code it cannot attribute, with the system off",
 		async () => {
 			await load({ permissions: { mode: false } });
-			await api.slothlet.api.add("twin", path.join(FIXTURE, "twin"), { moduleID: "twin" });
+			await api.slothlet.api.add("twin", path.join(FIXTURE, "twin"), { id: "twin" });
 			/**
 			 * A promise and the function that resolves it.
 			 * @returns {[Promise<void>, function(): void]} The gate and its release.

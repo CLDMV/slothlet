@@ -342,7 +342,7 @@ export function fullReport(name: string) {
 }
 ```
 
-`self` is declared as `SlothletSelf`, an empty class exported by `@cldmv/slothlet/runtime`. The generated `.d.ts` extends that class with the generated interface (and with `SlothletAPI`, since `self.slothlet.*` is the same framework surface as `api.slothlet.*`), which gives `self` full autocomplete and type-checking against your API shape in every leaf that imports it — `.ts`, `.mts`, and JSDoc-checked `.mjs` / `.cjs` alike. The same anchor types the consumer side: `slothlet()` resolves to `SlothletAPI & T`, where `T` defaults to `SlothletSelf`, so `const api = await slothlet({ base: "./api" })` is typed with no annotation. A program that loads more than one api passes its interface explicitly (`slothlet<OtherApi>({ base: "./other" })`) and generates the other declarations with `augmentRuntime: false` (`--no-augment-runtime`). When the root file's default export is a function, the generated interface carries that function's call signature (its parameters and result, taken from its own type), so `self(…)` in a leaf and `api(…)` on the host type as calls of the root; for an object root neither is callable. `context` and `instanceID` are typed by the runtime module's own `.d.ts` (no extra config needed).
+`self` is declared as `SlothletSelf`, an empty class exported by `@cldmv/slothlet/runtime`. The generated `.d.ts` extends that class with the generated interface (and with `SlothletAPI`, since `self.slothlet.*` is the same framework surface as `api.slothlet.*`), which gives `self` full autocomplete and type-checking against your API shape in every leaf that imports it — `.ts`, `.mts`, and JSDoc-checked `.mjs` / `.cjs` alike. The same anchor types the consumer side: `slothlet()` resolves to `SlothletAPI & T`, where `T` defaults to `SlothletSelf`, so `const api = await slothlet({ base: "./api" })` is typed with no annotation. A program that loads more than one api passes its interface explicitly (`slothlet<OtherApi>({ base: "./other" })`) and generates the other declarations with `augment: false` (`--no-augment`). When the root file's default export is a function, the generated interface carries that function's call signature (its parameters and result, taken from its own type), so `self(…)` in a leaf and `api(…)` on the host type as calls of the root; for an object root neither is callable. `context` and `instanceID` are typed by the runtime module's own `.d.ts` (no extra config needed).
 
 See [CONTEXT-PROPAGATION.md](CONTEXT-PROPAGATION.md) for what `context` and `instanceID` carry and how they propagate across calls.
 
@@ -383,10 +383,10 @@ Strict mode generates a `.d.ts` automatically as a side-effect of the type-check
 npx slothlet typegen ./api ./types/api.d.ts MyApi
 
 # Long flags
-npx slothlet typegen --dir ./api --output ./types/api.d.ts --interface-name MyApi
+npx slothlet typegen --base ./api --output ./types/api.d.ts --name MyApi
 
 # Short flags
-npx slothlet typegen -d ./api -o ./types/api.d.ts -n MyApi
+npx slothlet typegen -b ./api -o ./types/api.d.ts -n MyApi
 
 # package.json fallback (no args)
 npx slothlet typegen
@@ -403,9 +403,9 @@ Resolution order per option: **flag → positional → `package.json.slothlet.ty
 	},
 	"slothlet": {
 		"typegen": {
-			"dir": "./api",
+			"base": "./api",
 			"output": "./types/api.d.ts",
-			"interfaceName": "MyApi"
+			"name": "MyApi"
 		}
 	}
 }
@@ -416,21 +416,21 @@ Resolution order per option: **flag → positional → `package.json.slothlet.ty
 Same logic, no shell:
 
 ```js
-import { generateTypes } from "@cldmv/slothlet/typegen";
+import { generate } from "@cldmv/slothlet/typegen";
 
-const { filePath, content } = await generateTypes({
-	dir: "./api",
+const { filePath, content } = await generate({
+	base: "./api",
 	output: "./types/api.d.ts",
-	interfaceName: "MyApi"
+	name: "MyApi"
 });
 console.log(`Wrote ${filePath} (${content.length} bytes)`);
 ```
 
-`generateTypes()` loads the API in eager + fast TypeScript mode internally, walks the composed structure, references each node's originating export (see [Example Generated Output](#example-generated-output)), writes the `.d.ts`, and shuts the loaded instance down before returning. It does not need the `typescript` package. If `dir`, `output`, or `interfaceName` is missing or empty, it throws `SlothletError("INVALID_CONFIG")` — the same error class everything else uses.
+`generate()` loads the API in eager + fast TypeScript mode internally, walks the composed structure, references each node's originating export (see [Example Generated Output](#example-generated-output)), writes the `.d.ts`, and shuts the loaded instance down before returning. It does not need the `typescript` package. If `base`, `output`, or `name` is missing or empty, it throws `SlothletError("INVALID_CONFIG")` — the same error class everything else uses. A key it does not take (`dir`, `interfaceName`, …) throws `INVALID_CONFIG_UNKNOWN_KEY`. Its options are `base`, `output`, `name`, `augment` (default `true`), `docs` (default `true`) and `typescript`. The `package.json` `slothlet.typegen` fallback takes the same names.
 
 ### What the output looks like
 
-The generated file matches what strict mode emits — see [Example Generated Output](#example-generated-output) above. Concretely: a top-level `interface` whose members are `typeof import(...)` references to your leaves, and a `declare module "@cldmv/slothlet/runtime"` block that extends `SlothletSelf` (omitted with `augmentRuntime: false`).
+The generated file matches what strict mode emits — see [Example Generated Output](#example-generated-output) above. Concretely: a top-level `interface` whose members are `typeof import(...)` references to your leaves, and a `declare module "@cldmv/slothlet/runtime"` block that extends `SlothletSelf` (omitted with `augment: false`).
 
 ### Editor / build wiring tips
 

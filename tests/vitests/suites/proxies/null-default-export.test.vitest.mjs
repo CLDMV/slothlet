@@ -111,7 +111,7 @@ async function plainDefault(file) {
  */
 async function build(options, { load = true } = {}) {
 	const api = await slothlet({ base: FIXTURE, silent: true, ...options });
-	await api.slothlet.api.add("zz", FIXTURE, { moduleID: "zz" });
+	await api.slothlet.api.add("zz", FIXTURE, { id: "zz" });
 	if (load) {
 		for (const [path] of EVERY) await at(api, path);
 		for (const path of Object.values(BESIDE)) await at(api, path);
@@ -218,7 +218,7 @@ describe.each(configs)("a null or undefined default export > $mode / $runtime / 
 
 	it("reloads and removes such a node by its path and its module", async () => {
 		api = await build({ mode, runtime, permissions: { caller: { attribution }, rules: [] } });
-		await api.slothlet.api.add("one", join(FIXTURE, "pnull.mjs"), { moduleID: "one" });
+		await api.slothlet.api.add("one", join(FIXTURE, "pnull.mjs"), { id: "one" });
 		await api.slothlet.api.reload("pnull");
 		await api.slothlet.api.reload("zz.folder.inner");
 		await api.slothlet.api.reload("zz");

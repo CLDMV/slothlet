@@ -70,7 +70,7 @@ describe.each(["eager", "lazy"].flatMap((mode) => ["precise", "fast"].map((attri
 						})
 					}
 				},
-				{ moduleID: "reader" }
+				{ id: "reader" }
 			);
 			api.ownNothing = { a: 1 };
 			return api;

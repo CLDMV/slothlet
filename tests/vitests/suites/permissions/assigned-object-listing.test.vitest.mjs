@@ -56,7 +56,7 @@ describe.each(configs)("an object the host assigns to a node, listed by a module
 			{ caller: "lister.**", target: `${path}.ownDeep.open`, effect: "allow" }
 		];
 		api = await slothlet({ base: FIXTURE, silent: true, mode, runtime, permissions: { policy: "deny", rules } });
-		await api.slothlet.api.add("lister", LISTER, { moduleID: "lister" });
+		await api.slothlet.api.add("lister", LISTER, { id: "lister" });
 		await api.lister;
 		const node = path.split(".").reduce((holder, key) => holder[key], api);
 		await node;

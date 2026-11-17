@@ -86,7 +86,7 @@ describe("syncWrapper — debug.api=true exposes debug code paths", () => {
 		api = await makeDebugApi();
 
 		// Add a module then reload — triggers syncWrapper debug logs
-		await api.slothlet.api.add("ext", TEST_DIRS.API_TEST_MIXED, { collisionMode: "replace" });
+		await api.slothlet.api.add("ext", TEST_DIRS.API_TEST_MIXED, { collision: { mode: "replace" } });
 		expect(api.ext).toBeDefined();
 
 		// Reload triggers syncWrapper internally with debug=true
@@ -103,13 +103,15 @@ describe("syncWrapper — debug.api=true exposes debug code paths", () => {
 		api = await makeDebugApi();
 
 		// Add first module
-		await api.slothlet.api.add("ext2", TEST_DIRS.API_TEST_MIXED, { collisionMode: "merge" });
+		await api.slothlet.api.add("ext2", TEST_DIRS.API_TEST_MIXED, { collision: { mode: "merge" } });
 		expect(api.ext2).toBeDefined();
 
 		// Add second module at same path with merge — triggers syncWrapper merge debug logs
 		await api.slothlet.api.add("ext2", TEST_DIRS.API_TEST_MIXED, {
-			collisionMode: "merge",
-			moduleID: "ext2-second"
+			collision: {
+				mode: "merge"
+			},
+			id: "ext2-second"
 		});
 		expect(api.ext2).toBeDefined();
 	});
@@ -118,12 +120,14 @@ describe("syncWrapper — debug.api=true exposes debug code paths", () => {
 		api = await makeDebugApi();
 
 		// Add with merge-replace collision mode
-		await api.slothlet.api.add("mrc", TEST_DIRS.API_TEST_MIXED, { collisionMode: "merge-replace" });
+		await api.slothlet.api.add("mrc", TEST_DIRS.API_TEST_MIXED, { collision: { mode: "merge-replace" } });
 		expect(api.mrc).toBeDefined();
 
 		await api.slothlet.api.add("mrc", TEST_DIRS.API_TEST_MIXED, {
-			collisionMode: "merge-replace",
-			moduleID: "mrc-second"
+			collision: {
+				mode: "merge-replace"
+			},
+			id: "mrc-second"
 		});
 
 		// Reload triggers syncWrapper with merge-replace + debug logs
@@ -158,10 +162,12 @@ describe("mutateApiValue — debug.api=true debug logging", () => {
 		api = await makeDebugApi();
 
 		// Two modules merged at same path → syncWrapper → mutateApiValue debug path
-		await api.slothlet.api.add("d2", TEST_DIRS.API_TEST_MIXED, { collisionMode: "merge" });
+		await api.slothlet.api.add("d2", TEST_DIRS.API_TEST_MIXED, { collision: { mode: "merge" } });
 		await api.slothlet.api.add("d2", TEST_DIRS.API_TEST_MIXED, {
-			collisionMode: "merge",
-			moduleID: "d2-b"
+			collision: {
+				mode: "merge"
+			},
+			id: "d2-b"
 		});
 
 		// Reload both — triggers mutateApiValue with debug mode
@@ -205,7 +211,9 @@ describe("setValueAtPath — merge on primitive triggers warning", () => {
 		// With collisionMode="merge", setValueAtPath returns false → anyAssignmentSucceeded=false
 		try {
 			await api.slothlet.api.add("primitiveKey", TEST_DIRS.API_TEST_MIXED, {
-				collisionMode: "merge"
+				collision: {
+					mode: "merge"
+				}
 			});
 		} catch {
 			// May throw due to collision - that's acceptable
@@ -231,8 +239,10 @@ describe("setValueAtPath — merge on primitive triggers warning", () => {
 		// Line 800-823 fires when: collisionMode is merge AND existing is primitive
 		try {
 			await api.slothlet.api.add("numKey", TEST_DIRS.API_TEST_MIXED, {
-				collisionMode: "merge",
-				moduleID: "num-merge"
+				collision: {
+					mode: "merge"
+				},
+				id: "num-merge"
 			});
 			// If it doesn't throw, the add succeeded (either the primitive was skipped or merged)
 		} catch {
@@ -255,27 +265,31 @@ describe("setValueAtPath — debug log for replace/merge merge-objects", () => {
 
 	it("setValueAtPath replace-mode with two objects fires debug log", async () => {
 		api = await makeDebugApi();
-		await api.slothlet.api.add("repObj", TEST_DIRS.API_TEST_MIXED, { collisionMode: "replace" });
+		await api.slothlet.api.add("repObj", TEST_DIRS.API_TEST_MIXED, { collision: { mode: "replace" } });
 		expect(api.repObj).toBeDefined();
 
 		// Add again with replace → setValueAtPath replace mode + debug log at line ~793
 		await api.slothlet.api.add("repObj", TEST_DIRS.API_TEST_MIXED, {
-			collisionMode: "replace",
-			moduleID: "replace-obj-b",
-			forceOverwrite: true
+			collision: {
+				mode: "replace",
+				force: true
+			},
+			id: "replace-obj-b"
 		});
 		expect(api.repObj).toBeDefined();
 	});
 
 	it("setValueAtPath merge-mode with two objects fires debug log", async () => {
 		api = await makeDebugApi();
-		await api.slothlet.api.add("mergeObj", TEST_DIRS.API_TEST_MIXED, { collisionMode: "merge" });
+		await api.slothlet.api.add("mergeObj", TEST_DIRS.API_TEST_MIXED, { collision: { mode: "merge" } });
 		expect(api.mergeObj).toBeDefined();
 
 		// Add again with merge → setValueAtPath merge mode + debug log at line ~800
 		await api.slothlet.api.add("mergeObj", TEST_DIRS.API_TEST_MIXED, {
-			collisionMode: "merge",
-			moduleID: "merge-obj-b"
+			collision: {
+				mode: "merge"
+			},
+			id: "merge-obj-b"
 		});
 		expect(api.mergeObj).toBeDefined();
 	});
@@ -298,8 +312,10 @@ describe("normalizeApiPath — edge case inputs for coverage (via add)", () => {
 
 		// null apiPath → root level add
 		await api.slothlet.api.add(null, TEST_DIRS.API_TEST_MIXED, {
-			collisionMode: "merge",
-			moduleID: "null-path-add"
+			collision: {
+				mode: "merge"
+			},
+			id: "null-path-add"
 		});
 		// Root exports from API_TEST_MIXED should now be on api.*
 		expect(api.mathEsm || api["math-esm"]).toBeDefined();

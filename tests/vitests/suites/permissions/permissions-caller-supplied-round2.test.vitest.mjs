@@ -103,8 +103,8 @@ describe.each(getMatrixConfigs())("Permissions > caller-supplied code, second ro
 			hook: true,
 			permissions: { policy: "deny", rules: RULES, events: { policy: "allow" }, ...permissions }
 		});
-		await api.slothlet.api.add("callee", path.join(DIR, "callee"), { moduleID: "callee-mod" });
-		await api.slothlet.api.add("supplier", path.join(DIR, "supplier"), { moduleID: "supplier-mod" });
+		await api.slothlet.api.add("callee", path.join(DIR, "callee"), { id: "callee-mod" });
+		await api.slothlet.api.add("supplier", path.join(DIR, "supplier"), { id: "supplier-mod" });
 		return api;
 	};
 
@@ -301,10 +301,10 @@ describe.each(getMatrixConfigs())("Permissions > caller-supplied code on a versi
 				]
 			}
 		});
-		await api.slothlet.api.add("auth", path.join(DIR, "auth-v1"), { moduleID: "auth-v1" }, { version: "v1", default: true });
-		await api.slothlet.api.add("auth", path.join(DIR, "auth-v2"), { moduleID: "auth-v2" }, { version: "v2" });
-		await api.slothlet.api.add("callee", path.join(DIR, "callee"), { moduleID: "callee-mod" });
-		await api.slothlet.api.add("supplier", path.join(DIR, "supplier"), { moduleID: "supplier-mod" });
+		await api.slothlet.api.add("auth", path.join(DIR, "auth-v1"), { id: "auth-v1", version: { tag: "v1", default: true } });
+		await api.slothlet.api.add("auth", path.join(DIR, "auth-v2"), { id: "auth-v2", version: { tag: "v2" } });
+		await api.slothlet.api.add("callee", path.join(DIR, "callee"), { id: "callee-mod" });
+		await api.slothlet.api.add("supplier", path.join(DIR, "supplier"), { id: "supplier-mod" });
 		return api;
 	};
 

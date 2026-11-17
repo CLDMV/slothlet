@@ -111,7 +111,7 @@ async function build(env, config, permissions = {}) {
 		files: FILES,
 		options: { mode: config.mode, runtime: config.runtime, permissions: { ...config.permissions, ...permissions } }
 	});
-	await api.slothlet.api.add("zz", env.mountTarget(api, { from: "", files: FILES }), { moduleID: "zz" });
+	await api.slothlet.api.add("zz", env.mountTarget(api, { from: "", files: FILES }), { id: "zz" });
 	for (const [path] of EVERY) await at(api, path);
 	for (const path of Object.values(BESIDE)) await at(api, path);
 	await api.reader;

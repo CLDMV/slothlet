@@ -122,7 +122,7 @@ describe("slothlet > reload() preservedInstanceID cleanup path (lines 347-348)",
 			base: TEST_DIRS.API_TEST,
 			silent: true
 		});
-		await api.slothlet.api.add("extra", TEST_DIRS.API_TEST_MIXED, { moduleID: "extra-1" });
+		await api.slothlet.api.add("extra", TEST_DIRS.API_TEST_MIXED, { id: "extra-1" });
 		// Reload triggers preservedInstanceID logic
 		await api.slothlet.reload();
 		expect(api.math).toBeDefined();

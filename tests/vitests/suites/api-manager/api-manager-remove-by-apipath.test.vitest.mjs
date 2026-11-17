@@ -119,15 +119,19 @@ describe.each(EAGER_CONFIGS)("remove by api-path — restore action ($name)", ({
 
 		// Add module A first
 		await api.slothlet.api.add("layered", TEST_DIRS.API_TEST_MIXED, {
-			moduleID: "layer-a",
-			collisionMode: "replace"
+			id: "layer-a",
+			collision: {
+				mode: "replace"
+			}
 		});
 		expect(api.layered).toBeDefined();
 
 		// Add module B over same path — B becomes new owner (ownership now has A then B)
 		await api.slothlet.api.add("layered", TEST_DIRS.API_TEST_MIXED, {
-			moduleID: "layer-b",
-			collisionMode: "replace"
+			id: "layer-b",
+			collision: {
+				mode: "replace"
+			}
 		});
 		expect(api.layered).toBeDefined();
 
@@ -160,7 +164,7 @@ describe.each(EAGER_CONFIGS)("remove by api-path — none action ($name)", ({ co
 		api = await makeApi(config, { base: TEST_DIRS.API_TEST });
 
 		// Add then remove by moduleID to clear ownership entirely
-		await api.slothlet.api.add("tempPath", TEST_DIRS.API_TEST_MIXED, { moduleID: "temp-mod" });
+		await api.slothlet.api.add("tempPath", TEST_DIRS.API_TEST_MIXED, { id: "temp-mod" });
 		await api.slothlet.api.remove("temp-mod"); // by moduleID → clears ownership
 
 		// Now try to remove by apiPath — no owner found → returns false (early exit)

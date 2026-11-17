@@ -96,8 +96,8 @@ async function mount(options) {
 	const events = { default: "allow" };
 	const permissions = options.permissions ? { ...options.permissions, events } : { enabled: false, events };
 	const api = await slothlet({ base: join(FIXTURE, "host"), silent: true, hook: { enabled: true }, ...options, permissions });
-	await api.slothlet.api.add("owner", join(FIXTURE, "owner"), { moduleID: "owner" });
-	await api.slothlet.api.add("reader", join(FIXTURE, "reader"), { moduleID: "reader" });
+	await api.slothlet.api.add("owner", join(FIXTURE, "owner"), { id: "owner" });
+	await api.slothlet.api.add("reader", join(FIXTURE, "reader"), { id: "reader" });
 	await api.owner;
 	await api.reader;
 	return api;

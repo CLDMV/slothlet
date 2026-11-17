@@ -70,7 +70,7 @@ describe.each(getMatrixConfigs())("Events > delivery strategy (#497) > $name", (
 			events: { policy: "notify", rules: [{ caller: "plug.**", event: "**", effect: "allow" }] }
 		};
 		const instance = await slothlet({ ...config, base: BASE, permissions: effective });
-		await instance.slothlet.api.add("plug", BASE, { moduleID: "plug" });
+		await instance.slothlet.api.add("plug", BASE, { id: "plug" });
 		return instance;
 	};
 

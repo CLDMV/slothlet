@@ -50,12 +50,12 @@ export const rows = ["moduleID", "path"].map((by) => ({
 		const api = await env.compose({ fixture: FIXTURE, root: "root", files: ["base.mjs"], options: { mode, runtime, diagnostics: true } });
 		try {
 			const target = env.mountTarget(api, { from: "one.mjs" });
-			await api.slothlet.api.add("one", target, { moduleID: "one-mod" });
+			await api.slothlet.api.add("one", target, { id: "one-mod" });
 			const first = await api.one.ping();
 			const firstRuns = runs();
 			const firstUrl = await api.one.where();
 			const removed = await api.slothlet.api.remove(by === "moduleID" ? "one-mod" : "one");
-			await api.slothlet.api.add("one", target, { moduleID: "one-mod" });
+			await api.slothlet.api.add("one", target, { id: "one-mod" });
 			return [
 				["the first add runs the top level once", [first, firstRuns], [1, 1]],
 				["the first add is imported with no reload stamp", stamped(firstUrl), false],

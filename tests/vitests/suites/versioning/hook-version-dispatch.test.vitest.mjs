@@ -54,8 +54,7 @@ async function bootVersioned(extra = {}) {
 				}
 			}
 		},
-		{},
-		{ version: "v1", default: true }
+		{ version: { tag: "v1", default: true } }
 	);
 	await api.slothlet.api.add(
 		"auth",
@@ -70,8 +69,7 @@ async function bootVersioned(extra = {}) {
 				}
 			}
 		},
-		{},
-		{ version: "v2" }
+		{ version: { tag: "v2" } }
 	);
 	return api;
 }
@@ -94,12 +92,14 @@ describe("Versioning > hook registration dispatch (#250)", () => {
 		expect(fires, "the pre-existing behavior the seam exists to fix").toEqual([]);
 	});
 
-	it("resolves { versioned: true } through the instance dispatcher like a call", async () => {
+	it("resolves { versioning: { enabled: true } } through the instance dispatcher like a call", async () => {
 		api = await bootVersioned({ versioning: { dispatcher: () => "v2" } });
 		const fires = [];
 		api.slothlet.hook.on("auth.login:before", ({ version }) => void fires.push(version), {
 			id: "seamed",
-			versioned: true
+			versioning: {
+				enabled: true
+			}
 		});
 
 		await api.v1.auth.login();
@@ -113,7 +113,9 @@ describe("Versioning > hook registration dispatch (#250)", () => {
 		const fires = [];
 		api.slothlet.hook.on("auth.login:before", ({ version }) => void fires.push(version), {
 			id: "defaulted",
-			versioned: true
+			versioning: {
+				enabled: true
+			}
 		});
 
 		await api.v2.auth.login();
@@ -127,7 +129,9 @@ describe("Versioning > hook registration dispatch (#250)", () => {
 		const fires = [];
 		api.slothlet.hook.on("auth.login:before", ({ version }) => void fires.push(version), {
 			id: "ranged",
-			versionDispatcher: (allVersions) => Object.keys(allVersions)
+			versioning: {
+				dispatcher: (allVersions) => Object.keys(allVersions)
+			}
 		});
 
 		await api.v1.auth.login();
@@ -140,7 +144,9 @@ describe("Versioning > hook registration dispatch (#250)", () => {
 		const fires = [];
 		api.slothlet.hook.on("auth.login:before", ({ version }) => void fires.push(version), {
 			id: "composite",
-			versionDispatcher: (allVersions) => Object.keys(allVersions)
+			versioning: {
+				dispatcher: (allVersions) => Object.keys(allVersions)
+			}
 		});
 
 		const removed = api.slothlet.hook.remove({ id: "composite" });
@@ -154,7 +160,7 @@ describe("Versioning > hook registration dispatch (#250)", () => {
 	it("throws a named error when no versions are registered for the pattern", async () => {
 		api = await slothlet({ mode: "eager", base: BASE, hook: { enabled: true } });
 
-		expect(() => api.slothlet.hook.on("nowhere.login:before", () => {}, { id: "lost", versioned: true })).toThrow(
+		expect(() => api.slothlet.hook.on("nowhere.login:before", () => {}, { id: "lost", versioning: { enabled: true } })).toThrow(
 			/HOOK_VERSION_UNRESOLVED/
 		);
 	});
@@ -165,7 +171,9 @@ describe("Versioning > hook registration dispatch (#250)", () => {
 		expect(() =>
 			api.slothlet.hook.on("auth.login:before", () => {}, {
 				id: "bad-tag",
-				versionDispatcher: () => "v9"
+				versioning: {
+					dispatcher: () => "v9"
+				}
 			})
 		).toThrow(/HOOK_VERSION_UNKNOWN_TAG/);
 	});
@@ -175,8 +183,10 @@ describe("Versioning > hook registration dispatch (#250)", () => {
 		const fires = [];
 		api.slothlet.hook.on("auth.login:before", ({ version }) => void fires.push(version), {
 			id: "thrower",
-			versionDispatcher: () => {
-				throw new Error("dispatcher-boom");
+			versioning: {
+				dispatcher: () => {
+					throw new Error("dispatcher-boom");
+				}
 			}
 		});
 
@@ -192,7 +202,9 @@ describe("Versioning > hook registration dispatch (#250)", () => {
 		api.slothlet.hook.on("v1.auth.login:before", ({ version }) => void fires.push(`plain:${version}`), { id: "bystander" });
 		api.slothlet.hook.on("auth.login:before", ({ version }) => void fires.push(`group:${version}`), {
 			id: "composite2",
-			versionDispatcher: (allVersions) => Object.keys(allVersions)
+			versioning: {
+				dispatcher: (allVersions) => Object.keys(allVersions)
+			}
 		});
 
 		expect(api.slothlet.hook.remove({ id: "composite2" }), "only the group's members").toBe(2);
@@ -205,7 +217,9 @@ describe("Versioning > hook registration dispatch (#250)", () => {
 		const fires = [];
 		api.slothlet.hook.on("auth.login:before", ({ version }) => void fires.push(version), {
 			id: "dupes",
-			versionDispatcher: () => ["v1", "v1", "v2"]
+			versioning: {
+				dispatcher: () => ["v1", "v1", "v2"]
+			}
 		});
 
 		// Naming a tag twice means one registration for it — not a DUPLICATE_HOOK_ID failure on an
@@ -221,9 +235,9 @@ describe("Versioning > hook registration dispatch (#250)", () => {
 		// `versions` is a plain object, so a bare index lookup finds Object.prototype members and
 		// would register a hook against a physical path that was never mounted.
 		for (const tag of ["toString", "constructor", "valueOf"]) {
-			expect(() => api.slothlet.hook.on("auth.login:before", () => {}, { id: `proto-${tag}`, versionDispatcher: () => tag })).toThrow(
-				/HOOK_VERSION_UNKNOWN_TAG/
-			);
+			expect(() =>
+				api.slothlet.hook.on("auth.login:before", () => {}, { id: `proto-${tag}`, versioning: { dispatcher: () => tag } })
+			).toThrow(/HOOK_VERSION_UNKNOWN_TAG/);
 		}
 	});
 
@@ -233,7 +247,9 @@ describe("Versioning > hook registration dispatch (#250)", () => {
 		const fires = [];
 		api.slothlet.hook.on("auth.login:before", ({ version }) => void fires.push(version), {
 			id: "borrowed",
-			versionDispatcher: () => selection
+			versioning: {
+				dispatcher: () => selection
+			}
 		});
 
 		// Selecting nothing falls back to the default tag; pushing that onto the caller's own array
@@ -247,7 +263,9 @@ describe("Versioning > hook registration dispatch (#250)", () => {
 		api = await bootVersioned();
 		api.slothlet.hook.on("auth.login:before", () => {}, {
 			id: "claimed",
-			versionDispatcher: (allVersions) => Object.keys(allVersions)
+			versioning: {
+				dispatcher: (allVersions) => Object.keys(allVersions)
+			}
 		});
 
 		// The group id names a registration but is not itself a hook, so it is absent from the id
@@ -265,7 +283,9 @@ describe("Versioning > hook registration dispatch (#250)", () => {
 		expect(() =>
 			api.slothlet.hook.on("auth.login:before", () => void fires.push("group"), {
 				id: "partial",
-				versionDispatcher: (allVersions) => Object.keys(allVersions)
+				versioning: {
+					dispatcher: (allVersions) => Object.keys(allVersions)
+				}
 			})
 		).toThrow(/DUPLICATE_HOOK_ID/);
 
@@ -283,7 +303,9 @@ describe("Versioning > hook registration dispatch (#250)", () => {
 		const fires = [];
 		api.slothlet.hook.on("auth.login:before", ({ version }) => void fires.push(`before:${version}`), {
 			id: "ver-before",
-			versionDispatcher: (allVersions) => Object.keys(allVersions)
+			versioning: {
+				dispatcher: (allVersions) => Object.keys(allVersions)
+			}
 		});
 		api.slothlet.hook.on(
 			"auth.login:after",
@@ -291,7 +313,7 @@ describe("Versioning > hook registration dispatch (#250)", () => {
 				fires.push(`after:${version}`);
 				return result;
 			},
-			{ id: "ver-after", versionDispatcher: (allVersions) => Object.keys(allVersions) }
+			{ id: "ver-after", versioning: { dispatcher: (allVersions) => Object.keys(allVersions) } }
 		);
 		// An unrelated async handler on the same physical path forces the whole call onto the
 		// promoted pipeline. The version a hook fires for is a property of its registration, so it
@@ -308,7 +330,9 @@ describe("Versioning > hook registration dispatch (#250)", () => {
 		const fires = [];
 		api.slothlet.hook.on("auth.login:before", ({ version }) => void fires.push(version), {
 			id: "replayed",
-			versionDispatcher: (allVersions) => Object.keys(allVersions)
+			versioning: {
+				dispatcher: (allVersions) => Object.keys(allVersions)
+			}
 		});
 
 		const hookManager = resolveWrapper(api.mod).slothlet.handlers.hookManager;
@@ -337,8 +361,7 @@ describe("Versioning > hook registration dispatch (#250)", () => {
 					}
 				}
 			},
-			{},
-			{ version: "v1", default: true }
+			{ version: { tag: "v1", default: true } }
 		);
 		await api.slothlet.api.add(
 			"auth",
@@ -353,13 +376,14 @@ describe("Versioning > hook registration dispatch (#250)", () => {
 					}
 				}
 			},
-			{},
-			{ version: "v1", default: true }
+			{ version: { tag: "v1", default: true } }
 		);
 
 		api.slothlet.hook.on("auth.admin.login:before", () => {}, {
 			id: "nested",
-			versioned: true
+			versioning: {
+				enabled: true
+			}
 		});
 
 		// The deeper mount owns the pattern — the registration resolved against v1.auth.admin, not
@@ -375,7 +399,7 @@ describe("Versioning > hook registration dispatch (#250)", () => {
 
 		// The registry is non-empty here — the auth entry is examined and rejected as not covering
 		// the pattern, which is the discrimination the empty-registry variant above cannot make.
-		expect(() => api.slothlet.hook.on("nowhere.login:before", () => {}, { id: "lost2", versioned: true })).toThrow(
+		expect(() => api.slothlet.hook.on("nowhere.login:before", () => {}, { id: "lost2", versioning: { enabled: true } })).toThrow(
 			/HOOK_VERSION_UNRESOLVED/
 		);
 	});

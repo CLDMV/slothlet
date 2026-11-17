@@ -151,7 +151,7 @@ describe.each(matrix)(
 				runtime,
 				...(permissions ? { permissions: { ...permissions, rules } } : {})
 			});
-			for (const name of ["owner", "single", "reader"]) await api.slothlet.api.add(name, join(FIXTURE, name), { moduleID: name });
+			for (const name of ["owner", "single", "reader"]) await api.slothlet.api.add(name, join(FIXTURE, name), { id: name });
 			for (const node of [api.owner, api.single, api.reader]) await node;
 			for (const key of OWNER_KEYS) await api.owner[key];
 			for (const key of SINGLE_KEYS) await api.single[key];
@@ -243,7 +243,7 @@ describe.each(guarded)(
 				runtime,
 				permissions: { policy: "allow", caller: { attribution }, rules }
 			});
-			for (const name of ["owner", "single", "reader"]) await api.slothlet.api.add(name, join(FIXTURE, name), { moduleID: name });
+			for (const name of ["owner", "single", "reader"]) await api.slothlet.api.add(name, join(FIXTURE, name), { id: name });
 			for (const node of [api.owner, api.single, api.reader, api.owner.sharedMemory, api.owner.sharedBytes, api.single.derror]) await node;
 			return api;
 		};

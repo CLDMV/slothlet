@@ -99,7 +99,7 @@ for (const mode of ["eager", "lazy"]) {
 			await api.slothlet.api.add(
 				mount.split("."),
 				makeRecords(() => api),
-				{ moduleID: "host-records" }
+				{ id: "host-records" }
 			);
 			// A leaf whose host file the host loaded through a package ext.b imports too.
 			const loadedByPackage = await load(new URL("./host/loaded-by-package.mjs", import.meta.url));
@@ -110,7 +110,7 @@ for (const mode of ["eager", "lazy"]) {
 						return loadedByPackage.open(api.store);
 					}
 				},
-				{ moduleID: "host-loaded" }
+				{ id: "host-loaded" }
 			);
 			await api.ext.b.prepare();
 			for (const row of ROWS)

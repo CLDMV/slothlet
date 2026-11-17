@@ -67,8 +67,8 @@ const PERMISSIONS = {
 async function build(env, root, options) {
 	const files = ROOT_FILES[root];
 	const api = await env.compose({ fixture: FIXTURE, root, files, options: { diagnostics: true, ...options } });
-	await api.slothlet.api.add("zz", env.mountTarget(api, { from: root, files }), { moduleID: "zz" });
-	await api.slothlet.api.add("w", env.mountTarget(api, { from: "writer", files: ["ops.mjs"] }), { moduleID: "w" });
+	await api.slothlet.api.add("zz", env.mountTarget(api, { from: root, files }), { id: "zz" });
+	await api.slothlet.api.add("w", env.mountTarget(api, { from: "writer", files: ["ops.mjs"] }), { id: "w" });
 	for (const member of ["data", "pnum", "tool"]) {
 		await api[member];
 		await api.zz[member];
@@ -197,7 +197,7 @@ export const rows = [
 					[false, false, false]
 				]);
 				const added = await settled(() =>
-					api.slothlet.api.add("extra", env.mountTarget(api, { from: `${root}/data.mjs` }), { moduleID: "extra" })
+					api.slothlet.api.add("extra", env.mountTarget(api, { from: `${root}/data.mjs` }), { id: "extra" })
 				);
 				checks.push(["an add at the closed root", added, { threw: "API_ROOT_CLOSED" }]);
 				checks.push(["a reload of the closed root", await settled(() => api.slothlet.reload()), { threw: "API_ROOT_CLOSED" }]);
@@ -246,7 +246,7 @@ export const rows = [
 			for (const root of ["fnroot", "asyncroot"]) {
 				const api = await env.compose({ fixture: FIXTURE, root: "objroot", files: ROOT_FILES.objroot, options: { mode, runtime } });
 				try {
-					await api.slothlet.api.add("zz", env.mountTarget(api, { from: root, files: ROOT_FILES[root] }), { moduleID: "zz" });
+					await api.slothlet.api.add("zz", env.mountTarget(api, { from: root, files: ROOT_FILES[root] }), { id: "zz" });
 					await api.zz.data;
 					checks.push([`${root}: a function node`, typeof api.zz, "function"]);
 					const gone = delete api.zz.data;
@@ -262,8 +262,8 @@ export const rows = [
 			}
 			const api = await env.compose({ fixture: FIXTURE, root: "objroot", files: ROOT_FILES.objroot, options: { mode, runtime } });
 			try {
-				await api.slothlet.api.add("zz", env.mountTarget(api, { from: "fnroot", files: ROOT_FILES.fnroot }), { moduleID: "zz" });
-				await api.slothlet.api.add("w", env.mountTarget(api, { from: "writer", files: ["ops.mjs"] }), { moduleID: "w" });
+				await api.slothlet.api.add("zz", env.mountTarget(api, { from: "fnroot", files: ROOT_FILES.fnroot }), { id: "zz" });
+				await api.slothlet.api.add("w", env.mountTarget(api, { from: "writer", files: ["ops.mjs"] }), { id: "w" });
 				await api.zz.data;
 				await api.w.ops;
 				checks.push(["a module deletes it", api.w.ops.change("delete", "given", "zz", api), { deleted: true, has: false }]);

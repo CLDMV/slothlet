@@ -67,19 +67,19 @@ describe.each(CONFIGS)("module mounts and rule reach (#625) — $mode / $runtime
 	 */
 	async function load(options = { permissions: {} }) {
 		api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, ...options });
-		await api.slothlet.api.add("victim", VICTIM, { moduleID: "victim" });
-		for (const name of ["guest", "mgr", "other"]) await api.slothlet.api.add(name, GUEST, { moduleID: name });
+		await api.slothlet.api.add("victim", VICTIM, { id: "victim" });
+		for (const name of ["guest", "mgr", "other"]) await api.slothlet.api.add(name, GUEST, { id: name });
 		return api;
 	}
 
 	describe("api.add and api.remove from module code are writes", () => {
 		it("refuses mounting under another module's path, a manager's included", async () => {
 			await load({ permissions: { rules: [DELEGATE] } });
-			expect(await withSuppressedSlothletErrorOutput(() => api.guest.x.addAt("mgr.evil", GUEST, { moduleID: "evil" }))).toBe(
+			expect(await withSuppressedSlothletErrorOutput(() => api.guest.x.addAt("mgr.evil", GUEST, { id: "evil" }))).toBe(
 				"LOOSE_SET_NOT_OWNED"
 			);
 			expect(api.mgr.evil).toBeUndefined();
-			expect(await withSuppressedSlothletErrorOutput(() => api.guest.x.addAt("victim.extra", GUEST, { moduleID: "extra" }))).toBe(
+			expect(await withSuppressedSlothletErrorOutput(() => api.guest.x.addAt("victim.extra", GUEST, { id: "extra" }))).toBe(
 				"LOOSE_SET_NOT_OWNED"
 			);
 			expect(api.victim.extra).toBeUndefined();
@@ -88,7 +88,7 @@ describe.each(CONFIGS)("module mounts and rule reach (#625) — $mode / $runtime
 		it("refuses replacing another module's subtree", async () => {
 			await load();
 			expect(
-				await withSuppressedSlothletErrorOutput(() => api.guest.x.addAt("victim", GUEST, { moduleID: "imp", forceOverwrite: true }))
+				await withSuppressedSlothletErrorOutput(() => api.guest.x.addAt("victim", GUEST, { id: "imp", collision: { force: true } }))
 			).toBe("LOOSE_SET_NOT_OWNED");
 			expect(await api.victim.v.secret()).toBe("SECRET");
 			expect(api.victim.x).toBeUndefined();
@@ -104,14 +104,14 @@ describe.each(CONFIGS)("module mounts and rule reach (#625) — $mode / $runtime
 
 		it("refuses mounting at the framework namespace", async () => {
 			await load();
-			expect(await withSuppressedSlothletErrorOutput(() => api.guest.x.addAt("slothlet.evil", GUEST, { moduleID: "evil" }))).toBe(
+			expect(await withSuppressedSlothletErrorOutput(() => api.guest.x.addAt("slothlet.evil", GUEST, { id: "evil" }))).toBe(
 				"PERMISSION_DENIED"
 			);
 		});
 
 		it("lets a module mount under its own path, and the mounted module remove itself", async () => {
 			await load();
-			expect(await api.guest.x.addAt("guest.sub2", GUEST, { moduleID: "sub2" })).toBe("done");
+			expect(await api.guest.x.addAt("guest.sub2", GUEST, { id: "sub2" })).toBe("done");
 			expect(typeof api.guest.sub2.x.listSelf).toBe("function");
 			expect(await api.guest.sub2.x.removeAt("guest.sub2")).toBe(true);
 			expect(api.guest.sub2).toBeUndefined();
@@ -126,21 +126,21 @@ describe.each(CONFIGS)("module mounts and rule reach (#625) — $mode / $runtime
 					]
 				}
 			});
-			expect(await api.guest.x.addAt("victim.extra", GUEST, { moduleID: "extra" })).toBe("done");
+			expect(await api.guest.x.addAt("victim.extra", GUEST, { id: "extra" })).toBe("done");
 			expect(typeof api.victim.extra.x.listSelf).toBe("function");
 			expect(await api.guest.x.removeAt("victim.extra")).toBe(true);
 		});
 
 		it("lets a host write deny refuse mounting under the module's own path", async () => {
 			await load({ permissions: { rules: [{ caller: "guest.**", target: "guest.blocked:write", effect: "deny" }] } });
-			expect(await withSuppressedSlothletErrorOutput(() => api.guest.x.addAt("guest.blocked", GUEST, { moduleID: "blocked" }))).toBe(
+			expect(await withSuppressedSlothletErrorOutput(() => api.guest.x.addAt("guest.blocked", GUEST, { id: "blocked" }))).toBe(
 				"PERMISSION_DENIED"
 			);
 		});
 
 		it("leaves the host mounting and removing anywhere", async () => {
 			await load();
-			await api.slothlet.api.add("victim.hostExtra", GUEST, { moduleID: "host-extra" });
+			await api.slothlet.api.add("victim.hostExtra", GUEST, { id: "host-extra" });
 			expect(typeof api.victim.hostExtra.x.listSelf).toBe("function");
 			expect(await api.slothlet.api.remove("victim.hostExtra")).toBe(true);
 		});
@@ -149,7 +149,7 @@ describe.each(CONFIGS)("module mounts and rule reach (#625) — $mode / $runtime
 	describe("a moduleID module code mounts with", () => {
 		it("is refused when it belongs to another mounted module", async () => {
 			await load();
-			expect(await withSuppressedSlothletErrorOutput(() => api.guest.x.addAt("guest.imp", GUEST, { moduleID: "victim" }))).toBe(
+			expect(await withSuppressedSlothletErrorOutput(() => api.guest.x.addAt("guest.imp", GUEST, { id: "victim" }))).toBe(
 				"MODULE_ID_IN_USE"
 			);
 			expect(api.guest.imp).toBeUndefined();
@@ -158,9 +158,9 @@ describe.each(CONFIGS)("module mounts and rule reach (#625) — $mode / $runtime
 
 		it("is allowed when it is the module's own, or not mounted", async () => {
 			await load();
-			expect(await api.guest.x.addAt("guest.own", GUEST, { moduleID: "guest" })).toBe("done");
+			expect(await api.guest.x.addAt("guest.own", GUEST, { id: "guest" })).toBe("done");
 			expect(typeof api.guest.own.x.listSelf).toBe("function");
-			expect(await api.guest.x.addAt("guest.fresh", GUEST, { moduleID: "fresh" })).toBe("done");
+			expect(await api.guest.x.addAt("guest.fresh", GUEST, { id: "fresh" })).toBe("done");
 			expect(typeof api.guest.fresh.x.listSelf).toBe("function");
 		});
 
@@ -171,11 +171,11 @@ describe.each(CONFIGS)("module mounts and rule reach (#625) — $mode / $runtime
 			"holds content the module mounts under its own id to the rule for a module mounted below it (permissions %s)",
 			async (_label, options, expected) => {
 				await load(options);
-				await api.slothlet.api.add("guest.kid", VICTIM, { moduleID: "vic" });
+				await api.slothlet.api.add("guest.kid", VICTIM, { id: "vic" });
 				const content = { kid: { v: { planted: () => "EVIL" } } };
 				for (const moduleID of ["guest", undefined]) {
 					const outcome = await withSuppressedSlothletErrorOutput(() =>
-						api.guest.x.addAt("guest", content, { collisionMode: "merge", ...(moduleID ? { moduleID } : {}) })
+						api.guest.x.addAt("guest", content, { collision: { mode: "merge" }, ...(moduleID ? { id: moduleID } : {}) })
 					);
 					expect(outcome).toBe(expected);
 					expect(api.guest.kid.v.planted?.()).toBe(expected === "done" ? "EVIL" : undefined);
@@ -191,10 +191,10 @@ describe.each(CONFIGS)("module mounts and rule reach (#625) — $mode / $runtime
 			"leaves a removed module's kept function owning nothing once another module takes its id (permissions %s)",
 			async (_label, options, expected) => {
 				api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, ...options });
-				await api.slothlet.api.add("g", GUEST, { moduleID: "gA" });
+				await api.slothlet.api.add("g", GUEST, { id: "gA" });
 				const kept = api.g.x.keepWriter("z.v", true);
 				await api.slothlet.api.remove("gA");
-				await api.slothlet.api.add("z", VICTIM, { moduleID: "gA" });
+				await api.slothlet.api.add("z", VICTIM, { id: "gA" });
 				// With the permission system off nothing decides writes, so even code of a removed module writes.
 				expect(withSuppressedSlothletErrorOutputSync(() => kept())).toBe(expected);
 				expect(api.z.v.viaHeld).toBe(expected === "done" ? 1 : undefined);
@@ -210,10 +210,10 @@ describe.each(CONFIGS)("module mounts and rule reach (#625) — $mode / $runtime
 				[{}, "done"]
 			]) {
 				api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, ...options });
-				await api.slothlet.api.add("g", GUEST, { moduleID: "gA" });
+				await api.slothlet.api.add("g", GUEST, { id: "gA" });
 				const kept = api.g.x.keepWriter(target, true);
 				await api.slothlet.api.remove("gA");
-				await api.slothlet.api.add(mountAt, VICTIM, { moduleID: "gA" });
+				await api.slothlet.api.add(mountAt, VICTIM, { id: "gA" });
 				expect(withSuppressedSlothletErrorOutputSync(() => kept())).toBe(expected);
 				expect(target.split(".").reduce((node, key) => node[key], api).viaHeld).toBe(expected === "done" ? 1 : undefined);
 				await api.slothlet.shutdown();
@@ -223,7 +223,7 @@ describe.each(CONFIGS)("module mounts and rule reach (#625) — $mode / $runtime
 
 		it("keeps a module's kept function its standing across a full reload", async () => {
 			api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true });
-			await api.slothlet.api.add("g", GUEST, { moduleID: "gA" });
+			await api.slothlet.api.add("g", GUEST, { id: "gA" });
 			const kept = api.g.x.keepWriter("g.x", true);
 			await api.slothlet.reload();
 			expect(kept()).toBe("done");
@@ -243,8 +243,8 @@ describe.each(CONFIGS)("module mounts and rule reach (#625) — $mode / $runtime
 					]
 				}
 			});
-			await api.slothlet.api.add("t", VICTIM, { moduleID: "t" });
-			await api.slothlet.api.add("g", GUEST, { moduleID: "gA" });
+			await api.slothlet.api.add("t", VICTIM, { id: "t" });
+			await api.slothlet.api.add("g", GUEST, { id: "gA" });
 			const writer = api.g.x.keepWriter("t.v", true);
 			const caller = api.g.x.keepCaller("t.v.secret");
 			expect(writer()).toBe("done");
@@ -256,7 +256,7 @@ describe.each(CONFIGS)("module mounts and rule reach (#625) — $mode / $runtime
 
 		it("leaves the host re-using a moduleID", async () => {
 			await load();
-			await api.slothlet.api.add("victim2", VICTIM, { moduleID: "victim" });
+			await api.slothlet.api.add("victim2", VICTIM, { id: "victim" });
 			expect(await api.victim2.v.secret()).toBe("SECRET");
 		});
 	});
@@ -264,18 +264,18 @@ describe.each(CONFIGS)("module mounts and rule reach (#625) — $mode / $runtime
 	describe("a mount a module added", () => {
 		it("is the adding module's to remove, by path, by moduleID, or scoped within it", async () => {
 			await load();
-			expect(await api.guest.x.addAt("guest.kid", GUEST, { moduleID: "kid" })).toBe("done");
+			expect(await api.guest.x.addAt("guest.kid", GUEST, { id: "kid" })).toBe("done");
 			expect(await api.guest.x.removeAt("kid", "guest.kid.x")).toBe(true);
 			expect(await api.guest.x.removeAt("guest.kid")).toBe(true);
 			expect(api.guest.kid).toBeUndefined();
-			expect(await api.guest.x.addAt("guest.kid", GUEST, { moduleID: "kid" })).toBe("done");
+			expect(await api.guest.x.addAt("guest.kid", GUEST, { id: "kid" })).toBe("done");
 			expect(await api.guest.x.removeAt("kid")).toBe(true);
 			expect(api.guest.kid).toBeUndefined();
 		});
 
 		it("is not a sibling module's to remove", async () => {
 			await load();
-			expect(await api.guest.x.addAt("guest.kid", GUEST, { moduleID: "kid" })).toBe("done");
+			expect(await api.guest.x.addAt("guest.kid", GUEST, { id: "kid" })).toBe("done");
 			expect(await withSuppressedSlothletErrorOutput(() => api.other.x.removeAt("guest.kid"))).toBe("LOOSE_SET_NOT_OWNED");
 			expect(await withSuppressedSlothletErrorOutput(() => api.other.x.removeAt("kid"))).toBe("LOOSE_SET_NOT_OWNED");
 			expect(typeof api.guest.kid.x.listSelf).toBe("function");
@@ -283,7 +283,7 @@ describe.each(CONFIGS)("module mounts and rule reach (#625) — $mode / $runtime
 
 		it("is not the module's to remove when the host mounted it below the module's path", async () => {
 			await load();
-			await api.slothlet.api.add("guest.hostkid", GUEST, { moduleID: "hostkid" });
+			await api.slothlet.api.add("guest.hostkid", GUEST, { id: "hostkid" });
 			expect(await withSuppressedSlothletErrorOutput(() => api.guest.x.removeAt("guest.hostkid"))).toBe("LOOSE_SET_NOT_OWNED");
 			expect(await withSuppressedSlothletErrorOutput(() => api.guest.x.removeAt("hostkid"))).toBe("LOOSE_SET_NOT_OWNED");
 			expect(typeof api.guest.hostkid.x.listSelf).toBe("function");
@@ -291,8 +291,8 @@ describe.each(CONFIGS)("module mounts and rule reach (#625) — $mode / $runtime
 
 		it("stays the adding module's to remove across a reload, and not a sibling's", async () => {
 			await load();
-			expect(await api.guest.x.addAt("guest.kid", GUEST, { moduleID: "kid" })).toBe("done");
-			await api.slothlet.api.add("guest.hostkid", GUEST, { moduleID: "hostkid" });
+			expect(await api.guest.x.addAt("guest.kid", GUEST, { id: "kid" })).toBe("done");
+			await api.slothlet.api.add("guest.hostkid", GUEST, { id: "hostkid" });
 			await api.slothlet.reload();
 			expect(await withSuppressedSlothletErrorOutput(() => api.other.x.removeAt("guest.kid"))).toBe("LOOSE_SET_NOT_OWNED");
 			expect(await withSuppressedSlothletErrorOutput(() => api.guest.x.removeAt("guest.hostkid"))).toBe("LOOSE_SET_NOT_OWNED");
@@ -309,9 +309,9 @@ describe.each(CONFIGS)("module mounts and rule reach (#625) — $mode / $runtime
 		 */
 		async function nest(options = { permissions: {} }) {
 			api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, ...options });
-			await api.slothlet.api.add("parent", VICTIM, { moduleID: "parent" });
-			await api.slothlet.api.add("parent.child", VICTIM, { moduleID: "child" });
-			await api.slothlet.api.add("third", GUEST, { moduleID: "third" });
+			await api.slothlet.api.add("parent", VICTIM, { id: "parent" });
+			await api.slothlet.api.add("parent.child", VICTIM, { id: "child" });
+			await api.slothlet.api.add("third", GUEST, { id: "third" });
 			return api;
 		}
 
@@ -335,12 +335,12 @@ describe.each(CONFIGS)("module mounts and rule reach (#625) — $mode / $runtime
 	describe("removing a module by its path", () => {
 		it("takes its rules and their history with it when the path is not its moduleID", async () => {
 			await load();
-			await api.slothlet.api.add("mp", GUEST, { moduleID: "mpid" });
+			await api.slothlet.api.add("mp", GUEST, { id: "mpid" });
 			expect(await api.mp.x.addRuleFor({ caller: "guest.**", target: "mp.**:write", effect: "allow" })).toMatch(/^perm-/);
 			expect(await api.guest.x.writeAt("mp.x")).toEqual(every(await api.guest.x.writeAt("mp.x"), "done"));
 			expect(await api.slothlet.api.remove("mp")).toBe(true);
 			expect(api.slothlet.permissions.global.rulesByModule("mpid")).toEqual([]);
-			await api.slothlet.api.add("mp", GUEST, { moduleID: "mpid" });
+			await api.slothlet.api.add("mp", GUEST, { id: "mpid" });
 			const refused = withSuppressedSlothletErrorOutputSync(() => api.guest.x.writeAt("mp.x"));
 			expect(refused).toEqual(every(refused, "LOOSE_SET_NOT_OWNED"));
 			await api.slothlet.reload();

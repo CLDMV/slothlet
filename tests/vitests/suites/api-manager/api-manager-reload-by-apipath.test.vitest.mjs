@@ -125,7 +125,7 @@ describe.each(EAGER_CONFIGS)("_findAffectedCaches — exact endpoint match ($nam
 
 	it("reloads a specifically-named add module by its full endpoint", async () => {
 		api = await makeApi(config, { base: TEST_DIRS.API_TEST });
-		await api.slothlet.api.add("plugins", TEST_DIRS.API_TEST_MIXED, { moduleID: "plugins-mod" });
+		await api.slothlet.api.add("plugins", TEST_DIRS.API_TEST_MIXED, { id: "plugins-mod" });
 		expect(api.plugins).toBeDefined();
 
 		// Reload by apiPath "plugins" — exact endpoint match
@@ -159,7 +159,7 @@ describe.each(EAGER_CONFIGS)("_findAffectedCaches — parent cache fallback ($na
 
 	it("falls back to parent cache for deeply nested non-existent sub-path", async () => {
 		api = await makeApi(config, { base: TEST_DIRS.API_TEST });
-		await api.slothlet.api.add("ext", TEST_DIRS.API_TEST_MIXED, { moduleID: "ext-mod" });
+		await api.slothlet.api.add("ext", TEST_DIRS.API_TEST_MIXED, { id: "ext-mod" });
 		expect(api.ext).toBeDefined();
 
 		// "ext.mathEsm.add" is a sub-path of "ext" — no exact endpoint, uses parent "ext" cache
@@ -183,8 +183,8 @@ describe.each(EAGER_CONFIGS)("_findAffectedCaches — child caches ($name)", ({ 
 	it("finds child caches when reloading parent endpoint path", async () => {
 		api = await makeApi(config, { base: TEST_DIRS.API_TEST });
 		// Add two modules under a shared prefix (nested endpoints)
-		await api.slothlet.api.add("ns.a", TEST_DIRS.API_TEST_MIXED, { moduleID: "ns-a-mod" });
-		await api.slothlet.api.add("ns.b", TEST_DIRS.API_TEST_MIXED, { moduleID: "ns-b-mod", collisionMode: "merge" });
+		await api.slothlet.api.add("ns.a", TEST_DIRS.API_TEST_MIXED, { id: "ns-a-mod" });
+		await api.slothlet.api.add("ns.b", TEST_DIRS.API_TEST_MIXED, { id: "ns-b-mod", collision: { mode: "merge" } });
 
 		// Reload "ns" — _findAffectedCaches should find children "ns.a" and "ns.b"
 		await expect(api.slothlet.api.reload("ns")).resolves.toBeUndefined();
@@ -225,7 +225,7 @@ describe.each(EAGER_CONFIGS)("_reloadByApiPath — metadata option ($name)", ({ 
 
 	it("applies metadata update after reload when metadata option is provided", async () => {
 		api = await makeApi(config, { base: TEST_DIRS.API_TEST });
-		await api.slothlet.api.add("tagged", TEST_DIRS.API_TEST_MIXED, { moduleID: "tagged-mod" });
+		await api.slothlet.api.add("tagged", TEST_DIRS.API_TEST_MIXED, { id: "tagged-mod" });
 		expect(api.tagged).toBeDefined();
 
 		// Reload with metadata option — hits the reloadMetadata path (lines ~2041-2055)
@@ -250,7 +250,7 @@ describe.each(EAGER_CONFIGS)("_restoreApiTree — nested endpoint path ($name)",
 	it("updates wrapper impl via ___setImpl when endpoint is a nested path", async () => {
 		api = await makeApi(config, { base: TEST_DIRS.API_TEST });
 		// Add under a nested endpoint "plugins.extra"
-		await api.slothlet.api.add("plugins.extra", TEST_DIRS.API_TEST_MIXED, { moduleID: "nested-extra" });
+		await api.slothlet.api.add("plugins.extra", TEST_DIRS.API_TEST_MIXED, { id: "nested-extra" });
 		expect(api.plugins).toBeDefined();
 		expect(api.plugins.extra).toBeDefined();
 
@@ -261,7 +261,7 @@ describe.each(EAGER_CONFIGS)("_restoreApiTree — nested endpoint path ($name)",
 
 	it("reloads nested endpoint by moduleID string — wrapper is preserved", async () => {
 		api = await makeApi(config, { base: TEST_DIRS.API_TEST });
-		await api.slothlet.api.add("tools.extra", TEST_DIRS.API_TEST_MIXED, { moduleID: "tools-extra" });
+		await api.slothlet.api.add("tools.extra", TEST_DIRS.API_TEST_MIXED, { id: "tools-extra" });
 		expect(api.tools).toBeDefined();
 
 		// Reload by moduleID string — wrapper should still be accessible after
@@ -317,12 +317,16 @@ describe.each(EAGER_CONFIGS)("_reloadByApiPath — multi-module sort and group (
 
 		// Add two modules at the same endpoint with merge mode
 		await api.slothlet.api.add("shared", TEST_DIRS.API_TEST_MIXED, {
-			moduleID: "shared-first",
-			collisionMode: "merge"
+			id: "shared-first",
+			collision: {
+				mode: "merge"
+			}
 		});
 		await api.slothlet.api.add("shared", TEST_DIRS.API_TEST_MIXED, {
-			moduleID: "shared-second",
-			collisionMode: "merge"
+			id: "shared-second",
+			collision: {
+				mode: "merge"
+			}
 		});
 
 		expect(api.shared).toBeDefined();

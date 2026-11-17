@@ -54,16 +54,20 @@ describe.each(OWNERSHIP_CONFIGS)("Rule 12 Ownership Tracking - $name", ({ name: 
 	it("should allow module to register and update its own APIs", async () => {
 		// Register moduleA - use absolute paths relative to current test directory
 		await api.slothlet.api.add("plugins.moduleA", TEST_DIRS.API_TEST_MIXED, {
-			moduleID: "moduleA",
-			forceOverwrite: true
+			id: "moduleA",
+			collision: {
+				force: true
+			}
 		});
 
 		expect(api.plugins.moduleA).toBeDefined();
 
 		// Update moduleA (hot-reload)
 		await api.slothlet.api.add("plugins.moduleA", TEST_DIRS.API_TEST, {
-			moduleID: "moduleA",
-			forceOverwrite: true
+			id: "moduleA",
+			collision: {
+				force: true
+			}
 		});
 
 		expect(api.plugins.moduleA).toBeDefined();
@@ -71,8 +75,10 @@ describe.each(OWNERSHIP_CONFIGS)("Rule 12 Ownership Tracking - $name", ({ name: 
 
 	it("should allow registering different modules independently", async () => {
 		await api.slothlet.api.add("plugins.moduleB", TEST_DIRS.API_TEST_COLLECTIONS, {
-			moduleID: "moduleB",
-			forceOverwrite: true
+			id: "moduleB",
+			collision: {
+				force: true
+			}
 		});
 
 		expect(api.plugins.moduleB).toBeDefined();
@@ -81,8 +87,10 @@ describe.each(OWNERSHIP_CONFIGS)("Rule 12 Ownership Tracking - $name", ({ name: 
 	it("should handle cross-module overwrite based on allowAddApiOverwrite setting", async () => {
 		// Register moduleC first
 		await api.slothlet.api.add("plugins.moduleC", TEST_DIRS.API_TEST, {
-			moduleID: "moduleC",
-			forceOverwrite: true
+			id: "moduleC",
+			collision: {
+				force: true
+			}
 		});
 
 		const before = await api.slothlet.api.leaves("moduleC");
@@ -91,7 +99,8 @@ describe.each(OWNERSHIP_CONFIGS)("Rule 12 Ownership Tracking - $name", ({ name: 
 
 		// These configs collide by merge: a different module adding at an owned path succeeds.
 		await api.slothlet.api.add("plugins.moduleC", TEST_DIRS.API_TEST_MIXED, {
-			moduleID: "moduleD" // Different module adding at moduleC's path
+			id: "moduleD"
+				// Different module adding at moduleC's path
 		});
 
 		// The path now carries API_TEST_MIXED's top-level keys, and moduleC's own keys are still there (a merge, not a replace).
@@ -142,7 +151,9 @@ describe.each(BASIC_CONFIGS)("Rule 12 Configuration Validation - $name", ({ name
 
 	it("should gate a forceOverwrite add on api.mutations.add, not api.mutations.reload", async () => {
 		const addForced = (target) =>
-			target.slothlet.api.add("test.path", TEST_DIRS.API_TEST, { forceOverwrite: true, moduleID: "testModule" });
+			target.slothlet.api.add("test.path", TEST_DIRS.API_TEST, { collision: {
+						force: true
+					}, id: "testModule" });
 
 		// Reload mutations off: slothlet does not tie forceOverwrite to reload, so the add still resolves.
 		const noReload = await slothlet({ ...config, base: TEST_DIRS.API_TEST, api: { ...config.api, mutations: { reload: false } } });
@@ -227,14 +238,18 @@ describe("Rule 12 with allowApiOverwrite: false", () => {
 
 		// Register with moduleID
 		await api.slothlet.api.add("ownership.test", TEST_DIRS.API_TEST_COLLECTIONS, {
-			moduleID: "testModule",
-			forceOverwrite: true
+			id: "testModule",
+			collision: {
+				force: true
+			}
 		});
 
 		// Same module should be able to update
 		await api.slothlet.api.add("ownership.test", TEST_DIRS.API_TEST_MIXED, {
-			moduleID: "testModule",
-			forceOverwrite: true
+			id: "testModule",
+			collision: {
+				force: true
+			}
 		});
 
 		// Original test doesn't check reference identity - just verifies operation succeeds
@@ -258,15 +273,17 @@ describe("Rule 12 with allowApiOverwrite: false", () => {
 
 		// Register with moduleID
 		await api.slothlet.api.add("ownership.cross", TEST_DIRS.API_TEST_COLLECTIONS, {
-			moduleID: "testModule",
-			forceOverwrite: true
+			id: "testModule",
+			collision: {
+				force: true
+			}
 		});
 
 		// Different module should be blocked by collision mode
 		await withSuppressedSlothletErrorOutput(async () => {
 			try {
 				await api.slothlet.api.add("ownership.cross", TEST_DIRS.API_TEST_COLLECTIONS, {
-					moduleID: "differentModule"
+					id: "differentModule"
 				});
 				throw new Error("Expected cross-module overwrite to be blocked");
 			} catch (error) {
@@ -313,13 +330,17 @@ describe("Rule 12 with allowApiOverwrite: false", () => {
 		apisToClean.push(api);
 
 		await api.slothlet.api.add("ownership.test2", TEST_DIRS.API_TEST_COLLECTIONS, {
-			moduleID: "testModule2",
-			forceOverwrite: true
+			id: "testModule2",
+			collision: {
+				force: true
+			}
 		});
 
 		await api.slothlet.api.add("ownership.test2", TEST_DIRS.API_TEST_MIXED, {
-			moduleID: "testModule2",
-			forceOverwrite: true
+			id: "testModule2",
+			collision: {
+				force: true
+			}
 		});
 
 		// Original test doesn't check reference identity - just verifies operation succeeds
@@ -341,14 +362,16 @@ describe("Rule 12 with allowApiOverwrite: false", () => {
 		apisToClean.push(api);
 
 		await api.slothlet.api.add("ownership.cross2", TEST_DIRS.API_TEST_COLLECTIONS, {
-			moduleID: "testModule2",
-			forceOverwrite: true
+			id: "testModule2",
+			collision: {
+				force: true
+			}
 		});
 
 		await withSuppressedSlothletErrorOutput(async () => {
 			try {
 				await api.slothlet.api.add("ownership.cross2", TEST_DIRS.API_TEST_COLLECTIONS, {
-					moduleID: "differentModule2"
+					id: "differentModule2"
 				});
 				throw new Error("Expected cross-module overwrite to be blocked");
 			} catch (error) {

@@ -46,8 +46,8 @@ if (kind === "plain") {
 		silent: true,
 		permissions: { policy: "allow", caller: { attribution: kind } }
 	});
-	await api.slothlet.api.add("pledge", path.join(here, "pledge"), { moduleID: "pledge" });
-	await api.slothlet.api.add("taker", path.join(here, "taker"), { moduleID: "taker" });
+	await api.slothlet.api.add("pledge", path.join(here, "pledge"), { id: "pledge" });
+	await api.slothlet.api.add("taker", path.join(here, "taker"), { id: "taker" });
 	pledge = api.pledge;
 	taker = api.taker;
 	shape = await taker.take(name);

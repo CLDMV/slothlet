@@ -490,8 +490,7 @@ describe("Hooks > around (#496) > versioned registration", () => {
 						}
 					}
 				},
-				{},
-				{ version, default: version === "v1" }
+				{ version: { tag: version, default: version === "v1" } }
 			);
 		}
 		const fired = [];
@@ -501,7 +500,7 @@ describe("Hooks > around (#496) > versioned registration", () => {
 				fired.push({ version, path });
 				return `${next()}!`;
 			},
-			{ id: "audit", versionDispatcher: () => ["v1", "v2"] }
+			{ id: "audit", versioning: { dispatcher: () => ["v1", "v2"] } }
 		);
 
 		expect(api.v1.auth.login()).toBe("login-v1!");

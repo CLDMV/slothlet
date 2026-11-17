@@ -125,8 +125,8 @@ describe.each(CONFIGS)("what a module reaches through self (#625) — $mode / $r
 		async function load() {
 			const api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, ...options });
 			instances.push(api);
-			await api.slothlet.api.add("victim", path.join(FIXTURE, "victim"), { moduleID: "victim" });
-			await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { moduleID: "guest" });
+			await api.slothlet.api.add("victim", path.join(FIXTURE, "victim"), { id: "victim" });
+			await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { id: "guest" });
 			return api;
 		}
 
@@ -229,8 +229,8 @@ describe.each(CONFIGS)("what a module reaches through self (#625) — $mode / $r
 				permissions: { ...options.permissions, caller: { capture: false } }
 			});
 			instances.push(api);
-			await api.slothlet.api.add("victim", path.join(FIXTURE, "victim"), { moduleID: "victim" });
-			await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { moduleID: "guest" });
+			await api.slothlet.api.add("victim", path.join(FIXTURE, "victim"), { id: "victim" });
+			await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { id: "guest" });
 			const later = await api.guest.x.keepVictimFrozenMembers();
 			const report = withSuppressedSlothletErrorOutputSync(() => later());
 			expect(report).toEqual(Object.fromEntries(Object.keys(report).map((key) => [key, "LOOSE_SET_NOT_OWNED"])));
@@ -400,8 +400,8 @@ describe.each(CONFIGS)("what a module reaches through self (#625) — $mode / $r
 		it.runIf(off)("leaves the framework namespace stored on another module's class to a module with the system disabled", async () => {
 			const api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, permissions: { mode: "disabled" } });
 			instances.push(api);
-			await api.slothlet.api.add("victim", path.join(FIXTURE, "victim"), { moduleID: "victim" });
-			await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { moduleID: "guest" });
+			await api.slothlet.api.add("victim", path.join(FIXTURE, "victim"), { id: "victim" });
+			await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { id: "guest" });
 			api.victim.v.Account.prototype.namespace = api.slothlet;
 			expect(api.guest.x.changeStoredNamespace()).toBe("done");
 			expect(api.slothlet.planted).toBe(1);
@@ -488,7 +488,7 @@ describe.each(CONFIGS)("reading back a member a module made on a folder — $mod
 			permissions: { policy: "deny", rules: [...MADE_BASE_RULES, ...rules] }
 		});
 		instances.push(api);
-		await api.slothlet.api.add("zz", MADE, { moduleID: "zz" });
+		await api.slothlet.api.add("zz", MADE, { id: "zz" });
 		return api;
 	}
 

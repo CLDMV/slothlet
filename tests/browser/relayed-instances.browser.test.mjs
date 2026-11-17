@@ -64,8 +64,8 @@ describe("browser per-instance methods", () => {
 				return error?.code ?? String(error?.message ?? error);
 			}
 		};
-		await api.slothlet.api.add("vault", { exports: { get: () => "SECRET" } }, { moduleID: "vault" });
-		await api.slothlet.api.add("bag", { exports: { inst: () => new Client() } }, { moduleID: "bag" });
+		await api.slothlet.api.add("vault", { exports: { get: () => "SECRET" } }, { id: "vault" });
+		await api.slothlet.api.add("bag", { exports: { inst: () => new Client() } }, { id: "bag" });
 		await api.slothlet.api.add(
 			"runner",
 			{
@@ -77,7 +77,7 @@ describe("browser per-instance methods", () => {
 					}
 				}
 			},
-			{ moduleID: "runner" }
+			{ id: "runner" }
 		);
 		await api.slothlet.api.add(
 			"ext",
@@ -91,7 +91,7 @@ describe("browser per-instance methods", () => {
 					}
 				}
 			},
-			{ moduleID: "ext" }
+			{ id: "ext" }
 		);
 		return api;
 	};

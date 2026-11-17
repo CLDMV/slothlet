@@ -40,7 +40,7 @@ const BASE = TEST_DIRS.API_TEST_VERSIONED;
 /** Helper: one versioned path "auth" registered as v1 (default). */
 async function makeApi(config) {
 	const api = await slothlet({ ...config, base: `${BASE}/callers` });
-	await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1", default: true });
+	await api.slothlet.api.add("auth", `${BASE}/v1`, { version: { tag: "v1", default: true } });
 	return api;
 }
 
@@ -94,8 +94,8 @@ describe.each(getMatrixConfigs())("Versioning > Dispatcher set trap > $name", ({
 
 	it("assignment routes to the active default version when two versions exist", async () => {
 		api = await slothlet({ ...config, base: `${BASE}/callers` });
-		await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1", default: true });
-		await api.slothlet.api.add("auth", `${BASE}/v2`, {}, { version: "v2" });
+		await api.slothlet.api.add("auth", `${BASE}/v1`, { version: { tag: "v1", default: true } });
+		await api.slothlet.api.add("auth", `${BASE}/v2`, { version: { tag: "v2" } });
 
 		api.auth.sharedClient = "shared";
 

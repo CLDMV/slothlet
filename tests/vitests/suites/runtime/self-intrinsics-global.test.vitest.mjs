@@ -60,8 +60,8 @@ describe.each(CONFIGS)("a Proxy on the global object (#625) — $mode / $runtime
 		vi.resetModules();
 		const { default: slothlet } = await import("@cldmv/slothlet");
 		api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, permissions: {} });
-		await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { moduleID: "guest" });
-		await api.slothlet.api.add("victim", path.join(FIXTURE, "victim"), { moduleID: "victim" });
+		await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { id: "guest" });
+		await api.slothlet.api.add("victim", path.join(FIXTURE, "victim"), { id: "victim" });
 		expect(await api.victim.v.writeOwnSymbol()).toEqual({ assign: "done", read: 1, define: "done", remove: "done", gone: true });
 		expect(api.victim.v.useOwnMembers().constructed).toBe(100);
 		expect(traps).toEqual([]);

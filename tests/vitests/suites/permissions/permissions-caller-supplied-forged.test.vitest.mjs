@@ -75,7 +75,7 @@ describe.each(getMatrixConfigs())("Permissions > code placed on a caller keeps t
 			hook: true,
 			permissions: { policy: "deny", rules: RULES, events: EVENTS }
 		});
-		await api.slothlet.api.add("attacker", path.join(DIR, "attacker"), { moduleID: "attacker-mod" });
+		await api.slothlet.api.add("attacker", path.join(DIR, "attacker"), { id: "attacker-mod" });
 		return api;
 	};
 

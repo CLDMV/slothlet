@@ -164,12 +164,12 @@ describe("removeApiComponent — apiPath+moduleID restore via setValueAtPath (li
 
 		// Layer 1: add at "cstplug" with a custom moduleID that has no path-prefix relationship
 		// (ownership registers "cstplug" under moduleID "layer-one").
-		await api.slothlet.api.add("cstplug", TEST_DIRS.API_TEST_MIXED, { moduleID: "layer-one" });
+		await api.slothlet.api.add("cstplug", TEST_DIRS.API_TEST_MIXED, { id: "layer-one" });
 		expect(api.cstplug).toBeDefined();
 
 		// Layer 2: forceOverwrite=true → collisionMode="replace" → ownership stacks
 		// "cstplug" is now owned by "layer-two" with "layer-one" in the history.
-		await api.slothlet.api.add("cstplug", TEST_DIRS.API_TEST_MIXED, { moduleID: "layer-two", forceOverwrite: true });
+		await api.slothlet.api.add("cstplug", TEST_DIRS.API_TEST_MIXED, { id: "layer-two", collision: { force: true } });
 
 		// Remove by API path string "cstplug".
 		// Detection:
@@ -204,12 +204,12 @@ describe("removeApiComponent — pathsToRollback loop (line 1683)", () => {
 		api = await makeApi();
 
 		// Layer 1
-		await api.slothlet.api.add("rollmod", TEST_DIRS.API_TEST_MIXED, { moduleID: "roll-v1" });
+		await api.slothlet.api.add("rollmod", TEST_DIRS.API_TEST_MIXED, { id: "roll-v1" });
 		expect(api.rollmod).toBeDefined();
 
 		// Layer 2: forceOverwrite=true forces replace mode → stacks ownership for "rollmod"
 		// under "roll-v2", with "roll-v1" in the prior history.
-		await api.slothlet.api.add("rollmod", TEST_DIRS.API_TEST_MIXED, { moduleID: "roll-v2", forceOverwrite: true });
+		await api.slothlet.api.add("rollmod", TEST_DIRS.API_TEST_MIXED, { id: "roll-v2", collision: { force: true } });
 
 		// Remove by moduleID "roll-v2".
 		// ownership.unregister("roll-v2"):
@@ -394,7 +394,7 @@ describe("_restoreApiTree root path — reload after add (lines 2281-2286)", () 
 
 		// Add an extra module at root level (empty string → merges into root)
 		// forceOverwrite ensures replace mode and proper ownership on merge path
-		await api.slothlet.api.add("extra2024", TEST_DIRS.API_TEST_MIXED, { moduleID: "extra-for-root-reload" });
+		await api.slothlet.api.add("extra2024", TEST_DIRS.API_TEST_MIXED, { id: "extra-for-root-reload" });
 		expect(api.extra2024).toBeDefined();
 
 		// Reloading base module ("." ) iterates all root keys including "extra2024"
@@ -429,7 +429,7 @@ describe("_restoreApiTree nested path (lines 2364-2491)", () => {
 		api = await makeApi();
 
 		// Add a named endpoint — cache entry stored with endpoint="pluginsnested"
-		await api.slothlet.api.add("pluginsnested", TEST_DIRS.API_TEST_MIXED, { moduleID: "plugins-nested-v1" });
+		await api.slothlet.api.add("pluginsnested", TEST_DIRS.API_TEST_MIXED, { id: "plugins-nested-v1" });
 		expect(api.pluginsnested).toBeDefined();
 
 		// reload("plugins-nested-v1") → isModuleId=true → reloadApiComponent({moduleID:"plugins-nested-v1"})
@@ -444,7 +444,7 @@ describe("_restoreApiTree nested path (lines 2364-2491)", () => {
 	it("custom props survive nested-path reload (lines 2364+)", async () => {
 		api = await makeApi();
 
-		await api.slothlet.api.add("pluginscp", TEST_DIRS.API_TEST_MIXED, { moduleID: "plugins-cp-v1" });
+		await api.slothlet.api.add("pluginscp", TEST_DIRS.API_TEST_MIXED, { id: "plugins-cp-v1" });
 		expect(api.pluginscp).toBeDefined();
 
 		// Plant a custom property on the wrapper proxy — should survive reload
@@ -458,10 +458,12 @@ describe("_restoreApiTree nested path (lines 2364-2491)", () => {
 	it("stacked nested-path reload (forceOverwrite then reload by moduleID)", async () => {
 		api = await makeApi();
 
-		await api.slothlet.api.add("pluginsstack", TEST_DIRS.API_TEST_MIXED, { moduleID: "plugins-stack-v1" });
+		await api.slothlet.api.add("pluginsstack", TEST_DIRS.API_TEST_MIXED, { id: "plugins-stack-v1" });
 		await api.slothlet.api.add("pluginsstack", TEST_DIRS.API_TEST_MIXED, {
-			moduleID: "plugins-stack-v2",
-			forceOverwrite: true
+			id: "plugins-stack-v2",
+			collision: {
+				force: true
+			}
 		});
 		expect(api.pluginsstack).toBeDefined();
 
@@ -514,9 +516,11 @@ describe("debug.api branches in syncWrapper and mutateApiValue (lines 425-492, 6
 		// with the merge branch: if (collisionMode === "merge" || "merge-replace") (line ~804)
 		// When debug.api=true, lines 651, 661, 669, 676, 687, 695 fire.
 		await api.slothlet.api.add("math", TEST_DIRS.API_TEST, {
-			moduleID: "math-merge-debug",
-			collisionMode: "merge",
-			forceOverwrite: false
+			id: "math-merge-debug",
+			collision: {
+				mode: "merge",
+				force: false
+			}
 		});
 		expect(api.math).toBeDefined();
 	});
@@ -525,7 +529,7 @@ describe("debug.api branches in syncWrapper and mutateApiValue (lines 425-492, 6
 		api = await makeDebugApi();
 
 		// Add named endpoint → creates cache
-		await api.slothlet.api.add("debugplug", TEST_DIRS.API_TEST_MIXED, { moduleID: "debug-plug-v1" });
+		await api.slothlet.api.add("debugplug", TEST_DIRS.API_TEST_MIXED, { id: "debug-plug-v1" });
 		expect(api.debugplug).toBeDefined();
 
 		// Reload by moduleID with debug.api=true → _restoreApiTree nested path →
@@ -622,7 +626,7 @@ describe("collectPendingMaterializations — lazy mode add (lines 1364-1430)", (
 		// In lazy mode, API wrappers are unmaterialized shells.
 		// Adding a module runs collectPendingMaterializations which traverses
 		// any wrappers that exist at the added path.
-		await api.slothlet.api.add("lazyadd", TEST_DIRS.API_TEST_MIXED, { moduleID: "lazy-add-v1" });
+		await api.slothlet.api.add("lazyadd", TEST_DIRS.API_TEST_MIXED, { id: "lazy-add-v1" });
 		expect(api.lazyadd).toBeDefined();
 
 		// Access a property to trigger lazy materialization
@@ -634,7 +638,7 @@ describe("collectPendingMaterializations — lazy mode add (lines 1364-1430)", (
 		api = await makeLazyApi();
 
 		// Add first module at "lazymrg"
-		await api.slothlet.api.add("lazymrg", TEST_DIRS.API_TEST_MIXED, { moduleID: "lazy-mrg-v1" });
+		await api.slothlet.api.add("lazymrg", TEST_DIRS.API_TEST_MIXED, { id: "lazy-mrg-v1" });
 		expect(api.lazymrg).toBeDefined();
 
 		// Access to trigger initial materialization
@@ -642,9 +646,11 @@ describe("collectPendingMaterializations — lazy mode add (lines 1364-1430)", (
 
 		// Add again with merge — triggers collectPendingMaterializations on the existing wrapper
 		await api.slothlet.api.add("lazymrg", TEST_DIRS.API_TEST_MIXED, {
-			moduleID: "lazy-mrg-v2",
-			collisionMode: "merge",
-			forceOverwrite: false
+			id: "lazy-mrg-v2",
+			collision: {
+				mode: "merge",
+				force: false
+			}
 		});
 		expect(api.lazymrg).toBeDefined();
 	});

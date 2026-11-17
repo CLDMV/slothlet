@@ -287,7 +287,7 @@ export function grant(rule) {
  */
 export async function mountHelper(folder, permissions) {
 	try {
-		await self.slothlet.api.add("victim.helper", folder, { moduleID: "helper", permissions });
+		await self.slothlet.api.add("victim.helper", folder, { id: "helper", permissions });
 		return "done";
 	} catch (error) {
 		return error?.code ?? String(error);

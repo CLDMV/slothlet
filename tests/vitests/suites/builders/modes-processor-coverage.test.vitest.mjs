@@ -211,7 +211,7 @@ describe("modes-processor: addapi flatten-to-category (lines 525-680)", () => {
 		});
 
 		// Add addapi dir → triggers addapi flatten path
-		await _api.slothlet.api.add("plugins", DIRS.ADDAPI, { collisionMode: "merge" });
+		await _api.slothlet.api.add("plugins", DIRS.ADDAPI, { collision: { mode: "merge" } });
 		expect(typeof _api.plugins?.initializePlugin === "function" || typeof _api.initializePlugin === "function").toBe(true);
 	});
 
@@ -285,7 +285,7 @@ describe("modes-processor: eager folder transparency (lines 1040-1060)", () => {
 		});
 
 		// Add folder_config under "config" prefix
-		await _api.slothlet.api.add("config", DIRS.FOLDER_CONFIG, { collisionMode: "merge" });
+		await _api.slothlet.api.add("config", DIRS.FOLDER_CONFIG, { collision: { mode: "merge" } });
 
 		// Should have getNestedConfig at api.config level (transparent folder)
 		expect(typeof _api.config?.getNestedConfig).toBe("function");
@@ -298,7 +298,7 @@ describe("modes-processor: eager folder transparency (lines 1040-1060)", () => {
 			...makeConfig({ debug: { modes: true } }),
 			base: TEST_DIRS.API_TEST
 		});
-		await _api.slothlet.api.add("config", DIRS.FOLDER_CONFIG, { collisionMode: "merge" });
+		await _api.slothlet.api.add("config", DIRS.FOLDER_CONFIG, { collision: { mode: "merge" } });
 		expect(typeof _api.config?.getNestedConfig).toBe("function");
 	});
 });
@@ -315,7 +315,7 @@ describe("modes-processor: lazy folder transparency (lines ~1120-1135)", () => {
 		});
 
 		// Add folder_config under "config" prefix in lazy mode
-		await _api.slothlet.api.add("config", DIRS.FOLDER_CONFIG, { collisionMode: "merge" });
+		await _api.slothlet.api.add("config", DIRS.FOLDER_CONFIG, { collision: { mode: "merge" } });
 
 		// After lazy materialization, should have getNestedConfig
 		const result = await _api.config?.getNestedConfig?.();

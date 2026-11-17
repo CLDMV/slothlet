@@ -55,7 +55,7 @@ describe.each(EAGER_CONFIGS)("colon moduleID round-trips — $name", ({ config }
 
 	it.each(COLON_IDS)("remove(id) removes a directory mount added under moduleID %s", async (moduleID) => {
 		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST });
-		const id = await api.slothlet.api.add("shopfront", TEST_DIRS.API_TEST_MIXED, { moduleID });
+		const id = await api.slothlet.api.add("shopfront", TEST_DIRS.API_TEST_MIXED, { id: moduleID });
 		expect(id).toBe(moduleID); // add() hands back the exact id
 		expect(api.shopfront).toBeDefined();
 
@@ -67,11 +67,11 @@ describe.each(EAGER_CONFIGS)("colon moduleID round-trips — $name", ({ config }
 
 	it.each(COLON_IDS)("leaves(id) enumerates the owned paths for moduleID %s", async (moduleID) => {
 		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST });
-		await api.slothlet.api.add("shopfront", TEST_DIRS.API_TEST_MIXED, { moduleID });
+		await api.slothlet.api.add("shopfront", TEST_DIRS.API_TEST_MIXED, { id: moduleID });
 
 		// Resolution is by verbatim id — leaves must not throw API_LEAVES_UNKNOWN_MODULE and must
 		// return this mount's owned callable paths (host tooling call).
-		const paths = await api.slothlet.api.leaves(moduleID, { includePrivate: true });
+		const paths = await api.slothlet.api.leaves(moduleID, { private: true });
 		expect(Array.isArray(paths)).toBe(true);
 		expect(paths.length).toBeGreaterThan(0);
 		expect(paths.every((p) => p.startsWith("shopfront"))).toBe(true);
@@ -79,7 +79,7 @@ describe.each(EAGER_CONFIGS)("colon moduleID round-trips — $name", ({ config }
 
 	it.each(COLON_IDS)("reload(id) rebuilds a mount added under moduleID %s", async (moduleID) => {
 		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST });
-		await api.slothlet.api.add("shopfront", TEST_DIRS.API_TEST_MIXED, { moduleID });
+		await api.slothlet.api.add("shopfront", TEST_DIRS.API_TEST_MIXED, { id: moduleID });
 		expect(api.shopfront).toBeDefined();
 
 		await expect(api.slothlet.api.reload(moduleID)).resolves.toBeUndefined();
@@ -88,7 +88,7 @@ describe.each(EAGER_CONFIGS)("colon moduleID round-trips — $name", ({ config }
 
 	it("remove(id) removes a synthetic (in-memory) mount added under a colon moduleID", async () => {
 		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST });
-		const id = await api.slothlet.api.add("synth", () => 1, { moduleID: "vine:xyz" });
+		const id = await api.slothlet.api.add("synth", () => 1, { id: "vine:xyz" });
 		expect(id).toBe("vine:xyz");
 		expect(typeof api.synth).toBe("function");
 
@@ -100,7 +100,7 @@ describe.each(EAGER_CONFIGS)("colon moduleID round-trips — $name", ({ config }
 		// Guards against reload re-attributing the mount's children under a colon-truncated base id,
 		// which would leave remove() unable to find them afterward.
 		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST });
-		await api.slothlet.api.add("shopfront", TEST_DIRS.API_TEST_MIXED, { moduleID });
+		await api.slothlet.api.add("shopfront", TEST_DIRS.API_TEST_MIXED, { id: moduleID });
 		await api.slothlet.api.reload(moduleID);
 		expect(api.shopfront).toBeDefined();
 
@@ -110,7 +110,7 @@ describe.each(EAGER_CONFIGS)("colon moduleID round-trips — $name", ({ config }
 
 	it("control: a hyphen moduleID still removes (no regression)", async () => {
 		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST });
-		const id = await api.slothlet.api.add("shopfront", TEST_DIRS.API_TEST_MIXED, { moduleID: CONTROL_ID });
+		const id = await api.slothlet.api.add("shopfront", TEST_DIRS.API_TEST_MIXED, { id: CONTROL_ID });
 		expect(id).toBe(CONTROL_ID);
 		expect(await api.slothlet.api.remove(id)).toBe(true);
 		expect(api.shopfront).toBeUndefined();
@@ -120,7 +120,7 @@ describe.each(EAGER_CONFIGS)("colon moduleID round-trips — $name", ({ config }
 		// Regression: resolving a moduleID must never truncate on ':' — removing an unregistered
 		// "vine:abc" once matched the registered base "vine" and wrongly removed it.
 		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST });
-		await api.slothlet.api.add("shopfront", TEST_DIRS.API_TEST_MIXED, { moduleID: "vine" });
+		await api.slothlet.api.add("shopfront", TEST_DIRS.API_TEST_MIXED, { id: "vine" });
 		expect(api.shopfront).toBeDefined();
 
 		expect(await api.slothlet.api.remove("vine:abc")).toBe(false);
@@ -135,9 +135,9 @@ describe.each(EAGER_CONFIGS)("colon moduleID round-trips — $name", ({ config }
 		// The one token a module id may NOT contain — it is the delimiter slothlet joins the id and
 		// apiPath with in the internal composite key, so allowing it would corrupt that key.
 		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST });
-		await expect(api.slothlet.api.add("blocked", TEST_DIRS.API_TEST_MIXED, { moduleID: `a${MODULE_ID_SEPARATOR}b` })).rejects.toMatchObject(
-			{ code: "MODULE_ID_RESERVED_SEPARATOR" }
-		);
+		await expect(api.slothlet.api.add("blocked", TEST_DIRS.API_TEST_MIXED, { id: `a${MODULE_ID_SEPARATOR}b` })).rejects.toMatchObject({
+			code: "MODULE_ID_RESERVED_SEPARATOR"
+		});
 		expect(api.blocked).toBeUndefined();
 	});
 
@@ -159,7 +159,7 @@ describe.each(EAGER_CONFIGS)("colon moduleID round-trips — $name", ({ config }
 		const badPath = `seg${MODULE_ID_SEPARATOR}ment`;
 		// With a clean explicit moduleID the offending token is the apiPath, not the id, so it surfaces as a
 		// path-validation error rather than MODULE_ID_RESERVED_SEPARATOR (which covers the auto-generated case).
-		await expect(api.slothlet.api.add(badPath, TEST_DIRS.API_TEST_MIXED, { moduleID: "cleanId" })).rejects.toMatchObject({
+		await expect(api.slothlet.api.add(badPath, TEST_DIRS.API_TEST_MIXED, { id: "cleanId" })).rejects.toMatchObject({
 			code: "INVALID_CONFIG_API_PATH_INVALID"
 		});
 		expect(api[badPath]).toBeUndefined();
@@ -172,7 +172,7 @@ describe.each(EAGER_CONFIGS)("colon moduleID round-trips — $name", ({ config }
 		// guards coerce and gate on presence, so a numeric moduleID is validated the same as a string one.
 		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST });
 		const badPath = `seg${MODULE_ID_SEPARATOR}ment`;
-		await expect(api.slothlet.api.add(badPath, TEST_DIRS.API_TEST_MIXED, { moduleID: 123 })).rejects.toMatchObject({
+		await expect(api.slothlet.api.add(badPath, TEST_DIRS.API_TEST_MIXED, { id: 123 })).rejects.toMatchObject({
 			code: "INVALID_CONFIG_API_PATH_INVALID"
 		});
 		expect(api[badPath]).toBeUndefined();

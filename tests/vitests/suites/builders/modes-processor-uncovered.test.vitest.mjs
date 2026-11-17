@@ -643,7 +643,7 @@ describe("modes-processor: FLATTEN_MULTI_EXPORT_BLOCKED debug log when skip bloc
 			base: TEST_DIRS.API_TEST_ADD_ROOT_BASE
 		});
 
-		await expect(_api.slothlet.api.add("", DIRS.MULTI_EXPORT_SKIP, { moduleID: "errmod" })).rejects.toMatchObject({
+		await expect(_api.slothlet.api.add("", DIRS.MULTI_EXPORT_SKIP, { id: "errmod" })).rejects.toMatchObject({
 			code: "COLLISION_ERROR"
 		});
 

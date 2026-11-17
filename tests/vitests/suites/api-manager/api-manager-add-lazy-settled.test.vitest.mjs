@@ -81,7 +81,7 @@ describe.each(getMatrixConfigs({ mode: "lazy" }))("api.add() in lazy mode return
 
 	it("the mounted modules still resolve and stay owned by the added module", async () => {
 		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST });
-		const moduleID = await api.slothlet.api.add("mounted", TEST_DIRS.API_TEST_COLLISIONS, { moduleID: "collisions-mod" });
+		const moduleID = await api.slothlet.api.add("mounted", TEST_DIRS.API_TEST_COLLISIONS, { id: "collisions-mod" });
 
 		expect(await api.mounted.lazybase.sub.testFunc()).toBe("from-lazybase-sub");
 		expect(await api.mounted.lazyfuncbase.sub(1)).toBe("from-lazyfuncbase-sub:1");

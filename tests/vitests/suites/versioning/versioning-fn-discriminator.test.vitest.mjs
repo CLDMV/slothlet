@@ -48,8 +48,8 @@ describe.each(getMatrixConfigs())("Versioning > Function Discriminator > $name",
 			}
 		});
 
-		await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1", default: true, metadata: { stable: true } });
-		await api.slothlet.api.add("auth", `${BASE}/v2`, {}, { version: "v2", metadata: { stable: false } });
+		await api.slothlet.api.add("auth", `${BASE}/v1`, { version: { tag: "v1", default: true, metadata: { stable: true } } });
+		await api.slothlet.api.add("auth", `${BASE}/v2`, { version: { tag: "v2", metadata: { stable: false } } });
 
 		// Trigger a dispatch
 		api.unversionedCaller.callLogin("testUser");
@@ -87,8 +87,8 @@ describe.each(getMatrixConfigs())("Versioning > Function Discriminator > $name",
 			}
 		});
 
-		await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1", default: true });
-		await api.slothlet.api.add("auth", `${BASE}/v2`, {}, { version: "v2" });
+		await api.slothlet.api.add("auth", `${BASE}/v1`, { version: { tag: "v1", default: true } });
+		await api.slothlet.api.add("auth", `${BASE}/v2`, { version: { tag: "v2" } });
 
 		api.unversionedCaller.callLogin("testUser");
 
@@ -112,8 +112,8 @@ describe.each(getMatrixConfigs())("Versioning > Function Discriminator > $name",
 			}
 		});
 
-		await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1", default: true });
-		await api.slothlet.api.add("auth", `${BASE}/v2`, {}, { version: "v2" });
+		await api.slothlet.api.add("auth", `${BASE}/v1`, { version: { tag: "v1", default: true } });
+		await api.slothlet.api.add("auth", `${BASE}/v2`, { version: { tag: "v2" } });
 
 		api.slothlet.metadata.setFor("v2Caller", { targetVersion: "v2" });
 
@@ -132,8 +132,8 @@ describe.each(getMatrixConfigs())("Versioning > Function Discriminator > $name",
 			}
 		});
 
-		await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1", default: true });
-		await api.slothlet.api.add("auth", `${BASE}/v2`, {}, { version: "v2" });
+		await api.slothlet.api.add("auth", `${BASE}/v1`, { version: { tag: "v1", default: true } });
+		await api.slothlet.api.add("auth", `${BASE}/v2`, { version: { tag: "v2" } });
 
 		// Discriminator throws → resolveForPath catches it → returns null → getDefaultVersion fallback
 		// v1 is explicit default, so result.version should be "v1"

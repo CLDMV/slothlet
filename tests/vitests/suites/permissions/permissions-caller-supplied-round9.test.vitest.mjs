@@ -94,7 +94,7 @@ describe.each(getMatrixConfigs())("A module adds a folder however it is spelled 
 	])("%s: the added module's top level after its await is refused", async (_label, folder) => {
 		api = await slothlet({ ...config, base: path.join(DIR7, "base"), hook: true, permissions: { policy: "deny", rules: RULES } });
 		await api.vault.secret.whoami();
-		await api.slothlet.api.add("callee", path.join(DIR7, "callee"), { moduleID: "callee-mod" });
+		await api.slothlet.api.add("callee", path.join(DIR7, "callee"), { id: "callee-mod" });
 		const adding = api.callee.adder.addWhile(folder());
 		expect(await api.vault.secret.secret()).toBe("s3cret");
 		expect(await adding).toBe("s3cret");
@@ -133,7 +133,7 @@ describe.each(getMatrixConfigs({ runtime: "live" }))(
 			v8.setFlagsFromString("--expose-gc");
 			const gc = vm.runInNewContext("gc");
 			api = await slothlet({ ...config, base: path.join(DIR, "base") });
-			await api.slothlet.api.add("ticker", path.join(DIR, "ticker"), { moduleID: "ticker-mod" });
+			await api.slothlet.api.add("ticker", path.join(DIR, "ticker"), { id: "ticker-mod" });
 			const manager = resolveWrapper(api.probe.ping).slothlet.contextManager;
 			const before = manager.suspendedCallCount;
 			for (let batch = 0; batch < 3; batch++) {

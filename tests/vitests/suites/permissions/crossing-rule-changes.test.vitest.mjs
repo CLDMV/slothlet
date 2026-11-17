@@ -70,8 +70,8 @@ describe.each(matrix)("crossing views follow runtime rule changes > $mode / $run
 			runtime,
 			permissions: { policy: "allow", caller: { attribution }, rules }
 		});
-		await api.slothlet.api.add("owner", join(FIXTURE, "owner"), { moduleID: "owner" });
-		await api.slothlet.api.add("reader", join(FIXTURE, "reader"), { moduleID: "reader" });
+		await api.slothlet.api.add("owner", join(FIXTURE, "owner"), { id: "owner" });
+		await api.slothlet.api.add("reader", join(FIXTURE, "reader"), { id: "reader" });
 		await api.owner;
 		await api.reader;
 	}

@@ -52,7 +52,7 @@ describe.each(getMatrixConfigs())("Versioning > No Default > $name", ({ config }
 			// always fall through
 		});
 
-		await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1" });
+		await api.slothlet.api.add("auth", `${BASE}/v1`, { version: { tag: "v1" } });
 
 		// Dispatcher exists while the version is registered
 		expect(api.auth).toBeDefined();
@@ -76,8 +76,8 @@ describe.each(getMatrixConfigs())("Versioning > No Default > $name", ({ config }
 			// returns a non-existent tag
 		});
 
-		await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1", default: true });
-		await api.slothlet.api.add("auth", `${BASE}/v2`, {}, { version: "v2" });
+		await api.slothlet.api.add("auth", `${BASE}/v1`, { version: { tag: "v1", default: true } });
+		await api.slothlet.api.add("auth", `${BASE}/v2`, { version: { tag: "v2" } });
 
 		// v99 doesn't exist → falls to explicit default v1
 		const result = api.unversionedCaller.callLogin("testUser");

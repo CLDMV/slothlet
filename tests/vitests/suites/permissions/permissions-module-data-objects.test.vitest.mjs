@@ -90,8 +90,8 @@ describe.each(CONFIGS)("a module's data objects (#625) — $mode / $runtime", ({
 	 */
 	async function load(options) {
 		api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, ...options });
-		await api.slothlet.api.add("victim", path.join(FIXTURE, "victim"), { moduleID: "victim" });
-		await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { moduleID: "guest" });
+		await api.slothlet.api.add("victim", path.join(FIXTURE, "victim"), { id: "victim" });
+		await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { id: "guest" });
 		return api;
 	}
 
@@ -133,7 +133,7 @@ describe.each(CONFIGS)("a module's data objects (#625) — $mode / $runtime", ({
 		await api.slothlet.api.add(
 			"syn",
 			{ pending: Promise.resolve(value), ref: new WeakRef(value), map: new Map([["k", value]]) },
-			{ moduleID: "syn" }
+			{ id: "syn" }
 		);
 		globalThis[Symbol.for("slothlet.test.i625.probe")] = async (self) => {
 			const outcome = async (change) => {
@@ -219,7 +219,7 @@ describe.each(CONFIGS)("a module's data objects (#625) — $mode / $runtime", ({
 	])("holds a data object a module exports as a leaf to the same rule (permissions %s)", async (_label, options, change, changed) => {
 		await load(options);
 		const cache = new Map([["k", { n: 1 }]]);
-		await api.slothlet.api.add("syn", { cache }, { moduleID: "syn" });
+		await api.slothlet.api.add("syn", { cache }, { id: "syn" });
 		expect(withSuppressedSlothletErrorOutputSync(() => api.guest.x.changeMapAt("syn.cache"))).toEqual({ read: 1, change });
 		expect(cache.has("evil")).toBe(changed);
 	});
@@ -394,7 +394,7 @@ describe.each(CONFIGS)("a module's data objects (#625) — $mode / $runtime", ({
 				await load(options);
 				const shared = new SharedArrayBuffer(8, { maxByteLength: 16 });
 				const foreign = vm.runInNewContext("({ map: new Map([['k', { n: 0 }]]), bytes: new Uint8Array([1, 2]), date: new Date(0) })");
-				await api.slothlet.api.add("syn", { shared, foreign }, { moduleID: "syn" });
+				await api.slothlet.api.add("syn", { shared, foreign }, { id: "syn" });
 				const report = await asGuest((self) => ({
 					sharedGrow: outcome(() => self.syn.shared.grow(16)),
 					sharedRead: outcome(() => {

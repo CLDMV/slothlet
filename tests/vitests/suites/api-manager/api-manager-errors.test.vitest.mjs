@@ -92,8 +92,8 @@ describe("Hot Reload Error Handling", () => {
 	it("handles concurrent reloadApi operations", async () => {
 		const api = await createApiInstance(DEFAULT_HOT_CONFIG);
 
-		await api.slothlet.api.add("extra1", TEST_DIRS.API_TEST_MIXED, { moduleID: "module-1" });
-		await api.slothlet.api.add("extra2", TEST_DIRS.API_TEST, { moduleID: "module-2" });
+		await api.slothlet.api.add("extra1", TEST_DIRS.API_TEST_MIXED, { id: "module-1" });
+		await api.slothlet.api.add("extra2", TEST_DIRS.API_TEST, { id: "module-2" });
 
 		await expect(Promise.all([api.slothlet.api.reload("extra1"), api.slothlet.api.reload("extra2")])).resolves.toBeDefined();
 

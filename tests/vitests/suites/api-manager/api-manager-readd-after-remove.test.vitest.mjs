@@ -152,13 +152,13 @@ describe.each(TEST_MATRIX)("add after remove > $name", ({ config }) => {
 				async () => {
 					await setup();
 					const id = `${shape.at}-mod`;
-					await api.slothlet.api.add(shape.at, path.join(root, shape.src), { moduleID: id });
+					await api.slothlet.api.add(shape.at, path.join(root, shape.src), { id });
 					expect(await shape.read(api)).toBe(FRESH[1][shape.file]);
 					expect(runs(shape.counter)).toBe(1);
 
 					expect(await api.slothlet.api.remove(by === "moduleID" ? id : shape.at)).toBe(true);
 					writeFixture(root, 2);
-					await api.slothlet.api.add(shape.at, path.join(root, shape.src), { moduleID: id });
+					await api.slothlet.api.add(shape.at, path.join(root, shape.src), { id });
 
 					expect(await shape.read(api)).toBe(FRESH[2][shape.file]);
 					// The file was imported once more: its top level ran again, as a new import of it does.
@@ -174,7 +174,7 @@ describe.each(TEST_MATRIX)("add after remove > $name", ({ config }) => {
 		"loads the edited code on every re-add, however quickly they follow each other",
 		async () => {
 			await setup();
-			const add = () => api.slothlet.api.add("plug", path.join(root, "plug"), { moduleID: "pm" });
+			const add = () => api.slothlet.api.add("plug", path.join(root, "plug"), { id: "pm" });
 			await add();
 			await api.plug.p.ping();
 			for (const n of [2, 3]) {
@@ -203,13 +203,13 @@ describe.each(TEST_MATRIX)("add after remove > $name", ({ config }) => {
 			api = await slothlet({ ...config, base: path.join(root, "base"), silent: true, loader: { import: importer } });
 			const stamps = () => seen.filter((href) => href.includes("/plug/p.mjs")).map((href) => new URL(href).searchParams.has("_reload"));
 
-			await api.slothlet.api.add("plug", path.join(root, "plug"), { moduleID: "pm" });
+			await api.slothlet.api.add("plug", path.join(root, "plug"), { id: "pm" });
 			expect(await api.plug.p.ping()).toBe(FRESH[1]["plug/p.mjs"]);
 			expect(stamps()).toEqual([false]);
 			expect(runs("p")).toBe(1);
 
 			await api.slothlet.api.remove("pm");
-			await api.slothlet.api.add("plug", path.join(root, "plug"), { moduleID: "pm" });
+			await api.slothlet.api.add("plug", path.join(root, "plug"), { id: "pm" });
 			await api.plug.p.ping();
 			expect(stamps()).toEqual([false, true]);
 			expect(runs("p")).toBe(2);
@@ -221,11 +221,11 @@ describe.each(TEST_MATRIX)("add after remove > $name", ({ config }) => {
 		"loads the edited code when a removed path is added again under a different moduleID",
 		async () => {
 			await setup();
-			await api.slothlet.api.add("plug", path.join(root, "plug"), { moduleID: "first" });
+			await api.slothlet.api.add("plug", path.join(root, "plug"), { id: "first" });
 			expect(await api.plug.p.ping()).toBe(FRESH[1]["plug/p.mjs"]);
 			await api.slothlet.api.remove("first");
 			writeFixture(root, 2);
-			await api.slothlet.api.add("plug", path.join(root, "plug"), { moduleID: "second" });
+			await api.slothlet.api.add("plug", path.join(root, "plug"), { id: "second" });
 			expect(await api.plug.p.ping()).toBe(FRESH[2]["plug/p.mjs"]);
 			expect(runs("p")).toBe(2);
 		},
@@ -236,15 +236,15 @@ describe.each(TEST_MATRIX)("add after remove > $name", ({ config }) => {
 		"does not import again a module whose moduleID still has a live mount",
 		async () => {
 			await setup();
-			await api.slothlet.api.add("a", path.join(root, "plug"), { moduleID: "mm" });
-			await api.slothlet.api.add("b", path.join(root, "plug"), { moduleID: "mm" });
+			await api.slothlet.api.add("a", path.join(root, "plug"), { id: "mm" });
+			await api.slothlet.api.add("b", path.join(root, "plug"), { id: "mm" });
 			const liveA = await api.a.p.ping();
 			expect(await api.b.p.ping()).toBe(liveA);
 			const before = runs("p");
 
 			await api.slothlet.api.remove("b");
 			writeFixture(root, 2);
-			await api.slothlet.api.add("b", path.join(root, "plug"), { moduleID: "mm" });
+			await api.slothlet.api.add("b", path.join(root, "plug"), { id: "mm" });
 
 			// Plain JavaScript: a module that is still loaded is the same instance for a new importer.
 			expect(await api.a.p.ping()).toBe(liveA);
@@ -261,7 +261,7 @@ describe.each(TEST_MATRIX)("add after remove > $name", ({ config }) => {
 			expect(await api.extra.ping()).toBe(FRESH[1]["base/extra.mjs"]);
 			expect(await api.slothlet.api.remove("extra")).toBe(true);
 			writeFixture(root, 2);
-			await api.slothlet.api.add("extra", path.join(root, "base/extra.mjs"), { moduleID: "extra-mod" });
+			await api.slothlet.api.add("extra", path.join(root, "base/extra.mjs"), { id: "extra-mod" });
 			expect(await api.extra.ping()).toBe(FRESH[2]["base/extra.mjs"]);
 			expect(runs("extra")).toBe(2);
 		},

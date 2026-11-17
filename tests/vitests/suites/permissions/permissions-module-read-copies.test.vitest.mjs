@@ -51,9 +51,9 @@ describe.each(CONFIGS)("copies the metadata getters hand module code (#625) — 
 		["off", {}]
 	])("leaves the store as it was when module code changes what it read (permissions %s)", async (_label, options) => {
 		api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, ...options });
-		await api.slothlet.api.add("victim", VICTIM, { moduleID: "victim", metadata: { tier: { level: 1 } } });
-		await api.slothlet.api.add("svc", VICTIM, { moduleID: "svc1" }, { version: "v1", default: true, metadata: { nested: { flag: "ok" } } });
-		await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { moduleID: "guest" });
+		await api.slothlet.api.add("victim", VICTIM, { id: "victim", metadata: { tier: { level: 1 } } });
+		await api.slothlet.api.add("svc", VICTIM, { id: "svc1", version: { tag: "v1", default: true, metadata: { nested: { flag: "ok" } } } });
+		await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { id: "guest" });
 
 		await api.guest.x.changeReadMetadata("victim", "svc", "v1");
 

@@ -40,11 +40,11 @@ describe.each(getMatrixConfigs())("Versioning > Conflict > $name", ({ config }) 
 	it("throws VERSION_REGISTER_DUPLICATE when registering same version twice", async () => {
 		api = await slothlet({ ...config, base: `${BASE}/callers` });
 
-		await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1" });
+		await api.slothlet.api.add("auth", `${BASE}/v1`, { version: { tag: "v1" } });
 
 		// Second registration of same version tag should throw
 		await withSuppressedSlothletErrorOutput(async () => {
-			await expect(api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1" })).rejects.toThrow();
+			await expect(api.slothlet.api.add("auth", `${BASE}/v1`, { version: { tag: "v1" } })).rejects.toThrow();
 		});
 	});
 
@@ -52,7 +52,7 @@ describe.each(getMatrixConfigs())("Versioning > Conflict > $name", ({ config }) 
 		api = await slothlet({ ...config, base: `${BASE}/callers` });
 
 		await withSuppressedSlothletErrorOutput(async () => {
-			await expect(api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: 123 })).rejects.toThrow();
+			await expect(api.slothlet.api.add("auth", `${BASE}/v1`, { version: { tag: 123 } })).rejects.toThrow();
 		});
 	});
 
@@ -63,27 +63,26 @@ describe.each(getMatrixConfigs())("Versioning > Conflict > $name", ({ config }) 
 			const keysBefore = Object.keys(api);
 
 			await withSuppressedSlothletErrorOutput(async () => {
-				await expect(api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version })).rejects.toThrow("INVALID_CONFIG_API_PATH_INVALID");
+				await expect(api.slothlet.api.add("auth", `${BASE}/v1`, { version: { tag: version } })).rejects.toThrow(
+					"INVALID_CONFIG_API_PATH_INVALID"
+				);
 			});
 			expect(Object.keys(api)).toEqual(keysBefore);
 			expect(api.then).toBeUndefined();
 		}
 	);
 
-	it.each([{}, { moduleID: "auth-module" }])(
-		"refuses a version tag holding the reserved moduleID separator (options %o)",
-		async (options) => {
-			api = await slothlet({ ...config, base: `${BASE}/callers` });
-			const keysBefore = Object.keys(api);
+	it.each([{}, { id: "auth-module" }])("refuses a version tag holding the reserved moduleID separator (options %o)", async (options) => {
+		api = await slothlet({ ...config, base: `${BASE}/callers` });
+		const keysBefore = Object.keys(api);
 
-			await withSuppressedSlothletErrorOutput(async () => {
-				await expect(api.slothlet.api.add("auth", `${BASE}/v1`, options, { version: `v${MODULE_ID_SEPARATOR}x` })).rejects.toThrow(
-					"INVALID_CONFIG_API_PATH_INVALID"
-				);
-			});
-			expect(Object.keys(api)).toEqual(keysBefore);
-		}
-	);
+		await withSuppressedSlothletErrorOutput(async () => {
+			await expect(
+				api.slothlet.api.add("auth", `${BASE}/v1`, { ...options, version: { tag: `v${MODULE_ID_SEPARATOR}x` } })
+			).rejects.toThrow("INVALID_CONFIG_API_PATH_INVALID");
+		});
+		expect(Object.keys(api)).toEqual(keysBefore);
+	});
 
 	it("throws INVALID_CONFIG_VERSION_DISPATCHER for non-string non-function versionDispatcher", async () => {
 		// api is intentionally not assigned; slothlet rejects before creating an instance
@@ -99,7 +98,7 @@ describe.each(getMatrixConfigs())("Versioning > Conflict > $name", ({ config }) 
 		api = await slothlet({ ...config, base: `${BASE}/callers` });
 
 		await withSuppressedSlothletErrorOutput(async () => {
-			await expect(api.slothlet.api.add("", `${BASE}/v1`, {}, { version: "v1" })).rejects.toMatchObject({
+			await expect(api.slothlet.api.add("", `${BASE}/v1`, { version: { tag: "v1" } })).rejects.toMatchObject({
 				code: "INVALID_CONFIG_API_PATH_INVALID"
 			});
 		});

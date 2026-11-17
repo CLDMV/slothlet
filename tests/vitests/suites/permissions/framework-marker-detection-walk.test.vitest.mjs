@@ -75,8 +75,8 @@ describe.each(["eager", "lazy"])("Permissions > framework marker-detection walk 
 		// another, so it is a valid version-dispatch target (#287). Both versions must compose under
 		// permissions without the detection walk denying the marker probe, and each must resolve its own data.
 		api = await slothlet({ mode, base: `${BASE}/base`, permissions: { policy: "deny", rules: RULES } });
-		await expect(api.slothlet.api.add(["exts"], `${BASE}/ext`, {}, { version: "v1", default: true })).resolves.toBeDefined();
-		await expect(api.slothlet.api.add(["exts"], `${BASE}/v2`, {}, { version: "v2" })).resolves.toBeDefined();
+		await expect(api.slothlet.api.add(["exts"], `${BASE}/ext`, { version: { tag: "v1", default: true } })).resolves.toBeDefined();
+		await expect(api.slothlet.api.add(["exts"], `${BASE}/v2`, { version: { tag: "v2" } })).resolves.toBeDefined();
 
 		const readEvents = async (ns) => {
 			const cc = mode === "lazy" ? await ns.costcode : ns.costcode;
@@ -99,8 +99,8 @@ describe.each(["eager", "lazy"])("Permissions > framework marker-detection walk 
 		// (never reading its routing props, which would fire the discriminator or hit the gate).
 		const V = new URL("../../../../api_tests/api_test_versioned", import.meta.url).pathname;
 		api = await slothlet({ mode, base: `${BASE}/base`, permissions: { policy: "deny", rules: RULES } });
-		await api.slothlet.api.add(["exts", "svc", "field"], `${V}/v1`, {}, { version: "v1", default: true });
-		await api.slothlet.api.add(["exts", "svc", "field"], `${V}/v2`, {}, { version: "v2" });
-		await expect(api.slothlet.api.add(["exts", "svc"], `${BASE}/ext`, {}, {})).resolves.toBeDefined();
+		await api.slothlet.api.add(["exts", "svc", "field"], `${V}/v1`, { version: { tag: "v1", default: true } });
+		await api.slothlet.api.add(["exts", "svc", "field"], `${V}/v2`, { version: { tag: "v2" } });
+		await expect(api.slothlet.api.add(["exts", "svc"], `${BASE}/ext`, { version: {} })).resolves.toBeDefined();
 	});
 });

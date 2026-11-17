@@ -67,9 +67,9 @@ describe.each(CONFIGS)("host write grants (#625) — $mode / $runtime", ({ mode,
 	 */
 	async function load(options = {}) {
 		api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, ...options });
-		await api.slothlet.api.add("victim", path.join(FIXTURE, "victim"), { moduleID: "victim" });
-		await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { moduleID: "guest" });
-		await api.slothlet.api.add("other", path.join(FIXTURE, "guest"), { moduleID: "other" });
+		await api.slothlet.api.add("victim", path.join(FIXTURE, "victim"), { id: "victim" });
+		await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { id: "guest" });
+		await api.slothlet.api.add("other", path.join(FIXTURE, "guest"), { id: "other" });
 		return api;
 	}
 

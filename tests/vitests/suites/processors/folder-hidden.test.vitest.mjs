@@ -72,22 +72,6 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])("Hidden entries + empty-fol
 		return api;
 	}
 
-	/**
-	 * Run a callback with SlothletWarning console output suppressed and capture enabled. Capture is per
-	 * instance (#819): the warnings come from the most recently booted instance's diag class.
-	 * @param {Function} fn - Async callback.
-	 * @returns {Promise<Array>} Warnings that instance captured while the callback ran.
-	 */
-	async function captureWarnings(fn) {
-		apis.at(-1)?.slothlet.diag.SlothletWarning.clearCaptured();
-		try {
-			await fn();
-			return [...apis.at(-1).slothlet.diag.SlothletWarning.captured];
-		} finally {
-			apis.at(-1)?.slothlet.diag.SlothletWarning.clearCaptured();
-		}
-	}
-
 	it("does not create a leaf for an empty folder (#156)", async () => {
 		await writeModule(join(root, "math", "add.mjs"), "export function add(a, b) { return a + b; }");
 		await mkdir(join(root, "emptydir"), { recursive: true });

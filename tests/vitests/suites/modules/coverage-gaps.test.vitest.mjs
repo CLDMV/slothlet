@@ -200,7 +200,7 @@ describe("module-discovery enumeration skip branches", () => {
 	it("npm mode skips loose files and dot-prefixed entries inside node_modules (L286-287)", async () => {
 		// FIX_NPM/node_modules contains some-file.txt (regular file) and .pnpm (dot-dir).
 		// Neither should surface as a candidate.
-		const results = await discoverModules({ scanRoot: FIX_NPM });
+		const results = await discoverModules({ root: FIX_NPM });
 		const names = results.map((r) => r.packageName).sort();
 		// Same expected set as the existing npm-mode test — file + dot-dir silently skipped.
 		expect(names).toEqual(["@org/packrat-driver-bar", "@org/packrat-driver-foo", "packrat-extension-baz"]);
@@ -209,7 +209,7 @@ describe("module-discovery enumeration skip branches", () => {
 	it("folder mode skips loose files and dot-prefixed entries inside scanRoot (L329, L333)", async () => {
 		// FIX_FOLDER contains loose-file.txt (regular file) and .hidden-dir (dot-dir).
 		// Neither should surface as a candidate.
-		const results = await discoverModules({ scanRoot: FIX_FOLDER });
+		const results = await discoverModules({ root: FIX_FOLDER });
 		const names = results.map((r) => r.packageName).sort();
 		// Same expected set as the existing folder-mode test — file + dot-dir silently skipped.
 		expect(names).toEqual(["@local/driver-alpha", "@local/driver-beta"]);
@@ -221,7 +221,7 @@ describe("module-discovery enumeration skip branches", () => {
 describe("module-discovery coverage gaps", () => {
 	it("S1 + S2: schema field-name remap + lenient schemaVersion under override locator", async () => {
 		const results = await discoverModules({
-			scanRoot: FIX_LEGACY,
+			root: FIX_LEGACY,
 			manifest: "manifest.json#backend",
 			schema: { mountPath: "apiPath", apiDir: "apiFolder" }
 		});
@@ -233,28 +233,26 @@ describe("module-discovery coverage gaps", () => {
 	});
 
 	it("G7 case 3: same packageName + same version + different real paths → MODULE_DUPLICATE_NAME_VERSION_MISMATCH", async () => {
-		await expect(discoverModules({ scanRoot: [FIX_DUPVERSION_X, FIX_DUPVERSION_Y] })).rejects.toThrow(
-			/MODULE_DUPLICATE_NAME_VERSION_MISMATCH/
-		);
+		await expect(discoverModules({ root: [FIX_DUPVERSION_X, FIX_DUPVERSION_Y] })).rejects.toThrow(/MODULE_DUPLICATE_NAME_VERSION_MISMATCH/);
 	});
 
 	it("silently skips packages with a malformed package.json (readJsonOrNull JSON.parse catch)", async () => {
 		// The bad-pkgjson fixture has invalid JSON in package.json; discover should skip it.
-		const results = await discoverModules({ scanRoot: FIX_BAD_PKGJSON });
+		const results = await discoverModules({ root: FIX_BAD_PKGJSON });
 		expect(results).toEqual([]);
 	});
 
 	it("returns empty when scanRoot is a file rather than a directory (enumerate readdir failure)", async () => {
 		// Point scanRoot at a file path — readdir fails → enumerator returns []
 		const fileAsRoot = path.join(FIX_NPM, "package.json");
-		const results = await discoverModules({ scanRoot: fileAsRoot });
+		const results = await discoverModules({ root: fileAsRoot });
 		expect(results).toEqual([]);
 	});
 
 	it("subkey path walk: locator finds a nested object", async () => {
 		// Use the legacy fixture's manifest.json which has the actual subkey path.
 		const results = await discoverModules({
-			scanRoot: FIX_LEGACY,
+			root: FIX_LEGACY,
 			manifest: "manifest.json#backend",
 			schema: { mountPath: "apiPath", apiDir: "apiFolder" }
 		});
@@ -264,7 +262,7 @@ describe("module-discovery coverage gaps", () => {
 	it("subkey path walk: locator returns undefined when leaf is a non-object", async () => {
 		// package.json has "name" which is a string, not an object — walk returns undefined → skip.
 		const results = await discoverModules({
-			scanRoot: FIX_NPM,
+			root: FIX_NPM,
 			manifest: "package.json#name"
 		});
 		expect(results).toEqual([]);
@@ -310,7 +308,7 @@ describe("module-discovery coverage gaps", () => {
 		});
 
 		it("realpath() failure on a broken symlink is caught and the candidate skipped (module-discovery L121)", async () => {
-			const results = await discoverModules({ scanRoot: path.join(tmpRoot, "edge-npm") });
+			const results = await discoverModules({ root: path.join(tmpRoot, "edge-npm") });
 			// No slothlet.module.json anywhere → results empty. The broken-symlink entries
 			// are enumerated but realpath() throws → catch fires → continue.
 			expect(results).toEqual([]);
@@ -321,7 +319,7 @@ describe("module-discovery coverage gaps", () => {
 			// treats it as a scoped namespace (starts with "@"), tries readdir on the symlink,
 			// which throws ENOENT → catch fires → continue (L304). The @scope/lost inner
 			// symlink in the same fixture exercises the realpath catch (L121) for completeness.
-			const results = await discoverModules({ scanRoot: path.join(tmpRoot, "edge-npm") });
+			const results = await discoverModules({ root: path.join(tmpRoot, "edge-npm") });
 			expect(results).toEqual([]);
 		});
 
@@ -336,7 +334,7 @@ describe("module-discovery coverage gaps", () => {
 			try {
 				await fs.mkdir(nm);
 				await fs.chmod(nm, 0o000);
-				const results = await discoverModules({ scanRoot: restrictedRoot });
+				const results = await discoverModules({ root: restrictedRoot });
 				expect(results).toEqual([]);
 			} finally {
 				await fs.chmod(nm, 0o755).catch(() => {});
@@ -347,7 +345,7 @@ describe("module-discovery coverage gaps", () => {
 		it("detectScanMode() routes to folder-mode when 'node_modules' is a regular file, not a directory", async () => {
 			// fs.stat succeeds (the path exists), isDirectory() returns false → falls through
 			// to folder mode. Folder mode then walks the dir's immediate subfolders (none, here).
-			const results = await discoverModules({ scanRoot: path.join(tmpRoot, "edge-file-as-nm") });
+			const results = await discoverModules({ root: path.join(tmpRoot, "edge-file-as-nm") });
 			expect(results).toEqual([]);
 		});
 
@@ -383,7 +381,7 @@ describe("module-discovery coverage gaps", () => {
 			await fs.writeFile(path.join(orgDir, "real", "api", "info.mjs"), "export const k = () => 1;");
 			await fs.symlink(path.join(orgDir, "real"), path.join(orgDir, "alias"));
 
-			const results = await discoverModules({ scanRoot: dedupeRoot });
+			const results = await discoverModules({ root: dedupeRoot });
 			// Only one entry — the alias dedupes against the real package's realpath.
 			expect(results.length).toBe(1);
 			expect(results[0].packageName).toBe("@org/real");
@@ -393,7 +391,7 @@ describe("module-discovery coverage gaps", () => {
 			// FIX_NPM/node_modules/@org/ contains some-scoped-file.txt + an empty scope-file/ dir
 			// alongside the real scoped packages. The non-dir is skipped by the inner
 			// `if (!scoped.isDirectory() && !scoped.isSymbolicLink()) continue;` check.
-			const results = await discoverModules({ scanRoot: FIX_NPM });
+			const results = await discoverModules({ root: FIX_NPM });
 			const names = results.map((r) => r.packageName).sort();
 			// Same expected set — the file is silently skipped.
 			expect(names).toEqual(["@org/packrat-driver-bar", "@org/packrat-driver-foo", "packrat-extension-baz"]);
@@ -435,7 +433,7 @@ describe("module-discovery coverage gaps", () => {
 			// Triggering discover() internally calls #emit() — without a lifecycle handler
 			// the guard short-circuits and no emission happens. Nothing throws.
 			const mm = new ModuleManager({ handlers: {} });
-			const results = await mm.discover({ scanRoot: FIX_NPM });
+			const results = await mm.discover({ root: FIX_NPM });
 			expect(results.length).toBe(3);
 		});
 
@@ -448,8 +446,8 @@ describe("module-discovery coverage gaps", () => {
 			// the cache, then addModule attempts to mount and fails on the missing
 			// handler (not the addHistory guard itself, but the guard runs first).
 			const mm = new ModuleManager({ handlers: {} });
-			await mm.discover({ scanRoot: FIX_NPM, prefix: "packrat-extension-" });
-			await expect(mm.addModule("packrat-extension-baz", { collisionMode: "error" })).rejects.toThrow();
+			await mm.discover({ root: FIX_NPM, prefix: "packrat-extension-" });
+			await expect(mm.addModule("packrat-extension-baz", { collision: { mode: "error" } })).rejects.toThrow();
 			// The throw is from the missing apiManager (slothlet.handlers.apiManager is undefined),
 			// but #findExactMountAt's guard ran first and returned null cleanly.
 		});
@@ -462,7 +460,7 @@ describe("module-discovery coverage gaps", () => {
 		// against the legacy fixture's normalized manifest.json#backend — apiPath/apiFolder
 		// are remapped, and we additionally pass an irrelevant alias to exercise the skip.
 		const results = await discoverModules({
-			scanRoot: FIX_LEGACY,
+			root: FIX_LEGACY,
 			manifest: "manifest.json#backend",
 			schema: {
 				mountPath: "apiPath",
@@ -498,7 +496,7 @@ describe("module-discovery coverage gaps", () => {
 			await fs.writeFile(path.join(pkgDir, "api", "info.mjs"), "export const k = () => 1;");
 
 			const results = await discoverModules({
-				scanRoot: tmpDir,
+				root: tmpDir,
 				manifest: "manifest.json#backend",
 				schema: { apiDir: "apiFolder" }
 			});
@@ -515,7 +513,7 @@ describe("module-discovery coverage gaps", () => {
 		// already defined → continues. Even if canonical weren't set, the `if (legacy
 		// in out)` check would be false → nothing happens. Both skip arms exercised.
 		const results = await discoverModules({
-			scanRoot: FIX_NPM,
+			root: FIX_NPM,
 			schema: {
 				// Map canonical apiDir to a legacy name "totallyMissingLegacyAlias" that
 				// the manifest doesn't have. With the canonical apiDir already in raw,
@@ -551,7 +549,7 @@ describe("module-discovery coverage gaps", () => {
 			);
 			await fs.writeFile(path.join(pkgDir, "api", "info.mjs"), "export const k = () => 1;");
 
-			const results = await discoverModules({ scanRoot: tmpDir });
+			const results = await discoverModules({ root: tmpDir });
 			expect(results.length).toBe(1);
 			// All nested values frozen
 			expect(Object.isFrozen(results[0].manifest.metadata)).toBe(true);
@@ -595,7 +593,7 @@ describe("ModuleManager coverage gaps", () => {
 	it("addModule with multi-version cache hit + no version disambiguator throws INVALID_ARGUMENT (L360-372)", async () => {
 		const mm = await newApi();
 		await mm.discover({
-			scanRoot: [
+			root: [
 				path.join(FIXTURE_ROOT, "api_test_modules_versioned", "install-a"),
 				path.join(FIXTURE_ROOT, "api_test_modules_versioned", "install-b")
 			]
@@ -608,7 +606,7 @@ describe("ModuleManager coverage gaps", () => {
 	it("addModule with version disambiguator picks the matching cache entry (L346)", async () => {
 		const mm = await newApi();
 		await mm.discover({
-			scanRoot: [
+			root: [
 				path.join(FIXTURE_ROOT, "api_test_modules_versioned", "install-a"),
 				path.join(FIXTURE_ROOT, "api_test_modules_versioned", "install-b")
 			]
@@ -619,7 +617,7 @@ describe("ModuleManager coverage gaps", () => {
 
 	it("removeModule iterates the mounted map and skips entries whose packageName does not match (L298 mismatch branch)", async () => {
 		const mm = await newApi();
-		await mm.discover({ scanRoot: FIX_NPM });
+		await mm.discover({ root: FIX_NPM });
 		// Mount two unrelated modules
 		await mm.addModule("packrat-extension-baz");
 		await mm.addModule("@org/packrat-driver-foo");
@@ -631,7 +629,7 @@ describe("ModuleManager coverage gaps", () => {
 	it("removeModule with version filter removes only the matching version (L298-299)", async () => {
 		const mm = await newApi();
 		await mm.discover({
-			scanRoot: [
+			root: [
 				path.join(FIXTURE_ROOT, "api_test_modules_versioned", "install-a"),
 				path.join(FIXTURE_ROOT, "api_test_modules_versioned", "install-b")
 			]
@@ -645,14 +643,16 @@ describe("ModuleManager coverage gaps", () => {
 
 	it("addModules best-effort with a mount failure returns aggregate {mounted, failed}", async () => {
 		const mm = await newApi();
-		await mm.discover({ scanRoot: FIX_NPM });
+		await mm.discover({ root: FIX_NPM });
 		const found = mm.getDiscoveryCache();
 		const goodModule = found.find((r) => r.packageName === "packrat-extension-baz");
 		await mm.addModule(goodModule); // pre-mount so the next attempt collides
 		await withSuppressedSlothletErrorOutput(async () => {
 			const result = await mm.addModules([found.find((r) => r.packageName === "@org/packrat-driver-foo"), goodModule], {
-				collisionMode: "error",
-				onFailure: "best-effort"
+				collision: {
+					mode: "error"
+				},
+				failure: "best-effort"
 			});
 			expect(result.mounted.length).toBe(1);
 			expect(result.failed.length).toBe(1);
@@ -662,14 +662,16 @@ describe("ModuleManager coverage gaps", () => {
 
 	it("addModules parallel best-effort with mixed success / failure", async () => {
 		const mm = await newApi();
-		await mm.discover({ scanRoot: FIX_NPM });
+		await mm.discover({ root: FIX_NPM });
 		const found = mm.getDiscoveryCache();
 		const baz = found.find((r) => r.packageName === "packrat-extension-baz");
 		await mm.addModule(baz); // pre-mount
 		await withSuppressedSlothletErrorOutput(async () => {
 			const result = await mm.addModules([found.find((r) => r.packageName === "@org/packrat-driver-foo"), baz], {
-				collisionMode: "error",
-				onFailure: "best-effort",
+				collision: {
+					mode: "error"
+				},
+				failure: "best-effort",
 				concurrency: 2
 			});
 			expect(result.mounted.length).toBe(1);
@@ -679,15 +681,17 @@ describe("ModuleManager coverage gaps", () => {
 
 	it("addModules parallel throws first error when onFailure='throw'", async () => {
 		const mm = await newApi();
-		await mm.discover({ scanRoot: FIX_NPM });
+		await mm.discover({ root: FIX_NPM });
 		const found = mm.getDiscoveryCache();
 		const baz = found.find((r) => r.packageName === "packrat-extension-baz");
 		await mm.addModule(baz);
 		await withSuppressedSlothletErrorOutput(async () => {
 			await expect(
 				mm.addModules([baz, found.find((r) => r.packageName === "@org/packrat-driver-foo")], {
-					collisionMode: "error",
-					onFailure: "throw",
+					collision: {
+						mode: "error"
+					},
+					failure: "throw",
 					concurrency: 2
 				})
 			).rejects.toThrow(/MODULE_MOUNT_COLLISION/);
@@ -696,19 +700,19 @@ describe("ModuleManager coverage gaps", () => {
 
 	it("addModules SERIAL with onFailure='throw' throws on first failure (#mountSerial L541-542)", async () => {
 		const mm = await newApi();
-		await mm.discover({ scanRoot: FIX_NPM });
+		await mm.discover({ root: FIX_NPM });
 		const found = mm.getDiscoveryCache();
 		const baz = found.find((r) => r.packageName === "packrat-extension-baz");
 		await mm.addModule(baz); // pre-mount so the next attempt collides
 		await withSuppressedSlothletErrorOutput(async () => {
 			// Explicit concurrency: 1 → serial path. Default onFailure: "throw".
-			await expect(mm.addModules([baz], { collisionMode: "error", concurrency: 1 })).rejects.toThrow(/MODULE_MOUNT_COLLISION/);
+			await expect(mm.addModules([baz], { collision: { mode: "error" }, concurrency: 1 })).rejects.toThrow(/MODULE_MOUNT_COLLISION/);
 		});
 	});
 
 	it("addModules parallel best-effort captures each per-worker failure (#mountParallel L587 best-effort branch)", async () => {
 		const mm = await newApi();
-		await mm.discover({ scanRoot: FIX_NPM });
+		await mm.discover({ root: FIX_NPM });
 		const found = mm.getDiscoveryCache();
 		// Pre-mount BOTH baz AND foo so EVERY item we then try to mount fails.
 		const baz = found.find((r) => r.packageName === "packrat-extension-baz");
@@ -717,8 +721,10 @@ describe("ModuleManager coverage gaps", () => {
 		await mm.addModule(foo);
 		await withSuppressedSlothletErrorOutput(async () => {
 			const result = await mm.addModules([foo, baz], {
-				collisionMode: "error",
-				onFailure: "best-effort",
+				collision: {
+					mode: "error"
+				},
+				failure: "best-effort",
 				concurrency: 2
 			});
 			// Both items hit the collision in parallel; best-effort records both failures.
@@ -728,15 +734,17 @@ describe("ModuleManager coverage gaps", () => {
 
 	it("addModules parallel rollback on failure unmounts items succeeded in this call", async () => {
 		const mm = await newApi();
-		await mm.discover({ scanRoot: FIX_NPM });
+		await mm.discover({ root: FIX_NPM });
 		const found = mm.getDiscoveryCache();
 		const baz = found.find((r) => r.packageName === "packrat-extension-baz");
 		await mm.addModule(baz);
 		await withSuppressedSlothletErrorOutput(async () => {
 			await expect(
 				mm.addModules([found.find((r) => r.packageName === "@org/packrat-driver-foo"), baz], {
-					collisionMode: "error",
-					onFailure: "rollback",
+					collision: {
+						mode: "error"
+					},
+					failure: "rollback",
 					concurrency: 2
 				})
 			).rejects.toThrow(/MODULE_MOUNT_COLLISION/);
@@ -745,13 +753,13 @@ describe("ModuleManager coverage gaps", () => {
 
 	it("getStaleMounts returns empty when nothing has been mounted", async () => {
 		const mm = await newApi();
-		await mm.discover({ scanRoot: FIX_FOLDER });
+		await mm.discover({ root: FIX_FOLDER });
 		expect(mm.getStaleMounts()).toEqual([]);
 	});
 
 	it("addModules parallel with multiple simultaneous failures hits the !firstError false arm (L587 inner else-if)", async () => {
 		const mm = await newApi();
-		await mm.discover({ scanRoot: FIX_NPM });
+		await mm.discover({ root: FIX_NPM });
 		const found = mm.getDiscoveryCache();
 		// Pre-mount BOTH baz and foo so the next attempt on either fails.
 		const baz = found.find((r) => r.packageName === "packrat-extension-baz");
@@ -764,8 +772,10 @@ describe("ModuleManager coverage gaps", () => {
 		await withSuppressedSlothletErrorOutput(async () => {
 			await expect(
 				mm.addModules([foo, baz], {
-					collisionMode: "error",
-					onFailure: "throw",
+					collision: {
+						mode: "error"
+					},
+					failure: "throw",
 					concurrency: 2
 				})
 			).rejects.toThrow(/MODULE_MOUNT_COLLISION/);
@@ -777,7 +787,7 @@ describe("ModuleManager coverage gaps", () => {
 		// `if (!matchesPrefix(entry.name, prefixes)) continue` line in
 		// enumerateFolderModules only saw the false (proceed) arm. This test sets a
 		// prefix that no subdirectory matches → continue branch fires.
-		const results = await discoverModules({ scanRoot: FIX_FOLDER, prefix: "no-match-prefix-" });
+		const results = await discoverModules({ root: FIX_FOLDER, prefix: "no-match-prefix-" });
 		expect(results).toEqual([]);
 	});
 
@@ -785,7 +795,7 @@ describe("ModuleManager coverage gaps", () => {
 		const mm = await newApi();
 		const FIX_V_ROOT = path.join(FIXTURE_ROOT, "api_test_modules_versioned");
 		await mm.discover({
-			scanRoot: [
+			root: [
 				path.join(FIX_V_ROOT, "install-a"), // 1.2.3
 				path.join(FIX_V_ROOT, "install-b"), // 2.0.0 (highest)
 				path.join(FIX_V_ROOT, "install-c") // 0.5.0-rc.1 (lowest, pre-release suffix)
@@ -822,7 +832,7 @@ describe("ModuleManager coverage gaps", () => {
 
 	it("addModules with a single-version subset of the discovery cache exercises group.length < 2 in #buildVersionConfigs (L640 true arm)", async () => {
 		const mm = await newApi();
-		await mm.discover({ scanRoot: FIX_NPM });
+		await mm.discover({ root: FIX_NPM });
 		// Mount three distinct-name modules → each forms a group of size 1 in
 		// #buildVersionConfigs → `if (group.length < 2) continue` fires for every iteration.
 		// (The multi-version test covers the > 2 arm.)
@@ -837,7 +847,7 @@ describe("ModuleManager coverage gaps", () => {
 	it("addDiscovered with no items in the scanRoot returns an empty mounted array", async () => {
 		const mm = await newApi();
 		// Point at a path that doesn't exist so discover returns []
-		const out = await mm.addDiscovered({ scanRoot: "/this/path/does/not/exist" });
+		const out = await mm.addDiscovered({ discover: { root: "/this/path/does/not/exist" } });
 		expect(Array.isArray(out)).toBe(true);
 		expect(out.length).toBe(0);
 	});
@@ -853,7 +863,7 @@ describe("ModuleManager coverage gaps", () => {
 		const mm = await newApi();
 		const FIX_V_ROOT = path.join(FIXTURE_ROOT, "api_test_modules_versioned");
 		await mm.discover({
-			scanRoot: [
+			root: [
 				path.join(FIX_V_ROOT, "install-a"), // 1.2.3
 				path.join(FIX_V_ROOT, "install-d") // 1.2.3-beta (same major → collides at v1)
 			]
@@ -862,7 +872,7 @@ describe("ModuleManager coverage gaps", () => {
 		const ordered = [byVersion("1.2.3"), byVersion("1.2.3-beta")];
 		expect(ordered.every(Boolean)).toBe(true);
 		await withSuppressedSlothletErrorOutput(async () => {
-			const result = await mm.addModules(ordered, { onFailure: "best-effort" });
+			const result = await mm.addModules(ordered, { failure: "best-effort" });
 			expect(result.mounted.length).toBe(1);
 			expect(result.failed.length).toBe(1);
 			// First (default per pickHighestSemver — "1.2.3" wins since candidate doesn't beat it) mounts;
@@ -904,7 +914,7 @@ describe("ModuleManager coverage gaps", () => {
 			await writeFixture("install-2", "def.2.0.0");
 
 			const mm = await newApi();
-			await mm.discover({ scanRoot: [path.join(tmpDir, "install-1"), path.join(tmpDir, "install-2")] });
+			await mm.discover({ root: [path.join(tmpDir, "install-1"), path.join(tmpDir, "install-2")] });
 			const both = mm.getDiscoveryCache().filter((r) => r.packageName === "@org/nonsemv");
 			expect(both.length).toBe(2);
 			const mounted = await mm.addModules(both);
@@ -924,7 +934,7 @@ describe("ModuleManager coverage gaps", () => {
 		const mm = await newApi();
 		const FIX_V_ROOT = path.join(FIXTURE_ROOT, "api_test_modules_versioned");
 		await mm.discover({
-			scanRoot: [
+			root: [
 				path.join(FIX_V_ROOT, "install-d"), // 1.2.3-beta
 				path.join(FIX_V_ROOT, "install-a") // 1.2.3
 			]
@@ -933,7 +943,7 @@ describe("ModuleManager coverage gaps", () => {
 		const ordered = [byVersion("1.2.3-beta"), byVersion("1.2.3")];
 		expect(ordered.every(Boolean)).toBe(true);
 		await withSuppressedSlothletErrorOutput(async () => {
-			const result = await mm.addModules(ordered, { onFailure: "best-effort" });
+			const result = await mm.addModules(ordered, { failure: "best-effort" });
 			expect(result.mounted.length).toBe(1);
 			expect(result.failed.length).toBe(1);
 			// "1.2.3-beta" comes first in the array, so pickHighestSemver returns it (candidate "1.2.3" never wins).

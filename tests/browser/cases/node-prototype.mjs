@@ -106,7 +106,7 @@ async function build(env, config, permissions) {
 		files: FILES,
 		options: { mode: config.mode, runtime: config.runtime, permissions: { caller: { attribution: config.attribution }, ...permissions } }
 	});
-	await api.slothlet.api.add("reader", env.mountTarget(api, { from: "reader", files: ["reader.mjs"] }), { moduleID: "reader" });
+	await api.slothlet.api.add("reader", env.mountTarget(api, { from: "reader", files: ["reader.mjs"] }), { id: "reader" });
 	for (const path of ["leaf", "leaf.only", "grp", "sub", "sub.lay", "sub.other", "reader", "reader.reader"]) await at(api, path);
 	return api;
 }
@@ -171,7 +171,7 @@ export const rows = [
 					}
 				});
 				try {
-					await api.slothlet.api.add("w", env.mountTarget(api, { from: "writer", files: ["ops.mjs"] }), { moduleID: "w" });
+					await api.slothlet.api.add("w", env.mountTarget(api, { from: "writer", files: ["ops.mjs"] }), { id: "w" });
 					await api.w.ops;
 					const prototype = { inherited: 5, unruled: 6 };
 					Object.setPrototypeOf(api, prototype);

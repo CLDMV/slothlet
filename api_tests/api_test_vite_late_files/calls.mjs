@@ -64,7 +64,7 @@ export async function runCalls(slothlet) {
 				silent: true,
 				permissions: { policy: "deny", rules: RULES }
 			});
-			await api.slothlet.api.add("host", { echo: (value) => `echo:${value}` }, { moduleID: "host-mod" });
+			await api.slothlet.api.add("host", { echo: (value) => `echo:${value}` }, { id: "host-mod" });
 			// A query of its own each round, so every round imports the package's files anew after its instance exists.
 			const query = `?round=${round++}`;
 			const late = await import(pathToFileURL(path.join(here, "late-pkg", "context.mjs")).href + query);
@@ -74,7 +74,7 @@ export async function runCalls(slothlet) {
 			await api.caller.setup();
 			out[`${mode}/${runtime}/handed`] = await outcome(() => api.callee.fire());
 			out[`${mode}/${runtime}/json`] = await outcome(async () => {
-				await api.slothlet.api.add("info", path.join(here, "json-api"), { moduleID: "info" });
+				await api.slothlet.api.add("info", path.join(here, "json-api"), { id: "info" });
 				return api.info.name();
 			});
 			await api.slothlet.shutdown();

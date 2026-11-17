@@ -48,11 +48,11 @@ afterEach(async () => {
 });
 
 /** Compose pkg_a, subscribe, add pkg_b under `mode`, and return the collision events. */
-async function composeAndAdd({ mode, apiMode = "merge", addOpts = { collisionMode: "merge" } }) {
+async function composeAndAdd({ mode, apiMode = "merge", addOpts = { collision: { mode: "merge" } } }) {
 	const events = [];
 	api = await slothlet({ base: PKG_A, mode, api: { collision: { mode: { initial: "merge", api: apiMode } } }, silent: true });
 	api.slothlet.lifecycle.on("impl:collision", (d) => events.push(d));
-	await api.slothlet.api.add("", PKG_B, { moduleID: "pkgB", ...addOpts });
+	await api.slothlet.api.add("", PKG_B, { id: "pkgB", ...addOpts });
 	// Force lazy materialization of the composed surface so every resolved leaf is realized.
 	const shared = await api.shared;
 	void shared?.alpha;
@@ -115,7 +115,7 @@ describe("impl:collision — merged namespace", () => {
 
 describe("impl:collision — replaced", () => {
 	it("fires when an incoming module replaces an occupied slot, tagging value vs namespace", async () => {
-		const events = await composeAndAdd({ mode: "eager", apiMode: "replace", addOpts: { collisionMode: "replace" } });
+		const events = await composeAndAdd({ mode: "eager", apiMode: "replace", addOpts: { collision: { mode: "replace" } } });
 
 		// A callable leaf slot (`shared`) is replaced as a value.
 		const replacedLeaf = byPath(events, "shared");

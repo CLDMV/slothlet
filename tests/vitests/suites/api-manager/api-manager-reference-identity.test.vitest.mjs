@@ -80,7 +80,7 @@ describe.each(HOT_RELOAD_MATRIX)("Hot Reload Reference Identity - $name", ({ con
 
 	it("preserves function references (eager) / breaks references (lazy) across reloadApi()", async () => {
 		api = await createApiInstance(config);
-		await api.slothlet.api.add("extra", TEST_DIRS.API_TEST_MIXED, { moduleID: "test-module" });
+		await api.slothlet.api.add("extra", TEST_DIRS.API_TEST_MIXED, { id: "test-module" });
 
 		if (config.mode === "lazy") {
 			// Pre-materialize so we can capture stable references
@@ -113,7 +113,7 @@ describe.each(HOT_RELOAD_MATRIX)("Hot Reload Reference Identity - $name", ({ con
 
 	it("preserves nested references (eager) / breaks references (lazy) across reloadApi()", async () => {
 		api = await createApiInstance(config);
-		await api.slothlet.api.add("deep", TEST_DIRS.API_TEST, { moduleID: "deep-module" });
+		await api.slothlet.api.add("deep", TEST_DIRS.API_TEST, { id: "deep-module" });
 
 		// In lazy mode, materialize before capturing references
 		if (config.mode === "lazy") {
@@ -146,7 +146,7 @@ describe.each(HOT_RELOAD_MATRIX)("Hot Reload Reference Identity - $name", ({ con
 
 	it("preserves mixed export references (eager) / breaks references (lazy) across reloadApi()", async () => {
 		api = await createApiInstance(config);
-		await api.slothlet.api.add("extra", TEST_DIRS.API_TEST, { moduleID: "test-module" });
+		await api.slothlet.api.add("extra", TEST_DIRS.API_TEST, { id: "test-module" });
 
 		if (config.mode === "lazy") {
 			// Pre-materialize so we can capture stable references
@@ -176,7 +176,7 @@ describe.each(HOT_RELOAD_MATRIX)("Hot Reload Reference Identity - $name", ({ con
 
 	it("preserves all reference types (eager) / breaks references (lazy) across reloadApi()", async () => {
 		api = await createApiInstance(config);
-		await api.slothlet.api.add("comprehensive", TEST_DIRS.API_TEST, { moduleID: "comp-module" });
+		await api.slothlet.api.add("comprehensive", TEST_DIRS.API_TEST, { id: "comp-module" });
 
 		if (config.mode === "lazy") {
 			// Pre-materialize so we can capture stable references

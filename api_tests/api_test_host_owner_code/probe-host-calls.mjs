@@ -59,7 +59,7 @@ for (const mode of ["eager", "lazy"])
 		});
 		out[`${mode}/${runtime}/records`] = await outcome(() => api.ext.b.work());
 		out[`${mode}/${runtime}/hook`] = await outcome(() => api.ext.b.callHooked());
-		await api.slothlet.api.add(["ext", "c"], path.join(here, "ext-pkg", "api"), { moduleID: "ext-c" });
+		await api.slothlet.api.add(["ext", "c"], path.join(here, "ext-pkg", "api"), { id: "ext-c" });
 		out[`${mode}/${runtime}/helper`] = await outcome(() => api.ext.c.useHelper());
 		await api.slothlet.shutdown();
 	}

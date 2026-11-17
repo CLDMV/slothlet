@@ -68,8 +68,8 @@ describe.each(CONFIGS)(
 			const permissions =
 				permissionMode === "none" ? undefined : { mode: permissionMode, caller: { attribution }, policy: "allow", rules: [GUEST_EVENTS] };
 			api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, ...(permissions ? { permissions } : {}) });
-			await api.slothlet.api.add("victim", path.join(FIXTURE, "victim"), { moduleID: "victim" });
-			await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { moduleID: "guest" });
+			await api.slothlet.api.add("victim", path.join(FIXTURE, "victim"), { id: "victim" });
+			await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { id: "guest" });
 			return api;
 		}
 

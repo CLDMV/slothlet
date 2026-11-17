@@ -70,7 +70,7 @@ describe("syncWrapper — lazy collision against an untouched existing wrapper",
 		// reliable signal that nothing under it (including "testFunc") has been touched yet.
 		expect(resolveWrapper(api.sub).____slothletInternal.state.materialized).toBe(false);
 
-		await api.slothlet.api.add(["sub"], DIR2, { collisionMode: "merge" });
+		await api.slothlet.api.add(["sub"], DIR2, { collision: { mode: "merge" } });
 
 		// "merge" is documented as "keep existing, only add new keys" — the pre-existing lazybase
 		// contribution must win, not be silently discarded in favor of dir2's.
@@ -88,7 +88,7 @@ describe("syncWrapper — lazy collision against an untouched existing wrapper",
 			if (d.apiPath === "sub.testFunc") events.push(d);
 		});
 
-		await api.slothlet.api.add(["sub"], DIR2, { collisionMode: "merge" });
+		await api.slothlet.api.add(["sub"], DIR2, { collision: { mode: "merge" } });
 
 		// Pre-#398 this fired TWICE — once per contributor, INCLUDING the merge-discarded one — and each
 		// payload carried the raw unwrapped callable (the enforcement-bypassing leak). Now the PUBLIC
@@ -114,7 +114,7 @@ describe("syncWrapper — lazy collision against an untouched existing wrapper",
 		const statsBefore = api.slothlet.materialize.get();
 
 		// Force syncWrapper to materialize "sub" via a collision (replace mode swaps its content).
-		await api.slothlet.api.add(["sub"], DIR2, { collisionMode: "replace" });
+		await api.slothlet.api.add(["sub"], DIR2, { collision: { mode: "replace" } });
 
 		// syncWrapper's own force-materialization legitimately completed "sub" — it must not be
 		// reported back to unmaterialized just because its (now-superseded) impl was a function.
@@ -141,7 +141,7 @@ describe("syncWrapper — lazy collision against an untouched existing wrapper",
 		expect(resolveWrapper(api.sub).____slothletInternal.state.materialized).toBe(false);
 		const statsBefore = api.slothlet.materialize.get();
 
-		await api.slothlet.api.add(["sub"], DIR2, { collisionMode: "merge" });
+		await api.slothlet.api.add(["sub"], DIR2, { collision: { mode: "merge" } });
 
 		// syncWrapper's own force-materialization legitimately completed "sub" — it must not be
 		// reported back to unmaterialized just because its (now-superseded) impl was null.

@@ -130,9 +130,9 @@ describe.each(getMatrixConfigs())("Hooks > around permissions and pinning (#496)
 		expect(sink.map((entry) => entry.path)).toEqual(["db.read"]);
 	});
 
-	it("force-pins a module around hook registered with lockCaller:false and warns", async () => {
+	it("force-pins a module around hook registered with pin: false and warns", async () => {
 		api = await boot(null);
-		const id = await api.auditor.armOpts("db.read:around", { lockCaller: false });
+		const id = await api.auditor.armOpts("db.read:around", { pin: false });
 		expect(api.slothlet.hook.list({ id }).registeredHooks[0].lockCaller).toBe(true);
 		expect(api.slothlet.diag.SlothletWarning.captured.some((w) => w.code === "HOOK_UNPINNED_IGNORED")).toBe(true);
 	});

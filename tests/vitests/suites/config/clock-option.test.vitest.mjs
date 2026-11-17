@@ -64,11 +64,11 @@ describe.each(getMatrixConfigs())("Config > clock > $name", ({ config }) => {
 				permissions: { policy: "deny", caller: { attribution }, rules: [REQUIRES_ROLES, ...extra] }
 			});
 
-		it("a principal with maxAge goes stale when the fake clock passes it, and not before, with no real wait", async () => {
+		it("a principal with ttl goes stale when the fake clock passes it, and not before, with no real wait", async () => {
 			let time = 1000;
 			api = await build({ now: () => time });
 			const resolve = vi.fn(async () => ({}));
-			api.slothlet.permissions.principal.register("roles", { key: (ctx) => ctx.user, resolve, maxAge: 10 });
+			api.slothlet.permissions.principal.register("roles", { key: (ctx) => ctx.user, resolve, ttl: 10 });
 			const { checkCall } = api.slothlet.permissions.global;
 			await api.slothlet.context.run({ user: "u1" }, async () => {
 				const ask = () => checkCall("client.app", "project.files.list", []);
@@ -85,10 +85,10 @@ describe.each(getMatrixConfigs())("Config > clock > $name", ({ config }) => {
 			});
 		});
 
-		it("a clock that goes backwards does not keep a principal alive past its maxAge", async () => {
+		it("a clock that goes backwards does not keep a principal alive past its ttl", async () => {
 			let time = 5000;
 			api = await build({ now: () => time });
-			api.slothlet.permissions.principal.register("roles", { key: (ctx) => ctx.user, resolve: async () => ({}), maxAge: 10 });
+			api.slothlet.permissions.principal.register("roles", { key: (ctx) => ctx.user, resolve: async () => ({}), ttl: 10 });
 			const { checkCall } = api.slothlet.permissions.global;
 			await api.slothlet.context.run({ user: "u1" }, async () => {
 				const ask = () => checkCall("client.app", "project.files.list", []);
@@ -102,7 +102,7 @@ describe.each(getMatrixConfigs())("Config > clock > $name", ({ config }) => {
 		it("a clock that answers something that is not a finite number leaves the principal stale", async () => {
 			let answer = 5000;
 			api = await build({ now: () => answer });
-			api.slothlet.permissions.principal.register("roles", { key: (ctx) => ctx.user, resolve: async () => ({}), maxAge: 10 });
+			api.slothlet.permissions.principal.register("roles", { key: (ctx) => ctx.user, resolve: async () => ({}), ttl: 10 });
 			const { checkCall } = api.slothlet.permissions.global;
 			await api.slothlet.context.run({ user: "u1" }, async () => {
 				const ask = () => checkCall("client.app", "project.files.list", []);
@@ -122,7 +122,7 @@ describe.each(getMatrixConfigs())("Config > clock > $name", ({ config }) => {
 					return 1;
 				}
 			});
-			api.slothlet.permissions.principal.register("roles", { key: (ctx) => ctx.user, resolve: async () => ({}), maxAge: 10 });
+			api.slothlet.permissions.principal.register("roles", { key: (ctx) => ctx.user, resolve: async () => ({}), ttl: 10 });
 			const { checkCall } = api.slothlet.permissions.global;
 			await api.slothlet.context.run({ user: "u1" }, async () => {
 				await checkCall("client.app", "project.files.list", []);
@@ -280,7 +280,7 @@ describe.each(getMatrixConfigs())("Config > clock > $name", ({ config }) => {
 			api = await slothlet({ ...config, base: PLAIN, silent: true });
 			const real = Date.now();
 			await api.slothlet.api.add("guest", PERMISSIONS, {
-				moduleID: "guest",
+				id: "guest",
 				clock: { now: () => 1 },
 				context: { clock: { now: () => 1 } }
 			});

@@ -163,12 +163,12 @@ describe.each(getMatrixConfigs())("Events > rule specificity (#767) > $name", ({
 		// The fixture module's manifest declares `{ caller: "subscriber.**", event: "manifest.*", effect: "allow" }`.
 		const FIX = new URL("../../../../api_tests/api_test_events_module", import.meta.url).pathname;
 		await load([rule("manifest.*", "deny", "subscriber.**")]);
-		await api.slothlet.api.modules.addModule("@local/evt-plugin", { discover: { scanRoot: FIX } });
+		await api.slothlet.api.modules.addModule("@local/evt-plugin", { discover: { root: FIX } });
 		expect(api.slothlet.event.resolveLevel("subscriber.x", "manifest.data")).toBe("deny");
 		await api.shutdown();
 
 		await load([rule("**", "deny")]);
-		await api.slothlet.api.modules.addModule("@local/evt-plugin", { discover: { scanRoot: FIX } });
+		await api.slothlet.api.modules.addModule("@local/evt-plugin", { discover: { root: FIX } });
 		expect(api.slothlet.event.resolveLevel("subscriber.x", "manifest.data")).toBe("allow");
 	});
 

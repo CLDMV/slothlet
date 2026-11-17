@@ -72,7 +72,7 @@ describe.each(CONFIGS)("The permission manager reads the normalised permissions 
 				? { ...permissions, caller: { ...permissions.caller, attribution } }
 				: permissions;
 		api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, permissions: given });
-		await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { moduleID: "guest" });
+		await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { id: "guest" });
 		return api;
 	}
 

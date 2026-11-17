@@ -50,7 +50,7 @@ import { TEST_DIRS } from "../../setup/vitest-helper.mjs";
 // ──────────────────────────────────────────────────────────────────────────────────
 
 describe("slothlet.mjs load() — preserved context cleanup TRUE branch", () => {
-	it("reload({ keepInstanceID: true }) triggers the cleanup+reinit branch (async)", async () => {
+	it('reload({ instance: "keep" }) triggers the cleanup+reinit branch (async)', async () => {
 		const api = await slothlet({
 			base: TEST_DIRS.API_TEST,
 			silent: true,
@@ -61,12 +61,12 @@ describe("slothlet.mjs load() — preserved context cleanup TRUE branch", () => 
 		// reload() normally uses a brand-new ID → instances.has() is FALSE.
 		// keepInstanceID: true reuses the live instanceID → instances.has() is TRUE
 		// → load() takes the TRUE branch: cleanup(preservedInstanceID) + initialize(instanceID)
-		await expect(api.slothlet.reload({ keepInstanceID: true })).resolves.not.toThrow();
+		await expect(api.slothlet.reload({ instance: "keep" })).resolves.not.toThrow();
 
 		await api.shutdown();
 	});
 
-	it("reload({ keepInstanceID: true }) triggers the cleanup+reinit branch (live)", async () => {
+	it('reload({ instance: "keep" }) triggers the cleanup+reinit branch (live)', async () => {
 		const api = await slothlet({
 			base: TEST_DIRS.API_TEST,
 			silent: true,
@@ -74,7 +74,7 @@ describe("slothlet.mjs load() — preserved context cleanup TRUE branch", () => 
 			api: { mutations: { reload: true } }
 		});
 
-		await expect(api.slothlet.reload({ keepInstanceID: true })).resolves.not.toThrow();
+		await expect(api.slothlet.reload({ instance: "keep" })).resolves.not.toThrow();
 
 		await api.shutdown();
 	});

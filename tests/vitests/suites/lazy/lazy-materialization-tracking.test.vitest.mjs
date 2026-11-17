@@ -472,8 +472,8 @@ describe.each(matrixConfigs)("Lazy Materialization Tracking > Config: $name", ({
 				base: TEST_DIR,
 				api: { ...config.api, mutations: { add: true, remove: true, reload: true } }
 			});
-			await shadowApi.slothlet.api.add("launcher", launcherDir, { moduleID: "launcher" });
-			await shadowApi.slothlet.api.add("launcher.session", FORCE_SHADOW_DIR, { moduleID: "shadow", forceOverwrite: true });
+			await shadowApi.slothlet.api.add("launcher", launcherDir, { id: "launcher" });
+			await shadowApi.slothlet.api.add("launcher.session", FORCE_SHADOW_DIR, { id: "shadow", collision: { force: true } });
 			return shadowApi;
 		}
 

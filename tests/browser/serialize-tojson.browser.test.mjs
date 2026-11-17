@@ -102,11 +102,11 @@ describe.each(["eager", "lazy"].flatMap((mode) => ["precise", "fast"].map((attri
 				silent: true,
 				permissions: { policy: "allow", caller: { attribution }, rules }
 			});
-			await api.slothlet.api.add("owner", { exports: data() }, { moduleID: "owner" });
+			await api.slothlet.api.add("owner", { exports: data() }, { id: "owner" });
 			await api.slothlet.api.add(
 				"reader",
 				{ exports: { json: () => Object.fromEntries(NAMES.map((name) => [name, JSON.stringify(self.owner[name])])) } },
-				{ moduleID: "reader" }
+				{ id: "reader" }
 			);
 			return api;
 		};

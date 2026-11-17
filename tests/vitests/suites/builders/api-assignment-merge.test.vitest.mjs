@@ -399,8 +399,10 @@ describe("api-assignment – wrapper+wrapper syncWrapper path via nested folder 
 		// First add: create a nested wrapper structure at 'plugins'.
 		// API_SMART_FLATTEN has config/ + services/ + utils/ subdirs → child wrapper proxies.
 		await api.slothlet.api.add("plugins", TEST_DIRS.API_SMART_FLATTEN, {
-			collisionMode: "replace",
-			moduleID: "plugins_v1"
+			collision: {
+				mode: "replace"
+			},
+			id: "plugins_v1"
 		});
 
 		expect(api.plugins).toBeDefined();
@@ -413,8 +415,10 @@ describe("api-assignment – wrapper+wrapper syncWrapper path via nested folder 
 		// → for key 'config': assignToApiPath(existingPlugins, 'config', newPlugins.config, {mutateExisting:true, syncWrapper})
 		// → existingPlugins.config is a wrapper AND newPlugins.config is a wrapper → lines 133-134
 		await api.slothlet.api.add("plugins", TEST_DIRS.API_SMART_FLATTEN, {
-			collisionMode: "replace",
-			moduleID: "plugins_v2"
+			collision: {
+				mode: "replace"
+			},
+			id: "plugins_v2"
 		});
 
 		// API should remain intact after sync
@@ -432,16 +436,20 @@ describe("api-assignment – wrapper+wrapper syncWrapper path via nested folder 
 		});
 
 		await api.slothlet.api.add("ns", TEST_DIRS.API_SMART_FLATTEN, {
-			collisionMode: "merge",
-			moduleID: "ns_v1"
+			collision: {
+				mode: "merge"
+			},
+			id: "ns_v1"
 		});
 		expect(api.ns).toBeDefined();
 
 		// With merge mode, the second add also triggers mutateApiValue
 		// → syncWrapper → mergeApiObjects → assignToApiPath with both sub-wrappers
 		await api.slothlet.api.add("ns", TEST_DIRS.API_SMART_FLATTEN, {
-			collisionMode: "merge",
-			moduleID: "ns_v2"
+			collision: {
+				mode: "merge"
+			},
+			id: "ns_v2"
 		});
 
 		expect(api.ns).toBeDefined();

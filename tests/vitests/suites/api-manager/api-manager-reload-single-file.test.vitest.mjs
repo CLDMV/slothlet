@@ -145,8 +145,8 @@ describe.each(TEST_MATRIX)("scoped reload of a single-file add > $name", ({ conf
 		root = makeTestTmpDirSync("reload-single-file");
 		writeFixture(root, 1);
 		api = await slothlet({ ...config, base: path.join(root, "base"), silent: true, ...extra });
-		await api.slothlet.api.add(shape.at, path.join(root, shape.src), { moduleID: shape.id });
-		await api.slothlet.api.add("tools.sib", path.join(root, "sib.mjs"), { moduleID: "sib-mod" });
+		await api.slothlet.api.add(shape.at, path.join(root, shape.src), { id: shape.id });
+		await api.slothlet.api.add("tools.sib", path.join(root, "sib.mjs"), { id: "sib-mod" });
 		return api;
 	}
 
@@ -298,8 +298,8 @@ describe.each(TEST_MATRIX)("scoped reload of an add at the api root > $name", ({
 			silent: true,
 			permissions: { rules: [{ caller: `${target.key}.**`, target: "secret.**", effect: "deny" }] }
 		});
-		await api.slothlet.api.add(target.at, path.join(root, target.src), { moduleID: target.id });
-		await api.slothlet.api.add("", path.join(root, "two.mjs"), { moduleID: "two-mod" });
+		await api.slothlet.api.add(target.at, path.join(root, target.src), { id: target.id });
+		await api.slothlet.api.add("", path.join(root, "two.mjs"), { id: "two-mod" });
 		return api;
 	}
 

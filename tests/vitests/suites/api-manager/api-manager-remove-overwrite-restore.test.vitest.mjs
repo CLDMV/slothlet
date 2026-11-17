@@ -79,8 +79,8 @@ describe.each(getMatrixConfigs())("remove() of a forceOverwrite module restores 
 
 	it("restores every overwritten leaf when the original leaves were never called", async () => {
 		api = await slothlet({ ...config, base: BASE, silent: true });
-		await api.slothlet.api.add("launcher", EXT, { moduleID: "launcher" });
-		await api.slothlet.api.add("launcher.session", SHADOW, { moduleID: "shadow", forceOverwrite: true });
+		await api.slothlet.api.add("launcher", EXT, { id: "launcher" });
+		await api.slothlet.api.add("launcher.session", SHADOW, { id: "shadow", collision: { force: true } });
 
 		expect(await api.slothlet.api.remove("shadow")).toBe(true);
 
@@ -90,9 +90,9 @@ describe.each(getMatrixConfigs())("remove() of a forceOverwrite module restores 
 
 	it("restores every overwritten leaf when the original leaves were called before the overwrite", async () => {
 		api = await slothlet({ ...config, base: BASE, silent: true });
-		await api.slothlet.api.add("launcher", EXT, { moduleID: "launcher" });
+		await api.slothlet.api.add("launcher", EXT, { id: "launcher" });
 		expect(await callLauncherLeaves(api)).toEqual(LAUNCHER_RESULTS);
-		await api.slothlet.api.add("launcher.session", SHADOW, { moduleID: "shadow", forceOverwrite: true });
+		await api.slothlet.api.add("launcher.session", SHADOW, { id: "shadow", collision: { force: true } });
 
 		expect(await api.slothlet.api.remove("shadow")).toBe(true);
 
@@ -102,8 +102,8 @@ describe.each(getMatrixConfigs())("remove() of a forceOverwrite module restores 
 
 	it("restores every overwritten leaf when the overwriting leaves were called before the remove", async () => {
 		api = await slothlet({ ...config, base: BASE, silent: true });
-		await api.slothlet.api.add("launcher", EXT, { moduleID: "launcher" });
-		await api.slothlet.api.add("launcher.session", SHADOW, { moduleID: "shadow", forceOverwrite: true });
+		await api.slothlet.api.add("launcher", EXT, { id: "launcher" });
+		await api.slothlet.api.add("launcher.session", SHADOW, { id: "shadow", collision: { force: true } });
 		expect([await api.launcher.session.store.create(), await api.launcher.session.vault.lock.open()]).toEqual([
 			"shadow-create",
 			"shadow-open"
@@ -117,9 +117,9 @@ describe.each(getMatrixConfigs())("remove() of a forceOverwrite module restores 
 
 	it("keeps a third module's content merged into the overwritten namespace alongside the restored leaves", async () => {
 		api = await slothlet({ ...config, base: BASE, silent: true });
-		await api.slothlet.api.add("launcher", EXT, { moduleID: "launcher" });
-		await api.slothlet.api.add("launcher.session", SHADOW, { moduleID: "shadow", forceOverwrite: true });
-		await api.slothlet.api.add("launcher.session.vault", THIRD, { moduleID: "third" });
+		await api.slothlet.api.add("launcher", EXT, { id: "launcher" });
+		await api.slothlet.api.add("launcher.session", SHADOW, { id: "shadow", collision: { force: true } });
+		await api.slothlet.api.add("launcher.session.vault", THIRD, { id: "third" });
 		expect(await api.launcher.session.vault.extra.hello()).toBe("third-hello");
 
 		expect(await api.slothlet.api.remove("shadow")).toBe(true);
@@ -136,9 +136,9 @@ describe.each(getMatrixConfigs())("remove() of a forceOverwrite module restores 
 		["the original leaves were called before the overwrite", true]
 	])("keeps references taken while the overwriting module was live working when %s", async (_label, touchFirst) => {
 		api = await slothlet({ ...config, base: BASE, silent: true });
-		await api.slothlet.api.add("launcher", EXT, { moduleID: "launcher" });
+		await api.slothlet.api.add("launcher", EXT, { id: "launcher" });
 		if (touchFirst) expect(await callLauncherLeaves(api)).toEqual(LAUNCHER_RESULTS);
-		await api.slothlet.api.add("launcher.session", SHADOW, { moduleID: "shadow", forceOverwrite: true });
+		await api.slothlet.api.add("launcher.session", SHADOW, { id: "shadow", collision: { force: true } });
 
 		// Held while shadow is live: a namespace, a nested namespace, and a leaf.
 		const vault = api.launcher.session.vault;
@@ -170,9 +170,9 @@ describe.each(getMatrixConfigs())("remove() of a forceOverwrite module restores 
 		["the original leaves were called before the overwrite", true]
 	])("reads a member the restored namespace does not hold as undefined when %s", async (_label, touchFirst) => {
 		api = await slothlet({ ...config, base: BASE, silent: true });
-		await api.slothlet.api.add("launcher", EXT, { moduleID: "launcher" });
+		await api.slothlet.api.add("launcher", EXT, { id: "launcher" });
 		if (touchFirst) expect(await callLauncherLeaves(api)).toEqual(LAUNCHER_RESULTS);
-		await api.slothlet.api.add("launcher.session", SHADOW, { moduleID: "shadow", forceOverwrite: true });
+		await api.slothlet.api.add("launcher.session", SHADOW, { id: "shadow", collision: { force: true } });
 		expect(await api.launcher.session.vault.lock.open()).toBe("shadow-open");
 
 		expect(await api.slothlet.api.remove("shadow")).toBe(true);
@@ -186,8 +186,8 @@ describe.each(getMatrixConfigs())("remove() of a forceOverwrite module restores 
 
 	it("keeps values set by hand on the overwritten namespace, after the restored keys", async () => {
 		api = await slothlet({ ...config, base: BASE, silent: true });
-		await api.slothlet.api.add("launcher", EXT, { moduleID: "launcher" });
-		await api.slothlet.api.add("launcher.session", SHADOW, { moduleID: "shadow", forceOverwrite: true });
+		await api.slothlet.api.add("launcher", EXT, { id: "launcher" });
+		await api.slothlet.api.add("launcher.session", SHADOW, { id: "shadow", collision: { force: true } });
 		const vault = api.launcher.session.vault;
 		// Reached first so a lazy namespace has materialized before the hand-set values land on it.
 		expect(await vault.lock.open()).toBe("shadow-open");

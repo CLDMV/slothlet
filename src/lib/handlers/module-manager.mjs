@@ -39,6 +39,7 @@
 import { ComponentBase } from "#factories/component-base";
 import { internals as unifiedWrapperInternals } from "#handlers/unified-wrapper";
 import { SlothletError } from "#errors";
+import { assertOptionKeys } from "#helpers/config-schema";
 import { sortModules } from "#helpers/module-sort";
 import {
 	ArrayMethods,
@@ -77,21 +78,34 @@ const { runtime_selfModuleReader } = unifiedWrapperInternals("lib/handlers/modul
 const DEFAULT_MODULE_COLLISION_MODE = "merge";
 
 /**
+ * The collision mode a modules method was given: `options.collision` as a bare mode string, or its `mode`.
+ * @param {object} options - The method's options.
+ * @returns {string} The mode, or {@link DEFAULT_MODULE_COLLISION_MODE} when none is given.
+ * @private
+ */
+function collisionModeOf(options) {
+	const collision = options.collision;
+	if (typeof collision === "string") return collision;
+	if (collision !== null && typeof collision === "object" && collision.mode !== undefined) return collision.mode;
+	return DEFAULT_MODULE_COLLISION_MODE;
+}
+
+/**
  * @typedef {import("../helpers/module-discovery.mjs").DiscoverResult} DiscoverResult
  * @typedef {import("../helpers/module-discovery.mjs").DiscoverOptions} DiscoverOptions
  */
 
 /**
  * @typedef {object} AddModuleOptions
- * @property {"skip"|"warn"|"replace"|"merge"|"merge-replace"|"error"} [collisionMode="merge"] - Per-mount override; defaults to "merge" (matches `DEFAULT_MODULE_COLLISION_MODE`). Use "error" to throw on any pre-flight mountPath collision against api-manager's `addHistory`.
+ * @property {string|{mode?: "skip"|"warn"|"replace"|"merge"|"merge-replace"|"error"}} [collision] - `collision.mode` (or the mode as a bare string): per-mount override; defaults to "merge" (matches `DEFAULT_MODULE_COLLISION_MODE`). Use "error" to throw on any pre-flight mountPath collision against api-manager's `addHistory`.
  * @property {string} [version] - When the discovery cache holds multiple versions of the same `name`, mount only the entry whose package.json version matches.
  * @property {DiscoverOptions} [discover] - Options to forward to the lazy discover() call if the cache is empty. Ignored when the cache already holds data.
  */
 
 /**
  * @typedef {object} AddModulesOptions
- * @property {"skip"|"warn"|"replace"|"merge"|"merge-replace"|"error"} [collisionMode="merge"] - Per-call collision policy passed to every mount. Defaults to "merge" (matches `DEFAULT_MODULE_COLLISION_MODE`); use "error" to throw on any pre-flight mountPath collision.
- * @property {"throw"|"rollback"|"best-effort"} [onFailure="throw"] - Failure policy. `throw` (default): throw on first failure, leave mounted entries in place. `rollback`: throw on first failure, remove every entry mounted in this call. `best-effort`: collect failures, return aggregate `{ mounted, failed }`.
+ * @property {string|{mode?: "skip"|"warn"|"replace"|"merge"|"merge-replace"|"error"}} [collision] - `collision.mode` (or the mode as a bare string): per-call collision policy passed to every mount. Defaults to "merge" (matches `DEFAULT_MODULE_COLLISION_MODE`); use "error" to throw on any pre-flight mountPath collision.
+ * @property {"throw"|"rollback"|"best-effort"} [failure="throw"] - Failure policy. `throw` (default): throw on first failure, leave mounted entries in place. `rollback`: throw on first failure, remove every entry mounted in this call. `best-effort`: collect failures, return aggregate `{ mounted, failed }`.
  * @property {number} [concurrency=1] - Mount concurrency. `1` (default) = serial. Higher values mount in parallel batches.
  */
 
@@ -172,6 +186,7 @@ export class ModuleManager extends ComponentBase {
 	 * @throws {SlothletError} `MODULE_DISCOVERY_REQUIRES_NODE` in a browser, which has no filesystem to walk.
 	 */
 	async discover(options = {}) {
+		assertOptionKeys(options, "slothlet.api.modules.discover");
 		// Discovery walks the filesystem for module packages, which a browser does not have: refuse it by name
 		// rather than fail on a missing Node builtin (#817). addDiscovered() and addModule(name) run it too.
 		if (this.slothlet.envTarget === "browser") {
@@ -179,7 +194,7 @@ export class ModuleManager extends ComponentBase {
 				validationError: true
 			});
 		}
-		await this.#emit("modules:discover-start", { scanRoot: options.scanRoot, options });
+		await this.#emit("modules:discover-start", { scanRoot: options.root, options });
 		// Dynamically imported to keep module-manager free of static node:fs references.
 		// This allows module-manager to be safely imported in browser/bundler contexts
 		// where node:fs is not available; the import only fires when discover() is called.
@@ -260,7 +275,8 @@ export class ModuleManager extends ComponentBase {
 	 * @throws {SlothletError} `MODULE_MOUNT_COLLISION` when the exact mountPath is already occupied and `collisionMode` is `"error"`.
 	 */
 	async addModule(nameOrResult, options = {}, writer = runtime_selfModuleReader(this.slothlet)) {
-		const collisionMode = options.collisionMode ?? DEFAULT_MODULE_COLLISION_MODE;
+		assertOptionKeys(options, "slothlet.api.modules.addModule");
+		const collisionMode = collisionModeOf(options);
 		const discoverResult = await this.#resolveToDiscoverResult(nameOrResult, options);
 		await this.#emit("modules:mount-start", { items: [nameOrResult], options });
 		// addModule is single-item by contract — no multi-version routing here
@@ -298,15 +314,16 @@ export class ModuleManager extends ComponentBase {
 				{ validationError: true }
 			);
 		}
-		const onFailure = options.onFailure ?? "throw";
+		assertOptionKeys(options, "slothlet.api.modules.addModules");
+		const onFailure = options.failure ?? "throw";
 		const concurrency = Math.max(1, Number(options.concurrency) || 1);
-		const collisionMode = options.collisionMode ?? DEFAULT_MODULE_COLLISION_MODE;
+		const collisionMode = collisionModeOf(options);
 
 		if (!ArrayMethods.includes(["throw", "rollback", "best-effort"], onFailure)) {
 			throw new SlothletError(
 				"INVALID_ARGUMENT",
 				{
-					argument: "onFailure",
+					argument: "options.failure",
 					expected: "throw|rollback|best-effort",
 					received: String(onFailure)
 				},
@@ -370,6 +387,7 @@ export class ModuleManager extends ComponentBase {
 	 *   none.
 	 */
 	async removeModule(name, opts = {}, writer = runtime_selfModuleReader(this.slothlet)) {
+		assertOptionKeys(opts, "slothlet.api.modules.removeModule");
 		const matches = [];
 		for (const ofEntry of mapEntries(this.#mounted)) {
 			const key = ofEntry[0],

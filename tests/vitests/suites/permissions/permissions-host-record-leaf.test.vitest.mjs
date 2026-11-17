@@ -258,7 +258,7 @@ describe.each(CONFIGS)("Permissions > a host record leaf is its own entity at it
 			await api.slothlet.api.add(
 				mount.split("."),
 				make(() => api),
-				{ moduleID: "host-records" }
+				{ id: "host-records" }
 			);
 			await api.ext.b.prepare();
 		});

@@ -78,8 +78,8 @@ describe.each(CONFIGS)("module-code entry points (#625) — $mode / $runtime", (
 	 */
 	async function load(options = {}) {
 		api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, ...PERMISSIONS_ON, ...options });
-		await api.slothlet.api.add("victim", VICTIM, { moduleID: "victim" });
-		for (const name of ["guest", "atk", "other"]) await api.slothlet.api.add(name, GUEST, { moduleID: name });
+		await api.slothlet.api.add("victim", VICTIM, { id: "victim" });
+		for (const name of ["guest", "atk", "other"]) await api.slothlet.api.add(name, GUEST, { id: name });
 		return api;
 	}
 
@@ -93,7 +93,7 @@ describe.each(CONFIGS)("module-code entry points (#625) — $mode / $runtime", (
 		it.each([
 			["addModule", () => evilResult()],
 			["addModules", async () => [await evilResult()]],
-			["addDiscovered", () => ({ scanRoot: EVIL })]
+			["addDiscovered", () => ({ discover: { root: EVIL } })]
 		])("refuses module code mounting one whose rules reach beyond its subtree through %s, and mounts nothing", async (entry, arg) => {
 			await load();
 			const target = await arg();
@@ -108,7 +108,7 @@ describe.each(CONFIGS)("module-code entry points (#625) — $mode / $runtime", (
 
 		it("lets module code mount one whose rules stay in its subtree", async () => {
 			await load(PERMISSIONS_ON);
-			expect(await api.guest.x.mountModule("addDiscovered", { scanRoot: GOOD })).toBe("done");
+			expect(await api.guest.x.mountModule("addDiscovered", { discover: { root: GOOD } })).toBe("done");
 			expect(api.guest.good.info.name()).toBe("info");
 			const granted = await api.other.x.writeAt("guest.x");
 			expect(granted).toEqual(every(granted, "done"));
@@ -116,7 +116,7 @@ describe.each(CONFIGS)("module-code entry points (#625) — $mode / $runtime", (
 
 		it("applies a manifest the host mounts as declared", async () => {
 			await load(PERMISSIONS_ON);
-			await api.slothlet.api.modules.addDiscovered({ scanRoot: EVIL });
+			await api.slothlet.api.modules.addDiscovered({ discover: { root: EVIL } });
 			const granted = await api.guest.x.writeAt("victim.v");
 			expect(granted).toEqual(every(granted, "done"));
 		});
@@ -124,14 +124,14 @@ describe.each(CONFIGS)("module-code entry points (#625) — $mode / $runtime", (
 
 	describe("an api.add's content", () => {
 		it.each([
-			["merge", { collisionMode: "merge" }],
-			["mutateExisting", { mutateExisting: true }],
-			["skip", { collisionMode: "skip" }],
-			["warn", { collisionMode: "warn" }],
+			["merge", { collision: { mode: "merge" } }],
+			["mutateExisting", { collision: { mutate: true } }],
+			["skip", { collision: { mode: "skip" } }],
+			["warn", { collision: { mode: "warn" } }],
 			["default", {}]
 		])("does not land in a module the host mounted below the caller's path (%s)", async (_label, options) => {
 			await load(OVERRIDE);
-			await api.slothlet.api.add("atk.hostmount", GUEST, { moduleID: "hostmount" });
+			await api.slothlet.api.add("atk.hostmount", GUEST, { id: "hostmount" });
 			const outcome = await withSuppressedSlothletErrorOutput(() => api.atk.x.addInjected("atk", "hostmount", options));
 			expect(outcome).toBe("LOOSE_SET_NOT_OWNED");
 			expect(api.atk.hostmount.injected).toBeUndefined();
@@ -140,7 +140,7 @@ describe.each(CONFIGS)("module-code entry points (#625) — $mode / $runtime", (
 
 		it("does not get past a host write deny below the caller's path", async () => {
 			await load({ ...OVERRIDE, permissions: { rules: [{ caller: "atk.**", target: "atk.locked:write", effect: "deny" }] } });
-			expect(await withSuppressedSlothletErrorOutput(() => api.atk.x.addInjected("atk", "locked", { collisionMode: "merge" }))).toBe(
+			expect(await withSuppressedSlothletErrorOutput(() => api.atk.x.addInjected("atk", "locked", { collision: { mode: "merge" } }))).toBe(
 				"PERMISSION_DENIED"
 			);
 			expect(api.atk.locked).toBeUndefined();
@@ -148,9 +148,9 @@ describe.each(CONFIGS)("module-code entry points (#625) — $mode / $runtime", (
 
 		it("does not land a folder's content in a module the host mounted below the caller's path", async () => {
 			await load(OVERRIDE);
-			await api.slothlet.api.add("atk.kid", GUEST, { moduleID: "hostkid" });
+			await api.slothlet.api.add("atk.kid", GUEST, { id: "hostkid" });
 			expect(
-				await withSuppressedSlothletErrorOutput(() => api.atk.x.addAt("atk", HOLDER, { moduleID: "atkholder", collisionMode: "merge" }))
+				await withSuppressedSlothletErrorOutput(() => api.atk.x.addAt("atk", HOLDER, { id: "atkholder", collision: { mode: "merge" } }))
 			).toBe("LOOSE_SET_NOT_OWNED");
 			expect(api.atk.kid.note).toBeUndefined();
 			expect(api.atk.deep).toBeUndefined();
@@ -158,7 +158,7 @@ describe.each(CONFIGS)("module-code entry points (#625) — $mode / $runtime", (
 
 		it("lands content under the caller's own path", async () => {
 			await load(OVERRIDE);
-			expect(await api.atk.x.addInjected("atk", "fresh", { collisionMode: "merge" })).toBe("done");
+			expect(await api.atk.x.addInjected("atk", "fresh", { collision: { mode: "merge" } })).toBe("done");
 			expect(await api.atk.fresh.injected()).toBe("injected");
 		});
 	});
@@ -166,14 +166,14 @@ describe.each(CONFIGS)("module-code entry points (#625) — $mode / $runtime", (
 	describe("a path with surrounding whitespace", () => {
 		it("is checked as the path it mounts", async () => {
 			await load({ permissions: { rules: [{ caller: "guest.**", target: "guest.locked:write", effect: "deny" }] } });
-			await api.slothlet.api.add("guest.hostmount", GUEST, { moduleID: "hostmount" });
-			expect(await withSuppressedSlothletErrorOutput(() => api.guest.x.addAt("guest.locked ", GUEST, { moduleID: "lk" }))).toBe(
+			await api.slothlet.api.add("guest.hostmount", GUEST, { id: "hostmount" });
+			expect(await withSuppressedSlothletErrorOutput(() => api.guest.x.addAt("guest.locked ", GUEST, { id: "lk" }))).toBe(
 				"PERMISSION_DENIED"
 			);
 			expect(api.guest.locked).toBeUndefined();
 			expect(
 				await withSuppressedSlothletErrorOutput(() =>
-					api.guest.x.addAt("guest.hostmount ", VICTIM, { moduleID: "hm2", forceOverwrite: true })
+					api.guest.x.addAt("guest.hostmount ", VICTIM, { id: "hm2", collision: { force: true } })
 				)
 			).toBe("LOOSE_SET_NOT_OWNED");
 			expect(typeof api.guest.hostmount.x.listSelf).toBe("function");
@@ -205,8 +205,8 @@ describe.each(CONFIGS)("module-code entry points (#625) — $mode / $runtime", (
 		 */
 		async function versioned() {
 			await load();
-			await api.slothlet.api.add("vlib", VICTIM, { moduleID: "vv1" }, { version: "v1", default: true });
-			await api.slothlet.api.add("vlib", VICTIM, { moduleID: "vv2" }, { version: "v2" });
+			await api.slothlet.api.add("vlib", VICTIM, { id: "vv1", version: { tag: "v1", default: true } });
+			await api.slothlet.api.add("vlib", VICTIM, { id: "vv2", version: { tag: "v2" } });
 			return api;
 		}
 
@@ -314,10 +314,10 @@ describe.each(CONFIGS)("module-code entry points (#625) — $mode / $runtime", (
 	describe("a refused api.add", () => {
 		it("leaves no ownership entries behind", async () => {
 			await load({ ...OVERRIDE, diagnostics: true });
-			await api.slothlet.api.add("atk.kid", GUEST, { moduleID: "hostkid" });
+			await api.slothlet.api.add("atk.kid", GUEST, { id: "hostkid" });
 			const before = api.slothlet.diag.getOwnership();
 			expect(
-				await withSuppressedSlothletErrorOutput(() => api.atk.x.addAt("atk", HOLDER, { moduleID: "atkpay", collisionMode: "merge" }))
+				await withSuppressedSlothletErrorOutput(() => api.atk.x.addAt("atk", HOLDER, { id: "atkpay", collision: { mode: "merge" } }))
 			).toBe("LOOSE_SET_NOT_OWNED");
 			const after = api.slothlet.diag.getOwnership();
 			expect(after.modules.map((entry) => entry.moduleID)).not.toContain("atkpay");

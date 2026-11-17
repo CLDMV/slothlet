@@ -54,7 +54,7 @@ describe.each(MODES.flatMap((mode) => RUNTIMES.flatMap((runtime) => PERMISSIONS.
 
 		it("is refused when the host runs it later, and the host's own change still goes through", async () => {
 			api = await slothlet({ base: join(FIXTURE, "base"), mode, runtime, silent: true, ...options });
-			await api.slothlet.api.add("planter", join(FIXTURE, "planter"), { moduleID: "planter" });
+			await api.slothlet.api.add("planter", join(FIXTURE, "planter"), { id: "planter" });
 			for (const round of ["first", "reloaded"]) {
 				if (round === "reloaded") await api.slothlet.reload();
 				const target = {};

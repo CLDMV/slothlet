@@ -90,7 +90,7 @@ describe.each(RELOAD_MATRIX)("_reloadByModuleID — $name", ({ config }) => {
 
 	it("reloads a module by its moduleID and preserves wrapper references", async () => {
 		api = await makeApi(config, { base: TEST_DIRS.API_TEST });
-		await api.slothlet.api.add("ext", TEST_DIRS.API_TEST_MIXED, { moduleID: "mixed-mod" });
+		await api.slothlet.api.add("ext", TEST_DIRS.API_TEST_MIXED, { id: "mixed-mod" });
 
 		// Capture a reference before reload
 		const before = api.ext;
@@ -105,7 +105,7 @@ describe.each(RELOAD_MATRIX)("_reloadByModuleID — $name", ({ config }) => {
 
 	it("reloads a deeply-nested module by its moduleID", async () => {
 		api = await makeApi(config, { base: TEST_DIRS.API_TEST });
-		await api.slothlet.api.add("deep.nested", TEST_DIRS.API_TEST_MIXED, { moduleID: "deep-mod" });
+		await api.slothlet.api.add("deep.nested", TEST_DIRS.API_TEST_MIXED, { id: "deep-mod" });
 
 		expect(api.deep?.nested).toBeDefined();
 
@@ -126,8 +126,8 @@ describe.each(RELOAD_MATRIX)("_reloadByModuleID — $name", ({ config }) => {
 
 	it("reloads two sibling modules sequentially by moduleID", async () => {
 		api = await makeApi(config, { base: TEST_DIRS.API_TEST });
-		await api.slothlet.api.add("ext1", TEST_DIRS.API_TEST_MIXED, { moduleID: "mod-a" });
-		await api.slothlet.api.add("ext2", TEST_DIRS.API_TEST, { moduleID: "mod-b" });
+		await api.slothlet.api.add("ext1", TEST_DIRS.API_TEST_MIXED, { id: "mod-a" });
+		await api.slothlet.api.add("ext2", TEST_DIRS.API_TEST, { id: "mod-b" });
 
 		await api.slothlet.api.reload("mod-a");
 		await api.slothlet.api.reload("mod-b");
@@ -151,7 +151,7 @@ describe.each(RELOAD_MATRIX)("_reloadByApiPath — $name", ({ config }) => {
 
 	it("reloads an added module by its apiPath endpoint string", async () => {
 		api = await makeApi(config, { base: TEST_DIRS.API_TEST });
-		await api.slothlet.api.add("extra", TEST_DIRS.API_TEST_MIXED, { moduleID: "m1" });
+		await api.slothlet.api.add("extra", TEST_DIRS.API_TEST_MIXED, { id: "m1" });
 		expect(api.extra).toBeDefined();
 
 		// api.slothlet.api.reload("extra") → path is in live API → _reloadByApiPath("extra")
@@ -162,7 +162,7 @@ describe.each(RELOAD_MATRIX)("_reloadByApiPath — $name", ({ config }) => {
 
 	it("reloads a nested api path endpoint", async () => {
 		api = await makeApi(config, { base: TEST_DIRS.API_TEST });
-		await api.slothlet.api.add("features.core", TEST_DIRS.API_TEST, { moduleID: "core-mod" });
+		await api.slothlet.api.add("features.core", TEST_DIRS.API_TEST, { id: "core-mod" });
 		expect(api.features?.core).toBeDefined();
 
 		await api.slothlet.api.reload("features.core");
@@ -194,8 +194,8 @@ describe.each(RELOAD_MATRIX)("_reloadByApiPath — $name", ({ config }) => {
 	it("reloads two overlapping modules that share a path endpoint, exercising sort + group logic", async () => {
 		api = await makeApi(config, { base: TEST_DIRS.API_TEST });
 		// Add two modules to the same path; second with forceOverwrite so both end up in addHistory for "overlap"
-		await api.slothlet.api.add("overlap", TEST_DIRS.API_TEST, { moduleID: "overlap-base" });
-		await api.slothlet.api.add("overlap", TEST_DIRS.API_TEST_MIXED, { moduleID: "overlap-ext", forceOverwrite: true });
+		await api.slothlet.api.add("overlap", TEST_DIRS.API_TEST, { id: "overlap-base" });
+		await api.slothlet.api.add("overlap", TEST_DIRS.API_TEST_MIXED, { id: "overlap-ext", collision: { force: true } });
 
 		// Reload by path — _findAffectedCaches will find both moduleIDs, then sort/group, then call _reloadByModuleID for each
 		await api.slothlet.api.reload("overlap");
@@ -205,8 +205,8 @@ describe.each(RELOAD_MATRIX)("_reloadByApiPath — $name", ({ config }) => {
 
 	it("preserves outer API when reloading an inner sub-path", async () => {
 		api = await makeApi(config, { base: TEST_DIRS.API_TEST });
-		await api.slothlet.api.add("outer", TEST_DIRS.API_TEST, { moduleID: "outer-mod" });
-		await api.slothlet.api.add("outer.inner", TEST_DIRS.API_TEST_MIXED, { moduleID: "inner-mod" });
+		await api.slothlet.api.add("outer", TEST_DIRS.API_TEST, { id: "outer-mod" });
+		await api.slothlet.api.add("outer.inner", TEST_DIRS.API_TEST_MIXED, { id: "inner-mod" });
 
 		await api.slothlet.api.reload("inner-mod"); // by moduleID since it's in addHistory
 
@@ -230,8 +230,8 @@ describe.each(RELOAD_MATRIX)("_findAffectedCaches child resolution — $name", (
 	it("finds child caches when reloading a parent scope path", async () => {
 		api = await makeApi(config, { base: TEST_DIRS.API_TEST });
 		// Add a child under the base — so the base scope covers it
-		await api.slothlet.api.add("scope.childA", TEST_DIRS.API_TEST_MIXED, { moduleID: "scope-a" });
-		await api.slothlet.api.add("scope.childB", TEST_DIRS.API_TEST, { moduleID: "scope-b" });
+		await api.slothlet.api.add("scope.childA", TEST_DIRS.API_TEST_MIXED, { id: "scope-a" });
+		await api.slothlet.api.add("scope.childB", TEST_DIRS.API_TEST, { id: "scope-b" });
 
 		// Reload "scope" — _findAffectedCaches finds scope-a and scope-b as children
 		await api.slothlet.api.reload("scope");
@@ -242,7 +242,7 @@ describe.each(RELOAD_MATRIX)("_findAffectedCaches child resolution — $name", (
 
 	it("resolves via ownership history when path matches an add() record", async () => {
 		api = await makeApi(config, { base: TEST_DIRS.API_TEST });
-		await api.slothlet.api.add("histPath", TEST_DIRS.API_TEST_MIXED, { moduleID: "hist-mod" });
+		await api.slothlet.api.add("histPath", TEST_DIRS.API_TEST_MIXED, { id: "hist-mod" });
 		expect(api.histPath).toBeDefined();
 
 		// Reload by apiPath — _findAffectedCaches uses ownership history lookup
@@ -253,7 +253,7 @@ describe.each(RELOAD_MATRIX)("_findAffectedCaches child resolution — $name", (
 
 	it("falls back to parent cache when path is a leaf under a registered scope", async () => {
 		api = await makeApi(config, { base: TEST_DIRS.API_TEST });
-		await api.slothlet.api.add("parentScope", TEST_DIRS.API_TEST, { moduleID: "parent-mod" });
+		await api.slothlet.api.add("parentScope", TEST_DIRS.API_TEST, { id: "parent-mod" });
 
 		// Access a sub-key that exists deeper under parentScope
 		const subKeys = Object.keys(api.parentScope || {});

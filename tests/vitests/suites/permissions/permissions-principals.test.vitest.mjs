@@ -93,8 +93,8 @@ describe.each(getMatrixConfigs())("Permissions > Principals (#459) > $name", ({ 
 			base: path.join(FIXTURE, "base"),
 			permissions: { policy: "deny", rules: [...PLUGIN_GRANTS, ...rules], ...permissions }
 		});
-		await instance.slothlet.api.add("roles", path.join(FIXTURE, "roles"), { moduleID: "roles-mod" });
-		await instance.slothlet.api.add("billing", path.join(FIXTURE, "billing"), { moduleID: "billing-mod" });
+		await instance.slothlet.api.add("roles", path.join(FIXTURE, "roles"), { id: "roles-mod" });
+		await instance.slothlet.api.add("billing", path.join(FIXTURE, "billing"), { id: "billing-mod" });
 		if (roles !== false) await instance.roles.registry.setup(roles);
 		if (billing) await instance.billing.plans.setup();
 		return instance;
@@ -201,8 +201,8 @@ describe.each(getMatrixConfigs())("Permissions > Principals (#459) > $name", ({ 
 		expect(api.slothlet.permissions.principal.invalidate("nope")).toBe(false);
 	});
 
-	it("maxAge: 0 re-resolves on every call and each promoted call still succeeds", async () => {
-		api = await build([FILES_RULE], { roles: { maxAge: 0 } });
+	it("ttl: 0 re-resolves on every call and each promoted call still succeeds", async () => {
+		api = await build([FILES_RULE], { roles: { ttl: 0 } });
 		await api.roles.registry.grant("u1", "p1", ["read"]);
 		// Let the clock move so a same-millisecond hit cannot read as fresh.
 		for (let i = 0; i < 3; i++) {
@@ -344,8 +344,8 @@ describe.each(getMatrixConfigs())("Permissions > Principals (#459) > $name", ({ 
 		expect(() => register("x", null)).toThrow(/INVALID_ARGUMENT/);
 		expect(() => register("x", { resolve: () => 1 })).toThrow(/INVALID_ARGUMENT/);
 		expect(() => register("x", { key: () => 1 })).toThrow(/INVALID_ARGUMENT/);
-		expect(() => register("x", { key: () => 1, resolve: () => 1, maxAge: -1 })).toThrow(/INVALID_ARGUMENT/);
-		expect(() => register("x", { key: () => 1, resolve: () => 1, maxAge: "1s" })).toThrow(/INVALID_ARGUMENT/);
+		expect(() => register("x", { key: () => 1, resolve: () => 1, ttl: -1 })).toThrow(/INVALID_ARGUMENT/);
+		expect(() => register("x", { key: () => 1, resolve: () => 1, ttl: "1s" })).toThrow(/INVALID_ARGUMENT/);
 
 		const addRule = api.slothlet.permissions.addRule;
 		expect(() => addRule({ caller: "**", target: "x", effect: "allow", requires: [] })).toThrow(/INVALID_PERMISSION_RULE/);

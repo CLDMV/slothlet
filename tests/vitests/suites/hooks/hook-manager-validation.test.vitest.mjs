@@ -84,7 +84,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("HookManager > on()
 
 	test("on() with empty pattern throws INVALID_TYPE_PATTERN (line 644)", async () => {
 		await withSuppressedSlothletErrorOutput(async () => {
-			expect(() => api.slothlet.hook.on("before:", noop)).toThrow();
+			expect(() => api.slothlet.hook.on(":before", noop)).toThrow();
 		});
 	});
 

@@ -77,7 +77,7 @@ describe.each(matrix)(
 					rules: [{ caller: "reader.**", target: "reader.**", effect: "allow" }, ...rules]
 				}
 			});
-			for (const name of ["reader", "nested"]) await api.slothlet.api.add(name, join(FIXTURE, name), { moduleID: name });
+			for (const name of ["reader", "nested"]) await api.slothlet.api.add(name, join(FIXTURE, name), { id: name });
 			for (const name of ["reader", "nested"]) await api[name];
 			api.ownNothing = { a: 1 };
 			api.nested.ownNothing = { a: 1 };

@@ -54,7 +54,7 @@ describe.each(HOT_RELOAD_MATRIX)("Isolated: does not restore removed APIs - $nam
 
 	it("should not restore removed APIs after reload", async () => {
 		api = await createApiInstance(config);
-		await api.slothlet.api.add("extra", TEST_DIRS.API_TEST_MIXED, { moduleID: "test-module" });
+		await api.slothlet.api.add("extra", TEST_DIRS.API_TEST_MIXED, { id: "test-module" });
 		expect(api.extra?.mathCjs).toBeTypeOf("object");
 
 		await api.slothlet.api.remove("test-module");

@@ -145,7 +145,7 @@ const RULE_SETS = {
  */
 async function build(root, options, { load = true } = {}) {
 	const api = await slothlet({ base: join(FIXTURE, root), silent: true, diagnostics: true, ...options });
-	await api.slothlet.api.add("zz", join(FIXTURE, root), { moduleID: "zz" });
+	await api.slothlet.api.add("zz", join(FIXTURE, root), { id: "zz" });
 	if (load) {
 		for (const member of [...membersOf(root), "reader", "open"]) {
 			await api[member];

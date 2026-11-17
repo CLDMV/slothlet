@@ -464,7 +464,7 @@ export class HookManager extends ComponentBase {
 		this.defaultPattern = hookConfig.pattern || "**";
 		this.suppressErrors = hookConfig.errors === "suppress";
 
-		// Pin-enforcement policy. When true (default) a per-registration `lockCaller: false` on a
+		// Pin-enforcement policy. When true (default) a per-registration `pin: false` on a
 		// MODULE hook is ignored (force-pinned) — an unpinned module hook runs without an enforced
 		// caller identity and is a permission-bypass vector. Disable via `hook: { pin: false }` or the
 		// host-only runtime switch `api.slothlet.hook.pin.disable()`.
@@ -547,14 +547,13 @@ export class HookManager extends ComponentBase {
 	 * Register a hook for API functions.
 	 *
 	 * @param {string} typePattern - Path pattern then hook type, `"pattern:type"` (e.g. `"math.*:before"`).
-	 *   The legacy `"type:pattern"` form (e.g. `"before:math.*"`) is still accepted but deprecated.
 	 * @param {function} handler - Hook handler function
 	 * @param {object} [options={}] - Hook options
 	 * @param {string} [options.id] - Unique identifier (auto-generated if not provided)
 	 * @param {string} [options.pattern] - Path pattern; overrides the pattern parsed from `typePattern` when supplied
 	 * @param {number} [options.priority=0] - Higher = earlier execution
 	 * @param {string} [options.subset=DEFAULT_HOOK_SUBSET] - Phase: "before", "primary", or "after" ({@link HOOK_SUBSETS})
-	 * @param {boolean} [options.lockCaller=true] - Pin the registering module's caller
+	 * @param {boolean} [options.pin=true] - Pin the registering module's caller
 	 *   identity onto the handler so its `self.*` calls and permission checks are
 	 *   attributed to the module that registered the hook, not the caller whose API
 	 *   call triggered it. On by default; pass `false` to opt out — the handler then
@@ -563,9 +562,10 @@ export class HookManager extends ComponentBase {
 	 *   No effect when the hook is registered outside a module (no caller identity to
 	 *   capture) or when `handler` is already a `lockCaller`-wrapped function.
 	 * @param {boolean} [options.async] - Declare the handler asynchronous when its async-ness cannot be detected (a plain function returning a Promise)
-	 * @param {boolean} [options.versioned=false] - Resolve `pattern` (written against the logical path) through the instance's configured `versionDispatcher`,
-	 *   registering against the physical path of each selected version. The returned id is a group id that removes every version's hook.
-	 * @param {function(object, object): (string|string[]|null|undefined)} [options.versionDispatcher] - Per-registration dispatcher, `(allVersions, caller) => tag | tag[] | null`,
+	 * @param {object} [options.versioning] - Version dispatch for the hook's pattern.
+	 * @param {boolean} [options.versioning.enabled=false] - Resolve `pattern` (written against the logical path) through the instance's configured
+	 *   `versioning.dispatcher`, registering against the physical path of each selected version. The returned id is a group id that removes every version's hook.
+	 * @param {function(object, object): (string|string[]|null|undefined)} [options.versioning.dispatcher] - Per-registration dispatcher, `(allVersions, caller) => tag | tag[] | null`,
 	 *   overriding the instance's. Implies versioned registration. Returning nothing takes the default-version resolution a call would.
 	 * @returns {string} Hook ID
 	 * @public
@@ -645,14 +645,17 @@ export class HookManager extends ComponentBase {
 
 		// Version-dispatch seam (#250): hook registration resolves through the same dispatcher a call
 		// on the pattern's path would, so hooks and calls can never disagree about which mounted
-		// version a logical path means. `{ versioned: true }` uses the instance's configured
-		// dispatcher; a per-registration `versionDispatcher(allVersions, caller)` overrides it and
+		// version a logical path means. `{ versioning: { enabled: true } }` uses the instance's configured
+		// dispatcher; a per-registration `versioning.dispatcher(allVersions, caller)` overrides it and
 		// may select SEVERAL tags; returning nothing falls back to the same default-version
 		// resolution calls use. One registration per selected tag is delegated below with the
 		// physical (`tag.pattern`) target — each re-entry runs the ordinary permission gate for its
 		// concrete pattern — and the shared group id lets one remove({ id }) unhook them all.
 		const versionBinding = options[VERSION_BINDING] ?? null;
-		if ((options.versioned === true || typeof options.versionDispatcher === "function") && !versionBinding) {
+		const versioning = options.versioning ?? null;
+		const dispatcher = versioning !== null && typeof versioning === "object" ? versioning.dispatcher : undefined;
+		const versioned = versioning !== null && typeof versioning === "object" && versioning.enabled === true;
+		if ((versioned || typeof dispatcher === "function") && !versionBinding) {
 			const versionManager = this.slothlet.handlers?.versionManager;
 			const logicalPath = versionManager?.findLogicalPathFor?.(pattern) ?? null;
 			const registered = logicalPath ? versionManager.list(logicalPath) : undefined;
@@ -662,9 +665,9 @@ export class HookManager extends ComponentBase {
 			const allVersions = versionManager.buildAllVersionsArg(logicalPath);
 			const callerArg = versionManager.buildCallerArg(ownerWrapper);
 			let selected;
-			if (typeof options.versionDispatcher === "function") {
+			if (typeof dispatcher === "function") {
 				try {
-					selected = options.versionDispatcher(allVersions, callerArg);
+					selected = dispatcher(allVersions, callerArg);
 				} catch {
 					selected = null;
 				}
@@ -708,8 +711,7 @@ export class HookManager extends ComponentBase {
 						this.on(`${tag}.${pattern}:${type}`, handler, {
 							...options,
 							pattern: undefined,
-							versioned: undefined,
-							versionDispatcher: undefined,
+							versioning: undefined,
 							id: `${groupId}::${tag}`,
 							[VERSION_BINDING]: { groupId, version: tag }
 						})
@@ -761,7 +763,7 @@ export class HookManager extends ComponentBase {
 		// self.*/permission checks to the module that registered the hook rather than
 		// to whichever caller's API call triggered it. #pinHandler is a no-op when the
 		// hook is registered outside a module or the handler is already locked.
-		let lockCaller = options.lockCaller !== false;
+		let lockCaller = options.pin !== false;
 		// Force-pin module hooks while pin enforcement is on (the default): an unpinned module hook
 		// runs with no enforced caller identity and could reach denied paths through the bound `api`.
 		// Host hooks (no owner) are unaffected — #pinHandler is already a no-op without a caller.
@@ -1075,7 +1077,7 @@ export class HookManager extends ComponentBase {
 	/**
 	 * Set the pin-enforcement policy at runtime (backs `api.slothlet.hook.pin.enable`/`disable`).
 	 * When true (the default) module hooks are force-pinned to their owner; false permits a
-	 * per-registration `lockCaller: false`. The public wrapper is host-only when permissions are
+	 * per-registration `pin: false`. The public wrapper is host-only when permissions are
 	 * enabled — `slothlet.hook.pin.*` falls under the `slothlet.hook.**` deny baseline.
 	 *
 	 * @param {boolean} value - True to enforce pinning (force-pin module hooks), false to permit unpinned.
@@ -1913,12 +1915,8 @@ export class HookManager extends ComponentBase {
 	 * This matches the suffix form used by permission rule targets, so a hook and the permission
 	 * that gates it read identically.
 	 *
-	 * The legacy `type:pattern` form (type first, e.g. `"before:math.*"`) is still parsed for
-	 * backward compatibility but emits a `HOOK_TYPEPATTERN_PREFIX_DEPRECATED` warning (suppressed by
-	 * `silent: true`) and will be removed in v4. Detection prefers the new form: a valid trailing
-	 * type is read as suffix form (no warning); otherwise a valid leading type is read as the
-	 * deprecated prefix form (warning). The sole ambiguous input — a path literally named after a
-	 * hook type used with the legacy form (e.g. `"error:before"`) — resolves to the suffix reading.
+	 * A type-first string (`"before:math.*"`) names no hook type at its end and is refused like any
+	 * other string without one.
 	 *
 	 * @param {string} typePattern - Combined path pattern and type (e.g. "math.*:before").
 	 * @returns {{ type: string, pattern: string }} Parsed hook type and path pattern.
@@ -1955,25 +1953,7 @@ export class HookManager extends ComponentBase {
 			return { type: trailing, pattern };
 		}
 
-		// Deprecated prefix form: type:pattern — the leading token is a known hook type.
-		const leading = StringMethods.substring(typePattern, 0, firstColon);
-		if (SetMethods.has(this.#validTypes, leading)) {
-			const pattern = StringMethods.substring(typePattern, firstColon + 1);
-			if (!pattern) {
-				throw new this.slothlet.SlothletError("INVALID_TYPE_PATTERN", {
-					typePattern,
-					expected: "empty path pattern — use 'pattern:type' (e.g. 'math.*:before')"
-				});
-			}
-			// Deprecation: nudge toward the canonical suffix form. Suppressed by `silent`.
-			new this.SlothletWarning("HOOK_TYPEPATTERN_PREFIX_DEPRECATED", {
-				given: typePattern,
-				suggested: `${pattern}:${leading}`
-			});
-			return { type: leading, pattern };
-		}
-
-		// Neither end names a hook type.
+		// The string does not end with a hook type.
 		throw new this.slothlet.SlothletError("INVALID_TYPE_PATTERN", {
 			typePattern,
 			expected: `no hook type found — end with one of: ${ArrayMethods.join(setToArray(this.#validTypes), ", ")} (e.g. 'math.*:before')`
@@ -2229,7 +2209,7 @@ export class HookManager extends ComponentBase {
 					// already in final form (pinned handlers carry _slothletOriginal, so
 					// re-registration is idempotent), so this only keeps the hook object's
 					// lockCaller flag accurate for introspection.
-					lockCaller: hook.lockCaller,
+					pin: hook.lockCaller,
 					// Preserve async-ness across reload: a handler declared `{ async: true }` for a
 					// detection blind spot must not silently demote to the sync pipeline at replay —
 					// exactly the stale-strategy class the epoch cache exists to prevent.

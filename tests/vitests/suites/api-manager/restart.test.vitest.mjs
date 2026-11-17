@@ -133,7 +133,7 @@ describe.each(getMatrixConfigs({}))("api.slothlet.restart() (#504) > $name", ({ 
 
 	it("does not replay runtime add() / remove() history (reload does)", async () => {
 		await create();
-		await api.slothlet.api.add("plugin", EXTRA, { moduleID: "restart-plugin" });
+		await api.slothlet.api.add("plugin", EXTRA, { id: "restart-plugin" });
 		await api.slothlet.api.remove("secret");
 		expect(await api.plugin.ping()).toBe("plugin");
 		expect(api.secret).toBeUndefined();
@@ -182,7 +182,7 @@ describe.each(getMatrixConfigs({}))("api.slothlet.restart() (#504) > $name", ({ 
 
 	it("throws RESTART_REFERENCE_UNRESOLVED when a held reference's path no longer exists", async () => {
 		await create();
-		await api.slothlet.api.add("plugin", EXTRA, { moduleID: "restart-plugin" });
+		await api.slothlet.api.add("plugin", EXTRA, { id: "restart-plugin" });
 		const plugin = api.plugin;
 		expect(await plugin.ping()).toBe("plugin");
 

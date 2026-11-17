@@ -60,10 +60,10 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])(
 		 */
 		async function useKept(name, runtime) {
 			api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, permissions: { policy: "allow" } });
-			if (name === "ns") await api.slothlet.api.add("mounts.ns", path.join(FIXTURE, "ns_values"), { moduleID: "values" });
+			if (name === "ns") await api.slothlet.api.add("mounts.ns", path.join(FIXTURE, "ns_values"), { id: "values" });
 			await api.probe.keep(name);
 			// Made callable after it was kept (#533).
-			if (name === "ns") await api.slothlet.api.add("mounts.ns", path.join(FIXTURE, "ns_callable"), { moduleID: "callable" });
+			if (name === "ns") await api.slothlet.api.add("mounts.ns", path.join(FIXTURE, "ns_callable"), { id: "callable" });
 			await api.probe.useLater();
 			const outcome = await waitOutcome(api);
 			await api.shutdown();
