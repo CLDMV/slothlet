@@ -20,10 +20,9 @@
  * whatever) always stacked every raw-captured contributor regardless of what the real composed
  * tree actually kept, which is wrong: nothing before #341 ever stacked functions at a shared api
  * path, and #341 should not have made that automatic/implicit in `collisionMode`'s side effects.
- * `stackRoutines` defaults to `false` (like `autoRoutines`, a deliberate opt-in) — a module that
- * lost a collision (under ANY collisionMode) must not still run via the routine system unless
- * `stackRoutines: true` is explicitly set, and that setting is honored uniformly, independent of
- * which collisionMode produced the winner.
+ * `routines.stack` defaults to `true` in v4 — every contributor at a shared path runs. With
+ * `routines.stack: false`, a module that lost a collision (under ANY collisionMode) does not run via
+ * the routine system, honored uniformly, independent of which collisionMode produced the winner.
  * @module tests/vitests/suites/lifecycle/routines-stack-flag
  */
 
@@ -36,9 +35,9 @@ describe.each(["eager", "lazy"])("stackRoutines (#365) — mode: %s", (mode) => 
 		globalThis.__slothletRoutineLog = [];
 	});
 
-	describe("default (stackRoutines omitted, false)", () => {
+	describe("routines.stack: false", () => {
 		it("a merge collision at the same api path runs only the surviving (existing) contributor", async () => {
-			const api = await slothlet({ base: TEST_DIRS.API_TEST_ROUTINES, mode, routines: { auto: true }, silent: true });
+			const api = await slothlet({ base: TEST_DIRS.API_TEST_ROUTINES, mode, routines: { auto: true, stack: false }, silent: true });
 			try {
 				globalThis.__slothletRoutineLog = [];
 				await api.slothlet.api.add(["auth"], TEST_DIRS.API_TEST_ROUTINES_AUTH1);
@@ -52,7 +51,7 @@ describe.each(["eager", "lazy"])("stackRoutines (#365) — mode: %s", (mode) => 
 		});
 
 		it("a replace collision at the same api path runs only the winning (incoming) contributor", async () => {
-			const api = await slothlet({ base: TEST_DIRS.API_TEST_ROUTINES, mode, routines: { auto: true }, silent: true });
+			const api = await slothlet({ base: TEST_DIRS.API_TEST_ROUTINES, mode, routines: { auto: true, stack: false }, silent: true });
 			try {
 				globalThis.__slothletRoutineLog = [];
 				await api.slothlet.api.add(["auth"], TEST_DIRS.API_TEST_ROUTINES_AUTH1);
@@ -69,7 +68,7 @@ describe.each(["eager", "lazy"])("stackRoutines (#365) — mode: %s", (mode) => 
 		});
 
 		it("the root cascade also only reflects the surviving contributor at a collided path", async () => {
-			const api = await slothlet({ base: TEST_DIRS.API_TEST_ROUTINES, mode, routines: { auto: true }, silent: true });
+			const api = await slothlet({ base: TEST_DIRS.API_TEST_ROUTINES, mode, routines: { auto: true, stack: false }, silent: true });
 			try {
 				globalThis.__slothletRoutineLog = [];
 				await api.slothlet.api.add(["auth"], TEST_DIRS.API_TEST_ROUTINES_AUTH1);
@@ -80,6 +79,23 @@ describe.each(["eager", "lazy"])("stackRoutines (#365) — mode: %s", (mode) => 
 				// The root cascade also re-runs the base mount's own top-level initialize.mjs — that's
 				// unrelated to the "auth" collision this test is about.
 				expect(globalThis.__slothletRoutineLog).toEqual(["root:initialize", "auth1:initialize"]);
+			} finally {
+				await api.slothlet.shutdown();
+			}
+		});
+	});
+
+	describe("default (routines omitted): stacks", () => {
+		it("a merge collision at the same api path runs every contributor, in mount order", async () => {
+			const api = await slothlet({ base: TEST_DIRS.API_TEST_ROUTINES, mode, silent: true });
+			try {
+				globalThis.__slothletRoutineLog = [];
+				await api.slothlet.api.add(["auth"], TEST_DIRS.API_TEST_ROUTINES_AUTH1);
+				await api.slothlet.api.add(["auth"], TEST_DIRS.API_TEST_ROUTINES_AUTH2);
+
+				globalThis.__slothletRoutineLog = [];
+				await api.auth.initialize();
+				expect(globalThis.__slothletRoutineLog).toEqual(["auth1:initialize", "auth2:initialize"]);
 			} finally {
 				await api.slothlet.shutdown();
 			}
