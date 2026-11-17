@@ -1,0 +1,36 @@
+{
+	"source": "Additions from decisions made after the main table was generated (2026-11-16): error and warning fields.",
+	"notation": {
+		"data": "a field consumer code reads on a slothlet object (errors, warnings)"
+	},
+	"entries": [
+		{
+			"kind": "data",
+			"old": "error.context",
+			"new": "error.details",
+			"action": "rename",
+			"note": "SlothletError and SlothletWarning carry their extra fields on `.details` in v4 (the console label is \"Details:\"). Rewritten where the value is provably a slothlet error; reported everywhere else."
+		},
+		{
+			"kind": "data",
+			"old": "error.originalError",
+			"new": "error.cause",
+			"action": "rename",
+			"note": "Removed; the original throw is the standard `cause`."
+		},
+		{
+			"kind": "data",
+			"old": "@cldmv/slothlet/errors#SlothletWarning.suppressConsole",
+			"new": null,
+			"action": "remove",
+			"note": "The process-wide switch is gone. Set `silent: true` in the slothlet() config to keep that instance's warnings off the console; warnings are still created and recorded (api.slothlet.warnings.get())."
+		},
+		{
+			"kind": "data",
+			"old": "new SlothletError(code, context, originalError, flags)",
+			"new": "new SlothletError(code, details, { cause })",
+			"action": "behaviour",
+			"note": "The constructor takes (code, details, { cause }). The third positional originalError argument and the validationError / stub flags are gone."
+		}
+	]
+}
