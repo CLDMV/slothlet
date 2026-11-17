@@ -59,7 +59,7 @@ import {
 	unwrapThrown
 } from "#handlers/hook-manager";
 import { isSharedExport, internals as sharedValuesInternals } from "#handlers/shared-values";
-import { engineThenOf, pinnedThen } from "#helpers/promise-context";
+import { engineThenOf, pinnedResultThen, pinnedThen } from "#helpers/promise-context";
 import { isBoxedPrimitive, internals as cloneContextInternals } from "#helpers/clone-context";
 import { isFunctionSourcePatch, internals as functionSourceContextInternals } from "#helpers/function-source-context";
 import {
@@ -20187,11 +20187,22 @@ class UnifiedWrapper extends ComponentBase {
 				if (enginePromise || (result && typeof result === "object" && typeof result.then === "function")) {
 					// Mark as async so finally block skips always hooks (we handle them in the promise chain)
 					isAsync = true;
+					// With no hook to run and no error to suppress, a reaction would hand on what the call settles with as it is.
+					// A promise the runtime made for the call already settles that way, with the `Promise` taken at load: it is
+					// handed on as it is.
+					if (
+						enginePromise &&
+						!hasHooks &&
+						wrapper.slothlet.config?.hook?.errors !== "suppress" &&
+						wrapper.slothlet.contextManager?.ownsResult?.(result)
+					)
+						return result;
 					// Async result - attach hooks to Promise chain. A hand-written thenable is reacted to as `await`
 					// would, so a reaction that throws never surfaces at its own `then`'s call site.
+					// The reactions run as the call's caller, which the runtime resolved when the call was entered.
 					return (
 						enginePromise
-							? FunctionMethods.bind(pinnedThen, null, result)
+							? FunctionMethods.bind(pinnedResultThen, null, result)
 							: runtime_inherits(result, Promise)
 								? FunctionMethods.bind(result.then, result)
 								: FunctionMethods.bind(settleThenable, null, result)

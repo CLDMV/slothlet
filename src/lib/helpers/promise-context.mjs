@@ -39,7 +39,7 @@
  * sandbox. See `docs/PERMISSIONS.md` on what the live runtime does and does not bound.
  */
 
-import { pinManyToCurrentCaller } from "#helpers/caller-pinning";
+import { pinManyForResult, pinManyToCurrentCaller } from "#helpers/caller-pinning";
 import { inheritsFrom } from "#helpers/platform";
 import { openLayer, closeLayer, holdsValue, markLayer } from "#helpers/boundary-patch-layers";
 import {
@@ -93,17 +93,18 @@ const NATIVE_THEN = runtime_unwrapThen(PrototypeFunctions.Promise.then);
  * @param {Promise<*>} promise - The receiver.
  * @param {Function} [onFulfilled] - Fulfillment reaction.
  * @param {Function} [onRejected] - Rejection reaction.
+ * @param {function(Function[]): Function[]} [pin] - Pins the two reactions `then` is handed, when `then` does not.
  * @returns {Promise<*>} The derived promise.
  * @private
  */
-function runtime_derive(then, promise, onFulfilled, onRejected) {
+function runtime_derive(then, promise, onFulfilled, onRejected, pin) {
 	let resolve;
 	let reject;
 	const derived = new Promise((settleValue, settleError) => {
 		resolve = settleValue;
 		reject = settleError;
 	});
-	const fulfilled =
+	let fulfilled =
 		typeof onFulfilled === "function"
 			? (value) => {
 					try {
@@ -113,7 +114,7 @@ function runtime_derive(then, promise, onFulfilled, onRejected) {
 					}
 				}
 			: resolve;
-	const rejected =
+	let rejected =
 		typeof onRejected === "function"
 			? (error) => {
 					try {
@@ -123,6 +124,11 @@ function runtime_derive(then, promise, onFulfilled, onRejected) {
 					}
 				}
 			: reject;
+	if (pin) {
+		const pinned = pin([fulfilled, rejected]);
+		fulfilled = pinned[0];
+		rejected = pinned[1];
+	}
 	// A receiver `then` refuses, or a species constructor that throws, throws here as `then` itself would.
 	FunctionMethods.call(then, promise, fulfilled, rejected);
 	return derived;
@@ -171,6 +177,25 @@ export function nativeThen(promise, onFulfilled, onRejected) {
  */
 export function pinnedThen(promise, onFulfilled, onRejected) {
 	return runtime_derive(installed === null ? NATIVE_THEN : installed.wrapper, promise, onFulfilled, onRejected);
+}
+
+/**
+ * Register reactions on the promise a call returned, as {@link pinnedThen} does, pinned to who made the call rather
+ * than to whoever the stack says is registering them: the runtime that ran the call already knows its caller (see
+ * `pinManyForResult` in `helpers/caller-pinning`). A promise the runtime does not know is pinned as `pinnedThen` pins.
+ *
+ * @param {Promise<*>} promise - The promise a call returned, of the engine's own (not a Proxy).
+ * @param {Function} [onFulfilled] - Fulfillment reaction.
+ * @param {Function} [onRejected] - Rejection reaction.
+ * @returns {Promise<*>} The derived promise.
+ * @internal
+ * @example
+ * pinnedResultThen(result, (value) => value, (error) => { throw error; });
+ */
+export function pinnedResultThen(promise, onFulfilled, onRejected) {
+	// Disabled under another copy's wrapper, the wrapper passes reactions through unpinned: so does pinnedThen.
+	if (installed === null || !installed.layer.active) return pinnedThen(promise, onFulfilled, onRejected);
+	return runtime_derive(installed.original, promise, onFulfilled, onRejected, (reactions) => pinManyForResult(promise, reactions));
 }
 
 /**
@@ -248,7 +273,7 @@ function enablePromisePatching() {
 	markLayer(wrapper, layer);
 
 	Objects.defineProperty(Promise.prototype, "then", { __proto__: null, ...descriptor, value: wrapper });
-	installed = { layer, wrapper };
+	installed = { layer, wrapper, original };
 }
 
 /**

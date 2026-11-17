@@ -701,6 +701,14 @@ export class LiveContextManager {
 	#candidateLists = new WeakMap();
 
 	/**
+	 * The promises a leaf's call handed back (see runInContext's `attribute`), with the store it ran on and the caller
+	 * identity resolved when it was entered: reactions registered on one are pinned to that caller (see `forResult` in
+	 * registerEventEmitterContextChecker), and one no reaction needs is handed on as it is (see {@link LiveContextManager#ownsResult}).
+	 * @type {WeakMap<Promise<unknown>, {store: object, identity: object|null}>}
+	 */
+	#callResults = new WeakMap();
+
+	/**
 	 * The resource scopes running now, innermost last (see {@link LiveContextManager#pinScope}).
 	 * @type {Array<object>}
 	 */
@@ -1899,8 +1907,46 @@ export class LiveContextManager {
 				);
 			};
 		};
+		/**
+		 * Pin the reactions registered on the promise a leaf's call returned to that call's caller, as resolved when it was
+		 * entered (see #callResults), instead of resolving who registered them from the stack: the code registering them
+		 * is the caller's, which the call's entry already resolved. Only where that answer is the one a registration would
+		 * give without reading the stack; anything else (null) is pinned as pinMany pins it.
+		 * @param {Promise<unknown>} result - The promise the call returned.
+		 * @param {Function[]} listeners - The reactions.
+		 * @returns {Function[]|null} Each reaction pinned, or null.
+		 */
+		const forResult = (result, listeners) => {
+			const call = WeakMapMethods.get(this.#callResults, result);
+			const identity = call?.identity;
+			// A caller that could not be told, a loading file, an authoritative entry: resolved as any registration is.
+			if (!identity || identity.unresolved || SetMethods.size(this.#loads) || call.store.__authoritativeWrapper) return null;
+			// A module caller is pinned with the record it ran under; one without (a caller several calls account for, or
+			// inherited from a scope) is resolved as any registration is.
+			if (identity.currentWrapper && !identity.record) return null;
+			// The registration's store is the flow the registering code is part of (see flowStoreOf): the call's own store
+			// when that is the active one and is no `run()` / `scope()` store, or the code is part of its flow without a
+			// look at the stack.
+			const store = call.store;
+			if (this.tryGetContext() !== store) return null;
+			const family = store.parentInstanceID;
+			if (
+				family &&
+				family !== store.instanceID &&
+				!this.#carriesAwaits &&
+				!ArrayMethods.some(this.#enteredFor(store), (entry) => entry !== null)
+			)
+				return null;
+			const wrapper = identity.currentWrapper ?? null;
+			const ceiling = wrapper ? (identity.ceiling ?? null) : null;
+			// The call is in flight, so a host caller is pinned as the host (#595).
+			return mapList(listeners, (listener) =>
+				typeof listener === "function" ? carryFlow(pinListener(listener, store.instanceID, wrapper, ceiling), store) : listener
+			);
+		};
 		const pinOne = (listener) => pinMany([listener])[0];
 		pinOne.many = pinMany;
+		pinOne.forResult = forResult;
 		pinOne.idle = () => this.#nothingToPin();
 		pinOne.scope = (listener) => this.#pinScope(pinOne, listener);
 		setApiCallerPinner(pinOne);
@@ -2631,6 +2677,18 @@ export class LiveContextManager {
 	}
 
 	/**
+	 * Whether a promise is one a leaf's call handed back through {@link LiveContextManager#runInContext}: slothlet made it,
+	 * with the `Promise` taken at load, and settles it with the leaf's own result, so a caller with no reaction to add
+	 * can be handed it as it is.
+	 * @param {*} value - The value a call returned.
+	 * @returns {boolean} True for such a promise.
+	 * @public
+	 */
+	ownsResult(value) {
+		return WeakMapMethods.has(this.#callResults, value);
+	}
+
+	/**
 	 * Run function with instance context active (live mode)
 	 * @param {string} instanceID - Instance to run in context of
 	 * @param {Function} fn - Function to execute
@@ -2884,7 +2942,7 @@ export class LiveContextManager {
 				if (!follow && runtime_followSettled(result, settle, store.parentInstanceID ?? store.instanceID)) return result;
 				// Unpinned: settling restores the shared fields, which a pinned reaction would put back.
 				try {
-					return nativeThen(
+					const settled = nativeThen(
 						result,
 						(value) => {
 							settle();
@@ -2895,6 +2953,9 @@ export class LiveContextManager {
 							throw error;
 						}
 					);
+					// A leaf's call: the promise is slothlet's own, and who made the call is known (see #callResults).
+					if (attribute) WeakMapMethods.set(this.#callResults, settled, { store, identity: entryIdentity });
+					return settled;
 					// Not a promise after all: an object only tagged "Promise", which the browser's tag check
 					// cannot tell apart. It is returned as the value it is, as before (see platform.mjs). Node's
 					// util.types.isPromise is a brand check, so only the browser host can reach this.

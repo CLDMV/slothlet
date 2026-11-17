@@ -122,6 +122,25 @@ export function pinManyToCurrentCaller(callbacks) {
 }
 
 /**
+ * Pin the reactions registered on the promise a call returned to who made the call, when the runtime knows it (a
+ * strategy's `forResult`), instead of resolving who is registering them now; otherwise as
+ * {@link pinManyToCurrentCaller} pins them.
+ * @param {Promise<*>} result - The promise the call returned.
+ * @param {Array<Function|undefined>} callbacks - The reactions.
+ * @returns {Array<Function|undefined>} Each reaction, pinned where there is a caller to pin it to.
+ * @internal
+ * @example
+ * const [fulfilled, rejected] = pinManyForResult(result, [onFulfilled, onRejected]);
+ */
+export function pinManyForResult(result, callbacks) {
+	if (pinner && typeof pinner.forResult === "function") {
+		const pinned = pinner.forResult(result, callbacks);
+		if (pinned) return pinned;
+	}
+	return pinManyToCurrentCaller(callbacks);
+}
+
+/**
  * This file's internal bindings, for the files of slothlet's own that use them: each of those files takes them once, as
  * it loads, and anyone else is refused (see `ownBindingsRefusal` in `helpers/instance-imports`).
  * @param {string} consumer - The file asking: its path in slothlet's code folder, without its extension.
