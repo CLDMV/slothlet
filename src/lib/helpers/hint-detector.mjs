@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:12-08:00 (1794874572)
+ *	@Last modified time: 2026-11-16T17:07:46-08:00 (1794877666)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -20,7 +20,7 @@
  */
 
 import { ComponentBase } from "#factories/component-base";
-import { FunctionMethods, ObjectMethods, RegExpMethods } from "#helpers/intrinsics";
+import { describeThrown, FunctionMethods, RegExpMethods } from "#helpers/intrinsics";
 
 /**
  * Hint detection rules - pattern matching for originalError messages
@@ -60,7 +60,7 @@ export class HintDetector extends ComponentBase {
 	detectHint(error, errorCode) {
 		// If we have an originalError, check pattern rules first
 		if (error) {
-			const errorMessage = error.message || ObjectMethods.toString(error);
+			const errorMessage = describeThrown(error);
 			for (let ofIndex = 0, ofList = HINT_RULES; ofIndex < ofList.length; ofIndex++) {
 				const rule = ofList[ofIndex];
 				if (RegExpMethods.exec(rule.pattern, errorMessage) !== null) {
