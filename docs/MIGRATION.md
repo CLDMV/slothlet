@@ -104,6 +104,10 @@ Names slothlet keeps for itself now use `____` (private) and `___` (callables). 
 
 `permissions.mode` accepts `"strict"`: `"on"` plus a met baseline, fixed for the life of the instance. While permissions are on, built-in platform capabilities (`capability:code`, `capability:imports`, `capability:loader`) are refused to module code until a rule opens them. A rule that allows `**` opens none. The baseline checks and the capability list are in [PERMISSIONS.md](./PERMISSIONS.md#strict-mode-the-baseline-and-capabilities); `control.report()` shows the state. If you built functions from strings inside a module, add a `capability:code` rule for that leaf.
 
+### Writes into another module's values follow its read and call rules
+
+While permissions are on, a module that creates a member inside a value another module holds (a key on its data object or array, a static member on its class or function, a member on its class prototype) needs the access it would need to read or call that value; in v3 a member that did not exist yet could be created there under the default policy. Where a module needs to change another module's value, export a function on the owning module that makes the change and allow the caller to call it. See [PERMISSIONS.md](./PERMISSIONS.md#write-permissions).
+
 ### Live runtime: Node callbacks run in their own `run()`
 
 On the live runtime, the callbacks of `fs`, `dns` and `crypto`'s callback APIs (`fs.readFile(file, cb)`, `dns.lookup(host, cb)`, `crypto.randomBytes(n, cb)`, …) now run in the `run()` / `scope()` flow and as the caller that made the call, as on the async runtime; in v3 they saw whatever context was active when they fired. A function reference taken before the first live instance keeps Node's own function and is not carried. The list is in [CONTEXT-PROPAGATION.md](./CONTEXT-PROPAGATION.md#concurrent-run-and-scope-flows-in-the-live-runtime).

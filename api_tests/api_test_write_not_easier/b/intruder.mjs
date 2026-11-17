@@ -243,6 +243,55 @@ export function read(name) {
 }
 
 /**
+ * One write that creates a member that does not exist yet inside a value of the first module's, by its name.
+ * @type {Record<string, function(): *>}
+ */
+const INSIDE_WRITES = {
+	dataAssign: () => {
+		self.p.shared.data.extra = 1;
+	},
+	dataDefine: () => {
+		Object.defineProperty(self.p.shared.data, "extra", { value: 1, configurable: true, writable: true, enumerable: true });
+	},
+	dataReflect: () => {
+		if (!Reflect.set(self.p.shared.data, "extra", 1)) throw new Error("NOT_SET");
+	},
+	dataHeld: () => {
+		const data = self.p.shared.data;
+		data.extra = 1;
+	},
+	listIndex: () => {
+		self.p.shared.data.list[1] = 2;
+	},
+	classAssign: () => {
+		self.p.shared.Box.make = () => "b";
+	},
+	classDefine: () => {
+		Object.defineProperty(self.p.shared.Box, "make", { value: () => "b", configurable: true, writable: true, enumerable: true });
+	},
+	prototype: () => {
+		self.p.shared.Box.prototype.extra = () => "b";
+	},
+	function: () => {
+		self.p.shared.who.extra = 1;
+	},
+	date: () => {
+		self.p.shared.when.extra = 1;
+	}
+};
+
+/**
+ * Create a member inside one of the first module's values.
+ * @param {string} name - The write, a key of INSIDE_WRITES.
+ * @returns {string} Its outcome.
+ * @example
+ * insideWrite("dataAssign");
+ */
+export function insideWrite(name) {
+	return attempt(INSIDE_WRITES[name]);
+}
+
+/**
  * Replace the second module's own node.
  * @returns {string} Its outcome.
  * @example

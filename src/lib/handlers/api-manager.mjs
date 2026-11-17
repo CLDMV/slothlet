@@ -874,7 +874,7 @@ export class ApiManager extends ComponentBase {
 		const internal = callerWrapper.____slothletInternal;
 		const callerPath = String(internal?.apiPath ?? "");
 		const targetPath = ArrayMethods.join(parts, ".");
-		const { exists, accessor, filePath, value, inherited } = this.#memberAt(parts, inFlight);
+		const { exists, accessor, filePath, value, inherited, holder } = this.#memberAt(parts, inFlight);
 		// A member held as an accessor is read by running its getter, which no read gate checks: the write is held to the
 		// ownership and write rules alone, as reading it is to none.
 		if (accessor) return;
@@ -892,6 +892,12 @@ export class ApiManager extends ComponentBase {
 		// A member the value inherits, or one the language reads off it by itself, changes how the value behaves: shadowing
 		// it is a write to the value, held to the access of the node that holds it.
 		if (inherited) return check(ArrayMethods.join(copyList(parts, 0, parts.length - 1), "."), filePath);
+		// A member created inside a value a module holds (a data object, an array, a function or class, a prototype)
+		// changes that value: it is held to the access of the value, as reading or calling it would be decided. A member
+		// created on a node or at a mount point is not.
+		if (!exists && holder !== undefined && this.#isHeldValue(holder, parts)) {
+			check(ArrayMethods.join(copyList(parts, 0, parts.length - 1), "."), filePath);
+		}
 		check(targetPath, filePath, !exists);
 		// Replacing, redefining or deleting a node takes over every member it holds: each is held to its own access.
 		if (exists) this.#assertMembersBeneath(targetPath, value, filePath, check, inFlight);
@@ -983,6 +989,33 @@ export class ApiManager extends ComponentBase {
 	}
 
 	/**
+	 * Whether what holds a member about to be created is a value a module holds rather than a node of the api: an object
+	 * reached inside a node (a prototype, an array or object inside data), a node holding a module's data object, array,
+	 * or another data value, or a function or class with no members of its own as nodes. Creating a member there changes
+	 * that value, so it is held to the access of the value.
+	 * @param {*} holder - What holds the member, as the live tree holds it.
+	 * @param {string[]} parts - Segments of the member's api path.
+	 * @returns {boolean} True for a value.
+	 * @private
+	 */
+	#isHeldValue(holder, parts) {
+		if (holder === null || (typeof holder !== "object" && typeof holder !== "function")) return false;
+		const raw = resolveWrapper(holder);
+		if (raw === null) return holder !== this.slothlet.api && versionDispatcherRecord(holder) === null;
+		const internal = raw.____slothletInternal;
+		if (internal.mode === "lazy" && !internal.state.materialized) return false;
+		if (this.#holdsDataValue(raw)) return true;
+		if (Arrays.isArray(internal.impl)) return true;
+		if (runtime_dataReadOptions(this.slothlet).dataMember(ArrayMethods.join(copyList(parts, 0, parts.length - 1), "."))) return true;
+		if (!internal.isCallable) return false;
+		for (let ofIndex = 0, ofList = Reflect.ownKeys(raw); ofIndex < ofList.length; ofIndex++) {
+			const key = ofList[ofIndex];
+			if (typeof key === "string" && !isFrameworkReservedKey(key) && !SetMethods.has(FUNCTION_OWN_KEYS, key)) return false;
+		}
+		return true;
+	}
+
+	/**
 	 * Whether a loaded node holds a data value of its own rather than members: its impl is a primitive or an object that
 	 * is not walked as a namespace (a Date, a Map, a Set, a class instance, …). Such a node is read, so a write over it
 	 * is held to the read gate at its own path. A lazy node not loaded yet, a callable, and a node whose impl is a
@@ -1021,16 +1054,17 @@ export class ApiManager extends ComponentBase {
 	 * @param {string[]} parts - Segments of the api path.
 	 * @param {{moduleID: string, prior: Map<string, *>}|null} [inFlight=null] - An add in flight whose content is being
 	 *   checked (see {@link ApiManager#ownsPath}).
-	 * @returns {{exists: boolean, accessor: boolean, filePath: string|null, value: *, inherited: boolean}} Whether the
-	 *   member exists, whether it is held as an accessor, the node's source file, the member's value, and, for a member
-	 *   that does not exist, whether its holder inherits one of that name or the language reads it off the holder by
-	 *   itself ({@link PROTOCOL_KEYS}).
+	 * @returns {{exists: boolean, accessor: boolean, filePath: string|null, value: *, inherited: boolean, holder: *}}
+	 *   Whether the member exists, whether it is held as an accessor, the node's source file, the member's value, and, for
+	 *   a member that does not exist, whether its holder inherits one of that name or the language reads it off the holder
+	 *   by itself ({@link PROTOCOL_KEYS}), and the holder itself (undefined when the walk stopped above it).
 	 * @private
 	 */
 	#memberAt(parts, inFlight = null) {
 		let node = this.slothlet.api;
 		let filePath = null;
 		let exists = true;
+		let holder;
 		for (let index = 0; index < parts.length; index++) {
 			const { found, value, accessor } = this.#rawMember(node, parts[index]);
 			if (accessor) return { exists: true, accessor: index === parts.length - 1, filePath, value: undefined, inherited: false };
@@ -1048,6 +1082,7 @@ export class ApiManager extends ComponentBase {
 						return { exists: false, accessor: false, filePath, value: undefined, inherited: true };
 					}
 				}
+				if (index === parts.length - 1 && index > 0) holder = node;
 				break;
 			}
 			let next = value;
@@ -1059,7 +1094,7 @@ export class ApiManager extends ComponentBase {
 		}
 		const reached = exists;
 		if (!exists) exists = this.#recordedHeld(ArrayMethods.join(parts, "."), inFlight);
-		return { exists, accessor: false, filePath, value: reached ? node : undefined, inherited: false };
+		return { exists, accessor: false, filePath, value: reached ? node : undefined, inherited: false, holder };
 	}
 
 	/**

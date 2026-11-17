@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T07:57:38-08:00 (1794931058)
+ *	@Last modified time: 2026-11-17T14:45:51-08:00 (1794955551)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -293,6 +293,75 @@ describe.each(CONFIGS)("writing is never easier than accessing — $mode / $runt
 			const permissions = { rules: [{ caller: "p.intruder.**", target: "p.shared.count", effect: "deny" }] };
 			expect((await holderOnce(permissions, "data")).outcome).toBe("done");
 			for (const name of HOLDER_WRITES) expect([name, (await holderOnce({}, name)).outcome]).toEqual([name, "done"]);
+		});
+	});
+
+	/** Every write `B` makes that creates a member inside one of `A`'s values (see `b/intruder.mjs`). */
+	const INSIDE_WRITES = [
+		"dataAssign",
+		"dataDefine",
+		"dataReflect",
+		"dataHeld",
+		"listIndex",
+		"classAssign",
+		"classDefine",
+		"prototype",
+		"function",
+		"date"
+	];
+
+	/**
+	 * Make one write from `B` on a fresh instance through `intruder.insideWrite` and report what the host reads after.
+	 * @param {object|undefined} permissions - The permissions config.
+	 * @param {string} name - The write.
+	 * @returns {Promise<{outcome: string, created: boolean}>} Its outcome and whether any new member is there.
+	 */
+	async function insideOnce(permissions, name) {
+		await load(permissions);
+		const outcome = await withSuppressedSlothletErrorOutput(() => api.p.intruder.insideWrite(name));
+		const shared = api.p.shared;
+		const created =
+			shared.data.extra !== undefined ||
+			shared.data.list.length !== 1 ||
+			shared.Box.make !== undefined ||
+			shared.Box.prototype.extra !== undefined ||
+			shared.who.extra !== undefined ||
+			shared.when.extra !== undefined;
+		await api.slothlet.shutdown();
+		api = null;
+		return { outcome, created };
+	}
+
+	describe("creating a member inside another module's value follows the access to the value", () => {
+		it("refuses it in every write route under policy deny with the owner grant, and the value stays as it was", async () => {
+			for (const name of INSIDE_WRITES) {
+				expect({ name, ...(await insideOnce(DENY_OWNER, name)) }).toEqual({ name, outcome: "PERMISSION_DENIED", created: false });
+			}
+		});
+
+		it("refuses it under policy allow when a rule refuses the second module the value", async () => {
+			const permissions = { rules: [{ caller: "p.intruder.**", target: "p.shared.data.**", effect: "deny" }] };
+			for (const name of ["dataAssign", "dataDefine", "dataReflect", "dataHeld", "listIndex"]) {
+				expect({ name, ...(await insideOnce(permissions, name)) }).toEqual({ name, outcome: "PERMISSION_DENIED", created: false });
+			}
+			expect((await insideOnce(permissions, "classAssign")).outcome).toBe("done");
+		});
+
+		it("lets it through when the second module may access the value", async () => {
+			const permissions = { ...DENY_OWNER, rules: [{ caller: "p.intruder.**", target: "p.shared.**", effect: "allow" }] };
+			for (const name of INSIDE_WRITES) {
+				expect({ name, ...(await insideOnce(permissions, name)) }).toEqual({ name, outcome: "done", created: true });
+			}
+			for (const name of INSIDE_WRITES) expect([name, (await insideOnce({}, name)).outcome]).toEqual([name, "done"]);
+		});
+
+		it("still lets the second module create members on its own node, at the shared mount point, and on the first module's node", async () => {
+			for (const where of ["own", "mount", "node"]) {
+				await load(DENY_OWNER);
+				expect([where, await api.p.intruder.add(where)]).toEqual([where, "done"]);
+				await api.slothlet.shutdown();
+				api = null;
+			}
 		});
 	});
 
