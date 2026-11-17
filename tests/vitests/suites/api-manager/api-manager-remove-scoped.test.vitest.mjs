@@ -98,7 +98,7 @@ describe.each(CONFIGS)("remove(apiPath, id) scoped removal — $name", ({ config
 		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST });
 		await expect(api.slothlet.api.remove("dup", 123)).rejects.toMatchObject({
 			code: "INVALID_ARGUMENT",
-			context: expect.objectContaining({ argument: "id" })
+			details: expect.objectContaining({ argument: "id" })
 		});
 	});
 

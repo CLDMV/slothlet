@@ -47,7 +47,7 @@ async function load() {
 		mode: "eager",
 		runtime: "async",
 		silent: true,
-		api: { collision: { initial: "merge", api: "merge" } }
+		api: { collision: { mode: { initial: "merge", api: "merge" } } }
 	});
 	instances.push(api);
 	return api;
