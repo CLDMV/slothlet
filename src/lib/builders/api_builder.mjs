@@ -31,7 +31,7 @@
 // browser graph (#123). AsyncResource.bind only captures ALS context under Node — in a browser
 // (live context) bind is identity. loadJson reads package.json for the version (Node only).
 import { segmentsOf } from "#helpers/segments";
-import { isNode, AsyncResource, loadJson } from "#helpers/platform";
+import { isNode, AsyncResource, loadJson, util } from "#helpers/platform";
 import { ComponentBase } from "#factories/component-base";
 import { TYPE_STATES, isCallableValue, internals as unifiedWrapperInternals } from "#handlers/unified-wrapper";
 import { DELIVERY_REASONS } from "#handlers/event-manager";
@@ -76,7 +76,8 @@ import {
 	WeakMap,
 	WeakMapMethods,
 	WeakSet,
-	WeakSetMethods
+	WeakSetMethods,
+	settledWith
 } from "#helpers/intrinsics";
 const {
 	resolveWrapper,
@@ -275,6 +276,19 @@ function runtime_ownerModuleIDs(identity) {
 		if (moduleID !== null && moduleID !== supplier) SetMethods.add(ids, moduleID);
 	}
 	return SetMethods.size(ids) ? concatLists(setToArray(ids), [supplier]) : supplier;
+}
+
+/**
+ * What a `run()` / `scope()` callback returned, taken up in the store it ran in (async runtime): a native promise and a
+ * plain value as they are, and anything else through a promise of slothlet's own resolved with it there, so the `then` of
+ * a thenable that is no native promise runs in the run, as the callback's own code, and not wherever the caller awaits it.
+ * @param {*} value - What the callback returned.
+ * @returns {*} The value, or a promise settled as the thenable settles.
+ * @private
+ */
+function runtime_adoptInStore(value) {
+	if (value === null || (typeof value !== "object" && typeof value !== "function") || util.types.isPromise(value)) return value;
+	return settledWith(value);
 }
 
 /**
@@ -5074,10 +5088,9 @@ export class ApiBuilder extends ComponentBase {
 					MapMethods.set(contextManager.instances, childInstanceID, childStore);
 
 					try {
-						// Run callback in new ALS context
-						// The callback's own result is awaited, as the caller's await would: no promise of slothlet's own is made
-						// and awaited around it.
-						return await contextManager.als.run(childStore, () => Reflect.apply(fn, undefined, args));
+						// Run the callback in the run's store. Its result is taken up there too: a thenable that is no native
+						// promise has its `then` called in a job, which runs in the run only when the job is queued inside it.
+						return await contextManager.als.run(childStore, () => runtime_adoptInStore(Reflect.apply(fn, undefined, args)));
 					} finally {
 						// Cleanup: Remove temporary child instance
 						MapMethods.delete(contextManager.instances, childInstanceID);

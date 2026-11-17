@@ -533,6 +533,23 @@ beforeAll(() => {
 		'\tout[route + ":planted"] = typeof api.secret.planted;',
 		"\tawait api.slothlet.shutdown();",
 		"}",
+		"// A thenable that isn't a native promise, returned by a run() / scope() callback, settles in the run.",
+		"{",
+		"\tconst api = await make();",
+		"\tconst thenable = () => ({ then(resolve) { resolve(api.job.peek()); } });",
+		"\tconst rejecting = () => ({ then(resolve, reject) { reject(new Error(String(api.job.peek()))); } });",
+		'\tout.thenableRun = await api.slothlet.context.run({ user: "root" }, thenable);',
+		'\tout.thenableScope = await api.slothlet.context.scope({ context: { user: "root" }, fn: thenable });',
+		"\ttry {",
+		'\t\tawait api.slothlet.context.run({ user: "root" }, rejecting);',
+		"\t} catch (error) {",
+		"\t\tout.thenableRejected = error.message;",
+		"\t}",
+		"\t// A native promise and a plain value come back as before.",
+		'\tout.promiseRun = await api.slothlet.context.run({ user: "root" }, async () => api.job.peek());',
+		'\tout.valueRun = await api.slothlet.context.run({ user: "root" }, () => ({ user: api.job.peek() }));',
+		"\tawait api.slothlet.shutdown();",
+		"}",
 		"// A function a call hands the run's own code, handed to Node to call later.",
 		"{",
 		"\tconst api = await make();",
@@ -739,6 +756,14 @@ describe.each(FRAMES)("Permissions > a flow entered by module code itself > %s",
 				}
 			}
 		);
+
+		it("a thenable a run() or scope() callback returns settles in the run", () => {
+			expect(result.thenableRun).toBe("root");
+			expect(result.thenableScope).toBe("root");
+			expect(result.thenableRejected).toBe("root");
+			expect(result.promiseRun).toBe("root");
+			expect(result.valueRun).toEqual({ user: "root" });
+		});
 
 		it("a function a call hands the run's own code keeps the run when Node calls it later", () => {
 			expect(result.readerSeen.then).toEqual(["root", null]);
