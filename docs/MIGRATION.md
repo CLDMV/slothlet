@@ -146,6 +146,64 @@ await api.slothlet.context.scope({ context: {}, isolation: "partial", fn: () => 
 
 State a run needs to hand back belongs in its return value, not in `self`.
 
+### `run()` and `scope()` are isolated in every permission mode
+
+Every `run()` / `scope()` keeps its context and its callers to itself, on both runtimes, whatever `permissions.mode` says (no `permissions` config, `"off"`, `"disabled"`, `"on"` or `"strict"`). The permission mode decides only what code is allowed to do, not which flow it sees.
+
+- v3: on the live runtime, two `run()` flows waiting at `await`s at the same time could see each other's context ([#889](https://github.com/CLDMV/slothlet/issues/889)), and how far a run was kept apart from code outside it depended on the permission mode.
+- v4: no code sees or takes another flow's context, and each flow's calls report their own caller. The details, and the browser's one limit (the code after a bare `await` while flows interleave), are in [CONTEXT-PROPAGATION.md](./CONTEXT-PROPAGATION.md#code-that-enters-another-flow-by-itself-async-runtime).
+
+### Process-wide hooks while an instance exists
+
+Keeping flows apart in every mode needs a hook that Node runs for every promise and callback in the process, not only for slothlet's.
+
+- v3: no `async_hooks` hook and no V8 promise hooks were installed.
+- v4, async runtime: an `async_hooks.createHook()` hook is installed while any async-runtime instance exists, in every permission mode, and removed after the last one shuts down. Measured on Node 26, it adds about 0.9 µs per `await` of a `then()` outside every flow and about 1.3 µs inside a `run()` or a call, and about 0.9 µs / 3.2 µs per `setImmediate()` outside / inside.
+- v4, live runtime in Node: V8's promise hooks (`v8.promiseHooks`, not `async_hooks`) are installed while any live instance exists, in every permission mode. They cost every promise job in the process about 0.15 µs, and a callback a flow registers through a patched boundary about 1 µs more.
+
+A process with only live instances still makes no `async_hooks` hook and no `AsyncLocalStorage`. If another library in the process also installs hooks, both run.
+
+### A thenable a `run()` callback returns settles inside the run
+
+- v3: on the async runtime, a thenable that is not a native promise, returned from a `run()` / `scope()` callback, had its `then()` called after the run's store was left, so it read no run context.
+- v4: the result is taken up inside the run on both runtimes. Native promises and plain values come back as before. `run()` and `scope()` always return a promise.
+
+### A function is the same value in every run
+
+- v3.24.0: a value a module made could come back as a Proxy with the permission system off, and nested data lost its identity ([#726](https://github.com/CLDMV/slothlet/issues/726)).
+- v4: a function read through the api is the same value inside and outside a `run()` and in every run, so `emitter.off(fn)`, `Set` / `Map` keys and memoised lookups find it. Under `permissions.caller.attribution: "precise"` it is its module's one stand-in, the same in every run. A job a flow's own code hands Node (a promise reaction, a timer, an immediate, a microtask, a listener) still runs in that flow.
+
+### Writing a member needs the access a read or call of it would
+
+With the permission system on, every module write that passes the ownership and write rules is also held to the access the module would need to call or read the member it changes: assignment, `defineProperty`, `delete`, `Reflect.set`, writes through a held node or view, class prototype members, data objects, and `api.add` / `api.remove` from module code.
+
+- v3: a module could replace, redefine or delete a member it was refused a call or read of, and an explicit write grant passed a write without the read and call rules.
+- v4: replacing a node is held to the access of every member beneath it; a deny on an object member of a module's data covers writes beneath it as it covers reads; giving a value a member it inherits or one the language reads by itself (`toJSON`, `toString`, `valueOf`, …) is held to the access of the value's path; and an explicit write grant also needs the read or call. A member that does not exist yet takes over nothing, and an accessor keeps the write rules alone. Permissions off or disabled are unchanged. See [PERMISSIONS.md](./PERMISSIONS.md#write-permissions).
+
+If a module legitimately rewrites members it may not call, add the matching call or read rule for it.
+
+### A member a module creates at runtime is owned by that module
+
+- v3: a member module code created at runtime had no owner of its own; an object or function it created was recorded for the module owning the node it was written on.
+- v4: the module that creates a member (a new key by assignment, `defineProperty`, `Reflect.set`, through a held node, or at the top of `self`) owns it, with what a created object holds. Removing that module removes the member, a scoped removal removes just that member, and a full reload keeps neither. A member placed through a write grant stays part of the subtree it was written into.
+
+### Metadata with a cycle through an array is refused
+
+- v3: metadata validation walked plain objects only, so a cycle through an array (or object → array → object) was accepted.
+- v4: it throws `INVALID_ARGUMENT`, like a cycle through plain objects, at every entry point (config `metadata`, `api.add` metadata, `metadata.global` / `set`).
+
+### Node 22 and the async context frame
+
+With permissions on, an async-runtime instance checks that Node's `AsyncContextFrame` is on (the `async-context-frame` baseline check). It is on by default from Node 24.
+
+- v3: no such check.
+- v4 on Node 22: under `permissions.mode: "strict"` start Node with `--experimental-async-context-frame` (on the command line or in `NODE_OPTIONS`), or the instance does not start (`PERMISSION_BASELINE_UNMET`). Under `"on"` it starts and raises one `WARNING_PERMISSION_BASELINE_UNMET`. With permissions off or disabled, and on the live runtime, nothing is checked. On Node 24 and later the check fails only when Node runs with `--no-async-context-frame`.
+
+### Reload instance IDs and `diag.inspect().runtime.running`
+
+- v3: a full reload's instance ID was `<id>_reload_<time>`; `diag.inspect().runtime.running` was `false` inside `context.run()` / `scope()` on the async runtime and could read `true` in host code outside every call on the live runtime.
+- v4: the ID is `<id>_reload_<time>_<random>`, claimed before the old one is let go; if it cannot be claimed the reload fails with `INSTANCE_ID_IN_USE` and the instance keeps working on its current ID. `runtime.running` is `true` exactly while code of the instance (a call, a `run()` / `scope()` callback, a load) runs. Don't parse instance IDs.
+
 ### Lazy mode under vitest needs the plugin
 
 Under vitest, api files are loaded by vite, not by Node. Add the plugin from `@cldmv/slothlet/vite` to the vitest config so each instance gets its own copy of every api file and slothlet can tell which module loaded which file. Without it a test using lazy mode, or a module's helper outside its api folder, is refused, and `permissions.mode: "strict"` reports the `vitest-plugin` baseline check as unmet. The plugin is supported with the forks pool; the threads pool is refused. The setup is in [TESTING.md](./TESTING.md#per-instance-helpers-under-vitest-the-cldmvslothletvite-plugin).
