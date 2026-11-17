@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:51-08:00 (1794874611)
+ *	@Last modified time: 2026-11-17T13:27:43-08:00 (1794950863)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -26,7 +26,7 @@
  *
  * @module tests/vitests/suites/helpers/instance-imports-two-copies
  */
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import fs from "node:fs";
 import fsp from "node:fs/promises";
 import path from "node:path";
@@ -34,6 +34,7 @@ import nodeModule, { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import slothlet from "@cldmv/slothlet";
 import * as first from "#helpers/instance-imports";
+import { Utilities } from "#helpers/utilities";
 import { makeTestTmpDir } from "../../setup/test-fixtures-tmp.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -146,14 +147,19 @@ describe("Helpers > instance-imports > two copies of the module in one process",
 
 describe("Helpers > instance-imports > an instance ID something else holds", () => {
 	it("refuses to load an instance's files under it", async () => {
-		// The instance's clock is fixed, so the ID a full reload gives it (made from the old one and the time) is known.
-		const api = await slothlet({ base: DIR, silent: true, clock: { now: () => 1790000000000 } });
+		const api = await slothlet({ base: DIR, silent: true });
 		const instanceID = api.slothlet.instance.id;
-		const taken = first.claimInstanceScope(`${instanceID}_reload_1790000000000`);
+		// A reload's ID has a random part; fixed here so the ID it would take is known and can be held.
+		const generate = vi.spyOn(Utilities.prototype, "generateId").mockImplementation((prefix = "slothlet") => `${prefix}_held`);
+		const taken = first.claimInstanceScope(`${instanceID}_reload_held`);
 		try {
 			expect(taken).not.toBe(null);
 			await expect(api.slothlet.reload()).rejects.toMatchObject({ code: "INSTANCE_ID_IN_USE" });
+			// The reload failed before it let go of the instance's own ID: the instance is as it was.
+			expect(api.slothlet.instance.id).toBe(instanceID);
+			expect(await api.one.bump()).toBeTypeOf("number");
 		} finally {
+			generate.mockRestore();
 			taken?.release();
 			await api.shutdown().catch(() => {});
 		}

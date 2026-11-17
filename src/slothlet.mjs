@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T07:39:20-08:00 (1794929960)
+ *	@Last modified time: 2026-11-17T13:27:01-08:00 (1794950821)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -397,9 +397,46 @@ class Slothlet {
 	 */
 	#claimImportScope() {
 		if (this.#importScope?.instanceID === this.instanceID) return;
-		this.#releaseImportScope();
 		const scope = claimInstanceScope(this.instanceID);
 		if (!scope) throw new this.SlothletError("INSTANCE_ID_IN_USE", { instance: this.instanceID });
+		this.#adoptImportScope(scope);
+	}
+
+	/**
+	 * The most fresh IDs {@link Slothlet#claimFreshScope} tries before it gives up.
+	 * @type {number}
+	 * @private
+	 */
+	static #FRESH_ID_ATTEMPTS = 8;
+
+	/**
+	 * Claim a fresh instance ID for the instance's files, without taking it yet: the instance stays on the ID and scope
+	 * it holds until {@link Slothlet#adoptImportScope} switches. An ID something else already holds is passed over for
+	 * another fresh one, a bounded number of times.
+	 * @param {string} [prefix] - What the ID starts with (`<id>_reload` for a reload); `slothlet` when omitted.
+	 * @returns {{instanceID: string, require: Function, release: Function}} The claimed handle.
+	 * @throws {SlothletError} INSTANCE_ID_IN_USE when every ID tried is held; the instance is left as it was.
+	 * @private
+	 */
+	#claimFreshScope(prefix) {
+		let instanceID = null;
+		for (let attempt = 0; attempt < Slothlet.#FRESH_ID_ATTEMPTS; attempt++) {
+			instanceID = this.helpers.utilities.generateId(prefix);
+			const scope = claimInstanceScope(instanceID);
+			if (scope) return scope;
+		}
+		throw new this.SlothletError("INSTANCE_ID_IN_USE", { instance: instanceID });
+	}
+
+	/**
+	 * Switch the instance to a scope it has claimed: its ID becomes the scope's, and the scope it held before is released.
+	 * @param {{instanceID: string, require: Function, release: Function}} scope - The claimed handle.
+	 * @returns {void}
+	 * @private
+	 */
+	#adoptImportScope(scope) {
+		if (this.#importScope !== scope) this.#releaseImportScope();
+		this.instanceID = scope.instanceID;
 		this.#importScope = scope;
 		// A reload's files get the form of `self` the api took when it was first built, from their first import (#803).
 		if (this.boundApi) setInstanceSelfKind(this.instanceID, typeof this.boundApi === "function");
@@ -1256,10 +1293,14 @@ class Slothlet {
 		// This replaces the early-init created above and ensures post-transform flags are active.
 		this.debugLogger = new SlothletDebug(this.config);
 
-		// Use preserved instance ID (from reload) or generate new one
-		this.instanceID = preservedInstanceID || this.helpers.utilities.generateId();
-		// The ID is claimed for this instance's files before any of them load.
-		this.#claimImportScope();
+		// Use preserved instance ID (from reload) or generate new one. The ID is claimed for this instance's files
+		// before any of them load.
+		if (preservedInstanceID) {
+			this.instanceID = preservedInstanceID;
+			this.#claimImportScope();
+		} else {
+			this.#adoptImportScope(this.#claimFreshScope());
+		}
 
 		// Store reference and context from config
 		this.reference = this.config.reference;
@@ -1712,6 +1753,30 @@ class Slothlet {
 		// A closed api root keeps the members it holds, as a closed object does, so it cannot take the ones a rebuild makes.
 		this._assertRootOpen(["slothlet", "reload"]);
 
+		// A normal reload rotates to a fresh random ID, claimed before anything else changes: when no ID can be claimed,
+		// the reload fails with the instance still on the ID and scope it holds, and still working.
+		const oldInstanceID = this.instanceID;
+		const nextScope = keepInstanceID ? null : this.#claimFreshScope(`${oldInstanceID}_reload`);
+		try {
+			return await this.#reloadOnto(nextScope, oldInstanceID);
+		} catch (error) {
+			// The fresh scope was claimed but never taken: let the ID go again.
+			if (nextScope !== null && this.#importScope !== nextScope) nextScope.release();
+			throw error;
+		}
+	}
+
+	/**
+	 * The body of {@link Slothlet#reload}, run once the reload's fresh scope (if any) is claimed.
+	 * @param {{instanceID: string, require: Function, release: Function}|null} nextScope - The claimed scope a normal
+	 *   reload switches to, or null for `instance: "keep"`.
+	 * @param {string} oldInstanceID - The instance's ID when the reload started.
+	 * @returns {Promise<Object>} The bound API.
+	 * @private
+	 */
+	async #reloadOnto(nextScope, oldInstanceID) {
+		const keepInstanceID = nextScope === null;
+
 		// Changes queued through lazy stand-ins, and refusals of those made, belong to the nodes this reload replaces;
 		// eager mode's changes go with those nodes too (#653).
 		releaseStandInChanges(this);
@@ -1733,13 +1798,10 @@ class Slothlet {
 		//    Normal reload: create a fresh ID (busts internal caches; old ID cleaned up below).
 		//    instance "keep": reuse the current ID so instances.has() is TRUE inside load(),
 		//    which triggers the cleanup-then-reinitialise branch of the context store.
-		const oldInstanceID = this.instanceID;
 		if (!keepInstanceID) {
-			this.instanceID = `${oldInstanceID}_reload_${this.#clock.now()}`;
 			// The previous instanceID's private CommonJS helper copies (#518, #534) can no longer be served.
 			forgetInstanceScripts(oldInstanceID);
-			this.#releaseImportScope();
-			this.#claimImportScope();
+			this.#adoptImportScope(nextScope);
 			// The global patches are held under the new ID once load() runs; the old ID's share goes now, or the
 			// patches could never be released. Nothing is unpatched here: the new ID takes the share straight back.
 			SetMethods.delete(boundaryPatchHolders, oldInstanceID);

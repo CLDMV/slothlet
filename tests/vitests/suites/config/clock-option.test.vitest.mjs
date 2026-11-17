@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:28:49-08:00 (1794882529)
+ *	@Last modified time: 2026-11-17T13:27:30-08:00 (1794950850)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -156,11 +156,12 @@ describe.each(getMatrixConfigs())("Config > clock > $name", ({ config }) => {
 		expect(first).toMatch(/^slothlet_1700000000000_/);
 		time = 1700000000123;
 		await api.slothlet.reload();
-		expect(api.slothlet.instance.id).toBe(`${first}_reload_1700000000123`);
+		// The time, then a random part: a reload's ID cannot be worked out from the old one and the time.
+		expect(api.slothlet.instance.id).toMatch(new RegExp(`^${first}_reload_1700000000123_[a-z0-9]+$`));
 		// The reload is made from the config the instance kept, which has no clock; the instance still has its own.
 		time = 1700000000999;
 		await api.slothlet.reload();
-		expect(api.slothlet.instance.id.endsWith("_reload_1700000000999")).toBe(true);
+		expect(api.slothlet.instance.id).toMatch(/_reload_1700000000999_[a-z0-9]+$/);
 	});
 
 	it("takes the time hook failure sources record from the fake clock", async () => {

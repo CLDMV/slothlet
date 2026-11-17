@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:28:50-08:00 (1794882530)
+ *	@Last modified time: 2026-11-17T13:26:58-08:00 (1794950818)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -648,7 +648,8 @@ const SCRIPTS_READER = Objects.freeze({
  * @property {(url: string) => string} scriptKeyOf - How a URL is reduced to its script key.
  * @property {(url: string) => (object|undefined)} own - The namespace of one of slothlet's runtime entry files the
  *   keeping copy has evaluated (#760, see registerOwnModule).
- * @property {(instanceID: string) => (object|null)} claim - Claims an instance ID (see claimInstanceScope).
+ * @property {(instanceID: string) => (object|null)} claim - Claims an instance ID for another copy of slothlet (see
+ *   claimInstanceScope); null when the code calling it is not slothlet's (see claimForCopy).
  * @property {() => boolean} hooks - Registers the keeping copy's hooks with Node, once.
  * @property {(ticket: string) => object} redeem - Entry point of the code the load hook generates (see mintTicket).
  * @property {(specifier: *, importer: string) => *} checkImport - Holds an import or `import.meta.resolve` an instance
@@ -812,7 +813,7 @@ function sharedState() {
 		commonJS: COMMONJS_READER,
 		scriptKeyOf: (url) => (SCRIPT_KEY_OF ? SCRIPT_KEY_OF(url) : url),
 		own: (url) => MapMethods.get(OWN_MODULES, url),
-		claim: claimHere,
+		claim: claimForCopy,
 		hooks: () => installInstanceImportHooks(NODE_MODULE),
 		redeem: redeemTicket,
 		requireCJS: requireCJSFromRunner,
@@ -2921,6 +2922,66 @@ function claimHere(instanceID) {
 }
 
 /**
+ * Where this file is, as {@link toSlashPath} gives it: frames of this file are passed over when the code that called
+ * {@link claimForCopy} is looked for on an engine with no `Error.captureStackTrace`.
+ * @type {string}
+ * @private
+ */
+const THIS_FILE = toSlashPath(import.meta.url);
+
+/**
+ * Where the stack reader is, as {@link toSlashPath} gives it (see {@link THIS_FILE}).
+ * @type {string}
+ * @private
+ */
+const STACK_READ_FILE = toSlashPath(URLMethods.href(new URL("./stack-read.mjs", import.meta.url)));
+
+/**
+ * Whether the code that called a function of this file is slothlet's own (this copy's or another copy's, see
+ * {@link isOwnCodeLocation}) and no module's. The caller's frame is read right below the function's (V8's
+ * `Error.captureStackTrace`); elsewhere it is the first frame outside this file and the stack reader. A built-in
+ * frame in its place (a callback run by `Array.map`, say) cannot be placed, and is not slothlet's.
+ * @param {Function} callee - The function whose caller is asked about.
+ * @returns {boolean} True when slothlet's own code called it.
+ * @private
+ */
+function calledBySlothlet(callee) {
+	let stack;
+	try {
+		stack =
+			typeof PristineError.captureStackTrace === "function"
+				? String(readStack(stackText, { limit: 1, skip: callee })?.value ?? "")
+				: ownStackText(USE_FRAME_LIMIT);
+	} catch {
+		return false;
+	}
+	for (let ofIndex = 0, ofList = splitText(stack, "\n"); ofIndex < ofList.length; ofIndex++) {
+		const line = ofList[ofIndex];
+		if (!(RegExpMethods.exec(/\S/, line) !== null) || RegExpMethods.exec(/^\s*Error\s*$/, line) !== null) continue;
+		const location = stackLineLocation(line);
+		if (location === null) return false;
+		const path = toSlashPath(location);
+		if (typeof PristineError.captureStackTrace !== "function" && (path === THIS_FILE || path === STACK_READ_FILE)) continue;
+		return isOwnCodeLocation(location) && !isModuleCodeLocation(location);
+	}
+	return false;
+}
+
+/**
+ * The `claim` of the shared object: how another copy of slothlet claims an instance ID in the keeping copy's state
+ * (see {@link claimHere}). The object is on the global object, where a module's code can reach it too, so a claim
+ * is taken only from slothlet's own code: a module claiming IDs ahead of an instance (the IDs a reload would take)
+ * gets null. The keeping copy's own instances claim through {@link claimHere} directly.
+ * @param {string} instanceID - The instance ID.
+ * @returns {{instanceID: string, require: function(string, object=): *, release: function(): void}|null} The handle,
+ *   or null when the ID is not a string, is claimed already, or the caller is not slothlet's code.
+ * @private
+ */
+function claimForCopy(instanceID) {
+	return calledBySlothlet(claimForCopy) ? claimHere(instanceID) : null;
+}
+
+/**
  * Claim an instance ID for the instance that carries it, before any of its files load. The handle is how the instance
  * loads its CommonJS files ({@link scopeRequire}) and, when it shuts down or takes a new ID, releases what slothlet
  * keeps about its files. The instance keeps the handle to itself: nothing else can load a file as the instance's code
@@ -2936,7 +2997,7 @@ function claimHere(instanceID) {
  * scope.release();
  */
 function claimInstanceScope(instanceID) {
-	const handle = sharedState().claim(instanceID) ?? null;
+	const handle = (isKeeper() ? claimHere(instanceID) : sharedState().claim(instanceID)) ?? null;
 	// Claimed by this copy's own slothlet: its files are given this copy's runtime (see isOtherCopysFile).
 	if (handle && isKeeper()) SetMethods.add(OWN_CLAIMS, instanceID);
 	return handle;
