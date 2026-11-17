@@ -922,7 +922,8 @@ export class ApiManager extends ComponentBase {
 
 	/**
 	 * Who owns what a module's write at `parts` stores: the module that owns the member already there, or, for a member
-	 * that does not exist yet, the writing module, which creates it. Replacing another module's member transfers nothing.
+	 * that does not exist yet where the module writes by its own mount, the writing module, which creates it. Replacing
+	 * another module's member transfers nothing, and neither does creating one through a write grant.
 	 * A node built for an object or function the write stores is attributed to that owner, and a member it creates is
 	 * recorded for it once written ({@link ApiManager#recordCreated}).
 	 *
@@ -940,7 +941,9 @@ export class ApiManager extends ComponentBase {
 		if (!writer || !ownership || parts.length === 0 || SetMethods.has(FRAMEWORK_ROOT_SEGMENTS, parts[0])) return null;
 		const existing = ownership.getCurrentOwner(ArrayMethods.join(parts, "."));
 		if (existing !== null) return { owner: existing.moduleID, created: false };
-		if (this.#memberAt(parts).exists) return null;
+		// Only where the module writes by its own standing: a member created through a write grant into another module's
+		// subtree becomes part of that subtree, as what the grant lets it place there does.
+		if (this.#memberAt(parts).exists || !this.ownsPath(parts, writer)) return null;
 		const callerPath = String(writer.____slothletInternal?.apiPath ?? "");
 		const owner = callerPath ? (ownership.getCurrentOwner(callerPath)?.moduleID ?? null) : null;
 		return owner === null ? null : { owner, created: true };
@@ -967,6 +970,11 @@ export class ApiManager extends ComponentBase {
 		const ownership = this.slothlet.handlers.ownership;
 		const apiPath = ArrayMethods.join(parts, ".");
 		if (!ownership || !this.#memberAt(parts).exists) return;
+		// A node stored at a new key is an alias of that node, which keeps its own owner: nothing new is created (#625).
+		if (value !== null && (typeof value === "object" || typeof value === "function")) {
+			const stored = runtime_unwrapSelfView(value);
+			if (resolveWrapper(stored) !== null || versionDispatcherRecord(stored) !== null || util.types.isProxy(stored)) return;
+		}
 		const wrapped = value !== null && (typeof value === "object" || typeof value === "function");
 		ownership.register({
 			moduleID,

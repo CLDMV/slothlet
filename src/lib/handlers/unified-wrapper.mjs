@@ -3028,6 +3028,13 @@ function runtime_selfHookHandler(handler, slothlet, reader) {
 }
 
 /**
+ * What a definition's `valueOf` gives for an accessor definition, which stores no value (see {@link runtime_placingTrap}).
+ * @type {symbol}
+ * @private
+ */
+const NO_STORED_VALUE = Symbol("slothlet.noStoredValue");
+
+/**
  * A proxy trap that writes a member of `wrapper`, wrapped so ownership follows what module code stores: a node the
  * write builds for an object or function belongs to the module owning the member, and a member the write creates is
  * recorded as the writing module's own once the write stands; a deleted member a module created is no one's (see
@@ -3066,6 +3073,10 @@ function runtime_placingTrap(wrapper, trap, valueOf) {
 			if (removed) apiManager.forgetCreated(parts);
 			return removed;
 		}
+		// An accessor defined on the node stores no value: it is read by running its getter, which no gate checks, and
+		// nothing is created for anyone to own.
+		const stored = valueOf(args);
+		if (stored === NO_STORED_VALUE) return FunctionMethods.apply(trap, undefined, args);
 		// The node loads first, as the trap would load it, so what it already holds is known and adopted as its own.
 		if (internal.mode === "lazy" && !internal.state.materialized && !internal.state.inFlight) wrapper.___materialize();
 		const placed = apiManager.writeOwnerOf(parts, writer);
@@ -3078,7 +3089,7 @@ function runtime_placingTrap(wrapper, trap, valueOf) {
 		} finally {
 			internal.adoptOwner = priorOwner;
 		}
-		if (written && placed.created) apiManager.recordCreated(parts, placed.owner, valueOf(args));
+		if (written && placed.created) apiManager.recordCreated(parts, placed.owner, stored);
 		return written;
 	};
 }
@@ -21565,7 +21576,7 @@ class UnifiedWrapper extends ComponentBase {
 					if (heldNode !== null) SetMethods.add((internal.userAssignedKeys ??= new Set()), prop);
 					return true;
 				},
-				(args) => ("value" in args[2] ? args[2].value : undefined)
+				(args) => ("value" in args[2] ? args[2].value : NO_STORED_VALUE)
 			),
 			// A member a module created at runtime is no one's once deleted.
 			deleteProperty: runtime_placingTrap(wrapper, deletePropertyTrap, null),
