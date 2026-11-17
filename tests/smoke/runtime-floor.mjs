@@ -18,7 +18,7 @@
  *
  * CI's test matrix starts at the dev floor (`devEngines`), because vitest and the build toolchain
  * need a newer Node than the package itself. This script needs nothing but Node and the package, so
- * CI runs it on the runtime floor to cover the versions in between. It loads slothlet through the
+ * it is run by hand on the runtime floor (Node 22.15.0) to cover the versions in between. It loads slothlet through the
  * ESM and CJS entries, builds a small api in eager and lazy mode, calls leaves (one reaching a
  * sibling through `self`), imports `@cldmv/slothlet/runtime`, boots once with permissions on, and
  * shuts every instance down. It also runs an AsyncContextFrame canary: with AsyncContextFrame off,
