@@ -77,6 +77,13 @@ const PRIVATE_SUBDIR_DIR = new URL("../../../../api_tests/api_test_private_subdi
 /** Fixture with a nested namespace named after a root-reserved key (`shutdown/`). */
 const RESERVED_NESTED_DIR = new URL("../../../../api_tests/api_test_reserved_nested", import.meta.url).pathname;
 /** Dotted path of that tree's only callable, relative to its mount point. */
+/**
+ * leaves() reports each path as its segments (D-1); the assertions compare the dotted form.
+ * @param {string[][]} paths - The reported paths.
+ * @returns {string[]} The dotted paths.
+ */
+const dotted = (paths) => paths.map((path) => path.join("."));
+
 const DEEP_PATH = `deep.${Array.from({ length: 15 }, (_, i) => `l${i + 1}`).join(".")}.tip`;
 
 describe.each(["eager", "lazy"])("ApiManager > api.leaves (#247) > %s", (mode) => {
@@ -91,7 +98,7 @@ describe.each(["eager", "lazy"])("ApiManager > api.leaves (#247) > %s", (mode) =
 		api = await slothlet({ mode, base: BASE });
 		const moduleID = await api.slothlet.api.add("shop", SHOP);
 
-		expect(await api.slothlet.api.leaves(moduleID)).toEqual(["shop.mul", "shop.ns.deep"]);
+		expect(dotted(await api.slothlet.api.leaves(moduleID))).toEqual(["shop.mul", "shop.ns.deep"]);
 	});
 
 	it("tolerates a null-valued child during the walk (the `child ? … : null` guard, #329)", async () => {
@@ -101,14 +108,14 @@ describe.each(["eager", "lazy"])("ApiManager > api.leaves (#247) > %s", (mode) =
 		// it without erroring rather than assuming every child is a descendable wrapper.
 		const moduleID = await api.slothlet.api.add("nul", { exports: { fn: () => "x", empty: null } });
 
-		expect(await api.slothlet.api.leaves(moduleID)).toEqual(["nul.fn"]);
+		expect(dotted(await api.slothlet.api.leaves(moduleID))).toEqual(["nul.fn"]);
 	});
 
 	it("accepts the mount endpoint as an alternative key", async () => {
 		api = await slothlet({ mode, base: BASE });
 		await api.slothlet.api.add("shop", SHOP);
 
-		expect(await api.slothlet.api.leaves("shop")).toEqual(["shop.mul", "shop.ns.deep"]);
+		expect(dotted(await api.slothlet.api.leaves("shop"))).toEqual(["shop.mul", "shop.ns.deep"]);
 	});
 
 	it("resolves any owned path to its owning module", async () => {
@@ -117,7 +124,7 @@ describe.each(["eager", "lazy"])("ApiManager > api.leaves (#247) > %s", (mode) =
 
 		// An interior path is a valid handle on the module that owns it — the enumeration is always
 		// module-scoped, matching how remove()/reload() resolve path keys.
-		expect(await api.slothlet.api.leaves("shop.ns")).toEqual(["shop.mul", "shop.ns.deep"]);
+		expect(dotted(await api.slothlet.api.leaves("shop.ns"))).toEqual(["shop.mul", "shop.ns.deep"]);
 	});
 
 	it("distinguishes callable, namespace, and data paths under details", async () => {
@@ -126,11 +133,11 @@ describe.each(["eager", "lazy"])("ApiManager > api.leaves (#247) > %s", (mode) =
 
 		const detailed = await api.slothlet.api.leaves("shop", { details: true });
 		expect(detailed).toEqual([
-			{ path: "shop", kind: "namespace" },
-			{ path: "shop.limit", kind: "data" },
-			{ path: "shop.mul", kind: "function" },
-			{ path: "shop.ns", kind: "namespace" },
-			{ path: "shop.ns.deep", kind: "function" }
+			{ path: ["shop"], kind: "namespace" },
+			{ path: ["shop", "limit"], kind: "data" },
+			{ path: ["shop", "mul"], kind: "function" },
+			{ path: ["shop", "ns"], kind: "namespace" },
+			{ path: ["shop", "ns", "deep"], kind: "function" }
 		]);
 	});
 
@@ -153,7 +160,7 @@ describe.each(["eager", "lazy"])("ApiManager > api.leaves (#247) > %s", (mode) =
 		// apiDepth is unbounded by default, so a hard-coded settle depth would return a silently
 		// incomplete answer here rather than failing — the worst shape for an enumeration API.
 		// Under lazy this only holds because settle() walks the whole subtree, not a fixed prefix.
-		expect(await api.slothlet.api.leaves(moduleID)).toContain(DEEP_PATH);
+		expect(dotted(await api.slothlet.api.leaves(moduleID))).toContain(DEEP_PATH);
 	});
 
 	it("rejects a malformed option bag with INVALID_ARGUMENT, not a raw TypeError", async () => {
@@ -196,7 +203,7 @@ describe("ApiManager > api.leaves resilience (#247)", () => {
 		ownership.pathToModule.delete("shop.mul");
 
 		const detailed = await api.slothlet.api.leaves(moduleID, { details: true });
-		expect(detailed.find((d) => d.path === "shop.mul")).toEqual({ path: "shop.mul", kind: "data" });
+		expect(detailed.find((d) => d.path.join(".") === "shop.mul")).toEqual({ path: ["shop", "mul"], kind: "data" });
 	});
 
 	it("attributes a taken-over path to the current owner, not the shadowed one", async () => {
@@ -207,8 +214,8 @@ describe("ApiManager > api.leaves resilience (#247)", () => {
 		const idA = await api.slothlet.api.add("shop", { exports: { leaf: () => "A" } });
 		const idB = await api.slothlet.api.add("shop", { exports: { leaf: () => "B" } });
 
-		expect(await api.slothlet.api.leaves(idA), "A no longer claims the leaf B took over").not.toContain("shop.leaf");
-		expect(await api.slothlet.api.leaves(idB), "B, the current owner, claims it").toContain("shop.leaf");
+		expect(dotted(await api.slothlet.api.leaves(idA)), "A no longer claims the leaf B took over").not.toContain("shop.leaf");
+		expect(dotted(await api.slothlet.api.leaves(idB)), "B, the current owner, claims it").toContain("shop.leaf");
 	});
 });
 
@@ -225,17 +232,17 @@ describe("ApiManager > api.leaves lazy completeness and host exemption (#247)", 
 
 		// Nothing has been touched: the recursive-walk workaround would see only namespace shells
 		// here. leaves() settles the subtree itself and reads the loader's records.
-		const callable = await api.slothlet.api.leaves(".");
+		const callable = dotted(await api.slothlet.api.leaves("."));
 		expect(callable).toContain("consumer.readViaSelf");
 
 		const detailed = await api.slothlet.api.leaves(".", { details: true });
-		const byPath = Object.fromEntries(detailed.map((d) => [d.path, d.kind]));
+		const byPath = Object.fromEntries(detailed.map((d) => [d.path.join("."), d.kind]));
 		expect(byPath["mod.plain"], "data leaf recorded").toBe("data");
 		expect(byPath["mod.__priv"], "underscore exports are members too").toBe("data");
 		expect(byPath["mod"], "module namespace").toBe("namespace");
 		// The injected control tree is not a module contribution.
 		expect(
-			detailed.some((d) => d.path === "slothlet" || d.path.startsWith("slothlet.")),
+			detailed.some((d) => d.path[0] === "slothlet"),
 			"no builtins"
 		).toBe(false);
 		expect(byPath["shutdown"], "no lifecycle builtins").toBeUndefined();
@@ -295,7 +302,7 @@ describe("ApiManager > api.leaves lazy completeness and host exemption (#247)", 
 		api.cyc.loop = api.cyc;
 		expect(api.cyc.loop, "the cycle is real, not a copy").toBe(api.cyc);
 
-		expect(await api.slothlet.api.leaves(moduleID)).toEqual(["cyc.nested.leaf"]);
+		expect(dotted(await api.slothlet.api.leaves(moduleID))).toEqual(["cyc.nested.leaf"]);
 	});
 
 	it("settles a runtime-grafted chain deeper than the JS call stack", async () => {
@@ -322,7 +329,7 @@ describe("ApiManager > api.leaves lazy completeness and host exemption (#247)", 
 		for (let i = 0; i < 200000; i++) chain = { next: chain };
 		api.chained.graft = chain;
 
-		expect(await api.slothlet.api.leaves(moduleID)).toEqual(["chained.nested.leaf"]);
+		expect(dotted(await api.slothlet.api.leaves(moduleID))).toEqual(["chained.nested.leaf"]);
 	});
 
 	it("redacts module-private members the caller could not read", async () => {
@@ -330,7 +337,7 @@ describe("ApiManager > api.leaves lazy completeness and host exemption (#247)", 
 
 		// The composed surface already redacts these from the host's `Object.keys`; enumeration is
 		// the same disclosure and now answers the same way.
-		const paths = (await api.slothlet.api.leaves(".", { details: true })).map((d) => d.path);
+		const paths = (await api.slothlet.api.leaves(".", { details: true })).map((d) => d.path.join("."));
 		expect(paths, "no private member of billing/ is disclosed").toEqual(paths.filter((p) => !/\.__?[a-z]/i.test(p)));
 		expect(paths, "public members are untouched").toContain("billing.internals.currency");
 	});
@@ -339,7 +346,7 @@ describe("ApiManager > api.leaves lazy completeness and host exemption (#247)", 
 		api = await slothlet({ mode: "eager", base: PRIVATE_DIR, permissions: { defaultPolicy: "allow", rules: [] } });
 
 		// The tooling case this method exists for: the host asking for the complete picture.
-		const paths = (await api.slothlet.api.leaves(".", { details: true, includePrivate: true })).map((d) => d.path);
+		const paths = (await api.slothlet.api.leaves(".", { details: true, includePrivate: true })).map((d) => d.path.join("."));
 		expect(paths).toContain("billing.internals.__rate");
 		expect(paths).toContain("billing.internals._fee");
 	});
@@ -347,7 +354,7 @@ describe("ApiManager > api.leaves lazy completeness and host exemption (#247)", 
 	it("settles into a private subdirectory, so includePrivate is complete under lazy", async () => {
 		const perms = { defaultPolicy: "allow", rules: [] };
 		api = await slothlet({ mode: "eager", base: PRIVATE_SUBDIR_DIR, permissions: perms });
-		const eagerPaths = (await api.slothlet.api.leaves(".", { details: true, includePrivate: true })).map((d) => d.path).sort();
+		const eagerPaths = (await api.slothlet.api.leaves(".", { details: true, includePrivate: true })).map((d) => d.path.join(".")).sort();
 		await api.shutdown();
 
 		// A private subdirectory is its own materialization unit, and the composed surface
@@ -355,7 +362,7 @@ describe("ApiManager > api.leaves lazy completeness and host exemption (#247)", 
 		// ownership records, not the live keys alone. Enumeration-only discovery never loaded
 		// the subtree, and even the explicit includePrivate answer silently lost it.
 		api = await slothlet({ mode: "lazy", base: PRIVATE_SUBDIR_DIR, permissions: perms });
-		const lazyPaths = (await api.slothlet.api.leaves(".", { details: true, includePrivate: true })).map((d) => d.path).sort();
+		const lazyPaths = (await api.slothlet.api.leaves(".", { details: true, includePrivate: true })).map((d) => d.path.join(".")).sort();
 		expect(lazyPaths).toContain("pkg._vault.inner.rate");
 		expect(lazyPaths, "lazy answers exactly what eager answers").toEqual(eagerPaths);
 	});
@@ -363,14 +370,14 @@ describe("ApiManager > api.leaves lazy completeness and host exemption (#247)", 
 	it("keeps includePrivate complete under lazy when private terminal reads are gated", async () => {
 		const perms = { defaultPolicy: "allow", rules: [] };
 		api = await slothlet({ mode: "eager", base: PRIVATE_DIR, permissions: perms });
-		const eagerPaths = (await api.slothlet.api.leaves(".", { details: true, includePrivate: true })).map((d) => d.path).sort();
+		const eagerPaths = (await api.slothlet.api.leaves(".", { details: true, includePrivate: true })).map((d) => d.path.join(".")).sort();
 		await api.shutdown();
 
 		// Record-derived discovery also surfaces private TERMINAL exports, whose property read is
 		// caller-gated and throws — the walk must skip them (their records already exist from the
 		// file's materialization) rather than surface the refusal from inside settle.
 		api = await slothlet({ mode: "lazy", base: PRIVATE_DIR, permissions: perms });
-		const lazyPaths = (await api.slothlet.api.leaves(".", { details: true, includePrivate: true })).map((d) => d.path).sort();
+		const lazyPaths = (await api.slothlet.api.leaves(".", { details: true, includePrivate: true })).map((d) => d.path.join(".")).sort();
 		expect(lazyPaths, "gated terminal reads are skipped, not surfaced").toEqual(eagerPaths);
 	});
 
@@ -383,12 +390,12 @@ describe("ApiManager > api.leaves lazy completeness and host exemption (#247)", 
 
 		api = await slothlet({ mode: "eager", base: BASE });
 		await api.slothlet.api.add("shop", RESERVED_NESTED_DIR);
-		const eagerSub = sub((await api.slothlet.api.leaves("shop", { details: true })).map((d) => d.path));
+		const eagerSub = sub((await api.slothlet.api.leaves("shop", { details: true })).map((d) => d.path.join(".")));
 		await api.shutdown();
 
 		api = await slothlet({ mode: "lazy", base: BASE });
 		await api.slothlet.api.add("shop", RESERVED_NESTED_DIR);
-		const lazySub = sub((await api.slothlet.api.leaves("shop", { details: true })).map((d) => d.path));
+		const lazySub = sub((await api.slothlet.api.leaves("shop", { details: true })).map((d) => d.path.join(".")));
 
 		expect(lazySub).toContain("shop.shutdown.impl");
 		expect(lazySub, "the nested reserved-named subtree settles under lazy as it does eager").toEqual(eagerSub);
@@ -398,7 +405,7 @@ describe("ApiManager > api.leaves lazy completeness and host exemption (#247)", 
 		// The flip side of the fix: the root-level skip must remain, so slothlet/shutdown/destroy
 		// injected onto the base root are never reported as module leaves.
 		api = await slothlet({ mode: "lazy", base: BASE });
-		const paths = (await api.slothlet.api.leaves(".", { details: true })).map((d) => d.path);
+		const paths = (await api.slothlet.api.leaves(".", { details: true })).map((d) => d.path.join("."));
 		expect(
 			paths.some((p) => p === "slothlet" || p.startsWith("slothlet.") || p === "shutdown" || p === "destroy"),
 			"no injected control-tree keys leak into the base-load answer"
@@ -410,7 +417,7 @@ describe("ApiManager > api.leaves lazy completeness and host exemption (#247)", 
 
 		// Nothing is private without a permissions config, so nothing is filtered — the answer is
 		// exactly what it was before privacy existed.
-		const paths = (await api.slothlet.api.leaves(".", { details: true })).map((d) => d.path);
+		const paths = (await api.slothlet.api.leaves(".", { details: true })).map((d) => d.path.join("."));
 		expect(paths).toContain("billing.internals.__rate");
 	});
 
@@ -422,7 +429,7 @@ describe("ApiManager > api.leaves lazy completeness and host exemption (#247)", 
 		const seen = await api.introspect.list.paths({ details: false });
 		expect(seen.error).toBeNull();
 		expect(
-			seen.paths.some((p) => /\.__?[a-z]/i.test(p)),
+			seen.paths.some((p) => /\.__?[a-z]/i.test(p.join("."))),
 			"its own module's privates are listed"
 		).toBe(true);
 	});
@@ -443,7 +450,7 @@ describe("ApiManager > api.leaves lazy completeness and host exemption (#247)", 
 
 		// An object mount registers with filePath null, so the same-module comparison has nothing to
 		// match on — the member is private and reachable by no one but its own (absent) directory.
-		const paths = (await api.slothlet.api.leaves("inline", { details: true })).map((d) => d.path);
+		const paths = (await api.slothlet.api.leaves("inline", { details: true })).map((d) => d.path.join("."));
 		expect(paths).toContain("inline.open");
 		expect(paths, "no source file must not mean no privacy").not.toContain("inline.__secret");
 	});
@@ -460,6 +467,6 @@ describe("ApiManager > api.leaves lazy completeness and host exemption (#247)", 
 
 		// Enumeration under a caller identity now redacts (#244 shipped) — the host's bound handle
 		// is the documented carve-out, and leaves() reads records rather than gated traps anyway.
-		expect(await api.slothlet.api.leaves("shop")).toEqual(["shop.mul", "shop.ns.deep"]);
+		expect(dotted(await api.slothlet.api.leaves("shop"))).toEqual(["shop.mul", "shop.ns.deep"]);
 	});
 });

@@ -1737,7 +1737,7 @@ export class ApiBuilder extends ComponentBase {
 				 *   instead of the callable paths alone.
 				 * @param {boolean} [options.includePrivate=false] - Include module-private members the
 				 *   caller could not read. Host only — a module asking for it is refused.
-				 * @returns {Promise<string[]|Array<{path: string, kind: "function"|"namespace"|"data"}>>}
+				 * @returns {Promise<string[][]|Array<{path: string[], kind: "function"|"namespace"|"data"}>>}
 				 *   Sorted callable leaf paths, or `{ path, kind }` records under `details`.
 				 * @throws {SlothletError} INVALID_ARGUMENT when `key` is not a string, `options` is not an
 				 *   object, or `options.details`/`options.includePrivate` is not a boolean.
@@ -1763,9 +1763,9 @@ export class ApiBuilder extends ComponentBase {
 				 *
 				 * @example
 				 * const moduleID = await api.slothlet.api.add("shop", "./ext/shop/api");
-				 * await api.slothlet.api.leaves(moduleID); // ["shop.connect", "shop.search"]
+				 * await api.slothlet.api.leaves(moduleID); // [["shop", "connect"], ["shop", "search"]]
 				 * await api.slothlet.api.leaves("shop"); // same, by mount endpoint
-				 * await api.slothlet.api.leaves("shop", { details: true }); // [{ path, kind }, ...]
+				 * await api.slothlet.api.leaves("shop", { details: true }); // [{ path: ["shop", "connect"], kind }, ...]
 				 */
 				leaves: async function slothlet_api_leaves(key, options = {}) {
 					enforceInternalPermission("slothlet.api.leaves");
@@ -2039,10 +2039,14 @@ export class ApiBuilder extends ComponentBase {
 						});
 					}
 
+					// Reported as segments arrays (D-1); kindOf and the filters above work on the stored dotted form.
 					if (details) {
-						return mapList(visiblePaths, (path) => ({ path, kind: kindOf(path) }));
+						return mapList(visiblePaths, (path) => ({ path: segmentsOf(path), kind: kindOf(path) }));
 					}
-					return filterList(visiblePaths, (path) => kindOf(path) === "function");
+					return mapList(
+						filterList(visiblePaths, (path) => kindOf(path) === "function"),
+						(path) => segmentsOf(path)
+					);
 				},
 
 				/**
