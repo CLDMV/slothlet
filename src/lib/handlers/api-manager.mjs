@@ -1700,8 +1700,16 @@ export class ApiManager extends ComponentBase {
 		for (let ofIndex = 0, ofList = existingChildKeys; ofIndex < ofList.length; ofIndex++) {
 			const key = ofList[ofIndex];
 			// A member the overriding module also provides is co-owned/overwritten — the per-path
-			// rollback reverts it on removal, so it is not a shadow.
-			if (SetMethods.has(nextSet, key)) continue;
+			// rollback reverts it on removal, so it is not a shadow. Its whole subtree is the overriding
+			// module's while it is live, though: what another module had under it is off the api, so that
+			// module owns none of it until the rollback puts it back.
+			if (SetMethods.has(nextSet, key)) {
+				const existingOwner = resolveWrapper(existingWrapper[key])?.____slothletInternal?.moduleID;
+				if (existingOwner != null && splitText(String(existingOwner), MODULE_ID_SEPARATOR)[0] !== moduleIDKey) {
+					ownership.shadowSubtree(`${containerPath}.${key}`, moduleIDKey);
+				}
+				continue;
+			}
 			const owner = ownership.getCurrentOwner(`${containerPath}.${key}`);
 			// A shadowed member is always ownership-registered; the no-owner guard is defensive.
 			/* v8 ignore next */
@@ -1722,6 +1730,8 @@ export class ApiManager extends ComponentBase {
 			// Off the api surface, nothing can load it, so its unloaded wrappers stop counting until it is
 			// put back; otherwise materialize.wait() never settles while it is hidden.
 			this._setShadowParked(child, true);
+			// Nobody's value is live at the member while it is off the api, so nobody owns it until it is put back.
+			ownership.shadowSubtree(`${containerPath}.${key}`, moduleIDKey);
 		}
 	}
 
@@ -4213,6 +4223,39 @@ export class ApiManager extends ComponentBase {
 	}
 
 	/**
+	 * Put a primitive member's surviving value back after a removal, when the member at the path is a plain value
+	 * rather than a node.
+	 * @param {object} root - The api tree (`api` or `boundApi`).
+	 * @param {string[]} parts - The member's path segments.
+	 * @param {*} current - The value at the path now.
+	 * @param {*} value - The surviving owner's value.
+	 * @returns {void}
+	 * @private
+	 *
+	 * @description
+	 * A primitive member is a node until code sets it at runtime; the set leaves a plain value on the namespace,
+	 * which the node restores cannot reach. The namespace takes the surviving value the way the set placed its own.
+	 */
+	#restorePrimitiveMember(root, parts, current, value) {
+		if (parts.length === 0 || resolveWrapper(current)) return;
+		if (value === undefined || typeof value === "function" || (value !== null && typeof value === "object")) return;
+		if (Objects.is(current, value)) return;
+		const container = resolveWrapper(this.#memberAtPath(root, copyList(parts, 0, -1)));
+		const key = parts[parts.length - 1];
+		if (!container || !FunctionMethods.call(Objects.prototype.hasOwnProperty, container, key)) return;
+		const descriptor = Objects.getOwnPropertyDescriptor(container, key);
+		runtime_frameworkWrite(container, () =>
+			Objects.defineProperty(container, key, {
+				__proto__: null,
+				value,
+				writable: descriptor.writable === true,
+				enumerable: descriptor.enumerable !== false,
+				configurable: true
+			})
+		);
+	}
+
+	/**
 	 * Give a namespace the function its remaining contributors resolve to, after a removal (#533).
 	 * @param {object} live - The live (raw) namespace wrapper.
 	 * @param {string} apiPath - Its api path.
@@ -4521,6 +4564,8 @@ export class ApiManager extends ComponentBase {
 				// filter; harmless no-op when impl:removed already pruned it via a real "delete".
 				this.slothlet.handlers.routineManager?.onImplRemoved?.({ apiPath: target, moduleID: scopedModuleIDKey });
 				if (scopedResult.action === "restore") {
+					// What this module's replace took off the api under the node comes back with the revert.
+					ownership.unshadowSubtree(target, scopedModuleIDKey);
 					// Shared node: revert the tree value to the owner it fell back to.
 					const revertValue = ownership.getCurrentValue?.(target);
 					const revertOwner = ownership.getCurrentOwner?.(target)?.moduleID;
@@ -4692,6 +4737,13 @@ export class ApiManager extends ComponentBase {
 
 			// Deduplicate paths (ownership may track duplicates due to nested structures)
 			const uniquePaths = setToArray(setFrom(allPaths));
+			// The rolled-back paths where the removed module's value was the live one.
+			const takenOverPaths = setFrom(
+				mapList(
+					filterList(result.rolledBack, (r) => r.wasCurrent),
+					(r) => r.apiPath
+				)
+			);
 
 			// Filter paths: separate those with no owners (delete) vs those with owners (rollback)
 			const pathsToDelete = [];
@@ -4873,6 +4925,13 @@ export class ApiManager extends ComponentBase {
 					if (existingBoundWrapperRaw && !SetMethods.has(restoredWrappers, existingBoundWrapperRaw)) {
 						restoreFile(existingBoundWrapperRaw);
 						existingBoundWrapperRaw.___setImpl(previousImpl, rollback.restoredTo);
+					}
+					// A primitive member the removed module set at runtime is a plain value on its namespace, not a
+					// node, so there is no wrapper to restore into: put the surviving owner's value back in its place.
+					// Only where the removed module's value was the live one — otherwise the removal changed nothing.
+					if (SetMethods.has(takenOverPaths, rollback.apiPath)) {
+						this.#restorePrimitiveMember(this.slothlet.api, parts, existingWrapper, previousImpl);
+						this.#restorePrimitiveMember(this.slothlet.boundApi, parts, existingBoundWrapper, previousImpl);
 					}
 				}
 			}
