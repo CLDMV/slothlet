@@ -39,7 +39,6 @@ describe("a failed locale load is a coded SlothletWarning (#820)", () => {
 	let other;
 
 	beforeEach(() => {
-		SlothletWarning.suppressConsole = true;
 		SlothletWarning.clearCaptured();
 	});
 
@@ -48,7 +47,6 @@ describe("a failed locale load is a coded SlothletWarning (#820)", () => {
 		if (api) await api.shutdown();
 		if (other) await other.shutdown();
 		api = other = null;
-		SlothletWarning.suppressConsole = false;
 		setLanguage("en-us");
 	});
 
@@ -61,9 +59,9 @@ describe("a failed locale load is a coded SlothletWarning (#820)", () => {
 		expect(getLanguage()).toBe("en-us");
 	});
 
-	it("silent suppresses it", async () => {
+	it("silent still records it, unprinted (#838)", async () => {
 		api = await slothlet({ base: TEST_DIRS.API_TEST, diagnostics: true, silent: true, i18n: { language: "zz-zz" } });
-		expect(failed(api)).toEqual([]);
+		expect(failed(api)).toHaveLength(1);
 	});
 
 	it("is captured on the instance that asked, not another", async () => {
@@ -80,11 +78,11 @@ describe("a failed locale load is a coded SlothletWarning (#820)", () => {
 		expect(failed(api).map((w) => w.context.lang)).toEqual(["zz-zz", "yy-yy"]);
 	});
 
-	it("api.slothlet.i18n.setLanguage honours silent", async () => {
+	it("api.slothlet.i18n.setLanguage records on a silent instance too (#838)", async () => {
 		api = await slothlet({ base: TEST_DIRS.API_TEST, diagnostics: true, silent: true });
 		api.slothlet.i18n.setLanguage("zz-zz");
 		await api.slothlet.i18n.setLanguageAsync("yy-yy");
-		expect(failed(api)).toEqual([]);
+		expect(failed(api).map((w) => w.context.lang)).toEqual(["zz-zz", "yy-yy"]);
 	});
 
 	it("outside any instance the warning lands on the process-level class", async () => {
@@ -96,6 +94,9 @@ describe("a failed locale load is a coded SlothletWarning (#820)", () => {
 	it("prints no bare console.warn line of its own", async () => {
 		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
 		setLanguage("zz-zz");
-		expect(warn).not.toHaveBeenCalled();
+		// The process-level class prints every warning (#838); each line printed belongs to the warning itself.
+		const own = warn.mock.calls.filter(([first]) => !(typeof first === "string" && first.startsWith("\n⚠️  [")) && first !== "Context:");
+		expect(own).toEqual([]);
+		warn.mockRestore();
 	});
 });

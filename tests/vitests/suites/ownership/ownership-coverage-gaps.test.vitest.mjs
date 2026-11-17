@@ -109,8 +109,8 @@ describe("OwnershipManager.getPathHistory — returns [] for unregistered path (
 });
 // ─── register — collision "warn" with config.silent:true (line 78 false branch) ─
 
-describe("OwnershipManager.register — warn collision with silent:true suppresses warning (line 78 false)", () => {
-	it("returns null and emits no SlothletWarning when collision mode is warn and config.silent is true (line 78 false branch)", () => {
+describe("OwnershipManager.register — warn collision with silent:true", () => {
+	it("returns null when collision mode is warn and config.silent is true", () => {
 		const o = new OwnershipManager(makeMock());
 		const fn = () => {};
 

@@ -25,7 +25,6 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdir, writeFile, rm } from "node:fs/promises";
 import { join, resolve, dirname } from "node:path";
 import slothlet from "@cldmv/slothlet";
-import { SlothletWarning } from "@cldmv/slothlet/errors";
 
 /**
  * Unique fixture root under the project tmp folder.
@@ -81,14 +80,12 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])("Hidden entries + empty-fol
 	 * @returns {Promise<Array>} Warnings that instance captured while the callback ran.
 	 */
 	async function captureWarnings(fn) {
-		SlothletWarning.suppressConsole = true;
 		apis.at(-1)?.slothlet.diag.SlothletWarning.clearCaptured();
 		try {
 			await fn();
 			return [...apis.at(-1).slothlet.diag.SlothletWarning.captured];
 		} finally {
 			apis.at(-1)?.slothlet.diag.SlothletWarning.clearCaptured();
-			SlothletWarning.suppressConsole = false;
 		}
 	}
 

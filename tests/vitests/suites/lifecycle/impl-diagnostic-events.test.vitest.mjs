@@ -41,12 +41,9 @@ const BASE_TMP = join(process.cwd(), "tmp", `impl-diagnostic-events-${process.pi
 // `silent` or this flag — never affects event emission; that is the whole point of the feature.
 // (The `silent: true` gating of those console warnings is covered by its own describe block below.)
 beforeEach(() => {
-	SlothletWarning.suppressConsole = true;
 	SlothletWarning.clearCaptured();
 });
-afterEach(() => {
-	SlothletWarning.suppressConsole = false;
-});
+afterEach(() => {});
 
 // ─── Runtime diagnostics (eager + lazy) ─────────────────────────────────────
 

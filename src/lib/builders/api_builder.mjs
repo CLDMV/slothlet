@@ -553,11 +553,9 @@ export class ApiBuilder extends ComponentBase {
 
 		// Warn if user has 'slothlet' property (reserved namespace)
 		if (userApi.slothlet) {
-			// Console warning honors `silent` (like every other SlothletWarning site); the impl:warning
+			// The warning prints unless the instance is silent (decided inside the warning, #838); the impl:warning
 			// event below is additive and fires regardless of `silent` (#148).
-			if (!this.____config?.silent) {
-				new this.SlothletWarning("WARNING_RESERVED_PROPERTY_CONFLICT", { properties: "slothlet" });
-			}
+			new this.SlothletWarning("WARNING_RESERVED_PROPERTY_CONFLICT", { properties: "slothlet" });
 			// Also surface as an init-time impl:warning so construction-time `lifecycle` subscribers
 			// observe non-throwing diagnostics raised during cold-start buildAPI (#148).
 			await this.emitImplDiagnostic("warning", {
@@ -1531,14 +1529,12 @@ export class ApiBuilder extends ComponentBase {
 			 */
 			i18n: {
 				// A locale that fails to load is warned about through this instance: its warning class and `silent`.
-				setLanguage: (lang) => setLanguage(lang, { SlothletWarning: slothlet.SlothletWarning, silent: slothlet.config?.silent === true }),
-				setLanguageAsync: (lang) =>
-					setLanguageAsync(lang, { SlothletWarning: slothlet.SlothletWarning, silent: slothlet.config?.silent === true }),
+				setLanguage: (lang) => setLanguage(lang, { SlothletWarning: slothlet.SlothletWarning }),
+				setLanguageAsync: (lang) => setLanguageAsync(lang, { SlothletWarning: slothlet.SlothletWarning }),
 				getLanguage,
 				translate,
 				t,
-				initI18n: (options = {}) =>
-					initI18n({ SlothletWarning: slothlet.SlothletWarning, silent: slothlet.config?.silent === true, ...options })
+				initI18n: (options = {}) => initI18n({ SlothletWarning: slothlet.SlothletWarning, ...options })
 			},
 
 			/**
@@ -1629,10 +1625,8 @@ export class ApiBuilder extends ComponentBase {
 					if (!config.api?.collision?.override) {
 						const passed = filterList(LOCKED_ADD_OPTIONS, (key) => key in options);
 						if (passed.length > 0) {
-							// Console warning honors `silent`, like every other SlothletWarning site.
-							if (!config?.silent) {
-								new slothlet.SlothletWarning("WARNING_API_ADD_OPTION_LOCKED", { option: ArrayMethods.join(passed, ", ") });
-							}
+							// The warning prints unless the instance is silent (decided inside the warning, #838).
+							new slothlet.SlothletWarning("WARNING_API_ADD_OPTION_LOCKED", { option: ArrayMethods.join(passed, ", ") });
 							// Strip the locked options so the override does not take effect.
 							effectiveOptions = {};
 							for (let ofIndex = 0, ofList = Objects.keys(options); ofIndex < ofList.length; ofIndex++) {
@@ -4552,7 +4546,7 @@ export class ApiBuilder extends ComponentBase {
 				},
 
 				/**
-				 * This instance's SlothletWarning class: `captured`, `clearCaptured()` and `suppressConsole` apply to this instance only
+				 * This instance's SlothletWarning class: `captured` holds every warning the instance raised, printed or not (#838)
 				 * @type {Function}
 				 * @example
 				 * // Access captured warnings in tests

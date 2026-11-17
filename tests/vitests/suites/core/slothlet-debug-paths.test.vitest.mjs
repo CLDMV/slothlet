@@ -181,7 +181,6 @@ describe("slothlet > getDiagnostics and getOwnership (lines ~711)", () => {
 		const { default: slothlet } = await import("@cldmv/slothlet");
 		api = await slothlet({
 			base: TEST_DIRS.API_TEST,
-			ownership: false,
 			silent: true
 		});
 		expect(api).toBeDefined();

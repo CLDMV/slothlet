@@ -299,7 +299,6 @@ export class Lifecycle extends ComponentBase {
 	 * @private
 	 */
 	#warnHandlerError(event, data, error) {
-		if (this.____config?.silent) return;
 		if (data.apiPath) {
 			new this.SlothletWarning(
 				"WARNING_LIFECYCLE_HANDLER_ERROR",

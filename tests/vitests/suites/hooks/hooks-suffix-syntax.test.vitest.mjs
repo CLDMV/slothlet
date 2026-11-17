@@ -35,7 +35,6 @@ describe.each(getMatrixConfigs())("Hooks > suffix syntax + prefix deprecation (#
 	let api;
 
 	beforeEach(() => {
-		SlothletWarning.suppressConsole = true;
 		SlothletWarning.clearCaptured();
 	});
 

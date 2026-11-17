@@ -46,6 +46,7 @@ import {
 	StringMethods
 } from "#helpers/intrinsics";
 import { createClock } from "#helpers/clock";
+import { markNormalized } from "#helpers/config-schema";
 
 /** Valid `mode` values for a routines entry. @type {ReadonlySet<string>} */
 const VALID_ROUTINE_MODES = setFrom(["manual", "startup", "shutdown", "destroy"]);
@@ -935,8 +936,8 @@ export class Config extends ComponentBase {
 		// Normalize + validate the construction-time lifecycle subscription map (#148).
 		const lifecycleConfig = this.normalizeLifecycle(config.lifecycle);
 
-		// Build normalized config
-		return {
+		// Build normalized config. It is marked as slothlet's own, so a reload can feed it back in unchecked.
+		return markNormalized({
 			...config,
 			base: resolvedBase,
 			loader,
@@ -963,7 +964,7 @@ export class Config extends ComponentBase {
 			env: this.normalizeEnv(config.env),
 			versioning: { dispatcher },
 			permissions: permissionsConfig
-		};
+		});
 	}
 
 	/**

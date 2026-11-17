@@ -182,16 +182,14 @@ describe("Multi-Instance Mode Mixing", () => {
 		const eagerApi = await slothlet({
 			base: TEST_DIRS.API_TEST,
 			mode: "eager",
-			runtime: "async",
-			hooks: false
+			runtime: "async"
 		});
 		instances.push(eagerApi);
 
 		const lazyApi = await slothlet({
 			base: TEST_DIRS.API_TEST,
 			mode: "lazy",
-			runtime: "async",
-			hooks: false
+			runtime: "async"
 		});
 		instances.push(lazyApi);
 
@@ -212,16 +210,14 @@ describe("Multi-Instance Mode Mixing", () => {
 		const asyncApi = await slothlet({
 			base: TEST_DIRS.API_TEST,
 			mode: "eager",
-			runtime: "async",
-			hooks: false
+			runtime: "async"
 		});
 		instances.push(asyncApi);
 
 		const liveApi = await slothlet({
 			base: TEST_DIRS.API_TEST,
 			mode: "eager",
-			runtime: "live",
-			hooks: false
+			runtime: "live"
 		});
 		instances.push(liveApi);
 

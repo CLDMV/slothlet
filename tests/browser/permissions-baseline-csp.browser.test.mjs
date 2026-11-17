@@ -60,7 +60,6 @@ describe("permission baseline in a browser with a Content Security Policy that r
 
 	afterEach(async () => {
 		const { SlothletWarning } = await import("@cldmv/slothlet/errors");
-		SlothletWarning.suppressConsole = false;
 		SlothletWarning.captured.length = 0;
 		await api?.shutdown?.();
 		api = null;
@@ -76,7 +75,6 @@ describe("permission baseline in a browser with a Content Security Policy that r
 
 	it("under on, starts and warns once for each check not met", async () => {
 		const { SlothletWarning } = await import("@cldmv/slothlet/errors");
-		SlothletWarning.suppressConsole = true;
 		api = await boot("on");
 		const warned = SlothletWarning.captured.filter((warning) => warning.code === "WARNING_PERMISSION_BASELINE_UNMET");
 		expect(warned.map((warning) => warning.context.check)).toEqual(MET ? [] : IDS);

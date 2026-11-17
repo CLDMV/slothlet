@@ -435,7 +435,6 @@ describe("Hook Pattern Edge Cases", () => {
 	beforeEach(async () => {
 		api = await slothlet({
 			base: TEST_DIRS.API_TEST,
-			lazy: false,
 			depth: 1,
 			hook: { enabled: true },
 			// Enable hooks for pattern matching

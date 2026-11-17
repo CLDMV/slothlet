@@ -2772,17 +2772,15 @@ export class ModesProcessor extends ComponentBase {
 				}
 			} else {
 				// Multiple root contributors: namespace ALL of them and warn.
-				// Console warning honors `silent` (like every other SlothletWarning site); the
+				// The warning prints unless the instance is silent (decided inside the warning, #838); the
 				// impl:warning event below is additive and fires regardless of `silent` (#148).
-				if (!this.____config?.silent) {
-					new this.SlothletWarning("WARNING_MULTIPLE_ROOT_CONTRIBUTORS", {
-						rootContributors: ArrayMethods.join(
-							mapList(rootContributors, (rc) => rc.moduleName),
-							", "
-						),
-						firstContributor: rootContributors[0].moduleName
-					});
-				}
+				new this.SlothletWarning("WARNING_MULTIPLE_ROOT_CONTRIBUTORS", {
+					rootContributors: ArrayMethods.join(
+						mapList(rootContributors, (rc) => rc.moduleName),
+						", "
+					),
+					firstContributor: rootContributors[0].moduleName
+				});
 				// Also surface as an init-time impl:warning so construction-time `lifecycle` subscribers
 				// observe non-throwing diagnostics raised during cold-start buildAPI (#148).
 				await this.emitImplDiagnostic("warning", {

@@ -564,7 +564,9 @@
 		"BASELINE_CSP_EVAL_ALLOWED": "该页面允许从字符串生成代码：其 Content Security Policy 允许 'unsafe-eval'，或者没有策略。",
 		"BASELINE_CSP_BLOB_ALLOWED": "该页面会运行来自 blob: URL 的脚本：其 Content Security Policy 允许它们，或者没有策略。",
 		"BASELINE_CSP_DATA_ALLOWED": "该页面会运行来自 data: URL 的脚本：其 Content Security Policy 允许它们，或者没有策略。",
-		"BASELINE_VITEST_PLUGIN_ABSENT": "在 vitest 下运行，但 vitest 配置中没有 slothlet 的 @cldmv/slothlet/vite 插件。"
+		"BASELINE_VITEST_PLUGIN_ABSENT": "在 vitest 下运行，但 vitest 配置中没有 slothlet 的 @cldmv/slothlet/vite 插件。",
+		"INVALID_CONFIG_UNKNOWN_KEY": "{where} 中有未知的键 '{key}'。slothlet v4 没有这个选项。",
+		"HINT_INVALID_CONFIG_UNKNOWN_KEY": "请检查键是否拼写错误。为 slothlet v3 编写的代码可以用 npx @cldmv/slothlet-migrate 迁移到 v4 的名称。"
 	},
 	"metadata": {
 		"code": "zh-cn",

@@ -52,7 +52,6 @@ describe("translations.mjs edge cases", () => {
 	it("should log a warning and fall back to 'en-us' when the language file cannot be loaded", () => {
 		// "zz" is not a valid language; its JSON file does not exist in languages/
 		// → i18n_loadLanguageSync returns null → else branch fires (lines 103-105)
-		SlothletWarning.suppressConsole = true;
 		SlothletWarning.clearCaptured();
 		try {
 			setLanguage("zz");
@@ -61,7 +60,6 @@ describe("translations.mjs edge cases", () => {
 			const [warning] = SlothletWarning.captured.filter((w) => w.code === "WARNING_LANGUAGE_LOAD_FAILED");
 			expect(warning.message).toContain("Failed to load language 'zz'");
 		} finally {
-			SlothletWarning.suppressConsole = false;
 			SlothletWarning.clearCaptured();
 		}
 

@@ -404,32 +404,27 @@ describe("Flatten.processModuleForAPI — hybrid default+named collision modes (
 	});
 
 	it("emits warning and overwrites when collisionMode='warn' and named export collides (lines 309-314)", () => {
-		SlothletWarning.suppressConsole = true;
-		try {
-			const flatten = new Flatten(makeMockWithHelpers("warn"));
+		const flatten = new Flatten(makeMockWithHelpers("warn"));
 
-			function logger() {}
-			logger.version = "original";
+		function logger() {}
+		logger.version = "original";
 
-			const mod = { default: logger, version: "named-overwrite" };
+		const mod = { default: logger, version: "named-overwrite" };
 
-			const result = flatten.processModuleForAPI({
-				mod,
-				decision: {},
-				moduleName: "logger",
-				propertyName: "logger",
-				moduleKeys: ["version"],
-				analysis: { hasDefault: true },
-				collisionContext: "initial",
-				apiPathPrefix: "tools"
-			});
+		const result = flatten.processModuleForAPI({
+			mod,
+			decision: {},
+			moduleName: "logger",
+			propertyName: "logger",
+			moduleKeys: ["version"],
+			analysis: { hasDefault: true },
+			collisionContext: "initial",
+			apiPathPrefix: "tools"
+		});
 
-			// Should NOT throw; named export is assigned after warning
-			expect(result.moduleContent).toBeDefined();
-			expect(result.moduleContent.version).toBe("named-overwrite");
-		} finally {
-			SlothletWarning.suppressConsole = false;
-		}
+		// Should NOT throw; named export is assigned after warning
+		expect(result.moduleContent).toBeDefined();
+		expect(result.moduleContent.version).toBe("named-overwrite");
 	});
 
 	it("falls through with no warning when collisionMode='replace' and named export collides (line 309 false branch)", () => {
@@ -555,24 +550,19 @@ describe("Flatten.processModuleForAPI — object default+named collision modes (
 	});
 
 	it("emits WARNING_COLLISION_DEFAULT_EXPORT_OVERWRITE and overwrites when collisionMode='warn'", () => {
-		SlothletWarning.suppressConsole = true;
-		try {
-			const flatten = new Flatten(makeMockWithHelpers("warn"));
-			const mod = { default: { version: "original" }, version: "named-warn" };
-			const result = flatten.processModuleForAPI({
-				mod,
-				decision: {},
-				moduleName: "config",
-				propertyName: "config",
-				moduleKeys: ["version"],
-				analysis: { hasDefault: true },
-				collisionContext: "initial",
-				apiPathPrefix: "tools"
-			});
-			expect(result.moduleContent.version).toBe("named-warn");
-		} finally {
-			SlothletWarning.suppressConsole = false;
-		}
+		const flatten = new Flatten(makeMockWithHelpers("warn"));
+		const mod = { default: { version: "original" }, version: "named-warn" };
+		const result = flatten.processModuleForAPI({
+			mod,
+			decision: {},
+			moduleName: "config",
+			propertyName: "config",
+			moduleKeys: ["version"],
+			analysis: { hasDefault: true },
+			collisionContext: "initial",
+			apiPathPrefix: "tools"
+		});
+		expect(result.moduleContent.version).toBe("named-warn");
 	});
 
 	it("adds a non-colliding named export onto the object default (hasExisting=false)", () => {

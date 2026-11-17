@@ -767,9 +767,7 @@ export class HookManager extends ComponentBase {
 		// Host hooks (no owner) are unaffected — #pinHandler is already a no-op without a caller.
 		if (!lockCaller && ownerWrapper && this.pinEnforced) {
 			lockCaller = true;
-			if (!this.slothlet.config?.silent) {
-				new this.SlothletWarning("HOOK_UNPINNED_IGNORED", { pattern });
-			}
+			new this.SlothletWarning("HOOK_UNPINNED_IGNORED", { pattern });
 		}
 		// Async-ness is a property of the AUTHOR'S function, so it is read off the original before
 		// pinning wraps it in a plain function (a pre-locked handler exposes its original the same
@@ -1968,12 +1966,10 @@ export class HookManager extends ComponentBase {
 				});
 			}
 			// Deprecation: nudge toward the canonical suffix form. Suppressed by `silent`.
-			if (!this.slothlet.config?.silent) {
-				new this.SlothletWarning("HOOK_TYPEPATTERN_PREFIX_DEPRECATED", {
-					given: typePattern,
-					suggested: `${pattern}:${leading}`
-				});
-			}
+			new this.SlothletWarning("HOOK_TYPEPATTERN_PREFIX_DEPRECATED", {
+				given: typePattern,
+				suggested: `${pattern}:${leading}`
+			});
 			return { type: leading, pattern };
 		}
 

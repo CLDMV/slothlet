@@ -111,6 +111,7 @@ import { DEFAULT_ROUTINES, RESERVED_EXPORTS } from "#helpers/defaults";
 import { dataMemberOf, isFrameworkReservedKey } from "#helpers/reserved-keys";
 import { isGuardedInternal, internals as instanceImportsInternals } from "#helpers/instance-imports";
 import { normalizePermissionsConfig, normalizeClockConfig } from "#helpers/config";
+import { assertConfigKeys } from "#helpers/config-schema";
 import { DEFAULT_CLOCK } from "#helpers/clock";
 import { internals as framePlacementInternals } from "#handlers/frame-placement";
 import {
@@ -401,8 +402,9 @@ class Slothlet {
 	constructor() {
 		// Expose error classes to components (no imports needed)
 		this.SlothletError = SlothletError;
-		// Per-instance subclass: capture and console suppression stay on this instance (#819).
-		this.SlothletWarning = SlothletWarning.forInstance();
+		// Per-instance subclass: every warning is recorded on this instance (#819), and printed unless the instance's
+		// `silent` option is on (#838).
+		this.SlothletWarning = SlothletWarning.forInstance(() => this.config?.silent === true);
 		// Debug logger will be initialized in load() with config
 		this.debugLogger = null;
 
@@ -1071,6 +1073,9 @@ class Slothlet {
 	 * });
 	 */
 	async load(config = {}, preservedInstanceID = null) {
+		// Every key must be one the v4 config has: a misspelled or renamed option would otherwise read as its default.
+		assertConfigKeys(config);
+
 		// The host's clock is read once and kept on the instance, never in the config the instance hands out. A reload
 		// passes the normalised config back in, which has none: the instance keeps the clock it has.
 		if (config.clock !== undefined) {
@@ -1155,12 +1160,12 @@ class Slothlet {
 		// and no injectable importer configured, the consumer's leaf coverage will misattribute —
 		// say so at boot, pointing at the fix, instead of leaving a mysteriously low report.
 		if (this.envTarget === "node") {
-			warnIfCoverageWithoutImporter(this.config);
+			warnIfCoverageWithoutImporter(this.config, { Warning: this.SlothletWarning });
 		}
 
 		// The permission baseline (docs/PERMISSIONS.md): with permissions on, each check not met is a warning; under strict
 		// the instance does not start, before any module's code is loaded.
-		await this.handlers.permissionManager?.checkBaseline(this.envTarget, { silent: this.config.silent === true });
+		await this.handlers.permissionManager?.checkBaseline(this.envTarget);
 
 		// Register construction-time lifecycle subscribers (config.lifecycle) on the freshly-built
 		// Lifecycle emitter BEFORE buildAPI runs, so events emitted during the cold-start build
@@ -1170,7 +1175,7 @@ class Slothlet {
 
 		// Apply i18n configuration (dev-facing; process-global)
 		if (this.config?.i18n?.language) {
-			initI18n({ language: this.config.i18n.language, SlothletWarning: this.SlothletWarning, silent: this.config.silent === true });
+			initI18n({ language: this.config.i18n.language, SlothletWarning: this.SlothletWarning });
 		}
 
 		// Re-initialise debug logger with the fully normalised config (includes all flags).
@@ -1295,7 +1300,7 @@ class Slothlet {
 		// Build raw API (with context manager and instance ID for unified wrapper)
 		// UnifiedWrapper handles context binding internally - no separate wrapper needed!
 		// Deprecated escape hatch: warn whenever scanHiddenFolders is supplied at all.
-		if (this.config.scanHiddenFolders !== undefined && !this.config.silent) {
+		if (this.config.scanHiddenFolders !== undefined) {
 			new this.SlothletWarning("CONFIG_SCAN_HIDDEN_FOLDERS_DEPRECATED", { option: "scanHiddenFolders" });
 		}
 		const baseApi = await this.builders.builder.buildAPI({

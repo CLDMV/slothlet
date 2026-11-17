@@ -802,14 +802,13 @@ export class EventManager extends ComponentBase {
 	}
 
 	/**
-	 * Surface a listener error as a non-fatal warning (unless the instance is silent).
+	 * Surface a listener error as a non-fatal warning.
 	 * @param {string} event - Event name.
 	 * @param {Error} error - The error a listener threw or rejected with.
 	 * @returns {void}
 	 * @private
 	 */
 	#warnListener(event, error) {
-		if (this.____config?.silent) return;
 		new this.SlothletWarning("WARNING_EVENT_HANDLER_ERROR", { event }, error);
 	}
 

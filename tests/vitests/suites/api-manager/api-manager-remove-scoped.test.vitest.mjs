@@ -152,7 +152,7 @@ describe.each(CONFIGS)("remove(moduleID, apiPath) scoped removal — $name", ({ 
 		// modA and modB register the SAME leaf path (modB shadows modA via replace), so that node's
 		// ownership stack is two deep. A scoped remove(modB, "leaf") pops modB off the stack and the
 		// node reverts to modA's value — it is NOT deleted, because modA still owns it underneath.
-		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST, allowAddApiOverwrite: true });
+		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST });
 		await api.slothlet.api.add("leaf", () => "A", { moduleID: "modA" });
 		await api.slothlet.api.add("leaf", () => "B", { moduleID: "modB" });
 		expect(typeof api.leaf).toBe("function"); // both owners registered at "leaf"

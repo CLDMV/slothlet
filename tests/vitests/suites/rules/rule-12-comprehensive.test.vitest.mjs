@@ -148,7 +148,6 @@ describe("Rule 12 with allowApiOverwrite: false", () => {
 		const slothlet = slothletModule.default;
 		const api = await slothlet({
 			base: TEST_DIRS.API_TEST,
-			eager: true,
 			api: {
 				mutations: { reload: true },
 				collision: {
@@ -174,7 +173,6 @@ describe("Rule 12 with allowApiOverwrite: false", () => {
 		const slothlet = slothletModule.default;
 		const api = await slothlet({
 			base: TEST_DIRS.API_TEST,
-			eager: true,
 			api: {
 				mutations: { reload: true },
 				collision: {
@@ -206,7 +204,6 @@ describe("Rule 12 with allowApiOverwrite: false", () => {
 		const slothlet = slothletModule.default;
 		const api = await slothlet({
 			base: TEST_DIRS.API_TEST,
-			eager: true,
 			api: {
 				mutations: { reload: true },
 				collision: {
@@ -241,7 +238,6 @@ describe("Rule 12 with allowApiOverwrite: false", () => {
 		const slothlet = slothletModule.default;
 		const api = await slothlet({
 			base: TEST_DIRS.API_TEST_COLLECTIONS,
-			eager: false,
 			api: {
 				mutations: { reload: true },
 				collision: {
@@ -264,7 +260,6 @@ describe("Rule 12 with allowApiOverwrite: false", () => {
 		const slothlet = slothletModule.default;
 		const api = await slothlet({
 			base: TEST_DIRS.API_TEST,
-			eager: false,
 			api: {
 				mutations: { reload: true },
 				collision: {
@@ -293,7 +288,6 @@ describe("Rule 12 with allowApiOverwrite: false", () => {
 		const slothlet = slothletModule.default;
 		const api = await slothlet({
 			base: TEST_DIRS.API_TEST,
-			eager: false,
 			api: {
 				mutations: { reload: true },
 				collision: {

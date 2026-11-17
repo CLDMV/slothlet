@@ -64,19 +64,12 @@ describe("slothlet compose in a real browser", () => {
 
 	it("composes without a lifecycle handler error: the browser has no setImmediate (#578)", async () => {
 		expect(typeof globalThis.setImmediate).toBe("undefined");
-		const { SlothletWarning } = await import("@cldmv/slothlet/errors");
-		const prevSuppress = SlothletWarning.suppressConsole;
-		SlothletWarning.suppressConsole = true;
-		try {
-			const api = await composeBrowser({ diagnostics: true });
-			expect(await api.math.add(2, 3)).toBe(5);
-			// Let the deferred routine-stack patches run.
-			for (let i = 0; i < 5; i++) await new Promise((r) => setTimeout(r, 5));
-			expect(api.slothlet.diag.SlothletWarning.captured.filter((w) => w.code === "WARNING_LIFECYCLE_HANDLER_ERROR")).toEqual([]);
-			if (typeof api.shutdown === "function") await api.shutdown();
-		} finally {
-			SlothletWarning.suppressConsole = prevSuppress;
-		}
+		const api = await composeBrowser({ diagnostics: true });
+		expect(await api.math.add(2, 3)).toBe(5);
+		// Let the deferred routine-stack patches run.
+		for (let i = 0; i < 5; i++) await new Promise((r) => setTimeout(r, 5));
+		expect(api.slothlet.diag.SlothletWarning.captured.filter((w) => w.code === "WARNING_LIFECYCLE_HANDLER_ERROR")).toEqual([]);
+		if (typeof api.shutdown === "function") await api.shutdown();
 	});
 
 	it("gates an internal call via permissions (browser context path)", async () => {
