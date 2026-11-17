@@ -43,7 +43,10 @@ const RULES = {
 // A module the rules deny, for the cases where it tries to act as a module they allow.
 const ROGUE_RULES = {
 	defaultPolicy: "allow",
-	rules: [{ caller: "rogue.**", target: "c.**", effect: "deny" }]
+	rules: [
+		{ caller: "rogue.**", target: "c.**", effect: "deny" },
+		{ caller: "**", target: "capability:code", effect: "allow" }
+	]
 };
 
 /**
