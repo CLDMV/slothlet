@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-08T16:57:06-08:00 (1794185826)
+ *	@Last modified time: 2026-11-16T16:16:09-08:00 (1794874569)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -37,17 +37,8 @@
  * consumer's private member that happened to share the name, reopening exactly what #269 closed.
  */
 
-import {
-	FunctionMethods,
-	Functions,
-	setFrom,
-	SetMethods,
-	WeakMap,
-	WeakMapMethods,
-	WeakSet,
-	WeakSetMethods
-} from "@cldmv/slothlet/helpers/intrinsics";
-import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "@cldmv/slothlet/helpers/instance-imports";
+import { FunctionMethods, Functions, setFrom, SetMethods, WeakMap, WeakMapMethods, WeakSet, WeakSetMethods } from "#helpers/intrinsics";
+import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "#helpers/instance-imports";
 
 /**
  * Objects slothlet created and stamped with a framework-internal marker key. Weak so a branded

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:59-07:00 (1791090899)
+ *	@Last modified time: 2026-11-16T16:16:38-08:00 (1794874598)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -38,7 +38,7 @@
 process.env.SLOTHLET_INTERNAL_TEST_MODE = "true";
 
 import { describe, it, expect, afterEach } from "vitest";
-import { ApiAssignment } from "@cldmv/slothlet/builders/api-assignment";
+import { ApiAssignment } from "#builders/api-assignment";
 import slothlet from "@cldmv/slothlet";
 import { resolveWrapper, UnifiedWrapper } from "#handlers/unified-wrapper";
 import { TEST_DIRS } from "../../setup/vitest-helper.mjs";
@@ -269,7 +269,7 @@ describe("ApiAssignment.mergeApiObjects", () => {
 // ─────────────────────────────────────────────────────────────────────────────────────────
 describe("ApiAssignment.assignToApiPath collision-detection – both-plain path (lines 541-543)", () => {
 	it("merges two plain-object values into existing via Object.assign (lines 541-543)", async () => {
-		const { ApiAssignment } = await import("@cldmv/slothlet/builders/api-assignment");
+		const { ApiAssignment } = await import("#builders/api-assignment");
 		const mockSlothlet = {
 			debug: () => {},
 			SlothletError: class extends Error {
@@ -317,7 +317,7 @@ describe("ApiAssignment.assignToApiPath collision-detection – both-plain path 
 	});
 
 	it("same-reference check: existing object is mutated in-place (not replaced) (lines 541-543)", async () => {
-		const { ApiAssignment } = await import("@cldmv/slothlet/builders/api-assignment");
+		const { ApiAssignment } = await import("#builders/api-assignment");
 		const mockSlothlet = { debug: () => {}, SlothletError: Error, SlothletWarning: class {} };
 		const assignment = new ApiAssignment(mockSlothlet);
 
@@ -343,7 +343,7 @@ describe("ApiAssignment.assignToApiPath collision-detection – both-plain path 
 	});
 
 	it("skip mode returns false without modifying existing (collision.initial='skip') for plain-plain", async () => {
-		const { ApiAssignment } = await import("@cldmv/slothlet/builders/api-assignment");
+		const { ApiAssignment } = await import("#builders/api-assignment");
 		const mockSlothlet = { debug: () => {}, SlothletError: Error, SlothletWarning: class {} };
 		const assignment = new ApiAssignment(mockSlothlet);
 

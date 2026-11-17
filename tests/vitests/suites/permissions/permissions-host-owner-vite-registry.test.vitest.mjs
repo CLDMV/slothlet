@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-05T21:30:02-08:00 (1793943002)
+ *	@Last modified time: 2026-11-16T16:17:15-08:00 (1794874635)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -29,7 +29,7 @@ import path from "node:path";
 import vm from "node:vm";
 import { fileURLToPath } from "node:url";
 import { installViteHostRegistry } from "#handlers/frame-placement";
-import { VITE_HOST_SCRIPTS } from "@cldmv/slothlet/helpers/instance-imports";
+import { VITE_HOST_SCRIPTS } from "#helpers/instance-imports";
 import { makeTestTmpDirSync } from "../../setup/test-fixtures-tmp.mjs";
 
 const KEY = Symbol.for(VITE_HOST_SCRIPTS);

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:05-07:00 (1791090905)
+ *	@Last modified time: 2026-11-16T16:16:51-08:00 (1794874611)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -27,8 +27,8 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { createManifestResolver } from "@cldmv/slothlet/helpers/manifest-resolver";
-import { generateManifest, collectSlothletSpecifiers } from "@cldmv/slothlet/helpers/generate-manifest";
+import { createManifestResolver } from "#helpers/manifest-resolver";
+import { generateManifest, collectSlothletSpecifiers } from "#helpers/generate-manifest";
 import { mkdir, writeFile, rm, symlink, chmod } from "node:fs/promises";
 import { join } from "node:path";
 import { makeTestTmpDir } from "../../setup/test-fixtures-tmp.mjs";

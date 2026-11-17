@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-14T10:20:00-08:00 (1794680400)
+ *	@Last modified time: 2026-11-16T16:16:11-08:00 (1794874571)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -26,14 +26,7 @@
  * @module @cldmv/slothlet/helpers/clock
  * @internal
  */
-import {
-	Arrays,
-	clearTimeout as loadedClearTimeout,
-	Dates,
-	Objects,
-	Reflect,
-	setTimeout as loadedSetTimeout
-} from "@cldmv/slothlet/helpers/intrinsics";
+import { Arrays, clearTimeout as loadedClearTimeout, Dates, Objects, Reflect, setTimeout as loadedSetTimeout } from "#helpers/intrinsics";
 
 /**
  * The clock of an instance.

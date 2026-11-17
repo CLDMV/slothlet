@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-14T20:00:22-08:00 (1794715222)
+ *	@Last modified time: 2026-11-16T16:16:14-08:00 (1794874574)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -48,7 +48,7 @@
  * @internal
  */
 
-import { Error, Errors, FunctionMethods, Objects, Processes, Reflect, Symbol } from "@cldmv/slothlet/helpers/intrinsics";
+import { Error, Errors, FunctionMethods, Objects, Processes, Reflect, Symbol } from "#helpers/intrinsics";
 
 /**
  * The realm's `Error`, as slothlet loaded with it.

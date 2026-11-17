@@ -1,4 +1,3 @@
-import { ArrayMethods, copyList } from "@cldmv/slothlet/helpers/intrinsics";
 /**
  *
  *	@Project: @cldmv/slothlet
@@ -28,6 +27,7 @@ import { ArrayMethods, copyList } from "@cldmv/slothlet/helpers/intrinsics";
  * `DiscoverResult` entries are already deep-frozen by `discoverModules()`
  * per M3, so the comparator cannot mutate them through this surface either.
  */
+import { ArrayMethods, copyList } from "#helpers/intrinsics";
 
 /**
  * @typedef {object} DiscoverResult
@@ -46,7 +46,7 @@ import { ArrayMethods, copyList } from "@cldmv/slothlet/helpers/intrinsics";
  * @returns {DiscoverResult[]} New array sorted by the chosen comparator. Input is not mutated.
  *
  * @example
- * import { sortModules } from "@cldmv/slothlet/helpers/module-sort";
+ * import { sortModules } from "#helpers/module-sort";
  *
  * const sorted = sortModules(found);
  * // Default: priority desc, then packageName asc.

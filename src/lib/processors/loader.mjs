@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-13T21:48:09-08:00 (1794635289)
+ *	@Last modified time: 2026-11-16T16:16:14-08:00 (1794874574)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -25,7 +25,7 @@
  * @internal
  */
 import { ComponentBase } from "#factories/component-base";
-import { DEFAULT_API_DEPTH } from "@cldmv/slothlet/helpers/defaults";
+import { DEFAULT_API_DEPTH } from "#helpers/defaults";
 
 // Node-only static imports resolved via top-level await so `node:*` never
 // enters the static-import graph in browser bundles. The filesystem-scanning
@@ -35,12 +35,12 @@ import { DEFAULT_API_DEPTH } from "@cldmv/slothlet/helpers/defaults";
 // disk-scanning / CJS-loader methods are Node-only (browser mode uses #scanDirectoryBrowser /
 // #loadModuleBrowser over the manifest tree), so they reference the namespaces directly — null in a
 // browser, but those methods never run there, so no per-call guard is needed.
-import { isNode, fsp, path, url, createRequire } from "@cldmv/slothlet/helpers/platform";
-import { compilePattern } from "@cldmv/slothlet/helpers/pattern-matcher";
+import { isNode, fsp, path, url, createRequire } from "#helpers/platform";
+import { compilePattern } from "#helpers/pattern-matcher";
 import { isFrameworkReservedKey, isAwaitableThen, thenableExportError } from "#handlers/unified-wrapper";
-import { SlothletError, SlothletWarning } from "@cldmv/slothlet/errors";
-import { translate } from "@cldmv/slothlet/i18n";
-import { HELPERS_PARAM, HELPERS_PER_MODULE, internals as instanceImportsInternals } from "@cldmv/slothlet/helpers/instance-imports";
+import { SlothletError, SlothletWarning } from "#errors";
+import { translate } from "#i18n";
+import { HELPERS_PARAM, HELPERS_PER_MODULE, internals as instanceImportsInternals } from "#helpers/instance-imports";
 import { internals as framePlacementInternals, toComparablePath } from "#handlers/frame-placement";
 import {
 	ArrayMethods,
@@ -77,7 +77,7 @@ import {
 	URL,
 	URLMethods,
 	URLSearchParamsMethods
-} from "@cldmv/slothlet/helpers/intrinsics";
+} from "#helpers/intrinsics";
 const { installInstanceImportHooks, requireInInstance, setImportRefusal, noteModuleFile, noteModuleRoot } =
 	instanceImportsInternals("lib/processors/loader");
 const { createModuleLoad } = framePlacementInternals("lib/processors/loader");
@@ -449,7 +449,7 @@ function ensureRuntimeLoaded() {
 	const done = () => {
 		runtimeLoaded = true;
 	};
-	runtimeLoading ??= PromiseMethods.then(import("@cldmv/slothlet/runtime"), done, done);
+	runtimeLoading ??= PromiseMethods.then(import("#runtime"), done, done);
 	return runtimeLoading;
 }
 
@@ -700,7 +700,7 @@ export class Loader extends ComponentBase {
 
 					// Lazy load TypeScript strict mode processor
 					const { transformTypeScriptStrict, writeTransformedToCache, formatDiagnostics, getTypeScript } =
-						await import("@cldmv/slothlet/processors/typescript");
+						await import("#processors/typescript");
 
 					// Transform + type-check a single .ts/.mts file. Reused for the entry
 					// module and for every relative .ts/.mts file it imports, so type
@@ -749,7 +749,7 @@ export class Loader extends ComponentBase {
 					);
 				} else {
 					// Fast mode: Use esbuild
-					const { transformTypeScript, writeTransformedToCache } = await import("@cldmv/slothlet/processors/typescript");
+					const { transformTypeScript, writeTransformedToCache } = await import("#processors/typescript");
 
 					const transformOptions = {
 						target: typescriptConfig.target,

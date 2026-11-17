@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-13T21:48:06-08:00 (1794635286)
+ *	@Last modified time: 2026-11-16T16:16:13-08:00 (1794874573)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -51,16 +51,16 @@
  * manifest validation. Falsy return excludes the result.
  */
 
-import { SlothletError } from "@cldmv/slothlet/errors";
-import { t } from "@cldmv/slothlet/i18n";
-import { validateModuleManifest } from "@cldmv/slothlet/helpers/module-manifest-validator";
+import { SlothletError } from "#errors";
+import { t } from "#i18n";
+import { validateModuleManifest } from "#helpers/module-manifest-validator";
 
 // Node-only static imports resolved via top-level await so `node:*` never
 // enters the static-import graph in browser bundles. Module discovery walks
 // the filesystem — it has no meaning in browser mode.
 // fsp (fs/promises) + path resolved in the platform module (#123); both are null in a browser —
 // filesystem-walking module discovery has no meaning in browser mode.
-import { fsp, path } from "@cldmv/slothlet/helpers/platform";
+import { fsp, path } from "#helpers/platform";
 import {
 	appendList,
 	ArrayMethods,
@@ -77,7 +77,7 @@ import {
 	SetMethods,
 	splitText,
 	StringMethods
-} from "@cldmv/slothlet/helpers/intrinsics";
+} from "#helpers/intrinsics";
 
 // --- API-RULES condition markers (see docs/API-RULES/API-DISCOVERY-CONDITIONS.md) ---
 // Rule 15 (G09): Reserved mountPath-root rejection — module-manifest-validator.mjs ~L189
@@ -115,7 +115,7 @@ const UPWARD_WALK_CAP = 20;
  * @throws {SlothletError} `MODULE_*` codes on manifest validation failures or G7 duplicate-name-version-mismatch.
  *
  * @example
- * import { discoverModules } from "@cldmv/slothlet/helpers/module-discovery";
+ * import { discoverModules } from "#helpers/module-discovery";
  *
  * const found = await discoverModules();
  * // Default upward-walk scanRoot, default slothlet.module.json manifest.

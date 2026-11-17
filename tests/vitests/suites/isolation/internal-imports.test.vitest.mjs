@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-13T12:00:00-08:00 (1794600000)
+ *	@Last modified time: 2026-11-16T16:16:56-08:00 (1794874616)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -135,9 +135,9 @@ describe.each(MATRIX)("Isolation > slothlet's own files stay slothlet's > $name"
 	});
 
 	it("keeps the host's own imports of slothlet's files working", async () => {
-		const { sanitizePropertyName } = await import("@cldmv/slothlet/helpers/sanitize");
+		const { sanitizePropertyName } = await import("#helpers/sanitize");
 		expect(sanitizePropertyName("a-b")).toBe("aB");
-		const { instanceImporters } = await import("@cldmv/slothlet/helpers/instance-imports");
+		const { instanceImporters } = await import("#helpers/instance-imports");
 		expect(typeof instanceImporters).toBe("function");
 	});
 });

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-13T21:48:02-08:00 (1794635282)
+ *	@Last modified time: 2026-11-16T16:16:11-08:00 (1794874571)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -42,8 +42,8 @@
  * Each wrapper carries the function it wraps under a `Symbol.for` key, so a patch is recognisable from any copy of
  * slothlet in the realm, and this copy installs its wrappers once however many instances ask.
  */
-import { isNode } from "@cldmv/slothlet/helpers/platform";
-import { openLayer, closeLayer, holdsValue, markLayer } from "@cldmv/slothlet/helpers/boundary-patch-layers";
+import { isNode } from "#helpers/platform";
+import { openLayer, closeLayer, holdsValue, markLayer } from "#helpers/boundary-patch-layers";
 import {
 	ArrayBuffer,
 	Arrays,
@@ -86,8 +86,8 @@ import {
 	Uint8Array,
 	Uint8ClampedArray,
 	URIError
-} from "@cldmv/slothlet/helpers/intrinsics";
-import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "@cldmv/slothlet/helpers/instance-imports";
+} from "#helpers/intrinsics";
+import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "#helpers/instance-imports";
 
 /**
  * The key a clone wrapper holds the function it wraps under: the watermark of this patch.

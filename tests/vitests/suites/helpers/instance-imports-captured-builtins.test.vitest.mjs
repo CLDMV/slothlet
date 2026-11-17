@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-08T16:58:40-08:00 (1794185920)
+ *	@Last modified time: 2026-11-16T16:16:50-08:00 (1794874610)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -27,7 +27,7 @@ import { describe, it, expect } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { isInstanceScopedFile, isCommonJSFile } from "@cldmv/slothlet/helpers/instance-imports";
+import { isInstanceScopedFile, isCommonJSFile } from "#helpers/instance-imports";
 
 /**
  * Make a package tree: `pkg/package.json` named, `pkg/marker/package.json` without a name, `pkg/lib/h.js` CommonJS

@@ -515,6 +515,7 @@
 		"GENERATE_MANIFEST_DIR_UNREADABLE": "generateManifest: не удаётся прочитать директорию \"{dir}\": {reason}",
 		"GENERATE_MANIFEST_NOT_DIRECTORY": "generateManifest: \"{dir}\" не является директорией",
 		"GENERATE_BROWSER_ASSETS_SLOTHLET_BASE_INVALID": "generateBrowserAssets: options.slothletBase должен быть строкой (путь, по которому @cldmv/slothlet подключается в браузере), получено {received}",
+		"FILES_REQUIRES_NODE": "{operation} требует Node.js: функция читает файловую систему, которой нет в браузере. Вызовите её на этапе сборки и передайте результат странице.",
 		"MODULE_MANIFEST_UNKNOWN_FIELD": "Манифест модуля для пакета '{packageName}' в '{manifestPath}' содержит нераспознанное поле верхнего уровня '{field}'. Неизвестные поля отклоняются; используйте выделенный блок 'metadata' для определяемых разработчиком дополнений.",
 		"HINT_MODULE_MANIFEST_UNKNOWN_FIELD": "Если '{field}' — это опечатка, исправьте её. Если это намеренные метаданные разработчика, переместите их внутрь объекта 'metadata'.",
 		"MODULE_MANIFEST_NAME_MISMATCH": "Манифест модуля для пакета '{packageName}' объявляет имя '{manifestName}', которое не совпадает с именем в package.json '{packageName}'.",
@@ -567,7 +568,7 @@
 		"BASELINE_CSP_EVAL_ALLOWED": "страница разрешает создавать код из строк: её Content Security Policy разрешает 'unsafe-eval' или отсутствует.",
 		"BASELINE_CSP_BLOB_ALLOWED": "страница выполняет скрипты с адресов blob:: её Content Security Policy разрешает их или отсутствует.",
 		"BASELINE_CSP_DATA_ALLOWED": "страница выполняет скрипты с адресов data:: её Content Security Policy разрешает их или отсутствует.",
-		"BASELINE_VITEST_PLUGIN_ABSENT": "запуск под vitest без плагина slothletInstanceImports() от slothlet в конфигурации vitest."
+		"BASELINE_VITEST_PLUGIN_ABSENT": "запуск под vitest без плагина @cldmv/slothlet/vite от slothlet в конфигурации vitest."
 	},
 	"metadata": {
 		"code": "ru-ru",

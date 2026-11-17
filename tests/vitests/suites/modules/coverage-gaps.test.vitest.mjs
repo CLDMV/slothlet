@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:36-07:00 (1791091716)
+ *	@Last modified time: 2026-11-16T16:17:01-08:00 (1794874621)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -30,9 +30,9 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import slothlet from "@cldmv/slothlet";
-import { discoverModules } from "@cldmv/slothlet/helpers/module-discovery";
-import { sortModules } from "@cldmv/slothlet/helpers/module-sort";
-import { validateModuleManifest } from "@cldmv/slothlet/helpers/module-manifest-validator";
+import { discoverModules } from "#helpers/module-discovery";
+import { sortModules } from "#helpers/module-sort";
+import { validateModuleManifest } from "#helpers/module-manifest-validator";
 // `handlers/*` is internal-only (removed from `exports` for the permission-boundary hardening in
 // v3.12.0), so reach it through the package `#handlers/*` internal import — which detects src vs dist
 // via the same slothlet-dev/default conditions as the public exports.

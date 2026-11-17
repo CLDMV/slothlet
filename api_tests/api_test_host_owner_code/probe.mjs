@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-06T17:39:42-08:00 (1794015582)
+ *	@Last modified time: 2026-11-16T16:14:37-08:00 (1794874477)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -42,7 +42,7 @@ const forgedSource =
 
 if (process.argv.includes("--replace-builtins")) {
 	// Slothlet's runtime loads on the first `slothlet()` call; it is loaded here first, so the replacements come after it.
-	await import("@cldmv/slothlet/slothlet");
+	await import("#slothlet");
 	const { replaceBuiltins } = await import("./replace-builtins.mjs");
 	replaceBuiltins({ file: ownerContextFile, source: forgedSource });
 }

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-06T20:18:26-08:00 (1794025106)
+ *	@Last modified time: 2026-11-16T16:17:25-08:00 (1794874645)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -31,7 +31,7 @@ import vm from "node:vm";
 import { fileURLToPath } from "node:url";
 import { parse } from "acorn";
 import { installViteLoadedRegistry } from "#handlers/frame-placement";
-import { LOADED_BY_SPECIFIER, VITE_LOADED_BY, slothletInstanceImports } from "@cldmv/slothlet/helpers/instance-imports";
+import { LOADED_BY_SPECIFIER, VITE_LOADED_BY, slothletInstanceImports } from "#helpers/instance-imports";
 
 const KEY = Symbol.for(VITE_LOADED_BY);
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../..");

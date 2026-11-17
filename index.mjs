@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-01T09:24:29-08:00 (1793553869)
+ *	@Last modified time: 2026-11-16T16:16:08-08:00 (1794874568)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -20,7 +20,7 @@
 
 // Single source of truth for the `slothlet.defaults` namespace (#341) — a helper module with no
 // node:* specifiers, safe for the browser bundle's static-import graph (#123).
-import { DEFAULT_ROUTINES, RESERVED_EXPORTS } from "@cldmv/slothlet/helpers/defaults";
+import { DEFAULT_ROUTINES, RESERVED_EXPORTS } from "#helpers/defaults";
 
 // Custom uncaught exception handler for SlothletError
 // `process` is undefined in a browser, so define the handler unconditionally but
@@ -122,7 +122,7 @@ if (__isNode) process.on("uncaughtException", __slothletUncaughtHandler);
  */
 const slothlet = async (options = {}) => {
 	// Dynamic imports after environment check
-	const mod = await import("@cldmv/slothlet/slothlet");
+	const mod = await import("#slothlet");
 
 	const slothletImpl = mod.slothlet ?? mod.default;
 

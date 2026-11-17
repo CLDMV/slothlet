@@ -515,6 +515,7 @@
 		"GENERATE_MANIFEST_DIR_UNREADABLE": "generateManifest：无法读取目录 \"{dir}\"：{reason}",
 		"GENERATE_MANIFEST_NOT_DIRECTORY": "generateManifest：\"{dir}\" 不是目录",
 		"GENERATE_BROWSER_ASSETS_SLOTHLET_BASE_INVALID": "generateBrowserAssets：options.slothletBase 必须是字符串（@cldmv/slothlet 在浏览器中的服务路径），收到 {received}",
+		"FILES_REQUIRES_NODE": "{operation} 需要 Node.js：它会读取浏览器所没有的文件系统。请在构建步骤中调用它，并把结果交给页面。",
 		"MODULE_MANIFEST_UNKNOWN_FIELD": "包 '{packageName}' 在 '{manifestPath}' 处的模块清单包含无法识别的顶层字段 '{field}'。未知字段将被拒绝；请使用专用的 'metadata' 块来存放开发者定义的附加项。",
 		"HINT_MODULE_MANIFEST_UNKNOWN_FIELD": "如果 '{field}' 是拼写错误，请修正。如果是有意的开发者元数据，请将其移到 'metadata' 对象内。",
 		"MODULE_MANIFEST_NAME_MISMATCH": "包 '{packageName}' 的模块清单声明名称 '{manifestName}'，与 package.json 中的名称 '{packageName}' 不匹配。",
@@ -567,7 +568,7 @@
 		"BASELINE_CSP_EVAL_ALLOWED": "该页面允许从字符串生成代码：其 Content Security Policy 允许 'unsafe-eval'，或者没有策略。",
 		"BASELINE_CSP_BLOB_ALLOWED": "该页面会运行来自 blob: URL 的脚本：其 Content Security Policy 允许它们，或者没有策略。",
 		"BASELINE_CSP_DATA_ALLOWED": "该页面会运行来自 data: URL 的脚本：其 Content Security Policy 允许它们，或者没有策略。",
-		"BASELINE_VITEST_PLUGIN_ABSENT": "在 vitest 下运行，但 vitest 配置中没有 slothlet 的 slothletInstanceImports() 插件。"
+		"BASELINE_VITEST_PLUGIN_ABSENT": "在 vitest 下运行，但 vitest 配置中没有 slothlet 的 @cldmv/slothlet/vite 插件。"
 	},
 	"metadata": {
 		"code": "zh-cn",

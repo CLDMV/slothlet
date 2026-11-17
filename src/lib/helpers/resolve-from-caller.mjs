@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-13T21:48:08-08:00 (1794635288)
+ *	@Last modified time: 2026-11-16T16:16:14-08:00 (1794874574)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -30,19 +30,9 @@ import { ComponentBase } from "#factories/component-base";
 // stack-trace path resolution) are Node-only — never invoked in browser mode.
 // fs/path/url resolved in the platform module (#123); all null in a browser — the filesystem
 // walking + stack-trace path resolution methods here are Node-only.
-import { fs, path, url } from "@cldmv/slothlet/helpers/platform";
-import {
-	ArrayMethods,
-	Arrays,
-	Boolean,
-	filterList,
-	mapList,
-	Processes,
-	String,
-	StringMethods,
-	TypeError
-} from "@cldmv/slothlet/helpers/intrinsics";
-import { readStack, stackSites } from "@cldmv/slothlet/helpers/stack-read";
+import { fs, path, url } from "#helpers/platform";
+import { ArrayMethods, Arrays, Boolean, filterList, mapList, Processes, String, StringMethods, TypeError } from "#helpers/intrinsics";
+import { readStack, stackSites } from "#helpers/stack-read";
 
 /**
  * Calculate slothlet source directory path ONCE at module initialization.

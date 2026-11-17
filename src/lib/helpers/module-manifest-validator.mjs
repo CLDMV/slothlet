@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-13T21:48:06-08:00 (1794635286)
+ *	@Last modified time: 2026-11-16T16:16:13-08:00 (1794874573)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -32,8 +32,8 @@
  * slothlet ever adds reserved roots, both lists must stay in sync.
  */
 
-import { SlothletError } from "@cldmv/slothlet/errors";
-import { t } from "@cldmv/slothlet/i18n";
+import { SlothletError } from "#errors";
+import { t } from "#i18n";
 
 // Node-only static import resolved via top-level await so `node:path` never
 // enters the static-import graph in browser bundles. Methods that consume
@@ -41,7 +41,7 @@ import { t } from "@cldmv/slothlet/i18n";
 // browser mode because slothlet's browser path skips filesystem validation.
 // path resolved in the platform module (#123); null in a browser — slothlet's browser path skips
 // filesystem manifest validation.
-import { path } from "@cldmv/slothlet/helpers/platform";
+import { path } from "#helpers/platform";
 import {
 	ArrayMethods,
 	Arrays,
@@ -53,7 +53,7 @@ import {
 	String,
 	StringMethods,
 	splitText
-} from "@cldmv/slothlet/helpers/intrinsics";
+} from "#helpers/intrinsics";
 
 /**
  * Reserved mountPath root segments. Mirror of the list in

@@ -47,11 +47,11 @@ export class AsyncContextManager {
      * Initialize context for a new instance
      * @param {string} instanceID - Unique instance identifier
      * @param {Object} config - Instance configuration
-     * @param {import("@cldmv/slothlet/helpers/clock").Clock} [clock] - The instance's clock, which stamps the store.
+     * @param {import("#helpers/clock").Clock} [clock] - The instance's clock, which stamps the store.
      * @returns {Object} Created context store
      * @public
      */
-    public initialize(instanceID: string, config?: Object, clock?: import("@cldmv/slothlet/helpers/clock").Clock): Object;
+    public initialize(instanceID: string, config?: Object, clock?: import("#helpers/clock").Clock): Object;
     /**
      * Run function with instance context active
      * @param {string} instanceID - Instance to run in context of

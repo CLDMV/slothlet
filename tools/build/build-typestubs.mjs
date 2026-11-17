@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-07T21:25:24-08:00 (1794115524)
+ *	@Last modified time: 2026-11-16T16:17:42-08:00 (1794874662)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -24,21 +24,21 @@
  * that re-exports the matching subpath from `@cldmv/slothlet-types`. The rich in-repo declarations
  * (`types/src/**`) stay reachable through the `slothlet-dev` condition for this repo's own checks.
  *
- * One stub is emitted per real declaration file so the export-map wildcards (`./helpers/*`, …)
+ * One stub is emitted per real declaration file so an export-map wildcard would
  * resolve 1:1. Stubs carry no source maps. Which of those two shapes a given export gets is decided
  * by `computeTypesExports()` (imported from `build-subpackages.mjs`, the single source of truth for
  * what the satellite actually publishes) — NOT by whether a `types/dist/**` mirror exists, since
  * every core export compiles into `types/dist` regardless of whether it's on the consumer allowlist.
- * An export the satellite does NOT carry (an internal-only path like `./helpers/config` or
- * `./modes/*`) is shipped as a self-contained copy of its real declaration
+ * An export the satellite does NOT carry (an internal-only path like `./runtime/async` or
+ * `./i18n`) is shipped as a self-contained copy of its real declaration
  * instead of a re-export, so an internal-but-technically-importable subpath fails with "no
  * declaration for this path" rather than a re-export to a satellite subpath that doesn't exist.
  *
  * Resolution for a consumer:
- *   `@cldmv/slothlet/helpers/sanitize`
- *     → core export `./helpers/*` (default) → `types/stub/lib/helpers/sanitize.d.mts`
- *     → `export * from "@cldmv/slothlet-types/helpers/sanitize"`
- *     → satellite export `./helpers/sanitize` → its `lib/helpers/sanitize.d.mts`.
+ *   `@cldmv/slothlet/sanitize`
+ *     → core export `./sanitize` (default) → `types/stub/sanitize.d.mts`
+ *     → `export * from "@cldmv/slothlet-types/sanitize"`
+ *     → satellite export `./sanitize` → its `sanitize.d.mts`.
  *
  * If `@cldmv/slothlet-types` is not installed, that re-export fails to resolve and TypeScript reports
  * `Cannot find module '@cldmv/slothlet-types'` — the signal that the optional types peer is missing.
@@ -125,7 +125,7 @@ function stripComments(txt) {
  * Whether a self-contained stub's (comment-stripped) text references another module via a
  * relative path (`./foo`, `../foo`) — unshippable once the file is copied out to `types/stub/`: a
  * relative reference points at a source-tree-relative path this stub doesn't live at, and this
- * generator has no mechanism (unlike the `#factories/*`/`#handlers/*` closure below) to resolve it.
+ * generator has no mechanism (unlike the `#…` closure below) to resolve it.
  * @param {string} strippedTxt - The declaration file's source text, already comment-stripped.
  * @returns {boolean}
  */
@@ -134,39 +134,68 @@ function hasRelativeReference(strippedTxt) {
 }
 
 /**
- * Recursively emit self-contained stubs for every package-internal `#factories/*`/`#handlers/*`
- * declaration transitively referenced by an already-emitted self-contained stub. The package's own
- * `imports` map already points the production `types` condition for both prefixes at
- * `types/stub/lib/<factories|handlers>/*.d.mts` — this generator previously never wrote those
- * files, so a consumer importing e.g. `@cldmv/slothlet/modes/eager` (whose declaration imports
- * `#factories/component-base`) got a real `TS2307: Cannot find module` instead of a working type
- * (#372/#373 review).
+ * Where a package-internal `#…` specifier points, read from the package's own `imports` map: the real declaration
+ * (`slothlet-dev` types, under `types/src/`) and the stub the production `types` condition resolves it to (under
+ * `types/stub/`). Exact keys (`#slothlet`, `#errors`) and one-`*` wildcard keys (`#helpers/*`) are both handled.
+ * @internal
+ * @param {string} spec - The specifier, e.g. `#helpers/config`.
+ * @param {Record<string, *>} importsMap - The package's `imports` field.
+ * @returns {{ src: string, stub: string }|null} Both paths relative to the project root, or null for no match.
+ */
+function resolveInternal(spec, importsMap) {
+	for (const [key, value] of Object.entries(importsMap)) {
+		const src = value?.["slothlet-dev"]?.types;
+		const stub = value?.types;
+		if (typeof src !== "string" || typeof stub !== "string") continue;
+		if (key === spec) return { src, stub };
+		if (key.endsWith("*") && spec.startsWith(key.slice(0, -1))) {
+			const name = spec.slice(key.length - 1);
+			return { src: src.replace("*", name), stub: stub.replace("*", name) };
+		}
+	}
+	return null;
+}
+
+/**
+ * Recursively emit self-contained stubs for every package-internal `#…` declaration transitively referenced by an
+ * already-emitted self-contained stub. The package's own `imports` map points the production `types` condition for
+ * each `#…` key at a file under `types/stub/`; without these files a consumer importing e.g. `@cldmv/slothlet/runtime/async`
+ * (whose declaration imports package-internal modules) got a real `TS2307: Cannot find module` instead of a working
+ * type (#372/#373 review).
  * @internal
  * @param {string} strippedTxt - The referencing file's source text, already comment-stripped.
- * @param {Set<string>} emitted - `"factories/name"` / `"handlers/name"` keys already processed —
- *   shared across the whole generator run so a target referenced by multiple stubs (e.g. every
- *   handler importing `#factories/component-base`) is only read/written once.
- * @param {string[]} missing - Accumulator for refs whose source declaration doesn't exist on disk
- *   (defensive — would mean the package's own `imports` map points somewhere this repo never
- *   compiles), so the caller can still warn instead of silently shipping an unresolved reference.
+ * @param {Set<string>} emitted - Specifiers already processed — shared across the whole generator run so a target
+ *   referenced by multiple stubs (e.g. every handler importing `#factories/component-base`) is only read/written once.
+ * @param {string[]} missing - Accumulator for refs whose source declaration doesn't exist on disk (defensive — would
+ *   mean the package's own `imports` map points somewhere this repo never compiles), so the caller can still warn
+ *   instead of silently shipping an unresolved reference.
+ * @param {Record<string, *>} importsMap - The package's `imports` field.
+ * @param {Set<string>} owned - Stub files an `exports` entry writes itself (a re-export of the satellite for a public
+ *   entry point such as `#errors` → `lib/errors.d.mts`); left to that entry.
  * @returns {void}
  */
-function emitInternalReferenceClosure(strippedTxt, emitted, missing) {
-	const re = /["'](#(factories|handlers)\/([^"'/]+))["']/g;
+function emitInternalReferenceClosure(strippedTxt, emitted, missing, importsMap, owned) {
+	const re = /["'](#[^"'\s]+)["']/g;
 	let m;
 	while ((m = re.exec(strippedTxt))) {
-		const [, spec, dir, name] = m;
-		const key = `${dir}/${name}`;
-		if (emitted.has(key)) continue;
-		emitted.add(key);
-		const srcFile = path.join(srcTypesDir, "lib", dir, `${name}.d.mts`);
+		const spec = m[1];
+		if (emitted.has(spec)) continue;
+		emitted.add(spec);
+		const target = resolveInternal(spec, importsMap);
+		if (!target) {
+			missing.push(spec);
+			continue;
+		}
+		const stubFile = path.join(projectRoot, target.stub);
+		if (owned.has(stubFile)) continue;
+		const srcFile = path.join(projectRoot, target.src);
 		if (!fs.existsSync(srcFile)) {
 			missing.push(spec);
 			continue;
 		}
 		const childTxt = stripSourceMap(fs.readFileSync(srcFile, "utf8"));
-		writeStub(path.join(stubDir, "lib", dir, `${name}.d.mts`), childTxt, { selfContained: true });
-		emitInternalReferenceClosure(stripComments(childTxt), emitted, missing);
+		writeStub(stubFile, childTxt, { selfContained: true });
+		emitInternalReferenceClosure(stripComments(childTxt), emitted, missing, importsMap, owned);
 	}
 }
 
@@ -205,11 +234,18 @@ function main() {
 	}
 	const pkg = JSON.parse(fs.readFileSync(path.join(projectRoot, "package.json"), "utf8"));
 	const exportsMap = pkg.exports || {};
+	const importsMap = pkg.imports || {};
+	// The stub files the exact `exports` entries write themselves (see emitInternalReferenceClosure).
+	const ownedStubs = new Set();
+	for (const value of Object.values(exportsMap)) {
+		const stub = value && typeof value === "object" ? value.types : null;
+		if (typeof stub === "string" && !stub.includes("*")) ownedStubs.add(path.join(projectRoot, stub));
+	}
 
 	// The set of subpaths @cldmv/slothlet-types ACTUALLY carries — narrower than "has a types/dist
 	// mirror" since build-subpackages.mjs restricts the satellite to the real consumer surface
-	// (CONSUMER_EXACT_EXPORTS + the ./helpers/sanitize carve-out). A core export outside that set
-	// (e.g. ./modes/*, ./builders/*, ./runtime/async, ./i18n) still has a types/dist file — it's
+	// (CONSUMER_EXACT_EXPORTS). A core export outside that set
+	// (e.g. ./runtime/async, ./i18n) still has a types/dist file — it's
 	// compiled from src regardless of whether it's published to consumers — so dist existence alone
 	// is not "carried"; using it as the signal here would re-export a satellite subpath that no
 	// longer exists, and a consumer poking at that (technically real, just internal) runtime export
@@ -284,7 +320,7 @@ function main() {
 					if (hasRelativeReference(strippedTxt)) {
 						warnings.push(`self-contained stub for ./${leafSubpath} has a relative reference that will not ship — review ${rel}`);
 					}
-					emitInternalReferenceClosure(strippedTxt, emittedInternalRefs, missingInternalRefs);
+					emitInternalReferenceClosure(strippedTxt, emittedInternalRefs, missingInternalRefs, importsMap, ownedStubs);
 					writeStub(stubFile, txt, { selfContained: true });
 				}
 				count++;
@@ -317,7 +353,7 @@ function main() {
 			if (hasRelativeReference(strippedTxt)) {
 				warnings.push(`self-contained stub for ${key} has a relative reference that will not ship — review ${rel}`);
 			}
-			emitInternalReferenceClosure(strippedTxt, emittedInternalRefs, missingInternalRefs);
+			emitInternalReferenceClosure(strippedTxt, emittedInternalRefs, missingInternalRefs, importsMap, ownedStubs);
 			writeStub(stubFile, txt, { selfContained: true });
 		}
 		count++;
@@ -329,7 +365,7 @@ function main() {
 	for (const w of warnings) console.warn(`• ${w}`);
 	console.log(
 		`✓ build:typestubs — wrote ${count} stubs to ${path.relative(projectRoot, stubDir)}` +
-			(emittedInternalRefs.size ? ` (+${emittedInternalRefs.size} internal #factories/#handlers stub${emittedInternalRefs.size === 1 ? "" : "s"})` : "")
+			(emittedInternalRefs.size ? ` (+${emittedInternalRefs.size} internal #… stub${emittedInternalRefs.size === 1 ? "" : "s"})` : "")
 	);
 }
 

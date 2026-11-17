@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-13T21:48:06-08:00 (1794635286)
+ *	@Last modified time: 2026-11-16T16:16:12-08:00 (1794874572)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -17,6 +17,9 @@
  * @fileoverview Browser-safe factory for the `resolveModuleSpecifier` callback.
  *
  * @description
+ * Consumers reach it as `files.resolver` from `@cldmv/slothlet/files`; this file is package-private
+ * (`#helpers/manifest-resolver`).
+ *
  * `createManifestResolver(base)` produces a `resolveModuleSpecifier` function that
  * resolves manifest-relative file paths to absolute URLs using the standard
  * `new URL(path, base)` algorithm. This is the correct resolver for any deployment
@@ -24,7 +27,7 @@
  *
  * This file has **no Node.js-specific imports** — it is safe to include in a browser
  * bundle directly. For the build-time `generateManifest` utility (which uses `node:fs`)
- * see `@cldmv/slothlet/helpers/generate-manifest`.
+ * see `#helpers/generate-manifest`.
  *
  * ### Typical browser workflow
  *
@@ -36,7 +39,7 @@
  *
  * @example
  * // API modules live next to the current module
- * import { createManifestResolver } from "@cldmv/slothlet/helpers/manifest-resolver";
+ * import { createManifestResolver } from "#helpers/manifest-resolver";
  * import manifest from "./api-manifest.json" assert { type: "json" };
  * import { slothlet } from "@cldmv/slothlet";
  *
@@ -47,7 +50,7 @@
  *
  * @example
  * // API modules live in a sub-directory relative to the current module
- * import { createManifestResolver } from "@cldmv/slothlet/helpers/manifest-resolver";
+ * import { createManifestResolver } from "#helpers/manifest-resolver";
  *
  * const api = await slothlet({
  *   manifest,
@@ -58,7 +61,7 @@
  * @public
  */
 
-import { StringMethods, TypeError, URL, URLMethods } from "@cldmv/slothlet/helpers/intrinsics";
+import { StringMethods, TypeError, URL, URLMethods } from "#helpers/intrinsics";
 
 /**
  * Create a `resolveModuleSpecifier` callback that resolves manifest file entries
@@ -92,7 +95,7 @@ import { StringMethods, TypeError, URL, URLMethods } from "@cldmv/slothlet/helpe
  * // Full slothlet integration
  * import manifest from "./api-manifest.json" assert { type: "json" };
  * import { slothlet } from "@cldmv/slothlet";
- * import { createManifestResolver } from "@cldmv/slothlet/helpers/manifest-resolver";
+ * import { createManifestResolver } from "#helpers/manifest-resolver";
  *
  * const api = await slothlet({
  *   manifest,

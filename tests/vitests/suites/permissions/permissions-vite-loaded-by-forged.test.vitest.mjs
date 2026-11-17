@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-08T16:59:11-08:00 (1794185951)
+ *	@Last modified time: 2026-11-16T16:17:24-08:00 (1794874644)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -27,7 +27,7 @@ import { describe, it, expect } from "vitest";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parse } from "acorn";
-import { LOADED_BY_SPECIFIER, slothletInstanceImports } from "@cldmv/slothlet/helpers/instance-imports";
+import { LOADED_BY_SPECIFIER, slothletInstanceImports } from "#helpers/instance-imports";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../..");
 const FIXTURE = path.join(ROOT, "api_tests", "api_test_vite_late_files").replaceAll("\\", "/");

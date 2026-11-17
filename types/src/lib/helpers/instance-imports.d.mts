@@ -192,9 +192,9 @@ export function isCommonJSFile(filePath: string): boolean;
  * @returns {object} A vite plugin (`name`, `enforce`, `resolveId`, `transform`, `load`).
  * @public
  * @example
- * // vitest.config.mjs
- * import { slothletInstanceImports } from "@cldmv/slothlet/helpers/instance-imports";
- * export default defineConfig({ plugins: [slothletInstanceImports()] });
+ * // vitest.config.mjs — consumers import it as `plugin` from @cldmv/slothlet/vite
+ * import { plugin } from "@cldmv/slothlet/vite";
+ * export default defineConfig({ plugins: [plugin()] });
  */
 export function slothletInstanceImports(): object;
 /**

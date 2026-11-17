@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-12T22:54:52-08:00 (1794552892)
+ *	@Last modified time: 2026-11-16T16:17:31-08:00 (1794874651)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -39,7 +39,7 @@ import slothlet from "@cldmv/slothlet";
 import * as runtime from "@cldmv/slothlet/runtime";
 import * as asyncRuntime from "@cldmv/slothlet/runtime/async";
 import * as liveRuntime from "@cldmv/slothlet/runtime/live";
-import { registerOwnModule } from "@cldmv/slothlet/helpers/instance-imports";
+import { registerOwnModule } from "#helpers/instance-imports";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const DIR = path.resolve(HERE, "../../../../api_tests/api_test_runtime_single/api");

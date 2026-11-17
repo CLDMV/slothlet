@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-12T02:00:27-08:00 (1794477627)
+ *	@Last modified time: 2026-11-16T16:16:51-08:00 (1794874611)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -23,7 +23,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { compilePattern } from "@cldmv/slothlet/helpers/pattern-matcher";
+import { compilePattern } from "#helpers/pattern-matcher";
 
 /**
  * Rows of `[pattern, path, matches]`.

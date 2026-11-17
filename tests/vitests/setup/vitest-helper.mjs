@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-03T08:39:33-08:00 (1793723973)
+ *	@Last modified time: 2026-11-16T16:16:29-08:00 (1794874589)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -824,7 +824,7 @@ export function getManifest(dir) {
 	if (!_manifestCache.has(dir)) {
 		_manifestCache.set(
 			dir,
-			import("@cldmv/slothlet/helpers/generate-manifest").then(({ generateManifest }) => generateManifest(dir))
+			import("#helpers/generate-manifest").then(({ generateManifest }) => generateManifest(dir))
 		);
 	}
 	return _manifestCache.get(dir);

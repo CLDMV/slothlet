@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-12T00:17:44-08:00 (1794471464)
+ *	@Last modified time: 2026-11-16T16:16:40-08:00 (1794874600)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -40,7 +40,7 @@ import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import slothlet from "@cldmv/slothlet";
-import { commonJSWrapperSource, propagateInstanceQuery } from "@cldmv/slothlet/helpers/instance-imports";
+import { commonJSWrapperSource, propagateInstanceQuery } from "#helpers/instance-imports";
 
 const DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../../api_tests/api_test_helper_copies/api");
 const DENIED = "PERMISSION_DENIED";

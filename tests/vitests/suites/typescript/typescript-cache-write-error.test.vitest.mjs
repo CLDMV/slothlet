@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:23-07:00 (1791090923)
+ *	@Last modified time: 2026-11-16T16:17:37-08:00 (1794874657)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -47,7 +47,7 @@ vi.mock("node:fs/promises", async (importOriginal) => {
 	};
 });
 
-const { writeTransformedToCache } = await import("@cldmv/slothlet/processors/typescript");
+const { writeTransformedToCache } = await import("#processors/typescript");
 
 describe("writeTransformedToCache — non-EEXIST cache-write error", () => {
 	const tempRoot = makeTestTmpDirSync("cachewrite");

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:02-07:00 (1791090902)
+ *	@Last modified time: 2026-11-16T16:16:46-08:00 (1794874606)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -135,7 +135,7 @@ describe("Core > coverage-run hint (#235)", () => {
 	 * @returns {Promise<{fired: boolean, captured: number}>} Whether it warned and how many captures.
 	 */
 	async function probe(config, overrides) {
-		const { warnIfCoverageWithoutImporter } = await import("@cldmv/slothlet/processors/loader");
+		const { warnIfCoverageWithoutImporter } = await import("#processors/loader");
 		const { SlothletWarning } = await import("@cldmv/slothlet/errors");
 		SlothletWarning.clearCaptured();
 		const prior = SlothletWarning.suppressConsole;

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-10T21:29:45-08:00 (1794374985)
+ *	@Last modified time: 2026-11-16T16:17:09-08:00 (1794874629)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -32,12 +32,7 @@ import slothlet from "@cldmv/slothlet";
 import { getMatrixConfigs, TEST_DIRS, withSuppressedSlothletErrorOutput } from "../../setup/vitest-helper.mjs";
 import { createHash } from "node:crypto";
 import { stripTypeScriptTypes } from "node:module";
-import {
-	installInstanceImportHooks,
-	recordedScriptCount,
-	recordedScriptHashes,
-	releaseInstanceScope
-} from "@cldmv/slothlet/helpers/instance-imports";
+import { installInstanceImportHooks, recordedScriptCount, recordedScriptHashes, releaseInstanceScope } from "#helpers/instance-imports";
 import { learnedScriptCount } from "#handlers/frame-placement";
 import { moduleMakerCount, resolveWrapper } from "#handlers/unified-wrapper";
 

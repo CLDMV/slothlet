@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-13T21:47:57-08:00 (1794635277)
+ *	@Last modified time: 2026-11-16T16:16:09-08:00 (1794874569)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -19,10 +19,10 @@
  * @internal
  */
 
-import { util, inheritsFrom } from "@cldmv/slothlet/helpers/platform";
+import { util, inheritsFrom } from "#helpers/platform";
 import { ComponentBase } from "#factories/component-base";
-import { compilePattern } from "@cldmv/slothlet/helpers/pattern-matcher";
-import { normalizeHookConfig } from "@cldmv/slothlet/helpers/config";
+import { compilePattern } from "#helpers/pattern-matcher";
+import { normalizeHookConfig } from "#helpers/config";
 import { internals as unifiedWrapperInternals } from "#handlers/unified-wrapper";
 import { identityCeilings } from "#handlers/trusted-root";
 import { internals as frameworkInternalsInternals } from "#handlers/framework-internals";
@@ -59,7 +59,7 @@ import {
 	WeakMapMethods,
 	WeakSet,
 	WeakSetMethods
-} from "@cldmv/slothlet/helpers/intrinsics";
+} from "#helpers/intrinsics";
 const { runtime_selfHookHandler, runtime_isCallerLocked, runtime_markCallerLocked } = unifiedWrapperInternals("lib/handlers/hook-manager");
 const { markFrameworkInternal, markSlothletProxy } = frameworkInternalsInternals("lib/handlers/hook-manager");
 

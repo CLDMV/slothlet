@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T02:51:26-08:00 (1794826286)
+ *	@Last modified time: 2026-11-16T16:16:10-08:00 (1794874570)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -23,7 +23,7 @@
 // here; both resolve through the platform shim in a browser (#123). A browser has no
 // Proxy-detection API, so isProxy returns false — slothlet's OWN wrappers are detected via
 // resolveWrapper(), so only arbitrary USER proxies (rare in browser) lose detection.
-import { isNode, util, EventEmitter, scheduleMacrotask, inheritsFrom } from "@cldmv/slothlet/helpers/platform";
+import { isNode, util, EventEmitter, scheduleMacrotask, inheritsFrom } from "#helpers/platform";
 import {
 	copyForComposition,
 	copySourceOf,
@@ -35,11 +35,11 @@ import {
 	layerOnto,
 	holdMember,
 	internals as compositionInternals
-} from "@cldmv/slothlet/helpers/composition";
-import { SlothletError } from "@cldmv/slothlet/errors";
+} from "#helpers/composition";
+import { SlothletError } from "#errors";
 import { ComponentBase } from "#factories/component-base";
-import { isFrameworkReservedKey, internals as reservedKeysInternals } from "@cldmv/slothlet/helpers/reserved-keys";
-import { runtime_isWrappedClassInstance, internals as classInstanceWrapperInternals } from "@cldmv/slothlet/helpers/class-instance-wrapper";
+import { isFrameworkReservedKey, internals as reservedKeysInternals } from "#helpers/reserved-keys";
+import { runtime_isWrappedClassInstance, internals as classInstanceWrapperInternals } from "#helpers/class-instance-wrapper";
 import { combineCeilings, identityCeilings, internals as trustedRootInternals } from "#handlers/trusted-root";
 import { handsOutAsModule, internals as framePlacementInternals } from "#handlers/frame-placement";
 import {
@@ -58,9 +58,9 @@ import {
 	unwrapThrown
 } from "#handlers/hook-manager";
 import { isSharedExport, internals as sharedValuesInternals } from "#handlers/shared-values";
-import { engineThenOf } from "@cldmv/slothlet/helpers/promise-context";
-import { isBoxedPrimitive, internals as cloneContextInternals } from "@cldmv/slothlet/helpers/clone-context";
-import { isFunctionSourcePatch, internals as functionSourceContextInternals } from "@cldmv/slothlet/helpers/function-source-context";
+import { engineThenOf } from "#helpers/promise-context";
+import { isBoxedPrimitive, internals as cloneContextInternals } from "#helpers/clone-context";
+import { isFunctionSourcePatch, internals as functionSourceContextInternals } from "#helpers/function-source-context";
 import {
 	AggregateError,
 	ArrayBuffer,
@@ -157,11 +157,11 @@ import {
 	WeakRefMethods,
 	WeakSet,
 	WeakSetMethods
-} from "@cldmv/slothlet/helpers/intrinsics";
-import { pinToCurrentCaller } from "@cldmv/slothlet/helpers/caller-pinning";
-import { isEngineStackAccessor, runUnformatted } from "@cldmv/slothlet/helpers/stack-read";
-import { namesForeignFile, BINDING_NAME } from "@cldmv/slothlet/helpers/capability-context";
-import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "@cldmv/slothlet/helpers/instance-imports";
+} from "#helpers/intrinsics";
+import { pinToCurrentCaller } from "#helpers/caller-pinning";
+import { isEngineStackAccessor, runUnformatted } from "#helpers/stack-read";
+import { namesForeignFile, BINDING_NAME } from "#helpers/capability-context";
+import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "#helpers/instance-imports";
 const { setApiNodeCheck } = compositionInternals("lib/handlers/unified-wrapper");
 const reservedKeysOwn = reservedKeysInternals("lib/handlers/unified-wrapper");
 const { runtime_unwrapClassInstance, runtime_classInstanceCreator, setModuleInstanceCheck } =
@@ -13360,11 +13360,11 @@ const wrapperDebugEnabled =
  * Matched by EXACT name rather than an `__` prefix: a user module may legitimately export an
  * underscore-prefixed member, and dropping those would make the composed surface lie. Shared so
  * enumeration and the collision-merge paths filter exactly the same set. Defined in
- * `@cldmv/slothlet/helpers/reserved-keys` (which imports only helpers/intrinsics) and re-exported here.
+ * `#helpers/reserved-keys` (which imports only helpers/intrinsics) and re-exported here.
  * @type {Set<string>}
  * @public
  */
-export { IMPL_METADATA_KEYS } from "@cldmv/slothlet/helpers/reserved-keys";
+export { IMPL_METADATA_KEYS } from "#helpers/reserved-keys";
 
 /**
  * See {@link module:@cldmv/slothlet/helpers/reserved-keys.isFrameworkReservedKey}: the one check for

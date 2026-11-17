@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T21:27:31-08:00 (1794806851)
+ *	@Last modified time: 2026-11-16T16:16:09-08:00 (1794874569)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -39,9 +39,9 @@
  * }
  */
 
-import { translate } from "@cldmv/slothlet/i18n";
-import { internals as reservedKeysInternals } from "@cldmv/slothlet/helpers/reserved-keys";
-import { DEFAULT_CLOCK } from "@cldmv/slothlet/helpers/clock";
+import { translate } from "#i18n";
+import { internals as reservedKeysInternals } from "#helpers/reserved-keys";
+import { DEFAULT_CLOCK } from "#helpers/clock";
 const reservedKeysOwn = reservedKeysInternals("lib/factories/component-base");
 
 /**
@@ -150,7 +150,7 @@ export class ComponentBase {
 
 	/**
 	 * The clock of the instance: where components read the time and schedule their deferred work (the `clock` option).
-	 * @returns {import("@cldmv/slothlet/helpers/clock").Clock} The instance's frozen clock, or the one slothlet loaded with
+	 * @returns {import("#helpers/clock").Clock} The instance's frozen clock, or the one slothlet loaded with
 	 *   for an instance (a test's stand-in) that has none.
 	 * @internal
 	 * @example
@@ -305,7 +305,7 @@ export class ComponentBase {
 	 * Note: `_materialize` is included here (skip for collection/extraction) but
 	 * setTrap exempts it since the framework needs to write it directly.
 	 *
-	 * The Set itself is defined in `@cldmv/slothlet/helpers/reserved-keys`, a module with no
+	 * The Set itself is defined in `#helpers/reserved-keys`, a module with no
 	 * imports, so `slothlet.defaults.reservedExports` can be built without loading this class.
 	 *
 	 * @type {Set<string>}

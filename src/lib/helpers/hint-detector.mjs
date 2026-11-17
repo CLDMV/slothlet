@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:52-07:00 (1791090892)
+ *	@Last modified time: 2026-11-16T16:16:12-08:00 (1794874572)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -20,7 +20,7 @@
  */
 
 import { ComponentBase } from "#factories/component-base";
-import { FunctionMethods, ObjectMethods, RegExpMethods } from "@cldmv/slothlet/helpers/intrinsics";
+import { FunctionMethods, ObjectMethods, RegExpMethods } from "#helpers/intrinsics";
 
 /**
  * Hint detection rules - pattern matching for originalError messages

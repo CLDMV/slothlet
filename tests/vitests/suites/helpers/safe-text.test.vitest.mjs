@@ -2,12 +2,12 @@
  *
  *	@Project: @cldmv/slothlet
  *	@Filename: /tests/vitests/suites/helpers/safe-text.test.vitest.mjs
- *	@Date: 2026-11-16T07:00:00-08:00 (1794841200)
+ *	@Date: 2026-11-16T02:14:26-08:00 (1794824066)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T07:00:00-08:00 (1794841200)
+ *	@Last modified time: 2026-11-16T16:16:52-08:00 (1794874612)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -20,7 +20,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { stringOf, jsonOf } from "@cldmv/slothlet/helpers/intrinsics";
+import { stringOf, jsonOf } from "#helpers/intrinsics";
 import { SlothletError } from "@cldmv/slothlet/errors";
 import { translate } from "@cldmv/slothlet/i18n";
 

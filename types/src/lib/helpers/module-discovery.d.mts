@@ -22,7 +22,7 @@
  * @throws {SlothletError} `MODULE_*` codes on manifest validation failures or G7 duplicate-name-version-mismatch.
  *
  * @example
- * import { discoverModules } from "@cldmv/slothlet/helpers/module-discovery";
+ * import { discoverModules } from "#helpers/module-discovery";
  *
  * const found = await discoverModules();
  * // Default upward-walk scanRoot, default slothlet.module.json manifest.

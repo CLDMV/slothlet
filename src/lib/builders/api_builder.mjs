@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T21:09:15-08:00 (1794805755)
+ *	@Last modified time: 2026-11-16T16:16:08-08:00 (1794874568)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -30,14 +30,14 @@
 // Node-only AsyncResource resolved in the platform module so node:async_hooks stays out of the
 // browser graph (#123). AsyncResource.bind only captures ALS context under Node — in a browser
 // (live context) bind is identity. loadJson reads package.json for the version (Node only).
-import { isNode, AsyncResource, loadJson } from "@cldmv/slothlet/helpers/platform";
+import { isNode, AsyncResource, loadJson } from "#helpers/platform";
 import { ComponentBase } from "#factories/component-base";
 import { TYPE_STATES, isCallableValue, internals as unifiedWrapperInternals } from "#handlers/unified-wrapper";
 import { DELIVERY_REASONS } from "#handlers/event-manager";
 import { internals as framePlacementInternals } from "#handlers/frame-placement";
 import { internals as frameworkInternalsInternals } from "#handlers/framework-internals";
 import { ceilingMembers, combineCeilings, identityCeilings, internals as trustedRootInternals } from "#handlers/trusted-root";
-import { getLanguage, t, translate, internals as translationsInternals } from "@cldmv/slothlet/i18n";
+import { getLanguage, t, translate, internals as translationsInternals } from "#i18n";
 import {
 	ArrayMethods,
 	Arrays,
@@ -74,7 +74,7 @@ import {
 	WeakMapMethods,
 	WeakSet,
 	WeakSetMethods
-} from "@cldmv/slothlet/helpers/intrinsics";
+} from "#helpers/intrinsics";
 const {
 	resolveWrapper,
 	runtime_selfModuleCeilings,

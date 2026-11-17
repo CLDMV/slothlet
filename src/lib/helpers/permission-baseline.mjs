@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T03:00:00-08:00 (1794826800)
+ *	@Last modified time: 2026-11-16T16:16:13-08:00 (1794874573)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -38,8 +38,8 @@
  * @internal
  */
 
-import { translate } from "@cldmv/slothlet/i18n";
-import { ArrayMethods, Blob, EvalError, listPush, NativeFunction, Reflect, Symbols, URL, URLs } from "@cldmv/slothlet/helpers/intrinsics";
+import { translate } from "#i18n";
+import { ArrayMethods, Blob, EvalError, listPush, NativeFunction, Reflect, Symbols, URL, URLs } from "#helpers/intrinsics";
 
 /**
  * The global key of the record of who loaded each file vite transformed (#714), as `helpers/instance-imports` names it.

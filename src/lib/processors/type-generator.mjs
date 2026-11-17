@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T19:48:24-08:00 (1794800904)
+ *	@Last modified time: 2026-11-16T16:16:14-08:00 (1794874574)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -21,9 +21,9 @@
 
 import * as nodeFs from "fs";
 import * as nodePath from "path";
-import { SlothletError } from "@cldmv/slothlet/errors";
+import { SlothletError } from "#errors";
 import { internals as unifiedWrapperInternals } from "#handlers/unified-wrapper";
-import { isFrameworkReservedKey } from "@cldmv/slothlet/helpers/reserved-keys";
+import { isFrameworkReservedKey } from "#helpers/reserved-keys";
 import {
 	ArrayMethods,
 	Arrays,
@@ -43,7 +43,7 @@ import {
 	SetMethods,
 	splitText,
 	StringMethods
-} from "@cldmv/slothlet/helpers/intrinsics";
+} from "#helpers/intrinsics";
 
 // Node's built-ins, as slothlet loaded: frozen copies of their members (see helpers/platform), so code that replaces one
 // on Node's module object later does not run here.

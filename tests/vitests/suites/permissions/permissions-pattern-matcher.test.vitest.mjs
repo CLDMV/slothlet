@@ -7,14 +7,14 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:18-07:00 (1791090918)
+ *	@Last modified time: 2026-11-16T16:17:19-08:00 (1794874639)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
  */
 
 import { describe, it, expect } from "vitest";
-import { compilePattern, expandBraces, splitBraceAlternatives } from "@cldmv/slothlet/helpers/pattern-matcher";
+import { compilePattern, expandBraces, splitBraceAlternatives } from "#helpers/pattern-matcher";
 
 describe("Permissions > Pattern Matcher Unit Tests", () => {
 	describe("compilePattern", () => {

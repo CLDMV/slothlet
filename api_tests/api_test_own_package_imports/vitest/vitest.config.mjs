@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-08T16:00:40-08:00 (1794182440)
+ *	@Last modified time: 2026-11-16T16:15:11-08:00 (1794874511)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -15,7 +15,7 @@
 
 /**
  * @fileoverview The vitest config of the own-package fixture (#715): slothlet runs through vitest's module runner
- * (`server.deps.inline`) with the `slothletInstanceImports()` plugin.
+ * (`server.deps.inline`) with the `@cldmv/slothlet/vite` plugin.
  * @module api_test_own_package_imports.vitest.config
  */
 import path from "node:path";
@@ -25,13 +25,13 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 // Loaded by Node at run time, from a file beside this one, so the build of slothlet the process's export conditions name is
 // the one used: vitest bundles a config's static imports itself, under the default conditions.
 const PLUGIN = pathToFileURL(path.join(here, "plugin.mjs")).href;
-const { slothletInstanceImports } = await import(PLUGIN);
+const { plugin } = await import(PLUGIN);
 
 export default {
 	root: here,
 	// vite's cache stays out of the fixture, under the repository's ignored `tmp/`.
 	cacheDir: path.join(here, "..", "..", "..", "tmp", "vitest-cache", "api_test_own_package_imports"),
-	plugins: [slothletInstanceImports()],
+	plugins: [plugin()],
 	resolve: { conditions: ["slothlet-dev", "node", "import", "module", "default"] },
 	ssr: { resolve: { conditions: ["slothlet-dev", "node", "import", "module", "default"] } },
 	test: {

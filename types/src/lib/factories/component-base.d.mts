@@ -42,7 +42,7 @@ export class ComponentBase {
      * Note: `_materialize` is included here (skip for collection/extraction) but
      * setTrap exempts it since the framework needs to write it directly.
      *
-     * The Set itself is defined in `@cldmv/slothlet/helpers/reserved-keys`, a module with no
+     * The Set itself is defined in `#helpers/reserved-keys`, a module with no
      * imports, so `slothlet.defaults.reservedExports` can be built without loading this class.
      *
      * @type {Set<string>}
@@ -105,13 +105,13 @@ export class ComponentBase {
     get ____config(): object;
     /**
      * The clock of the instance: where components read the time and schedule their deferred work (the `clock` option).
-     * @returns {import("@cldmv/slothlet/helpers/clock").Clock} The instance's frozen clock, or the one slothlet loaded with
+     * @returns {import("#helpers/clock").Clock} The instance's frozen clock, or the one slothlet loaded with
      *   for an instance (a test's stand-in) that has none.
      * @internal
      * @example
      * const stamp = this.clock.now();
      */
-    get clock(): import("@cldmv/slothlet/helpers/clock").Clock;
+    get clock(): import("#helpers/clock").Clock;
     /**
      * Get Slothlet instance ID.
      * @returns {string} Slothlet instance identifier.

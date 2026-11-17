@@ -515,6 +515,7 @@
 		"GENERATE_MANIFEST_DIR_UNREADABLE": "generateManifest: no se puede leer el directorio \"{dir}\": {reason}",
 		"GENERATE_MANIFEST_NOT_DIRECTORY": "generateManifest: \"{dir}\" no es un directorio",
 		"GENERATE_BROWSER_ASSETS_SLOTHLET_BASE_INVALID": "generateBrowserAssets: options.slothletBase debe ser una cadena (la ruta desde la que se sirve @cldmv/slothlet en el navegador), se recibió {received}",
+		"FILES_REQUIRES_NODE": "{operation} necesita Node.js: lee el sistema de archivos, que un navegador no tiene. Llámelo en su paso de compilación y pase su resultado a la página.",
 		"MODULE_MANIFEST_UNKNOWN_FIELD": "El manifiesto del módulo para el paquete '{packageName}' en '{manifestPath}' contiene un campo de nivel superior no reconocido '{field}'. Los campos desconocidos son rechazados; use el bloque 'metadata' dedicado para extras definidos por el desarrollador.",
 		"HINT_MODULE_MANIFEST_UNKNOWN_FIELD": "Si '{field}' es un error tipográfico, corríjalo. Si son metadatos intencionales del desarrollador, muévalos dentro del objeto 'metadata'.",
 		"MODULE_MANIFEST_NAME_MISMATCH": "El manifiesto del módulo para el paquete '{packageName}' declara el nombre '{manifestName}' que no coincide con el nombre en package.json '{packageName}'.",
@@ -567,7 +568,7 @@
 		"BASELINE_CSP_EVAL_ALLOWED": "la página permite crear código a partir de cadenas: su Content Security Policy permite 'unsafe-eval', o no tiene ninguna.",
 		"BASELINE_CSP_BLOB_ALLOWED": "la página ejecuta scripts de URL blob:: su Content Security Policy los permite, o no tiene ninguna.",
 		"BASELINE_CSP_DATA_ALLOWED": "la página ejecuta scripts de URL data:: su Content Security Policy los permite, o no tiene ninguna.",
-		"BASELINE_VITEST_PLUGIN_ABSENT": "se ejecuta con vitest sin el plugin slothletInstanceImports() de slothlet en la configuración de vitest."
+		"BASELINE_VITEST_PLUGIN_ABSENT": "se ejecuta con vitest sin el plugin @cldmv/slothlet/vite de slothlet en la configuración de vitest."
 	},
 	"metadata": {
 		"code": "es-es",

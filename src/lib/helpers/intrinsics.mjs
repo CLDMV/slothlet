@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-13T21:48:06-08:00 (1794635286)
+ *	@Last modified time: 2026-11-16T16:16:12-08:00 (1794874572)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -71,7 +71,7 @@
  * @type {ObjectConstructor}
  * @internal
  * @example
- * import { NativeObject } from "@cldmv/slothlet/helpers/intrinsics";
+ * import { NativeObject } from "#helpers/intrinsics";
  * NativeObject(value) === value; // whether value is an object
  */
 export const NativeObject = globalThis.Object;
@@ -151,7 +151,7 @@ function withPlainDescriptors(source) {
  * @type {typeof globalThis.Reflect}
  * @internal
  * @example
- * import { Reflect } from "@cldmv/slothlet/helpers/intrinsics";
+ * import { Reflect } from "#helpers/intrinsics";
  * Reflect.getOwnPropertyDescriptor(value, "constructor");
  */
 export const Reflect = withPlainDescriptors(NativeReflect);
@@ -161,7 +161,7 @@ export const Reflect = withPlainDescriptors(NativeReflect);
  * @type {ObjectConstructor}
  * @internal
  * @example
- * import { Objects } from "@cldmv/slothlet/helpers/intrinsics";
+ * import { Objects } from "#helpers/intrinsics";
  * Objects.keys(value);
  */
 export const Objects = withPlainDescriptors(NativeObject);
@@ -171,7 +171,7 @@ export const Objects = withPlainDescriptors(NativeObject);
  * @type {ArrayConstructor}
  * @internal
  * @example
- * import { Arrays } from "@cldmv/slothlet/helpers/intrinsics";
+ * import { Arrays } from "#helpers/intrinsics";
  * Arrays.isArray(value);
  */
 export const Arrays = staticsOf(globalThis.Array);
@@ -181,7 +181,7 @@ export const Arrays = staticsOf(globalThis.Array);
  * @type {object}
  * @internal
  * @example
- * import { Functions } from "@cldmv/slothlet/helpers/intrinsics";
+ * import { Functions } from "#helpers/intrinsics";
  * Reflect.getPrototypeOf(value) === Functions.prototype;
  */
 export const Functions = staticsOf(globalThis.Function);
@@ -192,7 +192,7 @@ export const Functions = staticsOf(globalThis.Function);
  * @type {FunctionConstructor}
  * @internal
  * @example
- * import { NativeFunction } from "@cldmv/slothlet/helpers/intrinsics";
+ * import { NativeFunction } from "#helpers/intrinsics";
  * new NativeFunction("return 1"); // throws EvalError where code from strings is refused
  */
 export const NativeFunction = globalThis.Function;
@@ -248,7 +248,7 @@ export function functionSource(fn) {
  * @type {Function}
  * @internal
  * @example
- * import { NativeProxy } from "@cldmv/slothlet/helpers/intrinsics";
+ * import { NativeProxy } from "#helpers/intrinsics";
  * const view = new NativeProxy(shadow, handler);
  */
 export const NativeProxy = globalThis.Proxy;
@@ -258,7 +258,7 @@ export const NativeProxy = globalThis.Proxy;
  * @type {MapConstructor}
  * @internal
  * @example
- * import { Map } from "@cldmv/slothlet/helpers/intrinsics";
+ * import { Map } from "#helpers/intrinsics";
  * const seen = new Map();
  */
 export const Map = globalThis.Map;
@@ -268,7 +268,7 @@ export const Map = globalThis.Map;
  * @type {SetConstructor}
  * @internal
  * @example
- * import { Set } from "@cldmv/slothlet/helpers/intrinsics";
+ * import { Set } from "#helpers/intrinsics";
  * const seen = new Set();
  */
 export const Set = globalThis.Set;
@@ -278,7 +278,7 @@ export const Set = globalThis.Set;
  * @type {WeakMapConstructor}
  * @internal
  * @example
- * import { WeakMap } from "@cldmv/slothlet/helpers/intrinsics";
+ * import { WeakMap } from "#helpers/intrinsics";
  * const views = new WeakMap();
  */
 export const WeakMap = globalThis.WeakMap;
@@ -288,7 +288,7 @@ export const WeakMap = globalThis.WeakMap;
  * @type {WeakSetConstructor}
  * @internal
  * @example
- * import { WeakSet } from "@cldmv/slothlet/helpers/intrinsics";
+ * import { WeakSet } from "#helpers/intrinsics";
  * const marked = new WeakSet();
  */
 export const WeakSet = globalThis.WeakSet;
@@ -298,7 +298,7 @@ export const WeakSet = globalThis.WeakSet;
  * @type {WeakRefConstructor}
  * @internal
  * @example
- * import { WeakRef } from "@cldmv/slothlet/helpers/intrinsics";
+ * import { WeakRef } from "#helpers/intrinsics";
  * const ref = new WeakRef(target);
  */
 export const WeakRef = globalThis.WeakRef;
@@ -308,7 +308,7 @@ export const WeakRef = globalThis.WeakRef;
  * @type {PromiseConstructor}
  * @internal
  * @example
- * import { Promise } from "@cldmv/slothlet/helpers/intrinsics";
+ * import { Promise } from "#helpers/intrinsics";
  * const done = new Promise((resolve) => setImmediate(resolve));
  */
 export const Promise = NativePromise;
@@ -319,7 +319,7 @@ export const Promise = NativePromise;
  * @type {SymbolConstructor}
  * @internal
  * @example
- * import { Symbol } from "@cldmv/slothlet/helpers/intrinsics";
+ * import { Symbol } from "#helpers/intrinsics";
  * const marker = Symbol("marker");
  */
 export const Symbol = NativeSymbol;
@@ -363,7 +363,7 @@ function pickedStaticsOf(source, names) {
  * @type {PromiseConstructor}
  * @internal
  * @example
- * import { Promises } from "@cldmv/slothlet/helpers/intrinsics";
+ * import { Promises } from "#helpers/intrinsics";
  * await Promises.all(pending);
  */
 export const Promises = boundStaticsOf(NativePromise, ["resolve", "reject", "all", "allSettled", "race", "any"]);
@@ -373,7 +373,7 @@ export const Promises = boundStaticsOf(NativePromise, ["resolve", "reject", "all
  * @type {SymbolConstructor}
  * @internal
  * @example
- * import { Symbols } from "@cldmv/slothlet/helpers/intrinsics";
+ * import { Symbols } from "#helpers/intrinsics";
  * Symbols.for("nodejs.util.inspect.custom");
  */
 export const Symbols = boundStaticsOf(NativeSymbol, ["for", "keyFor"]);
@@ -382,7 +382,7 @@ export const Symbols = boundStaticsOf(NativeSymbol, ["for", "keyFor"]);
  * The `URL` constructor, as it was when slothlet loaded.
  * @internal
  * @example
- * import { URL } from "@cldmv/slothlet/helpers/intrinsics";
+ * import { URL } from "#helpers/intrinsics";
  * const href = new URL("./a.mjs", import.meta.url).href;
  */
 export const URL = globalThis.URL;
@@ -393,7 +393,7 @@ export const URL = globalThis.URL;
  * @type {{createObjectURL?: function(Blob): string, revokeObjectURL?: function(string): void}}
  * @internal
  * @example
- * import { URL, URLs } from "@cldmv/slothlet/helpers/intrinsics";
+ * import { URL, URLs } from "#helpers/intrinsics";
  * const href = Reflect.apply(URLs.createObjectURL, URL, [blob]);
  */
 export const URLs = pickedStaticsOf(globalThis.URL, ["createObjectURL", "revokeObjectURL"]);
@@ -402,7 +402,7 @@ export const URLs = pickedStaticsOf(globalThis.URL, ["createObjectURL", "revokeO
  * The `URLSearchParams` constructor, as it was when slothlet loaded.
  * @internal
  * @example
- * import { URLSearchParams } from "@cldmv/slothlet/helpers/intrinsics";
+ * import { URLSearchParams } from "#helpers/intrinsics";
  * new URLSearchParams(query).get("slothlet_instance");
  */
 export const URLSearchParams = globalThis.URLSearchParams;
@@ -420,7 +420,7 @@ export const String = globalThis.String;
  * @type {StringConstructor}
  * @internal
  * @example
- * import { Strings } from "@cldmv/slothlet/helpers/intrinsics";
+ * import { Strings } from "#helpers/intrinsics";
  * Strings.fromCharCode(0x41); // "A"
  */
 export const Strings = staticsOf(globalThis.String);
@@ -446,7 +446,7 @@ export const Number = globalThis.Number;
  * @type {NumberConstructor}
  * @internal
  * @example
- * import { Numbers } from "@cldmv/slothlet/helpers/intrinsics";
+ * import { Numbers } from "#helpers/intrinsics";
  * Numbers.isFinite(value);
  */
 export const Numbers = staticsOf(globalThis.Number);
@@ -472,7 +472,7 @@ export const Date = globalThis.Date;
  * @type {DateConstructor}
  * @internal
  * @example
- * import { Dates } from "@cldmv/slothlet/helpers/intrinsics";
+ * import { Dates } from "#helpers/intrinsics";
  * const started = Dates.now();
  */
 export const Dates = staticsOf(globalThis.Date);
@@ -491,7 +491,7 @@ export const RegExp = globalThis.RegExp;
  * `Error.isError` are on `Errors`.
  * @internal
  * @example
- * import { Error } from "@cldmv/slothlet/helpers/intrinsics";
+ * import { Error } from "#helpers/intrinsics";
  * throw new Error("message");
  */
 export const Error = globalThis.Error;
@@ -501,7 +501,7 @@ export const Error = globalThis.Error;
  * @type {object}
  * @internal
  * @example
- * import { Errors } from "@cldmv/slothlet/helpers/intrinsics";
+ * import { Errors } from "#helpers/intrinsics";
  * Errors.captureStackTrace(error, constructorOpt);
  */
 export const Errors = pickedStaticsOf(globalThis.Error, ["captureStackTrace", "isError"]);
@@ -575,7 +575,7 @@ export const ArrayBuffer = globalThis.ArrayBuffer;
  * @type {object}
  * @internal
  * @example
- * import { ArrayBuffers } from "@cldmv/slothlet/helpers/intrinsics";
+ * import { ArrayBuffers } from "#helpers/intrinsics";
  * ArrayBuffers.isView(value);
  */
 export const ArrayBuffers = staticsOf(globalThis.ArrayBuffer);
@@ -732,7 +732,7 @@ export const Iterator = globalThis.Iterator;
  * @type {object}
  * @internal
  * @example
- * import { Iterators } from "@cldmv/slothlet/helpers/intrinsics";
+ * import { Iterators } from "#helpers/intrinsics";
  * Iterators.from(iterable);
  */
 export const Iterators = globalThis.Iterator ? staticsOf(globalThis.Iterator) : freeze(create(null));
@@ -743,7 +743,7 @@ export const Iterators = globalThis.Iterator ? staticsOf(globalThis.Iterator) : 
  * @type {typeof globalThis.Intl}
  * @internal
  * @example
- * import { Intl } from "@cldmv/slothlet/helpers/intrinsics";
+ * import { Intl } from "#helpers/intrinsics";
  * new Intl.Segmenter();
  */
 export const Intl = staticsOf(globalThis.Intl);
@@ -792,7 +792,7 @@ export const MessageChannel = globalThis.MessageChannel;
  * The Web Crypto `CryptoKey` constructor, as it was when slothlet loaded, or undefined where the host has none.
  * @internal
  * @example
- * import { CryptoKey } from "@cldmv/slothlet/helpers/intrinsics";
+ * import { CryptoKey } from "#helpers/intrinsics";
  * typeof CryptoKey === "function";
  */
 export const CryptoKey = globalThis.CryptoKey;
@@ -801,7 +801,7 @@ export const CryptoKey = globalThis.CryptoKey;
  * `queueMicrotask`, as it was when slothlet loaded: the host's own, under none of the boundary patches.
  * @internal
  * @example
- * import { queueMicrotask } from "@cldmv/slothlet/helpers/intrinsics";
+ * import { queueMicrotask } from "#helpers/intrinsics";
  * queueMicrotask(() => settle());
  */
 export const queueMicrotask = globalThis.queueMicrotask;
@@ -810,7 +810,7 @@ export const queueMicrotask = globalThis.queueMicrotask;
  * `structuredClone`, as it was when slothlet loaded: the host's own, under none of the boundary patches.
  * @internal
  * @example
- * import { structuredClone } from "@cldmv/slothlet/helpers/intrinsics";
+ * import { structuredClone } from "#helpers/intrinsics";
  * structuredClone({ a: 1 });
  */
 export const structuredClone = globalThis.structuredClone;
@@ -819,7 +819,7 @@ export const structuredClone = globalThis.structuredClone;
  * `setTimeout`, as it was when slothlet loaded: the host's own, under none of the boundary patches.
  * @internal
  * @example
- * import { setTimeout } from "@cldmv/slothlet/helpers/intrinsics";
+ * import { setTimeout } from "#helpers/intrinsics";
  * setTimeout(run, 0);
  */
 export const setTimeout = globalThis.setTimeout;
@@ -828,7 +828,7 @@ export const setTimeout = globalThis.setTimeout;
  * `clearTimeout`, as it was when slothlet loaded: the host's own, under none of the boundary patches.
  * @internal
  * @example
- * import { setTimeout, clearTimeout } from "@cldmv/slothlet/helpers/intrinsics";
+ * import { setTimeout, clearTimeout } from "#helpers/intrinsics";
  * clearTimeout(setTimeout(run, 1000));
  */
 export const clearTimeout = globalThis.clearTimeout;
@@ -844,7 +844,7 @@ export const clearTimeout = globalThis.clearTimeout;
  * `setImmediate`, as it was when slothlet loaded, or undefined where the host has none (a browser).
  * @internal
  * @example
- * import { setImmediate } from "@cldmv/slothlet/helpers/intrinsics";
+ * import { setImmediate } from "#helpers/intrinsics";
  * setImmediate?.(run);
  * @type {ImmediateScheduler|undefined}
  */
@@ -899,7 +899,7 @@ export const isNaN = globalThis.isNaN;
  * calls are on `Processes`.
  * @internal
  * @example
- * import { NativeProcess } from "@cldmv/slothlet/helpers/intrinsics";
+ * import { NativeProcess } from "#helpers/intrinsics";
  * NativeProcess?.env.SLOTHLET_DEBUG;
  * @type {HostProcess|undefined}
  */
@@ -912,7 +912,7 @@ export const NativeProcess = globalThis.process;
  * @type {object}
  * @internal
  * @example
- * import { Processes } from "@cldmv/slothlet/helpers/intrinsics";
+ * import { Processes } from "#helpers/intrinsics";
  * const fs = Processes.getBuiltinModule?.("node:fs");
  */
 export const Processes = boundStaticsOf(globalThis.process, [
@@ -940,7 +940,7 @@ export const Processes = boundStaticsOf(globalThis.process, [
  * `Buffer.from` is on `Buffers`.
  * @internal
  * @example
- * import { Buffer } from "@cldmv/slothlet/helpers/intrinsics";
+ * import { Buffer } from "#helpers/intrinsics";
  * value instanceof Buffer;
  * @type {HostBufferConstructor|undefined}
  */
@@ -951,7 +951,7 @@ export const Buffer = globalThis.Buffer;
  * @type {object}
  * @internal
  * @example
- * import { Buffers } from "@cldmv/slothlet/helpers/intrinsics";
+ * import { Buffers } from "#helpers/intrinsics";
  * Buffers.from(text, "utf8");
  */
 export const Buffers = boundStaticsOf(globalThis.Buffer, ["from"]);
@@ -961,7 +961,7 @@ export const Buffers = boundStaticsOf(globalThis.Buffer, ["from"]);
  * `languages` are read off it where they are used.
  * @internal
  * @example
- * import { navigator } from "@cldmv/slothlet/helpers/intrinsics";
+ * import { navigator } from "#helpers/intrinsics";
  * navigator?.languages;
  */
 export const navigator = globalThis.navigator;
@@ -1011,7 +1011,7 @@ function methodsOf(proto, symbols) {
  * @type {object}
  * @internal
  * @example
- * import { ArrayMethods } from "@cldmv/slothlet/helpers/intrinsics";
+ * import { ArrayMethods } from "#helpers/intrinsics";
  * ArrayMethods.push(list, value);
  */
 export const ArrayMethods = methodsOf(globalThis.Array.prototype);
@@ -1021,7 +1021,7 @@ export const ArrayMethods = methodsOf(globalThis.Array.prototype);
  * @type {object}
  * @internal
  * @example
- * import { StringMethods } from "@cldmv/slothlet/helpers/intrinsics";
+ * import { StringMethods } from "#helpers/intrinsics";
  * StringMethods.startsWith(text, "node:");
  */
 export const StringMethods = methodsOf(globalThis.String.prototype);
@@ -1031,7 +1031,7 @@ export const StringMethods = methodsOf(globalThis.String.prototype);
  * @type {object}
  * @internal
  * @example
- * import { MapMethods } from "@cldmv/slothlet/helpers/intrinsics";
+ * import { MapMethods } from "#helpers/intrinsics";
  * MapMethods.get(map, key);
  */
 export const MapMethods = methodsOf(globalThis.Map.prototype);
@@ -1041,7 +1041,7 @@ export const MapMethods = methodsOf(globalThis.Map.prototype);
  * @type {object}
  * @internal
  * @example
- * import { SetMethods } from "@cldmv/slothlet/helpers/intrinsics";
+ * import { SetMethods } from "#helpers/intrinsics";
  * SetMethods.has(set, value);
  */
 export const SetMethods = methodsOf(globalThis.Set.prototype);
@@ -1051,7 +1051,7 @@ export const SetMethods = methodsOf(globalThis.Set.prototype);
  * @type {object}
  * @internal
  * @example
- * import { WeakMapMethods } from "@cldmv/slothlet/helpers/intrinsics";
+ * import { WeakMapMethods } from "#helpers/intrinsics";
  * WeakMapMethods.get(views, target);
  */
 export const WeakMapMethods = methodsOf(globalThis.WeakMap.prototype);
@@ -1061,7 +1061,7 @@ export const WeakMapMethods = methodsOf(globalThis.WeakMap.prototype);
  * @type {object}
  * @internal
  * @example
- * import { WeakSetMethods } from "@cldmv/slothlet/helpers/intrinsics";
+ * import { WeakSetMethods } from "#helpers/intrinsics";
  * WeakSetMethods.has(seen, value);
  */
 export const WeakSetMethods = methodsOf(globalThis.WeakSet.prototype);
@@ -1071,7 +1071,7 @@ export const WeakSetMethods = methodsOf(globalThis.WeakSet.prototype);
  * @type {object}
  * @internal
  * @example
- * import { WeakRefMethods } from "@cldmv/slothlet/helpers/intrinsics";
+ * import { WeakRefMethods } from "#helpers/intrinsics";
  * WeakRefMethods.deref(ref);
  */
 export const WeakRefMethods = methodsOf(globalThis.WeakRef.prototype);
@@ -1083,7 +1083,7 @@ export const WeakRefMethods = methodsOf(globalThis.WeakRef.prototype);
  * @type {object}
  * @internal
  * @example
- * import { RegExpMethods } from "@cldmv/slothlet/helpers/intrinsics";
+ * import { RegExpMethods } from "#helpers/intrinsics";
  * RegExpMethods.exec(pattern, text) !== null;
  */
 export const RegExpMethods = methodsOf(globalThis.RegExp.prototype, {
@@ -1100,7 +1100,7 @@ export const RegExpMethods = methodsOf(globalThis.RegExp.prototype, {
  * @type {object}
  * @internal
  * @example
- * import { PromiseMethods } from "@cldmv/slothlet/helpers/intrinsics";
+ * import { PromiseMethods } from "#helpers/intrinsics";
  * PromiseMethods.then(promise, onFulfilled, onRejected);
  */
 export const PromiseMethods = methodsOf(NativePromise.prototype);
@@ -1111,7 +1111,7 @@ export const PromiseMethods = methodsOf(NativePromise.prototype);
  * @type {object}
  * @internal
  * @example
- * import { FunctionMethods } from "@cldmv/slothlet/helpers/intrinsics";
+ * import { FunctionMethods } from "#helpers/intrinsics";
  * FunctionMethods.bind(fn, receiver);
  */
 export const FunctionMethods = methodsOf(globalThis.Function.prototype);
@@ -1122,7 +1122,7 @@ export const FunctionMethods = methodsOf(globalThis.Function.prototype);
  * @type {object}
  * @internal
  * @example
- * import { ObjectMethods } from "@cldmv/slothlet/helpers/intrinsics";
+ * import { ObjectMethods } from "#helpers/intrinsics";
  * ObjectMethods.hasOwnProperty(value, "key");
  */
 export const ObjectMethods = methodsOf(NativeObject.prototype);
@@ -1132,7 +1132,7 @@ export const ObjectMethods = methodsOf(NativeObject.prototype);
  * @type {object}
  * @internal
  * @example
- * import { NumberMethods } from "@cldmv/slothlet/helpers/intrinsics";
+ * import { NumberMethods } from "#helpers/intrinsics";
  * NumberMethods.toString(255, 16); // "ff"
  */
 export const NumberMethods = methodsOf(globalThis.Number.prototype);
@@ -1142,7 +1142,7 @@ export const NumberMethods = methodsOf(globalThis.Number.prototype);
  * @type {object}
  * @internal
  * @example
- * import { DateMethods } from "@cldmv/slothlet/helpers/intrinsics";
+ * import { DateMethods } from "#helpers/intrinsics";
  * DateMethods.toISOString(date);
  */
 export const DateMethods = methodsOf(globalThis.Date.prototype);
@@ -1153,7 +1153,7 @@ export const DateMethods = methodsOf(globalThis.Date.prototype);
  * @type {object}
  * @internal
  * @example
- * import { SymbolMethods } from "@cldmv/slothlet/helpers/intrinsics";
+ * import { SymbolMethods } from "#helpers/intrinsics";
  * SymbolMethods.description(marker);
  */
 export const SymbolMethods = methodsOf(NativeSymbol.prototype);
@@ -1163,7 +1163,7 @@ export const SymbolMethods = methodsOf(NativeSymbol.prototype);
  * @type {object}
  * @internal
  * @example
- * import { ErrorMethods } from "@cldmv/slothlet/helpers/intrinsics";
+ * import { ErrorMethods } from "#helpers/intrinsics";
  * ErrorMethods.toString(error);
  */
 export const ErrorMethods = methodsOf(globalThis.Error.prototype);
@@ -1174,7 +1174,7 @@ export const ErrorMethods = methodsOf(globalThis.Error.prototype);
  * @type {object}
  * @internal
  * @example
- * import { TypedArrayMethods } from "@cldmv/slothlet/helpers/intrinsics";
+ * import { TypedArrayMethods } from "#helpers/intrinsics";
  * TypedArrayMethods.length(bytes);
  */
 export const TypedArrayMethods = methodsOf(getPrototypeOfNative(globalThis.Uint8Array.prototype));
@@ -1185,7 +1185,7 @@ export const TypedArrayMethods = methodsOf(getPrototypeOfNative(globalThis.Uint8
  * @type {object}
  * @internal
  * @example
- * import { ArrayBufferMethods } from "@cldmv/slothlet/helpers/intrinsics";
+ * import { ArrayBufferMethods } from "#helpers/intrinsics";
  * ArrayBufferMethods.byteLength(buffer);
  */
 export const ArrayBufferMethods = methodsOf(globalThis.ArrayBuffer.prototype);
@@ -1196,7 +1196,7 @@ export const ArrayBufferMethods = methodsOf(globalThis.ArrayBuffer.prototype);
  * @type {object}
  * @internal
  * @example
- * import { URLMethods } from "@cldmv/slothlet/helpers/intrinsics";
+ * import { URLMethods } from "#helpers/intrinsics";
  * URLMethods.href(new URL("./a.mjs", base));
  */
 export const URLMethods = methodsOf(globalThis.URL?.prototype);
@@ -1206,7 +1206,7 @@ export const URLMethods = methodsOf(globalThis.URL?.prototype);
  * @type {object}
  * @internal
  * @example
- * import { URLSearchParamsMethods } from "@cldmv/slothlet/helpers/intrinsics";
+ * import { URLSearchParamsMethods } from "#helpers/intrinsics";
  * URLSearchParamsMethods.get(params, "slothlet_instance");
  */
 export const URLSearchParamsMethods = methodsOf(globalThis.URLSearchParams?.prototype);
@@ -1217,7 +1217,7 @@ export const URLSearchParamsMethods = methodsOf(globalThis.URLSearchParams?.prot
  * @type {object}
  * @internal
  * @example
- * import { TextDecoderMethods } from "@cldmv/slothlet/helpers/intrinsics";
+ * import { TextDecoderMethods } from "#helpers/intrinsics";
  * TextDecoderMethods.decode(new TextDecoder(), bytes);
  */
 export const TextDecoderMethods = methodsOf(globalThis.TextDecoder?.prototype);
@@ -1228,7 +1228,7 @@ export const TextDecoderMethods = methodsOf(globalThis.TextDecoder?.prototype);
  * @type {object}
  * @internal
  * @example
- * import { TextEncoderMethods } from "@cldmv/slothlet/helpers/intrinsics";
+ * import { TextEncoderMethods } from "#helpers/intrinsics";
  * TextEncoderMethods.encode(new TextEncoder(), text);
  */
 export const TextEncoderMethods = methodsOf(globalThis.TextEncoder?.prototype);
@@ -1239,7 +1239,7 @@ export const TextEncoderMethods = methodsOf(globalThis.TextEncoder?.prototype);
  * @type {object}
  * @internal
  * @example
- * import { BufferMethods } from "@cldmv/slothlet/helpers/intrinsics";
+ * import { BufferMethods } from "#helpers/intrinsics";
  * BufferMethods.toString(chunk, "utf8");
  */
 export const BufferMethods = methodsOf(globalThis.Buffer?.prototype);
@@ -1250,7 +1250,7 @@ export const BufferMethods = methodsOf(globalThis.Buffer?.prototype);
  * @type {object}
  * @internal
  * @example
- * import { FinalizationRegistryMethods } from "@cldmv/slothlet/helpers/intrinsics";
+ * import { FinalizationRegistryMethods } from "#helpers/intrinsics";
  * FinalizationRegistryMethods.register(registry, target, held);
  */
 export const FinalizationRegistryMethods = methodsOf(globalThis.FinalizationRegistry.prototype);
@@ -1262,7 +1262,7 @@ export const FinalizationRegistryMethods = methodsOf(globalThis.FinalizationRegi
  * @type {object}
  * @internal
  * @example
- * import { IteratorMethods } from "@cldmv/slothlet/helpers/intrinsics";
+ * import { IteratorMethods } from "#helpers/intrinsics";
  * IteratorMethods.mapNext(iterator);
  */
 export const IteratorMethods = freeze({
@@ -2090,7 +2090,7 @@ export function matchAllOf(text, regexp) {
  * `Promise`. It is still a `Promise` (`instanceof Promise`, `util.types.isPromise`).
  * @internal
  * @example
- * import { SafePromise } from "@cldmv/slothlet/helpers/intrinsics";
+ * import { SafePromise } from "#helpers/intrinsics";
  * const settled = new SafePromise((resolve) => resolve());
  */
 export class SafePromise extends NativePromise {}

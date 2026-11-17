@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-16T21:19:22-07:00 (1792210762)
+ *	@Last modified time: 2026-11-16T16:16:11-08:00 (1794874571)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -34,8 +34,8 @@
  * This module holds the one hook the boundary patches consult. The live context manager registers a
  * pinner; the async manager leaves it unset and its boundaries pass callbacks through untouched.
  */
-import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "@cldmv/slothlet/helpers/instance-imports";
-import { ArrayMethods, mapList } from "@cldmv/slothlet/helpers/intrinsics";
+import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "#helpers/instance-imports";
+import { ArrayMethods, mapList } from "#helpers/intrinsics";
 
 /**
  * Binds a callback to the caller active at registration, or `null` when the runtime does not need it.

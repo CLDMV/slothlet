@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-11T23:30:00-08:00 (1794468600)
+ *	@Last modified time: 2026-11-16T16:17:27-08:00 (1794874647)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -33,8 +33,8 @@ import { createRequire } from "node:module";
 import v8 from "node:v8";
 import { inspect } from "node:util";
 import slothlet from "@cldmv/slothlet";
-import { isFunctionSourcePatch, isFunctionSourcePatched } from "@cldmv/slothlet/helpers/function-source-context";
-import { functionSource } from "@cldmv/slothlet/helpers/intrinsics";
+import { isFunctionSourcePatch, isFunctionSourcePatched } from "#helpers/function-source-context";
+import { functionSource } from "#helpers/intrinsics";
 
 /** `Function.prototype.toString` as the language provides it: taken before any instance is built. */
 const nativeToString = Function.prototype.toString;

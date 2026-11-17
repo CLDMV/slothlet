@@ -296,7 +296,7 @@ Only relevant when modules are registered via <code>api.slothlet.api.add()</code
 | <a id="typedef_module_at_cldmv_slash_slothlet_SlothletOptions_prop_platform"></a>[platform] | <code>"browser" \| "node"</code> |  | Execution-environment target. Controls whether filesystem-dependent code paths run. Independent of `env` (the `process.env` snapshot). <ul> <li>`"browser"` — browser/worker/Electron-renderer mode. Skips filesystem operations and the `process.env` snapshot. Requires `manifest`.</li> <li>`"node"` — explicit Node.js mode.</li> <li>Omitted — auto-detected: `"browser"` when a `manifest` is provided (or no Node `process` is present), `"node"` otherwise.</li> </ul> |
 | <a id="typedef_module_at_cldmv_slash_slothlet_SlothletOptions_prop_env"></a>[env] | <code>object \| null</code> |  | `process.env` snapshot configuration (Node mode). Independent of `platform`. <ul> <li>`{ include: ["KEY"] }` — allowlist; only the listed keys are captured in `api.slothlet.env`. Non-string entries are silently ignored; an all-non-string array falls back to the full snapshot.</li> <li>Omitted / `null` — the full `process.env` snapshot is captured.</li> </ul> |
 | <a id="typedef_module_at_cldmv_slash_slothlet_SlothletOptions_prop_env-include"></a>[env.include] | <code>Array.<string></code> |  | Allowlist of environment variable names to capture. Only string entries are used. |
-| <a id="typedef_module_at_cldmv_slash_slothlet_SlothletOptions_prop_manifest"></a>[manifest] | <code>Object</code> |  | Pre-generated directory structure for browser mode. Produced at build time by `generateManifest()` from `@cldmv/slothlet/helpers/generate-manifest`. Required when `platform: "browser"`. Presence of `manifest` auto-triggers browser mode without needing an explicit `platform: "browser"`. |
+| <a id="typedef_module_at_cldmv_slash_slothlet_SlothletOptions_prop_manifest"></a>[manifest] | <code>Object</code> |  | Pre-generated directory structure for browser mode. Produced at build time by `generateManifest()` from `#helpers/generate-manifest`. Required when `platform: "browser"`. Presence of `manifest` auto-triggers browser mode without needing an explicit `platform: "browser"`. |
 | <a id="typedef_module_at_cldmv_slash_slothlet_SlothletOptions_prop_suppressFixes"></a>[suppressFixes] | <code>Array.<string></code> |  | Opt out of specific bug-fix behaviors that landed in v3 and become permanent in v4. Each entry uses the `<rule>_<PR>` form (e.g. `"C03_116"`). Each listed rule emits a `WARN_SUPPRESS_FIX_ACTIVE` deprecation warning unless `silent: true`. Temporary escape hatch — will be removed in v4 when the corrected behaviors become permanent. |
 | <a id="typedef_module_at_cldmv_slash_slothlet_SlothletOptions_prop_typescript"></a>[typescript] | <code>boolean \| "fast" \| "strict" \| object</code> | <code>false</code> | TypeScript support. <ul> <li>`false` — disabled (default).</li> <li>`true` or `"fast"` — esbuild transpilation, no type checking.</li> <li>`"strict"` — tsc compilation with type checking and `.d.ts` generation. See <a href="docs/TYPESCRIPT.md">TYPESCRIPT.md</a> for the full configuration reference.</li> </ul> |
 
@@ -408,10 +408,12 @@ Only relevant when modules are registered via <code>api.slothlet.api.add()</code
 <a id="at_cldmv_slash_slothlet_slash_helpers_slash_generate-manifest"></a>
 
 ## @cldmv/slothlet/helpers/generate-manifest
-> <p><strong style="font-size: 1.1em;"><p>Two entry points, both <strong>Node.js-only build-time utilities</strong> (they use <code>node:fs</code> / module
+> <p><strong style="font-size: 1.1em;"><p>Consumers reach these through <code>@cldmv/slothlet/files</code> (<code>files.assets</code>, <code>files.generate</code>, <code>files.importmap</code>,
+> <code>files.specifiers.*</code>); this file is package-private (<code>#helpers/generate-manifest</code>).</p>
+> <p>Two entry points, both <strong>Node.js-only build-time utilities</strong> (they use <code>node:fs</code> / module
 > resolution and run in your build step, a Vite/Webpack plugin, or an Electron main process):</p>
 > <ul>
-> <li><code>generateBrowserAssets(apiDir, { slothletBase })</code> — <strong>the recommended one-call entry.</strong>
+> <li><code>generateBrowserAssets(apiDir, { base })</code> — <strong>the recommended one-call entry.</strong>
 > Returns <code>{ manifest, importmap }</code>: the API-directory manifest <strong>and</strong> the importmap covering
 > both slothlet's own modules (see #123) and the exact <code>exports</code> subpaths of the third-party
 > packages the registered API leaves import (see #297), so browser consumers never hand-roll it.</li>
@@ -447,7 +449,7 @@ Only relevant when modules are registered via <code>api.slothlet.api.add()</code
 **Example**
 ```js
 // build.mjs — run this at build time in Node.js
-import { generateManifest } from "@cldmv/slothlet/helpers/generate-manifest";
+import { generateManifest } from "#helpers/generate-manifest";
 import { writeFileSync } from "node:fs";
 
 const manifest = await generateManifest("./src/api");
@@ -458,7 +460,7 @@ writeFileSync("./public/api-manifest.json", JSON.stringify(manifest, null, 2));
 // app.js — use the manifest at runtime in the browser
 import manifest from "./public/api-manifest.json" assert { type: "json" };
 import { slothlet } from "@cldmv/slothlet";
-import { createManifestResolver } from "@cldmv/slothlet/helpers/manifest-resolver";
+import { createManifestResolver } from "#helpers/manifest-resolver";
 
 const api = await slothlet({
   manifest,
@@ -527,13 +529,15 @@ const api = await slothlet({
 <a id="at_cldmv_slash_slothlet_slash_helpers_slash_manifest-resolver"></a>
 
 ## @cldmv/slothlet/helpers/manifest-resolver
-> <p><strong style="font-size: 1.1em;"><p><code>createManifestResolver(base)</code> produces a <code>resolveModuleSpecifier</code> function that
+> <p><strong style="font-size: 1.1em;"><p>Consumers reach it as <code>files.resolver</code> from <code>@cldmv/slothlet/files</code>; this file is package-private
+> (<code>#helpers/manifest-resolver</code>).</p>
+> <p><code>createManifestResolver(base)</code> produces a <code>resolveModuleSpecifier</code> function that
 > resolves manifest-relative file paths to absolute URLs using the standard
 > <code>new URL(path, base)</code> algorithm. This is the correct resolver for any deployment
 > where API modules are served from a known base URL (the vast majority of use cases).</p>
 > <p>This file has <strong>no Node.js-specific imports</strong> — it is safe to include in a browser
 > bundle directly. For the build-time <code>generateManifest</code> utility (which uses <code>node:fs</code>)
-> see <code>@cldmv/slothlet/helpers/generate-manifest</code>.</p>
+> see <code>#helpers/generate-manifest</code>.</p>
 > <h3>Typical browser workflow</h3>
 > <pre class="prettyprint source lang-text"><code>Build time  →  generateManifest(&quot;./src/api&quot;)  →  api-manifest.json
 > Bundle time →  import api-manifest.json
@@ -547,7 +551,7 @@ const api = await slothlet({
 **Example**
 ```js
 // API modules live next to the current module
-import { createManifestResolver } from "@cldmv/slothlet/helpers/manifest-resolver";
+import { createManifestResolver } from "#helpers/manifest-resolver";
 import manifest from "./api-manifest.json" assert { type: "json" };
 import { slothlet } from "@cldmv/slothlet";
 
@@ -559,7 +563,7 @@ const api = await slothlet({
 **Example**
 ```js
 // API modules live in a sub-directory relative to the current module
-import { createManifestResolver } from "@cldmv/slothlet/helpers/manifest-resolver";
+import { createManifestResolver } from "#helpers/manifest-resolver";
 
 const api = await slothlet({
   manifest,

@@ -33,14 +33,6 @@
 			"types": "./types/stub/lib/typegen/typegen.d.mts",
 			"import": "./dist/lib/typegen/typegen.mjs"
 		},
-		"./slothlet": {
-			"slothlet-dev": {
-				"types": "./types/src/slothlet.d.mts",
-				"import": "./src/slothlet.mjs"
-			},
-			"types": "./types/stub/slothlet.d.mts",
-			"import": "./dist/slothlet.mjs"
-		},
 		"./runtime": {
 			"slothlet-dev": {
 				"types": "./types/src/lib/runtime/runtime.d.mts",
@@ -65,38 +57,6 @@
 			"types": "./types/stub/lib/runtime/runtime-livebindings.d.mts",
 			"import": "./dist/lib/runtime/runtime-livebindings.mjs"
 		},
-		"./helpers/*": {
-			"slothlet-dev": {
-				"types": "./types/src/lib/helpers/*.d.mts",
-				"import": "./src/lib/helpers/*.mjs"
-			},
-			"types": "./types/stub/lib/helpers/*.d.mts",
-			"import": "./dist/lib/helpers/*.mjs"
-		},
-		"./modes/*": {
-			"slothlet-dev": {
-				"types": "./types/src/lib/modes/*.d.mts",
-				"import": "./src/lib/modes/*.mjs"
-			},
-			"types": "./types/stub/lib/modes/*.d.mts",
-			"import": "./dist/lib/modes/*.mjs"
-		},
-		"./builders/*": {
-			"slothlet-dev": {
-				"types": "./types/src/lib/builders/*.d.mts",
-				"import": "./src/lib/builders/*.mjs"
-			},
-			"types": "./types/stub/lib/builders/*.d.mts",
-			"import": "./dist/lib/builders/*.mjs"
-		},
-		"./processors/*": {
-			"slothlet-dev": {
-				"types": "./types/src/lib/processors/*.d.mts",
-				"import": "./src/lib/processors/*.mjs"
-			},
-			"types": "./types/stub/lib/processors/*.d.mts",
-			"import": "./dist/lib/processors/*.mjs"
-		},
 		"./errors": {
 			"slothlet-dev": {
 				"types": "./types/src/lib/errors.d.mts",
@@ -117,16 +77,40 @@
 			"slothlet-dev": "./src/lib/i18n/languages/*",
 			"default": "./dist/lib/i18n/languages/*"
 		},
+		"./vite": {
+			"slothlet-dev": {
+				"types": "./types/src/vite.d.mts",
+				"import": "./src/vite.mjs"
+			},
+			"types": "./types/stub/vite.d.mts",
+			"import": "./dist/vite.mjs"
+		},
+		"./files": {
+			"slothlet-dev": {
+				"types": "./types/src/files.d.mts",
+				"import": "./src/files.mjs"
+			},
+			"types": "./types/stub/files.d.mts",
+			"import": "./dist/files.mjs"
+		},
+		"./sanitize": {
+			"slothlet-dev": {
+				"types": "./types/src/sanitize.d.mts",
+				"import": "./src/sanitize.mjs"
+			},
+			"types": "./types/stub/sanitize.d.mts",
+			"import": "./dist/sanitize.mjs"
+		},
 		"./schemas/slothlet.module.schema.json": "./schemas/slothlet.module.schema.json"
 	},
 	"imports": {
-		"#handlers/*": {
+		"#builders/*": {
 			"slothlet-dev": {
-				"types": "./types/src/lib/handlers/*.d.mts",
-				"import": "./src/lib/handlers/*.mjs"
+				"types": "./types/src/lib/builders/*.d.mts",
+				"import": "./src/lib/builders/*.mjs"
 			},
-			"types": "./types/stub/lib/handlers/*.d.mts",
-			"import": "./dist/lib/handlers/*.mjs"
+			"types": "./types/stub/lib/builders/*.d.mts",
+			"import": "./dist/lib/builders/*.mjs"
 		},
 		"#factories/*": {
 			"slothlet-dev": {
@@ -135,6 +119,86 @@
 			},
 			"types": "./types/stub/lib/factories/*.d.mts",
 			"import": "./dist/lib/factories/*.mjs"
+		},
+		"#handlers/*": {
+			"slothlet-dev": {
+				"types": "./types/src/lib/handlers/*.d.mts",
+				"import": "./src/lib/handlers/*.mjs"
+			},
+			"types": "./types/stub/lib/handlers/*.d.mts",
+			"import": "./dist/lib/handlers/*.mjs"
+		},
+		"#helpers/*": {
+			"slothlet-dev": {
+				"types": "./types/src/lib/helpers/*.d.mts",
+				"import": "./src/lib/helpers/*.mjs"
+			},
+			"types": "./types/stub/lib/helpers/*.d.mts",
+			"import": "./dist/lib/helpers/*.mjs"
+		},
+		"#modes/*": {
+			"slothlet-dev": {
+				"types": "./types/src/lib/modes/*.d.mts",
+				"import": "./src/lib/modes/*.mjs"
+			},
+			"types": "./types/stub/lib/modes/*.d.mts",
+			"import": "./dist/lib/modes/*.mjs"
+		},
+		"#processors/*": {
+			"slothlet-dev": {
+				"types": "./types/src/lib/processors/*.d.mts",
+				"import": "./src/lib/processors/*.mjs"
+			},
+			"types": "./types/stub/lib/processors/*.d.mts",
+			"import": "./dist/lib/processors/*.mjs"
+		},
+		"#slothlet": {
+			"slothlet-dev": {
+				"types": "./types/src/slothlet.d.mts",
+				"import": "./src/slothlet.mjs"
+			},
+			"types": "./types/stub/slothlet.d.mts",
+			"import": "./dist/slothlet.mjs"
+		},
+		"#errors": {
+			"slothlet-dev": {
+				"types": "./types/src/lib/errors.d.mts",
+				"import": "./src/lib/errors.mjs"
+			},
+			"types": "./types/stub/lib/errors.d.mts",
+			"import": "./dist/lib/errors.mjs"
+		},
+		"#i18n": {
+			"slothlet-dev": {
+				"types": "./types/src/lib/i18n/translations.d.mts",
+				"import": "./src/lib/i18n/translations.mjs"
+			},
+			"types": "./types/stub/lib/i18n/translations.d.mts",
+			"import": "./dist/lib/i18n/translations.mjs"
+		},
+		"#runtime": {
+			"slothlet-dev": {
+				"types": "./types/src/lib/runtime/runtime.d.mts",
+				"import": "./src/lib/runtime/runtime.mjs"
+			},
+			"types": "./types/stub/lib/runtime/runtime.d.mts",
+			"import": "./dist/lib/runtime/runtime.mjs"
+		},
+		"#runtime/async": {
+			"slothlet-dev": {
+				"types": "./types/src/lib/runtime/runtime-asynclocalstorage.d.mts",
+				"import": "./src/lib/runtime/runtime-asynclocalstorage.mjs"
+			},
+			"types": "./types/stub/lib/runtime/runtime-asynclocalstorage.d.mts",
+			"import": "./dist/lib/runtime/runtime-asynclocalstorage.mjs"
+		},
+		"#runtime/live": {
+			"slothlet-dev": {
+				"types": "./types/src/lib/runtime/runtime-livebindings.d.mts",
+				"import": "./src/lib/runtime/runtime-livebindings.mjs"
+			},
+			"types": "./types/stub/lib/runtime/runtime-livebindings.d.mts",
+			"import": "./dist/lib/runtime/runtime-livebindings.mjs"
 		}
 	},
 	"types": "./types/stub/index.d.mts",
