@@ -454,7 +454,7 @@ The `permissions` block turns the permission system on; every option it takes is
 
 ### `permissions.mode: "strict"`
 
-`"strict"` is `"on"` with two differences: it is chosen in the config only (`control.enable()` and `control.disable()` throw `PERMISSION_STRICT_FIXED`), and the instance refuses to start (`PERMISSION_BASELINE_UNMET`) while a check of the permission baseline is not met. The checks are facts slothlet tries for itself as the instance starts: in a browser, a Content Security Policy that refuses `'unsafe-eval'` and `blob:` and `data:` scripts; under vitest, the `@cldmv/slothlet/vite` plugin. Plain Node has no check. Under `"on"` the same checks run and each one not met is a warning. `api.slothlet.permissions.control.report()` shows what they found.
+`"strict"` is `"on"` with two differences: it is chosen in the config only (`control.mode("on")` and `control.mode("off")` throw `PERMISSION_STRICT_FIXED`), and the instance refuses to start (`PERMISSION_BASELINE_UNMET`) while a check of the permission baseline is not met. The checks are facts slothlet tries for itself as the instance starts: in a browser, a Content Security Policy that refuses `'unsafe-eval'` and `blob:` and `data:` scripts; under vitest, the `@cldmv/slothlet/vite` plugin. Plain Node has no check. Under `"on"` the same checks run and each one not met is a warning. `api.slothlet.permissions.control.report()` shows what they found.
 
 ```javascript
 const api = await slothlet({ dir: "./api", permissions: { mode: "strict", rules } });

@@ -4214,136 +4214,53 @@ export class ApiBuilder extends ComponentBase {
 				 */
 				control: {
 					/**
-					 * Current permission-enforcement state.
-					 * Exposed as an accessor so descriptor-based reads remain permission-gated.
+					 * The permission system's mode, or switch it. Without an argument, returns `"on"` (every rule applies),
+					 * `"strict"` (as on, with the permission baseline met), `"off"` (only the built-in rules that keep module
+					 * code off the framework's own namespace, root functions, and keys on api nodes), or `"disabled"`
+					 * (nothing applies). With `"on"` / `true` or `"off"` / `false` it switches, then returns the mode.
+					 * `"strict"` is config-only (never entered or left at runtime, `PERMISSION_STRICT_FIXED`); `"disabled"`
+					 * can be left but not entered; after `seal()` switching throws `PERMISSION_SEALED`.
 					 *
-					 * @returns {boolean} True when permission enforcement is enabled.
+					 * @param {"on"|"off"|boolean} [value] - The mode to switch to.
+					 * @returns {"on"|"strict"|"off"|"disabled"} The mode (after the switch, when one was asked for).
 					 * @public
 					 * @example
-					 * const enabled = api.slothlet.permissions.control.enabled;
+					 * api.slothlet.permissions.control.mode(); // "off" with no permissions config
+					 * api.slothlet.permissions.control.mode("on");
 					 */
-					get enabled() {
-						const permissionManager = slothlet.handlers?.permissionManager;
-						/* v8 ignore start */
-						if (!permissionManager?.isEnabled) {
-							throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", {
-								validationError: true
-							});
+					mode: function slothlet_permissions_control_mode(...args) {
+						const permissionManager = slothlet.handlers.permissionManager;
+						if (args.length > 0) permissionManager.setMode(args[0]);
+						return permissionManager.mode();
+					},
+
+					/**
+					 * Read-level gating: whether terminal data-value reads are permission-gated.
+					 * @type {object}
+					 */
+					gating: {
+						/**
+						 * Read-level gating state, or switch it. Without an argument, returns whether terminal data-value reads
+						 * are permission-gated; with a boolean, switches it and returns the new state.
+						 *
+						 * @param {boolean} [value] - True to gate terminal data-value reads, false to stop.
+						 * @returns {boolean} The read-gating state (after the switch, when one was asked for).
+						 * @throws {SlothletError} INVALID_ARGUMENT for a non-boolean; PERMISSION_SEALED once sealed.
+						 * @public
+						 * @example
+						 * api.slothlet.permissions.control.gating.read(); // true
+						 * api.slothlet.permissions.control.gating.read(false);
+						 */
+						read: function slothlet_permissions_control_gating_read(...args) {
+							const permissionManager = slothlet.handlers.permissionManager;
+							if (args.length > 0) permissionManager.setReadGating(args[0]);
+							return permissionManager.isReadGatingEnabled();
 						}
-						/* v8 ignore stop */
-
-						return permissionManager.isEnabled();
 					},
 
 					/**
-					 * The permission system's mode: `"on"` (every rule applies), `"strict"` (as on, with the permission
-					 * baseline met), `"off"` (only the built-in rules that keep module code off the framework's own
-					 * namespace, root functions, and keys on api nodes), or `"disabled"` (nothing applies). `enable()` turns
-					 * it on and `disable()` off; disabled and strict are chosen in the config only, and under strict both
-					 * refuse with `PERMISSION_STRICT_FIXED`.
-					 *
-					 * @returns {"on"|"strict"|"off"|"disabled"} The mode.
-					 * @public
-					 * @example
-					 * api.slothlet.permissions.control.mode; // "off" with no permissions config
-					 */
-					get mode() {
-						return slothlet.handlers.permissionManager.mode();
-					},
-
-					/**
-					 * Enable permission enforcement globally.
-					 *
-					 * @returns {void}
-					 * @public
-					 * @example
-					 * api.slothlet.permissions.control.enable();
-					 */
-					enable: function slothlet_permissions_control_enable() {
-						// Check if permission manager is available
-						const permissionManager = slothlet.handlers?.permissionManager;
-						/* v8 ignore start */
-						if (!permissionManager?.enable) {
-							throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", {
-								validationError: true
-							});
-						}
-						/* v8 ignore stop */
-
-						slothlet.handlers.permissionManager.enable();
-					},
-
-					/**
-					 * Disable permission enforcement globally (all calls allowed).
-					 *
-					 * @returns {void}
-					 * @public
-					 * @example
-					 * api.slothlet.permissions.control.disable();
-					 */
-					disable: function slothlet_permissions_control_disable() {
-						// Check if permission manager is available
-						const permissionManager = slothlet.handlers?.permissionManager;
-						/* v8 ignore start */
-						if (!permissionManager?.disable) {
-							throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", {
-								validationError: true
-							});
-						}
-						/* v8 ignore stop */
-
-						slothlet.handlers.permissionManager.disable();
-					},
-
-					/**
-					 * Current read-level gating state.
-					 * Exposed as an accessor so descriptor-based reads remain permission-gated.
-					 *
-					 * @returns {boolean} True when terminal data-value reads are permission-gated.
-					 * @public
-					 * @example
-					 * const gated = api.slothlet.permissions.control.readGatingEnabled;
-					 */
-					get readGatingEnabled() {
-						const permissionManager = slothlet.handlers?.permissionManager;
-						/* v8 ignore start */
-						if (!permissionManager?.isReadGatingEnabled) {
-							throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", {
-								validationError: true
-							});
-						}
-						/* v8 ignore stop */
-
-						return permissionManager.isReadGatingEnabled();
-					},
-
-					/**
-					 * Enable or disable read-level permission gating at runtime.
-					 *
-					 * @param {boolean} value - True to gate terminal data-value reads, false to stop.
-					 * @returns {void}
-					 * @throws {SlothletError} INVALID_ARGUMENT if `value` is not a boolean.
-					 * @public
-					 * @example
-					 * api.slothlet.permissions.control.readGating(true);
-					 */
-					readGating: function slothlet_permissions_control_readGating(value) {
-						// Check if permission manager is available
-						const permissionManager = slothlet.handlers?.permissionManager;
-						/* v8 ignore start */
-						if (!permissionManager?.setReadGating) {
-							throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", {
-								validationError: true
-							});
-						}
-						/* v8 ignore stop */
-
-						slothlet.handlers.permissionManager.setReadGating(value);
-					},
-
-					/**
-					 * Seal the permission control surface (one-way, no unseal). After sealing, enable/disable,
-					 * addRule/removeRule, readGating, and principal.register/unregister throw PERMISSION_SEALED.
+					 * Seal the permission control surface (one-way, no unseal). After sealing, switching `mode(value)` or
+					 * `gating.read(value)`, addRule/removeRule, and principal.register/unregister throw PERMISSION_SEALED.
 					 * Enforcement continues to evaluate; principal.invalidate and shutdown() still work. Idempotent.
 					 *
 					 * @returns {void}

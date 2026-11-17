@@ -37,12 +37,12 @@ describe.each(getMatrixConfigs())("Permissions > Control Deny Default > $name", 
 		});
 
 		// The built-in deny rule should exist for control.**
-		const rules = api.slothlet.permissions.global.rulesForPath("slothlet.permissions.control.enable");
+		const rules = api.slothlet.permissions.global.rulesForPath("slothlet.permissions.control.mode");
 		const builtinDeny = rules.find((r) => r.caller === "**" && r.effect === "deny" && r.target === "slothlet.permissions.control.**");
 		expect(builtinDeny).toBeDefined();
 	});
 
-	it("built-in deny blocks inter-module call to control.enable() even when permissions are globally disabled", async () => {
+	it("built-in deny blocks inter-module call to control.mode('on') even when permissions are globally disabled", async () => {
 		// permissions.enabled: false means checkAccess() normally short-circuits to true,
 		// but control.** is carved out — the built-in deny still fires for callerWrapper calls.
 		api = await slothlet({
@@ -61,7 +61,7 @@ describe.each(getMatrixConfigs())("Permissions > Control Deny Default > $name", 
 		});
 	});
 
-	it("built-in deny blocks inter-module call to control.disable() even when permissions are globally disabled", async () => {
+	it("built-in deny blocks inter-module call to control.mode('off') even when permissions are globally disabled", async () => {
 		// Mirrors the enable() test — the disable() enforcement path in api_builder is separate code.
 		api = await slothlet({
 			...config,

@@ -63,12 +63,12 @@ await record("start", async () => {
 out.warnings = SlothletWarning.captured.map((warning) => ({ code: warning.code, check: warning.context?.check ?? null }));
 if (api) {
 	await record("report", () => api.slothlet.permissions.control.report());
-	await record("mode", () => api.slothlet.permissions.control.mode);
+	await record("mode", () => api.slothlet.permissions.control.mode());
 	await record("good", () => api.good.readOnly());
 	await record("settler", () => api.settler.own("none"));
-	await record("disable", () => api.slothlet.permissions.control.disable());
-	await record("enable", () => api.slothlet.permissions.control.enable());
-	await record("modeAfter", () => api.slothlet.permissions.control.mode);
+	await record("disable", () => api.slothlet.permissions.control.mode("off"));
+	await record("enable", () => api.slothlet.permissions.control.mode("on"));
+	await record("modeAfter", () => api.slothlet.permissions.control.mode());
 	await record("settlerAfter", () => api.settler.own("none"));
 	await api.shutdown();
 }

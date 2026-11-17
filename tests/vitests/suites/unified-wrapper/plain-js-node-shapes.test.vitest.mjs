@@ -875,7 +875,7 @@ describe.each(
 			expect(await api.reader.readHeldEmitter(api.owner.relay, "beforeHeld")).toEqual(plain.relay);
 			expect((await api.owner.prototypesHolding("beforeSelf")).bus).toBe(true);
 			expect((await api.owner.prototypesHolding("beforeHeld")).relay).toBe(true);
-			api.slothlet.permissions.control.enable();
+			api.slothlet.permissions.control.mode("on");
 			for (const [key, emitter, run] of [
 				["selfEmitter", "bus", () => api.reader.readEmitter("selfEmitter")],
 				["heldEmitter", "bus", () => api.reader.readHeldEmitter(api.owner.bus, "heldEmitter")],

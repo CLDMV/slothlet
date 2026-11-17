@@ -25,7 +25,7 @@
  * guards the internal namespace separately, and that guard covers `slothlet.api.add`,
  * `slothlet.permissions.control.*` and rule introspection. It read the caller field directly, so an
  * unprivileged module could borrow a concurrently-suspended sibling's authority over the permission
- * system itself — a strictly worse target than ordinary data, since `control.disable()` lives there.
+ * system itself — a strictly worse target than ordinary data, since `control.mode("off")` lives there.
  *
  * **Stack tampering.** Identity in that window comes from the stack, which makes the stack part of
  * the trust boundary. `Error.prepareStackTrace` is a writable global and `Error` itself is

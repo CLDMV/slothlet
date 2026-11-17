@@ -714,6 +714,21 @@ export class PermissionManager extends ComponentBase {
      */
     disable(): void;
     /**
+     * Switch the permission system's mode at runtime: `"on"` (or `true`) turns it on, `"off"` (or `false`) off.
+     * `"strict"` is chosen in the config only, so it can be neither entered nor left here. `"disabled"` is also chosen
+     * in the config only: an instance started disabled can be switched on or off, but none can be switched to it (asking
+     * for it while already disabled changes nothing). Refused once the control surface is sealed.
+     *
+     * @param {"on"|"off"|"strict"|"disabled"|boolean} value - The mode to switch to.
+     * @returns {void}
+     * @throws {SlothletError} PERMISSION_STRICT_FIXED under strict, or when `value` is `"strict"`; PERMISSION_SEALED
+     *   once sealed; INVALID_ARGUMENT for `"disabled"` (unless already disabled) or any other value.
+     * @example
+     * pm.setMode("on");
+     * pm.setMode(false);
+     */
+    setMode(value: "on" | "off" | "strict" | "disabled" | boolean): void;
+    /**
      * Whether the permission system is currently enabled.
      *
      * @returns {boolean} True if enabled.

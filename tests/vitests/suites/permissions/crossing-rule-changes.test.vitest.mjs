@@ -123,10 +123,10 @@ describe.each(matrix)("crossing views follow runtime rule changes > $mode / $run
 	it("decides again when the permission system is switched off and on", async () => {
 		await mount(allowWrites("writer"));
 		expect(await api.reader.plain("__d1_")).toEqual(VIEWED);
-		api.slothlet.permissions.control.disable();
+		api.slothlet.permissions.control.mode("off");
 		// Off: nothing is viewed and no write is refused on ownership.
 		expect(await api.reader.plain("__d2_")).toEqual(ITSELF);
-		api.slothlet.permissions.control.enable();
+		api.slothlet.permissions.control.mode("on");
 		expect(await api.reader.plain("__d3_")).toEqual(VIEWED);
 		expect(await api.reader.writer("__d4_")).toEqual(ITSELF);
 		expect(await api.owner.landed("__d")).toEqual(["2_", "4_"]);

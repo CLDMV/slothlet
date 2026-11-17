@@ -82,14 +82,14 @@ describe.each(CONFIGS)("The permission manager reads the normalised permissions 
 	describe.each(ATTRIBUTIONS)("attribution %s", (attribution) => {
 		it.each(RAW_FORMS)("%s behaves as its normalised form", async (_label, raw, modeName) => {
 			await load(raw, attribution);
-			const rawMode = api.slothlet.permissions.control.mode;
+			const rawMode = api.slothlet.permissions.control.mode();
 			const rawWrite = writeNamespace();
 			await api.shutdown();
 
 			const normalised = normalizePermissionsConfig(raw);
 			await load(normalised, attribution);
 			expect(rawMode).toBe(modeName);
-			expect(api.slothlet.permissions.control.mode).toBe(modeName);
+			expect(api.slothlet.permissions.control.mode()).toBe(modeName);
 			expect(rawWrite).toBe(writeNamespace());
 			expect(rawWrite).toBe(modeName === "disabled" ? "done" : "PERMISSION_DENIED");
 		});
@@ -97,7 +97,7 @@ describe.each(CONFIGS)("The permission manager reads the normalised permissions 
 		it("keeps the normalised section across a reload", async () => {
 			await load({ audit: true, mode: "on" }, attribution);
 			await api.slothlet.reload();
-			expect(api.slothlet.permissions.control.mode).toBe("on");
+			expect(api.slothlet.permissions.control.mode()).toBe("on");
 			expect(writeNamespace()).toBe("PERMISSION_DENIED");
 		});
 	});

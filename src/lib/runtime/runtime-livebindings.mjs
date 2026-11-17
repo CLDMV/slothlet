@@ -92,7 +92,7 @@ const resolveActiveContext = () => liveRuntime.getContext();
  * attributed to the module making it. Code that is not a module has no attribution, so resolving
  * `self` for it would resolve it as the host — which is exempt from the rules. Any script that can
  * import the runtime would then hold full authority over a running instance, up to and including
- * `slothlet.permissions.control.disable()`.
+ * `slothlet.permissions.control.mode("off")`.
  *
  * The async runtime refuses this for free: outside a module call there is no AsyncLocalStorage store
  * to read through. The live runtime holds its store in a field that stays populated for the whole

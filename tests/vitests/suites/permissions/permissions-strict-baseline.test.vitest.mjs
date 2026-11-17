@@ -17,7 +17,7 @@
  * @fileoverview `permissions.mode: "strict"` and the baseline checks an instance runs as it starts.
  *
  * @description
- * Strict is chosen in the config only: it behaves as "on" for every check, `control.enable()` and `control.disable()`
+ * Strict is chosen in the config only: it behaves as "on" for every check, `control.mode("on")` and `control.mode("off")`
  * refuse to leave it, and the instance refuses to start while a baseline check is not met. Under "on" each check that
  * is not met is one warning naming it. `control.report()` gives the mode, the baseline and the capabilities the rules open
  * (an empty list until capabilities are built).
@@ -126,7 +126,7 @@ describe.each(CONFIGS)("permissions mode strict > Node, a child process > $loadi
 		expect(out.report).toEqual({ ...MET_NODE, mode: "on" });
 		expect([out.good, out.settler]).toEqual(["GOOD-ONLY", "PERMISSION_DENIED"]);
 		// Off, then on again.
-		expect([out.disable, out.enable, out.modeAfter, out.settlerAfter]).toEqual([undefined, undefined, "on", "PERMISSION_DENIED"]);
+		expect([out.disable, out.enable, out.modeAfter, out.settlerAfter]).toEqual(["off", "on", "on", "PERMISSION_DENIED"]);
 	});
 
 	it.each(["off", "disabled"])("under %s, runs no check and warns nothing", (mode) => {

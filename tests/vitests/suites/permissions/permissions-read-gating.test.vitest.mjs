@@ -439,7 +439,7 @@ describe.each(getMatrixConfigs())("Permissions > Read-Level Gating > $name", ({ 
 		});
 	});
 
-	it("control.readGating(true) starts gating a previously-allowed read at runtime", async () => {
+	it("control.gating.read(true) starts gating a previously-allowed read at runtime", async () => {
 		api = await slothlet({
 			...config,
 			base: BASE,
@@ -451,13 +451,13 @@ describe.each(getMatrixConfigs())("Permissions > Read-Level Gating > $name", ({ 
 		});
 
 		// Started opted out — the deny rule does not gate the read yet.
-		expect(api.slothlet.permissions.control.readGatingEnabled).toBe(false);
+		expect(api.slothlet.permissions.control.gating.read()).toBe(false);
 		const before = await api.callers.dataReader.readToken();
 		expect(Buffer.isBuffer(before)).toBe(true);
 
 		// Toggle on — the same read is now gated.
-		api.slothlet.permissions.control.readGating(true);
-		expect(api.slothlet.permissions.control.readGatingEnabled).toBe(true);
+		api.slothlet.permissions.control.gating.read(true);
+		expect(api.slothlet.permissions.control.gating.read()).toBe(true);
 		try {
 			await api.callers.dataReader.readToken();
 			expect.unreachable("read should have been denied after toggle");
@@ -466,7 +466,7 @@ describe.each(getMatrixConfigs())("Permissions > Read-Level Gating > $name", ({ 
 		}
 	});
 
-	it("control.readGating(false) stops gating at runtime", async () => {
+	it("control.gating.read(false) stops gating at runtime", async () => {
 		api = await slothlet({
 			...config,
 			base: BASE,
@@ -485,8 +485,8 @@ describe.each(getMatrixConfigs())("Permissions > Read-Level Gating > $name", ({ 
 		}
 
 		// Toggle off — the read is no longer gated.
-		api.slothlet.permissions.control.readGating(false);
-		expect(api.slothlet.permissions.control.readGatingEnabled).toBe(false);
+		api.slothlet.permissions.control.gating.read(false);
+		expect(api.slothlet.permissions.control.gating.read()).toBe(false);
 		const after = await api.callers.dataReader.readToken();
 		expect(Buffer.isBuffer(after)).toBe(true);
 	});
@@ -546,13 +546,13 @@ describe.each(getMatrixConfigs())("Permissions > Read-Level Gating > $name", ({ 
 		expect(callers.every((c) => !/^callers\.dataReader(\.|$)/.test(c))).toBe(true);
 	});
 
-	it("control.readGating rejects a non-boolean argument", async () => {
+	it("control.gating.read rejects a non-boolean argument", async () => {
 		api = await slothlet({
 			...config,
 			base: BASE,
 			permissions: { defaultPolicy: "allow" }
 		});
 
-		expect(() => api.slothlet.permissions.control.readGating("yes")).toThrow(/INVALID_ARGUMENT/);
+		expect(() => api.slothlet.permissions.control.gating.read("yes")).toThrow(/INVALID_ARGUMENT/);
 	});
 });
