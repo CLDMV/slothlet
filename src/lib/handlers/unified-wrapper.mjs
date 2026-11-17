@@ -624,6 +624,10 @@ function runtime_selfModuleCeilings(slothlet, writer) {
  * `scope()` the host opened, where `self` itself writes as the host. The same test the live `self` applies
  * before it resolves at all.
  *
+ * Inside such a flow only the host's own code has that standing. A module's code running there (a function it handed
+ * out that the host calls, or a callback of its own given the flow's async context) is the module's, as a `self`
+ * read in the flow is (see {@link runtime_selfReadAsDefiner}): it is held to the view's reader, never to the host.
+ *
  * @param {object} slothlet - Instance the node belongs to.
  * @returns {boolean} Whether the write stands on the code running now.
  * @private
@@ -633,7 +637,30 @@ function runtime_selfWriteHasStanding(slothlet) {
 	const identity = contextManager?.getCallerIdentity?.(slothlet.instanceID);
 	if (identity?.currentWrapper || identity?.unresolved) return true;
 	const store = contextManager?.tryGetContext?.(slothlet.instanceID);
-	return Boolean(store?.parentInstanceID) && store[trustedRootOwn.TRUSTED_ROOT] === true;
+	if (!store?.parentInstanceID || store[trustedRootOwn.TRUSTED_ROOT] !== true) return false;
+	return !runtime_hostFlowRunsModuleCode(slothlet, store.parentInstanceID);
+}
+
+/**
+ * Whether the code running now inside a flow the host opened is a module's rather than the host's: its frames place
+ * it in a module's file, as {@link runtime_selfReadAsDefiner} reads them for a `self` read made there. Evaluated code
+ * whose definer the frames cannot tell stays the host's, as it does for that read; code of a file several running
+ * instances hold untold apart is not the host's. With the permission system on and `provenance` or `capture` off, no
+ * code is told by its frames and the flow's code is the host's.
+ *
+ * @param {object} slothlet - Instance the flow belongs to.
+ * @param {string} hostFlowInstanceID - The instance whose flow the host opened.
+ * @returns {boolean} True for a module's code.
+ * @private
+ */
+function runtime_hostFlowRunsModuleCode(slothlet, hostFlowInstanceID) {
+	if (slothlet.handlers?.permissionManager?.isEnabled?.()) {
+		const callerConfig = slothlet.config?.permissions?.caller;
+		if (callerConfig?.provenance === false || callerConfig?.capture === false) return false;
+	}
+	const definer = frameDefiner(hostFlowInstanceID);
+	if (definer === null) return false;
+	return !(definer.unplaced && !definer.shared);
 }
 
 /**
@@ -2375,8 +2402,9 @@ function runtime_registerFrameworkMember(member, slothlet, name) {
  * api itself, `hook.on()` / `lifecycle.on()` register for the module calling or for the host. A function a
  * module read and kept, called later from outside any call, would run as the host. Through the view it runs
  * as the module that read it, and so does every other use of the view — a member read, a write — made with
- * no standing of its own. While a module executes, or inside a `run()` / `scope()` the host opened, the view
- * behaves as the member itself. The host is handed the member itself.
+ * no standing of its own. While a module executes, or while the host's own code runs inside a `run()` / `scope()`
+ * it opened, the view behaves as the member itself; a module's code running in such a flow uses it as the reader
+ * (see {@link runtime_selfWriteHasStanding}). The host is handed the member itself.
  *
  * A module never changes them (#625): they are shared by every module and the host, so an assignment,
  * definition, or deletion of a member at any depth, or a change to a member's prototype or extensibility
