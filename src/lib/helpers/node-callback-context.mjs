@@ -42,11 +42,19 @@
  * the shared layer registry, removed when the last live instance shuts down; a wrapper another library has since
  * covered is left in place and passes through from then on. A browser has none of these modules, and nothing is
  * patched there.
+ *
+ * Node serves `crypto.randomInt(…, cb)` from a shared cache of random bytes; a call that finds it empty waits on one
+ * shared refill, and every waiting callback is called from the async context of the call that started the refill, so
+ * `AsyncLocalStorage`, and the async runtime with it, would hand a second flow the first one's store. While an instance
+ * on the async runtime exists, the functions listed in {@link BATCHED} are wrapped too: a call with a callback takes its
+ * value from the synchronous form (which refills the cache in place when it is empty) and hands it to the callback
+ * through `process.nextTick()`, which carries the caller's async context. That is how Node delivers every value the
+ * cache already holds. No other covered function mixes flows this way.
  */
 
 import { pinToCurrentFlow } from "#helpers/caller-pinning";
 import { openLayer, closeLayer, holdsValue, markLayer } from "#helpers/boundary-patch-layers";
-import { listPush, Objects, Processes, Reflect } from "#helpers/intrinsics";
+import { copyList, listPush, listSplice, Objects, Processes, Reflect } from "#helpers/intrinsics";
 import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "#helpers/instance-imports";
 
 /**
@@ -169,18 +177,37 @@ const COVERED = Objects.freeze([
 ]);
 
 /**
- * What is patched: the host object, the key, the wrapper installed and its layer, in install order.
- * @type {Array<{host: object, name: string, layer: {active: boolean, below: *}, wrapper: Function}>}
+ * The covered functions whose callbacks Node calls from another call's async context when calls overlap: concurrent
+ * `crypto.randomInt` calls wait on one shared refill, and the callbacks run in the context of the call that started it.
+ * Each one's synchronous form (the call without its callback) returns the value the callback is handed. Wrapped for the
+ * async runtime as well (see {@link enableAsyncCallbackServing}).
+ * @type {ReadonlyArray<{host: string, names: ReadonlyArray<string>}>}
+ * @private
+ */
+const BATCHED = Objects.freeze([{ host: "crypto", names: ["randomInt"] }]);
+
+/**
+ * What is patched: the host object, the key, the wrapper installed and its layer, and what the wrapper does with a
+ * trailing callback (`pin`: pin it to the live runtime's flow and caller; `serve`: take the value from the synchronous
+ * form and hand it to the callback through `process.nextTick()`), in install order.
+ * @type {Array<{host: object, name: string, layer: {active: boolean, below: *}, wrapper: Function, pin: boolean, serve: boolean}>}
  * @private
  */
 const patched = [];
 
 /**
- * Whether the patches are installed.
+ * Whether a live-runtime instance holds the patches.
  * @type {boolean}
  * @private
  */
 let isPatchingEnabled = false;
+
+/**
+ * Whether an async-runtime instance holds the {@link BATCHED} patches.
+ * @type {boolean}
+ * @private
+ */
+let isServingEnabled = false;
 
 /**
  * A Node builtin, when the platform has it.
@@ -248,26 +275,62 @@ function runtime_carryOwn(wrapper, original) {
 }
 
 /**
- * Replace `host[name]` with a wrapper that pins a trailing callback, and remember it for removal.
+ * The entry of `host[name]` in {@link patched}, if it is patched.
  * @param {object} host - The object carrying the function.
  * @param {string} name - Its key.
- * @returns {Function|null} The wrapper installed, or null when none was.
+ * @returns {object|null} The entry, or null.
  * @private
  */
-function runtime_patch(host, name) {
+function runtime_entry(host, name) {
+	for (let index = 0; index < patched.length; index++) {
+		const entry = patched[index];
+		if (entry.host === host && entry.name === name) return entry;
+	}
+	return null;
+}
+
+/**
+ * Replace `host[name]` with a wrapper that pins or serves a trailing callback, as its entry says, and remember it for
+ * removal. A function patched already only has its entry updated.
+ * @param {object} host - The object carrying the function.
+ * @param {string} name - Its key.
+ * @param {boolean} pin - Whether the callback is pinned to the live runtime's flow and caller.
+ * @param {boolean} serve - Whether the value is taken from the synchronous form and handed to the callback through
+ *   `process.nextTick()`.
+ * @returns {Function|null} The wrapper in place, or null when none is.
+ * @private
+ */
+function runtime_patch(host, name, pin, serve) {
+	const existing = runtime_entry(host, name);
+	if (existing !== null) {
+		existing.pin = existing.pin || pin;
+		existing.serve = existing.serve || serve;
+		return existing.wrapper;
+	}
 	const installed = host[name];
 	if (typeof installed !== "function") return null;
 	// Shared with any other copy of slothlet in the realm (see boundary-patch-layers).
 	const layer = openLayer(installed);
 	const below = layer.below;
+	const entry = { host, name, layer, wrapper: null, pin, serve };
 	const wrapper = function (...args) {
 		const last = args.length - 1;
 		// A call with no callback, or a wrapper switched off under another copy's, is Node's own call; outside every flow
 		// and module call the callback is handed on as it is (see pinToCurrentFlow).
 		if (last < 0 || typeof args[last] !== "function" || !layer.active) return Reflect.apply(below, this, args);
-		args[last] = pinToCurrentFlow(args[last]);
+		const callback = entry.pin ? pinToCurrentFlow(args[last]) : args[last];
+		// A call with nothing before its callback is malformed: Node's own call reports it.
+		if (entry.serve && last > 0) {
+			// The same checks and the same value as Node's own call; only the delivery differs, as Node's own does for a
+			// value its cache already holds. A refill the synchronous form needs is done in place.
+			const value = Reflect.apply(below, this, copyList(args, 0, last));
+			Processes.nextTick(callback, undefined, value);
+			return undefined;
+		}
+		args[last] = callback;
 		return Reflect.apply(below, this, args);
 	};
+	entry.wrapper = wrapper;
 	runtime_carryOwn(wrapper, below);
 	markLayer(wrapper, layer);
 	try {
@@ -284,7 +347,7 @@ function runtime_patch(host, name) {
 		layer.active = false;
 		return null;
 	}
-	listPush(patched, { host, name, layer, wrapper });
+	listPush(patched, entry);
 	return wrapper;
 }
 
@@ -302,18 +365,74 @@ function runtime_patch(host, name) {
 function enableNodeCallbackPatching() {
 	if (isPatchingEnabled) return;
 	isPatchingEnabled = true;
-	for (let entryIndex = 0; entryIndex < COVERED.length; entryIndex++) {
-		const { host: key, names } = COVERED[entryIndex];
+	runtime_install(COVERED, true, false);
+}
+
+/**
+ * Deliver the callbacks of the functions in {@link BATCHED} through `process.nextTick()`, in the async context they
+ * were handed in, so overlapping calls in different flows each see their own.
+ *
+ * Called when an instance on the async runtime is created; later calls are ignored. Does nothing where the builtins
+ * are absent (a browser).
+ *
+ * @returns {void}
+ * @public
+ * @example
+ * enableAsyncCallbackServing();
+ */
+function enableAsyncCallbackServing() {
+	if (isServingEnabled) return;
+	isServingEnabled = true;
+	runtime_install(BATCHED, false, true);
+}
+
+/**
+ * Patch every function listed, or add to what the wrapper of one patched already does.
+ * @param {ReadonlyArray<{host: string, names: ReadonlyArray<string>}>} list - The functions.
+ * @param {boolean} pin - Whether their callbacks are pinned to the live runtime's flow and caller.
+ * @param {boolean} serve - Whether their values are taken from the synchronous form and handed to the callback through
+ *   `process.nextTick()`.
+ * @returns {void}
+ * @private
+ */
+function runtime_install(list, pin, serve) {
+	const before = patched.length;
+	for (let entryIndex = 0; entryIndex < list.length; entryIndex++) {
+		const { host: key, names } = list[entryIndex];
 		const host = HOSTS[key];
 		if (host == null) continue;
 		for (let nameIndex = 0; nameIndex < names.length; nameIndex++) {
-			const wrapper = runtime_patch(host, names[nameIndex]);
+			const wrapper = runtime_patch(host, names[nameIndex], pin, serve);
 			// `fs.realpath.native` was copied onto the `fs.realpath` wrapper, and is patched there.
-			if (wrapper !== null && key === "fs" && names[nameIndex] === "realpath") runtime_patch(wrapper, "native");
+			if (wrapper !== null && key === "fs" && names[nameIndex] === "realpath") runtime_patch(wrapper, "native", pin, serve);
 		}
 	}
 	// ES modules read a builtin's exports through bindings Node refreshes on request.
-	if (patched.length !== 0) SYNC_BUILTIN_ESM_EXPORTS?.();
+	if (patched.length !== before) SYNC_BUILTIN_ESM_EXPORTS?.();
+}
+
+/**
+ * Take one job off every wrapper, and put back the functions whose wrapper is left with none, where that wrapper is
+ * still the one in place, last installed first. A wrapper something else has since covered passes through from then on.
+ * @param {"pin"|"serve"} job - The job taken off.
+ * @returns {void}
+ * @private
+ */
+function runtime_uninstall(job) {
+	let restored = false;
+	for (let index = patched.length - 1; index >= 0; index--) {
+		const entry = patched[index];
+		entry[job] = false;
+		if (entry.pin || entry.serve) continue;
+		const { host, name, layer, wrapper } = entry;
+		const below = closeLayer(layer);
+		if (holdsValue(host, name, wrapper)) {
+			host[name] = below;
+			restored = true;
+		}
+		listSplice(patched, index, 1);
+	}
+	if (restored) SYNC_BUILTIN_ESM_EXPORTS?.();
 }
 
 /**
@@ -326,18 +445,22 @@ function enableNodeCallbackPatching() {
  */
 function disableNodeCallbackPatching() {
 	if (!isPatchingEnabled) return;
-	let restored = false;
-	for (let index = patched.length - 1; index >= 0; index--) {
-		const { host, name, layer, wrapper } = patched[index];
-		const below = closeLayer(layer);
-		if (holdsValue(host, name, wrapper)) {
-			host[name] = below;
-			restored = true;
-		}
-	}
-	patched.length = 0;
 	isPatchingEnabled = false;
-	if (restored) SYNC_BUILTIN_ESM_EXPORTS?.();
+	runtime_uninstall("pin");
+}
+
+/**
+ * Take back what {@link enableAsyncCallbackServing} added: a wrapper left with nothing to do is removed as
+ * {@link disableNodeCallbackPatching} removes one.
+ * @returns {void}
+ * @public
+ * @example
+ * disableAsyncCallbackServing();
+ */
+function disableAsyncCallbackServing() {
+	if (!isServingEnabled) return;
+	isServingEnabled = false;
+	runtime_uninstall("serve");
 }
 
 /**
@@ -349,7 +472,7 @@ function disableNodeCallbackPatching() {
  */
 export function internals(consumer) {
 	if (!mayTakeInternals(consumer, ["slothlet"])) throw ownBindingsRefusal("lib/helpers/node-callback-context", import.meta.url);
-	return { disableNodeCallbackPatching, enableNodeCallbackPatching };
+	return { disableAsyncCallbackServing, disableNodeCallbackPatching, enableAsyncCallbackServing, enableNodeCallbackPatching };
 }
 
 /**
@@ -385,7 +508,13 @@ function mayTakeInternals(consumer, consumers) {
 const guarded_enableNodeCallbackPatching = guardInternal(enableNodeCallbackPatching, "enableNodeCallbackPatching", import.meta.url);
 /** @type {typeof disableNodeCallbackPatching} */
 const guarded_disableNodeCallbackPatching = guardInternal(disableNodeCallbackPatching, "disableNodeCallbackPatching", import.meta.url);
+/** @type {typeof enableAsyncCallbackServing} */
+const guarded_enableAsyncCallbackServing = guardInternal(enableAsyncCallbackServing, "enableAsyncCallbackServing", import.meta.url);
+/** @type {typeof disableAsyncCallbackServing} */
+const guarded_disableAsyncCallbackServing = guardInternal(disableAsyncCallbackServing, "disableAsyncCallbackServing", import.meta.url);
 export {
 	guarded_enableNodeCallbackPatching as enableNodeCallbackPatching,
-	guarded_disableNodeCallbackPatching as disableNodeCallbackPatching
+	guarded_disableNodeCallbackPatching as disableNodeCallbackPatching,
+	guarded_enableAsyncCallbackServing as enableAsyncCallbackServing,
+	guarded_disableAsyncCallbackServing as disableAsyncCallbackServing
 };

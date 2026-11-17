@@ -158,7 +158,12 @@ export const EXPORTS = {
 	"#helpers/eventtarget-context": ["enableEventTargetPatching", "disableEventTargetPatching"],
 	"#helpers/eventtarget-property-context": ["enableEventTargetPropertyPatching", "disableEventTargetPropertyPatching"],
 	"#helpers/async-resource-context": ["enableAsyncResourcePatching", "disableAsyncResourcePatching"],
-	"#helpers/node-callback-context": ["enableNodeCallbackPatching", "disableNodeCallbackPatching"],
+	"#helpers/node-callback-context": [
+		"enableNodeCallbackPatching",
+		"disableNodeCallbackPatching",
+		"enableAsyncCallbackServing",
+		"disableAsyncCallbackServing"
+	],
 	"#processors/typescript": ["sweepStaleFallbackRoots", "releaseSecureFallbackRoot"],
 	"@cldmv/slothlet/i18n": ["init"],
 	"#i18n": ["setLanguage", "setLanguageAsync", "initI18n"],

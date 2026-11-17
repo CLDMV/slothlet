@@ -180,7 +180,8 @@ const { enableObserverPatching, disableObserverPatching } = observerContextInter
 const { enablePromisePatching, disablePromisePatching } = promiseContextInternals("slothlet");
 const { enableClonePatching, disableClonePatching } = cloneContextInternals("slothlet");
 const { enableAsyncResourcePatching, disableAsyncResourcePatching } = asyncResourceContextInternals("slothlet");
-const { enableNodeCallbackPatching, disableNodeCallbackPatching } = nodeCallbackContextInternals("slothlet");
+const { enableNodeCallbackPatching, disableNodeCallbackPatching, enableAsyncCallbackServing, disableAsyncCallbackServing } =
+	nodeCallbackContextInternals("slothlet");
 const { enableFunctionSourcePatching, disableFunctionSourcePatching } = functionSourceContextInternals("slothlet");
 const { registerCapabilityCheck, releaseCapabilityCheck } = capabilityContextInternals("slothlet");
 const { claimInstanceScope, setInstanceSelfKind, closeInstanceSelf } = instanceImportsInternals("slothlet");
@@ -218,6 +219,14 @@ const boundaryPatchHolders = new Set();
  * @private
  */
 const promisePatchHolders = new Set();
+
+/**
+ * Async-runtime instances holding the `crypto.randomInt` patch that hands each callback its value in the caller's async
+ * context (see `enableAsyncCallbackServing` in `helpers/node-callback-context`), removed once no async instance holds it.
+ * @type {Set<string>}
+ * @private
+ */
+const asyncCallbackHolders = new Set();
 
 /**
  * Top-level config keys retained by identity when the original config is snapshotted for
@@ -1384,6 +1393,11 @@ class Slothlet {
 			// the event loop, past every boundary above, so each is pinned to the flow and caller that handed it in.
 			enableNodeCallbackPatching();
 			SetMethods.add(promisePatchHolders, this.instanceID);
+		} else {
+			// Node calls the callbacks of overlapping `crypto.randomInt(n, cb)` calls from the async context of the one that
+			// started its shared refill: each is handed its value through `process.nextTick()` in the caller's own.
+			enableAsyncCallbackServing();
+			SetMethods.add(asyncCallbackHolders, this.instanceID);
 		}
 
 		// The platform's cloning functions (`structuredClone`, `v8.serialize`, `postMessage`) refuse a Proxy, and what one
@@ -1811,6 +1825,7 @@ class Slothlet {
 			// patches could never be released. Nothing is unpatched here: the new ID takes the share straight back.
 			SetMethods.delete(boundaryPatchHolders, oldInstanceID);
 			SetMethods.delete(promisePatchHolders, oldInstanceID);
+			SetMethods.delete(asyncCallbackHolders, oldInstanceID);
 
 			// The TS transform cache dirs from the previous instanceID are stale: the
 			// startup sweep only removes dirs whose owning PID is dead (same-PID dirs
@@ -2349,6 +2364,9 @@ class Slothlet {
 			disablePromisePatching();
 			disableAsyncResourcePatching();
 			disableNodeCallbackPatching();
+		}
+		if (SetMethods.delete(asyncCallbackHolders, this.instanceID) && SetMethods.size(asyncCallbackHolders) === 0) {
+			disableAsyncCallbackServing();
 		}
 		if (SetMethods.size(boundaryPatchHolders) === 0) {
 			disableEventEmitterPatching();

@@ -269,10 +269,6 @@ describe.each(MATRIX)("Node callback APIs keep the run > $runtime / $name", ({ r
 	it("a module's callback sees its own run and caller, with a second run open beside it", async () => {
 		const failures = [];
 		for (const [group, name] of allCases()) {
-			// Node serves concurrent `crypto.randomInt(…, cb)` calls from one shared fetch and calls the waiting callbacks
-			// from the first one's async context, so `AsyncLocalStorage` (the async runtime) hands the second flow the
-			// first one's store. The live runtime pins each callback before Node sees it, so it keeps both apart.
-			if (runtime === "async" && name === "randomInt") continue;
 			const seen = await both((tag) => run(tag, () => (tag === "one" ? api.one : api.two).via(group, name, env)));
 			const expected = [
 				{ tag: "one", caller: "one.via" },
@@ -287,14 +283,42 @@ describe.each(MATRIX)("Node callback APIs keep the run > $runtime / $name", ({ r
 		const failures = [];
 		const read = () => api.slothlet.context.get().tag;
 		for (const [group, name] of allCases()) {
-			// See the module test above.
-			if (runtime === "async" && name === "randomInt") continue;
 			const start = (tag) => run(tag, () => new Promise((resolve) => cases.CASES[group][name](env, () => resolve(read()))));
 			const seen = await both(start);
 			if (seen[0] !== "one" || seen[1] !== "two") failures.push({ api: `${group}.${name}`, seen });
 		}
 		expect(failures).toEqual([]);
 	}, 120000);
+
+	// Node serves overlapping `crypto.randomInt(…, cb)` calls from one shared cache of random bytes; once it runs out, every
+	// waiting callback is called from the async context of the call that started the refill. 1100 calls per flow outrun
+	// the cache (1024 values), so the second flow's calls all wait on a refill the first flow started.
+	const RANDOM_INT_CALLS = 1100;
+
+	it("overlapping crypto.randomInt calls that outrun Node's shared cache each see their own run, from host code", async () => {
+		const read = () => api.slothlet.context.get().tag;
+		const start = (tag) =>
+			run(tag, () =>
+				Promise.all(Array.from({ length: RANDOM_INT_CALLS }, () => new Promise((resolve) => crypto.randomInt(10, () => resolve(read())))))
+			);
+		const [one, two] = await Promise.all([start("one"), start("two")]);
+		expect(new Set(one)).toEqual(new Set(["one"]));
+		expect(new Set(two)).toEqual(new Set(["two"]));
+	});
+
+	it("crypto.randomInt calls from module code waiting on a refill another flow started each see their own run and caller", async () => {
+		// The host empties the cache outside every run, so the refill it starts is the one both flows' calls wait on.
+		const draining = Promise.all(Array.from({ length: RANDOM_INT_CALLS }, () => new Promise((resolve) => crypto.randomInt(10, resolve))));
+		const seen = await Promise.all([
+			run("one", () => api.one.via("crypto", "randomInt", env)),
+			run("two", () => api.two.via("crypto", "randomInt", env))
+		]);
+		await draining;
+		expect(seen).toEqual([
+			{ tag: "one", caller: "one.via" },
+			{ tag: "two", caller: "two.via" }
+		]);
+	});
 
 	it("host code's callback outside every run sees the instance's own context", async () => {
 		const read = () => api.slothlet.context.get().tag;
@@ -408,6 +432,64 @@ describe("Node callback APIs > the patch itself", () => {
 		}
 		expect(fs.stat).toBe(before.stat);
 		expect(namedStat).toBe(before.stat);
+	});
+
+	it("patches crypto.randomInt alone for async instances, held while any instance needs it", async () => {
+		const original = { stat: fs.stat, randomInt: crypto.randomInt, randomBytes: crypto.randomBytes };
+		const first = await make("async");
+		const bound = crypto.randomInt;
+		expect(bound).not.toBe(original.randomInt);
+		expect(bound.name).toBe(original.randomInt.name);
+		expect(bound.length).toBe(original.randomInt.length);
+		expect(fs.stat).toBe(original.stat);
+		expect(crypto.randomBytes).toBe(original.randomBytes);
+		const second = await make("async");
+		expect(crypto.randomInt).toBe(bound);
+		await first.shutdown();
+		expect(crypto.randomInt).toBe(bound);
+		// A live instance beside an async one: the same wrapper does both jobs, and fs is patched for the live one.
+		const live = await make();
+		expect(crypto.randomInt).toBe(bound);
+		expect(fs.stat).not.toBe(original.stat);
+		await second.shutdown();
+		expect(crypto.randomInt).toBe(bound);
+		await live.shutdown();
+		expect(crypto.randomInt).toBe(original.randomInt);
+		expect(fs.stat).toBe(original.stat);
+		// And the other way round: the live instance goes first, the async one keeps randomInt bound.
+		const live2 = await make();
+		const async2 = await make("async");
+		await live2.shutdown();
+		expect(fs.stat).toBe(original.stat);
+		expect(crypto.randomInt).not.toBe(original.randomInt);
+		await async2.shutdown();
+		expect(crypto.randomInt).toBe(original.randomInt);
+		expect(typeof crypto.randomInt(10)).toBe("number");
+	});
+
+	it("hands crypto.randomInt's callback the same value and errors as Node on the async runtime", async () => {
+		const api = await make("async");
+		try {
+			const values = await Promise.all(
+				[[10], [5, 7], [-3, -1]].map(
+					(args) =>
+						new Promise((resolve, reject) => crypto.randomInt(...args, (error, value) => (error ? reject(error) : resolve([args, value]))))
+				)
+			);
+			for (const [args, value] of values) {
+				const [min, max] = args.length === 1 ? [0, args[0]] : args;
+				expect(Number.isSafeInteger(value) && value >= min && value < max).toBe(true);
+			}
+			// Malformed calls throw as Node's own call does, and the callback is never called.
+			let called = false;
+			expect(() => crypto.randomInt(5, 1, () => (called = true))).toThrow(RangeError);
+			expect(() => crypto.randomInt(() => (called = true))).toThrow(TypeError);
+			expect(() => crypto.randomInt(1.5, () => (called = true))).toThrow(TypeError);
+			await new Promise((resolve) => setImmediate(resolve));
+			expect(called).toBe(false);
+		} finally {
+			await api.shutdown();
+		}
 	});
 
 	it("passes calls without a callback straight through", async () => {
