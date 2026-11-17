@@ -907,7 +907,7 @@ export class ApiManager extends ComponentBase {
 	 * @param {string} targetPath - The node's api path.
 	 * @param {*} node - The node, as the live tree holds it.
 	 * @param {string|null} filePath - The node's source file.
-	 * @param {function(string, string|null): void} check - Refuses one member, by its path and source file.
+	 * @param {function(string, ?string): void} check - Refuses one member, by its path and source file.
 	 * @param {{moduleID: string, prior: Map<string, *>}|null} [inFlight=null] - An add in flight: what it registered for
 	 *   itself is new, not a member the write takes over (see {@link ApiManager#ownsPath}).
 	 * @returns {void}
