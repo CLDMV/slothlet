@@ -45,6 +45,11 @@
  * reports list `async-context-frame` met; under vitest the report lists it before `vitest-plugin`, met when the worker
  * runs with the frame on, and where it is off (Node 22's default) strict refuses and on warns once for it. The check
  * itself is covered in `permissions-baseline-async-context-frame.test.vitest.mjs`.
+ *
+ * Rows changed by the ruling that the live runtime uses no `node:async_hooks` / `AsyncLocalStorage` (2026-11-17): a
+ * live instance's report lists no `async-context-frame` check (was: met), since the probe would make and run the only
+ * `AsyncLocalStorage` in a live-only process and the live runtime keeps nothing in one; a live instance under strict
+ * starts with the frame off.
  * @module tests/vitests/suites/permissions/permissions-strict-baseline
  */
 
@@ -120,6 +125,15 @@ const MET_NODE = {
 	},
 	capabilities: expect.any(Array)
 };
+/** The Node flags that turn `AsyncContextFrame` off in a child: Node 22's default, a flag on Node 24 and later. */
+const FRAMES_OFF = Number(process.versions.node.split(".")[0]) < 24 ? [] : ["--no-async-context-frame"];
+
+/**
+ * The report of an instance whose every check is met: a live instance runs no `async-context-frame` check.
+ * @param {string} runtime - "async" or "live".
+ * @returns {object} The report.
+ */
+const metNode = (runtime) => (runtime === "live" ? { ...MET_NODE, baseline: { met: true, checks: [] } } : MET_NODE);
 
 describe("permissions mode strict > config", () => {
 	it("is accepted as a mode and as the shorthand, and counts as on", () => {
@@ -140,7 +154,7 @@ describe.each(CONFIGS)("permissions mode strict > Node, a child process > $loadi
 		expect(child("strict", config, [...FRAMES_ON, ...flags])).toEqual({
 			start: "started",
 			warnings: [],
-			report: MET_NODE,
+			report: metNode(config.runtime),
 			mode: "strict",
 			good: "GOOD-ONLY",
 			settler: "PERMISSION_DENIED",
@@ -155,11 +169,20 @@ describe.each(CONFIGS)("permissions mode strict > Node, a child process > $loadi
 		const out = child("on", config, FRAMES_ON);
 		expect(out.start).toBe("started");
 		expect(out.warnings).toEqual([]);
-		expect(out.report).toEqual({ ...MET_NODE, mode: "on" });
+		expect(out.report).toEqual({ ...metNode(config.runtime), mode: "on" });
 		expect([out.good, out.settler]).toEqual(["GOOD-ONLY", "PERMISSION_DENIED"]);
 		// Off, then on again.
 		expect([out.disable, out.enable, out.modeAfter, out.settlerAfter]).toEqual(["off", "on", "on", "PERMISSION_DENIED"]);
 	});
+
+	it.runIf(config.runtime === "live")(
+		"under strict with the frame off, starts: the live runtime keeps nothing in an AsyncLocalStorage",
+		() => {
+			const out = child("strict", config, FRAMES_OFF);
+			expect(out.start).toBe("started");
+			expect(out.report).toEqual(metNode("live"));
+		}
+	);
 
 	it.each(["off", "disabled"])("under %s, runs no check and warns nothing", (mode) => {
 		const out = child(mode, config);

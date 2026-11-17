@@ -191,23 +191,31 @@ const JOB_SLOTS = new Map([
 const SCOPE = Symbol("slothlet.scope");
 
 /**
- * The `enable()` and `disable()` of Node's async hooks, taken as slothlet loads: code can replace them on the hook's
- * prototype later. Null where the platform has no `node:async_hooks`.
- * @type {{enable: Function, disable: Function}|null}
+ * The `enable()` and `disable()` of Node's async hooks, taken from the first hook slothlet makes (see
+ * {@link AsyncContextManager#holdJobHook}), as the first instance on the async runtime starts, before any of its
+ * modules' code runs: code can replace them on the hook's prototype later. Not taken as slothlet loads, since making a
+ * hook there would call `createHook()` in a process whose instances all use the live runtime, which uses no async
+ * hooks. Undefined until then; null where the platform has no `node:async_hooks` or the hook has no such methods.
+ * @type {{enable: Function, disable: Function}|null|undefined}
  * @private
  */
-const HOOK_METHODS = (() => {
-	if (typeof createHook !== "function") return null;
-	try {
-		const proto = Objects.getPrototypeOf(createHook({}));
-		return typeof proto?.enable === "function" && typeof proto.disable === "function"
-			? { enable: proto.enable, disable: proto.disable }
-			: null;
-	} catch {
-		// A platform whose async hooks cannot be made tells no jobs apart: code that never touches slothlet there is not told.
-		return null;
-	}
-})();
+let hookMethods = typeof createHook === "function" ? undefined : null;
+
+/**
+ * Read the `enable()` and `disable()` of a hook just made into {@link hookMethods}, once.
+ * @param {object} hook - The hook `createHook()` made.
+ * @returns {{enable: Function, disable: Function}|null} The methods, or null where the hook has none.
+ * @private
+ */
+function takeHookMethods(hook) {
+	if (hookMethods !== undefined) return hookMethods;
+	const proto = Objects.getPrototypeOf(hook);
+	// Node's hooks always carry both methods; the null arm is for a runtime whose async hooks are a partial stand-in.
+	hookMethods =
+		/* v8 ignore next */
+		typeof proto?.enable === "function" && typeof proto.disable === "function" ? { enable: proto.enable, disable: proto.disable } : null;
+	return hookMethods;
+}
 
 /**
  * How many async hooks telling jobs apart are installed (0 or 1): one while any instance on the async runtime exists,
@@ -827,24 +835,40 @@ export class AsyncContextManager {
 	 */
 	holdJobHook() {
 		this.#jobHookInstances++;
-		if (this.#jobHook !== null || HOOK_METHODS === null) return;
+		if (this.#jobHook !== null || hookMethods === null) return;
 		const manager = this;
-		const hook = createHook({
-			init(asyncId, type, triggerAsyncId, resource) {
-				manager.#jobMade(resource, type);
-			},
-			before() {
-				manager.#stretch++;
-				manager.#jobBegins();
-				if (manager.#jobsMarked) manager.#jobStarts();
-			},
-			after() {
-				manager.#stretch++;
-				if (manager.#runningJobs.length !== 0) manager.#jobEnds();
-				manager.#jobFinishes();
-			}
-		});
-		Reflect.apply(HOOK_METHODS.enable, hook, []);
+		let hook;
+		try {
+			hook = createHook({
+				init(asyncId, type, triggerAsyncId, resource) {
+					manager.#jobMade(resource, type);
+				},
+				before() {
+					manager.#stretch++;
+					manager.#jobBegins();
+					if (manager.#jobsMarked) manager.#jobStarts();
+				},
+				after() {
+					manager.#stretch++;
+					if (manager.#runningJobs.length !== 0) manager.#jobEnds();
+					manager.#jobFinishes();
+				}
+			});
+			/* v8 ignore start */
+		} catch {
+			// A platform whose async hooks cannot be made (a runtime that ships `createHook` as a stub that throws) tells no
+			// jobs apart: code that never touches slothlet there is not told. Node always makes one, so the suite cannot
+			// reach this.
+			hookMethods = null;
+			return;
+		}
+		/* v8 ignore stop */
+		const methods = takeHookMethods(hook);
+		// A hook with no `enable` / `disable` (a runtime whose async hooks are a partial stand-in) tells no jobs apart. It
+		// can happen outside Node; Node's hooks always have both, so the suite cannot reach this.
+		/* v8 ignore next */
+		if (methods === null) return;
+		Reflect.apply(methods.enable, hook, []);
 		this.#jobHook = hook;
 		jobHooks++;
 	}
@@ -863,7 +887,7 @@ export class AsyncContextManager {
 		this.#jobStack = jobStackList();
 		this.#lastTold = null;
 		jobHooks--;
-		Reflect.apply(HOOK_METHODS.disable, hook, []);
+		Reflect.apply(hookMethods.disable, hook, []);
 	}
 
 	/**

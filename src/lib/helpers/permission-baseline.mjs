@@ -27,7 +27,9 @@
  *   Node run with `--no-async-context-frame`), Node keeps what an `AsyncLocalStorage` holds on async resources module
  *   code can reach. Tested by running a storage of slothlet's own with a marker and looking for the marker on the
  *   running async resource and a fresh promise; the flags are never parsed, since a version's default and flags passed
- *   through `NODE_OPTIONS` decide it as well. Run once per process.
+ *   through `NODE_OPTIONS` decide it as well. Run once per process, and only for an instance on the async runtime: the
+ *   live runtime keeps nothing in an `AsyncLocalStorage` and makes none, so there is nothing of slothlet's for the
+ *   frame to hold, and the probe's own storage would be the only one in a live-only process.
  * - `vitest-plugin` (Node, under vitest): the `slothletInstanceImports()` plugin is loaded: its records of who loaded
  *   each file have reached slothlet.
  *
@@ -331,13 +333,14 @@ async function check(id, probe, reason) {
  * Run the baseline checks for where the instance runs.
  * @param {"node"|"browser"} envTarget - Where the instance runs.
  * @param {BaselineProbes} [probes] - Stand-ins for the probes, for a test.
+ * @param {"async"|"live"} [runtime="async"] - The instance's runtime; `async-context-frame` is checked for `"async"` only.
  * @returns {Promise<{met: boolean, checks: Array<{id: string, met: boolean, reason: string|null}>}>} Whether every check
  *   is met, and each check.
  * @internal
  * @example
  * const { met, checks } = await runBaseline("node");
  */
-export async function runBaseline(envTarget, probes = PROBES) {
+export async function runBaseline(envTarget, probes = PROBES, runtime = "async") {
 	const checks = [];
 	if (envTarget === "browser") {
 		listPush(
@@ -365,7 +368,7 @@ export async function runBaseline(envTarget, probes = PROBES) {
 			)
 		);
 	} else {
-		if (typeof probes.asyncContextFrameOn === "function") {
+		if (runtime !== "live" && typeof probes.asyncContextFrameOn === "function") {
 			listPush(checks, await check("async-context-frame", () => probes.asyncContextFrameOn(), asyncContextFrameReason));
 		}
 		if (probes.vitestWorker) {

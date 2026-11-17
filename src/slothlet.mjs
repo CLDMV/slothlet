@@ -1238,7 +1238,8 @@ class Slothlet {
 
 		// The permission baseline (docs/PERMISSIONS.md): with permissions on, each check not met is a warning; under strict
 		// the instance does not start, before any module's code is loaded.
-		await this.handlers.permissionManager?.checkBaseline(this.envTarget);
+		// The live runtime keeps nothing in an AsyncLocalStorage, so the async-context-frame check is the async runtime's alone.
+		await this.handlers.permissionManager?.checkBaseline(this.envTarget, this.config.runtime === "live" ? "live" : "async");
 
 		// Register construction-time lifecycle subscribers (config.lifecycle) on the freshly-built
 		// Lifecycle emitter BEFORE buildAPI runs, so events emitted during the cold-start build

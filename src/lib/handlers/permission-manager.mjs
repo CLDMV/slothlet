@@ -3021,15 +3021,16 @@ export class PermissionManager extends ComponentBase {
 	 * Run the permission baseline as the instance starts (see `helpers/permission-baseline`), when the mode is on or
 	 * strict. Under on, each check not met is one warning; under strict, any check not met refuses the start.
 	 * @param {"node"|"browser"} envTarget - Where the instance runs.
+	 * @param {"async"|"live"} [runtime="async"] - The instance's runtime (see {@link runBaseline}).
 	 * @returns {Promise<void>}
 	 * @throws {SlothletError} PERMISSION_BASELINE_UNMET under strict, naming the checks not met.
 	 * @example
-	 * await pm.checkBaseline("node");
+	 * await pm.checkBaseline("node", "async");
 	 */
-	async checkBaseline(envTarget) {
+	async checkBaseline(envTarget, runtime = "async") {
 		this.#baseline = null;
 		if (!this.#enabled) return;
-		const baseline = await runBaseline(envTarget);
+		const baseline = await runBaseline(envTarget, undefined, runtime);
 		this.#baseline = baseline;
 		if (baseline.met) return;
 		const unmet = filterList(baseline.checks, (entry) => !entry.met);
