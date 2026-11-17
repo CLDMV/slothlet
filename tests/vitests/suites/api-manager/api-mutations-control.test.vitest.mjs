@@ -386,8 +386,8 @@ describe.each(MATRIX_CONFIGS)("API mutations control - $name", ({ config }) => {
 		// "existing" was rejected by the skip collision and never became live — it must not pick up
 		// metadata meant for the candidate that lost. Only "fresh" (the key that actually landed)
 		// should carry it.
-		expect(await api.slothlet.metadata.getFor("existing")).toEqual({});
-		expect(await api.slothlet.metadata.getFor("fresh")).toMatchObject({ taggedBy: "partial-meta-mod" });
+		expect(await api.slothlet.metadata.get("existing")).toEqual({});
+		expect(await api.slothlet.metadata.get("fresh")).toMatchObject({ taggedBy: "partial-meta-mod" });
 	});
 
 	it("a collisionMode:'error' throw reverts speculative ownership state instead of leaving an orphaned owner (#372 review)", async () => {

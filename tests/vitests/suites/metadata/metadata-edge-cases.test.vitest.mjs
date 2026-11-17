@@ -53,11 +53,12 @@ describe.each(getMatrixConfigs())("Metadata Edge Cases > Config: '$name'", ({ co
 			// Check if single.mjs exists in test directory
 			if (api.single) {
 				await materialize(api, "single", "test");
-				const meta = api.single.__metadata;
+				const meta = api.slothlet.metadata.get(api.single);
+				const metaNode = api.slothlet.node(api.single);
 
 				expect(meta).toBeDefined();
-				expect(meta.moduleID).toBeDefined();
-				expect(meta.apiPath).toBeDefined();
+				expect(metaNode.module).toBeDefined();
+				expect(metaNode.path.join(".")).toBeDefined();
 			}
 		});
 
@@ -65,10 +66,11 @@ describe.each(getMatrixConfigs())("Metadata Edge Cases > Config: '$name'", ({ co
 			// Root contributor with child properties
 			if (api.single?.nested) {
 				await materialize(api, "single.nested", "test");
-				const meta = api.single.nested.__metadata;
+				const meta = api.slothlet.metadata.get(api.single.nested);
+				const metaNode = api.slothlet.node(api.single.nested);
 
 				expect(meta).toBeDefined();
-				expect(meta.moduleID).toBeDefined();
+				expect(metaNode.module).toBeDefined();
 			}
 		});
 	});
@@ -86,11 +88,17 @@ describe.each(getMatrixConfigs())("Metadata Edge Cases > Config: '$name'", ({ co
 			// veryDeep.config.settings.getPluginConfig
 			if (api.veryDeep?.config?.settings?.getPluginConfig) {
 				const ____result = await materialize(api, "veryDeep.config.settings.getPluginConfig");
-				const meta = api.veryDeep.config.settings.getPluginConfig.__metadata;
+				const meta = api.slothlet.metadata.get(api.veryDeep.config.settings.getPluginConfig);
 
 				expect(meta.depth).toBe("extreme");
 				expect(meta.level).toBe(5);
-				expect(meta.moduleID).toContain("veryDeep");
+				expect(meta.moduleID).toBeUndefined();
+				expect(api.slothlet.node(api.veryDeep.config.settings.getPluginConfig).path).toEqual([
+					"veryDeep",
+					"config",
+					"settings",
+					"getPluginConfig"
+				]);
 			}
 		});
 	});
@@ -110,7 +118,7 @@ describe.each(getMatrixConfigs())("Metadata Edge Cases > Config: '$name'", ({ co
 				metadata: largeMetadata
 			});
 			await materialize(api, "large.config.settings.getPluginConfig");
-			const meta = api.large.config.settings.getPluginConfig.__metadata;
+			const meta = api.slothlet.metadata.get(api.large.config.settings.getPluginConfig);
 
 			expect(meta.key0).toBe("value0");
 			expect(meta.key99).toBe("value99");
@@ -132,7 +140,7 @@ describe.each(getMatrixConfigs())("Metadata Edge Cases > Config: '$name'", ({ co
 			});
 
 			await materialize(api, "special.config.settings.getPluginConfig");
-			const meta = api.special.config.settings.getPluginConfig.__metadata;
+			const meta = api.slothlet.metadata.get(api.special.config.settings.getPluginConfig);
 
 			expect(meta["key-with-dashes"]).toBe("value");
 			expect(meta["key.with.dots"]).toBe("value");
@@ -152,7 +160,7 @@ describe.each(getMatrixConfigs())("Metadata Edge Cases > Config: '$name'", ({ co
 			});
 
 			await materialize(api, "unicode.config.settings.getPluginConfig");
-			const meta = api.unicode.config.settings.getPluginConfig.__metadata;
+			const meta = api.slothlet.metadata.get(api.unicode.config.settings.getPluginConfig);
 
 			expect(meta.emoji).toBe("🎉✨🚀");
 			expect(meta.chinese).toBe("你好世界");
@@ -162,28 +170,28 @@ describe.each(getMatrixConfigs())("Metadata Edge Cases > Config: '$name'", ({ co
 	});
 
 	describe("Circular Reference Handling", () => {
-		it("should reject circular objects passed to metadata.setGlobal", async () => {
+		it("should reject circular objects passed to metadata.global", async () => {
 			const circular = {
 				name: "circular",
 				level: 1
 			};
 			circular.self = circular;
 
-			expect(() => api.slothlet.metadata.setGlobal(circular)).toThrow(/INVALID_ARGUMENT/);
+			expect(() => api.slothlet.metadata.global(circular)).toThrow(/INVALID_ARGUMENT/);
 		});
 
-		it("should allow repeated shared nested objects in metadata.setGlobal", async () => {
+		it("should allow repeated shared nested objects in metadata.global", async () => {
 			const shared = { enabled: true };
 
 			expect(() =>
-				api.slothlet.metadata.setGlobal({
+				api.slothlet.metadata.global({
 					alpha: shared,
 					beta: shared
 				})
 			).not.toThrow();
 
 			await materialize(api, "rootMath.add", 1, 2);
-			const meta = api.rootMath.add.__metadata;
+			const meta = api.slothlet.metadata.get(api.rootMath.add);
 			expect(meta.alpha.enabled).toBe(true);
 			expect(meta.beta.enabled).toBe(true);
 		});
@@ -201,7 +209,7 @@ describe.each(getMatrixConfigs())("Metadata Edge Cases > Config: '$name'", ({ co
 				});
 				await materialize(api, "circular.config.settings.getPluginConfig");
 
-				const meta = api.circular.config.settings.getPluginConfig.__metadata;
+				const meta = api.slothlet.metadata.get(api.circular.config.settings.getPluginConfig);
 				expect(meta.name).toBe("circular");
 				expect(meta.level).toBe(1);
 				// self may be undefined or handled gracefully
@@ -223,7 +231,7 @@ describe.each(getMatrixConfigs())("Metadata Edge Cases > Config: '$name'", ({ co
 			});
 
 			await materialize(api, "withFuncs.config.settings.getPluginConfig");
-			const meta = api.withFuncs.config.settings.getPluginConfig.__metadata;
+			const meta = api.slothlet.metadata.get(api.withFuncs.config.settings.getPluginConfig);
 
 			expect(meta.normalValue).toBe("test");
 			expect(typeof meta.functionValue).toBe("function");
@@ -270,12 +278,12 @@ describe.each(getMatrixConfigs())("Metadata Edge Cases > Config: '$name'", ({ co
 			await materialize(api, "perf.config.settings.getPluginConfig");
 
 			const iterations = 1000;
-			const first = api.perf.config.settings.getPluginConfig.__metadata;
+			const first = api.slothlet.metadata.get(api.perf.config.settings.getPluginConfig);
 
 			// Every read answers the same metadata. How fast it answers is measured by the benchmark
 			// (`npm run test:performance`), not by a wall-clock limit on a shared machine.
 			for (let i = 0; i < iterations; i++) {
-				const meta = api.perf.config.settings.getPluginConfig.__metadata;
+				const meta = api.slothlet.metadata.get(api.perf.config.settings.getPluginConfig);
 				expect(meta.data).toBe("test");
 				expect(meta).toEqual(first);
 			}
@@ -286,13 +294,11 @@ describe.each(getMatrixConfigs())("Metadata Edge Cases > Config: '$name'", ({ co
 		it("should handle metadata operations on non-existent paths gracefully", async () => {
 			// Test that metadata API handles non-existent paths without crashing
 
-			// Get metadata for non-existent path should return undefined
-			const nonExistentMeta = api.nonExistent?.__metadata;
-			expect(nonExistentMeta).toBeUndefined();
+			// A missing node read off the api is undefined, which names no metadata target
+			expect(() => api.slothlet.metadata.get(api.nonExistent)).toThrow(/INVALID_METADATA_TARGET/);
 
-			// metadata.get() should return null for non-existent paths (traversal fails gracefully)
-			const result = await api.slothlet.metadata.get("nonExistent.path.that.doesNotExist");
-			expect(result).toBeNull();
+			// A path nothing is mounted at has no metadata of its own (an empty object; no global metadata is set)
+			expect(api.slothlet.metadata.get("nonExistent.path.that.doesNotExist")).toEqual({});
 		});
 	});
 
@@ -303,7 +309,7 @@ describe.each(getMatrixConfigs())("Metadata Edge Cases > Config: '$name'", ({ co
 			// This fires when set() stores { metadata: <object> } on a function's user metadata.
 			await materialize(api, "rootMath.add", 1, 2);
 			api.slothlet.metadata.set(api.rootMath.add, "metadata", { nestedFlag: true, nestedVersion: "2" });
-			const meta = api.rootMath.add.__metadata;
+			const meta = api.slothlet.metadata.get(api.rootMath.add);
 			// The nested metadata object should be spread to root level
 			expect(meta.nestedFlag).toBe(true);
 			expect(meta.nestedVersion).toBe("2");
@@ -319,12 +325,12 @@ describe.each(getMatrixConfigs())("Metadata Edge Cases > Config: '$name'", ({ co
 
 		it("should throw when set() is called with a non-function, non-object target", async () => {
 			// Line coverage: setUserMetadata throws INVALID_METADATA_TARGET when target is a primitive
-			expect(() => api.slothlet.metadata.set("notAFunction", "key", "value")).toThrow();
+			expect(() => api.slothlet.metadata.set(123, "key", "value")).toThrow(/INVALID_METADATA_TARGET/);
 		});
 
 		it("should throw when remove() is called with a non-function, non-object target", async () => {
 			// Line coverage: removeUserMetadata throws INVALID_METADATA_TARGET when target is a primitive
-			expect(() => api.slothlet.metadata.remove("notAFunction", "key")).toThrow();
+			expect(() => api.slothlet.metadata.remove(123, "key")).toThrow(/INVALID_METADATA_TARGET/);
 		});
 
 		it("should throw when remove() is called with an invalid key type", async () => {
@@ -348,7 +354,7 @@ describe.each(getMatrixConfigs())("Metadata Edge Cases > Config: '$name'", ({ co
 	describe("Metadata on Different Export Types", () => {
 		it("should handle metadata on default exports", async () => {
 			await materialize(api, "rootMath.add", 1, 2);
-			const meta = api.rootMath.add.__metadata;
+			const meta = api.slothlet.metadata.get(api.rootMath.add);
 			expect(meta).toBeDefined();
 		});
 
@@ -357,7 +363,7 @@ describe.each(getMatrixConfigs())("Metadata Edge Cases > Config: '$name'", ({ co
 
 			if (api.named?.config?.settings?.getPluginConfig) {
 				await materialize(api, "named.config.settings.getPluginConfig");
-				const meta = api.named.config.settings.getPluginConfig.__metadata;
+				const meta = api.slothlet.metadata.get(api.named.config.settings.getPluginConfig);
 				expect(meta).toBeDefined();
 			}
 		});
@@ -378,8 +384,10 @@ describe.each(getMatrixConfigs())("Metadata Edge Cases > Config: '$name'", ({ co
 
 					// Check metadata - user metadata is only on direct children (mixed.*)
 					// Subfolders like mixed.config.settings don't inherit user metadata
-					const meta = api.mixed[key].__metadata;
-					if (meta && meta.apiPath === `mixed.${key}`) {
+					const metaNode = api.slothlet.node(api.mixed[key]);
+					if (!metaNode) continue;
+					const meta = api.slothlet.metadata.get([...metaNode.path]);
+					if (meta && metaNode.path.join(".") === `mixed.${key}`) {
 						// Only check if this is a direct child with user metadata
 						expect(meta.type).toBe("mixed");
 					}

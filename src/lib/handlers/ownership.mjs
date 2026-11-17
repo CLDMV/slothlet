@@ -1317,7 +1317,7 @@ export class OwnershipManager extends ComponentBase {
 				key = ofEntry[0],
 				value = ofEntry[1];
 			// Skip internal properties
-			const skipProps = ["__metadata", "__type", "_materialize", "_impl", "____slothletInternal"];
+			const skipProps = ["_materialize", "_impl", "____slothletInternal"];
 			if (ArrayMethods.includes(skipProps, key)) {
 				continue;
 			}
@@ -1540,7 +1540,7 @@ export class OwnershipManager extends ComponentBase {
 				key = ofEntry[0],
 				value = ofEntry[1];
 			// Skip internal properties
-			const skipProps = ["__metadata", "__type", "_materialize", "_impl", "____slothletInternal"];
+			const skipProps = ["_materialize", "_impl", "____slothletInternal"];
 			if (ArrayMethods.includes(skipProps, key)) {
 				continue;
 			}

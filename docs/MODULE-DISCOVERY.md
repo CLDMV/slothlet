@@ -275,19 +275,14 @@ All errors throw `SlothletError` with typed codes. See `src/lib/i18n/languages/e
 
 ## Round-tripping the manifest
 
-Each successfully mounted module stores its full normalized manifest at the mount point via `metadata.setFor(mountPath, "_module", { manifest })`. Retrieve it via [`metadata.getFor(path)`](METADATA.md#getforpathormoduleid):
+Each successfully mounted module keeps its full normalized manifest, and [`slothlet.node(target)`](METADATA.md#node-reports) reports it as `manifest` for every node of the module. It is not metadata: user metadata never carries it.
 
 ```js
-const meta = api.slothlet.metadata.getFor("drivers.opensearch");
-console.log(meta._module.manifest);
+api.slothlet.node("drivers.opensearch").manifest;
 // { schemaVersion: 1, name: "@cldmv/packrat-driver-opensearch", version: "1.4.2", ... }
-```
 
-Because slothlet's metadata system merges parent → child along the path, the manifest also surfaces from any leaf under the mountPath:
-
-```js
-api.slothlet.metadata.getFor("drivers.opensearch.connect")._module.manifest;
-// Same manifest — inherited via the parent → child merge
+api.slothlet.node("drivers.opensearch.connect").manifest;
+// The same manifest: the leaf belongs to the same module
 ```
 
 This is useful for "what module am I in?" introspection from inside module code.
@@ -298,7 +293,7 @@ This is useful for "what module am I in?" introspection from inside module code.
 
 - [LIFECYCLE.md — Module Discovery Events](LIFECYCLE.md#module-discovery-events) — event payloads and ordering
 - [VERSIONING.md](VERSIONING.md) — the underlying `versionConfig` mechanism used for multi-version mounts
-- [METADATA.md](METADATA.md) — `metadata.getFor()` and the manifest round-trip
+- [METADATA.md](METADATA.md) — `metadata.get()` and the manifest round-trip
 - [PERMISSIONS.md](PERMISSIONS.md) — the permission rule grammar used by the manifest's `permissions[]` field
 - [MODULE-STRUCTURE.md](MODULE-STRUCTURE.md) — what a slothlet module looks like internally
 - `schemas/slothlet.module.schema.json` — canonical JSON Schema for editor / CI validation

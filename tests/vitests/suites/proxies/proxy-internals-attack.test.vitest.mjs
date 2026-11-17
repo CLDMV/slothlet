@@ -333,14 +333,14 @@ describe.each(getMatrixConfigs({}))("Proxy Internals Attack Vectors - $name", ({
 	it("D2. __filePath / __sourceFolder / __moduleID are exposed as read-only informational props through the proxy", async () => {
 		const { leaf } = await getMaterializedProxies();
 		// These are informational props - readable through the proxy, write/delete is silently absorbed.
-		if (leaf.__filePath !== undefined) {
-			expect(typeof leaf.__filePath).toBe("string");
+		if (api.slothlet.node(leaf).file !== undefined) {
+			expect(typeof api.slothlet.node(leaf).file).toBe("string");
 		}
-		if (leaf.__moduleID !== undefined) {
-			expect(typeof leaf.__moduleID).toBe("string");
+		if (api.slothlet.node(leaf).module !== undefined) {
+			expect(typeof api.slothlet.node(leaf).module).toBe("string");
 		}
-		if (leaf.__sourceFolder !== undefined) {
-			expect(typeof leaf.__sourceFolder).toBe("string");
+		if (api.slothlet.node(leaf).folder !== undefined) {
+			expect(typeof api.slothlet.node(leaf).folder).toBe("string");
 		}
 	});
 
@@ -358,22 +358,12 @@ describe.each(getMatrixConfigs({}))("Proxy Internals Attack Vectors - $name", ({
 	 */
 	const READ_ONLY_INFO_PROPS = [
 		// Mode & identity
-		"__mode",
-		"__apiPath",
-		"__slothletPath",
-		"__isCallable",
 		"__materializeOnCreate",
 		"__displayName",
-		"__type",
 		// Server-info props - exposed read-only through proxy; write/delete silently absorbed.
 		"__filePath",
-		"__sourceFolder",
-		"__moduleID",
 		// Lazy state
-		"__materialized",
-		"__inFlight",
 		// Misc
-		"__metadata",
 		"__invalid"
 	];
 

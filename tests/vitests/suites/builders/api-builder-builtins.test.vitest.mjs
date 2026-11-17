@@ -19,7 +19,7 @@
  * @description
  * Covers:
  *   lines 590,610,637,659,679,700,728,762 – hook functions throw when hookManager not initialized
- *   lines 829,866  – metadata.setFor (not-available throw), metadata.removeFor (resolvedPath)
+ *   lines 829,866  – metadata.set (not-available throw), metadata.remove (resolvedPath)
  *   lines 921      – ownership.get (ownership handler exists path)
  *   lines 948,950,977 – materialize namespace getter (get() / materialized)
  *   lines 1039,1040,1042,1068,1076,1077,1079,1091 – diagnostics namespace (owner/caches)
@@ -164,9 +164,9 @@ describe("api_builder – materialize namespace methods", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Group C: metadata.setFor / removeFor paths (lines 829, 866)
+// Group C: metadata.set / removeFor paths (lines 829, 866)
 // ---------------------------------------------------------------------------
-describe("api_builder – metadata.setFor and removeFor", () => {
+describe("api_builder – metadata.set and removeFor", () => {
 	let api;
 
 	afterEach(async () => {
@@ -176,29 +176,29 @@ describe("api_builder – metadata.setFor and removeFor", () => {
 		}
 	});
 
-	it("metadata.setFor sets path metadata (line 835+)", async () => {
+	it("metadata.set sets path metadata (line 835+)", async () => {
 		api = await makeApi();
 
 		// Call setFor with a valid path - covers line 835 (resolvedPath) and metadata.setPathMetadata
 		// This should not throw
-		expect(() => api.slothlet.metadata.setFor("math", "testKey", "testValue")).not.toThrow();
+		expect(() => api.slothlet.metadata.set("math", "testKey", "testValue")).not.toThrow();
 	});
 
-	it("metadata.removeFor removes path metadata (line 866 resolvedPath)", async () => {
+	it("metadata.remove removes path metadata (line 866 resolvedPath)", async () => {
 		api = await makeApi();
 
 		// First set, then remove
-		api.slothlet.metadata.setFor("math", "tempKey", "tempVal");
+		api.slothlet.metadata.set("math", "tempKey", "tempVal");
 		// removeFor covers line 866 path (resolvedPath = _resolvePathOrModuleId(...))
-		api.slothlet.metadata.removeFor("math", "tempKey");
+		api.slothlet.metadata.remove("math", "tempKey");
 		// Just verify no error thrown
 	});
 
-	it("metadata.removeFor without key removes all path metadata", async () => {
+	it("metadata.remove without key removes all path metadata", async () => {
 		api = await makeApi();
 
-		api.slothlet.metadata.setFor("math", "k1", "v1");
-		api.slothlet.metadata.removeFor("math"); // no key = remove all
+		api.slothlet.metadata.set("math", "k1", "v1");
+		api.slothlet.metadata.remove("math"); // no key = remove all
 		// No error = success
 	});
 });

@@ -372,7 +372,7 @@ describe.each(matrix)("setPrototypeOf on an api node > $mode / $runtime / $name"
 	it.runIf(mode === "lazy")("a lazy node that has not loaded refuses a prototype, and takes it once loaded", async () => {
 		api = await slothlet({ base: join(FIXTURE, "host"), silent: true, mode, runtime, ...(permissions ? { permissions } : {}) });
 		const prototype = { inherited: 5 };
-		expect(api.sub.__materialized).toBe(false);
+		expect(api.slothlet.node(api.sub).materialized).toBe(false);
 		expect(Reflect.setPrototypeOf(api.sub, prototype)).toBe(false);
 		await api.sub;
 		expect(Reflect.setPrototypeOf(api.sub, prototype)).toBe(true);

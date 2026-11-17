@@ -615,9 +615,9 @@ The legacy [`collectLifecycleHooks`](#construction-time-subscription-lifecycle-c
 
 In eager mode, `typeof api.math` reflects the underlying type (`"object"` for object exports, `"function"` for function exports). In **lazy mode a node that has not loaded yet** is always a function, because a Proxy's form is fixed when it is made and a folder may turn out callable: `typeof` returns `"function"` until the node loads. Once it has loaded, a node holding no function is rebuilt on the form eager gives it, so `typeof api.math` is `"object"`, `Function.prototype.toString` refuses it and calling it throws a `TypeError`, as in eager mode. A reference taken before the load (`const math = api.math`) keeps the function form and reads through to the loaded node; read the node again, or take it from `await api.math`, to get the loaded form.
 
-Use `__type` and `api.slothlet.types` symbols to check a node's state without depending on whether it has loaded.
+Use `api.slothlet.node(target).type` and the `api.slothlet.types` symbols to check a node's state without depending on whether it has loaded.
 
-### `__type` property
+### `node(target).type`
 
 ```javascript
 const api = await slothlet({ base: "./api", mode: "lazy" });
@@ -626,12 +626,15 @@ const api = await slothlet({ base: "./api", mode: "lazy" });
 console.log(typeof api.math); // "function" - even if math module exports an object
 // once loaded: typeof (await api.math) === "object" for an object export
 
-// __type returns the real implementation type
-console.log(api.math.__type); // api.slothlet.types.UNMATERIALIZED  (not loaded yet)
+// node().type reports the node's state, then its kind
+console.log(api.slothlet.node(api.math).type); // api.slothlet.types.UNMATERIALIZED  (not loaded yet)
 // api.slothlet.types.IN_FLIGHT        (loading)
-// "object"                            (loaded, object export)
-// "function"                          (loaded, function export)
+// "namespace"                         (loaded, a node with members)
+// "function"                          (loaded, a callable with no members)
+// "data"                              (loaded, a plain value)
 ```
+
+Reading the report never starts loading a lazy node; reading or calling a member of it does.
 
 ### `api.slothlet.types` symbols
 
@@ -640,7 +643,7 @@ console.log(api.math.__type); // api.slothlet.types.UNMATERIALIZED  (not loaded 
 | `api.slothlet.types.UNMATERIALIZED` | Module not yet loaded; materialization not started |
 | `api.slothlet.types.IN_FLIGHT`      | Materialization in progress                        |
 
-Once materialized, `__type` returns a standard `typeof` string (`"object"`, `"function"`, etc.).
+Once materialized, `type` is `"function"`, `"data"` or `"namespace"`, and `callable` says whether the node can be called (a callable folder is a `"namespace"` with `callable: true`).
 
 ```javascript
 import slothlet from "@cldmv/slothlet";
@@ -648,25 +651,26 @@ import slothlet from "@cldmv/slothlet";
 const api = await slothlet({ base: "./api", mode: "lazy" });
 
 const { UNMATERIALIZED, IN_FLIGHT } = api.slothlet.types;
+const { type } = api.slothlet.node(api.math);
 
-if (api.math.__type === UNMATERIALIZED) {
+if (type === UNMATERIALIZED) {
 	console.log("Not loaded yet");
-} else if (api.math.__type === IN_FLIGHT) {
+} else if (type === IN_FLIGHT) {
 	console.log("Loading...");
 } else {
-	console.log("Loaded, type:", api.math.__type); // "object" or "function"
+	console.log("Loaded, type:", type); // "namespace", "function" or "data"
 }
 ```
 
 ### A kept folder that loads as a primitive
 
-A folder whose only file is named like it and exports a primitive by default (`zz/count/count.mjs` with `export default 7`) reads as that value once loaded. A reference to the folder's node taken before it loaded is an object, and JavaScript cannot turn an object into a primitive, so that reference stays an object: `typeof kept` is `"function"` and `kept === 7` is false. Everything else answers as the value: `await kept` gives `7`, `kept.valueOf()`, `String(kept)`, `` `${kept}` ``, `kept + 1`, `kept == 7` and `JSON.stringify(kept)` give what they give for `7`, the value's own methods run on it (`kept.toFixed(1)`), and `kept.__type` is `"number"`. A fresh read, `api.zz.count`, is the plain `7`. A module the rules deny the folder is refused each of these, the `await` included.
+A folder whose only file is named like it and exports a primitive by default (`zz/count/count.mjs` with `export default 7`) reads as that value once loaded. A reference to the folder's node taken before it loaded is an object, and JavaScript cannot turn an object into a primitive, so that reference stays an object: `typeof kept` is `"function"` and `kept === 7` is false. Everything else answers as the value: `await kept` gives `7`, `kept.valueOf()`, `String(kept)`, `` `${kept}` ``, `kept + 1`, `kept == 7` and `JSON.stringify(kept)` give what they give for `7`, the value's own methods run on it (`kept.toFixed(1)`), and `api.slothlet.node(kept).type` is `"data"`. A fresh read, `api.zz.count`, is the plain `7`. A module the rules deny the folder is refused each of these, the `await` included.
 
 ```javascript
 const kept = api.zz.count; // the folder has not loaded yet
 await kept; // 7
 `${kept}`; // "7"
-kept.__type; // "number"
+api.slothlet.node(kept).type; // "data"
 api.zz.count === 7; // true
 ```
 
@@ -745,13 +749,13 @@ const api = await slothlet({
 const api = await slothlet({ base: "./api", mode: "lazy" });
 
 // Modules are proxies - not loaded
-console.log(api.math.__type); // UNMATERIALIZED
+console.log(api.slothlet.node(api.math).type); // UNMATERIALIZED
 
 // First call triggers loading (slightly slower)
 const result = await api.math.add(2, 3);
 
 // Module is now loaded
-console.log(api.math.__type); // "object"
+console.log(api.slothlet.node(api.math).type); // "namespace"
 ```
 
 **With background materialization:**
@@ -764,13 +768,13 @@ const api = await slothlet({
 });
 
 // Modules are loading in background - may already be IN_FLIGHT or loaded
-console.log(api.math.__type); // "object" (if fast enough) or IN_FLIGHT
+console.log(api.slothlet.node(api.math).type); // "namespace" (if fast enough) or IN_FLIGHT
 
 // Wait for all modules to finish loading
 await api.slothlet.materialize.wait();
 
 // All modules guaranteed loaded
-console.log(api.math.__type); // "object"
+console.log(api.slothlet.node(api.math).type); // "namespace"
 const result = await api.math.add(2, 3); // Fast - no loading delay
 ```
 
@@ -852,9 +856,9 @@ Register handlers before the api builds (to observe init-time events) with the [
 | `api.slothlet.types.UNMATERIALIZED` | Module proxy, not yet loading |
 | `api.slothlet.types.IN_FLIGHT`      | Module loading in progress    |
 
-### `mod.__type`
+### `api.slothlet.node(mod).type`
 
-Direct property on any lazy-mode proxy. Returns `api.slothlet.types.UNMATERIALIZED`, `api.slothlet.types.IN_FLIGHT`, or a `typeof` string once materialized.
+Returns `api.slothlet.types.UNMATERIALIZED`, `api.slothlet.types.IN_FLIGHT`, or `"function"`, `"data"` or `"namespace"` once materialized. See [Node Reports](METADATA.md#node-reports) for the rest of the report.
 
 ---
 

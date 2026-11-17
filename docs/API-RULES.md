@@ -711,7 +711,7 @@ api.e.a(); // ✅ as addfolder/e/e.mjs builds it (not api.e.e.a)
 
 The direct child is composed by the same rules in eager and lazy mode before it is hoisted: a folder of one generic file (`e/main.mjs` or `e/e/main.mjs`, [Rule 10](#rule-10-generic-filename-parent-level-promotion)) mounted at `e` is `api.e.a`, a callable self-named file with a sibling (`e/e.mjs` default + `e/y.mjs`) is `api.e()` and `api.e.y`.
 
-Every node records the path it is placed at, after the hoist: `api.e.a.__metadata.apiPath === "e.a"`, and permission rules and hooks name `e.a`.
+Every node records the path it is placed at, after the hoist: `api.slothlet.node(api.e.a).path` is `["e", "a"]`, and permission rules and hooks name `e.a`.
 
 **Childless leaf case**: When the matching key's value has no children of its own — a single self-named file such as `thing.mjs` exporting a function named `thing`, mounted at `api.add("thing", folder)` — there is nothing to spread up from it. The value itself is what belongs at the mount path, so Rule 13 uses it directly rather than hoisting an empty set of children:
 
@@ -859,7 +859,7 @@ api.c.z.where(); // ✅ "c.z.where"
 api.t.x.where(); // ✅ "t.x.where"        (repeats while it holds)
 ```
 
-**Recorded path**: every node records the path it is placed at (`api.e.x.where.__metadata.apiPath === "e.x.where"`), derived from the level it is placed on and the key it is assigned under. Permission rules, hooks, ownership and metadata all read that one path, so a rule or hook pattern names the path the node is called at.
+**Recorded path**: every node records the path it is placed at (`api.slothlet.node(api.e.x.where).path` is `["e", "x", "where"]`), derived from the level it is placed on and the key it is assigned under. Permission rules, hooks, ownership and metadata all read that one path, so a rule or hook pattern names the path the node is called at.
 
 **History**: 2.x collapsed these folders; 3.0.0 through 3.24.0 built both levels, and recorded a repeated segment once whether or not the tree had it (#743). 3.25.0 restores the 2.x shape and derives the recorded path from the placement.
 

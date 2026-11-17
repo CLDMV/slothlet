@@ -110,7 +110,7 @@ export async function ceilingRead() {
  * await api.supplier.probe.selfInside(); // "supplier.probe.selfInside"
  */
 export async function selfInside() {
-	return handOver(() => self.slothlet.metadata.self()?.apiPath ?? null);
+	return handOver(() => self.slothlet.metadata.self()?.path?.join(".") ?? null);
 }
 
 /**

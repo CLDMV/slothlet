@@ -25,7 +25,7 @@
  *    directory includes a `config.mjs` file (API_TEST fixture).  The guard fires twice:
  *    once before `___adoptImplChildren()` and once after.
  *
- *  Lines 518-519 – `_applyNewImpl` sets filePath from impl.__filePath
+ *  Lines 518-519 – `_applyNewImpl` sets filePath from api.slothlet.node(impl).file
  *    Triggered during lazy materialization when the loaded module object carries a
  *    `__filePath` property (set by modes-processor) and the wrapper has no filePath yet.
  *
@@ -225,7 +225,7 @@ describe("util.inspect on waiting proxy before materialization (lines 1426, 1436
 // ---------------------------------------------------------------------------
 // 5. lazy materialization debug paths for apiPath === "string"
 //    Lines 670, 683, 708, 718 in ___materialize
-//    Lines 518-519 in _applyNewImpl (filePath update from impl.__filePath)
+//    Lines 518-519 in _applyNewImpl (filePath update from api.slothlet.node(impl).file)
 // ---------------------------------------------------------------------------
 describe("lazy materialization debug paths for apiPath=string (lines 670, 683, 708, 718)", () => {
 	it("fires ___materialize debug guards when debug.wrapper=true and string wrapper materialises", async () => {
@@ -261,7 +261,7 @@ describe("lazy materialization debug paths for apiPath=string (lines 670, 683, 7
 			mode: "lazy"
 		});
 		// During materialization, modes-processor sets __filePath on the impl.
-		// _applyNewImpl at line 517 checks `!filePath && impl.__filePath` and promotes it.
+		// _applyNewImpl at line 517 checks `!filePath && api.slothlet.node(impl).file` and promotes it.
 		// This covers lines 518-519.
 		const result = await api.string.trim("  hello  ");
 		expect(result).toBe("hello");

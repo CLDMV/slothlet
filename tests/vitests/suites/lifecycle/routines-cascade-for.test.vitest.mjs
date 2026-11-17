@@ -62,7 +62,7 @@ describe.each(["eager", "lazy"])("routines #400 — cascade:false + .for(key) + 
 			});
 			try {
 				expect(typeof api.initialize).toBe("function");
-				expect(api.initialize.__slothletRoutineCascade).toBe(true);
+				expect(api.initialize.____slothletRoutineCascade).toBe(true);
 			} finally {
 				await api.slothlet.shutdown();
 			}
@@ -82,7 +82,7 @@ describe.each(["eager", "lazy"])("routines #400 — cascade:false + .for(key) + 
 
 				// The base's own root "initialize" leaf stays at api.initialize — it is NOT replaced by a
 				// run-all cascade, so calling it runs only itself, not every matching contribution.
-				expect(api.initialize.__slothletRoutineCascade).toBeUndefined();
+				expect(api.initialize.____slothletRoutineCascade).toBeUndefined();
 				globalThis.__slothletRoutineLog = [];
 				await api.initialize();
 				expect(globalThis.__slothletRoutineLog).toEqual(["root:initialize"]);
@@ -232,7 +232,7 @@ describe.each(["eager", "lazy"])("routines #400 — cascade:false + .for(key) + 
 
 				// The `__slothletRoutine*` markers are not framework-reserved, so they reach the impl branch
 				// of the trap too — they must be configurable for the same reason.
-				const markerDesc = Object.getOwnPropertyDescriptor(slot, "__slothletRoutineStack");
+				const markerDesc = Object.getOwnPropertyDescriptor(slot, "____slothletRoutineStack");
 				expect(markerDesc).toBeDefined();
 				expect(markerDesc.configurable).toBe(true);
 
@@ -270,7 +270,7 @@ describe("routines #400 — config validation", () => {
 		});
 		try {
 			// String shorthand → cascade defaults to true → the root cascade exists.
-			expect(api.initialize.__slothletRoutineCascade).toBe(true);
+			expect(api.initialize.____slothletRoutineCascade).toBe(true);
 		} finally {
 			await api.slothlet.shutdown();
 		}

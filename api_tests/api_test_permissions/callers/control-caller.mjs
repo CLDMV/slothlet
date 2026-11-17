@@ -82,7 +82,7 @@ export const callRemoveRule = (ruleId) => self.slothlet.permissions.removeRule(r
  * @example
  * api.controlCaller.callSetGlobalMetadata("tenant", "alpha");
  */
-export const callSetGlobalMetadata = (key, value) => self.slothlet.metadata.setGlobal(key, value);
+export const callSetGlobalMetadata = (key, value) => self.slothlet.metadata.global(key, value);
 
 /**
  * Attempt to set i18n language via inter-module call.

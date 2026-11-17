@@ -193,7 +193,7 @@ describe.each(TEST_MATRIX)("scoped reload of a single-file add > $name", ({ conf
 			const shape = SHAPES[0];
 			await setup(shape);
 			const held = api.calc;
-			const before = api.calc.half.__metadata;
+			const beforeNode = api.slothlet.node(api.calc.half);
 			writeFixture(root, 2);
 			await api.slothlet.api.reload("calc-mod");
 			writeFixture(root, 3);
@@ -201,11 +201,11 @@ describe.each(TEST_MATRIX)("scoped reload of a single-file add > $name", ({ conf
 			expect(api.calc).toBe(held);
 			expect(await held(4)).toBe(12);
 			expect(await held.half(4)).toBe(2);
-			const after = api.calc.half.__metadata;
-			expect(after.moduleID).toBe(before.moduleID);
-			expect(after.apiPath).toBe("calc.half");
-			expect(after.filePath).toBe(path.join(root, "calc.mjs"));
-			expect(api.calc.__metadata.apiPath).toBe("calc");
+			const afterNode = api.slothlet.node(api.calc.half);
+			expect(afterNode.module).toBe(beforeNode.module);
+			expect(afterNode.path.join(".")).toBe("calc.half");
+			expect(afterNode.file).toBe(path.join(root, "calc.mjs"));
+			expect(api.slothlet.node(api.calc).path.join(".")).toBe("calc");
 		},
 		TIMEOUT
 	);
@@ -311,7 +311,7 @@ describe.each(TEST_MATRIX)("scoped reload of an add at the api root > $name", ({
 					expect(await node().ping()).toBe(`${target.key}1`);
 					const held = node();
 					const keys = Object.keys(api);
-					const metadata = node().ping.__metadata;
+					const metadataNode = api.slothlet.node(node().ping);
 					const seen = [];
 					if (config.hook?.enabled) {
 						api.slothlet.hook.on(`${target.key}.ping:before`, ({ path: p }) => void seen.push(p), { id: "reload-root-add" });
@@ -328,8 +328,8 @@ describe.each(TEST_MATRIX)("scoped reload of an add at the api root > $name", ({
 					expect(await api.two.ping()).toBe("two1");
 					expect(await api.root.hello()).toBe("hi");
 					expect([...api.slothlet.diag.owner.get(target.key)]).toContain(target.id);
-					expect(node().ping.__metadata.moduleID).toBe(metadata.moduleID);
-					expect(node().ping.__metadata.filePath).toBe(metadata.filePath);
+					expect(api.slothlet.node(node().ping).module).toBe(metadataNode.module);
+					expect(api.slothlet.node(node().ping).file).toBe(metadataNode.file);
 					if (config.hook?.enabled) expect(seen).toEqual([`${target.key}.ping`]);
 					await expect(Promise.resolve().then(() => node().peek())).rejects.toMatchObject({ code: "PERMISSION_DENIED" });
 				},

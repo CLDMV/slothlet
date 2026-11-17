@@ -58,7 +58,7 @@ const expected = {};
 
 beforeAll(async () => {
 	const api = await slothlet({ base: FIXTURE, mode: "eager", silent: true });
-	for (const path of PATHS) expected[path] = at(api, path).__type;
+	for (const path of PATHS) expected[path] = api.slothlet.node(at(api, path)).type;
 	await api.shutdown();
 });
 
@@ -90,7 +90,7 @@ describe.each(configs)("a module's read of a node's __type > $mode / $runtime / 
 		await load();
 		await loadAll(api);
 		expect(api.reader.type(path)).toBe(expected[path]);
-		expect(at(api, path).__type).toBe(expected[path]);
+		expect(api.slothlet.node(at(api, path)).type).toBe(expected[path]);
 	});
 
 	it.each(PATHS)("is answered with a deny on another node: %s", async (path) => {
@@ -103,7 +103,7 @@ describe.each(configs)("a module's read of a node's __type > $mode / $runtime / 
 		await load({ rules: [{ caller: "reader.**", target: path, effect: "deny" }] });
 		await loadAll(api);
 		expect(api.reader.type(path)).toEqual({ threw: "PERMISSION_DENIED" });
-		expect(at(api, path).__type).toBe(expected[path]);
+		expect(api.slothlet.node(at(api, path)).type).toBe(expected[path]);
 	});
 
 	it.each(PATHS)("is refused under a default deny, and answered with an allow on the node's path: %s", async (path) => {

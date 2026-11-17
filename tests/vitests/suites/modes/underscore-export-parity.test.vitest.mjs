@@ -162,11 +162,11 @@ describe("Modes > underscore-prefixed exports compose in both modes", () => {
 			try {
 				await instance.mod.plain;
 				const mod = await instance.mod;
-				expect(typeof mod.__filePath, `${mode} __filePath`).toBe("string");
-				expect(typeof mod.__sourceFolder, `${mode} __sourceFolder`).toBe("string");
-				expect(typeof mod.__moduleID, `${mode} __moduleID`).toBe("string");
-				expect(mod.__apiPath, `${mode} __apiPath`).toBe("mod");
-				expect(mod.__mode, `${mode} __mode`).toBe(mode);
+				expect(typeof instance.slothlet.node(mod).file, `${mode} __filePath`).toBe("string");
+				expect(typeof instance.slothlet.node(mod).folder, `${mode} __sourceFolder`).toBe("string");
+				expect(typeof instance.slothlet.node(mod).module, `${mode} __moduleID`).toBe("string");
+				expect(instance.slothlet.node(mod).path.join("."), `${mode} __apiPath`).toBe("mod");
+				expect(instance.slothlet.node(mod).mode, `${mode} __mode`).toBe(mode);
 				expect(typeof mod._materialize, `${mode} _materialize`).toBe("function");
 				// Private state stays private regardless of how the filter is widened.
 				expect(mod.____slothletInternal, `${mode} ____slothletInternal`).toBeUndefined();

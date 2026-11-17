@@ -411,8 +411,12 @@ await api.slothlet.api.add("plugins.trusted", "./trusted-dir", {
 
 // Set metadata at runtime
 api.slothlet.metadata.set(api.plugins.trusted.someFunc, "version", 2); // set(fn, key, value) — by function reference
-api.slothlet.metadata.setGlobal({ environment: "production" });
-api.slothlet.metadata.setFor("plugins.trusted", { owner: "core-team" }); // setFor(path, keyOrObj, value) — by path
+api.slothlet.metadata.global({ environment: "production" });
+api.slothlet.metadata.set("plugins.trusted", { owner: "core-team" }); // set(path, keyOrObj, value) — by path
+api.slothlet.metadata.get(api.plugins.trusted.someFunc); // user metadata only, synchronous
+
+// What slothlet records about a node is not metadata: read it with node()
+api.slothlet.node(api.plugins.trusted.someFunc); // { path: ["plugins", "trusted", "someFunc"], file, folder, module, mode, type, callable, ... }
 
 // Read metadata inside a module
 import { self } from "@cldmv/slothlet/runtime";
@@ -515,8 +519,8 @@ Mount multiple versions of the same logical path and dispatch to the correct ver
 ```js
 const api = await slothlet({
 	dir: "./api",
-	versionDispatcher: "version" // use caller's versionMetadata.version field
-	// versionDispatcher: (allVersions, caller) => { ... }  // custom function
+	versionDispatcher: "version" // use caller.version.metadata.version
+	// versionDispatcher: (versions, caller) => { ... }  // custom function
 });
 
 // Register versioned modules — 4th argument is versionConfig

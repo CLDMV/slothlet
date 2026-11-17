@@ -18,7 +18,7 @@
  * @module api_test_primitives.boolval
  * @memberof module:api_test_primitives
  * @example
- * // api.boolval.__type === "boolean"
+ * // api.slothlet.node(api.boolval).type === "data"
  */
 /**
  * @namespace boolval

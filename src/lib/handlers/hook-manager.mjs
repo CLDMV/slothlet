@@ -111,7 +111,7 @@ const DEFAULT_HOOK_SUBSET = "primary";
  * @typedef {Object} AroundChainOptions
  * @property {HookAroundCore} core - Innermost stage invoked by the last around hook's `next()`.
  * @property {boolean} isAsync - Whether the call runs the asynchronous pipeline.
- * @property {object|null} caller - Calling module's metadata, or null for an entry call.
+ * @property {{path: string[], module: string|null, metadata: object, version: {tag: string, default: boolean, metadata: object}|null}|null} caller - The calling leaf (its path segments, module id, user metadata and version record), or null for an entry call.
  * @property {boolean} entry - True when the call has no module caller.
  * @property {HookErrorSink} errorSink - Records where each failure originated.
  * @property {HookFlowRunner|null} runInCallerFlow - Restores the call's own identity inside a pinned hook's `next()`.

@@ -24,7 +24,7 @@
  *
  * This file tests those branches by nulling contextManager on the real Slothlet instance (accessed via
  * resolveWrapper) and restoring it in finally blocks. Because `typeof proxy` always returns "function"
- * for callable proxies regardless of the underlying impl, use `wrapper.__type` to inspect the actual
+ * for callable proxies regardless of the underlying impl, use `api.slothlet.node(wrapper).type` to inspect the actual
  * impl type in assertions.
  *
  * Target lines:
@@ -63,7 +63,7 @@ describe("UnifiedWrapper > applyTrap > impl=fn, no contextManager (line 2592)", 
 	it("__type is 'function' confirming impl is a function (not just proxy target)", () => {
 		// Note: typeof api.math.add === "function" is due to the proxy target,
 		// not the impl. Use .__type to check the actual impl type.
-		expect(api.math.add.__type).toBe("function");
+		expect(api.slothlet.node(api.math.add).type).toBe("function");
 	});
 
 	it("calls impl.apply directly when contextManager is null", () => {
@@ -132,7 +132,7 @@ describe("UnifiedWrapper > applyTrap > impl={default:fn}, no contextManager (lin
 		wrapper.____slothletInternal.impl = { default: (a, b) => a * b };
 		try {
 			// .__type reads the actual impl, not typeof proxy
-			expect(api.math.add.__type).toBe("function");
+			expect(api.slothlet.node(api.math.add).type).toBe("function");
 		} finally {
 			wrapper.____slothletInternal.impl = origImpl;
 		}
@@ -189,12 +189,13 @@ describe("UnifiedWrapper > applyTrap > impl=invalid, no contextManager (line 260
 		}
 	});
 
-	it("__type returns 'object' when impl is a plain object with no default fn", () => {
+	it("node().type stays 'function' for a callable node whose impl is swapped for a plain object", () => {
 		const wrapper = resolveWrapper(api.math.add);
 		const origImpl = wrapper.____slothletInternal.impl;
 		wrapper.____slothletInternal.impl = { notAFunction: true };
 		try {
-			expect(api.math.add.__type).toBe("object");
+			// The node is still callable and holds no members of its own: a function (D-4).
+			expect(api.slothlet.node(api.math.add).type).toBe("function");
 		} finally {
 			wrapper.____slothletInternal.impl = origImpl;
 		}

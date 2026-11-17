@@ -427,7 +427,7 @@ export class RoutineManager extends ComponentBase {
 		// self-referential entry again — infinite async recursion that grows the heap until OOM
 		// (#372 review; confirmed pre-existing, reproducible without any of this session's other
 		// changes: stackRoutines: true + a "merge" collision + removing the merge-loser).
-		if (typeof fn === "function" && fn.__slothletRoutineStack === true) {
+		if (typeof fn === "function" && fn.____slothletRoutineStack === true) {
 			return;
 		}
 		if (typeof fn !== "function") {
@@ -627,7 +627,11 @@ export class RoutineManager extends ComponentBase {
 				/* v8 ignore next */
 				return;
 			}
-			if (!(typeof current === "function" && current.__slothletRoutineCascade === true && current.__slothletRoutineName === winner.name)) {
+			if (!(
+				typeof current === "function" &&
+				current.____slothletRoutineCascade === true &&
+				current.____slothletRoutineName === winner.name
+			)) {
 				this.recording = false;
 				try {
 					// The framework's own install, not a write by whichever module's change scheduled it (#625).
@@ -660,7 +664,7 @@ export class RoutineManager extends ComponentBase {
 			/* v8 ignore next */
 			return;
 		}
-		if (typeof current === "function" && current.__slothletRoutineStack === true && current.__slothletRoutineName === winner.name) {
+		if (typeof current === "function" && current.____slothletRoutineStack === true && current.____slothletRoutineName === winner.name) {
 			return; // Already correctly stacked for the winning routine.
 		}
 		this.recording = false;
@@ -968,7 +972,7 @@ export class RoutineManager extends ComponentBase {
 			const ofEntry = ofList[ofIndex],
 				key = ofEntry[0],
 				value = ofEntry[1];
-			const skipProps = ["__metadata", "__type", "_materialize", "_impl", "____slothletInternal"];
+			const skipProps = ["_materialize", "_impl", "____slothletInternal"];
 			if (ArrayMethods.includes(skipProps, key)) {
 				continue;
 			}
@@ -1775,11 +1779,11 @@ export class RoutineManager extends ComponentBase {
 
 	/**
 	 * Build the stacked callable for one exact api path — invoking each of that path's contributors
-	 * in registration order, sequentially, awaiting each. Branded with `__slothletRoutineStack` as a
-	 * public introspection marker (`fn.__slothletRoutineStack === true` identifies a
+	 * in registration order, sequentially, awaiting each. Branded with `____slothletRoutineStack` as a
+	 * public introspection marker (`fn.____slothletRoutineStack === true` identifies a
 	 * routine-managed callable) — no longer load-bearing for double-invoke prevention since
 	 * `collectLifecycleHooks` now expands into ordinary routines (see `Config.normalizeRoutines`)
-	 * rather than running a separate parallel walk. Also branded with `__slothletRoutineName` (the
+	 * rather than running a separate parallel walk. Also branded with `____slothletRoutineName` (the
 	 * exact `routine.name` it was built for) so a later reactive self-heal (#362) can tell whether an
 	 * already-installed stack belongs to the correct routine — needed because two DIFFERENT routines
 	 * can match the same exact apiPath (#366 review's "last-registered-routine-wins" test), and a
@@ -1803,8 +1807,8 @@ export class RoutineManager extends ComponentBase {
 		// violates the ES Proxy invariant — so `Object.getOwnPropertyDescriptor(slot, "for")` (or
 		// `.contributors`, or a marker) throws once the slot is reached through the wrapper. Keeping them
 		// configurable lets the trap report them without tripping the invariant; non-enumerable is retained.
-		Objects.defineProperty(stacked, "__slothletRoutineStack", { __proto__: null, value: true, enumerable: false, configurable: true });
-		Objects.defineProperty(stacked, "__slothletRoutineName", {
+		Objects.defineProperty(stacked, "____slothletRoutineStack", { __proto__: null, value: true, enumerable: false, configurable: true });
+		Objects.defineProperty(stacked, "____slothletRoutineName", {
 			__proto__: null,
 			value: routine.name,
 			enumerable: false,
@@ -1836,9 +1840,9 @@ export class RoutineManager extends ComponentBase {
 	/**
 	 * Build the root-cascade callable for a routine. Forwards whatever arguments it's called with,
 	 * unchanged, to every contributor at every matching path (#362 review — previously took no
-	 * arguments at all). Branded with both the generic `__slothletRoutineStack` marker (any
-	 * routine-managed callable) and a distinct `__slothletRoutineCascade` marker plus
-	 * `__slothletRoutineName`, so a reactive self-heal (#362) can tell a cascade callable apart from
+	 * arguments at all). Branded with both the generic `____slothletRoutineStack` marker (any
+	 * routine-managed callable) and a distinct `____slothletRoutineCascade` marker plus
+	 * `____slothletRoutineName`, so a reactive self-heal (#362) can tell a cascade callable apart from
 	 * an ordinary per-path stack — and confirm it's already correctly installed for THIS routine —
 	 * without confusing the two, since a routine's own name can coincide with a root-level
 	 * contributor's own apiPath (see {@link rebuildStacks}'s cascade-slot skip).
@@ -1858,9 +1862,9 @@ export class RoutineManager extends ComponentBase {
 		// #443: configurable for the same proxy-invariant reason as #buildStackedCallable — a cascade
 		// callable can also be reached through the wrapper (e.g. a nested run-all slot), and a
 		// non-configurable marker would trip getOwnPropertyDescriptor there. Non-enumerable is retained.
-		Objects.defineProperty(cascade, "__slothletRoutineStack", { __proto__: null, value: true, enumerable: false, configurable: true });
-		Objects.defineProperty(cascade, "__slothletRoutineCascade", { __proto__: null, value: true, enumerable: false, configurable: true });
-		Objects.defineProperty(cascade, "__slothletRoutineName", { __proto__: null, value: name, enumerable: false, configurable: true });
+		Objects.defineProperty(cascade, "____slothletRoutineStack", { __proto__: null, value: true, enumerable: false, configurable: true });
+		Objects.defineProperty(cascade, "____slothletRoutineCascade", { __proto__: null, value: true, enumerable: false, configurable: true });
+		Objects.defineProperty(cascade, "____slothletRoutineName", { __proto__: null, value: name, enumerable: false, configurable: true });
 		return cascade;
 	}
 

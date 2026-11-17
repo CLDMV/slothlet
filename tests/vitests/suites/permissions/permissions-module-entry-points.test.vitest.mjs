@@ -21,7 +21,7 @@
  * `api.add` from module code writes at every path its content creates or merges into, whatever the collision mode,
  * all checked before anything changes; in lazy mode its content is loaded for the check. A path with surrounding
  * whitespace is checked as the path it mounts. The framework's metadata, versioning, and reload setters, called by
- * module code on another module's paths, are writes there. `metadata.setGlobal` is the host's while the permission
+ * module code on another module's paths, are writes there. `metadata.global` is the host's while the permission
  * system is on, unless an allow lifts it. `api.modules.removeModule` from module code removes every matching mount or
  * none. A refused `api.add` leaves no ownership entries behind. The host is unchanged throughout.
  *
@@ -216,26 +216,26 @@ describe.each(CONFIGS)("module-code entry points (#625) — $mode / $runtime", (
 		}
 
 		it.each([
-			["metadata.setFor", "setFor", "victim.v"],
-			["metadata.removeFor", "removeFor", "victim.v"],
+			["metadata.set", "setFor", "victim.v"],
+			["metadata.remove", "removeFor", "victim.v"],
 			["metadata.set", "set", "victim.v.secret"],
 			["api.reload by moduleID", "reload", "victim"],
 			["api.reload by path", "reload", "victim.v"]
 		])("refuses module code calling %s on another module's path", async (_label, what, target) => {
 			await load();
-			api.slothlet.metadata.setFor("victim.v", "kept", 1);
+			api.slothlet.metadata.set("victim.v", "kept", 1);
 			expect(await withSuppressedSlothletErrorOutput(() => api.guest.x.callSetter(what, target))).toBe("LOOSE_SET_NOT_OWNED");
 			expect(await api.victim.v.secret()).toBe("SECRET");
-			expect(api.slothlet.metadata.getFor("victim.v")).toMatchObject({ kept: 1 });
-			expect(api.slothlet.metadata.getFor("victim.v").planted).toBeUndefined();
-			expect(api.slothlet.metadata.getFor("victim.v.secret").planted).toBeUndefined();
+			expect(api.slothlet.metadata.get("victim.v")).toMatchObject({ kept: 1 });
+			expect(api.slothlet.metadata.get("victim.v").planted).toBeUndefined();
+			expect(api.slothlet.metadata.get("victim.v.secret").planted).toBeUndefined();
 		});
 
 		it("refuses module code removing another module's metadata", async () => {
 			await load();
-			api.slothlet.metadata.setFor("victim.v", "planted", 1);
+			api.slothlet.metadata.set("victim.v", "planted", 1);
 			expect(await withSuppressedSlothletErrorOutput(() => api.guest.x.callSetter("removeFor", "victim.v"))).toBe("LOOSE_SET_NOT_OWNED");
-			expect(api.slothlet.metadata.getFor("victim.v").planted).toBe(1);
+			expect(api.slothlet.metadata.get("victim.v").planted).toBe(1);
 		});
 
 		it.each([
@@ -247,42 +247,42 @@ describe.each(CONFIGS)("module-code entry points (#625) — $mode / $runtime", (
 			expect(await withSuppressedSlothletErrorOutput(() => api.guest.x.callSetter(what, "vlib", "v2"))).toBe("LOOSE_SET_NOT_OWNED");
 			expect(api.slothlet.versioning.list("vlib").default).toBe("v1");
 			expect(api.slothlet.versioning.getVersionMetadata("vlib", "v2")?.planted).toBeUndefined();
-			expect(api.slothlet.metadata.getForVersion("vlib", "v2")?.planted).toBeUndefined();
+			expect(api.slothlet.metadata.get("vlib", { version: "v2" })?.planted).toBeUndefined();
 		});
 
 		it("lets module code call them on its own paths, and leaves the host calling them anywhere", async () => {
 			await versioned();
 			expect(await api.guest.x.callSetter("setFor", "guest.x")).toBe("done");
-			expect(api.slothlet.metadata.getFor("guest.x").planted).toBe(1);
+			expect(api.slothlet.metadata.get("guest.x").planted).toBe(1);
 			expect(await api.guest.x.callSetter("reload", "guest")).toBe("done");
-			api.slothlet.metadata.setFor("victim.v", "hostSet", 1);
-			expect(api.slothlet.metadata.getFor("victim.v").hostSet).toBe(1);
+			api.slothlet.metadata.set("victim.v", "hostSet", 1);
+			expect(api.slothlet.metadata.get("victim.v").hostSet).toBe(1);
 			api.slothlet.versioning.setDefault("vlib", "v2");
 			expect(api.slothlet.versioning.list("vlib").default).toBe("v2");
 		});
 	});
 
-	describe("metadata.setGlobal", () => {
+	describe("metadata.global", () => {
 		it("is refused to module code with the permission system on, and changes nothing", async () => {
 			await load({ permissions: { defaultPolicy: "allow" } });
 			expect(await withSuppressedSlothletErrorOutput(() => api.guest.x.callSetter("setGlobal", ""))).toBe("PERMISSION_DENIED");
-			expect(api.slothlet.metadata.getFor("victim.v").planted).toBeUndefined();
-			api.slothlet.metadata.setGlobal("hostGlobal", 1);
-			expect(api.slothlet.metadata.getFor("victim.v").hostGlobal).toBe(1);
+			expect(api.slothlet.metadata.get("victim.v").planted).toBeUndefined();
+			api.slothlet.metadata.global("hostGlobal", 1);
+			expect(api.slothlet.metadata.get("victim.v").hostGlobal).toBe(1);
 		});
 
 		it("is granted to module code by an allow", async () => {
 			await load({
-				permissions: { defaultPolicy: "allow", rules: [{ caller: "guest.**", target: "slothlet.metadata.setGlobal", effect: "allow" }] }
+				permissions: { defaultPolicy: "allow", rules: [{ caller: "guest.**", target: "slothlet.metadata.global", effect: "allow" }] }
 			});
 			expect(await api.guest.x.callSetter("setGlobal", "")).toBe("done");
-			expect(api.slothlet.metadata.getFor("victim.v").planted).toBe(1);
+			expect(api.slothlet.metadata.get("victim.v").planted).toBe(1);
 		});
 
 		it("is left to module code with the permission system off", async () => {
 			await load({ permissions: undefined });
 			expect(await api.guest.x.callSetter("setGlobal", "")).toBe("done");
-			expect(api.slothlet.metadata.getFor("victim.v").planted).toBe(1);
+			expect(api.slothlet.metadata.get("victim.v").planted).toBe(1);
 		});
 	});
 

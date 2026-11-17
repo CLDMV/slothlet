@@ -69,15 +69,17 @@ describe.each(getMatrixConfigs())("Metadata Collision Modes > Config: '$name'", 
 			expect(addResult).toBe(12);
 
 			// Check system metadata filePath to confirm sources
-			const powerMeta = api.math.power.__metadata;
-			const addMeta = api.math.add.__metadata;
+			const powerMeta = api.slothlet.metadata.get(api.math.power);
+			const powerMetaNode = api.slothlet.node(api.math.power);
+			const addMeta = api.slothlet.metadata.get(api.math.add);
+			const addMetaNode = api.slothlet.node(api.math.add);
 			expect(powerMeta).toBeDefined();
 			expect(addMeta).toBeDefined();
 
 			// File functions should have filePath ending in math.mjs
-			expect(powerMeta.filePath).toMatch(/[/\\]math\.mjs$/);
+			expect(powerMetaNode.file).toMatch(/[/\\]math\.mjs$/);
 			// Folder functions should have filePath with math/math.mjs
-			expect(addMeta.filePath).toMatch(/[/\\]math[/\\]math\.mjs$/);
+			expect(addMetaNode.file).toMatch(/[/\\]math[/\\]math\.mjs$/);
 		});
 
 		it("should handle skip mode - first loaded wins", async () => {
@@ -99,12 +101,12 @@ describe.each(getMatrixConfigs())("Metadata Collision Modes > Config: '$name'", 
 			// Verify metadata filePath points to only one source
 			if (hasFileFunctions) {
 				await materialize(api, "math.power", 2, 3);
-				const meta = api.math.power.__metadata;
-				expect(meta.filePath).toMatch(/[/\\]math\.mjs$/);
+				const metaNode = api.slothlet.node(api.math.power);
+				expect(metaNode.file).toMatch(/[/\\]math\.mjs$/);
 			} else {
 				await materialize(api, "math.add", 5, 7);
-				const meta = api.math.add.__metadata;
-				expect(meta.filePath).toMatch(/[/\\]math[/\\]math\.mjs$/);
+				const metaNode = api.slothlet.node(api.math.add);
+				expect(metaNode.file).toMatch(/[/\\]math[/\\]math\.mjs$/);
 			}
 		});
 
@@ -130,10 +132,10 @@ describe.each(getMatrixConfigs())("Metadata Collision Modes > Config: '$name'", 
 			await materialize(api, "math.add", 5, 7);
 
 			// Verify metadata filePath from both sources
-			const powerMeta = api.math.power.__metadata;
-			const addMeta = api.math.add.__metadata;
-			expect(powerMeta.filePath).toMatch(/[/\\]math\.mjs$/);
-			expect(addMeta.filePath).toMatch(/[/\\]math[/\\]math\.mjs$/);
+			const powerMetaNode = api.slothlet.node(api.math.power);
+			const addMetaNode = api.slothlet.node(api.math.add);
+			expect(powerMetaNode.file).toMatch(/[/\\]math\.mjs$/);
+			expect(addMetaNode.file).toMatch(/[/\\]math[/\\]math\.mjs$/);
 		});
 
 		it("should handle replace mode - last loaded wins", async () => {
@@ -161,12 +163,12 @@ describe.each(getMatrixConfigs())("Metadata Collision Modes > Config: '$name'", 
 			// Verify metadata filePath points to only one source
 			if (hasFileFunctions) {
 				await materialize(api, "math.power", 2, 3);
-				const meta = api.math.power.__metadata;
-				expect(meta.filePath).toMatch(/[/\\]math\.mjs$/);
+				const metaNode = api.slothlet.node(api.math.power);
+				expect(metaNode.file).toMatch(/[/\\]math\.mjs$/);
 			} else {
 				await materialize(api, "math.add", 5, 7);
-				const meta = api.math.add.__metadata;
-				expect(meta.filePath).toMatch(/[/\\]math[/\\]math\.mjs$/);
+				const metaNode = api.slothlet.node(api.math.add);
+				expect(metaNode.file).toMatch(/[/\\]math[/\\]math\.mjs$/);
 			}
 		});
 
@@ -192,9 +194,9 @@ describe.each(getMatrixConfigs())("Metadata Collision Modes > Config: '$name'", 
 			});
 
 			await materialize(api, "rootMath.add", 1, 2);
-			const originalMeta = api.rootMath.add.__metadata;
-			const originalModuleId = originalMeta.moduleID;
-			const originalFilePath = originalMeta.filePath;
+			const originalMetaNode = api.slothlet.node(api.rootMath.add);
+			const originalModuleId = originalMetaNode.module;
+			const originalFilePath = originalMetaNode.file;
 
 			// Try to add conflicting API with metadata (should be skipped)
 			await api.slothlet.api.add("rootMath", TEST_DIRS.API_SMART_FLATTEN, {
@@ -206,10 +208,11 @@ describe.each(getMatrixConfigs())("Metadata Collision Modes > Config: '$name'", 
 
 			// Original should still be there unchanged
 			await materialize(api, "rootMath.add", 1, 2);
-			const currentMeta = api.rootMath.add.__metadata;
+			const currentMeta = api.slothlet.metadata.get(api.rootMath.add);
+			const currentMetaNode = api.slothlet.node(api.rootMath.add);
 
-			expect(currentMeta.moduleID).toBe(originalModuleId);
-			expect(currentMeta.filePath).toBe(originalFilePath);
+			expect(currentMetaNode.module).toBe(originalModuleId);
+			expect(currentMetaNode.file).toBe(originalFilePath);
 			expect(currentMeta.conflictingMetadata).toBeUndefined();
 			expect(currentMeta.version).toBeUndefined();
 		});
@@ -224,9 +227,9 @@ describe.each(getMatrixConfigs())("Metadata Collision Modes > Config: '$name'", 
 			});
 
 			await materialize(api, "rootMath.add", 1, 2);
-			const originalMeta = api.rootMath.add.__metadata;
-			const originalModuleId = originalMeta.moduleID;
-			const originalFilePath = originalMeta.filePath;
+			const originalMetaNode = api.slothlet.node(api.rootMath.add);
+			const originalModuleId = originalMetaNode.module;
+			const originalFilePath = originalMetaNode.file;
 
 			// Try to add conflicting API with metadata (should warn and skip)
 			await api.slothlet.api.add("rootMath", TEST_DIRS.API_SMART_FLATTEN, {
@@ -238,10 +241,11 @@ describe.each(getMatrixConfigs())("Metadata Collision Modes > Config: '$name'", 
 
 			// Original should still be there unchanged
 			await materialize(api, "rootMath.add", 1, 2);
-			const currentMeta = api.rootMath.add.__metadata;
+			const currentMeta = api.slothlet.metadata.get(api.rootMath.add);
+			const currentMetaNode = api.slothlet.node(api.rootMath.add);
 
-			expect(currentMeta.moduleID).toBe(originalModuleId);
-			expect(currentMeta.filePath).toBe(originalFilePath);
+			expect(currentMetaNode.module).toBe(originalModuleId);
+			expect(currentMetaNode.file).toBe(originalFilePath);
 			expect(currentMeta.conflictingMetadata).toBeUndefined();
 			expect(currentMeta.version).toBeUndefined();
 		});
@@ -256,8 +260,8 @@ describe.each(getMatrixConfigs())("Metadata Collision Modes > Config: '$name'", 
 			});
 
 			await materialize(api, "rootMath.add", 1, 2);
-			const originalMeta = api.rootMath.add.__metadata;
-			const originalModuleId = originalMeta.moduleID;
+			const originalMetaNode = api.slothlet.node(api.rootMath.add);
+			const originalModuleId = originalMetaNode.module;
 
 			// Add conflicting API with metadata (should replace)
 			await api.slothlet.api.add("rootMath", TEST_DIRS.API_SMART_FLATTEN, {
@@ -271,12 +275,13 @@ describe.each(getMatrixConfigs())("Metadata Collision Modes > Config: '$name'", 
 			// API_SMART_FLATTEN has different structure, verify the new structure exists
 			if (api.rootMath?.config?.settings?.getPluginConfig) {
 				await materialize(api, "rootMath.config.settings.getPluginConfig");
-				const currentMeta = api.rootMath.config.settings.getPluginConfig.__metadata;
+				const currentMeta = api.slothlet.metadata.get(api.rootMath.config.settings.getPluginConfig);
+				const currentMetaNode = api.slothlet.node(api.rootMath.config.settings.getPluginConfig);
 
 				// Should have new metadata
 				expect(currentMeta.replacedMetadata).toBe(true);
 				expect(currentMeta.version).toBe("2.0.0");
-				expect(currentMeta.moduleID).not.toBe(originalModuleId);
+				expect(currentMetaNode.module).not.toBe(originalModuleId);
 			}
 		});
 	});
@@ -299,7 +304,7 @@ describe.each(getMatrixConfigs())("Metadata Collision Modes > Config: '$name'", 
 			});
 
 			await materialize(api, "testMerge.config.settings.getPluginConfig");
-			const meta1 = api.testMerge.config.settings.getPluginConfig.__metadata;
+			const meta1 = api.slothlet.metadata.get(api.testMerge.config.settings.getPluginConfig);
 			expect(meta1.initialLoad).toBe(true);
 			expect(meta1.version).toBe("1.0.0");
 			expect(meta1.feature).toBe("base");
@@ -315,7 +320,7 @@ describe.each(getMatrixConfigs())("Metadata Collision Modes > Config: '$name'", 
 
 			// Metadata should be merged (preserves old + adds new, overwrites conflicts)
 			await materialize(api, "testMerge.config.settings.getPluginConfig");
-			const meta2 = api.testMerge.config.settings.getPluginConfig.__metadata;
+			const meta2 = api.slothlet.metadata.get(api.testMerge.config.settings.getPluginConfig);
 
 			expect(meta2.initialLoad).toBe(true); // Preserved from first load
 			expect(meta2.mergedLoad).toBe(true); // Added from merge
@@ -333,9 +338,9 @@ describe.each(getMatrixConfigs())("Metadata Collision Modes > Config: '$name'", 
 			});
 
 			await materialize(api, "rootMath.add", 1, 2);
-			const originalMeta = api.rootMath.add.__metadata;
-			const originalModuleId = originalMeta.moduleID;
-			const originalFilePath = originalMeta.filePath;
+			const originalMetaNode = api.slothlet.node(api.rootMath.add);
+			const originalModuleId = originalMetaNode.module;
+			const originalFilePath = originalMetaNode.file;
 
 			// Try to add conflicting API (should throw)
 			await withSuppressedSlothletErrorOutput(async () => {
@@ -351,10 +356,11 @@ describe.each(getMatrixConfigs())("Metadata Collision Modes > Config: '$name'", 
 
 			// Original should still be there unchanged
 			await materialize(api, "rootMath.add", 1, 2);
-			const currentMeta = api.rootMath.add.__metadata;
+			const currentMeta = api.slothlet.metadata.get(api.rootMath.add);
+			const currentMetaNode = api.slothlet.node(api.rootMath.add);
 
-			expect(currentMeta.moduleID).toBe(originalModuleId);
-			expect(currentMeta.filePath).toBe(originalFilePath);
+			expect(currentMetaNode.module).toBe(originalModuleId);
+			expect(currentMetaNode.file).toBe(originalFilePath);
 			expect(currentMeta.conflictingMetadata).toBeUndefined();
 			expect(currentMeta.version).toBeUndefined();
 		});
@@ -377,11 +383,12 @@ describe.each(getMatrixConfigs())("Metadata Collision Modes > Config: '$name'", 
 			});
 
 			await materialize(api, "tempModule.config.settings.getPluginConfig");
-			const meta = api.tempModule.config.settings.getPluginConfig.__metadata;
+			const meta = api.slothlet.metadata.get(api.tempModule.config.settings.getPluginConfig);
+			const metaNode = api.slothlet.node(api.tempModule.config.settings.getPluginConfig);
 			expect(meta.temporary).toBe(true);
 			expect(meta.version).toBe("temp");
 
-			const moduleID = meta.moduleID;
+			const moduleID = metaNode.module;
 
 			// Remove by moduleID
 			await api.slothlet.api.remove(moduleID);
@@ -406,7 +413,7 @@ describe.each(getMatrixConfigs())("Metadata Collision Modes > Config: '$name'", 
 			});
 
 			await materialize(api, "tempModule2.config.settings.getPluginConfig");
-			const meta = api.tempModule2.config.settings.getPluginConfig.__metadata;
+			const meta = api.slothlet.metadata.get(api.tempModule2.config.settings.getPluginConfig);
 			expect(meta.temporary).toBe(true);
 
 			// Remove by apiPath

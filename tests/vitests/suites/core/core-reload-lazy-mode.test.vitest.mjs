@@ -77,8 +77,8 @@ for (const { config, name } of lazyConfigs) {
 		 * @returns {{ materialized: boolean, inFlight: boolean }|null}
 		 */
 		function getWrapperState(proxyValue) {
-			if (!proxyValue || proxyValue.__mode === undefined) return null;
-			return { materialized: proxyValue.__materialized, inFlight: proxyValue.__inFlight };
+			if (!proxyValue || api.slothlet.node(proxyValue).mode === undefined) return null;
+			return { materialized: api.slothlet.node(proxyValue).materialized, inFlight: api.slothlet.node(proxyValue).loading };
 		}
 
 		// ─── 1. Materialized path resets to un-materialized after reload ───

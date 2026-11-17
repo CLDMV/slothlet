@@ -48,5 +48,5 @@ export function open() {
  * api.vault.whoami(); // null
  */
 export function whoami() {
-	return self.slothlet.metadata.caller()?.apiPath ?? null;
+	return self.slothlet.metadata.caller()?.path?.join(".") ?? null;
 }

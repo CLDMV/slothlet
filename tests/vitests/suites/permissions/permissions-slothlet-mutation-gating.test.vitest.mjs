@@ -349,13 +349,13 @@ describe.each(getMatrixConfigs())("Permissions > Slothlet Mutation Gating > $nam
 		expect(persisted).toBeDefined();
 	});
 
-	it("blocks internal metadata.setGlobal but keeps external direct call allowed", async () => {
+	it("blocks internal metadata.global but keeps external direct call allowed", async () => {
 		api = await slothlet({
 			...config,
 			base: `${BASE}/callers`,
 			permissions: {
 				defaultPolicy: "allow",
-				rules: [{ caller: "controlCaller.**", target: "slothlet.metadata.setGlobal", effect: "deny" }]
+				rules: [{ caller: "controlCaller.**", target: "slothlet.metadata.global", effect: "deny" }]
 			}
 		});
 
@@ -368,8 +368,8 @@ describe.each(getMatrixConfigs())("Permissions > Slothlet Mutation Gating > $nam
 			}
 		});
 
-		api.slothlet.metadata.setGlobal("securityTag", "allowed");
-		expect(api.controlCaller.callEnable.__metadata.securityTag).toBe("allowed");
+		api.slothlet.metadata.global("securityTag", "allowed");
+		expect(api.slothlet.metadata.get(api.controlCaller.callEnable).securityTag).toBe("allowed");
 	});
 
 	it("blocks internal i18n.setLanguage but keeps external direct call allowed", async () => {

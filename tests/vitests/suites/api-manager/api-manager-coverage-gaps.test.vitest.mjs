@@ -362,7 +362,7 @@ describe("_reloadByApiPath — metadata option (lines 1996-1997)", () => {
 		// API structure still present
 		expect(api.math).toBeDefined();
 		// The metadata option must actually have been registered for the reloaded path.
-		expect(await api.slothlet.metadata.getFor("math")).toMatchObject({ version: "2.0-test" });
+		expect(await api.slothlet.metadata.get("math")).toMatchObject({ version: "2.0-test" });
 	});
 
 	it("reload '.' with metadata also exercises metadata branch", async () => {

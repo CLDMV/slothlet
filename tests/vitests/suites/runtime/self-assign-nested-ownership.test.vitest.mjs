@@ -321,7 +321,7 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 		await api.slothlet.api.add("supplier", path.join(FIXTURE, "supplier"), { moduleID: "supplier" });
 		await api.slothlet.api.add("callee.boot", path.join(FIXTURE, "routine_a"), { moduleID: "boot-a" });
 		await api.supplier.attack.addAt("callee.boot", path.join(FIXTURE, "routine_b"), "boot-b");
-		expect(api.callee.boot.initialize.__slothletRoutineStack).toBe(true);
+		expect(api.callee.boot.initialize.____slothletRoutineStack).toBe(true);
 		expect(await api.callee.boot.initialize()).toEqual(["a", "b"]);
 	});
 

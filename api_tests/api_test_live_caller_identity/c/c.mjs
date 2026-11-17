@@ -24,7 +24,7 @@ import { self } from "@cldmv/slothlet/runtime";
  * @returns {string|null} `metadata.caller()`'s api path, or null for the host.
  */
 export function probe() {
-	return self.slothlet.metadata.caller()?.apiPath ?? null;
+	return self.slothlet.metadata.caller()?.path?.join(".") ?? null;
 }
 
 /**
@@ -32,7 +32,7 @@ export function probe() {
  * @returns {string|null} The api path the pinned callback runs as, or null for the host.
  */
 export function pinCaller() {
-	const pinned = self.slothlet.lockCaller.caller(() => self.slothlet.metadata.self()?.apiPath ?? null);
+	const pinned = self.slothlet.lockCaller.caller(() => self.slothlet.metadata.self()?.path?.join(".") ?? null);
 	try {
 		return pinned();
 	} catch (error) {

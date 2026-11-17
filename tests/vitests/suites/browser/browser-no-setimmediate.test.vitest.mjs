@@ -137,7 +137,7 @@ describe("reactive routine stack patch without setImmediate (#578)", () => {
 		api.auth.initialize = function postWrite() {
 			(globalThis.__slothletRoutineLog ??= []).push("post-write:initialize");
 		};
-		expect(api.auth.initialize.__slothletRoutineStack).toBeFalsy();
+		expect(api.auth.initialize.____slothletRoutineStack).toBeFalsy();
 
 		vi.stubGlobal("setImmediate", undefined);
 		routineManager.onImplCreated({
@@ -152,7 +152,7 @@ describe("reactive routine stack patch without setImmediate (#578)", () => {
 		await settle();
 		vi.unstubAllGlobals();
 
-		expect(api.auth.initialize.__slothletRoutineStack).toBe(true);
+		expect(api.auth.initialize.____slothletRoutineStack).toBe(true);
 		globalThis.__slothletRoutineLog = [];
 		await api.auth.initialize();
 		expect(globalThis.__slothletRoutineLog).toEqual(["post-write:initialize", "late-contributor:initialize"]);

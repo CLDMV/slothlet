@@ -57,43 +57,22 @@ function makeMock() {
 // ─── registerSubtree skip-props continue (line 372) ───────────────────────────
 
 describe("OwnershipManager.registerSubtree - skipProps continue (line 372)", () => {
-	it("should skip __metadata key and not register it", () => {
+	it("registers a module's own __metadata / __type exports like any member (no framework keys on nodes)", () => {
 		const ownership = new OwnershipManager(makeMock());
 
 		const api = {
 			__metadata: { type: "folder-wrapper" },
+			__type: "lazy",
 			add: function () {
 				return 1;
 			}
 		};
 
-		// Empty path — the top-level registration is skipped (falsy path guard).
-		// The loop will find __metadata → continue (line 372) and "add" → register.
 		ownership.registerSubtree(api, "mod1", "");
 
-		// "add" should be owned (registered at childPath "add")
-		const owner = ownership.getCurrentOwner("add");
-		expect(owner).not.toBeNull();
-		expect(owner.moduleID).toBe("mod1");
-
-		// __metadata should NOT be in pathToModule
-		expect(ownership.getCurrentOwner("__metadata")).toBeNull();
-	});
-
-	it("should skip __type key", () => {
-		const ownership = new OwnershipManager(makeMock());
-
-		const api = {
-			__type: "lazy",
-			compute: function () {
-				return 2;
-			}
-		};
-
-		ownership.registerSubtree(api, "mod2", "");
-
-		expect(ownership.getCurrentOwner("compute")).not.toBeNull();
-		expect(ownership.getCurrentOwner("__type")).toBeNull();
+		expect(ownership.getCurrentOwner("add")?.moduleID).toBe("mod1");
+		expect(ownership.getCurrentOwner("__metadata")?.moduleID).toBe("mod1");
+		expect(ownership.getCurrentOwner("__type")?.moduleID).toBe("mod1");
 	});
 
 	it("should skip _materialize, _impl, and ____slothletInternal keys", () => {
@@ -120,8 +99,8 @@ describe("OwnershipManager.registerSubtree - skipProps continue (line 372)", () 
 		const ownership = new OwnershipManager(makeMock());
 
 		const api = {
-			__metadata: {},
-			__type: "eager"
+			_materialize: function () {},
+			_impl: {}
 		};
 
 		// Should not throw and should produce no registrations

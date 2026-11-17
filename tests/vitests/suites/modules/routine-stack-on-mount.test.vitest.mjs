@@ -64,9 +64,9 @@ describe("routine stacks are installed for modules mounted via addModule()/addMo
 		expect(res.mountPath).toBe("ext.widget");
 
 		// The mount path must have installed the routine's stacked callable (fails pre-#362-Fix-B:
-		// the leaf stays the bare mounted function, __slothletRoutineStack undefined).
-		expect(api.ext.widget.initialize.__slothletRoutineStack).toBe(true);
-		expect(api.ext.widget.initialize.__slothletRoutineName).toBe("^ext.widget.initialize");
+		// the leaf stays the bare mounted function, ____slothletRoutineStack undefined).
+		expect(api.ext.widget.initialize.____slothletRoutineStack).toBe(true);
+		expect(api.ext.widget.initialize.____slothletRoutineName).toBe("^ext.widget.initialize");
 
 		// And it actually runs the mounted module's contributor, forwarding args.
 		globalThis.__slothletRoutineModuleLog = [];
@@ -88,7 +88,7 @@ describe("routine stacks are installed for modules mounted via addModule()/addMo
 		const found = await api.slothlet.api.modules.discover({ scanRoot: FIX_ROUTINE_MODULE });
 		await api.slothlet.api.modules.addModules(found);
 
-		expect(api.ext.widget.initialize.__slothletRoutineStack).toBe(true);
+		expect(api.ext.widget.initialize.____slothletRoutineStack).toBe(true);
 
 		globalThis.__slothletRoutineModuleLog = [];
 		const out = await api.ext.widget.initialize("beta");

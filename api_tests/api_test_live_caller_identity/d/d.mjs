@@ -39,7 +39,7 @@ export async function resume(gate) {
 	}
 	let metadataSelf;
 	try {
-		metadataSelf = meta.self()?.apiPath ?? null;
+		metadataSelf = meta.self()?.path.join(".") ?? null;
 	} catch (error) {
 		metadataSelf = error.code;
 	}

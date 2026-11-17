@@ -38,14 +38,14 @@ export function take(path) {
 }
 
 /**
- * The `__type` of a node, read fresh or off the node kept earlier.
+ * The `slothlet.node(...).type` of a node, read fresh or off the node kept earlier.
  * @param {string} path - The node's path.
  * @param {boolean} [kept=false] - Read the node kept by `take` instead.
  * @returns {string|{threw: string}} The type, or the code it was refused with.
  */
 export function type(path, kept = false) {
 	try {
-		const answer = (kept ? held[path] : walk(path)).__type;
+		const answer = self.slothlet.node(kept ? held[path] : walk(path)).type;
 		return typeof answer === "symbol" ? answer.description : answer;
 	} catch (error) {
 		return { threw: error?.code ?? error?.name ?? "threw" };

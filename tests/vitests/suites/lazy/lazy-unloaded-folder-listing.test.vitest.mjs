@@ -95,8 +95,8 @@ describe.each(configs)(
 			api = await slothlet({ ...options, mode });
 			await api.outer;
 			if (mode === "lazy") {
-				expect(api.folder.__materialized).toBe(false);
-				expect(api.outer.inner.__materialized).toBe(false);
+				expect(api.slothlet.node(api.folder).materialized).toBe(false);
+				expect(api.slothlet.node(api.outer.inner).materialized).toBe(false);
 			}
 			expect(await listings(api)).toEqual(expected);
 			await api.folder;

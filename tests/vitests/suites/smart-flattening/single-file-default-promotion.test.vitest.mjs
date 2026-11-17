@@ -42,7 +42,7 @@ describe.each(MODES)("a folder's only file with a default-export function is the
 		async ({ fixture, at, top, tree, wrong }) => {
 			const api = await build(fixture, at, { mode, runtime });
 			try {
-				const out = { tree: [], drift: [] };
+				const out = { tree: [], drift: [], api };
 				if (at === "base") {
 					for (const key of Object.keys(api)) {
 						if (!OWN_ROOT_KEYS.has(key)) await walk(api[key], [key], mode === "lazy", out, 0);
@@ -73,7 +73,7 @@ describe.each(MODES)("a folder's only file with a default-export function is the
 				const node = reach(api, apiPath);
 				expect(typeof node).toBe("function");
 				expect(await node("hello")).toBe(await expected("hello"));
-				expect(node.__metadata.apiPath).toBe(apiPath);
+				expect(api.slothlet.node(node).path.join(".")).toBe(apiPath);
 			}
 		} finally {
 			await api.slothlet.shutdown();
@@ -86,7 +86,7 @@ describe.each(MODES)("a folder's only file with a default-export function is the
 			try {
 				const expected = await plain(fixture, file, name);
 				expect(await reach(api, apiPath)("hello")).toBe(await expected("hello"));
-				expect(reach(api, apiPath).__metadata.apiPath).toBe(apiPath);
+				expect(api.slothlet.node(reach(api, apiPath)).path.join(".")).toBe(apiPath);
 			} finally {
 				await api.slothlet.shutdown();
 			}

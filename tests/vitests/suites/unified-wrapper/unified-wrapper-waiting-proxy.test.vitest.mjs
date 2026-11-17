@@ -169,7 +169,7 @@ describe("waiting proxy — then handler (lines 1348-1420)", () => {
 			await api.advanced.nonExistentProp;
 			// The advanced wrapper is now materialized
 			const advancedWrapper = api.advanced;
-			expect(advancedWrapper.__materialized).toBe(true);
+			expect(api.slothlet.node(advancedWrapper).materialized).toBe(true);
 		} finally {
 			await teardown();
 		}
@@ -199,7 +199,7 @@ describe("waiting proxy — special property handlers (lines 1424-1565)", () => 
 		const { api, teardown } = await makeLazy();
 		try {
 			const waiting = api.advanced.nonExistentProp;
-			const t = waiting.__type;
+			const t = api.slothlet.node(waiting).type;
 			// Must be a Symbol (IN_FLIGHT state indicator)
 			expect(typeof t).toBe("symbol");
 			expect(t.toString()).toContain("inFlight");
@@ -216,8 +216,8 @@ describe("waiting proxy — special property handlers (lines 1424-1565)", () => 
 		try {
 			const waiting = api.advanced.nonExistentProp; // capture waiting proxy before materialization
 			await waiting; // materializes advanced, keeping same proxy object
-			const t = waiting.__type; // same proxy, now post-materialization path (line 1469+)
-			expect(t).toBe("undefined");
+			// same proxy, now post-materialization: the chain reaches nothing, so there is no node to report
+			expect(api.slothlet.node(waiting)).toBeUndefined();
 		} finally {
 			await teardown();
 		}
@@ -228,7 +228,7 @@ describe("waiting proxy — special property handlers (lines 1424-1565)", () => 
 		const { api, teardown } = await makeLazy();
 		try {
 			const waiting = api.advanced.nonExistentProp;
-			expect(waiting.__mode).toBe("lazy");
+			expect(api.slothlet.node(waiting).mode).toBe("lazy");
 		} finally {
 			await teardown();
 		}
@@ -239,7 +239,7 @@ describe("waiting proxy — special property handlers (lines 1424-1565)", () => 
 		try {
 			const waiting = api.advanced.nonExistentProp;
 			// Before awaiting, advanced is not yet materialized
-			expect(waiting.__materialized).toBe(false);
+			expect(api.slothlet.node(waiting).materialized).toBe(false);
 		} finally {
 			await teardown();
 		}
@@ -251,7 +251,7 @@ describe("waiting proxy — special property handlers (lines 1424-1565)", () => 
 		const { api, teardown } = await makeLazy();
 		try {
 			const waiting = api.advanced.nonExistentProp; // triggers _materialize() → inFlight=true
-			expect(waiting.__inFlight).toBe(true);
+			expect(api.slothlet.node(waiting).loading).toBe(true);
 		} finally {
 			await teardown();
 		}
@@ -262,7 +262,7 @@ describe("waiting proxy — special property handlers (lines 1424-1565)", () => 
 		const { api, teardown } = await makeLazy();
 		try {
 			const waiting = api.advanced.nonExistentProp;
-			const meta = waiting.__metadata;
+			const meta = api.slothlet.metadata.get(waiting);
 			expect(typeof meta).toBe("object");
 		} finally {
 			await teardown();
@@ -329,7 +329,7 @@ describe("waiting proxy — special property handlers (lines 1424-1565)", () => 
 		const { api, teardown } = await makeLazy();
 		try {
 			const waiting = api.advanced.nonExistentProp;
-			expect(typeof waiting.__slothletPath).toBe("string");
+			expect(typeof api.slothlet.node(waiting).path.join(".")).toBe("string");
 		} finally {
 			await teardown();
 		}
@@ -523,7 +523,7 @@ describe("lazy getTrap — util.inspect.custom callback (lines 2133-2163)", () =
 // 8. lazy getTrap — symbol / bigint / undefined __type (lines 2106-2112)
 // ─────────────────────────────────────────────────────────────────────────────
 describe("lazy getTrap — symbol/bigint/undefined __type (lines 2106-2112)", () => {
-	it("__type for a Symbol impl returns 'symbol' (line 2106)", async () => {
+	it("node().type for a Symbol impl is 'data' (line 2106)", async () => {
 		// api_test_primitives needs symval.mjs that exports a Symbol.
 		// If that fixture doesn't exist, skip gracefully.
 		const { api, teardown } = await makeLazyPrimitives();
@@ -535,14 +535,14 @@ describe("lazy getTrap — symbol/bigint/undefined __type (lines 2106-2112)", ()
 			}
 			await api.symval._materialize();
 			await new Promise((r) => setImmediate(r));
-			expect(api.symval.__type).toBe("symbol");
+			expect(api.slothlet.node(api.symval).type).toBe("data");
 		} finally {
 			await teardown();
 		}
 	});
 
 	it("__metadata returns an object from the wrapper's metadata handler (line 2119-2122)", async () => {
-		// Line 2133: if (wrapper.slothlet.handlers?.metadata) { return handler.getMetadata(wrapper); }
+		// Line 2133: if (api.slothlet.handlers?.metadata) { return handler.getMetadata(wrapper); }
 		// The built-in slothlet metadata handler is always present, so we verify it returns an object.
 		// Note: line 2122 (return {} fallback) requires NO metadata handler — slothlet always has one,
 		// so line 2122 is only reachable in an internal test context without a metadata handler.
@@ -554,7 +554,7 @@ describe("lazy getTrap — symbol/bigint/undefined __type (lines 2106-2112)", ()
 		try {
 			await api.advanced._materialize();
 			await new Promise((r) => setImmediate(r));
-			const meta = api.advanced.__metadata;
+			const meta = api.slothlet.metadata.get(api.advanced);
 			expect(typeof meta).toBe("object");
 			expect(meta).toBeDefined();
 		} finally {

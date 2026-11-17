@@ -36,18 +36,19 @@ const FLATTEN_ROOT = path.join(path.dirname(API_TEST), "smart_flatten");
  * Rather than pin the handful of paths that happened to be wrong, this walks the whole surface
  * and asserts the invariant directly, so any future divergence surfaces wherever it appears.
  *
+ * @param {object} api - The api the node is read from.
  * @param {object} node - Node to walk.
  * @param {string} surface - Dotted position `node` is reachable at.
  * @param {Set<object>} seen - Cycle guard.
  * @param {string[]} out - Collected `surface != apiPath` mismatches.
  * @returns {void}
  */
-const collectMismatches = (node, surface, seen, out) => {
+const collectMismatches = (api, node, surface, seen, out) => {
 	if (node === null || (typeof node !== "object" && typeof node !== "function")) return;
 	if (seen.has(node)) return;
 	seen.add(node);
 
-	const declared = node.__apiPath;
+	const declared = api.slothlet.node(node)?.path.join(".");
 	if (typeof declared === "string" && surface && declared !== surface) {
 		out.push(`${surface} != ${declared}`);
 	}
@@ -59,7 +60,7 @@ const collectMismatches = (node, surface, seen, out) => {
 		} catch {
 			continue;
 		}
-		collectMismatches(child, surface ? `${surface}.${key}` : key, seen, out);
+		collectMismatches(api, child, surface ? `${surface}.${key}` : key, seen, out);
 	}
 };
 
@@ -69,7 +70,7 @@ const collectMismatches = (node, surface, seen, out) => {
  */
 const mismatches = (api) => {
 	const out = [];
-	collectMismatches(api, "", new Set(), out);
+	collectMismatches(api, api, "", new Set(), out);
 	return out;
 };
 
@@ -101,8 +102,8 @@ describe.each(getMatrixConfigs())("Smart Flattening > apiPath matches surface > 
 
 		// Both are named `folder`. If the path dropped the parent segment they would collapse
 		// onto one identity, and a rule or hook targeting one would silently govern the other.
-		expect(api.deep.folder.__apiPath).toBe("deep.folder");
-		expect(api.deep2.folder.__apiPath).toBe("deep2.folder");
+		expect(api.slothlet.node(api.deep.folder).path.join(".")).toBe("deep.folder");
+		expect(api.slothlet.node(api.deep2.folder).path.join(".")).toBe("deep2.folder");
 	});
 
 	it("api.add mount whose folder repeats the mount's last segment", async () => {
@@ -114,7 +115,7 @@ describe.each(getMatrixConfigs())("Smart Flattening > apiPath matches surface > 
 
 		// The inner `config/` level is flattened off the surface, so it must not appear in a path.
 		void (await api.config.getNestedConfig());
-		expect(api.config.getNestedConfig.__apiPath).toBe("config.getNestedConfig");
+		expect(api.slothlet.node(api.config.getNestedConfig).path.join(".")).toBe("config.getNestedConfig");
 		expect(mismatches(api)).toEqual([]);
 	});
 
@@ -124,6 +125,6 @@ describe.each(getMatrixConfigs())("Smart Flattening > apiPath matches surface > 
 
 		// The filename level is unwrapped by the mount, so it is not part of any path either.
 		void (await api.exts.zeta.getRootInfo());
-		expect(api.exts.zeta.getRootInfo.__apiPath).toBe("exts.zeta.getRootInfo");
+		expect(api.slothlet.node(api.exts.zeta.getRootInfo).path.join(".")).toBe("exts.zeta.getRootInfo");
 	});
 });

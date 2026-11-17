@@ -57,7 +57,7 @@ beforeAll(async () => {
 });
 
 /**
- * The answers a value gives, less `__type`, which a plain value does not have.
+ * The answers a value gives, less its node `type`, which a plain value does not have.
  * @param {object} answers - The reader's answers.
  * @returns {object} The answers without `type`.
  */
@@ -96,7 +96,7 @@ describe.each(configs)("a kept lazy folder node that loads as a primitive > $mod
 		expect(report(await kept)).toEqual(report(plain[key]));
 		expect(withoutType(answersOf(kept))).toEqual(withoutType(answersOf(plain[key])));
 		// In eager mode the folder is loaded from the start, so what is kept is the value itself.
-		expect(kept.__type).toBe(mode === "lazy" ? typeof plain[key] : undefined);
+		expect(api.slothlet.node(kept)?.type).toBe(mode === "lazy" ? "data" : undefined);
 		expect(api.zz[key]).toBe(plain[key]);
 	});
 
@@ -106,8 +106,8 @@ describe.each(configs)("a kept lazy folder node that loads as a primitive > $mod
 		expect(await api.reader.settle(key)).toEqual(report(plain[key]));
 		const answers = api.reader.answers(key);
 		expect(withoutType(answers)).toEqual(withoutType(answersOf(plain[key])));
-		expect(answers.type).toBe(mode === "lazy" ? typeof plain[key] : undefined);
-		// A fresh read is the plain value, which has no `__type`.
+		expect(answers.type).toBe(mode === "lazy" ? "data" : undefined);
+		// A fresh read is the plain value, which is no node: slothlet.node() reports nothing for it.
 		expect(api.reader.answers(key, true)).toEqual({ ...withoutType(answers), type: undefined });
 	});
 

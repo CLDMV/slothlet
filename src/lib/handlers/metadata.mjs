@@ -41,6 +41,7 @@ import {
 	setValues,
 	splitText,
 	StringMethods,
+	Symbol,
 	WeakMap,
 	WeakMapMethods,
 	WeakSet,
@@ -59,6 +60,15 @@ const { resolveWrapper } = unifiedWrapperInternals("lib/handlers/metadata");
  * @internal
  */
 export const MODULE_ID_SEPARATOR = "__slothlet_sep__";
+
+/**
+ * Add-option key (a symbol, so no consumer option can name it) carrying the parsed `slothlet.module.json` of a package
+ * mount from `modules.add` to the add that mounts it; reported as `slothlet.node(target).manifest`. Recorded with the
+ * add, so a reload's replay records it again.
+ * @type {symbol}
+ * @internal
+ */
+export const MODULE_MANIFEST = Symbol("slothlet.moduleManifest");
 
 /**
  * Metadata handler for introspection of function metadata
@@ -88,6 +98,8 @@ export class Metadata extends ComponentBase {
 	/** @type {Map<string, {metadata: object, apiPaths: Set<string>}>} */
 	#userMetadataStore = new Map(); // moduleID → { metadata: {}, apiPaths: Set<string> }
 	#globalUserMetadata = Objects.create(null); // global user metadata (applies to all)
+	/** @type {Map<string, object>} */
+	#manifests = new Map(); // raw moduleID → parsed slothlet.module.json of a package mount
 
 	/**
 	 * Merge metadata values while preserving nested plain-object structure.
@@ -310,41 +322,47 @@ export class Metadata extends ComponentBase {
 	}
 
 	/**
-	 * Get system metadata only (without user metadata)
-	 * @param {Function|Object} target - Wrapper or function
-	 * @returns {Object|null} System metadata or null
+	 * The system facts slothlet recorded for a node: its file, folder, api path and owning module.
+	 *
+	 * @description
+	 * Looked up on the wrapper first, then on its impl (for a node whose wrapper was never tagged), the order every
+	 * reader uses, so set(), get() and node() always agree on which node they mean. Internal only: consumers read
+	 * these facts through `slothlet.node(target)`; user metadata never carries them.
+	 *
+	 * @param {Function|Object} target - Wrapper, proxy or function.
+	 * @returns {{filePath: string, sourceFolder: string, apiPath: string, moduleID: string, baseModuleID: string, taggedAt: number}|null}
+	 *   The frozen system record, or null when the target was never tagged.
 	 * @package
+	 * @example
+	 * metadata.getSystemMetadata(api.math.add)?.baseModuleID; // "base"
 	 */
 	getSystemMetadata(target) {
-		if (!target) return null;
-
-		// Normalize target: if it's a proxy, get the underlying wrapper
+		if (!target || (typeof target !== "object" && typeof target !== "function")) return null;
 		const actualTarget = resolveWrapper(target) ?? target;
-
-		// Try impl first (for wrapped functions), then target itself
-		const systemData = WeakMapMethods.get(this.#secureMetadata, actualTarget.____slothletInternal?.impl || actualTarget);
-		return systemData || null;
+		const impl = actualTarget.____slothletInternal?.impl;
+		return (
+			WeakMapMethods.get(this.#secureMetadata, actualTarget) ||
+			(impl && (typeof impl === "object" || typeof impl === "function") ? WeakMapMethods.get(this.#secureMetadata, impl) : undefined) ||
+			null
+		);
 	}
 
 	/**
-	 * Get metadata for a target (combines system + user)
-	 * For wrappers: checks current impl to ensure metadata is current
-	 * @param {Function|Object} target - Wrapper or function
-	 * @returns {Object} Combined metadata (deeply frozen)
+	 * The user metadata of a node: global < api path chain < the node's own.
+	 *
+	 * @description
+	 * Only what consumers set (through `metadata.global`, `metadata.set`, or the `metadata` option of an add). The system
+	 * facts slothlet records (file, folder, path, module) are never merged in; `slothlet.node(target)` reports them.
+	 *
+	 * @param {Function|Object} target - Wrapper, proxy or function.
+	 * @returns {Object} The merged user metadata (deeply frozen).
 	 * @public
+	 * @example
+	 * metadata.getMetadata(api.math.add); // { category: "math" }
 	 */
 	getMetadata(target) {
-		if (!target) return {};
-
-		// Normalize target: if it's a proxy, get the underlying wrapper
-		const actualTarget = resolveWrapper(target) ?? target;
-
-		// Get system metadata - try WRAPPER first (each wrapper has unique metadata),
-		// then fall back to impl (for cases where wrapper wasn't tagged)
-		const systemData =
-			WeakMapMethods.get(this.#secureMetadata, actualTarget) ||
-			WeakMapMethods.get(this.#secureMetadata, actualTarget.____slothletInternal?.impl) ||
-			{};
+		if (!target) return this.#deepFreeze({ ...this.#globalUserMetadata });
+		const systemData = this.getSystemMetadata(target) ?? {};
 
 		// Lookup user metadata by BOTH moduleID AND rootApiPath
 		// - registerUserMetadata() stores by root apiPath (for api.add())
@@ -352,42 +370,14 @@ export class Metadata extends ComponentBase {
 		const moduleID = systemData.moduleID;
 		const apiPath = systemData.apiPath;
 
-		// Traverse UP the apiPath chain to collect inherited metadata
-		// Example: "mixed.config.settings.getPluginConfig" checks:
-		//   - "mixed.config.settings.getPluginConfig"
-		//   - "mixed.config.settings"
-		//   - "mixed.config"
-		//   - "mixed"
-		const collectMetadataFromParents = (path) => {
-			const parts = splitText(path, ".");
-			const collected = {};
-
-			// Start from root and work down (parent metadata merged first, child overrides)
-			for (let i = 1; i <= parts.length; i++) {
-				const parentPath = ArrayMethods.join(typeof parts === "string" ? StringMethods.slice(parts, 0, i) : copyList(parts, 0, i), ".");
-				const parentMeta = MapMethods.get(this.#userMetadataStore, parentPath);
-				if (parentMeta?.metadata) {
-					Objects.assign(collected, parentMeta.metadata);
-				}
-			}
-
-			return collected;
-		};
-
 		const userMetadataByModule = moduleID ? MapMethods.get(this.#userMetadataStore, moduleID) : null;
-		const userMetadataByPath = apiPath ? collectMetadataFromParents(apiPath) : {};
+		const userMetadataByPath = apiPath ? this.#collectPathChain(apiPath) : {};
 
-		// Merge both user metadata sources (path < moduleID priority)
-		const userData = {
-			...userMetadataByPath,
-			...(userMetadataByModule?.metadata || {})
-		};
-
-		// Merge order: global < user (by path) < user (by moduleID) < SYSTEM (system always wins)
+		// Merge order: global < user (by path) < user (by moduleID)
 		const combined = {
 			...this.#globalUserMetadata,
-			...userData,
-			...systemData // System metadata LAST = highest priority (immutable)
+			...userMetadataByPath,
+			...(userMetadataByModule?.metadata || {})
 		};
 
 		// If there's a nested 'metadata' key, spread it to root level and remove the nested key
@@ -400,6 +390,54 @@ export class Metadata extends ComponentBase {
 		}
 
 		return this.#deepFreeze(combined);
+	}
+
+	/**
+	 * Merge the path-store entries along an api path, root to leaf (closer to the leaf wins).
+	 * @param {string} apiPath - Dot-notation api path.
+	 * @returns {Object} The merged entries.
+	 * @private
+	 * @example
+	 * this.#collectPathChain("math.add"); // entries of "math" then "math.add"
+	 */
+	#collectPathChain(apiPath) {
+		const parts = splitText(apiPath, ".");
+		const collected = {};
+		for (let i = 1; i <= parts.length; i++) {
+			const parentPath = ArrayMethods.join(copyList(parts, 0, i), ".");
+			const parentMeta = MapMethods.get(this.#userMetadataStore, parentPath);
+			if (parentMeta?.metadata) {
+				Objects.assign(collected, parentMeta.metadata);
+			}
+		}
+		return collected;
+	}
+
+	/**
+	 * Record (or clear) the parsed `slothlet.module.json` of a package mount, reported as `node(target).manifest`.
+	 * @param {string} moduleID - The raw module id of the mount.
+	 * @param {object|null|undefined} manifest - The normalized manifest, or nothing to clear it.
+	 * @returns {void}
+	 * @package
+	 * @example
+	 * metadata.setModuleManifest("pkg-a", manifest);
+	 */
+	setModuleManifest(moduleID, manifest) {
+		if (typeof moduleID !== "string") return;
+		if (manifest && typeof manifest === "object") MapMethods.set(this.#manifests, moduleID, manifest);
+		else MapMethods.delete(this.#manifests, moduleID);
+	}
+
+	/**
+	 * The parsed `slothlet.module.json` of the package mount that owns a module id.
+	 * @param {string|null|undefined} moduleID - The raw module id.
+	 * @returns {object|undefined} The manifest, or undefined when the module is no package mount.
+	 * @package
+	 * @example
+	 * metadata.getModuleManifest("pkg-a")?.name; // "@acme/pkg-a"
+	 */
+	getModuleManifest(moduleID) {
+		return typeof moduleID === "string" ? MapMethods.get(this.#manifests, moduleID) : undefined;
 	}
 
 	/**
@@ -633,7 +671,7 @@ export class Metadata extends ComponentBase {
 	 * Multiple calls to the same path are merged; later calls override earlier
 	 * ones for conflicting keys.
 	 *
-	 * Priority (lowest → highest): global → setForPath → set() → system.
+	 * Priority (lowest → highest): global → path (closer to the leaf wins) → the function's own.
 	 *
 	 * @param {string} apiPath - Dot-notation path (e.g. `"math"`, `"math.add"`)
 	 * @param {string|Object} keyOrObj - Key string (with `value`) OR metadata object to merge
@@ -679,19 +717,10 @@ export class Metadata extends ComponentBase {
 	 * metadata.getPathMetadata("v1.auth"); // { stable: true, category: "auth" }
 	 */
 	getPathMetadata(apiPath) {
-		// All callers (getForVersion) always pass a valid resolved string; the null/non-string guard is defensive.
+		// All callers (metadata.get) always pass a valid resolved string; the null/non-string guard is defensive.
 		/* v8 ignore next */
 		if (!apiPath || typeof apiPath !== "string") return {};
-		const parts = splitText(apiPath, ".");
-		const collected = {};
-		for (let i = 1; i <= parts.length; i++) {
-			const parentPath = ArrayMethods.join(copyList(parts, 0, i), ".");
-			const parentMeta = MapMethods.get(this.#userMetadataStore, parentPath);
-			if (parentMeta?.metadata) {
-				Objects.assign(collected, parentMeta.metadata);
-			}
-		}
-		return { ...this.#globalUserMetadata, ...collected };
+		return { ...this.#globalUserMetadata, ...this.#collectPathChain(apiPath) };
 	}
 
 	/**
@@ -818,55 +847,7 @@ export class Metadata extends ComponentBase {
 	}
 
 	/**
-	 * Get metadata of any function by API path.
-	 *
-	 * Traverses `this.slothlet.api` using the dot-notation path, materializes
-	 * lazy wrappers as needed, then returns the combined metadata for the
-	 * resolved target via `getMetadata()`.
-	 *
-	 * Called by the `api.slothlet.metadata.get()` closure injected in
-	 * `slothlet.injectRuntimeMetadataFunctions()`.
-	 *
-	 * @param {string} path - Dot-notation API path (e.g. `"math.add"`)
-	 * @returns {Promise<object|null>} Combined metadata or null
-	 * @public
-	 */
-	async get(path) {
-		if (typeof path !== "string") {
-			throw new this.SlothletError("INVALID_ARGUMENT", {
-				argument: "path",
-				expected: "string",
-				received: typeof path
-			});
-		}
-
-		const apiRoot = this.slothlet.api;
-		if (!apiRoot) return null;
-
-		const parts = splitText(path, ".");
-		let target = apiRoot;
-
-		for (let ofIndex = 0, ofList = parts; ofIndex < ofList.length; ofIndex++) {
-			const part = ofList[ofIndex];
-			if (!target || (typeof target !== "object" && typeof target !== "function")) {
-				return null;
-			}
-			target = target[part];
-		}
-
-		if (target && typeof target._materialize === "function") {
-			await target._materialize();
-		}
-
-		if (typeof target === "function" || (target && resolveWrapper(target)?.____slothletInternal?.impl)) {
-			return this.getMetadata(target);
-		}
-
-		return null;
-	}
-
-	/**
-	 * Get metadata for the currently-executing API function.
+	 * The currently-executing API function, as a caller object ({ path, module, metadata, version }).
 	 *
 	 * Reads `currentWrapper` from the active context-manager store — the same
 	 * fast synchronous path used by the unified wrapper's `apply` trap.
@@ -876,7 +857,7 @@ export class Metadata extends ComponentBase {
 	 * Called by the `api.slothlet.metadata.self()` closure injected in
 	 * `slothlet.injectRuntimeMetadataFunctions()`.
 	 *
-	 * @returns {object} Combined metadata for the current function
+	 * @returns {{path: string[], module: string|null, metadata: object, version: object|null}} The current leaf, as a caller object
 	 * @public
 	 */
 	self() {
@@ -891,11 +872,11 @@ export class Metadata extends ComponentBase {
 		if (!ctx || !currentWrapper) {
 			throw new this.SlothletError("RUNTIME_NO_ACTIVE_CONTEXT", {}, null, { validationError: true });
 		}
-		return this.getMetadata(currentWrapper);
+		return this.#identity(currentWrapper);
 	}
 
 	/**
-	 * Get metadata for the API function that called the current function.
+	 * The API function that called the current function, as a caller object ({ path, module, metadata, version }).
 	 *
 	 * Reads `callerWrapper` from the active context-manager store.
 	 * Returns `null` when there is no caller in context (e.g. the function
@@ -904,13 +885,36 @@ export class Metadata extends ComponentBase {
 	 * Called by the `api.slothlet.metadata.caller()` closure injected in
 	 * `slothlet.injectRuntimeMetadataFunctions()`.
 	 *
-	 * @returns {object|null} Combined metadata for the calling function, or null
+	 * @returns {{path: string[], module: string|null, metadata: object, version: object|null}|null} The calling leaf, as a caller object, or null
 	 * @public
 	 */
 	caller() {
 		const callerWrapper = this.callerWrapper();
 		if (!callerWrapper) return null;
-		return this.getMetadata(callerWrapper);
+		return this.#identity(callerWrapper);
+	}
+
+	/**
+	 * The `caller` object of a leaf, the one shape slothlet hands out for "who": `{ path, module, metadata, version }`
+	 * (its api path as segments, its module id, its user metadata, its version record or null). The same object a
+	 * version dispatcher and an around hook get.
+	 * @param {object} wrapper - The leaf's wrapper.
+	 * @returns {{path: string[], module: string|null, metadata: object, version: object|null}} The caller object.
+	 * @private
+	 * @example
+	 * this.#identity(currentWrapper).path; // ["payments", "charge"]
+	 */
+	#identity(wrapper) {
+		const built = this.slothlet.handlers?.versionManager?.buildCallerArg?.(wrapper);
+		/* v8 ignore next 2 -- the version manager is always registered; the fallback keeps the shape without one */
+		if (built) return built;
+		const system = this.getSystemMetadata(wrapper);
+		return {
+			path: system?.apiPath ? splitText(system.apiPath, ".") : [],
+			module: system?.baseModuleID ?? null,
+			metadata: this.getMetadata(wrapper),
+			version: null
+		};
 	}
 
 	/**

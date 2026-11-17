@@ -94,7 +94,7 @@ describe.each(["eager", "lazy"])("stackRoutines (#365) — mode: %s", (mode) => 
 				await api.slothlet.api.add(["auth"], TEST_DIRS.API_TEST_ROUTINES_AUTH1);
 				await api.slothlet.api.add(["auth"], TEST_DIRS.API_TEST_ROUTINES_AUTH2);
 
-				expect(api.auth.initialize.__slothletRoutineStack).toBe(true);
+				expect(api.auth.initialize.____slothletRoutineStack).toBe(true);
 				await api.auth.initialize();
 				expect(globalThis.__slothletRoutineLog).toEqual(["auth1:initialize", "auth2:initialize"]);
 			} finally {
@@ -161,7 +161,7 @@ describe.each(["eager", "lazy"])("stackRoutines (#365) — mode: %s", (mode) => 
 				// contributor from a DIRECT call to the property (a `^`-anchored cascade, reading
 				// RoutineManager.raw directly, would still see all of them — the discrepancy is the bug).
 				await api.slothlet.api.remove(idA);
-				expect(api.auth.initialize.__slothletRoutineStack).toBe(true);
+				expect(api.auth.initialize.____slothletRoutineStack).toBe(true);
 
 				globalThis.__slothletRoutineLog = [];
 				await api.auth.initialize();

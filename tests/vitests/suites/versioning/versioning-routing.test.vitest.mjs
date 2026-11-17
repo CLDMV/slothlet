@@ -47,7 +47,7 @@ describe.each(getMatrixConfigs())("Versioning > Routing > $name", ({ config }) =
 		await api.slothlet.api.add("auth", `${BASE}/v2`, {}, { version: "v2" });
 
 		// Tag the v2-caller with callerVersion "v2" via regular metadata
-		api.slothlet.metadata.setFor("v2Caller", { callerVersion: "v2" });
+		api.slothlet.metadata.set("v2Caller", { callerVersion: "v2" });
 
 		const result = await api.v2Caller.callLogin("testUser", "pass");
 		expect(result.version).toBe("v2");
@@ -65,7 +65,7 @@ describe.each(getMatrixConfigs())("Versioning > Routing > $name", ({ config }) =
 		await api.slothlet.api.add("auth", `${BASE}/v2`, {}, { version: "v2" });
 
 		// Tag v1-caller with callerVersion "v1"
-		api.slothlet.metadata.setFor("v1Caller", { callerVersion: "v1" });
+		api.slothlet.metadata.set("v1Caller", { callerVersion: "v1" });
 
 		const result = await api.v1Caller.callLogin("testUser");
 		expect(result.version).toBe("v1");

@@ -48,7 +48,7 @@ import {
 } from "#handlers/unified-wrapper";
 import { isFrameworkInternal, internals as frameworkInternalsInternals } from "#handlers/framework-internals";
 import { dataMemberOf } from "#helpers/reserved-keys";
-import { MODULE_ID_SEPARATOR } from "#handlers/metadata";
+import { MODULE_ID_SEPARATOR, MODULE_MANIFEST } from "#handlers/metadata";
 
 // Node-only static imports resolved via top-level await so `node:*` never
 // enters the static-import graph in browser bundles. fsp (fs/promises) is resolved in the platform
@@ -855,7 +855,7 @@ export class ApiManager extends ComponentBase {
 	 * @public
 	 *
 	 * @example
-	 * apiManager.writeChecked(["victim", "v", "__mode"]); // true unless permissions are disabled
+	 * apiManager.writeChecked(["victim", "v", "__state"]); // true unless permissions are disabled
 	 */
 	writeChecked(parts) {
 		if (this.ownershipEnforced()) return true;
@@ -1827,7 +1827,7 @@ export class ApiManager extends ComponentBase {
 		// runs when something reads it, never as a side effect of this walk (#597).
 		for (let ofIndex = 0, ofList = Objects.keys(api); ofIndex < ofList.length; ofIndex++) {
 			const key = ofList[ofIndex];
-			const skipProps = ["__metadata", "__type", "_materialize", "_impl", "____slothletInternal"];
+			const skipProps = ["_materialize", "_impl", "____slothletInternal"];
 			if (ArrayMethods.includes(skipProps, key)) continue;
 			const value = dataMemberOf(api, key);
 			if (typeof value === "function" || (value && typeof value === "object")) {
@@ -2295,7 +2295,7 @@ export class ApiManager extends ComponentBase {
 
 		// Emit lifecycle event for removal BEFORE deletion
 		if (removedImpl && !removesAlias && this.slothlet.handlers?.lifecycle) {
-			const metadata = this.slothlet.handlers.metadata?.getMetadata?.(removedImpl);
+			const metadata = this.slothlet.handlers.metadata?.getSystemMetadata?.(removedImpl);
 			await this.slothlet.handlers.lifecycle.emit("impl:removed", {
 				apiPath,
 				impl: removedImpl,
@@ -3688,7 +3688,7 @@ export class ApiManager extends ComponentBase {
 				}
 			} else {
 				// Nested path - wrap apiToMerge in a UnifiedWrapper for the container
-				// This ensures api.lookup.__metadata exists and works properly
+				// This ensures metadata.get(api.lookup) and slothlet.node(api.lookup) work
 				// The wrapper acts as a namespace container for the loaded API modules
 				if (resolveWrapper(apiToMerge) === null) {
 					// Check if apiToMerge is a function (root contributor pattern).
@@ -3911,6 +3911,11 @@ export class ApiManager extends ComponentBase {
 				const rootSegment = effectiveParts[0];
 				this.slothlet.handlers.metadata.registerUserMetadata(rootSegment, metadata);
 			}
+		}
+
+		// A package mount's manifest is reported by slothlet.node(target) for every node of the module, never as metadata.
+		if (anyAssignmentSucceeded && this.slothlet.handlers.metadata) {
+			this.slothlet.handlers.metadata.setModuleManifest(moduleID, restOptions[MODULE_MANIFEST]);
 		}
 
 		// Register ownership for added API
@@ -4398,7 +4403,7 @@ export class ApiManager extends ComponentBase {
 
 	/**
 	 * Remove API modules at runtime.
-	 * @param {string} pathOrModuleId - An apiPath (dotted), a moduleID, or the composite `__metadata.moduleID`.
+	 * @param {string} pathOrModuleId - An apiPath (dotted), a moduleID, or the internal composite module id.
 	 * @param {object} [options={}] - Options.
 	 * @param {string} [options.scopedApiPath] - When set, `pathOrModuleId` is resolved strictly as a
 	 *   moduleID and only that module's single node at `scopedApiPath` is removed (drives the public
@@ -4413,7 +4418,7 @@ export class ApiManager extends ComponentBase {
 	 * @description
 	 * Removes an API subtree by apiPath, or every path owned by a moduleID. The argument is resolved by
 	 * splitting on the reserved composite separator ({@link MODULE_ID_SEPARATOR}): a plain id (which can
-	 * never contain the separator) passes through whole, while a composite `__metadata.moduleID` strips to
+	 * never contain the separator) passes through whole, while a composite module id strips to
 	 * its base. It matches a registered module verbatim or by its auto-generated `<base>_<hash>` form, and
 	 * otherwise falls back to treating the argument as an apiPath.
 	 *
@@ -4453,7 +4458,7 @@ export class ApiManager extends ComponentBase {
 
 			// Recover the base moduleID from the argument. The argument is either a plain moduleID (a user
 			// id — which can never contain the reserved separator, refused at add()) or the internal
-			// composite `moduleID<sep>apiPath` (e.g. a leaf's `__metadata.moduleID`). Splitting on the
+			// composite `moduleID<sep>apiPath` (the internal per-leaf id). Splitting on the
 			// reserved separator is therefore unambiguous: it yields the base for a composite and the whole
 			// id otherwise. A ':' — or any other character — in a user id is preserved intact (#303).
 			const candidateModuleID = splitText(pathOrModuleId, MODULE_ID_SEPARATOR)[0];

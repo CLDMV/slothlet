@@ -139,15 +139,16 @@ describe("ModuleManager.addModule()", () => {
 		await expect(mm.addModule("@org/does-not-exist")).rejects.toThrow(/MODULE_PACKAGE_NOT_FOUND/);
 	});
 
-	it("stores the manifest as metadata under the mounted path (B1 round-trip)", async () => {
+	it("reports the manifest as node().manifest at the mounted path, never as metadata (B1 round-trip)", async () => {
 		const mm = await newSlothletWithModules();
 		await mm.discover({ scanRoot: FIX_NPM, prefix: "packrat-extension-" });
 		await mm.addModule("packrat-extension-baz");
 
-		const meta = api.slothlet.metadata.getFor("extensions.baz");
-		expect(meta._module).toBeDefined();
-		expect(meta._module.manifest.name).toBe("packrat-extension-baz");
-		expect(meta._module.manifest.kind).toBe("extension");
+		expect(api.slothlet.metadata.get("extensions.baz")._module).toBeUndefined();
+		const report = api.slothlet.node("extensions.baz");
+		expect(report.manifest).toBeDefined();
+		expect(report.manifest.name).toBe("packrat-extension-baz");
+		expect(report.manifest.kind).toBe("extension");
 	});
 });
 
@@ -223,7 +224,7 @@ describe("ModuleManager.addModules() — onFailure", () => {
 
 		// Verify rollback removed the first mount (packrat-driver-foo) attempted in this call.
 		// The pre-existing packrat-extension-baz remains.
-		const checkMeta = api.slothlet.metadata.getFor("drivers.foo");
+		const checkMeta = api.slothlet.metadata.get("drivers.foo");
 		// The rolled-back mount should no longer have the _module metadata attached.
 		expect(checkMeta._module).toBeUndefined();
 	});

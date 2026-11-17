@@ -146,7 +146,7 @@ export class VersionManager extends ComponentBase {
      * Run the configured discriminator and return the winning version tag.
      *
      * When the configured `versionDispatcher` is a string, reads that key from
-     * `caller.versionMetadata`. When it is a function, calls it with `(allVersions, caller)`.
+     * `caller.version.metadata`. When it is a function, calls it with `(allVersions, caller)`.
      *
      * @param {string} logicalPath - Logical API path.
      * @param {object} allVersions - Pre-built allVersions arg (see `buildAllVersionsArg`).
@@ -157,36 +157,65 @@ export class VersionManager extends ComponentBase {
      */
     resolveForPath(logicalPath: string, allVersions: object, caller: object): string | null;
     /**
-     * Build the `allVersions` argument passed to function discriminators.
+     * Build the `versions` argument passed to function dispatchers.
      *
-     * Each key is a version tag; each value contains `version`, `default`, `metadata`
-     * (regular Metadata system data), and `versionMetadata` (VersionManager-only store).
+     * Keyed by version tag. Each entry carries the version's user `metadata` (what `metadata.get` reads for its path)
+     * and its `version` record (`{ tag, default, metadata }`, the shape of the add option `version`; its `metadata` is
+     * the version-manager store).
      *
      * @param {string} logicalPath - Logical API path.
-     * @returns {object} Map-like object keyed by version tag.
+     * @returns {object} Object keyed by version tag.
      * @example
      * versionManager.buildAllVersionsArg("auth");
-     * // { v1: { version: "v1", default: true, metadata: {...}, versionMetadata: {...} } }
+     * // { v1: { metadata: {...}, version: { tag: "v1", default: true, metadata: {...} } } }
      */
     buildAllVersionsArg(logicalPath: string): object;
     /**
-     * Build the `caller` argument passed to function discriminators.
+     * Build the `caller` object handed to dispatchers, around hooks and permission records.
      *
-     * Returns `null` for version-specific fields when the caller is not a registered
-     * versioned module.
+     * `{ path, module, metadata, version }`: the calling leaf's api path as segments, its module id, its user metadata,
+     * and its `version` record (`{ tag, default, metadata }`) when the calling module is a registered version, else
+     * null. Null for a call from outside the api (no module caller).
      *
-     * @param {object | null | undefined} callerWrapper - The caller's UnifiedWrapper proxy.
-     * @returns {{ version: string|null, default: boolean|null, metadata: object, versionMetadata: object|null }}
+     * @param {object | null | undefined} callerWrapper - The caller's UnifiedWrapper (or its proxy).
+     * @returns {{ path: string[], module: string|null, metadata: object, version: { tag: string, default: boolean, metadata: object }|null }|null}
      * @example
      * versionManager.buildCallerArg(callerWrapper);
-     * // { version: "v2", default: false, metadata: {...}, versionMetadata: {...} }
+     * // { path: ["v2", "auth", "login"], module: "auth-v2", metadata: {...}, version: { tag: "v2", default: false, metadata: {...} } }
      */
     buildCallerArg(callerWrapper: object | null | undefined): {
-        version: string | null;
-        default: boolean | null;
+        path: string[];
+        module: string | null;
         metadata: object;
-        versionMetadata: object | null;
-    };
+        version: {
+            tag: string;
+            default: boolean;
+            metadata: object;
+        } | null;
+    } | null;
+    /**
+     * Split a dotted api path into its segments, keeping a registered version's tag whole (`"2.3.0.auth.login"` →
+     * `["2.3.0", "auth", "login"]`).
+     *
+     * @param {string} apiPath - Dotted api path.
+     * @returns {string[]} Its segments.
+     * @package
+     * @example
+     * versionManager.pathSegments("2.3.0.auth"); // ["2.3.0", "auth"]
+     */
+    pathSegments(apiPath: string): string[];
+    /**
+     * What a version dispatcher stands for, when `value` is one: its logical path and how it resolves for the caller.
+     * @param {*} value - Any value (a node's impl).
+     * @returns {{ logicalPath: string, resolve: () => (object|null) }|null} The dispatcher's record, or null.
+     * @package
+     * @example
+     * versionManager.dispatcherOf(wrapper.____slothletInternal.impl)?.logicalPath; // "auth"
+     */
+    dispatcherOf(value: any): {
+        logicalPath: string;
+        resolve: () => (object | null);
+    } | null;
     /**
      * Create a native Proxy that dispatches property accesses to the correct versioned path.
      *

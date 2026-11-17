@@ -27,7 +27,7 @@
  * DIRECTLY without going through the lazy getTrap's code paths at lines 2082–2413.
  *
  * To cover lines 2082–2413 in the lazy getTrap, tests must access these special properties
- * DIRECTLY on the lazy wrapper proxy (e.g., `api.task.__type`), NOT on a waiting-proxy
+ * DIRECTLY on the lazy wrapper proxy (e.g., `api.slothlet.node(api.task).type`), NOT on a waiting-proxy
  * result of a two-step access (e.g., `(api.task.someChild).__type`).
  *
  * Lines covered by this file:
@@ -148,16 +148,13 @@ async function makeLazyCollision() {
 // 1. __type property (lines 2082–2117)
 // ─────────────────────────────────────────────────────────────────────────────
 describe("lazyGetTrap — __type special property (lines 2082–2117)", () => {
-	it("__type before materialization returns IN_FLIGHT symbol (accesses lazy wrapper __type directly)", async () => {
-		// Accessing api.task.__type triggers the lazy getTrap for api.task.
-		// The getTrap: mode=lazy, not materialized, not inFlight → calls _materialize() (sync),
-		// then inFlight becomes true → returns TYPE_STATES.IN_FLIGHT symbol.
+	it("node().type before materialization is UNMATERIALIZED, and the report does not start the load", async () => {
 		const { api, teardown } = await makeLazy();
 		try {
-			const type = api.task.__type;
-			// Must be a Symbol (IN_FLIGHT state)
-			expect(typeof type).toBe("symbol");
-			expect(type.toString()).toContain("inFlight");
+			const type = api.slothlet.node(api.task).type;
+			expect(type).toBe(api.slothlet.types.UNMATERIALIZED);
+			expect(api.slothlet.node(api.task).loading).toBe(false);
+			expect(api.slothlet.node(api.task).materialized).toBe(false);
 		} finally {
 			await teardown();
 		}
@@ -170,7 +167,7 @@ describe("lazyGetTrap — __type special property (lines 2082–2117)", () => {
 		try {
 			await api.math.add._materialize();
 			await new Promise((r) => setImmediate(r));
-			expect(api.math.add.__type).toBe("function");
+			expect(api.slothlet.node(api.math.add).type).toBe("function");
 		} finally {
 			await teardown();
 		}
@@ -184,20 +181,20 @@ describe("lazyGetTrap — __type special property (lines 2082–2117)", () => {
 		try {
 			await api.defaultFn._materialize();
 			await new Promise((r) => setImmediate(r));
-			expect(api.defaultFn.__type).toBe("function");
+			expect(api.slothlet.node(api.defaultFn).type).toBe("function");
 		} finally {
 			await teardown();
 		}
 	});
 
-	it("__type after materializing an object wrapper returns 'object' (lines 2109–2110)", async () => {
+	it("node().type after materializing an object wrapper is 'namespace' (lines 2109–2110)", async () => {
 		// api.task is a folder wrapper; its impl after materialization is a plain object of functions.
 		// Lines 2109–2110: `if (impl && typeof impl === "object") return "object"`.
 		const { api, teardown } = await makeLazy();
 		try {
 			await api.task._materialize();
 			await new Promise((r) => setImmediate(r));
-			expect(api.task.__type).toBe("object");
+			expect(api.slothlet.node(api.task).type).toBe("namespace");
 		} finally {
 			await teardown();
 		}
@@ -266,10 +263,10 @@ describe("lazyGetTrap — _materialize binding (line 2122)", () => {
 describe("lazyGetTrap — __metadata property (lines 2133–2143)", () => {
 	it("__metadata returns a metadata object when handler is registered (lines 2133–2141)", async () => {
 		// Default slothlet setup enables metadata tracking.
-		// api.task.__metadata returns the combined metadata object from the metadata handler.
+		// api.slothlet.metadata.get(api.task) returns the combined metadata object from the metadata handler.
 		const { api, teardown } = await makeLazy();
 		try {
-			const meta = api.task.__metadata;
+			const meta = api.slothlet.metadata.get(api.task);
 			expect(typeof meta).toBe("object");
 			expect(meta).not.toBeNull();
 		} finally {
@@ -286,7 +283,7 @@ describe("lazyGetTrap — __metadata property (lines 2133–2143)", () => {
 			metadata: false
 		});
 		try {
-			const meta = api.task.__metadata;
+			const meta = api.slothlet.metadata.get(api.task);
 			expect(typeof meta).toBe("object");
 			// We know it's either {} (no handler) or an object with fields
 			expect(meta !== null).toBe(true);
@@ -303,8 +300,8 @@ describe("lazyGetTrap — file info properties (lines 2146, 2149, 2154)", () => 
 	it("__filePath returns the file path string (line 2146)", async () => {
 		const { api, teardown } = await makeLazy();
 		try {
-			const fp = api.task.__filePath;
-			expect(fp === undefined || typeof fp === "string").toBe(true);
+			const fp = api.slothlet.node(api.task).file;
+			expect(fp === null || typeof fp === "string").toBe(true);
 		} finally {
 			await teardown();
 		}
@@ -313,8 +310,8 @@ describe("lazyGetTrap — file info properties (lines 2146, 2149, 2154)", () => 
 	it("__sourceFolder returns the source folder string (line 2149)", async () => {
 		const { api, teardown } = await makeLazy();
 		try {
-			const sf = api.task.__sourceFolder;
-			expect(sf === undefined || typeof sf === "string").toBe(true);
+			const sf = api.slothlet.node(api.task).folder;
+			expect(sf === null || typeof sf === "string").toBe(true);
 		} finally {
 			await teardown();
 		}
@@ -323,8 +320,8 @@ describe("lazyGetTrap — file info properties (lines 2146, 2149, 2154)", () => 
 	it("__moduleID returns the module ID string (line 2154)", async () => {
 		const { api, teardown } = await makeLazy();
 		try {
-			const mid = api.task.__moduleID;
-			expect(mid === undefined || typeof mid === "string").toBe(true);
+			const mid = api.slothlet.node(api.task).module;
+			expect(mid === null || typeof mid === "string").toBe(true);
 		} finally {
 			await teardown();
 		}
@@ -335,7 +332,7 @@ describe("lazyGetTrap — file info properties (lines 2146, 2149, 2154)", () => 
 		try {
 			await api.task._materialize();
 			await new Promise((r) => setImmediate(r));
-			const fp = api.task.__filePath;
+			const fp = api.slothlet.node(api.task).file;
 			expect(typeof fp).toBe("string");
 			expect(fp.length).toBeGreaterThan(0);
 		} finally {
@@ -348,7 +345,7 @@ describe("lazyGetTrap — file info properties (lines 2146, 2149, 2154)", () => 
 		try {
 			await api.task._materialize();
 			await new Promise((r) => setImmediate(r));
-			const sf = api.task.__sourceFolder;
+			const sf = api.slothlet.node(api.task).folder;
 			expect(typeof sf).toBe("string");
 		} finally {
 			await teardown();
@@ -360,7 +357,7 @@ describe("lazyGetTrap — file info properties (lines 2146, 2149, 2154)", () => 
 		try {
 			await api.task._materialize();
 			await new Promise((r) => setImmediate(r));
-			const mid = api.task.__moduleID;
+			const mid = api.slothlet.node(api.task).module;
 			expect(typeof mid).toBe("string");
 			expect(mid.length).toBeGreaterThan(0);
 		} finally {
@@ -746,10 +743,10 @@ describe("lazyGetTrap — non-configurable target property (lines 2003–2014)",
 		const api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "lazy", silent: true });
 		try {
 			// Access __apiPath and __mode which may use non-configurable target path
-			const apiPath = api.__apiPath;
-			const mode = api.__mode;
-			expect(typeof apiPath === "string" || apiPath === undefined).toBe(true);
-			expect(typeof mode === "string" || mode === undefined).toBe(true);
+			// The root is a plain object, no node: nothing to report. A node reports its own path and mode.
+			expect(api.slothlet.node(api)).toBeUndefined();
+			expect(api.slothlet.node(api.math).path).toEqual(["math"]);
+			expect(api.slothlet.node(api.math).mode).toBe("lazy");
 		} finally {
 			if (api?.shutdown) await api.shutdown().catch(() => {});
 		}

@@ -87,7 +87,7 @@ export function bury(value, depth) {
 	return out;
 }
 
-const who = () => self.slothlet.metadata.self()?.apiPath ?? null;
+const who = () => self.slothlet.metadata.self()?.path?.join(".") ?? null;
 
 export function makeClient() {
 	return () => who();

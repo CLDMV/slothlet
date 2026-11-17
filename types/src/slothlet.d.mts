@@ -513,13 +513,11 @@ export type SlothletAPI = {
             caller: () => Object | null;
             get: Function;
             remove: Function;
-            getFor: Function;
-            removeFor: Function;
             self: () => Object | null;
             set: Function;
-            setFor: Function;
-            setGlobal: Function;
+            global: Function;
         };
+        node: Function;
         owner: {
             get: Function;
         };

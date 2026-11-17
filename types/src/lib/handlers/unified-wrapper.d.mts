@@ -934,7 +934,7 @@ declare class UnifiedWrapper extends ComponentBase {
     /**
      * Core implementation-application logic shared by ___setImpl and lazy materialization.
      * Clones the implementation (protecting the API cache from ___adoptImplChildren's
-     * delete operations), clears the invalid flag, upgrades __isCallable when a
+     * delete operations), clears the invalid flag, upgrades callability when a
      * callable impl arrives on a configurable wrapper, updates __filePath for lazy
      * folder wrappers, and adopts children.
      *

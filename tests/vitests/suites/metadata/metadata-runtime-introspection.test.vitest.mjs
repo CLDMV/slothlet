@@ -62,23 +62,23 @@ describe.each(getMatrixConfigs())("Metadata Runtime Introspection > Config: '$na
 	});
 
 	describe("caller() - with tracked slothlet caller", () => {
-		it("returns the calling function's system metadata", async () => {
+		it("returns the calling function as a caller object", async () => {
 			// invokeCallerTest() is a slothlet function that calls self.callerTest.getCallerMeta()
 			// When getCallerMeta executes, callerWrapper = invokeCallerTest's wrapper
 			// So caller() returns metadata of invokeCallerTest (from metadata-test-helper.mjs)
 			const result = await api.metadataTestHelper.invokeCallerTest();
 
 			expect(result).not.toBeNull();
-			expect(result.moduleID).toBeDefined();
-			expect(result.filePath).toContain("metadata-test-helper");
+			expect(Object.keys(result).sort()).toEqual(["metadata", "module", "path", "version"]);
+			expect(typeof result.module).toBe("string");
+			expect(result.version).toBeNull();
 		});
 
 		it("caller metadata contains apiPath pointing to the invoking function", async () => {
 			const result = await api.metadataTestHelper.invokeCallerTest();
 
 			expect(result).not.toBeNull();
-			expect(result.apiPath).toBeDefined();
-			expect(result.apiPath).toContain("metadataTestHelper");
+			expect(result.path).toEqual(["metadataTestHelper", "invokeCallerTest"]);
 		});
 
 		it("caller metadata is distinct from the callee's own metadata", async () => {
@@ -87,28 +87,25 @@ describe.each(getMatrixConfigs())("Metadata Runtime Introspection > Config: '$na
 			const result = await api.metadataTestHelper.invokeCallerTest();
 
 			expect(result).not.toBeNull();
-			expect(result.filePath).not.toContain("caller-test");
+			expect(result.path).not.toContain("callerTest");
 		});
 	});
 
 	// ─── get() edge cases ────────────────────────────────────────────────────
 
-	describe("get() - non-string path throws INVALID_ARGUMENT", () => {
-		it("throws when passed a number", async () => {
-			await expect(api.slothlet.metadata.get(123)).rejects.toThrow();
+	describe("get() - a target that is no function, node, path or module id throws INVALID_METADATA_TARGET", () => {
+		it("throws when passed a number", () => {
+			expect(() => api.slothlet.metadata.get(123)).toThrow(/INVALID_METADATA_TARGET/);
 		});
 
-		it("throws when passed null", async () => {
-			await expect(api.slothlet.metadata.get(null)).rejects.toThrow();
+		it("throws when passed null", () => {
+			expect(() => api.slothlet.metadata.get(null)).toThrow(/INVALID_METADATA_TARGET/);
 		});
 	});
 
-	describe("get() - returns null for non-function resolved target", () => {
-		it("returns null when path resolves to undefined (unknown property)", async () => {
-			// rootMath.nonExistent is undefined in all modes — neither a function
-			// nor a wrapper with impl, so get() returns null at the final guard
-			const result = await api.slothlet.metadata.get("rootMath.nonExistent");
-			expect(result).toBeNull();
+	describe("get() - a path nothing is mounted at", () => {
+		it("returns the path's metadata, empty when none was set (sync, no lookup of the node)", () => {
+			expect(api.slothlet.metadata.get("rootMath.nonExistent")).toEqual({});
 		});
 	});
 

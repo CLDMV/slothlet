@@ -114,7 +114,7 @@ export class ApiAssignment extends ComponentBase {
 			// api member, and skipping it here would merge the extracted snapshot instead of the live
 			// child wrapper, stripping its apiPath and gating.
 			// Reaching the skip needs a reserved name among the folder wrapper's own enumerable keys.
-			// That CAN occur — adoption places a module's `__type`-style reserved export onto the wrapper,
+			// That CAN occur — adoption places a module's reserved-name export (`_materialize`) onto the wrapper,
 			// and a file named `_materialize.mjs` / `_impl.mjs` does the same before breaking the load —
 			// but every such module is exporting a name whose surface contract is the #260 hazard, so the
 			// suite deliberately composes none and the skip stays guarded rather than pinned.
@@ -133,7 +133,7 @@ export class ApiAssignment extends ComponentBase {
 			const folderKey = ofList[ofIndex];
 			// The full reserved set, not just the metadata names: when the folder's impl is a CALLABLE,
 			// extraction returns the function itself with every own key unfiltered, so a module export
-			// named for a reserved key (`__type`, `_materialize`, …) can appear here — and merging it
+			// named for a reserved key (`_materialize`, `__state`, …) can appear here — and merging it
 			// would plant a framework name as an own member of the surviving wrapper. Reachable only by
 			// a module exporting a reserved name, whose surface contract is the #260 hazard — the suite
 			// deliberately composes no such module, so the skip is guarded rather than pinned.
@@ -485,7 +485,7 @@ export class ApiAssignment extends ComponentBase {
 						}
 
 						// Get file wrapper's metadata to extract filePath for child mappings
-						const valueMetadata = this.slothlet.handlers?.metadata?.getMetadata(value);
+						const valueMetadata = this.slothlet.handlers?.metadata?.getSystemMetadata(value);
 						const valueFilePath = valueMetadata?.filePath;
 
 						// Create temporary object to hold __childFilePaths if _impl doesn't exist yet
@@ -563,7 +563,7 @@ export class ApiAssignment extends ComponentBase {
 							// When folder materializes, ___adoptImplChildren will preserve these (merge scenario)
 
 							// Get file wrapper's metadata to extract filePath for child mappings
-							const existingMetadata = this.slothlet.handlers?.metadata?.getMetadata(existing);
+							const existingMetadata = this.slothlet.handlers?.metadata?.getSystemMetadata(existing);
 							const existingFilePath = existingMetadata?.filePath;
 
 							// Create temporary object to hold __childFilePaths if _impl doesn't exist yet

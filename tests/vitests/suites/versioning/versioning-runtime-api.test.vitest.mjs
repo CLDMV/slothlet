@@ -184,43 +184,43 @@ describe.each(getMatrixConfigs())("Versioning > Runtime API > $name", ({ config 
 		expect(meta).toHaveProperty("stable", true);
 	});
 
-	it("metadata.setForVersion sets regular metadata on a versioned module", async () => {
+	it("metadata.set on a versioned path sets regular metadata on a versioned module", async () => {
 		api = await slothlet({ ...config, base: `${BASE}/callers` });
 
 		await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1", default: true });
 
-		api.slothlet.metadata.setForVersion("auth", "v1", "stable", true);
-		api.slothlet.metadata.setForVersion("auth", "v1", { region: "us" });
+		api.slothlet.metadata.set("v1.auth", "stable", true);
+		api.slothlet.metadata.set("v1.auth", { region: "us" });
 
-		const meta = api.slothlet.metadata.getForVersion("auth", "v1");
+		const meta = api.slothlet.metadata.get("auth", { version: "v1" });
 		expect(meta).toHaveProperty("stable", true);
 		expect(meta).toHaveProperty("region", "us");
 	});
 
-	it("metadata.getForVersion returns empty object for unknown path", async () => {
+	it("metadata.get with { version } returns empty object for unknown path", async () => {
 		api = await slothlet({ ...config, base: `${BASE}/callers` });
 
-		const meta = api.slothlet.metadata.getForVersion("nonexistent", "v1");
+		const meta = api.slothlet.metadata.get("nonexistent", { version: "v1" });
 		expect(meta).toEqual({});
 	});
 
-	it("metadata.getForVersion returns empty object when no metadata set on versioned module", async () => {
+	it("metadata.get with { version } returns empty object when no metadata set on versioned module", async () => {
 		api = await slothlet({ ...config, base: `${BASE}/callers` });
 
 		// Register a versioned module with NO metadata option — exercises the getPathMetadata
 		// parent-path traversal false branch where a path segment is not in the store.
 		await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1" });
-		const meta = api.slothlet.metadata.getForVersion("auth", "v1");
+		const meta = api.slothlet.metadata.get("auth", { version: "v1" });
 		// No metadata was set, so result should be an empty object (no user keys).
 		expect(meta).toEqual({});
 	});
 
-	it("metadata.setForVersion throws VERSION_NOT_FOUND for unknown version tag", async () => {
+	it("metadata.get with { version } returns an empty object for an unknown version tag", async () => {
 		api = await slothlet({ ...config, base: `${BASE}/callers` });
 
 		await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1" });
 
-		expect(() => api.slothlet.metadata.setForVersion("auth", "v99", "stable", true)).toThrow("VERSION_NOT_FOUND");
+		expect(api.slothlet.metadata.get("auth", { version: "v99" })).toEqual({});
 	});
 
 	it("versionManager.getVersionMetadata returns stored metadata by moduleID directly", async () => {

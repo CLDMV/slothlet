@@ -43,7 +43,7 @@ describe.each(LAZY_MATRIX)("Background Materialize - %s", ({ ____name, config })
 		// Without backgroundMaterialize, __type returns IN_FLIGHT or UNMATERIALIZED (not materialized yet)
 		// NOTE: Must test nested module (api.deep.folder.config) not root (api.math)
 		// because root files are always eager even in lazy mode for collision handling
-		const typeValue = api.deep.folder.config.__type;
+		const typeValue = api.slothlet.node(api.deep.folder.config).type;
 		const isNotMaterialized = typeValue === api.slothlet.types.UNMATERIALIZED || typeValue === api.slothlet.types.IN_FLIGHT;
 		expect(isNotMaterialized).toBe(true);
 
@@ -63,8 +63,8 @@ describe.each(LAZY_MATRIX)("Background Materialize - %s", ({ ____name, config })
 		// can complete before this assertion — so we accept either pending OR already-materialized.
 		// NOTE: Must test nested module (api.deep.folder.config) not root (api.math)
 		// because root files are always eager even in lazy mode for collision handling
-		const configType = api.deep.folder.config.__type;
-		const isAlreadyMaterialized = api.deep.folder.config.__materialized === true;
+		const configType = api.slothlet.node(api.deep.folder.config).type;
+		const isAlreadyMaterialized = api.slothlet.node(api.deep.folder.config).materialized === true;
 		const isValidConfigState = isAlreadyMaterialized
 			? typeof configType === "string"
 			: configType === api.slothlet.types.UNMATERIALIZED || configType === api.slothlet.types.IN_FLIGHT;
@@ -96,8 +96,8 @@ describe.each(LAZY_MATRIX)("Background Materialize - %s", ({ ____name, config })
 		// or a status symbol (IN_FLIGHT/UNMATERIALIZED) if still pending. Both are valid here
 		// since backgroundMaterialize=true triggers async materialization but doesn't guarantee
 		// completion before the assertion. Check __materialized to distinguish the two cases.
-		const loggerType = api.logger.__type;
-		const isAlreadyMaterialized = api.logger.__materialized === true;
+		const loggerType = api.slothlet.node(api.logger).type;
+		const isAlreadyMaterialized = api.slothlet.node(api.logger).materialized === true;
 		const isValidType = isAlreadyMaterialized
 			? loggerType === "function"
 			: loggerType === api.slothlet.types.UNMATERIALIZED || loggerType === api.slothlet.types.IN_FLIGHT;

@@ -61,7 +61,6 @@ import slothlet from "@cldmv/slothlet";
  */
 function toHookPath(pathValue) {
 	if (typeof pathValue === "string") return pathValue;
-	if (pathValue && typeof pathValue.__slothletPath === "string") return pathValue.__slothletPath;
 	try {
 		return String(pathValue);
 	} catch {

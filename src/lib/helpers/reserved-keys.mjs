@@ -55,22 +55,11 @@ const WRAPPER_INTERNAL_KEYS = setFrom([
 	"___setImpl",
 	"___resetLazy",
 	"___invalidate",
-	// 2-underscore: read-only info/mode/state props exposed through proxy
+	// 2-underscore: internal state props (what a node reports about itself is `slothlet.node(target)`, not a key)
 	"__state",
 	"__invalid",
-	"__mode",
-	"__apiPath",
-	"__slothletPath",
-	"__isCallable",
 	"__materializeOnCreate",
 	"__displayName",
-	"__type",
-	"__metadata",
-	"__filePath",
-	"__sourceFolder",
-	"__moduleID",
-	"__materialized",
-	"__inFlight",
 	"__impl",
 	// 1-underscore: internal method and raw impl alias
 	"_impl",
@@ -157,7 +146,7 @@ export function writeTargetLiteralPrefix(pattern) {
  * @returns {boolean} Whether it names the framework's own.
  * @example
  * isFrameworkWriteTarget("slothlet.**"); // true
- * isFrameworkWriteTarget("victim.**.__metadata"); // true
+ * isFrameworkWriteTarget("victim.**.__state"); // true
  */
 export function isFrameworkWriteTarget(pattern) {
 	const segments = splitText(String(pattern), ".");

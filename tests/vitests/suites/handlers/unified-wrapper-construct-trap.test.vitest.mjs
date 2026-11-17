@@ -166,8 +166,8 @@ describe("UnifiedWrapper > constructTrap > lazy in-flight Promise path (lines 34
 		const { default: slothlet } = await import("@cldmv/slothlet");
 		api = await slothlet({ mode: "lazy", runtime: "async", hook: { enabled: false }, base: TEST_DIRS.API_TEST });
 		const loggerProxy = api.logger;
-		expect(loggerProxy.__mode).toBe("lazy");
-		expect(loggerProxy.__materialized).toBe(false);
+		expect(api.slothlet.node(loggerProxy).mode).toBe("lazy");
+		expect(api.slothlet.node(loggerProxy).materialized).toBe(false);
 		// new on unmaterialized lazy wrapper → Promise (lines 3424-3472)
 		const inst = await new loggerProxy();
 		// impl is the log function → Reflect.construct resolves to a log instance
@@ -181,8 +181,8 @@ describe("UnifiedWrapper > constructTrap > lazy in-flight Promise path (lines 34
 		const { default: slothlet } = await import("@cldmv/slothlet");
 		api = await slothlet({ mode: "lazy", runtime: "async", hook: { enabled: false }, base: TEST_DIRS.API_TEST_CJS });
 		const dfProxy = api.defaultFn;
-		expect(dfProxy.__mode).toBe("lazy");
-		expect(dfProxy.__materialized).toBe(false);
+		expect(api.slothlet.node(dfProxy).mode).toBe("lazy");
+		expect(api.slothlet.node(dfProxy).materialized).toBe(false);
 		const inst = await new dfProxy();
 		// Reflect.construct(multiply, [], multiply) → instance of multiply
 		expect(inst?.constructor?.name).toBe("multiply");
@@ -194,8 +194,8 @@ describe("UnifiedWrapper > constructTrap > lazy in-flight Promise path (lines 34
 		const { default: slothlet } = await import("@cldmv/slothlet");
 		api = await slothlet({ mode: "lazy", runtime: "async", hook: { enabled: false }, base: TEST_DIRS.API_TEST });
 		const dbProxy = api.database;
-		expect(dbProxy.__mode).toBe("lazy");
-		expect(dbProxy.__materialized).toBe(false);
+		expect(api.slothlet.node(dbProxy).mode).toBe("lazy");
+		expect(api.slothlet.node(dbProxy).materialized).toBe(false);
 		await expect(new dbProxy()).rejects.toMatchObject({ code: "INVALID_CONFIG_NOT_A_FUNCTION" });
 	});
 });
@@ -226,7 +226,7 @@ describe("UnifiedWrapper > constructTrap > materialized lazy wrapper — eager f
 		api = await slothlet({ mode: "lazy", runtime: "async", hook: { enabled: false }, base: TEST_DIRS.API_TEST_CJS });
 		const dfProxy = api.defaultFn;
 		await dfProxy._materialize();
-		expect(dfProxy.__materialized).toBe(true);
+		expect(api.slothlet.node(dfProxy).materialized).toBe(true);
 		// Eager path: impl.default is the multiply function
 		const inst = new dfProxy(3, 4);
 		expect(inst?.constructor?.name).toBe("multiply");
@@ -239,7 +239,7 @@ describe("UnifiedWrapper > constructTrap > materialized lazy wrapper — eager f
 		api = await slothlet({ mode: "lazy", runtime: "async", hook: { enabled: false }, base: TEST_DIRS.API_TEST });
 		const dbProxy = api.database;
 		await dbProxy._materialize();
-		expect(dbProxy.__materialized).toBe(true);
+		expect(api.slothlet.node(dbProxy).materialized).toBe(true);
 		let caught = null;
 		try {
 			new dbProxy();
@@ -355,7 +355,7 @@ describe("UnifiedWrapper > constructTrap > invalid wrapper throws TypeError (lin
 		// Materialise math so api.math.add is a real callable UnifiedWrapper proxy.
 		await api.math._materialize();
 		const addProxy = api.math.add;
-		expect(addProxy.__isCallable).toBe(true);
+		expect(api.slothlet.node(addProxy).callable).toBe(true);
 
 		// Put the held proxy into the reset-window state: invalid = true, no revival scheduled.
 		resolveWrapper(addProxy).___invalidate();

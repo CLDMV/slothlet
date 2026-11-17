@@ -124,7 +124,7 @@ describe.each([
 			const keys = leaf.split(".");
 			for (let length = 1; length <= keys.length; length++) {
 				const at = keys.slice(0, length).join(".");
-				expect(reach(api, at).__metadata.apiPath).toBe(at);
+				expect(api.slothlet.node(reach(api, at)).path.join(".")).toBe(at);
 			}
 		});
 
