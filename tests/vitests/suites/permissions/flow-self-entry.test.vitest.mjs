@@ -93,6 +93,7 @@ beforeAll(() => {
 		'\telse if (how === "timeout") setTimeout(fn, 0);',
 		'\telse if (how === "immediate") setImmediate(fn);',
 		'\telse if (how === "microtask") queueMicrotask(fn);',
+		'\telse if (how === "tick") process.nextTick(fn);',
 		'\telse if (how === "nested") new AsyncResource("inner").runInAsyncScope(() => Promise.resolve().then(fn));',
 		"\telse throw new Error(how);",
 		"}",
@@ -265,6 +266,7 @@ beforeAll(() => {
 		'\telse if (how === "timeout") setTimeout(fn, 0);',
 		'\telse if (how === "immediate") setImmediate(fn);',
 		'\telse if (how === "microtask") queueMicrotask(fn);',
+		'\telse if (how === "tick") process.nextTick(fn);',
 		'\telse if (how === "nested") new AsyncResource("inner").runInAsyncScope(() => Promise.resolve().then(fn));',
 		"\telse throw new Error(how);",
 		"}",
@@ -320,6 +322,7 @@ beforeAll(() => {
 		'\telse if (how === "timeout") setTimeout(fn, 0);',
 		'\telse if (how === "immediate") setImmediate(fn);',
 		'\telse if (how === "microtask") queueMicrotask(fn);',
+		'\telse if (how === "tick") process.nextTick(fn);',
 		'\telse if (how === "nested") new AsyncResource("inner").runInAsyncScope(() => Promise.resolve().then(fn));',
 		"\telse throw new Error(how);",
 		"}",
@@ -400,10 +403,11 @@ beforeAll(() => {
 		'\telse if (how === "timeout") setTimeout(fn, 0);',
 		'\telse if (how === "immediate") setImmediate(fn);',
 		'\telse if (how === "microtask") queueMicrotask(fn);',
+		'\telse if (how === "tick") process.nextTick(fn);',
 		'\telse if (how === "nested") new AsyncResource("inner").runInAsyncScope(() => Promise.resolve().then(fn));',
 		"\telse throw new Error(how);",
 		"}",
-		'const HOWS = ["then", "timeout", "immediate", "microtask", "nested"];',
+		'const HOWS = ["then", "timeout", "immediate", "microtask", "tick", "nested"];',
 		"const settle = () => new Promise((resolve) => setTimeout(resolve, 20));",
 		"// A job Node runs that throws is noted by what it threw.",
 		'if (part === "scheduled") process.setUncaughtExceptionCaptureCallback((error) => globalThis.__flowSelfEntry.notes.push(codeOf(error)));',
@@ -617,10 +621,25 @@ beforeAll(() => {
 		"\t\tout.readerInRunSame = reader === api.mod.getReader();",
 		"\t\tout.readerInRunShape = [typeof reader, reader.name, reader.length];",
 		"\t\tout.readerHandedBackIsOwn = api.mod.isOwn(reader);",
+		"\t\tout.readerSameAsOutside = reader === outside;",
+		"\t\t// An emitter's off() finds the listener on() was given by the same function read again.",
+		"\t\tconst emitter = new EventEmitter();",
+		'\t\temitter.on("x", api.mod.getReader());',
+		'\t\temitter.off("x", api.mod.getReader());',
+		'\t\tout.readerOffRemoves = emitter.listenerCount("x");',
 		'\t\tawait Promise.resolve("then").then(reader);',
 		'\t\tsetTimeout(reader, 0, "timeout");',
+		'\t\tsetImmediate(reader, "immediate");',
+		'\t\tprocess.nextTick(reader, "tick");',
+		"\t\tqueueMicrotask(reader);",
+		'\t\tconst interval = setInterval((tag) => (clearInterval(interval), reader(tag)), 1, "intervalHost");',
+		'\t\tshared.interval = setInterval(reader, 1, "interval");',
 		"\t\tawait tick();",
+		"\t\tclearInterval(shared.interval);",
 		"\t\tawait null;",
+		'\t\tsetTimeout(reader, 0, "timeoutAfterAwait");',
+		'\t\tprocess.nextTick(reader, "tickAfterAwait");',
+		"\t\tawait tick();",
 		'\t\tawait Promise.resolve("thenAfterAwait").then(reader);',
 		'\t\tawait Promise.resolve("thenThis").then(reader.bind({ mark: "bound" }));',
 		'\t\tReflect.apply(reader, { mark: "this" }, ["direct"]);',
@@ -832,23 +851,29 @@ describe.each(FRAMES)("Permissions > a flow entered by module code itself > %s",
 		it("a function a call hands the run's own code keeps the run when Node calls it later", () => {
 			expect(result.readerSeen.then).toEqual(["root", null]);
 			expect(result.readerSeen.timeout).toEqual(["root", null]);
+			for (const tag of ["immediate", "tick", "undefined", "interval", "intervalHost", "timeoutAfterAwait", "tickAfterAwait"]) {
+				expect([tag, result.readerSeen[tag]]).toEqual([tag, ["root", null]]);
+			}
 			expect(result.readerSeen.thenAfterAwait).toEqual(["root", null]);
 			expect(result.readerSeen.thenThis).toEqual(["root", "bound"]);
 			expect(result.readerSeen.direct).toEqual(["root", "this"]);
 			expect(result.readerInRunShape).toEqual(["function", "reader", 1]);
 		});
 
-		it("the same function read twice in one run is the same value, and outside every run it is the function itself", () => {
+		it("the same function read inside a run and outside every run is the same value", () => {
 			expect(result.readerInRunSame).toBe(true);
 			expect(result.readerOutsideSame).toBe(true);
+			// The function itself in every permission mode (or, with "precise", its one stand-in), inside a run or not.
+			expect(result.readerSameAsOutside).toBe(true);
+			expect(result.readerOffRemoves).toBe(0);
 			expect(result.readerHandedBackIsOwn).toBe(true);
 			expect(result.readerSeen.outside).toEqual([null, null]);
 		});
 
 		// Code that entered the run by itself acts outside it, and so does every job it hands Node: the function it is
-		// handed runs outside the run, whether it comes back as itself or as a stand-in of its module's.
+		// handed runs outside the run, whether it comes back as itself or as a stand-in of its module's ("precise").
 		it.each(["hostResourceReader", "hostTimerReader"])(
-			"the function read by a module's own code that entered a run() by itself through the host's %s is not bound to the run",
+			"the function read by a module's own code that entered a run() by itself through the host's %s runs outside the run",
 			(route) => {
 				expect(result[route][0]).toBeNull();
 			}
@@ -902,7 +927,7 @@ describe.each(FRAMES)("Permissions > a flow entered by module code itself > %s",
 const STRICT_CONFIG = ["permissions strict", "strict", "provenance", "precise"];
 const framesOnByDefault = process.allowedNodeEnvironmentFlags.has("--no-async-context-frame");
 
-const HOWS = ["then", "timeout", "immediate", "microtask", "nested"];
+const HOWS = ["then", "timeout", "immediate", "microtask", "tick", "nested"];
 
 describe.each(FRAMES)("Permissions > jobs scheduled by module code that entered a flow by itself > %s", (_label, nodeFlags) => {
 	const configs = framesOnByDefault && nodeFlags.length === 0 ? [...CONFIGS, STRICT_CONFIG] : CONFIGS;

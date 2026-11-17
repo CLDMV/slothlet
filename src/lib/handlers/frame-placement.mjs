@@ -1688,35 +1688,6 @@ export function isHostPrototype(wrapper, value) {
 }
 
 /**
- * Whether a function a call hands back inside a `run()` / `scope()` is code of a module's, which the async runtime hands
- * out bound to the run (see `AsyncContextManager#bindToRun`): not one of slothlet's own values and not the language's.
- * Set by the wrapper module; until then nothing is.
- * @type {function(*): boolean}
- * @private
- */
-let runBindableCheck = () => false;
-
-/**
- * Register how a function handed out bound to a run is recognised (see {@link isRunBindable}).
- * @param {function(*): boolean} check - True for such a function.
- * @returns {void}
- * @internal
- */
-function setRunBindableCheck(check) {
-	runBindableCheck = check;
-}
-
-/**
- * Whether a function a call hands back inside a run is handed out bound to the run (see {@link setRunBindableCheck}).
- * @param {*} value - The value.
- * @returns {boolean} True for such a function.
- * @internal
- */
-function isRunBindable(value) {
-	return runBindableCheck(value);
-}
-
-/**
  * Whether a value is a stand-in slothlet hands a module's code out as (#597). Set by the wrapper module.
  * @type {function(*): boolean}
  * @private
@@ -5507,7 +5478,6 @@ export function internals(consumer) {
 		frameDefiner,
 		handedLeafFunctions,
 		isLeafFileFunction,
-		isRunBindable,
 		loadOnStack,
 		outerCallerCeiling,
 		ownReceiver,
@@ -5525,7 +5495,6 @@ export function internals(consumer) {
 		setInboundOriginal,
 		setModuleNodeResolver,
 		setResultAttributor,
-		setRunBindableCheck,
 		stackHoldsInstanceCode,
 		supplierChainCeiling
 	};

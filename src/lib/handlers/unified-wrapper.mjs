@@ -181,8 +181,7 @@ const {
 	setApiValueCheck,
 	setHandedOutCheck,
 	setInboundOriginal,
-	setResultAttributor,
-	setRunBindableCheck
+	setResultAttributor
 } = framePlacementInternals("lib/handlers/unified-wrapper");
 const { markFrameworkInternal, versionDispatcherRecord } = frameworkInternalsInternals("lib/handlers/unified-wrapper");
 const { recordSharedExports } = sharedValuesInternals("lib/handlers/unified-wrapper");
@@ -7723,16 +7722,6 @@ setHandedOutCheck(
 		value !== null &&
 		(typeof value === "object" || typeof value === "function") &&
 		(WeakMapMethods.has(STAND_IN_RECORDS, value) || WeakMapMethods.has(CROSSINGS, value))
-);
-// A function a call hands back inside a run is a module's code to bind to the run unless it is slothlet's own value or
-// the language's: those read no flow of a module's.
-setRunBindableCheck(
-	(value) =>
-		typeof value === "function" &&
-		!WeakSetMethods.has(INTRINSICS, value) &&
-		!isFrameworkInternal(value) &&
-		!runtime_isSlothletValue(value) &&
-		!isLazyStandIn(value)
 );
 // A crossing view of the class prototype guard stands for the value too: what the caller handed is what is looked into.
 setInboundOriginal((value) => {

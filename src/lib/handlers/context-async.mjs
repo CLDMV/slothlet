@@ -44,7 +44,6 @@ import {
 	mapEntriesToArray,
 	mapKeysToArray,
 	MapMethods,
-	NativeProxy,
 	Objects,
 	Promise,
 	queueMicrotask,
@@ -59,16 +58,8 @@ const { runtime_wrapClassInstance } = classInstanceWrapperInternals("lib/handler
 const { setApiContextChecker, setListenerFlow } = eventemitterContextInternals("lib/handlers/context-async");
 const trustedRootOwn = trustedRootInternals("lib/handlers/context-async");
 const { buildCapturedFlowStore } = trustedRootOwn;
-const {
-	attributeResult,
-	enterCall,
-	isRunBindable,
-	outerCallerCeiling,
-	ownReceiver,
-	resolveSupplier,
-	runningOutsideFlow,
-	sampleStoreScripts
-} = framePlacementInternals("lib/handlers/context-async");
+const { attributeResult, enterCall, ownReceiver, resolveSupplier, runningOutsideFlow, sampleStoreScripts } =
+	framePlacementInternals("lib/handlers/context-async");
 
 /**
  * Marks the stand-in store {@link AsyncContextManager} hands code that entered a flow by itself when no single leaf
@@ -163,10 +154,12 @@ Objects.freeze(Stamped.prototype);
 Objects.freeze(PromiseFlow.prototype);
 
 /**
- * The callback slot of a timer or an immediate made while a flow ran, with the function in it when it was made: code
- * holding the timer can put another function there later, which is then not what the flow handed Node. A microtask's
- * resource is entered only by Node, with the callback it was queued with.
- * @type {WeakMap<object, {slot: string|null, fn: *}>}
+ * The callback slot of a timer, an immediate or a `process.nextTick()` job made while a flow ran, with the function in
+ * it when it was made: code holding the timer can put another function there later, which is then not what the flow
+ * handed Node. A microtask's resource is an `AsyncResource` Node enters once, with the callback it was queued with;
+ * `entries` counts how often its scope has been entered, so code that got hold of it and enters it again is not taken
+ * for that job.
+ * @type {WeakMap<object, {slot: string|null, fn: *, entries: number}>}
  * @private
  */
 const JOB_CALLBACK = new WeakMap();
@@ -180,8 +173,25 @@ const JOB_CALLBACK = new WeakMap();
 const JOB_SLOTS = new Map([
 	["Timeout", "_onTimeout"],
 	["Immediate", "_onImmediate"],
+	["TickObject", "callback"],
 	["Microtask", null]
 ]);
+
+/**
+ * Whether a job recorded in {@link JOB_CALLBACK} runs the function it was made with: a timer's, an immediate's or a
+ * tick's slot still holds it, read as a data property (an accessor put there could answer Node and this check
+ * differently); a microtask's scope is entered for the first time, as Node does once to run it.
+ * @param {object} job - The job's async resource.
+ * @returns {boolean} Whether it does.
+ * @private
+ */
+function runsMadeCallback(job) {
+	const made = WeakMapMethods.get(JOB_CALLBACK, job);
+	if (made === undefined) return false;
+	if (made.slot === null) return made.entries === 1;
+	const slot = Objects.getOwnPropertyDescriptor(job, made.slot);
+	return slot !== undefined && "value" in slot && slot.value === made.fn;
+}
 
 /**
  * Marks a {@link MADE_IN} entry of an `AsyncResource` code can enter itself.
@@ -232,56 +242,6 @@ let jobHooks = 0;
  */
 export function jobHookCount() {
 	return jobHooks;
-}
-
-/**
- * The run-bound stand-ins {@link AsyncContextManager} hands out (see {@link AsyncContextManager#bindToRun}), each with
- * the function it stands for and the leaf whose call handed it out.
- * @type {WeakMap<Function, {original: Function, hander: object}>}
- * @private
- */
-const RUN_BOUND = new WeakMap();
-
-/**
- * How many run-bound stand-ins were made: until one is, no call's arguments are looked through for one.
- * @type {number}
- * @private
- */
-let runBoundMade = 0;
-
-/**
- * The function a run-bound stand-in stands for, when it is handed to a call of a leaf of the file whose call handed it
- * out: that file gets its own function back, as in plain JavaScript. Anything else is handed on as it is.
- * @param {*} value - A value handed to the call.
- * @param {object} wrapper - The wrapper of the leaf called.
- * @returns {*} What the leaf gets.
- * @private
- */
-function unbindForLeaf(value, wrapper) {
-	if (typeof value !== "function") return value;
-	const record = WeakMapMethods.get(RUN_BOUND, value);
-	if (record === undefined) return value;
-	const file = wrapper?.____slothletInternal?.filePath;
-	return file !== undefined && file === record.hander?.____slothletInternal?.filePath ? record.original : value;
-}
-
-/**
- * The arguments of a call of a leaf, with each run-bound stand-in of the leaf's own file's function replaced by the
- * function itself (see {@link unbindForLeaf}).
- * @param {Array<*>} args - The arguments.
- * @param {object} wrapper - The wrapper of the leaf called.
- * @returns {Array<*>} The arguments, the same list when none is replaced.
- * @private
- */
-function unbindArgsForLeaf(args, wrapper) {
-	let out = args;
-	for (let i = 0; i < args.length; i++) {
-		const value = unbindForLeaf(args[i], wrapper);
-		if (value === args[i]) continue;
-		if (out === args) out = concatLists([], args);
-		out[i] = value;
-	}
-	return out;
 }
 
 /**
@@ -595,13 +555,6 @@ export class AsyncContextManager {
 	#outsideViews = new WeakMap();
 
 	/**
-	 * The run-bound stand-ins handed out in each run, by the run's store and the function each stands for (see
-	 * {@link AsyncContextManager#bindToRun}).
-	 * @type {WeakMap<object, WeakMap<Function, Function>>}
-	 */
-	#runBound = new WeakMap();
-
-	/**
 	 * How many instances live on this runtime: the async hook that tells jobs apart (see
 	 * {@link AsyncContextManager#holdJobHook}) is installed while any does, in every permission mode.
 	 * @type {number}
@@ -654,87 +607,6 @@ export class AsyncContextManager {
 	#lastTold = null;
 
 	/**
-	 * What a call made inside a `run()` / `scope()` by the run's own code hands back, as that code gets it: a module's
-	 * function comes back as a stand-in that keeps the run when Node calls it later. Code the flow hands Node to call
-	 * later (passed straight to `promise.then()`, `setTimeout()`, an event) runs with nothing of the flow's on the stack,
-	 * the shape of code that entered the flow by itself (see {@link AsyncContextManager#activeStore}); the stand-in is
-	 * slothlet's code, so the code it runs is told as code the flow called. Run by a module's own code that entered
-	 * another flow by itself, it runs outside that flow as any of the module's code there does. The same function read
-	 * in the same run is the same stand-in; outside every run nothing is bound.
-	 * @param {*} value - What the call returned.
-	 * @param {object} store - The store of the code that made the call.
-	 * @param {object} hander - The wrapper of the leaf whose call returned it.
-	 * @returns {*} What the code gets.
-	 * @internal
-	 */
-	bindToRun(value, store, hander) {
-		if (typeof value !== "function" || WeakMapMethods.has(RUN_BOUND, value)) return value;
-		const run = MapMethods.get(this.instances, store.instanceID) ?? store.context;
-		if (run === null || typeof run !== "object") return value;
-		let bound = WeakMapMethods.get(this.#runBound, run);
-		if (bound === undefined) {
-			bound = new WeakMap();
-			WeakMapMethods.set(this.#runBound, run, bound);
-		}
-		let standIn = WeakMapMethods.get(bound, value);
-		if (standIn !== undefined) return standIn;
-		standIn = isRunBindable(value) ? this.#runBoundStandIn(value, hander) : value;
-		WeakMapMethods.set(bound, value, standIn);
-		return standIn;
-	}
-
-	/**
-	 * A stand-in of a module's function that runs it in the flow it is called in as a call of the leaf whose call handed
-	 * it out, entered by slothlet (see {@link AsyncContextManager#bindToRun}), as `"precise"` runs a module's code it
-	 * hands out: what the function runs after an `await` is then the call's code, and stays in the flow. Everything else
-	 * (its name, length, properties, prototype, `this`, `new`, what it returns and throws) is the function's own.
-	 * @param {Function} fn - The function.
-	 * @param {object} hander - The wrapper of the leaf whose call handed it out.
-	 * @returns {Function} The stand-in.
-	 * @private
-	 */
-	#runBoundStandIn(fn, hander) {
-		const manager = this;
-		const standIn = new NativeProxy(fn, {
-			__proto__: null,
-			apply(target, thisArg, args) {
-				const store = manager.activeStore();
-				if (store === undefined) return Reflect.apply(target, thisArg, args);
-				return manager.#runAsCallOf(hander, store, target, thisArg, args);
-			},
-			construct(target, args, newTarget) {
-				const store = manager.activeStore();
-				if (store === undefined) return Reflect.construct(target, args, newTarget);
-				return manager.#runAsCallOf(hander, store, Reflect.construct, undefined, [target, unbindArgsForLeaf(args, hander), newTarget]);
-			}
-		});
-		WeakMapMethods.set(RUN_BOUND, standIn, { original: fn, hander });
-		runBoundMade++;
-		return standIn;
-	}
-
-	/**
-	 * Run a module's function as a call of the leaf whose call handed it out, in the flow running now (see
-	 * {@link AsyncContextManager#bindToRun}). What it returns and throws comes back as it is: nothing is handed back
-	 * through slothlet. With the permission system on, whoever runs it is its ceiling, as for any code a module hands out.
-	 * A flow of another instance (the function handed on to code that runs it there) is entered as it is.
-	 * @param {object} hander - The wrapper of the leaf.
-	 * @param {object} store - The store of the flow running now.
-	 * @param {Function} fn - The function.
-	 * @param {*} thisArg - Its receiver.
-	 * @param {Array<*>} args - Its arguments.
-	 * @returns {*} What it returned.
-	 */
-	#runAsCallOf(hander, store, fn, thisArg, args) {
-		const instanceID = hander.slothlet?.instanceID;
-		if (instanceID === undefined || (store.instanceID !== instanceID && store.parentInstanceID !== instanceID))
-			return this.store.run(store, Reflect.apply, fn, thisArg, args);
-		const checks = attributesResults(hander);
-		const ceiling = checks ? outerCallerCeiling(this, instanceID, hander.slothlet, null) : null;
-		return this.runInContext(instanceID, fn, thisArg, args, hander, true, false, ceiling, null, false, checks, store);
-	}
-
-	/**
 	 * The store the code running now acts in. Node's async context gives a flow's store to any code holding an async
 	 * resource of that flow (an `AsyncResource`, a function `AsyncLocalStorage.snapshot()` or `bind()` made there, the
 	 * context a timer keeps, copied onto a timer of its own), so a module could run its own code in another call's flow,
@@ -763,9 +635,11 @@ export class AsyncContextManager {
 		// Inside an async resource's scope the flow was put in place by whoever called it: told every time.
 		const resource = executionAsyncResource?.();
 		const scoped = AsyncResource !== null && inheritsFrom(resource, AsyncResource);
-		// The job of a promise the flow's own code made (code it called that awaits, a reaction it registered) carries on
-		// that code: the flow's, with nothing of the flow's on the stack. Known while the async hook runs.
-		if (!scoped && this.#jobHook !== null && this.#ownContinuation(resource, store)) return store;
+		// The job of a promise, a timer, an immediate, a tick or a microtask the flow's own code made (code it called that
+		// awaits, a reaction it registered, a function it handed `setTimeout()`) carries on that code: the flow's, with
+		// nothing of the flow's on the stack. Known while the async hook runs. The scope of any other `AsyncResource` is
+		// never one (see MADE_IN).
+		if (this.#jobHook !== null && this.#ownContinuation(resource, store)) return store;
 		const told = this.#told;
 		if (!scoped && told !== null && told.store === store && this.#witness.getStore() === told.mark) return store;
 		const instanceID = store.parentInstanceID ?? store.instanceID;
@@ -798,14 +672,21 @@ export class AsyncContextManager {
 	}
 
 	/**
-	 * Whether the job running now is a promise's that the flow's own code made in `store` (see {@link PromiseFlow}).
+	 * Whether the job running now is one the flow's own code made in `store` and handed Node: a promise's (see
+	 * {@link PromiseFlow}), or a timer, an immediate, a `process.nextTick()` job or a microtask that still runs the
+	 * function it was made with (see {@link JOB_CALLBACK}). Such a job runs what the flow chose to have Node run then,
+	 * as it would call it itself; one made by code that entered the flow by itself is marked in {@link OUTSIDE_JOBS}.
 	 * @param {object|undefined} resource - The async resource running now.
 	 * @param {object} store - The flow running now.
 	 * @returns {boolean} Whether it is.
 	 */
 	#ownContinuation(resource, store) {
 		if (resource === null || typeof resource !== "object") return false;
-		return PromiseFlow.of(resource) === store && !WeakMapMethods.has(OUTSIDE_JOBS, resource);
+		const flow = PromiseFlow.of(resource);
+		if (flow !== undefined) return flow === store && !WeakMapMethods.has(OUTSIDE_JOBS, resource);
+		if (WeakMapMethods.get(MADE_IN, resource) !== store || WeakMapMethods.has(OUTSIDE_JOBS, resource)) return false;
+		const stack = this.#jobStack;
+		return stack.length !== 0 && stack[stack.length - 1] === resource && runsMadeCallback(resource);
 	}
 
 	/**
@@ -920,7 +801,7 @@ export class AsyncContextManager {
 				WeakMapMethods.set(MADE_IN, resource, scope ? { __proto__: null, [SCOPE]: store } : store);
 				if (MapMethods.has(JOB_SLOTS, type)) {
 					const slot = MapMethods.get(JOB_SLOTS, type);
-					WeakMapMethods.set(JOB_CALLBACK, resource, { slot, fn: slot === null ? null : resource[slot] });
+					WeakMapMethods.set(JOB_CALLBACK, resource, { slot, fn: slot === null ? null : resource[slot], entries: 0 });
 				}
 			}
 			if (this.store.entered() === store) return;
@@ -956,7 +837,10 @@ export class AsyncContextManager {
 	#jobBegins() {
 		try {
 			const stack = this.#jobStack;
-			stack[stack.length] = executionAsyncResource();
+			const resource = executionAsyncResource();
+			stack[stack.length] = resource;
+			const made = WeakMapMethods.get(JOB_CALLBACK, resource);
+			if (made !== undefined && made.slot === null) made.entries++;
 		} catch {
 			// Not kept: a scope it begins is told by its frames alone.
 		}
@@ -990,12 +874,7 @@ export class AsyncContextManager {
 		if (job === null || typeof job !== "object" || WeakMapMethods.has(OUTSIDE_JOBS, job)) return false;
 		if (PromiseFlow.of(job) === store) return true;
 		if (WeakMapMethods.get(MADE_IN, job) !== store) return false;
-		const made = WeakMapMethods.get(JOB_CALLBACK, job);
-		if (made === undefined) return false;
-		if (made.slot === null) return true;
-		// Read as a data property: an accessor put there could answer Node and this check differently.
-		const slot = Objects.getOwnPropertyDescriptor(job, made.slot);
-		return slot !== undefined && "value" in slot && slot.value === made.fn;
+		return runsMadeCallback(job);
 	}
 
 	/**
@@ -1232,9 +1111,6 @@ export class AsyncContextManager {
 	 *   set up to run as `currentWrapper`'s module, whoever runs it (#597). Set for a leaf's own call.
 	 * @param {boolean} [madeCode=false] - When `true`, `fn` is code a module made and handed out, run as that module
 	 *   (#597): the call is always checked for code another module made running inside it.
-	 * @param {object} [told] - The store of the flow running now, already told (see {@link AsyncContextManager#activeStore}),
-	 *   for a run-bound stand-in's call (see {@link AsyncContextManager#bindToRun}): what `fn` returns or throws is handed
-	 *   back as it is.
 	 * @returns {*} Result of function execution
 	 * @public
 	 */
@@ -1249,12 +1125,10 @@ export class AsyncContextManager {
 		ceiling = null,
 		resolved = null,
 		attribute = false,
-		madeCode = false,
-		told = undefined
+		madeCode = false
 	) {
 		// Check if we're already in an active ALS context
-		const asIs = told !== undefined;
-		const activeStore = asIs ? told : this.activeStore();
+		const activeStore = this.activeStore();
 		let baseStore;
 
 		// CHILD INSTANCE APPROACH: Check if active store is this instance OR a child of this instance
@@ -1323,37 +1197,10 @@ export class AsyncContextManager {
 		// A leaf's own call hands back what its module made as that module's (#597), to a caller known to be the host
 		// or a module (#667).
 		const callerIsHost = !executionStore.callerWrapper;
-		const attributes = attribute && currentWrapper && !asHost && attributesResults(currentWrapper);
-		// Inside a run, a function handed back to the run's own code is bound to the run, unless it already comes as a
-		// stand-in of its module (`"precise"` with the permission system on). Code that entered the flow by itself acts
-		// in the instance's own store, which belongs to no run.
-		const bindsToRun =
-			!asIs &&
-			currentWrapper &&
-			!asHost &&
-			isActiveOurInstance &&
-			activeStore.parentInstanceID !== undefined &&
-			!handsOutAsModule(currentWrapper);
-		const attributed = attributes
-			? bindsToRun
-				? (value) =>
-						this.bindToRun(
-							attributeResult(currentWrapper, value, callerIsHost, executionStore.callerWrapper ?? null, receiver),
-							activeStore,
-							currentWrapper
-						)
-				: (value) => attributeResult(currentWrapper, value, callerIsHost, executionStore.callerWrapper ?? null, receiver)
-			: bindsToRun
-				? (value) => this.bindToRun(value, activeStore, currentWrapper)
+		const attributed =
+			attribute && currentWrapper && !asHost && attributesResults(currentWrapper)
+				? (value) => attributeResult(currentWrapper, value, callerIsHost, executionStore.callerWrapper ?? null, receiver)
 				: (value) => value;
-		// A run-bound stand-in handed back to the file that handed it out is its own function again.
-		if (runBoundMade > 0 && currentWrapper && !asHost) {
-			args = unbindArgsForLeaf(args, currentWrapper);
-			thisArg = unbindForLeaf(thisArg, currentWrapper);
-		}
-
-		// A run-bound stand-in's call: the function's own result and errors, as plain JavaScript gives them.
-		if (asIs) return this.als.run(executionStore, enterCall, currentWrapper, fn, thisArg, args);
 
 		// Only wrap in als.run() if we're not already in the right context
 		if (isActiveOurInstance) {
