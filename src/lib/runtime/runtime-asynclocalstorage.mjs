@@ -50,7 +50,7 @@ import { SlothletError } from "#errors";
 import { internals as unifiedWrapperInternals } from "#handlers/unified-wrapper";
 import { internals as trustedRootInternals } from "#handlers/trusted-root";
 import { internals as frameworkInternalsInternals } from "#handlers/framework-internals";
-import { FunctionMethods, NativeObject, NativeProxy, Reflect, setFrom, SetMethods, String, Symbol } from "#helpers/intrinsics";
+import { FunctionMethods, NativeProxy, Objects, Reflect, setFrom, SetMethods, String } from "#helpers/intrinsics";
 const { registerOwnModule, registerSelfForms, bindInstanceSelf, SELF_BIND_KEY } = instanceImportsInternals(
 	"lib/runtime/runtime-asynclocalstorage"
 );
@@ -428,46 +428,35 @@ export const context = new NativeProxy(
  */
 
 /**
- * Current instance ID
- * @type {Proxy}
+ * Read-only facts about the running slothlet instance.
+ * @type {Readonly<{id: (string|undefined)}>}
  * @public
  *
  * @description
- * A proxy that provides access to the current slothlet instance ID.
- * Useful for debugging and tracking which instance is handling a request.
+ * `instance.id` is the id of the instance whose call is running, read at access: a real string inside a call (so
+ * `instance.id === "slothlet_…"` holds), undefined outside one. Useful for debugging and tracking which instance is
+ * handling a request.
  *
  * @example
- * import { instanceID } from "@cldmv/slothlet/runtime/async";
+ * import { instance } from "@cldmv/slothlet/runtime/async";
  *
  * export function getInstanceInfo() {
- *   return { instanceID };
+ *   return { id: instance.id };
  * }
  */
-export const instanceID = new NativeProxy(
-	{},
-	{
-		get(_, prop) {
-			const ctx = safeGetContext();
-			if (!ctx || !ctx.instanceID) {
-				return undefined;
-			}
-			// If accessing the proxy directly (toString, valueOf), return the instanceID
-			if (prop === Symbol.toPrimitive || prop === "toString" || prop === "valueOf") {
-				return () => ctx.instanceID;
-			}
-			return ctx.instanceID[prop];
-		},
-		has(_, prop) {
-			const ctx = safeGetContext();
-			if (!ctx || !ctx.instanceID) return false;
-			// ctx.instanceID is a string — wrap in Object() so `in` doesn't throw
-			return prop in NativeObject(ctx.instanceID);
-		}
+export const instance = Objects.freeze({
+	/**
+	 * The running instance's id, or undefined outside a call.
+	 * @returns {string|undefined} The id.
+	 */
+	get id() {
+		const ctx = safeGetContext();
+		return ctx?.instanceID ? String(ctx.instanceID) : undefined;
 	}
-);
+});
 
 // The runtime's own Proxies are slothlet's, never a module's (#597).
-for (let ofIndex = 0, ofList = [objectSelf, callableSelf, context, instanceID]; ofIndex < ofList.length; ofIndex++) {
+for (let ofIndex = 0, ofList = [objectSelf, callableSelf, context]; ofIndex < ofList.length; ofIndex++) {
 	const proxy = ofList[ofIndex];
 	markSlothletProxy(proxy);
 }

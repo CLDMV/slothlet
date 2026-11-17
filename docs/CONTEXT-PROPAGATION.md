@@ -29,7 +29,7 @@ Context propagation ensures that the `context` object and full `self` API access
 
 Access live-bound references in your API modules via the runtime module.
 
-The runtime exports `self`, `context`, and `instanceID`. Note that `reference` is **not** a runtime export - reference data is merged directly into the API at initialization and is accessible via `self` alongside your API modules.
+The runtime exports `self`, `context`, and `instance` (`instance.id` is the running instance's id: a string inside a call, undefined outside one). Note that `reference` is **not** a runtime export - reference data is merged directly into the API at initialization and is accessible via `self` alongside your API modules.
 
 ```javascript
 // Reference data is merged directly into the API - accessible via self
@@ -89,11 +89,11 @@ module.exports = { cjsFunction };
 
 ### TypeScript Module Example
 
-`.ts` and `.mts` modules use the same import — `self`, `context`, and `instanceID` are all reachable from TypeScript exactly as they are from `.mjs`. (Slothlet writes the transpiled output to a project-local cache file so Node's resolver can anchor the bare specifier; details in [TYPESCRIPT.md](TYPESCRIPT.md). This was fixed in v3.5.0 — earlier versions could not import bare specifiers from `.ts` files.)
+`.ts` and `.mts` modules use the same import — `self`, `context`, and `instance` are all reachable from TypeScript exactly as they are from `.mjs`. (Slothlet writes the transpiled output to a project-local cache file so Node's resolver can anchor the bare specifier; details in [TYPESCRIPT.md](TYPESCRIPT.md). This was fixed in v3.5.0 — earlier versions could not import bare specifiers from `.ts` files.)
 
 ```typescript
 // In your TypeScript modules
-import { self, context, instanceID } from "@cldmv/slothlet/runtime";
+import { self, context, instance } from "@cldmv/slothlet/runtime";
 
 interface RequestContext {
 	requestId?: string;
@@ -102,7 +102,7 @@ interface RequestContext {
 
 export function tsFunction(data: string): string {
 	const ctx = context as RequestContext;
-	const tag = `${instanceID}/${ctx.requestId ?? "anon"}`;
+	const tag = `${instance.id}/${ctx.requestId ?? "anon"}`;
 	const hash = self.md5(data);
 	return `[${tag}] ${self.esmModule.transform(hash)}`;
 }

@@ -366,6 +366,19 @@ export function stringOf(value: unknown, depth?: number): string;
  */
 export function jsonOf(value: unknown, depth?: number): string | undefined;
 /**
+ * A thrown value as text, made without running code it carries (a getter, a `toJSON`, a `toString`): an error's own
+ * `message`, else the error as `name: message` from its own data ({@link stringOf}); a string as itself; any other
+ * value's own data as JSON ({@link jsonOf}), falling back to its {@link stringOf} text. What a SlothletError puts in
+ * its message for the value it replaced, and what the hint detector matches.
+ * @param {unknown} thrown - Whatever was thrown.
+ * @returns {string} The text.
+ * @internal
+ * @example
+ * describeThrown(new TypeError("bad")); // "bad"
+ * describeThrown({ code: 404 }); // '{"code":404}'
+ */
+export function describeThrown(thrown: unknown): string;
+/**
  * A new `Set` of the elements of `list`, added with the `add` taken at load.
  * @param {ArrayLike<unknown>} list - The elements.
  * @returns {Set<unknown>} The set.

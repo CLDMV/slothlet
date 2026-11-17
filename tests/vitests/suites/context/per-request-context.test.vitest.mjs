@@ -560,7 +560,7 @@ describe.each(ALL_CONFIGS)("Per-Request Context Multi-Instance > Config: '$name'
 			diagnostics: true // Enable diagnostics to access instance info
 		});
 
-		const baseInstanceID = api1.slothlet.instanceID;
+		const baseInstanceID = api1.slothlet.instance.id;
 
 		// Record initial instance count using diagnostics
 		const initialDiag = await contextRegistry();
@@ -602,7 +602,7 @@ describe.each(ALL_CONFIGS)("Per-Request Context Multi-Instance > Config: '$name'
 			diagnostics: true
 		});
 
-		const baseInstanceID = api1.slothlet.instanceID;
+		const baseInstanceID = api1.slothlet.instance.id;
 		const initialDiag = await contextRegistry();
 		const initialCount = initialDiag.instancesMapSize;
 
@@ -640,7 +640,7 @@ describe.each(ALL_CONFIGS)("Per-Request Context Multi-Instance > Config: '$name'
 			diagnostics: true
 		});
 
-		const baseInstanceID = api1.slothlet.instanceID;
+		const baseInstanceID = api1.slothlet.instance.id;
 		const initialDiag = await contextRegistry();
 		const initialCount = initialDiag.instancesMapSize;
 

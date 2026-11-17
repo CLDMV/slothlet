@@ -74,7 +74,7 @@ describe("browser: a helper file an api leaf imports and slothlet's internal exp
 				// Outside every module's folder nothing tells the helper from the page's own code.
 				expect(await api.porter.viaOutside(lib)).toBe("used");
 				const context = await import(/* @vite-ignore */ new URL("factories/context.mjs", lib).href);
-				expect(context.getContextManager("live").instances.has(api.slothlet.instanceID)).toBe(true);
+				expect(context.getContextManager("live").instances.has(api.slothlet.instance.id)).toBe(true);
 			} finally {
 				await api.shutdown();
 			}

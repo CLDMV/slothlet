@@ -139,7 +139,7 @@ Automatic context preservation across all asynchronous boundaries:
 ### 🔗 **Runtime & Context System**
 
 - **Context Isolation**: Automatic per-request isolation using AsyncLocalStorage (default); switchable to live-bindings mode via `runtime: "live"` config option
-- **Cross-Module Access**: `self`, `context`, and `instanceID` always available inside API modules via `@cldmv/slothlet/runtime` — works identically from `.mjs`, `.cjs`, `.ts`, and `.mts`
+- **Cross-Module Access**: `self`, `context`, and `instance` always available inside API modules via `@cldmv/slothlet/runtime` — works identically from `.mjs`, `.cjs`, `.ts`, and `.mts`
 - **Mixed Module Support**: Seamlessly blend ESM and CommonJS modules
 - **Copy-Left Preservation**: Materialized functions stay materialized
 
@@ -277,7 +277,7 @@ const scoped = api.slothlet.context.scope({ userId: "bob" });
 await scoped.database.query();
 ```
 
-Context propagates automatically through `EventEmitter` callbacks (TCP/HTTP servers, custom emitters), class methods, and every async boundary. Inside modules: `import { context, instanceID } from "@cldmv/slothlet/runtime"`.
+Context propagates automatically through `EventEmitter` callbacks (TCP/HTTP servers, custom emitters), class methods, and every async boundary. Inside modules: `import { context, instance } from "@cldmv/slothlet/runtime"`.
 
 🔄 **Full reference, isolation guarantees, merge strategies, TCP/HTTP examples: [docs/CONTEXT-PROPAGATION.md](https://github.com/CLDMV/slothlet/blob/master/docs/CONTEXT-PROPAGATION.md)**
 
@@ -340,12 +340,12 @@ API modules **must never import each other directly** — use the live-binding r
 import { math } from "./math/math.mjs";
 
 // ✅ CORRECT — always reflects current runtime state
-import { self, context, instanceID } from "@cldmv/slothlet/runtime";
+import { self, context, instance } from "@cldmv/slothlet/runtime";
 
 export const myModule = {
 	async processData(input) {
 		const r = self.math.add(2, 3);
-		console.log(`[${instanceID}] caller=${context.userId}`);
+		console.log(`[${instance.id}] caller=${context.userId}`);
 		return `Processed: ${input}, Math: ${r}`;
 	}
 };

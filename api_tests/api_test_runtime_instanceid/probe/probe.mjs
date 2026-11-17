@@ -14,7 +14,7 @@
  */
 
 /**
- * @fileoverview A module that reads `instanceID` from each runtime entry: the auto-selecting one and the two runtimes'.
+ * @fileoverview A module that reads `instance.id` from each runtime entry: the auto-selecting one and the two runtimes'.
  * @module api_test_runtime_instanceid.probe
  * @memberof module:api_test_runtime_instanceid
  */
@@ -25,20 +25,13 @@ import * as liveRuntime from "@cldmv/slothlet/runtime/live";
 const ENTRIES = { auto, async: asyncRuntime, live: liveRuntime };
 
 /**
- * How `instanceID` of one entry reads.
+ * How `instance.id` of one entry reads.
  * @param {string} entry - `"auto"`, `"async"` or `"live"`.
- * @returns {{text: string, length: *, hasLength: boolean, hasMissing: boolean}} `String(instanceID)` (or the error's
- *   name), its `length`, and whether `length` and a missing member are `in` it.
+ * @returns {{id: (string|undefined), type: string}} The id and its type.
  */
 function read(entry) {
-	const { instanceID } = ENTRIES[entry];
-	let text;
-	try {
-		text = String(instanceID);
-	} catch (error) {
-		text = error.name;
-	}
-	return { text, length: instanceID.length, hasLength: "length" in instanceID, hasMissing: "missing" in instanceID };
+	const id = ENTRIES[entry].instance.id;
+	return { id, type: typeof id };
 }
 
 /**

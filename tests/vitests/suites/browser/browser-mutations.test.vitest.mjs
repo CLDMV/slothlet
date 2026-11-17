@@ -245,11 +245,11 @@ describe.each(getBrowserMatrixConfigs())("Browser Mode > api.slothlet.reload (fu
 
 	it('re-composes the api with instance: "keep" (reuses the instanceID)', async () => {
 		api = await slothlet(browserCfg(config));
-		const id = api.slothlet.instanceID;
+		const id = api.slothlet.instance.id;
 
 		await api.slothlet.reload({ instance: "keep" });
 
-		expect(api.slothlet.instanceID).toBe(id);
+		expect(api.slothlet.instance.id).toBe(id);
 		expect(api.math.add(1, 2)).toBe(3);
 	});
 });

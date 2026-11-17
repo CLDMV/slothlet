@@ -81,9 +81,9 @@ describe.each(HOT_RELOAD_MATRIX)("Hot Reload Basic - $name", ({ config }) => {
 		const expected = config.base === TEST_DIRS.API_TEST ? 1005 : 5;
 		expect(await mathAdd(2, 3)).toBe(expected);
 
-		const originalInstanceId = api.slothlet.instanceID;
+		const originalInstanceId = api.slothlet.instance.id;
 		await api.slothlet.reload();
-		expect(api.slothlet.instanceID).not.toBe(originalInstanceId);
+		expect(api.slothlet.instance.id).not.toBe(originalInstanceId);
 
 		const mathAddAfter = getMathAdd(api, config.base);
 		expect(mathAddAfter).toBeTypeOf("function");

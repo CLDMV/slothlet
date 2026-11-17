@@ -108,10 +108,10 @@ describe.each(getMatrixConfigs({}))("Permissions > built-in deny for the lifecyc
 	 * @returns {Promise<void>}
 	 */
 	async function expectFrameworkMethodsDenied() {
-		const before = api.slothlet.instanceID;
+		const before = api.slothlet.instance.id;
 		await expect(settle(() => api.caller.nsReload())).rejects.toThrow("PERMISSION_DENIED");
 		await expect(settle(() => api.caller.nsShutdown())).rejects.toThrow("PERMISSION_DENIED");
-		expect(api.slothlet.instanceID).toBe(before);
+		expect(api.slothlet.instance.id).toBe(before);
 		expect(isLoaded()).toBe(true);
 	}
 
@@ -119,19 +119,19 @@ describe.each(getMatrixConfigs({}))("Permissions > built-in deny for the lifecyc
 		for (const { label, call, target } of GATED) {
 			it(`denies a module ${label} (${target}) with the default routines under ${policy}`, async () => {
 				await create({ permissions });
-				const before = api.slothlet.instanceID;
+				const before = api.slothlet.instance.id;
 				await expect(settle(() => call(api))).rejects.toThrow("PERMISSION_DENIED");
-				expect(api.slothlet.instanceID).toBe(before);
+				expect(api.slothlet.instance.id).toBe(before);
 				expect(isLoaded()).toBe(true);
 				expect(await api.target.ping()).toBe("pong");
 			});
 
 			it(`re-opens ${label} for a module with an explicit allow on ${target} under ${policy}`, async () => {
 				await create({ permissions: { ...permissions, rules: [{ caller: "caller.**", target, effect: "allow" }] } });
-				const before = api.slothlet.instanceID;
+				const before = api.slothlet.instance.id;
 				await call(api);
 				if (target === "slothlet.reload") {
-					expect(api.slothlet.instanceID).not.toBe(before);
+					expect(api.slothlet.instance.id).not.toBe(before);
 				} else if (target === "initialize") {
 					expect(log()).toContain("user:initialize");
 					expect(isLoaded()).toBe(true);
@@ -144,9 +144,9 @@ describe.each(getMatrixConfigs({}))("Permissions > built-in deny for the lifecyc
 
 	it("does not gate the host", async () => {
 		await create({ permissions: { policy: "deny" } });
-		const before = api.slothlet.instanceID;
+		const before = api.slothlet.instance.id;
 		await api.slothlet.reload();
-		expect(api.slothlet.instanceID).not.toBe(before);
+		expect(api.slothlet.instance.id).not.toBe(before);
 		await api.initialize();
 		expect(log()).toContain("user:initialize");
 		await api.slothlet.shutdown();
@@ -159,10 +159,10 @@ describe.each(getMatrixConfigs({}))("Permissions > built-in deny for the lifecyc
 	for (const { label, call, target } of GATED) {
 		it(`leaves ${label} reachable from a module with no permissions config (built-ins inert)`, async () => {
 			await create();
-			const before = api.slothlet.instanceID;
+			const before = api.slothlet.instance.id;
 			await call(api);
 			if (target === "slothlet.reload") {
-				expect(api.slothlet.instanceID).not.toBe(before);
+				expect(api.slothlet.instance.id).not.toBe(before);
 			} else if (target === "initialize") {
 				expect(log()).toContain("user:initialize");
 			} else {

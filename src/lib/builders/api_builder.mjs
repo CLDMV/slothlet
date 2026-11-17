@@ -1663,10 +1663,20 @@ export class ApiBuilder extends ComponentBase {
 			version,
 
 			/**
-			 * Unique instance ID for this slothlet instance
-			 * @type {string}
+			 * Read-only facts about this instance.
+			 * @type {Readonly<{id: string}>}
 			 */
-			instanceID: slothlet.instanceID,
+			instance: {
+				/**
+				 * This instance's id, read at access (a reload with a new id answers the new one).
+				 * @returns {string} The id.
+				 * @example
+				 * api.slothlet.instance.id; // "slothlet_1794877110644_b1nk0g540"
+				 */
+				get id() {
+					return slothlet.instanceID;
+				}
+			},
 
 			/**
 			 * Type state symbols to compare `api.slothlet.node(target).type` against

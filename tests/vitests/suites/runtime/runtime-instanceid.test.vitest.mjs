@@ -14,20 +14,16 @@
  */
 
 /**
- * @fileoverview Coverage tests for the instanceID proxy from runtime-asynclocalstorage
+ * @fileoverview `instance` from runtime-asynclocalstorage: `instance.id` is undefined outside a call and the running
+ * instance's id, a real string, inside one.
  * @module tests/vitests/suites/runtime/runtime-instanceid.test.vitest
- *
- * @description
- * Exercises both the out-of-context (no ALS store) branches and the in-context
- * (resolved value) branches of the instanceID Proxy's get and has traps, covering
- * the lines uncovered in runtime-asynclocalstorage.mjs.
  */
 
 import { describe, it, expect, afterEach } from "vitest";
-import { instanceID } from "@cldmv/slothlet/runtime/async";
+import { instance } from "@cldmv/slothlet/runtime/async";
 import { TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
-describe("runtime-asynclocalstorage: instanceID proxy", () => {
+describe("runtime-asynclocalstorage: instance.id", () => {
 	let api;
 
 	afterEach(async () => {
@@ -37,70 +33,21 @@ describe("runtime-asynclocalstorage: instanceID proxy", () => {
 		api = null;
 	});
 
-	// ── outside an active ALS context ─────────────────────────────────────────
-
-	describe("outside an active context", () => {
-		it("get trap returns undefined for any property when no context is active", () => {
-			// Covers the !ctx || !ctx.instanceID branch of the get trap
-			expect(instanceID.someRandomProp).toBeUndefined();
-			expect(instanceID.foo).toBeUndefined();
-		});
-
-		it("has trap returns false when no context is active", () => {
-			// Covers the falsy return branch of the has trap
-			expect("someRandomProp" in instanceID).toBe(false);
-			expect("toString" in instanceID).toBe(false);
-		});
+	it("is undefined outside a call", () => {
+		expect(instance.id).toBeUndefined();
 	});
 
-	// ── inside an active ALS context ──────────────────────────────────────────
+	it("is frozen and read-only", () => {
+		expect(Object.isFrozen(instance)).toBe(true);
+		expect(Object.keys(instance)).toEqual(["id"]);
+	});
 
-	describe("inside an active context (async runtime)", () => {
-		it("resolves toString / toPrimitive / prop traps and has trap in eager mode", async () => {
-			const slothletModule = await import("@cldmv/slothlet");
-			api = await slothletModule.default({
-				base: TEST_DIRS.API_TEST,
-				mode: "eager",
-				runtime: "async",
-				diagnostics: true,
-				context: { user: "instanceid-test" }
-			});
+	it.each(["eager", "lazy"])("is the running instance's id, a real string, inside a call (%s)", async (mode) => {
+		const slothletModule = await import("@cldmv/slothlet");
+		api = await slothletModule.default({ base: TEST_DIRS.API_TEST, mode, runtime: "async", context: { user: "instance-test" } });
 
-			// Runs inside the ALS context — exercises all get/has branches in the fixture
-			const result = api.runtimeTest.getAsyncInstanceID();
-
-			// get trap — "toString" prop → function that returns ctx.instanceID
-			expect(result.id).toBe(api.slothlet.instanceID);
-
-			// get trap — Symbol.toPrimitive → String() coercion returns instanceID
-			expect(result.coerced).toBe(api.slothlet.instanceID);
-
-			// get trap — ctx.instanceID[prop] fallback (string["length"])
-			expect(typeof result.length).toBe("number");
-			expect(result.length).toBeGreaterThan(0);
-
-			// has trap — "length" in ctx.instanceID (string has "length")
-			expect(result.hasProp).toBe(true);
-
-			// has trap — non-existent prop → false
-			expect(result.missingProp).toBe(false);
-		});
-
-		it("resolves instanceID in lazy mode", async () => {
-			const slothletModule = await import("@cldmv/slothlet");
-			api = await slothletModule.default({
-				base: TEST_DIRS.API_TEST,
-				mode: "lazy",
-				runtime: "async",
-				diagnostics: true,
-				context: { user: "instanceid-lazy-test" }
-			});
-
-			const result = await api.runtimeTest.getAsyncInstanceID();
-
-			expect(result.id).toBe(api.slothlet.instanceID);
-			expect(result.hasProp).toBe(true);
-			expect(result.missingProp).toBe(false);
-		});
+		const result = await api.runtimeTest.getAsyncInstanceID();
+		expect(result).toEqual({ id: api.slothlet.instance.id, type: "string", frozen: true });
+		expect(result.id === api.slothlet.instance.id).toBe(true);
 	});
 });

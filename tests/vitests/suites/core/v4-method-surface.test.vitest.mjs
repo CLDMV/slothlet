@@ -131,11 +131,11 @@ describe("check.call audits with via as the method path", () => {
 describe("reload({ instance })", () => {
 	it('keeps the instance id with "keep", makes a new one by default, refuses anything else', async () => {
 		api = await slothlet({ base: TEST_DIRS.API_TEST });
-		const before = api.slothlet.instanceID;
+		const before = api.slothlet.instance.id;
 		await api.slothlet.reload({ instance: "keep" });
-		expect(api.slothlet.instanceID).toBe(before);
+		expect(api.slothlet.instance.id).toBe(before);
 		await api.slothlet.reload();
-		expect(api.slothlet.instanceID).not.toBe(before);
+		expect(api.slothlet.instance.id).not.toBe(before);
 		const error = await errorOf(() => api.slothlet.reload({ instance: "same" }));
 		expect(error.code).toBe("INVALID_ARGUMENT");
 	});

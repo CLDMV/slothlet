@@ -23,7 +23,7 @@
  * @memberof module:api_test
  */
 
-import { self, context, instanceID } from "@cldmv/slothlet/runtime";
+import { self, context, instance } from "@cldmv/slothlet/runtime";
 
 /**
  * Comprehensive runtime verification that tests all aspects of the runtime system.
@@ -474,14 +474,13 @@ export function testSelfAndReference() {
 }
 
 /**
- * Exercise all proxy traps on the `instanceID` export from the async runtime.
- * Must be called within an active slothlet async-runtime context so the in-context
- * branches of the get/has traps are reached.
+ * Read `instance.id` from the runtime inside a call: a real string, the running instance's id.
+ * Must be called within an active slothlet call.
  * @function getAsyncInstanceID
- * @returns {{ id: string, coerced: string, length: number, hasProp: boolean }} Proxy trap results
+ * @returns {{ id: string, type: string, frozen: boolean }} The id, its type, and whether `instance` is frozen
  * @example
  * const result = api.runtimeTest.getAsyncInstanceID();
- * // result.id === api.slothlet.instanceID
+ * // result.id === api.slothlet.instance.id
  *
  * @example // ESM usage via slothlet API
  * import slothlet from "@cldmv/slothlet";
@@ -509,23 +508,8 @@ export function testSelfAndReference() {
  * api_test.runtime-test.getAsyncInstanceID();
  */
 export function getAsyncInstanceID() {
-	// get trap — prop === "toString" branch: inside context returns () => ctx.instanceID
-	const toStringFn = instanceID.toString;
-	const id = typeof toStringFn === "function" ? toStringFn() : "";
-
-	// get trap — Symbol.toPrimitive branch: String() coercion
-	const coerced = String(instanceID);
-
-	// get trap — ctx.instanceID[prop] fallback: normal string property
-	const length = instanceID.length;
-
-	// has trap — "length" exists on any string (via Object wrapping in the proxy)
-	const hasProp = "length" in instanceID;
-
-	// has trap — undefined prop should be false
-	const missingProp = "__nonexistent__" in instanceID;
-
-	return { id, coerced, length, hasProp, missingProp };
+	const id = instance.id;
+	return { id, type: typeof id, frozen: Object.isFrozen(instance) };
 }
 
 /**
@@ -583,11 +567,10 @@ export function exerciseContextDispatcherTraps() {
 }
 
 /**
- * Exercise the instanceID proxy traps on the dispatcher (runtime.mjs).
- * Must be called while a live-runtime context is active so getCurrentRuntime()
- * resolves to liveRuntimeModule and instanceID is a non-null string.
+ * Read `instance.id` through the dispatcher (runtime.mjs) while a live-runtime call runs, so getCurrentRuntime()
+ * resolves to the live runtime.
  * @function exerciseInstanceIDDispatcherTraps
- * @returns {{ id: string|undefined, hasProp: boolean, hasMissing: boolean }} Trap results
+ * @returns {{ id: string|undefined, type: string }} The id and its type
  * @example
  * const result = api.runtimeTest.exerciseInstanceIDDispatcherTraps();
  * expect(result.id).toBeTruthy();
@@ -618,14 +601,8 @@ export function exerciseContextDispatcherTraps() {
  * api_test.runtime-test.exerciseInstanceIDDispatcherTraps();
  */
 export function exerciseInstanceIDDispatcherTraps() {
-	// get trap in runtime.mjs: instanceID[prop], answered by the active runtime's instanceID.
-	const id = instanceID.toString;
-
-	// has trap: prop in instanceID, answered by the active runtime's instanceID.
-	const hasProp = "length" in instanceID;
-	const hasMissing = "__nonexistent__" in instanceID;
-
-	return { id, hasProp, hasMissing };
+	const id = instance.id;
+	return { id, type: typeof id };
 }
 
 /**
