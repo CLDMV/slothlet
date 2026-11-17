@@ -107,6 +107,16 @@ const OUTSIDE_JOBS = new WeakMap();
 const MADE_IN = new WeakMap();
 
 /**
+ * The store each promise made while a flow ran was made in (see {@link MADE_IN}). A promise's job runs only what was
+ * fixed when it was made (an `await`'s continuation, the reaction `then()` registered, the thenable it resolves to):
+ * no one can enter it with code of their own later, as anyone can an `AsyncResource`'s scope or a timer's callback slot.
+ * One the flow's own code made, unmarked in {@link OUTSIDE_JOBS}, runs that code's continuation in the flow.
+ * @type {WeakMap<object, object>}
+ * @private
+ */
+const PROMISE_MADE_IN = new WeakMap();
+
+/**
  * Marks a {@link MADE_IN} entry of an `AsyncResource` code can enter itself.
  * @type {symbol}
  * @private
@@ -672,6 +682,9 @@ export class AsyncContextManager {
 		// Inside an async resource's scope the flow was put in place by whoever called it: told every time.
 		const resource = executionAsyncResource?.();
 		const scoped = AsyncResource !== null && inheritsFrom(resource, AsyncResource);
+		// The job of a promise the flow's own code made (code it called that awaits, a reaction it registered) carries on
+		// that code: the flow's, with nothing of the flow's on the stack. Known while the async hook runs.
+		if (!scoped && this.#jobHook !== null && this.#ownContinuation(resource, store)) return store;
 		const told = this.#told;
 		if (!scoped && told !== null && told.store === store && this.#witness.getStore() === told.mark) return store;
 		const instanceID = store.parentInstanceID ?? store.instanceID;
@@ -699,6 +712,17 @@ export class AsyncContextManager {
 			});
 		}
 		return store;
+	}
+
+	/**
+	 * Whether the job running now is a promise's that the flow's own code made in `store` (see {@link PROMISE_MADE_IN}).
+	 * @param {object|undefined} resource - The async resource running now.
+	 * @param {object} store - The flow running now.
+	 * @returns {boolean} Whether it is.
+	 */
+	#ownContinuation(resource, store) {
+		if (resource === null || typeof resource !== "object") return false;
+		return WeakMapMethods.get(PROMISE_MADE_IN, resource) === store && !WeakMapMethods.has(OUTSIDE_JOBS, resource);
 	}
 
 	/**
@@ -788,6 +812,7 @@ export class AsyncContextManager {
 			// Recorded for the resource's own callback: the store it is made in, or a scope anyone can enter.
 			const scope = type !== "PROMISE" && type !== "Microtask" && AsyncResource !== null && inheritsFrom(resource, AsyncResource);
 			WeakMapMethods.set(MADE_IN, resource, scope ? { __proto__: null, [SCOPE]: store } : store);
+			if (type === "PROMISE") WeakMapMethods.set(PROMISE_MADE_IN, resource, store);
 			if (this.store.entered() === store) return;
 			// The code running now runs in the store its callback was made in: the flow's own continuation (an await, a
 			// timer, a reaction). Anything else (a scope entered, a snapshot, a timer given another's context) is told.
