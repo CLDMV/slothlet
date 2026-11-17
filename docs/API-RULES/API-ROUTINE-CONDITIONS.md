@@ -12,7 +12,7 @@ Stackable-routine conditions — how contributions to a named routine are collec
 **Related Rule**: [Rule 20](../API-RULES.md#rule-20-stackable-routines--cascades)
 **Status**: ✅ Active
 
-**Pattern**: With `routines.stack` off (default), only the ownership-winner at a shared path counts as a contributor; with it on, every raw contribution counts regardless of collision outcome.
+**Pattern**: With `routines.stack` on (default), every raw contribution counts regardless of collision outcome; with it off, only the ownership-winner at a shared path counts as a contributor.
 
 **Source(s)**: `src/lib/handlers/routine-manager.mjs:273-276` (`#applyStackFilter`, #365) · `:249-260` (`#isCurrentOwner`)
 
