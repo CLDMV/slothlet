@@ -54,7 +54,7 @@ export const context: object;
  * Read-only facts about the running slothlet instance.
  *
  * @memberof module:@cldmv/slothlet/runtime
- * @type {{readonly id: (string|undefined)}}
+ * @type {Readonly<{id: (string|undefined)}>}
  * @description
  * `instance.id` is the id of the instance whose call is running, read at access: a real string inside a call (unique per
  * `slothlet()` call, so it tells instances apart when several coexist), undefined outside one. Both runtimes answer it
@@ -63,7 +63,7 @@ export const context: object;
  * import { instance } from "@cldmv/slothlet/runtime";
  * console.log(instance.id); // e.g. "slothlet_1794877110644_b1nk0g540"
  */
-export const instance: {
-    readonly id: (string | undefined);
-};
+export const instance: Readonly<{
+    id: (string | undefined);
+}>;
 //# sourceMappingURL=runtime.d.mts.map

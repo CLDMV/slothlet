@@ -51,7 +51,7 @@ export const context: ProxyConstructor;
  */
 /**
  * Read-only facts about the running slothlet instance.
- * @type {{readonly id: (string|undefined)}}
+ * @type {Readonly<{id: (string|undefined)}>}
  * @public
  *
  * @description
@@ -66,7 +66,7 @@ export const context: ProxyConstructor;
  *   return { id: instance.id };
  * }
  */
-export const instance: {
-    readonly id: (string | undefined);
-};
+export const instance: Readonly<{
+    id: (string | undefined);
+}>;
 //# sourceMappingURL=runtime-asynclocalstorage.d.mts.map

@@ -499,7 +499,7 @@ function runtime_executingInstanceID() {
 
 /**
  * Read-only facts about the running slothlet instance, as the async runtime's `instance` gives them.
- * @type {{readonly id: (string|undefined)}}
+ * @type {Readonly<{id: (string|undefined)}>}
  * @public
  *
  * @description

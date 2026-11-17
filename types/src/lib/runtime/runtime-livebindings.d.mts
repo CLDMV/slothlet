@@ -36,7 +36,7 @@ export let self: ProxyConstructor;
 export const context: ProxyConstructor;
 /**
  * Read-only facts about the running slothlet instance, as the async runtime's `instance` gives them.
- * @type {{readonly id: (string|undefined)}}
+ * @type {Readonly<{id: (string|undefined)}>}
  * @public
  *
  * @description
@@ -50,7 +50,7 @@ export const context: ProxyConstructor;
  *   return { id: instance.id };
  * }
  */
-export const instance: {
-    readonly id: (string | undefined);
-};
+export const instance: Readonly<{
+    id: (string | undefined);
+}>;
 //# sourceMappingURL=runtime-livebindings.d.mts.map

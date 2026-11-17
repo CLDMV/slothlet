@@ -429,7 +429,7 @@ export const context = new NativeProxy(
 
 /**
  * Read-only facts about the running slothlet instance.
- * @type {{readonly id: (string|undefined)}}
+ * @type {Readonly<{id: (string|undefined)}>}
  * @public
  *
  * @description

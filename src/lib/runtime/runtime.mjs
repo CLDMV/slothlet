@@ -278,7 +278,7 @@ export const context = new NativeProxy(
  * Read-only facts about the running slothlet instance.
  *
  * @memberof module:@cldmv/slothlet/runtime
- * @type {{readonly id: (string|undefined)}}
+ * @type {Readonly<{id: (string|undefined)}>}
  * @description
  * `instance.id` is the id of the instance whose call is running, read at access: a real string inside a call (unique per
  * `slothlet()` call, so it tells instances apart when several coexist), undefined outside one. Both runtimes answer it

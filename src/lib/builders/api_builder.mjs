@@ -1549,7 +1549,7 @@ export class ApiBuilder extends ComponentBase {
 
 			/**
 			 * Read-only facts about this instance.
-			 * @type {{readonly id: string}}
+			 * @type {Readonly<{id: string}>}
 			 */
 			instance: {
 				/**
