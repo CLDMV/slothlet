@@ -299,6 +299,12 @@ beforeAll(() => {
 		"\tshared().hostResource.runInAsyncScope(() => schedule(how, shared().hostResource.bind(note)));",
 		"\treturn true;",
 		"}",
+		"// Registers another module's function as a listener on the host's emitter, from inside the run it entered by itself.",
+		"export function hostResourceListen() {",
+		"\tconst note = self.job.getNote();",
+		'\tshared().hostResource.runInAsyncScope(() => shared().hostEmitter.on("ping", note));',
+		"\treturn true;",
+		"}",
 		"// The other call's own function, run through its resource by this module (a pool running a requester's callback).",
 		"export function adminSchedule(how) {",
 		"\treturn shared().resource.runInAsyncScope(shared().adminSchedule, null, how);",
@@ -319,6 +325,18 @@ beforeAll(() => {
 		"}",
 		"export function note() {",
 		"\tglobalThis.__flowSelfEntry.notes.push(context.user ?? null);",
+		"}",
+		"// The module's own function, handed out as it is: it notes the context it runs in.",
+		"const rawNote = function rawNote() {",
+		"\tglobalThis.__flowSelfEntry.notes.push(context.user ?? null);",
+		"};",
+		"export function getNote() {",
+		"\treturn rawNote;",
+		"}",
+		"// The call itself registers the module's own function as a listener.",
+		"export function listen(emitter, event) {",
+		"\temitter.on(event, rawNote);",
+		"\treturn true;",
 		"}",
 		"export function schedules(how) {",
 		"\tschedule(how, self.job.note);",
@@ -351,6 +369,8 @@ beforeAll(() => {
 	write("probe.mjs", [
 		'import slothlet from "@cldmv/slothlet";',
 		'import { AsyncResource, AsyncLocalStorage } from "node:async_hooks";',
+		'import { EventEmitter } from "node:events";',
+		'import net from "node:net";',
 		'const [mode, provenance, attribution, part = "self"] = process.argv.slice(2);',
 		'const root = new URL(".", import.meta.url).pathname;',
 		"const tick = () => new Promise((resolve) => setTimeout(resolve, 5));",
@@ -531,6 +551,41 @@ beforeAll(() => {
 		"\tclearTimeout(shared.hostTimer);",
 		'\tout[route + ":mode"] = mode === "none" ? null : api.slothlet.permissions.control.mode();',
 		'\tout[route + ":planted"] = typeof api.secret.planted;',
+		"\tawait api.slothlet.shutdown();",
+		"}",
+		"// A module's own function the host registers as a listener inside a run, on a server Node emits events on.",
+		"{",
+		"\tconst api = await make();",
+		"\tconst shared = globalThis.__flowSelfEntry;",
+		"\tshared.notes = [];",
+		'\tawait api.slothlet.context.run({ user: "root" }, async () => {',
+		"\t\tconst server = net.createServer();",
+		'\t\tserver.on("connection", api.job.getNote());',
+		'\t\tserver.on("connection", (socket) => socket.destroy());',
+		'\t\tawait new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));',
+		"\t\t// Registered after an await too, with once().",
+		'\t\tserver.once("connection", api.job.getNote());',
+		'\t\tconst socket = net.connect(server.address().port, "127.0.0.1");',
+		'\t\tsocket.on("error", () => {});',
+		'\t\tawait new Promise((resolve) => socket.on("close", resolve));',
+		"\t\tawait new Promise((resolve) => server.close(resolve));",
+		"\t});",
+		"\tout.hostListener = shared.notes;",
+		"\t// The host's emitter: a call of the run registers the module's function, and a module that entered the run by",
+		"\t// itself registers another; the host emits outside every run.",
+		"\tshared.notes = [];",
+		"\tshared.hostEmitter = new EventEmitter();",
+		'\tawait api.slothlet.context.run({ user: "root" }, () => {',
+		'\t\tshared.hostResource = new AsyncResource("host");',
+		'\t\treturn api.job.listen(shared.hostEmitter, "call");',
+		"\t});",
+		'\tshared.hostEmitter.emit("call");',
+		"\tout.callListener = shared.notes;",
+		"\tshared.notes = [];",
+		'\tawait api.slothlet.context.run({ user: "mallory" }, () => api.evil.hostResourceListen());',
+		'\tshared.hostEmitter.emit("ping");',
+		'\tawait api.slothlet.context.run({ user: "root" }, () => shared.hostEmitter.emit("ping"));',
+		"\tout.selfEnteredListener = shared.notes;",
 		"\tawait api.slothlet.shutdown();",
 		"}",
 		"// A thenable that isn't a native promise, returned by a run() / scope() callback, settles in the run.",
@@ -756,6 +811,15 @@ describe.each(FRAMES)("Permissions > a flow entered by module code itself > %s",
 				}
 			}
 		);
+
+		it("a module's function the host or a call registers as a listener inside a run keeps the run when Node emits", () => {
+			expect(result.hostListener).toEqual(["root", "root"]);
+			expect(result.callListener).toEqual(["root"]);
+		});
+
+		it("a listener a module registers from inside a run it entered by itself runs outside the run", () => {
+			expect(result.selfEnteredListener).toEqual([null, null]);
+		});
 
 		it("a thenable a run() or scope() callback returns settles in the run", () => {
 			expect(result.thenableRun).toBe("root");

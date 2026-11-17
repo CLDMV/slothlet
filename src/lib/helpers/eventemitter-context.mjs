@@ -74,6 +74,27 @@ let isInApiContext = null;
 function setApiContextChecker(checker) {
 	isInApiContext = checker;
 }
+
+/**
+ * How a listener keeps the flow it was registered in, set by the async runtime: `capture()` answers, as a listener is
+ * registered, the store the registering code acts in (a flow for the flow's own code, the host's or a call's; a store
+ * outside the flow for a module's code that entered the flow by itself), and undefined outside every flow; `run(flow,
+ * fn, thisArg, args)` runs the listener entered in that store. Null where no runtime needs it: the listener runs in the
+ * scope of the `AsyncResource` it was registered with, and is told by its frames there.
+ * @type {{capture: function(): *, run: function(*, Function, *, Array<*>): *}|null}
+ * @private
+ */
+let listenerFlow = null;
+
+/**
+ * Register how a listener keeps the flow it was registered in (see {@link listenerFlow}).
+ * @param {{capture: function(): *, run: function(*, Function, *, Array<*>): *}|null} strategy - The strategy, or null.
+ * @returns {void}
+ * @internal
+ */
+function setListenerFlow(strategy) {
+	listenerFlow = strategy;
+}
 /**
  * The patched EventEmitter methods: each patch, and its layer (which records the method it replaced).
  * @type {Map<string, {layer: {active: boolean, below: Function}, patch: Function}>}
@@ -199,6 +220,10 @@ function runtime_wrapEventListener(listener) {
 	// not serve. Done here, at registration, because that is when the registering module is the
 	// executing one; by the time the event fires it is long gone.
 	let bound = pinToCurrentCaller(listener);
+	// The store the registering code acts in: a listener the host or a call of a run registers keeps the run when Node
+	// emits, whoever wrote the listener, as a function the run calls itself does; one a module's code registers from a
+	// flow it entered by itself runs outside that flow, as that code did.
+	let flow = listenerFlow !== null ? listenerFlow.capture() : undefined;
 
 	const epoch = releaseEpoch;
 	// Create wrapped listener that executes within captured context
@@ -210,6 +235,7 @@ function runtime_wrapEventListener(listener) {
 		/* v8 ignore next — the no-AsyncResource (browser) path; see the capture above. */
 		if (!resource) return FunctionMethods.apply(bound, this, args);
 		return resource.runInAsyncScope(() => {
+			if (flow !== undefined && listenerFlow !== null) return listenerFlow.run(flow, bound, this, args);
 			return FunctionMethods.apply(bound, this, args);
 		}, this);
 	};
@@ -222,6 +248,7 @@ function runtime_wrapEventListener(listener) {
 	runtime_wrappedListener.____slothletRelease = () => {
 		resource = null;
 		bound = null;
+		flow = undefined;
 		runtime_wrappedListener.____slothletResource = null;
 	};
 
@@ -901,7 +928,7 @@ function cleanupEventEmitterResources() {
 export function internals(consumer) {
 	if (!mayTakeInternals(consumer, ["lib/handlers/context-async", "lib/handlers/context-live", "slothlet"]))
 		throw ownBindingsRefusal("lib/helpers/eventemitter-context", import.meta.url);
-	return { cleanupEventEmitterResources, disableEventEmitterPatching, enableEventEmitterPatching, setApiContextChecker };
+	return { cleanupEventEmitterResources, disableEventEmitterPatching, enableEventEmitterPatching, setApiContextChecker, setListenerFlow };
 }
 
 /**

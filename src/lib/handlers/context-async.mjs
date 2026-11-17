@@ -56,7 +56,7 @@ import {
 } from "#helpers/intrinsics";
 import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "#helpers/instance-imports";
 const { runtime_wrapClassInstance } = classInstanceWrapperInternals("lib/handlers/context-async");
-const { setApiContextChecker } = eventemitterContextInternals("lib/handlers/context-async");
+const { setApiContextChecker, setListenerFlow } = eventemitterContextInternals("lib/handlers/context-async");
 const trustedRootOwn = trustedRootInternals("lib/handlers/context-async");
 const { buildCapturedFlowStore } = trustedRootOwn;
 const {
@@ -1160,6 +1160,23 @@ export class AsyncContextManager {
 		setApiContextChecker(() => {
 			const store = this.als.getStore();
 			return store && store.instanceID ? true : false;
+		});
+		const manager = this;
+		setListenerFlow({
+			__proto__: null,
+			// The store the registering code acts in, told as any access there is: the flow for the flow's own code, and
+			// for a module's code that entered the flow by itself the stand-in it acts in outside the flow, which its
+			// listener then runs in too, whoever emits.
+			capture() {
+				if (manager.store === null) return undefined;
+				const store = manager.store.getStore();
+				if (store === undefined || (store[FLOW_OF] === undefined && !isFlow(store))) return undefined;
+				return manager.activeStore();
+			},
+			// Entered by slothlet, the listener and what it calls are the flow's code (see activeStore).
+			run(store, fn, thisArg, args) {
+				return manager.store.run(store, Reflect.apply, fn, thisArg, args);
+			}
 		});
 	}
 
