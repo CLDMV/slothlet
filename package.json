@@ -231,6 +231,7 @@
 		"ci:test:types": "npm run types:check",
 		"test:performance": "node tests/performance/performance-benchmark-aggregated.mjs",
 		"test:performance-simple": "node tests/performance/performance-benchmark.mjs",
+		"test:performance:compare": "node tests/performance/compare-v3-v4.mjs",
 		"pretest:browser": "npx playwright install chromium",
 		"test:browser": "node --conditions=slothlet-dev tests/browser/playwright-smoke.mjs",
 		"lint": "eslint --config .configs/eslint.config.mjs .",
