@@ -1,4 +1,5 @@
 {
+	"name": "@cldmv/slothlet-migrate",
 	"description": "Migrates code, configs and slothlet.module.json files from @cldmv/slothlet v3 to v4. Rewrites what it can prove and reports everything else with file, line and the v4 replacement.",
 	"keywords": [
 		"slothlet",
