@@ -44,13 +44,13 @@ const DENY_TAG = [{ caller: "reader.**", target: "tag", effect: "deny" }];
 const ALLOW_ALL = [{ caller: "reader.**", target: "**", effect: "allow" }];
 
 const POLICIES = [
-	{ label: "a deny rule on the member", permissions: (attribution) => ({ attribution, rules: DENY_TAG }), allowed: false },
+	{ label: "a deny rule on the member", permissions: (attribution) => ({ caller: { attribution }, rules: DENY_TAG }), allowed: false },
 	{
 		label: "default deny, everything but the member allowed",
 		permissions: (attribution) => ({ policy: "deny", caller: { attribution }, rules: [...ALLOW_ALL, ...DENY_TAG] }),
 		allowed: false
 	},
-	{ label: "default allow, no rule", permissions: (attribution) => ({ attribution }), allowed: true },
+	{ label: "default allow, no rule", permissions: (attribution) => ({ caller: { attribution } }), allowed: true },
 	{
 		label: "default deny, everything allowed",
 		permissions: (attribution) => ({ policy: "deny", caller: { attribution }, rules: ALLOW_ALL }),

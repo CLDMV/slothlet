@@ -590,8 +590,10 @@ describe("generateTypes – direct unit tests", () => {
 				}
 			);
 
-			// Typed unknown with the explanatory comment, never another export's type.
-			expect(output).toMatch(/\/\*\* No module origin: [^\n]*\*\/\n\tsum: unknown;/);
+			// Typed by its members (`__metadata` is the function's own member in v4), each with no module origin and the
+			// explanatory comment, never another export's type.
+			expect(output).toMatch(/\/\*\* Callable with no module origin: [^\n]*\*\/\n\tsum: \{/);
+			expect(output).toMatch(/\/\*\* No module origin: [^\n]*\*\/\n\t+filePath: unknown;/);
 			expect(output).not.toContain("typeof import");
 		});
 	});

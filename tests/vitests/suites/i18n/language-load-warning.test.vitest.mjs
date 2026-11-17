@@ -94,7 +94,7 @@ describe("a failed locale load is a coded SlothletWarning (#820)", () => {
 		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
 		language.set("zz-zz");
 		// The process-level class prints every warning (#838); each line printed belongs to the warning itself.
-		const own = warn.mock.calls.filter(([first]) => !(typeof first === "string" && first.startsWith("\n⚠️  [")) && first !== "Context:");
+		const own = warn.mock.calls.filter(([first]) => !(typeof first === "string" && first.startsWith("\n⚠️  [")) && first !== "Details:");
 		expect(own).toEqual([]);
 		warn.mockRestore();
 	});

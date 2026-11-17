@@ -442,7 +442,10 @@ const JSON_POLICIES = [
 	},
 	{
 		label: "permissions on, a deny rule on one member",
-		permissions: (attribution) => ({ attribution, rules: [{ caller: "probe.**", target: "config.settings.hidden", effect: "deny" }] }),
+		permissions: (attribution) => ({
+			caller: { attribution },
+			rules: [{ caller: "probe.**", target: "config.settings.hidden", effect: "deny" }]
+		}),
 		config: { settings: { public: 1, list: SETTINGS.list } },
 		hidden: DENIED,
 		principal: DENIED,

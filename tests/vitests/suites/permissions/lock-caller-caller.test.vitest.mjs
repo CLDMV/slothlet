@@ -84,7 +84,7 @@ describe.each(getMatrixConfigs())("Permissions > lockCaller.caller (#477) > $nam
 	 * Build the fixture api.
 	 * @param {object[]} rules - Permission rules.
 	 * @param {"allow"|"deny"} [defaultPolicy="allow"] - Default policy.
-	 * @param {object} [extra] - Further permission options (`{ provenance: false }`).
+	 * @param {object} [extra] - Further permission options (`{ caller: { provenance: false } }`).
 	 * @returns {Promise<object>} The api.
 	 */
 	const build = async (rules, defaultPolicy = "allow", extra = {}) => {
@@ -103,14 +103,14 @@ describe.each(getMatrixConfigs())("Permissions > lockCaller.caller (#477) > $nam
 
 	it("plain pin in the same leaf pins the service itself (the problem pin.caller solves)", async () => {
 		// With provenance off, the client's job code runs as whatever the service pinned.
-		await build([GRANT], "allow", { provenance: false });
+		await build([GRANT], "allow", { caller: { provenance: false } });
 		await api.client.app.scheduleWhoamiAsService();
 		expect(await api.scheduler.service.fire()).toEqual(["scheduler.service.everyAsSelf"]);
 	});
 
 	it("a permission rule keyed to the caller applies inside the pinned job", async () => {
 		// What a plain pin pins decides only with provenance off; with it on, see provenance-native (#597).
-		await build([GRANT, ...GUARD_RULES], "allow", { provenance: false });
+		await build([GRANT, ...GUARD_RULES], "allow", { caller: { provenance: false } });
 		await api.client.app.scheduleGuarded();
 		expect(await api.scheduler.service.fire()).toEqual(["guarded-ok"]);
 
