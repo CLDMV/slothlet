@@ -145,7 +145,7 @@ const alpha = api.slothlet.api.modules.sort(found, (a, b) => a.packageName.local
 
 ### `addModule(nameOrResult, options?) → Promise<MountResult>`
 
-Mounts a single module. Accepts a package name (looked up in the discovery cache) or a `DiscoverResult` directly.
+Mounts a single module. Accepts a package name (looked up in the discovery cache) or a `DiscoverResult` that this instance's `discover()` returned (also what `getDiscoveryCache()` and `sort()` hand back). A result is recognised by identity, not by its shape: any other object, such as one built by hand, a spread copy of a real result, or a result another slothlet instance discovered, is refused with `INVALID_ARGUMENT` and nothing mounts. Results are frozen, so the manifest that was validated at discovery is the one that mounts.
 
 ```js
 // By name — looks up in cache; lazy-triggers discover() if cache is empty
@@ -171,7 +171,7 @@ await api.slothlet.api.modules.addModule("@org/foo", {
 
 ### `addModules(items, options?) → Promise<MountResult[] | { mounted, failed }>`
 
-Batch mount. Accepts a heterogeneous array of names and `DiscoverResult` objects.
+Batch mount. Accepts a heterogeneous array of names and `DiscoverResult` objects this instance's `discover()` returned. Every item is resolved before anything mounts, so one object that isn't such a result refuses the whole batch with `INVALID_ARGUMENT`.
 
 ```js
 await api.slothlet.api.modules.addModules(["@org/foo", someDiscoverResult, "@org/bar"], {

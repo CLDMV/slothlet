@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-26T02:52:51-07:00 (1793008371)
+ *	@Last modified time: 2026-11-16T17:14:58-08:00 (1794878098)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -26,7 +26,7 @@
  * none. A refused `api.add` leaves no ownership entries behind. The host is unchanged throughout.
  *
  * Fixture: `api_tests/api_test_self_write_reach` — `base/`, `victim/`, `guest/` (also mounted as `atk`, `other`),
- * `holder/`, and the manifest modules `modules/evilgrant` and `modules/goodgrant`.
+ * `holder/`, and the manifest modules `modules/evilgrant`, `modules/goodgrant` and `modules/goodgrant-v2`.
  */
 import { describe, it, expect, afterEach } from "vitest";
 import path from "node:path";
@@ -45,6 +45,7 @@ const VICTIM = path.join(FIXTURE, "victim");
 const HOLDER = path.join(FIXTURE, "holder");
 const EVIL = path.join(FIXTURE, "modules", "evilgrant");
 const GOOD = path.join(FIXTURE, "modules", "goodgrant");
+const GOOD_V2 = path.join(FIXTURE, "modules", "goodgrant-v2");
 
 const CONFIGS = [
 	{ mode: "eager", runtime: "async" },
@@ -83,26 +84,20 @@ describe.each(CONFIGS)("module-code entry points (#625) — $mode / $runtime", (
 	}
 
 	describe("mounting a module with a manifest", () => {
-		const evilResult = () => ({
-			packageName: "evil",
-			mountPath: ["guest", "sub"],
-			apiDir: path.join(EVIL, "evilgrant", "api"),
-			manifest: {
-				version: "1.0.0",
-				permissions: [
-					{ caller: "guest.**", target: "victim.**:write", effect: "allow" },
-					{ caller: "guest.**", target: "slothlet.permissions.addRule", effect: "allow" }
-				]
-			}
-		});
+		/**
+		 * The evilgrant module's discover result, as the host's `discover()` returns it.
+		 * @returns {Promise<object>} The discover result.
+		 */
+		const evilResult = async () => (await api.slothlet.api.modules.discover({ scanRoot: EVIL }))[0];
 
 		it.each([
 			["addModule", () => evilResult()],
-			["addModules", () => [evilResult()]],
+			["addModules", async () => [await evilResult()]],
 			["addDiscovered", () => ({ scanRoot: EVIL })]
 		])("refuses module code mounting one whose rules reach beyond its subtree through %s, and mounts nothing", async (entry, arg) => {
 			await load();
-			expect(await withSuppressedSlothletErrorOutput(() => api.guest.x.mountModule(entry, arg()))).toBe("INVALID_PERMISSION_RULE");
+			const target = await arg();
+			expect(await withSuppressedSlothletErrorOutput(() => api.guest.x.mountModule(entry, target))).toBe("INVALID_PERMISSION_RULE");
 			expect(api.guest.sub).toBeUndefined();
 			const refused = withSuppressedSlothletErrorOutputSync(() => api.guest.x.writeAt("victim.v"));
 			expect(refused).toEqual(every(refused, "LOOSE_SET_NOT_OWNED"));
@@ -288,39 +283,29 @@ describe.each(CONFIGS)("module-code entry points (#625) — $mode / $runtime", (
 
 	describe("api.modules.removeModule", () => {
 		/**
-		 * A discover result for a `good` package version mounted at `mountPath`.
-		 * @param {string} version - The version.
-		 * @param {string[]} mountPath - Where it mounts.
-		 * @returns {object} The discover result.
-		 */
-		const goodResult = (version, mountPath) => ({
-			packageName: "good",
-			mountPath,
-			apiDir: path.join(GOOD, "goodgrant", "api"),
-			manifest: { version }
-		});
-
-		/**
-		 * Load, have the guest mount `good@1.0.0` under its own path, and the host mount `good@2.0.0` at `victim.good`.
+		 * Load, have the guest mount `@local/goodgrant@0.1.0` under its own path, and the host mount
+		 * `@local/goodgrant@0.2.0` at `victim.good`, each from a result the host's `discover()` returned.
 		 * @returns {Promise<object>} The composed api.
 		 */
 		async function mounted() {
 			await load();
-			expect(await api.guest.x.mountModule("addModule", goodResult("1.0.0", ["guest", "good"]))).toBe("done");
-			await api.slothlet.api.modules.addModule(goodResult("2.0.0", ["victim", "good"]));
+			const [own] = await api.slothlet.api.modules.discover({ scanRoot: GOOD });
+			expect(await api.guest.x.mountModule("addModule", own)).toBe("done");
+			const [hosts] = await api.slothlet.api.modules.discover({ scanRoot: GOOD_V2 });
+			await api.slothlet.api.modules.addModule(hosts);
 			return api;
 		}
 
 		it("refuses module code removing every match when one of them is not its own, and removes none", async () => {
 			await mounted();
-			expect(await withSuppressedSlothletErrorOutput(() => api.guest.x.removeModuleNamed("good"))).toBe("LOOSE_SET_NOT_OWNED");
+			expect(await withSuppressedSlothletErrorOutput(() => api.guest.x.removeModuleNamed("@local/goodgrant"))).toBe("LOOSE_SET_NOT_OWNED");
 			expect(api.guest.good.info.name()).toBe("info");
 			expect(api.victim.good.info.name()).toBe("info");
 		});
 
 		it("lets module code remove the mount it made", async () => {
 			await mounted();
-			expect(await api.guest.x.removeModuleNamed("good", { version: "1.0.0" })).toBe(true);
+			expect(await api.guest.x.removeModuleNamed("@local/goodgrant", { version: "0.1.0" })).toBe(true);
 			expect(api.guest.good).toBeUndefined();
 			expect(api.victim.good.info.name()).toBe("info");
 		});

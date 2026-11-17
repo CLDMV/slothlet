@@ -1,0 +1,5 @@
+{
+	"name": "@local/goodgrant",
+	"version": "0.2.0",
+	"description": "Test fixture: a second version of goodgrant, mounted by the host beside the module's own mount (#625)."
+}
