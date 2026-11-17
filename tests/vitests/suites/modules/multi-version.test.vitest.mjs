@@ -92,19 +92,19 @@ describe("addModules — multi-version mounting (G7 case 2)", () => {
 		expect(api.drivers.multiv.info.version()).toBe("2.0.0");
 	});
 
-	it("includes versionConfig in the mount result for multi-version entries", async () => {
+	it("includes version in the mount result for multi-version entries", async () => {
 		const mm = api.slothlet.api.modules;
 		const found = await mm.discover({ scanRoot: [FIX_V1, FIX_V2] });
 		const multivOnly = found.filter((r) => r.package === "@org/multiv");
 		const mounted = await mm.addModules(multivOnly);
 
 		for (const m of mounted) {
-			expect(m.versionConfig).not.toBeNull();
-			expect(m.versionConfig.version).toMatch(/^v\d+$/);
-			expect(typeof m.versionConfig.default).toBe("boolean");
+			expect(m.version).not.toBeNull();
+			expect(m.version.tag).toMatch(/^v\d+$/);
+			expect(typeof m.version.default).toBe("boolean");
 		}
 		// Exactly one of the two should be default
-		const defaults = mounted.filter((m) => m.versionConfig.default === true);
+		const defaults = mounted.filter((m) => m.version.default === true);
 		expect(defaults.length).toBe(1);
 		expect(defaults[0].found.manifest.version).toBe("2.0.0");
 	});
@@ -115,7 +115,7 @@ describe("addModules — multi-version mounting (G7 case 2)", () => {
 		const mounted = await mm.addModules(found.filter((r) => r.package === "@org/multiv"));
 		expect(mounted.length).toBe(1);
 		expect(mounted[0].mount).toEqual(["drivers", "multiv"]);
-		expect(mounted[0].versionConfig).toBeNull();
+		expect(mounted[0].version).toBeNull();
 	});
 
 	it("emits modules:mount-complete events for each version with version-aware mountPath", async () => {

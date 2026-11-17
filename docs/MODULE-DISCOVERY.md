@@ -185,13 +185,13 @@ await api.slothlet.api.modules.addModule("@org/foo", {
 
 **`MountResult`**:
 
-| Key             | Description                                                                                  |
-| --------------- | -------------------------------------------------------------------------------------------- |
-| `module`        | The module id the mount was registered under.                                                |
-| `package`       | The package name.                                                                            |
-| `mount`         | Mount segments as an array, including the `vMAJOR` prefix when the module mounted versioned. |
-| `found`         | The `DiscoverResult` the module was mounted from.                                            |
-| `versionConfig` | `{ version, default }` when the module mounted under a version prefix, otherwise `null`.     |
+| Key       | Description                                                                                  |
+| --------- | -------------------------------------------------------------------------------------------- |
+| `module`  | The module id the mount was registered under.                                                |
+| `package` | The package name.                                                                            |
+| `mount`   | Mount segments as an array, including the `vMAJOR` prefix when the module mounted versioned. |
+| `found`   | The `DiscoverResult` the module was mounted from.                                            |
+| `version` | `{ default, tag }` when the module mounted under a version prefix, otherwise `null`.         |
 
 ### `addModules(items, options?) → Promise<MountResult[] | { mounted, failed }>`
 

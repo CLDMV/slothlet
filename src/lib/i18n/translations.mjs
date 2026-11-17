@@ -26,6 +26,8 @@ import defaultTranslations from "./languages/en-us.json" with { type: "json" };
 // on-disk locales load only under Node — a browser keeps the bundled default.
 import { isNode, fs, path, url, loadJson } from "#helpers/platform";
 import {
+	ArrayMethods,
+	Arrays,
 	Boolean,
 	filterList,
 	listPush,
@@ -49,6 +51,13 @@ import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "#helpers/ins
  * Get current directory path
  * @private
  */
+/**
+ * Placeholders that name a path as segments. An array given for one of them reads dotted in a message (`drivers.opensearch`), not
+ * comma-joined like any other array.
+ * @type {Record<string, boolean>}
+ */
+const SEGMENT_KEYS = Objects.freeze({ mount: true, path: true });
+
 const translations_dirname = isNode ? path.dirname(url.fileURLToPath(import.meta.url)) : null;
 
 // `defaultTranslations` is imported as a JSON module at the top of this file, so the default
@@ -410,7 +419,11 @@ export function translate(errorCode, params = {}) {
 		const ofEntry = ofList[ofIndex],
 			key = ofEntry[0],
 			value = ofEntry[1];
-		message = regExpReplace(new RegExp(`\\{${key}\\}`, "g"), message, value !== undefined ? stringOf(value) : "");
+		message = regExpReplace(
+			new RegExp(`\\{${key}\\}`, "g"),
+			message,
+			value !== undefined ? (SEGMENT_KEYS[key] === true && Arrays.isArray(value) ? ArrayMethods.join(value, ".") : stringOf(value)) : ""
+		);
 	}
 
 	// Clean up empty placeholders (no surrounding \s* to avoid ReDoS on whitespace-heavy input)

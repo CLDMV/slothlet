@@ -167,7 +167,7 @@ describe("ModuleManager.addModule() — collision pre-flight (S7)", () => {
 		await mm.discover({ scanRoot: FIX_NPM, prefix: "packrat-extension-" });
 		await mm.addModule("packrat-extension-baz");
 		await withSuppressedSlothletErrorOutput(async () => {
-			await expect(mm.addModule("packrat-extension-baz", { collisionMode: "error" })).rejects.toThrow(/MODULE_MOUNT_COLLISION/);
+			await expect(mm.addModule("packrat-extension-baz", { collisionMode: "error" })).rejects.toThrow(/cannot mount at 'extensions\.baz'/);
 		});
 	});
 

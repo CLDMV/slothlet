@@ -100,7 +100,7 @@ const DEFAULT_MODULE_COLLISION_MODE = "merge";
  * @property {string} package - The package name.
  * @property {string[]} mount - Segments of the path used at the time of mount, including any version prefix.
  * @property {DiscoverResult} found - The discovery result the module was mounted from.
- * @property {{version: string, default: boolean}|null} versionConfig - Versioning descriptor when the module mounted under a `vMAJOR.<mount>` prefix (multi-version case from `#buildVersionConfigs`), otherwise `null`. `version` is the slothlet version tag (`vMAJOR`); `default` indicates whether this entry is the default for the unversioned dispatch path.
+ * @property {{default: boolean, tag: string}|null} version - Versioning descriptor when the module mounted under a `vMAJOR.<mount>` prefix (multi-version case from `#buildVersionConfigs`), otherwise `null`. `tag` is the slothlet version tag (`vMAJOR`); `default` indicates whether this entry is the default for the unversioned dispatch path.
  */
 
 /**
@@ -572,7 +572,7 @@ export class ModuleManager extends ComponentBase {
 			package: discoverResult.package,
 			mount: splitText(effectiveMountPath, "."),
 			found: discoverResult,
-			versionConfig: versionConfig ?? null
+			version: versionConfig ? { default: versionConfig.default, tag: versionConfig.version } : null
 		};
 		MapMethods.set(this.#mounted, `${discoverResult.package}@${version}`, result);
 		await this.#emit("modules:mount-complete", {

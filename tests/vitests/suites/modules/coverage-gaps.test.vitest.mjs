@@ -805,7 +805,7 @@ describe("ModuleManager coverage gaps", () => {
 
 		const mounted = await mm.addModules(ordered);
 		expect(mounted.length).toBe(3);
-		const defaults = mounted.filter((m) => m.versionConfig?.default === true);
+		const defaults = mounted.filter((m) => m.version?.default === true);
 		expect(defaults.length).toBe(1);
 		expect(defaults[0].found.manifest.version).toBe("2.0.0");
 	});
@@ -831,7 +831,7 @@ describe("ModuleManager coverage gaps", () => {
 		const mounted = await mm.addModules(all);
 		expect(mounted.length).toBe(3);
 		for (const m of mounted) {
-			expect(m.versionConfig).toBeNull();
+			expect(m.version).toBeNull();
 		}
 	});
 
@@ -911,7 +911,7 @@ describe("ModuleManager coverage gaps", () => {
 			const mounted = await mm.addModules(both);
 			// semverToTag false arm → tags "vabc.1.0.0" and "vdef.2.0.0" (different) → both mount.
 			expect(mounted.length).toBe(2);
-			const tags = mounted.map((m) => m.versionConfig?.version).sort();
+			const tags = mounted.map((m) => m.version?.tag).sort();
 			expect(tags).toEqual(["vabc.1.0.0", "vdef.2.0.0"]);
 		} finally {
 			await fs.rm(tmpDir, { recursive: true, force: true });

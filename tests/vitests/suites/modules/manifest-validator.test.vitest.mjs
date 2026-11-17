@@ -281,6 +281,7 @@ describe("validateModuleManifest — mount", () => {
 		} catch (err) {
 			expect(err.code).toBe("MODULE_RESERVED_MOUNT");
 			expect(err.context.mount).toEqual(["slothlet", "x"]);
+			expect(err.message).toContain("(slothlet.x)"); // segments read dotted in the message
 		}
 	});
 });
