@@ -818,10 +818,10 @@ export class ApiManager extends ComponentBase {
 				throw new this.SlothletError("PERMISSION_DENIED", { caller: callerPath, target: segmentsOf(`${targetPath}:write`) });
 			}
 			// An allowing write rule grants the write, whatever the module owns — to a module that is still there.
-			if (decision === "grant" && !this.isRemovedCaller(callerWrapper)) return this.#assertWriteAccess(parts, callerWrapper);
+			if (decision === "grant" && !this.isRemovedCaller(callerWrapper)) return this.#assertWriteAccess(parts, callerWrapper, inFlight);
 		}
 		if (!this.ownershipEnforced() || this.ownsPath(parts, callerWrapper, inFlight)) {
-			if (callerWrapper) this.#assertWriteAccess(parts, callerWrapper);
+			if (callerWrapper) this.#assertWriteAccess(parts, callerWrapper, inFlight);
 			return;
 		}
 		// The caller has a recorded mount point (or it would own the whole tree), so it has a module; its
@@ -846,17 +846,19 @@ export class ApiManager extends ComponentBase {
 	 *
 	 * @param {string[]} parts - Segments of the api path being written.
 	 * @param {object} callerWrapper - The executing module's wrapper.
+	 * @param {{moduleID: string, prior: Map<string, *>}|null} [inFlight=null] - An add in flight whose content is being
+	 *   checked: what it registered already is new, not a member it takes over (see {@link ApiManager#ownsPath}).
 	 * @returns {void}
 	 * @throws {SlothletError} `PERMISSION_DENIED` when the module would be refused a call or read of the target.
 	 * @private
 	 */
-	#assertWriteAccess(parts, callerWrapper) {
+	#assertWriteAccess(parts, callerWrapper, inFlight = null) {
 		const permissionManager = this.slothlet.handlers.permissionManager;
 		if (!permissionManager.isEnabled() || parts.length === 0) return;
 		const internal = callerWrapper.____slothletInternal;
 		const callerPath = String(internal?.apiPath ?? "");
 		const targetPath = ArrayMethods.join(parts, ".");
-		const { exists, accessor, filePath } = this.#memberAt(parts);
+		const { exists, accessor, filePath } = this.#memberAt(parts, inFlight);
 		// A member held as an accessor is read by running its getter, which no read gate checks: the write is held to the
 		// ownership and write rules alone, as reading it is to none.
 		if (accessor) return;
@@ -874,15 +876,18 @@ export class ApiManager extends ComponentBase {
 	/**
 	 * Whether the live tree holds a member at `parts`, and the source file of the node that holds it (the member's own
 	 * when it is a node), read off the nodes themselves so no read gate, view, or lazy load is involved. A path the
-	 * ownership registry records is held. A path running through an accessor counts as held, since its getter is not run
-	 * here; the member itself held as an accessor is reported as such.
+	 * ownership registry records is held, except what an add in flight registered for its own content where its module
+	 * did not own the path before the add began. A path running through an accessor counts as held, since its getter is
+	 * not run here; the member itself held as an accessor is reported as such.
 	 *
 	 * @param {string[]} parts - Segments of the api path.
+	 * @param {{moduleID: string, prior: Map<string, *>}|null} [inFlight=null] - An add in flight whose content is being
+	 *   checked (see {@link ApiManager#ownsPath}).
 	 * @returns {{exists: boolean, accessor: boolean, filePath: string|null}} Whether the member exists, whether it is
 	 *   held as an accessor, and the node's source file.
 	 * @private
 	 */
-	#memberAt(parts) {
+	#memberAt(parts, inFlight = null) {
 		let node = this.slothlet.api;
 		let filePath = null;
 		let exists = true;
@@ -900,7 +905,18 @@ export class ApiManager extends ComponentBase {
 			if (wrapper) filePath = wrapper.____slothletInternal.filePath ?? filePath;
 			node = next;
 		}
-		if (!exists && this.slothlet.handlers.ownership.getCurrentOwner(ArrayMethods.join(parts, ".")) !== null) exists = true;
+		if (!exists) {
+			const at = ArrayMethods.join(parts, ".");
+			const ownership = this.slothlet.handlers.ownership;
+			// An add in flight has registered its own content already; that content is new, not a member it takes over.
+			exists =
+				inFlight === null
+					? ownership.getCurrentOwner(at) !== null
+					: ArrayMethods.some(
+							ownership.getPathHistory(at),
+							(entry) => String(entry.moduleID) !== inFlight.moduleID || MapMethods.has(inFlight.prior, at)
+						);
+		}
 		return { exists, accessor: false, filePath };
 	}
 
