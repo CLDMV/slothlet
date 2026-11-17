@@ -14,22 +14,22 @@
  */
 
 /**
- * @fileoverview Both runtimes export the same `instanceID`, and the auto-selecting entry answers through either (#764).
+ * @fileoverview Both runtimes export the same `instance`, and the auto-selecting entry answers through either (#764).
  *
  * @description
  * One expectation table for both runtimes, read through the instance's own runtime entry and through
  * `@cldmv/slothlet/runtime`:
  *
- * | Where it is read                     | `String(instanceID)`                 | `instanceID.length` | `"length" in` |
- * | ------------------------------------ | ------------------------------------ | ------------------- | ------------- |
- * | in a call of instance A (or B)       | A's id (B's id)                      | the id's length     | true          |
- * | after the call waited                | A's id                               | the id's length     | true          |
- * | in a call inside `run()` on A        | the `run()` store's id (`A__run_…`)  | its length          | true          |
- * | in the host's `run()` callback on A  | the `run()` store's id               | its length          | true          |
- * | in the host's code, outside any call | throws `TypeError` (no member reads) | undefined           | false         |
+ * | Where it is read                     | `instance.id`                        |
+ * | ------------------------------------ | ------------------------------------ |
+ * | in a call of instance A (or B)       | A's id (B's id), a string            |
+ * | after the call waited                | A's id                               |
+ * | in a call inside `run()` on A        | the `run()` store's id (`A__run_…`)  |
+ * | in the host's `run()` callback on A  | the `run()` store's id               |
+ * | in the host's code, outside any call | undefined                            |
  *
- * A missing member is never `in` it. Fixture `api_test_runtime_instanceid`: `probe.now(entry)` / `probe.later(entry)`
- * read the export of `entry` (`"auto"`, `"async"`, `"live"`) inside the call.
+ * Fixture `api_test_runtime_instanceid`: `probe.now(entry)` / `probe.later(entry)` read the export of `entry`
+ * (`"auto"`, `"async"`, `"live"`) inside the call.
  * @module tests/vitests/suites/runtime/runtime-instanceid-entries
  */
 
@@ -51,27 +51,21 @@ const matrix = ["eager", "lazy"].flatMap((mode) => ["async", "live"].map((runtim
  * @param {string} id - The id.
  * @returns {object} The expected read.
  */
-const inCall = (id) => ({ text: id, length: id.length, hasLength: true, hasMissing: false });
+const inCall = (id) => ({ id, type: "string" });
 
 /**
- * How `instanceID` of one entry reads in the host's own code.
+ * How `instance.id` of one entry reads in the host's own code.
  * @param {string} entry - The entry.
  * @returns {object} The read.
  */
 function hostRead(entry) {
-	const { instanceID } = ENTRIES[entry];
-	let text;
-	try {
-		text = String(instanceID);
-	} catch (error) {
-		text = error.name;
-	}
-	return { text, length: instanceID.length, hasLength: "length" in instanceID, hasMissing: "missing" in instanceID };
+	const id = ENTRIES[entry].instance.id;
+	return { id, type: typeof id };
 }
 
-const OUTSIDE = { text: "TypeError", length: undefined, hasLength: false, hasMissing: false };
+const OUTSIDE = { id: undefined, type: "undefined" };
 
-describe.each(matrix)("instanceID of each runtime entry > $mode / $runtime", ({ mode, runtime }) => {
+describe.each(matrix)("instance.id of each runtime entry > $mode / $runtime", ({ mode, runtime }) => {
 	const apis = [];
 
 	afterEach(async () => {
@@ -91,28 +85,28 @@ describe.each(matrix)("instanceID of each runtime entry > $mode / $runtime", ({ 
 	describe.each(["auto", runtime])("read through the %s entry", (entry) => {
 		it("names the instance inside its call, and after the call waited", async () => {
 			const api = await open();
-			expect(await api.probe.now(entry)).toEqual(inCall(api.slothlet.instanceID));
-			expect(await api.probe.later(entry)).toEqual(inCall(api.slothlet.instanceID));
+			expect(await api.probe.now(entry)).toEqual(inCall(api.slothlet.instance.id));
+			expect(await api.probe.later(entry)).toEqual(inCall(api.slothlet.instance.id));
 		});
 
 		it("names each instance in its own call with two instances, overlapping or not", async () => {
 			const a = await open();
 			const b = await open();
-			expect(await a.probe.now(entry)).toEqual(inCall(a.slothlet.instanceID));
-			expect(await b.probe.now(entry)).toEqual(inCall(b.slothlet.instanceID));
+			expect(await a.probe.now(entry)).toEqual(inCall(a.slothlet.instance.id));
+			expect(await b.probe.now(entry)).toEqual(inCall(b.slothlet.instance.id));
 			const [fromA, fromB] = await Promise.all([a.probe.later(entry), b.probe.later(entry)]);
-			expect(fromA).toEqual(inCall(a.slothlet.instanceID));
-			expect(fromB).toEqual(inCall(b.slothlet.instanceID));
+			expect(fromA).toEqual(inCall(a.slothlet.instance.id));
+			expect(fromB).toEqual(inCall(b.slothlet.instance.id));
 		});
 
 		it("names the run() store inside a run(), in a call and in the host's callback", async () => {
 			const api = await open();
 			const inRun = await api.slothlet.context.run({ tag: "x" }, () => api.probe.now(entry));
-			expect(inRun.text.startsWith(`${api.slothlet.instanceID}__run_`)).toBe(true);
-			expect(inRun).toEqual(inCall(inRun.text));
+			expect(inRun.id.startsWith(`${api.slothlet.instance.id}__run_`)).toBe(true);
+			expect(inRun).toEqual(inCall(inRun.id));
 			const hostInRun = await api.slothlet.context.run({ tag: "x" }, () => hostRead(entry));
-			expect(hostInRun.text.startsWith(`${api.slothlet.instanceID}__run_`)).toBe(true);
-			expect(hostInRun).toEqual(inCall(hostInRun.text));
+			expect(hostInRun.id.startsWith(`${api.slothlet.instance.id}__run_`)).toBe(true);
+			expect(hostInRun).toEqual(inCall(hostInRun.id));
 		});
 
 		it("reads as nothing in the host's own code outside any call, before and after calls", async () => {

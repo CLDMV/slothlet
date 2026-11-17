@@ -84,7 +84,7 @@ const BASE_DIR = TEST_DIRS.API_TEST;
 const ALWAYS_PRESENT_KEYS = [
 	"version",
 	"versioning",
-	"instanceID",
+	"instance",
 	"types",
 	"api",
 	"sanitize",
@@ -219,9 +219,9 @@ describe("api.slothlet - diagnostics endpoint availability", () => {
 				expect(typeof api.slothlet.versioning.setVersionMetadata).toBe("function");
 			});
 
-			it("api.slothlet.instanceID should be a non-empty string", () => {
-				expect(typeof api.slothlet.instanceID).toBe("string");
-				expect(api.slothlet.instanceID.length).toBeGreaterThan(0);
+			it("api.slothlet.instance.id should be a non-empty string", () => {
+				expect(typeof api.slothlet.instance.id).toBe("string");
+				expect(api.slothlet.instance.id.length).toBeGreaterThan(0);
 			});
 
 			it("api.slothlet.types should have UNMATERIALIZED and IN_FLIGHT symbols", () => {

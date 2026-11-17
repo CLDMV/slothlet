@@ -152,15 +152,15 @@ describe.each(getMatrixConfigs())("Config > clock > $name", ({ config }) => {
 	it("takes the reload ID from the fake clock, and keeps the clock across the reload", async () => {
 		let time = 1700000000000;
 		api = await slothlet({ ...config, base: PLAIN, silent: true, clock: { now: () => time } });
-		const first = api.slothlet.instanceID;
+		const first = api.slothlet.instance.id;
 		expect(first).toMatch(/^slothlet_1700000000000_/);
 		time = 1700000000123;
 		await api.slothlet.reload();
-		expect(api.slothlet.instanceID).toBe(`${first}_reload_1700000000123`);
+		expect(api.slothlet.instance.id).toBe(`${first}_reload_1700000000123`);
 		// The reload is made from the config the instance kept, which has no clock; the instance still has its own.
 		time = 1700000000999;
 		await api.slothlet.reload();
-		expect(api.slothlet.instanceID.endsWith("_reload_1700000000999")).toBe(true);
+		expect(api.slothlet.instance.id.endsWith("_reload_1700000000999")).toBe(true);
 	});
 
 	it("takes the time hook failure sources record from the fake clock", async () => {
@@ -183,7 +183,7 @@ describe.each(getMatrixConfigs())("Config > clock > $name", ({ config }) => {
 		api = await slothlet({ ...config, base: PLAIN, silent: true, diagnostics: true, clock: { now: () => time } });
 		expect(api.slothlet.diag.inspect().config.clock).toBeUndefined();
 		await api.slothlet.restart();
-		expect(api.slothlet.instanceID).toMatch(/^slothlet_31337_/);
+		expect(api.slothlet.instance.id).toMatch(/^slothlet_31337_/);
 		expect(api.slothlet.diag.inspect().config.clock).toBeUndefined();
 	});
 

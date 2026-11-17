@@ -40,7 +40,7 @@ import { getAllApiTestFoldersSync, getMatrixConfigs } from "../../setup/vitest-h
  * @type {Map<string, string[]>}
  */
 const VOLATILE_VALUES = new Map([
-	["*", ["slothlet.instanceID"]],
+	["*", ["slothlet.instance.id"]],
 	["api_tv_test", ["config.state.instanceId"]]
 ]);
 

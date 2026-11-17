@@ -134,7 +134,7 @@ describe.each(MATRIX)("Isolation > slothlet's internal exports answer slothlet a
 		expect(await api.slothlet.context.run({}, resolveWrapper, api.held)).toBe(resolveWrapper(api.held));
 		const manager = held["#factories/context:getContextManager"](config.runtime);
 		expect(manager).toBe(held[`#factories/context:${config.runtime === "live" ? "liveRuntime" : "asyncRuntime"}`]);
-		expect(manager.instances.has(api.slothlet.instanceID)).toBe(true);
+		expect(manager.instances.has(api.slothlet.instance.id)).toBe(true);
 	});
 
 	it("refuses a module the static functions of the wrapper class, held or imported by package path or by file URL", async () => {

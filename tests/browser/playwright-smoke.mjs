@@ -151,7 +151,7 @@ try {
 	out.exports = await api3.held.tryInternals(lib);
 	const hostWrapper = await import(new URL("handlers/unified-wrapper.mjs", lib).href);
 	const hostContext = await import(new URL("factories/context.mjs", lib).href);
-	out.hostExports = [hostWrapper.resolveWrapper(api3.held) !== null, hostContext.getContextManager("live").instances.has(api3.slothlet.instanceID)].join(",");
+	out.hostExports = [hostWrapper.resolveWrapper(api3.held) !== null, hostContext.getContextManager("live").instances.has(api3.slothlet.instance.id)].join(",");
 	await api3.shutdown();
 
 	// A helper file a leaf imports from the module's folder is the module's code too; one outside every module's folder

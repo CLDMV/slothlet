@@ -22,16 +22,16 @@
  * Provides live bindings for use inside API module functions. Import the exports you need:
  *
  * ```js
- * import { self, context, instanceID } from "@cldmv/slothlet/runtime";
+ * import { self, context, instance } from "@cldmv/slothlet/runtime";
  * ```
  *
  * | Export | Type | Description |
  * | --- | --- | --- |
  * | `self` | `SlothletSelf` | Live reference to the full Slothlet API proxy. Use to call sibling modules without import cycles. Typed by extending `SlothletSelf` (see `slothlet typegen`). |
  * | `context` | `object` | The current ambient context object. Seeded at startup via `config.context` and persists across calls. `api.slothlet.context.run()` / `.scope()` can override it for the duration of a single call. Readable and writable. |
- * | `instanceID` | `string` | Unique identifier of the active Slothlet instance. |
+ * | `instance` | `{ id: string }` | Facts about the running instance: `instance.id` is its id (a string inside a call, undefined outside one). |
  *
- * All three are lazy Proxy objects — they resolve to the correct runtime value at call time,
+ * All three are read at access — they resolve to the correct runtime value at call time,
  * whether the instance uses `"async"` (AsyncLocalStorage) or `"live"` runtime mode.
  */
 
@@ -275,30 +275,30 @@ export const context = new NativeProxy(
 );
 
 /**
- * Current Slothlet instance identifier. Unique per `slothlet()` call; useful when
- * multiple Slothlet instances coexist and you need to identify which one is active.
+ * Read-only facts about the running slothlet instance.
  *
  * @memberof module:@cldmv/slothlet/runtime
- * @type {string}
+ * @type {{readonly id: (string|undefined)}}
+ * @description
+ * `instance.id` is the id of the instance whose call is running, read at access: a real string inside a call (unique per
+ * `slothlet()` call, so it tells instances apart when several coexist), undefined outside one. Both runtimes answer it
+ * alike (#764).
  * @example
- * import { instanceID } from "@cldmv/slothlet/runtime";
- * console.log(instanceID); // e.g. "slothlet-1"
+ * import { instance } from "@cldmv/slothlet/runtime";
+ * console.log(instance.id); // e.g. "slothlet_1794877110644_b1nk0g540"
  */
-export const instanceID = new NativeProxy(
-	{},
-	{
-		// Both runtimes export `instanceID` alike: read as the id inside a call, as nothing outside one (#764).
-		get(_, prop) {
-			return getCurrentRuntime().instanceID[prop];
-		},
-		has(_, prop) {
-			return prop in getCurrentRuntime().instanceID;
-		}
+export const instance = Objects.freeze({
+	/**
+	 * The running instance's id, or undefined outside a call.
+	 * @returns {string|undefined} The id.
+	 */
+	get id() {
+		return getCurrentRuntime().instance.id;
 	}
-);
+});
 
 // The runtime's own Proxies are slothlet's, never a module's (#597).
-for (const proxy of [objectSelf, callableSelf, context, instanceID]) markSlothletProxy(proxy);
+for (const proxy of [objectSelf, callableSelf, context]) markSlothletProxy(proxy);
 
 // Each instance's files get the form of `self` its api root takes (#803).
 registerSelfForms(import.meta.url, runtimeNamespace, { object: objectSelf, callable: callableSelf }, (form) => {

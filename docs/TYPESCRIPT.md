@@ -327,24 +327,24 @@ declare module "@cldmv/slothlet/runtime" {
 
 > **Every leaf is typed by its own source.** Each member is `typeof import(...)` of the export slothlet actually placed there, so TypeScript reads the leaf's own types — JSDoc in `.mjs` / `.cjs`, annotations in `.ts` / `.mts` (including types it imports, such as `node:events`), frozen constants, object leaves typed through an interface. The origin comes from composition itself (slothlet records which export produced each api node), so flattened, hoisted, and merged members are typed correctly too. Specifiers are relative to the generated file and use each leaf's runtime extension (`.ts` → `.js`, `.mts` → `.mjs`), which resolves under both `NodeNext` and `Bundler`. Because JavaScript leaves are referenced directly, the program that includes the declaration needs `allowJs: true`.
 
-### Runtime Imports (`self`, `context`, `instanceID`)
+### Runtime Imports (`self`, `context`, `instance`)
 
-All three named exports of `@cldmv/slothlet/runtime` — `self`, `context`, and `instanceID` — work the same way from TypeScript modules as they do from `.mjs` modules. Slothlet writes the transpiled `.ts` output to a project-local cache file (see [Limitations](#limitations)) so Node's resolver can anchor bare-specifier imports normally; relative imports resolve too — to plain `.mjs` / `.cjs` / `.js` files and to other `.ts` / `.mts` modules, which are transpiled and linked automatically. Those relative helpers are per instance exactly as they are for `.mjs` leaves — see [MODULE-STRUCTURE.md → Helper Modules Are Per Instance](MODULE-STRUCTURE.md#helper-modules-are-per-instance). Nothing about TypeScript changes the runtime API surface.
+All three named exports of `@cldmv/slothlet/runtime` — `self`, `context`, and `instance` — work the same way from TypeScript modules as they do from `.mjs` modules. Slothlet writes the transpiled `.ts` output to a project-local cache file (see [Limitations](#limitations)) so Node's resolver can anchor bare-specifier imports normally; relative imports resolve too — to plain `.mjs` / `.cjs` / `.js` files and to other `.ts` / `.mts` modules, which are transpiled and linked automatically. Those relative helpers are per instance exactly as they are for `.mjs` leaves — see [MODULE-STRUCTURE.md → Helper Modules Are Per Instance](MODULE-STRUCTURE.md#helper-modules-are-per-instance). Nothing about TypeScript changes the runtime API surface.
 
 ```typescript
 // api/utils.ts
-import { self, context, instanceID } from "@cldmv/slothlet/runtime";
+import { self, context, instance } from "@cldmv/slothlet/runtime";
 
 export function fullReport(name: string) {
 	const upper = self.string.uppercase(name); // call sibling modules
 	const requestId = (context as { requestId?: string }).requestId ?? "anon";
-	return `[${instanceID}/${requestId}] ${upper}: ${self.math.add(1, 1)}`;
+	return `[${instance.id}/${requestId}] ${upper}: ${self.math.add(1, 1)}`;
 }
 ```
 
 `self` is declared as `SlothletSelf`, an empty class exported by `@cldmv/slothlet/runtime`. The generated `.d.ts` extends that class with the generated interface (and with `SlothletAPI`, since `self.slothlet.*` is the same framework surface as `api.slothlet.*`), which gives `self` full autocomplete and type-checking against your API shape in every leaf that imports it — `.ts`, `.mts`, and JSDoc-checked `.mjs` / `.cjs` alike. The same anchor types the consumer side: `slothlet()` resolves to `SlothletAPI & T`, where `T` defaults to `SlothletSelf`, so `const api = await slothlet({ base: "./api" })` is typed with no annotation. A program that loads more than one api passes its interface explicitly (`slothlet<OtherApi>({ base: "./other" })`) and generates the other declarations with `augmentRuntime: false` (`--no-augment-runtime`). When the root file's default export is a function, the generated interface carries that function's call signature (its parameters and result, taken from its own type), so `self(…)` in a leaf and `api(…)` on the host type as calls of the root; for an object root neither is callable. `context` and `instanceID` are typed by the runtime module's own `.d.ts` (no extra config needed).
 
-See [CONTEXT-PROPAGATION.md](CONTEXT-PROPAGATION.md) for what `context` and `instanceID` carry and how they propagate across calls.
+See [CONTEXT-PROPAGATION.md](CONTEXT-PROPAGATION.md) for what `context` and `instance` carry and how they propagate across calls.
 
 ### Reuse on Subsequent Loads
 

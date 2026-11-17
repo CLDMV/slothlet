@@ -122,10 +122,10 @@ describe.each(getMatrixConfigs({}))("api.slothlet.restart() (#504) > $name", ({ 
 
 	it("rebuilds under a new instance ID and `self` inside leaves resolves to the new instance", async () => {
 		await create();
-		const oldID = api.slothlet.instanceID;
+		const oldID = api.slothlet.instance.id;
 		expect(await api.probe.instanceID()).toBe(oldID);
 		await api.slothlet.restart();
-		const newID = api.slothlet.instanceID;
+		const newID = api.slothlet.instance.id;
 		expect(newID).not.toBe(oldID);
 		expect(await api.probe.instanceID()).toBe(newID);
 		expect(await api.probe.connGeneration()).toBe(api.conn.generation);
@@ -248,7 +248,7 @@ describe.each(getMatrixConfigs({}))("api.slothlet.restart() (#504) > $name", ({ 
 		await create({
 			lifecycle: { restart: record("restart"), shutdown: record("shutdown"), init: record("init"), restarted: record("restarted") }
 		});
-		const oldID = api.slothlet.instanceID;
+		const oldID = api.slothlet.instance.id;
 		expect(configEvents.map((e) => e.name)).toEqual(["init"]);
 		expect(configEvents[0].data).toMatchObject({ instanceID: oldID, restart: false });
 
@@ -259,7 +259,7 @@ describe.each(getMatrixConfigs({}))("api.slothlet.restart() (#504) > $name", ({ 
 
 		configEvents.length = 0;
 		await api.slothlet.restart();
-		const newID = api.slothlet.instanceID;
+		const newID = api.slothlet.instance.id;
 		expect(configEvents.map((e) => e.name)).toEqual(["restart", "shutdown", "init", "restarted"]);
 		expect(configEvents[0].data).toEqual({ instanceID: oldID });
 		expect(configEvents[1].data).toEqual({ instanceID: oldID, restart: true });
@@ -276,11 +276,11 @@ describe.each(getMatrixConfigs({}))("api.slothlet.restart() (#504) > $name", ({ 
 
 	it("shuts the old instance down through the normal teardown path", async () => {
 		await create(TRACKER_ROUTINES);
-		const oldID = api.slothlet.instanceID;
+		const oldID = api.slothlet.instance.id;
 		expect(fixtureState().shutdowns).toEqual([]);
 
 		await api.slothlet.restart();
-		const newID = api.slothlet.instanceID;
+		const newID = api.slothlet.instance.id;
 		// The old generation's shutdown routine ran exactly once.
 		expect(fixtureState().shutdowns).toEqual([1]);
 		// The old context store is gone; only the new instance's remains for this api.
@@ -299,15 +299,15 @@ describe.each(getMatrixConfigs({}))("api.slothlet.restart() (#504) > $name", ({ 
 		await other.counter.increment();
 		const otherConn = other.conn;
 		const otherGeneration = other.conn.generation;
-		const otherID = other.slothlet.instanceID;
+		const otherID = other.slothlet.instance.id;
 
 		await api.slothlet.restart();
-		expect(other.slothlet.instanceID).toBe(otherID);
+		expect(other.slothlet.instance.id).toBe(otherID);
 		expect(await other.probe.instanceID()).toBe(otherID);
 		expect(await other.counter.current()).toBe(1);
 		expect(other.conn).toBe(otherConn);
 		expect(other.conn.generation).toBe(otherGeneration);
-		expect(await api.probe.instanceID()).toBe(api.slothlet.instanceID);
+		expect(await api.probe.instanceID()).toBe(api.slothlet.instance.id);
 	});
 
 	it("lets calls already in flight finish on the old implementation", async () => {
@@ -326,7 +326,7 @@ describe.each(getMatrixConfigs({}))("api.slothlet.restart() (#504) > $name", ({ 
 		expect(a).toBe(api);
 		expect(b).toBe(api);
 		expect(inits).toHaveLength(2);
-		expect(inits[1]).toBe(api.slothlet.instanceID);
+		expect(inits[1]).toBe(api.slothlet.instance.id);
 	});
 
 	it("rebuilds from the config as passed at creation, not from later mutations of that object", async () => {
@@ -378,44 +378,44 @@ describe.each(getMatrixConfigs({}))("api.slothlet.restart() (#504) > $name", ({ 
 
 	it("leaves restart() reachable from a module when there is no permissions config (built-ins inert)", async () => {
 		await create();
-		const before = api.slothlet.instanceID;
+		const before = api.slothlet.instance.id;
 		await api.probe.restartInstance();
-		expect(api.slothlet.instanceID).not.toBe(before);
-		expect(await api.probe.instanceID()).toBe(api.slothlet.instanceID);
+		expect(api.slothlet.instance.id).not.toBe(before);
+		expect(await api.probe.instanceID()).toBe(api.slothlet.instance.id);
 	});
 
 	it("is host-only by default: a module calling restart() is denied (defaultPolicy allow)", async () => {
 		await create({ permissions: { defaultPolicy: "allow" } });
-		const before = api.slothlet.instanceID;
+		const before = api.slothlet.instance.id;
 		await expect(settle(() => api.probe.restartInstance())).rejects.toThrow("PERMISSION_DENIED");
-		expect(api.slothlet.instanceID).toBe(before);
+		expect(api.slothlet.instance.id).toBe(before);
 	});
 
 	it("runs the user's root shutdown during the teardown, also when a permitted module triggered the restart", async () => {
 		await create({ permissions: { defaultPolicy: "allow", rules: [{ caller: "probe.**", target: "slothlet.restart", effect: "allow" }] } });
-		const first = api.slothlet.instanceID;
+		const first = api.slothlet.instance.id;
 		await api.slothlet.restart();
 		expect(fixtureState().userShutdowns).toHaveLength(1);
 
-		const second = api.slothlet.instanceID;
+		const second = api.slothlet.instance.id;
 		expect(second).not.toBe(first);
 		await api.probe.restartInstance();
 		// The module-triggered teardown ran the user's shutdown too — it was not refused halfway.
 		expect(fixtureState().userShutdowns).toHaveLength(2);
-		expect(api.slothlet.instanceID).not.toBe(second);
+		expect(api.slothlet.instance.id).not.toBe(second);
 		expect(await api.counter.increment()).toBe(1);
 	});
 
 	it("lets the host restart, and a host allow rule lets a trusted module restart", async () => {
 		await create({ permissions: { defaultPolicy: "allow", rules: [{ caller: "probe.**", target: "slothlet.restart", effect: "allow" }] } });
-		const first = api.slothlet.instanceID;
+		const first = api.slothlet.instance.id;
 		await api.slothlet.restart();
-		const second = api.slothlet.instanceID;
+		const second = api.slothlet.instance.id;
 		expect(second).not.toBe(first);
 
 		await api.probe.restartInstance();
-		expect(api.slothlet.instanceID).not.toBe(second);
-		expect(await api.probe.instanceID()).toBe(api.slothlet.instanceID);
+		expect(api.slothlet.instance.id).not.toBe(second);
+		expect(await api.probe.instanceID()).toBe(api.slothlet.instance.id);
 	});
 });
 
@@ -543,16 +543,16 @@ describe.each(getMatrixConfigs({}))("api.slothlet.restart() (#504) > held refere
 
 	it("restarts an instance that was already shut down", async () => {
 		await create();
-		const oldID = api.slothlet.instanceID;
+		const oldID = api.slothlet.instance.id;
 		await api.slothlet.shutdown();
 		await api.slothlet.restart();
-		expect(api.slothlet.instanceID).not.toBe(oldID);
+		expect(api.slothlet.instance.id).not.toBe(oldID);
 		expect(await api.counter.increment()).toBe(1);
 	});
 
 	it("still rebuilds when a shutdown routine throws, then re-throws its error", async () => {
 		await create(TRACKER_ROUTINES);
-		const oldID = api.slothlet.instanceID;
+		const oldID = api.slothlet.instance.id;
 		fixtureState().throwOnShutdown = true;
 		let caught = null;
 		try {
@@ -562,14 +562,14 @@ describe.each(getMatrixConfigs({}))("api.slothlet.restart() (#504) > held refere
 		}
 		fixtureState().throwOnShutdown = false;
 		expect(caught?.code).toBe("ROUTINE_FAILED");
-		expect(api.slothlet.instanceID).not.toBe(oldID);
+		expect(api.slothlet.instance.id).not.toBe(oldID);
 		expect(await api.counter.increment()).toBe(1);
 	});
 
 	it("finishes the internal teardown when the root shutdown hook throws", async () => {
 		await create();
 		const instance = resolveWrapper(api.counter).slothlet;
-		const oldID = api.slothlet.instanceID;
+		const oldID = api.slothlet.instance.id;
 		instance.userHooks.shutdown = () => {
 			throw new Error("hook failure");
 		};

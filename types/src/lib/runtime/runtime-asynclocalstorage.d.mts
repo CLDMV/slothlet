@@ -50,20 +50,23 @@ export const context: ProxyConstructor;
  * }
  */
 /**
- * Current instance ID
- * @type {Proxy}
+ * Read-only facts about the running slothlet instance.
+ * @type {{readonly id: (string|undefined)}}
  * @public
  *
  * @description
- * A proxy that provides access to the current slothlet instance ID.
- * Useful for debugging and tracking which instance is handling a request.
+ * `instance.id` is the id of the instance whose call is running, read at access: a real string inside a call (so
+ * `instance.id === "slothlet_…"` holds), undefined outside one. Useful for debugging and tracking which instance is
+ * handling a request.
  *
  * @example
- * import { instanceID } from "@cldmv/slothlet/runtime/async";
+ * import { instance } from "@cldmv/slothlet/runtime/async";
  *
  * export function getInstanceInfo() {
- *   return { instanceID };
+ *   return { id: instance.id };
  * }
  */
-export const instanceID: ProxyConstructor;
+export const instance: {
+    readonly id: (string | undefined);
+};
 //# sourceMappingURL=runtime-asynclocalstorage.d.mts.map

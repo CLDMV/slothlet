@@ -68,7 +68,7 @@ describe("Helpers > instance-imports > two copies of the module in one process",
 	});
 
 	it("reads the record the first copy keeps", () => {
-		const instanceID = api.slothlet.instanceID;
+		const instanceID = api.slothlet.instance.id;
 		expect(first.instanceCommonJSFiles(instanceID).length).toBeGreaterThan(0);
 		expect([...second.instanceCommonJSFiles(instanceID)].sort()).toEqual([...first.instanceCommonJSFiles(instanceID)].sort());
 		expect(second.instanceCommonJSVersion(instanceID)).toEqual(first.instanceCommonJSVersion(instanceID));
@@ -77,7 +77,7 @@ describe("Helpers > instance-imports > two copies of the module in one process",
 	});
 
 	it("cannot claim, load under or release the ID of an instance the first copy's slothlet built", () => {
-		const instanceID = api.slothlet.instanceID;
+		const instanceID = api.slothlet.instance.id;
 		const before = [...first.instanceCommonJSFiles(instanceID)].sort();
 		expect(second.claimInstanceScope(instanceID)).toBe(null);
 		expect(first.claimInstanceScope(instanceID)).toBe(null);
@@ -140,7 +140,7 @@ describe("Helpers > instance-imports > two copies of the module in one process",
 			expect(member in shared).toBe(false);
 		for (const value of Object.values(shared)) expect(value instanceof Map || value instanceof Set).toBe(false);
 		expect(() => shared.redeem("not-a-ticket")).toThrow(TypeError);
-		expect(() => shared.requireCJS(path.join(root, "helper.cjs"), api.slothlet.instanceID)).toThrow(TypeError);
+		expect(() => shared.requireCJS(path.join(root, "helper.cjs"), api.slothlet.instance.id)).toThrow(TypeError);
 	});
 });
 
@@ -148,7 +148,7 @@ describe("Helpers > instance-imports > an instance ID something else holds", () 
 	it("refuses to load an instance's files under it", async () => {
 		// The instance's clock is fixed, so the ID a full reload gives it (made from the old one and the time) is known.
 		const api = await slothlet({ base: DIR, silent: true, clock: { now: () => 1790000000000 } });
-		const instanceID = api.slothlet.instanceID;
+		const instanceID = api.slothlet.instance.id;
 		const taken = first.claimInstanceScope(`${instanceID}_reload_1790000000000`);
 		try {
 			expect(taken).not.toBe(null);

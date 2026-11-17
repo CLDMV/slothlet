@@ -41,7 +41,7 @@ for (const mode of ["eager", "lazy"]) {
 	const refsB = await b.shared.refs();
 	r.sharedRefs =
 		// Each instance's api files get a runtime module of their own (#803), whose members are the runtime's own.
-		["context", "instanceID", "SlothletSelf"].every((key) => refsA.runtime[key] === refsB.runtime[key]) &&
+		["context", "instance", "SlothletSelf"].every((key) => refsA.runtime[key] === refsB.runtime[key]) &&
 		refsA.EventEmitter === refsB.EventEmitter &&
 		(await a.shared.sameParser()) &&
 		(await b.shared.sameParser());

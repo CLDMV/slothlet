@@ -49,7 +49,7 @@ describe.each(getMatrixConfigs({ runtime: "async" }))("ALS Cleanup > Config: '$n
 		expect(contextDiag.baseContext).toBeDefined();
 		expect(contextDiag.managerType).toBe("AsyncContextManager");
 
-		const instanceId = api.slothlet.instanceID;
+		const instanceId = api.slothlet.instance.id;
 
 		// Verify instance is in the context manager's instances Map
 		expect(contextDiag.instancesMapKeys).toContain(instanceId);
@@ -76,7 +76,7 @@ describe.each(getMatrixConfigs({ runtime: "async" }))("ALS Cleanup > Config: '$n
 			diagnostics: true
 		});
 
-		const instanceId = api.slothlet.instanceID;
+		const instanceId = api.slothlet.instance.id;
 
 		// Shutdown
 		await api.shutdown();
@@ -98,7 +98,7 @@ describe.each(getMatrixConfigs({ runtime: "async" }))("ALS Cleanup > Config: '$n
 		});
 
 		const diag1 = api1.slothlet.context.diagnostics();
-		const instanceId1 = api1.slothlet.instanceID;
+		const instanceId1 = api1.slothlet.instance.id;
 
 		await api1.shutdown();
 
@@ -111,7 +111,7 @@ describe.each(getMatrixConfigs({ runtime: "async" }))("ALS Cleanup > Config: '$n
 		});
 
 		const diag2 = api2.slothlet.context.diagnostics();
-		const instanceId2 = api2.slothlet.instanceID;
+		const instanceId2 = api2.slothlet.instance.id;
 
 		// Different instances should have different instance IDs
 		expect(instanceId2).not.toBe(instanceId1);
@@ -175,12 +175,12 @@ describe.each(getMatrixConfigs({ runtime: "async" }))("ALS Cleanup > Config: '$n
 		});
 
 		// Track instance IDs across reloads
-		const instanceIds = [api.slothlet.instanceID];
+		const instanceIds = [api.slothlet.instance.id];
 
 		// Perform multiple reloads
 		for (let i = 0; i < 3; i++) {
 			await api.slothlet.reload();
-			instanceIds.push(api.slothlet.instanceID);
+			instanceIds.push(api.slothlet.instance.id);
 		}
 
 		// All instance IDs should be different
@@ -197,7 +197,7 @@ describe.each(getMatrixConfigs({ runtime: "async" }))("ALS Cleanup > Config: '$n
 		}
 
 		// Current instance should still exist
-		expect(diag.instances.find((inst) => inst.id === api.slothlet.instanceID)).toBeDefined();
+		expect(diag.instances.find((inst) => inst.id === api.slothlet.instance.id)).toBeDefined();
 
 		// API should still work after multiple reloads
 		// Note: math.mjs file collision test returns a+b+1000
