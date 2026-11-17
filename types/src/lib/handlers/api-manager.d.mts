@@ -636,7 +636,7 @@ export class ApiManager extends ComponentBase {
      * @param {object} [options={}] - Options.
      * @param {string} [options.scopedApiPath] - When set, `pathOrModuleId` is resolved strictly as a
      *   moduleID and only that module's single node at `scopedApiPath` is removed (drives the public
-     *   two-argument `api.remove(moduleID, apiPath)`); sibling modules and the module's other mounts stay.
+     *   two-argument `api.remove(apiPath, id)`); sibling modules and the module's other mounts stay.
      * @param {boolean} [options.recordHistory=true] - Whether to record the removal in the add/operation history.
      * @param {object|null} [options.writer] - The removing module's wrapper, or null for host code, when the caller read
      *   it before an await; read from the runtime otherwise (#625).

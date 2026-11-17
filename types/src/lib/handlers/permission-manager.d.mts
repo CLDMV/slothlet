@@ -133,7 +133,7 @@ export class PermissionManager extends ComponentBase {
      *   key (e.g. `(ctx) => ctx.user?.id`). Synchronous. A `null`/`undefined` key means "no identity":
      *   rules requiring this principal do not match for that call.
      * @param {function(*): *} definition.resolve - Resolves the facts for an identity key. May be async.
-     * @param {number} [definition.maxAge] - Optional time-to-live in milliseconds for a resolved value.
+     * @param {number} [definition.ttl] - Optional time-to-live in milliseconds for a resolved value.
      * @param {string|string[]|null} [ownerModuleID=null] - Registering module's id; `null` for the host. A list when the
      *   registrant acts for several modules (#597): each has to own an existing name, the first owns a new one.
      * @param {function(Function, Array<*>): *} [invoke=null] - Runs the resolver as its registering
@@ -144,12 +144,12 @@ export class PermissionManager extends ComponentBase {
      * @throws {SlothletError} INVALID_ARGUMENT when the name or definition is malformed.
      * @throws {SlothletError} PERMISSION_PRINCIPAL_NAME_OWNED when another module owns the name.
      * @example
-     * pm.registerPrincipal("roles", { key: (ctx) => ctx.user?.id, resolve: (id) => loadRoles(id), maxAge: 30_000 }, "roles_mod");
+     * pm.registerPrincipal("roles", { key: (ctx) => ctx.user?.id, resolve: (id) => loadRoles(id), ttl: 30_000 }, "roles_mod");
      */
     registerPrincipal(name: string, definition: {
         key: (arg0: object) => any;
         resolve: (arg0: any) => any;
-        maxAge?: number | undefined;
+        ttl?: number | undefined;
     }, ownerModuleID?: string | string[] | null, invoke?: (arg0: Function, arg1: Array<any>) => any): void;
     /**
      * Unregister a principal. Only its owner or the host may do so. Rules that require it stop
@@ -304,13 +304,14 @@ export class PermissionManager extends ComponentBase {
      * @param {PermissionCallMeta|null} [callMeta=null] - Call/construct metadata (#455): `{ args, target }`
      *   from the invocation, forwarded to function conditions as their second argument. Null for reads,
      *   hooks, the internal control surface, and silent queries.
-     * @param {{ principalGrace?: boolean, moduleCaller?: boolean, via?: string }|null} [options=null] - Enforcement options.
+     * @param {{ principalGrace?: boolean, moduleCaller?: boolean, via?: ReadonlyArray<string> }|null} [options=null] - Enforcement options.
      * @param {boolean} [options.principalGrace=false] - Accept a principal whose epoch is current even if its
-     *   `maxAge` has elapsed (#459). Set only by a promoted call re-enforcing right after its resolve.
+     *   `ttl` has elapsed (#459). Set only by a promoted call re-enforcing right after its resolve.
      * @param {boolean} [options.moduleCaller=false] - The caller is a module even though no source file is
      *   known for it (#508). A module-private target is then denied outright instead of being judged by
      *   the `permissions.private.host` policy, which is what a null `callerFilePath` otherwise means.
-     * @param {string} [options.via] - Origin marker added to the audit payload (`via: "checkCall"`), so an
+     * @param {ReadonlyArray<string>} [options.via] - Origin marker added to the audit payload: the method path as segments
+     *   (`via: ["slothlet", "permissions", "global", "check", "call"]`), so an
      *   audit consumer can tell a query from the gate of a real call.
      * @param {function(string): boolean} [options.dataMember] - Given for a read of data: whether a path above the
      *   target is an object member of a module's data. A deny rule naming such a member's path exactly then covers the
@@ -325,17 +326,17 @@ export class PermissionManager extends ComponentBase {
     enforceAccess(callerPath: string, targetPath: string, callerFilePath?: string | null, targetFilePath?: string | null, runtimeContext?: object | null, callMeta?: PermissionCallMeta | null, options?: {
         principalGrace?: boolean;
         moduleCaller?: boolean;
-        via?: string;
+        via?: ReadonlyArray<string>;
     } | null): boolean;
     /**
-     * Place a rule module code is registering — through `slothlet.permissions.addRule` / `removeRule`, or the
+     * Place a rule module code is registering — through `slothlet.permissions.rules.add` / `rules.remove`, or the
      * `permissions` option of an `api.add` it makes (#625) — and refuse it when the module may not.
      *
      * By default a module manages rules only for its own subtree: the rule's target pattern (a call, hook, or
      * write target alike) must have a non-empty literal prefix (the segments before the first glob segment)
      * inside the subtree the module owns, and must not name the framework's namespace, root functions, or
      * internal keys. Reaching any other target is the built-in default `{ caller: "**", target:
-     * "slothlet.permissions.addRule", effect: "deny" }`, which decides only that reach (calling `addRule` for the
+     * "slothlet.permissions.rules.add", effect: "deny" }`, which decides only that reach (calling `rules.add` for the
      * module's own subtree is not gated by it): an explicit allow on that target for the module — the host's, or
      * a manifest's — lifts it, and the module then manages rules for any target, as the host does.
      *
@@ -429,6 +430,27 @@ export class PermissionManager extends ComponentBase {
      */
     snapshotEventRule(rule: any): any;
     /**
+     * Check a call or write rule as {@link addRule} would, without registering it, so a caller that registers rules
+     * after other work can refuse a bad one before doing that work (#872).
+     *
+     * @param {object} rule - The rule, as {@link snapshotRule} copied it.
+     * @returns {void}
+     * @throws {SlothletError} `PERMISSION_RULE_INVALID` or `PERMISSION_RULE_UNKNOWN_TARGET` when the rule is refused.
+     * @example
+     * pm.assertRuleValid(pm.snapshotRule(input));
+     */
+    assertRuleValid(rule: object): void;
+    /**
+     * Check an event rule as {@link addEventRule} would, without registering it (#872).
+     *
+     * @param {object} rule - The event rule, as {@link snapshotEventRule} copied it.
+     * @returns {void}
+     * @throws {SlothletError} `PERMISSION_RULE_INVALID` when the rule is refused.
+     * @example
+     * pm.assertEventRuleValid(pm.snapshotEventRule(input));
+     */
+    assertEventRuleValid(rule: object): void;
+    /**
      * Refuse module code changing global metadata (#625): `metadata.global` changes what every node reports, every
      * other module's included, so it is the host's by a built-in deny an allow for the module lifts. Like the other
      * built-in rules it applies only while the permission system is on. It is checked once the call's arguments are
@@ -506,7 +528,7 @@ export class PermissionManager extends ComponentBase {
      * @param {object|null} [runtimeContext=null] - Per-request context for condition evaluation.
      * @returns {"deny"|"grant"|null} The decision; null when no write rule matches or the system is off.
      * @example
-     * pm.decideWrite("payments.charge", "slothlet.lockCaller"); // "deny" — the built-in rule denies it
+     * pm.decideWrite("payments.charge", "slothlet.pin"); // "deny" — the built-in rule denies it
      */
     decideWrite(callerPath: string, targetPath: string, runtimeContext?: object | null): "deny" | "grant" | null;
     /**
@@ -573,7 +595,7 @@ export class PermissionManager extends ComponentBase {
      *   with principal grace, mirroring a promoted call (#459). Only then is the result a Promise; the
      *   fast path (nothing stale) answers synchronously.
      * - Audit events emit as for a real call (`permission:denied` always, `allowed`/`default` under
-     *   `audit: "verbose"`), with `via: "checkCall"` in the payload so a probing peer is visible.
+     *   `audit: "verbose"`), with `via: ["slothlet", "permissions", "global", "check", "call"]` in the payload so a probing peer is visible.
      * - Disabled enforcement answers `true`, like {@link checkAccess}.
      *
      * @param {string} callerPath - The supplied caller's api path (non-empty).
@@ -747,18 +769,14 @@ export class PermissionManager extends ComponentBase {
     wasOnAtShutdown(): boolean;
     /**
      * Run the permission baseline as the instance starts (see `helpers/permission-baseline`), when the mode is on or
-     * strict. Under on, each check not met is one warning (unless the instance is silent); under strict, any check not
-     * met refuses the start.
+     * strict. Under on, each check not met is one warning; under strict, any check not met refuses the start.
      * @param {"node"|"browser"} envTarget - Where the instance runs.
-     * @param {{silent?: boolean}} [options] - The instance's options.
      * @returns {Promise<void>}
      * @throws {SlothletError} PERMISSION_BASELINE_UNMET under strict, naming the checks not met.
      * @example
-     * await pm.checkBaseline("node", { silent: false });
+     * await pm.checkBaseline("node");
      */
-    checkBaseline(envTarget: "node" | "browser", { silent }?: {
-        silent?: boolean;
-    }): Promise<void>;
+    checkBaseline(envTarget: "node" | "browser"): Promise<void>;
     /**
      * The mode, what the permission baseline found when the instance started, and the capabilities rules open.
      * @returns {{mode: string, baseline: {met: boolean|null, checks: Array<{id: string, met: boolean, reason: string|null}>}, capabilities: Array<{name: string, allowed: string[]}>}}

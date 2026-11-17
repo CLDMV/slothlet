@@ -20,7 +20,7 @@ export let self: ProxyConstructor;
  *
  * @description
  * A proxy that provides access to user-provided context data (e.g., request data, user info).
- * Can be set via `slothlet.run()` or `slothlet.scope()`.
+ * Can be set via `slothlet.context.run()` or `slothlet.context.scope()`.
  *
  * @example
  * import { context } from "@cldmv/slothlet/runtime/async";

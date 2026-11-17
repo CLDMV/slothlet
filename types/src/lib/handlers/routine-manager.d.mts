@@ -127,7 +127,7 @@ export class RoutineManager extends ComponentBase {
      * @public
      *
      * @description
-     * The scoped two-argument `api.remove(apiPath, moduleID)` deletes the ENTIRE live subtree
+     * The scoped two-argument `api.remove(apiPath, id)` deletes the ENTIRE live subtree
      * rooted at `apiPath` (`ApiManager#deletePath`), but `impl:removed` only ever fires for the
      * exact property that was deleted — never for descendants that were simply carried away with
      * it. A nested routine capture like `auth.initialize` therefore survived indefinitely in `raw`
@@ -364,8 +364,8 @@ export class RoutineManager extends ComponentBase {
     public contributorsAt(apiPath: string, routine?: object): string[];
     /**
      * Run the root cascade for a routine: every matching contribution anywhere, grouped by exact
-     * api path — with `routines.stack: true`, contributors colliding at the same path all run
-     * together, adjacently; with the default `routines.stack: false`, only the current owner at
+     * api path — with `routines.stack: true` (the default), contributors colliding at the same path all run
+     * together, adjacently; with `routines.stack: false`, only the current owner at
      * that path runs, exactly like a direct call — the groups themselves ordered per the routine's
      * configured `order` (see {@link #orderPaths}). No-op — and returns `undefined` — when the
      * routine isn't configured.
@@ -418,13 +418,9 @@ export class RoutineManager extends ComponentBase {
      * default `shutdown` routine and any custom-named `mode: "shutdown"` routine alike.
      *
      * @description
-     * TEMPORARY v3-compat gate (#341): a no-op unless `config.routines.auto` is `true` (its
-     * deprecated alias is `collectLifecycleHooks`, which also expands into an implicit
-     * `mode: "shutdown"` routine — see `Config.normalizeRoutines`). Every routine is always
-     * stacked/wrapped regardless of this flag — `self.<path>()` is always directly callable — only
-     * the AUTOMATIC firing at dispose is gated, so that a project upgrading to a slothlet version
-     * carrying #341 sees no behavior change by default. Planned for v4: default `routines.auto` to
-     * `true` and remove `collectLifecycleHooks` — do not lose track of this before that release.
+     * Gated by `config.routines.auto` (default `true`): with it `false` this is a no-op. Every
+     * routine is always stacked/wrapped regardless of this flag — `self.<path>()` is always directly
+     * callable — only the AUTOMATIC firing at dispose is gated.
      * @returns {Promise<void>}
      * @public
      */
@@ -438,8 +434,7 @@ export class RoutineManager extends ComponentBase {
      * a consumer wants to fire on `destroy()` specifically, not on a plain `shutdown()`.
      *
      * @description
-     * Same TEMPORARY v3-compat `routines.auto` gate as {@link runShutdownModeRoutines} — see that
-     * method's description for the full rationale and the v4 migration plan.
+     * Same `routines.auto` gate as {@link runShutdownModeRoutines}.
      * @returns {Promise<void>}
      * @public
      */
@@ -449,9 +444,8 @@ export class RoutineManager extends ComponentBase {
      * step of `load()` — `await slothlet(...)` resolves only after this completes.
      *
      * @description
-     * Same TEMPORARY v3-compat `routines.auto` gate as {@link runShutdownModeRoutines} — see that
-     * method's description for the full rationale and the v4 migration plan. Wrapping still always
-     * happens; only automatic firing is gated.
+     * Same `routines.auto` gate as {@link runShutdownModeRoutines}. Wrapping still always happens;
+     * only automatic firing is gated.
      * @returns {Promise<void>}
      * @public
      */

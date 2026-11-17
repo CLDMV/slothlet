@@ -3,13 +3,16 @@
  * @param {string} name - The capability.
  * @param {string} route - What the code used.
  * @param {string|null} [importer=null] - The importing file's URL, for an import being linked.
+ * @param {*} [filename=null] - The file name the code is compiled under, when one is given.
+ * @param {boolean} [runnerCompile=false] - Whether the compile is vitest's own compile of the code its server sent
+ *   for that file (see {@link module:@cldmv/slothlet/helpers/vitest-worker-setup}).
  * @returns {void}
  * @throws {SlothletError} `PERMISSION_CAPABILITY_REFUSED`.
  * @internal
  * @example
  * checkCapability("code", "setTimeout");
  */
-export function checkCapability(name: string, route: string, importer?: string | null, filename?: null): void;
+export function checkCapability(name: string, route: string, importer?: string | null, filename?: any, runnerCompile?: boolean): void;
 /**
  * Whether code compiled under a name would name a real file outside a leaf's own folder: the folder holding the file
  * the leaf was built from, and everything beneath it. A name no file holds, or a file in that folder, is not.

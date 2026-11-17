@@ -61,12 +61,12 @@ export class AsyncContextManager {
      * @param {Object} [currentWrapper] - Current wrapper being executed (for metadata.self())
      * @param {boolean} [rawErrors=false] - When `true`, let a non-SlothletError thrown by
      *   `fn` propagate unchanged instead of wrapping it as `CONTEXT_EXECUTION_FAILED`. Used
-     *   for framework callbacks (`lockCaller`, pinned hooks) where the caller expects the
+     *   for framework callbacks (`pin`, pinned hooks) where the caller expects the
      *   original error type/code/status.
      * @param {boolean} [asHost=false] - When `true`, run `fn` with **no module caller**: both
      *   `currentWrapper` and `callerWrapper` are cleared for the execution, so `fn` runs as the host
      *   (`metadata.caller()` returns null inside it). `currentWrapper` is ignored. Used by
-     *   `lockCaller.caller()` when the pinned caller is the host.
+     *   `pin.caller()` when the pinned caller is the host.
      * @param {object|null} [ceiling=null] - For an identity pinned from a caller-supplied-code read (#597): the
      *   call that code ran inside, which has to allow everything `currentWrapper` does here as well.
      * @param {{store: object|null, identity: object}|null} [resolved=null] - The caller identity already resolved
@@ -276,11 +276,25 @@ export class AsyncContextManager {
      */
     public cleanup(instanceID: string): void;
     /**
-     * Get diagnostic information
-     * @returns {Object} Diagnostic data
+     * Diagnostics for one instance (#837): what this manager holds for that instance only, never the other instances
+     * the process-wide manager also serves.
+     * @param {string} instanceID - The instance.
+     * @returns {{ type: "async", running: boolean, at: number|null, context: object|null, self: string[], current: { context: object, nested: boolean }|null }}
+     *   The runtime word, whether a call of the instance is running now, when its record was made, its context data,
+     *   the top-level names its `self` shows, and the running call's context (and whether it is a nested run/scope).
      * @public
      */
-    public getDiagnostics(): Object;
+    public getInstanceDiagnostics(instanceID: string): {
+        type: "async";
+        running: boolean;
+        at: number | null;
+        context: object | null;
+        self: string[];
+        current: {
+            context: object;
+            nested: boolean;
+        } | null;
+    };
     #private;
 }
 export { guarded_asyncContextManager as asyncContextManager };

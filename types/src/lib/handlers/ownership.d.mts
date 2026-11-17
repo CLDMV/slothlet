@@ -272,7 +272,6 @@ export class OwnershipManager extends ComponentBase {
      * @param {*} options.value - The actual function/object being registered
      * @param {string} [options.source="core"] - Source of registration
      * @param {string} [options.collisionMode="error"] - Collision mode: skip, warn, error, merge, replace
-     * @param {Object} [options.config] - Config object for silent mode check
      * @param {string} [options.filePath=null] - File path of the module source (for metadata tracking)
      * @param {string[]|null} [options.exportPath=null] - Access path within `filePath`'s module namespace
      *   that produced `value` (`["add"]`, `["default"]`, `["default", "member"]`); `null` when the value
@@ -282,13 +281,12 @@ export class OwnershipManager extends ComponentBase {
      * @returns {Object|null} Registration entry or null if skipped
      * @public
      */
-    public register({ moduleID, apiPath, value, source, collisionMode, config, filePath, exportPath, memberExportPaths }: {
+    public register({ moduleID, apiPath, value, source, collisionMode, filePath, exportPath, memberExportPaths }: {
         moduleID: string;
         apiPath: string;
         value: any;
         source?: string | undefined;
         collisionMode?: string | undefined;
-        config?: Object | undefined;
         filePath?: string | undefined;
         exportPath?: string[] | null | undefined;
         memberExportPaths?: {
@@ -429,11 +427,23 @@ export class OwnershipManager extends ComponentBase {
      */
     public ownsPath(moduleID: string, apiPath: string): boolean;
     /**
-     * Get diagnostic info about ownership
-     * @returns {Object} Diagnostic information
+     * Diagnostic summary of ownership: how many api paths are registered, how many each module owns, and the paths
+     * more than one module holds (their owners, oldest first).
+     * @returns {{ count: number, modules: Array<{ module: string, count: number }>, conflicts: Array<{ path: string[], owners: string[] }> }}
+     *   The summary.
      * @public
      */
-    public getDiagnostics(): Object;
+    public getDiagnostics(): {
+        count: number;
+        modules: Array<{
+            module: string;
+            count: number;
+        }>;
+        conflicts: Array<{
+            path: string[];
+            owners: string[];
+        }>;
+    };
     /**
      * Get ownership info for a specific API path
      * @param {string} apiPath - API path to check

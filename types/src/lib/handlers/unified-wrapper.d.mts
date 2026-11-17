@@ -355,7 +355,7 @@ declare function runtime_registerFrameworkMember(member: object | Function, slot
  * The framework's own namespace (`self.slothlet`) and root functions (`self.shutdown`, `self.destroy`) as a
  * module reads them (#625).
  *
- * What they do depends on who calls: `diag.getAPI()` hands module code a view of the api and the host the
+ * What they do depends on who calls: `diag.api()` hands module code a view of the api and the host the
  * api itself, `hook.on()` / `lifecycle.on()` register for the module calling or for the host. A function a
  * module read and kept, called later from outside any call, would run as the host. Through the view it runs
  * as the module that read it, and so does every other use of the view — a member read, a write — made with
@@ -375,7 +375,7 @@ declare function runtime_registerFrameworkMember(member: object | Function, slot
  * @internal
  *
  * @example
- * const diag = runtime_selfFrameworkView(api.slothlet).diag; // later diag.getAPI() still answers the module
+ * const diag = runtime_selfFrameworkView(api.slothlet).diag; // later diag.api() still answers the module
  */
 declare function runtime_selfFrameworkView(member: any, reader?: object, slothlet?: object): any;
 /**
@@ -423,7 +423,7 @@ declare function runtime_selfChangeTarget(ctx: object, prop: string | symbol | n
  * own (a function of `self.slothlet` a module kept, called later from outside any call) (#625).
  *
  * Run that way the code has no caller, which reads as "called from the host". What pins the caller
- * (`lockCaller.caller`) pins this module instead, so a kept function never acts as the host.
+ * (`pin.caller`) pins this module instead, so a kept function never acts as the host.
  *
  * @param {object} slothlet - Instance the executing code runs in.
  * @returns {object|null} The reader's wrapper, or null when the executing code is no such use.
@@ -1156,6 +1156,26 @@ declare class UnifiedWrapper extends ComponentBase {
      * wrapper.___adoptImplChildren();
      */
     private ___adoptImplChildren;
+    /**
+     * Adopt one member of another value (a collision's losing callable) onto this node the way the node's own
+     * members are adopted: an accessor stays an accessor, run on every read with the node as `this`; an object or
+     * function becomes a child node at this node's path and the member's key; anything else is held as it is.
+     *
+     * @private
+     * @param {string} key - The member's key.
+     * @param {object|Function} source - The value holding the member.
+     * @returns {void}
+     *
+     * @description
+     * A callable folder module that puts members on its own function (`fn.live` as a getter, `fn.me = fn`) keeps
+     * them on its impl, where the get trap serves them live and wraps a function or object as a child. When that
+     * folder loses its slot in a collision, its members move to the node that kept the slot; copying their values
+     * would freeze a getter at the value it had and hand out a self-reference as the bare function (#874).
+     *
+     * @example
+     * keptWrapper.___adoptForeignMember("live", losingFn);
+     */
+    private ___adoptForeignMember;
     /**
      * @private
      * @param {string|symbol} key - Child property name

@@ -274,15 +274,19 @@ export class Config extends ComponentBase {
      * @param {Function} [loader.import] - Every leaf load goes through it: `(specifier) => Promise<module>`.
      * @param {{files: Array, directories: Array}} [loader.files] - The browser file list (`files.generate()`); giving one
      *   selects browser mode.
-     * @param {boolean} [loader.materialize=false] - Lazy mode: materialize every path in the background after init.
+     * @param {boolean|Function} [loader.materialize=false] - Lazy mode: materialize every path in the background after init.
+     *   A function turns it on and is called once everything has materialized (at once in eager mode, or when
+     *   materialization finished before the instance did).
      * @param {"node"|"browser"} [loader.platform] - Where slothlet runs; auto-detected when omitted.
      * @param {Function} [loader.resolve] - Browser: a file list entry to an importable URL.
-     * @returns {{import: (Function|null), files: (object|null), materialize: boolean, platform: ("node"|"browser"), resolve: (Function|null)}}
+     * @returns {{import: (Function|null), files: (object|null), materialize: (boolean|Function), platform: ("node"|"browser"), resolve: (Function|null)}}
      *   The normalized group.
-     * @throws {SlothletError} INVALID_CONFIG_IMPORT when `import` is given and is not a function.
+     * @throws {SlothletError} INVALID_CONFIG_IMPORTER_INVALID when `import` is given and is not a function.
+     * @throws {SlothletError} INVALID_CONFIG when `materialize` is not a boolean or a function.
      * @public
      * @example
      * config.normalizeLoader({}); // => { import: null, files: null, materialize: false, platform: "node", resolve: null }
+     * config.normalizeLoader({ materialize: () => {} }).materialize; // => the function (materialization is on)
      */
     public normalizeLoader(loader?: {
         import?: Function | undefined;
@@ -290,28 +294,29 @@ export class Config extends ComponentBase {
             files: any[];
             directories: any[];
         } | undefined;
-        materialize?: boolean | undefined;
+        materialize?: boolean | Function | undefined;
         platform?: "browser" | "node" | undefined;
         resolve?: Function | undefined;
     }): {
         import: (Function | null);
         files: (object | null);
-        materialize: boolean;
+        materialize: (boolean | Function);
         platform: ("node" | "browser");
         resolve: (Function | null);
     };
     /**
      * Normalize the `routines` group (object form only).
      * @param {object} [routines] - The group as given.
-     * @param {boolean} [routines.auto=false] - Startup/shutdown/destroy routines fire by themselves.
+     * @param {boolean} [routines.auto=true] - Startup/shutdown/destroy routines fire by themselves; `false` leaves them to explicit calls.
      * @param {Array} [routines.entries] - The routines; see {@link Config#normalizeRoutines}. Omitted keeps the defaults.
-     * @param {boolean} [routines.stack=false] - Every module contributing the same routine name at one api path runs, in
+     * @param {boolean} [routines.stack=true] - Every module contributing the same routine name at one api path runs, in
      *   mount order; `false` runs only the collision winner.
      * @returns {{auto: boolean, entries: Array<object>, stack: boolean}} The normalized group.
      * @throws {SlothletError} INVALID_CONFIG when it is not an object, or a member is invalid.
      * @public
      * @example
-     * config.normalizeRoutinesGroup({ auto: true }).auto; // true
+     * config.normalizeRoutinesGroup({}).auto; // true
+     * config.normalizeRoutinesGroup({ auto: false }).auto; // false
      */
     public normalizeRoutinesGroup(routines?: {
         auto?: boolean | undefined;

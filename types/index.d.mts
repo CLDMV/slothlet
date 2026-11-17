@@ -37,7 +37,7 @@ export namespace slothlet {
             name: string;
             mode: "manual" | "startup" | "shutdown" | "destroy";
         }>;
-        reservedExports: ReadonlySet<string>;
+        reserved: ReadonlySet<string>;
     }>;
     export { slothlet };
 }

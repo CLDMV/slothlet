@@ -36,33 +36,22 @@ export class SlothletError extends Error {
  */
 export class SlothletWarning {
     /**
-     * Warnings captured while console output is suppressed (for testing).
-     * On this class it is the process-level list: it holds warnings raised outside any slothlet
-     * instance (module-level coverage notices, for example). Each instance has its own subclass with its own
-     * list, reached as `api.slothlet.diag.SlothletWarning.captured` (see {@link SlothletWarning.forInstance}).
-     * @type {SlothletWarning[]}
-     */
-    static captured: SlothletWarning[];
-    /**
-     * Suppress console output and capture instead. On this class it is the process-level setting; an
-     * instance's class follows it until that instance sets its own value (assign `null` to follow it again).
+     * Whether a warning raised through this class stays off the console. The process-level class prints every warning;
+     * an instance's class reads its instance's `silent` option.
      * @type {boolean}
      */
-    static suppressConsole: boolean;
+    static get silent(): boolean;
     /**
-     * Create the warning class for one slothlet instance (#819). The subclass keeps its own `captured` list and
-     * its own `suppressConsole` setting, so warnings, `clearCaptured()` and console suppression on one instance
-     * never reach another. `suppressConsole` follows the process-level value until the instance sets its own.
-     * Warnings are still `instanceof SlothletWarning`.
+     * Create the warning class for one slothlet instance (#819). Every warning raised through it is handed to
+     * `record` (the instance keeps them; `api.slothlet.warnings.get()` reads them), printed or not, and it is printed
+     * unless `isSilent()` says the instance is silent (#838). Warnings on one instance never reach another, and they
+     * are still `instanceof SlothletWarning`.
+     * @param {function(): boolean} [isSilent] - Whether the instance's `silent` option is on, read as each warning is raised.
+     * @param {(warning: SlothletWarning) => void} [record] - Called with each warning raised through the class.
      * @returns {Function} The per-instance class (a subclass of `SlothletWarning`).
      * @public
      */
-    public static forInstance(): Function;
-    /**
-     * Clear captured warnings (for testing). On an instance's class this clears that instance only.
-     * @public
-     */
-    public static clearCaptured(): void;
+    public static forInstance(isSilent?: () => boolean, record?: (warning: SlothletWarning) => void): Function;
     /**
      * Create and emit a warning with automatic translation
      * @param {string} code - Warning code identifier

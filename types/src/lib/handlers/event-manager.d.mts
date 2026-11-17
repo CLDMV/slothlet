@@ -30,7 +30,7 @@ export class EventManager extends ComponentBase {
      *
      * @param {string} event - Event name to subscribe to.
      * @param {Function} listener - Listener, called `(payload, meta)` on emit. At `notify`, `payload`
-     *   is `undefined`; `meta` is `{ event, at, instanceID }`.
+     *   is `undefined`; `meta` is `{ event, at, instance }`.
      * @param {object} [options={}] - Options.
      * @param {boolean} [options.once=false] - Remove the subscription after its first delivery.
      * @param {string|number} [options.key] - Replaces the ordinal `<n>` in the listener id, for a listener
@@ -95,8 +95,8 @@ export class EventManager extends ComponentBase {
      * built-in `slothlet.event.**` deny. The strategy is called per emit as
      * `strategy(envelope, listeners, defaultDeliver)`:
      *
-     * - `envelope` — frozen `{ event, payload, at, instanceID, emitter, levels, listeners }`: `emitter` is
-     *   `{ moduleID, apiPath }` of the emitting module (null for the host); `levels` maps each recipient's
+     * - `envelope` — frozen `{ event, payload, at, instance, emitter, levels, listeners }`: `emitter` is
+     *   `{ module, path }` of the emitting module (null for the host); `levels` maps each recipient's
      *   listener id to its level resolved at emit time (informational — levels are enforced at delivery).
      * - `listeners` — the recipients' listener ids (the same array as `envelope.listeners`).
      * - `defaultDeliver()` — delivers now, exactly as without a strategy; returns a promise that settles

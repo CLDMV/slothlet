@@ -6,21 +6,24 @@
  * @param {object|undefined} [overrides.worker] - The vitest worker global, when present.
  * @param {boolean} [overrides.externalized] - Whether this slothlet copy is outside the runner's
  *   module graph.
+ * @param {Function} [overrides.Warning] - The warning class to raise it through (the instance's), so it is recorded on the
+ *   instance and printed unless the instance is `silent`.
  * @returns {boolean} True when the warning was emitted.
  * @package
  *
  * @description
  * Fires only when every condition of the misattribution scenario holds: a vitest COVERAGE run is
  * active (`__vitest_worker__.config.coverage.enabled` — a plain test run stays silent), this
- * slothlet copy is EXTERNALIZED (an inlined copy attributes fine), no `import` importer is
- * configured (the fix), and the instance is not `silent`. The worker global is vitest-internal,
+ * slothlet copy is EXTERNALIZED (an inlined copy attributes fine), and no `loader.import` importer is
+ * configured (the fix). The worker global is vitest-internal,
  * so it is read defensively — its absence or a shape change simply means no hint, never a wrong
  * one. Detection cannot DO the fix: the importer must be a closure authored in the consumer's own
  * transformed code, which is why this is a pointer to docs/TESTING.md rather than an auto-enable.
  */
-export function warnIfCoverageWithoutImporter(config: object, { worker, externalized }?: {
+export function warnIfCoverageWithoutImporter(config: object, { worker, externalized, Warning }?: {
     worker?: object | undefined;
     externalized?: boolean | undefined;
+    Warning?: Function | undefined;
 }): boolean;
 /**
  * Whether a coverage run is collecting this process's coverage (#484).
@@ -60,14 +63,16 @@ export function resolveSourcemap(typescriptConfig: object, overrides?: object): 
  * Warns when a coverage run loads TypeScript leaves with source maps explicitly off (#484).
  *
  * @param {object} config - The instance's transformed config.
- * @param {object} [overrides] - Environment inputs forwarded to {@link isCoverageRun}.
+ * @param {object} [overrides] - Environment inputs forwarded to {@link isCoverageRun}, and `Warning`, the warning class
+ *   to raise it through (the instance's).
  * @returns {boolean} True when the warning was emitted.
  * @package
  *
  * @description
  * Without the inline map, coverage for a TypeScript leaf is recorded against its cache copy and
  * can never reach the `.ts` source. The Loader calls this once per instance, on the first
- * TypeScript leaf it loads; a `silent` instance stays quiet.
+ * TypeScript leaf it loads, through the instance's warning class (`overrides.Warning`), so a `silent` instance records it
+ * without printing.
  */
 export function warnIfCoverageWithoutSourcemap(config: object, overrides?: object): boolean;
 /**
@@ -156,6 +161,28 @@ export class Loader extends ComponentBase {
         paths: ReadonlyArray<string> | null;
     } | null;
     /**
+     * Whether this loader is loading any file now (see {@link Loader#loadingFile}).
+     * @returns {boolean} True while a load runs.
+     * @public
+     * @example
+     * loader.isLoading(); // false
+     */
+    public isLoading(): boolean;
+    /**
+     * Every load of a file this loader is running now, by the file's comparable path (see {@link Loader#loadingFile}),
+     * however many there are.
+     * @param {string} path - The file, in comparable form.
+     * @returns {Array<{path: string, moduleID: string|null, paths: ReadonlyArray<string>|null}>} The loads.
+     * @public
+     * @example
+     * loader.loadsOfFile("/app/api/ext/render.mjs"); // [{ path, moduleID: "ext", paths: ["ext.render"] }]
+     */
+    public loadsOfFile(path: string): Array<{
+        path: string;
+        moduleID: string | null;
+        paths: ReadonlyArray<string> | null;
+    }>;
+    /**
      * Scan directory for module files
      * @param {string} dir - Directory to scan
      * @param {Object} [options={}] - Scan options
@@ -165,7 +192,6 @@ export class Loader extends ComponentBase {
      * @param {Function|null} [options.fileFilter=null] - Optional filter function (fileName) => boolean to load specific files only
      * @param {string|string[]|Function|null} [options.hidden=null] - Glob(s) hiding files/folders, matched against each entry's
      *   path relative to the API root (extension-stripped for files). Internal recursion passes the compiled matcher function.
-     * @param {boolean} [options.scanHiddenFolders=false] - Deprecated: restore the pre-v3.11 scanning of `.`/`__`-prefixed folders.
      * @param {string} [options.rootDir] - API root the relative hidden-glob paths are computed from (defaults to the scanned dir).
      * @returns {Promise<Object>} Directory structure
      * @public
@@ -176,7 +202,6 @@ export class Loader extends ComponentBase {
         maxDepth?: number | undefined;
         fileFilter?: Function | null | undefined;
         hidden?: string | Function | string[] | null | undefined;
-        scanHiddenFolders?: boolean | undefined;
         rootDir?: string | undefined;
     }): Promise<Object>;
     /**

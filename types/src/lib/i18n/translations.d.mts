@@ -54,7 +54,7 @@ export const language: {
  * asynchronous (a browser) it returns a promise that settles once the locale is in place. `await language.set(x)`
  * works everywhere. A locale that fails to load raises `WARNING_LANGUAGE_LOAD_FAILED` and keeps `"en-us"`.
  * @param {string} lang - Language code (e.g. "es-mx").
- * @param {{SlothletWarning?: Function, silent?: boolean}} [options] - Warning class and `silent` flag for a failed load.
+ * @param {{SlothletWarning?: Function}} [options] - Warning class for a failed load.
  * @returns {Promise<void>|undefined} A promise only when the load is asynchronous.
  * @public
  * @example
@@ -63,7 +63,6 @@ export const language: {
  */
 declare function setLanguageTo(lang: string, options?: {
     SlothletWarning?: Function;
-    silent?: boolean;
 }): Promise<void> | undefined;
 /** @type {typeof setLanguage} */
 declare const guarded_setLanguage: typeof setLanguage;
@@ -75,12 +74,11 @@ declare const guarded_initI18n: typeof initI18n;
  * Set current language (synchronous)
  * Merges requested language translations over default English translations
  * @param {string} lang - Language code
- * @param {{SlothletWarning?: Function, silent?: boolean}} [options] - Warning class and `silent` flag for a failed load
+ * @param {{SlothletWarning?: Function}} [options] - Warning class for a failed load
  * @public
  */
 declare function setLanguage(lang: string, options?: {
     SlothletWarning?: Function;
-    silent?: boolean;
 }): void;
 /**
  * Set the current language asynchronously — the browser-capable path.
@@ -91,13 +89,12 @@ declare function setLanguage(lang: string, options?: {
  * awaits the same synchronous read (the await is a no-op). A failed load warns and keeps the bundled
  * English default. Use this when you need to *await* a locale switch (e.g. in an Electron renderer).
  * @param {string} lang - Language code (e.g. "es-mx").
- * @param {{SlothletWarning?: Function, silent?: boolean}} [options] - Warning class and `silent` flag for a failed load
+ * @param {{SlothletWarning?: Function}} [options] - Warning class for a failed load
  * @returns {Promise<void>}
  * @public
  */
 declare function setLanguageAsync(lang: string, options?: {
     SlothletWarning?: Function;
-    silent?: boolean;
 }): Promise<void>;
 /**
  * Initialize i18n system (synchronous)

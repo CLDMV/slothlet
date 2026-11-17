@@ -161,7 +161,7 @@ export class Flatten extends ComponentBase {
      * @param {string}   [options.collisionContext="initial"] - Collision context ("initial" | "api").
      * @param {string}   [options.apiPathPrefix=""]          - API path prefix for collision error messages.
      * @param {string|null} [options.collisionModeOverride=null] - Caller's per-call override (e.g.
-     *   `api.add({ forceOverwrite: true })`), preferred over `collisionContext`'s config default for
+     *   `api.add({ collision: { force: true } })`), preferred over `collisionContext`'s config default for
      *   the function-default-vs-named-export merge decision below.
      * @returns {{ moduleContent: object|Function, origins: {self: (string[]|null), members: Object<string, string[]>} }}
      *   Built module content ready for wrapping/assignment, plus where it came from (#484): `self` is the

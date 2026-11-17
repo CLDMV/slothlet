@@ -1,6 +1,6 @@
 /**
  * @typedef {object} DiscoverOptions
- * @property {string|string[]} [scanRoot] - Filesystem path(s) to scan. Default: upward-walk from process.cwd() to nearest node_modules ancestor.
+ * @property {string|string[]} [root] - Filesystem path(s) to scan. Default: upward-walk from process.cwd() to nearest node_modules ancestor.
  * @property {string} [manifest="slothlet.module.json"] - Manifest filename, or `<file>#<dotted.key>` locator pointing at a subkey of another file (e.g. `"package.json#slothlet"`).
  * @property {Record<string, string>} [schema] - Field-name remap for legacy manifests. Maps canonical name → legacy name.
  * @property {string|string[]} [prefix] - Name-prefix filter applied BEFORE manifest read. Matches against full package name including scope.
@@ -19,7 +19,7 @@
  *
  * @param {DiscoverOptions} [options] - Discovery options.
  * @param {object} [hooks] - Internal hooks.
- * @param {(code: string, details: object) => void} [hooks.warn] - Called with a warning code and its details for a manifest that is valid but deprecated (format 1).
+ * @param {(details: {package: string, manifest: string}) => void} [hooks.warn] - Called for a manifest that is valid but written in the deprecated format 1 (`WARNING_MODULE_MANIFEST_FORMAT_1`).
  * @returns {Promise<DiscoverResult[]>} Discovered modules in walk order (apply `sort()` for deterministic ordering).
  * @throws {SlothletError} `MODULE_*` codes on manifest validation failures or G7 duplicate-name-version-mismatch.
  *
@@ -27,7 +27,7 @@
  * import { discoverModules } from "#helpers/module-discovery";
  *
  * const found = await discoverModules();
- * // Default upward-walk scanRoot, default slothlet.module.json manifest.
+ * // Default upward-walk root, default slothlet.module.json manifest.
  *
  * @example
  * const drivers = await discoverModules({
@@ -36,13 +36,16 @@
  * });
  */
 export function discoverModules(options?: DiscoverOptions, hooks?: {
-    warn?: ((code: string, details: object) => void) | undefined;
+    warn?: ((details: {
+        package: string;
+        manifest: string;
+    }) => void) | undefined;
 }): Promise<DiscoverResult[]>;
 export type DiscoverOptions = {
     /**
      * - Filesystem path(s) to scan. Default: upward-walk from process.cwd() to nearest node_modules ancestor.
      */
-    scanRoot?: string | string[] | undefined;
+    root?: string | string[] | undefined;
     /**
      * - Manifest filename, or `<file>#<dotted.key>` locator pointing at a subkey of another file (e.g. `"package.json#slothlet"`).
      */
