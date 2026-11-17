@@ -135,7 +135,7 @@ describe("HookManager.executeErrorHooks — error?.constructor?.name || 'Error' 
 
 		// Capture what errorType the error hook receives
 		let capturedErrorType;
-		api.slothlet.hook.on("**:error", ({ errorType }) => {
+		api.slothlet.hook.on("**:error", ({ class: errorType }) => {
 			capturedErrorType = errorType;
 		});
 
@@ -146,7 +146,7 @@ describe("HookManager.executeErrorHooks — error?.constructor?.name || 'Error' 
 		sl.handlers.hookManager.executeErrorHooks(
 			"math.add",
 			bareObj,
-			{ type: "before", hookTag: "test-coverage", hookId: null, timestamp: new Date(), stack: "" },
+			{ type: "before", hook: "test-coverage", at: 0, stack: "" },
 			[],
 			api,
 			{}
@@ -167,7 +167,7 @@ describe("HookManager.executeErrorHooks — error?.constructor?.name || 'Error' 
 		const sl = getSlInstance(api);
 
 		let capturedErrorType;
-		api.slothlet.hook.on("**:error", ({ errorType }) => {
+		api.slothlet.hook.on("**:error", ({ class: errorType }) => {
 			capturedErrorType = errorType;
 		});
 
@@ -175,7 +175,7 @@ describe("HookManager.executeErrorHooks — error?.constructor?.name || 'Error' 
 		sl.handlers.hookManager.executeErrorHooks(
 			"math.add",
 			new TypeError("test"),
-			{ type: "before", hookTag: "test-coverage", hookId: null, timestamp: new Date(), stack: "" },
+			{ type: "before", hook: "test-coverage", at: 0, stack: "" },
 			[],
 			api,
 			{}

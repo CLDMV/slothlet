@@ -716,7 +716,7 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 					await expect(api.ns.initialize()).rejects.toMatchObject({
 						code: "ROUTINE_FAILED",
 						name: "SlothletError",
-						details: { path: "ns.initialize", module: expect.any(String), count: 1 }
+						details: { path: ["ns", "initialize"], module: expect.any(String), count: 1 }
 					});
 				});
 				// "good" ran before the failure, and — the actual point of best-effort — "auth1" ran
@@ -739,7 +739,7 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 						code: "ROUTINE_FAILED",
 						details: {
 							count: 2,
-							failures: [{ path: "ns2.initialize" }, { path: "billing.initialize" }]
+							failures: [{ path: ["ns2", "initialize"] }, { path: ["billing", "initialize"] }]
 						}
 					});
 				});
@@ -1371,7 +1371,7 @@ describe.each(["eager", "lazy"])("routine self.* context under the root cascade 
 				expect(globalThis.__slothletPermLog).not.toContain("b:ok");
 				// B's denial surfaces as a routine failure attributed to B, its own PERMISSION_DENIED as cause.
 				expect(cascErr?.code).toBe("ROUTINE_FAILED");
-				expect(cascErr.details.failures.some((f) => f.path.startsWith("b"))).toBe(true);
+				expect(cascErr.details.failures.some((f) => f.path[0].startsWith("b"))).toBe(true);
 				expect(denialText(cascErr)).toMatch(/PERMISSION_DENIED/);
 			} finally {
 				await api.slothlet.shutdown();

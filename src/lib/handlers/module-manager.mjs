@@ -42,6 +42,7 @@ import { MODULE_MANIFEST } from "#handlers/metadata";
 import { SlothletError } from "#errors";
 import { assertOptionKeys } from "#helpers/config-schema";
 import { sortModules } from "#helpers/module-sort";
+import { segmentsOf } from "#helpers/segments";
 import {
 	ArrayMethods,
 	Arrays,
@@ -194,7 +195,7 @@ export class ModuleManager extends ComponentBase {
 		if (this.slothlet.envTarget === "browser") {
 			throw new SlothletError("MODULE_DISCOVERY_REQUIRES_NODE", { operation: ["slothlet", "api", "modules", "discover"] });
 		}
-		await this.#emit("modules:discover-start", { scanRoot: options.root, options });
+		await this.#emit("modules:discover-start", { root: options.root, options });
 		// Dynamically imported to keep module-manager free of static node:fs references.
 		// This allows module-manager to be safely imported in browser/bundler contexts
 		// where node:fs is not available; the import only fires when discover() is called.
@@ -596,10 +597,10 @@ export class ModuleManager extends ComponentBase {
 		};
 		MapMethods.set(this.#mounted, `${discoverResult.package}@${version}`, result);
 		await this.#emit("modules:mount-complete", {
-			name: discoverResult.package,
+			package: discoverResult.package,
 			version,
-			mountPath: effectiveMountPath,
-			moduleID
+			mount: segmentsOf(effectiveMountPath),
+			module: moduleID
 		});
 		return result;
 	}

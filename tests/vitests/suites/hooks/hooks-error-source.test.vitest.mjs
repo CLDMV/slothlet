@@ -75,7 +75,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Error Hook Source 
 		// Error hook to capture context
 		api.slothlet.hook.on(
 			"math.add:error",
-			({ path, error, source }) => {
+			({ path, error, origin: source }) => {
 				errorContext = {
 					path,
 					error,
@@ -107,11 +107,11 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Error Hook Source 
 		expect(errorContext).not.toBeNull();
 		expect(errorContext.path).toBe("math.add");
 		expect(errorContext.error.message).toBe("Validation failed");
-		expect(errorContext.source.type).toBe("before");
-		expect(errorContext.source.hookTag).toBe("failing-validator");
-		expect(errorContext.source.hookId).toBeDefined();
-		expect(errorContext.source.timestamp).toBeDefined();
-		expect(errorContext.source.stack).toBeDefined();
+		expect(errorContext.origin.type).toBe("before");
+		expect(errorContext.origin.hook).toBe("failing-validator");
+		expect(errorContext.origin.hook).toBeDefined();
+		expect(errorContext.origin.at).toBeDefined();
+		expect(errorContext.origin.stack).toBeDefined();
 	});
 
 	/**
@@ -136,7 +136,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Error Hook Source 
 		// Error hook to capture context
 		api.slothlet.hook.on(
 			"math.multiply:error",
-			({ path, error, source }) => {
+			({ path, error, origin: source }) => {
 				errorContext = {
 					path,
 					error,
@@ -166,11 +166,11 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Error Hook Source 
 		expect(errorContext).not.toBeNull();
 		expect(errorContext.path).toBe("math.multiply");
 		expect(errorContext.error.message).toBe("Function error");
-		expect(errorContext.source.type).toBe("before"); // Simulated via before hook
-		expect(errorContext.source.hookTag).toBe("function-error-simulator");
-		expect(errorContext.source.hookId).toBeDefined();
-		expect(errorContext.source.timestamp).toBeDefined();
-		expect(errorContext.source.stack).toBeDefined();
+		expect(errorContext.origin.type).toBe("before"); // Simulated via before hook
+		expect(errorContext.origin.hook).toBe("function-error-simulator");
+		expect(errorContext.origin.hook).toBeDefined();
+		expect(errorContext.origin.at).toBeDefined();
+		expect(errorContext.origin.stack).toBeDefined();
 	});
 
 	/**
@@ -194,7 +194,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Error Hook Source 
 		// Error hook to capture context
 		api.slothlet.hook.on(
 			"math.add:error",
-			({ path, error, source }) => {
+			({ path, error, origin: source }) => {
 				errorContext = {
 					path,
 					error,
@@ -226,11 +226,11 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Error Hook Source 
 		expect(errorContext).not.toBeNull();
 		expect(errorContext.path).toBe("math.add");
 		expect(errorContext.error.message).toBe("Cleanup failed");
-		expect(errorContext.source.type).toBe("after");
-		expect(errorContext.source.hookTag).toBe("failing-cleanup");
-		expect(errorContext.source.hookId).toBeDefined();
-		expect(errorContext.source.timestamp).toBeDefined();
-		expect(errorContext.source.stack).toBeDefined();
+		expect(errorContext.origin.type).toBe("after");
+		expect(errorContext.origin.hook).toBe("failing-cleanup");
+		expect(errorContext.origin.hook).toBeDefined();
+		expect(errorContext.origin.at).toBeDefined();
+		expect(errorContext.origin.stack).toBeDefined();
 	});
 
 	/**
@@ -254,7 +254,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Error Hook Source 
 		// Error hook to capture context
 		api.slothlet.hook.on(
 			"math.add:error",
-			({ path, error, source }) => {
+			({ path, error, origin: source }) => {
 				errorContext = {
 					path,
 					error,
@@ -281,11 +281,11 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Error Hook Source 
 		expect(errorContext).not.toBeNull();
 		expect(errorContext.path).toBe("math.add");
 		expect(errorContext.error.message).toBe("Always hook failed");
-		expect(errorContext.source.type).toBe("always");
-		expect(errorContext.source.hookTag).toBe("failing-always");
-		expect(errorContext.source.hookId).toBeDefined();
-		expect(errorContext.source.timestamp).toBeDefined();
-		expect(errorContext.source.stack).toBeDefined();
+		expect(errorContext.origin.type).toBe("always");
+		expect(errorContext.origin.hook).toBe("failing-always");
+		expect(errorContext.origin.hook).toBeDefined();
+		expect(errorContext.origin.at).toBeDefined();
+		expect(errorContext.origin.stack).toBeDefined();
 	});
 
 	/**
@@ -309,7 +309,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Error Hook Source 
 		// Error hook to capture all contexts
 		api.slothlet.hook.on(
 			"**:error",
-			({ path, error, source }) => {
+			({ path, error, origin: source }) => {
 				errorContexts.push({
 					path,
 					error,
@@ -356,16 +356,16 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Error Hook Source 
 		expect(errorContexts).toHaveLength(2);
 
 		// First error (before hook)
-		const beforeError = errorContexts.find((ctx) => ctx.source.type === "before");
+		const beforeError = errorContexts.find((ctx) => ctx.origin.type === "before");
 		expect(beforeError).toBeDefined();
 		expect(beforeError.path).toBe("math.multiply");
-		expect(beforeError.source.hookTag).toBe("failing-before");
+		expect(beforeError.origin.hook).toBe("failing-before");
 
 		// Second error (always hook)
-		const alwaysError = errorContexts.find((ctx) => ctx.source.type === "always");
+		const alwaysError = errorContexts.find((ctx) => ctx.origin.type === "always");
 		expect(alwaysError).toBeDefined();
 		expect(alwaysError.path).toBe("math.add");
-		expect(alwaysError.source.hookTag).toBe("failing-always");
+		expect(alwaysError.origin.hook).toBe("failing-always");
 	});
 
 	/**
@@ -391,7 +391,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Error Hook Source 
 
 		api.slothlet.hook.on(
 			"math.add:error",
-			({ path, error, source }) => {
+			({ path, error, origin: source }) => {
 				errorContext = {
 					path,
 					error,
@@ -418,7 +418,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Error Hook Source 
 
 		// Verify error tracking works with current config
 		expect(errorContext).not.toBeNull();
-		expect(errorContext.source.type).toBe("before");
+		expect(errorContext.origin.type).toBe("before");
 		expect(errorContext.path).toBe("math.add");
 		expect(errorContext.error.message).toBe("Test error");
 	});

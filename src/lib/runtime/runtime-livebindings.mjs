@@ -40,6 +40,7 @@
  * };
  */
 
+import { segmentsOf } from "#helpers/segments";
 import { internals as contextInternals } from "#factories/context";
 import { internals as instanceImportsInternals } from "#helpers/instance-imports";
 // This module's own namespace, registered below as the one copy of this file.
@@ -153,7 +154,7 @@ function runtime_refuseUnknownCaller(prop) {
 	const identity = liveRuntime.getCallerIdentity?.();
 	if (!identity?.unresolved || identity.unaccounted) return;
 	const target = typeof prop === "symbol" ? String(SymbolMethods.description(prop) ?? "") : String(prop);
-	throw new SlothletError("PERMISSION_DENIED", { caller: null, target });
+	throw new SlothletError("PERMISSION_DENIED", { caller: null, target: segmentsOf(target) });
 }
 
 /**

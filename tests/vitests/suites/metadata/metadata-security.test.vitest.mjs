@@ -76,7 +76,7 @@ describe.each(getMatrixConfigs())("Lifecycle Payload Hardening > Config: '$name'
 			for (const data of payloads) {
 				// The public event carries only these fields — the raw wrapper, the real wrapper ref, and
 				// any path to the internal slothlet instance are all absent, so there is nothing to leak.
-				expect(Object.keys(data).sort()).toEqual(["apiPath", "filePath", "impl", "moduleID", "source", "sourceFolder"]);
+				expect(Object.keys(data).sort()).toEqual(["file", "folder", "impl", "module", "path", "source"]);
 				expect(data.wrapper).toBeUndefined();
 				expect(data.____wrapperRef).toBeUndefined();
 				expect("slothlet" in data).toBe(false);
@@ -112,7 +112,7 @@ describe.each(getMatrixConfigs())("Lifecycle Payload Hardening > Config: '$name'
 			}
 
 			for (const data of payloads) {
-				expect(Object.keys(data).sort()).toEqual(["apiPath", "filePath", "impl", "moduleID", "source", "sourceFolder"]);
+				expect(Object.keys(data).sort()).toEqual(["file", "folder", "impl", "module", "path", "source"]);
 				expect(data.wrapper).toBeUndefined();
 				expect(data.____wrapperRef).toBeUndefined();
 			}

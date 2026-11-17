@@ -172,7 +172,7 @@ describe("apply trap — sync throw with suppressErrors=true (with hooks)", () =
 
 		api.slothlet.hook.on(
 			"task.syncThrow:always",
-			({ hasError }) => {
+			({ errors, hasError = errors.length > 0 }) => {
 				alwaysHookFired = true;
 				alwaysHookHasError = hasError;
 			},

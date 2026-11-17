@@ -142,6 +142,7 @@ import {
 	URLSearchParams,
 	URLSearchParamsMethods
 } from "#helpers/intrinsics";
+import { segmentsOf } from "#helpers/segments";
 const {
 	resolveWrapper,
 	releaseModuleMakers,
@@ -812,7 +813,7 @@ class Slothlet {
 					void this.handlers.lifecycle.emit(
 						"impl:created",
 						{
-							apiPath: data.apiPath,
+							path: segmentsOf(data.apiPath),
 							// #433: the public tier carries the WRAPPED callable on a stable `impl` field — never the
 							// raw impl (#398), and no longer the reserved internal `wrapper.____impl` handle, which is
 							// dropped from the PUBLIC event entirely: it was redundant with `impl` and re-exposed an
@@ -823,9 +824,9 @@ class Slothlet {
 							// subscriber a module subscribed gets its module's view of the node (`nodeOf`) instead (#625).
 							impl: data.wrapper?.____impl ?? null,
 							source: data.source,
-							moduleID: data.moduleID,
-							filePath: data.filePath,
-							sourceFolder: data.sourceFolder
+							module: data.moduleID,
+							file: data.filePath,
+							folder: data.sourceFolder
 						},
 						nodeOf(data)
 					);
@@ -885,14 +886,14 @@ class Slothlet {
 					void this.handlers.lifecycle.emit(
 						"impl:changed",
 						{
-							apiPath: data.apiPath,
+							path: segmentsOf(data.apiPath),
 							// #433: stable public callable field, no public `wrapper` — see the impl:created re-emit above,
 							// also for what a subscriber a module subscribed gets instead (#625).
 							impl: data.wrapper?.____impl ?? null,
 							source: data.source,
-							moduleID: data.moduleID,
-							filePath: data.filePath,
-							sourceFolder: data.sourceFolder
+							module: data.moduleID,
+							file: data.filePath,
+							folder: data.sourceFolder
 						},
 						nodeOf(data)
 					);
@@ -1015,7 +1016,7 @@ class Slothlet {
 				if (this.handlers?.lifecycle) {
 					this.handlers.lifecycle.emit("materialized:complete", {
 						total: this._totalLazyCount,
-						timestamp: this.#clock.now()
+						at: this.#clock.now()
 					});
 				}
 			}
@@ -1615,7 +1616,7 @@ class Slothlet {
 		// restart(). A reload (which always passes an instance ID to preserve or rotate) is the same
 		// instance re-reading its modules, not a new one, so it does not emit this.
 		if (!preservedInstanceID) {
-			await this.handlers.lifecycle.emit("init", { instanceID: this.instanceID, restart: this._restarting });
+			await this.handlers.lifecycle.emit("init", { instance: this.instanceID, restart: this._restarting });
 		}
 
 		return this.boundApi;
@@ -1984,7 +1985,7 @@ class Slothlet {
 		this._restarting = true;
 		try {
 			// 1. `restart` — before anything is torn down.
-			await this.handlers.lifecycle.emit("restart", { instanceID: previousInstanceID });
+			await this.handlers.lifecycle.emit("restart", { instance: previousInstanceID });
 
 			// 2. Normal teardown of the old instance — the same steps as the root `api.shutdown()` dispose
 			//    path: `mode: "shutdown"` routines, the root shutdown hook (whatever the user's routines
@@ -2048,7 +2049,7 @@ class Slothlet {
 		}
 
 		// 6. `restarted` — on the new instance.
-		await this.handlers.lifecycle.emit("restarted", { instanceID: this.instanceID, previousInstanceID });
+		await this.handlers.lifecycle.emit("restarted", { instance: this.instanceID, previous: previousInstanceID });
 
 		if (teardownError) throw teardownError;
 		return this.boundApi;
@@ -2218,7 +2219,7 @@ class Slothlet {
 		// `shutdown` (#504): teardown is starting — emitted on the instance's own emitter while every
 		// system is still up, so its subscribers (config-declared and runtime alike) can still reach the
 		// api. `restart` is true when the teardown is the first half of a restart().
-		await this.handlers.lifecycle.emit("shutdown", { instanceID: this.instanceID, restart: this._restarting });
+		await this.handlers.lifecycle.emit("shutdown", { instance: this.instanceID, restart: this._restarting });
 
 		// Drain any in-flight lazy-mode module loads before tearing down, so that
 		// background import() calls can complete and won't cause "Closing rpc while

@@ -25,6 +25,7 @@
  * const assignment = new ApiAssignment(slothlet);
  * assignment.assignToApiPath(api, "math", mathWrapper, {});
  */
+import { segmentsOf } from "#helpers/segments";
 import { ComponentBase } from "#factories/component-base";
 import { isFrameworkReservedKey, internals as unifiedWrapperInternals } from "#handlers/unified-wrapper";
 import { isFrameworkInternal, internals as frameworkInternalsInternals } from "#handlers/framework-internals";
@@ -631,7 +632,7 @@ export class ApiAssignment extends ComponentBase {
 									new this.slothlet.SlothletWarning(
 										"WARNING_COLLISION_TRIGGER_MATERIALIZE_ERROR",
 										{
-											path: valueWrapper.____slothletInternal.apiPath
+											path: segmentsOf(valueWrapper.____slothletInternal.apiPath)
 										},
 										{ cause: err }
 									);

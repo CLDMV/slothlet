@@ -23,6 +23,7 @@
 // here; both resolve through the platform shim in a browser (#123). A browser has no
 // Proxy-detection API, so isProxy returns false — slothlet's OWN wrappers are detected via
 // resolveWrapper(), so only arbitrary USER proxies (rare in browser) lose detection.
+import { segmentsOf } from "#helpers/segments";
 import { isNode, util, EventEmitter, scheduleMacrotask, inheritsFrom } from "#helpers/platform";
 import {
 	copyForComposition,
@@ -2409,7 +2410,7 @@ function runtime_assertFrameworkRootChange(slothlet, prop) {
 	if (slothlet.handlers.apiManager.frameworkProtected()) {
 		const identity = slothlet.contextManager?.getCallerIdentity?.(slothlet.instanceID);
 		if (identity?.unresolved) {
-			throw new slothlet.SlothletError("LOOSE_SET_UNATTRIBUTED", { path: prop });
+			throw new slothlet.SlothletError("LOOSE_SET_UNATTRIBUTED", { path: segmentsOf(prop) });
 		}
 		// Code a caller supplied to another module's call changes it only where every module it acts for may (#597).
 		if (identity?.currentWrapper) {
@@ -2462,7 +2463,7 @@ function runtime_selfChangeTarget(ctx, prop) {
 		// caller that did reach it would fail closed rather than write with the host's standing.
 		/* v8 ignore next 3 */
 		if (identity?.unresolved) {
-			throw new slothlet.SlothletError("LOOSE_SET_UNATTRIBUTED", { path: ArrayMethods.join(parts, ".") });
+			throw new slothlet.SlothletError("LOOSE_SET_UNATTRIBUTED", { path: segmentsOf(ArrayMethods.join(parts, ".")) });
 		}
 		if (identity?.currentWrapper) {
 			for (
@@ -2549,7 +2550,7 @@ function runtime_frameworkViewOf(member, slothlet, reader, path) {
 	const changeWriter = (parts) => {
 		const identity = slothlet.contextManager?.getCallerIdentity?.(slothlet.instanceID);
 		if (identity?.unresolved) {
-			throw new slothlet.SlothletError("LOOSE_SET_UNATTRIBUTED", { path: ArrayMethods.join(parts, ".") });
+			throw new slothlet.SlothletError("LOOSE_SET_UNATTRIBUTED", { path: segmentsOf(ArrayMethods.join(parts, ".")) });
 		}
 		if (identity?.currentWrapper) return identity.currentWrapper;
 		if (runtime_selfWriteHasStanding(slothlet)) return null;
@@ -2724,7 +2725,7 @@ function runtime_selfRootWriter(slothlet, reader, parts) {
 		// Code the live runtime cannot attribute is refused here as through `self.X = …`: recorded as anyone's, the
 		// change would run with standing it was never given once the system is on.
 		if (identity?.unresolved) {
-			throw new slothlet.SlothletError("LOOSE_SET_UNATTRIBUTED", { path: ArrayMethods.join(parts, ".") });
+			throw new slothlet.SlothletError("LOOSE_SET_UNATTRIBUTED", { path: segmentsOf(ArrayMethods.join(parts, ".")) });
 		}
 		if (identity?.currentWrapper) return identity.currentWrapper;
 		if (
@@ -2737,7 +2738,7 @@ function runtime_selfRootWriter(slothlet, reader, parts) {
 		return reader;
 	}
 	if (identity?.unresolved) {
-		throw new slothlet.SlothletError("LOOSE_SET_UNATTRIBUTED", { path: ArrayMethods.join(parts, ".") });
+		throw new slothlet.SlothletError("LOOSE_SET_UNATTRIBUTED", { path: segmentsOf(ArrayMethods.join(parts, ".")) });
 	}
 	if (identity?.currentWrapper) return identity.currentWrapper;
 	if (runtime_selfWriteHasStanding(slothlet) || reader === HOST_READER || reader === SEALED_SHELL_READER) return null;
@@ -3028,7 +3029,7 @@ function runtime_assertOwnedWriteAt(wrapper, parts) {
 	// Code the live runtime cannot attribute to one of several suspended calls is module code with no
 	// owner to check against: refused, rather than handed the host's standing.
 	if (identity?.unresolved) {
-		throw new wrapper.SlothletError("LOOSE_SET_UNATTRIBUTED", { path: ArrayMethods.join(parts, ".") });
+		throw new wrapper.SlothletError("LOOSE_SET_UNATTRIBUTED", { path: segmentsOf(ArrayMethods.join(parts, ".")) });
 	}
 	const caller = identity?.currentWrapper;
 	if (!caller) return;
@@ -3325,8 +3326,8 @@ function runtime_makeQueuedChange(wrapper, change, generation) {
 	} catch (error) {
 		const apiPath = runtime_standInPath(wrapper, change.chain);
 		const operation = change.op === "lock" ? "preventExtensions" : change.op;
-		new wrapper.SlothletWarning("WARNING_LAZY_WRITE_REFUSED", { path: apiPath, operation }, { cause: error });
-		const refused = new wrapper.SlothletError("LAZY_WRITE_REFUSED", { path: apiPath, operation }, { cause: error });
+		new wrapper.SlothletWarning("WARNING_LAZY_WRITE_REFUSED", { path: segmentsOf(apiPath), operation }, { cause: error });
+		const refused = new wrapper.SlothletError("LAZY_WRITE_REFUSED", { path: segmentsOf(apiPath), operation }, { cause: error });
 		if (!WeakMapMethods.has(REFUSED_CHANGES, wrapper.slothlet)) WeakMapMethods.set(REFUSED_CHANGES, wrapper.slothlet, []);
 		// Recorded for the nodes the loads were for: one replaced while it loaded (reloaded, or rebuilt away) does not
 		// hand the refusal to the node that took its place.
@@ -3835,7 +3836,7 @@ function runtime_enforceNodeReportRead(wrapper, nodePath, callerOverride) {
 	if (decision.allowed) return;
 	throw new wrapper.SlothletError("PERMISSION_DENIED", {
 		caller: decision.caller,
-		target: nodePath
+		target: segmentsOf(nodePath)
 	});
 }
 
@@ -4091,7 +4092,7 @@ function runtime_enforceReadGate(wrapper, prop, resolvedValue, callerOverride, k
 	if (decision.allowed) return;
 	throw new wrapper.SlothletError("PERMISSION_DENIED", {
 		caller: decision.caller,
-		target: targetPath
+		target: segmentsOf(targetPath)
 	});
 }
 
@@ -4554,7 +4555,7 @@ function runtime_runAccessor(wrapper, accessor, thisArg, args, attribute = true)
 		} else kept = runtime_takeCapturedAccess(wrapper);
 	}
 	if (reader?.unresolved && !kept) {
-		throw new wrapper.SlothletError("PERMISSION_DENIED", { caller: null, target: wrapper.____slothletInternal.apiPath });
+		throw new wrapper.SlothletError("PERMISSION_DENIED", { caller: null, target: segmentsOf(wrapper.____slothletInternal.apiPath) });
 	}
 	// Running it is calling the module's code, so the reader has to be allowed to call the node, as a call through
 	// `self` is checked (a reader completed on behalf of is checked as that reader).
@@ -4896,7 +4897,8 @@ function runtime_givenMember(record, prop, value) {
 	if (value === undefined) return undefined;
 	if (runtime_isTerminalData(value)) {
 		const decision = runtime_givenReadDecision(record, prop);
-		if (!decision.allowed) throw new record.gate.SlothletError("PERMISSION_DENIED", { caller: decision.caller, target: decision.target });
+		if (!decision.allowed)
+			throw new record.gate.SlothletError("PERMISSION_DENIED", { caller: decision.caller, target: segmentsOf(decision.target) });
 		return value;
 	}
 	if (runtime_givenAsIs(value)) return value;
@@ -5598,7 +5600,7 @@ function runtime_gateNodeValue(wrapper, kept, access, pinned = null) {
 	const targetPath = wrapper.____slothletInternal.apiPath;
 	const decision = runtime_readGateDecision(wrapper, targetPath, undefined, kept, access, pinned);
 	if (decision.allowed) return;
-	throw new wrapper.SlothletError("PERMISSION_DENIED", { caller: decision.caller, target: targetPath });
+	throw new wrapper.SlothletError("PERMISSION_DENIED", { caller: decision.caller, target: segmentsOf(targetPath) });
 }
 
 /**
@@ -6488,7 +6490,7 @@ function runtime_selfReadAsDefiner(selfProxy, prop, loadingInstanceID = null, ho
 		if (!owner || owner.instanceID === loadingInstanceID) return null;
 	}
 	const target = typeof prop === "symbol" ? String(SymbolMethods.description(prop) ?? "") : String(prop);
-	if (definer.unplaced) throw new SlothletError("PERMISSION_DENIED", { caller: null, target });
+	if (definer.unplaced) throw new SlothletError("PERMISSION_DENIED", { caller: null, target: segmentsOf(target) });
 	// Several leaves and none the file's own node: the file's module path is the identity, and no node answers for it.
 	// With the permission system off nothing is checked: any of them gives the code its context (#726).
 	if (definer.leaves && !definer.leaves[0].slothlet?.handlers?.permissionManager?.isEnabled?.()) definer.wrapper = definer.leaves[0];
@@ -6497,7 +6499,7 @@ function runtime_selfReadAsDefiner(selfProxy, prop, loadingInstanceID = null, ho
 		const common = [];
 		for (let i = 0; ArrayMethods.every(paths, (parts) => i < parts.length - 1 && parts[i] === paths[0][i]); i++)
 			listPush(common, paths[0][i]);
-		throw new SlothletError("PERMISSION_DENIED", { caller: ArrayMethods.join(common, ".") || null, target });
+		throw new SlothletError("PERMISSION_DENIED", { caller: ArrayMethods.join(common, ".") || null, target: segmentsOf(target) });
 	}
 	const leaf = definer.wrapper;
 	const checks = Boolean(leaf.slothlet?.handlers?.permissionManager?.isEnabled?.());
@@ -6512,7 +6514,8 @@ function runtime_selfReadAsDefiner(selfProxy, prop, loadingInstanceID = null, ho
 	// definer is not read as the caller, and nor is the host. Only code no call accounts for is read by its frames.
 	if (checks) {
 		const identity = contextManager?.getCallerIdentity?.(leaf.slothlet.instanceID);
-		if (identity?.unresolved && !identity.unaccounted) throw new SlothletError("PERMISSION_DENIED", { caller: null, target });
+		if (identity?.unresolved && !identity.unaccounted)
+			throw new SlothletError("PERMISSION_DENIED", { caller: null, target: segmentsOf(target) });
 	}
 	const instanceID = contextManager?.runInContext ? runtime_makerInstanceID(leaf.slothlet) : null;
 	if (instanceID === null) return null;
@@ -6673,7 +6676,7 @@ function runtime_hostRunDefiner(slothlet, unaccounted = false, resolved = null, 
 	const definer = frameDefiner(contextManager.runningInstanceID?.() ?? null);
 	// Code of a file several running instances hold, with nothing naming which of them is running: it is some
 	// module's, so it is not run as the host's.
-	if (definer?.shared) throw new SlothletError("PERMISSION_DENIED", { caller: null, target: "self" });
+	if (definer?.shared) throw new SlothletError("PERMISSION_DENIED", { caller: null, target: segmentsOf("self") });
 	const leaf = definer?.wrapper;
 	if (!leaf || leaf.slothlet !== slothlet) return null;
 	// The others the code is held to as well: the leaves further out on the stack, and, for a helper file's own code,
@@ -10366,7 +10369,7 @@ function runtime_crossAssertWrite(state, prop, change) {
 	if (typeof prop === "string") listPush(parts, prop);
 	const identity = slothlet.contextManager?.getCallerIdentity?.(slothlet.instanceID);
 	if (identity?.unresolved) {
-		throw new slothlet.SlothletError("LOOSE_SET_UNATTRIBUTED", { path: ArrayMethods.join(parts, ".") });
+		throw new slothlet.SlothletError("LOOSE_SET_UNATTRIBUTED", { path: segmentsOf(ArrayMethods.join(parts, ".")) });
 	}
 	const writers = new Set();
 	if (state.reader?.____slothletInternal) SetMethods.add(writers, state.reader);
@@ -12278,7 +12281,7 @@ function runtime_refuseRemovedCaller(wrapper, callerWrapper, targetPath) {
 	if (!wrapper.slothlet.handlers.apiManager.isRemovedCaller(callerWrapper)) return;
 	throw new wrapper.SlothletError("PERMISSION_DENIED", {
 		caller: String(callerWrapper.____slothletInternal.apiPath ?? ""),
-		target: targetPath
+		target: segmentsOf(targetPath)
 	});
 }
 
@@ -12335,14 +12338,14 @@ function enforcePermission(wrapper, callArgs, promote = false, kept = null, reso
 			permissionManager.isPrivateTarget?.(targetPath) &&
 			!permissionManager.enforceAccess(null, targetPath, null, wrapper.____slothletInternal.filePath, null, callMeta)
 		) {
-			throw new wrapper.SlothletError("PERMISSION_DENIED", { caller: null, target: targetPath });
+			throw new wrapper.SlothletError("PERMISSION_DENIED", { caller: null, target: segmentsOf(targetPath) });
 		}
 		return;
 	}
 	if (decision.verdict === "deny") {
 		throw new wrapper.SlothletError("PERMISSION_DENIED", {
 			caller: null,
-			target: targetPath
+			target: segmentsOf(targetPath)
 		});
 	}
 	const { callerWrapper, ceilings, ctx } = decision;
@@ -12420,7 +12423,7 @@ function runtime_enforceCallAs(wrapper, permissionManager, callerWrapper, target
 	if (!permissionManager.enforceAccess(callerPath, targetPath, callerFilePath, targetFilePath, runtimeContext, callMeta, enforceOptions)) {
 		throw new wrapper.SlothletError("PERMISSION_DENIED", {
 			caller: callerPath,
-			target: targetPath
+			target: segmentsOf(targetPath)
 		});
 	}
 }
@@ -12462,7 +12465,7 @@ function runtime_deferForPrincipals(
 		if (
 			!permissionManager.enforceAccess(callerPath, targetPath, callerFilePath, targetFilePath, runtimeContext, callMeta, PRINCIPAL_GRACE)
 		) {
-			throw new wrapper.SlothletError("PERMISSION_DENIED", { caller: callerPath, target: targetPath });
+			throw new wrapper.SlothletError("PERMISSION_DENIED", { caller: callerPath, target: segmentsOf(targetPath) });
 		}
 	});
 }
@@ -12713,7 +12716,7 @@ function runtime_enforceCapturedCaller(wrapper, capturedCaller, targetPathOverri
 	}
 
 	if (!permissionManager.enforceAccess(callerPath, targetPath, callerFilePath, targetFilePath, runtimeContext, callMeta, enforceOptions)) {
-		throw new wrapper.SlothletError("PERMISSION_DENIED", { caller: callerPath, target: targetPath });
+		throw new wrapper.SlothletError("PERMISSION_DENIED", { caller: callerPath, target: segmentsOf(targetPath) });
 	}
 }
 
@@ -13451,8 +13454,7 @@ function runtime_runAroundPipeline(wrapper, hookManager, arounds, strategy, this
 	const onUnobserved = (source) => {
 		unobserved = source;
 	};
-	const functionSource = (error) =>
-		failureSource({ type: "function", timestamp: wrapper.clock.now() }, runtime_readTargetFailure(wrapper, error));
+	const functionSource = (error) => failureSource({ type: "function", at: wrapper.clock.now() }, runtime_readTargetFailure(wrapper, error));
 
 	const invokeTarget = (targetArgs) => {
 		const impl = internal.impl;
@@ -13474,7 +13476,7 @@ function runtime_runAroundPipeline(wrapper, hookManager, arounds, strategy, this
 				true
 			);
 		}
-		throw new wrapper.SlothletError("API_PATH_NOT_CALLABLE", { path, received: typeof impl });
+		throw new wrapper.SlothletError("API_PATH_NOT_CALLABLE", { path: segmentsOf(path), received: typeof impl });
 	};
 
 	// Observers, run once per call on the way out.
@@ -13871,7 +13873,7 @@ function runtime_resolveRestartTarget(wrapper, propChain = []) {
 	const apiPath = wrapper.____slothletInternal.apiPath;
 	const segments = concatLists(apiPath ? splitText(String(apiPath), ".") : [], mapList(propChain, String));
 	const fail = () => {
-		throw new wrapper.SlothletError("RESTART_REFERENCE_UNRESOLVED", { path: ArrayMethods.join(segments, ".") });
+		throw new wrapper.SlothletError("RESTART_REFERENCE_UNRESOLVED", { path: segmentsOf(ArrayMethods.join(segments, ".")) });
 	};
 	let node = wrapper.____slothlet.api;
 	for (let ofIndex = 0, ofList = segments; ofIndex < ofList.length; ofIndex++) {
@@ -14382,7 +14384,7 @@ function runtime_refuseFixedObjectDefinition(slothlet, apiPath, prop, value) {
 	if (resolveWrapper(value) !== null || UnifiedWrapper._staysValue(value)) return;
 	// A definition the object cannot take: thrown as the language's `TypeError`, coded and translated.
 	const refusal = new slothlet.SlothletError("PERMISSION_MEMBER_FIXED_OBJECT", {
-		path: apiPath ? `${apiPath}.${String(prop)}` : String(prop)
+		path: segmentsOf(apiPath ? `${apiPath}.${String(prop)}` : String(prop))
 	});
 	throw SlothletTypeError.from(refusal);
 }
@@ -17704,7 +17706,7 @@ class UnifiedWrapper extends ComponentBase {
 				if (Objects.isFrozen(target)) return false;
 				// A callable `then` would make the node awaitable (#571): refused at once, as a loaded node refuses it.
 				if (prop === "then" && isAwaitableThen({ value })) {
-					throw new wrapper.SlothletError("API_MEMBER_THEN_RESERVED", { path: nodePath() });
+					throw new wrapper.SlothletError("API_MEMBER_THEN_RESERVED", { path: segmentsOf(nodePath()) });
 				}
 				// A member defined fixed through the stand-in (below) takes no write, on the stand-in or the node.
 				if (runtime_isFixedReadOnly(target, prop)) {
@@ -17716,7 +17718,7 @@ class UnifiedWrapper extends ComponentBase {
 			defineProperty(target, prop, descriptor) {
 				// A callable `then` would make the node awaitable (#571): refused at once and first, as a loaded node refuses it.
 				if (prop === "then" && isAwaitableThen(descriptor)) {
-					throw new wrapper.SlothletError("API_MEMBER_THEN_RESERVED", { path: nodePath() });
+					throw new wrapper.SlothletError("API_MEMBER_THEN_RESERVED", { path: segmentsOf(nodePath()) });
 				}
 				if (!Reflect.isExtensible(target)) {
 					// Freezing or sealing the stand-in fixes the members its target holds (its own `name` and `length`) once it
@@ -18340,7 +18342,7 @@ class UnifiedWrapper extends ComponentBase {
 						filterList(concatLists([wrapper.____slothletInternal.apiPath], mapList(propChain, String)), Boolean),
 						"."
 					);
-					throw new wrapper.slothlet.SlothletError("PERMISSION_DENIED", { caller: null, target: ___deniedPath });
+					throw new wrapper.slothlet.SlothletError("PERMISSION_DENIED", { caller: null, target: segmentsOf(___deniedPath) });
 				}
 
 				wrapper.slothlet.debug("wrapper", {
@@ -18668,7 +18670,7 @@ class UnifiedWrapper extends ComponentBase {
 						filterList(concatLists([wrapper.____slothletInternal.apiPath], mapList(propChain, String)), Boolean),
 						"."
 					);
-					throw new wrapper.SlothletError("LAZY_SUBCLASS_BEFORE_LOAD", { path: apiPath });
+					throw new wrapper.SlothletError("LAZY_SUBCLASS_BEFORE_LOAD", { path: segmentsOf(apiPath) });
 				}
 				return waitingHandler.apply(target, undefined, args, (fn) => Reflect.construct(fn, args, fn));
 			},
@@ -19820,7 +19822,7 @@ class UnifiedWrapper extends ComponentBase {
 										)
 									: FunctionMethods.apply(impl.default, impl, args);
 							} else {
-								throw new wrapper.SlothletError("API_PATH_NOT_CALLABLE", { path: ___path, received: typeof impl });
+								throw new wrapper.SlothletError("API_PATH_NOT_CALLABLE", { path: segmentsOf(___path), received: typeof impl });
 							}
 							settled = raw && typeof raw === "object" && typeof raw.then === "function" ? await raw : raw;
 						} catch (error) {
@@ -19833,7 +19835,7 @@ class UnifiedWrapper extends ComponentBase {
 							// Reachable: an outer target that re-raises the inner call's marked original
 							// (rather than the context wrapper around it) lands here with the marker set.
 							if (!isHookProcessed(error)) {
-								const sourceInfo = failureSource({ type: "function", timestamp: wrapper.clock.now() }, failure);
+								const sourceInfo = failureSource({ type: "function", at: wrapper.clock.now() }, failure);
 								hookManager.executeErrorHooks(___path, originalError, sourceInfo, args, api, ctx);
 							}
 							hookManager.executeAlwaysHooks(___path, args, undefined, true, [originalError], api, ctx);
@@ -19962,7 +19964,7 @@ class UnifiedWrapper extends ComponentBase {
 									} else {
 										reject(
 											new wrapper.slothlet.SlothletError("API_PATH_NOT_CALLABLE", {
-												path: wrapper.____slothletInternal.apiPath,
+												path: segmentsOf(wrapper.____slothletInternal.apiPath),
 												received: typeof impl
 											})
 										);
@@ -19979,7 +19981,11 @@ class UnifiedWrapper extends ComponentBase {
 							// a defensive guard against corrupted internal state; unreachable in practice.
 							/* v8 ignore start */
 							if (!wrapper.____slothletInternal.state.inFlight) {
-								reject(new wrapper.slothlet.SlothletError("LAZY_MATERIALIZATION_FAILED", { path: wrapper.____slothletInternal.apiPath }));
+								reject(
+									new wrapper.slothlet.SlothletError("LAZY_MATERIALIZATION_FAILED", {
+										path: segmentsOf(wrapper.____slothletInternal.apiPath)
+									})
+								);
 								return;
 								/* v8 ignore stop */
 							}
@@ -20030,7 +20036,7 @@ class UnifiedWrapper extends ComponentBase {
 					}
 				} else {
 					throw new wrapper.SlothletError("API_PATH_NOT_CALLABLE", {
-						path: wrapper.____slothletInternal.apiPath,
+						path: segmentsOf(wrapper.____slothletInternal.apiPath),
 						received: typeof impl
 					});
 				}
@@ -20065,7 +20071,7 @@ class UnifiedWrapper extends ComponentBase {
 								if (hasHooks) {
 									// A hook's failure, read from its record (see HookManager#failureOf), never in the caller's flow (#599).
 									const originalError = unwrapError(error);
-									const sourceInfo = failureSource({ type: "after", timestamp: wrapper.clock.now() }, hookManager.failureOf(error));
+									const sourceInfo = failureSource({ type: "after", at: wrapper.clock.now() }, hookManager.failureOf(error));
 									// The after chain reports its own hook's failure; this reports only what it did not.
 									if (!hookReported && !isHookProcessed(error)) {
 										hookManager.executeErrorHooks(wrapper.____slothletInternal.apiPath, originalError, sourceInfo, args, api, ctx);
@@ -20088,7 +20094,7 @@ class UnifiedWrapper extends ComponentBase {
 								const failure = runtime_readTargetFailure(wrapper, error);
 								const originalError = failure.originalError();
 								if (!isHookProcessed(error)) {
-									const sourceInfo = failureSource({ type: "function", timestamp: wrapper.clock.now() }, failure);
+									const sourceInfo = failureSource({ type: "function", at: wrapper.clock.now() }, failure);
 									hookManager.executeErrorHooks(wrapper.____slothletInternal.apiPath, originalError, sourceInfo, args, api, ctx);
 								}
 								// Always hooks execute for rejected promises
@@ -20125,7 +20131,7 @@ class UnifiedWrapper extends ComponentBase {
 				// always hooks then take the unwrapped error from what was read.
 				const targetFailure = hasHooks && !hookReported ? runtime_readTargetFailure(wrapper, error) : null;
 				if (targetFailure && !isHookProcessed(error)) {
-					const sourceInfo = failureSource({ type: "function", timestamp: wrapper.clock.now() }, targetFailure);
+					const sourceInfo = failureSource({ type: "function", at: wrapper.clock.now() }, targetFailure);
 					hookManager.executeErrorHooks(wrapper.____slothletInternal.apiPath, targetFailure.originalError(), sourceInfo, args, api, ctx);
 				}
 
@@ -20610,7 +20616,7 @@ class UnifiedWrapper extends ComponentBase {
 			// A callable `then` would make the node awaitable (#571), so assigning one is refused; a `then`
 			// holding data is an ordinary member and reads back.
 			if (prop === "then" && isAwaitableThen({ value })) {
-				throw new wrapper.SlothletError("API_MEMBER_THEN_RESERVED", { path: wrapper.____slothletInternal.apiPath });
+				throw new wrapper.SlothletError("API_MEMBER_THEN_RESERVED", { path: segmentsOf(wrapper.____slothletInternal.apiPath) });
 			}
 			// A module writes only under the subtree it owns, below the top level of `self` as at it (#625). A
 			// framework-reserved key is the framework's own state: the built-in write rules keep modules off it.
@@ -21085,7 +21091,7 @@ class UnifiedWrapper extends ComponentBase {
 			if (wrapper.____slothletInternal.mode === "lazy" && wrapper.____slothletInternal.state.inFlight) {
 				// A subclass's `super()` has to finish now, which nothing still loading can (#685).
 				if (newTarget !== wrapper.____slothletInternal.proxy) {
-					throw new wrapper.SlothletError("LAZY_SUBCLASS_BEFORE_LOAD", { path: wrapper.____slothletInternal.apiPath });
+					throw new wrapper.SlothletError("LAZY_SUBCLASS_BEFORE_LOAD", { path: segmentsOf(wrapper.____slothletInternal.apiPath) });
 				}
 				// materializationPromise is always set when inFlight=true; Promise.resolve() guards
 				// the unreachable case where it is somehow absent due to corrupted internal state.
@@ -21095,7 +21101,9 @@ class UnifiedWrapper extends ComponentBase {
 						// Materialization resolved without marking the wrapper as materialized —
 						// a defensive guard against corrupted internal state; unreachable in practice.
 						/* v8 ignore next */
-						throw new wrapper.slothlet.SlothletError("LAZY_MATERIALIZATION_FAILED", { path: wrapper.____slothletInternal.apiPath });
+						throw new wrapper.slothlet.SlothletError("LAZY_MATERIALIZATION_FAILED", {
+							path: segmentsOf(wrapper.____slothletInternal.apiPath)
+						});
 					}
 					const impl = wrapper.____slothletInternal.impl;
 					// newTarget is the proxy itself here (a subclass was refused above): impl stands in for it, so
@@ -21106,7 +21114,7 @@ class UnifiedWrapper extends ComponentBase {
 						return Reflect.construct(impl.default, args, impl.default);
 					}
 					throw new wrapper.slothlet.SlothletError("API_PATH_NOT_CALLABLE", {
-						path: wrapper.____slothletInternal.apiPath,
+						path: segmentsOf(wrapper.____slothletInternal.apiPath),
 						received: typeof impl
 					});
 				});
@@ -21133,7 +21141,7 @@ class UnifiedWrapper extends ComponentBase {
 			}
 
 			throw new wrapper.SlothletError("API_PATH_NOT_CALLABLE", {
-				path: wrapper.____slothletInternal.apiPath,
+				path: segmentsOf(wrapper.____slothletInternal.apiPath),
 				received: typeof impl
 			});
 		};
@@ -21370,7 +21378,7 @@ class UnifiedWrapper extends ComponentBase {
 			// framework-reserved key, is defined on the target as before.
 			defineProperty: (target, prop, descriptor) => {
 				if (prop === "then" && isAwaitableThen(descriptor)) {
-					throw new wrapper.SlothletError("API_MEMBER_THEN_RESERVED", { path: wrapper.____slothletInternal.apiPath });
+					throw new wrapper.SlothletError("API_MEMBER_THEN_RESERVED", { path: segmentsOf(wrapper.____slothletInternal.apiPath) });
 				}
 				// A definition that changes nothing (freezing an already frozen node) is no write (#667).
 				if (!Reflect.isExtensible(target) && runtime_isUnchangingDefinition(target, prop, descriptor)) return true;

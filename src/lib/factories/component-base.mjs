@@ -42,6 +42,7 @@
 import { translate } from "#i18n";
 import { internals as reservedKeysInternals } from "#helpers/reserved-keys";
 import { DEFAULT_CLOCK } from "#helpers/clock";
+import { segmentsOf } from "#helpers/segments";
 const reservedKeysOwn = reservedKeysInternals("lib/factories/component-base");
 
 /**
@@ -235,7 +236,7 @@ export class ComponentBase {
 	async emitImplDiagnostic(level, data) {
 		const { code, context, apiPath, source, moduleID, error } = data;
 		const event = level === "error" ? "impl:error" : "impl:warning";
-		const payload = { apiPath, code, message: translate(code, context), source, context, moduleID };
+		const payload = { path: segmentsOf(apiPath), code, message: translate(code, context), source, details: context, module: moduleID };
 		if (error !== undefined) {
 			payload.error = error;
 		}
@@ -279,12 +280,12 @@ export class ComponentBase {
 	 */
 	emitImplCollision({ apiPath, resolution, incoming, owner, kind, collisionMode }) {
 		void this.____slothlet.handlers.lifecycle.emit("impl:collision", {
-			apiPath,
+			path: segmentsOf(apiPath),
 			resolution,
 			incoming,
 			owner,
 			kind,
-			collisionMode
+			collision: collisionMode
 		});
 	}
 

@@ -18,6 +18,7 @@
  * @module @cldmv/slothlet/ownership
  * @internal
  */
+import { segmentsOf } from "#helpers/segments";
 import { ComponentBase } from "#factories/component-base";
 import { internals as unifiedWrapperInternals } from "#handlers/unified-wrapper";
 import {
@@ -713,7 +714,7 @@ export class OwnershipManager extends ComponentBase {
 		}
 		// Allow empty string for root-level registrations
 		if (apiPath !== "" && (!apiPath || typeof apiPath !== "string")) {
-			throw new this.SlothletError("OWNERSHIP_API_PATH_INVALID", { path: apiPath });
+			throw new this.SlothletError("OWNERSHIP_API_PATH_INVALID", { path: segmentsOf(apiPath) });
 		}
 
 		// Guard: reject registration for modules that have been explicitly unregistered.
@@ -735,7 +736,7 @@ export class OwnershipManager extends ComponentBase {
 			} else if (collisionMode === "warn") {
 				// Skip registration but emit warning (printed unless the instance is silent)
 				new this.SlothletWarning("WARNING_OWNERSHIP_CONFLICT", {
-					path: apiPath,
+					path: segmentsOf(apiPath),
 					owner: currentOwner.moduleID,
 					incoming: moduleID
 				});
@@ -743,7 +744,7 @@ export class OwnershipManager extends ComponentBase {
 			} else {
 				// error mode - throw
 				throw new this.SlothletError("OWNERSHIP_CONFLICT", {
-					path: apiPath,
+					path: segmentsOf(apiPath),
 					owner: currentOwner.moduleID,
 					incoming: moduleID
 				});

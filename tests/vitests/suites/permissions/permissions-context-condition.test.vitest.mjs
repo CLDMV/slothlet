@@ -557,7 +557,7 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 
 	// ── Audit payload conditionMatched: true ─────────────────────────────────────
 
-	it("audit event payload includes conditionMatched: true when winning rule has a condition", async () => {
+	it("audit event payload carries the winning rule, whose condition is set, when it has a condition", async () => {
 		api = await slothlet({
 			...config,
 			base: BASE,
@@ -585,12 +585,13 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 		expect(events.length).toBeGreaterThan(0);
 		const evt = events.find((e) => e.caller === "callers.paymentsCaller.callCharge" && e.target === "payments.charge.process");
 		expect(evt).toBeDefined();
-		expect(evt.conditionMatched).toBe(true);
+		expect(evt.rule.condition != null).toBe(true);
+		expect("conditionMatched" in evt).toBe(false);
 	});
 
 	// ── Audit payload conditionMatched: false ────────────────────────────────────
 
-	it("audit event payload includes conditionMatched: false when winning rule has no condition", async () => {
+	it("audit event payload carries the winning rule, whose condition is null, when it has no condition", async () => {
 		api = await slothlet({
 			...config,
 			base: BASE,
@@ -609,7 +610,8 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 		expect(events.length).toBeGreaterThan(0);
 		const evt = events.find((e) => e.caller === "callers.paymentsCaller.callCharge" && e.target === "payments.charge.process");
 		expect(evt).toBeDefined();
-		expect(evt.conditionMatched).toBe(false);
+		expect(evt.rule.condition != null).toBe(false);
+		expect("conditionMatched" in evt).toBe(false);
 	});
 
 	// ── Array condition: OR semantics — first entry matches ───────────────────────

@@ -74,7 +74,7 @@ describe.each(configs)("Hooks Async Error Paths > Config: '$name'", ({ config })
 			// Register error hook to capture the error
 			api.slothlet.hook.on(
 				"task.autoIP:error",
-				({ source }) => {
+				({ origin: source }) => {
 					errorHookFired = true;
 					errorHookSource = source;
 				},
@@ -104,7 +104,7 @@ describe.each(configs)("Hooks Async Error Paths > Config: '$name'", ({ config })
 			// Register always hook to verify it fires even on error
 			api.slothlet.hook.on(
 				"task.autoIP:always",
-				({ hasError }) => {
+				({ errors, hasError = errors.length > 0 }) => {
 					alwaysHookFired = true;
 					alwaysHookHasError = hasError;
 				},
@@ -177,7 +177,7 @@ describe.each(configs)("Hooks Async Error Paths > Config: '$name'", ({ config })
 			// Register error hook to capture async rejection
 			api.slothlet.hook.on(
 				"task.asyncReject:error",
-				({ source }) => {
+				({ origin: source }) => {
 					errorHookFired = true;
 					errorHookSourceType = source?.type;
 				},
@@ -198,7 +198,7 @@ describe.each(configs)("Hooks Async Error Paths > Config: '$name'", ({ config })
 			// Register always hook to verify it fires even on rejection
 			api.slothlet.hook.on(
 				"task.asyncReject:always",
-				({ hasError }) => {
+				({ errors, hasError = errors.length > 0 }) => {
 					alwaysHookFired = true;
 					alwaysHookHasError = hasError;
 				},

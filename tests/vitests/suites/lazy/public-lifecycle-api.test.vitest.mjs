@@ -58,7 +58,7 @@ describe("Public Lifecycle API (api.slothlet.lifecycle)", () => {
 			expect(eventReceived).toBe(true);
 			expect(eventData).toBeDefined();
 			expect(eventData.total).toBeGreaterThan(0);
-			expect(eventData.timestamp).toBeDefined();
+			expect(eventData.at).toBeDefined();
 		});
 
 		it("should expose lifecycle manager with standard EventEmitter methods", async () => {

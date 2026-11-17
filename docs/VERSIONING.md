@@ -315,7 +315,7 @@ List all registered versions for a logical path.
 const info = api.slothlet.versioning.list("auth");
 // {
 //   versions: {
-//     v1: { moduleID, versionTag, versionedPath, isDefault, versionMeta, registeredAt },
+//     v1: { moduleID, versionTag, versionedPath, isDefault, versionMeta, versionedParts, at },
 //     v2: { ... }
 //   },
 //   default: "v2"

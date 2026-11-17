@@ -187,7 +187,9 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks > around (#4
 		const always = [];
 		api.slothlet.hook.on("svc.mul:before", () => log.push("before"), { id: "be" });
 		api.slothlet.hook.on("svc.mul:after", () => log.push("after"), { id: "af" });
-		api.slothlet.hook.on("svc.mul:always", ({ result, hasError }) => always.push({ result, hasError }), { id: "al" });
+		api.slothlet.hook.on("svc.mul:always", ({ result, errors, hasError = errors.length > 0 }) => always.push({ result, hasError }), {
+			id: "al"
+		});
 		api.slothlet.hook.on("svc.mul:around", () => "cached", { id: "ar" });
 
 		expect(await api.svc.mul(2, 3)).toBe("cached");
@@ -200,7 +202,9 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks > around (#4
 		const errors = [];
 		const always = [];
 		api.slothlet.hook.on("svc.fail:error", ({ error }) => errors.push(error.message), { id: "er" });
-		api.slothlet.hook.on("svc.fail:always", ({ result, hasError }) => always.push({ result, hasError }), { id: "al" });
+		api.slothlet.hook.on("svc.fail:always", ({ result, errors, hasError = errors.length > 0 }) => always.push({ result, hasError }), {
+			id: "al"
+		});
 		api.slothlet.hook.on(
 			"svc.fail:around",
 			({ next }) => {
@@ -222,8 +226,14 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks > around (#4
 		api = await boot(config);
 		const errors = [];
 		const always = [];
-		api.slothlet.hook.on("svc.fail:error", ({ error, source }) => errors.push({ message: error.message, type: source.type }), { id: "er" });
-		api.slothlet.hook.on("svc.fail:always", ({ hasError, errors: errs }) => always.push({ hasError, count: errs.length }), { id: "al" });
+		api.slothlet.hook.on("svc.fail:error", ({ error, origin: source }) => errors.push({ message: error.message, type: source.type }), {
+			id: "er"
+		});
+		api.slothlet.hook.on(
+			"svc.fail:always",
+			({ errors: errs, hasError = errs.length > 0 }) => always.push({ hasError, count: errs.length }),
+			{ id: "al" }
+		);
 		api.slothlet.hook.on(
 			"svc.fail:around",
 			({ next }) => {
@@ -248,7 +258,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks > around (#4
 	it("an around hook's own error is reported with an `around` source", async () => {
 		api = await boot(config);
 		const sources = [];
-		api.slothlet.hook.on("svc.mul:error", ({ source }) => sources.push(source), { id: "er" });
+		api.slothlet.hook.on("svc.mul:error", ({ origin: source }) => sources.push(source), { id: "er" });
 		api.slothlet.hook.on(
 			"svc.mul:around",
 			() => {
@@ -260,8 +270,8 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks > around (#4
 		const result = await outcome(() => api.svc.mul(1, 2));
 		expect(result.error.message).toBe("denied");
 		expect(sources).toHaveLength(1);
-		expect(sources[0]).toMatchObject({ type: "around", hookId: "gate", hookTag: "gate", subset: "before" });
-		expect(typeof sources[0].timestamp).toBe("number");
+		expect(sources[0]).toMatchObject({ type: "around", hook: "gate", subset: "before" });
+		expect(typeof sources[0].at).toBe("number");
 		expect(log, "target never ran").toEqual([]);
 	});
 
@@ -269,7 +279,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks > around (#4
 		api = await boot(config);
 		const sources = [];
 		const caught = [];
-		api.slothlet.hook.on("svc.mul:error", ({ source }) => sources.push(source.type), { id: "er" });
+		api.slothlet.hook.on("svc.mul:error", ({ origin: source }) => sources.push(source.type), { id: "er" });
 		api.slothlet.hook.on(
 			"svc.mul:before",
 			() => {
@@ -300,7 +310,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks > around (#4
 		api = await boot(config);
 		const sources = [];
 		const caught = [];
-		api.slothlet.hook.on("svc.mul:error", ({ source }) => sources.push({ type: source.type, hookId: source.hookId }), { id: "er" });
+		api.slothlet.hook.on("svc.mul:error", ({ origin: source }) => sources.push({ type: source.type, hookId: source.hook }), { id: "er" });
 		api.slothlet.hook.on(
 			"svc.mul:after",
 			() => {
@@ -407,7 +417,9 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks > around (#4
 	it("calling next() twice throws HOOK_AROUND_NEXT_CALLED_TWICE (reported as an around failure)", async () => {
 		api = await boot(config);
 		const sources = [];
-		api.slothlet.hook.on("svc.mul:error", ({ error, source }) => sources.push({ code: error.code, type: source.type }), { id: "er" });
+		api.slothlet.hook.on("svc.mul:error", ({ error, origin: source }) => sources.push({ code: error.code, type: source.type }), {
+			id: "er"
+		});
 		api.slothlet.hook.on(
 			"svc.mul:around",
 			({ next }) => {

@@ -74,7 +74,7 @@ describe.each(EAGER_CONFIGS)("colon moduleID round-trips — $name", ({ config }
 		const paths = await api.slothlet.api.leaves(moduleID, { private: true });
 		expect(Array.isArray(paths)).toBe(true);
 		expect(paths.length).toBeGreaterThan(0);
-		expect(paths.every((p) => p.startsWith("shopfront"))).toBe(true);
+		expect(paths.every((p) => p[0] === "shopfront")).toBe(true);
 	});
 
 	it.each(COLON_IDS)("reload(id) rebuilds a mount added under moduleID %s", async (moduleID) => {

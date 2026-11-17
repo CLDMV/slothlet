@@ -234,9 +234,9 @@ describe.each(getMatrixConfigs())("Permissions > owner grant (#509) > $name", ({
 		expect(await outcome(() => api.launcher.main.activate())).toEqual({ ok: true, value: "created" });
 		// Lifecycle delivery is asynchronous.
 		await new Promise((resolve) => setTimeout(resolve, 0));
-		const hit = seen.find((e) => e.caller === "launcher.main.activate" && String(e.target).startsWith("launcher.session"));
+		const hit = seen.find((e) => e.caller === "launcher.main.activate" && e.target.join(".").startsWith("launcher.session"));
 		expect(hit).toBeDefined();
-		expect(hit.moduleID).toEqual(expect.any(String));
+		expect(hit.module).toEqual(expect.any(String));
 	});
 });
 

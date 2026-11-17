@@ -186,7 +186,7 @@ describe("WARNING_LIFECYCLE_HANDLER_ERROR carries the handler's error (#578)", (
 
 		const [warning] = handlerWarnings();
 		expect(warning.cause).toBe(boom);
-		expect(warning.details).toMatchObject({ event: "impl:created", path: "math.add", module: "base" });
+		expect(warning.details).toMatchObject({ event: "impl:created", path: ["math", "add"], module: "base" });
 		expect(warning.message).toContain("math.add");
 		expect(warning.message).toContain("base");
 	});
@@ -224,7 +224,7 @@ describe("WARNING_LIFECYCLE_HANDLER_ERROR carries the handler's error (#578)", (
 
 		const [warning] = handlerWarnings();
 		expect(warning.cause).toBe(boom);
-		expect(warning.details).toMatchObject({ event: "impl:created", path: "math.add", module: "base" });
+		expect(warning.details).toMatchObject({ event: "impl:created", path: ["math", "add"], module: "base" });
 	});
 
 	it("prints the cause's stack when the warning reaches the console", () => {

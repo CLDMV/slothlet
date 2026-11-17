@@ -76,12 +76,12 @@ describe.each([["eager"], ["lazy"]])("impl:warning / impl:error — runtime (%s 
 
 		const [payload] = warningsOfCode("WARNING_INLINE_ROOT_UNNAMED");
 		expect(payload).toBeDefined();
-		expect(payload.apiPath).toBe("");
+		expect(payload.path).toEqual([]);
 		expect(payload.code).toBe("WARNING_INLINE_ROOT_UNNAMED");
 		expect(typeof payload.message).toBe("string");
 		expect(payload.message.length).toBeGreaterThan(0);
-		expect(payload.source).toBe("addApi");
-		expect(payload.context).toEqual({});
+		expect(payload.source).toBe("add");
+		expect(payload.details).toEqual({});
 	});
 
 	it("fires impl:warning when a root default's name collides with a named export", async () => {
@@ -98,9 +98,9 @@ describe.each([["eager"], ["lazy"]])("impl:warning / impl:error — runtime (%s 
 
 		const [payload] = warningsOfCode("WARNING_INLINE_ROOT_COLLISION");
 		expect(payload).toBeDefined();
-		expect(payload.apiPath).toBe("");
-		expect(payload.source).toBe("addApi");
-		expect(payload.context).toEqual({ name: "greet" });
+		expect(payload.path).toEqual([]);
+		expect(payload.source).toBe("add");
+		expect(payload.details).toEqual({ name: "greet" });
 		expect(typeof payload.message).toBe("string");
 	});
 
@@ -109,9 +109,9 @@ describe.each([["eager"], ["lazy"]])("impl:warning / impl:error — runtime (%s 
 
 		const [payload] = warningsOfCode("WARNING_INLINE_ROOT_EMPTY");
 		expect(payload).toBeDefined();
-		expect(payload.apiPath).toBe("");
-		expect(payload.source).toBe("addApi");
-		expect(payload.context).toEqual({ apiPath: "(root)" });
+		expect(payload.path).toEqual([]);
+		expect(payload.source).toBe("add");
+		expect(payload.details).toEqual({ path: [] });
 		expect(typeof payload.message).toBe("string");
 	});
 
@@ -131,7 +131,7 @@ describe.each([["eager"], ["lazy"]])("impl:warning / impl:error — runtime (%s 
 
 		const empty = silentEvents.find((p) => p.code === "WARNING_INLINE_ROOT_EMPTY");
 		expect(empty).toBeDefined();
-		expect(empty.source).toBe("addApi");
+		expect(empty.source).toBe("add");
 	});
 
 	it("fires impl:warning for a root default/name collision under silent: true (console gated off, event delivered)", async () => {
@@ -162,9 +162,9 @@ describe.each([["eager"], ["lazy"]])("impl:warning / impl:error — runtime (%s 
 
 		const collision = silentEvents.find((p) => p.code === "WARNING_INLINE_ROOT_COLLISION");
 		expect(collision).toBeDefined();
-		expect(collision.apiPath).toBe("");
-		expect(collision.source).toBe("addApi");
-		expect(collision.context).toEqual({ name: "greet" });
+		expect(collision.path).toEqual([]);
+		expect(collision.source).toBe("add");
+		expect(collision.details).toEqual({ name: "greet" });
 	});
 
 	it("fires impl:error for a handled hot-reload merge-primitives failure (not thrown)", async () => {
@@ -182,8 +182,8 @@ describe.each([["eager"], ["lazy"]])("impl:warning / impl:error — runtime (%s 
 		expect(errors.length).toBeGreaterThanOrEqual(1);
 		const [payload] = errors;
 		expect(payload.code).toBe("WARNING_COLLISION_MERGE_PRIMITIVES");
-		expect(payload.apiPath).toBe("primitiveKey");
-		expect(payload.source).toBe("addApi");
+		expect(payload.path).toEqual(["primitiveKey"]);
+		expect(payload.source).toBe("add");
 		expect(payload.error).toBeInstanceOf(Error);
 		expect(payload.error.code).toBe("WARNING_COLLISION_MERGE_PRIMITIVES");
 		expect(typeof payload.message).toBe("string");
@@ -210,7 +210,7 @@ describe("lifecycle config option — construction-time subscription", () => {
 		try {
 			const init = initEvents.find((p) => p.code === "WARNING_MULTIPLE_ROOT_CONTRIBUTORS");
 			expect(init).toBeDefined();
-			expect(init.source).toBe("buildAPI");
+			expect(init.source).toBe("build");
 			expect(typeof init.message).toBe("string");
 		} finally {
 			await api.shutdown().catch(() => {});
@@ -232,8 +232,8 @@ describe("lifecycle config option — construction-time subscription", () => {
 		try {
 			const reserved = initEvents.find((p) => p.code === "WARNING_RESERVED_PROPERTY_CONFLICT");
 			expect(reserved).toBeDefined();
-			expect(reserved.source).toBe("buildAPI");
-			expect(reserved.context).toEqual({ properties: "slothlet" });
+			expect(reserved.source).toBe("build");
+			expect(reserved.details).toEqual({ properties: "slothlet" });
 		} finally {
 			await api.shutdown().catch(() => {});
 		}
