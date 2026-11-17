@@ -147,21 +147,33 @@ describe("sanitizePropertyName — **string** leave rule triggers lookahead rege
 	 * which returns a /(?<=.)WORD(?=.)/ regex rather than a standard glob regex.
 	 */
 	it("leave rule '**HTTP**' invokes lookahead regex path and preserves matching segment (line 50)", () => {
-		// "AUTO_HTTP_CLIENT" is split into segments; "HTTP" appears as a sub-segment.
-		// The rule **HTTP** compiles to a lookahead regex (line 50).
-		const result = sanitizePropertyName("AUTO_HTTP_CLIENT", { leave: ["**HTTP**"] });
-		expect(typeof result).toBe("string");
-		expect(result.length).toBeGreaterThan(0);
+		// "AUTO_HTTP_CLIENT" is one primary segment with "HTTP" inside it, so the boundary pattern matches and
+		// `leave` keeps the segment exactly as written (the default would lowercase the first character).
+		expect(sanitizePropertyName("AUTO_HTTP_CLIENT", {})).toBe("aUTO_HTTP_CLIENT");
+		expect(sanitizePropertyName("AUTO_HTTP_CLIENT", { rules: { leave: ["**HTTP**"] } })).toBe("AUTO_HTTP_CLIENT");
+		// `leave` is case-sensitive.
+		expect(sanitizePropertyName("AUTO_HTTP_CLIENT", { rules: { leave: ["**http**"] } })).toBe("aUTO_HTTP_CLIENT");
+		// A boundary pattern needs characters on both sides: a bare "HTTP" is not matched (a plain glob would match it).
+		expect(sanitizePropertyName("HTTP", { rules: { leave: ["**HTTP**"] } })).toBe("hTTP");
 	});
 
-	it("leave rule '**url**' case-insensitive triggers lookahead regex (line 50)", () => {
-		const result = sanitizePropertyName("parseUrlString", { rules: { nocase: ["**url**"] } });
-		expect(typeof result).toBe("string");
-		expect(result.length).toBeGreaterThan(0);
+	it("nocase rule '**url**' case-insensitive triggers lookahead regex (line 50)", () => {
+		// "Url" sits inside "ParseUrlString", so the case-insensitive boundary pattern matches and the segment
+		// is kept as written; without it the first character is lowercased.
+		expect(sanitizePropertyName("ParseUrlString", {})).toBe("parseUrlString");
+		expect(sanitizePropertyName("ParseUrlString", { rules: { nocase: ["**url**"] } })).toBe("ParseUrlString");
+		// The same pattern under the case-sensitive `leave` does not match "Url".
+		expect(sanitizePropertyName("ParseUrlString", { rules: { leave: ["**url**"] } })).toBe("parseUrlString");
+		// A bare "Url" has nothing on either side, so the boundary pattern does not match it.
+		expect(sanitizePropertyName("Url", { rules: { nocase: ["**url**"] } })).toBe("url");
 	});
 
 	it("upper rule '**ID**' triggers lookahead regex path and affects segment case (line 50)", () => {
-		const result = sanitizePropertyName("getIdValue", { upper: ["**ID**"] });
-		expect(typeof result).toBe("string");
+		// "Id" between "get" and "Value" matches the boundary pattern and is uppercased.
+		expect(sanitizePropertyName("getIdValue", {})).toBe("getIdValue");
+		expect(sanitizePropertyName("getIdValue", { rules: { upper: ["**ID**"] } })).toBe("getIDValue");
+		// At the end of the name there is nothing after "Id", so it is left alone; a plain *ID* glob would match.
+		expect(sanitizePropertyName("getId", { rules: { upper: ["**ID**"] } })).toBe("getId");
+		expect(sanitizePropertyName("id", { rules: { upper: ["*ID*"] } })).toBe("ID");
 	});
 });
