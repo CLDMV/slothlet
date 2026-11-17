@@ -17,13 +17,13 @@
  * @fileoverview Integration tests for the metadata system in browser mode.
  *
  * @description
- * Browser mode resolves caller identity via wrapper metadata (`____slothletInternal`), not stack traces. The existing Playwright smoke verifies only that `typeof api.slothlet.metadata === "object"` and that `getFor("math.add")` returns an object — it does not assert metadata write/read round-trips, `setGlobal`, or `caller()` from inside a leaf. A regression here would silently break plugin-manifest storage, runtime metadata tagging, and any code that calls `self.slothlet.metadata.caller()` to identify its invoker.
+ * Browser mode resolves caller identity via wrapper metadata (`____slothletInternal`), not stack traces. The existing Playwright smoke verifies only that `typeof api.slothlet.metadata === "object"` and that `getFor("math.add")` returns an object — it does not assert metadata write/read round-trips, `metadata.global`, or `caller()` from inside a leaf. A regression here would silently break plugin-manifest storage, runtime metadata tagging, and any code that calls `self.slothlet.metadata.caller()` to identify its invoker.
  *
  * Covers (all under `platform:"browser"`, which forces the live runtime via manifest-based loading):
  * - `getFor` returns a plain object for a known path with no metadata set (returns `{}`)
  * - `getFor` returns the correct merged object after `setFor` writes to that path
- * - `setGlobal` (string-key form) is reflected in a subsequent `getFor` call
- * - `setGlobal` (object form) is reflected in a subsequent `getFor` call
+ * - `metadata.global` (string-key form) is reflected in a subsequent `getFor` call
+ * - `metadata.global` (object form) is reflected in a subsequent `getFor` call
  * - path-level `setFor` metadata is inherited by a descendant path via `getFor`
  * - `caller()` called from inside `api.probe.caller()` returns `null` (the test is not a slothlet function — no tracked caller in context)
  * - `getForVersion`: no versioned fixture exists in `api_test_browser`; `getForVersion` on a non-versioned path returns `{}` (the no-version/default path)
@@ -138,9 +138,9 @@ describe.each(getBrowserMatrixConfigs())("Browser Mode > metadata > $name", ({ c
 		expect(meta.taggedAt).toBeUndefined();
 	});
 
-	// ── setGlobal + getFor ───────────────────────────────────────────────────────
+	// ── metadata.global + getFor ───────────────────────────────────────────────────────
 
-	it("setGlobal (string-key form) is visible via getFor on any path", async () => {
+	it("metadata.global (string-key form) is visible via getFor on any path", async () => {
 		api = await slothlet(browserCfg(config));
 
 		api.slothlet.metadata.global("env", "browser-test");
@@ -152,7 +152,7 @@ describe.each(getBrowserMatrixConfigs())("Browser Mode > metadata > $name", ({ c
 		expect(authMeta.env).toBe("browser-test");
 	});
 
-	it("setGlobal (object form) is visible via getFor on any path", async () => {
+	it("metadata.global (object form) is visible via getFor on any path", async () => {
 		api = await slothlet(browserCfg(config));
 
 		api.slothlet.metadata.global({ build: "ci", region: "us" });
@@ -162,7 +162,7 @@ describe.each(getBrowserMatrixConfigs())("Browser Mode > metadata > $name", ({ c
 		expect(meta.region).toBe("us");
 	});
 
-	it("setFor key overrides setGlobal key at the same name", async () => {
+	it("setFor key overrides metadata.global key at the same name", async () => {
 		api = await slothlet(browserCfg(config));
 
 		api.slothlet.metadata.global("version", "global-1");
@@ -173,7 +173,7 @@ describe.each(getBrowserMatrixConfigs())("Browser Mode > metadata > $name", ({ c
 		expect(meta.version).toBe("path-2");
 	});
 
-	it("setGlobal is live — an update is reflected immediately in getFor", async () => {
+	it("metadata.global is live — an update is reflected immediately in getFor", async () => {
 		api = await slothlet(browserCfg(config));
 
 		api.slothlet.metadata.global("counter", 1);

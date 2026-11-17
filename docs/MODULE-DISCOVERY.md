@@ -24,7 +24,7 @@ import slothlet from "@cldmv/slothlet";
 const api = await slothlet({ base: "./api" });
 
 // Discover, sort, and mount everything matching the convention in one call:
-await api.slothlet.api.modules.addDiscovered({
+await api.slothlet.api.modules.add({
 	discover: { root: process.cwd(), prefix: "@cldmv/packrat-driver-" }
 });
 
@@ -32,7 +32,7 @@ await api.slothlet.api.modules.addDiscovered({
 api.drivers.opensearch.connect(/* … */);
 ```
 
-That's the full flow: `discover()` walks the filesystem, `sort()` orders by priority, `addModules()` grafts each module onto the api tree.
+That's the full flow: `discover()` walks the filesystem, `sort()` orders by priority, `modules.add()` grafts each module onto the api tree.
 
 ---
 
@@ -101,7 +101,7 @@ All methods live at `api.slothlet.api.modules.*`.
 
 ### `discover(options?) → Promise<DiscoverResult[]>`
 
-Walks the filesystem for slothlet modules. Returns validated `DiscoverResult[]` and replaces the per-instance discovery cache. Discovery needs Node: in a browser, `discover()`, `addDiscovered()` and an `addModule(name)` that has to discover are refused with `MODULE_DISCOVERY_REQUIRES_NODE`. Mount modules there with `api.slothlet.api.add()` from the manifest.
+Walks the filesystem for slothlet modules. Returns validated `DiscoverResult[]` and replaces the per-instance discovery cache. Discovery needs Node: in a browser, `discover()`, a `modules.add()` that runs it and a `modules.add(name)` that has to discover are refused with `MODULE_DISCOVERY_REQUIRES_NODE`. Mount modules there with `api.slothlet.api.add()` from the manifest.
 
 ```js
 const found = await api.slothlet.api.modules.discover({
@@ -156,35 +156,65 @@ const ordered = api.slothlet.api.modules.sort(found);
 const alpha = api.slothlet.api.modules.sort(found, (a, b) => a.package.localeCompare(b.package));
 ```
 
-### `addModule(nameOrResult, options?) → Promise<MountResult>`
+### `add(target?, options?) → Promise<MountResult | MountResult[] | { mounted, failed }>`
 
-Mounts a single module. Accepts a package name (looked up in the discovery cache) or a `DiscoverResult` that this instance's `discover()` returned (also what `getDiscoveryCache()` and `sort()` hand back). A result is recognised by identity, not by its shape: any other object, such as one built by hand, a spread copy of a real result, or a result another slothlet instance discovered, is refused with `INVALID_ARGUMENT` and nothing mounts. Results are frozen, so the manifest that was validated at discovery is the one that mounts.
+Mounts modules. The target says what to mount:
+
+| Target                                          | Mounts                                                                                               |
+| ----------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| a package name                                  | that module, looked up in the discovery cache (`discover()` runs first when the cache is empty)      |
+| a result this instance's `discover()` or `cache.get()` returned | that module                                                                          |
+| an array of names and results                   | the batch                                                                                            |
+| nothing, or only an options object              | every module `discover()` finds (with `options.discover`), ordered by `sort()` (with `options.sort`) |
+
+Only results this instance's discovery returned count as a result: a result is recognised by identity, never by its shape. Any other object is the options, so `add({ discover: { prefix: "@org/" } })` is a discover run, and an object you built yourself is never mounted as a module.
 
 ```js
-// By name — looks up in cache; lazy-triggers discover() if cache is empty
-await api.slothlet.api.modules.addModule("@cldmv/packrat-driver-opensearch");
+// One module, by name: looks it up in the cache; runs discover() if the cache is empty
+await api.slothlet.api.modules.add("@cldmv/packrat-driver-opensearch");
 
-// By DiscoverResult — direct
-await api.slothlet.api.modules.addModule(found[0]);
+// One module, from a result discover() returned
+await api.slothlet.api.modules.add(found[0]);
 
-// With options
-await api.slothlet.api.modules.addModule("@org/foo", {
+// One module, with options
+await api.slothlet.api.modules.add("@org/foo", {
 	collision: { mode: "error" },
 	version: "1.4.2" // disambiguator when multiple versions are cached
+});
+
+// A batch
+await api.slothlet.api.modules.add(["@org/foo", someDiscoverResult, "@org/bar"], {
+	collision: { mode: "error" },
+	failure: "best-effort",
+	concurrency: 4
+});
+
+// Discover, sort and mount everything found
+await api.slothlet.api.modules.add({
+	discover: { root: process.cwd(), prefix: "@cldmv/packrat-driver-" },
+	sort: (a, b) => a.package.localeCompare(b.package),
+	collision: { mode: "error" },
+	failure: "best-effort"
 });
 ```
 
 **Options:**
 
-| Option      | Default   | Description                                                                                                                                                                                                               |
-| ----------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `collision` | `"merge"` | `collision.mode` (or the mode as a bare string): one of `"skip" \| "warn" \| "replace" \| "merge" \| "merge-replace" \| "error"`. When `"error"`, throws `MODULE_MOUNT_COLLISION` if the exact mount is already occupied. |
-| `version`   | none      | Disambiguator when the cache holds multiple versions of `name`.                                                                                                                                                           |
-| `discover`  | `{}`      | Options forwarded to the lazy `discover()` call if the cache is empty (only when called with a name).                                                                    |
+| Option          | Default   | Applies to              | Description                                                                                                                                                                                                                            |
+| --------------- | --------- | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `collision` | `"merge"` | all                     | `collision.mode` (or the mode as a bare string): one of `"skip" \| "warn" \| "replace" \| "merge" \| "merge-replace" \| "error"`. When `"error"`, throws `MODULE_MOUNT_COLLISION` if the exact mount is already occupied.                                                           |
+| `version`       | none      | one module              | Disambiguator when the cache holds multiple versions of `name`.                                                                                                                                                                        |
+| `discover`      | `{}`      | a name, a discover run  | The `discover()` options: for the discover run, and for the lazy `discover()` a name triggers when the cache is empty.                                                                                                                 |
+| `failure`     | `"throw"` | a batch, a discover run | `"throw"` (default — throw on first failure, mounted entries remain), `"rollback"` (throw + best-effort unmount of entries mounted in this call), or `"best-effort"` (continue past failures, return `{ mounted, failed }` aggregate). |
+| `concurrency`   | `1`       | a batch, a discover run | Mount concurrency. `1` (default) = serial. `Infinity` = all-at-once via `Math.min(concurrency, items.length)`. Lifecycle event order tracks completion order under `concurrency > 1`.                                                  |
+| `sort`          | priority  | a discover run          | Comparator for the found results (see `sort()`).                                                                                                                                                                                       |
+
+**Return shape:** one module → `MountResult`. A batch or a discover run → `MountResult[]` under `"throw"` / `"rollback"`, `{ mounted: MountResult[], failed: FailureEntry[] }` under `"best-effort"`.
+
 
 **`MountResult`**:
 
-| Key                                                        | Description                                                                                  |
+| Key       | Description                                                                                  |
 | --------- | -------------------------------------------------------------------------------------------- |
 | `module`  | The module id the mount was registered under.                                                |
 | `package` | The package name.                                                                            |
@@ -192,66 +222,28 @@ await api.slothlet.api.modules.addModule("@org/foo", {
 | `found`   | The `DiscoverResult` the module was mounted from.                                            |
 | `version` | `{ default, tag }` when the module mounted under a version prefix, otherwise `null`.         |
 
-### `addModules(items, options?) → Promise<MountResult[] | { mounted, failed }>`
-
-Batch mount. Accepts a heterogeneous array of names and `DiscoverResult` objects this instance's `discover()` returned. Every item is resolved before anything mounts, so one object that isn't such a result refuses the whole batch with `INVALID_ARGUMENT`.
-
-```js
-await api.slothlet.api.modules.addModules(["@org/foo", someDiscoverResult, "@org/bar"], {
-	collision: { mode: "error" },
-	failure: "best-effort",
-	concurrency: 4
-});
-```
-
-**Options:**
-
-| Option        | Default   | Description                                                                                                                                                                                                                            |
-| ------------- | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `collision`   | `"merge"` | Same values as `addModule`.                                                                                                                                                                                                            |
-| `failure`     | `"throw"` | `"throw"` (default — throw on first failure, mounted entries remain), `"rollback"` (throw + best-effort unmount of entries mounted in this call), or `"best-effort"` (continue past failures, return `{ mounted, failed }` aggregate). |
-| `concurrency` | `1`       | Mount concurrency. `1` (default) = serial. `Infinity` = all-at-once via `Math.min(concurrency, items.length)`. Lifecycle event order tracks completion order under `concurrency > 1`.                                                  |
-
-**Return shape** is bifurcated:
-
-- `"throw"` / `"rollback"` → `MountResult[]`
-- `"best-effort"` → `{ mounted: MountResult[], failed: FailureEntry[] }`
-
 **Multi-version routing:** when two or more resolved items share a `package` with different `version`s, every entry in that group routes through slothlet's versioned mount (`api.add`'s `version` option) — each lands at `vMAJOR.<mountPath>` and the highest semver becomes the registered default. See [VERSIONING.md](VERSIONING.md) for the underlying mechanism.
 
-### `removeModule(name, opts?) → Promise<boolean>`
+### `remove(name, opts?) → Promise<boolean>`
 
 Unmounts a previously-mounted module. Returns `true` if anything was unmounted.
 
 ```js
-await api.slothlet.api.modules.removeModule("@org/foo");
+await api.slothlet.api.modules.remove("@org/foo");
 
 // Disambiguate when multi-version mounts exist:
-await api.slothlet.api.modules.removeModule("@org/foo", { version: "1.4.2" });
-```
-
-### `addDiscovered(options?) → Promise<MountResult[] | { mounted, failed }>`
-
-One-shot convenience: chains `discover()` → `sort()` → `addModules()`. Takes the `discover()` options under `discover`, the `addModules()` options, and a `sort` option for a custom comparator.
-
-```js
-await api.slothlet.api.modules.addDiscovered({
-  discover: { root: process.cwd(), prefix: "@cldmv/packrat-driver-" },
-  sort: (a, b) => /* custom comparator, or omit for default priority sort */,
-  collision: { mode: "error" },
-  failure: "best-effort"
-});
+await api.slothlet.api.modules.remove("@org/foo", { version: "1.4.2" });
 ```
 
 ### Cache inspection
 
 ```js
-api.slothlet.api.modules.getDiscoveryCache(); // → DiscoverResult[]
-api.slothlet.api.modules.clearDiscoveryCache(); // → void; does not unmount anything
-api.slothlet.api.modules.getStaleMounts(); // → MountResult[] — mounted modules no longer in cache
+api.slothlet.api.modules.cache.get(); // → DiscoverResult[]
+api.slothlet.api.modules.cache.clear(); // → void; does not unmount anything
+api.slothlet.api.modules.stale(); // → MountResult[] — mounted modules no longer in cache
 ```
 
-`getStaleMounts()` enables reconciliation after re-discovery. When the host re-runs `discover()` (e.g. after `pnpm install` / `pnpm uninstall`), modules that were previously mounted but no longer appear in the new cache are flagged as stale. The host decides whether to call `removeModule()` on each.
+`stale()` enables reconciliation after re-discovery. When the host re-runs `discover()` (e.g. after `pnpm install` / `pnpm uninstall`), modules that were previously mounted but no longer appear in the new cache are flagged as stale. The host decides whether to call `modules.remove()` on each.
 
 ---
 
@@ -259,13 +251,13 @@ api.slothlet.api.modules.getStaleMounts(); // → MountResult[] — mounted modu
 
 Five `modules:*` events emit through slothlet's standard lifecycle handler (subscribe via `api.slothlet.lifecycle.on(name, handler)`). See [LIFECYCLE.md — Module Discovery Events](LIFECYCLE.md#module-discovery-events) for full payload shapes.
 
-| Event                       | When                                                                    |
-| --------------------------- | ----------------------------------------------------------------------- |
-| `modules:discover-start`    | Beginning of `discover()`                                               |
-| `modules:discover-complete` | After cache replacement; payload includes `stale[]` for reconciliation  |
-| `modules:mount-start`       | Beginning of `addModule` / `addModules` / `addDiscovered`'s mount phase |
-| `modules:mount-complete`    | Once per successfully mounted module                                    |
-| `modules:loaded`            | After the helper's full async chain settles                             |
+| Event                       | When                                                                   |
+| --------------------------- | ---------------------------------------------------------------------- |
+| `modules:discover-start`    | Beginning of `discover()`                                              |
+| `modules:discover-complete` | After cache replacement; payload includes `stale[]` for reconciliation |
+| `modules:mount-start`       | Beginning of `modules.add`'s mount phase                               |
+| `modules:mount-complete`    | Once per successfully mounted module                                   |
+| `modules:loaded`            | After the helper's full async chain settles                            |
 
 ```js
 api.slothlet.lifecycle.on("modules:loaded", ({ mounted, failed, stale }) => {
@@ -287,7 +279,7 @@ All errors throw `SlothletError` with typed codes. See `src/lib/i18n/languages/e
 | `MODULE_MANIFEST_VERSION_MISMATCH`       | Manifest `version` disagrees with `package.json`                                |
 | `MODULE_PATH_TRAVERSAL`                  | `base` resolves outside the package root                                        |
 | `MODULE_MANIFEST_FORMAT_UNSUPPORTED`     | `schema` not `2`, or `schemaVersion` not `1`                                    |
-| `MODULE_PACKAGE_NOT_FOUND`               | `addModule(name)` and name isn't in the cache after discovery                   |
+| `MODULE_PACKAGE_NOT_FOUND`               | `modules.add(name)` and name isn't in the cache after discovery                 |
 | `MODULE_RESERVED_MOUNT`                  | Manifest claims a reserved root (`slothlet`, `shutdown`, `destroy`)             |
 | `MODULE_DUPLICATE_NAME_VERSION_MISMATCH` | Same package name + version at multiple real paths (G7 case 3)                  |
 | `MODULE_MOUNT_COLLISION`                 | Pre-flight detects exact-mount collision and `collision: { mode: "error" }`     |

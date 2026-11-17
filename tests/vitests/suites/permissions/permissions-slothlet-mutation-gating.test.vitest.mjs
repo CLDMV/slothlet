@@ -27,13 +27,13 @@ describe.each(getMatrixConfigs())("Permissions > Slothlet Mutation Gating > $nam
 		api = null;
 	});
 
-	it("denies inter-module addRule when slothlet.permissions.addRule is blocked", async () => {
+	it("denies inter-module rules.add when slothlet.permissions.rules.add is blocked", async () => {
 		api = await slothlet({
 			...config,
 			base: `${BASE}/callers`,
 			permissions: {
 				policy: "allow",
-				rules: [{ caller: "controlCaller.**", target: "slothlet.permissions.addRule", effect: "deny" }]
+				rules: [{ caller: "controlCaller.**", target: "slothlet.permissions.rules.add", effect: "deny" }]
 			}
 		});
 
@@ -50,20 +50,20 @@ describe.each(getMatrixConfigs())("Permissions > Slothlet Mutation Gating > $nam
 			}
 		});
 
-		const paymentRules = api.slothlet.permissions.global.rulesForPath("payments.charge.process");
+		const paymentRules = api.slothlet.permissions.global.rules.path("payments.charge.process");
 		const injected = paymentRules.find(
 			(rule) => rule.caller === "controlCaller.**" && rule.target === "payments.**" && rule.effect === "deny"
 		);
 		expect(injected).toBeUndefined();
 	});
 
-	it("denies descriptor-based bypass for slothlet.permissions.addRule", async () => {
+	it("denies descriptor-based bypass for slothlet.permissions.rules.add", async () => {
 		api = await slothlet({
 			...config,
 			base: `${BASE}/callers`,
 			permissions: {
 				policy: "allow",
-				rules: [{ caller: "controlCaller.**", target: "slothlet.permissions.addRule", effect: "deny" }]
+				rules: [{ caller: "controlCaller.**", target: "slothlet.permissions.rules.add", effect: "deny" }]
 			}
 		});
 
@@ -80,7 +80,7 @@ describe.each(getMatrixConfigs())("Permissions > Slothlet Mutation Gating > $nam
 			}
 		});
 
-		const paymentRules = api.slothlet.permissions.global.rulesForPath("payments.charge.process");
+		const paymentRules = api.slothlet.permissions.global.rules.path("payments.charge.process");
 		const injected = paymentRules.find(
 			(rule) => rule.caller === "controlCaller.**" && rule.target === "payments.**" && rule.effect === "deny"
 		);
@@ -119,9 +119,9 @@ describe.each(getMatrixConfigs())("Permissions > Slothlet Mutation Gating > $nam
 
 		expect(await api.controlCaller.cacheAddRuleReference()).toBe("function");
 
-		api.slothlet.permissions.addRule({
+		api.slothlet.permissions.rules.add({
 			caller: "controlCaller.**",
-			target: "slothlet.permissions.addRule",
+			target: "slothlet.permissions.rules.add",
 			effect: "deny"
 		});
 
@@ -138,7 +138,7 @@ describe.each(getMatrixConfigs())("Permissions > Slothlet Mutation Gating > $nam
 			}
 		});
 
-		const paymentRules = api.slothlet.permissions.global.rulesForPath("payments.charge.process");
+		const paymentRules = api.slothlet.permissions.global.rules.path("payments.charge.process");
 		const injected = paymentRules.find(
 			(rule) => rule.caller === "controlCaller.**" && rule.target === "payments.**" && rule.effect === "deny"
 		);
@@ -157,9 +157,9 @@ describe.each(getMatrixConfigs())("Permissions > Slothlet Mutation Gating > $nam
 
 		expect(await api.controlCaller.cacheAddRuleDescriptorReference()).toBe("function");
 
-		api.slothlet.permissions.addRule({
+		api.slothlet.permissions.rules.add({
 			caller: "controlCaller.**",
-			target: "slothlet.permissions.addRule",
+			target: "slothlet.permissions.rules.add",
 			effect: "deny"
 		});
 
@@ -176,7 +176,7 @@ describe.each(getMatrixConfigs())("Permissions > Slothlet Mutation Gating > $nam
 			}
 		});
 
-		const paymentRules = api.slothlet.permissions.global.rulesForPath("payments.charge.process");
+		const paymentRules = api.slothlet.permissions.global.rules.path("payments.charge.process");
 		const injected = paymentRules.find(
 			(rule) => rule.caller === "controlCaller.**" && rule.target === "payments.**" && rule.effect === "deny"
 		);
@@ -195,7 +195,7 @@ describe.each(getMatrixConfigs())("Permissions > Slothlet Mutation Gating > $nam
 
 		expect(await api.controlCaller.cacheMaterializeGetReference()).toBe("function");
 
-		api.slothlet.permissions.addRule({
+		api.slothlet.permissions.rules.add({
 			caller: "controlCaller.**",
 			target: "slothlet.materialize.get",
 			effect: "deny"
@@ -223,9 +223,9 @@ describe.each(getMatrixConfigs())("Permissions > Slothlet Mutation Gating > $nam
 
 		expect(await api.controlCaller.cacheMaterializedGetterReference()).toBe("function");
 
-		api.slothlet.permissions.addRule({
+		api.slothlet.permissions.rules.add({
 			caller: "controlCaller.**",
-			target: "slothlet.materialize.materialized",
+			target: "slothlet.materialize.complete",
 			effect: "deny"
 		});
 
@@ -259,13 +259,13 @@ describe.each(getMatrixConfigs())("Permissions > Slothlet Mutation Gating > $nam
 		});
 	});
 
-	it("denies accessor descriptor getter bypass for slothlet.materialize.materialized", async () => {
+	it("denies accessor descriptor getter bypass for slothlet.materialize.complete", async () => {
 		api = await slothlet({
 			...config,
 			base: `${BASE}/callers`,
 			permissions: {
 				policy: "allow",
-				rules: [{ caller: "controlCaller.**", target: "slothlet.materialize.materialized", effect: "deny" }]
+				rules: [{ caller: "controlCaller.**", target: "slothlet.materialize.complete", effect: "deny" }]
 			}
 		});
 
@@ -319,17 +319,17 @@ describe.each(getMatrixConfigs())("Permissions > Slothlet Mutation Gating > $nam
 		});
 	});
 
-	it("denies inter-module removeRule when slothlet.permissions.removeRule is blocked", async () => {
+	it("denies inter-module rules.remove when slothlet.permissions.rules.remove is blocked", async () => {
 		api = await slothlet({
 			...config,
 			base: `${BASE}/callers`,
 			permissions: {
 				policy: "allow",
-				rules: [{ caller: "controlCaller.**", target: "slothlet.permissions.removeRule", effect: "deny" }]
+				rules: [{ caller: "controlCaller.**", target: "slothlet.permissions.rules.remove", effect: "deny" }]
 			}
 		});
 
-		const ruleId = api.slothlet.permissions.addRule({
+		const ruleId = api.slothlet.permissions.rules.add({
 			caller: "paymentsCaller.**",
 			target: "payments.**",
 			effect: "deny"
@@ -344,7 +344,7 @@ describe.each(getMatrixConfigs())("Permissions > Slothlet Mutation Gating > $nam
 			}
 		});
 
-		const paymentRules = api.slothlet.permissions.global.rulesForPath("payments.charge.process");
+		const paymentRules = api.slothlet.permissions.global.rules.path("payments.charge.process");
 		const persisted = paymentRules.find((rule) => rule.id === ruleId);
 		expect(persisted).toBeDefined();
 	});
@@ -417,7 +417,7 @@ describe.each(getMatrixConfigs())("Permissions > Slothlet Mutation Gating > $nam
 		expect(typeof api.slothlet.version).toBe("string");
 	});
 
-	it("allows external permissions.addRule under default deny", async () => {
+	it("allows external permissions.rules.add under default deny", async () => {
 		api = await slothlet({
 			...config,
 			base: `${BASE}/callers`,
@@ -427,14 +427,14 @@ describe.each(getMatrixConfigs())("Permissions > Slothlet Mutation Gating > $nam
 			}
 		});
 
-		const ruleId = api.slothlet.permissions.addRule({
+		const ruleId = api.slothlet.permissions.rules.add({
 			caller: "controlCaller.**",
 			target: "payments.**",
 			effect: "deny"
 		});
 
 		expect(typeof ruleId).toBe("string");
-		const paymentRules = api.slothlet.permissions.global.rulesForPath("payments.charge.process");
+		const paymentRules = api.slothlet.permissions.global.rules.path("payments.charge.process");
 		expect(paymentRules.some((rule) => rule.id === ruleId)).toBe(true);
 	});
 

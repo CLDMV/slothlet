@@ -560,7 +560,7 @@ export class HookManager extends ComponentBase {
 	 *   runs un-pinned, with whatever async context is ambient when it fires (for a
 	 *   `before` hook, typically none, so a `self.*` call inside it has no context).
 	 *   No effect when the hook is registered outside a module (no caller identity to
-	 *   capture) or when `handler` is already a `lockCaller`-wrapped function.
+	 *   capture) or when `handler` is already a `pin`-wrapped function.
 	 * @param {boolean} [options.async] - Declare the handler asynchronous when its async-ness cannot be detected (a plain function returning a Promise)
 	 * @param {object} [options.versioning] - Version dispatch for the hook's pattern.
 	 * @param {boolean} [options.versioning.enabled=false] - Resolve `pattern` (written against the logical path) through the instance's configured
@@ -831,14 +831,14 @@ export class HookManager extends ComponentBase {
 	/**
 	 * Pin the registering module's caller identity onto a hook handler.
 	 *
-	 * Mirrors `self.slothlet.lockCaller()`: captures the `currentWrapper` active at
+	 * Mirrors `self.slothlet.pin()`: captures the `currentWrapper` active at
 	 * registration time and, on every invocation, runs the handler with that caller
 	 * identity restored — so the handler's `self.*` calls and permission checks are
 	 * attributed to the module that registered the hook, not to whichever caller
 	 * triggered the intercepted API path.
 	 *
 	 * No-op passthrough when there is nothing to pin: the hook was registered outside
-	 * a module (no `currentWrapper`), or `handler` is already a `lockCaller`-wrapped
+	 * a module (no `currentWrapper`), or `handler` is already a `pin`-wrapped
 	 * function (it carries `____slothletOriginal`) — in which case the existing lock is
 	 * respected rather than double-wrapped. This also makes re-registration after a
 	 * full reload (via {@link exportHooks}/{@link importHooks}) idempotent.
@@ -850,7 +850,7 @@ export class HookManager extends ComponentBase {
 	 *   nothing to pin.
 	 */
 	#pinHandler(handler) {
-		// Already locked (manual lockCaller, or a re-registered hook) — respect it. Known by the framework's own
+		// Already locked (manual pin, or a re-registered hook) — respect it. Known by the framework's own
 		// record, never by a property: a module can put `____slothletOriginal` on any function (#625).
 		if (runtime_isCallerLocked(handler)) return handler;
 
@@ -873,7 +873,7 @@ export class HookManager extends ComponentBase {
 			// error-hook pipeline sees the original type/code, not CONTEXT_EXECUTION_FAILED.
 			return slothlet.contextManager.runInContext(slothlet.instanceID, handler, this, args, capturedWrapper, true, false, capturedCeiling);
 		};
-		// Parity with lockCaller / the EventEmitter patch metadata.
+		// Parity with pin / the EventEmitter patch metadata.
 		pinned.____slothletOriginal = handler;
 		return runtime_markCallerLocked(pinned);
 	}
@@ -1010,7 +1010,7 @@ export class HookManager extends ComponentBase {
 	 * @public
 	 *
 	 * @example
-	 * api.slothlet.hook.enablePattern("database.*"); // only intercept database.* paths
+	 * api.slothlet.hook.pattern.enable("database.*"); // only intercept database.* paths
 	 */
 	enablePattern(pattern) {
 		// Validate by compiling (throws on malformed patterns, consistent with on()).
@@ -1037,7 +1037,7 @@ export class HookManager extends ComponentBase {
 	 * @public
 	 *
 	 * @example
-	 * api.slothlet.hook.disablePattern("database.*"); // stop restricting to database.*
+	 * api.slothlet.hook.pattern.disable("database.*"); // stop restricting to database.*
 	 */
 	disablePattern(pattern) {
 		const removed = SetMethods.delete(this.enabledPatterns, pattern);

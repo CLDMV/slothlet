@@ -37,7 +37,7 @@ const { default: slothlet } = await import("@cldmv/slothlet");
 
 /** The owner's `makeContext` as source that is not the file's. */
 const forgedSource =
-	"(api) => ({ pin: (fn) => typeof api.slothlet.lockCaller(fn), meta: () => api.slothlet.metadata.caller()?.path?.join('.') ?? null, " +
+	"(api) => ({ pin: (fn) => typeof api.slothlet.pin(fn), meta: () => api.slothlet.metadata.caller()?.path?.join('.') ?? null, " +
 	"emit: () => (api.slothlet.event.emit('host:ping', { n: 1 }), 'emitted'), hostLeaf: () => api.host.echo('x') })";
 
 if (process.argv.includes("--replace-builtins")) {

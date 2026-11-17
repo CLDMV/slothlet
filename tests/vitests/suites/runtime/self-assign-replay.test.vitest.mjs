@@ -39,7 +39,7 @@ describe("self.X = ... does not survive a reload", () => {
 	it("a runtime self.X = … primitive write is gone after api.slothlet.reload()", async () => {
 		api = await slothlet({ base: "./api_tests/api_test", mode: "eager" });
 
-		await api.slothlet.run({}, () => {
+		await api.slothlet.context.run({}, () => {
 			self.runtimeKey = "written-at-runtime";
 		});
 		// Visible immediately (partial-isolation `.run()` shares `self`).
@@ -54,7 +54,7 @@ describe("self.X = ... does not survive a reload", () => {
 	it("a runtime self.X = … object write is gone after api.slothlet.reload()", async () => {
 		api = await slothlet({ base: "./api_tests/api_test", mode: "eager" });
 
-		await api.slothlet.run({}, () => {
+		await api.slothlet.context.run({}, () => {
 			self.runtimeObj = { count: 42 };
 		});
 		expect(api.runtimeObj?.count).toBe(42);
@@ -67,7 +67,7 @@ describe("self.X = ... does not survive a reload", () => {
 	it("multiple runtime self.X = … writes are all gone after a full reload", async () => {
 		api = await slothlet({ base: "./api_tests/api_test", mode: "eager" });
 
-		await api.slothlet.run({}, () => {
+		await api.slothlet.context.run({}, () => {
 			self.first = 1;
 			self.second = 2;
 			self.third = 3;

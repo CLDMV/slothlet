@@ -74,18 +74,8 @@ describe.each(["eager", "lazy"])("method options > unknown keys (%s)", (mode) =>
 		["api.leaves", "includePrivate", (a) => a.slothlet.api.leaves(".", { includePrivate: true }), "slothlet.api.leaves"],
 		["api.reload", "keep", (a) => a.slothlet.api.reload(".", { keep: true }), "slothlet.api.reload"],
 		["api.modules.discover", "scanRoot", (a) => a.slothlet.api.modules.discover({ scanRoot: "." }), "slothlet.api.modules.discover"],
-		[
-			"api.modules.addModules",
-			"onFailure",
-			(a) => a.slothlet.api.modules.addModules([], { onFailure: "throw" }),
-			"slothlet.api.modules.addModules"
-		],
-		[
-			"api.modules.addDiscovered",
-			"scanRoot",
-			(a) => a.slothlet.api.modules.addDiscovered({ scanRoot: "." }),
-			"slothlet.api.modules.addDiscovered"
-		],
+		["api.modules.add (batch)", "onFailure", (a) => a.slothlet.api.modules.add([], { onFailure: "throw" }), "slothlet.api.modules.add"],
+		["api.modules.add (discover run)", "scanRoot", (a) => a.slothlet.api.modules.add({ scanRoot: "." }), "slothlet.api.modules.add"],
 		["reload", "keepInstanceID", (a) => a.slothlet.reload({ keepInstanceID: true }), "slothlet.reload"],
 		["hook.on", "lockCaller", (a) => a.slothlet.hook.on("math.*:before", () => {}, { lockCaller: false }), "slothlet.hook.on"],
 		[
@@ -144,6 +134,6 @@ describe("METHOD_OPTION_SCHEMAS", () => {
 	it("is frozen at every level", () => {
 		expect(Object.isFrozen(METHOD_OPTION_SCHEMAS)).toBe(true);
 		expect(Object.isFrozen(METHOD_OPTION_SCHEMAS["slothlet.api.add"].collision)).toBe(true);
-		expect(Object.isFrozen(METHOD_OPTION_SCHEMAS["slothlet.api.modules.addDiscovered"].discover)).toBe(true);
+		expect(Object.isFrozen(METHOD_OPTION_SCHEMAS["slothlet.api.modules.add.run"].discover)).toBe(true);
 	});
 });

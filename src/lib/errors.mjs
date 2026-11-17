@@ -22,16 +22,32 @@ import { translate, registerWarningClass } from "#i18n";
 import { detectHint } from "#helpers/hint-detector";
 import {
 	ArrayMethods,
+	Arrays,
 	describeThrown,
 	Error,
 	Errors,
 	filterList,
-	listPush,
 	Objects,
 	StringMethods,
 	stringOf,
-	Symbols
+	Symbols,
+	WeakMap,
+	WeakMapMethods
 } from "#helpers/intrinsics";
+
+/**
+ * The message parameters for a details object: a method path (`operation`), which details carry as segments, is
+ * rendered joined, as messages name it.
+ * @param {object} details - The details.
+ * @returns {object} The parameters to interpolate.
+ * @private
+ * @example
+ * messageParams({ operation: ["slothlet", "api", "add"] }); // { operation: "slothlet.api.add" }
+ */
+function messageParams(details) {
+	if (!Arrays.isArray(details.operation)) return details;
+	return { ...details, operation: ArrayMethods.join(details.operation, ".") };
+}
 
 /**
  * Custom error class for Slothlet-specific errors with context and i18n
@@ -81,7 +97,8 @@ export class SlothletError extends Error {
 		// throws — and leave the diagnostic unable to name what it replaced, which is the very gap
 		// this rendering exists to close.
 		const hasOriginal = originalError !== null && originalError !== undefined;
-		const enrichedContext = hasOriginal ? { ...contextData, error: SlothletError.#describeThrown(originalError) } : contextData;
+		const params = messageParams(contextData);
+		const enrichedContext = hasOriginal ? { ...params, error: SlothletError.#describeThrown(originalError) } : params;
 
 		// Translate message synchronously (translations already loaded at module init)
 		const translatedMessage = translate(code, enrichedContext);
@@ -175,19 +192,17 @@ export class SlothletError extends Error {
 }
 
 /**
+ * The recorder each per-instance warning class hands its warnings to (see {@link SlothletWarning.forInstance}).
+ * @type {WeakMap<Function, (warning: SlothletWarning) => void>}
+ * @private
+ */
+const RECORDERS = new WeakMap();
+
+/**
  * Warning class for non-fatal issues with i18n support
  * @public
  */
 export class SlothletWarning {
-	/**
-	 * Warnings raised through this class. On this class it is the process-level list: it holds warnings raised outside
-	 * any slothlet instance (module-level coverage notices, for example). Each instance has its own subclass with its own
-	 * list, reached as `api.slothlet.diag.SlothletWarning.captured` (see {@link SlothletWarning.forInstance}). Every
-	 * warning is recorded, whether or not it is also printed.
-	 * @type {SlothletWarning[]}
-	 */
-	static captured = [];
-
 	/**
 	 * Whether a warning raised through this class stays off the console. The process-level class prints every warning;
 	 * an instance's class reads its instance's `silent` option.
@@ -198,23 +213,22 @@ export class SlothletWarning {
 	}
 
 	/**
-	 * Create the warning class for one slothlet instance (#819). The subclass keeps its own `captured` list, so warnings
-	 * and `clearCaptured()` on one instance never reach another, and prints a warning unless `isSilent()` says the
-	 * instance is silent (#838). Warnings are still `instanceof SlothletWarning`.
+	 * Create the warning class for one slothlet instance (#819). Every warning raised through it is handed to
+	 * `record` (the instance keeps them; `api.slothlet.warnings.get()` reads them), printed or not, and it is printed
+	 * unless `isSilent()` says the instance is silent (#838). Warnings on one instance never reach another, and they
+	 * are still `instanceof SlothletWarning`.
 	 * @param {function(): boolean} [isSilent] - Whether the instance's `silent` option is on, read as each warning is raised.
+	 * @param {(warning: SlothletWarning) => void} [record] - Called with each warning raised through the class.
 	 * @returns {Function} The per-instance class (a subclass of `SlothletWarning`).
 	 * @public
 	 */
-	static forInstance(isSilent = () => false) {
+	static forInstance(isSilent = () => false, record) {
 		class InstanceSlothletWarning extends SlothletWarning {
-			static captured = [];
 			static get silent() {
 				return isSilent() === true;
 			}
-			static clearCaptured() {
-				InstanceSlothletWarning.captured = [];
-			}
 		}
+		if (typeof record === "function") WeakMapMethods.set(RECORDERS, InstanceSlothletWarning, record);
 		return InstanceSlothletWarning;
 	}
 
@@ -235,7 +249,7 @@ export class SlothletWarning {
 		const translationKey = msgKey ?? code;
 
 		// Translate message synchronously
-		const translatedMessage = translate(translationKey, contextData);
+		const translatedMessage = translate(translationKey, messageParams(contextData));
 
 		this.name = "SlothletWarning";
 		this.code = code;
@@ -250,11 +264,9 @@ export class SlothletWarning {
 			this.cause = cause;
 		}
 
-		// Every warning is recorded on the class it was raised through: the instance's class for a warning raised through
-		// an instance (#819), or this class for one raised outside any instance. Whether it is also printed is that
-		// class's `silent`, decided here and nowhere else (#838).
+		// `Home` is the instance's class for a warning raised through an instance (#819), or this class for one raised
+		// outside any instance. Whether it is printed is that class's `silent`, decided here and nowhere else (#838).
 		const Home = this.constructor;
-		listPush(Home.captured, this);
 		if (!Home.silent) {
 			// The console as it is now: hosts and test runners point it elsewhere after slothlet loads.
 			globalThis.console.warn(`\n⚠️  [${this.code}] ${this.name}\n${this.message}`);
@@ -268,6 +280,9 @@ export class SlothletWarning {
 				globalThis.console.warn("Cause:", cause instanceof Error ? cause.stack : cause);
 			}
 		}
+		// A warning raised through an instance is kept by that instance, printed or not.
+		const record = WeakMapMethods.get(RECORDERS, Home);
+		if (record !== undefined) record(this);
 	}
 
 	/**
@@ -276,14 +291,6 @@ export class SlothletWarning {
 	 */
 	toString() {
 		return `[${this.code}] ${this.name}: ${this.message}`;
-	}
-
-	/**
-	 * Clear captured warnings (for testing). On an instance's class this clears that instance only.
-	 * @public
-	 */
-	static clearCaptured() {
-		SlothletWarning.captured = [];
 	}
 }
 

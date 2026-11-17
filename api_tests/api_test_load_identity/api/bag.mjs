@@ -52,7 +52,7 @@ export const call = (fn) => fn();
  * A closure pinned to this module on purpose: whoever runs it, it reads the vault as `bag`.
  * @returns {Function} The pinned closure.
  */
-export const lend = () => self.slothlet.lockCaller(() => self.vault.get());
+export const lend = () => self.slothlet.pin(() => self.vault.get());
 
 /**
  * Read the vault for whoever may call this leaf.

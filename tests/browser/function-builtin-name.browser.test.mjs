@@ -66,7 +66,7 @@ describe.each(["eager", "lazy"])("a function's built-in name and length in a bro
 		it("lets a module read name and length of a function node it may not call, and of slothlet's own functions", async () => {
 			const api = await boot();
 			try {
-				for (const path of ["math.add", "math.multiply", "slothlet.hook.on", "slothlet.lockCaller"]) {
+				for (const path of ["math.add", "math.multiply", "slothlet.hook.on", "slothlet.pin"]) {
 					expect(api.viewer.readable(path, ["name", "length"]), path).toEqual(["name", "length"]);
 				}
 			} finally {

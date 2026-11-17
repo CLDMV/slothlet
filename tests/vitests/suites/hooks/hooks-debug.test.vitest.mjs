@@ -57,7 +57,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true }, diagnostics: true }))(
 		expect(api.slothlet.diag).toBeDefined();
 		expect(api.slothlet.diag.hook).toBeDefined();
 		expect(typeof api.slothlet.diag.hook.enabled).toBe("boolean");
-		expect(typeof api.slothlet.diag.hook.compilePattern).toBe("function");
+		expect(typeof api.slothlet.diag.hook.compile).toBe("function");
 
 		// Register a hook to test functionality
 		api.slothlet.hook.on(
@@ -85,17 +85,17 @@ describe.each(getMatrixConfigs({ hook: { enabled: true }, diagnostics: true }))(
 		const diag = api.slothlet.diag.hook;
 
 		// Test pattern compilation method exists
-		expect(typeof diag.compilePattern).toBe("function");
+		expect(typeof diag.compile).toBe("function");
 
 		// Test basic patterns
-		const matcher = diag.compilePattern("math.*");
+		const matcher = diag.compile("math.*");
 		expect(typeof matcher).toBe("function");
 		expect(matcher("math.add")).toBe(true);
 		expect(matcher("math.sub")).toBe(true);
 		expect(matcher("user.login")).toBe(false);
 
 		// Test pattern compilation functionality with globstar
-		const globMatcher = diag.compilePattern("**");
+		const globMatcher = diag.compile("**");
 		expect(typeof globMatcher).toBe("function");
 		expect(globMatcher("math.add")).toBe(true);
 		expect(globMatcher("any.deep.path")).toBe(true);
@@ -108,19 +108,19 @@ describe.each(getMatrixConfigs({ hook: { enabled: true }, diagnostics: true }))(
 		api.slothlet.hook.on("math.*:before", () => {}, { id: "pattern-test" });
 
 		// Test wildcard patterns
-		const singleWildcard = diag.compilePattern("math.*");
+		const singleWildcard = diag.compile("math.*");
 		expect(singleWildcard("math.add")).toBe(true);
 		expect(singleWildcard("math.sub")).toBe(true);
 		expect(singleWildcard("user.login")).toBe(false);
 
 		// Test double wildcard patterns
-		const doubleWildcard = diag.compilePattern("**");
+		const doubleWildcard = diag.compile("**");
 		expect(doubleWildcard("math.add")).toBe(true);
 		expect(doubleWildcard("user.login")).toBe(true);
 		expect(doubleWildcard("deep.nested.path")).toBe(true);
 
 		// Test question mark pattern
-		const questionMark = diag.compilePattern("tes?");
+		const questionMark = diag.compile("tes?");
 		expect(questionMark("test")).toBe(true);
 		expect(questionMark("test2")).toBe(false);
 
@@ -150,12 +150,12 @@ describe.each(getMatrixConfigs({ hook: { enabled: true }, diagnostics: true }))(
 		const diag = api.slothlet.diag.hook;
 
 		// Test various pattern types
-		const globPattern = diag.compilePattern("*.add");
+		const globPattern = diag.compile("*.add");
 		expect(globPattern("math.add")).toBe(true);
 		expect(globPattern("user.add")).toBe(true);
 		expect(globPattern("math.sub")).toBe(false);
 
-		const deepPattern = diag.compilePattern("*.*.*");
+		const deepPattern = diag.compile("*.*.*");
 		expect(deepPattern("a.b.c")).toBe(true);
 		// Pattern *.*.* requires exactly 3 dot-separated segments
 		expect(deepPattern("a.b")).toBe(false);
@@ -166,7 +166,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true }, diagnostics: true }))(
 		const testPath = "math.add";
 
 		for (const pattern of patterns) {
-			const matcher = diag.compilePattern(pattern);
+			const matcher = diag.compile(pattern);
 			expect(typeof matcher).toBe("function");
 
 			// All these patterns should match "math.add"

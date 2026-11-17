@@ -562,13 +562,13 @@ api.slothlet.versioning.list("auth");
 // → { versions: { v1: { ... }, v2: { ... } }, default: "v2" }
 
 // Change the default dispatcher fallback
-api.slothlet.versioning.setDefault("auth", "v1");
+api.slothlet.versioning.default("auth", "v1");
 
 // Unregister a version (removes api.v1.auth; dispatcher updates automatically)
-await api.slothlet.versioning.unregister("auth", "v1");
+await api.slothlet.versioning.remove("auth", "v1");
 
 // Read version metadata stored at registration
-api.slothlet.versioning.getVersionMetadata(moduleID);
+api.slothlet.versioning.metadata.get(moduleID);
 ```
 
 > 📖 See [`docs/VERSIONING.md`](docs/VERSIONING.md) for full documentation.

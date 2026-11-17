@@ -22,7 +22,7 @@
  * off the call stack. V8's async stack traces also carry the `at async …` frames of the OUTER
  * suspended calls, which is what these cases are about:
  *
- * - **A synchronously entered module** — a nested leaf, or a `lockCaller`-pinned callback — whose
+ * - **A synchronously entered module** — a nested leaf, or a `pin`-pinned callback — whose
  *   own file is not a suspended call's was attributed to the outer suspended caller found further
  *   down the stack (`run.boot` here, `run.runHostBootChain` downstream).
  * - **A suspended call resuming in a sibling file of its module** was matched only by the exact
@@ -135,7 +135,7 @@ describe.each(PLATFORMS)("Live runtime > suspended caller attribution (#512) > $
 	}
 
 	describe("a synchronously entered module is attributed to itself, not to an outer suspended caller", () => {
-		it("a lockCaller-pinned callback the host invokes from its boot chain runs as the extension", async () => {
+		it("a pin-pinned callback the host invokes from its boot chain runs as the extension", async () => {
 			const { extID } = await boot();
 			// run.chain → run.boot → ext.activate.for(id) registers two pinned callbacks and settles;
 			// run.boot (still suspended inside run.chain) then renders them synchronously.

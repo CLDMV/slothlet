@@ -363,7 +363,7 @@ describe.each([{ runtime: "async" }, { runtime: "live" }])("writes through an un
 		expect(await settled(api.holder.deep.inner)).toBe("LAZY_WRITE_REFUSED");
 		const node = api.holder.deep.inner;
 		expect([node.leaf, node.added, Object.isExtensible(node)]).toEqual([5, undefined, false]);
-		const warnings = api.slothlet.diag.SlothletWarning.captured.filter((warning) => warning.code === "WARNING_LAZY_WRITE_REFUSED");
+		const warnings = api.slothlet.warnings.get().filter((warning) => warning.code === "WARNING_LAZY_WRITE_REFUSED");
 		expect(warnings.map((warning) => warning.context.apiPath)).toEqual(["holder.deep.inner"]);
 		expect(warnings[0].cause).toBeInstanceOf(TypeError);
 	});
@@ -374,7 +374,7 @@ describe.each([{ runtime: "async" }, { runtime: "live" }])("writes through an un
 		api.holder.deep.cfg.getterOnly.g = 2;
 		// Loaded through another member, not through a stand-in the refused change was made on.
 		await api.holder.deep.cfg.plain;
-		const warnings = api.slothlet.diag.SlothletWarning.captured.filter((warning) => warning.code === "WARNING_LAZY_WRITE_REFUSED");
+		const warnings = api.slothlet.warnings.get().filter((warning) => warning.code === "WARNING_LAZY_WRITE_REFUSED");
 		expect(warnings.map((warning) => [warning.context.apiPath, warning.context.operation])).toEqual([
 			["holder.deep.cfg.getterOnly", "set"]
 		]);
@@ -384,7 +384,7 @@ describe.each([{ runtime: "async" }, { runtime: "live" }])("writes through an un
 		await load("lazy");
 		api.holder.deep.cfg.getterOnly.g = 2;
 		expect(await settled(api.holder.deep.cfg.getterOnly)).toBe("LAZY_WRITE_REFUSED");
-		expect(api.slothlet.diag.SlothletWarning.captured.filter((warning) => warning.code === "WARNING_LAZY_WRITE_REFUSED")).toHaveLength(1);
+		expect(api.slothlet.warnings.get().filter((warning) => warning.code === "WARNING_LAZY_WRITE_REFUSED")).toHaveLength(1);
 	});
 
 	it.each(["freeze", "seal"])("closes an object node with %s once it loads, refusing nothing, as eager mode does", async (kind) => {
@@ -396,7 +396,7 @@ describe.each([{ runtime: "async" }, { runtime: "live" }])("writes through an un
 			const made = outcome(() => Object[kind](api.holder.deep.cfg.plain));
 			const awaited = await settled(api.holder.deep.cfg.plain);
 			reports[mode] = [made, awaited, lockState(api.holder.deep.cfg.plain), api.holder.deep.cfg.plain.p];
-			refusals.push(...api.slothlet.diag.SlothletWarning.captured.filter((warning) => warning.code === "WARNING_LAZY_WRITE_REFUSED"));
+			refusals.push(...api.slothlet.warnings.get().filter((warning) => warning.code === "WARNING_LAZY_WRITE_REFUSED"));
 			await api.slothlet.shutdown();
 			api = null;
 		}
@@ -513,7 +513,7 @@ describe.each([{ runtime: "async" }, { runtime: "live" }])("writes through an un
 		await api.slothlet.api.add("holder", path.join(FIXTURE, "holder"), { id: "holder" });
 		api.holder.deep.cfg.getterOnly.g = 2;
 		await api.slothlet.api.reload("holder");
-		const warnings = api.slothlet.diag.SlothletWarning.captured.filter((warning) => warning.code === "WARNING_LAZY_WRITE_REFUSED");
+		const warnings = api.slothlet.warnings.get().filter((warning) => warning.code === "WARNING_LAZY_WRITE_REFUSED");
 		expect(warnings.map((warning) => warning.context.apiPath)).toEqual(["holder.deep.cfg.getterOnly"]);
 	});
 
@@ -527,7 +527,7 @@ describe.each([{ runtime: "async" }, { runtime: "live" }])("writes through an un
 			await api.slothlet.reload();
 			const awaited = await settled(api.holder.deep.inner);
 			reports[mode] = [awaited, api.holder.deep.inner.planted];
-			refusals.push(...api.slothlet.diag.SlothletWarning.captured.filter((warning) => warning.code === "WARNING_LAZY_WRITE_REFUSED"));
+			refusals.push(...api.slothlet.warnings.get().filter((warning) => warning.code === "WARNING_LAZY_WRITE_REFUSED"));
 			await api.slothlet.shutdown();
 			api = null;
 		}

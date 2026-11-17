@@ -44,7 +44,6 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import { SlothletWarning } from "@cldmv/slothlet/errors";
 
 afterEach(() => {
-	SlothletWarning.captured = [];
 	vi.restoreAllMocks();
 });
 
@@ -87,11 +86,15 @@ describe("SlothletWarning — empty contextData skips context log (line 184 fals
 		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
 
 		// A silent instance's class skips the entire outer if (#838).
-		const Silent = SlothletWarning.forInstance(() => true);
+		const kept = [];
+		const Silent = SlothletWarning.forInstance(
+			() => true,
+			(warning) => kept.push(warning)
+		);
 		new Silent("WARNING_METADATA_MISMATCH", {});
 
 		// No console output — the warning is recorded all the same
 		expect(warnSpy).not.toHaveBeenCalled();
-		expect(Silent.captured.length).toBeGreaterThan(0);
+		expect(kept.length).toBe(1);
 	});
 });

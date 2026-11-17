@@ -61,7 +61,7 @@ describe.each(getMatrixConfigs())("Permissions > Internal Route Proxy Coverage >
 		expect(ok).toBe(true);
 	});
 
-	it("exercises construct trap by creating SlothletWarning via slothlet.diag", async () => {
+	it("exercises construct trap by calling a namespace method with new", async () => {
 		api = await slothlet({
 			...config,
 			diagnostics: true,
@@ -72,7 +72,7 @@ describe.each(getMatrixConfigs())("Permissions > Internal Route Proxy Coverage >
 			}
 		});
 
-		const constructed = await api.internalProxyHelper.constructWarningThroughDiag();
+		const constructed = await api.internalProxyHelper.constructThroughNamespace();
 		expect(constructed).toBe(true);
 	});
 
@@ -125,7 +125,7 @@ describe.each(getMatrixConfigs())("Permissions > Internal Route Proxy Coverage >
 				rules: [
 					{ caller: "**", target: "internalProxyHelper.**", effect: "allow" },
 					{ caller: "internalProxyHelper.**", target: "slothlet.permissions", effect: "allow" },
-					{ caller: "internalProxyHelper.**", target: "slothlet.permissions.__setProbe", effect: "deny" }
+					{ caller: "internalProxyHelper.**", target: "slothlet.permissions.__setProbe:write", effect: "deny" }
 				]
 			}
 		});
@@ -149,7 +149,7 @@ describe.each(getMatrixConfigs())("Permissions > Internal Route Proxy Coverage >
 				rules: [
 					{ caller: "**", target: "internalProxyHelper.**", effect: "allow" },
 					{ caller: "internalProxyHelper.**", target: "slothlet.permissions", effect: "allow" },
-					{ caller: "internalProxyHelper.**", target: "slothlet.permissions.__defineProbe", effect: "deny" }
+					{ caller: "internalProxyHelper.**", target: "slothlet.permissions.__defineProbe:write", effect: "deny" }
 				]
 			}
 		});
@@ -173,7 +173,7 @@ describe.each(getMatrixConfigs())("Permissions > Internal Route Proxy Coverage >
 				rules: [
 					{ caller: "**", target: "internalProxyHelper.**", effect: "allow" },
 					{ caller: "internalProxyHelper.**", target: "slothlet.permissions", effect: "allow" },
-					{ caller: "internalProxyHelper.**", target: "slothlet.permissions.__deleteProbe", effect: "deny" }
+					{ caller: "internalProxyHelper.**", target: "slothlet.permissions.__deleteProbe:write", effect: "deny" }
 				]
 			}
 		});
@@ -186,6 +186,90 @@ describe.each(getMatrixConfigs())("Permissions > Internal Route Proxy Coverage >
 				expect(err.message).toContain("PERMISSION_DENIED");
 			}
 		});
+	});
+
+	it("denies a set of a real member by a call rule on it (internal route proxy set trap)", async () => {
+		api = await slothlet({
+			...config,
+			base: `${BASE}/callers`,
+			permissions: {
+				policy: "deny",
+				rules: [
+					{ caller: "**", target: "internalProxyHelper.**", effect: "allow" },
+					{ caller: "internalProxyHelper.**", target: "slothlet.permissions", effect: "allow" },
+					{ caller: "internalProxyHelper.**", target: "slothlet.permissions.rules", effect: "deny" }
+				]
+			}
+		});
+
+		await withSuppressedSlothletErrorOutput(async () => {
+			let error;
+			try {
+				await api.internalProxyHelper.writeOnHandedNamespace(api.slothlet.permissions, "rules", 1);
+			} catch (err) {
+				error = err;
+			}
+			expect(error?.code).toBe("PERMISSION_DENIED");
+			// The call rule on the member itself refused it, not a write rule on a made-up key.
+			expect(error.context.target).toBe("slothlet.permissions.rules");
+		});
+		expect(typeof api.slothlet.permissions.rules.add).toBe("function");
+	});
+
+	it("denies a defineProperty of a real member by a call rule on it (internal route proxy defineProperty trap)", async () => {
+		api = await slothlet({
+			...config,
+			base: `${BASE}/callers`,
+			permissions: {
+				policy: "deny",
+				rules: [
+					{ caller: "**", target: "internalProxyHelper.**", effect: "allow" },
+					{ caller: "internalProxyHelper.**", target: "slothlet.permissions", effect: "allow" },
+					{ caller: "internalProxyHelper.**", target: "slothlet.permissions.rules", effect: "deny" }
+				]
+			}
+		});
+
+		await withSuppressedSlothletErrorOutput(async () => {
+			let error;
+			try {
+				await api.internalProxyHelper.defineOnHandedNamespace(api.slothlet.permissions, "rules", 2);
+			} catch (err) {
+				error = err;
+			}
+			expect(error?.code).toBe("PERMISSION_DENIED");
+			// The call rule on the member itself refused it, not a write rule on a made-up key.
+			expect(error.context.target).toBe("slothlet.permissions.rules");
+		});
+		expect(typeof api.slothlet.permissions.rules.add).toBe("function");
+	});
+
+	it("denies a delete of a real member by a call rule on it (internal route proxy deleteProperty trap)", async () => {
+		api = await slothlet({
+			...config,
+			base: `${BASE}/callers`,
+			permissions: {
+				policy: "deny",
+				rules: [
+					{ caller: "**", target: "internalProxyHelper.**", effect: "allow" },
+					{ caller: "internalProxyHelper.**", target: "slothlet.permissions", effect: "allow" },
+					{ caller: "internalProxyHelper.**", target: "slothlet.permissions.rules", effect: "deny" }
+				]
+			}
+		});
+
+		await withSuppressedSlothletErrorOutput(async () => {
+			let error;
+			try {
+				await api.internalProxyHelper.deleteOnHandedNamespace(api.slothlet.permissions, "rules");
+			} catch (err) {
+				error = err;
+			}
+			expect(error?.code).toBe("PERMISSION_DENIED");
+			// The call rule on the member itself refused it, not a write rule on a made-up key.
+			expect(error.context.target).toBe("slothlet.permissions.rules");
+		});
+		expect(typeof api.slothlet.permissions.rules.add).toBe("function");
 	});
 
 	it("refuses symbol-key mutations as it refuses string-key ones", async () => {
@@ -252,7 +336,7 @@ describe.each(getMatrixConfigs())("Permissions > Internal Route Proxy Coverage >
 		});
 	});
 
-	it("throws INVALID_METADATA_KEY for empty key from module-internal setGlobal", async () => {
+	it("throws INVALID_METADATA_KEY for empty key from module-internal metadata.global", async () => {
 		api = await slothlet({
 			...config,
 			base: `${BASE}/callers`,
@@ -272,7 +356,7 @@ describe.each(getMatrixConfigs())("Permissions > Internal Route Proxy Coverage >
 		});
 	});
 
-	it("throws INVALID_ARGUMENT for non-string/non-object keyOrObj from module setGlobal", async () => {
+	it("throws INVALID_ARGUMENT for non-string/non-object keyOrObj from module metadata.global", async () => {
 		api = await slothlet({
 			...config,
 			base: `${BASE}/callers`,
@@ -303,7 +387,7 @@ describe.each(getMatrixConfigs())("Permissions > conditionMatches branches (canT
 	});
 
 	it("conditionMatches(null) returns true — allow rule with no condition and startsWith prefix", async () => {
-		// Allow rule targets "slothlet.permissions.addRule" (startsWith "slothlet.permissions.").
+		// Allow rule targets "slothlet.permissions.rules.add" (startsWith "slothlet.permissions.").
 		// conditionMatches(null) fires and returns true → traversal allowed → readPermissionsNamespace succeeds.
 		api = await slothlet({
 			...config,
@@ -312,7 +396,7 @@ describe.each(getMatrixConfigs())("Permissions > conditionMatches branches (canT
 				policy: "allow",
 				rules: [
 					{ caller: "internalProxyHelper.**", target: "slothlet.permissions", effect: "deny" },
-					{ caller: "internalProxyHelper.**", target: "slothlet.permissions.addRule", effect: "allow" }
+					{ caller: "internalProxyHelper.**", target: "slothlet.permissions.rules.add", effect: "allow" }
 				]
 			}
 		});
@@ -335,7 +419,7 @@ describe.each(getMatrixConfigs())("Permissions > conditionMatches branches (canT
 				policy: "allow",
 				rules: [
 					{ caller: "internalProxyHelper.**", target: "slothlet.permissions", effect: "deny" },
-					{ caller: "internalProxyHelper.**", target: "slothlet.permissions.addRule", effect: "allow" }
+					{ caller: "internalProxyHelper.**", target: "slothlet.permissions.rules.add", effect: "allow" }
 				]
 			}
 		});
@@ -350,7 +434,7 @@ describe.each(getMatrixConfigs())("Permissions > conditionMatches branches (canT
 			isReadGatingEnabled: orig.isReadGatingEnabled.bind(orig),
 			enforceAccess: orig.enforceAccess.bind(orig),
 			checkAccess: orig.checkAccess.bind(orig),
-			getRulesForCaller: () => [{ effect: "allow", target: "slothlet.permissions.addRule", condition: { role: "x" } }]
+			getRulesForCaller: () => [{ effect: "allow", target: "slothlet.permissions.rules.add", condition: { role: "x" } }]
 		};
 
 		try {
@@ -370,7 +454,7 @@ describe.each(getMatrixConfigs())("Permissions > conditionMatches branches (canT
 				policy: "allow",
 				rules: [
 					{ caller: "internalProxyHelper.**", target: "slothlet.permissions", effect: "deny" },
-					{ caller: "internalProxyHelper.**", target: "slothlet.permissions.addRule", effect: "allow", condition: () => true }
+					{ caller: "internalProxyHelper.**", target: "slothlet.permissions.rules.add", effect: "allow", condition: () => true }
 				]
 			}
 		});
@@ -391,7 +475,7 @@ describe.each(getMatrixConfigs())("Permissions > conditionMatches branches (canT
 					{ caller: "**", target: "internalProxyHelper.**", effect: "allow" },
 					{
 						caller: "internalProxyHelper.**",
-						target: "slothlet.permissions.addRule",
+						target: "slothlet.permissions.rules.add",
 						effect: "allow",
 						condition: () => {
 							throw new Error("deliberate-throw-in-condition");
@@ -420,7 +504,7 @@ describe.each(getMatrixConfigs())("Permissions > conditionMatches branches (canT
 				policy: "deny",
 				rules: [
 					{ caller: "**", target: "internalProxyHelper.**", effect: "allow" },
-					{ caller: "internalProxyHelper.**", target: "slothlet.permissions.addRule", effect: "allow", condition: { role: "admin" } }
+					{ caller: "internalProxyHelper.**", target: "slothlet.permissions.rules.add", effect: "allow", condition: { role: "admin" } }
 				]
 			}
 		});
@@ -444,7 +528,7 @@ describe.each(getMatrixConfigs())("Permissions > conditionMatches branches (canT
 				policy: "allow",
 				rules: [
 					{ caller: "internalProxyHelper.**", target: "slothlet.permissions", effect: "deny" },
-					{ caller: "internalProxyHelper.**", target: "slothlet.permissions.addRule", effect: "allow", condition: { role: "admin" } }
+					{ caller: "internalProxyHelper.**", target: "slothlet.permissions.rules.add", effect: "allow", condition: { role: "admin" } }
 				]
 			}
 		});
@@ -466,7 +550,7 @@ describe.each(getMatrixConfigs())("Permissions > conditionMatches branches (canT
 					{ caller: "internalProxyHelper.**", target: "slothlet.permissions", effect: "deny" },
 					{
 						caller: "internalProxyHelper.**",
-						target: "slothlet.permissions.addRule",
+						target: "slothlet.permissions.rules.add",
 						effect: "allow",
 						condition: [{ role: "guest" }, { role: "admin" }]
 					}
@@ -492,7 +576,7 @@ describe.each(getMatrixConfigs())("Permissions > conditionMatches branches (canT
 					{ caller: "**", target: "internalProxyHelper.**", effect: "allow" },
 					{
 						caller: "internalProxyHelper.**",
-						target: "slothlet.permissions.addRule",
+						target: "slothlet.permissions.rules.add",
 						effect: "allow",
 						condition: { profile: { role: "admin" } }
 					}
@@ -524,7 +608,7 @@ describe.each(getMatrixConfigs())("Permissions > conditionMatches branches (canT
 					{ caller: "internalProxyHelper.**", target: "slothlet.permissions", effect: "deny" },
 					{
 						caller: "internalProxyHelper.**",
-						target: "slothlet.permissions.addRule",
+						target: "slothlet.permissions.rules.add",
 						effect: "allow",
 						condition: { profile: { role: "admin" } }
 					}
@@ -550,7 +634,7 @@ describe.each(getMatrixConfigs())("Permissions > conditionMatches branches (canT
 					{ caller: "**", target: "internalProxyHelper.**", effect: "allow" },
 					{
 						caller: "internalProxyHelper.**",
-						target: "slothlet.permissions.addRule",
+						target: "slothlet.permissions.rules.add",
 						effect: "allow",
 						condition: { profile: { role: "admin" } }
 					}
@@ -582,7 +666,7 @@ describe.each(getMatrixConfigs())("Permissions > conditionMatches branches (canT
 				policy: "allow",
 				rules: [
 					{ caller: "internalProxyHelper.**", target: "slothlet.permissions", effect: "deny" },
-					{ caller: "internalProxyHelper.**", target: "slothlet.permissions.addRule", effect: "allow", condition: nullProtoCondition }
+					{ caller: "internalProxyHelper.**", target: "slothlet.permissions.rules.add", effect: "allow", condition: nullProtoCondition }
 				]
 			}
 		});
@@ -604,8 +688,8 @@ describe.each(getMatrixConfigs())("Permissions > proxy traversal edge branches >
 	});
 
 	it("glob firstSegment in probe path — rule target has wildcard segment → else branch on line 343", async () => {
-		// Allow rule: "slothlet.permissions.*.addRule" — startsWith prefix is true, but condition always fails.
-		// Falls through to probe path: suffix="*.addRule", firstSegment="*" which has glob char → else branch.
+		// Allow rule: "slothlet.permissions.*.add" — startsWith prefix is true, but condition always fails.
+		// Falls through to probe path: suffix="*.add", firstSegment="*" which has glob char → else branch.
 		// Probe "slothlet.permissions.__probe__" is then checked via defaultPolicy=allow → traversal allowed.
 		api = await slothlet({
 			...config,
@@ -616,7 +700,7 @@ describe.each(getMatrixConfigs())("Permissions > proxy traversal edge branches >
 					{ caller: "internalProxyHelper.**", target: "slothlet.permissions", effect: "deny" },
 					{
 						caller: "internalProxyHelper.**",
-						target: "slothlet.permissions.*.addRule",
+						target: "slothlet.permissions.*.add",
 						effect: "allow",
 						condition: () => false
 					}

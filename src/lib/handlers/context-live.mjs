@@ -135,7 +135,7 @@ const FAR_FRAMES = 1024;
 const UNACCOUNTED = Symbol("slothlet.callerIdentity.unaccounted");
 
 /**
- * Marks a call pinned to the host (`runInContext(..., asHost)`, from `lockCaller.caller()` when the
+ * Marks a call pinned to the host (`runInContext(..., asHost)`, from `pin.caller()` when the
  * pinned caller is the host) on the running-call stack. Unlike a context-only entry, which is looked
  * through, it answers "no module caller": the pinned callback runs as the host even when a module
  * invoked it synchronously.
@@ -785,7 +785,7 @@ export class LiveContextManager {
 	 * stack its code (or code it called synchronously) is what is running: an `await` continuation
 	 * only ever resumes on an empty JavaScript stack, so no other flow can be executing underneath
 	 * it. The top entry is therefore the caller, with no ambiguity to resolve — which is what makes a
-	 * synchronously entered module (a nested leaf, or a `lockCaller`-pinned callback) attributable
+	 * synchronously entered module (a nested leaf, or a `pin`-pinned callback) attributable
 	 * even while other calls are suspended and their async frames sit further down the stack (#512).
 	 *
 	 * @param {object} store - Instance context store.
@@ -1014,7 +1014,7 @@ export class LiveContextManager {
 	 * call really running may do. A call among them that cannot answer for the code (one pinned to the host, code
 	 * running as no module, or code a call cannot account for) leaves the whole unanswered, and refused.
 	 *
-	 * The caller reported (`metadata.caller()`, `lockCaller`) is the first call's, in the order the calls started
+	 * The caller reported (`metadata.caller()`, `pin`) is the first call's, in the order the calls started
 	 * waiting; which call's it really is is not known.
 	 *
 	 * @param {object} store - Instance context store.
@@ -1196,7 +1196,7 @@ export class LiveContextManager {
 	 * @private
 	 */
 	#resolveSuspendedFromStack(suspended, read = null) {
-		// Host-pinned calls (`lockCaller.caller()` with no module caller) are tracked with no filePath:
+		// Host-pinned calls (`pin.caller()` with no module caller) are tracked with no filePath:
 		// they have no module frame to match. When only those are suspended, no candidate can match.
 		const candidates = filterList(setToArray(suspended), (entry) => entry.filePath);
 		if (!candidates.length) return null;
@@ -1464,7 +1464,7 @@ export class LiveContextManager {
 				// rawErrors: a listener's own throw must reach its emitter unchanged. Without it
 				// runInContext would re-wrap anything that is not a SlothletError as
 				// CONTEXT_EXECUTION_FAILED, rewriting errors an `error` handler is meant to receive.
-				// Same reason the pinned-hook and lockCaller call sites pass it.
+				// Same reason the pinned-hook and pin call sites pass it.
 				// A host registration made while calls were in flight runs as the host (#595): left unpinned
 				// it would be attributed, when it runs, to whichever call is then the only one suspended.
 				if (!wrapper) return liveContextManagerRef.runRegisteredAsHost(instanceID, listener, this, args);
@@ -1867,12 +1867,12 @@ export class LiveContextManager {
 	 * @param {Object} [currentWrapper] - Current wrapper being executed (for metadata.self())
 	 * @param {boolean} [rawErrors=false] - When `true`, let a non-SlothletError thrown by
 	 *   `fn` propagate unchanged instead of wrapping it as `CONTEXT_EXECUTION_FAILED`. Used
-	 *   for framework callbacks (`lockCaller`, pinned hooks) where the caller expects the
+	 *   for framework callbacks (`pin`, pinned hooks) where the caller expects the
 	 *   original error type/code/status.
 	 * @param {boolean} [asHost=false] - When `true`, run `fn` with **no module caller**: both
 	 *   `currentWrapper` and `callerWrapper` are cleared for the execution, so `fn` runs as the host
 	 *   (`metadata.caller()` returns null inside it). `currentWrapper` is ignored. Used by
-	 *   `lockCaller.caller()` when the pinned caller is the host.
+	 *   `pin.caller()` when the pinned caller is the host.
 	 * @param {object|null} [ceiling=null] - For an identity pinned from a caller-supplied-code read (#597): the
 	 *   call that code ran inside, which has to allow everything `currentWrapper` does here as well.
 	 * @param {{store: object|null, identity: object}|null} [resolved=null] - The caller identity already resolved

@@ -165,7 +165,7 @@ describe.each(getMatrixConfigs())(
 			api = null;
 		});
 
-		it.each(["scope", "event.on", "lockCaller", "lockCaller.caller", "metadata.caller"])(
+		it.each(["context.scope", "event.on", "pin", "pin.caller", "metadata.caller"])(
 			"%s: in, delete, freeze and reads after a freeze report as on the host's function",
 			async (name) => {
 				api = await slothlet({ ...config, base: path.join(DIR, "base"), permissions: { mode: "disabled" } });

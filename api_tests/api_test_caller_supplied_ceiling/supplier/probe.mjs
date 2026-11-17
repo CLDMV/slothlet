@@ -121,7 +121,7 @@ export async function selfInside() {
  * await api.supplier.probe.pinnedInside();
  */
 export async function pinnedInside() {
-	const pinned = await handOver(() => self.slothlet.lockCaller(() => self.vault.secret.forSupplier()));
+	const pinned = await handOver(() => self.slothlet.pin(() => self.vault.secret.forSupplier()));
 	return attempt(() => pinned());
 }
 
@@ -147,7 +147,7 @@ export async function capturedInside() {
  * await api.supplier.probe.scopeInside();
  */
 export async function scopeInside() {
-	return handOver(() => self.slothlet.run({}, () => attempt(() => self.vault.secret.secret())));
+	return handOver(() => self.slothlet.context.run({}, () => attempt(() => self.vault.secret.secret())));
 }
 
 /**

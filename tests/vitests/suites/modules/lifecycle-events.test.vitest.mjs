@@ -104,14 +104,14 @@ describe("modules:discover-* events", () => {
 	});
 });
 
-// ─── addModule() event sequence ─────────────────────────────────────────────
+// ─── modules.add() event sequence ─────────────────────────────────────────────
 
-describe("modules:mount-* and modules:loaded events — addModule()", () => {
-	it("emits mount-start → mount-complete → loaded for a single addModule call", async () => {
+describe("modules:mount-* and modules:loaded events — modules.add()", () => {
+	it("emits mount-start → mount-complete → loaded for a single modules.add call", async () => {
 		const mm = api.slothlet.api.modules;
 		await mm.discover({ root: FIX_NPM, prefix: "packrat-extension-" });
 		events.length = 0; // clear discover events
-		await mm.addModule("packrat-extension-baz");
+		await mm.add("packrat-extension-baz");
 
 		const sequence = events.map((e) => e.event);
 		expect(sequence).toEqual(["modules:mount-start", "modules:mount-complete", "modules:loaded"]);
@@ -120,7 +120,7 @@ describe("modules:mount-* and modules:loaded events — addModule()", () => {
 	it("mount-complete payload identifies the mounted module", async () => {
 		const mm = api.slothlet.api.modules;
 		await mm.discover({ root: FIX_NPM, prefix: "packrat-extension-" });
-		await mm.addModule("packrat-extension-baz");
+		await mm.add("packrat-extension-baz");
 
 		const [{ payload }] = eventsOfType("modules:mount-complete");
 		expect(payload.name).toBe("packrat-extension-baz");
@@ -132,7 +132,7 @@ describe("modules:mount-* and modules:loaded events — addModule()", () => {
 	it("loaded payload contains a mounted[] array of length 1", async () => {
 		const mm = api.slothlet.api.modules;
 		await mm.discover({ root: FIX_NPM, prefix: "packrat-extension-" });
-		await mm.addModule("packrat-extension-baz");
+		await mm.add("packrat-extension-baz");
 
 		const [{ payload }] = eventsOfType("modules:loaded");
 		expect(payload.mounted.length).toBe(1);
@@ -140,14 +140,14 @@ describe("modules:mount-* and modules:loaded events — addModule()", () => {
 	});
 });
 
-// ─── addModules() per-item events ───────────────────────────────────────────
+// ─── modules.add() per-item events ───────────────────────────────────────────
 
-describe("modules:mount-* and modules:loaded events — addModules()", () => {
+describe("modules:mount-* and modules:loaded events — modules.add()", () => {
 	it("emits one mount-complete per mounted item plus one loaded at the end", async () => {
 		const mm = api.slothlet.api.modules;
 		await mm.discover({ root: FIX_NPM });
 		events.length = 0;
-		await mm.addModules(["@org/packrat-driver-foo", "@org/packrat-driver-bar"]);
+		await mm.add(["@org/packrat-driver-foo", "@org/packrat-driver-bar"]);
 
 		expect(eventsOfType("modules:mount-start").length).toBe(1);
 		expect(eventsOfType("modules:mount-complete").length).toBe(2);
@@ -158,7 +158,7 @@ describe("modules:mount-* and modules:loaded events — addModules()", () => {
 		const mm = api.slothlet.api.modules;
 		await mm.discover({ root: FIX_NPM });
 		events.length = 0;
-		await mm.addModules(["@org/packrat-driver-foo"], { concurrency: 1 });
+		await mm.add(["@org/packrat-driver-foo"], { concurrency: 1 });
 
 		const [{ payload }] = eventsOfType("modules:mount-start");
 		expect(Array.isArray(payload.items)).toBe(true);
@@ -169,18 +169,18 @@ describe("modules:mount-* and modules:loaded events — addModules()", () => {
 	it("loaded payload mounted[] reflects all successfully-mounted modules", async () => {
 		const mm = api.slothlet.api.modules;
 		await mm.discover({ root: FIX_NPM });
-		await mm.addModules(["@org/packrat-driver-foo", "@org/packrat-driver-bar", "packrat-extension-baz"]);
+		await mm.add(["@org/packrat-driver-foo", "@org/packrat-driver-bar", "packrat-extension-baz"]);
 
 		const [{ payload }] = eventsOfType("modules:loaded");
 		expect(payload.mounted.length).toBe(3);
 	});
 });
 
-// ─── addDiscovered() chains all events ──────────────────────────────────────
+// ─── modules.add() chains all events ──────────────────────────────────────
 
-describe("modules:* events — addDiscovered() chain", () => {
-	it("emits the full discover + mount sequence in one addDiscovered call", async () => {
-		await api.slothlet.api.modules.addDiscovered({ discover: { root: FIX_NPM } });
+describe("modules:* events — modules.add() chain", () => {
+	it("emits the full discover + mount sequence in one modules.add call", async () => {
+		await api.slothlet.api.modules.add({ discover: { root: FIX_NPM } });
 
 		// discover phase
 		expect(eventsOfType("modules:discover-start").length).toBe(1);
@@ -192,7 +192,7 @@ describe("modules:* events — addDiscovered() chain", () => {
 	});
 
 	it("ordering: discover-start < discover-complete < mount-start < mount-complete < loaded", async () => {
-		await api.slothlet.api.modules.addDiscovered({ discover: { root: FIX_NPM } });
+		await api.slothlet.api.modules.add({ discover: { root: FIX_NPM } });
 
 		const order = events.map((e) => e.event);
 		const idxDiscoverStart = order.indexOf("modules:discover-start");

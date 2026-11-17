@@ -27,7 +27,7 @@ describe.each(getMatrixConfigs())("Permissions > Stacking Order > $name", ({ con
 		api = null;
 	});
 
-	it("config → api.add → addRule stacking order determines tiebreak", async () => {
+	it("config → api.add → rules.add stacking order determines tiebreak", async () => {
 		// Config denies callers → payments
 		api = await slothlet({
 			...config,
@@ -46,8 +46,8 @@ describe.each(getMatrixConfigs())("Permissions > Stacking Order > $name", ({ con
 			expect(err.message).toMatch(/PERMISSION_DENIED/);
 		}
 
-		// addRule overrides with allow (registered later = wins at same specificity)
-		api.slothlet.permissions.addRule({ caller: "callers.**", target: "payments.**", effect: "allow" });
+		// rules.add overrides with allow (registered later = wins at same specificity)
+		api.slothlet.permissions.rules.add({ caller: "callers.**", target: "payments.**", effect: "allow" });
 
 		// Now should be allowed
 		const result = await api.callers.paymentsCaller.callCharge(100);

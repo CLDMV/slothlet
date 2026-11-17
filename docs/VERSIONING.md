@@ -18,7 +18,7 @@ When you register the same logical path more than once with `api.add`'s `version
 - Default version auto-selected via highest-version algorithm when no explicit default is set
 - Runtime control via `api.slothlet.versioning.*`
 - Full lifecycle support: add, remove, reload, shutdown
-- Used automatically by the module discovery system when `addModules()` receives two or more `DiscoverResult` entries sharing a `packageName` at different `version`s — each routes through a versioned mount with the highest semver as the registered default. See the module discovery docs for the discovery side of that flow.
+- Used automatically by the module discovery system when `modules.add([...])` receives two or more `DiscoverResult` entries sharing a `packageName` at different `version`s — each routes through a versioned mount with the highest semver as the registered default. See the module discovery docs for the discovery side of that flow.
 
 ## Table of Contents
 
@@ -113,7 +113,7 @@ After both registrations:
 | `default`  | `boolean` | No       | Mark this version as the explicit default fallback                           |
 | `metadata` | `object`  | No       | Version metadata stored in VersionManager (separate from `options.metadata`) |
 
-> **Important**: `options.version.metadata` and `options.metadata` are two separate systems. `options.metadata` goes into the regular Metadata handler (accessible via `api.slothlet.metadata.get(target)`). `options.version.metadata` goes into the VersionManager-only store (accessible via discriminator args and `api.slothlet.versioning.getVersionMetadata()`). They are never merged.
+> **Important**: `options.version.metadata` and `options.metadata` are two separate systems. `options.metadata` goes into the regular Metadata handler (accessible via `api.slothlet.metadata.get(target)`). `options.version.metadata` goes into the VersionManager-only store (accessible via discriminator args and `api.slothlet.versioning.metadata.get()`). They are never merged.
 
 ---
 
@@ -246,7 +246,7 @@ await api.slothlet.api.add("auth", "./api/v2", { version: { tag: "v2" } });
 ### Override Default at Runtime
 
 ```javascript
-api.slothlet.versioning.setDefault("auth", "v2");
+api.slothlet.versioning.default("auth", "v2");
 // Now "v2" is the explicit default for this path
 ```
 
@@ -324,40 +324,40 @@ const info = api.slothlet.versioning.list("auth");
 
 The result is a copy, made for each call: changing it changes nothing in the registry a version dispatcher routes by.
 
-### `api.slothlet.versioning.setDefault(logicalPath, versionTag)`
+### `api.slothlet.versioning.default(logicalPath, versionTag)`
 
 Override the default version for a logical path at runtime.
 
 ```javascript
-api.slothlet.versioning.setDefault("auth", "v1");
+api.slothlet.versioning.default("auth", "v1");
 ```
 
-### `api.slothlet.versioning.unregister(logicalPath, versionTag)`
+### `api.slothlet.versioning.remove(logicalPath, versionTag)`
 
 Unregister a specific version. If other versions remain, the dispatcher is updated. If no versions remain, the dispatcher is torn down and the logical path is removed from the API tree.
 
 ```javascript
-const wasRemoved = await api.slothlet.versioning.unregister("auth", "v2");
+const wasRemoved = await api.slothlet.versioning.remove("auth", "v2");
 // api.v2.auth is gone; api.auth dispatcher now routes to v1 only
 ```
 
-### `api.slothlet.versioning.getVersionMetadata(logicalPath, versionTag)`
+### `api.slothlet.versioning.metadata.get(logicalPath, versionTag)`
 
 Retrieve the VersionManager-only metadata stored at registration time via `options.version.metadata`.
 
 ```javascript
-const meta = api.slothlet.versioning.getVersionMetadata("auth", "v1");
+const meta = api.slothlet.versioning.metadata.get("auth", "v1");
 // { version: "v1", logicalPath: "auth", deprecated: false, stable: true }
 ```
 
-The result is a copy, made for each call: only `setVersionMetadata()` changes the stored version metadata.
+The result is a copy, made for each call: only `versioning.metadata.set()` changes the stored version metadata.
 
-### `api.slothlet.versioning.setVersionMetadata(logicalPath, versionTag, patch)`
+### `api.slothlet.versioning.metadata.set(logicalPath, versionTag, patch)`
 
 Patch (merge) the VersionManager-only metadata for a registered version at runtime. The injected `version` and `logicalPath` keys always win over any fields in `patch`.
 
 ```javascript
-api.slothlet.versioning.setVersionMetadata("auth", "v1", { stable: true, deprecated: false });
+api.slothlet.versioning.metadata.set("auth", "v1", { stable: true, deprecated: false });
 // updated metadata is immediately visible to the dispatcher via versions.v1.version.metadata
 ```
 
@@ -367,10 +367,10 @@ api.slothlet.versioning.setVersionMetadata("auth", "v1", { stable: true, depreca
 
 Two separate metadata systems coexist for versioned modules:
 
-| System           | Set via                                                                                 | Read via                                                                                    | Contains                         |
-| ---------------- | --------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- | -------------------------------- |
-| Regular Metadata | `options.metadata` in `api.add` or `metadata.set("v1.auth", …)` at runtime              | `metadata.get("auth", { version: "v1" })` / `metadata.get("v1.auth")` / `metadata.caller()` | User module metadata             |
-| Version Metadata | `options.version.metadata` in `api.add` or `versioning.setVersionMetadata()` at runtime | `versioning.getVersionMetadata(logicalPath, versionTag)` / dispatcher args                  | VersionManager-only version data |
+| System           | Set via                                                                           | Read via                                                                              | Contains                         |
+| ---------------- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- | -------------------------------- |
+| Regular Metadata | `options.metadata` in `api.add` or `metadata.set("v1.auth", …)` at runtime        | `metadata.get("auth", { version: "v1" })` / `metadata.get("v1.auth")` / `metadata.caller()` | User module metadata       |
+| Version Metadata | `options.version.metadata` in `api.add` or `versioning.metadata.set()` at runtime | `versioning.metadata.get(logicalPath, versionTag)` / dispatcher args                  | VersionManager-only version data |
 
 These two objects are **never merged**. The dispatcher args expose both in separate fields (`metadata` and `version.metadata`) so the function can read from either independently. Neither carries what slothlet records about a node (its file, path, module): `api.slothlet.node(target)` reports that.
 
@@ -403,7 +403,7 @@ Each call to `api.slothlet.api.add` with a `version` option mounts the module at
 ```javascript
 // Remove a specific versioned module by path
 await api.slothlet.api.remove("v2.auth");
-// Equivalent to calling api.slothlet.versioning.unregister("auth", "v2")
+// Equivalent to calling api.slothlet.versioning.remove("auth", "v2")
 
 // Remove the dispatcher itself (versioned namespaces remain)
 await api.slothlet.api.remove("auth");
@@ -491,7 +491,7 @@ const info = api.slothlet.versioning.list("auth");
 console.log(info.default); // "v1"
 
 // --- Unregister v2 ---
-await api.slothlet.versioning.unregister("auth", "v2");
+await api.slothlet.versioning.remove("auth", "v2");
 // api.v2.auth is gone; api.auth dispatcher now routes to v1 only
 
 await api.shutdown();

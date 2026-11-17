@@ -187,7 +187,7 @@ describe.each(configs)("module-private members > $mode / $runtime / $attribution
 			// A silent query answers for leaves that have loaded (lazy mode loads a folder on its first read).
 			await api.billing.reader.read("billing.internals.currency");
 			await api.ext.reader.read("ext.vault.name");
-			const { checkCall } = api.slothlet.permissions.global;
+			const { call: checkCall } = api.slothlet.permissions.global.check;
 			expect(checkCall("billing.reader.read", "billing.internals.__rate")).toBe(true);
 			expect(checkCall("ext.reader.read", "billing.internals.__rate")).toBe(false);
 		});
@@ -270,7 +270,7 @@ describe.each(configs)("module-private members > $mode / $runtime / $attribution
 				const own = await plain(`${BASE}/billing/internals.mjs`);
 				const twin = await plain(`${TWIN}/billing/internals.mjs`);
 				api = await build(privateConfig);
-				await api.slothlet.api.add("twin", TWIN, { moduleID: "twin-mod" });
+				await api.slothlet.api.add("twin", TWIN, { id: "twin-mod" });
 				await api.slothlet.api.add("twin2", TWIN);
 				// Each folder still reads its own module's member, so the refusals below are about the module, not the read.
 				expect(await api.billing.reader.read("billing.internals.__rate")).toEqual({ value: own.__rate, error: null });

@@ -21,7 +21,7 @@
  * Each of three roots (a folder of files, one whose root file's default export is a function, and one whose root file's
  * default export is an async function) is loaded as the api and mounted again at `zz`. The host inspects the root and
  * `zz`; an `inspector` module the rules deny `pnum` and `data` inspects the root through `self` and through
- * `self.slothlet.diag.getAPI()`; a denied primitive is left out, a file's namespace stays listed. The host's view shows what its listed members show as a plain object, a module's
+ * `self.slothlet.diag.api()`; a denied primitive is left out, a file's namespace stays listed. The host's view shows what its listed members show as a plain object, a module's
  * shows exactly the members it lists, and a function root or function node starts with the function's form. Eager and lazy mode, the async and live runtime, both attributions,
  * and a frozen root.
  * @module tests/vitests/suites/proxies/api-root-inspect

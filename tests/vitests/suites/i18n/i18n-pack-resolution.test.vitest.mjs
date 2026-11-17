@@ -26,6 +26,7 @@ import { describe, it, expect, beforeAll, vi } from "vitest";
 import { writeFileSync, rmSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { PACK_LOCALE, PACK_MESSAGE, PACK_KEY, packDir, assertI18nPackStaged } from "../../setup/i18n-pack-fixture.mjs";
+import { captureWarnings } from "../../setup/warning-capture.mjs";
 
 const PACK_DIR = packDir();
 
@@ -74,37 +75,27 @@ describe("i18n — @cldmv/slothlet-i18n pack resolution (tier 1)", () => {
 
 	it("setLanguage warns and keeps en-us when the pack locale file is corrupt", async () => {
 		writeFileSync(join(PACK_DIR, "languages", "qa-corrupt.json"), "{ not valid json !");
-		// A failed load is a coded SlothletWarning (#820); outside any instance it is captured on the process-level class.
-		const { SlothletWarning } = await import("@cldmv/slothlet/errors");
-		SlothletWarning.clearCaptured();
+		// A failed load is a coded SlothletWarning (#820); outside any instance it is printed, not kept.
 		try {
 			const i18n = await import("@cldmv/slothlet/i18n");
-			i18n.language.set("qa-corrupt");
+			const warnings = await captureWarnings(() => i18n.language.set("qa-corrupt"));
 			expect(i18n.language.get()).toBe("en-us");
-			expect(SlothletWarning.captured.some((w) => w.code === "WARNING_LANGUAGE_LOAD_FAILED" && w.message.includes("qa-corrupt"))).toBe(
-				true
-			);
+			expect(warnings.some((w) => w.code === "WARNING_LANGUAGE_LOAD_FAILED" && w.message.includes("qa-corrupt"))).toBe(true);
 		} finally {
-			SlothletWarning.clearCaptured();
 			rmSync(join(PACK_DIR, "languages", "qa-corrupt.json"), { force: true });
 		}
 	});
 
 	it("setLanguageAsync warns and keeps en-us when the pack locale file is corrupt", async () => {
 		writeFileSync(join(PACK_DIR, "languages", "qa-corrupt-async.json"), "{ not valid json !");
-		// A failed load is a coded SlothletWarning (#820); outside any instance it is captured on the process-level class.
-		const { SlothletWarning } = await import("@cldmv/slothlet/errors");
-		SlothletWarning.clearCaptured();
+		// A failed load is a coded SlothletWarning (#820); outside any instance it is printed, not kept.
 		try {
 			// The asynchronous load (the browser path), run directly: language.set takes the synchronous one in Node.
 			const i18n = await import("#i18n");
-			await i18n.setLanguageAsync("qa-corrupt-async");
+			const warnings = await captureWarnings(() => i18n.setLanguageAsync("qa-corrupt-async"));
 			expect(i18n.language.get()).toBe("en-us");
-			expect(
-				SlothletWarning.captured.some((w) => w.code === "WARNING_LANGUAGE_LOAD_FAILED" && w.message.includes("qa-corrupt-async"))
-			).toBe(true);
+			expect(warnings.some((w) => w.code === "WARNING_LANGUAGE_LOAD_FAILED" && w.message.includes("qa-corrupt-async"))).toBe(true);
 		} finally {
-			SlothletWarning.clearCaptured();
 			rmSync(join(PACK_DIR, "languages", "qa-corrupt-async.json"), { force: true });
 		}
 	});

@@ -105,7 +105,7 @@ Path-based access control for inter-module API calls **and** data-value reads (v
 - **Self-call bypass** — calls within the same source file always succeed
 - **Read-level gating** _(v3.7)_ — terminal data-value reads (`Buffer`, `TypedArray`, `Date`, `Map`, primitives, …) checked against the rule set; on by default, `gating.read: false` to opt out
 - **Audit events** — `permission:denied`, `permission:allowed`, `permission:default`, `permission:self-bypass`
-- **Runtime management** — `api.slothlet.permissions.addRule()`, `.removeRule()`, `.self.*`, `.global.*`, `.control.*`
+- **Runtime management** — `api.slothlet.permissions.rules.add()`, `.rules.remove()`, `.self.*`, `.global.*`, `.control.*`
 - **Context conditions** _(v3.4)_ — optional `condition` field; accepts a plain object (deep leaf matching), function, or array (OR); evaluated against per-request ALS context
 
 🔐 **For complete permission system documentation, see [docs/PERMISSIONS.md](https://github.com/CLDMV/slothlet/blob/master/docs/PERMISSIONS.md)** · 📐 **For condition syntax, see [docs/PERMISSIONS-CONDITIONS.md](https://github.com/CLDMV/slothlet/blob/master/docs/PERMISSIONS-CONDITIONS.md)**

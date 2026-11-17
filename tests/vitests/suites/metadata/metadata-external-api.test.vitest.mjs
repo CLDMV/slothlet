@@ -14,7 +14,7 @@
  */
 
 /**
- * @fileoverview Tests for external metadata API (set/remove/setGlobal).
+ * @fileoverview Tests for external metadata API (set/remove/metadata.global).
  *
  * Tests the public API for manipulating metadata from OUTSIDE API context:
  * - api.slothlet.metadata.set(fn, key, value) - Set metadata on specific function
@@ -379,7 +379,7 @@ describe.each(getMatrixConfigs())("External Metadata API > Config: '$name'", ({ 
 			expect(api.slothlet.metadata.get(api.rootMath.multiply).environment).toBe("staging");
 		});
 
-		it("should preserve nested object payload shape in setGlobal", async () => {
+		it("should preserve nested object payload shape in metadata.global", async () => {
 			api.slothlet.metadata.global({
 				build: { region: "us", env: { tier: "prod" } }
 			});
@@ -390,7 +390,7 @@ describe.each(getMatrixConfigs())("External Metadata API > Config: '$name'", ({ 
 			expect(api.slothlet.metadata.get(api.rootMath.add).build.env.tier).toBe("prod");
 		});
 
-		it("should deep merge nested object payloads across setGlobal calls", async () => {
+		it("should deep merge nested object payloads across metadata.global calls", async () => {
 			api.slothlet.metadata.global({
 				build: { region: "us" }
 			});
@@ -404,7 +404,7 @@ describe.each(getMatrixConfigs())("External Metadata API > Config: '$name'", ({ 
 			expect(api.slothlet.metadata.get(api.rootMath.add).build.env.tier).toBe("prod");
 		});
 
-		it("should reject circular plain objects in string-key setGlobal mode", async () => {
+		it("should reject circular plain objects in string-key metadata.global mode", async () => {
 			api.slothlet.metadata.global("build", { region: "us" });
 
 			const circular = {
@@ -430,7 +430,7 @@ describe.each(getMatrixConfigs())("External Metadata API > Config: '$name'", ({ 
 			expect(() => api.slothlet.metadata.global("prototype", "polluted")).toThrow(/INVALID_METADATA_KEY/);
 		});
 
-		it("should reject prototype-pollution keys when deep-merging setGlobal string-mode objects", async () => {
+		it("should reject prototype-pollution keys when deep-merging metadata.global string-mode objects", async () => {
 			api.slothlet.metadata.global("build", { region: "us" });
 
 			const mergePayload = Object.create(null);
@@ -523,7 +523,7 @@ describe.each(getMatrixConfigs())("External Metadata API > Config: '$name'", ({ 
 			});
 		});
 
-		it("should handle set/remove/setGlobal in combination", async () => {
+		it("should handle set/remove/metadata.global in combination", async () => {
 			// Set global metadata
 			api.slothlet.metadata.global("appName", "TestApp");
 			api.slothlet.metadata.global("version", "1.0.0");

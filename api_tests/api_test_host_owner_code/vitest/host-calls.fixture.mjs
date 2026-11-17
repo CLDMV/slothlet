@@ -35,7 +35,7 @@ const RULES = [
 	{ caller: "host.records.**", target: "store.partition", effect: "allow" }
 ];
 const forgedContext = vm.runInThisContext(
-	"(api) => ({ pin: (fn) => typeof api.slothlet.lockCaller(fn), meta: () => api.slothlet.metadata.caller()?.path?.join('.') ?? null, " +
+	"(api) => ({ pin: (fn) => typeof api.slothlet.pin(fn), meta: () => api.slothlet.metadata.caller()?.path?.join('.') ?? null, " +
 		"emit: () => (api.slothlet.event.emit('host:ping', { n: 1 }), 'emitted'), hostLeaf: () => api.host.echo('x') })",
 	{ filename: OWNER_CONTEXT }
 );

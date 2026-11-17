@@ -332,7 +332,7 @@ Controls which runtime API mutation methods are available. Affects the `api.slot
 | `add`         | `true`  | `api.slothlet.api.add()` - mount new API modules at runtime                                       |
 | `remove`      | `true`  | `api.slothlet.api.remove()` - unmount API modules at runtime                                      |
 | `reload`      | `true`  | `api.slothlet.api.reload()` - hot-reload a module or directory                                    |
-| `permissions` | `true`  | `api.slothlet.permissions.addRule()` / `removeRule()` - add or remove permission rules at runtime |
+| `permissions` | `true`  | `api.slothlet.permissions.rules.add()` / `rules.remove()` - add or remove permission rules at runtime |
 | `events`      | `true`  | `api.slothlet.event.rules.add()` / `remove()` - add or remove event rules at runtime (host-only)  |
 
 Disable all mutations to create a locked, immutable API:
@@ -392,7 +392,7 @@ api.config; // ✅
 **Type**: `{ merge?: "shallow" | "deep", isolation?: "partial" | "full" }`
 **Default**: `undefined` (`merge` behaves as `"shallow"`, `isolation` as `"partial"`)
 
-Sets the defaults for `api.slothlet.scope()` runs. Both can be overridden per call.
+Sets the defaults for `api.slothlet.context.scope()` runs. Both can be overridden per call.
 
 - **`merge`**
   - **`"shallow"`** - Top-level keys are merged (default when scope is provided)
@@ -637,7 +637,7 @@ const api = await slothlet({
 **Type**: `boolean`
 **Default**: `false`
 
-Keeps slothlet's warnings off the console. It decides only that: every warning is still created and recorded on the instance (`api.slothlet.diag.SlothletWarning.captured`), `impl:warning` / `impl:error` lifecycle events still fire (see [LIFECYCLE.md](LIFECYCLE.md)), and `debug` logging is not affected.
+Keeps slothlet's warnings off the console. It decides only that: every warning is still created and recorded on the instance (`api.slothlet.warnings.get()`), `impl:warning` / `impl:error` lifecycle events still fire (see [LIFECYCLE.md](LIFECYCLE.md)), and `debug` logging is not affected.
 
 ```javascript
 const api = await slothlet({ base: "./api", silent: true });
@@ -949,12 +949,12 @@ const info = diag.caches.get();
 // }
 ```
 
-### `diag.caches.getAllModuleIDs()`
+### `diag.caches.ids()`
 
 Returns the array of all `moduleID` strings currently in cache.
 
 ```javascript
-const ids = diag.caches.getAllModuleIDs(); // ["base_abc", "plugins_xyz"]
+const ids = diag.caches.ids(); // ["base_abc", "plugins_xyz"]
 ```
 
 ### `diag.caches.has(moduleID)`
@@ -965,27 +965,27 @@ Returns `true` if a cache exists for the given `moduleID`.
 diag.caches.has("base_abc"); // true
 ```
 
-### `diag.hook.compilePattern(pattern)` _(hooks enabled only)_
+### `diag.hook.compile(pattern)` _(hooks enabled only)_
 
 Expands a glob pattern string into a `RegExp`. Only available when `hook` is also enabled.
 
 ```javascript
-const re = diag.hook.compilePattern("math.*");
+const re = diag.hook.compile("math.*");
 ```
 
-### `diag.SlothletWarning`
+### Warnings: `api.slothlet.warnings`
 
-This instance's `SlothletWarning` class. Every warning the instance raises is recorded here, whether or not it is printed: two instances never share a `captured` list, and `clearCaptured()` on one leaves the other's warnings alone. Whether a warning is also printed is the instance's [`silent`](#silent) option. Used in tests to assert on warnings.
+Warnings are not part of `diag`: every instance keeps the warnings it raised, printed or not, at `api.slothlet.warnings`, whether or not `diagnostics` is on. Two instances never share the list.
 
 ```javascript
-// In tests
-diag.SlothletWarning.clearCaptured();
+api.slothlet.warnings.clear();
 // ... trigger code that may emit warnings ...
-const warnings = diag.SlothletWarning.captured;
-expect(warnings).toHaveLength(1);
+const codes = api.slothlet.warnings.get().map((w) => w.code);
+expect(codes).toContain("WARNING_API_ADD_OPTION_LOCKED");
 ```
 
-- `captured` - every warning this instance raised.
-- `clearCaptured()` - empties this instance's list.
+- `get()` - a copy of this instance's warnings, oldest first.
+- `clear()` - empties this instance's list.
 
-Warnings raised outside any instance (for example a coverage notice from module load) go to the process-level class, `SlothletWarning` from `@cldmv/slothlet/errors`, which has its own `captured` and `clearCaptured()` and prints every warning. Warnings from either class are `instanceof SlothletWarning`.
+Module code is refused by a built-in deny on `slothlet.warnings.**` (the list names other modules' paths and files); a host rule on that target grants it. Warnings raised outside any instance (a locale that failed to load through `@cldmv/slothlet/i18n`, a notice from module load) are printed and kept by no instance. Whether an instance's warning is also printed is that instance's [`silent`](#silent) option. Warnings are `instanceof SlothletWarning`.
+

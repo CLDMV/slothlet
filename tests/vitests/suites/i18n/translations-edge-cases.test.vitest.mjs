@@ -32,7 +32,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { setLanguage, translate, initI18n, getLanguage } from "#i18n";
-import { SlothletWarning } from "@cldmv/slothlet/errors";
+import { captureWarnings } from "../../setup/warning-capture.mjs";
 
 describe("translations.mjs edge cases", () => {
 	let warnSpy;
@@ -49,19 +49,14 @@ describe("translations.mjs edge cases", () => {
 
 	// ─── setLanguage failure path (lines 103-105) ───────────────────────────
 
-	it("should log a warning and fall back to 'en-us' when the language file cannot be loaded", () => {
+	it("should log a warning and fall back to 'en-us' when the language file cannot be loaded", async () => {
 		// "zz" is not a valid language; its JSON file does not exist in languages/
 		// → i18n_loadLanguageSync returns null → else branch fires (lines 103-105)
-		SlothletWarning.clearCaptured();
-		try {
-			setLanguage("zz");
+		const warnings = await captureWarnings(() => setLanguage("zz"));
 
-			// A coded, translated SlothletWarning (#820), not a bare console.warn; outside any instance it is process-level
-			const [warning] = SlothletWarning.captured.filter((w) => w.code === "WARNING_LANGUAGE_LOAD_FAILED");
-			expect(warning.message).toContain("Failed to load language 'zz'");
-		} finally {
-			SlothletWarning.clearCaptured();
-		}
+		// A coded, translated SlothletWarning (#820); outside any instance it is printed, not kept
+		const [warning] = warnings.filter((w) => w.code === "WARNING_LANGUAGE_LOAD_FAILED");
+		expect(warning.message).toContain("Failed to load language 'zz'");
 
 		// Language should reset to the English fallback
 		expect(getLanguage()).toBe("en-us");

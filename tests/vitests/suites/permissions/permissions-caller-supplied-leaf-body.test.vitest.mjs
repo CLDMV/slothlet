@@ -25,7 +25,7 @@
  * The host's leaves here are added as an object, the shape of rummage's `host.records.*` and `host.callback.*`: once
  * mounted at `host.access` with functions written in a host file (`host/access.mjs`), and once mounted at `host.inline`
  * with functions written in this file; either way each leaf is identified by its path. Their bodies read `vault.get`, which only `host.**` may call, call a helper of their own file that does, ask
- * `permissions.global.checkAccess`, and run what they were handed. `project.hand` hands them a value; `project.**` may
+ * `permissions.global.check.access`, and run what they were handed. `project.hand` hands them a value; `project.**` may
  * call `host.**` and `vault.open` but not `vault.get`.
  *
  * @module tests/vitests/suites/permissions/permissions-caller-supplied-leaf-body
@@ -88,7 +88,7 @@ function inlineLeaves(getApi) {
 			return readVault();
 		},
 		check(_) {
-			return inlineAttempt(() => getApi().slothlet.permissions.global.checkAccess("project.hand", "vault.get"));
+			return inlineAttempt(() => getApi().slothlet.permissions.global.check.access("project.hand", "vault.get"));
 		},
 		who(_) {
 			return inlineAttempt(() => getApi().vault.whoami());
@@ -120,7 +120,7 @@ function inlineLeaves(getApi) {
 		},
 		async awaitCheck(_) {
 			await Promise.resolve();
-			return inlineAttempt(() => getApi().slothlet.permissions.global.checkAccess("project.hand", "vault.get"));
+			return inlineAttempt(() => getApi().slothlet.permissions.global.check.access("project.hand", "vault.get"));
 		},
 		async timerWho(_) {
 			await new Promise((resolve) => setTimeout(resolve, 1));

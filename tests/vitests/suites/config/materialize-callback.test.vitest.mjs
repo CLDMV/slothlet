@@ -57,7 +57,7 @@ describe.each(["eager", "lazy"])("loader.materialize callback - %s", (mode) => {
 			expect(calls[0].total).toBe(api.slothlet.materialize.get().total);
 		}
 		expect(typeof calls[0].timestamp).toBe("number");
-		expect(api.slothlet.materialize.materialized).toBe(true);
+		expect(api.slothlet.materialize.complete).toBe(true);
 
 		// Once per instance.
 		await api.slothlet.materialize.wait();
@@ -67,7 +67,7 @@ describe.each(["eager", "lazy"])("loader.materialize callback - %s", (mode) => {
 
 	it("turns background materialization on", async () => {
 		api = await slothlet({ base: TEST_DIRS.API_TEST, mode, silent: true, loader: { materialize: () => {} } });
-		await until(() => api.slothlet.materialize.materialized === true);
+		await until(() => api.slothlet.materialize.complete === true);
 		expect(api.deep.folder.config.__materialized).toBe(true);
 	});
 
@@ -83,7 +83,7 @@ describe.each(["eager", "lazy"])("loader.materialize callback - %s", (mode) => {
 				}
 			}
 		});
-		const handlerWarnings = () => api.slothlet.diag.SlothletWarning.captured.filter((w) => w.code === "WARNING_LIFECYCLE_HANDLER_ERROR");
+		const handlerWarnings = () => api.slothlet.warnings.get().filter((w) => w.code === "WARNING_LIFECYCLE_HANDLER_ERROR");
 		await until(() => handlerWarnings().some((w) => w.cause?.message === "boom"));
 		await api.shutdown();
 

@@ -18,8 +18,8 @@
  *
  * @description
  * Accepts callbacks on behalf of whoever calls it and runs them later from {@link fire}. `every`
- * pins the CALLER of `every` onto the job (`self.slothlet.lockCaller.caller`); `everyAsSelf` pins the
- * service itself (`self.slothlet.lockCaller`) for comparison.
+ * pins the CALLER of `every` onto the job (`self.slothlet.pin.caller`); `everyAsSelf` pins the
+ * service itself (`self.slothlet.pin`) for comparison.
  *
  * @module api_tests/api_test_lock_caller_caller/scheduler/service
  */
@@ -37,7 +37,7 @@ let jobs = [];
  * api.scheduler.service.every(() => 1);
  */
 export function every(job) {
-	jobs.push(self.slothlet.lockCaller.caller(job));
+	jobs.push(self.slothlet.pin.caller(job));
 	return jobs.length;
 }
 
@@ -50,7 +50,7 @@ export function every(job) {
  * api.scheduler.service.everyAsSelf(() => 1);
  */
 export function everyAsSelf(job) {
-	jobs.push(self.slothlet.lockCaller(job));
+	jobs.push(self.slothlet.pin(job));
 	return jobs.length;
 }
 
@@ -63,7 +63,7 @@ export function everyAsSelf(job) {
  * api.scheduler.service.pin(() => 1);
  */
 export function pin(job) {
-	return self.slothlet.lockCaller.caller(job);
+	return self.slothlet.pin.caller(job);
 }
 
 /**

@@ -147,7 +147,7 @@ describe.each(Object.keys(SETUPS))("self.slothlet as a module lists and inspects
 				expect(text.startsWith("THROW"), `${JSON.stringify(options)}: ${text}`).toBe(false);
 				if (!options.showProxy) expect(names(text), JSON.stringify(options)).toEqual(keys);
 				if (setup.deniesMarker) expect(text).not.toContain(MARKER_VALUE);
-				if (setup.deniesDiag) expect(text).not.toContain("getAPI");
+				if (setup.deniesDiag) expect(text).not.toContain("describe");
 			}
 		});
 
@@ -178,7 +178,7 @@ describe.each(Object.keys(SETUPS))("self.slothlet as a module lists and inspects
 				expect(names(util.inspect(at(api, path), { depth: 0, compact: false })), path).toEqual(Object.keys(at(api, path)));
 			}
 			expect(util.inspect(api.slothlet.env)).toContain(MARKER_VALUE);
-			expect(util.inspect(api.slothlet.materialize)).toContain("materialized: [Getter]");
+			expect(util.inspect(api.slothlet.materialize)).toContain("complete: [Getter]");
 		});
 	});
 });

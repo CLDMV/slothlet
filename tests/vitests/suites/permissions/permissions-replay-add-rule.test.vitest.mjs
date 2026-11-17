@@ -27,7 +27,7 @@ describe.each(getMatrixConfigs())("Permissions > Replay addRule > $name", ({ con
 		api = null;
 	});
 
-	it("addRule survives module hot-reload via operationHistory replay", async () => {
+	it("rules.add survives module hot-reload via operationHistory replay", async () => {
 		api = await slothlet({
 			...config,
 			base: BASE,
@@ -37,7 +37,7 @@ describe.each(getMatrixConfigs())("Permissions > Replay addRule > $name", ({ con
 		});
 
 		// Add a deny rule
-		api.slothlet.permissions.addRule({ caller: "callers.**", target: "payments.**", effect: "deny" });
+		api.slothlet.permissions.rules.add({ caller: "callers.**", target: "payments.**", effect: "deny" });
 
 		// Verify denied
 		try {

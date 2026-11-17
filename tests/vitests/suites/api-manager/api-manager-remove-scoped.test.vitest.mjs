@@ -104,7 +104,7 @@ describe.each(CONFIGS)("remove(apiPath, id) scoped removal — $name", ({ config
 
 	it("a v3-order call (module id first) is read as a path scoped to a module, and matches nothing", async () => {
 		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST });
-		await api.slothlet.api.add("svc.a", () => "A", { moduleID: "modA" });
+		await api.slothlet.api.add("svc.a", () => "A", { id: "modA" });
 
 		expect(await api.slothlet.api.remove("modA", "svc.a")).toBe(false);
 		expect(api.svc.a()).toBe("A");

@@ -42,8 +42,8 @@ describe("self.X = ... (Stage 2: ownership)", () => {
 	it("allows external code (no currentWrapper) to write at the root", async () => {
 		api = await slothlet({ base: "./api_tests/api_test", mode: "eager" });
 
-		await api.slothlet.run({}, () => {
-			// We're directly in user code via slothlet.run — no module currentWrapper.
+		await api.slothlet.context.run({}, () => {
+			// We're directly in user code via slothlet.context.run — no module currentWrapper.
 			self.bootstrapValue = "from-outside";
 			expect(self.bootstrapValue).toBe("from-outside");
 		});

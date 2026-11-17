@@ -298,7 +298,7 @@ export async function resolvedOutcome() {
  */
 export async function boundScope() {
 	const outcome = await attempt(() =>
-		self.callee.ops.run(bind(self.slothlet.scope, { context: {}, fn: () => attempt(() => self.vault.secret.secret()) }))
+		self.callee.ops.run(bind(self.slothlet.context.scope, { context: {}, fn: () => attempt(() => self.vault.secret.secret()) }))
 	);
 	return outcome.ok ? outcome.value : outcome;
 }
@@ -312,7 +312,7 @@ export async function boundScope() {
  * await api.supplier.probe.boundLockCallerCaller();
  */
 export async function boundLockCallerCaller() {
-	return attempt(() => self.callee.ops.run(bind(self.slothlet.lockCaller.caller, () => 1)));
+	return attempt(() => self.callee.ops.run(bind(self.slothlet.pin.caller, () => 1)));
 }
 
 /**
@@ -347,7 +347,7 @@ export async function keeperGetter() {
  */
 export async function nestedPin() {
 	const pinned = self.callee.ops.run(() =>
-		self.slothlet.lockCaller(() => self.callee2.ops.run(() => attempt(() => self.vault.secret.forSupplier())))
+		self.slothlet.pin(() => self.callee2.ops.run(() => attempt(() => self.vault.secret.forSupplier())))
 	);
 	return pinned();
 }

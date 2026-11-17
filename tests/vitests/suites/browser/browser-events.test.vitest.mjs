@@ -57,7 +57,7 @@
  * `process.cwd()`. The helper is dynamically imported inside `discover()` precisely
  * so it does not execute at module-parse time in a browser — but calling it still
  * requires a Node filesystem. There is no browser shim for `fsp`, so invoking
- * `discover()` / `addModule()` / `addModules()` in a browser throws immediately.
+ * `discover()` / `modules.add()` / `modules.add()` in a browser throws immediately.
  * Coverage of `modules:*` events is therefore impossible in browser mode and is
  * intentionally omitted here. The node-side suite
  * (`tests/vitests/suites/modules/lifecycle-events.test.vitest.mjs`) covers all five

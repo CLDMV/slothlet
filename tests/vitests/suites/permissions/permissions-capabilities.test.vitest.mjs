@@ -183,11 +183,11 @@ describe.each(getMatrixConfigs())("Permissions > built-in capabilities > $name",
 			it("a rule added at runtime opens it, and sealed rules take no more", async () => {
 				await build();
 				expect(await tryAll(api.coder.probe.attempt, list)).toEqual(expected(list, REFUSED));
-				api.slothlet.permissions.addRule({ caller: "coder.probe.attempt", target: `capability:${name}`, effect: "allow" });
+				api.slothlet.permissions.rules.add({ caller: "coder.probe.attempt", target: `capability:${name}`, effect: "allow" });
 				expect(await tryAll(api.coder.probe.attempt, list)).toEqual(expected(list, null));
 				api.slothlet.permissions.control.seal();
 				expect(() =>
-					api.slothlet.permissions.addRule({ caller: "coder.probe.attemptToo", target: `capability:${name}`, effect: "allow" })
+					api.slothlet.permissions.rules.add({ caller: "coder.probe.attemptToo", target: `capability:${name}`, effect: "allow" })
 				).toThrow();
 				expect(await tryAll(api.coder.probe.attemptToo, list)).toEqual(expected(list, REFUSED));
 			});
@@ -295,8 +295,8 @@ describe.each(getMatrixConfigs())("Permissions > built-in capabilities > $name",
 
 		it("an unknown capability is not a rule", async () => {
 			await build();
-			expect(() => api.slothlet.permissions.addRule({ caller: "coder.**", target: "capability:nothing", effect: "allow" })).toThrow(
-				expect.objectContaining({ code: "INVALID_PERMISSION_RULE" })
+			expect(() => api.slothlet.permissions.rules.add({ caller: "coder.**", target: "capability:nothing", effect: "allow" })).toThrow(
+				expect.objectContaining({ code: "PERMISSION_RULE_UNKNOWN_TARGET" })
 			);
 		});
 	});

@@ -68,7 +68,7 @@ describe("slothlet compose in a real browser", () => {
 		expect(await api.math.add(2, 3)).toBe(5);
 		// Let the deferred routine-stack patches run.
 		for (let i = 0; i < 5; i++) await new Promise((r) => setTimeout(r, 5));
-		expect(api.slothlet.diag.SlothletWarning.captured.filter((w) => w.code === "WARNING_LIFECYCLE_HANDLER_ERROR")).toEqual([]);
+		expect(api.slothlet.warnings.get().filter((w) => w.code === "WARNING_LIFECYCLE_HANDLER_ERROR")).toEqual([]);
 		if (typeof api.shutdown === "function") await api.shutdown();
 	});
 

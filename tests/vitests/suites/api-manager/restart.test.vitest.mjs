@@ -202,7 +202,7 @@ describe.each(getMatrixConfigs({}))("api.slothlet.restart() (#504) > $name", ({ 
 		await create({
 			permissions: { policy: "allow", rules: [{ caller: "probe.**", target: "secret.blocked", effect: "deny" }] }
 		});
-		api.slothlet.permissions.addRule({ caller: "probe.**", target: "secret.open", effect: "deny" });
+		api.slothlet.permissions.rules.add({ caller: "probe.**", target: "secret.open", effect: "deny" });
 		await expect(settle(() => api.probe.callBlocked())).rejects.toThrow("PERMISSION_DENIED");
 		await expect(settle(() => api.probe.callOpen())).rejects.toThrow("PERMISSION_DENIED");
 
@@ -362,7 +362,7 @@ describe.each(getMatrixConfigs({}))("api.slothlet.restart() (#504) > $name", ({ 
 		await create({
 			permissions: { policy: "allow", rules: [{ caller: "probe.**", target: "secret.blocked", effect: "deny" }] }
 		});
-		api.slothlet.permissions.addRule({ caller: "probe.**", target: "secret.open", effect: "deny" });
+		api.slothlet.permissions.rules.add({ caller: "probe.**", target: "secret.open", effect: "deny" });
 		api.slothlet.permissions.control.seal();
 		expect(api.slothlet.permissions.control.sealed).toBe(true);
 
@@ -371,7 +371,7 @@ describe.each(getMatrixConfigs({}))("api.slothlet.restart() (#504) > $name", ({ 
 		await expect(settle(() => api.probe.callBlocked())).rejects.toThrow("PERMISSION_DENIED");
 		expect(await api.probe.callOpen()).toBe("open");
 		// Unsealed: the policy can be changed (and sealed) again.
-		expect(() => api.slothlet.permissions.addRule({ caller: "probe.**", target: "secret.open", effect: "deny" })).not.toThrow();
+		expect(() => api.slothlet.permissions.rules.add({ caller: "probe.**", target: "secret.open", effect: "deny" })).not.toThrow();
 		api.slothlet.permissions.control.seal();
 		expect(api.slothlet.permissions.control.sealed).toBe(true);
 	});

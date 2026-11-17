@@ -36,14 +36,6 @@ import { TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
 const BASE_TMP = join(process.cwd(), "tmp", `impl-diagnostic-events-${process.pid}`);
 
-// Keep the console clean during the run via the static `suppressConsole` flag: these tests don't pass
-// `silent`, so the init-time warning sites would otherwise print. Console suppression — whether via
-// `silent` or this flag — never affects event emission; that is the whole point of the feature.
-// (The `silent: true` gating of those console warnings is covered by its own describe block below.)
-beforeEach(() => {
-	SlothletWarning.clearCaptured();
-});
-afterEach(() => {});
 
 // ─── Runtime diagnostics (eager + lazy) ─────────────────────────────────────
 
@@ -347,7 +339,7 @@ describe("silent gates init-time console warnings, not events", () => {
 			lifecycle: { "impl:warning": (payload) => events.push(payload) }
 		});
 		// Console warning is silent-gated → never constructed → not captured (on this instance, #819).
-		expect(api.slothlet.diag.SlothletWarning.captured.some((w) => w.code === "WARNING_RESERVED_PROPERTY_CONFLICT")).toBe(false);
+		expect(api.slothlet.warnings.get().some((w) => w.code === "WARNING_RESERVED_PROPERTY_CONFLICT")).toBe(false);
 		// The event is additive → fires even under silent.
 		expect(events.some((p) => p.code === "WARNING_RESERVED_PROPERTY_CONFLICT")).toBe(true);
 		await api.shutdown().catch(() => {});
@@ -355,7 +347,7 @@ describe("silent gates init-time console warnings, not events", () => {
 
 	it("without silent, the reserved-property console warning IS emitted (control)", async () => {
 		const api = await slothlet({ base: TEST_DIRS.API_TEST_RESERVED_NAME, mode: "eager", diagnostics: true });
-		expect(api.slothlet.diag.SlothletWarning.captured.some((w) => w.code === "WARNING_RESERVED_PROPERTY_CONFLICT")).toBe(true);
+		expect(api.slothlet.warnings.get().some((w) => w.code === "WARNING_RESERVED_PROPERTY_CONFLICT")).toBe(true);
 		await api.shutdown().catch(() => {});
 	});
 });

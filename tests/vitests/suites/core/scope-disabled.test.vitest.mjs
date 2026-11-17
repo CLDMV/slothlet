@@ -17,8 +17,8 @@
  * @fileoverview Coverage-gap tests for api_builder.mjs createScopeFunction — scope:false branch.
  *
  * @description
- * When `scope: false` is passed in the slothlet config, calling `api.slothlet.scope()` (or
- * `api.slothlet.run()`) should throw a `SlothletError` with code `"SCOPE_DISABLED"`.
+ * When `scope: false` is passed in the slothlet config, calling `api.slothlet.context.scope()` (or
+ * `api.slothlet.context.run()`) should throw a `SlothletError` with code `"SCOPE_DISABLED"`.
  *
  * Uncovered line:
  *
@@ -53,8 +53,8 @@ afterEach(async () => {
 
 // ─── scope: false → SCOPE_DISABLED error (api_builder.mjs line 1207) ─────────
 
-describe("api.slothlet.scope() with scope: false config (line 1207)", () => {
-	it("throws SCOPE_DISABLED when scope: false and api.slothlet.scope() is called", async () => {
+describe("api.slothlet.context.scope() with scope: false config (line 1207)", () => {
+	it("throws SCOPE_DISABLED when scope: false and api.slothlet.context.scope() is called", async () => {
 		api = await slothlet({
 			base: TEST_DIRS.API_TEST,
 			scope: false,
@@ -63,7 +63,7 @@ describe("api.slothlet.scope() with scope: false config (line 1207)", () => {
 
 		// `scope()` is an async function — SCOPE_DISABLED surfaces as a rejected Promise (line 1207).
 		// Use `.rejects.toMatchObject` instead of `.toThrow()` which only catches sync throws.
-		await expect(api.slothlet.scope({ fn: () => {} })).rejects.toMatchObject({ code: "SCOPE_DISABLED" });
+		await expect(api.slothlet.context.scope({ fn: () => {} })).rejects.toMatchObject({ code: "SCOPE_DISABLED" });
 	});
 
 	it("rejects with SCOPE_DISABLED when scope: false (async rejection, line 1207)", async () => {
@@ -75,7 +75,7 @@ describe("api.slothlet.scope() with scope: false config (line 1207)", () => {
 
 		// scope() is async so the SCOPE_DISABLED error is a Promise rejection, not a sync throw.
 		// Verify the rejection carries the expected error code.
-		const rejection = await api.slothlet.scope({ fn: () => {} }).catch((e) => e);
+		const rejection = await api.slothlet.context.scope({ fn: () => {} }).catch((e) => e);
 		expect(rejection).toMatchObject({ code: "SCOPE_DISABLED" });
 	});
 
@@ -86,7 +86,7 @@ describe("api.slothlet.scope() with scope: false config (line 1207)", () => {
 		});
 
 		// scope is not disabled → no throw (the scope function proceeds)
-		expect(typeof api.slothlet.scope).toBe("function");
+		expect(typeof api.slothlet.context.scope).toBe("function");
 		// We don't actually invoke it here to avoid needing a valid fn argument
 	});
 });

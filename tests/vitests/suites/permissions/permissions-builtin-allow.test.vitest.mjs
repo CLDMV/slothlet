@@ -27,7 +27,7 @@ describe.each(getMatrixConfigs())("Permissions > Built-in Allow (lockCaller / bi
 		api = null;
 	});
 
-	it("slothlet.lockCaller and slothlet.bind are allowed under defaultPolicy deny with no rules", async () => {
+	it("slothlet.pin and slothlet.bind are allowed under defaultPolicy deny with no rules", async () => {
 		api = await slothlet({
 			...config,
 			base: BASE,
@@ -35,8 +35,8 @@ describe.each(getMatrixConfigs())("Permissions > Built-in Allow (lockCaller / bi
 		});
 
 		const global = api.slothlet.permissions.global;
-		expect(global.checkAccess("anyModule", "slothlet.lockCaller")).toBe(true);
-		expect(global.checkAccess("anyModule", "slothlet.bind")).toBe(true);
+		expect(global.check.access("anyModule", "slothlet.pin")).toBe(true);
+		expect(global.check.access("anyModule", "slothlet.bind")).toBe(true);
 	});
 
 	it("other slothlet.* routes stay denied under defaultPolicy deny", async () => {
@@ -47,25 +47,25 @@ describe.each(getMatrixConfigs())("Permissions > Built-in Allow (lockCaller / bi
 		});
 
 		const global = api.slothlet.permissions.global;
-		// The built-in allows are scoped to lockCaller/bind only — nothing else is carved out.
-		expect(global.checkAccess("anyModule", "slothlet.api.add")).toBe(false);
-		expect(global.checkAccess("anyModule", "slothlet.permissions.control.enable")).toBe(false);
+		// The built-in allows are scoped to pin/bind only — nothing else is carved out.
+		expect(global.check.access("anyModule", "slothlet.api.add")).toBe(false);
+		expect(global.check.access("anyModule", "slothlet.permissions.control.enable")).toBe(false);
 	});
 
-	it("a more specific user deny rule still overrides the built-in lockCaller allow", async () => {
+	it("a more specific user deny rule still overrides the built-in pin allow", async () => {
 		api = await slothlet({
 			...config,
 			base: BASE,
 			permissions: {
 				policy: "deny",
-				rules: [{ caller: "untrusted.plugin", target: "slothlet.lockCaller", effect: "deny" }]
+				rules: [{ caller: "untrusted.plugin", target: "slothlet.pin", effect: "deny" }]
 			}
 		});
 
 		const global = api.slothlet.permissions.global;
-		// Exact caller + exact target outranks the built-in `**` → lockCaller allow.
-		expect(global.checkAccess("untrusted.plugin", "slothlet.lockCaller")).toBe(false);
+		// Exact caller + exact target outranks the built-in `**` → pin allow.
+		expect(global.check.access("untrusted.plugin", "slothlet.pin")).toBe(false);
 		// Other callers are unaffected — the built-in allow still applies.
-		expect(global.checkAccess("trusted.module", "slothlet.lockCaller")).toBe(true);
+		expect(global.check.access("trusted.module", "slothlet.pin")).toBe(true);
 	});
 });

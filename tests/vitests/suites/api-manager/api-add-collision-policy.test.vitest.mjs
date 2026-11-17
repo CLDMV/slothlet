@@ -31,13 +31,12 @@ const ADDDIR = TEST_DIRS.API_TEST_MIXED;
 
 /** Run `fn` while capturing the instance's SlothletWarnings (per instance, #819); return the captured warning codes. */
 async function withCapturedWarnings(api, fn) {
-	const Warning = api.slothlet.diag.SlothletWarning;
-	Warning.clearCaptured();
+	api.slothlet.warnings.clear();
 	try {
 		await fn();
-		return Warning.captured.map((w) => w.code);
+		return api.slothlet.warnings.get().map((w) => w.code);
 	} finally {
-		Warning.clearCaptured();
+		api.slothlet.warnings.clear();
 	}
 }
 

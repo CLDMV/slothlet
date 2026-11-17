@@ -15,7 +15,7 @@
 
 /**
  * @fileoverview H2 — opt-in control-surface seal. `permissions.control.seal()` is a one-way lock:
- * after sealing, enable/disable, addRule/removeRule, and readGating throw PERMISSION_SEALED, while
+ * after sealing, enable/disable, rules.add/rules.remove, and readGating throw PERMISSION_SEALED, while
  * enforcement keeps evaluating and shutdown() still works. seal() is idempotent, and module-land
  * calls to the control surface stay blocked by the pre-existing builtin deny rule.
  */
@@ -44,8 +44,8 @@ describe.each(getMatrixConfigs())("Permissions > Control-surface seal (H2) > $na
 
 		expect(() => P.control.enable()).toThrow(/PERMISSION_SEALED/);
 		expect(() => P.control.disable()).toThrow(/PERMISSION_SEALED/);
-		expect(() => P.addRule({ caller: "a.**", target: "b.**", effect: "deny" })).toThrow(/PERMISSION_SEALED/);
-		expect(() => P.removeRule("perm-1")).toThrow(/PERMISSION_SEALED/);
+		expect(() => P.rules.add({ caller: "a.**", target: "b.**", effect: "deny" })).toThrow(/PERMISSION_SEALED/);
+		expect(() => P.rules.remove("perm-1")).toThrow(/PERMISSION_SEALED/);
 		expect(() => P.control.readGating(false)).toThrow(/PERMISSION_SEALED/);
 	});
 
@@ -98,7 +98,7 @@ describe.each(getMatrixConfigs())("Permissions > Control-surface seal (H2) > $na
 
 		expect(api.slothlet.permissions.control.sealed).toBe(true);
 		expect(() => api.slothlet.permissions.control.disable()).toThrow(/PERMISSION_SEALED/);
-		expect(() => api.slothlet.permissions.addRule({ caller: "a.**", target: "b.**", effect: "allow" })).toThrow(/PERMISSION_SEALED/);
+		expect(() => api.slothlet.permissions.rules.add({ caller: "a.**", target: "b.**", effect: "allow" })).toThrow(/PERMISSION_SEALED/);
 	});
 
 	it("module-land seal() is blocked by the builtin control.** deny rule (regression)", async () => {

@@ -273,6 +273,9 @@
 		]
 	},
 	"tokens": [
+		"rules",
+		"path",
+		"modules",
 		"Object",
 		"defineProperty",
 		"key",

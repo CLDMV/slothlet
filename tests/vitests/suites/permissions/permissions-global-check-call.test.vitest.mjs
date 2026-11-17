@@ -14,8 +14,8 @@
  */
 
 /**
- * @fileoverview `api.slothlet.permissions.global.checkCall(callerPath, targetPath, args)` (#508) — the
- * host-only call-gate query, the call-side twin of `event.resolveLevel`: would a SUPPLIED caller
+ * @fileoverview `api.slothlet.permissions.global.check.call(callerPath, targetPath, args)` (#508) — the
+ * host-only call-gate query, the call-side twin of `event.level`: would a SUPPLIED caller
  * identity be allowed to call a target with these arguments, judged exactly as the real call gate
  * judges it.
  *
@@ -24,7 +24,7 @@
  * call's `{ args, target }` (which `checkAccess` never forwards); ambient `context.run()` context;
  * the stale-principal path (a Promise, resolved and re-evaluated with grace) versus the fresh path
  * (synchronous); a module-private target denied regardless of the host policy; the self-call bypass
- * never applying to a file-less caller; audit events emitted with `via: "checkCall"`; disabled
+ * never applying to a file-less caller; audit events emitted with `via` naming check.call; disabled
  * enforcement answering `true`; host-only gating (a module caller is refused, an exact instance
  * grant opens it); and argument validation — across the eager/lazy × async/live matrix. A second
  * describe drives the PermissionManager directly for the `moduleCaller` / `via` enforcement options.
@@ -40,6 +40,8 @@ import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
 const BASE = TEST_DIRS.API_TEST_PERMISSIONS;
 const PRIVATE = new URL("../../../../api_tests/api_test_private", import.meta.url).pathname;
+/** The audit `via` of a check.call decision: the method path as segments. */
+const VIA = ["slothlet", "permissions", "global", "check", "call"];
 
 /**
  * Let a lifecycle emit's listener notification settle before asserting on what it collected.
@@ -47,7 +49,7 @@ const PRIVATE = new URL("../../../../api_tests/api_test_private", import.meta.ur
  */
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 
-describe.each(getMatrixConfigs())("Permissions > global.checkCall (#508) > $name", ({ config }) => {
+describe.each(getMatrixConfigs())("Permissions > global.check.call (#508) > $name", ({ config }) => {
 	let api;
 
 	afterEach(async () => {
@@ -83,7 +85,7 @@ describe.each(getMatrixConfigs())("Permissions > global.checkCall (#508) > $name
 			policy: "allow",
 			rules: [{ caller: "untrusted.**", target: "admin.**", effect: "deny" }]
 		});
-		const { checkCall, checkAccess } = api.slothlet.permissions.global;
+		const { call: checkCall, access: checkAccess } = api.slothlet.permissions.global.check;
 
 		for (const [caller, target] of [
 			["payments.charge", "db.read"],
@@ -114,7 +116,7 @@ describe.each(getMatrixConfigs())("Permissions > global.checkCall (#508) > $name
 				}
 			]
 		});
-		const { checkCall, checkAccess } = api.slothlet.permissions.global;
+		const { call: checkCall, access: checkAccess } = api.slothlet.permissions.global.check;
 
 		expect(checkCall("callers.paymentsCaller", "payments.charge.process", [100])).toBe(true);
 		expect(seen.at(-1)).toEqual({ args: [100], target: "payments.charge.process" });
@@ -144,7 +146,7 @@ describe.each(getMatrixConfigs())("Permissions > global.checkCall (#508) > $name
 				}
 			]
 		});
-		const { checkCall } = api.slothlet.permissions.global;
+		const { call: checkCall } = api.slothlet.permissions.global.check;
 
 		expect(checkCall("callers.paymentsCaller", "payments.charge.process", [1])).toBe(true);
 		expect(checkCall("callers.paymentsCaller", "payments.webhook.handleWebhook", [{ type: "ping" }])).toBe(false);
@@ -164,7 +166,7 @@ describe.each(getMatrixConfigs())("Permissions > global.checkCall (#508) > $name
 				}
 			]
 		});
-		const { checkCall } = api.slothlet.permissions.global;
+		const { call: checkCall } = api.slothlet.permissions.global.check;
 		const ask = (amount) => checkCall("callers.paymentsCaller", "payments.charge.process", [amount]);
 
 		expect(await api.slothlet.context.run({ role: "admin" }, () => ask(100)), "right role, right args").toBe(true);
@@ -190,7 +192,7 @@ describe.each(getMatrixConfigs())("Permissions > global.checkCall (#508) > $name
 		});
 		const resolve = vi.fn(async (user) => ({ projects: user === "u1" ? { p1: ["read"] } : {} }));
 		api.slothlet.permissions.principal.register("roles", { key: (ctx) => ctx.user, resolve });
-		const { checkCall } = api.slothlet.permissions.global;
+		const { call: checkCall } = api.slothlet.permissions.global.check;
 		const ask = (project) => checkCall("client.app", "project.files.list", [project]);
 
 		// First query for this identity: the principal is stale, so the answer is deferred behind its resolve.
@@ -226,7 +228,7 @@ describe.each(getMatrixConfigs())("Permissions > global.checkCall (#508) > $name
 		// Ownership is recorded as a lazy folder loads; a silent query answers for loaded paths.
 		await api.reporting.peek.rate();
 		const audit = collectAudit(api);
-		const { checkCall, checkAccess } = api.slothlet.permissions.global;
+		const { call: checkCall, access: checkAccess } = api.slothlet.permissions.global.check;
 
 		expect(checkCall("reporting.peek", "billing.internals._scale", [100])).toBe(true);
 		expect(checkCall("reporting.peek", "billing.internals.__rate")).toBe(true);
@@ -237,19 +239,19 @@ describe.each(getMatrixConfigs())("Permissions > global.checkCall (#508) > $name
 		await settle();
 		expect(audit).not.toContainEqual({
 			event: "permission:denied",
-			payload: expect.objectContaining({ caller: "reporting.peek", target: "billing.internals._scale", via: "checkCall" })
+			payload: expect.objectContaining({ caller: "reporting.peek", target: "billing.internals._scale", via: VIA })
 		});
 	});
 
 	it("allows a module-private target to a supplied caller of the same module under the default host policy too", async () => {
 		api = await build({ policy: "allow", rules: [] }, PRIVATE);
 		await api.reporting.peek.rate();
-		expect(api.slothlet.permissions.global.checkCall("reporting.peek", "billing.internals._scale", [100])).toBe(true);
+		expect(api.slothlet.permissions.global.check.call("reporting.peek", "billing.internals._scale", [100])).toBe(true);
 	});
 
 	it("never applies the self-call bypass: the supplied caller has no source file", async () => {
 		api = await build({ policy: "deny", rules: [] });
-		const { checkCall } = api.slothlet.permissions.global;
+		const { call: checkCall } = api.slothlet.permissions.global.check;
 
 		// The real gate lets a same-file call through (callSelf → identity live in self-caller.mjs)...
 		expect((await api.callers.selfCaller.callSelf()).ok).toBe(true);
@@ -260,7 +262,7 @@ describe.each(getMatrixConfigs())("Permissions > global.checkCall (#508) > $name
 
 	// ── Audit ────────────────────────────────────────────────────────────────────
 
-	it("emits the audit lifecycle events as a real call would, tagged via: 'checkCall'", async () => {
+	it("emits the audit lifecycle events as a real call would, tagged via: the check.call path", async () => {
 		api = await build({
 			policy: "allow",
 			audit: "verbose",
@@ -270,7 +272,7 @@ describe.each(getMatrixConfigs())("Permissions > global.checkCall (#508) > $name
 			]
 		});
 		const audit = collectAudit(api);
-		const { checkCall, checkAccess } = api.slothlet.permissions.global;
+		const { call: checkCall, access: checkAccess } = api.slothlet.permissions.global.check;
 
 		expect(checkCall("untrusted.plugin", "admin.manage", ["x"])).toBe(false);
 		expect(checkCall("payments.charge", "db.read", [])).toBe(true);
@@ -281,12 +283,12 @@ describe.each(getMatrixConfigs())("Permissions > global.checkCall (#508) > $name
 		expect(audit[0].payload).toMatchObject({
 			caller: "untrusted.plugin",
 			target: "admin.manage",
-			via: "checkCall",
+			via: VIA,
 			rule: expect.objectContaining({ caller: "untrusted.**", target: "admin.**", effect: "deny" }),
 			conditionMatched: false
 		});
-		expect(audit[1].payload).toMatchObject({ caller: "payments.charge", target: "db.read", via: "checkCall" });
-		expect(audit[2].payload).toMatchObject({ caller: "cache.store", target: "widgets.render", via: "checkCall", policy: "allow" });
+		expect(audit[1].payload).toMatchObject({ caller: "payments.charge", target: "db.read", via: VIA });
+		expect(audit[2].payload).toMatchObject({ caller: "cache.store", target: "widgets.render", via: VIA, policy: "allow" });
 		for (const { payload } of audit) expect(payload.timestamp).toBeTypeOf("number");
 
 		// The silent query stays silent.
@@ -302,14 +304,14 @@ describe.each(getMatrixConfigs())("Permissions > global.checkCall (#508) > $name
 			rules: [{ caller: "untrusted.**", target: "admin.**", effect: "deny" }]
 		});
 		const audit = collectAudit(api);
-		const { checkCall } = api.slothlet.permissions.global;
+		const { call: checkCall } = api.slothlet.permissions.global.check;
 
 		expect(checkCall("payments.charge", "db.read")).toBe(true);
 		expect(checkCall("untrusted.plugin", "admin.manage")).toBe(false);
 		await settle();
 
 		expect(audit).toHaveLength(1);
-		expect(audit[0]).toMatchObject({ event: "permission:denied", payload: { via: "checkCall" } });
+		expect(audit[0]).toMatchObject({ event: "permission:denied", payload: { via: VIA } });
 	});
 
 	// ── Disabled enforcement ─────────────────────────────────────────────────────
@@ -318,7 +320,7 @@ describe.each(getMatrixConfigs())("Permissions > global.checkCall (#508) > $name
 		// No permissions config → the manager is constructed but not enabled (as for checkAccess).
 		api = await slothlet({ ...config, base: BASE });
 		const audit = collectAudit(api);
-		expect(api.slothlet.permissions.global.checkCall("untrusted.plugin", "admin.manage", ["x"])).toBe(true);
+		expect(api.slothlet.permissions.global.check.call("untrusted.plugin", "admin.manage", ["x"])).toBe(true);
 		await settle();
 		expect(audit).toHaveLength(0);
 		await api.shutdown();
@@ -329,7 +331,7 @@ describe.each(getMatrixConfigs())("Permissions > global.checkCall (#508) > $name
 			policy: "deny",
 			rules: [{ caller: "untrusted.**", target: "admin.**", effect: "deny" }]
 		});
-		expect(api.slothlet.permissions.global.checkCall("untrusted.plugin", "admin.manage")).toBe(true);
+		expect(api.slothlet.permissions.global.check.call("untrusted.plugin", "admin.manage")).toBe(true);
 	});
 
 	// ── Host-only ────────────────────────────────────────────────────────────────
@@ -345,9 +347,9 @@ describe.each(getMatrixConfigs())("Permissions > global.checkCall (#508) > $name
 		expect(access).toEqual({ ok: true, allowed: true });
 
 		// The built-in rule is visible through the diagnostics surface, like the control.** deny.
-		const rules = api.slothlet.permissions.global.rulesForPath("slothlet.permissions.global.checkCall");
+		const rules = api.slothlet.permissions.global.rules.path("slothlet.permissions.global.check.call");
 		expect(
-			rules.find((r) => r.caller === "**" && r.effect === "deny" && r.target === "slothlet.permissions.global.checkCall")
+			rules.find((r) => r.caller === "**" && r.effect === "deny" && r.target === "slothlet.permissions.global.check.call")
 		).toBeDefined();
 	});
 
@@ -355,7 +357,7 @@ describe.each(getMatrixConfigs())("Permissions > global.checkCall (#508) > $name
 		api = await build({
 			policy: "allow",
 			rules: [
-				{ caller: "callers.checkCallCaller.**", target: "slothlet.permissions.global.checkCall", effect: "allow" },
+				{ caller: "callers.checkCallCaller.**", target: "slothlet.permissions.global.check.call", effect: "allow" },
 				{ caller: "untrusted.**", target: "admin.**", effect: "deny" }
 			]
 		});
@@ -368,7 +370,7 @@ describe.each(getMatrixConfigs())("Permissions > global.checkCall (#508) > $name
 
 	it("throws INVALID_ARGUMENT for a non-string or empty caller/target and a non-array args", async () => {
 		api = await build({ policy: "allow", rules: [] });
-		const { checkCall } = api.slothlet.permissions.global;
+		const { call: checkCall } = api.slothlet.permissions.global.check;
 
 		expect(() => checkCall(7, "db.read", [])).toThrow(/INVALID_ARGUMENT/);
 		expect(() => checkCall("", "db.read", [])).toThrow(/INVALID_ARGUMENT/);
@@ -418,11 +420,11 @@ describe("PermissionManager > checkCall enforcement options (#508)", () => {
 		expect(lifecycle.emit).not.toHaveBeenCalledWith("permission:denied", expect.anything());
 		// ...but a caller declared a file-less MODULE is never the host.
 		expect(
-			manager.enforceAccess("reporting.peek", "billing.internals._scale", null, null, null, null, { moduleCaller: true, via: "probe" })
+			manager.enforceAccess("reporting.peek", "billing.internals._scale", null, null, null, null, { moduleCaller: true, via: ["probe"] })
 		).toBe(false);
 		expect(lifecycle.emit).toHaveBeenCalledWith(
 			"permission:denied",
-			expect.objectContaining({ caller: "reporting.peek", target: "billing.internals._scale", via: "probe" })
+			expect.objectContaining({ caller: "reporting.peek", target: "billing.internals._scale", via: ["probe"] })
 		);
 	});
 
@@ -432,7 +434,7 @@ describe("PermissionManager > checkCall enforcement options (#508)", () => {
 
 		// First enforcement caches the decision; the tagged emit must spread, not write `via` into the cache.
 		expect(manager.checkCall("a.x", "b.y", [])).toBe(false);
-		expect(lifecycle.emit).toHaveBeenLastCalledWith("permission:denied", expect.objectContaining({ via: "checkCall" }));
+		expect(lifecycle.emit).toHaveBeenLastCalledWith("permission:denied", expect.objectContaining({ via: VIA }));
 		expect(manager.enforceAccess("a.x", "b.y")).toBe(false);
 		expect(lifecycle.emit).toHaveBeenLastCalledWith("permission:denied", expect.not.objectContaining({ via: expect.anything() }));
 	});

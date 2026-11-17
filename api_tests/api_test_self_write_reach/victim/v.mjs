@@ -271,7 +271,7 @@ export function useOwnMembers() {
  */
 export function grant(rule) {
 	try {
-		return self.slothlet.permissions.addRule(rule);
+		return self.slothlet.permissions.rules.add(rule);
 	} catch (error) {
 		return error?.code ?? String(error);
 	}
@@ -303,7 +303,7 @@ export async function mountHelper(folder, permissions) {
  */
 export function revoke(ruleId) {
 	try {
-		return self.slothlet.permissions.removeRule(ruleId);
+		return self.slothlet.permissions.rules.remove(ruleId);
 	} catch (error) {
 		return error?.code ?? String(error);
 	}

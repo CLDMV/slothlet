@@ -224,27 +224,27 @@ describe.each(getMatrixConfigs())(
 
 		it("an async function keeps its prototype", async () => {
 			await build();
-			expect(await api.callee.shapes.report("scope")).toEqual(describeFunction(api.slothlet.scope));
-			expect((await api.callee.shapes.report("scope")).prototype).toBe("AsyncFunction");
+			expect(await api.callee.shapes.report("context.scope")).toEqual(describeFunction(api.slothlet.context.scope));
+			expect((await api.callee.shapes.report("context.scope")).prototype).toBe("AsyncFunction");
 		});
 
 		it("a prototype set by the module is the function's", async () => {
 			await build();
-			expect(await api.callee.shapes.reparent("scope")).toBe(true);
-			expect(Object.getPrototypeOf(api.slothlet.scope)).toBe(Function.prototype);
-			expect((await api.callee.shapes.report("scope")).prototype).toBe("Function");
+			expect(await api.callee.shapes.reparent("context.scope")).toBe(true);
+			expect(Object.getPrototypeOf(api.slothlet.context.scope)).toBe(Function.prototype);
+			expect((await api.callee.shapes.report("context.scope")).prototype).toBe("Function");
 		});
 
 		it("a member defined naming only its value is reported fixed, as on the function", async () => {
 			await build();
-			const reported = await api.callee.shapes.define("scope", "extra");
+			const reported = await api.callee.shapes.define("context.scope", "extra");
 			expect(reported.member).toEqual({ configurable: false, writable: false, enumerable: false });
-			expect(reported).toEqual(describeFunction(api.slothlet.scope, "extra"));
+			expect(reported).toEqual(describeFunction(api.slothlet.context.scope, "extra"));
 		});
 
 		it("a member the function holds fixed is reported fixed", async () => {
 			await build();
-			expect(await api.callee.shapes.report("lockCaller")).toEqual(describeFunction(api.slothlet.lockCaller));
+			expect(await api.callee.shapes.report("pin")).toEqual(describeFunction(api.slothlet.pin));
 		});
 
 		it.each([
@@ -253,9 +253,9 @@ describe.each(getMatrixConfigs())(
 			["made non-extensible", Object.preventExtensions]
 		])("%s by the host after the module read it, it reports as the host's", async (_label, fix) => {
 			await build();
-			await api.callee.shapes.keep("lockCaller");
-			fix(api.slothlet.lockCaller);
-			expect(await api.callee.shapes.report("lockCaller")).toEqual(describeFunction(api.slothlet.lockCaller));
+			await api.callee.shapes.keep("pin");
+			fix(api.slothlet.pin);
+			expect(await api.callee.shapes.report("pin")).toEqual(describeFunction(api.slothlet.pin));
 		});
 	}
 );

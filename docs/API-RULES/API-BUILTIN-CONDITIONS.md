@@ -63,12 +63,12 @@ if (userApi.slothlet) {
 
 ---
 
-## B04: `versioning.unregister` Unknown Tag → No-Op
+## B04: `versioning.remove` Unknown Tag → No-Op
 
 **Related Rule**: [Rule 21](../API-RULES.md#rule-21-reserved-keys--built-in-surface) (with [Rule 19](../API-RULES.md#rule-19-versioned-mounts))
 **Status**: ✅ Active
 
-**Pattern**: `slothlet.versioning.unregister()` for an unknown logical path or version tag returns `false` without touching the api tree; only a known tag proceeds to `removeApiComponent`.
+**Pattern**: `slothlet.versioning.remove()` for an unknown logical path or version tag returns `false` without touching the api tree; only a known tag proceeds to `removeApiComponent`.
 
 **Source(s)**: `src/lib/builders/api_builder.mjs:2678-2690`
 
@@ -77,4 +77,4 @@ if (userApi.slothlet) {
 
 ---
 
-_Built-in family: B01–B04, under Rule 21. Dead code not catalogued: `delete namespace.hooks` (api_builder.mjs:3139 — targets a never-set plural key; hooks are a v3 placeholder). The `slothlet.scope`/`run` vs `slothlet.context.scope`/`run` duplication and the `api.shutdown()` vs `slothlet.shutdown()` call-graph difference are documented in the built-in surface reference, not as leaf-generation conditions._
+_Built-in family: B01–B04, under Rule 21. Dead code not catalogued: `delete namespace.hooks` (api_builder.mjs:3139 — targets a never-set plural key; hooks are a v3 placeholder). The `api.shutdown()` vs `slothlet.shutdown()` call-graph difference is documented in the built-in surface reference, not as leaf-generation conditions._

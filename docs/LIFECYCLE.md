@@ -272,7 +272,7 @@ These fire from the module discovery + mount pipeline at `api.slothlet.api.modul
 
 ### `modules:discover-start`
 
-Emitted at the start of every `discover()` call (including the lazy-trigger call from `addModule(name)` when the cache is empty, and the chained call inside `addDiscovered()`).
+Emitted at the start of every `discover()` call (including the lazy-trigger call from `modules.add(name)` when the cache is empty, and the chained call inside `modules.add()`).
 
 **Event data:**
 
@@ -296,11 +296,11 @@ Emitted after `discover()` finishes walking the filesystem and replaces the disc
 }
 ```
 
-The `stale` array enables S3b reconciliation — the host can iterate it and call `removeModule()` on each to unmount packages that have been uninstalled from disk.
+The `stale` array enables S3b reconciliation — the host can iterate it and call `modules.remove()` on each to unmount packages that have been uninstalled from disk.
 
 ### `modules:mount-start`
 
-Emitted at the start of `addModule()`, `addModules()`, or `addDiscovered()`'s mount phase.
+Emitted at the start of a `modules.add()` mount phase (one module, a batch, or a discover run).
 
 **Event data:**
 
@@ -313,7 +313,7 @@ Emitted at the start of `addModule()`, `addModules()`, or `addDiscovered()`'s mo
 
 ### `modules:mount-complete`
 
-Emitted once **per successfully mounted module**, immediately after the underlying `api.add()` resolves. Fires up to N times for `addModules` with N items — once per item that mounted cleanly. Failed mounts emit nothing on this channel. Whether failures surface elsewhere depends on `failure`:
+Emitted once **per successfully mounted module**, immediately after the underlying `api.add()` resolves. Fires up to N times for `modules.add` with N items — once per item that mounted cleanly. Failed mounts emit nothing on this channel. Whether failures surface elsewhere depends on `failure`:
 
 - **`failure: "best-effort"`** — every prior-success `modules:mount-complete` event still fires, plus the final `modules:loaded` payload carries a `failed[]` aggregate of every failure.
 - **`failure: "throw"` (default)** — every successful mount BEFORE the failing one still fires `modules:mount-complete`; the failure throws synchronously and `modules:loaded` is NOT emitted (see below).
@@ -334,7 +334,7 @@ Under `concurrency > 1` event order tracks **completion order**, not start order
 
 ### `modules:loaded`
 
-Emitted after the helper's entire async chain settles. Fires **exactly once on the happy path** — at the end of every `addModule`, `addModules`, or `addDiscovered` call that returns normally. Does **NOT** fire when the call throws:
+Emitted after the helper's entire async chain settles. Fires **exactly once on the happy path** — at the end of every `modules.add` call that returns normally. Does **NOT** fire when the call throws:
 
 - **`failure: "throw"` (default)** — fires only if every mount succeeded. The first failure rethrows synchronously and skips this emit.
 - **`failure: "rollback"`** — fires only if every mount succeeded. Any failure triggers a best-effort rollback and rethrows; this emit is skipped.
@@ -348,7 +348,7 @@ Hosts that need a "settled regardless of outcome" signal should either use `best
 {
 	mounted: [ /* MountResult[] for every successful mount */ ],
 	failed?: [ /* FailureEntry[] with { item, error } — only present when failure was "best-effort" */ ],
-	stale?: [ /* MountResult[] — only present on addDiscovered chains that ran discover() */ ]
+	stale?: [ /* MountResult[] — only present when modules.add() ran discover() */ ]
 }
 ```
 
@@ -553,7 +553,7 @@ await api.storage.deactivate.for("B")(ctx); // runs ONLY B.deactivate(ctx)
 
 ### Execution extent
 
-Every contribution runs **exactly as if it had been called directly** — inside the instance's own extent, attributed to its own module's wrapper. So ambient `self.*` inside a routine body resolves, and a permission check on a `self.*` call is evaluated against the contributing module's identity, never a shared slot or the instance root. This holds whether the contribution is invoked per-path (`api.<path>.<name>()`) or through the root cascade (`api.<name>()`), so a cascade needs no `api.slothlet.run(...)` wrap to make `self.*` resolve. A routine fans a call out to every matching contribution without changing the semantics of any one of them. (Fixed in v3.16.2: the root cascade previously ran contributors with no active extent, so a contributor reaching `self.*` threw `RUNTIME_NO_ACTIVE_CONTEXT_SELF` — see [#394](https://github.com/CLDMV/slothlet/pull/394).)
+Every contribution runs **exactly as if it had been called directly** — inside the instance's own extent, attributed to its own module's wrapper. So ambient `self.*` inside a routine body resolves, and a permission check on a `self.*` call is evaluated against the contributing module's identity, never a shared slot or the instance root. This holds whether the contribution is invoked per-path (`api.<path>.<name>()`) or through the root cascade (`api.<name>()`), so a cascade needs no `api.slothlet.context.run(...)` wrap to make `self.*` resolve. A routine fans a call out to every matching contribution without changing the semantics of any one of them. (Fixed in v3.16.2: the root cascade previously ran contributors with no active extent, so a contributor reaching `self.*` threw `RUNTIME_NO_ACTIVE_CONTEXT_SELF` — see [#394](https://github.com/CLDMV/slothlet/pull/394).)
 
 ### Errors: best-effort, aggregated
 

@@ -61,7 +61,7 @@ describe.each(getMatrixConfigs())("Versioning > Remove > $name", ({ config }) =>
 		expect(api.auth).toBeDefined();
 
 		// Remove v2
-		await api.slothlet.versioning.unregister("auth", "v2");
+		await api.slothlet.versioning.remove("auth", "v2");
 
 		// v2 namespace should be gone
 		expect(api.v2).toBeUndefined();
@@ -83,7 +83,7 @@ describe.each(getMatrixConfigs())("Versioning > Remove > $name", ({ config }) =>
 
 		expect(Object.keys(api.slothlet.versioning.list("auth").versions)).toHaveLength(2);
 
-		await api.slothlet.versioning.unregister("auth", "v2");
+		await api.slothlet.versioning.remove("auth", "v2");
 
 		const info = api.slothlet.versioning.list("auth");
 		expect(Object.keys(info.versions)).toHaveLength(1);

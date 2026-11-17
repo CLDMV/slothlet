@@ -410,7 +410,7 @@ api.slothlet.hook.on("*.{add,update,delete}:after", handler);
 
 ```javascript
 // Compile a pattern to test it
-const matcher = api.slothlet.diag.hook.compilePattern("math.*");
+const matcher = api.slothlet.diag.hook.compile("math.*");
 console.log(matcher("math.add")); // true
 console.log(matcher("other.func")); // false
 ```
@@ -544,17 +544,17 @@ api.slothlet.hook.disable({ id: "my-expensive-hook" });
 
 ```javascript
 // Only intercept database.* paths from now on — calls to other paths run no hooks.
-api.slothlet.hook.enablePattern("database.*");
+api.slothlet.hook.pattern.enable("database.*");
 
 // Widen the filter — both database.* and cache.* paths are now intercepted.
-api.slothlet.hook.enablePattern("cache.*");
+api.slothlet.hook.pattern.enable("cache.*");
 
 // Remove one pattern. When the last pattern is removed the filter deactivates,
 // so every path is intercepted again.
-api.slothlet.hook.disablePattern("database.*");
+api.slothlet.hook.pattern.disable("database.*");
 
 // Reset back to the pattern configured via hook.pattern (or fully unrestricted if that was "**").
-api.slothlet.hook.resetPatternFilter();
+api.slothlet.hook.pattern.reset();
 ```
 
 The catch-all pattern `"**"` matches every path, so a `hook.pattern` of `"**"` (the default) imposes no restriction.
@@ -794,7 +794,7 @@ Slothlet's hook system above governs slothlet's own `before`/`after`/`always`/`e
 
 ### Hooks auto-pin caller identity
 
-Slothlet's **own** hooks need no manual pinning. A hook handler fires during the API call it intercepts, which belongs to whichever caller triggered that call — not to the module that registered the hook. So by default `hook.on()` pins the **registering module's** caller identity onto the handler: its `self.*` calls and permission checks are attributed to the module that registered the hook, exactly as if the body had been wrapped in `lockCaller`.
+Slothlet's **own** hooks need no manual pinning. A hook handler fires during the API call it intercepts, which belongs to whichever caller triggered that call — not to the module that registered the hook. So by default `hook.on()` pins the **registering module's** caller identity onto the handler: its `self.*` calls and permission checks are attributed to the module that registered the hook, exactly as if the body had been wrapped in `pin`.
 
 ```javascript
 // Registered inside module B's init() — the handler runs as module B,
@@ -811,7 +811,7 @@ Pass `{ pin: false }` to opt a hook out — the handler then runs without a pinn
 self.slothlet.hook.on("math.*:before", logArgs, { pin: false });
 ```
 
-Auto-pinning applies only when the hook is registered from inside a module (there is a caller identity to capture) and the handler is not already `lockCaller`-wrapped. The remaining sections below cover the harder case slothlet **cannot** intercept: callbacks handed to a third-party framework.
+Auto-pinning applies only when the hook is registered from inside a module (there is a caller identity to capture) and the handler is not already `pin`-wrapped. The remaining sections below cover the harder case slothlet **cannot** intercept: callbacks handed to a third-party framework.
 
 ### Why array-stored callbacks lose caller identity
 
@@ -821,9 +821,9 @@ The failure mode: module B registers an `onRequest` hook. A later request restor
 
 This is not something slothlet can fix generically: `addHook` is a framework mechanism with no interception point. Instead, two opt-in utilities on `self.slothlet` let a module pin its identity onto a callback.
 
-### `self.slothlet.lockCaller(fn)` — pin caller identity, keep context live
+### `self.slothlet.pin(fn)` — pin caller identity, keep context live
 
-`lockCaller` captures the registering module's caller identity at call time and, on every invocation of the returned wrapper, overrides **only** the caller identity. The request-scoped context set later in the lifecycle stays live and visible; `self` stays the live proxy.
+`pin` captures the registering module's caller identity at call time and, on every invocation of the returned wrapper, overrides **only** the caller identity. The request-scoped context set later in the lifecycle stays live and visible; `self` stays the live proxy.
 
 ```javascript
 import { self } from "@cldmv/slothlet/runtime";
@@ -831,7 +831,7 @@ import { self } from "@cldmv/slothlet/runtime";
 // Inside module B's setup:
 server.addHook(
 	"onRequest",
-	self.slothlet.lockCaller(async (req, reply) => {
+	self.slothlet.pin(async (req, reply) => {
 		// Runs as module B regardless of which module's context is ambient.
 		const ctx = self.slothlet.context.get(); // permission rules keyed to B match
 		// ...
@@ -841,12 +841,12 @@ server.addHook(
 
 - The locked callback's caller identity is frozen, but the request context stays **live** — context set later in the request lifecycle is visible inside it.
 - `this` is forwarded, so framework-supplied `this` (the request/reply or the framework instance) is preserved.
-- Called with no active context (no module wrapper to capture), `lockCaller` is a no-op passthrough — it is meaningful only when called from inside a module.
+- Called with no active context (no module wrapper to capture), `pin` is a no-op passthrough — it is meaningful only when called from inside a module.
 - **Runtime mode matters for async callbacks.** In **async** runtime mode the pinned identity propagates through `AsyncLocalStorage`, so `self.*` calls after an `await` still resolve to the registering module. In **live** runtime mode the pinned caller is held until the callback's promise settles, so `self.*` calls after an `await` resolve to the registering module as well. Live mode keeps no per-async-task context, though: while other module calls are suspended at the same time, the resumed callback is attributed from the call stack (see [PERMISSIONS.md → Overlapping calls](./PERMISSIONS.md#runtime-choice--the-permission-boundary)), which holds for cooperative code but is not an enforced guarantee. Use **async** runtime mode for `async` hooks (like the example above) whose locked identity is load-bearing past their first `await`. `bind` is **not** an escape hatch here — it has the same live-mode limitation (see below).
 
-### `self.slothlet.lockCaller.caller(fn)` — pin the leaf's caller
+### `self.slothlet.pin.caller(fn)` — pin the leaf's caller
 
-`lockCaller` pins the leaf that calls it. A service that accepts a callback on behalf of whoever called it — a scheduler's `every(interval, fn)`, a registry — can therefore only pin **itself**, and the callback runs as the service rather than the module that handed it over. `lockCaller.caller` pins the current leaf's **caller** instead: exactly the identity `self.slothlet.metadata.caller()` reports at that moment.
+`pin` pins the leaf that calls it. A service that accepts a callback on behalf of whoever called it — a scheduler's `every(interval, fn)`, a registry — can therefore only pin **itself**, and the callback runs as the service rather than the module that handed it over. `pin.caller` pins the current leaf's **caller** instead: exactly the identity `self.slothlet.metadata.caller()` reports at that moment.
 
 ```javascript
 // scheduler/service.mjs
@@ -854,7 +854,7 @@ import { self } from "@cldmv/slothlet/runtime";
 
 export function every(ms, job) {
 	// Runs each job as the module that called every(), not as the scheduler.
-	setInterval(self.slothlet.lockCaller.caller(job), ms);
+	setInterval(self.slothlet.pin.caller(job), ms);
 }
 ```
 
@@ -863,26 +863,26 @@ export function every(ms, job) {
 self.scheduler.service.every(60_000, () => self.reports.refresh());
 ```
 
-- **It is a privilege.** Acting as your caller is not something a module may do by default: `slothlet.lockCaller.caller` is its own api path, denied to every module by a built-in rule. The host grants it to the services that run callbacks on their callers' behalf — `{ caller: "scheduler.**", target: "slothlet.lockCaller.caller", effect: "allow" }`. See [Permissions](PERMISSIONS.md#other-slothlet-routes-are-gated-too). The check runs when the wrapper is created.
-- **No module caller → runs as the host.** When the leaf was itself called from outside any module (the host, a transport edge), the callback is pinned to "no module caller": it runs as the host, and `metadata.caller()` returns `null` inside it. This is a real pin, not a passthrough of `fn`, and it does not throw. Because a host-pinned callback carries the host's exemption from rules, grant `lockCaller.caller` only to modules trusted to act for any caller, the host included.
-- **A kept `lockCaller.caller` acts for the module that read it.** A module that keeps the function (`const pin = self.slothlet.lockCaller.caller`) and calls it later, outside any call — from a timer, or from host code it handed a closure to — has no caller at that point, but it is not the host either: the callback is pinned to that module. Calling it there is still checked against the grant for that module.
-- **Otherwise identical to `lockCaller`**: the identity is captured once, at call time, and cannot be changed afterwards; `this` and arguments are forwarded; errors thrown by `fn` propagate unchanged; the wrapper exposes `____slothletOriginal`; a callback held across `reload()` runs against the current instance.
+- **It is a privilege.** Acting as your caller is not something a module may do by default: `slothlet.pin.caller` is its own api path, denied to every module by a built-in rule. The host grants it to the services that run callbacks on their callers' behalf — `{ caller: "scheduler.**", target: "slothlet.pin.caller", effect: "allow" }`. See [Permissions](PERMISSIONS.md#other-slothlet-routes-are-gated-too). The check runs when the wrapper is created.
+- **No module caller → runs as the host.** When the leaf was itself called from outside any module (the host, a transport edge), the callback is pinned to "no module caller": it runs as the host, and `metadata.caller()` returns `null` inside it. This is a real pin, not a passthrough of `fn`, and it does not throw. Because a host-pinned callback carries the host's exemption from rules, grant `pin.caller` only to modules trusted to act for any caller, the host included.
+- **A kept `pin.caller` acts for the module that read it.** A module that keeps the function (`const pin = self.slothlet.pin.caller`) and calls it later, outside any call — from a timer, or from host code it handed a closure to — has no caller at that point, but it is not the host either: the callback is pinned to that module. Calling it there is still checked against the grant for that module.
+- **Otherwise identical to `pin`**: the identity is captured once, at call time, and cannot be changed afterwards; `this` and arguments are forwarded; errors thrown by `fn` propagate unchanged; the wrapper exposes `____slothletOriginal`; a callback held across `reload()` runs against the current instance.
 - **Principals compose.** Calls made inside the callback are enforced for the pinned identity, so rules keyed to the caller — including [`requires` principals](PERMISSIONS.md#principals) — resolve exactly as they would for a direct call from that caller.
-- **Runtime mode** carries the same caveat as `lockCaller`: in **async** runtime mode the pinned identity propagates through `AsyncLocalStorage` across every `await`. In **live** runtime mode there is one identity slot per instance, so while an `async` callback is parked at an `await` alongside other suspended calls (for example the service that fired it and is awaiting it), its resumed calls are attributed from the call stack and can resolve to an awaiting module frame instead of the pin. That fails closed — never to the host — but it is not the pin; use async runtime mode for `async` callbacks that must keep the pinned caller past an `await`.
+- **Runtime mode** carries the same caveat as `pin`: in **async** runtime mode the pinned identity propagates through `AsyncLocalStorage` across every `await`. In **live** runtime mode there is one identity slot per instance, so while an `async` callback is parked at an `await` alongside other suspended calls (for example the service that fired it and is awaiting it), its resumed calls are attributed from the call stack and can resolve to an awaiting module frame instead of the pin. That fails closed — never to the host — but it is not the pin; use async runtime mode for `async` callbacks that must keep the pinned caller past an `await`.
 
 ### `self.slothlet.bind(fn)` — freeze the whole async context
 
-`bind` is a convenience re-export of Node's `AsyncResource.bind`. Unlike `lockCaller`, it freezes the **entire** async context captured at registration time — every `AsyncLocalStorage`, including slothlet's caller and request context:
+`bind` is a convenience re-export of Node's `AsyncResource.bind`. Unlike `pin`, it freezes the **entire** async context captured at registration time — every `AsyncLocalStorage`, including slothlet's caller and request context:
 
 ```javascript
 server.addHook("onRequest", self.slothlet.bind(handler));
 ```
 
-Reach for `lockCaller` when you want the caller pinned but request-scoped context live; reach for `bind` when you want the whole context snapshot frozen.
+Reach for `pin` when you want the caller pinned but request-scoped context live; reach for `bind` when you want the whole context snapshot frozen.
 
-Both utilities share the same live-mode limitation: `AsyncResource.bind` only meaningfully captures slothlet's caller/context in **async** runtime mode. In live mode the slothlet store is kept off the `AsyncLocalStorage`, so `bind` degrades to binding whatever other async context exists and does **not** preserve slothlet caller identity past an `await`. `bind` is therefore not a workaround for the live-mode `lockCaller` caveat above — if an `async` callback must keep slothlet identity across awaits, run the instance in **async** runtime mode.
+Both utilities share the same live-mode limitation: `AsyncResource.bind` only meaningfully captures slothlet's caller/context in **async** runtime mode. In live mode the slothlet store is kept off the `AsyncLocalStorage`, so `bind` degrades to binding whatever other async context exists and does **not** preserve slothlet caller identity past an `await`. `bind` is therefore not a workaround for the live-mode `pin` caveat above — if an `async` callback must keep slothlet identity across awaits, run the instance in **async** runtime mode.
 
-> `slothlet.lockCaller`, `slothlet.lockCaller.caller`, and `slothlet.bind` are permission-gated routes like every other `slothlet.*` member — see [Permissions](PERMISSIONS.md#other-slothlet-routes-are-gated-too). `lockCaller.caller` is denied to modules by default.
+> `slothlet.pin`, `slothlet.pin.caller`, and `slothlet.bind` are permission-gated routes like every other `slothlet.*` member — see [Permissions](PERMISSIONS.md#other-slothlet-routes-are-gated-too). `pin.caller` is denied to modules by default.
 
 ---
 
@@ -941,7 +941,7 @@ Disable hooks without unregistering them. Empty filter disables all.
 
 **Returns:** number - Count of hooks disabled
 
-### api.slothlet.hook.enablePattern(pattern)
+### api.slothlet.hook.pattern.enable(pattern)
 
 Restrict hook execution to an API path pattern at runtime (the global path filter). Distinct from `enable()`/`disable()`, which toggle individual registered hooks — this narrows which API paths the hook system applies to at all. Once any pattern is enabled the filter is active, and a hook fires only when the called path matches at least one enabled pattern.
 
@@ -951,13 +951,13 @@ Restrict hook execution to an API path pattern at runtime (the global path filte
 
 **Returns:** number - Count of patterns now in the active filter
 
-### api.slothlet.hook.disablePattern(pattern)
+### api.slothlet.hook.pattern.disable(pattern)
 
 Remove a path pattern from the runtime global path filter. When the last pattern is removed the filter deactivates and hooks apply to every path again.
 
 **Returns:** number - Count of patterns remaining in the filter
 
-### api.slothlet.hook.resetPatternFilter()
+### api.slothlet.hook.pattern.reset()
 
 Reset the runtime global path filter back to the configured `hook.pattern` default (fully unrestricted if that default was `"**"`).
 

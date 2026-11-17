@@ -230,7 +230,7 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 		}
 	});
 
-	it("global.checkAccess uses context.run() runtime context for conditional rules", async () => {
+	it("global.check.access uses context.run() runtime context for conditional rules", async () => {
 		api = await slothlet({
 			...config,
 			base: BASE,
@@ -248,12 +248,12 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 		});
 
 		const allowed = await api.slothlet.context.run({ tenant: "tenant-a" }, async () => {
-			return api.slothlet.permissions.global.checkAccess("callers.paymentsCaller.callCharge", "payments.charge.process");
+			return api.slothlet.permissions.global.check.access("callers.paymentsCaller.callCharge", "payments.charge.process");
 		});
 		expect(allowed).toBe(true);
 
 		const denied = await api.slothlet.context.run({ tenant: "tenant-b" }, async () => {
-			return api.slothlet.permissions.global.checkAccess("callers.paymentsCaller.callCharge", "payments.charge.process");
+			return api.slothlet.permissions.global.check.access("callers.paymentsCaller.callCharge", "payments.charge.process");
 		});
 		expect(denied).toBe(false);
 	});
@@ -334,7 +334,7 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 		});
 
 		try {
-			api.slothlet.permissions.addRule({
+			api.slothlet.permissions.rules.add({
 				caller: "callers.**",
 				target: "payments.**",
 				effect: "allow",
@@ -435,7 +435,7 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 		});
 
 		// Rule was created — verify it appears in getRulesForPath output with condition
-		const rules = api.slothlet.permissions.global.rulesForPath("admin.manage.createUser");
+		const rules = api.slothlet.permissions.global.rules.path("admin.manage.createUser");
 		const rule = rules.find((r) => r.caller === "extra.**" && r.effect === "deny");
 		expect(rule).toBeDefined();
 		expect(rule.condition).toEqual({ tenant: "trial" });
@@ -458,12 +458,12 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 			}
 		});
 
-		const adminRules = api.slothlet.permissions.global.rulesForPath("admin.manage.createUser");
+		const adminRules = api.slothlet.permissions.global.rules.path("admin.manage.createUser");
 		const plainRule = adminRules.find((r) => r.caller === "extra.**" && r.target === "admin.**");
 		expect(plainRule).toBeDefined();
 		expect(plainRule.condition).toBeNull();
 
-		const dbRules = api.slothlet.permissions.global.rulesForPath("db.write.insert");
+		const dbRules = api.slothlet.permissions.global.rules.path("db.write.insert");
 		const condRule = dbRules.find((r) => r.caller === "extra.**" && r.target === "db.write.**");
 		expect(condRule).toBeDefined();
 		expect(condRule.condition).toEqual({ role: "guest" });
@@ -816,7 +816,7 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 		});
 
 		try {
-			api.slothlet.permissions.addRule({
+			api.slothlet.permissions.rules.add({
 				caller: "callers.**",
 				target: "payments.**",
 				effect: "allow",
@@ -838,7 +838,7 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 		});
 
 		try {
-			api.slothlet.permissions.addRule({
+			api.slothlet.permissions.rules.add({
 				caller: "callers.**",
 				target: "payments.**",
 				effect: "allow",

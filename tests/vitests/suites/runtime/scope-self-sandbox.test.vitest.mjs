@@ -43,7 +43,7 @@ describe(".run()/.scope() self sandbox (full isolation)", () => {
 	it("discards a self.X write made inside a full-isolation .run()", async () => {
 		api = await slothlet({ base: DIR, mode: "eager", scope: { isolation: "full" } });
 
-		await api.slothlet.run({}, async () => {
+		await api.slothlet.context.run({}, async () => {
 			// owner.writeOutside() does `self.intruder = value` — visible within
 			// the scope through the copy-on-write view.
 			const inside = await api.owner.writeOutside("scoped");
@@ -58,7 +58,7 @@ describe(".run()/.scope() self sandbox (full isolation)", () => {
 		api = await slothlet({ base: DIR, mode: "eager", scope: { isolation: "full" } });
 
 		let result;
-		await api.slothlet.run({}, async () => {
+		await api.slothlet.context.run({}, async () => {
 			// owner.introspectSelf() writes self.probeKey then introspects `self`:
 			// `in`, Object.keys, getOwnPropertyDescriptor — all routed through the
 			// copy-on-write view.
@@ -81,7 +81,7 @@ describe(".run()/.scope() self sandbox (full isolation)", () => {
 		// Counterpart: confirms the COW view is full-isolation-only.
 		api = await slothlet({ base: DIR, mode: "eager" });
 
-		await api.slothlet.run({}, async () => {
+		await api.slothlet.context.run({}, async () => {
 			await api.owner.writeOutside("persisted");
 		});
 
@@ -94,7 +94,7 @@ describe(".run()/.scope() self sandbox (full isolation)", () => {
 		// ctx.slothlet.boundApi`) and writes to the per-scope overlay rather than the global boundApi.
 		api = await slothlet({ base: DIR, mode: "eager", runtime: "live", scope: { isolation: "full" } });
 
-		await api.slothlet.run({}, async () => {
+		await api.slothlet.context.run({}, async () => {
 			const inside = await api.owner.writeOutside("scoped-live");
 			expect(inside).toBe("scoped-live"); // overlay write visible within the scope
 		});
@@ -109,7 +109,7 @@ describe(".run()/.scope() self sandbox (full isolation)", () => {
 		// apiManager path — the write persists to the live instance.
 		api = await slothlet({ base: DIR, mode: "eager", runtime: "live" });
 
-		await api.slothlet.run({}, async () => {
+		await api.slothlet.context.run({}, async () => {
 			await api.owner.writeOutside("persisted-live");
 		});
 

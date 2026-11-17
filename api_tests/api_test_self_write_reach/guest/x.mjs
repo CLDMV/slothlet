@@ -454,7 +454,7 @@ export function writeAt(apiPath) {
  */
 export function addRuleFor(rule) {
 	try {
-		return self.slothlet.permissions.addRule(rule);
+		return self.slothlet.permissions.rules.add(rule);
 	} catch (error) {
 		return error?.code ?? String(error);
 	}
@@ -481,7 +481,7 @@ export function writeVictimMetadata() {
  */
 export function removeRuleFor(ruleId) {
 	try {
-		return self.slothlet.permissions.removeRule(ruleId);
+		return self.slothlet.permissions.rules.remove(ruleId);
 	} catch (error) {
 		return error?.code ?? String(error);
 	}
@@ -549,7 +549,7 @@ export function addShiftingRule(early, late, effect = "allow", reads = 4) {
 		}
 	};
 	try {
-		return self.slothlet.permissions.addRule(rule);
+		return self.slothlet.permissions.rules.add(rule);
 	} catch (error) {
 		return error?.code ?? String(error);
 	}
@@ -604,7 +604,7 @@ let keptRule = null;
 export function addKeptRule() {
 	keptRule = { caller: "guest.**", target: "guest.**", effect: "allow" };
 	try {
-		return self.slothlet.permissions.addRule(keptRule);
+		return self.slothlet.permissions.rules.add(keptRule);
 	} catch (error) {
 		return error?.code ?? String(error);
 	}
@@ -685,7 +685,7 @@ let keptConditionalRule = null;
 export function addKeptConditionalRule() {
 	keptConditionalRule = { caller: "other.**", target: "guest.**:write", effect: "allow", condition: { tenant: "a" } };
 	try {
-		return self.slothlet.permissions.addRule(keptConditionalRule);
+		return self.slothlet.permissions.rules.add(keptConditionalRule);
 	} catch (error) {
 		return error?.code ?? String(error);
 	}
@@ -740,17 +740,25 @@ export async function addInjected(apiPath, key, options = {}) {
 }
 
 /**
- * Call a module-manager entry point from this module's code.
- * @param {"addModule"|"addModules"|"addDiscovered"} entry - The entry point.
- * @param {*} arg - Its first argument.
- * @param {object} [options] - Its options.
+ * Mount modules found under `scanRoot` from this module's code, through `modules.add`.
+ * @param {"one"|"batch"|"run"} how - Mount one result `discover()` returned (the one of `version` when given), the
+ *   whole list it returned as a batch, or let `modules.add` run the discovery itself.
+ * @param {string} scanRoot - Where to discover.
+ * @param {string} [version] - For `"one"`: the version to mount.
  * @returns {Promise<string>} `"done"`, or the error code it was refused with.
  * @example
- * await mountModule("addDiscovered", { discover: { root: "/abs/modules" } });
+ * await mountModule("run", "/abs/modules");
  */
-export async function mountModule(entry, arg, options = {}) {
+export async function mountModule(how, scanRoot, version) {
 	try {
-		await self.slothlet.api.modules[entry](arg, options);
+		const modules = self.slothlet.api.modules;
+		if (how === "run") {
+			await modules.add({ discover: { root: scanRoot } });
+		} else {
+			const found = await modules.discover({ root: scanRoot });
+			if (how === "batch") await modules.add(found);
+			else await modules.add(version === undefined ? found[0] : found.find((result) => result.manifest.version === version));
+		}
 		return "done";
 	} catch (error) {
 		return error?.code ?? String(error);
@@ -780,8 +788,8 @@ export async function callSetter(what, target, tag) {
 				1
 			);
 		else if (what === "setGlobal") slothlet.metadata.global("planted", 1);
-		else if (what === "setDefault") slothlet.versioning.setDefault(target, tag);
-		else if (what === "setVersionMetadata") slothlet.versioning.setVersionMetadata(target, tag, { planted: 1 });
+		else if (what === "setDefault") slothlet.versioning.default(target, tag);
+		else if (what === "setVersionMetadata") slothlet.versioning.metadata.set(target, tag, { planted: 1 });
 		else await slothlet.api.reload(target);
 		return "done";
 	} catch (error) {
@@ -792,14 +800,14 @@ export async function callSetter(what, target, tag) {
 /**
  * Unmount a module by package name from this module's code.
  * @param {string} name - The package name.
- * @param {object} [opts] - `removeModule` options.
- * @returns {Promise<*>} What `removeModule` returned, or the error code it was refused with.
+ * @param {object} [opts] - `modules.remove` options.
+ * @returns {Promise<*>} What `modules.remove` returned, or the error code it was refused with.
  * @example
  * await removeModuleNamed("good"); // "LOOSE_SET_NOT_OWNED"
  */
 export async function removeModuleNamed(name, opts) {
 	try {
-		return await self.slothlet.api.modules.removeModule(name, opts);
+		return await self.slothlet.api.modules.remove(name, opts);
 	} catch (error) {
 		return error?.code ?? String(error);
 	}
@@ -899,7 +907,7 @@ const conditionWrites = (globalThis[Symbol.for("slothlet.test.i625.conditionWrit
 export function addWritingCondition(target) {
 	const read = (apiPath) => apiPath.split(".").reduce((value, part) => value[part], self);
 	try {
-		return self.slothlet.permissions.addRule({
+		return self.slothlet.permissions.rules.add({
 			caller: "**",
 			target: "guest.**",
 			effect: "allow",
@@ -1068,7 +1076,7 @@ export function addProxyCondition(target, where, kind) {
 	try {
 		return kind === "event"
 			? self.slothlet.event.rules.add({ caller: "**", event: "guest.**", effect: "allow", condition })
-			: self.slothlet.permissions.addRule({ caller: "**", target: "guest.**", effect: "allow", condition });
+			: self.slothlet.permissions.rules.add({ caller: "**", target: "guest.**", effect: "allow", condition });
 	} catch (error) {
 		return error?.code ?? String(error);
 	}
@@ -1094,10 +1102,10 @@ export function changeReadMetadata(metaPath, logicalPath, tag) {
 			metadata.get(metaPath).planted = 1;
 		}),
 		versionMeta: attempt(() => {
-			versioning.getVersionMetadata(logicalPath, tag).version = "hijacked";
+			versioning.metadata.get(logicalPath, tag).version = "hijacked";
 		}),
 		versionNested: attempt(() => {
-			versioning.getVersionMetadata(logicalPath, tag).nested.flag = "hijacked";
+			versioning.metadata.get(logicalPath, tag).nested.flag = "hijacked";
 		}),
 		listParts: attempt(() => {
 			versioning.list(logicalPath).versions[tag].versionedParts.splice(0, 9, "elsewhere");
@@ -1122,7 +1130,7 @@ export function keepWriter(target, locked) {
 		attempt(() => {
 			target.split(".").reduce((value, part) => value[part], self).viaHeld = 1;
 		});
-	return locked ? self.slothlet.lockCaller(write) : write;
+	return locked ? self.slothlet.pin(write) : write;
 }
 
 /**
@@ -1134,7 +1142,7 @@ export function keepWriter(target, locked) {
  * await keepCaller("victim.v.secret")();
  */
 export function keepCaller(target) {
-	return self.slothlet.lockCaller(async () => {
+	return self.slothlet.pin(async () => {
 		try {
 			return await target.split(".").reduce((value, part) => value[part], self)();
 		} catch (error) {
@@ -1203,7 +1211,7 @@ export function registerCallbacks(pattern, event) {
  * keepRegistering("victim.v.secret:after", "victim.news")();
  */
 export function keepRegistering(pattern, event) {
-	return self.slothlet.lockCaller(() => registerCallbacks(pattern, event));
+	return self.slothlet.pin(() => registerCallbacks(pattern, event));
 }
 
 /**

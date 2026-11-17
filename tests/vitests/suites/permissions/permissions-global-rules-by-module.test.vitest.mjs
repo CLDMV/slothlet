@@ -19,7 +19,7 @@ import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
 const BASE = TEST_DIRS.API_TEST_PERMISSIONS;
 
-describe.each(getMatrixConfigs())("Permissions > global.rulesByModule > $name", ({ config }) => {
+describe.each(getMatrixConfigs())("Permissions > global.rules.module > $name", ({ config }) => {
 	let api;
 
 	afterEach(async () => {
@@ -42,7 +42,7 @@ describe.each(getMatrixConfigs())("Permissions > global.rulesByModule > $name", 
 			}
 		});
 
-		const rules = api.slothlet.permissions.global.rulesByModule(moduleID);
+		const rules = api.slothlet.permissions.global.rules.module(moduleID);
 		expect(rules.length).toBeGreaterThanOrEqual(2);
 		expect(rules.every((r) => r.ownerModuleID === moduleID)).toBe(true);
 	});

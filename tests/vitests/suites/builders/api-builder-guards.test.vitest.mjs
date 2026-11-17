@@ -26,7 +26,7 @@
  *   line  976                      – lifecycle namespace noop stub (null handler IIFE)
  *   line  1051                     – diag.owner.get returns null when ownership absent
  *   lines 1077,1088,1100           – diag.caches.get/getAllModuleIDs/has fallbacks when apiCacheManager absent
- *   line  1135                     – diag.hook.compilePattern executes
+ *   line  1135                     – diag.hook.compile executes
  *   line  1165                     – userHooks.shutdown callback called on api.shutdown()
  *   lines 1427,1447-1450           – userHooks.destroy callback + destroy clear loop via api.destroy()
  *   line  487                      – context.get falls back to slothlet.context for unknown manager type
@@ -185,15 +185,15 @@ describe("api_builder – hook methods throw HOOKS_NOT_INITIALIZED when hookMana
 		}
 	});
 
-	it("hook.{enablePattern,disablePattern,resetPatternFilter} throw HOOKS_NOT_INITIALIZED when hookManager is null", async () => {
+	it("hook.{pattern.enable,pattern.disable,pattern.reset} throw HOOKS_NOT_INITIALIZED when hookManager is null", async () => {
 		api = await makeApi();
 		const sl = getSlothlet(api);
 		const orig = sl.handlers.hookManager;
 		sl.handlers.hookManager = null;
 		try {
-			expect(() => api.slothlet.hook.enablePattern("math.*")).toThrow(/HOOKS_NOT_INITIALIZED/);
-			expect(() => api.slothlet.hook.disablePattern("math.*")).toThrow(/HOOKS_NOT_INITIALIZED/);
-			expect(() => api.slothlet.hook.resetPatternFilter()).toThrow(/HOOKS_NOT_INITIALIZED/);
+			expect(() => api.slothlet.hook.pattern.enable("math.*")).toThrow(/HOOKS_NOT_INITIALIZED/);
+			expect(() => api.slothlet.hook.pattern.disable("math.*")).toThrow(/HOOKS_NOT_INITIALIZED/);
+			expect(() => api.slothlet.hook.pattern.reset()).toThrow(/HOOKS_NOT_INITIALIZED/);
 		} finally {
 			sl.handlers.hookManager = orig;
 		}
@@ -343,7 +343,7 @@ describe("api_builder – materialize and lifecycle fallback stubs when handlers
 		try {
 			const ns = await builder.createSlothletNamespace({});
 			// Stub has materialized: false and a get() returning zeros
-			expect(ns.materialize.materialized).toBe(false);
+			expect(ns.materialize.complete).toBe(false);
 			const stats = ns.materialize.get();
 			expect(stats).toMatchObject({ total: 0, materialized: 0, remaining: 0, percentage: 100 });
 		} finally {
@@ -409,13 +409,13 @@ describe("api_builder – diagnostics namespace fallbacks when handlers absent",
 		}
 	});
 
-	it("diag.caches.getAllModuleIDs returns empty array when apiCacheManager is null (line 1088)", async () => {
+	it("diag.caches.ids returns empty array when apiCacheManager is null (line 1088)", async () => {
 		api = await makeApiWithDiag();
 		const sl = getSlothlet(api);
 		const origCache = sl.handlers.apiCacheManager;
 		sl.handlers.apiCacheManager = null;
 		try {
-			const result = api.slothlet.diag.caches.getAllModuleIDs();
+			const result = api.slothlet.diag.caches.ids();
 			expect(result).toEqual([]);
 		} finally {
 			sl.handlers.apiCacheManager = origCache;
@@ -435,13 +435,13 @@ describe("api_builder – diagnostics namespace fallbacks when handlers absent",
 		}
 	});
 
-	it("diag.hook.compilePattern executes via hookManager diagnostic method (line 1135)", async () => {
+	it("diag.hook.compile executes via hookManager diagnostic method (line 1135)", async () => {
 		api = await makeApiWithDiag();
 		// With hooks enabled, diag.hook is present and compilePattern calls
 		// slothlet.handlers.hookManager.getCompilePatternForDiagnostics()(pattern)
 		expect(api.slothlet.diag.hook).toBeDefined();
-		expect(typeof api.slothlet.diag.hook.compilePattern).toBe("function");
-		const result = api.slothlet.diag.hook.compilePattern("before:*");
+		expect(typeof api.slothlet.diag.hook.compile).toBe("function");
+		const result = api.slothlet.diag.hook.compile("before:*");
 		// Returns a compiled RegExp or pattern — just verify it did not throw
 		expect(result).toBeDefined();
 	});
@@ -518,7 +518,7 @@ describe("api_builder – context.get and scope() fallback paths for edge-case m
 		const orig = sl.contextManager;
 		sl.contextManager = null;
 		try {
-			await expect(api.slothlet.scope({ context: { x: 1 }, fn: () => {} })).rejects.toThrow(/NO_CONTEXT_MANAGER/);
+			await expect(api.slothlet.context.scope({ context: { x: 1 }, fn: () => {} })).rejects.toThrow(/NO_CONTEXT_MANAGER/);
 		} finally {
 			sl.contextManager = orig;
 		}
@@ -535,7 +535,7 @@ describe("api_builder – context.get and scope() fallback paths for edge-case m
 			instances: new Map()
 		};
 		try {
-			await expect(api.slothlet.scope({ context: { x: 1 }, fn: () => {} })).rejects.toThrow(/CONTEXT_NOT_FOUND/);
+			await expect(api.slothlet.context.scope({ context: { x: 1 }, fn: () => {} })).rejects.toThrow(/CONTEXT_NOT_FOUND/);
 		} finally {
 			sl.contextManager = orig;
 		}
@@ -552,7 +552,7 @@ describe("api_builder – context.get and scope() fallback paths for edge-case m
 			instances: new Map()
 		};
 		try {
-			await expect(api.slothlet.scope({ context: { x: 1 }, fn: () => {} })).rejects.toThrow(/CONTEXT_NOT_FOUND/);
+			await expect(api.slothlet.context.scope({ context: { x: 1 }, fn: () => {} })).rejects.toThrow(/CONTEXT_NOT_FOUND/);
 		} finally {
 			sl.contextManager = orig;
 		}
@@ -568,7 +568,7 @@ describe("api_builder – context.get and scope() fallback paths for edge-case m
 			instances: new Map()
 		};
 		try {
-			await expect(api.slothlet.scope({ context: { x: 1 }, fn: () => {} })).rejects.toThrow(/UNSUPPORTED_CONTEXT_MANAGER/);
+			await expect(api.slothlet.context.scope({ context: { x: 1 }, fn: () => {} })).rejects.toThrow(/UNSUPPORTED_CONTEXT_MANAGER/);
 		} finally {
 			sl.contextManager = orig;
 		}

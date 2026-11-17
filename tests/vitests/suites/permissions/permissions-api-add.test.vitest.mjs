@@ -45,13 +45,13 @@ describe.each(getMatrixConfigs())("Permissions > api.add > $name", ({ config }) 
 		});
 
 		// Verify deny rule was created with caller = extra.**
-		const denyRules = api.slothlet.permissions.global.rulesForPath("admin.manage.createUser");
+		const denyRules = api.slothlet.permissions.global.rules.path("admin.manage.createUser");
 		const denyRule = denyRules.find((r) => r.caller === "extra.**" && r.effect === "deny");
 		expect(denyRule).toBeDefined();
 		expect(denyRule.target).toBe("admin.**");
 
 		// Verify allow rule was created with caller = extra.**
-		const allowRules = api.slothlet.permissions.global.rulesForPath("db.read.query");
+		const allowRules = api.slothlet.permissions.global.rules.path("db.read.query");
 		const allowRule = allowRules.find((r) => r.caller === "extra.**" && r.effect === "allow");
 		expect(allowRule).toBeDefined();
 		expect(allowRule.target).toBe("db.read.**");

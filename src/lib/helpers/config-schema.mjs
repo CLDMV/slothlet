@@ -125,22 +125,21 @@ export const METHOD_OPTION_SCHEMAS = deepFreeze({
 		metadata: OPEN,
 		permissions: { allow: true, deny: true },
 		replay: true,
-		scanHiddenFolders: true,
 		version: { default: true, metadata: OPEN, tag: true }
 	},
 	"slothlet.api.leaves": { details: true, private: true },
 	"slothlet.api.reload": { metadata: OPEN },
 	"slothlet.api.modules.discover": DISCOVER_SCHEMA,
-	"slothlet.api.modules.addModule": { collision: { mode: true }, discover: DISCOVER_SCHEMA, version: true },
-	"slothlet.api.modules.addModules": { collision: { mode: true }, concurrency: true, failure: true },
-	"slothlet.api.modules.addDiscovered": {
+	"slothlet.api.modules.add.one": { collision: { mode: true }, discover: DISCOVER_SCHEMA, version: true },
+	"slothlet.api.modules.add.batch": { collision: { mode: true }, concurrency: true, failure: true },
+	"slothlet.api.modules.add.run": {
 		collision: { mode: true },
 		concurrency: true,
 		discover: DISCOVER_SCHEMA,
 		failure: true,
 		sort: true
 	},
-	"slothlet.api.modules.removeModule": { version: true },
+	"slothlet.api.modules.remove": { version: true },
 	"slothlet.context.scope": { args: true, context: OPEN, fn: true, isolation: true, merge: true, owners: OPEN, protect: true },
 	"slothlet.event.on": { key: true, once: true },
 	"slothlet.hook.filter": { enabled: true, id: true, pattern: true, type: true },

@@ -200,7 +200,7 @@ describe.each(PLATFORMS)("Live runtime > a host-registered callback runs as the 
 		const api = await create(ROOT, MANIFEST);
 		const second = await create(SECOND, SECOND_MANIFEST);
 		const settle = await suspendPane(api);
-		const pinnedOnSecond = second.slothlet.lockCaller.caller(body(api));
+		const pinnedOnSecond = second.slothlet.pin.caller(body(api));
 		expect(await pinnedOnSecond()).toBe(null);
 		await settle();
 	});

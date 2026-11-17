@@ -21,7 +21,7 @@
  * verifies that the three runtime mutation surfaces — `api.slothlet.api.remove`,
  * `api.slothlet.api.reload` (path-scoped), and `api.slothlet.reload` (full-instance) —
  * behave correctly (or predictably fail) under browser mode (i.e. when `manifest` is
- * provided), and investigates `api.slothlet.api.modules.addModule(s)` reachability.
+ * provided), and investigates `api.slothlet.api.modules.add(s)` reachability.
  *
  * Covers (all under browser mode, via the full matrix):
  * - `api.slothlet.api.remove(path)` returns `true` after mounting a manifest subdirectory
@@ -33,10 +33,10 @@
  * - `api.slothlet.api.reload(path)` re-loads an `api.add`-mounted subdirectory; leaves
  *   remain callable and return correct values after reload
  * - `api.slothlet.reload()` (full-instance) re-composes the api in browser mode, both with a fresh
- *   instanceID and with `keepInstanceID: true` (regression for #91: the normalized config stores
+ *   instanceID and with `instance: "keep"` (regression for #91: the normalized config stores
  *   `resolveModuleSpecifier: null`, which transformConfig's browser guard now treats like
  *   `undefined` instead of rejecting)
- * - `api.slothlet.api.modules.addModule(s)` — FINDING: node-only in practice; `discover()`
+ * - `api.slothlet.api.modules.add(s)` — FINDING: node-only in practice; `discover()`
  *   calls `discoverModules()` which uses `node:fs/promises` behind `platform.mjs`. In a real
  *   browser where `fsp === null` this throws a TypeError. Node-side browser-mode simulations
  *   happen to reach the filesystem because `isNode` is `true` in all vitest runs.
@@ -254,11 +254,11 @@ describe.each(getBrowserMatrixConfigs())("Browser Mode > api.slothlet.reload (fu
 	});
 });
 
-// ─── 3. api.slothlet.api.modules.addModule(s) — investigation ────────────────
+// ─── 3. api.slothlet.api.modules.add(s) — investigation ────────────────
 //
-// FINDING: `addModule(s)` is NODE-ONLY in practice. The call chain is:
+// FINDING: `modules.add(s)` is NODE-ONLY in practice. The call chain is:
 //
-//   addModule(nameOrResult)
+//   modules.add(nameOrResult)
 //   → #resolveToDiscoverResult() [if cache empty, calls this.discover()]
 //   → discover() → dynamic import("#helpers/module-discovery")
 //   → discoverModules() → fsp.stat(scanRoot) via platform.mjs
@@ -268,14 +268,14 @@ describe.each(getBrowserMatrixConfigs())("Browser Mode > api.slothlet.reload (fu
 // This TypeError is the only guard — there is no SlothletError with a helpful code.
 //
 // In this Node-side test environment `isNode = true` even when `manifest` is provided,
-// so the filesystem path is reachable. Passing a DiscoverResult directly to `addModule`
+// so the filesystem path is reachable. Passing a DiscoverResult directly to `modules.add`
 // also reaches `addApiComponent` which ultimately calls `scanDirectory`, which in browser
 // mode uses `#scanDirectoryBrowser`. That path works because it reads from the manifest
 // in memory rather than the filesystem. So passing a pre-built DiscoverResult object to
-// `addModule` would theoretically mount in browser mode, but there is no way to produce
+// `modules.add` would theoretically mount in browser mode, but there is no way to produce
 // a valid DiscoverResult without first calling `discover()` (which is filesystem-bound).
 //
-// Read-only methods (getDiscoveryCache, clearDiscoveryCache, getStaleMounts, sort) do
+// Read-only methods (cache.get, cache.clear, stale, sort) do
 // not touch the filesystem and work correctly in all modes.
 
 describe("Browser Mode > api.slothlet.api.modules — investigation", () => {
@@ -292,10 +292,9 @@ describe("Browser Mode > api.slothlet.api.modules — investigation", () => {
 
 		const mm = api.slothlet.api.modules;
 		expect(mm).toBeDefined();
-		expect(typeof mm.addModule).toBe("function");
-		expect(typeof mm.addModules).toBe("function");
+		expect(typeof mm.add).toBe("function");
 		expect(typeof mm.discover).toBe("function");
-		expect(typeof mm.removeModule).toBe("function");
+		expect(typeof mm.remove).toBe("function");
 		expect(typeof mm.sort).toBe("function");
 	});
 
@@ -306,14 +305,14 @@ describe("Browser Mode > api.slothlet.api.modules — investigation", () => {
 		const mm = api.slothlet.api.modules;
 
 		// All read-only accessors must work without touching the filesystem
-		const cache = mm.getDiscoveryCache();
+		const cache = mm.cache.get();
 		expect(Array.isArray(cache)).toBe(true);
 		expect(cache.length).toBe(0); // empty until discover() is called
 
-		mm.clearDiscoveryCache();
-		expect(mm.getDiscoveryCache().length).toBe(0);
+		mm.cache.clear();
+		expect(mm.cache.get().length).toBe(0);
 
-		const stale = mm.getStaleMounts();
+		const stale = mm.stale();
 		expect(Array.isArray(stale)).toBe(true);
 		expect(stale.length).toBe(0);
 	});
@@ -323,8 +322,8 @@ describe("Browser Mode > api.slothlet.api.modules — investigation", () => {
 		api = await slothlet(browserCfg(matrixConfig));
 
 		const mm = api.slothlet.api.modules;
-		expect(Array.isArray(mm.getDiscoveryCache())).toBe(true);
-		expect(Array.isArray(mm.getStaleMounts())).toBe(true);
+		expect(Array.isArray(mm.cache.get())).toBe(true);
+		expect(Array.isArray(mm.stale())).toBe(true);
 		expect(Array.isArray(mm.sort([]))).toBe(true);
 	});
 });

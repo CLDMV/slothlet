@@ -27,7 +27,7 @@ import { makeContext as baseContext } from "./context.mjs";
 export function makeContext(api) {
 	const base = baseContext(api);
 	return {
-		pin: (fn) => typeof api.slothlet.lockCaller(fn),
+		pin: (fn) => typeof api.slothlet.pin(fn),
 		meta: () => api.slothlet.metadata.caller()?.path?.join(".") ?? null,
 		emit: () => {
 			api.slothlet.event.emit("host:ping", { n: 1 });

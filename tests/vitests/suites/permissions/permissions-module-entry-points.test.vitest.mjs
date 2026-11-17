@@ -17,16 +17,16 @@
  * @fileoverview Every way module code writes into the api is held to the write permissions (#625).
  *
  * A manifest's rules apply as declared when the host mounts its module; when module code mounts it, they are that
- * module's rules and placed like `addRule`'s, so a rule beyond the caller's subtree refuses the whole mount. An
+ * module's rules and placed like `rules.add`'s, so a rule beyond the caller's subtree refuses the whole mount. An
  * `api.add` from module code writes at every path its content creates or merges into, whatever the collision mode,
  * all checked before anything changes; in lazy mode its content is loaded for the check. A path with surrounding
  * whitespace is checked as the path it mounts. The framework's metadata, versioning, and reload setters, called by
  * module code on another module's paths, are writes there. `metadata.global` is the host's while the permission
- * system is on, unless an allow lifts it. `api.modules.removeModule` from module code removes every matching mount or
+ * system is on, unless an allow lifts it. `api.modules.remove` from module code removes every matching mount or
  * none. A refused `api.add` leaves no ownership entries behind. The host is unchanged throughout.
  *
  * Fixture: `api_tests/api_test_self_write_reach` — `base/`, `victim/`, `guest/` (also mounted as `atk`, `other`),
- * `holder/`, and the manifest modules `modules/evilgrant`, `modules/goodgrant` and `modules/goodgrant-v2`.
+ * `holder/`, and the manifest modules `modules/evilgrant`, `modules/goodgrant` and `modules/goodversions`.
  */
 import { describe, it, expect, afterEach } from "vitest";
 import path from "node:path";
@@ -45,7 +45,7 @@ const VICTIM = path.join(FIXTURE, "victim");
 const HOLDER = path.join(FIXTURE, "holder");
 const EVIL = path.join(FIXTURE, "modules", "evilgrant");
 const GOOD = path.join(FIXTURE, "modules", "goodgrant");
-const GOOD_V2 = path.join(FIXTURE, "modules", "goodgrant-v2");
+const GOOD_VERSIONS = path.join(FIXTURE, "modules", "goodversions");
 
 const CONFIGS = [
 	{ mode: "eager", runtime: "async" },
@@ -84,20 +84,13 @@ describe.each(CONFIGS)("module-code entry points (#625) — $mode / $runtime", (
 	}
 
 	describe("mounting a module with a manifest", () => {
-		/**
-		 * The evilgrant module's discover result, as the host's `discover()` returns it.
-		 * @returns {Promise<object>} The discover result.
-		 */
-		const evilResult = async () => (await api.slothlet.api.modules.discover({ root: EVIL }))[0];
-
 		it.each([
-			["addModule", () => evilResult()],
-			["addModules", async () => [await evilResult()]],
-			["addDiscovered", () => ({ discover: { root: EVIL } })]
-		])("refuses module code mounting one whose rules reach beyond its subtree through %s, and mounts nothing", async (entry, arg) => {
+			["one discover result", "one"],
+			["a batch", "batch"],
+			["a discover run", "run"]
+		])("refuses module code mounting one whose rules reach beyond its subtree through %s, and mounts nothing", async (_label, how) => {
 			await load();
-			const target = await arg();
-			expect(await withSuppressedSlothletErrorOutput(() => api.guest.x.mountModule(entry, target))).toBe("INVALID_PERMISSION_RULE");
+			expect(await withSuppressedSlothletErrorOutput(() => api.guest.x.mountModule(how, EVIL))).toBe("INVALID_PERMISSION_RULE");
 			expect(api.guest.sub).toBeUndefined();
 			const refused = withSuppressedSlothletErrorOutputSync(() => api.guest.x.writeAt("victim.v"));
 			expect(refused).toEqual(every(refused, "LOOSE_SET_NOT_OWNED"));
@@ -108,7 +101,7 @@ describe.each(CONFIGS)("module-code entry points (#625) — $mode / $runtime", (
 
 		it("lets module code mount one whose rules stay in its subtree", async () => {
 			await load(PERMISSIONS_ON);
-			expect(await api.guest.x.mountModule("addDiscovered", { discover: { root: GOOD } })).toBe("done");
+			expect(await api.guest.x.mountModule("run", GOOD)).toBe("done");
 			expect(api.guest.good.info.name()).toBe("info");
 			const granted = await api.other.x.writeAt("guest.x");
 			expect(granted).toEqual(every(granted, "done"));
@@ -116,7 +109,7 @@ describe.each(CONFIGS)("module-code entry points (#625) — $mode / $runtime", (
 
 		it("applies a manifest the host mounts as declared", async () => {
 			await load(PERMISSIONS_ON);
-			await api.slothlet.api.modules.addDiscovered({ discover: { root: EVIL } });
+			await api.slothlet.api.modules.add({ discover: { root: EVIL } });
 			const granted = await api.guest.x.writeAt("victim.v");
 			expect(granted).toEqual(every(granted, "done"));
 		});
@@ -234,14 +227,14 @@ describe.each(CONFIGS)("module-code entry points (#625) — $mode / $runtime", (
 		});
 
 		it.each([
-			["versioning.setDefault", "setDefault"],
-			["versioning.setVersionMetadata", "setVersionMetadata"],
+			["versioning.default", "setDefault"],
+			["versioning.metadata.set", "setVersionMetadata"],
 			["metadata.setForVersion", "setForVersion"]
 		])("refuses module code calling %s on another module's versions", async (_label, what) => {
 			await versioned();
 			expect(await withSuppressedSlothletErrorOutput(() => api.guest.x.callSetter(what, "vlib", "v2"))).toBe("LOOSE_SET_NOT_OWNED");
 			expect(api.slothlet.versioning.list("vlib").default).toBe("v1");
-			expect(api.slothlet.versioning.getVersionMetadata("vlib", "v2")?.planted).toBeUndefined();
+			expect(api.slothlet.versioning.metadata.get("vlib", "v2")?.planted).toBeUndefined();
 			expect(api.slothlet.metadata.get("vlib", { version: "v2" })?.planted).toBeUndefined();
 		});
 
@@ -252,7 +245,7 @@ describe.each(CONFIGS)("module-code entry points (#625) — $mode / $runtime", (
 			expect(await api.guest.x.callSetter("reload", "guest")).toBe("done");
 			api.slothlet.metadata.set("victim.v", "hostSet", 1);
 			expect(api.slothlet.metadata.get("victim.v").hostSet).toBe(1);
-			api.slothlet.versioning.setDefault("vlib", "v2");
+			api.slothlet.versioning.default("vlib", "v2");
 			expect(api.slothlet.versioning.list("vlib").default).toBe("v2");
 		});
 	});
@@ -281,18 +274,16 @@ describe.each(CONFIGS)("module-code entry points (#625) — $mode / $runtime", (
 		});
 	});
 
-	describe("api.modules.removeModule", () => {
+	describe("api.modules.remove", () => {
 		/**
-		 * Load, have the guest mount `@local/goodgrant@0.1.0` under its own path, and the host mount
-		 * `@local/goodgrant@0.2.0` at `victim.good`, each from a result the host's `discover()` returned.
+		 * Load, have the guest mount `good@1.0.0` under its own path, and the host mount `good@2.0.0` at `victim.good`.
 		 * @returns {Promise<object>} The composed api.
 		 */
 		async function mounted() {
 			await load();
-			const [own] = await api.slothlet.api.modules.discover({ root: GOOD });
-			expect(await api.guest.x.mountModule("addModule", own)).toBe("done");
-			const [hosts] = await api.slothlet.api.modules.discover({ root: GOOD_V2 });
-			await api.slothlet.api.modules.addModule(hosts);
+			expect(await api.guest.x.mountModule("one", GOOD_VERSIONS, "1.0.0")).toBe("done");
+			const found = await api.slothlet.api.modules.discover({ root: GOOD_VERSIONS });
+			await api.slothlet.api.modules.add(found.find((result) => result.manifest.version === "2.0.0"));
 			return api;
 		}
 
@@ -315,11 +306,11 @@ describe.each(CONFIGS)("module-code entry points (#625) — $mode / $runtime", (
 		it("leaves no ownership entries behind", async () => {
 			await load({ ...OVERRIDE, diagnostics: true });
 			await api.slothlet.api.add("atk.kid", GUEST, { id: "hostkid" });
-			const before = api.slothlet.diag.getOwnership();
+			const before = api.slothlet.diag.owner.list();
 			expect(
 				await withSuppressedSlothletErrorOutput(() => api.atk.x.addAt("atk", HOLDER, { id: "atkpay", collision: { mode: "merge" } }))
 			).toBe("LOOSE_SET_NOT_OWNED");
-			const after = api.slothlet.diag.getOwnership();
+			const after = api.slothlet.diag.owner.list();
 			expect(after.modules.map((entry) => entry.moduleID)).not.toContain("atkpay");
 			expect(after.totalPaths).toBe(before.totalPaths);
 			for (const apiPath of ["atk.deep", "atk.deep.inner", "atk.deep.inner.leaf", "atk.kid.note"]) {

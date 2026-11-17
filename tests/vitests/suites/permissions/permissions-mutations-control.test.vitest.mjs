@@ -27,7 +27,7 @@ describe.each(getMatrixConfigs())("Permissions > mutations control > $name", ({ 
 		api = null;
 	});
 
-	it("should disable permissions.addRule when config.api.mutations.permissions is false", async () => {
+	it("should disable permissions.rules.add when config.api.mutations.permissions is false", async () => {
 		api = await slothlet({
 			...config,
 			base: BASE,
@@ -44,16 +44,16 @@ describe.each(getMatrixConfigs())("Permissions > mutations control > $name", ({ 
 		// Should throw INVALID_CONFIG_MUTATIONS_DISABLED when trying to add a rule
 		await withSuppressedSlothletErrorOutput(async () => {
 			try {
-				api.slothlet.permissions.addRule({ caller: "untrusted.**", target: "**", effect: "deny" });
+				api.slothlet.permissions.rules.add({ caller: "untrusted.**", target: "**", effect: "deny" });
 				expect.unreachable("Should have thrown INVALID_CONFIG_MUTATIONS_DISABLED");
 			} catch (error) {
 				expect(error.message).toContain("INVALID_CONFIG_MUTATIONS_DISABLED");
-				expect(error.context?.operation).toBe("api.slothlet.permissions.addRule");
+				expect(error.context?.operation).toEqual(["slothlet", "permissions", "rules", "add"]);
 			}
 		});
 	});
 
-	it("should allow permissions.addRule when config.api.mutations.permissions is true", async () => {
+	it("should allow permissions.rules.add when config.api.mutations.permissions is true", async () => {
 		api = await slothlet({
 			...config,
 			base: BASE,
@@ -68,11 +68,11 @@ describe.each(getMatrixConfigs())("Permissions > mutations control > $name", ({ 
 		});
 
 		// Should work normally when permissions mutations are enabled
-		const ruleId = api.slothlet.permissions.addRule({ caller: "untrusted.**", target: "**", effect: "deny" });
+		const ruleId = api.slothlet.permissions.rules.add({ caller: "untrusted.**", target: "**", effect: "deny" });
 		expect(ruleId).toBeTypeOf("string");
 	});
 
-	it("should allow permissions.addRule by default (permissions mutations enabled)", async () => {
+	it("should allow permissions.rules.add by default (permissions mutations enabled)", async () => {
 		api = await slothlet({
 			...config,
 			base: BASE,
@@ -82,11 +82,11 @@ describe.each(getMatrixConfigs())("Permissions > mutations control > $name", ({ 
 		});
 
 		// Should work normally by default
-		const ruleId = api.slothlet.permissions.addRule({ caller: "untrusted.**", target: "**", effect: "deny" });
+		const ruleId = api.slothlet.permissions.rules.add({ caller: "untrusted.**", target: "**", effect: "deny" });
 		expect(ruleId).toBeTypeOf("string");
 	});
 
-	it("should throw INVALID_CONFIG_MUTATIONS_DISABLED when removeRule is called and mutations.permissions is false", async () => {
+	it("should throw INVALID_CONFIG_MUTATIONS_DISABLED when rules.remove is called and mutations.permissions is false", async () => {
 		api = await slothlet({
 			...config,
 			base: BASE,
@@ -102,11 +102,11 @@ describe.each(getMatrixConfigs())("Permissions > mutations control > $name", ({ 
 
 		await withSuppressedSlothletErrorOutput(async () => {
 			try {
-				api.slothlet.permissions.removeRule("any-rule-id");
+				api.slothlet.permissions.rules.remove("any-rule-id");
 				expect.unreachable("Should have thrown INVALID_CONFIG_MUTATIONS_DISABLED");
 			} catch (error) {
 				expect(error.message).toContain("INVALID_CONFIG_MUTATIONS_DISABLED");
-				expect(error.context?.operation).toBe("api.slothlet.permissions.removeRule");
+				expect(error.context?.operation).toEqual(["slothlet", "permissions", "rules", "remove"]);
 			}
 		});
 	});

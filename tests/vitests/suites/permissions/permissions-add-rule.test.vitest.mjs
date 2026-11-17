@@ -27,7 +27,7 @@ describe.each(getMatrixConfigs())("Permissions > addRule > $name", ({ config }) 
 		api = null;
 	});
 
-	it("programmatic addRule adds a rule enforced immediately", async () => {
+	it("programmatic rules.add adds a rule enforced immediately", async () => {
 		api = await slothlet({
 			...config,
 			base: BASE,
@@ -41,7 +41,7 @@ describe.each(getMatrixConfigs())("Permissions > addRule > $name", ({ config }) 
 		expect(result.ok).toBe(true);
 
 		// Add deny rule
-		const ruleId = api.slothlet.permissions.addRule({ caller: "callers.**", target: "payments.**", effect: "deny" });
+		const ruleId = api.slothlet.permissions.rules.add({ caller: "callers.**", target: "payments.**", effect: "deny" });
 		expect(ruleId).toBeTypeOf("string");
 
 		// Should be denied after rule

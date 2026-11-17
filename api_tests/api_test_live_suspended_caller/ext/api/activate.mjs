@@ -45,9 +45,9 @@ export function activate(scenario, gate) {
  */
 async function registerThenSettle(scenario) {
 	if (scenario === "pinned") {
-		self.registry.register(self.slothlet.lockCaller(() => attempt(() => self.ext.views.running.render("pinned"))));
+		self.registry.register(self.slothlet.pin(() => attempt(() => self.ext.views.running.render("pinned"))));
 		self.registry.register(
-			self.slothlet.lockCaller(() =>
+			self.slothlet.pin(() =>
 				attempt(
 					() => self.ext.usage.cache.context.subscribe(() => {}),
 					() => "subscribed"

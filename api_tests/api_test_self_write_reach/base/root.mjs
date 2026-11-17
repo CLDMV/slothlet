@@ -110,7 +110,7 @@ export function writeNamespace() {
  */
 export function grantByRule() {
 	return attempt(() => {
-		self.slothlet.permissions.addRule({ caller: "**", target: "slothlet.**:write", effect: "allow" });
+		self.slothlet.permissions.rules.add({ caller: "**", target: "slothlet.**:write", effect: "allow" });
 	});
 }
 
@@ -160,13 +160,13 @@ export function changeScopedSelf() {
 export function addOtherRules() {
 	return {
 		deny: attempt(() => {
-			self.slothlet.permissions.addRule({ caller: "**", target: "victim.**:write", effect: "deny" });
+			self.slothlet.permissions.rules.add({ caller: "**", target: "victim.**:write", effect: "deny" });
 		}),
 		call: attempt(() => {
-			self.slothlet.permissions.addRule({ caller: "**", target: "victim.**", effect: "allow" });
+			self.slothlet.permissions.rules.add({ caller: "**", target: "victim.**", effect: "allow" });
 		}),
 		malformed: attempt(() => {
-			self.slothlet.permissions.addRule({ caller: "**", effect: "allow" });
+			self.slothlet.permissions.rules.add({ caller: "**", effect: "allow" });
 		})
 	};
 }

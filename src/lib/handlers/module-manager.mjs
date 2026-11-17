@@ -190,9 +190,9 @@ export class ModuleManager extends ComponentBase {
 	async discover(options = {}) {
 		assertOptionKeys(options, "slothlet.api.modules.discover");
 		// Discovery walks the filesystem for module packages, which a browser does not have: refuse it by name
-		// rather than fail on a missing Node builtin (#817). addDiscovered() and addModule(name) run it too.
+		// rather than fail on a missing Node builtin (#817). modules.add() with no target and modules.add(name) run it too.
 		if (this.slothlet.envTarget === "browser") {
-			throw new SlothletError("MODULE_DISCOVERY_REQUIRES_NODE", { operation: "api.slothlet.api.modules.discover()" }, null, {
+			throw new SlothletError("MODULE_DISCOVERY_REQUIRES_NODE", { operation: ["slothlet", "api", "modules", "discover"] }, null, {
 				validationError: true
 			});
 		}
@@ -216,6 +216,17 @@ export class ModuleManager extends ComponentBase {
 			stale: this.getStaleMounts()
 		});
 		return found;
+	}
+
+	/**
+	 * Whether `value` is a discover result this instance's `discover()` returned. `modules.add()` takes one of these
+	 * back as a module to mount and reads any other object as options: a result is told apart by where it came from,
+	 * never by its shape.
+	 * @param {unknown} value - Any value.
+	 * @returns {boolean} True for a result this instance's discovery produced.
+	 */
+	issued(value) {
+		return value !== null && typeof value === "object" && WeakSetMethods.has(this.#issued, value);
 	}
 
 	/**
@@ -279,7 +290,7 @@ export class ModuleManager extends ComponentBase {
 	 * @throws {SlothletError} `MODULE_MOUNT_COLLISION` when the exact mountPath is already occupied and `collisionMode` is `"error"`.
 	 */
 	async addModule(nameOrResult, options = {}, writer = runtime_selfModuleReader(this.slothlet)) {
-		assertOptionKeys(options, "slothlet.api.modules.addModule");
+		assertOptionKeys(options, "slothlet.api.modules.add.one", "slothlet.api.modules.add");
 		const collisionMode = collisionModeOf(options);
 		const discoverResult = await this.#resolveToDiscoverResult(nameOrResult, options);
 		await this.#emit("modules:mount-start", { items: [nameOrResult], options });
@@ -318,7 +329,7 @@ export class ModuleManager extends ComponentBase {
 				{ validationError: true }
 			);
 		}
-		assertOptionKeys(options, "slothlet.api.modules.addModules");
+		assertOptionKeys(options, "slothlet.api.modules.add.batch", "slothlet.api.modules.add");
 		const onFailure = options.failure ?? "throw";
 		const concurrency = Math.max(1, Number(options.concurrency) || 1);
 		const collisionMode = collisionModeOf(options);
@@ -391,7 +402,7 @@ export class ModuleManager extends ComponentBase {
 	 *   none.
 	 */
 	async removeModule(name, opts = {}, writer = runtime_selfModuleReader(this.slothlet)) {
-		assertOptionKeys(opts, "slothlet.api.modules.removeModule");
+		assertOptionKeys(opts, "slothlet.api.modules.remove");
 		const matches = [];
 		for (const ofEntry of mapEntries(this.#mounted)) {
 			const key = ofEntry[0],
@@ -462,7 +473,7 @@ export class ModuleManager extends ComponentBase {
 				"MODULE_PACKAGE_NOT_FOUND",
 				{
 					package: arg,
-					hint: "addModule(name) requires the package to be installed under one of the scanned roots. Run discover() first, or pass a result discover() returned."
+					hint: "modules.add(name) needs the package installed under one of the scanned roots. Run discover() first, or pass a result discover() returned."
 				},
 				null,
 				{ validationError: true }
@@ -545,6 +556,11 @@ export class ModuleManager extends ComponentBase {
 			: [];
 		const rulePlacements = mapList(manifestRules, (rule) => permissionManager.placeModuleRule(rule, writer));
 		const eventPlacements = mapList(manifestEvents, (rule) => permissionManager.placeModuleRule({ target: rule?.event }, writer));
+
+		// Every rule is checked as registering it will, before the module is mounted, so a refused one leaves nothing
+		// mounted behind (#872).
+		ArrayMethods.forEach(manifestRules, (rule) => permissionManager.assertRuleValid(rule));
+		ArrayMethods.forEach(manifestEvents, (rule) => permissionManager.assertEventRuleValid(rule));
 
 		const moduleID = await this.slothlet.handlers.apiManager.addApiComponent({
 			apiPath: mountPathDotted,

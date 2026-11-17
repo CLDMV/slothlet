@@ -42,7 +42,7 @@ const CONFIGS = [
 	{ mode: "lazy", runtime: "live" }
 ];
 
-const DELEGATE = { caller: "mgr.**", target: "slothlet.permissions.addRule", effect: "allow" };
+const DELEGATE = { caller: "mgr.**", target: "slothlet.permissions.rules.add", effect: "allow" };
 
 /**
  * The report expected when every change has the same outcome.
@@ -339,7 +339,7 @@ describe.each(CONFIGS)("module mounts and rule reach (#625) — $mode / $runtime
 			expect(await api.mp.x.addRuleFor({ caller: "guest.**", target: "mp.**:write", effect: "allow" })).toMatch(/^perm-/);
 			expect(await api.guest.x.writeAt("mp.x")).toEqual(every(await api.guest.x.writeAt("mp.x"), "done"));
 			expect(await api.slothlet.api.remove("mp")).toBe(true);
-			expect(api.slothlet.permissions.global.rulesByModule("mpid")).toEqual([]);
+			expect(api.slothlet.permissions.global.rules.module("mpid")).toEqual([]);
 			await api.slothlet.api.add("mp", GUEST, { id: "mpid" });
 			const refused = withSuppressedSlothletErrorOutputSync(() => api.guest.x.writeAt("mp.x"));
 			expect(refused).toEqual(every(refused, "LOOSE_SET_NOT_OWNED"));

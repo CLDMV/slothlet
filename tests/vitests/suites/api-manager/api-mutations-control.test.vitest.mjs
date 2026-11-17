@@ -494,7 +494,7 @@ describe.each(MATRIX_CONFIGS)("API mutations control - $name", ({ config }) => {
 			await api.slothlet.api.add("test", TEST_DIRS.API_TEST_MIXED);
 		} catch (error) {
 			expect(error.message).toContain("INVALID_CONFIG_MUTATIONS_DISABLED");
-			expect(error.context?.operation).toBe("api.add");
+			expect(error.context?.operation).toEqual(["slothlet", "api", "add"]);
 			expect(error.hint).toBeTruthy();
 		}
 
@@ -503,7 +503,7 @@ describe.each(MATRIX_CONFIGS)("API mutations control - $name", ({ config }) => {
 			await api.slothlet.api.remove("math");
 		} catch (error) {
 			expect(error.message).toContain("INVALID_CONFIG_MUTATIONS_DISABLED");
-			expect(error.context?.operation).toBe("api.remove");
+			expect(error.context?.operation).toEqual(["slothlet", "api", "remove"]);
 			expect(error.hint).toBeTruthy();
 		}
 
@@ -512,7 +512,7 @@ describe.each(MATRIX_CONFIGS)("API mutations control - $name", ({ config }) => {
 			await api.slothlet.reload();
 		} catch (error) {
 			expect(error.message).toContain("INVALID_CONFIG_MUTATIONS_DISABLED");
-			expect(error.context?.operation).toBe("reload");
+			expect(error.context?.operation).toEqual(["slothlet", "reload"]);
 			expect(error.hint).toBeTruthy();
 		}
 	});

@@ -28,7 +28,7 @@ import { self } from "@cldmv/slothlet/runtime";
  */
 export function addRuleFor(rule) {
 	try {
-		return self.slothlet.permissions.addRule(rule);
+		return self.slothlet.permissions.rules.add(rule);
 	} catch (error) {
 		return error?.code ?? String(error);
 	}

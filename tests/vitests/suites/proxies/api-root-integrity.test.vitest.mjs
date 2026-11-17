@@ -22,7 +22,7 @@
  * Each of three roots (a folder of files, one whose root file's default export is a function, and one whose root file's
  * default export is an async function) is loaded as the api and mounted again at `zz`, so the root has a twin one level
  * down, and a `writer` module is mounted at `w`, where it owns neither. The writer makes each change through the api the
- * host handed it and through `self.slothlet.diag.getAPI()`, to `zz` and to the root of a fresh instance, and the root's
+ * host handed it and through `self.slothlet.diag.api()`, to `zz` and to the root of a fresh instance, and the root's
  * answer must be the twin's: with no write rule, with write rules granting each member, with the permission system off
  * and with it disabled. The host's own changes are checked against a plain object's. Eager and lazy mode, the async and
  * live runtime, both attributions.
@@ -383,7 +383,7 @@ describe.each(ROOTS)("the api root's integrity > %s", (root) => {
 					{ caller: "w.ops.protoListed", target: "inherited", effect: "allow" },
 					{ caller: "w.ops.protoKeys", target: "inherited", effect: "allow" },
 					{ caller: "w.ops.protoRead", target: "deepRuled", effect: "allow" },
-					// The writer reaches the root through `self.slothlet.diag.getAPI()` too.
+					// The writer reaches the root through `self.slothlet.diag.api()` too.
 					{ caller: "w.**", target: "slothlet.diag", effect: "allow" },
 					{ caller: "w.**", target: "slothlet.diag.**", effect: "allow" }
 				];

@@ -38,35 +38,35 @@ describe("apiCacheManager invalidation on removal", () => {
 	it("api.remove(apiPath) drops the removed module's cache entry (no orphan)", async () => {
 		api = await slothlet({ base: "./api_tests/api_test", mode: "eager", diagnostics: true });
 
-		const baseCount = api.slothlet.diag.caches.getAllModuleIDs().length;
+		const baseCount = api.slothlet.diag.caches.ids().length;
 
 		await api.slothlet.api.add("extras", ADD_DIR, { id: "extras-mod" });
-		expect(api.slothlet.diag.caches.getAllModuleIDs().length).toBe(baseCount + 1);
+		expect(api.slothlet.diag.caches.ids().length).toBe(baseCount + 1);
 
 		// Remove BY apiPath — the branch that previously orphaned the cache entry.
 		await api.slothlet.api.remove("extras");
 
-		expect(api.slothlet.diag.caches.getAllModuleIDs().length).toBe(baseCount);
+		expect(api.slothlet.diag.caches.ids().length).toBe(baseCount);
 		expect(api.extras).toBeUndefined();
 	});
 
 	it("api.remove(moduleID) drops the cache entry", async () => {
 		api = await slothlet({ base: "./api_tests/api_test", mode: "eager", diagnostics: true });
 
-		const baseCount = api.slothlet.diag.caches.getAllModuleIDs().length;
+		const baseCount = api.slothlet.diag.caches.ids().length;
 
 		await api.slothlet.api.add("extras", ADD_DIR, { id: "extras-mod" });
-		expect(api.slothlet.diag.caches.getAllModuleIDs().length).toBe(baseCount + 1);
+		expect(api.slothlet.diag.caches.ids().length).toBe(baseCount + 1);
 
 		await api.slothlet.api.remove("extras-mod");
 
-		expect(api.slothlet.diag.caches.getAllModuleIDs().length).toBe(baseCount);
+		expect(api.slothlet.diag.caches.ids().length).toBe(baseCount);
 	});
 
 	it("reload after a remove leaves no orphaned cache entry", async () => {
 		api = await slothlet({ base: "./api_tests/api_test", mode: "eager", diagnostics: true });
 
-		const baseCount = api.slothlet.diag.caches.getAllModuleIDs().length;
+		const baseCount = api.slothlet.diag.caches.ids().length;
 
 		await api.slothlet.api.add("extras", ADD_DIR, { id: "extras-mod" });
 		await api.slothlet.api.remove("extras");
@@ -74,23 +74,23 @@ describe("apiCacheManager invalidation on removal", () => {
 
 		// The operation-history replay re-adds then removes "extras"; the
 		// replayed remove must fully clean up — no orphan cache entry survives.
-		expect(api.slothlet.diag.caches.getAllModuleIDs().length).toBe(baseCount);
+		expect(api.slothlet.diag.caches.ids().length).toBe(baseCount);
 		expect(api.extras).toBeUndefined();
 	});
 
 	it("a partial removal keeps the cache entry (module still owns paths)", async () => {
 		api = await slothlet({ base: "./api_tests/api_test", mode: "eager", diagnostics: true });
 
-		const baseCount = api.slothlet.diag.caches.getAllModuleIDs().length;
+		const baseCount = api.slothlet.diag.caches.ids().length;
 
 		// api_test_self_assign exposes the `owner` module under "extras.owner".
 		await api.slothlet.api.add("extras", ADD_DIR, { id: "extras-mod" });
-		expect(api.slothlet.diag.caches.getAllModuleIDs().length).toBe(baseCount + 1);
+		expect(api.slothlet.diag.caches.ids().length).toBe(baseCount + 1);
 
 		// Remove only a sub-path; the module still owns the rest of "extras.*".
 		await api.slothlet.api.remove("extras.owner.readSelf");
 
 		// Cache entry retained — the module is not fully removed.
-		expect(api.slothlet.diag.caches.getAllModuleIDs().length).toBe(baseCount + 1);
+		expect(api.slothlet.diag.caches.ids().length).toBe(baseCount + 1);
 	});
 });

@@ -207,8 +207,6 @@ Slothlet provides dedicated methods for executing functions with isolated contex
 
 `api.slothlet.context.run()` and `api.slothlet.context.scope()` execute a callback with temporary context data that:
 
-> **Aliases**: `api.slothlet.run()` and `api.slothlet.scope()` are direct aliases for `api.slothlet.context.run()` and `api.slothlet.context.scope()` respectively and are interchangeable.
-
 - Does **not** affect the global instance context after the callback returns
 - **Inherits** from and merges with the current context
 - Supports **shallow** and **deep** merge strategies
@@ -218,8 +216,6 @@ Slothlet provides dedicated methods for executing functions with isolated contex
 ### API Reference
 
 #### api.slothlet.context.run(contextData, callback, ...args)
-
-> **Alias**: `api.slothlet.run(contextData, callback, ...args)`
 
 Executes a callback function with isolated context data. `.run()` is shorthand for `.scope()` with shallow merge and partial isolation.
 
@@ -252,8 +248,6 @@ const result = await api.slothlet.context.run(
 ```
 
 #### api.slothlet.context.scope({ context, fn, args, merge, isolation, protect, owners })
-
-> **Alias**: `api.slothlet.scope({ context, fn, args, merge, isolation, protect, owners })`
 
 Executes a function with isolated context using structured options.
 
@@ -308,14 +302,14 @@ By default, any module that receives the runtime `context` proxy can write any c
 
 ```javascript
 // Lock userId for the duration of the request — no downstream module can change it
-await api.slothlet.scope({
+await api.slothlet.context.scope({
 	context: { userId: "alice", scratch: {} },
 	protect: ["userId"],
 	fn: async () => api.handleRequest()
 });
 
 // Bind `budget` to the billing module — only billing.* may write it
-await api.slothlet.scope({
+await api.slothlet.context.scope({
 	context: { budget: 1000 },
 	owners: { budget: "billing" },
 	fn: async () => api.runPipeline()
@@ -329,7 +323,7 @@ Ownership inherits down nested scopes: a child scope sees the parent's owned key
 The lock is not limited to the top layer. When a protected/owned key holds a **plain object or array**, that value is handed back through a recursive protected view, so a write to any nested field is enforced exactly like a top-level write:
 
 ```javascript
-await api.slothlet.scope({
+await api.slothlet.context.scope({
 	context: { auth: { userId: "alice", roles: ["reader"] } },
 	protect: ["auth"],
 	fn: async () => {

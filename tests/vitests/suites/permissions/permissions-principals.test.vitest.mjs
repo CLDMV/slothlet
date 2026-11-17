@@ -347,7 +347,7 @@ describe.each(getMatrixConfigs())("Permissions > Principals (#459) > $name", ({ 
 		expect(() => register("x", { key: () => 1, resolve: () => 1, ttl: -1 })).toThrow(/INVALID_ARGUMENT/);
 		expect(() => register("x", { key: () => 1, resolve: () => 1, ttl: "1s" })).toThrow(/INVALID_ARGUMENT/);
 
-		const addRule = api.slothlet.permissions.addRule;
+		const addRule = api.slothlet.permissions.rules.add;
 		expect(() => addRule({ caller: "**", target: "x", effect: "allow", requires: [] })).toThrow(/INVALID_PERMISSION_RULE/);
 		expect(() => addRule({ caller: "**", target: "x", effect: "allow", requires: "roles" })).toThrow(/INVALID_PERMISSION_RULE/);
 		expect(() => addRule({ caller: "**", target: "x", effect: "allow", requires: [""] })).toThrow(/INVALID_PERMISSION_RULE/);
@@ -355,7 +355,7 @@ describe.each(getMatrixConfigs())("Permissions > Principals (#459) > $name", ({ 
 
 	it("rule introspection reports `requires`", async () => {
 		api = await build([FILES_RULE]);
-		const rules = api.slothlet.permissions.global.rulesForPath("project.files.list");
+		const rules = api.slothlet.permissions.global.rules.path("project.files.list");
 		expect(rules.find((rule) => rule.requires)?.requires).toEqual(["roles"]);
 	});
 
@@ -432,8 +432,13 @@ describe.each(getMatrixConfigs())("Permissions > Principals (#459) > $name", ({ 
 		expect(await api.roles.registry.drop()).toBe(true);
 		await api.roles.registry.setup();
 		expect(api.slothlet.permissions.principal.unregister("billing")).toBe(true);
-		await api.slothlet.permissions.addRule({ caller: "client.**", target: "slothlet.permissions.principal.**", effect: "allow" });
-		await api.slothlet.permissions.addRule({ caller: "client.**", target: "reports.exporter.run", effect: "allow", requires: ["tenant"] });
+		await api.slothlet.permissions.rules.add({ caller: "client.**", target: "slothlet.permissions.principal.**", effect: "allow" });
+		await api.slothlet.permissions.rules.add({
+			caller: "client.**",
+			target: "reports.exporter.run",
+			effect: "allow",
+			requires: ["tenant"]
+		});
 
 		await api.slothlet.reload();
 

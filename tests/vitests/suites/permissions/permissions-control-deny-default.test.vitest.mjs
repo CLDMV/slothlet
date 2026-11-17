@@ -37,7 +37,7 @@ describe.each(getMatrixConfigs())("Permissions > Control Deny Default > $name", 
 		});
 
 		// The built-in deny rule should exist for control.**
-		const rules = api.slothlet.permissions.global.rulesForPath("slothlet.permissions.control.enable");
+		const rules = api.slothlet.permissions.global.rules.path("slothlet.permissions.control.enable");
 		const builtinDeny = rules.find((r) => r.caller === "**" && r.effect === "deny" && r.target === "slothlet.permissions.control.**");
 		expect(builtinDeny).toBeDefined();
 	});

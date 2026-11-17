@@ -71,7 +71,7 @@ describe.each(getMatrixConfigs())("Events > rule specificity (#767) > $name", ({
 	const levelWith = (rules, subscriber, event) => {
 		const ids = rules.map((rule) => api.slothlet.event.rules.add(rule));
 		try {
-			return api.slothlet.event.resolveLevel(subscriber, event);
+			return api.slothlet.event.level(subscriber, event);
 		} finally {
 			for (const id of ids) api.slothlet.event.rules.remove(id);
 		}
@@ -142,10 +142,10 @@ describe.each(getMatrixConfigs())("Events > rule specificity (#767) > $name", ({
 
 	it("applies to rules in the config, in either order", async () => {
 		await load([rule("guest.zz.**", "deny"), rule("guest.**", "allow")]);
-		expect(api.slothlet.event.resolveLevel("m", "guest.zz.a")).toBe("deny");
+		expect(api.slothlet.event.level("m", "guest.zz.a")).toBe("deny");
 		await api.shutdown();
 		await load([rule("guest.**", "allow"), rule("guest.zz.**", "deny")]);
-		expect(api.slothlet.event.resolveLevel("m", "guest.zz.a")).toBe("deny");
+		expect(api.slothlet.event.level("m", "guest.zz.a")).toBe("deny");
 	});
 
 	it("still lets the higher layer win a tie, and a narrower rule win over a higher layer's broader one", async () => {
@@ -163,17 +163,17 @@ describe.each(getMatrixConfigs())("Events > rule specificity (#767) > $name", ({
 		// The fixture module's manifest declares `{ caller: "subscriber.**", event: "manifest.*", effect: "allow" }`.
 		const FIX = new URL("../../../../api_tests/api_test_events_module", import.meta.url).pathname;
 		await load([rule("manifest.*", "deny", "subscriber.**")]);
-		await api.slothlet.api.modules.addModule("@local/evt-plugin", { discover: { root: FIX } });
-		expect(api.slothlet.event.resolveLevel("subscriber.x", "manifest.data")).toBe("deny");
+		await api.slothlet.api.modules.add("@local/evt-plugin", { discover: { root: FIX } });
+		expect(api.slothlet.event.level("subscriber.x", "manifest.data")).toBe("deny");
 		await api.shutdown();
 
 		await load([rule("**", "deny")]);
-		await api.slothlet.api.modules.addModule("@local/evt-plugin", { discover: { root: FIX } });
-		expect(api.slothlet.event.resolveLevel("subscriber.x", "manifest.data")).toBe("allow");
+		await api.slothlet.api.modules.add("@local/evt-plugin", { discover: { root: FIX } });
+		expect(api.slothlet.event.level("subscriber.x", "manifest.data")).toBe("allow");
 	});
 
 	it.each(["off", "disabled"])("evaluates nothing under mode %s", async (mode) => {
 		await load([rule("guest.zz.**", "deny"), rule("guest.**", "allow")], { mode });
-		expect(api.slothlet.event.resolveLevel("m", "guest.zz.a")).toBe("allow");
+		expect(api.slothlet.event.level("m", "guest.zz.a")).toBe("allow");
 	});
 });

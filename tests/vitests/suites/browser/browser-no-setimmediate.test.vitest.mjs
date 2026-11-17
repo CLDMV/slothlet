@@ -52,10 +52,16 @@ const settle = async () => {
 };
 
 /**
- * Lifecycle handler warnings captured since the last clear.
+ * Lifecycle handler warnings the current stand-in recorded.
  * @returns {SlothletWarning[]}
  */
-const handlerWarnings = () => SlothletWarning.captured.filter((w) => w.code === "WARNING_LIFECYCLE_HANDLER_ERROR");
+const handlerWarnings = () => recorded.filter((w) => w.code === "WARNING_LIFECYCLE_HANDLER_ERROR");
+
+/**
+ * The warnings the current stand-in's warning class recorded (set fresh by each `makeMock()`).
+ * @type {SlothletWarning[]}
+ */
+let recorded = [];
 
 let manifest;
 let api;
@@ -68,7 +74,6 @@ afterEach(async () => {
 	vi.unstubAllGlobals();
 	if (api) await api.shutdown().catch(() => {});
 	api = null;
-	SlothletWarning.clearCaptured();
 });
 
 describe("scheduleMacrotask (#578)", () => {
@@ -118,7 +123,7 @@ describe.each(getBrowserMatrixConfigs())("browser compose without setImmediate (
 		expect(await api.utils.format.upper("a")).toBe("A");
 		await settle();
 		// Capture is per instance (#819), so read this instance's list, not the process-level one.
-		expect(api.slothlet.diag.SlothletWarning.captured.filter((w) => w.code === "WARNING_LIFECYCLE_HANDLER_ERROR")).toEqual([]);
+		expect(api.slothlet.warnings.get().filter((w) => w.code === "WARNING_LIFECYCLE_HANDLER_ERROR")).toEqual([]);
 	});
 });
 
@@ -166,10 +171,12 @@ describe("WARNING_LIFECYCLE_HANDLER_ERROR carries the handler's error (#578)", (
 	 * Minimal slothlet stand-in for a bare Lifecycle.
 	 * @returns {object}
 	 */
-	const makeMock = () => ({ config: { debug: {} }, debug: vi.fn(), SlothletWarning });
+	const makeMock = () => {
+		recorded = [];
+		return { config: { debug: {} }, debug: vi.fn(), SlothletWarning: SlothletWarning.forInstance((warning) => recorded.push(warning)) };
+	};
 
 	it("attaches a synchronous handler's error as the cause, with apiPath and moduleID", async () => {
-		SlothletWarning.clearCaptured();
 		const lc = new Lifecycle(makeMock());
 		const boom = new ReferenceError("setImmediate is not defined");
 		lc.subscribeInternal("impl:created", () => {
@@ -185,7 +192,6 @@ describe("WARNING_LIFECYCLE_HANDLER_ERROR carries the handler's error (#578)", (
 	});
 
 	it("names only the event when the event is not about an api path", async () => {
-		SlothletWarning.clearCaptured();
 		const lc = new Lifecycle(makeMock());
 		const boom = new Error("init handler failure");
 		lc.on("init", () => {
@@ -200,7 +206,6 @@ describe("WARNING_LIFECYCLE_HANDLER_ERROR carries the handler's error (#578)", (
 	});
 
 	it("still records the warning when the instance is silent (#838)", async () => {
-		SlothletWarning.clearCaptured();
 		const lc = new Lifecycle({ ...makeMock(), config: { debug: {}, silent: true } });
 		lc.subscribeInternal("impl:created", () => {
 			throw new Error("silenced");
@@ -210,7 +215,6 @@ describe("WARNING_LIFECYCLE_HANDLER_ERROR carries the handler's error (#578)", (
 	});
 
 	it("attaches an async handler's rejection as the cause", async () => {
-		SlothletWarning.clearCaptured();
 		const lc = new Lifecycle(makeMock());
 		const boom = new Error("async failure");
 		lc.subscribeInternal("impl:created", async () => {

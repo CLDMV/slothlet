@@ -59,12 +59,12 @@ const RULES = [
 	{ caller: "callee.**", target: "callee2.**", effect: "allow" },
 	{ caller: "callee.**", target: "supplier.hooks.**", effect: "allow" },
 	{ caller: "callee.**", target: "supplier.bag.**", effect: "allow" },
-	{ caller: "callee.**", target: "slothlet.lockCaller.caller", effect: "allow" },
+	{ caller: "callee.**", target: "slothlet.pin.caller", effect: "allow" },
 	{ caller: "supplier.**", target: "slothlet.permissions.principal.**", effect: "allow" },
 	{ caller: "callee.**", target: "slothlet.permissions.principal.**", effect: "allow" },
-	{ caller: "**", target: "slothlet.scope", effect: "allow" },
+	{ caller: "**", target: "slothlet.context.scope", effect: "allow" },
 	// The slothlet functions themselves, so binding one reads what it needs to: the tests are about who calling it is.
-	{ caller: "**", target: "slothlet.scope.**", effect: "allow" },
+	{ caller: "**", target: "slothlet.context.scope.**", effect: "allow" },
 	{ caller: "**", target: "slothlet.event.**", effect: "allow" },
 	{ caller: "**", target: "slothlet.hook.**", effect: "allow" }
 ];
@@ -164,7 +164,7 @@ describe.each(getMatrixConfigs())("Permissions > caller-supplied code, second ro
 			expect(await withSuppressedSlothletErrorOutput(() => api.supplier.probe.boundScope())).toEqual(DENIED);
 		});
 
-		it("control: lockCaller.caller is refused to a supplier that may not take it", async () => {
+		it("control: pin.caller is refused to a supplier that may not take it", async () => {
 			await build();
 			expect(await withSuppressedSlothletErrorOutput(() => api.supplier.probe.boundLockCallerCaller())).toEqual(DENIED);
 		});

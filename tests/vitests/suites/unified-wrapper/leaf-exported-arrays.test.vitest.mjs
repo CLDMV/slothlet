@@ -338,7 +338,7 @@ describe("Array elements are full slothlet nodes (api.add + permission gating)",
 		// Allowed by default: caller.go() calls self.data.items[0].run() (an inter-module call).
 		expect(await api.caller.go()).toBe("secret-x");
 		// Deny everything under the array element for the caller — gating keys off the element apiPath.
-		api.slothlet.permissions.addRule({ caller: "caller.**", target: "data.items.**", effect: "deny" });
+		api.slothlet.permissions.rules.add({ caller: "caller.**", target: "data.items.**", effect: "deny" });
 		await expect(api.caller.go()).rejects.toThrow(/PERMISSION_DENIED/);
 	});
 
@@ -346,7 +346,7 @@ describe("Array elements are full slothlet nodes (api.add + permission gating)",
 		const api = await slothlet({ base: root, mode: "eager", permissions: { policy: "allow" } });
 		apis.push(api);
 		// `*` must match the array index, and gating must be path-precise: deny only plugin.hello.
-		api.slothlet.permissions.addRule({ caller: "caller.**", target: "data.items.*.plugin.hello", effect: "deny" });
+		api.slothlet.permissions.rules.add({ caller: "caller.**", target: "data.items.*.plugin.hello", effect: "deny" });
 		await expect(api.caller.callHello()).rejects.toThrow(/PERMISSION_DENIED/);
 		// Sibling method on the same nested object — allowed.
 		expect(await api.caller.callBye()).toBe("bye");
@@ -737,7 +737,7 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])("An array element's path fo
 	it("a rule for an index applies to the element at that index, including a reference held from before it moved", async () => {
 		api = await slothlet({ base: root, mode, permissions: { policy: "allow" } });
 		expect(await api.caller.hold(1)).toBe("y");
-		api.slothlet.permissions.addRule({ caller: "caller.**", target: "data.items.0.**", effect: "deny" });
+		api.slothlet.permissions.rules.add({ caller: "caller.**", target: "data.items.0.**", effect: "deny" });
 		expect(await api.caller.callHeld()).toBe("run-y");
 		api.data.items.shift();
 		await expect(api.caller.callHeld()).rejects.toThrow(/PERMISSION_DENIED/);

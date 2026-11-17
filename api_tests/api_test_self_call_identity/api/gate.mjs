@@ -34,7 +34,7 @@ export function post() {
 		return view;
 	};
 	board.thunk = () => self.vault.get();
-	board.gateLent = self.slothlet.lockCaller(() => self.vault.get());
+	board.gateLent = self.slothlet.pin(() => self.vault.get());
 	return true;
 }
 

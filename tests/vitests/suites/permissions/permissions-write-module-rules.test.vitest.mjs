@@ -18,10 +18,10 @@
  * manifest declares (#625).
  *
  * Permissions, write permission among them, are granted by the host and by modules. Module code registers rules —
- * through `self.slothlet.permissions.addRule` / `removeRule` and the `permissions` option of an `api.add` it
+ * through `self.slothlet.permissions.rules.add` / `rules.remove` and the `permissions` option of an `api.add` it
  * makes — for targets inside its own subtree (checked on the pattern's literal prefix), of any kind: call, hook,
  * or `:write`, allow or deny. Any other target, the framework's own among them, is the built-in default
- * `{ caller: "**", target: "slothlet.permissions.addRule", effect: "deny" }`, which an explicit allow for the
+ * `{ caller: "**", target: "slothlet.permissions.rules.add", effect: "deny" }`, which an explicit allow for the
  * module — the host's or its manifest's — lifts. A manifest is not restricted: mounting it is the consumer's
  * choice. Module rules (a manifest's or module code's) sit below the host's: at equal specificity the host
  * wins, both ways. A write allow is a grant: another module's write goes through whatever it owns.
@@ -81,7 +81,7 @@ describe.each(CONFIGS)("module write rules (#625) — $mode / $runtime", ({ mode
 	 */
 	async function mountVault(name) {
 		try {
-			await api.slothlet.api.modules.addModule(`@local/${name}`, { discover: { root: path.join(FIXTURE, "modules", name) } });
+			await api.slothlet.api.modules.add(`@local/${name}`, { discover: { root: path.join(FIXTURE, "modules", name) } });
 			return "done";
 		} catch (error) {
 			return error?.code ?? String(error);
@@ -140,7 +140,7 @@ describe.each(CONFIGS)("module write rules (#625) — $mode / $runtime", ({ mode
 		});
 	});
 
-	describe("through addRule from the module's code", () => {
+	describe("through rules.add from the module's code", () => {
 		it("lets the module grant another module writes into its subtree, and refuses a third module", async () => {
 			await load();
 			expect(typeof (await api.victim.v.grant(GUEST_ALLOW_VICTIM))).toBe("string");
@@ -247,7 +247,7 @@ describe.each(CONFIGS)("module write rules (#625) — $mode / $runtime", ({ mode
 	});
 
 	describe("a module allowed to manage rules beyond its subtree", () => {
-		const DELEGATE = { caller: "mgr.**", target: "slothlet.permissions.addRule", effect: "allow" };
+		const DELEGATE = { caller: "mgr.**", target: "slothlet.permissions.rules.add", effect: "allow" };
 
 		it("lets the manager grant one module writes into another module's subtree, until the rule is removed", async () => {
 			await load({ permissions: { rules: [DELEGATE] } });
@@ -255,7 +255,7 @@ describe.each(CONFIGS)("module write rules (#625) — $mode / $runtime", ({ mode
 			expect(ruleId).toMatch(/^perm-/);
 			const granted = await api.guest.x.writeAt("victim.v");
 			expect(granted).toEqual(every(granted, "done"));
-			expect(api.slothlet.permissions.removeRule(ruleId)).toBe(true);
+			expect(api.slothlet.permissions.rules.remove(ruleId)).toBe(true);
 			const refused = withSuppressedSlothletErrorOutputSync(() => api.guest.x.writeAt("victim.v"));
 			expect(refused).toEqual(every(refused, "LOOSE_SET_NOT_OWNED"));
 		});

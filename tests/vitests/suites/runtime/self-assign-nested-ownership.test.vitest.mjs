@@ -139,7 +139,7 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 		const SYMBOL = Symbol.for("slothlet.test.i625");
 		const SUPPLIER_WRITES_CALLEE = { caller: "supplier.**", target: "callee.**:write", effect: "allow" };
 		const SUPPLIER_DENIED_CALLEE = { caller: "supplier.**", target: "callee.**:write", effect: "deny" };
-		const FRONT_MANAGES = { caller: "front.**", target: "slothlet.permissions.addRule", effect: "allow" };
+		const FRONT_MANAGES = { caller: "front.**", target: "slothlet.permissions.rules.add", effect: "allow" };
 		const DONE = { assign: "done", define: "done", remove: "done" };
 		const NOT_OWNED = { assign: "LOOSE_SET_NOT_OWNED", define: "LOOSE_SET_NOT_OWNED", remove: "LOOSE_SET_NOT_OWNED" };
 		const DENIED = { assign: "PERMISSION_DENIED", define: "PERMISSION_DENIED", remove: "PERMISSION_DENIED" };
@@ -318,7 +318,7 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 			// framework's `__`-prefixed routine-stack marker below.
 			permissions: { private: { host: "allow" } }
 		});
-		for (const rule of grantMount("callee.boot")) api.slothlet.permissions.addRule(rule);
+		for (const rule of grantMount("callee.boot")) api.slothlet.permissions.rules.add(rule);
 		await api.slothlet.api.add("callee", path.join(FIXTURE, "callee"), { id: "callee" });
 		await api.slothlet.api.add("supplier", path.join(FIXTURE, "supplier"), { id: "supplier" });
 		await api.slothlet.api.add("callee.boot", path.join(FIXTURE, "routine_a"), { id: "boot-a" });
@@ -339,7 +339,7 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 		async (at, allow, awaited) => {
 			// The host's grant is a write rule, which applies only while the permission system is on.
 			await mountModules({ permissions: allow ? { policy: "allow" } : {} });
-			for (const rule of grantMount(at)) api.slothlet.permissions.addRule(rule);
+			for (const rule of grantMount(at)) api.slothlet.permissions.rules.add(rule);
 			const folder = path.join(FIXTURE, "vault");
 			if (awaited) await api.supplier.attack.addAt(at, folder, "k4");
 			else await (await api.supplier.attack.addAtUnawaited(at, folder, "k4")).done;
@@ -781,7 +781,7 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 		}
 	);
 
-	it.each([["describe"], ["getAPI"]])("refuses a later write through another module's node a module took from diag.%s", async (how) => {
+	it.each([["describe"], ["api"]])("refuses a later write through another module's node a module took from diag.%s", async (how) => {
 		await mountSideChannels({ diagnostics: true });
 		const later = await api.evil.x.keepDiag(how);
 		withSuppressedSlothletErrorOutputSync(() => {
@@ -859,7 +859,7 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 		}
 	);
 
-	it.each([["getAPI"], ["describe"]])("refuses a later write through a node a kept diag.%s hands back", async (how) => {
+	it.each([["api"], ["describe"]])("refuses a later write through a node a kept diag.%s hands back", async (how) => {
 		await mountSideChannels({ diagnostics: true });
 		const kept = await api.evil.x.keepFrameworkFn(how);
 		withSuppressedSlothletErrorOutputSync(() => {
@@ -884,9 +884,9 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 		expect(await api.callee.ops.useSecret()).toBe("callee-original");
 	});
 
-	it("runs a kept lockCaller.caller as the module that read it when the host calls it later", async () => {
+	it("runs a kept pin.caller as the module that read it when the host calls it later", async () => {
 		await mountSideChannels({
-			permissions: { policy: "allow", rules: [{ caller: "evil.**", target: "slothlet.lockCaller.caller", effect: "allow" }] }
+			permissions: { policy: "allow", rules: [{ caller: "evil.**", target: "slothlet.pin.caller", effect: "allow" }] }
 		});
 		await api.slothlet.api.add("front", path.join(FIXTURE, "front"), { id: "front" });
 		const later = await api.front.relay.keepCallerPin();
@@ -898,11 +898,11 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 
 	it("pins the host, not the module, for code pinned to the host that a kept framework function runs later", async () => {
 		await mountSideChannels({
-			permissions: { policy: "allow", rules: [{ caller: "evil.**", target: "slothlet.lockCaller.caller", effect: "allow" }] }
+			permissions: { policy: "allow", rules: [{ caller: "evil.**", target: "slothlet.pin.caller", effect: "allow" }] }
 		});
 		const { run } = await api.evil.x.keepContextRun();
 		const { job } = await api.evil.x.pinForCaller(() =>
-			api.slothlet.lockCaller.caller(() => {
+			api.slothlet.pin.caller(() => {
 				api.callee.ops.hostNote = "host-pinned";
 				return "ran";
 			})()

@@ -44,7 +44,7 @@ describe("self.X = ... under scope({ isolation: 'full' })", () => {
 
 		expect(api.bootstrapIsolated).toBeUndefined();
 
-		await api.slothlet.run({}, () => {
+		await api.slothlet.context.run({}, () => {
 			// Inside the full-isolation scope: write should land on the cloned
 			// `ctx.self`, NOT on the global boundApi.
 			self.bootstrapIsolated = "scope-only";
@@ -66,7 +66,7 @@ describe("self.X = ... under scope({ isolation: 'full' })", () => {
 
 		expect(api.bootstrapPartial).toBeUndefined();
 
-		await api.slothlet.run({}, () => {
+		await api.slothlet.context.run({}, () => {
 			self.bootstrapPartial = "persists";
 			expect(self.bootstrapPartial).toBe("persists");
 		});

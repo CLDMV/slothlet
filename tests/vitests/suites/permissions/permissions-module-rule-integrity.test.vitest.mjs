@@ -43,7 +43,7 @@ const CONFIGS = [
 ];
 
 const HOST_DENY = { caller: "guest.**", target: "victim.**", effect: "deny" };
-const DELEGATE = { caller: "mgr.**", target: "slothlet.permissions.addRule", effect: "allow" };
+const DELEGATE = { caller: "mgr.**", target: "slothlet.permissions.rules.add", effect: "allow" };
 const GUEST_ALLOW_VICTIM = { caller: "guest.**", target: "victim.**:write", effect: "allow" };
 
 /**
@@ -78,7 +78,7 @@ describe.each(CONFIGS)("module rule integrity (#625) — $mode / $runtime", ({ m
 		it.each([
 			["a call target", "victim.v.secret"],
 			["a write target", "victim.**:write"],
-			["the rule-manager target", "slothlet.permissions.addRule"]
+			["the rule-manager target", "slothlet.permissions.rules.add"]
 		])("refuses a rule whose target turns into %s after the check", async (_label, late) => {
 			await load();
 			const outcome = withSuppressedSlothletErrorOutputSync(() => api.guest.x.addShiftingRule("guest.**", late));
@@ -102,7 +102,7 @@ describe.each(CONFIGS)("module rule integrity (#625) — $mode / $runtime", ({ m
 			await load();
 			const outcome = await withSuppressedSlothletErrorOutput(() => api.guest.x.mountShifting(path.join(FIXTURE, "guest"), how));
 			expect(["done", "INVALID_PERMISSION_RULE"]).toContain(outcome);
-			expect(api.slothlet.permissions.global.rulesForPath("victim.v.secret").some((rule) => rule.effect === "allow")).toBe(false);
+			expect(api.slothlet.permissions.global.rules.path("victim.v.secret").some((rule) => rule.effect === "allow")).toBe(false);
 			expect(withSuppressedSlothletErrorOutputSync(() => api.guest.x.callVictimSecret())).toBe("PERMISSION_DENIED");
 		});
 
@@ -121,7 +121,7 @@ describe.each(CONFIGS)("module rule integrity (#625) — $mode / $runtime", ({ m
 			const granted = await api.guest.x.writeAt("victim.v");
 			expect(granted).toEqual(every(granted, "done"));
 			// Still at the module layer: an equally specific host deny added after the reload wins.
-			api.slothlet.permissions.addRule({ caller: "guest.**", target: "victim.**:write", effect: "deny" });
+			api.slothlet.permissions.rules.add({ caller: "guest.**", target: "victim.**:write", effect: "deny" });
 			const denied = withSuppressedSlothletErrorOutputSync(() => api.guest.x.writeAt("victim.v"));
 			expect(denied).toEqual(every(denied, "PERMISSION_DENIED"));
 		});
@@ -220,35 +220,35 @@ describe.each(CONFIGS)("module rule integrity (#625) — $mode / $runtime", ({ m
 
 		it("refuses an event rule beyond the module's own events", async () => {
 			await load(EVENT_RULES_ON);
-			const before = api.slothlet.event.resolveLevel("victim.v", "victim.ping");
+			const before = api.slothlet.event.level("victim.v", "victim.ping");
 			expect(api.guest.x.addEventRuleFor({ caller: "**", event: "**", effect: "deny" })).toBe("INVALID_PERMISSION_RULE");
 			expect(api.guest.x.addEventRuleFor({ caller: "**", event: "victim.**", effect: "deny" })).toBe("INVALID_PERMISSION_RULE");
-			expect(api.slothlet.event.resolveLevel("victim.v", "victim.ping")).toBe(before);
+			expect(api.slothlet.event.level("victim.v", "victim.ping")).toBe(before);
 		});
 
 		it("lets a module add and remove event rules for its own events", async () => {
 			await load(EVENT_RULES_ON);
 			const ruleId = api.guest.x.addEventRuleFor({ caller: "victim.**", event: "guest.**", effect: "deny" });
 			expect(ruleId).toMatch(/^evt-/);
-			expect(api.slothlet.event.resolveLevel("victim.v", "guest.ping")).toBe("deny");
+			expect(api.slothlet.event.level("victim.v", "guest.ping")).toBe("deny");
 			expect(api.guest.x.removeEventRuleFor(ruleId)).toBe(true);
-			expect(api.slothlet.event.resolveLevel("victim.v", "guest.ping")).not.toBe("deny");
+			expect(api.slothlet.event.level("victim.v", "guest.ping")).not.toBe("deny");
 		});
 
 		it("refuses a module removing the host's event rule, even for its own events", async () => {
 			await load(EVENT_RULES_ON);
 			const hostId = api.slothlet.event.rules.add({ caller: "victim.**", event: "guest.*", effect: "deny" });
 			expect(api.guest.x.removeEventRuleFor(hostId)).toBe("INVALID_PERMISSION_RULE");
-			expect(api.slothlet.event.resolveLevel("victim.v", "guest.ping")).toBe("deny");
+			expect(api.slothlet.event.level("victim.v", "guest.ping")).toBe("deny");
 		});
 
 		it("ranks the module's event rule below the host's, across a reload too", async () => {
 			await load(EVENT_RULES_ON);
 			api.slothlet.event.rules.add({ caller: "victim.**", event: "guest.*", effect: "deny" });
 			expect(api.guest.x.addEventRuleFor({ caller: "victim.**", event: "guest.*", effect: "allow" })).toMatch(/^evt-/);
-			expect(api.slothlet.event.resolveLevel("victim.v", "guest.ping")).toBe("deny");
+			expect(api.slothlet.event.level("victim.v", "guest.ping")).toBe("deny");
 			await api.slothlet.reload();
-			expect(api.slothlet.event.resolveLevel("victim.v", "guest.ping")).toBe("deny");
+			expect(api.slothlet.event.level("victim.v", "guest.ping")).toBe("deny");
 		});
 
 		it("holds the condition of a module's event rule to that module's own writes", async () => {
@@ -321,7 +321,7 @@ describe.each(CONFIGS)("module rule integrity (#625) — $mode / $runtime", ({ m
 		it("refuses a Proxy in a condition the host adds", async () => {
 			await load({ permissions: { policy: "allow", rules: [] } });
 			const condition = { tenant: new Proxy({}, {}) };
-			expect(() => api.slothlet.permissions.addRule({ caller: "**", target: "guest.**", effect: "allow", condition })).toThrow(
+			expect(() => api.slothlet.permissions.rules.add({ caller: "**", target: "guest.**", effect: "allow", condition })).toThrow(
 				expect.objectContaining({ code: "INVALID_PERMISSION_RULE" })
 			);
 		});
@@ -332,16 +332,16 @@ describe.each(CONFIGS)("module rule integrity (#625) — $mode / $runtime", ({ m
 			await load({
 				permissions: { policy: "allow", rules: [{ caller: "guest.**", target: "slothlet.event.**", effect: "allow" }] }
 			});
-			const before = api.slothlet.event.resolveLevel("victim.v", "guest.ping");
+			const before = api.slothlet.event.level("victim.v", "guest.ping");
 			expect(api.guest.x.addEventRuleFor({ caller: "victim.**", event: "guest.**", effect: "deny" })).toMatch(/^evt-/);
 			const hostId = api.slothlet.event.rules.add({ caller: "victim.**", event: "victim.*", effect: "deny" });
-			expect(api.slothlet.event.resolveLevel("victim.v", "guest.ping")).toBe("deny");
+			expect(api.slothlet.event.level("victim.v", "guest.ping")).toBe("deny");
 			await api.slothlet.api.remove("guest");
-			expect(api.slothlet.event.resolveLevel("victim.v", "guest.ping")).toBe(before);
-			expect(api.slothlet.event.resolveLevel("victim.v", "victim.ping")).toBe("deny");
+			expect(api.slothlet.event.level("victim.v", "guest.ping")).toBe(before);
+			expect(api.slothlet.event.level("victim.v", "victim.ping")).toBe("deny");
 			await api.slothlet.reload();
-			expect(api.slothlet.event.resolveLevel("victim.v", "guest.ping")).toBe(before);
-			expect(api.slothlet.event.resolveLevel("victim.v", "victim.ping")).toBe("deny");
+			expect(api.slothlet.event.level("victim.v", "guest.ping")).toBe(before);
+			expect(api.slothlet.event.level("victim.v", "victim.ping")).toBe("deny");
 			expect(typeof hostId).toBe("string");
 		});
 	});
@@ -349,9 +349,9 @@ describe.each(CONFIGS)("module rule integrity (#625) — $mode / $runtime", ({ m
 	describe("removing rules from module code", () => {
 		it("refuses a module removing a host rule in its own subtree", async () => {
 			await load();
-			const ruleId = api.slothlet.permissions.addRule({ caller: "victim.**", target: "guest.x.writeAt", effect: "deny" });
+			const ruleId = api.slothlet.permissions.rules.add({ caller: "victim.**", target: "guest.x.writeAt", effect: "deny" });
 			expect(withSuppressedSlothletErrorOutputSync(() => api.guest.x.removeRuleFor(ruleId))).toBe("INVALID_PERMISSION_RULE");
-			expect(api.slothlet.permissions.global.rulesForPath("guest.x.writeAt").some((rule) => rule.id === ruleId)).toBe(true);
+			expect(api.slothlet.permissions.global.rules.path("guest.x.writeAt").some((rule) => rule.id === ruleId)).toBe(true);
 		});
 
 		it("refuses a module removing another module's rule in its own subtree", async () => {
@@ -363,10 +363,10 @@ describe.each(CONFIGS)("module rule integrity (#625) — $mode / $runtime", ({ m
 
 		it("refuses a rule manager removing a host rule or a built-in one, and lets it remove a module's", async () => {
 			await load({ permissions: { policy: "allow", rules: [HOST_DENY, DELEGATE] } });
-			const hostRule = api.slothlet.permissions.addRule({ caller: "guest.**", target: "victim.v.secret", effect: "deny" });
+			const hostRule = api.slothlet.permissions.rules.add({ caller: "guest.**", target: "victim.v.secret", effect: "deny" });
 			expect(withSuppressedSlothletErrorOutputSync(() => api.mgr.x.removeRuleFor(hostRule))).toBe("INVALID_PERMISSION_RULE");
-			const builtinRule = api.slothlet.permissions.global
-				.rulesForPath("slothlet.restart")
+			const builtinRule = api.slothlet.permissions.global.rules
+				.path("slothlet.restart")
 				.find((rule) => rule.ownerModuleID === "__builtin__").id;
 			expect(withSuppressedSlothletErrorOutputSync(() => api.mgr.x.removeRuleFor(builtinRule))).toBe("INVALID_PERMISSION_RULE");
 			const victimRule = await api.victim.v.grant(GUEST_ALLOW_VICTIM);
@@ -431,7 +431,7 @@ describe.each(CONFIGS)("module rule integrity (#625) — $mode / $runtime", ({ m
 
 		it("go with a manifest module that is removed", async () => {
 			await load({ permissions: { policy: "allow", rules: [] } });
-			await api.slothlet.api.modules.addModule("@local/vault-grant-other", {
+			await api.slothlet.api.modules.add("@local/vault-grant-other", {
 				discover: { root: path.join(FIXTURE, "modules", "vault-grant-other") }
 			});
 			const granted = await api.guest.x.writeAt("victim.v");
@@ -448,7 +448,7 @@ describe.each(CONFIGS)("module rule integrity (#625) — $mode / $runtime", ({ m
 			await api.slothlet.api.remove("mgr");
 			const granted = await api.guest.x.writeAt("victim.v");
 			expect(granted).toEqual(every(granted, "done"));
-			expect(api.slothlet.permissions.global.rulesForPath("mgr.x").some((rule) => rule.caller === "mgr.**")).toBe(true);
+			expect(api.slothlet.permissions.global.rules.path("mgr.x").some((rule) => rule.caller === "mgr.**")).toBe(true);
 		});
 	});
 });

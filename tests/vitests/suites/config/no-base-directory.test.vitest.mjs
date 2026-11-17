@@ -43,14 +43,11 @@ const userKeys = (api) => Object.keys(api).filter((key) => !FRAMEWORK_ROOT_KEYS.
  * @param {object} instance - Bound api.
  * @returns {string[]} Warning codes.
  */
-const warningCodes = (instance) => instance.slothlet.diag.SlothletWarning.captured.map((w) => w.code);
+const warningCodes = (instance) => instance.slothlet.warnings.get().map((w) => w.code);
 
 describe.each(getMatrixConfigs())("No base directory (#471) > $name", ({ config }) => {
 	let api;
 
-	beforeEach(() => {
-		SlothletWarning.clearCaptured();
-	});
 
 	afterEach(async () => {
 		if (api) await api.shutdown();

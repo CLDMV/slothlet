@@ -30,17 +30,15 @@
  *   with `{ validationError: true }`.  `HINT_INVALID_CONFIG_DIR_MISSING` exists in
  *   en-us.json as a genuine hint string, so the constructor takes line 62.
  *
- * **Line 184 — `SlothletWarning.captured.push(this)`**
+ * **The instance recorder — `record(this)`**
  *
- *   Fires when a `SlothletWarning` is constructed while
- *   `SlothletWarning.suppressConsole === true`.  The global vitest setup sets this
- *   flag to `true` before any test runs, so any warning goes into `captured[]`
- *   instead of printing to the console.
+ *   Fires when a `SlothletWarning` is constructed through an instance's warning class:
+ *   the instance keeps every warning it raises (`api.slothlet.warnings.get()`), printed or not.
  *
  *   Trigger path through slothlet: `api.slothlet.api.add(path, dir, { collisionMode })` with
  *   `api.collision.override` off creates `WARNING_API_ADD_OPTION_LOCKED` via
  *   `new slothlet.SlothletWarning(...)` (gated behind `if (!config.silent)`).
- *   Because `suppressConsole` is true, line 184 fires: `captured.push(this)`.
+ *   The instance records it.
  *   NOTE: `silent: true` must NOT be passed here — it suppresses the warning entirely.
  *
  * @module tests/vitests/suites/lifecycle/errors-branches
@@ -80,9 +78,9 @@ describe("SlothletError — static HINT_<CODE> lookup via slothlet config valida
 	});
 });
 
-// ─── SlothletWarning captured branch (line 184) ───────────────────────────────
+// ─── SlothletWarning instance recorder ───────────────────────────────────────
 
-describe("SlothletWarning — captured.push via a runtime warning through slothlet (line 184)", () => {
+describe("SlothletWarning — kept by the instance that raised it (a runtime warning)", () => {
 	let api;
 
 	afterEach(async () => {
@@ -90,7 +88,6 @@ describe("SlothletWarning — captured.push via a runtime warning through slothl
 			await api.shutdown().catch(() => {});
 		}
 		api = null;
-		// Capture is per instance (#819): nothing to drain on the process-level class.
 	});
 
 	/**
@@ -104,16 +101,15 @@ describe("SlothletWarning — captured.push via a runtime warning through slothl
 		return api;
 	};
 
-	it("a locked api.add() option creates a warning captured in captured[] (line 184)", async () => {
-		// suppressConsole is true (set globally in vitest.setup.mjs), so the warning is captured.
-		// IMPORTANT: do NOT pass silent:true here — it gates the warning creation entirely.
+	it("a locked api.add() option creates a warning the instance keeps", async () => {
+		// The instance's warning class records it, printed or not.
 		await loadAndWarn();
-		expect(api.slothlet.diag.SlothletWarning.captured.length).toBeGreaterThan(0);
+		expect(api.slothlet.warnings.get().length).toBeGreaterThan(0);
 	});
 
-	it("the captured warning has code WARNING_API_ADD_OPTION_LOCKED (line 184)", async () => {
+	it("the kept warning has code WARNING_API_ADD_OPTION_LOCKED", async () => {
 		await loadAndWarn();
-		const codes = api.slothlet.diag.SlothletWarning.captured.map((w) => w.code);
+		const codes = api.slothlet.warnings.get().map((w) => w.code);
 		expect(codes).toContain("WARNING_API_ADD_OPTION_LOCKED");
 	});
 });

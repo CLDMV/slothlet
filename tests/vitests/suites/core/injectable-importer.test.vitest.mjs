@@ -33,6 +33,7 @@
 
 import { describe, it, expect, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
+import { captureWarnings } from "../../setup/warning-capture.mjs";
 
 const BASE = new URL("../../../../api_tests/api_test_underscore", import.meta.url).pathname;
 const MOD_FILE = new URL("../../../../api_tests/api_test_underscore/mod/mod.mjs", import.meta.url).pathname;
@@ -144,14 +145,11 @@ describe("Core > coverage-run hint (#235)", () => {
 	 */
 	async function probe(config, overrides) {
 		const { warnIfCoverageWithoutImporter } = await import("#processors/loader");
-		const { SlothletWarning } = await import("@cldmv/slothlet/errors");
-		SlothletWarning.clearCaptured();
-		try {
-			const fired = warnIfCoverageWithoutImporter(config, overrides);
-			return { fired, captured: SlothletWarning.captured.filter((w) => w.code === "WARNING_COVERAGE_IMPORTER_UNSET").length };
-		} finally {
-			SlothletWarning.clearCaptured();
-		}
+		let fired;
+		const warnings = await captureWarnings(() => {
+			fired = warnIfCoverageWithoutImporter(config, overrides);
+		});
+		return { fired, captured: warnings.filter((w) => w.code === "WARNING_COVERAGE_IMPORTER_UNSET").length };
 	}
 
 	const COVERAGE_WORKER = { config: { coverage: { enabled: true, provider: "v8" } } };
@@ -193,17 +191,17 @@ describe("Core > coverage-run hint (#235)", () => {
 	});
 
 	it("never fires from an in-repo boot, where slothlet is the project under test", async () => {
-		const { SlothletWarning } = await import("@cldmv/slothlet/errors");
-		SlothletWarning.clearCaptured();
 		let api;
 		try {
 			// The real boot consults the helper with REAL environment inputs; in this suite slothlet
 			// is transformed project code (not externalized), so the hint must not fire even under
 			// the repo's own coverage runs.
-			api = await slothlet({ mode: "eager", base: BASE });
-			expect(SlothletWarning.captured.filter((w) => w.code === "WARNING_COVERAGE_IMPORTER_UNSET")).toHaveLength(0);
+			const printed = await captureWarnings(async () => {
+				api = await slothlet({ mode: "eager", base: BASE });
+			});
+			const raised = [...printed, ...api.slothlet.warnings.get()];
+			expect(raised.filter((w) => w.code === "WARNING_COVERAGE_IMPORTER_UNSET")).toHaveLength(0);
 		} finally {
-			SlothletWarning.clearCaptured();
 			if (api) await api.shutdown();
 		}
 	});

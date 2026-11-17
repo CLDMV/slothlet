@@ -57,7 +57,7 @@ describe.each(matrixConfigs)("Lazy Materialization Tracking > Config: $name", ({
 		});
 
 		it("should have materialized boolean property", () => {
-			expect(typeof api.slothlet.materialize.materialized).toBe("boolean");
+			expect(typeof api.slothlet.materialize.complete).toBe("boolean");
 		});
 
 		it("should have get() method returning statistics object", () => {
@@ -277,7 +277,7 @@ describe.each(matrixConfigs)("Lazy Materialization Tracking > Config: $name", ({
 			await new Promise((resolve) => setTimeout(resolve, 200));
 
 			const stats = api.slothlet.materialize.get();
-			const isMaterialized = api.slothlet.materialize.materialized;
+			const isMaterialized = api.slothlet.materialize.complete;
 
 			if (stats.remaining === 0) {
 				expect(isMaterialized).toBe(true);
@@ -292,7 +292,7 @@ describe.each(matrixConfigs)("Lazy Materialization Tracking > Config: $name", ({
 			});
 
 			const stats = freshApi.slothlet.materialize.get();
-			const isMaterialized = freshApi.slothlet.materialize.materialized;
+			const isMaterialized = freshApi.slothlet.materialize.complete;
 
 			if (stats.remaining > 0) {
 				expect(isMaterialized).toBe(false);
@@ -337,7 +337,7 @@ describe.each(matrixConfigs)("Lazy Materialization Tracking > Config: $name", ({
 				const stats = collisionApi.slothlet.materialize.get();
 				expect(stats.remaining).toBe(0);
 				expect(stats.materialized).toBe(stats.total);
-				expect(collisionApi.slothlet.materialize.materialized).toBe(true);
+				expect(collisionApi.slothlet.materialize.complete).toBe(true);
 				expect(await waitSettles(collisionApi)).toBe(true);
 			} finally {
 				await collisionApi.shutdown();
@@ -352,7 +352,7 @@ describe.each(matrixConfigs)("Lazy Materialization Tracking > Config: $name", ({
 				await loadAll(reservedApi);
 				const stats = reservedApi.slothlet.materialize.get();
 				expect(stats.remaining).toBe(0);
-				expect(reservedApi.slothlet.materialize.materialized).toBe(true);
+				expect(reservedApi.slothlet.materialize.complete).toBe(true);
 				expect(await waitSettles(reservedApi)).toBe(true);
 			} finally {
 				await reservedApi.shutdown();
@@ -401,7 +401,7 @@ describe.each(matrixConfigs)("Lazy Materialization Tracking > Config: $name", ({
 				const stats = reloadApi.slothlet.materialize.get();
 				expect(stats.remaining).toBe(0);
 				expect(stats.materialized).toBe(stats.total);
-				expect(reloadApi.slothlet.materialize.materialized).toBe(true);
+				expect(reloadApi.slothlet.materialize.complete).toBe(true);
 				expect(await waitSettles(reloadApi)).toBe(true);
 			} finally {
 				await reloadApi.shutdown();
@@ -688,7 +688,7 @@ describe.each(matrixConfigs)("Lazy Materialization Tracking > Config: $name", ({
 			const stats = eagerApi.slothlet.materialize.get();
 			expect(stats.total).toBe(stats.materialized);
 			expect(stats.remaining).toBe(0);
-			expect(eagerApi.slothlet.materialize.materialized).toBe(true);
+			expect(eagerApi.slothlet.materialize.complete).toBe(true);
 
 			await eagerApi.shutdown();
 		});

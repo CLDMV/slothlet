@@ -442,15 +442,20 @@ describe("module-discovery coverage gaps", () => {
 			// Instantiate ModuleManager standalone. The S7 pre-flight check inside
 			// #mountSingle calls #findExactMountAt — without an apiManager.state, the
 			// optional-chain returns undefined and the !Array.isArray guard fires. We
-			// can't reach #mountSingle without going through addModule, which needs
+			// can't reach #mountSingle without going through modules.add, which needs
 			// addApiComponent — so observe the guard indirectly: discover() populates
-			// the cache, then addModule attempts to mount and fails on the missing
+			// the cache, then modules.add attempts to mount and fails on the missing
 			// handler (not the addHistory guard itself, but the guard runs first).
 			const mm = new ModuleManager({ handlers: {} });
 			await mm.discover({ root: FIX_NPM, prefix: "packrat-extension-" });
 			await expect(mm.addModule("packrat-extension-baz", { collision: { mode: "error" } })).rejects.toThrow();
 			// The throw is from the missing apiManager (slothlet.handlers.apiManager is undefined),
 			// but #findExactMountAt's guard ran first and returned null cleanly.
+		});
+
+		it("modules.add refuses a list that is not an array (modules.add only hands it arrays)", async () => {
+			const mm = new ModuleManager({ handlers: {} });
+			await expect(mm.addModules("not-an-array")).rejects.toThrow(/INVALID_ARGUMENT/);
 		});
 	});
 
@@ -584,14 +589,14 @@ describe("ModuleManager coverage gaps", () => {
 		return api.slothlet.api.modules;
 	}
 
-	it("addModule with neither string nor DiscoverResult throws INVALID_ARGUMENT (L325-336)", async () => {
+	it("modules.add with neither string nor DiscoverResult throws INVALID_ARGUMENT (L325-336)", async () => {
 		const mm = await newApi();
 		await withSuppressedSlothletErrorOutput(async () => {
-			await expect(mm.addModule(42)).rejects.toThrow(/INVALID_ARGUMENT/);
+			await expect(mm.add(42)).rejects.toThrow(/INVALID_ARGUMENT/);
 		});
 	});
 
-	it("addModule with multi-version cache hit + no version disambiguator throws INVALID_ARGUMENT (L360-372)", async () => {
+	it("modules.add with multi-version cache hit + no version disambiguator throws INVALID_ARGUMENT (L360-372)", async () => {
 		const mm = await newApi();
 		await mm.discover({
 			root: [
@@ -600,11 +605,11 @@ describe("ModuleManager coverage gaps", () => {
 			]
 		});
 		await withSuppressedSlothletErrorOutput(async () => {
-			await expect(mm.addModule("@org/multiv")).rejects.toThrow(/INVALID_ARGUMENT/);
+			await expect(mm.add("@org/multiv")).rejects.toThrow(/INVALID_ARGUMENT/);
 		});
 	});
 
-	it("addModule with version disambiguator picks the matching cache entry (L346)", async () => {
+	it("modules.add with version disambiguator picks the matching cache entry (L346)", async () => {
 		const mm = await newApi();
 		await mm.discover({
 			root: [
@@ -612,22 +617,22 @@ describe("ModuleManager coverage gaps", () => {
 				path.join(FIXTURE_ROOT, "api_test_modules_versioned", "install-b")
 			]
 		});
-		const result = await mm.addModule("@org/multiv", { version: "1.2.3" });
+		const result = await mm.add("@org/multiv", { version: "1.2.3" });
 		expect(result.found.manifest.version).toBe("1.2.3");
 	});
 
-	it("removeModule iterates the mounted map and skips entries whose packageName does not match (L298 mismatch branch)", async () => {
+	it("modules.remove iterates the mounted map and skips entries whose packageName does not match (L298 mismatch branch)", async () => {
 		const mm = await newApi();
 		await mm.discover({ root: FIX_NPM });
 		// Mount two unrelated modules
-		await mm.addModule("packrat-extension-baz");
-		await mm.addModule("@org/packrat-driver-foo");
+		await mm.add("packrat-extension-baz");
+		await mm.add("@org/packrat-driver-foo");
 		// Remove just one — iteration walks both entries; the non-matching one hits the continue.
-		const removed = await mm.removeModule("packrat-extension-baz");
+		const removed = await mm.remove("packrat-extension-baz");
 		expect(removed).toBe(true);
 	});
 
-	it("removeModule with version filter removes only the matching version (L298-299)", async () => {
+	it("modules.remove with version filter removes only the matching version (L298-299)", async () => {
 		const mm = await newApi();
 		await mm.discover({
 			root: [
@@ -635,21 +640,21 @@ describe("ModuleManager coverage gaps", () => {
 				path.join(FIXTURE_ROOT, "api_test_modules_versioned", "install-b")
 			]
 		});
-		const both = mm.getDiscoveryCache().filter((r) => r.package === "@org/multiv");
-		await mm.addModules(both);
+		const both = mm.cache.get().filter((r) => r.package === "@org/multiv");
+		await mm.add(both);
 		// Remove only v1; v2 should remain.
-		const removed = await mm.removeModule("@org/multiv", { version: "1.2.3" });
+		const removed = await mm.remove("@org/multiv", { version: "1.2.3" });
 		expect(removed).toBe(true);
 	});
 
-	it("addModules best-effort with a mount failure returns aggregate {mounted, failed}", async () => {
+	it("modules.add best-effort with a mount failure returns aggregate {mounted, failed}", async () => {
 		const mm = await newApi();
 		await mm.discover({ root: FIX_NPM });
-		const found = mm.getDiscoveryCache();
+		const found = mm.cache.get();
 		const goodModule = found.find((r) => r.package === "packrat-extension-baz");
-		await mm.addModule(goodModule); // pre-mount so the next attempt collides
+		await mm.add(goodModule); // pre-mount so the next attempt collides
 		await withSuppressedSlothletErrorOutput(async () => {
-			const result = await mm.addModules([found.find((r) => r.package === "@org/packrat-driver-foo"), goodModule], {
+			const result = await mm.add([found.find((r) => r.package === "@org/packrat-driver-foo"), goodModule], {
 				collision: {
 					mode: "error"
 				},
@@ -661,14 +666,14 @@ describe("ModuleManager coverage gaps", () => {
 		});
 	});
 
-	it("addModules parallel best-effort with mixed success / failure", async () => {
+	it("modules.add parallel best-effort with mixed success / failure", async () => {
 		const mm = await newApi();
 		await mm.discover({ root: FIX_NPM });
-		const found = mm.getDiscoveryCache();
+		const found = mm.cache.get();
 		const baz = found.find((r) => r.package === "packrat-extension-baz");
-		await mm.addModule(baz); // pre-mount
+		await mm.add(baz); // pre-mount
 		await withSuppressedSlothletErrorOutput(async () => {
-			const result = await mm.addModules([found.find((r) => r.package === "@org/packrat-driver-foo"), baz], {
+			const result = await mm.add([found.find((r) => r.package === "@org/packrat-driver-foo"), baz], {
 				collision: {
 					mode: "error"
 				},
@@ -680,15 +685,15 @@ describe("ModuleManager coverage gaps", () => {
 		});
 	});
 
-	it("addModules parallel throws first error when onFailure='throw'", async () => {
+	it("modules.add parallel throws first error when onFailure='throw'", async () => {
 		const mm = await newApi();
 		await mm.discover({ root: FIX_NPM });
-		const found = mm.getDiscoveryCache();
+		const found = mm.cache.get();
 		const baz = found.find((r) => r.package === "packrat-extension-baz");
-		await mm.addModule(baz);
+		await mm.add(baz);
 		await withSuppressedSlothletErrorOutput(async () => {
 			await expect(
-				mm.addModules([baz, found.find((r) => r.package === "@org/packrat-driver-foo")], {
+				mm.add([baz, found.find((r) => r.package === "@org/packrat-driver-foo")], {
 					collision: {
 						mode: "error"
 					},
@@ -699,29 +704,29 @@ describe("ModuleManager coverage gaps", () => {
 		});
 	});
 
-	it("addModules SERIAL with onFailure='throw' throws on first failure (#mountSerial L541-542)", async () => {
+	it("modules.add SERIAL with onFailure='throw' throws on first failure (#mountSerial L541-542)", async () => {
 		const mm = await newApi();
 		await mm.discover({ root: FIX_NPM });
-		const found = mm.getDiscoveryCache();
+		const found = mm.cache.get();
 		const baz = found.find((r) => r.package === "packrat-extension-baz");
-		await mm.addModule(baz); // pre-mount so the next attempt collides
+		await mm.add(baz); // pre-mount so the next attempt collides
 		await withSuppressedSlothletErrorOutput(async () => {
 			// Explicit concurrency: 1 → serial path. Default onFailure: "throw".
-			await expect(mm.addModules([baz], { collision: { mode: "error" }, concurrency: 1 })).rejects.toThrow(/MODULE_MOUNT_COLLISION/);
+			await expect(mm.add([baz], { collision: { mode: "error" }, concurrency: 1 })).rejects.toThrow(/MODULE_MOUNT_COLLISION/);
 		});
 	});
 
-	it("addModules parallel best-effort captures each per-worker failure (#mountParallel L587 best-effort branch)", async () => {
+	it("modules.add parallel best-effort captures each per-worker failure (#mountParallel L587 best-effort branch)", async () => {
 		const mm = await newApi();
 		await mm.discover({ root: FIX_NPM });
-		const found = mm.getDiscoveryCache();
+		const found = mm.cache.get();
 		// Pre-mount BOTH baz AND foo so EVERY item we then try to mount fails.
 		const baz = found.find((r) => r.package === "packrat-extension-baz");
 		const foo = found.find((r) => r.package === "@org/packrat-driver-foo");
-		await mm.addModule(baz);
-		await mm.addModule(foo);
+		await mm.add(baz);
+		await mm.add(foo);
 		await withSuppressedSlothletErrorOutput(async () => {
-			const result = await mm.addModules([foo, baz], {
+			const result = await mm.add([foo, baz], {
 				collision: {
 					mode: "error"
 				},
@@ -733,15 +738,15 @@ describe("ModuleManager coverage gaps", () => {
 		});
 	});
 
-	it("addModules parallel rollback on failure unmounts items succeeded in this call", async () => {
+	it("modules.add parallel rollback on failure unmounts items succeeded in this call", async () => {
 		const mm = await newApi();
 		await mm.discover({ root: FIX_NPM });
-		const found = mm.getDiscoveryCache();
+		const found = mm.cache.get();
 		const baz = found.find((r) => r.package === "packrat-extension-baz");
-		await mm.addModule(baz);
+		await mm.add(baz);
 		await withSuppressedSlothletErrorOutput(async () => {
 			await expect(
-				mm.addModules([found.find((r) => r.package === "@org/packrat-driver-foo"), baz], {
+				mm.add([found.find((r) => r.package === "@org/packrat-driver-foo"), baz], {
 					collision: {
 						mode: "error"
 					},
@@ -752,27 +757,27 @@ describe("ModuleManager coverage gaps", () => {
 		});
 	});
 
-	it("getStaleMounts returns empty when nothing has been mounted", async () => {
+	it("stale returns empty when nothing has been mounted", async () => {
 		const mm = await newApi();
 		await mm.discover({ root: FIX_FOLDER });
-		expect(mm.getStaleMounts()).toEqual([]);
+		expect(mm.stale()).toEqual([]);
 	});
 
-	it("addModules parallel with multiple simultaneous failures hits the !firstError false arm (L587 inner else-if)", async () => {
+	it("modules.add parallel with multiple simultaneous failures hits the !firstError false arm (L587 inner else-if)", async () => {
 		const mm = await newApi();
 		await mm.discover({ root: FIX_NPM });
-		const found = mm.getDiscoveryCache();
+		const found = mm.cache.get();
 		// Pre-mount BOTH baz and foo so the next attempt on either fails.
 		const baz = found.find((r) => r.package === "packrat-extension-baz");
 		const foo = found.find((r) => r.package === "@org/packrat-driver-foo");
-		await mm.addModule(baz);
-		await mm.addModule(foo);
+		await mm.add(baz);
+		await mm.add(foo);
 		// Try to mount BOTH again in parallel with onFailure="throw". Two workers fail
 		// near-simultaneously. The first to catch sets firstError; the second hits the
 		// `else if (!firstError)` else arm (firstError already truthy) and silently bails.
 		await withSuppressedSlothletErrorOutput(async () => {
 			await expect(
-				mm.addModules([foo, baz], {
+				mm.add([foo, baz], {
 					collision: {
 						mode: "error"
 					},
@@ -809,51 +814,51 @@ describe("ModuleManager coverage gaps", () => {
 		//   - iter 2: candidate = 2.0.0; 2 > 1 → `a > b` break, candidateWins true → L677 true arm
 		// Both `if (a > b)` arms hit; both `if (candidateWins)` arms hit. The pre-release
 		// segment ("rc") returns NaN from parseInt and falls to 0 via the Number.isFinite false branch.
-		const byVersion = (v) => mm.getDiscoveryCache().find((r) => r.package === "@org/multiv" && r.manifest.version === v);
+		const byVersion = (v) => mm.cache.get().find((r) => r.package === "@org/multiv" && r.manifest.version === v);
 		const ordered = [byVersion("1.2.3"), byVersion("0.5.0-rc.1"), byVersion("2.0.0")];
 		expect(ordered.every(Boolean)).toBe(true);
 
-		const mounted = await mm.addModules(ordered);
+		const mounted = await mm.add(ordered);
 		expect(mounted.length).toBe(3);
 		const defaults = mounted.filter((m) => m.version?.default === true);
 		expect(defaults.length).toBe(1);
 		expect(defaults[0].found.manifest.version).toBe("2.0.0");
 	});
 
-	it("addModule with name and empty cache + no discover option falls back to {} default (L340 ??)", async () => {
+	it("modules.add with name and empty cache + no discover option falls back to {} default (L340 ??)", async () => {
 		const mm = await newApi();
 		// Cache is empty. We pass a name that won't be found by lazy discover (no scanRoot
 		// option → defaultScanRoot upward-walk; the test runner's cwd is the slothlet repo
 		// so `node_modules` is discovered there). The result is MODULE_PACKAGE_NOT_FOUND
 		// because no module in the real node_modules matches our unique fixture name.
 		await withSuppressedSlothletErrorOutput(async () => {
-			await expect(mm.addModule("zzz-this-package-name-does-not-exist-in-node-modules")).rejects.toThrow(/MODULE_PACKAGE_NOT_FOUND/);
+			await expect(mm.add("zzz-this-package-name-does-not-exist-in-node-modules")).rejects.toThrow(/MODULE_PACKAGE_NOT_FOUND/);
 		});
 	});
 
-	it("addModules with a single-version subset of the discovery cache exercises group.length < 2 in #buildVersionConfigs (L640 true arm)", async () => {
+	it("modules.add with a single-version subset of the discovery cache exercises group.length < 2 in #buildVersionConfigs (L640 true arm)", async () => {
 		const mm = await newApi();
 		await mm.discover({ root: FIX_NPM });
 		// Mount three distinct-name modules → each forms a group of size 1 in
 		// #buildVersionConfigs → `if (group.length < 2) continue` fires for every iteration.
 		// (The multi-version test covers the > 2 arm.)
-		const all = mm.getDiscoveryCache();
-		const mounted = await mm.addModules(all);
+		const all = mm.cache.get();
+		const mounted = await mm.add(all);
 		expect(mounted.length).toBe(3);
 		for (const m of mounted) {
 			expect(m.version).toBeNull();
 		}
 	});
 
-	it("addDiscovered with no items in the scanRoot returns an empty mounted array", async () => {
+	it("modules.add with no items in the scanRoot returns an empty mounted array", async () => {
 		const mm = await newApi();
 		// Point at a path that doesn't exist so discover returns []
-		const out = await mm.addDiscovered({ discover: { root: "/this/path/does/not/exist" } });
+		const out = await mm.add({ discover: { root: "/this/path/does/not/exist" } });
 		expect(Array.isArray(out)).toBe(true);
 		expect(out.length).toBe(0);
 	});
 
-	it("addModules with two same-major versions in order [1.2.3, 1.2.3-beta] exercises pickHighestSemver's bestSegs `?? 0` fallback (L675 nullish-fallback arm) + L680 equal-continue arm", async () => {
+	it("modules.add with two same-major versions in order [1.2.3, 1.2.3-beta] exercises pickHighestSemver's bestSegs `?? 0` fallback (L675 nullish-fallback arm) + L680 equal-continue arm", async () => {
 		// Forces pickHighestSemver to compare ["1.2.3", "1.2.3-beta"]:
 		//   best=[1,2,3], candidate=[1,2,3,0]; j=0..2 equal → continue (L680 false arm);
 		//   j=3: a=0, b=bestSegs[3]??0=0 (L675 `?? 0` fallback fires for best, undefined → 0).
@@ -869,11 +874,11 @@ describe("ModuleManager coverage gaps", () => {
 				path.join(FIX_V_ROOT, "install-d") // 1.2.3-beta (same major → collides at v1)
 			]
 		});
-		const byVersion = (v) => mm.getDiscoveryCache().find((r) => r.package === "@org/multiv" && r.manifest.version === v);
+		const byVersion = (v) => mm.cache.get().find((r) => r.package === "@org/multiv" && r.manifest.version === v);
 		const ordered = [byVersion("1.2.3"), byVersion("1.2.3-beta")];
 		expect(ordered.every(Boolean)).toBe(true);
 		await withSuppressedSlothletErrorOutput(async () => {
-			const result = await mm.addModules(ordered, { failure: "best-effort" });
+			const result = await mm.add(ordered, { failure: "best-effort" });
 			expect(result.mounted.length).toBe(1);
 			expect(result.failed.length).toBe(1);
 			// First (default per pickHighestSemver — "1.2.3" wins since candidate doesn't beat it) mounts;
@@ -883,7 +888,7 @@ describe("ModuleManager coverage gaps", () => {
 		});
 	});
 
-	it("addModules with two non-numeric-lead versions exercises semverToTag's `v${version}` fallback (L640 false arm)", async () => {
+	it("modules.add with two non-numeric-lead versions exercises semverToTag's `v${version}` fallback (L640 false arm)", async () => {
 		// semverToTag's regex `^(\d+)/.exec` only matches versions starting with a digit.
 		// Standard semver always does, so the false arm is only reachable with
 		// pathological version strings. Manifest validator doesn't enforce semver shape
@@ -916,9 +921,9 @@ describe("ModuleManager coverage gaps", () => {
 
 			const mm = await newApi();
 			await mm.discover({ root: [path.join(tmpDir, "install-1"), path.join(tmpDir, "install-2")] });
-			const both = mm.getDiscoveryCache().filter((r) => r.package === "@org/nonsemv");
+			const both = mm.cache.get().filter((r) => r.package === "@org/nonsemv");
 			expect(both.length).toBe(2);
-			const mounted = await mm.addModules(both);
+			const mounted = await mm.add(both);
 			// semverToTag false arm → tags "vabc.1.0.0" and "vdef.2.0.0" (different) → both mount.
 			expect(mounted.length).toBe(2);
 			const tags = mounted.map((m) => m.version?.tag).sort();
@@ -928,7 +933,7 @@ describe("ModuleManager coverage gaps", () => {
 		}
 	});
 
-	it("addModules with two same-major versions in order [1.2.3-beta, 1.2.3] exercises pickHighestSemver's candidateSegs `?? 0` fallback (L674 nullish-fallback arm)", async () => {
+	it("modules.add with two same-major versions in order [1.2.3-beta, 1.2.3] exercises pickHighestSemver's candidateSegs `?? 0` fallback (L674 nullish-fallback arm)", async () => {
 		// Reversed order: best=[1,2,3,0], candidate=[1,2,3]; j=0..2 equal → continue;
 		//   j=3: a=candidateSegs[3]??0=0 (L674 `?? 0` fallback fires, undefined → 0), b=0.
 		//   Loop exits, candidateWins=false. Best stays "1.2.3-beta" (the first one).
@@ -940,11 +945,11 @@ describe("ModuleManager coverage gaps", () => {
 				path.join(FIX_V_ROOT, "install-a") // 1.2.3
 			]
 		});
-		const byVersion = (v) => mm.getDiscoveryCache().find((r) => r.package === "@org/multiv" && r.manifest.version === v);
+		const byVersion = (v) => mm.cache.get().find((r) => r.package === "@org/multiv" && r.manifest.version === v);
 		const ordered = [byVersion("1.2.3-beta"), byVersion("1.2.3")];
 		expect(ordered.every(Boolean)).toBe(true);
 		await withSuppressedSlothletErrorOutput(async () => {
-			const result = await mm.addModules(ordered, { failure: "best-effort" });
+			const result = await mm.add(ordered, { failure: "best-effort" });
 			expect(result.mounted.length).toBe(1);
 			expect(result.failed.length).toBe(1);
 			// "1.2.3-beta" comes first in the array, so pickHighestSemver returns it (candidate "1.2.3" never wins).

@@ -329,7 +329,7 @@ describe.each(["async", "live"])("self in a scope the host opens > %s", (runtime
 		it.each(["partial", "full"])("with %s isolation, self answers as the host's api does", async (isolation) => {
 			const api = await slothlet({ base: path.join(FIXTURE, folder), runtime, silent: true });
 			try {
-				const rows = await api.slothlet.scope({ context: {}, isolation, fn: () => moduleShape(api) });
+				const rows = await api.slothlet.context.scope({ context: {}, isolation, fn: () => moduleShape(api) });
 				expectMirror(rows, hostShape(api), false);
 			} finally {
 				await api.shutdown();

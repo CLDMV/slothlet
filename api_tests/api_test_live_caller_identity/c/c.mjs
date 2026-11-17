@@ -32,7 +32,7 @@ export function probe() {
  * @returns {string|null} The api path the pinned callback runs as, or null for the host.
  */
 export function pinCaller() {
-	const pinned = self.slothlet.lockCaller.caller(() => self.slothlet.metadata.self()?.path?.join(".") ?? null);
+	const pinned = self.slothlet.pin.caller(() => self.slothlet.metadata.self()?.path?.join(".") ?? null);
 	try {
 		return pinned();
 	} catch (error) {
