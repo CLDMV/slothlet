@@ -93,6 +93,19 @@ export function checkCapability(name, route, importer = null, filename = null, r
 }
 
 /**
+ * Whether an instance is up with a capability check of its own registered: code compiled under a name tagged with
+ * that instance's id is then judged by that instance's check, not by any other's.
+ * @param {*} instanceID - The instance id a name is tagged with.
+ * @returns {boolean} True while that instance's check is registered.
+ * @internal
+ * @example
+ * hasCapabilityCheck("b"); // true while instance "b" is up with the permission system configured
+ */
+export function hasCapabilityCheck(instanceID) {
+	return typeof instanceID === "string" && MapMethods.has(CHECKS, instanceID);
+}
+
+/**
  * `node:fs`, `node:path` and `node:url`, as slothlet loaded: what a file name compiled under is resolved with.
  * @type {{fs: object|null, path: object|null, url: object|null}}
  * @private

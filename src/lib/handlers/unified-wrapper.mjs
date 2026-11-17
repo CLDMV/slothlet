@@ -161,7 +161,7 @@ import {
 } from "#helpers/intrinsics";
 import { pinToCurrentCaller } from "#helpers/caller-pinning";
 import { isEngineStackAccessor, runUnformatted } from "#helpers/stack-read";
-import { namesForeignFile, BINDING_NAME } from "#helpers/capability-context";
+import { namesForeignFile, BINDING_NAME, hasCapabilityCheck } from "#helpers/capability-context";
 import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "#helpers/instance-imports";
 const { setApiNodeCheck } = compositionInternals("lib/handlers/unified-wrapper");
 const reservedKeysOwn = reservedKeysInternals("lib/handlers/unified-wrapper");
@@ -491,7 +491,10 @@ function runtime_runnerCompilesLoad(slothlet, filename) {
 
 /**
  * Refuse code compiled under the name of a file this instance is loading now (every load of it) a capability that no
- * rule opens for that load's module path; a load whose paths are not known yet is refused it.
+ * rule opens for that load's module path; a load whose paths are not known yet is refused it. A name tagged with
+ * another instance's id is that instance's to judge while it is up with a check of its own registered (two instances
+ * load the same file under their own tags, and the compile hooks are shared by the process); a name tagged with an id
+ * no registered check holds (an unknown instance, or one that has shut down) is judged here as any other.
  * @param {object} slothlet - The instance.
  * @param {object} permissionManager - Its permission manager.
  * @param {string} name - The capability.
@@ -505,6 +508,8 @@ function runtime_assertNamedLoads(slothlet, permissionManager, name, route, file
 	if (typeof filename !== "string") return;
 	const loader = slothlet?.processors?.loader;
 	if (typeof loader?.loadsOfFile !== "function") return;
+	const tag = RegExpMethods.exec(/[?&]slothlet_instance=([^&#]+)/, filename)?.[1] ?? null;
+	if (tag !== null && tag !== String(slothlet.instanceID) && hasCapabilityCheck(tag)) return;
 	const loads = loader.loadsOfFile(toComparablePath(filename));
 	for (let index = 0; index < loads.length; index++) {
 		const paths = loads[index].paths;
