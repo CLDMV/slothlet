@@ -34,9 +34,9 @@
  *
  * Additional paths covered:
  * - ___invalidate() lines 760-773: Clearing children when api.remove() is called
- * - _extractFullImpl metadata paths (lines 457-468): Reload where impl has __childFilePaths
+ * - _extractFullImpl metadata paths (lines 457-468): Reload where impl has ____childFilePaths
  * - Inner ___adoptImplChildren debug paths (lines 901-909): symbol keys during adoption
- * - _materialize() deduplication: concurrent materializations reuse existing promise
+ * - ___materialize() deduplication: concurrent materializations reuse existing promise
  *
  * @module tests/vitests/suites/unified-wrapper/unified-wrapper-reset-lazy
  */
@@ -237,8 +237,8 @@ describe("unified-wrapper: ___invalidate via api.remove (lines 760-773)", () => 
 });
 
 // ---------------------------------------------------------------------------
-// 3. Concurrent materialization: _materialize() deduplication via materializationPromise
-//    Triggering _materialize() twice simultaneously reuses the same promise
+// 3. Concurrent materialization: ___materialize() deduplication via materializationPromise
+//    Triggering ___materialize() twice simultaneously reuses the same promise
 //    (lines 661-675)
 // ---------------------------------------------------------------------------
 describe("unified-wrapper: concurrent materialization deduplication (lines 661-675)", () => {
@@ -285,7 +285,7 @@ describe("unified-wrapper: concurrent materialization deduplication (lines 661-6
 
 // ---------------------------------------------------------------------------
 // 4. _extractFullImpl metadata paths (lines 457-468)
-//    Reload of a module that has __childFilePaths or __childFilePathsPreMaterialize
+//    Reload of a module that has ____childFilePaths or ____childFilePathsPreMaterialize
 //    in its impl → the metadata paths in _extractFullImpl fire
 // ---------------------------------------------------------------------------
 describe("unified-wrapper: _extractFullImpl metadata paths (lines 457-468)", () => {

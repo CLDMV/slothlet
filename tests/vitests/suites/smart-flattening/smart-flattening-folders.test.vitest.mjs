@@ -331,7 +331,7 @@ describe.each(FULL_MATRIX)("Smart Flattening Folders - $name", ({ name: ___name,
 		// In lazy mode this exercises the `attachedKeys.length > 0` branch in
 		// lazy_materializeFunc (modes-processor.mjs ~line 1512): the same-name subdir lazy
 		// wrapper is pre-populated with the file's exports as direct own keys, so it is
-		// returned directly as nestedValue (rather than unwrapping __impl).
+		// returned directly as nestedValue (rather than unwrapping ____impl).
 		const api = await slothlet({
 			...config,
 			base: path.join(__dirname, `../../../../${API_TEST_BASE}/api_test`)

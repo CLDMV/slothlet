@@ -355,11 +355,11 @@ for (const { config, name } of getMatrixConfigs()) {
 		it.skipIf(config.mode !== "lazy")("does not materialize the other module's untouched lazy subtrees", async () => {
 			api = await createComounted(config);
 			const untouched = ["gear", "tools.kit"].map((p) => resolveWrapper(at(api, p)));
-			const spies = untouched.map((w) => vi.spyOn(w, "_materialize"));
+			const spies = untouched.map((w) => vi.spyOn(w, "___materialize"));
 
 			await api.slothlet.api.reload("ext");
 
-			spies.forEach((spy, i) => expect(spy, `${["gear", "tools.kit"][i]}._materialize`).not.toHaveBeenCalled());
+			spies.forEach((spy, i) => expect(spy, `${["gear", "tools.kit"][i]}.___materialize`).not.toHaveBeenCalled());
 			await expectLeaves(api, { ...EXT_LEAVES, ...OTHER_LEAVES });
 		});
 

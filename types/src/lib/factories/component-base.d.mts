@@ -39,7 +39,7 @@ export class ComponentBase {
      *   - Determining whether a set(trap) write should be silently absorbed (`setTrap`)
      *   - Filtering what getTrap exposes externally on wrapper proxies
      *
-     * Note: `_materialize` is included here (skip for collection/extraction) but
+     * Note: `___materialize` is included here (skip for collection/extraction) but
      * setTrap exempts it since the framework needs to write it directly.
      *
      * The Set itself is defined in `#helpers/reserved-keys`, a module with no

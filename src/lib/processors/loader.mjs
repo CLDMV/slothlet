@@ -910,8 +910,8 @@ export class Loader extends ComponentBase {
 
 	/**
 	 * Whether a file or folder name is, or sanitizes to, a framework-reserved key. The member a file
-	 * or folder produces is named by its sanitized name, so `_materialize-` or `-_impl` collides with
-	 * the framework handle exactly as `_materialize` does (#571 review).
+	 * or folder produces is named by its sanitized name, so `___materialize-` or `-____impl` collides with
+	 * the framework handle exactly as `___materialize` does (#571 review).
 	 * @param {string} name - Entry name without extension (a folder's name as-is).
 	 * @returns {boolean} True when the entry's name or its member name is reserved.
 	 * @private
@@ -1254,9 +1254,10 @@ export class Loader extends ComponentBase {
 
 					// Reserved-name rejection (#260): a module file named for a framework-reserved key
 					// would overwrite the framework's own handle when its children are adopted — the
-					// `_materialize.mjs` shape used to break composition with a bare TypeError, and
-					// `_impl.mjs` silently emptied the lazy surface. Fail the scan with a named error
-					// instead, for a `__`-prefixed name a `hidden` glob brought back as for the rest.
+					// `___materialize.mjs` shape used to break composition with a bare TypeError, and
+					// `____impl.mjs` silently emptied the lazy surface. Fail the scan with a named error
+					// instead, for a `__`-prefixed name a `hidden` glob brought back as for a name that
+					// only sanitizes into a reserved one (such as `-____impl`).
 					//
 					// Checked LAST, after every exclusion: the refusal covers the files this mount
 					// actually loads. A single-file `api.add` filters the listing down to one file, and
@@ -1431,7 +1432,7 @@ export class Loader extends ComponentBase {
 			if (isHiddenEntry(hiddenMatcher, apiPrefix ? `${apiPrefix}.${hiddenSegment(name)}` : hiddenSegment(name), fullName, false)) continue;
 
 			// Reserved-name rejection (#260), mirroring the filesystem scan. The hazard is the
-			// composed wrapper shape, not the platform: a manifest carrying `_impl.mjs` would empty
+			// composed wrapper shape, not the platform: a manifest carrying `____impl.mjs` would empty
 			// the lazy surface in a browser exactly as it does under Node.
 			if (this.#isReservedEntryName(name)) {
 				throw new this.SlothletError("MODULE_RESERVED_FILENAME", { file: fullName, dir: rootPath }, null, { validationError: true });
@@ -1652,7 +1653,7 @@ export class Loader extends ComponentBase {
 			const key = ofList[ofIndex];
 			if (key !== "default" && key !== "module.exports" && typeof key === "string") {
 				// Reserved-name rejection (#260): an export named for a framework-reserved key
-				// (`_materialize`, `__impl`, …) can only ever be shadowed by the framework's own
+				// (`___materialize`, `____impl`, …) can only ever be shadowed by the framework's own
 				// handle — it is unreachable on the composed surface and a standing hazard to the
 				// wrapper contract. Refuse it loudly at load instead of silently coexisting, so the
 				// module author learns at the file, not from a distant behavioral surprise.

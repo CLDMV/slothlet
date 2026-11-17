@@ -395,9 +395,9 @@ export class RoutineManager extends ComponentBase {
 	 * Subscribed to the INTERNAL contribution stream (#398), `emitInternal("impl:created"/"impl:changed")`,
 	 * which fires once per contribution BEFORE collision resolution decides which contributor's value
 	 * survives onto the composed tree — so every contributor is captured, not just the merge winner.
-	 * Reads the leaf's callable from `data.wrapper.__impl` (present on every such event, eager and
+	 * Reads the leaf's callable from `data.wrapper.____impl` (present on every such event, eager and
 	 * lazy); the raw `data.impl` field no longer exists (that was the enforcement-bypassing leak #398
-	 * removed). The real `UnifiedWrapper` instance, when there is one, arrives on `data.__wrapperRef`.
+	 * removed). The real `UnifiedWrapper` instance, when there is one, arrives on `data.____wrapperRef`.
 	 *
 	 * Also subscribed to `impl:changed` so a LATE, direct reassignment (`self.auth.shutdown = fn`,
 	 * done after the module that owns `auth` finished loading) is captured too, not just the
@@ -414,7 +414,7 @@ export class RoutineManager extends ComponentBase {
 		const apiPath = data?.apiPath;
 		if (typeof apiPath !== "string" || apiPath.length === 0) return;
 		const moduleID = data.moduleID;
-		const fn = data.wrapper?.__impl;
+		const fn = data.wrapper?.____impl;
 		const existingIndex = ArrayMethods.findIndex(this.raw, (e) => e.apiPath === apiPath && e.moduleID === moduleID);
 		// A stacked callable installed by rebuildStacks() must never be captured as if it were a
 		// module's own contribution, no matter what later re-touches the property it was written
@@ -444,13 +444,13 @@ export class RoutineManager extends ComponentBase {
 		const entry = { apiPath, moduleID, fn };
 		if (existingIndex === -1) listPush(this.raw, entry);
 		else this.raw[existingIndex] = entry;
-		// `data.wrapper` is a deliberately minimal frozen `{ __impl }` shape (the emit sites'), never
+		// `data.wrapper` is a deliberately minimal frozen `{ ____impl }` shape (the emit sites'), never
 		// the actual UnifiedWrapper — it has no `___invalidate()` to call. The REAL wrapper instance is
-		// reachable via `data.__wrapperRef` (#398), set by the construction + `impl:changed` emit sites
+		// reachable via `data.____wrapperRef` (#398), set by the construction + `impl:changed` emit sites
 		// (unified-wrapper.mjs). The lazy-materialization internal emit (modes-processor.mjs) carries a
-		// raw exported function and no `__wrapperRef`, so `resolveWrapper(undefined)` returns null —
+		// raw exported function and no `____wrapperRef`, so `resolveWrapper(undefined)` returns null —
 		// correctly leaving whatever this key already tracked untouched rather than clobbering it.
-		const wrapper = resolveWrapper(data.__wrapperRef);
+		const wrapper = resolveWrapper(data.____wrapperRef);
 		if (wrapper) MapMethods.set(this.#moduleWrappers(moduleID), apiPath, wrapper);
 
 		// Reactive self-heal (#362): rebuildStacks() only (re)installs the stacked callable at the
@@ -575,7 +575,7 @@ export class RoutineManager extends ComponentBase {
 		if (target === null || target === undefined || (typeof target !== "object" && typeof target !== "function")) return;
 
 		// Re-validate after the await (#362 review — findings #2/#4/#6). `#resolveContainer` yields (and
-		// may itself await a lazy `_materialize()`), so state can have moved on since the pre-await
+		// may itself await a lazy `___materialize()`), so state can have moved on since the pre-await
 		// snapshot above:
 		//   - A build/add/reload may have STARTED — defer to its terminal rebuildStacks() (same reason
 		//     as the top-of-method gate), and don't write raw mid-build.
@@ -972,7 +972,7 @@ export class RoutineManager extends ComponentBase {
 			const ofEntry = ofList[ofIndex],
 				key = ofEntry[0],
 				value = ofEntry[1];
-			const skipProps = ["_materialize", "_impl", "____slothletInternal"];
+			const skipProps = ["___materialize", "____impl", "____slothletInternal"];
 			if (ArrayMethods.includes(skipProps, key)) {
 				continue;
 			}
@@ -1323,7 +1323,7 @@ export class RoutineManager extends ComponentBase {
 				if (wrapper) {
 					if (wrapper.____slothletInternal.mode === "lazy" && !wrapper.____slothletInternal.state.materialized) {
 						try {
-							await wrapper._materialize();
+							await wrapper.___materialize();
 						} catch {
 							return; // Materialization failed — do not descend into a broken subtree.
 						}
@@ -1401,7 +1401,7 @@ export class RoutineManager extends ComponentBase {
 		const nodeWrapper = resolveWrapper(node);
 		if (nodeWrapper && nodeWrapper.____slothletInternal.mode === "lazy" && !nodeWrapper.____slothletInternal.state.materialized) {
 			try {
-				await nodeWrapper._materialize();
+				await nodeWrapper.___materialize();
 			} catch {
 				return; // Materialization failed — nothing further to resolve down this branch.
 			}
@@ -1679,7 +1679,7 @@ export class RoutineManager extends ComponentBase {
 		if (!invoked || SetMethods.size(invoked) === 0 || !value) return false;
 		if (SetMethods.has(invoked, value)) return true;
 		const wrapper = resolveWrapper(value);
-		return !!wrapper && (SetMethods.has(invoked, wrapper) || SetMethods.has(invoked, wrapper.__impl));
+		return !!wrapper && (SetMethods.has(invoked, wrapper) || SetMethods.has(invoked, wrapper.____impl));
 	}
 
 	/**
@@ -1762,7 +1762,7 @@ export class RoutineManager extends ComponentBase {
 			const wrapper = resolveWrapper(node);
 			if (wrapper && wrapper.____slothletInternal.mode === "lazy" && !wrapper.____slothletInternal.state.materialized) {
 				try {
-					await wrapper._materialize();
+					await wrapper.___materialize();
 				} catch {
 					return undefined;
 				}
@@ -1891,7 +1891,7 @@ export class RoutineManager extends ComponentBase {
 		const wasRecording = this.recording;
 		this.recording = true;
 		try {
-			await slotWrapper._materialize();
+			await slotWrapper.___materialize();
 		} catch {
 			// A node that fails to load contributes nothing; the cascade is installed either way.
 		} finally {

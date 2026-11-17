@@ -33,7 +33,7 @@
  *
  * Lines covered:
  *   - 217-228  : existingIsLazyUnmaterialized=true → sets effectiveMode on existing
- *   - 229-248  : valueIsLazyUnmaterialized=true   → sets effectiveMode on value; calls _materialize for replace
+ *   - 229-248  : valueIsLazyUnmaterialized=true   → sets effectiveMode on value; calls ___materialize for replace
  *   - 318-348  : merge mode, !existingIsLazyUnmaterialized && valueIsLazyUnmaterialized
  *
  * @module tests/vitests/suites/builders/api-assignment-lazy-folder-collision
@@ -145,7 +145,7 @@ describe("api-assignment: both wrappers lazy+unmaterialized — collision lines 
 		});
 
 		expect(value.____slothletInternal.state.collisionMode).toBe("replace");
-		// Line 241: _materialize() called for replace mode
+		// Line 241: ___materialize() called for replace mode
 		expect(value.____slothletInternal.state.inFlight || value.____slothletInternal.state.materialized).toBe(true);
 	});
 
@@ -246,7 +246,7 @@ describe("api-assignment: existing eager, value lazy — merge branch (lines 318
 
 		const targetApi = { myFolder: existingProxy };
 
-		// replace mode: lines 340-348 fire → _materialize() called on value
+		// replace mode: lines 340-348 fire → ___materialize() called on value
 		await assignment.assignToApiPath(targetApi, "myFolder", valueProxy, {
 			useCollisionDetection: true,
 			config: makeConfig("replace"),
@@ -254,7 +254,7 @@ describe("api-assignment: existing eager, value lazy — merge branch (lines 318
 		});
 
 		expect(value.____slothletInternal.state.collisionMode).toBe("replace");
-		// _materialize() triggered (line 348 area)
+		// ___materialize() triggered (line 348 area)
 		expect(value.____slothletInternal.state.inFlight || value.____slothletInternal.state.materialized).toBe(true);
 	});
 
@@ -602,7 +602,7 @@ describe("api-assignment: nested sub-wrapper recursive merge (lines 497-506)", (
 
 // ---------------------------------------------------------------------------
 // Group 7: Case 2 merge, value lazy with FAILING materializeFunc
-// → Line 416 (SlothletWarning in _materialize().catch())
+// → Line 416 (SlothletWarning in ___materialize().catch())
 // ---------------------------------------------------------------------------
 describe("api-assignment: failing materializeFunc warning in Case 2 merge (line 416)", () => {
 	let _api;
@@ -639,7 +639,7 @@ describe("api-assignment: failing materializeFunc warning in Case 2 merge (line 
 
 		// merge mode, existing=eager, value=lazy with failing materializeFunc
 		// Case 2: valueLazy && !existingLazy → else if (!isMergeReplace) block
-		// → _materialize().catch(err => new SlothletWarning(...)) fires → line 416
+		// → ___materialize().catch(err => new SlothletWarning(...)) fires → line 416
 		const result = await assignment.assignToApiPath(targetApi, "myFolder", failingProxy, {
 			useCollisionDetection: true,
 			config: makeConfig("merge"),
@@ -708,7 +708,7 @@ describe("api-assignment: lazy folder first, file second — getters through the
 			config: makeConfig(mode),
 			collisionContext: "initial"
 		});
-		await targetApi.gauge._materialize();
+		await targetApi.gauge.___materialize();
 		return targetApi.gauge;
 	}
 

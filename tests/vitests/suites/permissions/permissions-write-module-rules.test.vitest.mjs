@@ -164,7 +164,7 @@ describe.each(CONFIGS)("module write rules (#625) — $mode / $runtime", ({ mode
 			expect(report).toEqual(every(report, "PERMISSION_DENIED"));
 		});
 
-		it.each([["other.**:write"], ["**:write"], ["*.x:write"], ["slothlet.**:write"], ["victim.**.__state:write"]])(
+		it.each([["other.**:write"], ["**:write"], ["*.x:write"], ["slothlet.**:write"], ["victim.**.____state:write"]])(
 			"refuses the module a write rule on %s",
 			async (target) => {
 				await load();

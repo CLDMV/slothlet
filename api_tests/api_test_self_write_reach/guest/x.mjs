@@ -468,7 +468,7 @@ export function addRuleFor(rule) {
  */
 export function writeVictimMetadata() {
 	return attempt(() => {
-		Object.defineProperty(self.victim.v, "__state", { value: {}, configurable: true });
+		Object.defineProperty(self.victim.v, "____state", { value: {}, configurable: true });
 	});
 }
 

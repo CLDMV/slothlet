@@ -146,7 +146,7 @@ describe("reactive routine stack patch without setImmediate (#578)", () => {
 			apiPath: "auth.initialize",
 			moduleID: "late-second-module",
 			wrapper: {
-				__impl: function lateContributor() {
+				____impl: function lateContributor() {
 					(globalThis.__slothletRoutineLog ??= []).push("late-contributor:initialize");
 				}
 			}

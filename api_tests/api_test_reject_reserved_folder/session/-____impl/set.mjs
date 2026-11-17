@@ -1,7 +1,7 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /api_tests/api_test_reject_reserved_folder/session/_impl/set.mjs
+ *	@Filename: /api_tests/api_test_reject_reserved_folder/session/____impl/set.mjs
  *	@Date: 2026-10-07T00:00:00-07:00 (1791356400)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
@@ -15,12 +15,12 @@
 
 /**
  * @fileoverview Fixture (#571): a folder named for a framework-reserved key, refused by the directory scan.
- * @module api_test_reject_reserved_folder.session._impl.set
+ * @module api_test_reject_reserved_folder.session.____impl.set
  */
 
 /**
  * @returns {string} Marker naming this leaf.
  */
 export function set() {
-	return "session._impl.set";
+	return "session.____impl.set";
 }

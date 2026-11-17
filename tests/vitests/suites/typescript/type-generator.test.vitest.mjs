@@ -343,8 +343,8 @@ describe("generateTypes – direct unit tests", () => {
 			const apiWithPrefixed = {
 				_private: member,
 				__modulePrivate: member,
-				__impl: member,
-				_materialize: member
+				____impl: member,
+				___materialize: member
 			};
 
 			const outputPath = nextOutputPath();
@@ -357,8 +357,8 @@ describe("generateTypes – direct unit tests", () => {
 			expect(output).toContain("_private");
 			expect(output).toContain("__modulePrivate");
 			// The framework's reserved names are its own, never the module's.
-			expect(output).not.toContain("__impl");
-			expect(output).not.toContain("_materialize");
+			expect(output).not.toContain("____impl");
+			expect(output).not.toContain("___materialize");
 		});
 
 		it("should skip the 'slothlet', 'shutdown', and 'destroy' reserved keys", async () => {

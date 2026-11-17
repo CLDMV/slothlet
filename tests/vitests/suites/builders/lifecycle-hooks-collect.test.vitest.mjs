@@ -302,7 +302,7 @@ describe.each(["eager", "lazy"])("collectLifecycleHooks — routine system walk 
 		await api.slothlet.api.add("auth", `${TEST_DIRS.API_TEST_VERSIONED}/v2`, { version: { tag: "v2" } });
 
 		// The logical path now resolves to a version-dispatcher proxy.
-		expect(api.auth.__isVersionDispatcher).toBe(true);
+		expect(api.auth.____isVersionDispatcher).toBe(true);
 
 		// The dispatcher and the versioned auth namespaces (login/logout/createUser only) own no
 		// shutdown hooks — api.shutdown() must resolve cleanly with no phantom invocation or crash.

@@ -855,7 +855,7 @@ export class ApiManager extends ComponentBase {
 	 * @public
 	 *
 	 * @example
-	 * apiManager.writeChecked(["victim", "v", "__state"]); // true unless permissions are disabled
+	 * apiManager.writeChecked(["victim", "v", "____state"]); // true unless permissions are disabled
 	 */
 	writeChecked(parts) {
 		if (this.ownershipEnforced()) return true;
@@ -1345,7 +1345,7 @@ export class ApiManager extends ComponentBase {
 		//     so an incomplete list there silently drops real children from the delete pass, the shadow
 		//     capture, AND the copy of nextWrapper's keys onto the survivor — not just from a moot key-exists
 		//     check. "replace" needs the accurate list exactly as much as "merge"/"merge-replace" do.
-		//   - Deriving keys from lazy metadata instead of materializing (`__childFilePathsPreMaterialize`,
+		//   - Deriving keys from lazy metadata instead of materializing (`____childFilePathsPreMaterialize`,
 		//     unified-wrapper.mjs): that map is populated ONLY as a side effect of a PRIOR merge-mode
 		//     file-vs-folder collision transferring the file side's already-known keys onto the still-lazy
 		//     folder side (api-assignment.mjs) — it never contains a lazy wrapper's own undiscovered
@@ -1356,10 +1356,10 @@ export class ApiManager extends ComponentBase {
 		// so "a side that might never otherwise be accessed" does not apply here: both sides are already
 		// being composed right now, and correctly composing them requires knowing what each one contains.
 		if (existingWrapper.____slothletInternal.mode === "lazy" && !existingWrapper.____slothletInternal.state.materialized) {
-			await existingWrapper._materialize();
+			await existingWrapper.___materialize();
 		}
 		if (nextWrapper.____slothletInternal.mode === "lazy" && !nextWrapper.____slothletInternal.state.materialized) {
-			await nextWrapper._materialize();
+			await nextWrapper.___materialize();
 		}
 
 		if (config?.debug?.api) {
@@ -1382,7 +1382,7 @@ export class ApiManager extends ComponentBase {
 		}
 
 		// THE ACTUAL FIX: Transfer _childCache entries directly
-		// nextProxy.__impl is empty because buildAPI already moved everything to _childCache
+		// nextProxy.____impl is empty because buildAPI already moved everything to _childCache
 		// We need to transfer the child wrappers from nextWrapper to existingWrapper
 		// Transfer children from wrapper properties
 		const existingChildKeys = filterList(Objects.keys(existingWrapper), (k) => !isFrameworkReservedKey(k));
@@ -1422,7 +1422,7 @@ export class ApiManager extends ComponentBase {
 		// Set true only when existingWrapper's impl is explicitly cleared to null below, pending a
 		// future materialization — the ONE case where the shared bookkeeping after this if/else-if/else
 		// chain must mark existingWrapper unmaterialized. Every other path through this function leaves
-		// existingWrapper's own materialized state exactly as `_materialize()`/`___setImpl()` already
+		// existingWrapper's own materialized state exactly as `___materialize()`/`___setImpl()` already
 		// set it (see the bookkeeping's own comment below for why re-deriving it from impl's content is
 		// wrong).
 		let existingImplExplicitlyCleared = false;
@@ -1656,12 +1656,12 @@ export class ApiManager extends ComponentBase {
 		// Only the "replace" branch's explicit-clear-to-null case needs existingWrapper marked
 		// unmaterialized here. Every other path (___setImpl, and "merge"/"merge-replace"'s child-key
 		// copying, which never touches existingWrapper's own impl) already leaves
-		// existingWrapper.____slothletInternal.state exactly as `_materialize()`/`___setImpl()` set it —
+		// existingWrapper.____slothletInternal.state exactly as `___materialize()`/`___setImpl()` set it —
 		// both unconditionally mark materialized=true and clear inFlight on real completion, regardless
 		// of what the actual content turns out to be. A prior version of this block re-derived
 		// "materialized" from impl's own value/type instead of trusting that — first misreading a
 		// legitimately callable impl (a self-named single-file lazy folder) as unmaterialized, which let
-		// a later access re-run `_materialize()` and double-fire `_onWrapperMaterialized()`, corrupting
+		// a later access re-run `___materialize()` and double-fire `_onWrapperMaterialized()`, corrupting
 		// the global unmaterialized-lazy-wrapper count (#364 review); the equivalent content-based check
 		// would misread any other falsy-by-type-check impl (e.g. a legitimate null/undefined export) the
 		// same way. Content is never a valid signal for "was this wrapper actually materialized."
@@ -1795,7 +1795,7 @@ export class ApiManager extends ComponentBase {
 	 * @private
 	 *
 	 * @description
-	 * `createProxy()` can kick off a wrapper's `_materialize()` in the background before
+	 * `createProxy()` can kick off a wrapper's `___materialize()` in the background before
 	 * `setValueAtPath()`'s collision decision is even known. When that decision rejects the
 	 * candidate, `revertSpeculativeSubtree()` correctly undoes ownership/raw-capture state
 	 * immediately — but the in-flight materialization is a separate, already-running async
@@ -1827,7 +1827,7 @@ export class ApiManager extends ComponentBase {
 		// runs when something reads it, never as a side effect of this walk (#597).
 		for (let ofIndex = 0, ofList = Objects.keys(api); ofIndex < ofList.length; ofIndex++) {
 			const key = ofList[ofIndex];
-			const skipProps = ["_materialize", "_impl", "____slothletInternal"];
+			const skipProps = ["___materialize", "____impl", "____slothletInternal"];
 			if (ArrayMethods.includes(skipProps, key)) continue;
 			const value = dataMemberOf(api, key);
 			if (typeof value === "function" || (value && typeof value === "object")) {
@@ -1940,7 +1940,7 @@ export class ApiManager extends ComponentBase {
 				// previous owner) would then have RoutineManager capture the restored function under
 				// the WRONG (just-removed) moduleID — a phantom entry that duplicates the real one and
 				// invokes the same function twice (#372 review).
-				existingValueRaw.___setImpl(resolveWrapper(nextValue)?.__impl ?? nextValue, options.moduleID);
+				existingValueRaw.___setImpl(resolveWrapper(nextValue)?.____impl ?? nextValue, options.moduleID);
 				return;
 			}
 		}
@@ -2035,7 +2035,7 @@ export class ApiManager extends ComponentBase {
 			!parentWrapper.____slothletInternal.state.materialized;
 			walk += 1
 		) {
-			await parentWrapper._materialize();
+			await parentWrapper.___materialize();
 			if (!isLazyStandIn(parent)) break;
 			parent = this.ensureParentPath(root, parts, parentOptions);
 			parentWrapper = resolveWrapper(parent);
@@ -2302,19 +2302,19 @@ export class ApiManager extends ComponentBase {
 			});
 		}
 
-		// CRITICAL: Delete from wrapper's child properties AND _impl if current is a proxy
-		// Properties are stored in wrapper and _impl, not on the proxy itself
+		// CRITICAL: Delete from wrapper's child properties AND ____impl if current is a proxy
+		// Properties are stored in wrapper and ____impl, not on the proxy itself
 		if (resolveWrapper(current)) {
 			const wrapper = resolveWrapper(current);
 			// Delete from wrapper (child properties). The else-arm (an internal `_`/`__` key, or a key
-			// that lives only in _impl and not on the wrapper) is a defensive location guard for leaf
+			// that lives only in ____impl and not on the wrapper) is a defensive location guard for leaf
 			// shapes the test suite does not construct here.
 			const isInternal = isFrameworkReservedKey(finalKey);
 			/* v8 ignore else */
 			if (!isInternal && finalKey in wrapper) {
 				delete wrapper[finalKey];
 			}
-			// Delete from _impl (the actual implementation object). The else-arm (a callable leaf whose
+			// Delete from ____impl (the actual implementation object). The else-arm (a callable leaf whose
 			// impl is a function, or an absent impl) is a defensive shape guard not exercised here.
 			/* v8 ignore else */
 			if (wrapper.____slothletInternal.impl && typeof wrapper.____slothletInternal.impl === "object") {
@@ -2453,11 +2453,11 @@ export class ApiManager extends ComponentBase {
 
 			// Extract raw implementation from temporary wrapper IF it's materialized
 			// The temporary buildAPI creates wrappers which we need to unwrap
-			// For eager mode: __impl is the actual implementation (object/function) - extract it
-			// For lazy mode: if __impl is a function, it's unmaterialized - extract it anyway for reload
+			// For eager mode: ____impl is the actual implementation (object/function) - extract it
+			// For lazy mode: if ____impl is a function, it's unmaterialized - extract it anyway for reload
 			const baseValueRaw = resolveWrapper(baseValue);
 			if (baseValue && baseValueRaw !== null) {
-				baseValue = baseValueRaw.__impl;
+				baseValue = baseValueRaw.____impl;
 			}
 
 			await this.setValueAtPath(this.slothlet.api, parts, baseValue, {
@@ -2677,7 +2677,7 @@ export class ApiManager extends ComponentBase {
 			let members;
 			if (raw) {
 				const internal = raw.____slothletInternal;
-				if (internal.mode === "lazy" && !internal.state.materialized) await raw._materialize();
+				if (internal.mode === "lazy" && !internal.state.materialized) await raw.___materialize();
 				const impl = internal.impl;
 				members = new Map();
 				// Members are read by descriptor: an accessor is still a path the content writes, but it is the module's code,
@@ -3774,7 +3774,7 @@ export class ApiManager extends ComponentBase {
 				// Skip version dispatcher proxies — accessing their routing properties would
 				// prematurely invoke user discriminator functions during setup, before all
 				// versions are registered. Dispatchers have no pending materializations anyway.
-				// Detect by the module-private brand, never by reading `.__isVersionDispatcher`: that
+				// Detect by the module-private brand, never by reading `.____isVersionDispatcher`: that
 				// read is a `__`-private access that the permission gate denies on ANY gated data node
 				// (e.g. a `manifest.activationEvents` array) under `private.host: deny` (#287).
 				if (isFrameworkInternal(obj)) return;
@@ -3799,7 +3799,7 @@ export class ApiManager extends ComponentBase {
 						collectPendingMaterializations(dataMemberOf(wrapper, key), depth + 1);
 					}
 					// Walked the raw wrapper's children; do NOT also walk the proxy below — `Object.keys()` on a
-					// lazy, function-typed proxy triggers its ownKeys trap, which calls `_materialize()` and
+					// lazy, function-typed proxy triggers its ownKeys trap, which calls `___materialize()` and
 					// would eagerly materialize the very wrappers lazy mode defers. Matches _drainInFlightLoads,
 					// which returns after the wrapper branch for the same reason.
 					return;
@@ -4303,7 +4303,7 @@ export class ApiManager extends ComponentBase {
 		for (let ofIndex = 0, ofList = concatLists([live], sources); ofIndex < ofList.length; ofIndex++) {
 			const wrapper = ofList[ofIndex];
 			if (wrapper.____slothletInternal.mode === "lazy" && !wrapper.____slothletInternal.state.materialized) {
-				await wrapper._materialize();
+				await wrapper.___materialize();
 			}
 		}
 		const childKeys = (wrapper) => filterList(Objects.keys(wrapper), (key) => !isFrameworkReservedKey(key));
@@ -4883,7 +4883,7 @@ export class ApiManager extends ComponentBase {
 			// Rollback paths that still have owners
 			for (let ofIndex = 0, ofList = pathsToRollback; ofIndex < ofList.length; ofIndex++) {
 				const rollback = ofList[ofIndex];
-				// Get the previous _impl from ownership and set it
+				// Get the previous ____impl from ownership and set it
 				const { parts } = this.normalizeApiPath(rollback.apiPath);
 				const previousImpl = this.slothlet.handlers.ownership?.getCurrentValue?.(rollback.apiPath);
 
@@ -4893,7 +4893,7 @@ export class ApiManager extends ComponentBase {
 					const restoreFile = (raw) => {
 						if (restoredFile !== null) raw.____slothletInternal.filePath = restoredFile;
 					};
-					// Get the existing wrapper and update its _impl — unless the restore above already did.
+					// Get the existing wrapper and update its ____impl — unless the restore above already did.
 					const existingWrapper = this.#memberAtPath(this.slothlet.api, parts);
 					const existingWrapperRaw = resolveWrapper(existingWrapper);
 					if (existingWrapperRaw && !SetMethods.has(restoredWrappers, existingWrapperRaw)) {
@@ -5645,7 +5645,7 @@ export class ApiManager extends ComponentBase {
 			implForReload = withoutSetAside;
 		}
 
-		// Recursively extract full impls from any child wrapper proxies with depleted _impl.
+		// Recursively extract full impls from any child wrapper proxies with depleted ____impl.
 		// This handles the common case where freshApi is a function (no ___getState) but
 		// its enumerable properties are wrapper proxies from eager rebuild.
 		// IMPORTANT: Only extract from MATERIALIZED wrappers (eager mode). Unmaterialized
@@ -5665,8 +5665,8 @@ export class ApiManager extends ComponentBase {
 						// the adopting wrapper would give the child its own folder; the child keeps its file here.
 						const childFile = childWrapper.____slothletInternal.filePath;
 						if (childFile) {
-							if (!FunctionMethods.call(Objects.prototype.hasOwnProperty, implForReload, "__childFilePaths")) {
-								Objects.defineProperty(implForReload, "__childFilePaths", {
+							if (!FunctionMethods.call(Objects.prototype.hasOwnProperty, implForReload, "____childFilePaths")) {
+								Objects.defineProperty(implForReload, "____childFilePaths", {
 									__proto__: null,
 									value: {},
 									enumerable: false,
@@ -5674,7 +5674,7 @@ export class ApiManager extends ComponentBase {
 									writable: true
 								});
 							}
-							implForReload.__childFilePaths[key] ??= childFile;
+							implForReload.____childFilePaths[key] ??= childFile;
 						}
 					}
 				}
@@ -5727,7 +5727,7 @@ export class ApiManager extends ComponentBase {
 		const nodeWrapper = resolveWrapper(node);
 		if (!nodeWrapper) return node ?? {};
 		if (nodeWrapper.____slothletInternal.mode === "lazy" && !nodeWrapper.____slothletInternal.state.materialized) {
-			await nodeWrapper._materialize();
+			await nodeWrapper.___materialize();
 		}
 		const impl = nodeWrapper.____slothletInternal.impl;
 		if (typeof impl === "function") return impl;
@@ -6177,7 +6177,7 @@ export class ApiManager extends ComponentBase {
 						// Extract full impl from fresh value (which is a wrapper proxy from buildAPI).
 						// CRITICAL: freshWrapper.____slothletInternal.impl may be depleted - the constructor's
 						// ___adoptImplChildren() moved children (like host, port for config) out of
-						// _impl and onto the wrapper as own properties, deleting them from _impl.
+						// ____impl and onto the wrapper as own properties, deleting them from ____impl.
 						// Use _extractFullImpl to reconstruct the complete impl from wrapper tree.
 						let implForReload;
 						// freshValue always has a wrapper (from buildAPI) and is truthy; FALSE branch is defensive.
@@ -6281,7 +6281,7 @@ export class ApiManager extends ComponentBase {
 
 				// Existing wrapper found - update implementation directly
 				// This is the key: we update the WRAPPER's implementation, not replace the path
-				// CRITICAL: After eager rebuild, wrapper proxies have depleted _impl (children
+				// CRITICAL: After eager rebuild, wrapper proxies have depleted ____impl (children
 				// adopted to own properties). Reconstruct the complete impl from the wrapper tree
 				// so ___setImpl → ___adoptImplChildren receives the full key set.
 				let implForReload;

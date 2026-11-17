@@ -689,13 +689,13 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 				const routineManager = resolveWrapper(api.ping).slothlet.handlers.routineManager;
 				const hasEntry = () => routineManager.raw.some((e) => e.apiPath === "stale.initialize" && e.moduleID === "mod1");
 
-				routineManager.onImplCreated({ apiPath: "stale.initialize", moduleID: "mod1", wrapper: { __impl: function initialize() {} } });
+				routineManager.onImplCreated({ apiPath: "stale.initialize", moduleID: "mod1", wrapper: { ____impl: function initialize() {} } });
 				expect(hasEntry()).toBe(true);
 
 				// A later impl:changed for the SAME (apiPath, moduleID) whose impl is no longer a
 				// function — e.g. a direct reassignment to a plain object — must drop the earlier
 				// capture, not leave a stale function contribution a cascade could still invoke.
-				routineManager.onImplCreated({ apiPath: "stale.initialize", moduleID: "mod1", wrapper: { __impl: {} } });
+				routineManager.onImplCreated({ apiPath: "stale.initialize", moduleID: "mod1", wrapper: { ____impl: {} } });
 				expect(hasEntry()).toBe(false);
 			} finally {
 				await api.slothlet.shutdown();
@@ -880,7 +880,7 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 				routineManager.onImplCreated({
 					apiPath: "auth.initialize",
 					moduleID: "late-second-module",
-					wrapper: { __impl: lateContributor }
+					wrapper: { ____impl: lateContributor }
 				});
 
 				// The reactive self-heal runs asynchronously off the onImplCreated call above; give it
@@ -987,7 +987,7 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 				routineManager.onImplCreated({
 					apiPath: "initialize",
 					moduleID: rawEntry.moduleID,
-					wrapper: { __impl: rawEntry.fn }
+					wrapper: { ____impl: rawEntry.fn }
 				});
 
 				// The reactive self-heal is deferred via setImmediate (#362 review) — a macrotask
@@ -1050,7 +1050,7 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 				const entries = routineManager.raw.filter((e) => e.apiPath === "auth.initialize");
 				expect(entries.length).toBe(2);
 				for (const entry of entries) {
-					routineManager.onImplCreated({ apiPath: entry.apiPath, moduleID: entry.moduleID, wrapper: { __impl: entry.fn } });
+					routineManager.onImplCreated({ apiPath: entry.apiPath, moduleID: entry.moduleID, wrapper: { ____impl: entry.fn } });
 				}
 
 				await new Promise((r) => setTimeout(r, 30));
@@ -1096,7 +1096,7 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 				routineManager.onImplCreated({
 					apiPath: "auth.initialize",
 					moduleID: "late-second-module",
-					wrapper: { __impl: lateContributor }
+					wrapper: { ____impl: lateContributor }
 				});
 
 				// A slower "real" assignment landing several microtask turns later, but still well
@@ -1148,7 +1148,11 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 				const lateContributor = function lateContributor() {
 					(globalThis.__slothletRoutineLog ??= []).push("late-contributor:initialize");
 				};
-				routineManager.onImplCreated({ apiPath: "auth.initialize", moduleID: "gate-second-module", wrapper: { __impl: lateContributor } });
+				routineManager.onImplCreated({
+					apiPath: "auth.initialize",
+					moduleID: "gate-second-module",
+					wrapper: { ____impl: lateContributor }
+				});
 				await new Promise((r) => setTimeout(r, 30));
 
 				// Gated: the slot is still the bare clobber write, NOT a healed stack.
@@ -1157,7 +1161,11 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 				// Build finished (depth back to 0): a fresh event now heals normally — proving the gate,
 				// not a broken mechanism, was responsible for the no-op above.
 				routineManager.slothlet.____buildDepth = 0;
-				routineManager.onImplCreated({ apiPath: "auth.initialize", moduleID: "gate-second-module", wrapper: { __impl: lateContributor } });
+				routineManager.onImplCreated({
+					apiPath: "auth.initialize",
+					moduleID: "gate-second-module",
+					wrapper: { ____impl: lateContributor }
+				});
 				await new Promise((r) => setTimeout(r, 30));
 				expect(api.auth.initialize.____slothletRoutineStack).toBe(true);
 			} finally {

@@ -77,7 +77,7 @@ function getSlothletInstance(api, childKey = "task") {
 describe("unified-wrapper: in-flight lazy wrapper → not-a-function reject (lines 2533-2629)", () => {
 	it("calling in-flight lazy NAMESPACE wrapper rejects with not-a-function error", async () => {
 		// In lazy mode, api.task is a lazy NAMESPACE wrapper (mode="lazy").
-		// We manually trigger _materialize() to set inFlight=true synchronously,
+		// We manually trigger ___materialize() to set inFlight=true synchronously,
 		// then call api.task() to hit the in-flight polling path.
 		// After materialization, task.impl = object (not callable) → rejects.
 		_api = await slothlet({
@@ -96,8 +96,8 @@ describe("unified-wrapper: in-flight lazy wrapper → not-a-function reject (lin
 		expect(taskWrapper.____slothletInternal.state.materialized).toBe(false);
 		expect(taskWrapper.____slothletInternal.state.inFlight).toBe(false);
 
-		// Fire _materialize() — sets inFlight=true SYNCHRONOUSLY before any await
-		taskWrapper._materialize();
+		// Fire ___materialize() — sets inFlight=true SYNCHRONOUSLY before any await
+		taskWrapper.___materialize();
 
 		// Verify inFlight is now true (set synchronously inside the async IIFE)
 		expect(taskWrapper.____slothletInternal.state.inFlight).toBe(true);
@@ -130,7 +130,7 @@ describe("unified-wrapper: in-flight lazy wrapper → not-a-function reject (lin
 		const taskWrapper = resolveWrapper(taskProxy);
 
 		// Trigger in-flight
-		taskWrapper._materialize();
+		taskWrapper.___materialize();
 
 		// Call while in-flight — creates polling promise, attach handler immediately
 		// to prevent unhandled rejection warning
@@ -155,7 +155,7 @@ describe("unified-wrapper: in-flight lazy wrapper → not-a-function reject (lin
 		const taskWrapper = resolveWrapper(taskProxy);
 
 		// Trigger in-flight
-		taskWrapper._materialize();
+		taskWrapper.___materialize();
 
 		// Make TWO calls while in-flight — both should return polling promises
 		const call1 = taskProxy("arg1");
@@ -199,7 +199,7 @@ describe("unified-wrapper: in-flight callable lazy wrapper → successful resolu
 		});
 
 		// Fire materialization (sets inFlight=true synchronously)
-		callableWrapper._materialize();
+		callableWrapper.___materialize();
 
 		// Verify in-flight state
 		expect(callableWrapper.____slothletInternal.state.inFlight).toBe(true);
@@ -232,7 +232,7 @@ describe("unified-wrapper: in-flight callable lazy wrapper → successful resolu
 			}
 		});
 
-		callableWrapper._materialize();
+		callableWrapper.___materialize();
 
 		const proxy = callableWrapper.createProxy();
 
@@ -270,7 +270,7 @@ describe("unified-wrapper: in-flight callable lazy wrapper → successful resolu
 			}
 		});
 
-		callableWrapper._materialize();
+		callableWrapper.___materialize();
 		const proxy = callableWrapper.createProxy();
 
 		// impl is { default: fn } - should call impl.default(5)
@@ -305,8 +305,8 @@ describe("unified-wrapper: in-flight wrapper materialization failure (lines 2609
 		});
 
 		// Fire materialization (sets inFlight=true, then will fail)
-		failingWrapper._materialize().catch(() => {
-			// Swallow the error from _materialize() - we're testing the apply trap's response
+		failingWrapper.___materialize().catch(() => {
+			// Swallow the error from ___materialize() - we're testing the apply trap's response
 		});
 
 		// Verify inFlight is true
@@ -341,7 +341,7 @@ describe("unified-wrapper: in-flight wrapper materialization failure (lines 2609
 			}
 		});
 
-		failingWrapper._materialize().catch(() => {});
+		failingWrapper.___materialize().catch(() => {});
 
 		const proxy = failingWrapper.createProxy();
 
@@ -384,10 +384,10 @@ describe("unified-wrapper: invalidated wrapper throws before lazy check", () => 
 
 // ---------------------------------------------------------------------------
 // Group 5: Lazy materialization starts from apply trap (not external trigger)
-// Covers line 2524: `!materialized && !inFlight → wrapper._materialize()`
+// Covers line 2524: `!materialized && !inFlight → wrapper.___materialize()`
 // ---------------------------------------------------------------------------
 describe("unified-wrapper: lazy apply trap starts materialization itself (line 2524)", () => {
-	it("calling unmaterialized non-inFlight lazy wrapper triggers _materialize and polls", async () => {
+	it("calling unmaterialized non-inFlight lazy wrapper triggers ___materialize and polls", async () => {
 		_api = await slothlet({
 			mode: "lazy",
 			runtime: "async",
@@ -397,7 +397,7 @@ describe("unified-wrapper: lazy apply trap starts materialization itself (line 2
 
 		const slothletInst = getSlothletInstance(_api, "task");
 
-		// Create a lazy callable wrapper WITHOUT manually triggering _materialize first
+		// Create a lazy callable wrapper WITHOUT manually triggering ___materialize first
 		const lazyWrapper = new UnifiedWrapper(slothletInst, {
 			mode: "lazy",
 			apiPath: "test.selfMaterializeCallable",
@@ -407,14 +407,14 @@ describe("unified-wrapper: lazy apply trap starts materialization itself (line 2
 			}
 		});
 
-		// Don't manually trigger _materialize - the apply trap should do it
+		// Don't manually trigger ___materialize - the apply trap should do it
 		expect(lazyWrapper.____slothletInternal.state.inFlight).toBe(false);
 		expect(lazyWrapper.____slothletInternal.state.materialized).toBe(false);
 
 		const proxy = lazyWrapper.createProxy();
 
 		// In the apply trap:
-		// 1. mode=lazy && !materialized && !inFlight → calls _materialize() (line 2524)
+		// 1. mode=lazy && !materialized && !inFlight → calls ___materialize() (line 2524)
 		//    inFlight becomes true synchronously
 		// 2. mode=lazy && inFlight → returns polling promise (line 2533)
 		const result = await proxy("world");
@@ -478,7 +478,7 @@ describe("unified-wrapper: in-flight, null contextManager, impl=function (line 2
 		});
 
 		// Start materialization → inFlight=true
-		callableWrapper._materialize();
+		callableWrapper.___materialize();
 		expect(callableWrapper.____slothletInternal.state.inFlight).toBe(true);
 
 		// Null contextManager on the slothlet instance → forces null-CM path (line 2543)
@@ -534,7 +534,7 @@ describe("unified-wrapper: in-flight, wrapper.contextManager set, impl={default:
 		callableWrapper.contextManager = mockContextManager;
 
 		// Start materialization → inFlight=true
-		callableWrapper._materialize();
+		callableWrapper.___materialize();
 		expect(callableWrapper.____slothletInternal.state.inFlight).toBe(true);
 
 		// Null slothlet-level contextManager so we get past line 2540 check
@@ -578,7 +578,7 @@ describe("unified-wrapper: ___invalidate() stops an already-in-flight materializ
 			}
 		});
 
-		const matPromise = wrapper._materialize();
+		const matPromise = wrapper.___materialize();
 		wrapper.___invalidate();
 		await matPromise;
 
@@ -607,7 +607,7 @@ describe("unified-wrapper: ___invalidate() stops an already-in-flight materializ
 			}
 		});
 
-		const matPromise = wrapper._materialize();
+		const matPromise = wrapper.___materialize();
 		wrapper.___invalidate();
 		await matPromise;
 

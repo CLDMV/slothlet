@@ -16,7 +16,7 @@
 /**
  * An extension lifecycle leaf that also exports a `manifest` OBJECT whose `activationEvents`
  * is an ARRAY — the shape that reproduced #287: the framework's dispatcher-detection walk read
- * `manifest.activationEvents.__isVersionDispatcher` as the host and was denied by `private.host`.
+ * `manifest.activationEvents.____isVersionDispatcher` as the host and was denied by `private.host`.
  */
 export const name = "costcode";
 export const manifest = {

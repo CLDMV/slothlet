@@ -22,7 +22,7 @@
  * (`__materialized === false`) until a user explicitly accesses them.
  *
  * If anything in the cache creation or diagnostic path inadvertently iterates
- * the lazy wrappers (e.g. via `Object.entries()`), it would fire `_materialize()`
+ * the lazy wrappers (e.g. via `Object.entries()`), it would fire `___materialize()`
  * as a side effect and silently defeat lazy mode at startup.
  *
  * Test subject: `api.string` - a pure subdirectory in `api_test/` with no
@@ -101,7 +101,7 @@ for (const { config, name } of lazyConfigs) {
 		it("should materialize a lazy wrapper only on first access through the api", async () => {
 			expect(api.slothlet.node(api.string).materialized).toBe(false);
 
-			// Accessing a function through the proxy fires getTrap → _materialize().
+			// Accessing a function through the proxy fires getTrap → ___materialize().
 			// The await ensures materialization has completed before the assertion.
 			const result = await api.string.upper("hello");
 			expect(result).toBe("HELLO");
@@ -118,7 +118,7 @@ for (const { config, name } of lazyConfigs) {
 
 			// getCacheDiagnostics() internally calls _countPaths(entry.api).
 			// If _countPaths() uses Object.entries() on the api tree, it hits the
-			// ownKeysTrap on the lazy proxy which fires _materialize() as a
+			// ownKeysTrap on the lazy proxy which fires ___materialize() as a
 			// fire-and-forget side effect - setting __inFlight = true synchronously.
 			// This assertion confirms that does NOT happen.
 			api.slothlet.diag.caches.get();

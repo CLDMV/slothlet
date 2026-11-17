@@ -29,11 +29,11 @@
  *   Triggered by `await waitingProxy` (not `await waitingProxy()`).
  *   – Normal propChain resolution after materialization (lines 1346–1405)
  *   – propChain walking through child wrappers (lines 1372–1386)
- *   – propChain walking through _impl properties (lines 1388–1394)
+ *   – propChain walking through ____impl properties (lines 1388–1394)
  *   – Empty propChain → returns impl directly (lines 1396–1404)
  *
  * GROUP B  — Special-property fast-paths (lines 1410–1695)
- *   `____slothletInternal`, `_materialize`, `__mode`, `__materialized`, `__inFlight`,
+ *   `____slothletInternal`, `___materialize`, `__mode`, `__materialized`, `__inFlight`,
  *   `util.inspect.custom`, `__type`, `__metadata`, symbol, `length`, `name`,
  *   `toString`, `valueOf`, `__slothletPath`, and the post-impl traversal paths.
  *
@@ -85,7 +85,7 @@ async function getWaitingProxy() {
 	const { api, teardown } = await makeLazy();
 	// Access api.task.autoIP — task's getTrap creates a waiting proxy because
 	// the task wrapper is lazy and has no impl yet.
-	// NOTE: this also fires wrapper._materialize() as a side-effect (fire-and-forget),
+	// NOTE: this also fires wrapper.___materialize() as a side-effect (fire-and-forget),
 	// but since JS is single-threaded the async import hasn't started yet while we're
 	// in this synchronous frame.
 	const wp = api.task.autoIP;
@@ -115,7 +115,7 @@ describe("Waiting proxy — `then` trap (lines 1341–1408)", () => {
 		// The easiest way to get such a proxy is to access a property on the root that
 		// hasn't been touched yet AND then grab the waiting proxy with propChain = [].
 		// We test this by calling api.task (wrapper is lazy), then accessing a member.
-		// A simpler approach: directly call _materialize on the waiting proxy so it
+		// A simpler approach: directly call ___materialize on the waiting proxy so it
 		// materialises without propChain and then re-await a zero-chain waiting proxy.
 		const { api, teardown } = await makeLazy();
 		try {
@@ -130,12 +130,12 @@ describe("Waiting proxy — `then` trap (lines 1341–1408)", () => {
 	});
 
 	it("awaiting a waiting proxy works even when wrapper is already materialised", async () => {
-		// If materialization already finished, the then trap skips _materialize() and
+		// If materialization already finished, the then trap skips ___materialize() and
 		// goes straight to propChain resolution — covers the `!materialized` false-branch.
 		const { api, teardown } = await makeLazy();
 		try {
 			// Trigger materialization explicitly first
-			await api.task.autoIP._materialize();
+			await api.task.autoIP.___materialize();
 			// Now task should be materialized — get another waiting proxy for the same path
 			// (it will be cached in waitingProxyCache, but the then-trap still runs)
 			const wp = api.task.asyncReject; // different prop to avoid cache hit
@@ -146,9 +146,9 @@ describe("Waiting proxy — `then` trap (lines 1341–1408)", () => {
 		}
 	});
 
-	it("propChain resolution walks through _impl properties when not a child wrapper", async () => {
+	it("propChain resolution walks through ____impl properties when not a child wrapper", async () => {
 		// Access api.math (the flattened module, math/math.mjs → api.math)
-		// math has functions like add, subtract as _impl properties.
+		// math has functions like add, subtract as ____impl properties.
 		// api.math is a wrapper; api.math.add goes through the getTrap where
 		// task is not involved but math wrapper's impl has add.
 		const { api, teardown } = await makeLazy();
@@ -179,10 +179,10 @@ describe("Waiting proxy — special property fast-paths (lines 1410–1695)", ()
 		}
 	});
 
-	it("_materialize returns a bound function that materialises the wrapper", async () => {
+	it("___materialize returns a bound function that materialises the wrapper", async () => {
 		const { wp, ____api, teardown } = await getWaitingProxy();
 		try {
-			const materializeFn = wp._materialize;
+			const materializeFn = wp.___materialize;
 			expect(typeof materializeFn).toBe("function");
 			// Calling it should resolve (returns a promise)
 			await expect(materializeFn()).resolves.not.toThrow();
@@ -263,7 +263,7 @@ describe("Waiting proxy — special property fast-paths (lines 1410–1695)", ()
 		try {
 			const wp = api.task.autoIP;
 			// Trigger materialization and wait
-			await wp._materialize();
+			await wp.___materialize();
 			await new Promise((resolve) => setImmediate(resolve));
 			const type = api.slothlet.node(wp).type;
 			expect(type).toBe("function");
@@ -368,7 +368,7 @@ describe("Waiting proxy — special property fast-paths (lines 1410–1695)", ()
 		try {
 			// Get math waiting proxy and wait for materialization
 			const wpMath = api.math.add;
-			await wpMath._materialize(); // trigger math materialization
+			await wpMath.___materialize(); // trigger math materialization
 			await new Promise((resolve) => setImmediate(resolve));
 			// Now access the add function through the waiting proxy — impl is set
 			// but the waitingProxy is from before (propChain already stored)
@@ -444,7 +444,7 @@ describe("Waiting proxy — apply trap (lines 1698+)", () => {
 		// Trigger materialization (fire-and-forget) then immediately call
 		const { api, teardown } = await makeLazy();
 		try {
-			// Access autoIP triggers fire-and-forget _materialize()
+			// Access autoIP triggers fire-and-forget ___materialize()
 			const wp = api.task.autoIP;
 			// Immediately call the waiting proxy while task may still be in-flight
 			// This exercises the inFlight branch (lines 1721-1728)

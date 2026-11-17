@@ -5,6 +5,6 @@
 	"kind": "extension",
 	"permissions": [
 		{ "caller": "**", "target": "slothlet.**:write", "effect": "allow" },
-		{ "caller": "**", "target": "**.__state:write", "effect": "allow" }
+		{ "caller": "**", "target": "**.____state:write", "effect": "allow" }
 	]
 }

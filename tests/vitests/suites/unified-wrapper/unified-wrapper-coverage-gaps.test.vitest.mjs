@@ -21,7 +21,7 @@
  * Targets the following uncovered lines in unified-wrapper.mjs:
  *
  *   Lines 310-311  — background materialize error with debug.materialize enabled
- *                    Inside the `setImmediate` catch handler when `_materialize()` fails
+ *                    Inside the `setImmediate` catch handler when `___materialize()` fails
  *                    AND `config.debug?.materialize` is truthy.
  *
  *   Lines 451-466  — `UnifiedWrapper._extractFullImpl(wrapper)` static method body
@@ -79,16 +79,16 @@ afterEach(async () => {
 // 1. Background materialize error with debug.materialize (lines 310-311)
 //
 // When `config.tracking.materialization === true`, the UnifiedWrapper constructor
-// schedules `setImmediate(() => this._materialize().catch(...))`. If the
+// schedules `setImmediate(() => this.___materialize().catch(...))`. If the
 // materialization fails AND `config.debug?.materialize` is truthy, the catch
 // handler logs a debug message — hitting lines 310-311.
 //
 // Approach: create a fresh slothlet instance with both config flags enabled,
 // then directly instantiate a UnifiedWrapper whose materializeFunc always rejects.
-// The setImmediate fires, _materialize() rejects, the catch handler runs lines 310-311.
+// The setImmediate fires, ___materialize() rejects, the catch handler runs lines 310-311.
 // ─────────────────────────────────────────────────────────────────────────────
 describe("unified-wrapper: background materialize error debug log (lines 310-311)", () => {
-	it("setImmediate catch handler fires debug log when _materialize rejects and debug.materialize is true", async () => {
+	it("setImmediate catch handler fires debug log when ___materialize rejects and debug.materialize is true", async () => {
 		// Create a slothlet instance with BOTH tracking.materialization AND debug.materialize enabled.
 		// We need a real slothlet instance for the UnifiedWrapper constructor (ComponentBase super()).
 		_api = await slothlet({
@@ -107,9 +107,9 @@ describe("unified-wrapper: background materialize error debug log (lines 310-311
 		expect(slInstance.config.debug?.materialize).toBe(true);
 
 		// Directly create a new UnifiedWrapper using this slothlet instance.
-		// The materializeFunc always rejects, so _materialize() will fail.
+		// The materializeFunc always rejects, so ___materialize() will fail.
 		// Because tracking.materialization is true, the constructor schedules:
-		//   setImmediate(() => this._materialize().catch((err) => { … debug log … }))
+		//   setImmediate(() => this.___materialize().catch((err) => { … debug log … }))
 		// Lines 310-311 fire inside that catch handler.
 		const failWrapper = new UnifiedWrapper(slInstance, {
 			mode: "lazy",
@@ -137,7 +137,7 @@ describe("unified-wrapper: background materialize error debug log (lines 310-311
 //
 // The main wrapper proxy's getTrap kicks off background materialization on the
 // first property read of a lazy, not-yet-materialized, not-in-flight wrapper:
-//   wrapper._materialize().catch(() => {});
+//   wrapper.___materialize().catch(() => {});
 // The empty catch exists to prevent an UNHANDLED rejection when that background
 // materialization fails — the real error surfaces where a caller awaits the
 // materialized value, not on this fire-and-forget kick-off. Drive it directly:
@@ -170,7 +170,7 @@ describe("unified-wrapper: getTrap background-materialize rejection is swallowed
 		process.on("unhandledRejection", onUnhandled);
 		try {
 			// Bare property read on the lazy, unmaterialized, not-in-flight wrapper → getTrap fires
-			// `wrapper._materialize().catch(() => {})`. Deliberately not awaited.
+			// `wrapper.___materialize().catch(() => {})`. Deliberately not awaited.
 			void proxy.someMissingMember;
 			// Let the async materializeFunc reject and its rejection settle through the catch.
 			await new Promise((r) => setImmediate(r));

@@ -20,7 +20,7 @@
  *
  * @description
  * A module-private registry of objects slothlet ITSELF created and stamped with reserved internal
- * marker keys (currently a version dispatcher's `{ __isVersionDispatcher, __logicalPath }` target and
+ * marker keys (currently a version dispatcher's `{ ____isVersionDispatcher, ____logicalPath }` target and
  * any wrapper those markers are merged onto). Membership is by object IDENTITY — the registry is not
  * reachable by consumer code and cannot be joined by naming a member.
  *
@@ -66,7 +66,7 @@ const weakSetHas = FunctionMethods.bind(Functions.prototype.call, WeakSet.protot
  * @type {Set<string>}
  * @private
  */
-const FRAMEWORK_MARKER_KEYS = setFrom(["__isVersionDispatcher", "__logicalPath"]);
+const FRAMEWORK_MARKER_KEYS = setFrom(["____isVersionDispatcher", "____logicalPath"]);
 
 /**
  * Whether `key` is one of slothlet's reserved dispatcher marker keys.

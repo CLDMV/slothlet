@@ -779,7 +779,7 @@ export class HookManager extends ComponentBase {
 		// the conservative direction is: undeclared and undetected means the sync pipeline, which now
 		// fails loudly rather than corrupting (HOOK_AFTER_RETURNED_PROMISE).
 		const handlerIsAsync =
-			options.async === true || util.types.isAsyncFunction(runtime_isCallerLocked(handler) ? handler._slothletOriginal : handler);
+			options.async === true || util.types.isAsyncFunction(runtime_isCallerLocked(handler) ? handler.____slothletOriginal : handler);
 		let effectiveHandler = lockCaller ? this.#pinHandler(handler) : handler;
 		// A handler pinned to a module is handed its payload as that module reads the api through `self`:
 		// its own views of the call's nodes and a root view as `api`, never the values themselves (#625).
@@ -839,7 +839,7 @@ export class HookManager extends ComponentBase {
 	 *
 	 * No-op passthrough when there is nothing to pin: the hook was registered outside
 	 * a module (no `currentWrapper`), or `handler` is already a `lockCaller`-wrapped
-	 * function (it carries `_slothletOriginal`) — in which case the existing lock is
+	 * function (it carries `____slothletOriginal`) — in which case the existing lock is
 	 * respected rather than double-wrapped. This also makes re-registration after a
 	 * full reload (via {@link exportHooks}/{@link importHooks}) idempotent.
 	 *
@@ -851,7 +851,7 @@ export class HookManager extends ComponentBase {
 	 */
 	#pinHandler(handler) {
 		// Already locked (manual lockCaller, or a re-registered hook) — respect it. Known by the framework's own
-		// record, never by a property: a module can put `_slothletOriginal` on any function (#625).
+		// record, never by a property: a module can put `____slothletOriginal` on any function (#625).
 		if (runtime_isCallerLocked(handler)) return handler;
 
 		// `slothlet` is the long-lived instance object; a full reload() swaps both
@@ -874,7 +874,7 @@ export class HookManager extends ComponentBase {
 			return slothlet.contextManager.runInContext(slothlet.instanceID, handler, this, args, capturedWrapper, true, false, capturedCeiling);
 		};
 		// Parity with lockCaller / the EventEmitter patch metadata.
-		pinned._slothletOriginal = handler;
+		pinned.____slothletOriginal = handler;
 		return runtime_markCallerLocked(pinned);
 	}
 
@@ -2206,7 +2206,7 @@ export class HookManager extends ComponentBase {
 					priority: hook.priority,
 					subset: hook.subset,
 					// Preserve an explicit opt-out across reload. The exported handler is
-					// already in final form (pinned handlers carry _slothletOriginal, so
+					// already in final form (pinned handlers carry ____slothletOriginal, so
 					// re-registration is idempotent), so this only keeps the hook object's
 					// lockCaller flag accurate for introspection.
 					pin: hook.lockCaller,

@@ -141,7 +141,7 @@ describe("api-manager syncWrapper debug.api paths", () => {
 
 	it("fires syncWrapper debug paths when reload restores a module with debug.api=true", async () => {
 		api = await makeDebugApiInstance();
-		const moduleID = api.slothlet.__state?.apiManager?.state?.addHistory?.[0]?.moduleID;
+		const moduleID = api.slothlet.____state?.apiManager?.state?.addHistory?.[0]?.moduleID;
 		if (!moduleID) return;
 
 		// Reload the base module triggers _restoreApiTree → syncWrapper for root keys

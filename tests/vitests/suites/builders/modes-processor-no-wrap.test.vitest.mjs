@@ -69,7 +69,7 @@
  *     so Case 2's `key in callableModule` guard fires the early continue for those keys.
  *     This assignment can never fire.
  *
- *   Line 958 — `await modes_existingWrapper._materialize()` inside the eager recursive
+ *   Line 958 — `await modes_existingWrapper.___materialize()` inside the eager recursive
  *     collision block.  Requires an existing lazy wrapper (with materializeFunc) at the
  *     slot during eager recursive directory processing.  All root files are eagerly
  *     wrapped even in lazy mode, so this condition never holds.
@@ -220,7 +220,7 @@ describe("modes-processor: Case 2 shouldAttachNamedExport guard (lines 343, 344)
 		expect(_api).toBeDefined();
 		expect(_api.logger).toBeDefined();
 		// Trigger materialization to exercise the lazy flatten path as well
-		await _api.logger._materialize?.();
+		await _api.logger.___materialize?.();
 		expect(_api.logger).toBeDefined();
 	});
 });
@@ -403,7 +403,7 @@ describe("modes-processor: addapi-metadata-default in lazy subfolder materializa
 //
 // Line 1139 — `if (!modes_fileFolderImpl) modes_fileFolderImpl = {}` in processSubdirectories:
 //   In lazy mode, targetApi["calc"] is the eager wrapper for root calc.mjs.
-//   existImpl = wrapper.__impl = function calc  (typeof function, not object)
+//   existImpl = wrapper.____impl = function calc  (typeof function, not object)
 //   → modes_fileFolderImpl stays null (object check at 1133 fails)
 //   existChildKeys = ["add"]  (add was adopted as a child wrapper from calc's own property)
 //   → for (ck of existChildKeys): if (!modes_fileFolderImpl) modes_fileFolderImpl = {}

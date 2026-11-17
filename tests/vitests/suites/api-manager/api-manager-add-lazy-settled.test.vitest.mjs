@@ -17,7 +17,7 @@
  * @fileoverview #462 — a lazy-mode `api.slothlet.api.add()` must return with the mounted subtree in
  * the same settled state an initial lazy build produces: top-level folder wrappers unmaterialized
  * and NOT mid-materialization. Ownership registration used to walk the new subtree through the
- * wrappers' get traps, which starts a fire-and-forget `_materialize()` on every child it touched;
+ * wrappers' get traps, which starts a fire-and-forget `___materialize()` on every child it touched;
  * `add()` then resolved while those were still in flight, so what `add()` returned depended on
  * timing (and the eager/lazy parity check in tests/debug-slothlet.mjs read a half-built tree).
  */

@@ -550,15 +550,15 @@ describe("browser manifests refuse the same folder and file names (#571)", () =>
 
 	it("refuses folder and file names that sanitize to `then` or a framework-reserved key", async () => {
 		await expect(composeManifest({ files: [math], directories: [folder("Then")] })).rejects.toThrow(/MODULE_THENABLE_NAME/);
-		await expect(composeManifest({ files: [math], directories: [folder("_materialize-")] })).rejects.toThrow(/MODULE_RESERVED_DIRNAME/);
+		await expect(composeManifest({ files: [math], directories: [folder("-___materialize-")] })).rejects.toThrow(/MODULE_RESERVED_DIRNAME/);
 		await expect(
-			composeManifest({ files: [math, { path: "-_impl.mjs", name: "-_impl", full: "-_impl.mjs" }], directories: [] })
+			composeManifest({ files: [math, { path: "-____impl.mjs", name: "-____impl", full: "-____impl.mjs" }], directories: [] })
 		).rejects.toThrow(/MODULE_RESERVED_FILENAME/);
 	});
 
 	it("refuses a `then` folder and a framework-reserved folder", async () => {
 		await expect(composeManifest({ files: [math], directories: [folder("then")] })).rejects.toThrow(/MODULE_THENABLE_NAME/);
-		await expect(composeManifest({ files: [math], directories: [folder("_materialize")] })).rejects.toThrow(/MODULE_RESERVED_DIRNAME/);
+		await expect(composeManifest({ files: [math], directories: [folder("-___materialize")] })).rejects.toThrow(/MODULE_RESERVED_DIRNAME/);
 	});
 });
 

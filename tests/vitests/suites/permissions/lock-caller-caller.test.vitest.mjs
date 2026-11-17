@@ -146,7 +146,7 @@ describe.each(getMatrixConfigs())("Permissions > lockCaller.caller (#477) > $nam
 		await api.scheduler.service.every(job);
 		const [wrapper] = await api.scheduler.service.list();
 		expect(wrapper).not.toBe(job);
-		expect(wrapper._slothletOriginal).toBe(job);
+		expect(wrapper.____slothletOriginal).toBe(job);
 		expect(wrapper()).toBe(1);
 	});
 
@@ -321,10 +321,10 @@ describe.each(getMatrixConfigs())("Permissions > lockCaller.caller (#477) > $nam
 		expect(result.args).toEqual([1, 2]);
 	});
 
-	it("exposes the original function via `_slothletOriginal`", async () => {
+	it("exposes the original function via `____slothletOriginal`", async () => {
 		await build([GRANT]);
 		const { wrapper, original } = await api.client.app.pinThroughScheduler();
-		expect(wrapper._slothletOriginal).toBe(original);
+		expect(wrapper.____slothletOriginal).toBe(original);
 		expect(wrapper()).toBe("original");
 	});
 

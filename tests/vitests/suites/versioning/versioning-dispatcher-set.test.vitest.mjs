@@ -116,7 +116,7 @@ describe.each(getMatrixConfigs())("Versioning > Dispatcher set trap > $name", ({
 		// These would return fixed dispatcher values from get; writes must not throw
 		// and must not alter what get returns.
 		expect(() => {
-			api.auth.__isVersionDispatcher = false;
+			api.auth.____isVersionDispatcher = false;
 			api.auth.toString = "not-a-function";
 			api.auth.valueOf = null;
 			api.auth.toJSON = null;
@@ -126,7 +126,7 @@ describe.each(getMatrixConfigs())("Versioning > Dispatcher set trap > $name", ({
 		}).not.toThrow();
 
 		// Reads must return the original fixed values, not the written values
-		expect(api.auth.__isVersionDispatcher).toBe(true);
+		expect(api.auth.____isVersionDispatcher).toBe(true);
 		expect(api.slothlet.node(api.auth).logical).toEqual(["auth"]);
 		expect(api.auth.toString()).toBe("[VersionDispatcher: auth]");
 		expect(api.auth.then).toBeUndefined();
@@ -163,23 +163,22 @@ describe.each(getMatrixConfigs())("Versioning > Dispatcher set trap > $name", ({
 		// These keys return undefined from the get trap (case 1); writes must be absorbed silently.
 		expect(() => {
 			api.auth.____slothletInternal = "corrupted";
-			api.auth._impl = "corrupted";
-			api.auth.__impl = "corrupted";
-			api.auth.__state = "corrupted";
-			api.auth.__invalid = "corrupted";
+			api.auth.____impl = "corrupted";
+			api.auth.____state = "corrupted";
+			api.auth.____invalid = "corrupted";
 		}).not.toThrow();
 		// Internal keys are never visible through the dispatcher
 		expect(api.auth.____slothletInternal).toBeUndefined();
-		expect(api.auth._impl).toBeUndefined();
+		expect(api.auth.____impl).toBeUndefined();
 	});
 
 	it("util.inspect shows the resolved versioned namespace (inspection transparency)", async () => {
 		api = await makeApi(config);
 		const result = inspect(api.auth, { depth: 3, colors: false });
 		// Must show default-version namespace content, not the raw dispatcher target.
-		// The raw target only has __isVersionDispatcher and __logicalPath.
+		// The raw target only has ____isVersionDispatcher and ____logicalPath.
 		expect(result).toContain("login");
-		expect(result).not.toContain("__isVersionDispatcher");
+		expect(result).not.toContain("____isVersionDispatcher");
 	});
 
 	it("[util.inspect.custom] is accessible via explicit property access (get trap case 6)", async () => {

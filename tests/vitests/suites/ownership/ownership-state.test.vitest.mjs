@@ -21,8 +21,8 @@
  * integration tests:
  *
  * - Line 372: `continue` inside `registerSubtree()` — fires when a key in the API
- *   object is one of the internal skipProps ("__metadata", "__type", "_materialize",
- *   "_impl", "____slothletInternal").
+ *   object is one of the internal skipProps ("__metadata", "__type", "___materialize",
+ *   "____impl", "____slothletInternal").
  *
  * - Lines 409–414: `exportState()` — serialises moduleToPath and pathToModule to plain
  *   arrays for persistence across hot-reload cycles.
@@ -75,12 +75,12 @@ describe("OwnershipManager.registerSubtree - skipProps continue (line 372)", () 
 		expect(ownership.getCurrentOwner("__type")?.moduleID).toBe("mod1");
 	});
 
-	it("should skip _materialize, _impl, and ____slothletInternal keys", () => {
+	it("should skip ___materialize, ____impl, and ____slothletInternal keys", () => {
 		const ownership = new OwnershipManager(makeMock());
 
 		const api = {
-			_materialize: function () {},
-			_impl: {},
+			___materialize: function () {},
+			____impl: {},
 			____slothletInternal: true,
 			visible: function () {
 				return "yes";
@@ -90,7 +90,7 @@ describe("OwnershipManager.registerSubtree - skipProps continue (line 372)", () 
 		ownership.registerSubtree(api, "mod3", "");
 
 		expect(ownership.getCurrentOwner("visible")).not.toBeNull();
-		for (const key of ["_materialize", "_impl", "____slothletInternal"]) {
+		for (const key of ["___materialize", "____impl", "____slothletInternal"]) {
 			expect(ownership.getCurrentOwner(key)).toBeNull();
 		}
 	});
@@ -99,8 +99,8 @@ describe("OwnershipManager.registerSubtree - skipProps continue (line 372)", () 
 		const ownership = new OwnershipManager(makeMock());
 
 		const api = {
-			_materialize: function () {},
-			_impl: {}
+			___materialize: function () {},
+			____impl: {}
 		};
 
 		// Should not throw and should produce no registrations

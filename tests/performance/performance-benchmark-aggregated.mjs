@@ -67,7 +67,7 @@ async function callMathAdd(api, a, b) {
 			// Retry after materialization when lazy proxy throws.
 		}
 	}
-	const mathMaterialize = api?.math?._materialize;
+	const mathMaterialize = api?.math?.___materialize;
 	if (typeof mathMaterialize === "function") {
 		await mathMaterialize();
 	}
@@ -81,7 +81,7 @@ async function callMathAdd(api, a, b) {
 	}
 	let rootFn = api?.rootMath?.add;
 	if (typeof rootFn !== "function") {
-		const rootMaterialize = api?.rootMath?._materialize;
+		const rootMaterialize = api?.rootMath?.___materialize;
 		if (typeof rootMaterialize === "function") {
 			await rootMaterialize();
 		}
@@ -117,11 +117,11 @@ async function callNestedDateToday(api) {
 			// Retry after materialization when lazy proxy throws.
 		}
 	}
-	const nestedMaterialize = api?.nested?._materialize;
+	const nestedMaterialize = api?.nested?.___materialize;
 	if (typeof nestedMaterialize === "function") {
 		await nestedMaterialize();
 	}
-	const dateMaterialize = api?.nested?.date?._materialize;
+	const dateMaterialize = api?.nested?.date?.___materialize;
 	if (typeof dateMaterialize === "function") {
 		await dateMaterialize();
 	}
@@ -153,7 +153,7 @@ async function callStringUpper(api, value) {
 			// Retry after materialization when lazy proxy throws.
 		}
 	}
-	const stringMaterialize = api?.string?._materialize;
+	const stringMaterialize = api?.string?.___materialize;
 	if (typeof stringMaterialize === "function") {
 		await stringMaterialize();
 	}
@@ -186,7 +186,7 @@ async function callFuncmod(api, a, b) {
 			// Retry after materialization when lazy proxy throws.
 		}
 	}
-	const funcmodMaterialize = api?.funcmod?._materialize;
+	const funcmodMaterialize = api?.funcmod?.___materialize;
 	if (typeof funcmodMaterialize === "function") {
 		await funcmodMaterialize();
 	}

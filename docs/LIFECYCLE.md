@@ -85,7 +85,7 @@ Emitted when a module implementation is first placed on the composed api — dur
 }
 ```
 
-> The **raw, unwrapped** `impl` field was removed in v3.16.x (#398): it exposed the module's raw callable, which a subscriber could invoke outside slothlet's enforced boundary. v3.18.0 (#433) restores `impl` as a stable public field carrying the **wrapped** callable, and drops the reserved internal `wrapper.__impl` handle from the **public** event entirely — read `data.impl` for the leaf's (wrapped) implementation; there is no public `wrapper` to reach into. (The internal tier still carries `wrapper` for the framework's own ownership / metadata / routine subscribers.) The event also fires only for the leaf actually placed on the tree, so a registry keyed off it no longer records a contribution that a later merge discards.
+> The **raw, unwrapped** `impl` field was removed in v3.16.x (#398): it exposed the module's raw callable, which a subscriber could invoke outside slothlet's enforced boundary. v3.18.0 (#433) restores `impl` as a stable public field carrying the **wrapped** callable, and drops the reserved internal `wrapper.____impl` handle from the **public** event entirely — read `data.impl` for the leaf's (wrapped) implementation; there is no public `wrapper` to reach into. (The internal tier still carries `wrapper` for the framework's own ownership / metadata / routine subscribers.) The event also fires only for the leaf actually placed on the tree, so a registry keyed off it no longer records a contribution that a later merge discards.
 
 ### `impl:changed`
 

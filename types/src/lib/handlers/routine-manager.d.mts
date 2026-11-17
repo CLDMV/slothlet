@@ -96,9 +96,9 @@ export class RoutineManager extends ComponentBase {
      * Subscribed to the INTERNAL contribution stream (#398), `emitInternal("impl:created"/"impl:changed")`,
      * which fires once per contribution BEFORE collision resolution decides which contributor's value
      * survives onto the composed tree — so every contributor is captured, not just the merge winner.
-     * Reads the leaf's callable from `data.wrapper.__impl` (present on every such event, eager and
+     * Reads the leaf's callable from `data.wrapper.____impl` (present on every such event, eager and
      * lazy); the raw `data.impl` field no longer exists (that was the enforcement-bypassing leak #398
-     * removed). The real `UnifiedWrapper` instance, when there is one, arrives on `data.__wrapperRef`.
+     * removed). The real `UnifiedWrapper` instance, when there is one, arrives on `data.____wrapperRef`.
      *
      * Also subscribed to `impl:changed` so a LATE, direct reassignment (`self.auth.shutdown = fn`,
      * done after the module that owns `auth` finished loading) is captured too, not just the

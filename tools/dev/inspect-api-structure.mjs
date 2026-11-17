@@ -463,7 +463,7 @@ async function inspectApi(apiName, options = {}) {
 }
 
 /**
- * Recursively materializes lazy proxy structures by calling their _materialize methods.
+ * Recursively materializes lazy proxy structures by calling their ___materialize methods.
  * @param {any} obj - Object to materialize
  * @param {WeakSet} [visited] - Visited objects tracker to prevent infinite recursion
  * @returns {Promise<void>}
@@ -478,10 +478,10 @@ async function materializeLazyStructure(obj, visited = new WeakSet()) {
 
 	visited.add(obj);
 
-	// Check if this is a lazy proxy with a _materialize method
-	if (typeof obj === "function" && obj._materialize && typeof obj._materialize === "function") {
+	// Check if this is a lazy proxy with a ___materialize method
+	if (typeof obj === "function" && obj.___materialize && typeof obj.___materialize === "function") {
 		try {
-			await obj._materialize();
+			await obj.___materialize();
 			// After materialization, get the materialized value and recurse into it
 			const materialized = obj.__materialized;
 			if (materialized && materialized !== obj) {
@@ -602,7 +602,7 @@ async function findCallablePaths(obj, basePath = "api", visited = new WeakSet(),
 		visited.add(obj);
 	}
 
-	// Force materialization of lazy proxies using the exposed _materialize method
+	// Force materialization of lazy proxies using the exposed ___materialize method
 	await materializeLazyStructure(obj);
 
 	// If the object itself is callable, add it (unless skipSelf is true)

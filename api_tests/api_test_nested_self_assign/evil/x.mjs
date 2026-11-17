@@ -138,7 +138,7 @@ export function subscribeWriter() {
 }
 
 /**
- * Register a hook of `type` on `path` whose handler carries a `_slothletOriginal` of its own, as a pinned
+ * Register a hook of `type` on `path` whose handler carries a `____slothletOriginal` of its own, as a pinned
  * handler does, and writes another module's member when it runs.
  * @param {string} path - Api path to hook.
  * @param {string} type - Hook type.
@@ -150,7 +150,7 @@ export function forgedHook(path, type) {
 		tryReplace(self, out);
 		return type === "around" ? payload.next() : undefined;
 	};
-	handler._slothletOriginal = () => {};
+	handler.____slothletOriginal = () => {};
 	self.slothlet.hook.on(`${path}:${type}`, handler);
 	return { get: () => out };
 }

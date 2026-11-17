@@ -39,16 +39,16 @@
  *    A12. Delete attempt - must not throw (return true silently)
  *    A13. Waiting proxy (lazy pre-materialization) - must also block ____slothletInternal
  *
- * B. ___getState / __state - now blocked (removed from allowedInternals)
+ * B. ___getState / ____state - now blocked (removed from allowedInternals)
  *    B1.  ___getState returns undefined through the proxy
- *    B2.  __state returns undefined through the proxy
+ *    B2.  ____state returns undefined through the proxy
  *
  * C. Framework mutation/disruption APIs (___setImpl, ___resetLazy, ___invalidate)
  *    C1.  These are BLOCKED through proxy
  *
- * D. Implementation / server-path info (__impl, _impl, __filePath, __sourceFolder, __moduleID)
- *    D1.  __impl / _impl blocked through proxy
- *    D2.  __filePath / __sourceFolder / __moduleID are exposed read-only through proxy (informational)
+ * D. Implementation / server-path info (____impl, ____filePath, __sourceFolder, __moduleID)
+ *    D1.  ____impl blocked through proxy
+ *    D2.  ____filePath / __sourceFolder / __moduleID are exposed read-only through proxy (informational)
  *
  * E. Read-only informational properties - cannot be overwritten from outside
  *    E1.  Writing to any read-only prop is silently absorbed - read returns original value
@@ -74,12 +74,12 @@ import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
 const BLOCKED_KEYS = [
 	{ key: "____slothletInternal", desc: "private state bag backed by #internal field" },
 	{ key: "___getState", desc: "state accessor - removed from allowedInternals" },
-	{ key: "__state", desc: "state alias - removed from allowedInternals" },
+	{ key: "____state", desc: "state alias - removed from allowedInternals" },
 	{ key: "___setImpl", desc: "implementation replacement API - blocked" },
 	{ key: "___resetLazy", desc: "lazy reset API - blocked" },
 	{ key: "___invalidate", desc: "invalidation API - blocked" },
-	{ key: "__impl", desc: "raw implementation - blocked" },
-	{ key: "_impl", desc: "raw implementation alias - blocked" }
+	{ key: "____impl", desc: "raw implementation - blocked" },
+	{ key: "____impl", desc: "raw implementation alias - blocked" }
 ];
 
 describe.each(getMatrixConfigs({}))("Proxy Internals Attack Vectors - $name", ({ config }) => {
@@ -104,12 +104,12 @@ describe.each(getMatrixConfigs({}))("Proxy Internals Attack Vectors - $name", ({
 
 	/**
 	 * Returns a materialized leaf proxy (api.math.add) and namespace proxy (api.math).
-	 * Triggers _materialize() unconditionally - it is a no-op in eager mode and
+	 * Triggers ___materialize() unconditionally - it is a no-op in eager mode and
 	 * performs actual async work in lazy mode, ensuring the proxies are fully resolved.
 	 * @returns {Promise<{ leaf: unknown, ns: unknown }>}
 	 */
 	async function getMaterializedProxies() {
-		await api.math._materialize();
+		await api.math.___materialize();
 		return {
 			leaf: api.math.add,
 			ns: api.math
@@ -285,7 +285,7 @@ describe.each(getMatrixConfigs({}))("Proxy Internals Attack Vectors - $name", ({
 			expect(key in nsPre, `"${key}" in nsPre pre-materialization`).toBe(false);
 		}
 
-		await api.math._materialize();
+		await api.math.___materialize();
 		const nsPost = api.math;
 		for (const { key } of BLOCKED_KEYS) {
 			expect(nsPost[key], `nsPost["${key}"] post-materialization`).toBeUndefined();
@@ -294,7 +294,7 @@ describe.each(getMatrixConfigs({}))("Proxy Internals Attack Vectors - $name", ({
 	});
 
 	// ---------------------------------------------------------------------------
-	// B. ___getState / __state - blocked (removed from allowedInternals)
+	// B. ___getState / ____state - blocked (removed from allowedInternals)
 	// ---------------------------------------------------------------------------
 
 	it("B1. ___getState is blocked - returns undefined through the proxy", async () => {
@@ -302,9 +302,9 @@ describe.each(getMatrixConfigs({}))("Proxy Internals Attack Vectors - $name", ({
 		expect(ns.___getState).toBeUndefined();
 	});
 
-	it("B2. __state is blocked - returns undefined through the proxy", async () => {
+	it("B2. ____state is blocked - returns undefined through the proxy", async () => {
 		const { ns } = await getMaterializedProxies();
-		expect(ns.__state).toBeUndefined();
+		expect(ns.____state).toBeUndefined();
 	});
 
 	// ---------------------------------------------------------------------------
@@ -321,16 +321,15 @@ describe.each(getMatrixConfigs({}))("Proxy Internals Attack Vectors - $name", ({
 
 	// ---------------------------------------------------------------------------
 	// D. Implementation / server-path info leaks
-	// The A1–A13 loop already validates __impl and _impl are blocked in every attack vector.
+	// The A1–A13 loop already validates ____impl is blocked in every attack vector.
 	// ---------------------------------------------------------------------------
 
-	it("D1. __impl / _impl are blocked through the proxy", async () => {
+	it("D1. ____impl is blocked through the proxy", async () => {
 		const { leaf } = await getMaterializedProxies();
-		expect(leaf.__impl).toBeUndefined();
-		expect(leaf._impl).toBeUndefined();
+		expect(leaf.____impl).toBeUndefined();
 	});
 
-	it("D2. __filePath / __sourceFolder / __moduleID are exposed as read-only informational props through the proxy", async () => {
+	it("D2. ____filePath / __sourceFolder / __moduleID are exposed as read-only informational props through the proxy", async () => {
 		const { leaf } = await getMaterializedProxies();
 		// These are informational props - readable through the proxy, write/delete is silently absorbed.
 		if (api.slothlet.node(leaf).file !== undefined) {
@@ -358,13 +357,13 @@ describe.each(getMatrixConfigs({}))("Proxy Internals Attack Vectors - $name", ({
 	 */
 	const READ_ONLY_INFO_PROPS = [
 		// Mode & identity
-		"__materializeOnCreate",
-		"__displayName",
+		"____materializeOnCreate",
+		"____displayName",
 		// Server-info props - exposed read-only through proxy; write/delete silently absorbed.
-		"__filePath",
+		"____filePath",
 		// Lazy state
 		// Misc
-		"__invalid"
+		"____invalid"
 	];
 
 	it("E1. Writing to any read-only informational prop is silently absorbed - read returns original value", async () => {

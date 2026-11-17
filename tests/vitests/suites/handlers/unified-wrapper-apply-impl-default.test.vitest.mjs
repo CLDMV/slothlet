@@ -327,9 +327,9 @@ describe("UnifiedWrapper > hasTrap > prop in impl (line ~2763)", () => {
 		expect("add" in api.math).toBe(true);
 	});
 
-	it("'_materialize' in api.math returns true (special internal key)", async () => {
-		// hasTrap: prop === "_materialize" → return true immediately
-		expect("_materialize" in api.math).toBe(true);
+	it("'___materialize' in api.math returns true (special internal key)", async () => {
+		// hasTrap: prop === "___materialize" → return true immediately
+		expect("___materialize" in api.math).toBe(true);
 	});
 
 	it("'nonExistentProp' in api.math returns false", async () => {
@@ -431,7 +431,7 @@ describe("UnifiedWrapper > ownKeysTrap > impl keys (lines ~2858-2869)", () => {
 			mode: "lazy",
 			silent: true
 		});
-		// ownKeysTrap in lazy unmaterialized state triggers _materialize()
+		// ownKeysTrap in lazy unmaterialized state triggers ___materialize()
 		expect(() => {
 			const _ = Object.getOwnPropertyNames(lazyApi.math);
 		}).not.toThrow();
@@ -442,7 +442,7 @@ describe("UnifiedWrapper > ownKeysTrap > impl keys (lines ~2858-2869)", () => {
 // ─── hasTrap in lazy mode (lazy materialize trigger) ────────────────────────
 
 describe("UnifiedWrapper > hasTrap > lazy mode materialization trigger", () => {
-	it("'add' in api.math in lazy mode fires _materialize (lazy has trap path)", async () => {
+	it("'add' in api.math in lazy mode fires ___materialize (lazy has trap path)", async () => {
 		const { default: slothlet } = await import("@cldmv/slothlet");
 		const api = await slothlet({
 			base: TEST_DIRS.API_TEST,

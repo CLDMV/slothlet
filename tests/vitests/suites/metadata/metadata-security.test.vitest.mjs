@@ -25,7 +25,7 @@
  * 2. **lifecycle payload wrapper leakage** — `data.wrapper` in impl:created / impl:changed
  *    payloads previously pointed to the raw UnifiedWrapper instance, which exposed
  *    `data.wrapper.slothlet` → the full internal slothlet object. It was first hardened to a frozen
- *    minimal `{ __impl }`, and in v3.18.0 (#433) `wrapper` was DROPPED from the PUBLIC event
+ *    minimal `{ ____impl }`, and in v3.18.0 (#433) `wrapper` was DROPPED from the PUBLIC event
  *    entirely — the wrapped callable is exposed on a stable `impl` field instead — so the public tier
  *    surfaces no wrapper handle to leak at all. (The INTERNAL event still carries `wrapper` for
  *    ownership/metadata/routine subscribers, reached only via subscribeInternal.)
@@ -43,7 +43,7 @@ import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
 // UnifiedWrapper instance, and data.wrapper.slothlet returned the full internal slothlet object
 // (bypassing the proxy's get trap, which was not yet created at that point) — letting any lifecycle
 // subscriber reach slothlet.handlers.lifecycle.emit() and bypass the token check entirely. It was
-// first hardened to a frozen Object.freeze({ __impl }); in v3.18.0 (#433) `wrapper` was DROPPED from
+// first hardened to a frozen Object.freeze({ ____impl }); in v3.18.0 (#433) `wrapper` was DROPPED from
 // the PUBLIC event altogether — the wrapped callable is now exposed on a stable `impl` field — so the
 // public tier surfaces no wrapper handle to leak. (The INTERNAL event still carries `wrapper` for
 // ownership/metadata/routine subscribers, reached only via subscribeInternal.)
@@ -78,7 +78,7 @@ describe.each(getMatrixConfigs())("Lifecycle Payload Hardening > Config: '$name'
 				// any path to the internal slothlet instance are all absent, so there is nothing to leak.
 				expect(Object.keys(data).sort()).toEqual(["apiPath", "filePath", "impl", "moduleID", "source", "sourceFolder"]);
 				expect(data.wrapper).toBeUndefined();
-				expect(data.__wrapperRef).toBeUndefined();
+				expect(data.____wrapperRef).toBeUndefined();
 				expect("slothlet" in data).toBe(false);
 				expect("handlers" in data).toBe(false);
 			}
@@ -92,7 +92,7 @@ describe.each(getMatrixConfigs())("Lifecycle Payload Hardening > Config: '$name'
 			await api.slothlet.api.add("securityTest2", TEST_DIRS.API_TEST);
 
 			// At least one placed leaf carries its wrapped callable on `impl` (the value ownership
-			// subscribers read internally as wrapper.__impl), so a public consumer never needs the handle.
+			// subscribers read internally as wrapper.____impl), so a public consumer never needs the handle.
 			expect(payloads.some((data) => typeof data.impl === "function")).toBe(true);
 		});
 	});
@@ -114,7 +114,7 @@ describe.each(getMatrixConfigs())("Lifecycle Payload Hardening > Config: '$name'
 			for (const data of payloads) {
 				expect(Object.keys(data).sort()).toEqual(["apiPath", "filePath", "impl", "moduleID", "source", "sourceFolder"]);
 				expect(data.wrapper).toBeUndefined();
-				expect(data.__wrapperRef).toBeUndefined();
+				expect(data.____wrapperRef).toBeUndefined();
 			}
 		});
 	});

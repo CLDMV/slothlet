@@ -199,7 +199,7 @@ function readOwnData(value, key) {
  * The proxy's get trap is the authoritative read: it builds child wrappers from the impl, unwraps
  * primitive leaves, and so on, so the walk reads through it. The one exception is a child that is
  * itself an unmaterialized lazy wrapper: for that child the trap returns the same stored proxy
- * unchanged, and its only other effect is to start a fire-and-forget `_materialize()`. That child
+ * unchanged, and its only other effect is to start a fire-and-forget `___materialize()`. That child
  * is read from the wrapper directly, so observing the tree never loads it.
  */
 function readWithoutMaterializing(proxy, inner, key) {
@@ -1165,10 +1165,10 @@ export class OwnershipManager extends ComponentBase {
 
 		// If value is a wrapper proxy, unwrap it to get the raw implementation.
 		// Use resolveWrapper (checks the internal _proxyRegistry WeakMap directly) rather than
-		// `"__impl" in value`, which goes through the hasTrap - and __impl is now blocked there.
+		// `"____impl" in value`, which goes through the hasTrap - and ____impl is now blocked there.
 		const rawWrapper = resolveWrapper(value);
 		if (rawWrapper) {
-			return rawWrapper.__impl;
+			return rawWrapper.____impl;
 		}
 
 		return value;
@@ -1303,7 +1303,7 @@ export class OwnershipManager extends ComponentBase {
 		// Recursively register children. Reads go through the proxy (its get trap produces the values
 		// callers see) EXCEPT for a child that is an unmaterialized lazy wrapper: reading that one
 		// through the trap returns the same stored proxy but also starts a fire-and-forget
-		// `_materialize()`, which left a freshly added lazy mount mid-materialization when
+		// `___materialize()`, which left a freshly added lazy mount mid-materialization when
 		// `api.slothlet.api.add()` resolved and made what add() returned depend on timing (#462). Such a
 		// child registers its own descendants when it materializes.
 		const inner = resolveWrapper(api);
@@ -1313,7 +1313,7 @@ export class OwnershipManager extends ComponentBase {
 				key = ofEntry[0],
 				value = ofEntry[1];
 			// Skip internal properties
-			const skipProps = ["_materialize", "_impl", "____slothletInternal"];
+			const skipProps = ["___materialize", "____impl", "____slothletInternal"];
 			if (ArrayMethods.includes(skipProps, key)) {
 				continue;
 			}
@@ -1536,7 +1536,7 @@ export class OwnershipManager extends ComponentBase {
 				key = ofEntry[0],
 				value = ofEntry[1];
 			// Skip internal properties
-			const skipProps = ["_materialize", "_impl", "____slothletInternal"];
+			const skipProps = ["___materialize", "____impl", "____slothletInternal"];
 			if (ArrayMethods.includes(skipProps, key)) {
 				continue;
 			}

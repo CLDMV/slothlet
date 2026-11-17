@@ -312,7 +312,7 @@ describe.each(matrixConfigs)("Lazy Materialization Tracking > Config: $name", ({
 		async function loadAll(node, seen = new WeakSet()) {
 			if (!node || (typeof node !== "object" && typeof node !== "function") || seen.has(node)) return;
 			seen.add(node);
-			if (typeof node._materialize === "function") await node._materialize();
+			if (typeof node.___materialize === "function") await node.___materialize();
 			for (const key of Object.keys(node)) await loadAll(node[key], seen);
 		}
 
@@ -414,7 +414,7 @@ describe.each(matrixConfigs)("Lazy Materialization Tracking > Config: $name", ({
 				await deepApi.l1;
 				const l2 = resolveWrapper(deepApi.l1.l2);
 				// l2 is loading when the result holding it is dropped; its own child l3 must not be counted.
-				const loading = l2._materialize();
+				const loading = l2.___materialize();
 				UnifiedWrapper._uncountUnappliedImpl({ l2: deepApi.l1.l2 });
 				await loading.catch(() => {});
 				expect(l2.____slothletInternal.invalid).toBe(true);
@@ -434,7 +434,7 @@ describe.each(matrixConfigs)("Lazy Materialization Tracking > Config: $name", ({
 				const l2 = resolveWrapper(deepApi.l1.l2);
 				// l2 has loaded, so it already holds its still-unloaded child l3 when the result holding it is
 				// dropped; l3 is unreachable from then on and must stop counting.
-				await l2._materialize();
+				await l2.___materialize();
 				const l3 = resolveWrapper(l2.l3);
 				expect(l3.____slothletInternal.state.materialized).toBe(false);
 				UnifiedWrapper._uncountUnappliedImpl({ l2: deepApi.l1.l2 });
@@ -512,7 +512,7 @@ describe.each(matrixConfigs)("Lazy Materialization Tracking > Config: $name", ({
 				const vault = resolveWrapper(shadows.find((shadow) => shadow.key === "vault").child);
 				expect(vault.____slothletInternal.state.materialized).toBe(false);
 				// Loading it makes its `inner` folder, which is off the api surface too and must not be counted.
-				await vault._materialize();
+				await vault.___materialize();
 				await loadAll(shadowApi);
 				expect(shadowApi.slothlet.materialize.get().remaining).toBe(0);
 				expect(await waitSettles(shadowApi)).toBe(true);
@@ -564,7 +564,7 @@ describe.each(matrixConfigs)("Lazy Materialization Tracking > Config: $name", ({
 				try {
 					if (loadWhileHidden) {
 						const shadows = [...resolveWrapper(shadowApi.launcher).slothlet.handlers.apiManager.state.replaceShadows.values()].flat();
-						await resolveWrapper(shadows.find((shadow) => shadow.key === "vault").child)._materialize();
+						await resolveWrapper(shadows.find((shadow) => shadow.key === "vault").child).___materialize();
 					}
 					await shadowApi.slothlet.api.remove("shadow");
 					await loadAll(shadowApi);

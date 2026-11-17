@@ -17,8 +17,8 @@
  * @fileoverview A module cannot change the framework's internal keys on an api node (#625).
  *
  * Every api node carries keys that are the framework's, not the module's: the wrapper's own state
- * (`____slothletInternal`, `_materialize`, `___setImpl`, …), what the node reports about itself (`__metadata`,
- * `__type`, `__apiPath`, …), and impl metadata (`__childFilePaths`, …). The built-in write rules of the
+ * (`____slothletInternal`, `___materialize`, `___setImpl`, …), what the node reports about itself (`__metadata`,
+ * `__type`, `__apiPath`, …), and impl metadata (`____childFilePaths`, …). The built-in write rules of the
  * permission system refuse a module defining, assigning, or deleting any of them, on another module's node and on
  * its own, with `PERMISSION_DENIED`. A write the host makes is absorbed (it reports success and changes nothing, so
  * the key's existence does not leak).
@@ -58,16 +58,15 @@ const INTERNAL_KEYS = [
 	"___getState",
 	"___resetLazy",
 	"___invalidate",
-	"__state",
-	"__invalid",
-	"__materializeOnCreate",
-	"__displayName",
-	"__filePath",
-	"__impl",
-	"_impl",
-	"_materialize",
-	"__childFilePaths",
-	"__childFilePathsPreMaterialize"
+	"____state",
+	"____invalid",
+	"____materializeOnCreate",
+	"____displayName",
+	"____filePath",
+	"____impl",
+	"___materialize",
+	"____childFilePaths",
+	"____childFilePathsPreMaterialize"
 ];
 
 /**

@@ -246,7 +246,7 @@ describe.each(CONFIGS)("ownership across a permission toggle (#625) — $mode / 
 			await load(options);
 			globalThis[Symbol.for(PROBE)] = (self) => {
 				const v = self.victim.v;
-				return () => outcome(() => Object.defineProperty(v, "__filePath", { value: "/elsewhere", configurable: true }));
+				return () => outcome(() => Object.defineProperty(v, "____filePath", { value: "/elsewhere", configurable: true }));
 			};
 			const later = await api.guest.x.runWithSelf(PROBE);
 			// The closure runs as the module that made it (#597), so the built-in rule refuses it in both modes that keep it.

@@ -207,7 +207,7 @@ describe.each(["eager", "lazy"])("Permissions > module-private exports (#260) > 
 		// Same rule as the fileFilter case: a file the consumer hid never reaches the composed
 		// surface, so refusing the whole mount over it contradicts scoping the refusal to loaded
 		// files. Hiding it is the documented way to keep such a file in the tree.
-		await api.slothlet.api.add("hid", REJECT_FILE, { hidden: "_impl" });
+		await api.slothlet.api.add("hid", REJECT_FILE, { hidden: "-____impl" });
 		expect((mode === "lazy" ? await api.hid : api.hid).ok.fine).toBe("fine");
 	});
 
@@ -233,7 +233,7 @@ describe("Permissions > reserved-name refusal is platform-symmetric (#260)", () 
 
 	it("refuses a reserved-name file in a browser manifest too", async () => {
 		// The hazard is the composed wrapper shape, not the platform: a manifest carrying
-		// `_impl.mjs` would empty the lazy surface in a browser exactly as on disk, so the
+		// `-____impl.mjs` (which sanitizes to `____impl`) would empty the lazy surface in a browser exactly as on disk, so the
 		// filesystem scan's refusal has to have a manifest-side twin.
 		await expect(
 			slothlet({
@@ -243,7 +243,7 @@ describe("Permissions > reserved-name refusal is platform-symmetric (#260)", () 
 					files: {
 						files: [
 							{ path: "math.mjs", name: "math", full: "math.mjs" },
-							{ path: "_impl.mjs", name: "_impl", full: "_impl.mjs" }
+							{ path: "-____impl.mjs", name: "-____impl", full: "-____impl.mjs" }
 						],
 						directories: []
 					}
