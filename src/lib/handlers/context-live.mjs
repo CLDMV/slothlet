@@ -38,7 +38,8 @@ import {
 	isRunnerFrame,
 	parseStackFrame,
 	resolvesSupplier,
-	runtime_namesEntry,
+	runtime_namedAmong,
+	bareList,
 	toComparablePath,
 	internals as framePlacementInternals
 } from "#handlers/frame-placement";
@@ -135,6 +136,69 @@ const FAR_FRAMES = 1024;
  * @private
  */
 const UNACCOUNTED = Symbol("slothlet.callerIdentity.unaccounted");
+
+/**
+ * What has to agree for enforcement: the api path within one instance. Across instances the same api path is a
+ * different call, so the instance is part of it.
+ * @param {{family?: string|null, apiPath: string}} entry - A suspended call.
+ * @returns {string} Its key.
+ * @private
+ */
+const callKey = (entry) => `${entry.family ?? ""}\u0000${entry.apiPath}`;
+
+/**
+ * Lists of suspended calls already found to be one call or several, by the list.
+ * @type {WeakMap<Array<object>, boolean>}
+ * @private
+ */
+const ONE_CALL = new WeakMap();
+
+/**
+ * Whether every call of a list is the same call for enforcement (see {@link callKey}). A list read again (a placement's
+ * matches, shared between reads of the same suspended calls) answers by a lookup.
+ * @param {ArrayLike<object>} list - Suspended calls, at least one. The list is not changed afterwards.
+ * @returns {boolean} True when they all share one key.
+ * @private
+ */
+function oneCall(list) {
+	let one = WeakMapMethods.get(ONE_CALL, list);
+	if (one === undefined) {
+		const first = list[0];
+		let key = null;
+		one = true;
+		for (let i = 1; i < list.length && one; i++) {
+			const entry = list[i];
+			// The calls of one function carry the same family and api path: only others are keyed.
+			if (entry.family === first.family && entry.apiPath === first.apiPath) continue;
+			key ??= callKey(first);
+			one = callKey(entry) === key;
+		}
+		WeakMapMethods.set(ONE_CALL, list, one);
+	}
+	return one;
+}
+
+/**
+ * Sets of the entries of a list, by the list.
+ * @type {WeakMap<Array<object>, Set<object>>}
+ * @private
+ */
+const LIST_SETS = new WeakMap();
+
+/**
+ * The entries of a list kept in another as well, in the first list's order. Lists compared again (shared between reads
+ * of the same suspended calls) are looked up in a set made once.
+ * @param {Array<object>} list - The entries to keep from.
+ * @param {Array<object>} among - The entries to keep. The list is not changed afterwards.
+ * @returns {Array<object>} The entries of `list` that are in `among`.
+ * @private
+ */
+function keptAmong(list, among) {
+	if (list === among) return list;
+	let members = WeakMapMethods.get(LIST_SETS, among);
+	if (!members) WeakMapMethods.set(LIST_SETS, among, (members = setFrom(among)));
+	return filterList(list, (entry) => SetMethods.has(members, entry));
+}
 
 /**
  * Marks a call pinned to the host (`runInContext(..., asHost)`, from `pin.caller()` when the
@@ -622,6 +686,19 @@ export class LiveContextManager {
 	 * @type {Set<object>}
 	 */
 	#busyStores = new Set();
+
+	/**
+	 * Counts every change to any store's suspended calls, so the candidates read from a set of them are made again only
+	 * after it changed (see {@link LiveContextManager#candidatesOf}).
+	 * @type {number}
+	 */
+	#suspendedVersion = 0;
+
+	/**
+	 * The candidates last made from each set of suspended calls, with the version they were made at.
+	 * @type {WeakMap<Set<object>, {version: number, candidates: ArrayLike<object>, unattributed: boolean}>}
+	 */
+	#candidateLists = new WeakMap();
 
 	/**
 	 * The resource scopes running now, innermost last (see {@link LiveContextManager#pinScope}).
@@ -1201,8 +1278,7 @@ export class LiveContextManager {
 	 * @private
 	 */
 	#hasUnattributed(suspended) {
-		for (const entry of setValues(suspended)) if (entry.unattributed) return true;
-		return false;
+		return this.#suspendedState(suspended).unattributed;
 	}
 
 	/**
@@ -1403,6 +1479,39 @@ export class LiveContextManager {
 	}
 
 	/**
+	 * The suspended calls of a set that can be placed on a stack — a host-pinned call (`pin.caller()` with no module
+	 * caller) is tracked with no file, and has no module frame to match. Made again only once the suspended calls changed,
+	 * so reads between changes hand the placer the same list (see createFramePlacer).
+	 * @param {Set<object>} suspended - Suspended calls.
+	 * @returns {ArrayLike<object>} Those with a file, in the set's order (a bare list, see bareList). The list is only read.
+	 * @private
+	 */
+	#candidatesOf(suspended) {
+		return this.#suspendedState(suspended).candidates;
+	}
+
+	/**
+	 * What reads of a set of suspended calls need from the calls alone, made again only once they changed: the calls that
+	 * can be placed (see {@link LiveContextManager#candidatesOf}), and whether code that runs as no module is among them.
+	 * @param {Set<object>} suspended - Suspended calls.
+	 * @returns {{version: number, candidates: ArrayLike<object>, unattributed: boolean}} The state.
+	 * @private
+	 */
+	#suspendedState(suspended) {
+		let state = WeakMapMethods.get(this.#candidateLists, suspended);
+		if (state && state.version === this.#suspendedVersion) return state;
+		const candidates = bareList();
+		let unattributed = false;
+		SetMethods.forEach(suspended, (entry) => {
+			if (entry.filePath) candidates[candidates.length] = entry;
+			if (entry.unattributed) unattributed = true;
+		});
+		state = { version: this.#suspendedVersion, candidates, unattributed };
+		WeakMapMethods.set(this.#candidateLists, suspended, state);
+		return state;
+	}
+
+	/**
 	 * Pick which suspended call the current stack belongs to.
 	 *
 	 * Each frame is placed by its location (never by its function name alone, see {@link parseStackFrame}):
@@ -1439,16 +1548,14 @@ export class LiveContextManager {
 	#resolveSuspendedFromStack(suspended, read = null) {
 		// Host-pinned calls (`pin.caller()` with no module caller) are tracked with no filePath:
 		// they have no module frame to match. When only those are suspended, no candidate can match.
-		const candidates = filterList(setToArray(suspended), (entry) => entry.filePath);
+		const candidates = this.#candidatesOf(suspended);
 		if (!candidates.length) return null;
-		// Each frame is placed by the shared placer (see createFramePlacer).
+		// Each frame is placed by the shared placer (see createFramePlacer). The same candidates list is handed in for as
+		// long as the suspended calls stay the same, so what they alone decide is looked up rather than worked out again.
 		const { place } = createFramePlacer(candidates);
 
-		// Enforcement keys on the api path within one instance; across instances the same api path is a
-		// different call, so the instance is part of what has to agree.
-		const callKey = (entry) => `${entry.family ?? ""}\u0000${entry.apiPath}`;
-
-		const settle = (matches) => (SetMethods.size(setFrom(mapList(matches, callKey))) === 1 ? matches[0] : AMBIGUOUS);
+		// Enforcement keys on the api path within one instance (see callKey).
+		const settle = (matches) => (oneCall(matches) ? matches[0] : AMBIGUOUS);
 
 		// Returns the answer, or undefined when the frames read ran out before one could be given. The last read
 		// (`final`) answers from the frames it has.
@@ -1473,7 +1580,7 @@ export class LiveContextManager {
 				if (!syncEnded && !(placement && !(placement.byModule && !placement.matches.length))) listPush(below, frame);
 				if (!placement) {
 					if (!byName) {
-						const named = filterList(candidates, (entry) => runtime_namesEntry(frame.head, entry));
+						const named = runtime_namedAmong(candidates, frame.head);
 						if (named.length) byName = named;
 					}
 					continue;
@@ -1499,7 +1606,7 @@ export class LiveContextManager {
 			// With no placed frame of its own, the job is placed by the innermost flow awaiting it.
 			if (!running.length) {
 				if (!awaiting[0].matches.length) return AMBIGUOUS;
-				return this.#narrow(awaiting, null, callKey, truncated);
+				return this.#narrow(awaiting, null, truncated);
 			}
 			// A suspended call that resumed runs its own function: the outermost frame is that function, in the call's
 			// own file. Whatever it calls — another module's handler or a function another call returned — runs as
@@ -1512,18 +1619,18 @@ export class LiveContextManager {
 			// The waiting calls of the file the job picked up in, when no name says which of them it is.
 			let fileCalls = null;
 			if (outermost.byFile && resuming) {
-				const resumed = filterList(outermost.matches, (entry) => runtime_namesEntry(outermost.frame.head, entry));
-				if (resumed.length && SetMethods.size(setFrom(mapList(resumed, callKey))) === 1) return resumed[0];
+				const resumed = runtime_namedAmong(outermost.matches, outermost.frame.head);
+				if (resumed.length && oneCall(resumed)) return resumed[0];
 				// The job started in the file of one waiting call alone, in a function nested in its export or a promise
 				// callback it made: that call is what picked up again. Code it has called since (another module's function
 				// it was handed) runs inside it, and whose code that is is told when the access is checked, by its frames,
 				// as it is in the async runtime.
-				if (outermost.matches.length && SetMethods.size(setFrom(mapList(outermost.matches, callKey))) === 1) return outermost.matches[0];
+				if (outermost.matches.length && oneCall(outermost.matches)) return outermost.matches[0];
 				// Several calls of that file are waiting: the job is one of them. When nothing below settles which, the
 				// access is held to every one of them (see tiedIdentity).
 				if (outermost.matches.length) fileCalls = outermost.matches;
 			}
-			const settled = this.#agree(running, awaiting, callKey, truncated, resuming ? suspended : null);
+			const settled = this.#agree(running, awaiting, truncated, resuming ? suspended : null);
 			return fileCalls && (settled === AMBIGUOUS || settled === UNACCOUNTED) ? { tied: fileCalls } : settled;
 		};
 
@@ -1559,18 +1666,17 @@ export class LiveContextManager {
 	 *   part, innermost first.
 	 * @param {Array<{frame: object, matches: Array<object>, byFile: boolean}>} awaiting - Placed frames of the flows
 	 *   awaiting it, innermost first.
-	 * @param {function(object): string} callKey - What has to agree for enforcement.
 	 * @param {boolean} truncated - Whether frames further out were cut off.
 	 * @param {Set<object>|null} waiting - Every suspended call, when the job is a function picking up after an `await`.
 	 * @returns {object|{tied: Array<object>}|symbol|undefined} The entry, the calls the access is held to, AMBIGUOUS,
 	 *   UNACCOUNTED, or undefined when more frames could still settle it.
 	 * @private
 	 */
-	#agree(running, awaiting, callKey, truncated, waiting) {
+	#agree(running, awaiting, truncated, waiting) {
 		let agreed = null;
 		for (let ofIndex = 0, ofList = running; ofIndex < ofList.length; ofIndex++) {
 			const { matches } = ofList[ofIndex];
-			agreed = agreed ? filterList(agreed, (entry) => ArrayMethods.includes(matches, entry)) : matches;
+			agreed = agreed ? keptAmong(agreed, matches) : matches;
 			if (agreed.length) continue;
 			if (!ArrayMethods.every(running, (placed) => !placed.matches.length)) return AMBIGUOUS;
 			if (!waiting) return UNACCOUNTED;
@@ -1579,15 +1685,15 @@ export class LiveContextManager {
 			// The flows awaiting it may lie past the frames read.
 			return truncated ? undefined : UNACCOUNTED;
 		}
-		if (SetMethods.size(setFrom(mapList(agreed, callKey))) === 1) return agreed[0];
+		if (oneCall(agreed)) return agreed[0];
 		// Different functions of one file: a frame in a candidate's own file names the function as well.
 		for (let ofIndex = 0, ofList = running; ofIndex < ofList.length; ofIndex++) {
 			const { frame, byFile } = ofList[ofIndex];
 			if (!byFile) continue;
-			const pinned = filterList(agreed, (entry) => runtime_namesEntry(frame.head, entry));
-			if (pinned.length && SetMethods.size(setFrom(mapList(pinned, callKey))) === 1) return pinned[0];
+			const pinned = runtime_namedAmong(agreed, frame.head);
+			if (pinned.length && oneCall(pinned)) return pinned[0];
 		}
-		return this.#narrow(awaiting, agreed, callKey, truncated);
+		return this.#narrow(awaiting, agreed, truncated);
 	}
 
 	/**
@@ -1595,25 +1701,24 @@ export class LiveContextManager {
 	 * @param {Array<{frame: object, matches: Array<object>, byFile: boolean}>} placed - Placed frames to narrow by,
 	 *   innermost first.
 	 * @param {Array<object>|null} narrowed - The calls the job is already narrowed to, or null.
-	 * @param {function(object): string} callKey - What has to agree for enforcement.
 	 * @param {boolean} truncated - Whether frames further out were cut off.
 	 * @returns {object|symbol|undefined} The entry, AMBIGUOUS, or undefined when more frames could still settle it.
 	 * @private
 	 */
-	#narrow(placed, narrowed, callKey, truncated) {
+	#narrow(placed, narrowed, truncated) {
 		for (let ofIndex = 0, ofList = placed; ofIndex < ofList.length; ofIndex++) {
 			const { frame, matches, byFile } = ofList[ofIndex];
 			// Frames further out that are no suspended call's are flows awaiting this one: they cannot narrow.
 			if (!matches.length) continue;
-			let matched = narrowed ? filterList(matches, (entry) => ArrayMethods.includes(narrowed, entry)) : matches;
+			let matched = narrowed ? keptAmong(matches, narrowed) : matches;
 			if (!matched.length) return AMBIGUOUS;
-			if (SetMethods.size(setFrom(mapList(matched, callKey))) === 1) return matched[0];
+			if (oneCall(matched)) return matched[0];
 			// Different functions of one file: the frame names the function as well as the file. Only the text
 			// before the location is searched, so a name inside the path cannot match by accident. Not tried for
 			// a frame placed by module or import — the function there is the helper's, not the candidate's.
 			if (byFile) {
-				const pinned = filterList(matched, (entry) => runtime_namesEntry(frame.head, entry));
-				if (pinned.length && SetMethods.size(setFrom(mapList(pinned, callKey))) === 1) return pinned[0];
+				const pinned = runtime_namedAmong(matched, frame.head);
+				if (pinned.length && oneCall(pinned)) return pinned[0];
 			}
 			narrowed = matched;
 		}
@@ -2461,10 +2566,11 @@ export class LiveContextManager {
 			)
 		};
 		SetMethods.add(this.#suspendedFor(store), entry);
+		this.#suspendedVersion++;
 		SetMethods.add(this.#busyStores, store);
 		const settle = () => {
 			const suspended = this.#suspendedFor(store);
-			SetMethods.delete(suspended, entry);
+			if (SetMethods.delete(suspended, entry)) this.#suspendedVersion++;
 			if (SetMethods.size(suspended) === 0) SetMethods.delete(this.#busyStores, store);
 			restore();
 		};
@@ -2765,11 +2871,12 @@ export class LiveContextManager {
 				/* v8 ignore next */
 				if (currentWrapper || asHost) {
 					SetMethods.add(this.#suspendedFor(store), entry);
+					this.#suspendedVersion++;
 					SetMethods.add(this.#busyStores, store);
 				}
 				const settle = () => {
 					const suspended = this.#suspendedFor(store);
-					SetMethods.delete(suspended, entry);
+					if (SetMethods.delete(suspended, entry)) this.#suspendedVersion++;
 					if (SetMethods.size(suspended) === 0) SetMethods.delete(this.#busyStores, store);
 					restore();
 				};

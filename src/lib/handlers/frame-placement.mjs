@@ -1287,32 +1287,216 @@ function describeCall(wrapper) {
 }
 
 /**
- * The module root folders of the instances some calls belong to, longest first.
+ * The module root folders of some instances' api caches, longest first.
  *
  * Taken from each instance's module cache — the folder every `base`/`api.add()` module was loaded from —
  * so a frame in any file of a module's folder can be attributed to that module, not only a frame in the
  * exact file its call entered through. Synthetic (in-memory) modules have no folder and contribute
  * nothing. Longest first so a module mounted from inside another module's folder owns its own files.
  *
- * @param {Array<{currentWrapper: object}>} candidates - Calls being placed.
+ * @param {Array<object>} caches - The api caches of the calls being placed, each once.
  * @returns {Array<{moduleID: string, root: string}>} Module roots, longest first.
  * @private
  */
-function runtime_moduleRootsFor(candidates) {
-	// Every candidate is a live wrapper, which always reaches its instance's cache; the optional chain
-	// guards a partially-built wrapper handed in by a direct caller.
-	/* v8 ignore next */
-	const caches = setFrom(
-		filterList(
-			mapList(candidates, (entry) => entry.currentWrapper?.slothlet?.handlers?.apiCacheManager),
-			Boolean
-		)
-	);
+function runtime_moduleRootsOf(caches) {
 	// One instance's roots are kept between reads as they are; several instances' are merged, deepest first.
-	if (SetMethods.size(caches) === 1) return runtime_moduleRoots(setToArray(caches)[0]);
+	if (caches.length === 1) return runtime_moduleRoots(caches[0]);
 	const roots = [];
-	for (const cache of setValues(caches)) appendList(roots, runtime_moduleRoots(cache));
+	for (let i = 0; i < caches.length; i++) appendList(roots, runtime_moduleRoots(caches[i]));
 	return ArrayMethods.sort(roots, (a, b) => b.root.length - a.root.length);
+}
+
+/**
+ * Candidate indexes by the list of calls they were built for.
+ * @type {WeakMap<ArrayLike<object>, object>}
+ * @private
+ */
+const CANDIDATE_INDEXES = new WeakMap();
+
+/**
+ * A new empty list with no prototype, for lists of slothlet's own entries kept inside slothlet's own code: an element is
+ * written to it as `list[list.length] = value` without any check, as nothing a module puts on `Array.prototype` or
+ * `Object.prototype` is on its chain. Read by index and length only (it has no iterator).
+ * @returns {Array<object>} The list.
+ * @internal
+ */
+export function bareList() {
+	return Objects.setPrototypeOf([], null);
+}
+
+/**
+ * The entries of a list for which `keep` answers true, in a {@link bareList}; the list itself when it keeps all of them.
+ * @param {ArrayLike<object>} list - The entries, only read.
+ * @param {function(object): boolean} keep - The test.
+ * @returns {ArrayLike<object>} The entries kept.
+ * @private
+ */
+function keepAll(list, keep) {
+	let at = 0;
+	while (at < list.length && keep(list[at])) at++;
+	if (at === list.length) return list;
+	const kept = bareList();
+	for (let i = 0; i < at; i++) kept[i] = list[i];
+	for (let i = at + 1; i < list.length; i++) if (keep(list[i])) kept[kept.length] = list[i];
+	return kept;
+}
+
+/**
+ * Add an entry to the bare list kept under a key.
+ * @param {Map<unknown, Array<object>>} map - The index.
+ * @param {unknown} key - The key.
+ * @param {object} entry - The entry.
+ * @returns {Array<object>} The list.
+ * @private
+ */
+function fileUnder(map, key, entry) {
+	let list = MapMethods.get(map, key);
+	if (!list) MapMethods.set(map, key, (list = bareList()));
+	list[list.length] = entry;
+	return list;
+}
+
+/**
+ * What placing a frame among a list of calls needs from the calls alone, built once per list and kept with it.
+ *
+ * The calls are looked up by their files instead of each being compared to each frame: by comparable path (a relative
+ * one as a whole-segment suffix of a location), by real path and by imported location, and by module. What a call's
+ * file and a frame's tags select is kept too, by location and tags, so a list read again places the same frames by a
+ * lookup. Only what the calls themselves describe is kept here: what an instance has loaded, which grows, is read
+ * when a frame is placed. The lists it answers are slothlet's own and shared between reads, so they are only read.
+ *
+ * @param {ArrayLike<object>} candidates - The calls, each with a file. The list is not changed afterwards.
+ * @returns {object} The index.
+ * @private
+ */
+function runtime_candidateIndex(candidates) {
+	let index = WeakMapMethods.get(CANDIDATE_INDEXES, candidates);
+	if (index) return index;
+	// Comparable paths that are strings, matched equal and as a suffix; any other only as the suffix its text makes.
+	const byComparable = new Map();
+	const bySuffixOnly = new Map();
+	const byLocation = new Map();
+	const byModule = new Map();
+	const families = new Set();
+	const caches = new Set();
+	const loaders = new Set();
+	const wrappers = new Set();
+	// The lists the last entry was filed under: an entry of the same call of the same instance (overlapping calls of
+	// one function) is filed under the same ones.
+	let last = null;
+	let lastLists = bareList();
+	for (let i = 0; i < candidates.length; i++) {
+		const entry = candidates[i];
+		if (
+			last !== null &&
+			entry.currentWrapper === last.currentWrapper &&
+			entry.family === last.family &&
+			entry.comparablePath === last.comparablePath &&
+			entry.realComparablePath === last.realComparablePath &&
+			entry.locations === last.locations &&
+			entry.moduleID === last.moduleID
+		) {
+			for (let j = 0; j < lastLists.length; j++) lastLists[j][lastLists[j].length] = entry;
+			continue;
+		}
+		last = entry;
+		lastLists = bareList();
+		// An entry is filed once per list, even under keys that coincide (a real path also recorded as a location).
+		const file = (map, key) => {
+			const list = MapMethods.get(map, key);
+			if (list && list[list.length - 1] === entry) return;
+			lastLists[lastLists.length] = fileUnder(map, key, entry);
+		};
+		const comparable = entry.comparablePath;
+		if (typeof comparable === "string") file(byComparable, comparable);
+		else file(bySuffixOnly, `${comparable}`);
+		if (entry.realComparablePath != null) file(byLocation, entry.realComparablePath);
+		if (entry.locations != null) SetMethods.forEach(entry.locations, (location) => file(byLocation, location));
+		file(byModule, entry.moduleID);
+		if (entry.family) SetMethods.add(families, entry.family);
+		// The calls of one function share its wrapper: its instance's cache and loader are read once.
+		const wrapper = entry.currentWrapper;
+		if (SetMethods.has(wrappers, wrapper)) continue;
+		SetMethods.add(wrappers, wrapper);
+		// Every candidate is a live wrapper, which always reaches its instance's cache and loader; the chains guard a
+		// partially-built wrapper handed in by a direct caller.
+		/* v8 ignore next 4 */
+		const cache = wrapper?.slothlet?.handlers?.apiCacheManager;
+		if (cache) SetMethods.add(caches, cache);
+		const loader = wrapper?.slothlet?.processors?.loader;
+		if (loader) SetMethods.add(loaders, loader);
+	}
+
+	// Entries of several lists, once each, in the order of the candidates.
+	let order = null;
+	const merged = (lists) => {
+		if (order === null) {
+			order = new Map();
+			for (let i = 0; i < candidates.length; i++) if (!MapMethods.has(order, candidates[i])) MapMethods.set(order, candidates[i], i);
+		}
+		const seen = new Set();
+		const list = bareList();
+		for (let i = 0; i < lists.length; i++)
+			for (let j = 0; j < lists[i].length; j++) {
+				const entry = lists[i][j];
+				if (SetMethods.has(seen, entry)) continue;
+				SetMethods.add(seen, entry);
+				list[list.length] = entry;
+			}
+		if (list.length > 1) ArrayMethods.sort(list, (a, b) => MapMethods.get(order, a) - MapMethods.get(order, b));
+		return list;
+	};
+
+	// The calls a location is the file of. A browser-mode wrapper records its file relative to the manifest root, so a
+	// relative path matches as a whole-segment suffix of a location; an absolute one must be equal. A file reached
+	// through a symlink is matched by its real path too, as Node reports it.
+	const atLocation = new Map();
+	const entriesAt = (location) => {
+		let found = MapMethods.get(atLocation, location);
+		if (found) return found;
+		const lists = bareList();
+		const take = (list) => {
+			if (list) lists[lists.length] = list;
+		};
+		take(MapMethods.get(byComparable, location));
+		take(MapMethods.get(byLocation, location));
+		for (let at = StringMethods.indexOf(location, "/"); at !== -1; at = StringMethods.indexOf(location, "/", at + 1)) {
+			const suffix = StringMethods.slice(location, at + 1);
+			take(MapMethods.get(byComparable, suffix));
+			take(MapMethods.get(bySuffixOnly, suffix));
+		}
+		found = lists.length === 0 ? bareList() : lists.length === 1 ? lists[0] : merged(lists);
+		MapMethods.set(atLocation, location, found);
+		return found;
+	};
+
+	// The calls a frame in a call's own file is placed among, by its location and the instance and mount tags it carries.
+	const inFile = new Map();
+	const fileMatches = (location, frameInstance, frameModule) => {
+		const key = `${location}\u0000${frameInstance ?? ""}\u0000${frameModule ?? ""}`;
+		let found = MapMethods.get(inFile, key);
+		if (found) return found;
+		found = keepAll(
+			entriesAt(location),
+			(entry) =>
+				(!frameInstance || !entry.family || entry.family === frameInstance) &&
+				(frameModule ? entry.moduleID === frameModule : !frameInstance || !entry.moduleID)
+		);
+		MapMethods.set(inFile, key, found);
+		return found;
+	};
+
+	index = {
+		merged,
+		entriesAt,
+		fileMatches,
+		families,
+		caches: setToArray(caches),
+		loaders: setToArray(loaders),
+		ofModule: (moduleID) => MapMethods.get(byModule, moduleID) ?? bareList()
+	};
+	WeakMapMethods.set(CANDIDATE_INDEXES, candidates, index);
+	return index;
 }
 
 /**
@@ -1330,6 +1514,10 @@ function runtime_moduleRootsFor(candidates) {
  *   folder belongs to that module's calls (#512); the deepest root wins, so a module mounted inside
  *   another's folder owns its files.
  *
+ * What the calls alone decide is indexed once per list (see runtime_candidateIndex): a caller placing frames among the
+ * same calls again passes the same list, unchanged, and places them by lookups. The `matches` lists placements answer
+ * can be shared between placements, so they are only read.
+ *
  * @param {Array<{currentWrapper: object, family: string|null, comparablePath: string, realComparablePath: string|null, locations: Set<string>|null, moduleID: string|null}>} candidates - The calls, each with a file.
  * @returns {{place: function(object): ({matches: Array<object>, byFile: boolean, byModule?: boolean}|null), families: Set<string>}}
  *   `place` answers a frame's placement — `{ matches }` (possibly none: an orphan), or null when the frame is
@@ -1338,13 +1526,9 @@ function runtime_moduleRootsFor(candidates) {
  * @internal
  */
 function createFramePlacer(candidates) {
-	const roots = runtime_moduleRootsFor(candidates);
-	const families = setFrom(
-		filterList(
-			mapList(candidates, (entry) => entry.family),
-			Boolean
-		)
-	);
+	const index = runtime_candidateIndex(candidates);
+	const { families, entriesAt } = index;
+	const roots = runtime_moduleRootsOf(index.caches);
 
 	// The CommonJS helpers each instance's leaves required run under their plain path, untagged; a frame
 	// in one of them is that instance's code all the same. Node loads a CommonJS file once, so several
@@ -1373,33 +1557,15 @@ function createFramePlacer(candidates) {
 		return seen;
 	};
 
-	// A browser-mode wrapper records its file relative to the manifest root, so a relative path matches as a
-	// whole-segment suffix of a location; an absolute one must be equal. A file reached through a symlink is
-	// matched by its real path too, as Node reports it.
-	const isEntryLocation = (location, entry) =>
-		location === entry.comparablePath ||
-		StringMethods.endsWith(location, "/" + entry.comparablePath) ||
-		(entry.realComparablePath !== null && location === entry.realComparablePath) ||
-		Boolean(entry.locations == null ? undefined : SetMethods.has(entry.locations, location));
-
 	// The files the candidates' instances loaded under their tag: every leaf, and every file of their import
 	// graphs. The sets are cached across reads and rebuilt only when their instance loads more.
 	let tagged = null;
 	const isInstanceFile = (location) => {
-		if (!tagged) {
-			// Every candidate is a live wrapper, which always reaches its loader; the chain guards a partial one.
-			/* v8 ignore next */
-			const loaders = setFrom(
-				filterList(
-					mapList(candidates, (entry) => entry.currentWrapper?.slothlet?.processors?.loader),
-					Boolean
-				)
-			);
+		if (!tagged)
 			tagged = concatLists(
-				mapList(setToArray(loaders), runtime_loadedLocations),
+				mapList(index.loaders, runtime_loadedLocations),
 				mapList(setToArray(families), (family) => runtime_importGraphEntry(family).files)
 			);
-		}
 		return ArrayMethods.some(tagged, (set) => SetMethods.has(set, location));
 	};
 
@@ -1417,28 +1583,38 @@ function createFramePlacer(candidates) {
 		const frameModule = runtime_frameModuleTag(frame.line);
 		// A leaf's file an api file imported itself is no leaf's: it is placed as a helper file of the module is.
 		const copy = runtime_leafFileCopyOf(frame) !== null;
-		const byFile = filterList(
-			candidates,
-			(entry) =>
-				!copy &&
-				isEntryLocation(frame.path, entry) &&
-				(!frameInstance || !entry.family || entry.family === frameInstance) &&
-				(frameModule ? entry.moduleID === frameModule : !frameInstance || !entry.moduleID)
-		);
+		const byFile = copy ? bareList() : index.fileMatches(frame.path, frameInstance, frameModule);
 		if (byFile.length) return { matches: byFile, byFile: true };
 		const commonJSFamilies = frameInstance ? null : commonJSFamiliesAt(frame.path);
 		const frameFamilies = frameInstance ? setFrom([frameInstance]) : commonJSFamilies;
 		if (frameFamilies) {
 			// A helper copy loaded for one api file (`helpers: "module"`) names it: only that file's calls can be running it.
 			const loadedFor = frameInstance ? runtime_helperCopyOf(frameInstance, frame) : null;
-			const owners = filterList(candidates, (entry) => {
-				if (!SetMethods.has(frameFamilies, entry.family)) return false;
-				// A leaf's own copy names its mount: only that mount's calls can be running it.
-				if (frameModule && entry.moduleID !== frameModule) return false;
-				if (loadedFor) return isEntryLocation(loadedFor.path, entry) && (!loadedFor.mount || entry.moduleID === loadedFor.mount);
-				for (const importer of setValues(importersOf(entry.family, frame.path))) if (isEntryLocation(importer, entry)) return true;
-				return false;
-			});
+			let owners;
+			if (loadedFor)
+				owners = keepAll(
+					entriesAt(loadedFor.path),
+					(entry) =>
+						SetMethods.has(frameFamilies, entry.family) &&
+						// A leaf's own copy names its mount: only that mount's calls can be running it.
+						(!frameModule || entry.moduleID === frameModule) &&
+						(!loadedFor.mount || entry.moduleID === loadedFor.mount)
+				);
+			else {
+				// The calls of the frame's instances whose files import it.
+				const lists = bareList();
+				for (const family of setValues(frameFamilies)) {
+					if (!SetMethods.has(families, family)) continue;
+					for (const importer of setValues(importersOf(family, frame.path))) {
+						const list = keepAll(
+							entriesAt(importer),
+							(entry) => entry.family === family && (!frameModule || entry.moduleID === frameModule)
+						);
+						if (list.length) lists[lists.length] = list;
+					}
+				}
+				owners = lists.length === 0 ? bareList() : lists.length === 1 ? lists[0] : index.merged(lists);
+			}
 			// A CommonJS file runs under its plain path, which code compiled by someone can name too (#597).
 			return { matches: owners, byFile: false, unverified: Boolean(commonJSFamilies) };
 		}
@@ -1446,25 +1622,25 @@ function createFramePlacer(candidates) {
 		// import): the leaves its record names as importers, directly or through other such helpers (#714).
 		if (!frameInstance) {
 			const importers = runtime_runnerTaggedImporters(frame.path);
-			const owners = importers.length
-				? filterList(candidates, (entry) =>
-						ArrayMethods.some(
-							importers,
-							(importer) =>
-								importer.family === entry.family &&
-								(!importer.mount || importer.mount === entry.moduleID) &&
-								isEntryLocation(importer.location, entry)
-						)
-					)
-				: [];
-			if (owners.length) return { matches: owners, byFile: false, unverified: true };
+			if (importers.length) {
+				const lists = bareList();
+				for (let i = 0; i < importers.length; i++) {
+					const importer = importers[i];
+					const list = keepAll(
+						entriesAt(importer.location),
+						(entry) => importer.family === entry.family && (!importer.mount || importer.mount === entry.moduleID)
+					);
+					if (list.length) lists[lists.length] = list;
+				}
+				if (lists.length) return { matches: lists.length === 1 ? lists[0] : index.merged(lists), byFile: false, unverified: true };
+			}
 		}
 		// A CommonJS file only a gone instance loaded: its code is accounted for by no live call.
 		if (isNode && !frameInstance && SetMethods.has(RETIRED_COMMONJS, frame.path)) return { matches: [], byFile: false };
 		const owner = ArrayMethods.find(roots, ({ root }) => StringMethods.startsWith(frame.path, root + "/"));
 		if (owner)
 			return {
-				matches: filterList(candidates, (entry) => entry.moduleID === owner.moduleID),
+				matches: index.ofModule(owner.moduleID),
 				byFile: false,
 				byModule: true,
 				unverified: true
@@ -1473,6 +1649,67 @@ function createFramePlacer(candidates) {
 	};
 
 	return { place, families };
+}
+
+/**
+ * The calls of lists grouped by the names their entry function goes by, and the answers already given for a frame's
+ * text, by the list.
+ * @type {WeakMap<ArrayLike<object>, {groups: Array<{names: *, entry: object, list: Array<object>}>, byHead: Map<string, ArrayLike<object>>}>}
+ * @private
+ */
+const NAMED_AMONG = new WeakMap();
+
+/**
+ * The calls of a list whose entry function a stack frame's text names (see {@link runtime_namesEntry}).
+ *
+ * Calls of one function go by the same names, so the list is grouped by them once and each group's names are tested
+ * once; a list read again (a placement's matches, a caller's candidates) answers for the same frame text by a lookup.
+ * The list is only read, and the answer may be the list itself or shared, so it is only read too.
+ *
+ * @param {ArrayLike<{fnNames?: string[], fnName?: string}>} list - The calls. The list is not changed afterwards.
+ * @param {string} head - The frame's text before its location.
+ * @returns {ArrayLike<object>} The calls the frame names, in the list's order.
+ * @internal
+ */
+export function runtime_namedAmong(list, head) {
+	if (!head) return bareList();
+	let known = WeakMapMethods.get(NAMED_AMONG, list);
+	if (!known) {
+		// Entries of one wrapper share its names list; an entry with no list goes by its single name.
+		const byNames = new Map();
+		const groups = bareList();
+		for (let i = 0; i < list.length; i++) {
+			const entry = list[i];
+			const names = entry.fnNames ?? entry.fnName;
+			let group = MapMethods.get(byNames, names);
+			if (!group) {
+				MapMethods.set(byNames, names, (group = { names, entry, list: bareList() }));
+				groups[groups.length] = group;
+			}
+			group.list[group.list.length] = entry;
+		}
+		WeakMapMethods.set(NAMED_AMONG, list, (known = { groups, byHead: new Map() }));
+	}
+	let named = MapMethods.get(known.byHead, head);
+	if (named) return named;
+	const { groups } = known;
+	let hit = null;
+	let hits = 0;
+	const verdicts = new Map();
+	for (let i = 0; i < groups.length; i++) {
+		const verdict = runtime_namesEntry(head, groups[i].entry);
+		MapMethods.set(verdicts, groups[i].names, verdict);
+		if (verdict) {
+			hits++;
+			hit = groups[i];
+		}
+	}
+	if (hits === 0) named = bareList();
+	else if (hits === groups.length) named = list;
+	else if (hits === 1) named = hit.list;
+	else named = keepAll(list, (entry) => MapMethods.get(verdicts, entry.fnNames ?? entry.fnName));
+	MapMethods.set(known.byHead, head, named);
+	return named;
 }
 
 /**
