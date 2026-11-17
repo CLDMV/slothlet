@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T15:03:14-08:00 (1794956594)
+ *	@Last modified time: 2026-11-17T15:23:43-08:00 (1794957823)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -22,6 +22,7 @@ import { SlothletError } from "#errors";
 import { DEFAULT_CLOCK } from "#helpers/clock";
 import { internals as eventemitterContextInternals } from "#helpers/eventemitter-context";
 import { pinToCurrentCaller, internals as callerPinningInternals } from "#helpers/caller-pinning";
+import { internals as schedulerContextInternals } from "#helpers/scheduler-context";
 import { combineCeilings, internals as trustedRootInternals } from "#handlers/trusted-root";
 import { nativeThen } from "#helpers/promise-context";
 import { util, inheritsFrom } from "#helpers/platform";
@@ -81,6 +82,7 @@ import {
 import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "#helpers/instance-imports";
 const { setApiContextChecker } = eventemitterContextInternals("lib/handlers/context-live");
 const { setApiCallerPinner } = callerPinningInternals("lib/handlers/context-live");
+const { reinstateSchedulerPatching } = schedulerContextInternals("lib/handlers/context-live");
 const trustedRootOwn = trustedRootInternals("lib/handlers/context-live");
 const { buildCapturedFlowStore } = trustedRootOwn;
 const { runtime_wrapClassInstance } = classInstanceWrapperInternals("lib/handlers/context-live");
@@ -2249,6 +2251,8 @@ export class LiveContextManager {
 	 * @internal
 	 */
 	runFlowBody(flowID, fn, args) {
+		// What the flow schedules is carried only through the patched schedulers (see runInContext).
+		reinstateSchedulerPatching();
 		if (this.#carriesAwaits) {
 			const previous = this.#activeID;
 			this.#activeID = flowID;
@@ -2569,6 +2573,8 @@ export class LiveContextManager {
 		load = null,
 		loading = null
 	) {
+		// A host that wrote back a scheduler it read before the patch (vitest's `process.nextTick`) took the patch out.
+		reinstateSchedulerPatching();
 		// CHILD INSTANCE APPROACH: Check if current is this instance OR a child of this instance
 		const currentID = this.currentInstanceID;
 		const isAlreadyInContext = this.#flowBelongsToInstance(currentID, instanceID);

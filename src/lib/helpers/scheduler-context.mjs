@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:14-08:00 (1794874574)
+ *	@Last modified time: 2026-11-17T15:23:50-08:00 (1794957830)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -135,7 +135,7 @@ function runtime_patchScheduler(host, name) {
  * @public
  */
 function enableSchedulerPatching() {
-	if (isPatchingEnabled) return;
+	if (isPatchingEnabled) return void reinstateSchedulerPatching();
 
 	// The current globals: the patch installs over whatever the host has there now, and restores it.
 	runtime_patchScheduler(globalThis, "setTimeout");
@@ -149,6 +149,28 @@ function enableSchedulerPatching() {
 	runtime_patchScheduler(globalThis.scheduler, "postTask");
 
 	isPatchingEnabled = true;
+}
+
+/**
+ * Put a wrapper back where a host wrote over it with the very function the wrapper calls.
+ *
+ * Code that read a scheduler before slothlet patched it, swapped in a function of its own for a while and then wrote
+ * back what it had read, takes the patch out for the rest of the process: callbacks scheduled from then on run unpinned,
+ * outside the flow and the caller that scheduled them. vitest does this with `process.nextTick` around every message
+ * its worker sends to the main process. It installs the original for the call and writes back what it found on a later
+ * tick, so a wrapper installed in between is overwritten, and two calls that overlap leave the original in place for
+ * good. The function written back is exactly the one under the wrapper, so it can be told from a replacement (fake
+ * timers, another library's wrapper), which owns the slot and is left alone. Called where a live flow or module call
+ * starts, which is where the slot has to be right: a few property reads.
+ *
+ * @returns {void}
+ * @public
+ */
+function reinstateSchedulerPatching() {
+	for (let i = 0; i < patched.length; i++) {
+		const { host, name, layer, wrapper } = patched[i];
+		if (layer.active && host[name] === layer.below && holdsValue(host, name, layer.below)) host[name] = wrapper;
+	}
 }
 
 /**
@@ -184,8 +206,9 @@ function disableSchedulerPatching() {
  * @internal
  */
 export function internals(consumer) {
-	if (!mayTakeInternals(consumer, ["slothlet"])) throw ownBindingsRefusal("lib/helpers/scheduler-context", import.meta.url);
-	return { disableSchedulerPatching, enableSchedulerPatching };
+	if (!mayTakeInternals(consumer, ["slothlet", "lib/handlers/context-live"]))
+		throw ownBindingsRefusal("lib/helpers/scheduler-context", import.meta.url);
+	return { disableSchedulerPatching, enableSchedulerPatching, reinstateSchedulerPatching };
 }
 
 /**
