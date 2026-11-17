@@ -783,18 +783,18 @@ const api = await slothlet({ base: "./api", mode: "lazy", tracking: { materializ
 
 ### `loader`
 
-**Type**: `{ import?: Function, files?: { files: Array, directories: Array }, materialize?: boolean, platform?: "node" | "browser", resolve?: Function }`
+**Type**: `{ import?: Function, files?: { files: Array, directories: Array }, materialize?: boolean | Function, platform?: "node" | "browser", resolve?: Function }`
 **Default**: `{}`
 
 How leaf files are found and loaded.
 
-| Option        | Default         | Effect                                                                                                                                                                                                                                 |
-| ------------- | --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `import`      | none            | `(specifier) => Promise<module>`: every leaf load goes through it instead of slothlet's own `import()`, so a coverage run attributes leaf code (see [TESTING.md](TESTING.md)). Anything but a function throws `INVALID_CONFIG_IMPORT`. |
-| `files`       | none            | The browser file list `files.generate()` from `@cldmv/slothlet/files` writes; giving one selects browser mode. See [BROWSER.md](BROWSER.md).                                                                                           |
-| `materialize` | `false`         | With `mode: "lazy"`, start materializing every api path in the background right after initialization. The api is usable through its proxies before this completes.                                                                     |
-| `platform`    | auto-detected   | `"node"` or `"browser"`: scan the filesystem, or read `files`. Omitted, it is `"browser"` when `files` is given or no Node `process` is present.                                                                                       |
-| `resolve`     | resolve on base | Browser: `({ path, name, full }) => string \| URL`, a file list entry to an importable URL. Defaults to resolving against `base` as a `file://` URL.                                                                                   |
+| Option        | Default         | Effect                                                                                                                                                                                                                                                                                                                 |
+| ------------- | --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `import`      | none            | `(specifier) => Promise<module>`: every leaf load goes through it instead of slothlet's own `import()`, so a coverage run attributes leaf code (see [TESTING.md](TESTING.md)). Anything but a function throws `INVALID_CONFIG_IMPORT`.                                                                                 |
+| `files`       | none            | The browser file list `files.generate()` from `@cldmv/slothlet/files` writes; giving one selects browser mode. See [BROWSER.md](BROWSER.md).                                                                                                                                                                           |
+| `materialize` | `false`         | With `mode: "lazy"`, start materializing every api path in the background right after initialization. The api is usable through its proxies before this completes. A function turns it on and is called once when everything has materialized (see [LIFECYCLE.md](LIFECYCLE.md#a-callback-when-everything-is-loaded)). |
+| `platform`    | auto-detected   | `"node"` or `"browser"`: scan the filesystem, or read `files`. Omitted, it is `"browser"` when `files` is given or no Node `process` is present.                                                                                                                                                                       |
+| `resolve`     | resolve on base | Browser: `({ path, name, full }) => string \| URL`, a file list entry to an importable URL. Defaults to resolving against `base` as a `file://` URL.                                                                                                                                                                   |
 
 ```javascript
 const api = await slothlet({

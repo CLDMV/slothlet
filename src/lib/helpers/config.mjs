@@ -739,15 +739,19 @@ export class Config extends ComponentBase {
 	 * @param {Function} [loader.import] - Every leaf load goes through it: `(specifier) => Promise<module>`.
 	 * @param {{files: Array, directories: Array}} [loader.files] - The browser file list (`files.generate()`); giving one
 	 *   selects browser mode.
-	 * @param {boolean} [loader.materialize=false] - Lazy mode: materialize every path in the background after init.
+	 * @param {boolean|Function} [loader.materialize=false] - Lazy mode: materialize every path in the background after init.
+	 *   A function turns it on and is called once everything has materialized (at once in eager mode, or when
+	 *   materialization finished before the instance did).
 	 * @param {"node"|"browser"} [loader.platform] - Where slothlet runs; auto-detected when omitted.
 	 * @param {Function} [loader.resolve] - Browser: a file list entry to an importable URL.
-	 * @returns {{import: (Function|null), files: (object|null), materialize: boolean, platform: ("node"|"browser"), resolve: (Function|null)}}
+	 * @returns {{import: (Function|null), files: (object|null), materialize: (boolean|Function), platform: ("node"|"browser"), resolve: (Function|null)}}
 	 *   The normalized group.
 	 * @throws {SlothletError} INVALID_CONFIG_IMPORT when `import` is given and is not a function.
+	 * @throws {SlothletError} INVALID_CONFIG when `materialize` is not a boolean or a function.
 	 * @public
 	 * @example
 	 * config.normalizeLoader({}); // => { import: null, files: null, materialize: false, platform: "node", resolve: null }
+	 * config.normalizeLoader({ materialize: () => {} }).materialize; // => the function (materialization is on)
 	 */
 	normalizeLoader(loader) {
 		const group = configGroup(loader, "loader");
@@ -762,7 +766,12 @@ export class Config extends ComponentBase {
 		return {
 			import: group.import ?? null,
 			files,
-			materialize: group.materialize === true,
+			// true | false | a function: a function turns materialization on and is kept as given, so a reload feeding this
+			// config back in keeps the callback.
+			materialize:
+				typeof group.materialize === "function"
+					? group.materialize
+					: configChoice(group.materialize, [true, false], false, "loader.materialize", "a boolean or a function"),
 			// A file list is a strong browser-mode signal: it selects browser mode unless the platform is given.
 			platform: this.normalizeEnvTarget(group.platform, files !== null),
 			resolve: group.resolve ?? null

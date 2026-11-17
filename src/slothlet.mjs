@@ -134,6 +134,7 @@ import {
 	Reflect,
 	Set,
 	setFrom,
+	settledWith,
 	SetMethods,
 	setToArray,
 	splitText,
@@ -451,6 +452,7 @@ class Slothlet {
 		this._materializationComplete = false; // Set to true when all lazy wrappers materialized
 		this._materializationWaiters = []; // Promises waiting for full materialization
 		this._materializationCompleteEmitted = false; // Track if event was already emitted
+		this._materializeCallbackCalled = false; // The `loader.materialize` callback ran (once per instance)
 
 		// Component categories
 		this.componentCategories = ["helpers", "handlers", "builders", "processors", "modes"];
@@ -1009,6 +1011,30 @@ class Slothlet {
 					});
 				}
 			}
+
+			// Before the instance has finished loading, load() calls it at its end instead.
+			if (this.isLoaded) this._callMaterializeCallback();
+		}
+	}
+
+	/**
+	 * Call the `loader.materialize` callback, when one was given, the first time everything is materialized and the
+	 * instance has loaded. It runs once per instance; what it throws or rejects with is reported as a
+	 * `WARNING_LIFECYCLE_HANDLER_ERROR` warning, like a `materialized:complete` handler that fails.
+	 * @returns {void}
+	 * @private
+	 */
+	_callMaterializeCallback() {
+		const callback = this.config?.loader?.materialize;
+		if (typeof callback !== "function" || this._materializeCallbackCalled || this._unmaterializedLazyCount !== 0) return;
+		this._materializeCallbackCalled = true;
+		const warn = (error) => {
+			new this.SlothletWarning("WARNING_LIFECYCLE_HANDLER_ERROR", { event: "materialized:complete" }, error);
+		};
+		try {
+			PromiseMethods.then(settledWith(callback({ total: this._totalLazyCount, timestamp: this.#clock.now() })), undefined, warn);
+		} catch (error) {
+			warn(error);
 		}
 	}
 
@@ -1573,6 +1599,10 @@ class Slothlet {
 
 		this.isLoaded = true;
 
+		// `loader.materialize` given a function: call it now when everything is already materialized (eager mode, or a lazy
+		// tree that finished during load); otherwise _checkMaterializationComplete() calls it when the last wrapper loads.
+		this._callMaterializeCallback();
+
 		// `init` (#504): a new instance finished building — the cold start, and the rebuild inside
 		// restart(). A reload (which always passes an instance ID to preserve or rotate) is the same
 		// instance re-reading its modules, not a new one, so it does not emit this.
@@ -1998,6 +2028,7 @@ class Slothlet {
 			this._unmaterializedLazyCount = 0;
 			this._materializationComplete = false;
 			this._materializationCompleteEmitted = false;
+			this._materializeCallbackCalled = false;
 
 			// 4. Build the new instance from the original config. New wrappers carry the next epoch;
 			//    the old tree's wrappers keep answering as themselves until the swap below.
@@ -2541,7 +2572,7 @@ export default slothlet;
  * @property {{files: Array<{path:string,name:string,full:string}>, directories: Array}} [loader.files] - Pre-generated directory structure for browser mode.
  *   Produced at build time by `files.generate()` from `@cldmv/slothlet/files`. Required when `loader.platform` is `"browser"`.
  *   Giving it selects browser mode without an explicit `loader.platform`.
- * @property {boolean} [loader.materialize=false] - When `mode: "lazy"`, immediately begins materializing all paths in the background after init.
+ * @property {boolean|Function} [loader.materialize=false] - When `mode: "lazy"`, immediately begins materializing all paths in the background after init. A function turns it on and is called once with `{ total, timestamp }` when everything has materialized — at once when that is already so when the instance finishes loading (always in eager mode). What it throws or rejects with is reported as a `WARNING_LIFECYCLE_HANDLER_ERROR` warning.
  * @property {"browser"|"node"} [loader.platform] - Execution-environment target. Controls whether filesystem-dependent code paths run. Independent of `env` (the `process.env` snapshot).
  *   - `"browser"` — browser/worker/Electron-renderer mode. Skips filesystem operations and the `process.env` snapshot. Requires `loader.files`.
  *   - `"node"` — explicit Node.js mode.
