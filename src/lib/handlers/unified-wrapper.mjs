@@ -532,9 +532,10 @@ function runtime_assertNamedLoads(slothlet, permissionManager, name, route, file
  *   makes as it links), so that code is never taken for the host's.
  * @param {*} [filename=null] - The file name the code is compiled under, when one is given: a real file outside the
  *   caller's own folder is refused even where a rule opens the capability.
- * @param {boolean} [runnerCompile=false] - Whether the call is vitest's compile of exactly the code its server sent for
- *   `filename` (see `helpers/vitest-worker-setup`): allowed once for a file of this instance's that is loading now, as
- *   Node's own loader compiling the file would be.
+ * @param {boolean|null} [runnerCompile=false] - Whether the call is vitest's compile of exactly the code its server sent
+ *   for `filename` (see `helpers/vitest-worker-setup`): allowed once for a file of this instance's that is loading now,
+ *   as Node's own loader compiling the file would be. Null when no worker setup records what the server sent: the first
+ *   such compile of a loading file is then decided by the code that makes it, as any other code is.
  * @returns {void}
  * @throws {SlothletError} `PERMISSION_CAPABILITY_REFUSED`.
  * @internal
@@ -547,9 +548,15 @@ function runtime_assertCapability(slothlet, name, route, moduleFile = null, file
 	// vitest's module runner compiling the code its server sent for a file of this instance's that is loading now: the
 	// loader's own compile of the file, as Node's loader compiling it would be. One such compile per load.
 	if (runnerCompile === true && runtime_runnerCompilesLoad(slothlet, filename)) return;
+	// With no worker setup recording what vitest's server sent (vitest without the vite plugin, `server.deps.inline`
+	// only), the runner's compile of a loading file cannot be told from other code by what it compiles. The first
+	// runner-shaped compile of each load is then decided by the code making it, as below: vitest's runner is no
+	// module's code, and a module's own code compiling under the name is still its own and refused. Every later compile
+	// under the name is placed as the file's code.
+	const unverifiedRunnerCompile = runnerCompile === null && runtime_runnerCompilesLoad(slothlet, filename);
 	// Any other code compiled under the name of a file this instance is loading now is placed as that file's code,
 	// whoever compiles it: decided as the file's module path, as its own top-level code is.
-	runtime_assertNamedLoads(slothlet, permissionManager, name, route, filename);
+	if (!unverifiedRunnerCompile) runtime_assertNamedLoads(slothlet, permissionManager, name, route, filename);
 	const contextManager = slothlet.contextManager;
 	let caller = null;
 	const identity = contextManager?.getCallerIdentity?.(slothlet.instanceID);
