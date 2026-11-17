@@ -529,6 +529,11 @@ export class ModuleManager extends ComponentBase {
 		const rulePlacements = mapList(manifestRules, (rule) => permissionManager.placeModuleRule(rule, writer));
 		const eventPlacements = mapList(manifestEvents, (rule) => permissionManager.placeModuleRule({ target: rule?.event }, writer));
 
+		// Every rule is checked as registering it will, before the module is mounted, so a refused one leaves nothing
+		// mounted behind (#872).
+		ArrayMethods.forEach(manifestRules, (rule) => permissionManager.assertRuleValid(rule));
+		ArrayMethods.forEach(manifestEvents, (rule) => permissionManager.assertEventRuleValid(rule));
+
 		const moduleID = await this.slothlet.handlers.apiManager.addApiComponent({
 			apiPath: mountPathDotted,
 			folderPath: discoverResult.apiDir,

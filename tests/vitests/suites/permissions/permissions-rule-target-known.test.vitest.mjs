@@ -156,6 +156,16 @@ describe.each(getMatrixConfigs())("Permissions > rule targets in slothlet's own 
 		expect(code).toBe("PERMISSION_RULE_UNKNOWN_TARGET");
 	});
 
+	it("a refused module mount leaves nothing mounted at the module's mount path (#872)", async () => {
+		api = await slothlet({ ...config, base: BASE, permissions: { defaultPolicy: "allow" } });
+		const add = () => api.slothlet.api.modules.add("@local/unknown-target", { discover: { scanRoot: FIX_RULE_MODULES } });
+		expect(await codeOf(add)).toBe("PERMISSION_RULE_UNKNOWN_TARGET");
+		expect(api.plugins?.["unknown-target"]).toBeUndefined();
+		expect(Object.keys(api.plugins ?? {})).not.toContain("unknown-target");
+		// The mount can be tried again: nothing it left behind makes it collide with itself.
+		expect(await codeOf(add)).toBe("PERMISSION_RULE_UNKNOWN_TARGET");
+	});
+
 	it("a module manifest rule naming a consumer path that does not exist is not refused", async () => {
 		api = await slothlet({ ...config, base: BASE, permissions: { defaultPolicy: "allow" } });
 		const code = await codeOf(() => api.slothlet.api.modules.add("@local/consumer-target", { discover: { scanRoot: FIX_RULE_MODULES } }));

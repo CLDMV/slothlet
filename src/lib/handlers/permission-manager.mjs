@@ -2180,6 +2180,33 @@ export class PermissionManager extends ComponentBase {
 	}
 
 	/**
+	 * Check a call or write rule as {@link addRule} would, without registering it, so a caller that registers rules
+	 * after other work can refuse a bad one before doing that work (#872).
+	 *
+	 * @param {object} rule - The rule, as {@link snapshotRule} copied it.
+	 * @returns {void}
+	 * @throws {SlothletError} `INVALID_PERMISSION_RULE` or `PERMISSION_RULE_UNKNOWN_TARGET` when the rule is refused.
+	 * @example
+	 * pm.assertRuleValid(pm.snapshotRule(input));
+	 */
+	assertRuleValid(rule) {
+		this.#validateRule(rule);
+	}
+
+	/**
+	 * Check an event rule as {@link addEventRule} would, without registering it (#872).
+	 *
+	 * @param {object} rule - The event rule, as {@link snapshotEventRule} copied it.
+	 * @returns {void}
+	 * @throws {SlothletError} `INVALID_PERMISSION_RULE` when the rule is refused.
+	 * @example
+	 * pm.assertEventRuleValid(pm.snapshotEventRule(input));
+	 */
+	assertEventRuleValid(rule) {
+		this.#validateEventRule(rule);
+	}
+
+	/**
 	 * Read `fields` of a rule once into a frozen copy.
 	 *
 	 * @param {*} rule - The rule handed in.
