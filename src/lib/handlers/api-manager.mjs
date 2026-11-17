@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T12:09:02-08:00 (1794946142)
+ *	@Last modified time: 2026-11-17T12:36:59-08:00 (1794947819)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -5446,8 +5446,10 @@ export class ApiManager extends ComponentBase {
 							? moduleIDKey
 							: mountRoot || splitText(pathsToDelete[0], ".")[0]
 				});
-			} else if (recordHistory && ownerlessLoaded) {
-				// Nothing of it is on the api to name by path, so a reload replays the removal by its moduleID.
+			} else if (recordHistory && (ownerlessLoaded || pathsToRollback.length > 0)) {
+				// Nothing of it is on the api to name by path (every path it held went back to the module it covered, as
+				// after a forced add over another module's path), so a reload replays the removal by its moduleID.
+				// Without this the reload re-adds it over that module again.
 				listPush(this.state.operationHistory, { type: "remove", apiPath: moduleIDKey });
 			}
 			// Return true if we actually removed something
