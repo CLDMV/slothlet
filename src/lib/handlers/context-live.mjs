@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T13:35:16-08:00 (1794951316)
+ *	@Last modified time: 2026-11-17T15:03:14-08:00 (1794956594)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -164,19 +164,22 @@ class Adopt {
 
 /**
  * The flow each promise was made in (the store id the active-instance field named), and with permissions on the call it
- * was created in, while it ran synchronously or in a flow such a promise's reaction ran: the flow's starter. Kept in a
+ * was created in, while it ran synchronously or in a flow such a promise's reaction ran: the flow's starter. A promise
+ * made in a `run()` / `scope()` flow also holds that flow's store, so its jobs run in the flow after the `run()` has
+ * returned, for as long as the promise lives (see {@link LiveContextManager#reopenFlowStore}). Kept in a
  * private field slothlet puts on the promise as the engine makes it: no code but this class's can read or change it, and
  * putting it there costs a promise far less than an entry in a weak map would.
  * @private
  */
 class PromiseFlow extends Adopt {
-	/** @type {string|null|{flow: string|null, starter: object}} */
+	/** @type {string|null|{flow: string|null, starter: object|null, store?: object}} */
 	#record;
 
 	/**
 	 * Record a promise's flow.
 	 * @param {Promise<*>} promise - The promise, as the engine makes it.
-	 * @param {string|null|{flow: string|null, starter: object}} record - Its flow, or its flow and starter.
+	 * @param {string|null|{flow: string|null, starter: object|null, store?: object}} record - Its flow, or its flow
+	 *   with its starter and, for a `run()` / `scope()` flow, its store.
 	 */
 	constructor(promise, record) {
 		super(promise);
@@ -186,7 +189,8 @@ class PromiseFlow extends Adopt {
 	/**
 	 * A promise's recorded flow.
 	 * @param {Promise<*>} promise - The promise.
-	 * @returns {string|null|{flow: string|null, starter: object}|undefined} The record; undefined when it has none.
+	 * @returns {string|null|{flow: string|null, starter: object|null, store?: object}|undefined} The record; undefined
+	 *   when it has none.
 	 */
 	static of(promise) {
 		return #record in promise ? promise.#record : undefined;
@@ -685,6 +689,13 @@ export class LiveContextManager {
 	 */
 	#jobDepth = 0;
 
+	/**
+	 * For each running promise job, the `run()` / `scope()` store it put back among the instances for its run (see
+	 * {@link LiveContextManager#reopenFlowStore}), or null.
+	 * @type {Array<object|null>}
+	 */
+	#jobReopened = [];
+
 	constructor() {
 		this.instances = new Map(); // instanceID → context data
 	}
@@ -755,8 +766,13 @@ export class LiveContextManager {
 						if (!scope.own && !scope.swapped && manager.#tellingScope) flow = scope.before;
 						else flow = manager.#activeID;
 					}
+					// A run() / scope() flow's promise holds the flow's store, so a job of it can still run there once the
+					// run() has returned and its store has left the instances (see reopenFlowStore).
+					const flowStore = flow === null ? undefined : MapMethods.get(manager.instances, flow);
+					const held = flowStore !== undefined && flowStore.parentInstanceID ? flowStore : undefined;
 					if (manager.#flowStarterInstances === 0) {
-						new PromiseFlow(promise, flow);
+						// One record per store, shared by its promises: it never changes.
+						new PromiseFlow(promise, held === undefined ? flow : (held.__promiseRecord ??= { flow, starter: null, store: held }));
 						return;
 					}
 					let starter = manager.#runningStarter;
@@ -766,10 +782,12 @@ export class LiveContextManager {
 						if (top === HOST_ENTRY || top === UNATTRIBUTED_ENTRY) starter = null;
 						else if (top?.wrapper) starter = top;
 					}
-					new PromiseFlow(promise, starter ? { flow, starter } : flow);
+					if (starter) new PromiseFlow(promise, { flow, starter, store: held });
+					else new PromiseFlow(promise, held === undefined ? flow : (held.__promiseRecord ??= { flow, starter: null, store: held }));
 				},
 				// Reactions run one at a time from the microtask queue, never inside one another.
 				before(promise) {
+					manager.#jobReopened[manager.#jobDepth] = null;
 					manager.#jobOuter[manager.#jobDepth++] = manager.#activeID;
 					const record = PromiseFlow.of(promise);
 					// A promise made before the hooks were installed carries no flow: the field is left as it is.
@@ -780,6 +798,9 @@ export class LiveContextManager {
 					if (record !== null && typeof record === "object") {
 						manager.#activeID = record.flow;
 						manager.#runningStarter = record.starter;
+						// The run() / scope() the promise was made in has returned: its store is back for this job.
+						if (record.store !== undefined && manager.#reopenFlowStore(record.store))
+							manager.#jobReopened[manager.#jobDepth - 1] = record.store;
 					} else {
 						manager.#activeID = record;
 						manager.#runningStarter = null;
@@ -787,7 +808,14 @@ export class LiveContextManager {
 				},
 				after() {
 					manager.#runningStarter = null;
-					if (manager.#jobDepth > 0) manager.#activeID = manager.#jobOuter[--manager.#jobDepth];
+					if (manager.#jobDepth > 0) {
+						manager.#activeID = manager.#jobOuter[--manager.#jobDepth];
+						const reopened = manager.#jobReopened[manager.#jobDepth];
+						if (reopened !== null && reopened !== undefined) {
+							manager.#jobReopened[manager.#jobDepth] = null;
+							manager.#closeFlowStore(reopened);
+						}
+					}
 				}
 			}
 		]);
@@ -896,6 +924,39 @@ export class LiveContextManager {
 		if (cut <= 0) return id;
 		const base = StringMethods.slice(id, 0, cut);
 		return MapMethods.has(this.instances, base) ? base : id;
+	}
+
+	/**
+	 * Put a `run()` / `scope()` store back among the instances while work tied to it runs after the `run()` has returned.
+	 *
+	 * A `run()` removes its store when its callback settles, but what the callback scheduled can run later: a timer, an
+	 * interval, a listener, a promise's jobs. That work keeps the store itself (a carried callback's closure, a promise's
+	 * record), so it runs in the run's context as on the async runtime, and the store lives exactly as long as that work
+	 * can still run: once the timers have fired, the listeners are removed and the promises are gone, nothing holds it.
+	 * The store is in the instances only while such work runs synchronously, so no other flow and no host code outside
+	 * every flow ever sees it; the caller removes it again with {@link LiveContextManager#closeFlowStore}.
+	 * @param {object} store - The `run()` / `scope()` store.
+	 * @returns {boolean} True when the store was put back (and must be closed after); false when it is still open, or
+	 *   the instance it was opened on has shut down.
+	 * @private
+	 */
+	#reopenFlowStore(store) {
+		const id = store.instanceID;
+		if (MapMethods.has(this.instances, id)) return false;
+		// The instance has shut down: the work runs with no store, as any callback that outlives its instance.
+		if (!MapMethods.has(this.instances, store.parentInstanceID)) return false;
+		MapMethods.set(this.instances, id, store);
+		return true;
+	}
+
+	/**
+	 * Remove a store {@link LiveContextManager#reopenFlowStore} put back, once the work it was put back for returns.
+	 * @param {object} store - The store.
+	 * @returns {void}
+	 * @private
+	 */
+	#closeFlowStore(store) {
+		MapMethods.delete(this.instances, store.instanceID);
 	}
 
 	/**
@@ -1621,31 +1682,34 @@ export class LiveContextManager {
 			// host's standing either. Either way the callback still runs in the flow it was registered in, so it never
 			// sees the context of a run() / scope() flow open when it fires.
 			if (ambiguous || (!wrapper && !inFlight))
-				return mapList(listeners, (listener) => (typeof listener === "function" ? carryFlow(listener, store.instanceID) : listener));
+				return mapList(listeners, (listener) => (typeof listener === "function" ? carryFlow(listener, store) : listener));
 			return mapList(listeners, (listener) =>
-				typeof listener === "function"
-					? carryFlow(pinListener(listener, store.instanceID, wrapper, ceiling ?? null), store.instanceID)
-					: listener
+				typeof listener === "function" ? carryFlow(pinListener(listener, store.instanceID, wrapper, ceiling ?? null), store) : listener
 			);
 		};
 		/**
 		 * The replacement for one callback that runs it in the flow it was registered in: the store's id is the active
-		 * one for its synchronous run, and what was active is put back after. A `run()` / `scope()` store that has gone
-		 * since stands for its instance's own (see removedRunBase).
+		 * one for its synchronous run, and what was active is put back after. The callback holds the store, so one a
+		 * `run()` / `scope()` registered still runs in that run's context after the run has returned (see
+		 * reopenFlowStore), for as long as the callback itself is kept.
 		 * @param {Function} listener - The callback, pinned or not.
-		 * @param {string} flowID - The store it was registered in.
+		 * @param {object} flowStore - The store it was registered in.
 		 * @returns {Function} The callback, run in that flow.
 		 */
-		const carryFlow = (listener, flowID) => {
+		const carryFlow = (listener, flowStore) => {
+			const flowID = flowStore.instanceID;
 			if (this.#pinSource === false) this.#pinSource = { instanceID: flowID, wrapper: null, ceiling: null, loading: null };
+			const ofRun = !!flowStore.parentInstanceID;
 			return function slothlet_flowCarriedListener(...args) {
 				const manager = liveContextManagerRef;
 				const previous = manager.#activeID;
+				const reopened = ofRun && manager.#reopenFlowStore(flowStore);
 				manager.#activeID = flowID;
 				try {
 					return FunctionMethods.apply(listener, this, args);
 				} finally {
 					manager.#activeID = previous;
+					if (reopened) manager.#closeFlowStore(flowStore);
 				}
 			};
 		};
@@ -2807,6 +2871,8 @@ export class LiveContextManager {
 	 */
 	runInFlow(flow, fn) {
 		const { store } = flow;
+		// A flow captured in a run() / scope() that has returned since runs in that run's store (see reopenFlowStore).
+		const reopened = store.parentInstanceID && store.instanceID === flow.instanceID ? this.#reopenFlowStore(store) : false;
 		const previousInstanceID = this.#activeID;
 		const previousWrapper = store.currentWrapper;
 		const previousCallerWrapper = store.callerWrapper;
@@ -2839,6 +2905,7 @@ export class LiveContextManager {
 			store.currentWrapper = previousWrapper;
 			store.callerWrapper = previousCallerWrapper;
 			store.callerCeiling = previousCallerCeiling;
+			if (reopened) this.#closeFlowStore(store);
 		}
 	}
 

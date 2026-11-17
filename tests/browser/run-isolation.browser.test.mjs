@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T12:00:00-08:00 (1794945600)
+ *	@Last modified time: 2026-11-17T15:03:27-08:00 (1794956607)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -17,7 +17,8 @@
  * @fileoverview Interleaved `context.run()` flows in a browser: a callback a flow registers through a boundary slothlet
  * patches (a timer, a microtask, an animation frame, a DOM event listener, an explicit `then` / `catch` / `finally`) runs
  * in that flow, whichever flow was opened last. A browser has no promise hooks, so the code after a bare `await` is not
- * covered here (documented in CONTEXT-PROPAGATION.md).
+ * covered here (documented in CONTEXT-PROPAGATION.md). A callback a run() registers still runs in that run once the run has
+ * returned.
  */
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
@@ -118,6 +119,44 @@ describe.each([undefined, "off", "on"])("interleaved context.run() flows in a br
 			}
 		);
 		expect(await seen).toEqual(["one", "two"]);
+	});
+
+	/**
+	 * Open `run({ tag: "alice" })` whose callback schedules a read through a route and returns at once; the read runs
+	 * once the run has returned.
+	 * @param {function(function(string): void, Promise<void>): void} schedule - Schedules the read; `after` settles once
+	 *   the run has returned.
+	 * @returns {Promise<string>} The tag the late read saw.
+	 */
+	const afterRun = async (schedule) => {
+		const seen = gate();
+		const after = gate();
+		const read = () => api.slothlet.context.get().tag;
+		await api.slothlet.context.run({ tag: "alice" }, () => {
+			schedule((tag) => seen.release(tag), after.promise, read);
+		});
+		after.release();
+		return seen.promise;
+	};
+
+	it("a timer a run() set fires after the run returned, in the run's context", async () => {
+		expect(await afterRun((done, _after, read) => setTimeout(() => done(read()), 5))).toBe("alice");
+	});
+
+	it("a then() chain and a microtask a run() left behind run in the run's context", async () => {
+		expect(await afterRun((done, after, read) => after.then(() => queueMicrotask(() => done(read()))))).toBe("alice");
+	});
+
+	it("a DOM listener a run() added, dispatched after the run returned, runs in the run's context", async () => {
+		const target = new EventTarget();
+		await api.slothlet.context.run({ tag: "alice" }, () => {
+			target.addEventListener("ping", (event) => event.seen.push(api.slothlet.context.get().tag));
+		});
+		const event = new Event("ping");
+		event.seen = [];
+		target.dispatchEvent(event);
+		expect(event.seen).toEqual(["alice"]);
+		expect(api.slothlet.context.get().tag).toBe("base");
 	});
 
 	it("host code outside every run() sees the instance's own context", async () => {

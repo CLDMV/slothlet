@@ -112,6 +112,8 @@ While permissions are on, a module that creates a member inside a value another 
 
 On the live runtime, the callbacks of `fs`, `dns` and `crypto`'s callback APIs (`fs.readFile(file, cb)`, `dns.lookup(host, cb)`, `crypto.randomBytes(n, cb)`, …) now run in the `run()` / `scope()` flow and as the caller that made the call, as on the async runtime; in v3 they saw whatever context was active when they fired. A function reference taken before the first live instance keeps Node's own function and is not carried. The list is in [CONTEXT-PROPAGATION.md](./CONTEXT-PROPAGATION.md#concurrent-run-and-scope-flows-in-the-live-runtime).
 
+Work a `run()` / `scope()` leaves running after its callback returns (a timer, an interval, a listener, a promise chain or module call nobody awaited) now keeps the run's context on the live runtime, as on the async runtime; in v3 it saw the instance's own context once the run had returned.
+
 ### Lazy mode under vitest needs the plugin
 
 Under vitest, api files are loaded by vite, not by Node. Add the plugin from `@cldmv/slothlet/vite` to the vitest config so each instance gets its own copy of every api file and slothlet can tell which module loaded which file. Without it a test using lazy mode, or a module's helper outside its api folder, is refused, and `permissions.mode: "strict"` reports the `vitest-plugin` baseline check as unmet. The plugin is supported with the forks pool; the threads pool is refused. The setup is in [TESTING.md](./TESTING.md#per-instance-helpers-under-vitest-the-cldmvslothletvite-plugin).
