@@ -54,8 +54,8 @@ const REFUSALS = new Set(["LOOSE_SET_NOT_OWNED", "PERMISSION_DENIED", "refused"]
  */
 async function mount(options) {
 	const api = await slothlet({ base: join(FIXTURE, "host"), silent: true, ...options });
-	await api.slothlet.api.add("owner", join(FIXTURE, "owner"), { moduleID: "owner" });
-	await api.slothlet.api.add("reader", join(FIXTURE, "reader"), { moduleID: "reader" });
+	await api.slothlet.api.add("owner", join(FIXTURE, "owner"), { id: "owner" });
+	await api.slothlet.api.add("reader", join(FIXTURE, "reader"), { id: "reader" });
 	await api.owner;
 	await api.reader;
 	return api;
@@ -172,7 +172,7 @@ describe.each(matrix)("crossing guard routes > $mode / $runtime / $attribution",
 				]
 			}
 		});
-		await api.slothlet.api.add("deputy", join(FIXTURE, "deputy"), { moduleID: "deputy" });
+		await api.slothlet.api.add("deputy", join(FIXTURE, "deputy"), { id: "deputy" });
 		// The deputy may write the owner's code, but the view the write goes through is the reader's, and the reader may not.
 		expect(await api.reader.throughDeputy("__deputy_")).toEqual({
 			assign: "LOOSE_SET_NOT_OWNED",

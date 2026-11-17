@@ -1062,7 +1062,7 @@ export class RoutineManager extends ComponentBase {
 	/**
 	 * Run one exact api path's contributors sequentially, awaiting each before the next, collecting
 	 * both what each one returns AND what each one throws — best-effort, mirroring
-	 * `module-manager.mjs`'s own `onFailure: "best-effort"` convention and the dispose semantics this
+	 * `module-manager.mjs`'s own `failure: "best-effort"` convention and the dispose semantics this
 	 * replaces: every contributor gets a chance to run regardless of an earlier one failing.
 	 *
 	 * @description

@@ -108,7 +108,7 @@ describe.each(["eager", "lazy"])("sanitize config names loaded files and folders
 
 	it("the names survive a full reload and a scoped reload", async () => {
 		api = await slothlet({ base: root, mode, sanitize: SANITIZE });
-		await api.slothlet.api.add("added", path.join(root, "extra"), { moduleID: "extra-mod" });
+		await api.slothlet.api.add("added", path.join(root, "extra"), { id: "extra-mod" });
 		await api.slothlet.reload();
 		expect(await api.autoIP.first()).toBe("first");
 		expect(await api.netIP.info.two()).toBe("two");

@@ -113,9 +113,9 @@ describe.each(getMatrixConfigs())("Permissions > a copy of a module's file is it
 				base: path.join(DIR, "base"),
 				permissions: { policy: "deny", rules: RULES, caller: { attribution } }
 			});
-			await api.slothlet.api.add("trusted", path.join(DIR, "trusted"), { moduleID: "trusted-mod" });
-			await api.slothlet.api.add("trustedesm", path.join(DIR, "trustedesm"), { moduleID: "trustedesm-mod" });
-			await api.slothlet.api.add("reader", path.join(DIR, "reader"), { moduleID: "reader-mod" });
+			await api.slothlet.api.add("trusted", path.join(DIR, "trusted"), { id: "trusted-mod" });
+			await api.slothlet.api.add("trustedesm", path.join(DIR, "trustedesm"), { id: "trustedesm-mod" });
+			await api.slothlet.api.add("reader", path.join(DIR, "reader"), { id: "reader-mod" });
 			return api;
 		};
 
@@ -199,9 +199,9 @@ describe.each(getMatrixConfigs())(
 					base: path.join(DIR, "base"),
 					permissions: { policy: "deny", rules: RULES, caller: { attribution } }
 				});
-				await api.slothlet.api.add("trusted", path.join(DIR, "trusted"), { moduleID: "trusted-mod" });
-				await api.slothlet.api.add("trustedesm", path.join(DIR, "trustedesm"), { moduleID: "trustedesm-mod" });
-				await api.slothlet.api.add("reader", path.join(DIR, "reader"), { moduleID: "reader-mod" });
+				await api.slothlet.api.add("trusted", path.join(DIR, "trusted"), { id: "trusted-mod" });
+				await api.slothlet.api.add("trustedesm", path.join(DIR, "trustedesm"), { id: "trustedesm-mod" });
+				await api.slothlet.api.add("reader", path.join(DIR, "reader"), { id: "reader-mod" });
 				return api;
 			};
 
@@ -239,7 +239,7 @@ describe.each(getMatrixConfigs())("Permissions > a helper's code run by the host
 
 		it("control: the trusted module reaches the secret through its helper", async () => {
 			api = await slothlet({ ...config, helpers, base: path.join(DIR, "base"), permissions: { policy: "deny", rules: RULES } });
-			await api.slothlet.api.add("trustedesm", path.join(DIR, "trustedesm"), { moduleID: "trustedesm-mod" });
+			await api.slothlet.api.add("trustedesm", path.join(DIR, "trustedesm"), { id: "trustedesm-mod" });
 			expect(await attempt(() => api.trustedesm.ops.viaHelper())).toEqual({ ok: true, value: "s3cret" });
 		});
 
@@ -252,8 +252,8 @@ describe.each(getMatrixConfigs())("Permissions > a helper's code run by the host
 					base: path.join(DIR, "base"),
 					permissions: { policy: "deny", rules: RULES, caller: { attribution } }
 				});
-				await api.slothlet.api.add("trustedesm", path.join(DIR, "trustedesm"), { moduleID: "trustedesm-mod" });
-				await api.slothlet.api.add("reader", path.join(DIR, "reader"), { moduleID: "reader-mod" });
+				await api.slothlet.api.add("trustedesm", path.join(DIR, "trustedesm"), { id: "trustedesm-mod" });
+				await api.slothlet.api.add("reader", path.join(DIR, "reader"), { id: "reader-mod" });
 				// In lazy mode the vault loads first and the call is decided after: still as the helper's code, held to every
 				// module importing it, as in eager mode.
 				const { fn } = await api.reader.probe.sharedHelper();
@@ -263,8 +263,8 @@ describe.each(getMatrixConfigs())("Permissions > a helper's code run by the host
 
 		it("the reader's copy, loaded as the trusted module's helper copy and run by the host, is refused", async () => {
 			api = await slothlet({ ...config, helpers, base: path.join(DIR, "base"), permissions: { policy: "deny", rules: RULES } });
-			await api.slothlet.api.add("trustedesm", path.join(DIR, "trustedesm"), { moduleID: "trustedesm-mod" });
-			await api.slothlet.api.add("reader", path.join(DIR, "reader"), { moduleID: "reader-mod" });
+			await api.slothlet.api.add("trustedesm", path.join(DIR, "trustedesm"), { id: "trustedesm-mod" });
+			await api.slothlet.api.add("reader", path.join(DIR, "reader"), { id: "reader-mod" });
 			const { fn } = await api.reader.probe.helperCopy();
 			expect(await withSuppressedSlothletErrorOutput(() => attempt(() => fn()))).toEqual(DENIED);
 		});

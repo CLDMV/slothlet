@@ -70,12 +70,12 @@ export const rows = [
 				try {
 					const target = env.mountTarget(api, shape.from);
 					const id = `${shape.at}-mod`;
-					await api.slothlet.api.add(shape.at, target, { moduleID: id });
+					await api.slothlet.api.add(shape.at, target, { id });
 					const first = await shape.node(api).ping();
 					const firstRuns = runs(shape.counter);
 					const firstUrl = await shape.node(api).where();
 					const removed = await api.slothlet.api.remove(by === "moduleID" ? id : shape.at);
-					await api.slothlet.api.add(shape.at, target, { moduleID: id });
+					await api.slothlet.api.add(shape.at, target, { id });
 					return [
 						["the first add runs the top level once", [first, firstRuns], [1, 1]],
 						["the first add is imported with no reload stamp", stamped(firstUrl), false],
@@ -98,7 +98,7 @@ export const rows = [
 			const api = await setup(env, config);
 			try {
 				const target = env.mountTarget(api, SHAPES[0].from);
-				const add = () => api.slothlet.api.add("plug", target, { moduleID: "pm" });
+				const add = () => api.slothlet.api.add("plug", target, { id: "pm" });
 				await add();
 				const pings = [await api.plug.p.ping()];
 				for (let i = 0; i < 2; i++) {
@@ -119,12 +119,12 @@ export const rows = [
 			const api = await setup(env, config);
 			try {
 				const target = env.mountTarget(api, SHAPES[0].from);
-				await api.slothlet.api.add("a", target, { moduleID: "mm" });
-				await api.slothlet.api.add("b", target, { moduleID: "mm" });
+				await api.slothlet.api.add("a", target, { id: "mm" });
+				await api.slothlet.api.add("b", target, { id: "mm" });
 				const liveA = await api.a.p.ping();
 				const before = runs("p");
 				await api.slothlet.api.remove("b");
-				await api.slothlet.api.add("b", target, { moduleID: "mm" });
+				await api.slothlet.api.add("b", target, { id: "mm" });
 				return [
 					["b shares a's module before", liveA, 1],
 					["a and b share the live module after", [await api.a.p.ping(), await api.b.p.ping()], [liveA, liveA]],

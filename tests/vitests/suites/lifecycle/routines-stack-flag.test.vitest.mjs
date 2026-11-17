@@ -57,8 +57,10 @@ describe.each(["eager", "lazy"])("stackRoutines (#365) — mode: %s", (mode) => 
 				globalThis.__slothletRoutineLog = [];
 				await api.slothlet.api.add(["auth"], TEST_DIRS.API_TEST_ROUTINES_AUTH1);
 				await api.slothlet.api.add(["auth"], TEST_DIRS.API_TEST_ROUTINES_AUTH2, {
-					forceOverwrite: true,
-					moduleID: "auth2-forced"
+					collision: {
+						force: true
+					},
+					id: "auth2-forced"
 				});
 
 				await api.auth.initialize();
@@ -108,8 +110,10 @@ describe.each(["eager", "lazy"])("stackRoutines (#365) — mode: %s", (mode) => 
 				globalThis.__slothletRoutineLog = [];
 				await api.slothlet.api.add(["auth"], TEST_DIRS.API_TEST_ROUTINES_AUTH1);
 				await api.slothlet.api.add(["auth"], TEST_DIRS.API_TEST_ROUTINES_AUTH2, {
-					forceOverwrite: true,
-					moduleID: "auth2-forced"
+					collision: {
+						force: true
+					},
+					id: "auth2-forced"
 				});
 
 				await api.auth.initialize();
@@ -149,7 +153,7 @@ describe.each(["eager", "lazy"])("stackRoutines (#365) — mode: %s", (mode) => 
 			try {
 				const idA = await api.slothlet.api.add(["auth"], TEST_DIRS.API_TEST_ROUTINES_AUTH1);
 				await api.slothlet.api.add(["auth"], TEST_DIRS.API_TEST_ROUTINES_AUTH2);
-				await api.slothlet.api.add(["auth"], TEST_DIRS.API_TEST_ROUTINES_AUTH1, { moduleID: "auth1-again" });
+				await api.slothlet.api.add(["auth"], TEST_DIRS.API_TEST_ROUTINES_AUTH1, { id: "auth1-again" });
 
 				globalThis.__slothletRoutineLog = [];
 				await api.auth.initialize();

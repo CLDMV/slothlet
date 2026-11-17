@@ -68,8 +68,8 @@ describe.each(CONFIGS)("writes with the permission system off (#625) — $mode /
 	 */
 	async function load(options = {}) {
 		api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, ...options });
-		await api.slothlet.api.add("victim", VICTIM, { moduleID: "victim" });
-		for (const name of ["guest", "other"]) await api.slothlet.api.add(name, GUEST, { moduleID: name });
+		await api.slothlet.api.add("victim", VICTIM, { id: "victim" });
+		for (const name of ["guest", "other"]) await api.slothlet.api.add(name, GUEST, { id: name });
 		return api;
 	}
 

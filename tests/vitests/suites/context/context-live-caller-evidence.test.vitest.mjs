@@ -719,8 +719,8 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])("Live runtime: one folder m
 			permissions: { policy: "allow", rules: [{ caller: "dupA.**", target: "c.**", effect: "deny" }] }
 		});
 		try {
-			await api.slothlet.api.add(["dupA"], path.join(ROOT, "dup"), { moduleID: deniedID });
-			await api.slothlet.api.add(["dupB"], path.join(ROOT, "dup"), { moduleID: allowedID });
+			await api.slothlet.api.add(["dupA"], path.join(ROOT, "dup"), { id: deniedID });
+			await api.slothlet.api.add(["dupB"], path.join(ROOT, "dup"), { id: allowedID });
 			await api.c;
 			const settle = (promise) =>
 				promise.then(

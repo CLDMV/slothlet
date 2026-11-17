@@ -52,7 +52,7 @@ describe("loader.mjs #buildTypescriptModuleUrl coverage", () => {
 		// 2) api.add(..., { moduleID }) → loadModule receives a truthy moduleID,
 		//    hitting the TRUE arm of `if (moduleID)`.
 		await api.slothlet.api.add("tsAdded", "./api_tests/api_test_typescript", {
-			moduleID: "ts-cov-moduleid"
+			id: "ts-cov-moduleid"
 		});
 		expect(api.tsAdded.math.add(2, 3)).toBe(5);
 

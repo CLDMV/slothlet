@@ -47,8 +47,8 @@ const ALLOW_WRITER_LEAF = [
  */
 async function mount(options) {
 	const api = await slothlet({ base: join(FIXTURE, "host"), silent: true, ...options });
-	await api.slothlet.api.add("owner", join(FIXTURE, "owner"), { moduleID: "owner" });
-	await api.slothlet.api.add("reader", join(FIXTURE, "reader"), { moduleID: "reader" });
+	await api.slothlet.api.add("owner", join(FIXTURE, "owner"), { id: "owner" });
+	await api.slothlet.api.add("reader", join(FIXTURE, "reader"), { id: "reader" });
 	await api.owner;
 	await api.reader;
 	return api;
@@ -273,8 +273,8 @@ describe.each(matrix)("crossing rules > $mode / $runtime / $attribution", ({ mod
 				runtime,
 				permissions: { policy: "allow", caller: { attribution }, rules: SPLIT_RULES }
 			});
-			await api.slothlet.api.add("owner", join(FIXTURE, "split", "owner"), { moduleID: "owner" });
-			await api.slothlet.api.add("readers", join(FIXTURE, "split", "readers"), { moduleID: "readers" });
+			await api.slothlet.api.add("owner", join(FIXTURE, "split", "owner"), { id: "owner" });
+			await api.slothlet.api.add("readers", join(FIXTURE, "split", "readers"), { id: "readers" });
 			expect(await splitWrites(api, order)).toEqual(SPLIT_EXPECTED);
 		}
 	);

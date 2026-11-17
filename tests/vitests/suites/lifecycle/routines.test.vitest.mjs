@@ -132,7 +132,7 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 			});
 			try {
 				globalThis.__slothletRoutineLog = [];
-				await api.slothlet.api.add("", TEST_DIRS.API_TEST_ROUTINES_ROOT_ADD, { moduleID: "root-add-mod" });
+				await api.slothlet.api.add("", TEST_DIRS.API_TEST_ROUTINES_ROOT_ADD, { id: "root-add-mod" });
 
 				expect(typeof api.initialize).toBe("function");
 				await api.initialize();
@@ -1248,7 +1248,7 @@ describe.each(["eager", "lazy"])("routine self.* context under the root cascade 
 			silent: true
 		});
 		try {
-			await api.slothlet.api.add([], TEST_DIRS.API_TEST_ROUTINES_SELF_DEEP, { moduleID: "self-deep" });
+			await api.slothlet.api.add([], TEST_DIRS.API_TEST_ROUTINES_SELF_DEEP, { id: "self-deep" });
 			await api.initialize();
 			const log = await api.coord.getRegistered();
 			expect(log).toContain("worker:init");
@@ -1272,8 +1272,8 @@ describe.each(["eager", "lazy"])("routine self.* context under the root cascade 
 			// Two independently-mounted contributors at the identical composed path self.svc.initialize
 			// (mirrors the auth1/auth2 stacking pair) — with stackRoutines the cascade runs BOTH, and
 			// each reaches the coordinator through ambient self.*.
-			await api.slothlet.api.add(["svc"], TEST_DIRS.API_TEST_ROUTINES_SELF_PEER, { moduleID: "self-peer-1" });
-			await api.slothlet.api.add(["svc"], TEST_DIRS.API_TEST_ROUTINES_SELF_PEER2, { moduleID: "self-peer-2" });
+			await api.slothlet.api.add(["svc"], TEST_DIRS.API_TEST_ROUTINES_SELF_PEER, { id: "self-peer-1" });
+			await api.slothlet.api.add(["svc"], TEST_DIRS.API_TEST_ROUTINES_SELF_PEER2, { id: "self-peer-2" });
 			await api.initialize();
 			const log = await api.coord.getRegistered();
 			expect(log).toContain("peer:init");

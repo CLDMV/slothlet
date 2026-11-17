@@ -12121,7 +12121,7 @@ function runtime_enforceCallAs(wrapper, permissionManager, callerWrapper, target
 	/* v8 ignore stop */
 
 	// #459: a promotable gate first scans for stale principals. When the scan finds none, the enforcement
-	// right after it runs with principal grace, so a `maxAge` that expires between the two clock reads
+	// right after it runs with principal grace, so a `ttl` that expires between the two clock reads
 	// cannot flip the verdict (the epoch must still match; only the age check is waived).
 	let enforceOptions = null;
 	if (promote) {

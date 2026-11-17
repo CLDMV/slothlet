@@ -38,8 +38,8 @@ describe.each(getMatrixConfigs())("Versioning > Default Explicit > $name", ({ co
 		api = await slothlet({ ...config, base: `${BASE}/callers` });
 
 		// v1 is explicitly marked as default — should win over v2
-		await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1", default: true });
-		await api.slothlet.api.add("auth", `${BASE}/v2`, {}, { version: "v2" });
+		await api.slothlet.api.add("auth", `${BASE}/v1`, { version: { tag: "v1", default: true } });
+		await api.slothlet.api.add("auth", `${BASE}/v2`, { version: { tag: "v2" } });
 
 		const info = api.slothlet.versioning.list("auth");
 		expect(info.default).toBe("v1");
@@ -55,8 +55,8 @@ describe.each(getMatrixConfigs())("Versioning > Default Explicit > $name", ({ co
 			// always fall through to default
 		});
 
-		await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1", default: true });
-		await api.slothlet.api.add("auth", `${BASE}/v2`, {}, { version: "v2" });
+		await api.slothlet.api.add("auth", `${BASE}/v1`, { version: { tag: "v1", default: true } });
+		await api.slothlet.api.add("auth", `${BASE}/v2`, { version: { tag: "v2" } });
 
 		// Unversioned caller falls back to default (v1)
 		const result = api.unversionedCaller.callLogin("testUser");
@@ -66,8 +66,8 @@ describe.each(getMatrixConfigs())("Versioning > Default Explicit > $name", ({ co
 	it("setDefault can change default at runtime", async () => {
 		api = await slothlet({ ...config, base: `${BASE}/callers` });
 
-		await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1", default: true });
-		await api.slothlet.api.add("auth", `${BASE}/v2`, {}, { version: "v2" });
+		await api.slothlet.api.add("auth", `${BASE}/v1`, { version: { tag: "v1", default: true } });
+		await api.slothlet.api.add("auth", `${BASE}/v2`, { version: { tag: "v2" } });
 
 		expect(api.slothlet.versioning.list("auth").default).toBe("v1");
 

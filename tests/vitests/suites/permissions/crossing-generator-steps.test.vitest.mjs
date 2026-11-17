@@ -86,7 +86,7 @@ describe.each(matrix)("generator steps across modules > $mode / $runtime / $attr
 			runtime,
 			permissions: { policy: "allow", caller: { attribution } }
 		});
-		for (const name of ["owner", "reader"]) await api.slothlet.api.add(name, join(FIXTURE, name), { moduleID: name });
+		for (const name of ["owner", "reader"]) await api.slothlet.api.add(name, join(FIXTURE, name), { id: name });
 		for (const node of [api.owner, api.reader]) await node;
 		return api;
 	};

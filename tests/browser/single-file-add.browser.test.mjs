@@ -127,7 +127,7 @@ describe("single-file api.add in a real browser (#805)", () => {
 			const math = await plain("math.mjs");
 			const api = await build({ mode, runtime });
 			try {
-				await api.slothlet.api.add("calc", baseUrl() + "math.mjs", { moduleID: "calc-file" });
+				await api.slothlet.api.add("calc", baseUrl() + "math.mjs", { id: "calc-file" });
 				const held = api.calc;
 				await api.slothlet.api.reload("calc-file");
 				expect(await api.calc.add(2, 3)).toBe(math.add(2, 3));

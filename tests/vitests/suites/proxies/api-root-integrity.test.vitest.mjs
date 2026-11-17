@@ -81,8 +81,8 @@ const PERMISSIONS = {
  */
 async function build(root, options) {
 	const api = await slothlet({ base: join(FIXTURE, root), silent: true, diagnostics: true, ...options });
-	await api.slothlet.api.add("zz", join(FIXTURE, root), { moduleID: "zz" });
-	await api.slothlet.api.add("w", join(FIXTURE, "writer"), { moduleID: "w" });
+	await api.slothlet.api.add("zz", join(FIXTURE, root), { id: "zz" });
+	await api.slothlet.api.add("w", join(FIXTURE, "writer"), { id: "w" });
 	for (const member of ["data", "pnum", "tool"]) {
 		await api[member];
 		await api.zz[member];
@@ -302,10 +302,10 @@ describe.each(ROOTS)("the api root's integrity > %s", (root) => {
 					root === "objroot" ? Object.prototype : Object.getPrototypeOf(root === "fnroot" ? function () {} : async () => {})
 				);
 				// A member's own subtree still changes, the framework's work under it included.
-				await api.slothlet.api.add("zz.more", join(FIXTURE, root, "data.mjs"), { moduleID: "more" });
+				await api.slothlet.api.add("zz.more", join(FIXTURE, root, "data.mjs"), { id: "more" });
 				expect(api.zz.more.a).toBe(1);
 				// A member the root did not hold is not added, as on a frozen node.
-				await expect(api.slothlet.api.add("extra", join(FIXTURE, root, "data.mjs"), { moduleID: "extra" })).rejects.toMatchObject({
+				await expect(api.slothlet.api.add("extra", join(FIXTURE, root, "data.mjs"), { id: "extra" })).rejects.toMatchObject({
 					code: "API_ROOT_CLOSED"
 				});
 				expect("extra" in api).toBe(false);

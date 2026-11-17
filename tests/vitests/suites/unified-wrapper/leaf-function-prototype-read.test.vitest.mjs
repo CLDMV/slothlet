@@ -65,7 +65,7 @@ describe.each(MODES)("Function.prototype reads on a callable leaf leave the reco
 	it("does not turn a function leaf into a namespace or grow phantom children", async () => {
 		api = await slothlet({ base: ROOT, silent: true, mode });
 
-		const before = await api.slothlet.api.leaves(".", { details: true, includePrivate: true });
+		const before = await api.slothlet.api.leaves(".", { details: true, private: true });
 		expect(before.find((p) => p.path === "tool.ping")?.kind).toBe("function");
 		expect(before.filter(isPhantom)).toHaveLength(0);
 
@@ -76,7 +76,7 @@ describe.each(MODES)("Function.prototype reads on a callable leaf leave the reco
 		expect(typeof api.tool.ping.prototype).toBe("object");
 		expect(api.tool.ping()).toBe("pong");
 
-		const after = await api.slothlet.api.leaves(".", { details: true, includePrivate: true });
+		const after = await api.slothlet.api.leaves(".", { details: true, private: true });
 		// The leaf stays a function, and no phantom `tool.ping.apply` / `.call` / `.bind` / … appeared.
 		expect(after.find((p) => p.path === "tool.ping")?.kind).toBe("function");
 		expect(after.filter(isPhantom)).toHaveLength(0);
@@ -99,7 +99,7 @@ describe.each(MODES)("Function.prototype reads on a callable leaf leave the reco
 		expect(api.greet.version()).toBe("v1");
 		expect(typeof api.greet.apply).toBe("function");
 
-		const details = await api.slothlet.api.leaves(".", { details: true, includePrivate: true });
+		const details = await api.slothlet.api.leaves(".", { details: true, private: true });
 		expect(details.find((p) => p.path === "greet.version")?.kind).toBe("function");
 		expect(details.some((p) => isPhantom(p) && p.path.startsWith("greet."))).toBe(false);
 	});

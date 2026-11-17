@@ -70,7 +70,7 @@ describe("browser crossing guard", () => {
 					}
 				}
 			},
-			{ moduleID: "owner" }
+			{ id: "owner" }
 		);
 		await api.slothlet.api.add(
 			"reader",
@@ -108,7 +108,7 @@ describe("browser crossing guard", () => {
 					}
 				}
 			},
-			{ moduleID: "reader" }
+			{ id: "reader" }
 		);
 		return api;
 	};

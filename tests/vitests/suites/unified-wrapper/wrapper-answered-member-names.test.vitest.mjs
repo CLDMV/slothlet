@@ -113,12 +113,9 @@ describe.each(getMatrixConfigs())("wrapper-answered names as namespace members (
 
 	it("mounts a version dispatcher below a `name` segment that follows an unloaded nested folder before the add resolves", async () => {
 		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST_WRAPPER_PROP_MEMBERS_DEEP });
-		await api.slothlet.api.add(
-			"outer.inner.name.deep",
-			TEST_DIRS.API_TEST_WRAPPER_PROP_MEMBERS_MOUNT,
-			{},
-			{ version: "v1", default: true }
-		);
+		await api.slothlet.api.add("outer.inner.name.deep", TEST_DIRS.API_TEST_WRAPPER_PROP_MEMBERS_MOUNT, {
+			version: { tag: "v1", default: true }
+		});
 		// Read with no await in between: the add has resolved, so the dispatcher is already mounted.
 		const dispatcher = api.outer.inner.name.deep;
 		expect(typeof dispatcher === "object" || typeof dispatcher === "function").toBe(true);

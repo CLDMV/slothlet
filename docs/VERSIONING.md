@@ -4,7 +4,7 @@ API Path Versioning allows the same logical API path (e.g. `auth`) to be registe
 
 ## Overview
 
-When you register the same logical path more than once with `versionConfig`, Slothlet:
+When you register the same logical path more than once with `api.add`'s `version` option, Slothlet:
 
 1. Mounts each version at a namespaced path (e.g. `v1.auth`, `v2.auth`) in the live API tree.
 2. Creates a **dispatcher proxy** at the logical path (`auth`) that transparently routes any property access to the correct versioned namespace at call time.
@@ -18,7 +18,7 @@ When you register the same logical path more than once with `versionConfig`, Slo
 - Default version auto-selected via highest-version algorithm when no explicit default is set
 - Runtime control via `api.slothlet.versioning.*`
 - Full lifecycle support: add, remove, reload, shutdown
-- Used automatically by the module discovery system when `addModules()` receives two or more `DiscoverResult` entries sharing a `packageName` at different `version`s — each routes through `versionConfig` with the highest semver as the registered default. See the module discovery docs for the discovery side of that flow.
+- Used automatically by the module discovery system when `addModules()` receives two or more `DiscoverResult` entries sharing a `packageName` at different `version`s — each routes through a versioned mount with the highest semver as the registered default. See the module discovery docs for the discovery side of that flow.
 
 ## Table of Contents
 
@@ -78,31 +78,25 @@ const api = await slothlet({
 
 ## Registering Versioned APIs
 
-Pass a `versionConfig` object as the 4th argument to `api.slothlet.api.add`:
+Pass a `version` object in the options of `api.slothlet.api.add`:
 
 ```javascript
 // Mount v1 at api.v1.auth (logical dispatcher created at api.auth)
-await api.slothlet.api.add(
-	"auth",
-	"./api/v1",
-	{},
-	{
-		version: "v1",
+await api.slothlet.api.add("auth", "./api/v1", {
+	version: {
+		tag: "v1",
 		default: true,
 		metadata: { deprecated: false, stable: true }
 	}
-);
+});
 
 // Mount v2 at api.v2.auth (dispatcher updated to include v2)
-await api.slothlet.api.add(
-	"auth",
-	"./api/v2",
-	{},
-	{
-		version: "v2",
+await api.slothlet.api.add("auth", "./api/v2", {
+	version: {
+		tag: "v2",
 		metadata: { stable: true }
 	}
-);
+});
 ```
 
 After both registrations:
@@ -111,15 +105,15 @@ After both registrations:
 - `api.v1.auth` → real v1 module
 - `api.v2.auth` → real v2 module
 
-### `versionConfig` Fields
+### `version` Fields
 
 | Field      | Type      | Required | Description                                                                  |
 | ---------- | --------- | -------- | ---------------------------------------------------------------------------- |
-| `version`  | `string`  | **Yes**  | The version tag (e.g. `"v1"`, `"2.3.0"`, `"beta"`)                           |
+| `tag`      | `string`  | **Yes**  | The version tag (e.g. `"v1"`, `"2.3.0"`, `"beta"`)                           |
 | `default`  | `boolean` | No       | Mark this version as the explicit default fallback                           |
 | `metadata` | `object`  | No       | Version metadata stored in VersionManager (separate from `options.metadata`) |
 
-> **Important**: `versionConfig.metadata` and `options.metadata` are two separate systems. `options.metadata` goes into the regular Metadata handler (accessible via `module.__metadata`). `versionConfig.metadata` goes into the VersionManager-only store (accessible via discriminator args and `api.slothlet.versioning.getVersionMetadata()`). They are never merged.
+> **Important**: `options.version.metadata` and `options.metadata` are two separate systems. `options.metadata` goes into the regular Metadata handler (accessible via `module.__metadata`). `options.version.metadata` goes into the VersionManager-only store (accessible via discriminator args and `api.slothlet.versioning.getVersionMetadata()`). They are never merged.
 
 ---
 
@@ -161,7 +155,7 @@ An object keyed by version tag containing info about every registered version fo
 		version: "v1",               // the version tag
 		default: true,               // whether this is the default version
 		metadata: { ... },           // regular Metadata system data (system + user, from options.metadata)
-		versionMetadata: { ... }     // VersionManager-only data (from versionConfig.metadata)
+		versionMetadata: { ... }     // VersionManager-only data (from options.version.metadata)
 	},
 	v2: {
 		version: "v2",
@@ -221,7 +215,7 @@ When this caller module calls `api.auth.login(...)`, the string discriminator re
 
 When the discriminator returns nothing resolvable, or when there is no discriminator match, Slothlet automatically selects a default version using this algorithm:
 
-1. Look for any registered version where `versionConfig.default === true` — return the first match.
+1. Look for any registered version whose `version.default` is `true` — return the first match.
 2. If none, collect all registered version tags and normalize them:
    - Strip leading non-numeric prefix characters (e.g. `"v"`, `"V"`, `"ver-"`)
    - Strip any pre-release / build suffix (e.g. `-alpha`, `-beta`, `+build`)
@@ -248,8 +242,8 @@ Tags: ["v1", "2.0.0-alpha", "2.0.0", "v1.5"]
 ### Explicit Default
 
 ```javascript
-await api.slothlet.api.add("auth", "./api/v1", {}, { version: "v1", default: true });
-await api.slothlet.api.add("auth", "./api/v2", {}, { version: "v2" });
+await api.slothlet.api.add("auth", "./api/v1", { version: { tag: "v1", default: true } });
+await api.slothlet.api.add("auth", "./api/v2", { version: { tag: "v2" } });
 // Default is "v1" regardless of version comparison
 ```
 
@@ -355,7 +349,7 @@ const wasRemoved = await api.slothlet.versioning.unregister("auth", "v2");
 
 ### `api.slothlet.versioning.getVersionMetadata(logicalPath, versionTag)`
 
-Retrieve the VersionManager-only metadata stored at registration time via `versionConfig.metadata`.
+Retrieve the VersionManager-only metadata stored at registration time via `options.version.metadata`.
 
 ```javascript
 const meta = api.slothlet.versioning.getVersionMetadata("auth", "v1");
@@ -379,10 +373,10 @@ api.slothlet.versioning.setVersionMetadata("auth", "v1", { stable: true, depreca
 
 Two separate metadata systems coexist for versioned modules:
 
-| System           | Set via                                                                               | Read via                                                                      | Contains                         |
-| ---------------- | ------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- | -------------------------------- |
-| Regular Metadata | `options.metadata` in `api.add` or `metadata.setForVersion()` at runtime              | `module.__metadata` / `metadata.caller()` / `metadata.getForVersion()`        | System + user module metadata    |
-| Version Metadata | `versionConfig.metadata` in `api.add` or `versioning.setVersionMetadata()` at runtime | `versioning.getVersionMetadata(logicalPath, versionTag)` / discriminator args | VersionManager-only version data |
+| System           | Set via                                                                                 | Read via                                                                      | Contains                         |
+| ---------------- | --------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- | -------------------------------- |
+| Regular Metadata | `options.metadata` in `api.add` or `metadata.setForVersion()` at runtime                | `module.__metadata` / `metadata.caller()` / `metadata.getForVersion()`        | System + user module metadata    |
+| Version Metadata | `options.version.metadata` in `api.add` or `versioning.setVersionMetadata()` at runtime | `versioning.getVersionMetadata(logicalPath, versionTag)` / discriminator args | VersionManager-only version data |
 
 These two objects are **never merged**. The discriminator args expose both in separate named fields (`metadata` and `versionMetadata`) so the function can read from either independently.
 
@@ -408,7 +402,7 @@ const full = api.v1.auth.__metadata;
 
 ### Add
 
-Each call to `api.slothlet.api.add` with a `versionConfig` mounts the module at `${version}.${path}` and updates (or creates) the dispatcher at the logical path.
+Each call to `api.slothlet.api.add` with a `version` option mounts the module at `${version.tag}.${path}` and updates (or creates) the dispatcher at the logical path.
 
 ### Remove
 
@@ -426,13 +420,13 @@ await api.slothlet.api.remove("auth");
 
 ```javascript
 // Reload a specific versioned module
-await api.slothlet.api.reload({ apiPath: "v2.auth" });
+await api.slothlet.api.reload("v2.auth");
 // Module source is reloaded; dispatcher is updated with refreshed metadata
 ```
 
 ### Full Instance Reload
 
-`slothlet.reload()` replays all `api.add` operations in order. Each versioned registration is replayed with its original `versionConfig`, rebuilding the VersionManager state naturally.
+`slothlet.reload()` replays all `api.add` operations in order. Each versioned registration is replayed with its original `version` option, rebuilding the VersionManager state naturally.
 
 ### Shutdown
 
@@ -442,14 +436,14 @@ await api.slothlet.api.reload({ apiPath: "v2.auth" });
 
 ## Hooks and Versioning
 
-Hook registration participates in the same dispatch seam as calls: `api.slothlet.hook.on(typePattern, handler, { versioned: true })` — where `typePattern` is the usual `pattern:type` string, e.g. `"auth.login:before"` — resolves the pattern half's logical path through the configured [discriminator](#discriminator) (a per-registration `versionDispatcher` overrides it and may select several tags), registers against the selected **physical** paths, and hands the handler the firing tag as structured context (`version`). A dispatcher returning nothing takes the same [default-version resolution](#default-version-resolution) a call does. See [HOOKS.md — Versioned Registration](HOOKS.md#versioned-registration) for the full contract.
+Hook registration participates in the same dispatch seam as calls: `api.slothlet.hook.on(typePattern, handler, { versioning: { enabled: true } })` — where `typePattern` is the usual `pattern:type` string, e.g. `"auth.login:before"` — resolves the pattern half's logical path through the configured [discriminator](#discriminator) (a per-registration `versioning.dispatcher` overrides it and may select several tags), registers against the selected **physical** paths, and hands the handler the firing tag as structured context (`version`). A dispatcher returning nothing takes the same [default-version resolution](#default-version-resolution) a call does. See [HOOKS.md — Versioned Registration](HOOKS.md#versioned-registration) for the full contract.
 
 ## Error Reference
 
 | Code                                | When it occurs                                                                                                                                                                                     |
 | ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `INVALID_CONFIG_VERSION_DISPATCHER` | `versioning.dispatcher` is not a string or function                                                                                                                                                |
-| `INVALID_CONFIG_VERSION_TAG`        | `versionConfig.version` is missing or not a non-empty string                                                                                                                                       |
+| `INVALID_CONFIG_VERSION_TAG`        | `options.version.tag` is missing or not a non-empty string                                                                                                                                         |
 | `VERSION_NOT_FOUND`                 | Requested version tag is not registered for the path                                                                                                                                               |
 | `VERSION_NO_DEFAULT`                | No default version and discriminator returned nothing resolvable — this includes the case where a function discriminator returns an unrecognized tag (treated as `null`, falls through to default) |
 | `VERSION_DISPATCH_NOT_CALLABLE`     | Reserved for dispatcher invocation; in practice the JS engine throws a native `TypeError` before this fires, because the proxy target is a plain object                                            |

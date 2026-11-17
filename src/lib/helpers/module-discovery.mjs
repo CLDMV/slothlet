@@ -27,9 +27,9 @@
  * looking for the first ancestor with a `node_modules` directory, capped at 20
  * levels. Falls back to `process.cwd()` if no `node_modules` found.
  *
- * Per-root mode auto-detect (G6): if `<scanRoot>/node_modules` exists, scan in
+ * Per-root mode auto-detect (G6): if `<root>/node_modules` exists, scan in
  * npm mode (walk `node_modules/*` and `node_modules/@*\/*`). Otherwise scan in
- * folder mode (immediate subfolders of `scanRoot` containing a manifest).
+ * folder mode (immediate subfolders of `root` containing a manifest).
  *
  * Dedupe and multi-version handling (G7):
  *  - Same real path → dedupe silently (first wins).
@@ -91,7 +91,7 @@ const UPWARD_WALK_CAP = 20;
 
 /**
  * @typedef {object} DiscoverOptions
- * @property {string|string[]} [scanRoot] - Filesystem path(s) to scan. Default: upward-walk from process.cwd() to nearest node_modules ancestor.
+ * @property {string|string[]} [root] - Filesystem path(s) to scan. Default: upward-walk from process.cwd() to nearest node_modules ancestor.
  * @property {string} [manifest="slothlet.module.json"] - Manifest filename, or `<file>#<dotted.key>` locator pointing at a subkey of another file (e.g. `"package.json#slothlet"`).
  * @property {Record<string, string>} [schema] - Field-name remap for legacy manifests. Maps canonical name → legacy name.
  * @property {string|string[]} [prefix] - Name-prefix filter applied BEFORE manifest read. Matches against full package name including scope.
@@ -118,7 +118,7 @@ const UPWARD_WALK_CAP = 20;
  * import { discoverModules } from "#helpers/module-discovery";
  *
  * const found = await discoverModules();
- * // Default upward-walk scanRoot, default slothlet.module.json manifest.
+ * // Default upward-walk root, default slothlet.module.json manifest.
  *
  * @example
  * const drivers = await discoverModules({
@@ -127,7 +127,7 @@ const UPWARD_WALK_CAP = 20;
  * });
  */
 export async function discoverModules(options = {}) {
-	const scanRoots = await resolveScanRoots(options.scanRoot);
+	const scanRoots = await resolveScanRoots(options.root);
 	const manifestSource = parseManifestSource(options.manifest);
 	const fieldSchema = options.schema ?? {};
 	const filterFn = options.filter;
@@ -242,7 +242,7 @@ export async function discoverModules(options = {}) {
 // ─── Scan-root resolution ────────────────────────────────────────────────────
 
 /**
- * Resolve the `scanRoot` option into an array of absolute paths.
+ * Resolve the `root` option into an array of absolute paths.
  * Default: upward-walk from process.cwd() to nearest node_modules ancestor (S6, max 20 levels).
  *
  * @param {string|string[]} [opt]
@@ -262,7 +262,7 @@ async function resolveScanRoots(opt) {
 	throw new SlothletError(
 		"INVALID_ARGUMENT",
 		{
-			argument: "scanRoot",
+			argument: "options.root",
 			expected: "string or string[]",
 			received: typeof opt
 		},
@@ -295,7 +295,7 @@ async function defaultScanRoot() {
 }
 
 /**
- * Detect npm-mode vs folder-mode for a scanRoot.
+ * Detect npm-mode vs folder-mode for a scan root.
  * @param {string} root
  * @returns {Promise<"npm"|"folder">}
  * @private

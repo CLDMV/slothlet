@@ -459,7 +459,7 @@ export class Flatten extends ComponentBase {
 	 * @param {string}   [options.collisionContext="initial"] - Collision context ("initial" | "api").
 	 * @param {string}   [options.apiPathPrefix=""]          - API path prefix for collision error messages.
 	 * @param {string|null} [options.collisionModeOverride=null] - Caller's per-call override (e.g.
-	 *   `api.add({ forceOverwrite: true })`), preferred over `collisionContext`'s config default for
+	 *   `api.add({ collision: { force: true } })`), preferred over `collisionContext`'s config default for
 	 *   the function-default-vs-named-export merge decision below.
 	 * @returns {{ moduleContent: object|Function, origins: {self: (string[]|null), members: Object<string, string[]>} }}
 	 *   Built module content ready for wrapping/assignment, plus where it came from (#484): `self` is the
@@ -593,7 +593,7 @@ export class Flatten extends ComponentBase {
 				);
 				const members = {};
 				const collisionConfig = this.slothlet.config.api.collision.mode;
-				// Per-call override (e.g. api.add({ forceOverwrite: true })) takes priority over the
+				// Per-call override (e.g. api.add({ collision: { force: true } })) takes priority over the
 				// config default, matching every other collision decision in this same build
 				// (#372/#373 review, suppressed finding).
 				const collisionMode = collisionModeOverride || (collisionContext === "initial" ? collisionConfig.initial : collisionConfig.api);

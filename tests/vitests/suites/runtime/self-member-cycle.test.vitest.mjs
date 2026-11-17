@@ -74,7 +74,7 @@ describe.each(CONFIGS)("a cyclic member read through self (#688) — $mode / $ru
 	 */
 	async function load(options) {
 		api = await slothlet({ base: path.join(FIXTURE, "maker"), mode, runtime, silent: true, ...options });
-		await api.slothlet.api.add("reader", path.join(FIXTURE, "reader"), { moduleID: "reader" });
+		await api.slothlet.api.add("reader", path.join(FIXTURE, "reader"), { id: "reader" });
 		return api.m.make();
 	}
 

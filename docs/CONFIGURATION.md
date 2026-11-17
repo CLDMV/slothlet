@@ -4,6 +4,8 @@ Complete reference for all slothlet configuration options. Pass these as propert
 
 Every key must be one listed here, at every level of a group: an unknown key (a typo, or an option name from slothlet v3) throws `INVALID_CONFIG_UNKNOWN_KEY` with `details.key` naming it (`"permissions.defaultPolicy"`) and `details.path` as segments. `npx @cldmv/slothlet-migrate` moves v3 configs to the v4 names. Values whose keys are your own are not checked: `context`, `reference`, `metadata`, `lifecycle`, `loader.files`, `typescript.compiler`, and the items of `permissions.rules`, `permissions.events.rules` and `routines.entries`, which their own validation reads.
 
+The options object of every `api.slothlet.*` method (`api.add`, `api.leaves`, `api.reload`, `api.modules.*`, `reload`, `hook.on` and the hook filters, `event.on`, `context.scope`, `permissions.principal.register`) and of `generate()` from `@cldmv/slothlet/typegen` is checked the same way, with `details.where` naming the method (`"slothlet.api.add"`).
+
 ---
 
 ## Quick Reference
@@ -311,7 +313,7 @@ const api = await slothlet({ base: "./api", api: { collision: "warn" } }); // sa
 **Type**: `boolean`
 **Default**: `false`
 
-Honor a per-call `collisionMode` / `mutateExisting` / `recordHistory` on `api.slothlet.api.add()`. Locked by default: passing them warns and the override is ignored, since it could bypass the instance's collision config. `forceOverwrite` stays the always-available targeted escape hatch regardless.
+Honor a per-call `collision.mode` / `collision.mutate` / `replay` on `api.slothlet.api.add()`. Locked by default: passing them warns and the override is ignored, since it could bypass the instance's collision config. `collision.force` stays the always-available targeted escape hatch regardless.
 
 See [METADATA.md](METADATA.md) for per-module collision mode overrides via metadata.
 
@@ -550,7 +552,7 @@ api/billing/internals.mjs   export const __rate = 0.2
 api/billing/quote.mjs       reads self.billing.internals.__rate
 api/billing/deep/audit.mjs  reads self.billing.internals.__rate
 api/reporting/peek.mjs      reads self.billing.internals.__rate
-ext/vault.mjs               added with api.slothlet.api.add("ext", "./ext", { moduleID: "ext" }), reads the same
+ext/vault.mjs               added with api.slothlet.api.add("ext", "./ext", { id: "ext" }), reads the same
 ```
 
 | Reader               | `scope: "module"` (default) | `scope: "folder"`   |
@@ -814,24 +816,24 @@ See [LIFECYCLE.md](LIFECYCLE.md) for materialization details.
 
 The functions an instance reads the time with and starts its deferred work with. Every member is optional, and a member you leave out is the copy slothlet took when it loaded. Anything that is not an object whose given members are functions throws `INVALID_CONFIG`.
 
-slothlet takes `Date.now` and the timers when it loads, so a script (or a test runner) that replaces them afterwards does not move an instance. That is deliberate: a principal's `maxAge` is measured on that clock, and a module that replaced `Date.now` must not be able to stretch it. `clock` is how a host that wants to control time, a test above all, hands an instance its own:
+slothlet takes `Date.now` and the timers when it loads, so a script (or a test runner) that replaces them afterwards does not move an instance. That is deliberate: a principal's `ttl` is measured on that clock, and a module that replaced `Date.now` must not be able to stretch it. `clock` is how a host that wants to control time, a test above all, hands an instance its own:
 
-- **`now`** is the time in milliseconds. It stamps the principal cache behind `maxAge` (a value older than `maxAge`, or resolved at a time later than `now()` reports, is stale), the ID a `reload()` gives the instance, the ID of a context run, and every time slothlet records: the `timestamp` of lifecycle events and hook failure sources, the `at` of event metadata, the time a rule or an ownership entry was registered.
+- **`now`** is the time in milliseconds. It stamps the principal cache behind `ttl` (a value older than `ttl`, or resolved at a time later than `now()` reports, is stale), the ID a `reload()` gives the instance, the ID of a context run, and every time slothlet records: the `timestamp` of lifecycle events and hook failure sources, the `at` of event metadata, the time a rule or an ownership entry was registered.
 - **`set`** and **`clear`** take the place of `setTimeout` and `clearTimeout`: when you give `set`, slothlet's own deferred work (the background step of `loader.materialize` and `tracking.materialization`, and the patch of a stack after an api change) runs through it with a delay of `0` instead of on the host's immediate queue, so a host that fakes timers moves it with its own clock. slothlet never cancels a timer it started, so `clear` is only kept for the host's use of the instance's clock.
 
 The option is read once, when the instance is created, and kept by the instance alone: it is not part of the config the instance reports (`api.slothlet.diag.inspect().config`), a module's manifest, the options of `api.slothlet.api.add()` and `context` cannot supply or replace it, and it carries across `reload()` and `restart()`. Two instances have two clocks.
 
-A clock whose `now` throws makes the call that read it throw. A `now` that answers something that is not a finite number, or that goes backwards, never keeps a principal alive past its `maxAge`: the value is stale.
+A clock whose `now` throws makes the call that read it throw. A `now` that answers something that is not a finite number, or that goes backwards, never keeps a principal alive past its `ttl`: the value is stale.
 
 ```javascript
-// Test a principal's maxAge without waiting for it
+// Test a principal's ttl without waiting for it
 let time = 1_000;
 const api = await slothlet({
 	base: "./api",
 	permissions: { policy: "deny", rules },
 	clock: { now: () => time }
 });
-api.slothlet.permissions.principal.register("roles", { key: (ctx) => ctx.user, resolve, maxAge: 10 });
+api.slothlet.permissions.principal.register("roles", { key: (ctx) => ctx.user, resolve, ttl: 10 });
 // ...resolve it, then
 time += 11; // the cached value is now stale, with no real wait
 ```

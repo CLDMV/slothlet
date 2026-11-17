@@ -83,12 +83,12 @@ describe.each(["eager", "lazy"].flatMap((mode) => ["on", "off"].map((permissionM
 						}
 					}
 				},
-				{ moduleID: "owner" }
+				{ id: "owner" }
 			);
 			await api.slothlet.api.add(
 				"reader",
 				{ exports: { probe: () => ({ hidden: answer(() => self.owner.data.locked.hidden), v: answer(() => self.owner.data.locked.v) }) } },
-				{ moduleID: "reader" }
+				{ id: "reader" }
 			);
 			return api;
 		};

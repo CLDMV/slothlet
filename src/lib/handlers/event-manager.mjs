@@ -48,6 +48,7 @@
  * `deliver`, so an envelope stays deliverable across a reload once the listener re-registers.
  */
 
+import { assertOptionKeys } from "#helpers/config-schema";
 import { ComponentBase } from "#factories/component-base";
 import { MODULE_ID_SEPARATOR } from "#handlers/metadata";
 import { identityCeilings } from "#handlers/trusted-root";
@@ -225,6 +226,7 @@ export class EventManager extends ComponentBase {
 		if (typeof listener !== "function") {
 			throw new this.SlothletError("INVALID_ARGUMENT", { argument: "listener", expected: "a function", received: typeof listener });
 		}
+		assertOptionKeys(options, "slothlet.event.on");
 		const key = options.key;
 		if (key !== undefined && !((typeof key === "string" && key !== "") || (typeof key === "number" && Numbers.isFinite(key)))) {
 			throw new this.SlothletError("INVALID_ARGUMENT", {

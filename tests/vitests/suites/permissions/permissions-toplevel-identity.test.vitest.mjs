@@ -163,9 +163,9 @@ async function build({ attribution, mode, runtime }, rules) {
 		silent: true,
 		permissions: { policy: "allow", caller: { attribution }, rules }
 	});
-	await api.slothlet.api.add("plug", path.join(DIR, "plug"), { moduleID: "plug" });
-	await api.slothlet.api.add("dedupe", path.join(DIR, "dedupe"), { moduleID: "dedupe" });
-	await api.slothlet.api.add("ext.mounted", path.join(DIR, "mounted"), { moduleID: "mounted" });
+	await api.slothlet.api.add("plug", path.join(DIR, "plug"), { id: "plug" });
+	await api.slothlet.api.add("dedupe", path.join(DIR, "dedupe"), { id: "dedupe" });
+	await api.slothlet.api.add("ext.mounted", path.join(DIR, "mounted"), { id: "mounted" });
 	return api;
 }
 

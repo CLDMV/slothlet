@@ -107,7 +107,7 @@ describe("api-manager syncWrapper debug.api paths", () => {
 
 	it("fires syncWrapper debug paths when reloading a nested module", async () => {
 		api = await makeDebugApiInstance();
-		await api.slothlet.api.add("ns1", TEST_DIRS.API_TEST_MIXED, { moduleID: "ns1-mod" });
+		await api.slothlet.api.add("ns1", TEST_DIRS.API_TEST_MIXED, { id: "ns1-mod" });
 		expect(api.ns1).toBeDefined();
 
 		// Reload triggers _restoreApiTree → syncWrapper (with debug.api=true)
@@ -123,7 +123,7 @@ describe("api-manager syncWrapper debug.api paths", () => {
 			runtime: "async",
 			debug: { api: true }
 		});
-		await api.slothlet.api.add("lazyExt", TEST_DIRS.API_TEST_MIXED, { moduleID: "lazy-mod" });
+		await api.slothlet.api.add("lazyExt", TEST_DIRS.API_TEST_MIXED, { id: "lazy-mod" });
 
 		// Reload in lazy mode triggers syncWrapper with materializeFunc → line 445
 		await api.slothlet.api.reload("lazy-mod");
@@ -133,9 +133,9 @@ describe("api-manager syncWrapper debug.api paths", () => {
 	it("fires syncWrapper debug paths when merging two dirs to the same root path", async () => {
 		api = await makeDebugApiInstance();
 		// Add first dir
-		await api.slothlet.api.add("shared", TEST_DIRS.API_TEST_MIXED, { moduleID: "shared-a" });
+		await api.slothlet.api.add("shared", TEST_DIRS.API_TEST_MIXED, { id: "shared-a" });
 		// Add second dir to same path → collision on shared wrapper → syncWrapper debug
-		await api.slothlet.api.add("shared", TEST_DIRS.API_TEST_MIXED, { moduleID: "shared-b" });
+		await api.slothlet.api.add("shared", TEST_DIRS.API_TEST_MIXED, { id: "shared-b" });
 		expect(api.shared).toBeDefined();
 	});
 
@@ -170,9 +170,9 @@ describe("api-manager mutateApiValue debug.api paths", () => {
 	it("fires mutateApiValue sync-wrappers debug (line 634-638) via two-wrapper collision", async () => {
 		api = await makeDebugApiInstance();
 		// Load a path that will have a wrapper
-		await api.slothlet.api.add("mod1", TEST_DIRS.API_TEST_MIXED, { moduleID: "m1" });
+		await api.slothlet.api.add("mod1", TEST_DIRS.API_TEST_MIXED, { id: "m1" });
 		// Re-add the same path with same dir → both values wrappers → mutateApiValue line 634
-		await api.slothlet.api.add("mod1", TEST_DIRS.API_TEST_MIXED, { moduleID: "m2" });
+		await api.slothlet.api.add("mod1", TEST_DIRS.API_TEST_MIXED, { id: "m2" });
 		expect(api.mod1).toBeDefined();
 	});
 

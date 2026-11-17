@@ -86,7 +86,7 @@ describe.each(CONFIGS)("module writes to the framework namespace (#625) — $mod
 		 */
 		async function load() {
 			api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, hook: true, ...options });
-			await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { moduleID: "guest" });
+			await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { id: "guest" });
 			return api;
 		}
 
@@ -237,7 +237,7 @@ describe.each(CONFIGS)("module writes to the framework namespace (#625) — $mod
 				silent: true,
 				permissions: { ...options.permissions, rules: [...(options.permissions.rules ?? []), grant] }
 			});
-			await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { moduleID: "guest" });
+			await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { id: "guest" });
 			// The grant names every caller: the guest, which owns none of the namespace, writes too.
 			expect(await api.guest.attack.writeMember("hostGranted", 2)).toBe("done");
 			expect(api.slothlet.hostGranted).toBe(2);
@@ -258,7 +258,7 @@ describe.each(CONFIGS)("module writes to the framework namespace (#625) — $mod
 				silent: true,
 				permissions: { ...options.permissions, rules: [...(options.permissions.rules ?? []), grant] }
 			});
-			await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { moduleID: "guest" });
+			await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { id: "guest" });
 			expect(await api.attack.writeMember("hostGranted", 1)).toBe("done");
 			expect(withSuppressedSlothletErrorOutputSync(() => api.guest.attack.writeMember("hostGranted", 2))).toBe(REFUSED);
 			expect(api.slothlet.hostGranted).toBe(1);
@@ -303,7 +303,7 @@ describe.each(CONFIGS)("module writes to the framework namespace, permission sys
 	 */
 	async function load(options = {}) {
 		api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, hook: true, ...options });
-		await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { moduleID: "guest" });
+		await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { id: "guest" });
 		return api;
 	}
 

@@ -29,6 +29,7 @@ import { translate } from "#i18n";
 import { MODULE_ID_SEPARATOR } from "#handlers/metadata";
 import { DEFAULT_ROUTINES } from "#helpers/defaults";
 import { runBaseline } from "#helpers/permission-baseline";
+import { assertOptionKeys } from "#helpers/config-schema";
 import { isFrameworkWriteTarget, writeTargetLiteralPrefix, internals as reservedKeysInternals } from "#helpers/reserved-keys";
 import { internals as unifiedWrapperInternals } from "#handlers/unified-wrapper";
 import { internals as frameworkInternalsInternals } from "#handlers/framework-internals";
@@ -71,7 +72,7 @@ const { runtime_selfModuleCeilings, runtime_selfModuleReader } = unifiedWrapperI
 const { markSlothletProxy } = frameworkInternalsInternals("lib/handlers/permission-manager");
 
 /**
- * Cache size above which a principal with a `maxAge` sweeps its expired identities on the next
+ * Cache size above which a principal with a `ttl` sweeps its expired identities on the next
  * resolve (#459), so a long-lived process serving many identities does not grow without bound.
  * @type {number}
  */
@@ -258,17 +259,17 @@ function runtime_sameModuleDir(callerFilePath, targetFilePath) {
  */
 
 /**
- * Whether a principal's cached value is still inside its `maxAge`, given how long ago it was resolved on the
+ * Whether a principal's cached value is still inside its `ttl`, given how long ago it was resolved on the
  * instance's clock. A clock that went backwards (a negative age) or answered something that is not a number is not
  * evidence the value is fresh, so it is not current: it fails closed.
  *
  * @param {number} age - Milliseconds since the value was resolved.
- * @param {number} maxAge - The principal's `maxAge`.
+ * @param {number} ttl - The principal's `ttl`.
  * @returns {boolean} True when the value is current.
  * @private
  */
-function runtime_withinMaxAge(age, maxAge) {
-	return typeof age === "number" && age >= 0 && age <= maxAge;
+function runtime_withinTtl(age, ttl) {
+	return typeof age === "number" && age >= 0 && age <= ttl;
 }
 
 /**
@@ -707,7 +708,7 @@ export class PermissionManager extends ComponentBase {
 	 * Registered principals (#459): named, owned resolvers that turn a caller identity into
 	 * authorization facts for synchronous rule conditions. Keyed by principal name.
 	 *
-	 * Each record: `{ name, ownerModuleID, key, resolve, maxAge, epoch, cache, inflight }`, where
+	 * Each record: `{ name, ownerModuleID, key, resolve, ttl, epoch, cache, inflight }`, where
 	 * `cache` maps an identity key to `{ value, view, epoch, resolvedAt }` and `inflight` maps an
 	 * identity key to the pending resolve so concurrent calls for one identity share it.
 	 * @type {Map<string, object>}
@@ -725,8 +726,8 @@ export class PermissionManager extends ComponentBase {
 
 	/**
 	 * True only for the duration of a promoted call's post-resolve enforcement (#459). A principal
-	 * resolved for that call is accepted even if its `maxAge` has since elapsed, as long as its epoch
-	 * still matches — without this a `maxAge: 0` principal could never be satisfied. An epoch bump
+	 * resolved for that call is accepted even if its `ttl` has since elapsed, as long as its epoch
+	 * still matches — without this a `ttl: 0` principal could never be satisfied. An epoch bump
 	 * (invalidate / re-register / owner reload) during the resolve still fails the rule closed.
 	 * @type {boolean}
 	 * @private
@@ -1233,7 +1234,7 @@ export class PermissionManager extends ComponentBase {
 	 *   key (e.g. `(ctx) => ctx.user?.id`). Synchronous. A `null`/`undefined` key means "no identity":
 	 *   rules requiring this principal do not match for that call.
 	 * @param {function(*): *} definition.resolve - Resolves the facts for an identity key. May be async.
-	 * @param {number} [definition.maxAge] - Optional time-to-live in milliseconds for a resolved value.
+	 * @param {number} [definition.ttl] - Optional time-to-live in milliseconds for a resolved value.
 	 * @param {string|string[]|null} [ownerModuleID=null] - Registering module's id; `null` for the host. A list when the
 	 *   registrant acts for several modules (#597): each has to own an existing name, the first owns a new one.
 	 * @param {function(Function, Array<*>): *} [invoke=null] - Runs the resolver as its registering
@@ -1244,7 +1245,7 @@ export class PermissionManager extends ComponentBase {
 	 * @throws {SlothletError} INVALID_ARGUMENT when the name or definition is malformed.
 	 * @throws {SlothletError} PRINCIPAL_NAME_OWNED when another module owns the name.
 	 * @example
-	 * pm.registerPrincipal("roles", { key: (ctx) => ctx.user?.id, resolve: (id) => loadRoles(id), maxAge: 30_000 }, "roles_mod");
+	 * pm.registerPrincipal("roles", { key: (ctx) => ctx.user?.id, resolve: (id) => loadRoles(id), ttl: 30_000 }, "roles_mod");
 	 */
 	registerPrincipal(name, definition, ownerModuleID = null, invoke = null) {
 		this.#assertNotSealed();
@@ -1274,7 +1275,7 @@ export class PermissionManager extends ComponentBase {
 				existing ? existing.ownerModuleID : ownerModuleID,
 				definition,
 				invoke,
-				definition.maxAge ?? null,
+				definition.ttl ?? null,
 				// A replacement continues the epoch sequence so a value resolved by the previous resolver can
 				// never read as current for the new one.
 				existing ? existing.epoch + 1 : 0
@@ -1620,18 +1621,18 @@ export class PermissionManager extends ComponentBase {
 	}
 
 	/**
-	 * Whether a cached principal value is current: same epoch, and within `maxAge` unless `grace`.
+	 * Whether a cached principal value is current: same epoch, and within `ttl` unless `grace`.
 	 *
 	 * @param {object} record - Principal record.
 	 * @param {{ epoch: number, resolvedAt: number }} hit - Cached entry.
-	 * @param {boolean} grace - Ignore `maxAge` (a promoted call re-enforcing right after its resolve).
+	 * @param {boolean} grace - Ignore `ttl` (a promoted call re-enforcing right after its resolve).
 	 * @returns {boolean} True when current.
 	 * @private
 	 */
 	#isPrincipalCurrent(record, hit, grace) {
 		if (hit.epoch !== record.epoch) return false;
-		if (grace || record.maxAge === null) return true;
-		return runtime_withinMaxAge(this.clock.now() - hit.resolvedAt, record.maxAge);
+		if (grace || record.ttl === null) return true;
+		return runtime_withinTtl(this.clock.now() - hit.resolvedAt, record.ttl);
 	}
 
 	/**
@@ -1641,19 +1642,19 @@ export class PermissionManager extends ComponentBase {
 	 * @param {string|null} ownerModuleID - Owning module's id; `null` for the host.
 	 * @param {{ key: Function, resolve: Function }|null} definition - Resolver definition; `null` for a dormant reservation.
 	 * @param {Function|null} invoke - Runs the resolver as its owner (see {@link registerPrincipal}).
-	 * @param {number|null} maxAge - Time-to-live in ms, or `null` for none.
+	 * @param {number|null} ttl - Time-to-live in ms, or `null` for none.
 	 * @param {number} epoch - Starting epoch.
 	 * @returns {object} The record.
 	 * @private
 	 */
-	#newPrincipalRecord(name, ownerModuleID, definition, invoke, maxAge, epoch) {
+	#newPrincipalRecord(name, ownerModuleID, definition, invoke, ttl, epoch) {
 		return {
 			name,
 			ownerModuleID,
 			key: definition?.key ?? null,
 			resolve: definition?.resolve ?? null,
 			invoke,
-			maxAge,
+			ttl,
 			epoch,
 			seq: 0,
 			cache: new Map(),
@@ -1693,7 +1694,7 @@ export class PermissionManager extends ComponentBase {
 
 	/**
 	 * Drop expired entries once a principal's cache grows past a threshold. Only principals with a
-	 * `maxAge` can expire; without one, entries live until invalidated.
+	 * `ttl` can expire; without one, entries live until invalidated.
 	 *
 	 * @param {object} record - Principal record.
 	 * @param {number} now - Current time.
@@ -1701,9 +1702,9 @@ export class PermissionManager extends ComponentBase {
 	 * @private
 	 */
 	#prunePrincipalCache(record, now) {
-		if (record.maxAge === null || MapMethods.size(record.cache) <= PRINCIPAL_PRUNE_THRESHOLD) return;
+		if (record.ttl === null || MapMethods.size(record.cache) <= PRINCIPAL_PRUNE_THRESHOLD) return;
 		for (const ofEntry of mapEntries(record.cache)) {
-			if (!runtime_withinMaxAge(now - ofEntry[1].resolvedAt, record.maxAge)) MapMethods.delete(record.cache, ofEntry[0]);
+			if (!runtime_withinTtl(now - ofEntry[1].resolvedAt, record.ttl)) MapMethods.delete(record.cache, ofEntry[0]);
 		}
 	}
 
@@ -1799,9 +1800,10 @@ export class PermissionManager extends ComponentBase {
 		if (!definition || typeof definition !== "object") fail("definition", "object", definition === null ? "null" : typeof definition);
 		if (typeof definition.key !== "function") fail("definition.key", "function", typeof definition.key);
 		if (typeof definition.resolve !== "function") fail("definition.resolve", "function", typeof definition.resolve);
-		const { maxAge } = definition;
-		if (maxAge !== undefined && maxAge !== null && !(typeof maxAge === "number" && Numbers.isFinite(maxAge) && maxAge >= 0)) {
-			fail("definition.maxAge", "finite number >= 0", typeof maxAge);
+		assertOptionKeys(definition, "slothlet.permissions.principal.register");
+		const { ttl } = definition;
+		if (ttl !== undefined && ttl !== null && !(typeof ttl === "number" && Numbers.isFinite(ttl) && ttl >= 0)) {
+			fail("definition.ttl", "finite number >= 0", typeof ttl);
 		}
 	}
 
@@ -1901,7 +1903,7 @@ export class PermissionManager extends ComponentBase {
 	 *   hooks, the internal control surface, and silent queries.
 	 * @param {{ principalGrace?: boolean, moduleCaller?: boolean, via?: string }|null} [options=null] - Enforcement options.
 	 * @param {boolean} [options.principalGrace=false] - Accept a principal whose epoch is current even if its
-	 *   `maxAge` has elapsed (#459). Set only by a promoted call re-enforcing right after its resolve.
+	 *   `ttl` has elapsed (#459). Set only by a promoted call re-enforcing right after its resolve.
 	 * @param {boolean} [options.moduleCaller=false] - The caller is a module even though no source file is
 	 *   known for it (#508). A module-private target is then denied outright instead of being judged by
 	 *   the `permissions.private.host` policy, which is what a null `callerFilePath` otherwise means.
@@ -1927,7 +1929,7 @@ export class PermissionManager extends ComponentBase {
 		options = null
 	) {
 		// #459: a promoted call re-enforces right after resolving its stale principals; `principalGrace`
-		// lets those just-resolved values count as current even when `maxAge` has elapsed meanwhile.
+		// lets those just-resolved values count as current even when `ttl` has elapsed meanwhile.
 		// Evaluation is synchronous, so the flag cannot leak into another call's enforcement; it is saved
 		// and restored rather than cleared so a nested enforcement cannot end an outer one's grace early.
 		const priorGrace = this.#principalGrace;
@@ -2671,7 +2673,7 @@ export class PermissionManager extends ComponentBase {
 
 		const callMeta = { args: callArgs, target: targetPath };
 		// Scan-then-enforce, as the promoted call gate does (#459): a stale principal is resolved first,
-		// and the enforcement after the scan runs with principal grace so a `maxAge` expiring between the
+		// and the enforcement after the scan runs with principal grace so a `ttl` expiring between the
 		// two clock reads cannot flip the verdict.
 		const stale = this.stalePrincipals(callerPath, targetPath, null, null, runtimeContext);
 		if (stale.length > 0) {

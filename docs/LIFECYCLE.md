@@ -131,7 +131,7 @@ pkg_a/shared/util/fmt.mjs  → shared.util.fmt        pkg_b/shared/beta.mjs     
 
 ```javascript
 api.slothlet.lifecycle.on("impl:collision", (d) => report(d));
-await api.slothlet.api.add("", "/abs/pkg_b", { moduleID: "pkg_b" });
+await api.slothlet.api.add("", "/abs/pkg_b", { id: "pkg_b" });
 // impl:collision fires (eager):
 //   { apiPath: "shared.alpha",    resolution: "dropped", incoming: "pkg_b", owner: "pkg_a", kind: "value" }
 //   { apiPath: "shared.util",     resolution: "merged",  incoming: "pkg_b", owner: "pkg_a", kind: "namespace" }
@@ -278,7 +278,7 @@ Emitted at the start of every `discover()` call (including the lazy-trigger call
 
 ```javascript
 {
-	scanRoot: "/path/to/scan/root",  // The resolved scan root (string | string[] from options)
+	scanRoot: "/path/to/scan/root",  // options.root as given (string | string[])
 	options: { /* the full discover() options object */ }
 }
 ```
@@ -307,17 +307,17 @@ Emitted at the start of `addModule()`, `addModules()`, or `addDiscovered()`'s mo
 ```javascript
 {
 	items: [ /* (string | DiscoverResult)[] — the input list */ ],
-	options: { /* the full options object: collisionMode, onFailure, concurrency, etc. */ }
+	options: { /* the full options object: collision, failure, concurrency, etc. */ }
 }
 ```
 
 ### `modules:mount-complete`
 
-Emitted once **per successfully mounted module**, immediately after the underlying `api.add()` resolves. Fires up to N times for `addModules` with N items — once per item that mounted cleanly. Failed mounts emit nothing on this channel. Whether failures surface elsewhere depends on `onFailure`:
+Emitted once **per successfully mounted module**, immediately after the underlying `api.add()` resolves. Fires up to N times for `addModules` with N items — once per item that mounted cleanly. Failed mounts emit nothing on this channel. Whether failures surface elsewhere depends on `failure`:
 
-- **`onFailure: "best-effort"`** — every prior-success `modules:mount-complete` event still fires, plus the final `modules:loaded` payload carries a `failed[]` aggregate of every failure.
-- **`onFailure: "throw"` (default)** — every successful mount BEFORE the failing one still fires `modules:mount-complete`; the failure throws synchronously and `modules:loaded` is NOT emitted (see below).
-- **`onFailure: "rollback"`** — same as `throw`: prior successes' `modules:mount-complete` events still fired (they happened before the failure was known), then the failure triggers rollback + throws without emitting `modules:loaded`. Subscribers needing rollback awareness should listen for the thrown SlothletError, not for any lifecycle event.
+- **`failure: "best-effort"`** — every prior-success `modules:mount-complete` event still fires, plus the final `modules:loaded` payload carries a `failed[]` aggregate of every failure.
+- **`failure: "throw"` (default)** — every successful mount BEFORE the failing one still fires `modules:mount-complete`; the failure throws synchronously and `modules:loaded` is NOT emitted (see below).
+- **`failure: "rollback"`** — same as `throw`: prior successes' `modules:mount-complete` events still fired (they happened before the failure was known), then the failure triggers rollback + throws without emitting `modules:loaded`. Subscribers needing rollback awareness should listen for the thrown SlothletError, not for any lifecycle event.
 
 **Event data:**
 
@@ -336,9 +336,9 @@ Under `concurrency > 1` event order tracks **completion order**, not start order
 
 Emitted after the helper's entire async chain settles. Fires **exactly once on the happy path** — at the end of every `addModule`, `addModules`, or `addDiscovered` call that returns normally. Does **NOT** fire when the call throws:
 
-- **`onFailure: "throw"` (default)** — fires only if every mount succeeded. The first failure rethrows synchronously and skips this emit.
-- **`onFailure: "rollback"`** — fires only if every mount succeeded. Any failure triggers a best-effort rollback and rethrows; this emit is skipped.
-- **`onFailure: "best-effort"`** — always fires; the payload includes the `failed[]` aggregate alongside `mounted[]`.
+- **`failure: "throw"` (default)** — fires only if every mount succeeded. The first failure rethrows synchronously and skips this emit.
+- **`failure: "rollback"`** — fires only if every mount succeeded. Any failure triggers a best-effort rollback and rethrows; this emit is skipped.
+- **`failure: "best-effort"`** — always fires; the payload includes the `failed[]` aggregate alongside `mounted[]`.
 
 Hosts that need a "settled regardless of outcome" signal should either use `best-effort` and inspect `failed[]`, or wrap the call in their own try/catch.
 
@@ -347,7 +347,7 @@ Hosts that need a "settled regardless of outcome" signal should either use `best
 ```javascript
 {
 	mounted: [ /* MountResult[] for every successful mount */ ],
-	failed?: [ /* FailureEntry[] with { item, error } — only present when onFailure was "best-effort" */ ],
+	failed?: [ /* FailureEntry[] with { item, error } — only present when failure was "best-effort" */ ],
 	stale?: [ /* MountResult[] — only present on addDiscovered chains that ran discover() */ ]
 }
 ```

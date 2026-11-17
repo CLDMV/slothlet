@@ -121,8 +121,8 @@ describe.each(getMatrixConfigs())("api.add into an existing namespace: materiali
 			base: TEST_DIRS.API_TEST,
 			api: { ...config.api, mutations: { add: true, remove: true, reload: true } }
 		});
-		await instance.slothlet.api.add("plugins", A_DIR, { moduleID: "a" });
-		await instance.slothlet.api.add("plugins", B_DIR, { moduleID: "b" });
+		await instance.slothlet.api.add("plugins", A_DIR, { id: "a" });
+		await instance.slothlet.api.add("plugins", B_DIR, { id: "b" });
 		return instance;
 	}
 

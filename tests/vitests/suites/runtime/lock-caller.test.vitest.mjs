@@ -258,12 +258,12 @@ describe.each(getMatrixConfigs())("Runtime > lockCaller/bind > $name", ({ config
 		}
 	);
 
-	it.skipIf(!config.hook?.enabled)("{ lockCaller: false } opts a hook out of caller-identity pinning (pin enforcement off)", async () => {
+	it.skipIf(!config.hook?.enabled)("{ pin: false } opts a hook out of caller-identity pinning (pin enforcement off)", async () => {
 		await makeApi();
 		// Pin enforcement is on by default and would ignore lockCaller:false; disable it (host-only)
 		// so the per-registration opt-out is honored (#118).
 		api.slothlet.hook.pin.disable();
-		await api.consumer.probe.registerAccessHook("producer.relay.viaDirect", { lockCaller: false });
+		await api.consumer.probe.registerAccessHook("producer.relay.viaDirect", { pin: false });
 		await api.producer.relay.viaSelf();
 		// Opted out: the handler is not pinned, so it runs inside the producer's call. It is still the consumer's code
 		// (its definer), so both the consumer and the producer's call have to allow what it does: neither id is reached.
@@ -274,7 +274,7 @@ describe.each(getMatrixConfigs())("Runtime > lockCaller/bind > $name", ({ config
 		// With provenance off no frames are read, so nothing tells the handler's code from the call running it.
 		await makeApi({ provenance: false });
 		api.slothlet.hook.pin.disable();
-		await api.consumer.probe.registerAccessHook("producer.relay.viaDirect", { lockCaller: false });
+		await api.consumer.probe.registerAccessHook("producer.relay.viaDirect", { pin: false });
 		await api.producer.relay.viaSelf();
 		// The producer alone: allowed the consumer's id, denied its own.
 		expect(await api.consumer.probe.getHookProbedAccess()).toEqual([true, false]);

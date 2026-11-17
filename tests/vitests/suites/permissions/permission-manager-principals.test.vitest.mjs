@@ -200,12 +200,12 @@ describe("PermissionManager > principals (#459)", () => {
 		expect(manager.checkAccess(CALLER, TARGET, null, null, { user: "u1" })).toBe(false);
 	});
 
-	it("maxAge expiry makes a value stale; grace accepts it only for the promoted re-check", async () => {
+	it("ttl expiry makes a value stale; grace accepts it only for the promoted re-check", async () => {
 		vi.useFakeTimers();
 		try {
 			// The manager reads the clock it is given, as an instance's clock hands it the (fake) Date.now.
 			({ manager } = makeManager([REQUIRES_ROLES], {}, normalizeClockConfig({ now: Date.now })));
-			manager.registerPrincipal("roles", { key: (ctx) => ctx.user, resolve: () => ({}), maxAge: 1000 });
+			manager.registerPrincipal("roles", { key: (ctx) => ctx.user, resolve: () => ({}), ttl: 1000 });
 			await manager.resolvePrincipals([{ name: "roles", identityKey: "u1" }]);
 			expect(manager.enforceAccess(CALLER, TARGET, null, null, { user: "u1" })).toBe(true);
 			vi.advanceTimersByTime(1001);
@@ -218,11 +218,11 @@ describe("PermissionManager > principals (#459)", () => {
 		}
 	});
 
-	it("expired identities are pruned once a maxAge principal's cache grows past the threshold", async () => {
+	it("expired identities are pruned once a ttl principal's cache grows past the threshold", async () => {
 		vi.useFakeTimers();
 		try {
 			({ manager } = makeManager([REQUIRES_ROLES], {}, normalizeClockConfig({ now: Date.now })));
-			manager.registerPrincipal("roles", { key: (ctx) => ctx.user, resolve: () => ({}), maxAge: 10 });
+			manager.registerPrincipal("roles", { key: (ctx) => ctx.user, resolve: () => ({}), ttl: 10 });
 			await manager.resolvePrincipals(Array.from({ length: 1025 }, (_, i) => ({ name: "roles", identityKey: `u${i}` })));
 			vi.advanceTimersByTime(20);
 			await manager.resolvePrincipals([{ name: "roles", identityKey: "fresh" }]);

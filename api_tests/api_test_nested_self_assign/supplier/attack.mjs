@@ -90,7 +90,7 @@ export function deleteFromCallee() {
  * @returns {Promise<string>} The type of the mounted node.
  */
 export async function addUnderCallee(folderPath) {
-	await self.slothlet.api.add("callee.extra", folderPath, { moduleID: "callee-extra" });
+	await self.slothlet.api.add("callee.extra", folderPath, { id: "callee-extra" });
 	return typeof self.callee.extra;
 }
 
@@ -112,7 +112,7 @@ export function writeCalleeSymbol(apiPath = "callee.ops", which = "member") {
  * @returns {Promise<void>}
  */
 export async function addThenWrite(folderPath, afterAwait = false) {
-	const pending = self.slothlet.api.add("supplier.sub", folderPath, { moduleID: "supplier-sub" });
+	const pending = self.slothlet.api.add("supplier.sub", folderPath, { id: "supplier-sub" });
 	let refused = null;
 	try {
 		if (afterAwait) await null;
@@ -149,7 +149,7 @@ export async function failingRemoveThenWrite() {
  * @returns {Promise<*>}
  */
 export async function dual(job, folderPath) {
-	if (job === "add") return self.slothlet.api.add("supplier.dual", folderPath, { moduleID: "supplier-dual" });
+	if (job === "add") return self.slothlet.api.add("supplier.dual", folderPath, { id: "supplier-dual" });
 	self.callee.ops.useSecret = () => "pwned-by-sibling-call";
 }
 
@@ -248,7 +248,7 @@ export function captureSelf() {
 export async function addReloadRemoveUnderCallee(folderPath, apiPath = "callee.extra") {
 	const read = () => typeof apiPath.split(".").reduce((node, key) => node?.[key], self);
 	const seen = [];
-	await self.slothlet.api.add(apiPath, folderPath, { moduleID: "callee-extra" });
+	await self.slothlet.api.add(apiPath, folderPath, { id: "callee-extra" });
 	seen.push(read());
 	await self.slothlet.api.reload(apiPath);
 	seen.push(read());
@@ -266,7 +266,7 @@ export async function addReloadRemoveUnderCallee(folderPath, apiPath = "callee.e
  * @returns {Promise<void>}
  */
 export async function addAt(apiPath, folderPath, moduleID) {
-	await self.slothlet.api.add(apiPath, folderPath, { moduleID });
+	await self.slothlet.api.add(apiPath, folderPath, { id: moduleID });
 }
 
 /**
@@ -277,7 +277,7 @@ export async function addAt(apiPath, folderPath, moduleID) {
  * @returns {{ done: Promise<*> }} The add, still in flight.
  */
 export function addAtUnawaited(apiPath, folderPath, moduleID) {
-	return { done: self.slothlet.api.add(apiPath, folderPath, { moduleID }) };
+	return { done: self.slothlet.api.add(apiPath, folderPath, { id: moduleID }) };
 }
 
 /**
@@ -461,7 +461,7 @@ export async function argLeak(how) {
  */
 export async function hookLeak() {
 	let captured = null;
-	self.slothlet.hook.on("before:callee.ops.box", ({ args }) => {
+	self.slothlet.hook.on("callee.ops.box:before", ({ args }) => {
 		captured = args[0];
 	});
 	await self.callee.ops.box(self.callee.ops);

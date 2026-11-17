@@ -117,7 +117,7 @@ describe.each(getMatrixConfigs())(
 		 */
 		const boot = async () => {
 			api = await slothlet({ ...config, base: path.join(FIXTURE, "api"), silent: true, permissions: PERMISSIONS });
-			await api.slothlet.api.add("host", { echo: (value) => `echo:${value}` }, { moduleID: "host-mod" });
+			await api.slothlet.api.add("host", { echo: (value) => `echo:${value}` }, { id: "host-mod" });
 			return api;
 		};
 

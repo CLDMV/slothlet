@@ -93,7 +93,7 @@ describe.each(getMatrixConfigs())("each teardown contribution runs once (#542) >
 	describe.each([true, false])("autoRoutines: %s", (autoRoutines) => {
 		it.each(Object.keys(TEARDOWNS))("via %s", async (entry) => {
 			api = await slothlet({ ...config, base: BASE, silent: true, routines: { auto: autoRoutines, entries: ROUTINES } });
-			await api.slothlet.api.add("plugin", PLUGIN, { moduleID: "plugin" });
+			await api.slothlet.api.add("plugin", PLUGIN, { id: "plugin" });
 			globalThis.__slothletTeardownCalls = [];
 
 			await TEARDOWNS[entry](api);

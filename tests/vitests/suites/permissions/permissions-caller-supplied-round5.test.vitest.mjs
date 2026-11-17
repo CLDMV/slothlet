@@ -96,9 +96,9 @@ describe.each(getMatrixConfigs())("Permissions > caller-supplied code, fifth rou
 	const build = async (permissions = { policy: "deny", rules: RULES }) => {
 		api = await slothlet({ ...config, base: path.join(DIR, "base"), hook: true, permissions });
 		await api.vault.secret.whoami();
-		await api.slothlet.api.add("callee", path.join(DIR, "callee"), { moduleID: "callee-mod" });
-		await api.slothlet.api.add("supplier", path.join(DIR, "supplier"), { moduleID: "supplier-mod" });
-		await api.slothlet.api.add("outsider", path.join(DIR, "outsider"), { moduleID: "outsider-mod" });
+		await api.slothlet.api.add("callee", path.join(DIR, "callee"), { id: "callee-mod" });
+		await api.slothlet.api.add("supplier", path.join(DIR, "supplier"), { id: "supplier-mod" });
+		await api.slothlet.api.add("outsider", path.join(DIR, "outsider"), { id: "outsider-mod" });
 		return api;
 	};
 
@@ -512,8 +512,8 @@ describe("Frame placement > scripts learned from a shut-down instance are releas
 		/** One cycle: build, run a call that is checked for supplied code, shut down. */
 		const cycle = async () => {
 			const api = await slothlet({ ...config, base: path.join(DIR, "base"), permissions: { policy: "allow", rules: [] } });
-			await api.slothlet.api.add("callee", path.join(DIR, "callee"), { moduleID: "callee-mod" });
-			await api.slothlet.api.add("supplier", path.join(DIR, "supplier"), { moduleID: "supplier-mod" });
+			await api.slothlet.api.add("callee", path.join(DIR, "callee"), { id: "callee-mod" });
+			await api.slothlet.api.add("supplier", path.join(DIR, "supplier"), { id: "supplier-mod" });
 			expect(await api.supplier.probe.throughCallee()).toBe("pong");
 			await api.shutdown();
 		};

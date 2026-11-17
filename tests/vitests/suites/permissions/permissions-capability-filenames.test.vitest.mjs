@@ -111,8 +111,8 @@ describe.each(getMatrixConfigs())("Permissions > capability:code and the file na
 		 */
 		const build = async (permissions = { policy: "deny", rules: RULES, caller: { attribution } }) => {
 			api = await slothlet({ ...config, silent: true, base: path.join(ROOT, "base"), permissions });
-			await api.slothlet.api.add("coder", path.join(ROOT, "coder"), { moduleID: "coder" });
-			await api.slothlet.api.add("other", path.join(ROOT, "other"), { moduleID: "other" });
+			await api.slothlet.api.add("coder", path.join(ROOT, "coder"), { id: "coder" });
+			await api.slothlet.api.add("other", path.join(ROOT, "other"), { id: "other" });
 			return api;
 		};
 

@@ -74,8 +74,8 @@ describe.each(getMatrixConfigs())("Permissions > caller-supplied code, fourth ro
 	 */
 	const build = async (permissions = { policy: "deny", rules: RULES }) => {
 		api = await slothlet({ ...config, base: path.join(DIR, "base"), permissions });
-		await api.slothlet.api.add("callee", path.join(DIR, "callee"), { moduleID: "callee-mod" });
-		await api.slothlet.api.add("supplier", path.join(DIR, "supplier"), { moduleID: "supplier-mod" });
+		await api.slothlet.api.add("callee", path.join(DIR, "callee"), { id: "callee-mod" });
+		await api.slothlet.api.add("supplier", path.join(DIR, "supplier"), { id: "supplier-mod" });
 		await api.vault.secret.whoami();
 		return api;
 	};
@@ -218,7 +218,7 @@ describe.each(getMatrixConfigs())(
 		 */
 		const build = async () => {
 			api = await slothlet({ ...config, base: path.join(DIR, "base"), permissions: { mode: "disabled" } });
-			await api.slothlet.api.add("callee", path.join(DIR, "callee"), { moduleID: "callee-mod" });
+			await api.slothlet.api.add("callee", path.join(DIR, "callee"), { id: "callee-mod" });
 			return api;
 		};
 

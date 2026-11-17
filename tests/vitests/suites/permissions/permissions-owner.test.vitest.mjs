@@ -73,8 +73,8 @@ describe.each(getMatrixConfigs())("Permissions > owner grant (#509) > $name", ({
 	 */
 	async function build(permissions, { other = false } = {}) {
 		api = await slothlet({ ...config, base: BASE, permissions });
-		await api.slothlet.api.add("launcher", EXT, { moduleID: "ext" });
-		if (other) await api.slothlet.api.add("launcher", OTHER, { moduleID: "other" });
+		await api.slothlet.api.add("launcher", EXT, { id: "ext" });
+		if (other) await api.slothlet.api.add("launcher", OTHER, { id: "other" });
 		return api;
 	}
 
@@ -179,7 +179,7 @@ describe.each(getMatrixConfigs())("Permissions > owner grant (#509) > $name", ({
 		expect(await outcome(() => api.launcher.main.activate())).toEqual({ ok: true, value: "created" });
 
 		await api.slothlet.api.remove("ext");
-		await api.slothlet.api.add("launcher", EXT, { moduleID: "ext2" });
+		await api.slothlet.api.add("launcher", EXT, { id: "ext2" });
 		expect(await outcome(() => api.launcher.main.activate())).toEqual({ ok: true, value: "created" });
 		// The co-mounted module still owns none of it.
 		expect(await outcome(() => api.launcher.intruder.poke())).toEqual({ ok: false, code: "PERMISSION_DENIED" });

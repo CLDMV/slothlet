@@ -60,7 +60,7 @@ describe.each(getMatrixConfigs())("Events > manifest precedence layer (#407) > $
 			silent: true,
 			permissions: { policy: "allow", events: { policy: "notify" } }
 		});
-		await api.slothlet.api.modules.addModule("@local/evt-plugin", { discover: { scanRoot: FIX_EVT_MODULE } });
+		await api.slothlet.api.modules.addModule("@local/evt-plugin", { discover: { root: FIX_EVT_MODULE } });
 
 		// Manifest: { caller: subscriber.**, event: manifest.*, effect: allow } — registered at mount.
 		expect(await api.subscriber.subscribe("manifest.data")).toBe("allow");
@@ -84,7 +84,7 @@ describe.each(getMatrixConfigs())("Events > manifest precedence layer (#407) > $
 				events: { policy: "notify", rules: [{ caller: "subscriber.**", event: "manifest.*", effect: "notify" }] }
 			}
 		});
-		await api.slothlet.api.modules.addModule("@local/evt-plugin", { discover: { scanRoot: FIX_EVT_MODULE } });
+		await api.slothlet.api.modules.addModule("@local/evt-plugin", { discover: { root: FIX_EVT_MODULE } });
 
 		// Manifest says allow; instance says notify at equal specificity → instance wins.
 		expect(await api.subscriber.subscribe("manifest.data")).toBe("notify");

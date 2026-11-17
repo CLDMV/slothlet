@@ -98,7 +98,7 @@ describe.each(matrix)("serializing data with its own toJSON > $mode / $runtime /
 			silent: true,
 			permissions: { policy: "allow", caller: { attribution }, rules }
 		});
-		for (const name of ["owner", "reader", "writer"]) await api.slothlet.api.add(name, join(FIXTURE, name), { moduleID: name });
+		for (const name of ["owner", "reader", "writer"]) await api.slothlet.api.add(name, join(FIXTURE, name), { id: name });
 		for (const name of ["owner", "reader", "writer"]) await api[name];
 		for (const path of PATHS) await api.owner[path.slice("owner.".length)];
 		return api;

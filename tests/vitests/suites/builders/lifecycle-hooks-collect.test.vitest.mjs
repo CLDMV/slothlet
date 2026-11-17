@@ -298,8 +298,8 @@ describe.each(["eager", "lazy"])("collectLifecycleHooks — routine system walk 
 			mode,
 			routines: COLLECT_ROUTINES
 		});
-		await api.slothlet.api.add("auth", `${TEST_DIRS.API_TEST_VERSIONED}/v1`, {}, { version: "v1", default: true });
-		await api.slothlet.api.add("auth", `${TEST_DIRS.API_TEST_VERSIONED}/v2`, {}, { version: "v2" });
+		await api.slothlet.api.add("auth", `${TEST_DIRS.API_TEST_VERSIONED}/v1`, { version: { tag: "v1", default: true } });
+		await api.slothlet.api.add("auth", `${TEST_DIRS.API_TEST_VERSIONED}/v2`, { version: { tag: "v2" } });
 
 		// The logical path now resolves to a version-dispatcher proxy.
 		expect(api.auth.__isVersionDispatcher).toBe(true);

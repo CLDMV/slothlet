@@ -59,7 +59,7 @@ describe.each(CONFIGS)("permissions as a bare mode string (#765) — $mode / $ru
 	 */
 	async function load(permissions) {
 		api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, permissions });
-		await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { moduleID: "guest" });
+		await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { id: "guest" });
 		return api;
 	}
 

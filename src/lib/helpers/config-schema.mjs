@@ -106,6 +106,78 @@ export const CONFIG_SCHEMA = deepFreeze({
 });
 
 /**
+ * The discover options `api.slothlet.api.modules.discover()` takes, and the `discover` group of the methods that discover.
+ * @type {Readonly<object>}
+ * @private
+ */
+const DISCOVER_SCHEMA = { filter: true, manifest: true, prefix: true, root: true, schema: OPEN };
+
+/**
+ * The options object each `api.slothlet.*` method (and `generate()` from `@cldmv/slothlet/typegen`) takes, keyed by the
+ * method path the error names as `where`. Read by {@link assertOptionKeys}; the shape rules are the same as
+ * {@link CONFIG_SCHEMA}'s. A `collision` group also takes its mode as a bare string (`"merge"` = `{ mode: "merge" }`).
+ * @type {Readonly<Record<string, object>>}
+ */
+export const METHOD_OPTION_SCHEMAS = deepFreeze({
+	"slothlet.api.add": {
+		collision: { force: true, mode: true, mutate: true },
+		hidden: true,
+		id: true,
+		metadata: OPEN,
+		permissions: { allow: true, deny: true },
+		replay: true,
+		scanHiddenFolders: true,
+		version: { default: true, metadata: OPEN, tag: true }
+	},
+	"slothlet.api.leaves": { details: true, private: true },
+	"slothlet.api.reload": { metadata: OPEN },
+	"slothlet.api.modules.discover": DISCOVER_SCHEMA,
+	"slothlet.api.modules.addModule": { collision: { mode: true }, discover: DISCOVER_SCHEMA, version: true },
+	"slothlet.api.modules.addModules": { collision: { mode: true }, concurrency: true, failure: true },
+	"slothlet.api.modules.addDiscovered": {
+		collision: { mode: true },
+		concurrency: true,
+		discover: DISCOVER_SCHEMA,
+		failure: true,
+		sort: true
+	},
+	"slothlet.api.modules.removeModule": { version: true },
+	"slothlet.context.scope": { args: true, context: OPEN, fn: true, isolation: true, merge: true, owners: OPEN, protect: true },
+	"slothlet.event.on": { key: true, once: true },
+	"slothlet.hook.filter": { enabled: true, id: true, pattern: true, type: true },
+	"slothlet.hook.on": {
+		async: true,
+		id: true,
+		pattern: true,
+		pin: true,
+		priority: true,
+		subset: true,
+		versioning: { dispatcher: true, enabled: true }
+	},
+	"slothlet.permissions.principal.register": { key: true, resolve: true, ttl: true },
+	"slothlet.reload": { instance: true },
+	"typegen.generate": { augment: true, base: true, docs: true, name: true, output: true, typescript: true }
+});
+
+/**
+ * Check a method's options object against its entry in {@link METHOD_OPTION_SCHEMAS}. `null` / `undefined` and values
+ * that are not plain objects pass: the method's own validation names a wrong-shaped argument.
+ * @param {*} options - The options object as given.
+ * @param {string} method - The method path, a key of {@link METHOD_OPTION_SCHEMAS}.
+ * @param {string} [where=method] - The method path the error names, when several methods share one schema
+ *   (`"slothlet.hook.list"` checked against `"slothlet.hook.filter"`).
+ * @returns {void}
+ * @throws {SlothletError} INVALID_CONFIG_UNKNOWN_KEY for a key the method does not take, with `where` = the method path.
+ * @public
+ * @example
+ * assertOptionKeys({ collisionMode: "merge" }, "slothlet.api.add");
+ * // throws INVALID_CONFIG_UNKNOWN_KEY { where: "slothlet.api.add", key: "collisionMode", path: ["collisionMode"] }
+ */
+export function assertOptionKeys(options, method, where = method) {
+	assertKnownKeys(options, METHOD_OPTION_SCHEMAS[method], where);
+}
+
+/**
  * Freeze a schema and every nested schema in it.
  * @param {object} schema - The schema.
  * @returns {object} The same schema, frozen.

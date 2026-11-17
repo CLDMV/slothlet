@@ -61,7 +61,7 @@ describe("browser returned errors", () => {
 					}
 				}
 			},
-			{ moduleID: "slots" }
+			{ id: "slots" }
 		);
 		return api;
 	};

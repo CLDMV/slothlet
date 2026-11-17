@@ -51,18 +51,18 @@ describe.each(["eager", "lazy"])("Permissions > version-dispatcher marker (#283)
 		// slothlet merge the dispatcher (which carries __isVersionDispatcher/__logicalPath) into that
 		// module's wrapper, then read the marker back as the host. Before the fix this threw
 		// PERMISSION_DENIED at api.add time.
-		await expect(api.slothlet.api.add(["advanced", "activationEvents"], FIELD_BASE, {}, {})).resolves.toBeDefined();
+		await expect(api.slothlet.api.add(["advanced", "activationEvents"], FIELD_BASE, { version: {} })).resolves.toBeDefined();
 		await expect(
-			api.slothlet.api.add(["advanced", "activationEvents"], `${VBASE}/v1`, {}, { version: "v1", default: true })
+			api.slothlet.api.add(["advanced", "activationEvents"], `${VBASE}/v1`, { version: { tag: "v1", default: true } })
 		).resolves.toBeDefined();
-		await expect(api.slothlet.api.add(["advanced", "activationEvents"], `${VBASE}/v2`, {}, { version: "v2" })).resolves.toBeDefined();
+		await expect(api.slothlet.api.add(["advanced", "activationEvents"], `${VBASE}/v2`, { version: { tag: "v2" } })).resolves.toBeDefined();
 	});
 
 	it("keeps slothlet's own marker readable by the host but stays scoped to the marker keys", async () => {
 		api = await slothlet({ mode, base: TEST_DIRS.API_TEST, permissions: { policy: "allow", rules: [] } });
-		await api.slothlet.api.add(["advanced", "activationEvents"], FIELD_BASE, {}, {});
-		await api.slothlet.api.add(["advanced", "activationEvents"], `${VBASE}/v1`, {}, { version: "v1", default: true });
-		await api.slothlet.api.add(["advanced", "activationEvents"], `${VBASE}/v2`, {}, { version: "v2" });
+		await api.slothlet.api.add(["advanced", "activationEvents"], FIELD_BASE, { version: {} });
+		await api.slothlet.api.add(["advanced", "activationEvents"], `${VBASE}/v1`, { version: { tag: "v1", default: true } });
+		await api.slothlet.api.add(["advanced", "activationEvents"], `${VBASE}/v2`, { version: { tag: "v2" } });
 
 		const advanced = mode === "lazy" ? await api.advanced : api.advanced;
 		const field = mode === "lazy" ? await advanced.activationEvents : advanced.activationEvents;

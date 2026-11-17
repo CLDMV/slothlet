@@ -73,8 +73,8 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])('api-manager — remove a "
 		await writeModule(join(sibMod, "keepme.mjs"), "export function keepme() { return 'kept'; }");
 
 		api = await slothlet({ base, mode, silent: true, diagnostics: true });
-		await api.slothlet.api.add("", rootMod, { moduleID: "rootmod" });
-		await api.slothlet.api.add("shared.b", sibMod, { moduleID: "sibmod" });
+		await api.slothlet.api.add("", rootMod, { id: "rootmod" });
+		await api.slothlet.api.add("shared.b", sibMod, { id: "sibmod" });
 
 		// Sanity: the foreign sibling resolves and the root mount is registered. (Deliberately do NOT touch
 		// shared.a first — that trips a *separate* lazy-materialization bug that drops the sibling; this

@@ -230,7 +230,7 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])("Hidden entries + empty-fol
 		expect(api.plugins.stash).toBeUndefined();
 
 		const warnings = await captureWarnings(async () => {
-			await api.slothlet.api.add("plugins2", addRoot, { scanHiddenFolders: true });
+			await api.slothlet.api.add("plugins2", addRoot, { hidden: ["!**/.*/", "!**/__*/"] });
 		});
 		expect(api.plugins2.stash).toBeDefined();
 		expect(warnings.some((w) => w.code === "CONFIG_SCAN_HIDDEN_FOLDERS_DEPRECATED")).toBe(true);

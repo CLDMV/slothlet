@@ -94,7 +94,7 @@ async function build(config, attribution, rules, helpers) {
 		base: path.join(DIR, "base"),
 		permissions: { policy: "deny", rules, caller: { attribution } }
 	});
-	for (const mount of MOUNTS) await api.slothlet.api.add(mount, path.join(DIR, mount), { moduleID: `${mount}-mod` });
+	for (const mount of MOUNTS) await api.slothlet.api.add(mount, path.join(DIR, mount), { id: `${mount}-mod` });
 	// The CommonJS files take the runtime with a dynamic import: let it settle.
 	await new Promise((resolve) => setTimeout(resolve, 20));
 	return api;

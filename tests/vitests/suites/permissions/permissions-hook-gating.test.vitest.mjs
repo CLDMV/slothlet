@@ -127,9 +127,9 @@ describe.each(getMatrixConfigs())("Permissions > hook gating (#118) > $name", ({
 		expect((await tryCall(() => api.auditor.callList())).ok).toBe(true);
 	});
 
-	it("force-pins a module hook registered with lockCaller:false (pin enforced) and warns", async () => {
+	it("force-pins a module hook registered with pin: false (pin enforced) and warns", async () => {
 		api = await boot(null); // force-pin is independent of the permission system
-		const id = await api.auditor.armOpts("db.read:before", { lockCaller: false });
+		const id = await api.auditor.armOpts("db.read:before", { pin: false });
 		const { registeredHooks } = api.slothlet.hook.list({ id });
 		expect(registeredHooks[0].lockCaller).toBe(true); // forced back on
 		expect(api.slothlet.diag.SlothletWarning.captured.some((w) => w.code === "HOOK_UNPINNED_IGNORED")).toBe(true);
@@ -151,7 +151,7 @@ describe.each(getMatrixConfigs())("Permissions > hook gating (#118) > $name", ({
 		api = await boot(null);
 		api.slothlet.hook.pin.disable();
 		api.slothlet.diag.SlothletWarning.clearCaptured();
-		const id = await api.auditor.armOpts("db.read:before", { lockCaller: false });
+		const id = await api.auditor.armOpts("db.read:before", { pin: false });
 		const { registeredHooks } = api.slothlet.hook.list({ id });
 		expect(registeredHooks[0].lockCaller).toBe(false); // honored, not forced
 		expect(api.slothlet.diag.SlothletWarning.captured.some((w) => w.code === "HOOK_UNPINNED_IGNORED")).toBe(false);
@@ -197,16 +197,16 @@ describe.each(getMatrixConfigs())("Permissions > hook gating (#118) > $name", ({
 	it("hook: { pin: false } config permits unpinned module hooks", async () => {
 		api = await slothlet({ ...config, base: DIR, hook: { enabled: true, pin: false }, diagnostics: true });
 		api.slothlet.diag.SlothletWarning.clearCaptured();
-		const id = await api.auditor.armOpts("db.read:before", { lockCaller: false });
+		const id = await api.auditor.armOpts("db.read:before", { pin: false });
 		const { registeredHooks } = api.slothlet.hook.list({ id });
 		expect(registeredHooks[0].lockCaller).toBe(false); // config disabled pin enforcement
 		expect(api.slothlet.diag.SlothletWarning.captured.some((w) => w.code === "HOOK_UNPINNED_IGNORED")).toBe(false);
 	});
 
-	it("force-pin under silent ignores lockCaller:false without warning", async () => {
+	it("force-pin under silent ignores pin: false without warning", async () => {
 		api = await slothlet({ ...config, base: DIR, hook: true, silent: true, diagnostics: true });
 		api.slothlet.diag.SlothletWarning.clearCaptured();
-		const id = await api.auditor.armOpts("db.read:before", { lockCaller: false });
+		const id = await api.auditor.armOpts("db.read:before", { pin: false });
 		const { registeredHooks } = api.slothlet.hook.list({ id });
 		expect(registeredHooks[0].lockCaller).toBe(true); // still force-pinned
 		expect(api.slothlet.diag.SlothletWarning.captured.some((w) => w.code === "HOOK_UNPINNED_IGNORED")).toBe(false); // silent suppresses the warn

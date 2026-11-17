@@ -108,7 +108,7 @@ describe("_resolvePathOrModuleId — moduleID history lookup (api_builder.mjs li
 		// api.slothlet.api.add(apiPath, folderPath, options) — first arg is the API namespace,
 		// second arg is the folder path, third arg is options including moduleID.
 		const moduleID = await api.slothlet.api.add("dynamic", TEST_DIRS.API_TEST_MIXED, {
-			moduleID: "dynamic_module_id_test"
+			id: "dynamic_module_id_test"
 		});
 
 		expect(typeof moduleID === "string" || typeof moduleID === "undefined").toBe(true);

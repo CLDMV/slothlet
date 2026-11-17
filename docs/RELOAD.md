@@ -54,9 +54,12 @@ await api.slothlet.api.add(apiPath, folderPath, options);
 | --------------------------- | ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `apiPath`                   | `string`                                                    | Dot-separated path where modules are mounted (e.g. `"plugins"`, `"plugins.tools"`). Pass `""` or `null` to add directly to root.                                                                                                                                                                                                                                                                                                                                                          |
 | `folderPath`                | `string \| string[] \| Function \| Record<string, unknown>` | What to mount: a **directory** to scan, a **single file** (`.mjs`/`.cjs`/`.js`), an **array** of file/folder paths, a bare **function** (mounts as one callable leaf), a **plain object** used directly as the export map (its keys mount as leaves), or the **`{ exports, ...options }`** shorthand (the `exports` value is the export map; sibling keys apply as options). The last two are synthetic / in-memory leaves — no filesystem. Relative paths resolve from the calling file. |
-| `options.moduleID`          | `string?`                                                   | Stable identifier for this module. Used for targeted `reload()` and `remove()`. Auto-generated if omitted (including for synthetic leaves).                                                                                                                                                                                                                                                                                                                                               |
-| `options.forceOverwrite`    | `boolean?`                                                  | Override collision mode for this call. Use with ownership-aware workflows.                                                                                                                                                                                                                                                                                                                                                                                                                |
+| `options.id`                | `string?`                                                   | Stable module id. Used for targeted `reload()` and `remove()`. Generated if omitted (including for synthetic leaves).                                                                                                                                                                                                                                                                                                                                                                     |
+| `options.collision`         | `string \| { mode?, force?, mutate? }?`                     | What happens when the mount meets an existing path. `force: true` replaces whatever is there regardless of the collision mode. `mode` and `mutate` (and a bare mode string) are locked unless config `api.collision.override` is true.                                                                                                                                                                                                                                                    |
 | `options.metadata`          | `object?`                                                   | Metadata to apply to loaded API paths after mount.                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `options.replay`            | `boolean?`                                                  | Whether a full `reload()` replays this add (default `true`). Locked like `collision.mode`.                                                                                                                                                                                                                                                                                                                                                                                                |
+| `options.permissions`       | `{ allow?, deny? }?`                                        | Rules the module mounts with.                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| `options.version`           | `{ tag, default?, metadata? }?`                             | Mount as one version of the path; see [VERSIONING.md](VERSIONING.md).                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | `options.hidden`            | `string \| string[]?`                                       | Glob(s) hiding files/folders from this mount, matched against each entry's path relative to the **added** folder (files match extension-stripped). Same syntax and semantics as the init-time [`hidden`](./CONFIGURATION.md#hidden) option. Persisted, so `reload()` re-applies it.                                                                                                                                                                                                       |
 | `options.scanHiddenFolders` | `boolean?`                                                  | **Deprecated** escape hatch: scan `.`/`__`-prefixed folders for this mount (default `false`; falls back to the instance config; supplying it warns). See [`scanHiddenFolders`](./CONFIGURATION.md#scanhiddenfolders). Removed in v4.                                                                                                                                                                                                                                                      |
 
@@ -75,7 +78,7 @@ await api.slothlet.api.add("plugins.tools", "./tools/string-utils.mjs");
 await api.slothlet.api.add("plugins", ["./a.mjs", "./b.mjs", "./extras"]);
 
 // Mount with stable ID for later reload/remove
-await api.slothlet.api.add("plugins", "./plugins", { moduleID: "core-plugins" });
+await api.slothlet.api.add("plugins", "./plugins", { id: "core-plugins" });
 await api.slothlet.api.remove("core-plugins"); // remove by ID
 await api.slothlet.api.reload("core-plugins"); // reload by ID
 
@@ -104,7 +107,7 @@ await api.tools.ping(); // "pong"
 // A plain object (no `exports` key) IS the exports map — its keys mount as leaves, even keys
 // that happen to share an option name. The 2nd arg is never scanned for options.
 await api.slothlet.api.add("util", { upper: (s) => s.toUpperCase() });
-await api.slothlet.api.add("cfg", { moduleID: "x" }); // mounts api.cfg.moduleID = "x" (content, not an option)
+await api.slothlet.api.add("cfg", { id: "x" }); // mounts api.cfg.id = "x" (content, not an option)
 
 // A default function with named exports → the function at the apiPath, the named exports as its members
 await api.slothlet.api.add("calc", {
@@ -115,7 +118,7 @@ await api.calc.half(4); // 2
 
 // Shorthand: when the inline object carries an `exports` key, its sibling keys ARE options
 // (here a custom moduleID), exactly as if passed third. `exports` must be present.
-await api.slothlet.api.add("svc", { exports: { ping: () => "pong" }, moduleID: "svc-id" });
+await api.slothlet.api.add("svc", { exports: { ping: () => "pong" }, id: "svc-id" });
 
 // Mount at root ("" or null) — exports land directly on api.*
 await api.slothlet.api.add("", { exports: { ping: () => "pong" } }); // api.ping
@@ -163,7 +166,7 @@ await api.slothlet.api.leaves("modules.acme.shop", { details: true });
 
 An unknown key throws `API_LEAVES_UNKNOWN_MODULE`. Module callers pass through the same internal-permission gate as the rest of `slothlet.*` (`slothlet.api.leaves`); the host's bound handle is exempt from that gate, matching the carve-out documented in [PERMISSIONS.md](PERMISSIONS.md).
 
-Enumeration is a disclosure surface, so the answer is scoped to the caller: [module-private members](PERMISSIONS.md#module-private-exports) the caller could not read are omitted, matching the redaction `Object.keys` already performs on the composed surface. A module sees its own module's privates and no other module's, and the host's bound handle is redacted too by default (`permissions.private.host: "deny"`). Pass `{ includePrivate: true }` — host only — for the unredacted list; a module asking for it is refused with `PERMISSION_DENIED` rather than quietly downgraded to the redacted answer. With permissions disabled nothing is private and nothing is filtered.
+Enumeration is a disclosure surface, so the answer is scoped to the caller: [module-private members](PERMISSIONS.md#module-private-exports) the caller could not read are omitted, matching the redaction `Object.keys` already performs on the composed surface. A module sees its own module's privates and no other module's, and the host's bound handle is redacted too by default (`permissions.private.host: "deny"`). Pass `{ private: true }` — host only — for the unredacted list; a module asking for it is refused with `PERMISSION_DENIED` rather than quietly downgraded to the redacted answer. With permissions disabled nothing is private and nothing is filtered.
 
 ---
 
@@ -190,8 +193,8 @@ await api.slothlet.api.remove("plugins.tools");
 await api.slothlet.api.remove("core-plugins");
 
 // Scoped: remove only modA's nodes under "shop" — modB's shop.b and the container survive
-await api.slothlet.api.add("shop.a", "./a", { moduleID: "modA" });
-await api.slothlet.api.add("shop.b", "./b", { moduleID: "modB" });
+await api.slothlet.api.add("shop.a", "./a", { id: "modA" });
+await api.slothlet.api.add("shop.b", "./b", { id: "modB" });
 await api.slothlet.api.remove("modA", "shop"); // → true; api.shop.a gone, api.shop.b intact
 ```
 
@@ -366,7 +369,7 @@ Every `api.slothlet.api.add()` and `api.slothlet.api.remove()` call is recorded 
 ```javascript
 const api = await slothlet({ base: "./api" });
 
-await api.slothlet.api.add("plugins", "./plugins", { moduleID: "core-plugins" });
+await api.slothlet.api.add("plugins", "./plugins", { id: "core-plugins" });
 await api.slothlet.api.add("tools", "./tools");
 
 // Reload base module - replays both add() calls automatically
@@ -394,8 +397,8 @@ Ownership is **stack-based**: each API path maintains a history of which modules
 
 ```javascript
 // Two modules coexist at peer namespaces
-await api.slothlet.api.add("plugins.auth", "./auth", { moduleID: "auth-module" });
-await api.slothlet.api.add("plugins.billing", "./billing", { moduleID: "billing-module" });
+await api.slothlet.api.add("plugins.auth", "./auth", { id: "auth-module" });
+await api.slothlet.api.add("plugins.billing", "./billing", { id: "billing-module" });
 
 // Reload only authentication
 await api.slothlet.api.reload("auth-module");

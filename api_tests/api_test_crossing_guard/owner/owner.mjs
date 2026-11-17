@@ -377,7 +377,7 @@ export const isHeldInstance = (value) => value === heldInstance;
  */
 export function ownHook() {
 	let got;
-	const off = self.slothlet.hook.on("after:owner.inData", ({ result }) => {
+	const off = self.slothlet.hook.on("owner.inData:after", ({ result }) => {
 		got = result;
 		return result;
 	});

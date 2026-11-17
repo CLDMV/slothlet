@@ -119,7 +119,7 @@ describe.each(matrix)(
 					rules: [{ caller: "reader.**", target: "owner.data.locked.hidden", effect: "deny" }]
 				}
 			});
-			for (const name of ["owner", "reader"]) await api.slothlet.api.add(name, join(FIXTURE, name), { moduleID: name });
+			for (const name of ["owner", "reader"]) await api.slothlet.api.add(name, join(FIXTURE, name), { id: name });
 			for (const name of ["base", "owner", "reader"]) await api[name];
 			await api.owner.data;
 			return api;

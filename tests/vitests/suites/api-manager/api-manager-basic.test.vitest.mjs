@@ -94,7 +94,7 @@ describe.each(HOT_RELOAD_MATRIX)("Hot Reload Basic - $name", ({ config }) => {
 
 	it("preserves api.slothlet.api.add modules with moduleID across reloads", async () => {
 		api = await createApiInstance(config);
-		await api.slothlet.api.add("extra", TEST_DIRS.API_TEST_MIXED, { moduleID: "extra-module" });
+		await api.slothlet.api.add("extra", TEST_DIRS.API_TEST_MIXED, { id: "extra-module" });
 		expect(api.extra?.mathCjs).toBeTypeOf("object");
 
 		await api.slothlet.reload();
@@ -116,7 +116,7 @@ describe.each(HOT_RELOAD_MATRIX)("Hot Reload Basic - $name", ({ config }) => {
 
 	it("does not restore removed APIs after reload", async () => {
 		api = await createApiInstance(config);
-		await api.slothlet.api.add("extra", TEST_DIRS.API_TEST_MIXED, { moduleID: "test-module" });
+		await api.slothlet.api.add("extra", TEST_DIRS.API_TEST_MIXED, { id: "test-module" });
 		expect(api.extra?.mathCjs).toBeTypeOf("object");
 
 		await api.slothlet.api.remove("test-module");
@@ -137,8 +137,8 @@ describe.each(HOT_RELOAD_MATRIX)("Hot Reload Basic - $name", ({ config }) => {
 
 	it("keeps multiple api.slothlet.api.add modules registered after reload", async () => {
 		api = await createApiInstance(config);
-		await api.slothlet.api.add("extra1", TEST_DIRS.API_TEST_MIXED, { moduleID: "module-1" });
-		await api.slothlet.api.add("extra2", TEST_DIRS.API_TEST_MIXED, { moduleID: "module-2" });
+		await api.slothlet.api.add("extra1", TEST_DIRS.API_TEST_MIXED, { id: "module-1" });
+		await api.slothlet.api.add("extra2", TEST_DIRS.API_TEST_MIXED, { id: "module-2" });
 
 		await api.slothlet.reload();
 
@@ -149,8 +149,8 @@ describe.each(HOT_RELOAD_MATRIX)("Hot Reload Basic - $name", ({ config }) => {
 	// TODO: allowAddApiOverwrite isn't in v3...
 	it("reloads using the latest api.slothlet.api.add overwrite", async () => {
 		api = await createApiInstance(config, { allowAddApiOverwrite: true });
-		await api.slothlet.api.add("extra", TEST_DIRS.API_TEST_MIXED, { moduleID: "module-x" });
-		await api.slothlet.api.add("extra", TEST_DIRS.API_TEST, { moduleID: "module-x" });
+		await api.slothlet.api.add("extra", TEST_DIRS.API_TEST_MIXED, { id: "module-x" });
+		await api.slothlet.api.add("extra", TEST_DIRS.API_TEST, { id: "module-x" });
 
 		await api.slothlet.reload();
 

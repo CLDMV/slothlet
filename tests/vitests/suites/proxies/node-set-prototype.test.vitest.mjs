@@ -266,7 +266,7 @@ describe.each(matrix)("setPrototypeOf on an api node > $mode / $runtime / $name"
 	const build = async (overrides) => {
 		const settings = permissions || overrides ? { permissions: { ...permissions, ...overrides } } : {};
 		api = await slothlet({ base: join(FIXTURE, "host"), silent: true, mode, runtime, ...settings });
-		await api.slothlet.api.add("reader", join(FIXTURE, "reader"), { moduleID: "reader" });
+		await api.slothlet.api.add("reader", join(FIXTURE, "reader"), { id: "reader" });
 		for (const node of [api.leaf, api.leaf.only, api.grp, api.sub, api.sub.lay, api.sub.other, api.ev, api.ev.em, api.ev.inst, api.reader])
 			await node;
 		return api;
@@ -277,7 +277,7 @@ describe.each(matrix)("setPrototypeOf on an api node > $mode / $runtime / $name"
 	 * @returns {Promise<void>}
 	 */
 	const addExtra = async () => {
-		await api.slothlet.api.add("extra", join(FIXTURE, "extra"), { moduleID: "extra" });
+		await api.slothlet.api.add("extra", join(FIXTURE, "extra"), { id: "extra" });
 		for (const node of [api.extra, api.extra.tool, api.extra.tool.run, api.extra.data]) await node;
 	};
 
@@ -345,7 +345,7 @@ describe.each(matrix)("setPrototypeOf on an api node > $mode / $runtime / $name"
 		expect(Object.getPrototypeOf(api.extra.tool.run)).toBe(Function.prototype);
 		// So does an add that replaces what is there.
 		expect(setExtra(prototype)).toEqual([true, true, true]);
-		await api.slothlet.api.add("extra", join(FIXTURE, "over"), { moduleID: "over", forceOverwrite: true });
+		await api.slothlet.api.add("extra", join(FIXTURE, "over"), { id: "over", collision: { force: true } });
 		for (const loaded of [api.extra, api.extra.tool, api.extra.tool.run]) await loaded;
 		expect(await api.extra.tool.run()).toBe("over");
 		expect(extraInherits()).toEqual([undefined, undefined, undefined]);

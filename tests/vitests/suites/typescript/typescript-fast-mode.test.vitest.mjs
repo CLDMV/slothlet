@@ -281,7 +281,7 @@ describe("TypeScript Fast Mode", () => {
 
 			// Add TypeScript module
 			await api.slothlet.api.add("tsModule", "./api_tests/api_test_typescript", {
-				moduleID: "ts_addon"
+				id: "ts_addon"
 			});
 
 			expect(api.tsModule).toBeDefined();

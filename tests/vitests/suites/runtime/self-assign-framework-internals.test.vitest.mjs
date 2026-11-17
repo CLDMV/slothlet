@@ -114,8 +114,8 @@ describe.each(CONFIGS)("module writes to a node's framework-internal keys (#625)
 		 */
 		async function load() {
 			api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, ...options });
-			await api.slothlet.api.add("victim", path.join(FIXTURE, "victim"), { moduleID: "victim" });
-			await api.slothlet.api.add("intruder", path.join(FIXTURE, "intruder"), { moduleID: "intruder" });
+			await api.slothlet.api.add("victim", path.join(FIXTURE, "victim"), { id: "victim" });
+			await api.slothlet.api.add("intruder", path.join(FIXTURE, "intruder"), { id: "intruder" });
 			// A lazy node is read once so there is a materialized wrapper to compare against.
 			await api.victim.v.hello();
 			return api;
@@ -182,8 +182,8 @@ describe.each(CONFIGS)(
 			["lets a module change them with the system disabled", { permissions: { mode: "disabled" } }, "done"]
 		])("%s", async (_label, options, outcome) => {
 			api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, ...options });
-			await api.slothlet.api.add("victim", path.join(FIXTURE, "victim"), { moduleID: "victim" });
-			await api.slothlet.api.add("intruder", path.join(FIXTURE, "intruder"), { moduleID: "intruder" });
+			await api.slothlet.api.add("victim", path.join(FIXTURE, "victim"), { id: "victim" });
+			await api.slothlet.api.add("intruder", path.join(FIXTURE, "intruder"), { id: "intruder" });
 			await api.victim.v.hello();
 			const nodeAt = (apiPath) => apiPath.split(".").reduce((value, key) => value[key], api);
 			for (const apiPath of ["victim", "victim.v", "victim.v.hello", "victim.v.data"]) {

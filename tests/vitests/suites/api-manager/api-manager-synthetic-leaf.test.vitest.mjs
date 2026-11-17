@@ -120,9 +120,9 @@ describe.each([["eager"], ["lazy"]])("synthetic leaf via api.add (#117) — %s m
 		// option names — is content: its keys flatten onto the path as leaves (a non-function value as
 		// a data leaf, a function value as a callable leaf). Options are the 3rd arg, or the
 		// `{ exports, ...options }` shorthand.
-		await api.slothlet.api.add("cfg", { moduleID: "x", forceOverwrite: true });
-		expect(await api.cfg.moduleID).toBe("x");
-		expect(await api.cfg.forceOverwrite).toBe(true);
+		await api.slothlet.api.add("cfg", { id: "x", replay: true });
+		expect(await api.cfg.id).toBe("x");
+		expect(await api.cfg.replay).toBe(true);
 		await api.slothlet.api.add("real", { metadata: () => "m" });
 		expect(await api.real.metadata()).toBe("m");
 	});
@@ -132,15 +132,11 @@ describe.each([["eager"], ["lazy"]])("synthetic leaf via api.add (#117) — %s m
 		// When the inline object carries an `exports` key, its sibling keys are applied as call options
 		// — exactly as if passed as the 3rd argument. `exports` is the content; the siblings are not
 		// mounted as leaves.
-		const moduleID = await api.slothlet.api.add("shp", { exports: { greet: () => "hi" }, moduleID: "custom-id" });
-		expect(moduleID).toBe("custom-id"); // sibling applied as the moduleID option
+		const moduleID = await api.slothlet.api.add("shp", { exports: { greet: () => "hi" }, id: "custom-id" });
+		expect(moduleID).toBe("custom-id"); // sibling applied as the id option
 		expect(await api.shp.greet()).toBe("hi"); // exports mounted as content
 		// An explicit 3rd-arg option wins over a sibling on conflict.
-		const moduleID2 = await api.slothlet.api.add(
-			"shp2",
-			{ exports: { ping: () => "pong" }, moduleID: "sibling" },
-			{ moduleID: "explicit" }
-		);
+		const moduleID2 = await api.slothlet.api.add("shp2", { exports: { ping: () => "pong" }, id: "sibling" }, { id: "explicit" });
 		expect(moduleID2).toBe("explicit");
 		expect(await api.shp2.ping()).toBe("pong");
 	});

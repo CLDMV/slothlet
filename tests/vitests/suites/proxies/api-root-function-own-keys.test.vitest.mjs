@@ -300,7 +300,7 @@ describe.each(
 					}
 				});
 				try {
-					await api.slothlet.api.add("reader", readerDir, { moduleID: "reader" });
+					await api.slothlet.api.add("reader", readerDir, { id: "reader" });
 					return { host: Object.keys(api), reader: await api.reader.look() };
 				} finally {
 					await api.slothlet.shutdown();

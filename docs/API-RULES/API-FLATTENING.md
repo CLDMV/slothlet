@@ -307,19 +307,19 @@ api.plugins.cleanup(); // ✅
 
 ```javascript
 // Module A and B coexist in same namespace (moduleID lives in the third `options` argument)
-await api.slothlet.api.add("plugins.moduleA", "./modules/moduleA", { moduleID: "moduleA" });
-await api.slothlet.api.add("plugins.moduleB", "./modules/moduleB", { moduleID: "moduleB" });
+await api.slothlet.api.add("plugins.moduleA", "./modules/moduleA", { id: "moduleA" });
+await api.slothlet.api.add("plugins.moduleB", "./modules/moduleB", { id: "moduleB" });
 
 // Hot-reload module A - only its own paths are updated
 await api.slothlet.api.add("plugins.moduleA", "./modules/moduleA-v2", {
-	moduleID: "moduleA",
-	forceOverwrite: true // ✅ Allowed - moduleA owns these paths
+	id: "moduleA",
+	collision: { force: true } // ✅ Allowed - moduleA owns these paths
 });
 
 // Cross-module protection - blocked in "error" collision mode
 await api.slothlet.api.add("plugins.moduleB", "./other", {
-	moduleID: "moduleA", // moduleA does not own moduleB's paths
-	forceOverwrite: true // ❌ OWNERSHIP_CONFLICT thrown
+	id: "moduleA", // moduleA does not own moduleB's paths
+	collision: { force: true } // ❌ OWNERSHIP_CONFLICT thrown
 });
 ```
 

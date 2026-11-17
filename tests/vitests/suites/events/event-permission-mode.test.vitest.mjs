@@ -205,7 +205,7 @@ describe.each(getMatrixConfigs())("Events > the event pool follows the permissio
 				silent: true,
 				permissions: { mode: "on", policy: "allow", events: { policy: "deny" } }
 			});
-			await api.slothlet.api.modules.addModule("@local/evt-plugin", { discover: { scanRoot: FIX_EVT_MODULE } });
+			await api.slothlet.api.modules.addModule("@local/evt-plugin", { discover: { root: FIX_EVT_MODULE } });
 			// Manifest: { caller: "subscriber.**", event: "manifest.*", effect: "allow" }.
 			expect(await api.subscriber.subscribe("manifest.data")).toBe("allow");
 			expect(await api.subscriber.subscribe("other.thing")).toBe("deny");
@@ -218,7 +218,7 @@ describe.each(getMatrixConfigs())("Events > the event pool follows the permissio
 				silent: true,
 				permissions: { mode, policy: "allow", events: { policy: "deny" } }
 			});
-			await api.slothlet.api.modules.addModule("@local/evt-plugin", { discover: { scanRoot: FIX_EVT_MODULE } });
+			await api.slothlet.api.modules.addModule("@local/evt-plugin", { discover: { root: FIX_EVT_MODULE } });
 			expect(await api.subscriber.subscribe("manifest.data")).toBe("allow");
 			expect(await api.subscriber.subscribe("other.thing")).toBe("allow");
 		});

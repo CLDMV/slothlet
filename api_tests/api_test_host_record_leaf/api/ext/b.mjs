@@ -74,7 +74,7 @@ export async function prepare() {
 			},
 			invoke: packageInvoke
 		},
-		{ moduleID: "ext-added" }
+		{ id: "ext-added" }
 	);
 	return "prepared";
 }

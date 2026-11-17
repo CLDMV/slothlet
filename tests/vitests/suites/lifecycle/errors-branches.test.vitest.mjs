@@ -100,7 +100,7 @@ describe("SlothletWarning — captured.push via a runtime warning through slothl
 	 */
 	const loadAndWarn = async () => {
 		api = await slothlet({ base: TEST_DIRS.API_TEST, diagnostics: true });
-		await api.slothlet.api.add("locked", TEST_DIRS.API_TEST_MIXED, { collisionMode: "replace" });
+		await api.slothlet.api.add("locked", TEST_DIRS.API_TEST_MIXED, { collision: { mode: "replace" } });
 		return api;
 	};
 

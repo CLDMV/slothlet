@@ -39,8 +39,8 @@ describe.each(getMatrixConfigs())("Versioning > Runtime API > $name", ({ config 
 	it("version.list returns correct structure", async () => {
 		api = await slothlet({ ...config, base: `${BASE}/callers` });
 
-		await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1", default: true, metadata: { stable: true } });
-		await api.slothlet.api.add("auth", `${BASE}/v2`, {}, { version: "v2", metadata: { stable: false } });
+		await api.slothlet.api.add("auth", `${BASE}/v1`, { version: { tag: "v1", default: true, metadata: { stable: true } } });
+		await api.slothlet.api.add("auth", `${BASE}/v2`, { version: { tag: "v2", metadata: { stable: false } } });
 
 		const info = api.slothlet.versioning.list("auth");
 
@@ -58,8 +58,8 @@ describe.each(getMatrixConfigs())("Versioning > Runtime API > $name", ({ config 
 	it("version.setDefault changes the default", async () => {
 		api = await slothlet({ ...config, base: `${BASE}/callers` });
 
-		await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1", default: true });
-		await api.slothlet.api.add("auth", `${BASE}/v2`, {}, { version: "v2" });
+		await api.slothlet.api.add("auth", `${BASE}/v1`, { version: { tag: "v1", default: true } });
+		await api.slothlet.api.add("auth", `${BASE}/v2`, { version: { tag: "v2" } });
 
 		expect(api.slothlet.versioning.list("auth").default).toBe("v1");
 		api.slothlet.versioning.setDefault("auth", "v2");
@@ -69,7 +69,7 @@ describe.each(getMatrixConfigs())("Versioning > Runtime API > $name", ({ config 
 	it("version.getVersionMetadata returns stored metadata", async () => {
 		api = await slothlet({ ...config, base: `${BASE}/callers` });
 
-		await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1", metadata: { stable: true, tier: "ga" } });
+		await api.slothlet.api.add("auth", `${BASE}/v1`, { version: { tag: "v1", metadata: { stable: true, tier: "ga" } } });
 
 		const meta = api.slothlet.versioning.getVersionMetadata("auth", "v1");
 		expect(meta).toHaveProperty("version", "v1"); // auto-injected
@@ -80,8 +80,8 @@ describe.each(getMatrixConfigs())("Versioning > Runtime API > $name", ({ config 
 	it("version.unregister removes a version and updates list", async () => {
 		api = await slothlet({ ...config, base: `${BASE}/callers` });
 
-		await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1", default: true });
-		await api.slothlet.api.add("auth", `${BASE}/v2`, {}, { version: "v2" });
+		await api.slothlet.api.add("auth", `${BASE}/v1`, { version: { tag: "v1", default: true } });
+		await api.slothlet.api.add("auth", `${BASE}/v2`, { version: { tag: "v2" } });
 
 		const result = await api.slothlet.versioning.unregister("auth", "v2");
 		expect(result).toBe(true);
@@ -107,7 +107,7 @@ describe.each(getMatrixConfigs())("Versioning > Runtime API > $name", ({ config 
 	it("version.setDefault throws VERSION_NOT_FOUND for unknown version tag", async () => {
 		api = await slothlet({ ...config, base: `${BASE}/callers` });
 
-		await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1" });
+		await api.slothlet.api.add("auth", `${BASE}/v1`, { version: { tag: "v1" } });
 
 		expect(() => api.slothlet.versioning.setDefault("auth", "v99")).toThrow("VERSION_NOT_FOUND");
 	});
@@ -122,7 +122,7 @@ describe.each(getMatrixConfigs())("Versioning > Runtime API > $name", ({ config 
 	it("version.unregister returns false for unknown version tag", async () => {
 		api = await slothlet({ ...config, base: `${BASE}/callers` });
 
-		await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1" });
+		await api.slothlet.api.add("auth", `${BASE}/v1`, { version: { tag: "v1" } });
 
 		const result = await api.slothlet.versioning.unregister("auth", "v99");
 		expect(result).toBe(false);
@@ -138,7 +138,7 @@ describe.each(getMatrixConfigs())("Versioning > Runtime API > $name", ({ config 
 	it("version.getVersionMetadata returns undefined for unknown version tag", async () => {
 		api = await slothlet({ ...config, base: `${BASE}/callers` });
 
-		await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1", metadata: { stable: true } });
+		await api.slothlet.api.add("auth", `${BASE}/v1`, { version: { tag: "v1", metadata: { stable: true } } });
 
 		const meta = api.slothlet.versioning.getVersionMetadata("auth", "v99");
 		expect(meta).toBeUndefined();
@@ -147,7 +147,7 @@ describe.each(getMatrixConfigs())("Versioning > Runtime API > $name", ({ config 
 	it("version.setVersionMetadata merges patch into stored version metadata", async () => {
 		api = await slothlet({ ...config, base: `${BASE}/callers` });
 
-		await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1", metadata: { tier: "beta" } });
+		await api.slothlet.api.add("auth", `${BASE}/v1`, { version: { tag: "v1", metadata: { tier: "beta" } } });
 
 		api.slothlet.versioning.setVersionMetadata("auth", "v1", { stable: true, tier: "ga" });
 
@@ -167,7 +167,7 @@ describe.each(getMatrixConfigs())("Versioning > Runtime API > $name", ({ config 
 	it("version.setVersionMetadata throws VERSION_NOT_FOUND for unknown version tag", async () => {
 		api = await slothlet({ ...config, base: `${BASE}/callers` });
 
-		await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1" });
+		await api.slothlet.api.add("auth", `${BASE}/v1`, { version: { tag: "v1" } });
 
 		expect(() => api.slothlet.versioning.setVersionMetadata("auth", "v99", { stable: true })).toThrow("VERSION_NOT_FOUND");
 	});
@@ -175,7 +175,7 @@ describe.each(getMatrixConfigs())("Versioning > Runtime API > $name", ({ config 
 	it("version.setVersionMetadata with a non-object patch silently merges nothing", async () => {
 		api = await slothlet({ ...config, base: `${BASE}/callers` });
 
-		await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1", default: true, metadata: { stable: true } });
+		await api.slothlet.api.add("auth", `${BASE}/v1`, { version: { tag: "v1", default: true, metadata: { stable: true } } });
 
 		// Passing null as patch hits the (patch && typeof patch === "object" ? patch : {}) false branch —
 		// it spreads {} instead of the non-object, so existing metadata is preserved.
@@ -187,7 +187,7 @@ describe.each(getMatrixConfigs())("Versioning > Runtime API > $name", ({ config 
 	it("metadata.setForVersion sets regular metadata on a versioned module", async () => {
 		api = await slothlet({ ...config, base: `${BASE}/callers` });
 
-		await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1", default: true });
+		await api.slothlet.api.add("auth", `${BASE}/v1`, { version: { tag: "v1", default: true } });
 
 		api.slothlet.metadata.setForVersion("auth", "v1", "stable", true);
 		api.slothlet.metadata.setForVersion("auth", "v1", { region: "us" });
@@ -209,7 +209,7 @@ describe.each(getMatrixConfigs())("Versioning > Runtime API > $name", ({ config 
 
 		// Register a versioned module with NO metadata option — exercises the getPathMetadata
 		// parent-path traversal false branch where a path segment is not in the store.
-		await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1" });
+		await api.slothlet.api.add("auth", `${BASE}/v1`, { version: { tag: "v1" } });
 		const meta = api.slothlet.metadata.getForVersion("auth", "v1");
 		// No metadata was set, so result should be an empty object (no user keys).
 		expect(meta).toEqual({});
@@ -218,7 +218,7 @@ describe.each(getMatrixConfigs())("Versioning > Runtime API > $name", ({ config 
 	it("metadata.setForVersion throws VERSION_NOT_FOUND for unknown version tag", async () => {
 		api = await slothlet({ ...config, base: `${BASE}/callers` });
 
-		await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1" });
+		await api.slothlet.api.add("auth", `${BASE}/v1`, { version: { tag: "v1" } });
 
 		expect(() => api.slothlet.metadata.setForVersion("auth", "v99", "stable", true)).toThrow("VERSION_NOT_FOUND");
 	});
@@ -226,7 +226,7 @@ describe.each(getMatrixConfigs())("Versioning > Runtime API > $name", ({ config 
 	it("versionManager.getVersionMetadata returns stored metadata by moduleID directly", async () => {
 		api = await slothlet({ ...config, base: `${BASE}/callers` });
 
-		await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1", metadata: { stable: true } });
+		await api.slothlet.api.add("auth", `${BASE}/v1`, { version: { tag: "v1", metadata: { stable: true } } });
 
 		const info = api.slothlet.versioning.list("auth");
 		const { moduleID } = info.versions.v1;

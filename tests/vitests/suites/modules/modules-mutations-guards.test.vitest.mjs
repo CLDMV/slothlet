@@ -88,7 +88,7 @@ describe("api.slothlet.api.modules.* — mutation guards", () => {
 
 	it("addModule(name) throws INVALID_CONFIG_MUTATIONS_DISABLED when mutations.add is false", async () => {
 		const mm = await bootWithMutations({ add: false });
-		const [first] = await mm.discover({ scanRoot: FIX_FOLDER });
+		const [first] = await mm.discover({ root: FIX_FOLDER });
 		expect(first?.packageName).toBeTypeOf("string");
 
 		await withSuppressedSlothletErrorOutput(async () => {
@@ -98,7 +98,7 @@ describe("api.slothlet.api.modules.* — mutation guards", () => {
 
 	it("addModules([...]) throws INVALID_CONFIG_MUTATIONS_DISABLED when mutations.add is false", async () => {
 		const mm = await bootWithMutations({ add: false });
-		const found = await mm.discover({ scanRoot: FIX_FOLDER });
+		const found = await mm.discover({ root: FIX_FOLDER });
 		expect(found.length).toBeGreaterThan(0);
 
 		await withSuppressedSlothletErrorOutput(async () => {
@@ -110,7 +110,7 @@ describe("api.slothlet.api.modules.* — mutation guards", () => {
 		const mm = await bootWithMutations({ add: false });
 
 		await withSuppressedSlothletErrorOutput(async () => {
-			await expect(mm.addDiscovered({ scanRoot: FIX_FOLDER })).rejects.toThrow("INVALID_CONFIG_MUTATIONS_DISABLED");
+			await expect(mm.addDiscovered({ discover: { root: FIX_FOLDER } })).rejects.toThrow("INVALID_CONFIG_MUTATIONS_DISABLED");
 		});
 	});
 
@@ -134,7 +134,7 @@ describe("api.slothlet.api.modules.* — mutation guards", () => {
 		});
 		try {
 			const setupMm = setupApi.slothlet.api.modules;
-			const [first] = await setupMm.discover({ scanRoot: FIX_FOLDER });
+			const [first] = await setupMm.discover({ root: FIX_FOLDER });
 			expect(first?.packageName).toBeTypeOf("string");
 		} finally {
 			await setupApi.shutdown?.().catch(() => {});
@@ -144,7 +144,7 @@ describe("api.slothlet.api.modules.* — mutation guards", () => {
 		// module to operate against. (Mounting succeeds because mutations.add
 		// is still true — the gate fires when removeModule is called.)
 		const mm = await bootWithMutations({ add: true, remove: false });
-		const [first] = await mm.discover({ scanRoot: FIX_FOLDER });
+		const [first] = await mm.discover({ root: FIX_FOLDER });
 		await mm.addModule(first);
 
 		await withSuppressedSlothletErrorOutput(async () => {
@@ -158,7 +158,7 @@ describe("api.slothlet.api.modules.* — mutation guards", () => {
 		const mm = await bootWithMutations({ add: false, remove: false });
 
 		// All read-only methods must succeed even with both mutation flags off.
-		const found = await mm.discover({ scanRoot: FIX_FOLDER });
+		const found = await mm.discover({ root: FIX_FOLDER });
 		expect(Array.isArray(found)).toBe(true);
 
 		const sorted = mm.sort(found);
@@ -178,7 +178,7 @@ describe("api.slothlet.api.modules.* — mutation guards", () => {
 
 	it("addModule + removeModule succeed when both mutation flags are enabled (control)", async () => {
 		const mm = await bootWithMutations({ add: true, remove: true });
-		const [first] = await mm.discover({ scanRoot: FIX_FOLDER });
+		const [first] = await mm.discover({ root: FIX_FOLDER });
 		expect(first?.packageName).toBeTypeOf("string");
 
 		// Both calls must resolve without throwing the mutation-disabled guard.

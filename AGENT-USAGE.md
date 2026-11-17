@@ -519,9 +519,9 @@ const api = await slothlet({
 	// versioning: { dispatcher: (allVersions, caller) => { ... } }  // custom function
 });
 
-// Register versioned modules — 4th argument is versionConfig
-await api.slothlet.api.add("auth", "./api/v1", {}, { version: "v1", default: true });
-await api.slothlet.api.add("auth", "./api/v2", {}, { version: "v2" });
+// Register versioned modules — the version goes under options.version
+await api.slothlet.api.add("auth", "./api/v1", { version: { tag: "v1", default: true } });
+await api.slothlet.api.add("auth", "./api/v2", { version: { tag: "v2" } });
 ```
 
 ### Access Patterns
@@ -539,18 +539,15 @@ api.v2.auth.login(user, pass); // → always v2
 
 ```js
 // Register a module WITH a version tag so the discriminator can use it
-await api.slothlet.api.add(
-	"services/payments",
-	"./payments",
-	{},
-	{
-		version: "v2",
-		metadata: { stable: true } // versionConfig.metadata — stored in VersionManager only
+await api.slothlet.api.add("services/payments", "./payments", {
+	version: {
+		tag: "v2",
+		metadata: { stable: true } // options.version.metadata — stored in VersionManager only
 	}
-);
+});
 
-// options.metadata (3rd arg)     → regular Metadata system (metadata.caller() etc.)
-// versionConfig.metadata (4th arg) → version-system only, used by the discriminator
+// options.metadata         → regular Metadata system (metadata.caller() etc.)
+// options.version.metadata → version-system only, used by the discriminator
 ```
 
 ### Runtime Version Management
@@ -628,7 +625,7 @@ await api.run({ userId: "alice" }, fn);
 // ✅ CORRECT (v3 API)
 await api.slothlet.api.add("plugins", "./dir");
 await api.slothlet.api.reload("math.*");
-api.slothlet.hook.on("before:math.*", handler);
+api.slothlet.hook.on("math.*:before", handler);
 await api.slothlet.context.run({ userId: "alice" }, fn);
 ```
 
@@ -686,16 +683,16 @@ const api = await slothlet({ base: "./api", versionResolver: "version" });
 const api = await slothlet({ base: "./api", versioning: { dispatcher: "version" } });
 ```
 
-### ❌ Mistake 8: Conflating versionConfig.metadata with options.metadata
+### ❌ Mistake 8: Conflating options.version.metadata with options.metadata
 
 ```js
 // ❌ WRONG — puts version tag in the regular Metadata system instead of VersionManager
 await api.slothlet.api.add("auth", "./v2", { metadata: { version: "v2" } });
 
 // ✅ CORRECT
-// options.metadata (3rd arg)       → regular Metadata system (metadata.caller() etc.)
-// versionConfig.metadata (4th arg) → VersionManager only, used by the discriminator
-await api.slothlet.api.add("auth", "./v2", { metadata: { role: "core" } }, { version: "v2", metadata: { stable: true } });
+// options.metadata         → regular Metadata system (metadata.caller() etc.)
+// options.version.metadata → VersionManager only, used by the discriminator
+await api.slothlet.api.add("auth", "./v2", { metadata: { role: "core" }, version: { tag: "v2", metadata: { stable: true } } });
 ```
 
 ---
@@ -713,7 +710,7 @@ await api.slothlet.api.add("auth", "./v2", { metadata: { role: "core" } }, { ver
 - [ ] **Hook subsets**: auth/security → `subset: "before"`, main logic → `"primary"`, audit → `"after"`
 - [ ] **Versioning config key is `versioning: { dispatcher }`**, not `versionDispatcher:`, `versionResolver:` or `versionDiscriminator:`
 - [ ] **Use `api.auth` (dispatcher path) for dynamic routing**, not `api.v1.auth` (direct path bypasses discriminator)
-- [ ] **`versionConfig.metadata` (4th arg)** and **`options.metadata` (3rd arg)** are separate systems — don't conflate them
+- [ ] **`options.version.metadata`** and **`options.metadata`** are separate systems — don't conflate them
 - [ ] **Double quotes everywhere** - follow Slothlet coding standards
 
 ---

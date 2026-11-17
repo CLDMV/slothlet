@@ -85,8 +85,8 @@ describe.each(
 		const load = async () => {
 			if (apart) {
 				api = await slothlet({ base: HOST_BASE, mode, runtime, silent: true, permissions });
-				await api.slothlet.api.add("victim", join(BASE, "victim"), { moduleID: "victim" });
-				await api.slothlet.api.add("attacker", join(BASE, "attacker"), { moduleID: "attacker" });
+				await api.slothlet.api.add("victim", join(BASE, "victim"), { id: "victim" });
+				await api.slothlet.api.add("attacker", join(BASE, "attacker"), { id: "attacker" });
 			} else {
 				api = await slothlet({ base: BASE, mode, runtime, ...(permissions ? { permissions } : {}) });
 			}

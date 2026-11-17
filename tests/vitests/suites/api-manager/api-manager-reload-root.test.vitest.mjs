@@ -218,10 +218,12 @@ describe("_reloadByApiPath sort comparator — two modules for same path", () =>
 		// _findAffectedCaches step 3 collects both → moduleIDsToReload.length = 2.
 		// sort() comparator is called for the pair → lines 1996-1997 evaluate to false
 		// (neither module has endpoint ".") → falls through to addHistory-index sort.
-		await api.slothlet.api.add("shared", TEST_DIRS.API_TEST, { moduleID: "sort-mod-a" });
+		await api.slothlet.api.add("shared", TEST_DIRS.API_TEST, { id: "sort-mod-a" });
 		await api.slothlet.api.add("shared", TEST_DIRS.API_TEST_MIXED, {
-			moduleID: "sort-mod-b",
-			collisionMode: "merge"
+			id: "sort-mod-b",
+			collision: {
+				mode: "merge"
+			}
 		});
 
 		expect(api.shared).toBeDefined();
@@ -233,10 +235,12 @@ describe("_reloadByApiPath sort comparator — two modules for same path", () =>
 	it("sort comparator runs for a second pair of sibling modules (eager)", async () => {
 		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager" });
 
-		await api.slothlet.api.add("sortSibling", TEST_DIRS.API_TEST_MIXED, { moduleID: "sibling-a" });
+		await api.slothlet.api.add("sortSibling", TEST_DIRS.API_TEST_MIXED, { id: "sibling-a" });
 		await api.slothlet.api.add("sortSibling", TEST_DIRS.API_TEST, {
-			moduleID: "sibling-b",
-			collisionMode: "merge"
+			id: "sibling-b",
+			collision: {
+				mode: "merge"
+			}
 		});
 
 		expect(api.sortSibling).toBeDefined();

@@ -63,9 +63,9 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 	 */
 	async function mountModules(options = {}) {
 		api = await slothlet({ base: TEST_DIRS.API_TEST, mode, runtime, silent: true, ...PERMISSIONS_ON, ...options });
-		await api.slothlet.api.add("callee", path.join(FIXTURE, "callee"), { moduleID: "callee" });
-		await api.slothlet.api.add("vault", path.join(FIXTURE, "vault"), { moduleID: "vault" });
-		await api.slothlet.api.add("supplier", path.join(FIXTURE, "supplier"), { moduleID: "supplier" });
+		await api.slothlet.api.add("callee", path.join(FIXTURE, "callee"), { id: "callee" });
+		await api.slothlet.api.add("vault", path.join(FIXTURE, "vault"), { id: "vault" });
+		await api.slothlet.api.add("supplier", path.join(FIXTURE, "supplier"), { id: "supplier" });
 		return api;
 	}
 
@@ -152,8 +152,8 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 		 */
 		async function mountAll(options = {}) {
 			await mountModules(options);
-			await api.slothlet.api.add("front", path.join(FIXTURE, "front"), { moduleID: "front" });
-			await api.slothlet.api.add("bystander", path.join(FIXTURE, "bystander"), { moduleID: "bystander" });
+			await api.slothlet.api.add("front", path.join(FIXTURE, "front"), { id: "front" });
+			await api.slothlet.api.add("bystander", path.join(FIXTURE, "bystander"), { id: "bystander" });
 			return api;
 		}
 
@@ -185,7 +185,7 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 
 		it("lets the root module write symbols anywhere", async () => {
 			api = await slothlet({ base: path.join(FIXTURE, "supplier"), mode, runtime, silent: true });
-			await api.slothlet.api.add("callee", path.join(FIXTURE, "callee"), { moduleID: "callee" });
+			await api.slothlet.api.add("callee", path.join(FIXTURE, "callee"), { id: "callee" });
 			expect(await api.attack.writeCalleeSymbol()).toEqual(DONE);
 			expect(await api.attack.writeCalleeSymbol("callee.ops", "toPrimitive")).toEqual(DONE);
 		});
@@ -257,7 +257,7 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 
 	it("allows two modules mounted at the same point to write under it", async () => {
 		await mountModules();
-		await api.slothlet.api.add("callee", path.join(FIXTURE, "callee_peer"), { moduleID: "callee-peer" });
+		await api.slothlet.api.add("callee", path.join(FIXTURE, "callee_peer"), { id: "callee-peer" });
 		expect(await api.callee.peer.writeShared("shared")).toBe("shared");
 		expect(api.callee.ops.peerNote).toBe("shared");
 	});
@@ -319,9 +319,9 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 			permissions: { private: { host: "allow" } }
 		});
 		for (const rule of grantMount("callee.boot")) api.slothlet.permissions.addRule(rule);
-		await api.slothlet.api.add("callee", path.join(FIXTURE, "callee"), { moduleID: "callee" });
-		await api.slothlet.api.add("supplier", path.join(FIXTURE, "supplier"), { moduleID: "supplier" });
-		await api.slothlet.api.add("callee.boot", path.join(FIXTURE, "routine_a"), { moduleID: "boot-a" });
+		await api.slothlet.api.add("callee", path.join(FIXTURE, "callee"), { id: "callee" });
+		await api.slothlet.api.add("supplier", path.join(FIXTURE, "supplier"), { id: "supplier" });
+		await api.slothlet.api.add("callee.boot", path.join(FIXTURE, "routine_a"), { id: "boot-a" });
 		await api.supplier.attack.addAt("callee.boot", path.join(FIXTURE, "routine_b"), "boot-b");
 		expect(api.callee.boot.initialize.__slothletRoutineStack).toBe(true);
 		expect(await api.callee.boot.initialize()).toEqual(["a", "b"]);
@@ -403,8 +403,8 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 		let outcome;
 		await withSuppressedSlothletErrorOutput(async () => {
 			const lurking = api.supplier.attack.lurk();
-			await api.slothlet.api.add("vault2", path.join(FIXTURE, "vault"), { moduleID: "vault2" });
-			await api.slothlet.api.add("vault3", path.join(FIXTURE, "callee_peer"), { moduleID: "vault3" });
+			await api.slothlet.api.add("vault2", path.join(FIXTURE, "vault"), { id: "vault2" });
+			await api.slothlet.api.add("vault3", path.join(FIXTURE, "callee_peer"), { id: "vault3" });
 			api.supplier.attack.stopLurk();
 			outcome = await lurking;
 		});
@@ -610,7 +610,7 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 		["bus", true]
 	])("refuses writes through the %s instance another module's method hands back as its receiver (async %s)", async (name, async) => {
 		await mountModules();
-		await api.slothlet.api.add("svc", path.join(FIXTURE, "svc"), { moduleID: "svc" });
+		await api.slothlet.api.add("svc", path.join(FIXTURE, "svc"), { id: "svc" });
 		let outcome;
 		await withSuppressedSlothletErrorOutput(async () => {
 			outcome = await api.supplier.attack.instanceLeak(name, async);
@@ -681,9 +681,9 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 		const write = await api.supplier.attack.captureCallee();
 		const borrow = await api.supplier.attack.captureBorrow();
 		await api.slothlet.restart();
-		await api.slothlet.api.add("callee", path.join(FIXTURE, "callee"), { moduleID: "callee" });
-		await api.slothlet.api.add("vault", path.join(FIXTURE, "vault"), { moduleID: "vault" });
-		await api.slothlet.api.add("supplier", path.join(FIXTURE, "supplier"), { moduleID: "supplier" });
+		await api.slothlet.api.add("callee", path.join(FIXTURE, "callee"), { id: "callee" });
+		await api.slothlet.api.add("vault", path.join(FIXTURE, "vault"), { id: "vault" });
+		await api.slothlet.api.add("supplier", path.join(FIXTURE, "supplier"), { id: "supplier" });
 		withSuppressedSlothletErrorOutputSync(() => {
 			expect(() => write()).toThrow(/LOOSE_SET_NOT_OWNED/);
 		});
@@ -715,8 +715,8 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 	 */
 	async function mountSideChannels(options = {}) {
 		await mountModules(options);
-		await api.slothlet.api.add("svc", path.join(FIXTURE, "svc"), { moduleID: "svc" });
-		await api.slothlet.api.add("evil", path.join(FIXTURE, "evil"), { moduleID: "evil" });
+		await api.slothlet.api.add("svc", path.join(FIXTURE, "svc"), { id: "svc" });
+		await api.slothlet.api.add("evil", path.join(FIXTURE, "evil"), { id: "evil" });
 		api.svc.state = {
 			secret: "state-secret",
 			read() {
@@ -797,7 +797,7 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 		async (event) => {
 			await mountSideChannels();
 			const subscription = await api.evil.x.keepLifecycle(event, "vault2");
-			await api.slothlet.api.add("vault2", path.join(FIXTURE, "callee"), { moduleID: "vault2" });
+			await api.slothlet.api.add("vault2", path.join(FIXTURE, "callee"), { id: "vault2" });
 			expect(await api.vault2.ops.useSecret()).toBe("callee-original");
 			await api.slothlet.api.reload("vault2");
 			expect(await api.vault2.ops.useSecret()).toBe("callee-original");
@@ -823,7 +823,7 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 			await mountSideChannels();
 			const subscription = await api.evil.x.subscribeWriter();
 			await withSuppressedSlothletErrorOutput(async () => {
-				if (trigger === "the host's api.add") await api.slothlet.api.add("vault2", path.join(FIXTURE, "vault"), { moduleID: "vault2" });
+				if (trigger === "the host's api.add") await api.slothlet.api.add("vault2", path.join(FIXTURE, "vault"), { id: "vault2" });
 				else await api.callee.ops.writeOwnNested(() => 1);
 				await new Promise((resolve) => setTimeout(resolve, 0));
 			});
@@ -848,8 +848,8 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 		"refuses a later write through a version dispatcher a module read (%s)",
 		async (how) => {
 			await mountSideChannels();
-			await api.slothlet.api.add("auth", path.join(TEST_DIRS.API_TEST_VERSIONED, "v1"), {}, { version: "v1", default: true });
-			await api.slothlet.api.add("auth", path.join(TEST_DIRS.API_TEST_VERSIONED, "v2"), {}, { version: "v2" });
+			await api.slothlet.api.add("auth", path.join(TEST_DIRS.API_TEST_VERSIONED, "v1"), { version: { tag: "v1", default: true } });
+			await api.slothlet.api.add("auth", path.join(TEST_DIRS.API_TEST_VERSIONED, "v2"), { version: { tag: "v2" } });
 			const later = await api.evil.x.dispatcherLeak(how);
 			withSuppressedSlothletErrorOutputSync(() => {
 				expect(() => later()).toThrow(/LOOSE_SET_NOT_OWNED/);
@@ -888,7 +888,7 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 		await mountSideChannels({
 			permissions: { policy: "allow", rules: [{ caller: "evil.**", target: "slothlet.lockCaller.caller", effect: "allow" }] }
 		});
-		await api.slothlet.api.add("front", path.join(FIXTURE, "front"), { moduleID: "front" });
+		await api.slothlet.api.add("front", path.join(FIXTURE, "front"), { id: "front" });
 		const later = await api.front.relay.keepCallerPin();
 		withSuppressedSlothletErrorOutputSync(() => {
 			expect(() => later()).toThrow(/LOOSE_SET_NOT_OWNED/);
@@ -974,8 +974,8 @@ describe.each([
 
 	it("refuses a write the live runtime cannot attribute to one call, rather than taking the store's last caller", async () => {
 		api = await slothlet({ base: TEST_DIRS.API_TEST, mode, runtime, silent: true, ...PERMISSIONS_ON });
-		await api.slothlet.api.add("callee", path.join(FIXTURE, "callee"), { moduleID: "callee" });
-		await api.slothlet.api.add("twin", path.join(FIXTURE, "twin"), { moduleID: "twin" });
+		await api.slothlet.api.add("callee", path.join(FIXTURE, "callee"), { id: "callee" });
+		await api.slothlet.api.add("twin", path.join(FIXTURE, "twin"), { id: "twin" });
 		const [goGate, releaseGo] = gate();
 		const [peerGate, releasePeer] = gate();
 		const [holdGate, releaseHold] = gate();

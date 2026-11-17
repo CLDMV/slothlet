@@ -53,7 +53,7 @@ describe.each(configs)("deleting a member of a function node > $mode / $runtime"
 
 	it.each(["fnroot", "asyncroot"])("removes it, as from a function: %s", async (root) => {
 		api = await slothlet({ base: join(FIXTURE, "objroot"), silent: true, mode, runtime });
-		await api.slothlet.api.add("zz", join(FIXTURE, root), { moduleID: "zz" });
+		await api.slothlet.api.add("zz", join(FIXTURE, root), { id: "zz" });
 		await api.zz.data;
 		expect(typeof api.zz).toBe("function");
 		const deleted = delete api.zz.data;
@@ -65,8 +65,8 @@ describe.each(configs)("deleting a member of a function node > $mode / $runtime"
 
 	it("removes it when a module allowed to change the node deletes it", async () => {
 		api = await slothlet({ base: join(FIXTURE, "objroot"), silent: true, mode, runtime });
-		await api.slothlet.api.add("zz", join(FIXTURE, "fnroot"), { moduleID: "zz" });
-		await api.slothlet.api.add("w", join(FIXTURE, "writer"), { moduleID: "w" });
+		await api.slothlet.api.add("zz", join(FIXTURE, "fnroot"), { id: "zz" });
+		await api.slothlet.api.add("w", join(FIXTURE, "writer"), { id: "w" });
 		await api.zz.data;
 		expect(api.w.ops.change("delete", "given", "zz", api)).toEqual({ deleted: true, has: false });
 		expect(Object.keys(api.zz)).not.toContain("data");

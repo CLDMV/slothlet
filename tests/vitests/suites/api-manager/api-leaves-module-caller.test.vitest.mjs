@@ -43,7 +43,7 @@ const all = {};
 
 beforeAll(async () => {
 	const api = await slothlet({ base: BASE, mode: "eager", silent: true });
-	await api.slothlet.api.add("ext", EXT, { moduleID: "ext-mod" });
+	await api.slothlet.api.add("ext", EXT, { id: "ext-mod" });
 	all.base = await api.slothlet.api.leaves(".");
 	all.ext = await api.slothlet.api.leaves("ext-mod");
 	await api.shutdown();
@@ -59,7 +59,7 @@ describe.each(configs)("api.leaves from a module > $mode / $runtime / $attributi
 
 	it("shows a module its own module's leaves, privates included, and another module's without them", async () => {
 		api = await slothlet({ base: BASE, mode, runtime, silent: true, permissions: { policy: "allow", caller: { attribution }, rules: [] } });
-		await api.slothlet.api.add("ext", EXT, { moduleID: "ext-mod" });
+		await api.slothlet.api.add("ext", EXT, { id: "ext-mod" });
 		expect(all.ext.some(isPrivate)).toBe(true);
 		expect(all.base.some(isPrivate)).toBe(true);
 		expect(await api.ext.list.paths("ext")).toEqual({ paths: all.ext, error: null });

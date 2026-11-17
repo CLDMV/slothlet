@@ -73,7 +73,7 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])("api-manager — remove a m
 		await writeModule(store, "errors.mjs", FROZEN_ERRORS);
 
 		api = await slothlet({ mode, silent: true });
-		await api.slothlet.api.add(["store"], store, { moduleID: "m" });
+		await api.slothlet.api.add(["store"], store, { id: "m" });
 		expect(api.store.errors.CODES.NOT_FOUND).toBe("not-found");
 		expect(await api.store.errors.isStoreError(new Error("x"))).toBe(true);
 
@@ -90,7 +90,7 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])("api-manager — remove a m
 		}
 
 		// Re-adding the same moduleID restores a fully working module.
-		await api.slothlet.api.add(["store"], store, { moduleID: "m" });
+		await api.slothlet.api.add(["store"], store, { id: "m" });
 		expect(api.store.errors.CODES.NOT_FOUND).toBe("not-found");
 		expect(api.store.errors.CODES.CONFLICT).toBe("conflict");
 		expect(await api.store.errors.isStoreError(new Error("x"))).toBe(true);
@@ -103,7 +103,7 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])("api-manager — remove a m
 		await writeModule(cfg, "values.mjs", SEALED);
 
 		api = await slothlet({ mode, silent: true });
-		await api.slothlet.api.add(["cfg"], cfg, { moduleID: "sealed" });
+		await api.slothlet.api.add(["cfg"], cfg, { id: "sealed" });
 		expect(api.cfg.values.limits.max).toBe(10);
 		expect(api.cfg.values.fixed.answer).toBe(42);
 
@@ -119,7 +119,7 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])("api-manager — remove a m
 		await writeModule(store, "table.mjs", `export const table = { a: 1, b: 2 };`);
 
 		api = await slothlet({ mode, silent: true });
-		await api.slothlet.api.add(["store"], store, { moduleID: "m" });
+		await api.slothlet.api.add(["store"], store, { id: "m" });
 
 		// Frozen: the same strict-mode TypeError a direct delete on the frozen object throws, value kept.
 		const codes = api.store.errors.CODES;
@@ -146,8 +146,8 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])("api-manager — remove a m
 		await writeModule(other, "ping.mjs", "export function ping() { return 'pong'; }");
 
 		api = await slothlet({ mode, silent: true });
-		await api.slothlet.api.add(["store"], store, { moduleID: "m" });
-		await api.slothlet.api.add(["other"], other, { moduleID: "o" });
+		await api.slothlet.api.add(["store"], store, { id: "m" });
+		await api.slothlet.api.add(["other"], other, { id: "o" });
 
 		await api.slothlet.api.remove("m");
 		expect(api.store).toBeUndefined();

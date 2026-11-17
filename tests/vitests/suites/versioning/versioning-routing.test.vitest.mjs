@@ -45,8 +45,8 @@ describe.each(getMatrixConfigs())("Versioning > Routing > $name", ({ config }) =
 			}
 		});
 
-		await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1", default: true });
-		await api.slothlet.api.add("auth", `${BASE}/v2`, {}, { version: "v2" });
+		await api.slothlet.api.add("auth", `${BASE}/v1`, { version: { tag: "v1", default: true } });
+		await api.slothlet.api.add("auth", `${BASE}/v2`, { version: { tag: "v2" } });
 
 		// Tag the v2-caller with callerVersion "v2" via regular metadata
 		api.slothlet.metadata.setFor("v2Caller", { callerVersion: "v2" });
@@ -65,8 +65,8 @@ describe.each(getMatrixConfigs())("Versioning > Routing > $name", ({ config }) =
 			}
 		});
 
-		await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1", default: true });
-		await api.slothlet.api.add("auth", `${BASE}/v2`, {}, { version: "v2" });
+		await api.slothlet.api.add("auth", `${BASE}/v1`, { version: { tag: "v1", default: true } });
+		await api.slothlet.api.add("auth", `${BASE}/v2`, { version: { tag: "v2" } });
 
 		// Tag v1-caller with callerVersion "v1"
 		api.slothlet.metadata.setFor("v1Caller", { callerVersion: "v1" });
@@ -79,11 +79,11 @@ describe.each(getMatrixConfigs())("Versioning > Routing > $name", ({ config }) =
 	it("routes via string discriminator using caller versionMetadata.version", async () => {
 		api = await slothlet({ ...config, base: `${BASE}/callers`, versioning: { dispatcher: "version" } });
 
-		await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1", default: true });
-		await api.slothlet.api.add("auth", `${BASE}/v2`, {}, { version: "v2" });
+		await api.slothlet.api.add("auth", `${BASE}/v1`, { version: { tag: "v1", default: true } });
+		await api.slothlet.api.add("auth", `${BASE}/v2`, { version: { tag: "v2" } });
 
 		// Register v2Caller as a versioned module so it gets version metadata
-		await api.slothlet.api.add("vCaller", `${BASE}/callers/v2-caller.mjs`, {}, { version: "v2" });
+		await api.slothlet.api.add("vCaller", `${BASE}/callers/v2-caller.mjs`, { version: { tag: "v2" } });
 
 		// Call through the versioned path — caller has versionMetadata.version = "v2"
 		const result = api.v2.vCaller.callLogin("alice", "secret");

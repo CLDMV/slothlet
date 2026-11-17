@@ -348,7 +348,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hook Pattern Match
 		// In v3, pattern is part of the first argument typePattern string
 		withSuppressedSlothletErrorOutputSync(() => {
 			expect(() => {
-				api.slothlet.hook.on(`before:${pattern}`, () => {
+				api.slothlet.hook.on(`${pattern}:before`, () => {
 					// Hook registered but may not be called
 				});
 			}).toThrow("HOOK_BRACE_EXPANSION_MAX_DEPTH");

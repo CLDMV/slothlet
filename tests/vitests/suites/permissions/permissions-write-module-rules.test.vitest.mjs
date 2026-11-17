@@ -69,8 +69,8 @@ describe.each(CONFIGS)("module write rules (#625) — $mode / $runtime", ({ mode
 	 */
 	async function load(options = { permissions: {} }) {
 		api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, ...options });
-		await api.slothlet.api.add("victim", path.join(FIXTURE, "victim"), { moduleID: "victim" });
-		for (const name of ["guest", "other", "mgr"]) await api.slothlet.api.add(name, path.join(FIXTURE, "guest"), { moduleID: name });
+		await api.slothlet.api.add("victim", path.join(FIXTURE, "victim"), { id: "victim" });
+		for (const name of ["guest", "other", "mgr"]) await api.slothlet.api.add(name, path.join(FIXTURE, "guest"), { id: name });
 		return api;
 	}
 
@@ -81,7 +81,7 @@ describe.each(CONFIGS)("module write rules (#625) — $mode / $runtime", ({ mode
 	 */
 	async function mountVault(name) {
 		try {
-			await api.slothlet.api.modules.addModule(`@local/${name}`, { discover: { scanRoot: path.join(FIXTURE, "modules", name) } });
+			await api.slothlet.api.modules.addModule(`@local/${name}`, { discover: { root: path.join(FIXTURE, "modules", name) } });
 			return "done";
 		} catch (error) {
 			return error?.code ?? String(error);

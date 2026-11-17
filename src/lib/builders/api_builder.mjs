@@ -38,6 +38,7 @@ import { internals as framePlacementInternals } from "#handlers/frame-placement"
 import { internals as frameworkInternalsInternals } from "#handlers/framework-internals";
 import { ceilingMembers, combineCeilings, identityCeilings, internals as trustedRootInternals } from "#handlers/trusted-root";
 import { getLanguage, t, translate, internals as translationsInternals } from "#i18n";
+import { assertOptionKeys } from "#helpers/config-schema";
 import {
 	ArrayMethods,
 	Arrays,
@@ -268,6 +269,82 @@ function runtime_resolveAddFolder(slothlet, folderPath) {
 	if (!resolver || slothlet.envTarget === "browser") return folderPath;
 	const resolve = (entry) => (typeof entry === "string" && entry ? resolver.resolvePathFromCaller(entry) : entry);
 	return Arrays.isArray(folderPath) ? mapList(folderPath, resolve) : resolve(folderPath);
+}
+
+/**
+ * The `api.add` options the instance's collision policy locks (see `config.api.collision.override`), by the internal
+ * name the build reads, with the option name a caller writes.
+ * @type {ReadonlyArray<[string, string]>}
+ * @private
+ */
+const LOCKED_ADD_OPTIONS = Objects.freeze([
+	["collisionMode", "collision.mode"],
+	["mutateExisting", "collision.mutate"],
+	["recordHistory", "replay"]
+]);
+
+/**
+ * Read `api.add`'s options into the shape the build takes. The `{ exports, ...options }` inline form gives its sibling
+ * keys as options (an explicit options key wins); every key is checked against the method's schema first, so a key
+ * `api.add` does not take is refused rather than ignored. `collision` (or a bare mode string), `id`, `replay` and
+ * `version` become the build's `collisionMode` / `forceOverwrite` / `mutateExisting`, `moduleID`, `recordHistory` and
+ * version config.
+ * @param {object} slothlet - The instance.
+ * @param {*} source - What the add mounts.
+ * @param {*} options - The options as given.
+ * @returns {{ source: *, options: object, versionConfig: object|null }} The content to mount, the build's options and
+ *   the version config (`null` when no `version` is given).
+ * @throws {SlothletError} INVALID_CONFIG_UNKNOWN_KEY for a key `api.add` does not take; INVALID_ARGUMENT for an options,
+ *   `collision` or `version` value that is not an object.
+ * @private
+ */
+function runtime_readAddOptions(slothlet, source, options) {
+	const objectArgument = (value, argument) => {
+		if (value === null || typeof value !== "object" || Arrays.isArray(value)) {
+			throw new slothlet.SlothletError("INVALID_ARGUMENT", {
+				argument,
+				expected: "object",
+				received: value === null ? "null" : Arrays.isArray(value) ? "array" : typeof value,
+				validationError: true
+			});
+		}
+	};
+	const given = options == null ? {} : options;
+	objectArgument(given, "options");
+	assertOptionKeys(given, "slothlet.api.add");
+	let content = source;
+	let merged = given;
+	if (
+		source &&
+		typeof source === "object" &&
+		!Arrays.isArray(source) &&
+		FunctionMethods.call(Objects.prototype.hasOwnProperty, source, "exports")
+	) {
+		const sibling = { ...source };
+		delete sibling.exports;
+		assertOptionKeys(sibling, "slothlet.api.add");
+		content = { exports: source.exports };
+		merged = { ...sibling, ...given };
+	}
+	const { collision, id, replay, version, ...rest } = merged;
+	const read = rest;
+	if (collision !== undefined) {
+		const group = typeof collision === "string" ? { mode: collision } : collision;
+		objectArgument(group, "options.collision");
+		if (group.mode !== undefined) read.collisionMode = group.mode;
+		if (group.force !== undefined) read.forceOverwrite = group.force;
+		if (group.mutate !== undefined) read.mutateExisting = group.mutate;
+	}
+	if (id !== undefined) read.moduleID = id;
+	if (replay !== undefined) read.recordHistory = replay;
+	let versionConfig = null;
+	if (version != null) {
+		objectArgument(version, "options.version");
+		versionConfig = { version: version.tag };
+		if (version.default !== undefined) versionConfig.default = version.default;
+		if (version.metadata !== undefined) versionConfig.metadata = version.metadata;
+	}
+	return { source: content, options: read, versionConfig };
 }
 
 /**
@@ -505,7 +582,7 @@ export class ApiBuilder extends ComponentBase {
 		// Strip any previously-attached slothlet builtins from userApi before checking for user hooks.
 		// When the API root is a function module (e.g. a root-function.mjs default export), the mode
 		// builder may return the SAME function object on successive calls if the ESM module cache is
-		// not busted (e.g. keepInstanceID reload keeps the same instanceID query param, so Node's ESM
+		// not busted (e.g. an `instance: "keep"` reload keeps the same instanceID query param, so Node's ESM
 		// loader serves the cached module). That function still carries shutdown/slothlet/destroy from
 		// the previous buildFinalAPI invocation. Without stripping them we'd mistake our own builtins
 		// for user-provided lifecycle hooks, creating infinite recursion in createShutdownFunction.
@@ -603,7 +680,7 @@ export class ApiBuilder extends ComponentBase {
 		});
 
 		// Save references to our own builtin functions so the next buildFinalAPI call
-		// (e.g. on a keepInstanceID reload) can distinguish them from user-exported functions.
+		// (e.g. on an `instance: "keep"` reload) can distinguish them from user-exported functions.
 		this.slothlet._ownBuiltins = {
 			shutdown: shutdownFn,
 			slothlet: slothletNamespace,
@@ -1572,26 +1649,37 @@ export class ApiBuilder extends ComponentBase {
 				 * @param {string|string[]|Function|Record<string, unknown>} folderPath - What to mount: a directory to scan,
 				 *   a single file (`.mjs`/`.cjs`/`.js`), or an array of file/folder paths. When an array is
 				 *   provided, each path is processed sequentially and the return value is an array of
-				 *   moduleIDs in the same order. May also be inline content (synthetic / in-memory leaf, no
+				 *   module ids in the same order. May also be inline content (synthetic / in-memory leaf, no
 				 *   filesystem): a bare function mounts as one callable leaf; a plain object IS the export
 				 *   map (its own keys mount as leaves — option-named keys included — never auto-extracted as
 				 *   options); and an object with an `exports` key splits into content (`exports`) plus
 				 *   sibling call-options (an explicit 3rd-arg option wins on conflict). Inline exports
 				 *   flatten exactly as a file with those exports would.
-				 * @param {Record<string, unknown>} [options={}] - Add options (metadata goes here).
-				 * @param {object | null} [versionConfig=null] - Optional version configuration.
-				 * @param {string} versionConfig.version - Version tag (e.g. "v1", "2.3.0").
-				 * @param {boolean} [versionConfig.default] - Mark this as the explicit default version.
-				 * @param {object} [versionConfig.metadata] - Version metadata stored in VersionManager only.
-				 * @returns {Promise<string|string[]>} Resolves with the moduleID, or an array of moduleIDs
+				 * @param {object} [options={}] - Add options. A key not listed here throws `INVALID_CONFIG_UNKNOWN_KEY`.
+				 * @param {string} [options.id] - The module id (generated when omitted).
+				 * @param {object} [options.metadata] - Metadata attached to every mounted function.
+				 * @param {string|object} [options.collision] - What happens when the mount meets an existing path; a string is
+				 *   the mode alone.
+				 * @param {string} [options.collision.mode] - Collision mode (same values as config `api.collision.mode`).
+				 *   Locked unless config `api.collision.override` is true.
+				 * @param {boolean} [options.collision.force] - Replace whatever is at the path, regardless of the mode.
+				 * @param {boolean} [options.collision.mutate] - Merge into the existing node in place. Locked like `mode`.
+				 * @param {boolean} [options.replay=true] - Whether `reload()` replays this add. Locked like `collision.mode`.
+				 * @param {string|string[]} [options.hidden] - Globs (relative to the added folder) of files to leave out.
+				 * @param {{ allow?: Array<string|object>, deny?: Array<string|object> }} [options.permissions] - Rules the
+				 *   module mounts with.
+				 * @param {object} [options.version] - Mount as one version of the path.
+				 * @param {string} options.version.tag - The version tag (e.g. "v1", "2.3.0").
+				 * @param {boolean} [options.version.default] - Mark this as the explicit default version.
+				 * @param {object} [options.version.metadata] - Version metadata, stored in the version manager only.
+				 * @returns {Promise<string|string[]>} Resolves with the module id, or an array of module ids
 				 *   when `folderPath` is an array.
 				 * @public
 				 *
 				 * @description
 				 * Adds API modules from a folder into the current instance at runtime.
-				 * When `versionConfig` is provided, the module is mounted at
-				 * `${versionConfig.version}.${apiPath}` and a dispatcher proxy is created
-				 * (or updated) at `${apiPath}`.
+				 * With `options.version`, the module is mounted at `${options.version.tag}.${apiPath}` and a
+				 * dispatcher proxy is created (or updated) at `${apiPath}`.
 				 *
 				 * @example
 				 * await api.slothlet.api.add("plugins", "./plugins");
@@ -1603,10 +1691,10 @@ export class ApiBuilder extends ComponentBase {
 				 *
 				 * @example
 				 * // Versioned registration
-				 * await api.slothlet.api.add("auth", "./api/v1", {}, { version: "v1", default: true });
-				 * await api.slothlet.api.add("auth", "./api/v2", {}, { version: "v2" });
+				 * await api.slothlet.api.add("auth", "./api/v1", { version: { tag: "v1", default: true } });
+				 * await api.slothlet.api.add("auth", "./api/v2", { version: { tag: "v2" } });
 				 */
-				add: async function slothlet_api_add(apiPath, folderPath, options = {}, versionConfig = null) {
+				add: async function slothlet_api_add(apiPath, folderPath, options = {}, ...extra) {
 					// Check if add mutation is allowed
 					if (!config.api?.mutations?.add) {
 						throw new slothlet.SlothletError("INVALID_CONFIG_MUTATIONS_DISABLED", {
@@ -1614,29 +1702,46 @@ export class ApiBuilder extends ComponentBase {
 							validationError: true
 						});
 					}
-					// collisionMode / mutateExisting / recordHistory are init-time or internal policy, not
+					// api.add takes (path, source, options); a further argument would otherwise be dropped unread.
+					if (extra.length > 0 && extra[0] !== undefined) {
+						throw new slothlet.SlothletError("INVALID_ARGUMENT", {
+							argument: "arguments",
+							expected: "(path, source, options)",
+							received: `${3 + extra.length} arguments`,
+							validationError: true
+						});
+					}
+					const read = runtime_readAddOptions(slothlet, folderPath, options);
+					folderPath = read.source;
+					const versionConfig = read.versionConfig;
+					// collision.mode / collision.mutate / replay are init-time or internal policy, not
 					// per-call knobs — honoring a per-call override could bypass the instance's collision
 					// config (#380). Locked by default: they are IGNORED (kept out of the mount) but WARN
 					// loudly instead of the old silent strip — a throw here could break a live app that
 					// still passes them. Opt in with config.api.collision.override to honor
-					// them. forceOverwrite stays the always-available targeted escape hatch regardless.
-					const LOCKED_ADD_OPTIONS = ["collisionMode", "mutateExisting", "recordHistory"];
-					let effectiveOptions = options;
+					// them. collision.force stays the always-available targeted escape hatch regardless.
+					let effectiveOptions = read.options;
 					if (!config.api?.collision?.override) {
-						const passed = filterList(LOCKED_ADD_OPTIONS, (key) => key in options);
+						const passed = filterList(LOCKED_ADD_OPTIONS, (entry) => entry[0] in effectiveOptions);
 						if (passed.length > 0) {
 							// The warning prints unless the instance is silent (decided inside the warning, #838).
-							new slothlet.SlothletWarning("WARNING_API_ADD_OPTION_LOCKED", { option: ArrayMethods.join(passed, ", ") });
+							new slothlet.SlothletWarning("WARNING_API_ADD_OPTION_LOCKED", {
+								option: ArrayMethods.join(
+									mapList(passed, (entry) => entry[1]),
+									", "
+								)
+							});
 							// Strip the locked options so the override does not take effect.
-							effectiveOptions = {};
-							for (let ofIndex = 0, ofList = Objects.keys(options); ofIndex < ofList.length; ofIndex++) {
+							const unlocked = {};
+							for (let ofIndex = 0, ofList = Objects.keys(effectiveOptions); ofIndex < ofList.length; ofIndex++) {
 								const key = ofList[ofIndex];
-								if (!ArrayMethods.includes(LOCKED_ADD_OPTIONS, key)) effectiveOptions[key] = options[key];
+								if (!ArrayMethods.some(passed, (entry) => entry[0] === key)) unlocked[key] = effectiveOptions[key];
 							}
+							effectiveOptions = unlocked;
 						}
 					}
 					// When allowed (or none passed) forward options as-is so a per-call override is honored;
-					// forceOverwrite / moduleID / metadata pass through in every case.
+					// collision.force / id / metadata pass through in every case.
 					// Building the module runs its code — its top level, and its exports' getters and Proxy traps as the
 					// build reads them — which is the module's, never the code of a module that asked for the add (#597).
 					const resolvedFolder = runtime_resolveAddFolder(slothlet, folderPath);
@@ -1734,13 +1839,14 @@ export class ApiBuilder extends ComponentBase {
 				 * @param {object} [options={}] - Enumeration options.
 				 * @param {boolean} [options.details=false] - Return every owned path tagged with its kind
 				 *   instead of the callable paths alone.
-				 * @param {boolean} [options.includePrivate=false] - Include module-private members the
+				 * @param {boolean} [options.private=false] - Include module-private members the
 				 *   caller could not read. Host only — a module asking for it is refused.
 				 * @returns {Promise<string[]|Array<{path: string, kind: "function"|"namespace"|"data"}>>}
 				 *   Sorted callable leaf paths, or `{ path, kind }` records under `details`.
 				 * @throws {SlothletError} INVALID_ARGUMENT when `key` is not a string, `options` is not an
-				 *   object, or `options.details`/`options.includePrivate` is not a boolean.
-				 * @throws {SlothletError} PERMISSION_DENIED when a MODULE caller passes `includePrivate`.
+				 *   object, or `options.details`/`options.private` is not a boolean.
+				 * @throws {SlothletError} INVALID_CONFIG_UNKNOWN_KEY when `options` has a key other than `details`/`private`.
+				 * @throws {SlothletError} PERMISSION_DENIED when a MODULE caller passes `private`.
 				 * @throws {SlothletError} API_LEAVES_UNKNOWN_MODULE when the key resolves to no module.
 				 * @public
 				 *
@@ -1754,7 +1860,7 @@ export class ApiBuilder extends ComponentBase {
 				 * Enumeration is a disclosure surface, so the answer is scoped to the CALLER:
 				 * module-private members (#260) the caller could not read are omitted, which keeps this
 				 * in step with the redaction `Object.keys` already performs on the composed surface. A
-				 * module therefore sees its own module's privates and no other module's. `includePrivate`
+				 * module therefore sees its own module's privates and no other module's. `private`
 				 * asks for the unredacted list and is host-only: reaching `slothlet.api.leaves` at all is
 				 * gated like the rest of `slothlet.*`, but that gate says nothing about another module's
 				 * privates, so a module cannot self-grant sight of them. With permissions disabled
@@ -1784,17 +1890,18 @@ export class ApiBuilder extends ComponentBase {
 					if (typeof normalizedOptions !== "object" || Arrays.isArray(normalizedOptions)) {
 						throw new slothlet.SlothletError("INVALID_ARGUMENT", {
 							argument: "options",
-							expected: "object with optional boolean details/includePrivate",
+							expected: "object with optional boolean details/private",
 							received: Arrays.isArray(normalizedOptions) ? "array" : typeof normalizedOptions,
 							validationError: true
 						});
 					}
-					const { details = false, includePrivate = false } = normalizedOptions;
+					assertOptionKeys(normalizedOptions, "slothlet.api.leaves");
+					const { details = false, private: includePrivate = false } = normalizedOptions;
 					for (
 						let ofIndex = 0,
 							ofList = [
 								["details", details],
-								["includePrivate", includePrivate]
+								["private", includePrivate]
 							];
 						ofIndex < ofList.length;
 						ofIndex++
@@ -1830,7 +1937,7 @@ export class ApiBuilder extends ComponentBase {
 							// justification, as enforceInternalPermission above.
 							/* v8 ignore next */
 							caller: leavesCaller.____slothletInternal?.apiPath ?? "",
-							target: "slothlet.api.leaves:includePrivate"
+							target: "slothlet.api.leaves:private"
 						});
 					}
 
@@ -2089,6 +2196,7 @@ export class ApiBuilder extends ComponentBase {
 							validationError: true
 						});
 					}
+					assertOptionKeys(options, "slothlet.api.reload");
 
 					// Normalize base module identifiers: null, undefined, "", "." all mean base module
 					if (pathOrModuleId == null || pathOrModuleId === "" || pathOrModuleId === ".") {
@@ -2220,8 +2328,8 @@ export class ApiBuilder extends ComponentBase {
 
 					/**
 					 * Convenience: chain discover() → sort() → addModules() in one call.
-					 * Forwards `sort` option as the comparator and the rest as the discover/addModules options.
-					 * @param {import("../helpers/module-discovery.mjs").DiscoverOptions & import("../handlers/module-manager.mjs").AddModulesOptions & {sort?: (a, b) => number}} [options]
+					 * `discover` holds the discover() options, `sort` is the comparator, and the rest are the addModules options.
+					 * @param {import("../handlers/module-manager.mjs").AddModulesOptions & {discover?: import("../helpers/module-discovery.mjs").DiscoverOptions, sort?: (a, b) => number}} [options]
 					 */
 					addDiscovered: async function slothlet_modules_addDiscovered(options = {}) {
 						if (!config.api?.mutations?.add) {
@@ -2230,12 +2338,13 @@ export class ApiBuilder extends ComponentBase {
 								validationError: true
 							});
 						}
-						const { sort: comparator, collisionMode, onFailure, concurrency, ...discoverOptions } = options;
+						assertOptionKeys(options, "slothlet.api.modules.addDiscovered");
+						const { sort: comparator, collision, failure, concurrency, discover: discoverOptions = {} } = options;
 						// The calling module, read before the discovery's await loses it (#625).
 						const writer = runtime_selfModuleReader(slothlet);
 						const found = await slothlet.handlers.moduleManager.discover(discoverOptions);
 						const ordered = slothlet.handlers.moduleManager.sort(found, comparator);
-						return slothlet.handlers.moduleManager.addModules(ordered, { collisionMode, onFailure, concurrency }, writer);
+						return slothlet.handlers.moduleManager.addModules(ordered, { collision, failure, concurrency }, writer);
 					},
 
 					/**
@@ -2600,13 +2709,17 @@ export class ApiBuilder extends ComponentBase {
 			hook: {
 				/**
 				 * Register a hook for API functions.
-				 * @param {string} typePattern - Path pattern then hook type, `"pattern:type"` (e.g. `"math.*:before"`); the legacy `"type:pattern"` form (e.g. `"before:math.*"`) is still accepted but deprecated.
+				 * @param {string} typePattern - Path pattern then hook type, `"pattern:type"` (e.g. `"math.*:before"`).
 				 * @param {function} handler - Hook handler function
 				 * @param {object} [options={}] - Hook options
 				 * @param {string} [options.id] - Unique identifier (auto-generated if not provided)
 				 * @param {number} [options.priority=0] - Higher = earlier execution
 				 * @param {string} [options.subset=DEFAULT_HOOK_SUBSET] - Phase: "before", "primary", or "after" (`DEFAULT_HOOK_SUBSET` / `HOOK_SUBSETS` in `handlers/hook-manager.mjs`)
 				 * @param {boolean} [options.async] - Declare a before/after/around handler asynchronous when the native async brand cannot show it
+				 * @param {string} [options.pattern] - Path pattern; overrides the one in `typePattern`
+				 * @param {boolean} [options.pin=true] - Pin the registering module's identity onto the handler
+				 * @param {{ enabled?: boolean, dispatcher?: Function }} [options.versioning] - Resolve the pattern through version
+				 *   dispatch (`enabled`), or through this hook's own `dispatcher(allVersions, caller)`
 				 * @returns {string} Hook ID
 				 * @public
 				 *
@@ -2624,6 +2737,7 @@ export class ApiBuilder extends ComponentBase {
 					if (!slothlet.handlers?.hookManager) {
 						throw new slothlet.SlothletError("HOOKS_NOT_INITIALIZED", { validationError: true });
 					}
+					assertOptionKeys(options, "slothlet.hook.on");
 					return slothlet.handlers.hookManager.on(typePattern, handler, options);
 				},
 
@@ -2644,6 +2758,7 @@ export class ApiBuilder extends ComponentBase {
 					if (!slothlet.handlers?.hookManager) {
 						throw new slothlet.SlothletError("HOOKS_NOT_INITIALIZED", { validationError: true });
 					}
+					assertOptionKeys(filter, "slothlet.hook.filter", "slothlet.hook.remove");
 					return slothlet.handlers.hookManager.remove(filter);
 				},
 
@@ -2673,6 +2788,7 @@ export class ApiBuilder extends ComponentBase {
 					}
 					// If string, treat as ID
 					const filter = typeof idOrFilter === "string" ? { id: idOrFilter } : idOrFilter;
+					assertOptionKeys(filter, "slothlet.hook.filter", "slothlet.hook.off");
 					return slothlet.handlers.hookManager.remove(filter);
 				},
 
@@ -2693,6 +2809,7 @@ export class ApiBuilder extends ComponentBase {
 					if (!slothlet.handlers?.hookManager) {
 						throw new slothlet.SlothletError("HOOKS_NOT_INITIALIZED", { validationError: true });
 					}
+					assertOptionKeys(filter, "slothlet.hook.filter", "slothlet.hook.enable");
 					return slothlet.handlers.hookManager.enable(filter);
 				},
 
@@ -2713,6 +2830,7 @@ export class ApiBuilder extends ComponentBase {
 					if (!slothlet.handlers?.hookManager) {
 						throw new slothlet.SlothletError("HOOKS_NOT_INITIALIZED", { validationError: true });
 					}
+					assertOptionKeys(filter, "slothlet.hook.filter", "slothlet.hook.disable");
 					return slothlet.handlers.hookManager.disable(filter);
 				},
 
@@ -2784,6 +2902,7 @@ export class ApiBuilder extends ComponentBase {
 					if (!slothlet.handlers?.hookManager) {
 						throw new slothlet.SlothletError("HOOKS_NOT_INITIALIZED", { validationError: true });
 					}
+					assertOptionKeys(filter, "slothlet.hook.filter", "slothlet.hook.list");
 					return slothlet.handlers.hookManager.list(filter);
 				},
 
@@ -3267,7 +3386,7 @@ export class ApiBuilder extends ComponentBase {
 			/**
 			 * Reload entire instance (creates new references)
 			 * @param {Object} [options={}] - Reload options forwarded to Slothlet#reload.
-			 * @param {boolean} [options.keepInstanceID=false] - Keep the same instanceID (resets context store in place).
+			 * @param {"keep"|"new"} [options.instance="new"] - `"keep"` keeps the same instanceID (resets the context store in place).
 			 * @returns {Promise<void>}
 			 */
 			reload: async (options = {}) => {
@@ -3874,17 +3993,17 @@ export class ApiBuilder extends ComponentBase {
 					 * the host may register it again, unregister it, or invalidate it. Recorded for replay on reload.
 					 *
 					 * @param {string} name - Principal name, as rules list it in `requires`.
-					 * @param {object} definition - `{ key, resolve, maxAge? }`.
+					 * @param {object} definition - `{ key, resolve, ttl? }`.
 					 * @param {function(object): *} definition.key - Maps the runtime context to this principal's identity key.
 					 * @param {function(*): *} definition.resolve - Resolves the facts for an identity key (may be async).
-					 * @param {number} [definition.maxAge] - Optional time-to-live (ms) for a resolved value.
+					 * @param {number} [definition.ttl] - Optional time-to-live (ms) for a resolved value.
 					 * @returns {void}
 					 * @public
 					 * @example
 					 * api.slothlet.permissions.principal.register("roles", {
 					 *   key: (ctx) => ctx.user?.id,
 					 *   resolve: async (userId) => loadRoles(userId),
-					 *   maxAge: 30_000
+					 *   ttl: 30_000
 					 * });
 					 */
 					register: function slothlet_permissions_principal_register(name, definition) {
@@ -4796,6 +4915,7 @@ export class ApiBuilder extends ComponentBase {
 				if (!options || typeof options !== "object") {
 					throw new slothlet.SlothletError("SCOPE_INVALID_OPTIONS", { received: typeof options }, null, { validationError: true });
 				}
+				assertOptionKeys(options, "slothlet.context.scope");
 				if (!options.fn || typeof options.fn !== "function") {
 					throw new slothlet.SlothletError("SCOPE_INVALID_FN", { received: typeof options?.fn }, null, { validationError: true });
 				}

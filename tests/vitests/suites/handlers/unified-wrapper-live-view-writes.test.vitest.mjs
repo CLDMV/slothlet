@@ -52,7 +52,7 @@ const ROUTES = {
 	},
 	"api.add()-mounted leaf": {
 		async setup(api) {
-			await api.slothlet.api.add("devices.d1", DEVICE_DIR, { moduleID: "device-d1" });
+			await api.slothlet.api.add("devices.d1", DEVICE_DIR, { id: "device-d1" });
 			const raw = await api.devices.d1.session.open();
 			return {
 				raw,
@@ -282,7 +282,7 @@ describe("UnifiedWrapper > live view object/function writes (#495) — permissio
 
 	it("a write through a stale view of a removed module does not reach the old underlying object", async () => {
 		api = await slothlet({ base: BASE, mode: "eager", permissions: { policy: "allow" } });
-		await api.slothlet.api.add("devices.d1", DEVICE_DIR, { moduleID: "device-d1" });
+		await api.slothlet.api.add("devices.d1", DEVICE_DIR, { id: "device-d1" });
 		const conn = await api.devices.d1.session.open();
 		const staleView = api.devices.d1.connection;
 
@@ -327,7 +327,7 @@ describe("UnifiedWrapper > live view object/function writes (#495) — permissio
 
 	it("the view assigned on an api.add()-mounted leaf keeps its writes, and stays two-way, across a reload of that module", async () => {
 		api = await slothlet({ base: BASE, mode: "eager", permissions: { policy: "allow" } });
-		await api.slothlet.api.add("devices.d1", DEVICE_DIR, { moduleID: "device-d1" });
+		await api.slothlet.api.add("devices.d1", DEVICE_DIR, { id: "device-d1" });
 		const conn = await api.devices.d1.session.open();
 
 		api.devices.d1.connection.deviceFeatures = ["cmd"];

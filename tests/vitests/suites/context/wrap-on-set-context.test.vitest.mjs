@@ -166,7 +166,7 @@ describe.each(getMatrixConfigs({ runtime: "async" }))("Context > writable self.X
 		// Re-add the same mount with collision "merge": existing and next are both wrapper proxies, so
 		// the merge routes through syncWrapper, whose userAssigned loop must recognise the wrap-on-set
 		// `keep` override and leave it untouched while merging the new content in (#329).
-		await api.slothlet.api.add("registry", { exports: { extra: () => "extra" } }, { collisionMode: "merge" });
+		await api.slothlet.api.add("registry", { exports: { extra: () => "extra" } }, { collision: { mode: "merge" } });
 
 		expect(await api.registry.keep.ping()).toBe("pong"); // override preserved through the resync
 		expect(await api.registry.extra()).toBe("extra"); // new content merged alongside it

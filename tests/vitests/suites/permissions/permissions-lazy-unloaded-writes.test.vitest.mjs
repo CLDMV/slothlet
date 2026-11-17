@@ -57,8 +57,8 @@ describe.each([{ runtime: "async" }, { runtime: "live" }])(
 			["off", {}, "done"]
 		])("holds another module's change to the same rule as a loaded node (permissions %s)", async (_label, options, expected) => {
 			api = await slothlet({ base: path.join(FIXTURE, "base"), mode: "lazy", runtime, silent: true, ...options });
-			await api.slothlet.api.add("holder", path.join(FIXTURE, "holder"), { moduleID: "holder" });
-			await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { moduleID: "guest" });
+			await api.slothlet.api.add("holder", path.join(FIXTURE, "holder"), { id: "holder" });
+			await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { id: "guest" });
 			globalThis[Symbol.for(PROBE)] = (self) => {
 				/**
 				 * Run `change`, reporting `"done"` or the error code it was refused with.
@@ -102,8 +102,8 @@ describe.each([{ runtime: "async" }, { runtime: "live" }])(
 			]
 		])("lets a module %s freeze its view of another module's unloaded node without an error", async (_label, options) => {
 			api = await slothlet({ base: path.join(FIXTURE, "base"), mode: "lazy", runtime, silent: true, ...options });
-			await api.slothlet.api.add("holder", path.join(FIXTURE, "holder"), { moduleID: "holder" });
-			await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { moduleID: "guest" });
+			await api.slothlet.api.add("holder", path.join(FIXTURE, "holder"), { id: "holder" });
+			await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { id: "guest" });
 			globalThis[Symbol.for(PROBE)] = (self) => {
 				try {
 					Object.freeze(self.holder.deep.inner);
@@ -121,7 +121,7 @@ describe.each([{ runtime: "async" }, { runtime: "live" }])(
 			["off", {}]
 		])("an unloaded node frozen by the host still answers for its prototype (permissions %s)", async (_label, options) => {
 			api = await slothlet({ base: path.join(FIXTURE, "base"), mode: "lazy", runtime, silent: true, ...options });
-			await api.slothlet.api.add("holder", path.join(FIXTURE, "holder"), { moduleID: "holder" });
+			await api.slothlet.api.add("holder", path.join(FIXTURE, "holder"), { id: "holder" });
 			const inner = api.holder.deep.inner;
 			Object.freeze(inner);
 			expect(Object.isFrozen(inner)).toBe(true);
@@ -169,8 +169,8 @@ describe.each([{ runtime: "async" }, { runtime: "live" }])(
 			const reports = {};
 			for (const mode of ["eager", "lazy"]) {
 				api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, ...options });
-				await api.slothlet.api.add("holder", path.join(FIXTURE, "holder"), { moduleID: "holder" }, { version: "v1", default: true });
-				await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { moduleID: "guest" });
+				await api.slothlet.api.add("holder", path.join(FIXTURE, "holder"), { id: "holder", version: { tag: "v1", default: true } });
+				await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { id: "guest" });
 				reports[mode] = await withSuppressedSlothletErrorOutput(() => api.guest.x.runWithSelf(PROBE));
 				await api.slothlet.shutdown();
 				api = null;

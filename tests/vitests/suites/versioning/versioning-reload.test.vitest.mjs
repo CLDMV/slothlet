@@ -44,8 +44,8 @@ describe.each(getMatrixConfigs())("Versioning > Reload > $name", ({ config }) =>
 			// always use default
 		});
 
-		await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1", default: true });
-		await api.slothlet.api.add("auth", `${BASE}/v2`, {}, { version: "v2" });
+		await api.slothlet.api.add("auth", `${BASE}/v1`, { version: { tag: "v1", default: true } });
+		await api.slothlet.api.add("auth", `${BASE}/v2`, { version: { tag: "v2" } });
 
 		// Verify initial routing
 		const before = api.unversionedCaller.callLogin("testUser");
@@ -66,8 +66,8 @@ describe.each(getMatrixConfigs())("Versioning > Reload > $name", ({ config }) =>
 	it("version list is intact after reload", async () => {
 		api = await slothlet({ ...config, base: `${BASE}/callers` });
 
-		await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1", default: true });
-		await api.slothlet.api.add("auth", `${BASE}/v2`, {}, { version: "v2" });
+		await api.slothlet.api.add("auth", `${BASE}/v1`, { version: { tag: "v1", default: true } });
+		await api.slothlet.api.add("auth", `${BASE}/v2`, { version: { tag: "v2" } });
 
 		const list = api.slothlet.versioning.list("auth");
 		const v1ID = list.versions.v1?.moduleID;

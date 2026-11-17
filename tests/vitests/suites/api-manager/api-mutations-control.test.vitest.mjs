@@ -89,7 +89,7 @@ describe.each(MATRIX_CONFIGS)("API mutations control - $name", ({ config }) => {
 
 		// But mutations should be blocked
 		await withSuppressedSlothletErrorOutput(async () => {
-			await expect(api.slothlet.api.add("test", TEST_DIRS.API_TEST_MIXED, { moduleID: "test" })).rejects.toThrow(
+			await expect(api.slothlet.api.add("test", TEST_DIRS.API_TEST_MIXED, { id: "test" })).rejects.toThrow(
 				"INVALID_CONFIG_MUTATIONS_DISABLED"
 			);
 		});
@@ -134,7 +134,7 @@ describe.each(MATRIX_CONFIGS)("API mutations control - $name", ({ config }) => {
 
 		// All mutations should be blocked
 		await withSuppressedSlothletErrorOutput(async () => {
-			await expect(api.slothlet.api.add("test", TEST_DIRS.API_TEST_MIXED, { moduleID: "test" })).rejects.toThrow(
+			await expect(api.slothlet.api.add("test", TEST_DIRS.API_TEST_MIXED, { id: "test" })).rejects.toThrow(
 				"INVALID_CONFIG_MUTATIONS_DISABLED"
 			);
 		});
@@ -160,7 +160,7 @@ describe.each(MATRIX_CONFIGS)("API mutations control - $name", ({ config }) => {
 		});
 
 		// Add should work
-		await api.slothlet.api.add("extra", TEST_DIRS.API_TEST_MIXED, { moduleID: "extra-test" });
+		await api.slothlet.api.add("extra", TEST_DIRS.API_TEST_MIXED, { id: "extra-test" });
 		expect(api.extra).toBeDefined();
 
 		// Remove and reload should be blocked
@@ -185,7 +185,7 @@ describe.each(MATRIX_CONFIGS)("API mutations control - $name", ({ config }) => {
 
 		// Add and reload should be blocked
 		await withSuppressedSlothletErrorOutput(async () => {
-			await expect(api.slothlet.api.add("test", TEST_DIRS.API_TEST_MIXED, { moduleID: "test" })).rejects.toThrow(
+			await expect(api.slothlet.api.add("test", TEST_DIRS.API_TEST_MIXED, { id: "test" })).rejects.toThrow(
 				"INVALID_CONFIG_MUTATIONS_DISABLED"
 			);
 		});
@@ -212,7 +212,7 @@ describe.each(MATRIX_CONFIGS)("API mutations control - $name", ({ config }) => {
 		// forceOverwrite should NOT bypass mutations.add restriction
 		await withSuppressedSlothletErrorOutput(async () => {
 			await expect(
-				api.slothlet.api.add("test", TEST_DIRS.API_TEST_MIXED, { moduleID: "test-forced", forceOverwrite: true })
+				api.slothlet.api.add("test", TEST_DIRS.API_TEST_MIXED, { id: "test-forced", collision: { force: true } })
 			).rejects.toThrow("INVALID_CONFIG_MUTATIONS_DISABLED");
 		});
 	});
@@ -226,7 +226,7 @@ describe.each(MATRIX_CONFIGS)("API mutations control - $name", ({ config }) => {
 		// collisionMode before ever comparing the two references.
 		api = await createApiInstance(config, { api: { collision: { mode: { api: "error" } } } });
 
-		await api.slothlet.api.add("thing", TEST_DIRS.API_TEST_ADD_DEDUP_LEAF, { moduleID: "dedup-leaf" });
+		await api.slothlet.api.add("thing", TEST_DIRS.API_TEST_ADD_DEDUP_LEAF, { id: "dedup-leaf" });
 		expect(api.thing("x")).toBe("base:x");
 	});
 
@@ -235,9 +235,9 @@ describe.each(MATRIX_CONFIGS)("API mutations control - $name", ({ config }) => {
 		expect(api.thing("x")).toBe("base:x");
 
 		await withSuppressedSlothletErrorOutput(async () => {
-			await expect(
-				api.slothlet.api.add("thing", TEST_DIRS.API_TEST_ADD_DEDUP_LEAF_OVERRIDE, { moduleID: "different-module" })
-			).rejects.toThrow("INVALID_CONFIG_API_PATH_INVALID");
+			await expect(api.slothlet.api.add("thing", TEST_DIRS.API_TEST_ADD_DEDUP_LEAF_OVERRIDE, { id: "different-module" })).rejects.toThrow(
+				"INVALID_CONFIG_API_PATH_INVALID"
+			);
 		});
 	});
 
@@ -247,7 +247,7 @@ describe.each(MATRIX_CONFIGS)("API mutations control - $name", ({ config }) => {
 		const baseModuleID = resolveWrapper(api.thing).____slothletInternal.moduleID;
 
 		await expect(
-			api.slothlet.api.add("thing", TEST_DIRS.API_TEST_ADD_DEDUP_LEAF_OVERRIDE, { moduleID: baseModuleID, forceOverwrite: true })
+			api.slothlet.api.add("thing", TEST_DIRS.API_TEST_ADD_DEDUP_LEAF_OVERRIDE, { id: baseModuleID, collision: { force: true } })
 		).resolves.not.toThrow();
 
 		expect(typeof api.thing).toBe("function");
@@ -262,7 +262,7 @@ describe.each(MATRIX_CONFIGS)("API mutations control - $name", ({ config }) => {
 		// A different moduleID colliding under "skip" is silently rejected — the live tree must be
 		// untouched, AND the rejected module must not appear in the path's ownership set (previously
 		// it did, since processFiles registered ownership unconditionally after assignToApiPath).
-		await api.slothlet.api.add("thing", TEST_DIRS.API_TEST_ADD_DEDUP_LEAF_OVERRIDE, { moduleID: "rejected-mod" });
+		await api.slothlet.api.add("thing", TEST_DIRS.API_TEST_ADD_DEDUP_LEAF_OVERRIDE, { id: "rejected-mod" });
 
 		expect(api.thing("x")).toBe("base:x");
 		const owners = api.slothlet.owner.get("thing");
@@ -274,7 +274,7 @@ describe.each(MATRIX_CONFIGS)("API mutations control - $name", ({ config }) => {
 		api = await createApiInstance(config, { api: { collision: { mode: { api: "skip" } } }, base: TEST_DIRS.API_TEST });
 
 		// First add: a brand-new path, no collision — "same-mod" becomes its legitimate owner.
-		await api.slothlet.api.add("thing", TEST_DIRS.API_TEST_ADD_DEDUP_LEAF, { moduleID: "same-mod" });
+		await api.slothlet.api.add("thing", TEST_DIRS.API_TEST_ADD_DEDUP_LEAF, { id: "same-mod" });
 		expect(api.thing("x")).toBe("base:x");
 		expect(api.slothlet.owner.get("thing").has("same-mod")).toBe(true);
 
@@ -282,7 +282,7 @@ describe.each(MATRIX_CONFIGS)("API mutations control - $name", ({ config }) => {
 		// fresh wrapper, so this is still a real collision under "skip" and is rejected — but the
 		// module's own PRIOR ownership registration must survive the rejection cleanup, since it
 		// wasn't fabricated by this failed attempt.
-		await api.slothlet.api.add("thing", TEST_DIRS.API_TEST_ADD_DEDUP_LEAF_OVERRIDE, { moduleID: "same-mod" });
+		await api.slothlet.api.add("thing", TEST_DIRS.API_TEST_ADD_DEDUP_LEAF_OVERRIDE, { id: "same-mod" });
 
 		expect(api.thing("x")).toBe("base:x");
 		expect(api.slothlet.owner.get("thing").has("same-mod")).toBe(true);
@@ -292,18 +292,18 @@ describe.each(MATRIX_CONFIGS)("API mutations control - $name", ({ config }) => {
 		api = await createApiInstance(config, { api: { collision: { mode: { api: "skip" } } }, base: TEST_DIRS.API_TEST });
 
 		// same-mod: fresh add, becomes sole+current owner of "thing" with the correct value.
-		await api.slothlet.api.add("thing", TEST_DIRS.API_TEST_ADD_DEDUP_LEAF, { moduleID: "same-mod" });
+		await api.slothlet.api.add("thing", TEST_DIRS.API_TEST_ADD_DEDUP_LEAF, { id: "same-mod" });
 		expect(api.thing("x")).toBe("base:x");
 
 		// same-mod: rejected re-add under skip — must not corrupt same-mod's OWN ownership entry,
 		// even though the live tree is untouched (the impl:created subscriber fires and updates the
 		// existing entry's value during buildAPI's candidate construction, before this rejection).
-		await api.slothlet.api.add("thing", TEST_DIRS.API_TEST_ADD_DEDUP_LEAF_OVERRIDE, { moduleID: "same-mod" });
+		await api.slothlet.api.add("thing", TEST_DIRS.API_TEST_ADD_DEDUP_LEAF_OVERRIDE, { id: "same-mod" });
 		expect(api.thing("x")).toBe("base:x");
 
 		// temp-mod: forceOverwrite replaces "thing" on top of same-mod — same-mod's entry becomes
 		// the fallback a later removal below restores to.
-		await api.slothlet.api.add("thing", TEST_DIRS.API_TEST_ADD_DEDUP_LEAF_OVERRIDE, { moduleID: "temp-mod", forceOverwrite: true });
+		await api.slothlet.api.add("thing", TEST_DIRS.API_TEST_ADD_DEDUP_LEAF_OVERRIDE, { id: "temp-mod", collision: { force: true } });
 		expect(api.thing("x")).toBe("override:x");
 
 		// Removing temp-mod restores to same-mod's entry. If that entry's value was corrupted by
@@ -320,7 +320,7 @@ describe.each(MATRIX_CONFIGS)("API mutations control - $name", ({ config }) => {
 		// Root add mounts two keys at once: "existing" collides under skip and is rejected, "fresh"
 		// has no collision and is genuinely mounted. The two keys must be gated independently, not
 		// by a single any-key-succeeded flag.
-		await api.slothlet.api.add("", TEST_DIRS.API_TEST_ADD_ROOT_MULTI, { moduleID: "root-multi-mod" });
+		await api.slothlet.api.add("", TEST_DIRS.API_TEST_ADD_ROOT_MULTI, { id: "root-multi-mod" });
 
 		expect(api.existing("x")).toBe("root-base:x");
 		expect(api.slothlet.owner.get("existing").has("root-multi-mod")).toBe(false);
@@ -331,7 +331,7 @@ describe.each(MATRIX_CONFIGS)("API mutations control - $name", ({ config }) => {
 
 	it("a fully-rejected add does not cache or record history for a later reload to resurrect (#372 review)", async () => {
 		api = await createApiInstance(config, { api: { collision: { mode: { api: "skip" } } }, base: TEST_DIRS.API_TEST_ADD_DEDUP_LEAF });
-		await api.slothlet.api.add("thing", TEST_DIRS.API_TEST_ADD_DEDUP_LEAF_OVERRIDE, { moduleID: "rejected-cache-mod" });
+		await api.slothlet.api.add("thing", TEST_DIRS.API_TEST_ADD_DEDUP_LEAF_OVERRIDE, { id: "rejected-cache-mod" });
 		expect(api.thing("x")).toBe("base:x");
 
 		// Nothing was cached for this moduleID — a targeted reload (which force-replaces by default,
@@ -345,7 +345,7 @@ describe.each(MATRIX_CONFIGS)("API mutations control - $name", ({ config }) => {
 
 	it("a partially-rejected root add only caches the keys that actually succeeded (#372 review)", async () => {
 		api = await createApiInstance(config, { api: { collision: { mode: { api: "skip" } } }, base: TEST_DIRS.API_TEST_ADD_ROOT_BASE });
-		await api.slothlet.api.add("", TEST_DIRS.API_TEST_ADD_ROOT_MULTI, { moduleID: "partial-cache-mod" });
+		await api.slothlet.api.add("", TEST_DIRS.API_TEST_ADD_ROOT_MULTI, { id: "partial-cache-mod" });
 		expect(api.existing("x")).toBe("root-base:x");
 		expect(api.fresh("x")).toBe("root-multi:fresh:x");
 
@@ -361,7 +361,7 @@ describe.each(MATRIX_CONFIGS)("API mutations control - $name", ({ config }) => {
 	it("a partially-rejected root add only registers metadata on the keys that actually succeeded (#372 review)", async () => {
 		api = await createApiInstance(config, { api: { collision: { mode: { api: "skip" } } }, base: TEST_DIRS.API_TEST_ADD_ROOT_BASE });
 		await api.slothlet.api.add("", TEST_DIRS.API_TEST_ADD_ROOT_MULTI, {
-			moduleID: "partial-meta-mod",
+			id: "partial-meta-mod",
 			metadata: { taggedBy: "partial-meta-mod" }
 		});
 		expect(api.existing("x")).toBe("root-base:x");
@@ -377,7 +377,7 @@ describe.each(MATRIX_CONFIGS)("API mutations control - $name", ({ config }) => {
 	it("a collisionMode:'error' throw reverts speculative ownership state instead of leaving an orphaned owner (#372 review)", async () => {
 		api = await createApiInstance(config, { api: { collision: { mode: { api: "error" } } }, base: TEST_DIRS.API_TEST_ADD_DEDUP_LEAF });
 		await withSuppressedSlothletErrorOutput(async () => {
-			await expect(api.slothlet.api.add("thing", TEST_DIRS.API_TEST_ADD_DEDUP_LEAF_OVERRIDE, { moduleID: "error-mod" })).rejects.toThrow();
+			await expect(api.slothlet.api.add("thing", TEST_DIRS.API_TEST_ADD_DEDUP_LEAF_OVERRIDE, { id: "error-mod" })).rejects.toThrow();
 		});
 
 		expect(api.thing("x")).toBe("base:x");
@@ -398,7 +398,7 @@ describe.each(MATRIX_CONFIGS)("API mutations control - $name", ({ config }) => {
 
 		// Add and remove should be blocked
 		await withSuppressedSlothletErrorOutput(async () => {
-			await expect(api.slothlet.api.add("test", TEST_DIRS.API_TEST_MIXED, { moduleID: "test" })).rejects.toThrow(
+			await expect(api.slothlet.api.add("test", TEST_DIRS.API_TEST_MIXED, { id: "test" })).rejects.toThrow(
 				"INVALID_CONFIG_MUTATIONS_DISABLED"
 			);
 		});
@@ -414,7 +414,7 @@ describe.each(MATRIX_CONFIGS)("API mutations control - $name", ({ config }) => {
 		api = await createApiInstance(config);
 
 		// All mutations should work
-		await api.slothlet.api.add("extra", TEST_DIRS.API_TEST_MIXED, { moduleID: "extra-test" });
+		await api.slothlet.api.add("extra", TEST_DIRS.API_TEST_MIXED, { id: "extra-test" });
 		expect(api.extra).toBeDefined();
 
 		await expect(api.slothlet.reload()).resolves.not.toThrow();
@@ -433,7 +433,7 @@ describe.each(MATRIX_CONFIGS)("API mutations control - $name", ({ config }) => {
 		});
 
 		// All mutations should work
-		await api.slothlet.api.add("extra", TEST_DIRS.API_TEST_MIXED, { moduleID: "extra-test" });
+		await api.slothlet.api.add("extra", TEST_DIRS.API_TEST_MIXED, { id: "extra-test" });
 		expect(api.extra).toBeDefined();
 
 		await expect(api.slothlet.reload()).resolves.not.toThrow();
@@ -467,12 +467,12 @@ describe.each(MATRIX_CONFIGS)("API mutations control - $name", ({ config }) => {
 		// Mutations are still available (not disabled by collision config)
 		// Adding to unique path should work (warns but allows first add)
 		const uniquePath = `test_${Date.now()}`;
-		await api.slothlet.api.add(uniquePath, TEST_DIRS.API_TEST_COLLECTIONS, { moduleID: "unique-test" });
+		await api.slothlet.api.add(uniquePath, TEST_DIRS.API_TEST_COLLECTIONS, { id: "unique-test" });
 		expect(api[uniquePath]).toBeDefined();
 
 		// V3: With warn mode, second add merges instead of throwing
 		// The test concept is validated: collision config != mutations disabled
-		await api.slothlet.api.add(uniquePath, TEST_DIRS.API_TEST_COLLECTIONS, { moduleID: "unique-test2" });
+		await api.slothlet.api.add(uniquePath, TEST_DIRS.API_TEST_COLLECTIONS, { id: "unique-test2" });
 		expect(api[uniquePath]).toBeDefined();
 	});
 

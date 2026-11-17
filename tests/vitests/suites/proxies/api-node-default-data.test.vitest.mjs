@@ -78,7 +78,7 @@ const WRITER_RULES = [
  */
 async function mount(options) {
 	const api = await slothlet({ base: join(FIXTURE, "host"), silent: true, ...options });
-	for (const name of ["owner", "single", "reader", "writer"]) await api.slothlet.api.add(name, join(FIXTURE, name), { moduleID: name });
+	for (const name of ["owner", "single", "reader", "writer"]) await api.slothlet.api.add(name, join(FIXTURE, name), { id: name });
 	for (const name of ["owner", "single", "reader", "writer"]) await api[name];
 	for (const key of [...Object.keys(KINDS), "ddate", "derr"]) {
 		await api.owner[key];

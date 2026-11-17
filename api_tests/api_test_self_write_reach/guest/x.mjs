@@ -582,7 +582,7 @@ export async function mountShifting(folder, how) {
 					]
 				};
 	try {
-		await self.slothlet.api.add("guest.sub", folder, { moduleID: "guest-sub", permissions });
+		await self.slothlet.api.add("guest.sub", folder, { id: "guest-sub", permissions });
 		return "done";
 	} catch (error) {
 		return error?.code ?? String(error);
@@ -714,7 +714,7 @@ export function changeKeptCondition(tenant) {
  */
 export async function addAtVersion(apiPath, folder, options, version) {
 	try {
-		await self.slothlet.api.add(apiPath, folder, options, { version });
+		await self.slothlet.api.add(apiPath, folder, { ...options, version: { tag: version } });
 		return "done";
 	} catch (error) {
 		return error?.code ?? String(error);
@@ -746,7 +746,7 @@ export async function addInjected(apiPath, key, options = {}) {
  * @param {object} [options] - Its options.
  * @returns {Promise<string>} `"done"`, or the error code it was refused with.
  * @example
- * await mountModule("addDiscovered", { scanRoot: "/abs/modules" });
+ * await mountModule("addDiscovered", { discover: { root: "/abs/modules" } });
  */
 export async function mountModule(entry, arg, options = {}) {
 	try {

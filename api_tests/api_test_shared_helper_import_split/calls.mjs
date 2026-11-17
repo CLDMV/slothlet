@@ -63,8 +63,8 @@ export async function runCalls(slothlet) {
 					permissions: { policy: "deny", rules: RULES }
 				});
 				apis.push(api);
-				await api.slothlet.api.add("a", path.join(here, "a"), { moduleID: "mod-a" });
-				await api.slothlet.api.add("b", path.join(here, "b"), { moduleID: "mod-b" });
+				await api.slothlet.api.add("a", path.join(here, "a"), { id: "mod-a" });
+				await api.slothlet.api.add("b", path.join(here, "b"), { id: "mod-b" });
 			}
 			for (const [index, api] of apis.entries()) {
 				out[`${mode}/${runtime}/${index + 1}`] = {

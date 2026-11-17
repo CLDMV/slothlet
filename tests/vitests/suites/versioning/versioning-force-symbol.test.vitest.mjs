@@ -46,8 +46,8 @@ describe.each(getMatrixConfigs())("Versioning > Force Symbol > $name", ({ config
 			// would normally route to v2
 		});
 
-		await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1", default: true });
-		await api.slothlet.api.add("auth", `${BASE}/v2`, {}, { version: "v2" });
+		await api.slothlet.api.add("auth", `${BASE}/v1`, { version: { tag: "v1", default: true } });
+		await api.slothlet.api.add("auth", `${BASE}/v2`, { version: { tag: "v2" } });
 
 		// Without force — discriminator returns v2
 		const withoutForce = api.unversionedCaller.callLogin("testUser");
@@ -70,8 +70,8 @@ describe.each(getMatrixConfigs())("Versioning > Force Symbol > $name", ({ config
 			}
 		});
 
-		await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1", default: true });
-		await api.slothlet.api.add("auth", `${BASE}/v2`, {}, { version: "v2" });
+		await api.slothlet.api.add("auth", `${BASE}/v1`, { version: { tag: "v1", default: true } });
+		await api.slothlet.api.add("auth", `${BASE}/v2`, { version: { tag: "v2" } });
 
 		// Force to a non-existent version — should fall back to default
 		let result;

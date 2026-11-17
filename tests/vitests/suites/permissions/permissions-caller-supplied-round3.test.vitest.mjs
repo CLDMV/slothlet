@@ -80,8 +80,8 @@ describe.each(getMatrixConfigs())("Permissions > caller-supplied code, third rou
 			base: path.join(DIR, "base"),
 			permissions: { policy: "deny", rules: RULES }
 		});
-		await api.slothlet.api.add("callee", path.join(DIR, "callee"), { moduleID: "callee-mod" });
-		await api.slothlet.api.add("supplier", path.join(DIR, "supplier"), { moduleID: "supplier-mod" });
+		await api.slothlet.api.add("callee", path.join(DIR, "callee"), { id: "callee-mod" });
+		await api.slothlet.api.add("supplier", path.join(DIR, "supplier"), { id: "supplier-mod" });
 		// The vault is loaded up front, so code calling it synchronously gets its answer rather than a lazy load's promise.
 		await api.vault.secret.whoami();
 		return api;
@@ -169,7 +169,7 @@ describe.each(getMatrixConfigs())(
 			"%s: in, delete, freeze and reads after a freeze report as on the host's function",
 			async (name) => {
 				api = await slothlet({ ...config, base: path.join(DIR, "base"), permissions: { mode: "disabled" } });
-				await api.slothlet.api.add("callee", path.join(DIR, "callee"), { moduleID: "callee-mod" });
+				await api.slothlet.api.add("callee", path.join(DIR, "callee"), { id: "callee-mod" });
 				const read = api.callee.shapes.of(name);
 				await api.shutdown();
 				api = await slothlet({ ...config, base: path.join(DIR, "base"), permissions: { mode: "disabled" } });

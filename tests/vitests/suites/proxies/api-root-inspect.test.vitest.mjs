@@ -86,8 +86,8 @@ describe.each(ROOTS)("util.inspect of the api root > %s", (root) => {
 					]
 				}
 			});
-			await api.slothlet.api.add("zz", join(FIXTURE, root), { moduleID: "zz" });
-			await api.slothlet.api.add("i", join(FIXTURE, "inspector"), { moduleID: "i" });
+			await api.slothlet.api.add("zz", join(FIXTURE, root), { id: "zz" });
+			await api.slothlet.api.add("i", join(FIXTURE, "inspector"), { id: "i" });
 			for (const member of ["data", "pnum", "tool"]) {
 				await api[member];
 				await api.zz[member];

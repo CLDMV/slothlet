@@ -73,7 +73,7 @@ it("reports every call", async () => {
 			const host = await bootHost(slothlet, config);
 			out[`${mode}/${runtime}/records`] = await outcome(() => host.ext.b.work());
 			out[`${mode}/${runtime}/hook`] = await outcome(() => host.ext.b.callHooked());
-			await host.slothlet.api.add(["ext", "c"], path.join(here, "..", "ext-pkg", "api"), { moduleID: "ext-c" });
+			await host.slothlet.api.add(["ext", "c"], path.join(here, "..", "ext-pkg", "api"), { id: "ext-c" });
 			out[`${mode}/${runtime}/helper`] = await outcome(() => host.ext.c.useHelper());
 			await host.slothlet.shutdown();
 		}

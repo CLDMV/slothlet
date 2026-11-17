@@ -29,7 +29,7 @@
  * paths — the form a caller invokes and the one-stub-per-callable contract; `{ details: true }`
  * returns every owned path tagged `function` / `namespace` / `data`. The answer is scoped to the
  * caller: module-private members (#260) the caller could not read are redacted, with
- * `{ includePrivate: true }` as the host-only unredacted view.
+ * `{ private: true }` as the host-only unredacted view.
  */
 
 // One case reaches an internal `#handlers/*` entrypoint to inject an inconsistent ownership state;
@@ -335,42 +335,42 @@ describe("ApiManager > api.leaves lazy completeness and host exemption (#247)", 
 		expect(paths, "public members are untouched").toContain("billing.internals.currency");
 	});
 
-	it("returns the unredacted list under includePrivate for the host", async () => {
+	it("returns the unredacted list under private for the host", async () => {
 		api = await slothlet({ mode: "eager", base: PRIVATE_DIR, permissions: { policy: "allow", rules: [] } });
 
 		// The tooling case this method exists for: the host asking for the complete picture.
-		const paths = (await api.slothlet.api.leaves(".", { details: true, includePrivate: true })).map((d) => d.path);
+		const paths = (await api.slothlet.api.leaves(".", { details: true, private: true })).map((d) => d.path);
 		expect(paths).toContain("billing.internals.__rate");
 		expect(paths).toContain("billing.internals._fee");
 	});
 
-	it("settles into a private subdirectory, so includePrivate is complete under lazy", async () => {
+	it("settles into a private subdirectory, so private is complete under lazy", async () => {
 		const perms = { policy: "allow", rules: [] };
 		api = await slothlet({ mode: "eager", base: PRIVATE_SUBDIR_DIR, permissions: perms });
-		const eagerPaths = (await api.slothlet.api.leaves(".", { details: true, includePrivate: true })).map((d) => d.path).sort();
+		const eagerPaths = (await api.slothlet.api.leaves(".", { details: true, private: true })).map((d) => d.path).sort();
 		await api.shutdown();
 
 		// A private subdirectory is its own materialization unit, and the composed surface
 		// redacts its key from the host's enumeration — so settle discovery must come from the
 		// ownership records, not the live keys alone. Enumeration-only discovery never loaded
-		// the subtree, and even the explicit includePrivate answer silently lost it.
+		// the subtree, and even the explicit private answer silently lost it.
 		api = await slothlet({ mode: "lazy", base: PRIVATE_SUBDIR_DIR, permissions: perms });
-		const lazyPaths = (await api.slothlet.api.leaves(".", { details: true, includePrivate: true })).map((d) => d.path).sort();
+		const lazyPaths = (await api.slothlet.api.leaves(".", { details: true, private: true })).map((d) => d.path).sort();
 		expect(lazyPaths).toContain("pkg._vault.inner.rate");
 		expect(lazyPaths, "lazy answers exactly what eager answers").toEqual(eagerPaths);
 	});
 
-	it("keeps includePrivate complete under lazy when private terminal reads are gated", async () => {
+	it("keeps private complete under lazy when private terminal reads are gated", async () => {
 		const perms = { policy: "allow", rules: [] };
 		api = await slothlet({ mode: "eager", base: PRIVATE_DIR, permissions: perms });
-		const eagerPaths = (await api.slothlet.api.leaves(".", { details: true, includePrivate: true })).map((d) => d.path).sort();
+		const eagerPaths = (await api.slothlet.api.leaves(".", { details: true, private: true })).map((d) => d.path).sort();
 		await api.shutdown();
 
 		// Record-derived discovery also surfaces private TERMINAL exports, whose property read is
 		// caller-gated and throws — the walk must skip them (their records already exist from the
 		// file's materialization) rather than surface the refusal from inside settle.
 		api = await slothlet({ mode: "lazy", base: PRIVATE_DIR, permissions: perms });
-		const lazyPaths = (await api.slothlet.api.leaves(".", { details: true, includePrivate: true })).map((d) => d.path).sort();
+		const lazyPaths = (await api.slothlet.api.leaves(".", { details: true, private: true })).map((d) => d.path).sort();
 		expect(lazyPaths, "gated terminal reads are skipped, not surfaced").toEqual(eagerPaths);
 	});
 
@@ -427,12 +427,12 @@ describe("ApiManager > api.leaves lazy completeness and host exemption (#247)", 
 		).toBe(true);
 	});
 
-	it("refuses includePrivate to a MODULE caller", async () => {
+	it("refuses private to a MODULE caller", async () => {
 		api = await slothlet({ mode: "eager", base: PRIVATE_DIR, permissions: { policy: "allow", rules: [] } });
 
 		// The unredacted list is a host capability. Allowing a module to ask for it would let it
 		// self-grant exactly what the redaction above withholds.
-		const seen = await api.introspect.list.paths({ includePrivate: true });
+		const seen = await api.introspect.list.paths({ private: true });
 		expect(seen.paths).toBeNull();
 		expect(seen.error).toBe("PERMISSION_DENIED");
 	});
@@ -448,10 +448,10 @@ describe("ApiManager > api.leaves lazy completeness and host exemption (#247)", 
 		expect(paths, "no source file must not mean no privacy").not.toContain("inline.__secret");
 	});
 
-	it("rejects a non-boolean includePrivate", async () => {
+	it("rejects a non-boolean private", async () => {
 		api = await slothlet({ mode: "eager", base: PRIVATE_DIR });
 
-		await expect(api.slothlet.api.leaves(".", { includePrivate: "yes" })).rejects.toThrow(/INVALID_ARGUMENT/);
+		await expect(api.slothlet.api.leaves(".", { private: "yes" })).rejects.toThrow(/INVALID_ARGUMENT/);
 	});
 
 	it("is unaffected by permission rules on the host's bound handle", async () => {

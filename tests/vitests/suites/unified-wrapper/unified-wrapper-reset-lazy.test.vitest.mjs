@@ -127,7 +127,7 @@ describe("unified-wrapper: ___resetLazy via lazy mode reload (lines 595-640)", (
 		api = await makeLazyApi();
 
 		// Add a module at a new endpoint in lazy mode
-		await api.slothlet.api.add("ext", TEST_DIRS.API_TEST_MIXED, { moduleID: "ext-lazy-mod" });
+		await api.slothlet.api.add("ext", TEST_DIRS.API_TEST_MIXED, { id: "ext-lazy-mod" });
 		expect(api.ext).toBeDefined();
 
 		// Access it to materialize
@@ -171,7 +171,7 @@ describe("unified-wrapper: ___resetLazy via lazy mode reload (lines 595-640)", (
 		api = await makeLazyApi();
 
 		// Add nested module
-		await api.slothlet.api.add("nest.level", TEST_DIRS.API_TEST_MIXED, { moduleID: "nest-lazy" });
+		await api.slothlet.api.add("nest.level", TEST_DIRS.API_TEST_MIXED, { id: "nest-lazy" });
 		await new Promise((r) => setTimeout(r, 50));
 
 		// Trigger materialization of nest.level
@@ -210,7 +210,7 @@ describe("unified-wrapper: ___invalidate via api.remove (lines 760-773)", () => 
 
 		// Add a module, access it, then remove → ___invalidate fires on child wrappers
 		const ____modID = await api.slothlet.api.add("toRemove", TEST_DIRS.API_TEST_MIXED, {
-			moduleID: "remove-test"
+			id: "remove-test"
 		});
 		expect(api.toRemove).toBeDefined();
 
@@ -223,7 +223,7 @@ describe("unified-wrapper: ___invalidate via api.remove (lines 760-773)", () => 
 		api = await makeLazyApi();
 
 		const ____modID = await api.slothlet.api.add("toRemoveLazy", TEST_DIRS.API_TEST_MIXED, {
-			moduleID: "remove-lazy-test"
+			id: "remove-lazy-test"
 		});
 
 		// Access to materialize

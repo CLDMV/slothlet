@@ -132,8 +132,8 @@ async function createInstance(config, collisionApi) {
  */
 async function createComounted(config, extDir = EXT_DIR, extID = "ext", { otherDir = OTHER_DIR, collisionApi } = {}) {
 	const api = await createInstance(config, collisionApi);
-	await api.slothlet.api.add("plugins", extDir, { moduleID: extID });
-	await api.slothlet.api.add("plugins", otherDir, { moduleID: "other" });
+	await api.slothlet.api.add("plugins", extDir, { id: extID });
+	await api.slothlet.api.add("plugins", otherDir, { id: "other" });
 	return api;
 }
 
@@ -370,8 +370,8 @@ for (const { config, name } of getMatrixConfigs()) {
 			["forceOverwrite", ["A"]]
 		])("with B overriding A's leaf (%s), reloading %j then removing B reverts the leaf to A's code", async (how, reloads) => {
 			api = await createInstance(config, how === "merge-replace" ? "merge-replace" : undefined);
-			await api.slothlet.api.add("leaf", REVERT_A_DIR, { moduleID: "A" });
-			await api.slothlet.api.add("leaf", REVERT_B_DIR, { moduleID: "B", ...(how === "forceOverwrite" ? { forceOverwrite: true } : {}) });
+			await api.slothlet.api.add("leaf", REVERT_A_DIR, { id: "A" });
+			await api.slothlet.api.add("leaf", REVERT_B_DIR, { id: "B", ...(how === "forceOverwrite" ? { collision: { force: true } } : {}) });
 			expect(await api.leaf.an()).toBe("B:an");
 
 			for (const id of reloads) await api.slothlet.api.reload(id);

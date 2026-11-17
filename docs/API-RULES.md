@@ -583,29 +583,29 @@ const api = await slothlet({
 
 ### moduleID Tracking
 
-Each `api.slothlet.api.add()` call accepts an optional `moduleID` in its options object (the third argument — `api.add(apiPath, folderPath, options, versionConfig?)`; the optional fourth argument is `versionConfig` for versioned mounts, not a second options bag). This is the key for ownership tracking:
+Each `api.slothlet.api.add()` call accepts an optional `id` (the module id) in its options object, the third argument: `api.add(path, source, options)`. Versioned mounts put their version under `options.version`. The module id is the key for ownership tracking:
 
 ```javascript
 // Module A registers plugins namespace
 await api.slothlet.api.add("plugins.moduleA", "./modules/moduleA", {
-	moduleID: "moduleA"
+	id: "moduleA"
 });
 
 // Module B registers in the same parent namespace
 await api.slothlet.api.add("plugins.moduleB", "./modules/moduleB", {
-	moduleID: "moduleB"
+	id: "moduleB"
 });
 
 // Hot-reload Module A - ownership system allows this because moduleA owns these paths
 await api.slothlet.api.add("plugins.moduleA", "./modules/moduleA-v2", {
-	moduleID: "moduleA",
-	forceOverwrite: true
+	id: "moduleA",
+	collision: { force: true }
 });
 
 // Cross-module overwrite - blocked if the instance's configured collision mode is "error"
 await api.slothlet.api.add("plugins.moduleB", "./modules/other", {
-	moduleID: "moduleA", // moduleA does not own moduleB's paths
-	forceOverwrite: true // Throws OWNERSHIP_CONFLICT when the instance's collision mode is "error"
+	id: "moduleA", // moduleA does not own moduleB's paths
+	collision: { force: true } // Throws OWNERSHIP_CONFLICT when the instance's collision mode is "error"
 });
 ```
 
@@ -621,7 +621,7 @@ await api.slothlet.api.remove("module-b");
 
 ### Collision Modes
 
-Collision mode is fixed at instance initialization (the `api.collision.mode` config option — see [CONFIGURATION.md](CONFIGURATION.md)). Passing `collisionMode` to an individual `api.add()` call is locked by default — it emits a `WARNING_API_ADD_OPTION_LOCKED` warning and is ignored (the add still succeeds), unless `api.collision.override: true` is set, which makes a per-call `collisionMode` take effect. `forceOverwrite` (below) is the always-available per-call escape hatch regardless of that flag.
+Collision mode is fixed at instance initialization (the `api.collision.mode` config option — see [CONFIGURATION.md](CONFIGURATION.md)). Passing `collision.mode` to an individual `api.add()` call is locked by default — it emits a `WARNING_API_ADD_OPTION_LOCKED` warning and is ignored (the add still succeeds), unless `api.collision.override: true` is set, which makes a per-call `collision.mode` take effect. `collision.force` (below) is the always-available per-call escape hatch regardless of that flag.
 
 | Mode                | Behavior                                   |
 | ------------------- | ------------------------------------------ |
@@ -632,14 +632,14 @@ Collision mode is fixed at instance initialization (the `api.collision.mode` con
 | `"warn"`            | Keep existing value, log a warning         |
 | `"error"`           | Throw `OWNERSHIP_CONFLICT` error           |
 
-### forceOverwrite
+### collision.force
 
-`forceOverwrite: true` performs a complete replacement regardless of the instance's configured collision mode (a `moduleID` is auto-generated when you don't supply one). Use for cases where a module must fully replace its own prior registration:
+`collision: { force: true }` performs a complete replacement regardless of the instance's configured collision mode (a module id is generated when you don't supply one). Use for cases where a module must fully replace its own prior registration:
 
 ```javascript
 await api.slothlet.api.add("config", "./new-config", {
-	moduleID: "config-v2",
-	forceOverwrite: true
+	id: "config-v2",
+	collision: { force: true }
 });
 ```
 
@@ -776,9 +776,9 @@ api.thing("x"); // ✅ the leaf itself, mounted directly (nothing to hoist)
 
 **Category**: Composition
 **Status**: ✅ Implemented (`src/lib/handlers/ownership.mjs`, `src/lib/builders/api-assignment.mjs`, `src/lib/handlers/api-manager.mjs`)
-**Conditions**: [O01–O13](API-RULES/API-COLLISION-CONDITIONS.md) — the six collision modes (`merge`, `merge-replace`, `replace`, `skip`, `warn`, `error`), `forceOverwrite`, Merge-Loss, Namespace-vs-Callable, Wrapper/Plain fall-throughs, `removeMissing`, Load Order, Mount Preflight
+**Conditions**: [O01–O13](API-RULES/API-COLLISION-CONDITIONS.md) — the six collision modes (`merge`, `merge-replace`, `replace`, `skip`, `warn`, `error`), `collision.force`, Merge-Loss, Namespace-vs-Callable, Wrapper/Plain fall-throughs, `removeMissing`, Load Order, Mount Preflight
 
-**Purpose**: Governs which value wins when two contributions land at the same api path. The six collision modes are the primary policy; `forceOverwrite` overrides per call; merge-loss and the wrapper/plain shape fall-throughs resolve mixed shapes; load order sets precedence. Ownership tracking, the ownership stack, and rollback stay with [Rule 12](#rule-12-module-ownership-and-selective-api-overwriting).
+**Purpose**: Governs which value wins when two contributions land at the same api path. The six collision modes are the primary policy; `collision.force` overrides per call; merge-loss and the wrapper/plain shape fall-throughs resolve mixed shapes; load order sets precedence. Ownership tracking, the ownership stack, and rollback stay with [Rule 12](#rule-12-module-ownership-and-selective-api-overwriting).
 
 **Note**: `warn` is intentionally context-dependent — a cross-module conflict keeps the existing owner, an intra-build file/folder collision merges (see O05).
 

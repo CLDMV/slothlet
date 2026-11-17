@@ -131,8 +131,8 @@ const plainOwner = () => import(`${pathToFileURL(join(FIXTURE, "owner", "owner.m
  */
 async function mount(options) {
 	const api = await slothlet({ base: join(FIXTURE, "host"), silent: true, ...options });
-	await api.slothlet.api.add("owner", join(FIXTURE, "owner"), { moduleID: "owner" });
-	await api.slothlet.api.add("reader", join(FIXTURE, "reader"), { moduleID: "reader" });
+	await api.slothlet.api.add("owner", join(FIXTURE, "owner"), { id: "owner" });
+	await api.slothlet.api.add("reader", join(FIXTURE, "reader"), { id: "reader" });
 	await api.owner;
 	await api.reader;
 	return api;

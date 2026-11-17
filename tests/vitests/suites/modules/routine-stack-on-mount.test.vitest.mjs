@@ -62,7 +62,7 @@ describe("routine stacks are installed for modules mounted via addModule()/addMo
 			api: { collision: { mode: { initial: "merge", api: "merge" } } }
 		});
 
-		const res = await api.slothlet.api.modules.addModule("@local/routine-widget", { discover: { scanRoot: FIX_ROUTINE_MODULE } });
+		const res = await api.slothlet.api.modules.addModule("@local/routine-widget", { discover: { root: FIX_ROUTINE_MODULE } });
 		expect(res.mountPath).toBe("ext.widget");
 
 		// The mount path must have installed the routine's stacked callable (fails pre-#362-Fix-B:
@@ -89,7 +89,7 @@ describe("routine stacks are installed for modules mounted via addModule()/addMo
 			api: { collision: { mode: { initial: "merge", api: "merge" } } }
 		});
 
-		const found = await api.slothlet.api.modules.discover({ scanRoot: FIX_ROUTINE_MODULE });
+		const found = await api.slothlet.api.modules.discover({ root: FIX_ROUTINE_MODULE });
 		await api.slothlet.api.modules.addModules(found);
 
 		expect(api.ext.widget.initialize.__slothletRoutineStack).toBe(true);

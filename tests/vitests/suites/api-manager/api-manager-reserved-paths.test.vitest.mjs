@@ -125,7 +125,7 @@ describe.each(CONFIGS)("normalizeApiPath prototype-pollution guard — $name", (
 
 	it.each(UNSAFE)("rejects a $label mount path and does not pollute Object.prototype", async ({ path, probe }) => {
 		api = await makeApi(config);
-		await expect(api.slothlet.api.add(path, () => "polluted", { moduleID: "proto-guard" })).rejects.toMatchObject({
+		await expect(api.slothlet.api.add(path, () => "polluted", { id: "proto-guard" })).rejects.toMatchObject({
 			code: "INVALID_CONFIG_API_PATH_INVALID"
 		});
 		// The write must not have reached the prototype chain.
@@ -138,7 +138,7 @@ describe.each(CONFIGS)("normalizeApiPath prototype-pollution guard — $name", (
 		// starts with "__" (the module-private convention) or contains a reserved word as a substring
 		// must still mount — the guard matches whole segments, not prefixes or substrings.
 		api = await makeApi(config);
-		await expect(api.slothlet.api.add("__config.value", () => 1, { moduleID: "safe-underscore" })).resolves.toBeDefined();
-		await expect(api.slothlet.api.add(["prototypeName", "leaf"], () => 2, { moduleID: "safe-substring" })).resolves.toBeDefined();
+		await expect(api.slothlet.api.add("__config.value", () => 1, { id: "safe-underscore" })).resolves.toBeDefined();
+		await expect(api.slothlet.api.add(["prototypeName", "leaf"], () => 2, { id: "safe-substring" })).resolves.toBeDefined();
 	});
 });

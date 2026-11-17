@@ -186,7 +186,7 @@ describe("module-private members in a real browser", () => {
 			try {
 				// The add mounts a folder of the manifest outside the root: listed after the build, so the root never composes it.
 				MOUNTED.forEach((entry) => manifestOf(api).directories.push(entry));
-				await api.slothlet.api.add("ext", baseUrl() + "mounted", { moduleID: "ext-mod" });
+				await api.slothlet.api.add("ext", baseUrl() + "mounted", { id: "ext-mod" });
 				expect(await settled(() => api.ext.peek.rate())).toEqual({ rate: undefined, error: "PERMISSION_DENIED" });
 				expect(await settled(() => api.reporting.peek.rate())).toEqual({ rate: 0.2, error: null });
 			} finally {

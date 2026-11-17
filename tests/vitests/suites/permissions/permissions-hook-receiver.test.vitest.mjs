@@ -62,12 +62,12 @@ describe.each(CONFIGS)("hook handler receiver (#625) — $mode / $runtime", ({ m
 		["permissions off", {}]
 	])("calls a module's handler with no receiver, so it cannot change its own registration (%s)", async (_label, options) => {
 		api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, hook: { enabled: true }, ...options });
-		await api.slothlet.api.add("victim", path.join(FIXTURE, "victim"), { moduleID: "victim" });
-		await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { moduleID: "guest" });
+		await api.slothlet.api.add("victim", path.join(FIXTURE, "victim"), { id: "victim" });
+		await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { id: "guest" });
 		const seen = [];
 		let handedApi = null;
 		globalThis[Symbol.for(PROBE)] = (self) => {
-			self.slothlet.hook.on("before:victim.v.echo", function handler({ api: given }) {
+			self.slothlet.hook.on("victim.v.echo:before", function handler({ api: given }) {
 				seen.push(this === undefined ? "none" : typeof this);
 				if (this && typeof this === "object") {
 					this.handler = function swapped({ api: raw }) {
