@@ -1178,7 +1178,7 @@ async function runDebug(config, modeLabel, awaitCalls = false) {
 	// Second parity pass over the collision fixture base: api_test carries no same-name
 	// file+directory pairs, so mode drift on collision composition was invisible to the main
 	// compare — that is exactly how the eager/lazy collision divergence fixed against the
-	// documented MIGRATION.md table went unnoticed. Booting both modes over the dedicated
+	// documented v2-to-v3.md table went unnoticed. Booting both modes over the dedicated
 	// collision base keeps that family under comparison permanently.
 	// The framework's own control tree (api.slothlet, shutdown, destroy) carries mode-varying
 	// STATUS fields (e.g. materialize.materialized) — legitimate differences, not composition

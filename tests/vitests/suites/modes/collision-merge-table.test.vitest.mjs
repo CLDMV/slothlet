@@ -17,7 +17,7 @@
  * @fileoverview The documented collision table, pinned against real file+directory collisions.
  *
  * @description
- * MIGRATION.md's collision-mode table is the specification: under the default `merge`, on a
+ * docs/migration/v2-to-v3.md's collision-mode table is the specification: under the default `merge`, on a
  * conflict the FIRST loaded wins and non-conflicting keys from both sources are added; files load
  * before directories at every level. Pinned against both composition branches of the fixture base:
  *
