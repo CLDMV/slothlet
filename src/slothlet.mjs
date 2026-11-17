@@ -1269,12 +1269,19 @@ class Slothlet {
 		// Built-in capabilities (code from strings, `data:`/`blob:` imports, module hooks): refused to module code while
 		// the permission system is on, unless a rule opens one. The entry points are wrapped while any instance with a
 		// permission config that can be on is up, and unwrapped with the last.
+		// A reload loads again under a new instanceID: the check held under the previous one goes once the new one is
+		// registered, so the instance is checked once per call and the entry points are not unwrapped in between.
+		const previousCapabilityHolder = this.#capabilityHolder;
+		this.#capabilityHolder = null;
 		if (this.config?.permissions && this.config.permissions.mode !== "disabled") {
 			const instanceID = this.instanceID;
-			registerCapabilityCheck(instanceID, (name, route, importer, filename) =>
-				runtime_assertCapability(this, name, route, this.#importsAsOwnFile(importer) ? importer : null, filename)
+			registerCapabilityCheck(instanceID, (name, route, importer, filename, runnerCompile) =>
+				runtime_assertCapability(this, name, route, this.#importsAsOwnFile(importer) ? importer : null, filename, runnerCompile)
 			);
 			this.#capabilityHolder = instanceID;
+		}
+		if (previousCapabilityHolder !== null && previousCapabilityHolder !== this.#capabilityHolder) {
+			releaseCapabilityCheck(previousCapabilityHolder);
 		}
 
 		// Claim a share in the global patches, released on this instance's shutdown.

@@ -41,7 +41,7 @@ import { ComponentBase } from "#factories/component-base";
 import { isFrameworkReservedKey, internals as reservedKeysInternals } from "#helpers/reserved-keys";
 import { runtime_isWrappedClassInstance, internals as classInstanceWrapperInternals } from "#helpers/class-instance-wrapper";
 import { combineCeilings, identityCeilings, internals as trustedRootInternals } from "#handlers/trusted-root";
-import { handsOutAsModule, internals as framePlacementInternals } from "#handlers/frame-placement";
+import { handsOutAsModule, toComparablePath, internals as framePlacementInternals } from "#handlers/frame-placement";
 import {
 	isFrameworkInternal,
 	isFrameworkMarkerKey,
@@ -455,6 +455,64 @@ function runtime_selfModuleReader(slothlet) {
 }
 
 /**
+ * The loads whose file vitest's module runner has compiled (see {@link runtime_runnerCompilesLoad}).
+ * @type {WeakSet<object>}
+ * @private
+ */
+const RUNNER_COMPILED_LOADS = new WeakSet();
+
+/**
+ * Whether a compile vitest's module runner makes of the code its server sent (see `helpers/vitest-worker-setup`) is
+ * the loader's: the compile of a file this instance is loading now (the name it compiles under carries this instance's
+ * tag and names a file the loader is loading, and that load's file has not been compiled yet; the load is then marked
+ * compiled), or of this instance's own `self` module, which the vite plugin writes for a runtime import of one of the
+ * instance's files (`slothlet-self:<instanceID>|…`), while the instance has a load running.
+ * @param {object} slothlet - The instance.
+ * @param {*} filename - The name the code is compiled under (the module's id).
+ * @returns {boolean} True for such a compile.
+ * @private
+ */
+function runtime_runnerCompilesLoad(slothlet, filename) {
+	if (typeof filename !== "string") return false;
+	// vite names a virtual module with a leading NUL.
+	const selfName = StringMethods.startsWith(filename, "\0") ? StringMethods.slice(filename, 1) : filename;
+	if (StringMethods.startsWith(selfName, "slothlet-self:")) {
+		if (!StringMethods.startsWith(selfName, `slothlet-self:${String(slothlet.instanceID)}|`)) return false;
+		const loader = slothlet?.processors?.loader;
+		return typeof loader?.isLoading === "function" && loader.isLoading();
+	}
+	if (RegExpMethods.exec(/[?&]slothlet_instance=([^&#]+)/, filename)?.[1] !== String(slothlet.instanceID)) return false;
+	const load = runtime_loadingFileRunning(slothlet, filename);
+	if (load === null || WeakSetMethods.has(RUNNER_COMPILED_LOADS, load)) return false;
+	WeakSetMethods.add(RUNNER_COMPILED_LOADS, load);
+	return true;
+}
+
+/**
+ * Refuse code compiled under the name of a file this instance is loading now (every load of it) a capability that no
+ * rule opens for that load's module path; a load whose paths are not known yet is refused it.
+ * @param {object} slothlet - The instance.
+ * @param {object} permissionManager - Its permission manager.
+ * @param {string} name - The capability.
+ * @param {string} route - What the code used.
+ * @param {*} filename - The name the code is compiled under.
+ * @returns {void}
+ * @throws {SlothletError} `CAPABILITY_REFUSED`.
+ * @private
+ */
+function runtime_assertNamedLoads(slothlet, permissionManager, name, route, filename) {
+	if (typeof filename !== "string") return;
+	const loader = slothlet?.processors?.loader;
+	if (typeof loader?.loadsOfFile !== "function") return;
+	const loads = loader.loadsOfFile(toComparablePath(filename));
+	for (let index = 0; index < loads.length; index++) {
+		const paths = loads[index].paths;
+		if (paths?.length) permissionManager.assertCapabilityForPaths(paths, name, route);
+		else permissionManager.assertCapability(UNATTRIBUTED_READER, name, route);
+	}
+}
+
+/**
  * Refuse module code of this instance a built-in capability no rule opens for it (see
  * `PermissionManager#assertCapability`), told as any other access is: the call running, read from the stack where
  * calls are in flight; while no call runs, the code's own frames (a function a module handed out, run by the host, is
@@ -468,15 +526,24 @@ function runtime_selfModuleReader(slothlet) {
  *   makes as it links), so that code is never taken for the host's.
  * @param {*} [filename=null] - The file name the code is compiled under, when one is given: a real file outside the
  *   caller's own folder is refused even where a rule opens the capability.
+ * @param {boolean} [runnerCompile=false] - Whether the call is vitest's compile of exactly the code its server sent for
+ *   `filename` (see `helpers/vitest-worker-setup`): allowed once for a file of this instance's that is loading now, as
+ *   Node's own loader compiling the file would be.
  * @returns {void}
  * @throws {SlothletError} `CAPABILITY_REFUSED`.
  * @internal
  * @example
  * runtime_assertCapability(slothlet, "code", "new Function");
  */
-function runtime_assertCapability(slothlet, name, route, moduleFile = null, filename = null) {
+function runtime_assertCapability(slothlet, name, route, moduleFile = null, filename = null, runnerCompile = false) {
 	const permissionManager = slothlet?.handlers?.permissionManager;
 	if (!permissionManager?.isEnabled?.()) return;
+	// vitest's module runner compiling the code its server sent for a file of this instance's that is loading now: the
+	// loader's own compile of the file, as Node's loader compiling it would be. One such compile per load.
+	if (runnerCompile === true && runtime_runnerCompilesLoad(slothlet, filename)) return;
+	// Any other code compiled under the name of a file this instance is loading now is placed as that file's code,
+	// whoever compiles it: decided as the file's module path, as its own top-level code is.
+	runtime_assertNamedLoads(slothlet, permissionManager, name, route, filename);
 	const contextManager = slothlet.contextManager;
 	let caller = null;
 	const identity = contextManager?.getCallerIdentity?.(slothlet.instanceID);
