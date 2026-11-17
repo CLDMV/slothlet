@@ -39,6 +39,12 @@
  * Rows changed by the ruling that removed `node-stack-realm` from the baseline (2026-11-16): the Node reports list no
  * check outside vitest (was: `node-stack-realm`) and `vitest-plugin` alone under vitest; the stand-in row for a missing
  * realm is gone, and the row for a probe that throws uses the vitest check.
+ *
+ * Rows changed by the `async-context-frame` check (2026-11-17): the child processes start with Node's
+ * `AsyncContextFrame` on (`--experimental-async-context-frame` on Node 22, nothing on Node 24 and later) and their
+ * reports list `async-context-frame` met; under vitest the report lists it before `vitest-plugin`, met when the worker
+ * runs with the frame on, and where it is off (Node 22's default) strict refuses and on warns once for it. The check
+ * itself is covered in `permissions-baseline-async-context-frame.test.vitest.mjs`.
  * @module tests/vitests/suites/permissions/permissions-strict-baseline
  */
 
@@ -46,6 +52,7 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { describe, it, expect, afterEach } from "vitest";
+import { AsyncLocalStorage, executionAsyncResource } from "node:async_hooks";
 import slothlet from "@cldmv/slothlet";
 import { normalizePermissionsConfig } from "#helpers/config";
 import { runBaseline } from "#helpers/permission-baseline";
@@ -77,13 +84,39 @@ function child(mode, { loading, runtime }, flags = []) {
 	return JSON.parse(line.slice("RESULT ".length));
 }
 
+/**
+ * Whether this process runs with Node's `AsyncContextFrame` on, told the way the check tells it: a storage's value is
+ * not found on the running async resource or a fresh promise.
+ * @returns {boolean} True when it is on.
+ */
+function frameOnHere() {
+	const marker = Object.freeze({});
+	const reaches = (value, depth = 0, seen = new Set()) => {
+		if (value === marker) return true;
+		if (!value || (typeof value !== "object" && typeof value !== "function") || depth > 4 || seen.has(value)) return false;
+		seen.add(value);
+		if (value instanceof Map) for (const [k, v] of value) if (reaches(k, depth + 1, seen) || reaches(v, depth + 1, seen)) return true;
+		return Reflect.ownKeys(value).some((key) => {
+			const descriptor = Object.getOwnPropertyDescriptor(value, key);
+			return descriptor && "value" in descriptor && reaches(descriptor.value, depth + 1, seen);
+		});
+	};
+	const storage = new AsyncLocalStorage();
+	const exposed = storage.run(marker, () => reaches(executionAsyncResource()) || reaches(Promise.resolve()));
+	storage.disable();
+	return !exposed;
+}
+
+const FRAME_ON_HERE = frameOnHere();
+/** The Node flags that turn `AsyncContextFrame` on in a child: Node 22 needs the flag, Node 24 and later have it on. */
+const FRAMES_ON = Number(process.versions.node.split(".")[0]) < 24 ? ["--experimental-async-context-frame"] : [];
 const NO_CODEGEN = ["--disallow-code-generation-from-strings"];
 /** `capabilities` is the permission manager's list of capabilities and the callers rules open each to. */
 const MET_NODE = {
 	mode: "strict",
 	baseline: {
 		met: true,
-		checks: []
+		checks: [{ id: "async-context-frame", met: true, reason: null }]
 	},
 	capabilities: expect.any(Array)
 };
@@ -104,7 +137,7 @@ describe.each(CONFIGS)("permissions mode strict > Node, a child process > $loadi
 		["without", []],
 		["with", NO_CODEGEN]
 	])("starts %s --disallow-code-generation-from-strings, applies every rule, and cannot be left at runtime", (_label, flags) => {
-		expect(child("strict", config, flags)).toEqual({
+		expect(child("strict", config, [...FRAMES_ON, ...flags])).toEqual({
 			start: "started",
 			warnings: [],
 			report: MET_NODE,
@@ -119,7 +152,7 @@ describe.each(CONFIGS)("permissions mode strict > Node, a child process > $loadi
 	});
 
 	it("under on, warns nothing without the flag, and the runtime switches work", () => {
-		const out = child("on", config);
+		const out = child("on", config, FRAMES_ON);
 		expect(out.start).toBe("started");
 		expect(out.warnings).toEqual([]);
 		expect(out.report).toEqual({ ...MET_NODE, mode: "on" });
@@ -138,8 +171,11 @@ describe.each(CONFIGS)("permissions mode strict > Node, a child process > $loadi
 describe("permissions mode strict > under vitest with the plugin", () => {
 	let api = null;
 	const UNDER_VITEST = {
-		met: true,
-		checks: [{ id: "vitest-plugin", met: true, reason: null }]
+		met: FRAME_ON_HERE,
+		checks: [
+			{ id: "async-context-frame", met: FRAME_ON_HERE, reason: FRAME_ON_HERE ? null : expect.any(String) },
+			{ id: "vitest-plugin", met: true, reason: null }
+		]
 	};
 
 	afterEach(async () => {
@@ -148,6 +184,14 @@ describe("permissions mode strict > under vitest with the plugin", () => {
 	});
 
 	it("starts under strict with the plugin's records seen", async () => {
+		if (!FRAME_ON_HERE) {
+			// Node's AsyncContextFrame is off in this worker: strict refuses for that check alone.
+			await expect(slothlet({ base: BASE, silent: true, permissions: { mode: "strict", rules: RULES } })).rejects.toMatchObject({
+				code: "PERMISSION_BASELINE_UNMET",
+				details: { checks: "async-context-frame" }
+			});
+			return;
+		}
 		api = await slothlet({ base: BASE, silent: true, permissions: { mode: "strict", rules: RULES } });
 		expect(api.slothlet.permissions.control.report()).toEqual({ mode: "strict", baseline: UNDER_VITEST, capabilities: expect.any(Array) });
 		expect(await api.good.readOnly()).toBe("GOOD-ONLY");
@@ -156,7 +200,12 @@ describe("permissions mode strict > under vitest with the plugin", () => {
 	it("under on, reports every check met and warns nothing", async () => {
 		api = await slothlet({ base: BASE, permissions: { mode: "on", rules: RULES } });
 		expect(api.slothlet.permissions.control.report()).toEqual({ mode: "on", baseline: UNDER_VITEST, capabilities: expect.any(Array) });
-		expect(api.slothlet.warnings.get().filter((warning) => warning.code === "WARNING_PERMISSION_BASELINE_UNMET")).toEqual([]);
+		expect(
+			api.slothlet.warnings
+				.get()
+				.filter((warning) => warning.code === "WARNING_PERMISSION_BASELINE_UNMET")
+				.map((warning) => warning.details.check)
+		).toEqual(FRAME_ON_HERE ? [] : ["async-context-frame"]);
 	});
 });
 

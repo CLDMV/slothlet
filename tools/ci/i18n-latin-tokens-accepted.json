@@ -561,6 +561,8 @@
 		"loader",
 		"platform",
 		"resolve",
-		"dispatcher"
+		"dispatcher",
+		"AsyncContextFrame",
+		"AsyncLocalStorage"
 	]
 }
