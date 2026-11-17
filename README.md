@@ -253,8 +253,8 @@ const api = await slothlet({ base: "./api", hook: true });
 
 api.slothlet.hook.on("math.add:before", ({ args }) => [args[0] * 2, args[1] * 2], { id: "double" });
 api.slothlet.hook.on("math.*:after", ({ result }) => result * 10, { id: "scale" });
-api.slothlet.hook.on("**:always", ({ path, hasError }) => console.log(path, hasError));
-api.slothlet.hook.on("**:error", ({ path, error, source }) => console.error(path, source.type, error));
+api.slothlet.hook.on("**:always", ({ path, errors }) => console.log(path, errors.length > 0));
+api.slothlet.hook.on("**:error", ({ path, error, origin }) => console.error(path, origin.type, error));
 
 const out = await api.math.add(2, 3); // hooks fire automatically
 ```

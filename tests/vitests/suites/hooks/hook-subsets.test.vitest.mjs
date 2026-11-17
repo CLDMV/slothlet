@@ -472,9 +472,13 @@ describe.each(HOOK_SUBSET_MATRIX)("Hook Subsets - $name", ({ config }) => {
 
 			const contexts = [];
 
-			api.slothlet.hook.on("**:always", (ctx) => contexts.push({ subset: "before", hasError: ctx.hasError }), { subset: "before" });
-			api.slothlet.hook.on("**:always", (ctx) => contexts.push({ subset: "primary", hasError: ctx.hasError }), { subset: "primary" });
-			api.slothlet.hook.on("**:always", (ctx) => contexts.push({ subset: "after", hasError: ctx.hasError }), { subset: "after" });
+			api.slothlet.hook.on("**:always", (ctx) => contexts.push({ subset: "before", hasError: ctx.errors.length > 0 }), {
+				subset: "before"
+			});
+			api.slothlet.hook.on("**:always", (ctx) => contexts.push({ subset: "primary", hasError: ctx.errors.length > 0 }), {
+				subset: "primary"
+			});
+			api.slothlet.hook.on("**:always", (ctx) => contexts.push({ subset: "after", hasError: ctx.errors.length > 0 }), { subset: "after" });
 
 			api.slothlet.hook.on("**:before", () => {
 				throw new Error("Test error");
@@ -546,8 +550,8 @@ describe.each(HOOK_SUBSET_MATRIX)("Hook Subsets - $name", ({ config }) => {
 				(ctx) =>
 					errorContexts.push({
 						subset: "before",
-						errorType: ctx.errorType,
-						sourceType: ctx.source.type
+						errorType: ctx.class,
+						sourceType: ctx.origin.type
 					}),
 				{ subset: "before" }
 			);
@@ -557,8 +561,8 @@ describe.each(HOOK_SUBSET_MATRIX)("Hook Subsets - $name", ({ config }) => {
 				(ctx) =>
 					errorContexts.push({
 						subset: "primary",
-						errorType: ctx.errorType,
-						sourceType: ctx.source.type
+						errorType: ctx.class,
+						sourceType: ctx.origin.type
 					}),
 				{ subset: "primary" }
 			);
@@ -568,8 +572,8 @@ describe.each(HOOK_SUBSET_MATRIX)("Hook Subsets - $name", ({ config }) => {
 				(ctx) =>
 					errorContexts.push({
 						subset: "after",
-						errorType: ctx.errorType,
-						sourceType: ctx.source.type
+						errorType: ctx.class,
+						sourceType: ctx.origin.type
 					}),
 				{ subset: "after" }
 			);

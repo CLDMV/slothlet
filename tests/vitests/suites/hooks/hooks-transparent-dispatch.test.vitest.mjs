@@ -469,9 +469,13 @@ describe("Hooks > transparent dispatch guards and reversibility (#253/#251)", ()
 		});
 		api.slothlet.hook.on("relay.inner:after", async ({ result }) => result, { id: "r-inner" });
 		api.slothlet.hook.on("relay.outer:after", async ({ result }) => result, { id: "r-outer" });
-		api.slothlet.hook.on("relay.outer:always", ({ hasError, errors }) => observed.push({ hasError, message: errors[0]?.message }), {
-			id: "r-always"
-		});
+		api.slothlet.hook.on(
+			"relay.outer:always",
+			({ errors, hasError = errors.length > 0 }) => observed.push({ hasError, message: errors[0]?.message }),
+			{
+				id: "r-always"
+			}
+		);
 
 		await expect(async () => await api.relay.outer(api)).rejects.toThrow("relayed-boom");
 		// The marker suppresses a duplicate ERROR hook at the outer pipeline. `always` is a per-call
@@ -490,9 +494,13 @@ describe("Hooks > transparent dispatch guards and reversibility (#253/#251)", ()
 			},
 			{ id: "a-refuse" }
 		);
-		api.slothlet.hook.on("svc.mulSync:always", ({ hasError, errors }) => observed.push({ hasError, message: errors[0]?.message }), {
-			id: "always-after-witness"
-		});
+		api.slothlet.hook.on(
+			"svc.mulSync:always",
+			({ errors, hasError = errors.length > 0 }) => observed.push({ hasError, message: errors[0]?.message }),
+			{
+				id: "always-after-witness"
+			}
+		);
 
 		await expect(async () => await api.svc.mulSync(1, 1)).rejects.toThrow("after-refused");
 		expect(observed, "the after-chain's failure reaches always, as it does on the sync path").toEqual([
@@ -510,9 +518,13 @@ describe("Hooks > transparent dispatch guards and reversibility (#253/#251)", ()
 			},
 			{ id: "b-refuse" }
 		);
-		api.slothlet.hook.on("svc.mulSync:always", ({ hasError, errors }) => observed.push({ hasError, message: errors[0]?.message }), {
-			id: "always-witness"
-		});
+		api.slothlet.hook.on(
+			"svc.mulSync:always",
+			({ errors, hasError = errors.length > 0 }) => observed.push({ hasError, message: errors[0]?.message }),
+			{
+				id: "always-witness"
+			}
+		);
 
 		await expect(async () => await api.svc.mulSync(1, 1)).rejects.toThrow("gate-closed");
 		// The sync path guarantees this from its `finally`; whether a promotion happened is not the

@@ -62,7 +62,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks Always Error
 
 		api.slothlet.hook.on(
 			"math.add:always",
-			({ path, result, hasError, errors }) => {
+			({ path, result, errors, hasError = errors.length > 0 }) => {
 				alwaysContext = { path, result, hasError, errors };
 			},
 			{ id: "observe-execution" }
@@ -93,7 +93,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks Always Error
 
 		api.slothlet.hook.on(
 			"math.add:always",
-			({ result, hasError, errors }) => {
+			({ result, errors, hasError = errors.length > 0 }) => {
 				alwaysContext = { result, hasError, errors };
 			},
 			{ id: "observe-execution" }
@@ -125,7 +125,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks Always Error
 
 		api.slothlet.hook.on(
 			"math.divide:always",
-			({ path, result, hasError, errors }) => {
+			({ path, result, errors, hasError = errors.length > 0 }) => {
 				alwaysContext = { path, result, hasError, errors };
 			},
 			{ id: "observe-execution" }
@@ -163,7 +163,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks Always Error
 		// Single always hook handles both success and error logging
 		api.slothlet.hook.on(
 			"math.*:always",
-			({ path, result, hasError, errors }) => {
+			({ path, result, errors, hasError = errors.length > 0 }) => {
 				if (hasError) {
 					logs.push({
 						type: "error",
@@ -224,7 +224,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks Always Error
 
 		api.slothlet.hook.on(
 			"math.divide:always",
-			({ path, result, hasError, errors, self, context }) => {
+			({ path, result, errors, self, context, hasError = errors.length > 0 }) => {
 				alwaysContext = { path, result, hasError, errors, self, context };
 			},
 			{ id: "observe-execution" }
@@ -266,7 +266,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks Always Error
 
 		api.slothlet.hook.on(
 			"**:always",
-			({ hasError }) => {
+			({ errors, hasError = errors.length > 0 }) => {
 				metrics.calls++;
 				if (hasError) {
 					metrics.errors++;
@@ -309,7 +309,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks Always Error
 
 		api.slothlet.hook.on(
 			"**:always",
-			({ path, hasError, errors }) => {
+			({ path, errors, hasError = errors.length > 0 }) => {
 				if (hasError) {
 					errorLog.push({
 						path: path,

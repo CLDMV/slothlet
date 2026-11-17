@@ -109,7 +109,7 @@ describe.each(describe_each_matrix)("Hooks Suppress Errors > Config: '$name'", (
 
 		expect(result).toBeUndefined();
 		expect(flags.called).toBe(true);
-		expect(lastContext.current?.source?.type).toBe("before");
+		expect(lastContext.current?.origin?.type).toBe("before");
 		expect(lastContext.current?.error?.message).toBe("Before hook failed");
 	});
 
@@ -151,7 +151,7 @@ describe.each(describe_each_matrix)("Hooks Suppress Errors > Config: '$name'", (
 		// Hook failure should NOT short-circuit - function result (5) should still be returned
 		expect(result).toBe(5);
 		expect(flags.called).toBe(true);
-		expect(lastContext.current?.source?.type).toBe("after");
+		expect(lastContext.current?.origin?.type).toBe("after");
 		expect(lastContext.current?.error?.message).toBe("After hook failed");
 	});
 

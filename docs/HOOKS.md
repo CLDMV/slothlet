@@ -202,8 +202,8 @@ api.slothlet.hook.on(
 // Always hook: Observe final result (read-only)
 api.slothlet.hook.on(
 	"**:always",
-	({ path, result, hasError, errors }) => {
-		if (hasError) {
+	({ path, result, errors }) => {
+		if (errors.length > 0) {
 			console.log(`${path} failed:`, errors);
 		} else {
 			console.log(`${path} succeeded:`, result);
@@ -260,12 +260,11 @@ api.slothlet.hook.on("math.*:after", ({ path, args, result, api, ctx }) => {
 ### Always hook context
 
 ```javascript
-api.slothlet.hook.on("**:always", ({ path, args, result, hasError, errors, api, ctx }) => {
+api.slothlet.hook.on("**:always", ({ path, args, result, errors, api, ctx }) => {
 	// path: string - API path
 	// args: Array - original arguments
-	// result: * - final result (undefined if hasError)
-	// hasError: boolean - whether an error occurred
-	// errors: Array<Error> - array of errors that occurred
+	// result: * - final result (undefined when the call failed)
+	// errors: Array<Error> - the errors that occurred (empty on success; the call failed when errors.length > 0)
 	// api, ctx - as above
 	// Return value is ignored
 });
@@ -290,19 +289,18 @@ api.slothlet.hook.on("math.*:around", ({ path, args, next, entry, caller, api, c
 ### Error hook context
 
 ```javascript
-api.slothlet.hook.on("**:error", ({ path, args, error, errorType, source, timestamp, api, ctx }) => {
+api.slothlet.hook.on("**:error", ({ path, args, error, class: errorClass, origin, at, api, ctx }) => {
 	// path: string - API path
 	// args: Array - function arguments
 	// error: Error - the error object
-	// errorType: string - error constructor name
-	// timestamp: Date - when the error occurred
-	// source: object - error source details
-	//   source.type: "around" | "before" | "after" | "always" | "function"
-	//   source.subset: hook subset (if hook error)
-	//   source.hookId: hook ID (if hook error)
-	//   source.hookTag: hook tag/name (if hook error)
-	//   source.timestamp: epoch ms
-	//   source.stack: full stack trace
+	// class: string - the error's class name
+	// at: number - when the error hooks ran (the instance clock, epoch ms)
+	// origin: object - where the error came from
+	//   origin.type: "around" | "before" | "after" | "always" | "function"
+	//   origin.subset: hook subset (if hook error)
+	//   origin.hook: the failing hook's id (if hook error)
+	//   origin.at: when the error occurred (epoch ms)
+	//   origin.stack: full stack trace
 	// api, ctx - as above
 });
 ```
@@ -617,14 +615,14 @@ The `error` hook type receives detailed context about any error in the execution
 ```javascript
 api.slothlet.hook.on(
 	"**:error",
-	({ path, error, source }) => {
+	({ path, error, origin }) => {
 		console.error(`Error in ${path}:`, error.message);
-		console.error(`Source type: ${source.type}`); // "around" | "before" | "function" | "after" | "always" | "unknown"
+		console.error(`Origin type: ${origin.type}`); // "around" | "before" | "function" | "after" | "always" | "unknown"
 
-		if (source.type === "function") {
+		if (origin.type === "function") {
 			console.error("Error in function body");
 		} else {
-			console.error(`Error in ${source.type} hook: ${source.hookTag}`);
+			console.error(`Error in ${origin.type} hook: ${origin.hook}`);
 		}
 	},
 	{ id: "error-monitor" }
@@ -642,9 +640,9 @@ api.slothlet.hook.on(
 
 ## Error Source Tracking
 
-### Source Types
+### Origin Types
 
-| `source.type` | Description                       |
+| `origin.type` | Description                       |
 | ------------- | --------------------------------- |
 | `"function"`  | Error in the target function body |
 | `"around"`    | Error thrown by an around hook    |
@@ -652,14 +650,13 @@ api.slothlet.hook.on(
 | `"after"`     | Error in an after hook            |
 | `"always"`    | Error in an always hook           |
 
-### Source Properties
+### Origin Properties
 
-- `source.type` - source type (see above)
-- `source.subset` - hook subset where error occurred (for hook errors)
-- `source.hookId` - ID of the hook that failed (for hook errors)
-- `source.hookTag` - name/tag of the hook that failed (for hook errors)
-- `source.timestamp` - epoch millisecond when error occurred
-- `source.stack` - full stack trace string
+- `origin.type` - origin type (see above)
+- `origin.subset` - hook subset where error occurred (for hook errors)
+- `origin.hook` - id of the hook that failed (for hook errors)
+- `origin.at` - epoch millisecond when error occurred
+- `origin.stack` - full stack trace string
 
 ### Comprehensive Error Monitoring Example
 
@@ -668,21 +665,20 @@ const errorStats = { function: 0, around: 0, before: 0, after: 0, always: 0, byH
 
 api.slothlet.hook.on(
 	"**:error",
-	({ path, error, source }) => {
-		errorStats[source.type] = (errorStats[source.type] || 0) + 1;
+	({ path, error, origin }) => {
+		errorStats[origin.type] = (errorStats[origin.type] || 0) + 1;
 
-		if (source.hookTag) {
-			errorStats.byHook[source.hookTag] = (errorStats.byHook[source.hookTag] || 0) + 1;
+		if (origin.hook) {
+			errorStats.byHook[origin.hook] = (errorStats.byHook[origin.hook] || 0) + 1;
 		}
 
 		sendToMonitoring({
-			timestamp: source.timestamp,
+			at: origin.at,
 			path,
-			errorType: source.type,
-			hookId: source.hookId,
-			hookTag: source.hookTag,
+			type: origin.type,
+			hook: origin.hook,
 			message: error.message,
-			stack: source.stack
+			stack: origin.stack
 		});
 	},
 	{ id: "error-analytics" }

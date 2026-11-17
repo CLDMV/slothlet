@@ -239,7 +239,7 @@ describe.each(getBrowserMatrixConfigs({ hook: { enabled: true } }))(
 			});
 
 			expect(errorCtx).not.toBeNull();
-			expect(errorCtx.source?.type).toBe("before");
+			expect(errorCtx.origin?.type).toBe("before");
 			expect(errorCtx.error?.message).toBe("before threw");
 		});
 	}
@@ -309,7 +309,7 @@ describe.each(getBrowserMatrixConfigs({ hook: { enabled: true } }))("Browser Mod
 		await api.math.add(2, 3);
 
 		expect(errorCtx).not.toBeNull();
-		expect(errorCtx.source?.type).toBe("before");
+		expect(errorCtx.origin?.type).toBe("before");
 		expect(errorCtx.error?.message).toBe("suppressed error msg");
 	});
 
@@ -336,7 +336,7 @@ describe.each(getBrowserMatrixConfigs({ hook: { enabled: true } }))("Browser Mod
 		await api.math.add(2, 3);
 
 		expect(errorCtx).not.toBeNull();
-		expect(errorCtx.source?.type).toBe("after");
+		expect(errorCtx.origin?.type).toBe("after");
 		expect(errorCtx.error?.message).toBe("after error msg");
 	});
 });

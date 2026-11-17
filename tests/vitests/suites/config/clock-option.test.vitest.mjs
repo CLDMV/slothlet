@@ -171,7 +171,7 @@ describe.each(getMatrixConfigs())("Config > clock > $name", ({ config }) => {
 			}
 		});
 		const seen = [];
-		api.slothlet.hook.on("clocked.fail:error", ({ source }) => seen.push(source.timestamp));
+		api.slothlet.hook.on("clocked.fail:error", ({ origin: source }) => seen.push(source.at));
 		await withSuppressedSlothletErrorOutput(async () => {
 			await expect(Promise.resolve().then(() => api.clocked.fail())).rejects.toThrow("clocked failure");
 		});

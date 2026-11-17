@@ -229,7 +229,9 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks > around syn
 	it("an undeclared thenable from a sync around fails loudly with HOOK_AROUND_RETURNED_PROMISE", async () => {
 		api = await boot(config);
 		const sources = [];
-		api.slothlet.hook.on("svc.mulSync:error", ({ error, source }) => sources.push({ code: error.code, type: source.type }), { id: "er" });
+		api.slothlet.hook.on("svc.mulSync:error", ({ error, origin: source }) => sources.push({ code: error.code, type: source.type }), {
+			id: "er"
+		});
 		// A plain function returning a Promise reads as synchronous — the brand check cannot see it.
 		api.slothlet.hook.on("svc.mulSync:around", ({ next }) => Promise.resolve(next()), { id: "undeclared" });
 
@@ -251,7 +253,9 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks > around syn
 	it("async pipeline error flow: a swallowed rejection is hidden from error hooks, a rethrown one is not", async () => {
 		api = await boot(config);
 		const errors = [];
-		api.slothlet.hook.on("svc.failAsync:error", ({ error, source }) => errors.push(`${error.message}:${source.type}`), { id: "er" });
+		api.slothlet.hook.on("svc.failAsync:error", ({ error, origin: source }) => errors.push(`${error.message}:${source.type}`), {
+			id: "er"
+		});
 		const swallowId = api.slothlet.hook.on(
 			"svc.failAsync:around",
 			async ({ next }) => {
@@ -328,7 +332,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks > around syn
 		api = await boot(config);
 		const sources = [];
 		const caught = [];
-		api.slothlet.hook.on("svc.mulSync:error", ({ source }) => sources.push(source.type), { id: "er" });
+		api.slothlet.hook.on("svc.mulSync:error", ({ origin: source }) => sources.push(source.type), { id: "er" });
 		api.slothlet.hook.on(
 			"svc.mulSync:around",
 			async ({ next }) => {
@@ -368,8 +372,10 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks > around syn
 		api = await boot(config);
 		const errors = [];
 		const always = [];
-		api.slothlet.hook.on("svc.rejectThenable:error", ({ error, source }) => errors.push(`${error.message}:${source.type}`), { id: "er" });
-		api.slothlet.hook.on("svc.rejectThenable:always", ({ hasError }) => always.push(hasError), { id: "al" });
+		api.slothlet.hook.on("svc.rejectThenable:error", ({ error, origin: source }) => errors.push(`${error.message}:${source.type}`), {
+			id: "er"
+		});
+		api.slothlet.hook.on("svc.rejectThenable:always", ({ errors, hasError = errors.length > 0 }) => always.push(hasError), { id: "al" });
 		api.slothlet.hook.on("svc.rejectThenable:around", ({ next }) => next(), { id: "pass-through" });
 
 		const result = await outcome(() => api.svc.rejectThenable("late"));

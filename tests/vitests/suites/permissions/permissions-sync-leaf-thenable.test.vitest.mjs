@@ -301,7 +301,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Permissions > sync
 	it("an error hook sees the target's error and stack, read as b", async () => {
 		api = await slothlet({ ...config, base: BASE, permissions: { defaultPolicy: "deny", rules: RULES } });
 		const seen = [];
-		api.slothlet.hook.on("b.give.failWithGetter:error", ({ error, source }) => seen.push({ error, stack: source?.stack }), {
+		api.slothlet.hook.on("b.give.failWithGetter:error", ({ error, origin: source }) => seen.push({ error, stack: source?.stack }), {
 			id: "i599-error"
 		});
 		expect(await api.a.use.fails("failWithGetter", "secret", "reject")).toBe(true);
@@ -389,7 +389,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))(
 		it.each(HOWS)("%s: a hand-set processed mark does not silence the error hook", async (how) => {
 			await build();
 			const seen = [];
-			api.slothlet.hook.on("b.give.failWith:error", ({ errorType }) => seen.push(errorType), { id: "i599-error" });
+			api.slothlet.hook.on("b.give.failWith:error", ({ class: errorType }) => seen.push(errorType), { id: "i599-error" });
 			expect(await api.a.use.fails("failWith", "forgedMark", "whoami", how)).toBe(true);
 			expect(seen).toEqual(["Error"]);
 		});
@@ -397,7 +397,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))(
 		it.each(HOWS)("%s: the error hook gets the class's own name as errorType, read as b", async (how) => {
 			await build();
 			const seen = [];
-			api.slothlet.hook.on("b.give.failWith:error", ({ errorType }) => seen.push(errorType), { id: "i599-error" });
+			api.slothlet.hook.on("b.give.failWith:error", ({ class: errorType }) => seen.push(errorType), { id: "i599-error" });
 			expect(await api.a.use.fails("failWith", "staticName", "secret", how)).toBe(true);
 			expect(seen).toEqual(["NamedError"]);
 			expect(await api.b.give.drain()).not.toContainEqual(expect.objectContaining({ ok: true }));

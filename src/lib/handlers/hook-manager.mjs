@@ -31,7 +31,6 @@ import {
 	ArrayMethods,
 	Arrays,
 	Boolean,
-	Date,
 	filterList,
 	FunctionMethods,
 	listPush,
@@ -86,7 +85,7 @@ const DEFAULT_HOOK_SUBSET = "primary";
  * pipeline can report the right source once the error escapes the around chain.
  * @callback HookErrorSink
  * @param {*} error - The thrown value.
- * @param {object} source - Error source details (`type`, `subset`, `hookId`, `hookTag`, `timestamp`, `stack`).
+ * @param {object} source - Error origin details (`type`, `subset`, `hook`, `at`, `stack`).
  * @returns {void}
  */
 
@@ -250,7 +249,7 @@ const typeNameOf = (error) => error?.constructor?.name || "Error";
  * A record of a failure that reads it only as the code that made it, and only when something asks (#599).
  *
  * Unwrapping an error reads its `name`, formatting its stack reads `name` and `message`, and the error hooks'
- * `errorType` reads `constructor` and the class's `name`. Each can be an accessor or a Proxy trap of the module that
+ * `class` reads `constructor` and the class's `name`. Each can be an accessor or a Proxy trap of the module that
  * threw it, so each is read through `runAs` — as that module — and at most once. Nothing is read until it is needed,
  * so a failure no hook looks at runs no more of the error's code than plain JavaScript would.
  *
@@ -1358,7 +1357,7 @@ export class HookManager extends ComponentBase {
 			} catch (error) {
 				// Execute error hooks for before hook failure
 				const sourceInfo = failureSource(
-					{ type: "before", subset: hook.subset, hookTag: hook.id, hookId: hook.id, timestamp: this.clock.now() },
+					{ type: "before", subset: hook.subset, hook: hook.id, at: this.clock.now() },
 					this.failureOf(error)
 				);
 				// Inside an around pipeline the observers sit OUTSIDE the around chain: the failure is
@@ -1435,7 +1434,7 @@ export class HookManager extends ComponentBase {
 			} catch (error) {
 				// Execute error hooks for after hook failure
 				const sourceInfo = failureSource(
-					{ type: "after", subset: hook.subset, hookTag: hook.id, hookId: hook.id, timestamp: this.clock.now() },
+					{ type: "after", subset: hook.subset, hook: hook.id, at: this.clock.now() },
 					this.failureOf(error)
 				);
 				// Inside an around pipeline the observers sit OUTSIDE the around chain: the failure is
@@ -1502,7 +1501,7 @@ export class HookManager extends ComponentBase {
 			} catch (error) {
 				// Execute error hooks for before hook failure
 				const sourceInfo = failureSource(
-					{ type: "before", subset: hook.subset, hookTag: hook.id, hookId: hook.id, timestamp: this.clock.now() },
+					{ type: "before", subset: hook.subset, hook: hook.id, at: this.clock.now() },
 					this.failureOf(error)
 				);
 				// Inside an around pipeline the observers sit OUTSIDE the around chain: the failure is
@@ -1562,7 +1561,7 @@ export class HookManager extends ComponentBase {
 			} catch (error) {
 				// Execute error hooks for after hook failure
 				const sourceInfo = failureSource(
-					{ type: "after", subset: hook.subset, hookTag: hook.id, hookId: hook.id, timestamp: this.clock.now() },
+					{ type: "after", subset: hook.subset, hook: hook.id, at: this.clock.now() },
 					this.failureOf(error)
 				);
 				// Inside an around pipeline the observers sit OUTSIDE the around chain: the failure is
@@ -1717,13 +1716,7 @@ export class HookManager extends ComponentBase {
 
 		// The stack is read from the failure's record, as the code it belongs to (#599).
 		const sinkAround = (hook, error) =>
-			errorSink(
-				error,
-				failureSource(
-					{ type: "around", subset: hook.subset, hookTag: hook.id, hookId: hook.id, timestamp: this.clock.now() },
-					this.failureOf(error)
-				)
-			);
+			errorSink(error, failureSource({ type: "around", subset: hook.subset, hook: hook.id, at: this.clock.now() }, this.failureOf(error)));
 
 		// Any thenable a handler returns other than next()'s own (`next().then(check)`, or another): a rejection
 		// of it is this hook's failure unless the target or an inner hook already reported it, which keeps its
@@ -1739,9 +1732,8 @@ export class HookManager extends ComponentBase {
 					onUnobserved({
 						type: "around",
 						subset: hook.subset,
-						hookTag: hook.id,
-						hookId: hook.id,
-						timestamp: this.clock.now(),
+						hook: hook.id,
+						at: this.clock.now(),
 						stack: undefined
 					})
 			);
@@ -1829,7 +1821,6 @@ export class HookManager extends ComponentBase {
 					path,
 					args,
 					result: hasError ? undefined : resultOrError,
-					hasError,
 					errors: errors,
 					api,
 					ctx,
@@ -1838,7 +1829,7 @@ export class HookManager extends ComponentBase {
 			} catch (error) {
 				// Execute error hooks for always hook failure
 				const sourceInfo = failureSource(
-					{ type: "always", subset: hook.subset, hookTag: hook.id, hookId: hook.id, timestamp: this.clock.now() },
+					{ type: "always", subset: hook.subset, hook: hook.id, at: this.clock.now() },
 					this.failureOf(error)
 				);
 				this.executeErrorHooks(path, error, sourceInfo, args, api, ctx);
@@ -1869,7 +1860,7 @@ export class HookManager extends ComponentBase {
 	 *
 	 * @param {string} path - API path being called
 	 * @param {Error} error - The error that occurred
-	 * @param {object} source - Error source info with type, hookTag, hookId, timestamp, stack
+	 * @param {object} source - Error origin: `type`, `subset`, `hook` (the hook id), `at` (a clock time) and `stack`
 	 * @param {Array} args - Function arguments
 	 * @param {object} api - Bound API object
 	 * @param {object} ctx - User context object
@@ -1890,9 +1881,9 @@ export class HookManager extends ComponentBase {
 					path,
 					args,
 					error,
-					errorType,
-					source,
-					timestamp: new Date(this.clock.now()),
+					class: errorType,
+					origin: source,
+					at: this.clock.now(),
 					api,
 					ctx,
 					version: hook.version
