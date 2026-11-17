@@ -83,6 +83,52 @@ function runtime_unwrapThen(then) {
 const NATIVE_THEN = runtime_unwrapThen(PrototypeFunctions.Promise.then);
 
 /**
+ * Register reactions on a promise through a `then` of the engine's (or this copy's wrapper of it), and hand back a
+ * promise of slothlet's own that settles as the one `then` returns would. The engine's `then` builds the promise it
+ * returns from the receiver's `constructor` and that constructor's `Symbol.species`, both of which module code can
+ * replace on `Promise.prototype` and `Promise`; the promise handed back here is made with the `Promise` taken at load
+ * and settled by the reactions themselves, so what the caller receives and what it settles with are never steered by
+ * them. The one `then` makes is left unused.
+ * @param {Function} then - The `then` to call: the engine's, or this copy's wrapper of it.
+ * @param {Promise<*>} promise - The receiver.
+ * @param {Function} [onFulfilled] - Fulfillment reaction.
+ * @param {Function} [onRejected] - Rejection reaction.
+ * @returns {Promise<*>} The derived promise.
+ * @private
+ */
+function runtime_derive(then, promise, onFulfilled, onRejected) {
+	let resolve;
+	let reject;
+	const derived = new Promise((settleValue, settleError) => {
+		resolve = settleValue;
+		reject = settleError;
+	});
+	const fulfilled =
+		typeof onFulfilled === "function"
+			? (value) => {
+					try {
+						resolve(onFulfilled(value));
+					} catch (error) {
+						reject(error);
+					}
+				}
+			: resolve;
+	const rejected =
+		typeof onRejected === "function"
+			? (error) => {
+					try {
+						resolve(onRejected(error));
+					} catch (thrown) {
+						reject(thrown);
+					}
+				}
+			: reject;
+	// A receiver `then` refuses, or a species constructor that throws, throws here as `then` itself would.
+	FunctionMethods.call(then, promise, fulfilled, rejected);
+	return derived;
+}
+
+/**
  * Register reactions on a promise without pinning them to the current caller.
  *
  * For framework reactions that restore or inspect identity state themselves. A pinned reaction runs
@@ -91,12 +137,12 @@ const NATIVE_THEN = runtime_unwrapThen(PrototypeFunctions.Promise.then);
  * @param {Promise<*>} promise - A promise, or a Proxy around one.
  * @param {Function} [onFulfilled] - Fulfillment reaction.
  * @param {Function} [onRejected] - Rejection reaction.
- * @returns {Promise<*>} The derived promise, as `then` returns it.
+ * @returns {Promise<*>} The derived promise, as `then` returns it, made by slothlet (see {@link runtime_derive}).
  * @internal
  */
 export function nativeThen(promise, onFulfilled, onRejected) {
 	try {
-		return FunctionMethods.call(NATIVE_THEN, promise, onFulfilled, onRejected);
+		return runtime_derive(NATIVE_THEN, promise, onFulfilled, onRejected);
 	} catch (error) {
 		// A Proxy around a promise (a wrapped return value) passes `instanceof Promise` but has no
 		// promise internals, so the engine's `then` refuses it as a receiver. Adopt it into a genuine
@@ -104,7 +150,7 @@ export function nativeThen(promise, onFulfilled, onRejected) {
 		// else the engine refused is not a promise (a plain object only tagged "Promise", which the
 		// browser's tag check cannot tell apart), so the refusal stands and the caller keeps the value.
 		if (!inheritsFrom(error, TypeError) || !inheritsFrom(promise, Promise)) throw error;
-		return FunctionMethods.call(NATIVE_THEN, Promises.resolve(promise), onFulfilled, onRejected);
+		return runtime_derive(NATIVE_THEN, Promises.resolve(promise), onFulfilled, onRejected);
 	}
 }
 
@@ -112,18 +158,19 @@ export function nativeThen(promise, onFulfilled, onRejected) {
  * Register reactions on a promise of the engine's own as its `then` would while this copy's patch is installed: through
  * this copy's wrapper, which pins them to the current caller (see {@link enablePromisePatching}), or the engine's `then`
  * when no patch is installed. Neither is read off the promise or `Promise.prototype`, so a `then` module code put there
- * is never called.
+ * is never called, and the promise handed back is slothlet's own, so a `constructor` or `Symbol.species` module code
+ * put on `Promise.prototype` or `Promise` does not decide what it is or what it settles with (see {@link runtime_derive}).
  *
  * @param {Promise<*>} promise - A promise of the engine's own (not a Proxy).
  * @param {Function} [onFulfilled] - Fulfillment reaction.
  * @param {Function} [onRejected] - Rejection reaction.
- * @returns {Promise<*>} The derived promise, as `then` returns it.
+ * @returns {Promise<*>} The derived promise.
  * @internal
  * @example
  * pinnedThen(promise, (value) => value, (error) => { throw error; });
  */
 export function pinnedThen(promise, onFulfilled, onRejected) {
-	return FunctionMethods.call(installed === null ? NATIVE_THEN : installed.wrapper, promise, onFulfilled, onRejected);
+	return runtime_derive(installed === null ? NATIVE_THEN : installed.wrapper, promise, onFulfilled, onRejected);
 }
 
 /**

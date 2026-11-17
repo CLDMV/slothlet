@@ -55,22 +55,19 @@
  */
 
 import {
-	ArrayBuffer,
 	ArrayBuffers,
 	ArrayMethods,
-	BigInt,
 	Boolean,
 	CryptoKey,
-	DataView,
 	Error,
 	Errors,
+	filterList,
 	FunctionMethods,
 	JSON,
 	Map,
 	mapList,
 	MessageChannel,
 	NativeProcess,
-	Number,
 	ObjectMethods,
 	Objects,
 	Promise,
@@ -81,8 +78,6 @@ import {
 	Set,
 	setImmediate,
 	setTimeout,
-	SharedArrayBuffer,
-	String,
 	StringMethods,
 	Symbol,
 	Symbols
@@ -193,14 +188,27 @@ if (isNode) {
 				return false;
 			}
 		};
-	/** The getter of an accessor a kind's prototype holds. */
-	const getterOf = (prototype, name) => Objects.getOwnPropertyDescriptor(prototype, name).get;
-	const IS_REGEXP = brand(getterOf(RegExp.prototype, "source"));
-	const IS_ARRAY_BUFFER = brand(getterOf(ArrayBuffer.prototype, "byteLength"));
+	// The getters and `valueOf`s of the built-in prototypes, as slothlet took them when it loaded.
+	const IS_REGEXP = brand(PrototypeFunctions.RegExp.source);
+	const IS_ARRAY_BUFFER = brand(PrototypeFunctions.ArrayBuffer.byteLength);
 	const IS_SHARED_ARRAY_BUFFER =
-		typeof SharedArrayBuffer === "function" ? brand(getterOf(SharedArrayBuffer.prototype, "byteLength")) : () => false;
-	const IS_DATA_VIEW = brand(getterOf(DataView.prototype, "byteLength"));
-	const BOXED_BRANDS = mapList([Number, String, Boolean, Symbol, BigInt], (kind) => brand(kind.prototype.valueOf));
+		typeof PrototypeFunctions.SharedArrayBuffer.byteLength === "function"
+			? brand(PrototypeFunctions.SharedArrayBuffer.byteLength)
+			: () => false;
+	const IS_DATA_VIEW = brand(PrototypeFunctions.DataView.byteLength);
+	const BOXED_BRANDS = mapList(
+		filterList(
+			[
+				PrototypeFunctions.Number.valueOf,
+				PrototypeFunctions.String.valueOf,
+				PrototypeFunctions.Boolean.valueOf,
+				PrototypeFunctions.Symbol.valueOf,
+				PrototypeFunctions.BigInt.valueOf
+			],
+			(valueOf) => typeof valueOf === "function"
+		),
+		(valueOf) => brand(valueOf)
+	);
 	// `util` is the one builtin consumed in both hosts: `inspect` (with its custom
 	// symbol) for value formatting and `types.isProxy` for proxy detection. Slothlet's
 	// own wrappers are resolved via resolveWrapper(), so a browser-side `isProxy()`

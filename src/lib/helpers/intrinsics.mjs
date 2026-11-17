@@ -1352,6 +1352,7 @@ function functionsOf(proto, symbols) {
 		for (let i = 0; i < keys.length; i++) {
 			const descriptor = getOwnPropertyDescriptor(proto, symbols[keys[i]]);
 			if (descriptor && typeof descriptor.value === "function") copy[keys[i]] = descriptor.value;
+			else if (descriptor && typeof descriptor.get === "function") copy[keys[i]] = descriptor.get;
 		}
 	}
 	return freeze(copy);
@@ -1361,7 +1362,9 @@ function functionsOf(proto, symbols) {
  * The functions of the built-in prototypes themselves, as they were when slothlet loaded, by prototype and name, for
  * the code that needs the function rather than a call of it: to compare a value against it, hand it to
  * `Reflect.apply`, or call it on a value whose kind it checks (`PrototypeFunctions.Map.has`). Under `Function` the
- * language's `Symbol.hasInstance` is `hasInstance`. To call one on a value, `ObjectMethods.hasOwnProperty(value, key)`
+ * language's `Symbol.hasInstance` is `hasInstance`; under `TypedArray` (the prototype every typed array class inherits
+ * from) the `Symbol.toStringTag` getter is `toStringTag`. An accessor is taken as its getter (`PrototypeFunctions.RegExp.source`,
+ * `PrototypeFunctions.ArrayBuffer.byteLength`). To call one on a value, `ObjectMethods.hasOwnProperty(value, key)`
  * and the other `…Methods` read the same.
  * @type {Readonly<Record<string, Readonly<Record<string, Function>>>>}
  * @internal
@@ -1383,8 +1386,40 @@ export const PrototypeFunctions = freeze({
 	Symbol: functionsOf(NativeSymbol.prototype),
 	TextDecoder: functionsOf(globalThis.TextDecoder?.prototype),
 	URLSearchParams: functionsOf(globalThis.URLSearchParams?.prototype),
-	Iterator: functionsOf(globalThis.Iterator?.prototype)
+	Iterator: functionsOf(globalThis.Iterator?.prototype),
+	Error: functionsOf(globalThis.Error.prototype),
+	RegExp: functionsOf(globalThis.RegExp.prototype),
+	ArrayBuffer: functionsOf(globalThis.ArrayBuffer.prototype),
+	SharedArrayBuffer: functionsOf(globalThis.SharedArrayBuffer?.prototype),
+	DataView: functionsOf(globalThis.DataView.prototype),
+	TypedArray: functionsOf(getPrototypeOfNative(globalThis.Uint8Array.prototype), { toStringTag: NativeSymbol.toStringTag }),
+	Number: functionsOf(NativeNumber.prototype),
+	String: functionsOf(NativeString.prototype),
+	Boolean: functionsOf(globalThis.Boolean.prototype),
+	BigInt: functionsOf(globalThis.BigInt?.prototype)
 });
+
+/**
+ * `%TypedArray%.prototype`, the prototype every typed array class's `prototype` inherits from, as it was when slothlet
+ * loaded (its functions and getters are `PrototypeFunctions.TypedArray`).
+ * @type {object}
+ * @internal
+ * @example
+ * import { TypedArrayPrototype } from "#helpers/intrinsics";
+ * Reflect.getPrototypeOf(Uint8Array.prototype) === TypedArrayPrototype;
+ */
+export const TypedArrayPrototype = getPrototypeOfNative(globalThis.Uint8Array.prototype);
+
+/**
+ * The language's own setter of `Object.prototype.__proto__`, as it was when slothlet loaded (its getter is
+ * `PrototypeFunctions.Object.__proto__`).
+ * @type {function(this: object, (object|null)): void}
+ * @internal
+ * @example
+ * import { ObjectProtoSetter, Reflect } from "#helpers/intrinsics";
+ * Reflect.apply(ObjectProtoSetter, value, [null]);
+ */
+export const ObjectProtoSetter = getOwnPropertyDescriptor(NativeObject.prototype, "__proto__").set;
 
 /**
  * The `Array` function, as it was when slothlet loaded, for comparing a value's `constructor` against. Its static

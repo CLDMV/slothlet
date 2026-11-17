@@ -121,7 +121,9 @@ import {
 	promiseAll,
 	PromiseMethods,
 	Promises,
+	ObjectProtoSetter,
 	PrototypeFunctions,
+	TypedArrayPrototype,
 	queueMicrotask,
 	RangeError,
 	ReferenceError,
@@ -1196,7 +1198,7 @@ const ENGINE_DATA_PROTOTYPES = setFrom(
 				Boolean.prototype,
 				typeof BigInt === "function" ? BigInt.prototype : null,
 				Symbol.prototype,
-				Reflect.getPrototypeOf(Uint8Array.prototype)
+				TypedArrayPrototype
 			],
 			mapList(
 				filterList(
@@ -5500,7 +5502,7 @@ function runtime_moduleObjectFor(wrapper, value, asMember) {
  * @type {function(this: object, (object|null)): void}
  * @private
  */
-const OBJECT_PROTO_SETTER = Reflect.getOwnPropertyDescriptor(Objects.prototype, "__proto__").set;
+const OBJECT_PROTO_SETTER = ObjectProtoSetter;
 
 /**
  * The members each module object a node fronts has held since slothlet first built a node from it (#757), so a member
@@ -6114,7 +6116,9 @@ const INTRINSICS = (() => {
 		addChain(iterator);
 	}
 	addChain(Uint8Array);
-	addChain(Uint8Array.prototype);
+	// Above `Uint8Array.prototype`: `%TypedArray%.prototype` and what it inherits, as they were when slothlet loaded.
+	add(TypedArrayPrototype);
+	addChain(TypedArrayPrototype);
 	return intrinsics;
 })();
 
@@ -9812,8 +9816,8 @@ function runtime_isOpaqueData(value) {
  * @type {Function}
  * @private
  */
-const TYPED_ARRAY_BYTE_LENGTH = Reflect.getOwnPropertyDescriptor(Reflect.getPrototypeOf(Uint8Array.prototype), "byteLength").get;
-const TYPED_ARRAY_LENGTH = Reflect.getOwnPropertyDescriptor(Reflect.getPrototypeOf(Uint8Array.prototype), "length").get;
+const TYPED_ARRAY_BYTE_LENGTH = PrototypeFunctions.TypedArray.byteLength;
+const TYPED_ARRAY_LENGTH = PrototypeFunctions.TypedArray.length;
 
 /**
  * Whether an object whose internal data holds no references ({@link runtime_isOpaqueData}) holds nothing else either,

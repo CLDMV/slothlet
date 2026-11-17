@@ -123,6 +123,32 @@ describe("slothlet/captured-intrinsics", () => {
 		expect(messages.some((message) => message.startsWith("6: `Object` here is the global"))).toBe(true);
 	});
 
+	it("reports a captured constructor's prototype handed to a descriptor read, getPrototypeOf or a function of the file's own, at load or later", () => {
+		const HANDED = "reads the shared prototype's members (or its prototype) when it runs";
+		const messages = lint(
+			'import { Reflect, Objects, RegExp, DataView, Uint8Array } from "#helpers/intrinsics";\n' +
+				'const source = Reflect.getOwnPropertyDescriptor(RegExp.prototype, "source").get;\n' +
+				"const getterOf = (prototype, key) => Objects.getOwnPropertyDescriptor(prototype, key).get;\n" +
+				'export const length = () => getterOf(DataView.prototype, "byteLength");\n' +
+				"const typed = Reflect.getPrototypeOf(Uint8Array.prototype);\n" +
+				"function all(prototype) {\n\treturn Objects.getOwnPropertyDescriptors(prototype);\n}\n" +
+				"all(RegExp.prototype);\n"
+		);
+		expect(messages.filter((message) => message.includes(HANDED)).map((message) => message.split(":")[0])).toEqual(["2", "4", "5", "9"]);
+		expect(messages.find((message) => message.startsWith("4:"))).toContain("`PrototypeFunctions.DataView`");
+	});
+
+	it("leaves a prototype handed to an imported helper, a write and the descriptor read kept on purpose alone", () => {
+		expect(
+			lint(
+				'import { Objects, Promise } from "#helpers/intrinsics";\nimport { holdsValue } from "#helpers/boundary-patch-layers";\n' +
+					'export const then = () => Objects.getOwnPropertyDescriptor(Promise.prototype, "then");\n' +
+					'export const held = (wrapper) => holdsValue(Promise.prototype, "then", wrapper);\n' +
+					'export const write = (wrapper) => Objects.defineProperty(Promise.prototype, "then", { __proto__: null, value: wrapper });\n'
+			)
+		).toEqual([]);
+	});
+
 	it("leaves the prototype object itself, a write to its member and the reads kept on purpose alone", () => {
 		expect(
 			lint(

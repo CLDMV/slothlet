@@ -47,10 +47,8 @@ import { openLayer, closeLayer, holdsValue, markLayer } from "#helpers/boundary-
 import {
 	ArrayBuffer,
 	Arrays,
-	BigInt,
 	BigInt64Array,
 	BigUint64Array,
-	Boolean,
 	DataView,
 	Date,
 	Error,
@@ -66,7 +64,6 @@ import {
 	Map,
 	mapList,
 	NativeObject,
-	Number,
 	Objects,
 	Processes,
 	PrototypeFunctions,
@@ -75,10 +72,7 @@ import {
 	Reflect,
 	RegExp,
 	Set,
-	SharedArrayBuffer,
-	String,
 	structuredClone,
-	Symbol,
 	Symbols,
 	SyntaxError,
 	TypeError,
@@ -111,15 +105,6 @@ const mapHas = PrototypeFunctions.Map.has;
 const mapSize = PrototypeFunctions.Map.size;
 const setSize = PrototypeFunctions.Set.size;
 
-/**
- * A getter of a built-in prototype, as it was when slothlet loaded, or null where the platform has none.
- * @param {object|undefined} prototype - The prototype.
- * @param {string|symbol} key - The getter's key.
- * @returns {Function|null} The getter.
- * @private
- */
-const getterOf = (prototype, key) => (prototype ? (getOwnPropertyDescriptor(prototype, key)?.get ?? null) : null);
-
 const NativeDate = Date;
 const NativeRegExp = RegExp;
 const NativeError = Error;
@@ -129,7 +114,7 @@ const NativeArrayBuffer = ArrayBuffer;
 const NativeUint8Array = Uint8Array;
 const NativeDataView = DataView;
 const dateGetTime = PrototypeFunctions.Date.getTime;
-const regExpSource = getterOf(RegExp.prototype, "source");
+const regExpSource = PrototypeFunctions.RegExp.source;
 /** The flag getters of `RegExp.prototype`, each with the letter it stands for, in the order `flags` lists them. */
 const REGEXP_FLAGS = filterList(
 	mapList(
@@ -146,7 +131,7 @@ const REGEXP_FLAGS = filterList(
 		(entry1) => {
 			const letter = entry1[0],
 				key = entry1[1];
-			return [letter, getterOf(RegExp.prototype, key)];
+			return [letter, PrototypeFunctions.RegExp[key] ?? null];
 		}
 	),
 	(entry2) => {
@@ -154,20 +139,20 @@ const REGEXP_FLAGS = filterList(
 		return getter !== null;
 	}
 );
-const bufferByteLength = getterOf(ArrayBuffer.prototype, "byteLength");
-const bufferResizable = getterOf(ArrayBuffer.prototype, "resizable");
-const bufferMaxByteLength = getterOf(ArrayBuffer.prototype, "maxByteLength");
-const bufferDetached = getterOf(ArrayBuffer.prototype, "detached");
-const sharedByteLength = typeof SharedArrayBuffer === "function" ? getterOf(SharedArrayBuffer.prototype, "byteLength") : null;
-const TypedArrayPrototype = getPrototypeOf(Uint8Array.prototype);
-const typedBuffer = getterOf(TypedArrayPrototype, "buffer");
-const typedByteOffset = getterOf(TypedArrayPrototype, "byteOffset");
-const typedLength = getterOf(TypedArrayPrototype, "length");
-const typedTag = getterOf(TypedArrayPrototype, Symbol.toStringTag);
-const typedSet = TypedArrayPrototype.set;
-const viewBuffer = getterOf(DataView.prototype, "buffer");
-const viewByteOffset = getterOf(DataView.prototype, "byteOffset");
-const viewByteLength = getterOf(DataView.prototype, "byteLength");
+// The getters and functions of the built-in prototypes, as they were when slothlet loaded (null where the platform has none).
+const bufferByteLength = PrototypeFunctions.ArrayBuffer.byteLength;
+const bufferResizable = PrototypeFunctions.ArrayBuffer.resizable ?? null;
+const bufferMaxByteLength = PrototypeFunctions.ArrayBuffer.maxByteLength ?? null;
+const bufferDetached = PrototypeFunctions.ArrayBuffer.detached ?? null;
+const sharedByteLength = PrototypeFunctions.SharedArrayBuffer.byteLength ?? null;
+const typedBuffer = PrototypeFunctions.TypedArray.buffer;
+const typedByteOffset = PrototypeFunctions.TypedArray.byteOffset;
+const typedLength = PrototypeFunctions.TypedArray.length;
+const typedTag = PrototypeFunctions.TypedArray.toStringTag;
+const typedSet = PrototypeFunctions.TypedArray.set;
+const viewBuffer = PrototypeFunctions.DataView.buffer;
+const viewByteOffset = PrototypeFunctions.DataView.byteOffset;
+const viewByteLength = PrototypeFunctions.DataView.byteLength;
 /** The typed array classes, by the name each instance's tag gives. */
 const TYPED_ARRAYS = new NativeMap(
 	filterList(
@@ -202,9 +187,15 @@ const ERROR_CLASSES = new NativeMap([
 	["URIError", URIError]
 ]);
 /** The `valueOf` of each boxed primitive's prototype: the engine's brand check for that box. */
-const BOXED_VALUE_OF = mapList(
-	filterList([Number, String, Boolean, typeof BigInt === "function" ? BigInt : null, Symbol], (kind) => kind !== null),
-	(kind) => kind.prototype.valueOf
+const BOXED_VALUE_OF = filterList(
+	[
+		PrototypeFunctions.Number.valueOf,
+		PrototypeFunctions.String.valueOf,
+		PrototypeFunctions.Boolean.valueOf,
+		PrototypeFunctions.BigInt.valueOf,
+		PrototypeFunctions.Symbol.valueOf
+	],
+	(valueOf) => typeof valueOf === "function"
 );
 
 /**
