@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T02:52:10-08:00 (1794826330)
+ *	@Last modified time: 2026-11-16T18:29:21-08:00 (1794882561)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -108,7 +108,7 @@ describe.each(getMatrixConfigs({ mode: "lazy" }))("Lazy > a loaded folder node's
 
 	it.each([
 		["permissions off", undefined],
-		["permissions on", { defaultPolicy: "allow" }]
+		["permissions on", { policy: "allow" }]
 	])("matches eager for the host and through self: %s", async (_label, permissions) => {
 		const lazy = await build(config, "lazy", permissions);
 		const eager = await build(config, "eager", permissions);

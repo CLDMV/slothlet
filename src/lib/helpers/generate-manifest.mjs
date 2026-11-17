@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:12-08:00 (1794874572)
+ *	@Last modified time: 2026-11-16T18:27:56-08:00 (1794882476)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -28,10 +28,10 @@
  *   both slothlet's own modules (see #123) and the exact `exports` subpaths of the third-party
  *   packages the registered API leaves import (see #297), so browser consumers never hand-roll it.
  * - `generateManifest(dir)` — the lower-level primitive that returns just the API manifest
- *   (the `{ files, directories }` tree passed to `slothlet({ manifest, resolveModuleSpecifier })`).
+ *   (the `{ files, directories }` tree passed to `slothlet({ loader: { files, resolve } })`).
  *
  * Why two artifacts: slothlet loads **API leaves** at runtime, so their location is deferred to
- * the `resolveModuleSpecifier` callback (the manifest holds relative paths). slothlet's **own**
+ * the `loader.resolve` callback (the manifest holds relative paths). slothlet's **own**
  * static imports are resolved by the browser *before slothlet runs*, so they must live in the
  * page's `<script type="importmap">` — which is what `importmap` provides.
  *
@@ -39,14 +39,14 @@
  * ```json
  * {
  *   "files": [
- *     { "path": "math.mjs", "name": "math", "fullName": "math.mjs" }
+ *     { "path": "math.mjs", "name": "math", "full": "math.mjs" }
  *   ],
  *   "directories": [
  *     {
  *       "name": "utils",
  *       "path": "utils",
  *       "children": {
- *         "files": [{ "path": "utils/format.mjs", "name": "format", "fullName": "format.mjs" }],
+ *         "files": [{ "path": "utils/format.mjs", "name": "format", "full": "format.mjs" }],
  *         "directories": []
  *       }
  *     }
@@ -69,8 +69,7 @@
  * import { createManifestResolver } from "#helpers/manifest-resolver";
  *
  * const api = await slothlet({
- *   manifest,
- *   resolveModuleSpecifier: createManifestResolver(new URL("./api/", import.meta.url))
+ *   loader: { files: manifest, resolve: createManifestResolver(new URL("./api/", import.meta.url)) }
  * });
  *
  * @see {@link module:@cldmv/slothlet/helpers/manifest-resolver} for the browser-safe resolver factory
@@ -195,16 +194,16 @@ function isApiFile(filename) {
  * Build a file entry object for the manifest.
  *
  * @param {string} relativePath - Path relative to the root dir (e.g. `"utils/format.mjs"`).
- * @returns {{ path: string, name: string, fullName: string }} File entry.
+ * @returns {{ path: string, name: string, full: string }} File entry.
  *
  * @example
  * makeFileEntry("utils/format.mjs");
- * // { path: "utils/format.mjs", name: "format", fullName: "format.mjs" }
+ * // { path: "utils/format.mjs", name: "format", full: "format.mjs" }
  */
 function makeFileEntry(relativePath) {
-	const fullName = path.basename(relativePath);
+	const full = path.basename(relativePath);
 	const name = path.basename(relativePath, path.extname(relativePath));
-	return { path: relativePath, name, fullName };
+	return { path: relativePath, name, full };
 }
 
 /**
@@ -260,11 +259,11 @@ async function scanDir(absDir, rootDir) {
  * Generate a slothlet browser manifest by scanning a directory at build time.
  *
  * This is the primary entry point for producing the `manifest` object required by
- * `slothlet({ manifest, resolveModuleSpecifier })`. Call this once during your build
+ * `slothlet({ loader: { files, resolve } })`. Call this once during your build
  * step and embed the result in your browser bundle.
  *
  * @param {string} dir - Absolute or relative path to the API root directory.
- * @returns {Promise<{ files: Array<{path:string,name:string,fullName:string}>, directories: Array }>}
+ * @returns {Promise<{ files: Array<{path:string,name:string,full:string}>, directories: Array }>}
  *   Manifest object ready to pass to `slothlet()`.
  *
  * @throws {SlothletError} `GENERATE_MANIFEST_DIR_INVALID` if `dir` is not a non-empty string.
@@ -494,7 +493,7 @@ async function collectSlothletSpecifiers(root) {
  *
  * In a browser, slothlet's internal imports (`@cldmv/slothlet`, `#helpers/*`, …)
  * are static and resolved by the page's importmap **before slothlet runs** — they cannot route
- * through `resolveModuleSpecifier` (which only governs API-leaf loads). This produces that
+ * through `loader.resolve` (which only governs API-leaf loads). This produces that
  * importmap from slothlet's public export surface so consumers never hand-roll it.
  *
  * Each specifier is resolved via `import.meta.resolve`, which automatically picks the dev
@@ -868,14 +867,14 @@ function derivePackagesBase(base) {
  * Generate everything the browser needs to run slothlet, in one build-time call.
  *
  * Returns both halves of a browser-mode setup:
- * - `manifest` — the API-directory listing passed to `slothlet({ manifest })` (replaces the
+ * - `manifest` — the API-directory listing passed to `slothlet({ loader: { files } })` (replaces the
  *   filesystem `readdir` slothlet uses in Node).
  * - `importmap` — the `<script type="importmap">` content that lets the browser resolve slothlet's
  *   own module graph AND the third-party packages the registered API leaves import.
  *
  * Run this in your build step (or, for Electron, in the main process) and send both to the
  * renderer: inline `importmap` into the page's importmap script tag, and pass `manifest` (plus a
- * `resolveModuleSpecifier` for your API base) to `slothlet()`.
+ * `loader.resolve` for your API base) to `slothlet()`.
  *
  * The importmap covers two surfaces. First, slothlet's own modules (rebased onto `base`).
  * Second — and this is what the registered API leaves need — the **exact `exports` subpaths** of the
@@ -903,7 +902,7 @@ function derivePackagesBase(base) {
  * import { generateBrowserAssets } from "#helpers/generate-manifest";
  * const { manifest, importmap } = await generateBrowserAssets("./src/api");
  * // → inline importmap: `<script type="importmap">${JSON.stringify(importmap)}</script>`
- * // → pass manifest to slothlet({ manifest, resolveModuleSpecifier })
+ * // → pass manifest to slothlet({ loader: { files, resolve } })
  *
  * @example
  * // Override the base for a CDN (or "/" when the package is served at the web root).

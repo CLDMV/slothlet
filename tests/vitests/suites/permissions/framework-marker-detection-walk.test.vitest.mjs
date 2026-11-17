@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:13-07:00 (1791090913)
+ *	@Last modified time: 2026-11-16T18:29:37-08:00 (1794882577)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -51,14 +51,14 @@ describe.each(["eager", "lazy"])("Permissions > framework marker-detection walk 
 	});
 
 	it("mounting an ext whose manifest.activationEvents is a plain array does not deny the detection walk", async () => {
-		api = await slothlet({ mode, base: `${BASE}/base`, permissions: { defaultPolicy: "deny", rules: RULES } });
+		api = await slothlet({ mode, base: `${BASE}/base`, permissions: { policy: "deny", rules: RULES } });
 		// Before the fix, the walk read `exts.costcode.manifest.activationEvents.__isVersionDispatcher`
 		// as the host and threw PERMISSION_DENIED here, aborting the mount.
 		await expect(api.slothlet.api.add(["exts"], `${BASE}/ext`)).resolves.toBeDefined();
 	});
 
 	it("keeps the declared leaf reachable and the manifest array intact after mounting", async () => {
-		api = await slothlet({ mode, base: `${BASE}/base`, permissions: { defaultPolicy: "deny", rules: RULES } });
+		api = await slothlet({ mode, base: `${BASE}/base`, permissions: { policy: "deny", rules: RULES } });
 		await api.slothlet.api.add(["exts"], `${BASE}/ext`);
 
 		const costcode = mode === "lazy" ? await api.exts.costcode : api.exts.costcode;
@@ -74,7 +74,7 @@ describe.each(["eager", "lazy"])("Permissions > framework marker-detection walk 
 		// A data field like `activationEvents` may legitimately hold different data in one version than
 		// another, so it is a valid version-dispatch target (#287). Both versions must compose under
 		// permissions without the detection walk denying the marker probe, and each must resolve its own data.
-		api = await slothlet({ mode, base: `${BASE}/base`, permissions: { defaultPolicy: "deny", rules: RULES } });
+		api = await slothlet({ mode, base: `${BASE}/base`, permissions: { policy: "deny", rules: RULES } });
 		await expect(api.slothlet.api.add(["exts"], `${BASE}/ext`, {}, { version: "v1", default: true })).resolves.toBeDefined();
 		await expect(api.slothlet.api.add(["exts"], `${BASE}/v2`, {}, { version: "v2" })).resolves.toBeDefined();
 
@@ -98,7 +98,7 @@ describe.each(["eager", "lazy"])("Permissions > framework marker-detection walk 
 		// materialization walk descends THROUGH the dispatcher node. The walk must skip it by the brand
 		// (never reading its routing props, which would fire the discriminator or hit the gate).
 		const V = new URL("../../../../api_tests/api_test_versioned", import.meta.url).pathname;
-		api = await slothlet({ mode, base: `${BASE}/base`, permissions: { defaultPolicy: "deny", rules: RULES } });
+		api = await slothlet({ mode, base: `${BASE}/base`, permissions: { policy: "deny", rules: RULES } });
 		await api.slothlet.api.add(["exts", "svc", "field"], `${V}/v1`, {}, { version: "v1", default: true });
 		await api.slothlet.api.add(["exts", "svc", "field"], `${V}/v2`, {}, { version: "v2" });
 		await expect(api.slothlet.api.add(["exts", "svc"], `${BASE}/ext`, {}, {})).resolves.toBeDefined();

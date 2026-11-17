@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:59-07:00 (1791090899)
+ *	@Last modified time: 2026-11-16T18:28:45-08:00 (1794882525)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -60,7 +60,11 @@ describe("api-assignment collision: lazy+lazy merge (lines 217-248)", () => {
 		api = await slothlet({
 			base: TEST_DIRS.API_TEST_COLLISIONS,
 			mode: "lazy",
-			collision: { initial: "merge" },
+			api: {
+				collision: {
+					mode: { initial: "merge" }
+				}
+			},
 			silent: true
 		});
 		expect(api).toBeDefined();
@@ -72,7 +76,11 @@ describe("api-assignment collision: lazy+lazy merge (lines 217-248)", () => {
 		api = await slothlet({
 			base: TEST_DIRS.API_TEST_COLLISIONS,
 			mode: "lazy",
-			collision: { initial: "merge" },
+			api: {
+				collision: {
+					mode: { initial: "merge" }
+				}
+			},
 			silent: true
 		});
 		// api.math exists because file+folder both map to it
@@ -86,7 +94,11 @@ describe("api-assignment collision: lazy+lazy merge (lines 217-248)", () => {
 		api = await slothlet({
 			base: TEST_DIRS.API_TEST_COLLISIONS,
 			mode: "lazy",
-			collision: { initial: "merge" },
+			api: {
+				collision: {
+					mode: { initial: "merge" }
+				}
+			},
 			debug: { api: true },
 			silent: true
 		});
@@ -98,7 +110,11 @@ describe("api-assignment collision: lazy+lazy merge (lines 217-248)", () => {
 		api = await slothlet({
 			base: TEST_DIRS.API_TEST_COLLISIONS,
 			mode: "lazy",
-			collision: { initial: "merge" },
+			api: {
+				collision: {
+					mode: { initial: "merge" }
+				}
+			},
 			silent: true
 		});
 		// Trigger materialization
@@ -116,7 +132,11 @@ describe("api-assignment collision: lazy+lazy replace (lines 318-348, 243-248)",
 		api = await slothlet({
 			base: TEST_DIRS.API_TEST_COLLISIONS,
 			mode: "lazy",
-			collision: { initial: "replace" },
+			api: {
+				collision: {
+					mode: { initial: "replace" }
+				}
+			},
 			silent: true
 		});
 		expect(api).toBeDefined();
@@ -127,7 +147,11 @@ describe("api-assignment collision: lazy+lazy replace (lines 318-348, 243-248)",
 		api = await slothlet({
 			base: TEST_DIRS.API_TEST_COLLISIONS,
 			mode: "lazy",
-			collision: { initial: "replace" },
+			api: {
+				collision: {
+					mode: { initial: "replace" }
+				}
+			},
 			silent: true
 		});
 		expect(api.math).toBeDefined();
@@ -140,7 +164,11 @@ describe("api-assignment collision: lazy+lazy replace (lines 318-348, 243-248)",
 		api = await slothlet({
 			base: TEST_DIRS.API_TEST_COLLISIONS,
 			mode: "lazy",
-			collision: { initial: "replace" },
+			api: {
+				collision: {
+					mode: { initial: "replace" }
+				}
+			},
 			debug: { api: true },
 			silent: true
 		});
@@ -156,7 +184,11 @@ describe("api-assignment collision: lazy+lazy merge-replace (lines 217-348)", ()
 		api = await slothlet({
 			base: TEST_DIRS.API_TEST_COLLISIONS,
 			mode: "lazy",
-			collision: { initial: "merge-replace" },
+			api: {
+				collision: {
+					mode: { initial: "merge-replace" }
+				}
+			},
 			silent: true
 		});
 		expect(api).toBeDefined();
@@ -168,7 +200,11 @@ describe("api-assignment collision: lazy+lazy merge-replace (lines 217-348)", ()
 		api = await slothlet({
 			base: TEST_DIRS.API_TEST_COLLISIONS,
 			mode: "lazy",
-			collision: { initial: "merge-replace" },
+			api: {
+				collision: {
+					mode: { initial: "merge-replace" }
+				}
+			},
 			debug: { api: true },
 			silent: true
 		});
@@ -184,7 +220,11 @@ describe("api-assignment collision: eager both-wrapper merge (lines 451-535)", (
 		api = await slothlet({
 			base: TEST_DIRS.API_TEST_COLLISIONS,
 			mode: "eager",
-			collision: { initial: "merge" },
+			api: {
+				collision: {
+					mode: { initial: "merge" }
+				}
+			},
 			silent: true
 		});
 		expect(api).toBeDefined();
@@ -195,7 +235,11 @@ describe("api-assignment collision: eager both-wrapper merge (lines 451-535)", (
 		api = await slothlet({
 			base: TEST_DIRS.API_TEST_COLLISIONS,
 			mode: "eager",
-			collision: { initial: "merge" },
+			api: {
+				collision: {
+					mode: { initial: "merge" }
+				}
+			},
 			silent: true
 		});
 		expect(api.math).toBeDefined();
@@ -207,7 +251,11 @@ describe("api-assignment collision: eager both-wrapper merge (lines 451-535)", (
 		api = await slothlet({
 			base: TEST_DIRS.API_TEST_COLLISIONS,
 			mode: "eager",
-			collision: { initial: "merge" },
+			api: {
+				collision: {
+					mode: { initial: "merge" }
+				}
+			},
 			debug: { api: true },
 			silent: true
 		});
@@ -219,7 +267,11 @@ describe("api-assignment collision: eager both-wrapper merge (lines 451-535)", (
 		api = await slothlet({
 			base: TEST_DIRS.API_TEST_COLLISIONS,
 			mode: "eager",
-			collision: { initial: "merge-replace" },
+			api: {
+				collision: {
+					mode: { initial: "merge-replace" }
+				}
+			},
 			silent: true
 		});
 		expect(api).toBeDefined();
@@ -235,7 +287,11 @@ describe("api-assignment collision: warn mode lazy (converts to merge)", () => {
 		api = await slothlet({
 			base: TEST_DIRS.API_TEST_COLLISIONS,
 			mode: "lazy",
-			collision: { initial: "warn" },
+			api: {
+				collision: {
+					mode: { initial: "warn" }
+				}
+			},
 			silent: true
 		});
 		expect(api).toBeDefined();
@@ -250,7 +306,11 @@ describe("api-assignment collision: skip mode lazy", () => {
 		api = await slothlet({
 			base: TEST_DIRS.API_TEST_COLLISIONS,
 			mode: "lazy",
-			collision: { initial: "skip" },
+			api: {
+				collision: {
+					mode: { initial: "skip" }
+				}
+			},
 			silent: true
 		});
 		expect(api).toBeDefined();

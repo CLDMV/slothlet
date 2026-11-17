@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-08T22:59:44-08:00 (1794207584)
+ *	@Last modified time: 2026-11-16T18:29:39-08:00 (1794882579)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -82,7 +82,7 @@ afterEach(async () => {
  * @returns {Promise<object>} The api.
  */
 async function open({ mode, runtime, ...permissions }) {
-	api = await slothlet({ base: DIR, mode, runtime, silent: true, permissions: { defaultPolicy: "deny", rules: RULES, ...permissions } });
+	api = await slothlet({ base: DIR, mode, runtime, silent: true, permissions: { policy: "deny", rules: RULES, ...permissions } });
 	await api.vault.get();
 	await api.shared.take();
 	await api.bag.echo(1);
@@ -91,7 +91,7 @@ async function open({ mode, runtime, ...permissions }) {
 
 describe("Permissions > attribution > validation (#726)", () => {
 	it.each([["bogus"], [""], [5], [true], [null], [{}]])("rejects attribution %j with a translated INVALID_CONFIG", async (attribution) => {
-		const error = await slothlet({ base: DIR, silent: true, permissions: { attribution } }).then(
+		const error = await slothlet({ base: DIR, silent: true, permissions: { caller: { attribution } } }).then(
 			(made) => {
 				api = made;
 				return null;
@@ -104,7 +104,7 @@ describe("Permissions > attribution > validation (#726)", () => {
 	});
 
 	it.each([["precise"], ["fast"], [undefined]])("accepts attribution %j", async (attribution) => {
-		api = await slothlet({ base: DIR, silent: true, permissions: { attribution } });
+		api = await slothlet({ base: DIR, silent: true, permissions: { caller: { attribution } } });
 		expect(await api.vault.get()).toBe(42);
 	});
 
@@ -162,7 +162,7 @@ describe.each(MODES)("Permissions > attribution: precise > $name (#726)", ({ mod
 			mode,
 			runtime,
 			silent: true,
-			permissions: { defaultPolicy: "deny", rules: [...RULES, { caller: "mixed.trustedHands", target: "vault.**", effect: "allow" }] }
+			permissions: { policy: "deny", rules: [...RULES, { caller: "mixed.trustedHands", target: "vault.**", effect: "allow" }] }
 		});
 		const helper = await api.mixed.trustedHands();
 		expect(types.isProxy(helper)).toBe(true);
@@ -176,8 +176,10 @@ describe.each(MODES)("Permissions > attribution: precise > $name (#726)", ({ mod
 			runtime,
 			silent: true,
 			permissions: {
-				defaultPolicy: "deny",
-				provenance: false,
+				policy: "deny",
+				caller: {
+					provenance: false
+				},
 				rules: [...RULES, { caller: "mixed.trustedHands", target: "vault.**", effect: "allow" }]
 			}
 		});
@@ -255,7 +257,7 @@ function runCommonJSPairInFlow(attribution, mode, runtime) {
 		const pair = [];
 		for (const rules of [[{ caller: "bag.**", target: "vault.**", effect: "allow" }], []]) {
 			const instance = await slothlet({ base, mode: ${JSON.stringify(mode)}, runtime: ${JSON.stringify(runtime)}, silent: true,
-				permissions: { defaultPolicy: "deny", attribution: ${JSON.stringify(attribution)}, rules } });
+				permissions: { policy: "deny", rules, caller: { attribution: ${JSON.stringify(attribution)} } } });
 			await settle(() => instance.vault.get());
 			pair.push(instance);
 		}
@@ -380,7 +382,7 @@ function runCommonJSPair(attribution, mode, runtime) {
 		const pair = [];
 		for (const rules of [[{ caller: "bag.**", target: "vault.**", effect: "allow" }], []]) {
 			const instance = await slothlet({ base, mode: ${JSON.stringify(mode)}, runtime: ${JSON.stringify(runtime)}, silent: true,
-				permissions: { defaultPolicy: "deny", attribution: ${JSON.stringify(attribution)}, rules } });
+				permissions: { policy: "deny", rules, caller: { attribution: ${JSON.stringify(attribution)} } } });
 			await settle(() => instance.vault.get());
 			pair.push(instance);
 		}

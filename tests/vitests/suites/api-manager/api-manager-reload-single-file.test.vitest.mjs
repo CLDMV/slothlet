@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-14T23:40:00-08:00 (1794728400)
+ *	@Last modified time: 2026-11-16T18:28:37-08:00 (1794882517)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -144,7 +144,7 @@ describe.each(TEST_MATRIX)("scoped reload of a single-file add > $name", ({ conf
 	async function setup(shape, extra = {}) {
 		root = makeTestTmpDirSync("reload-single-file");
 		writeFixture(root, 1);
-		api = await slothlet({ ...config, dir: path.join(root, "base"), silent: true, ...extra });
+		api = await slothlet({ ...config, base: path.join(root, "base"), silent: true, ...extra });
 		await api.slothlet.api.add(shape.at, path.join(root, shape.src), { moduleID: shape.id });
 		await api.slothlet.api.add("tools.sib", path.join(root, "sib.mjs"), { moduleID: "sib-mod" });
 		return api;
@@ -230,7 +230,9 @@ describe.each(TEST_MATRIX)("scoped reload of a single-file add > $name", ({ conf
 			`still applies a rule on the path after the reload (attribution "${attribution}")`,
 			async () => {
 				const shape = SHAPES[0];
-				await setup(shape, { permissions: { attribution, rules: [{ caller: "calc.**", target: "secret.**", effect: "deny" }] } });
+				await setup(shape, {
+					permissions: { caller: { attribution }, rules: [{ caller: "calc.**", target: "secret.**", effect: "deny" }] }
+				});
 				await expect(Promise.resolve().then(() => api.calc.peek())).rejects.toMatchObject({ code: "PERMISSION_DENIED" });
 				writeFixture(root, 2);
 				await api.slothlet.api.reload("calc-mod");
@@ -292,7 +294,7 @@ describe.each(TEST_MATRIX)("scoped reload of an add at the api root > $name", ({
 		writeRootFixture(1);
 		api = await slothlet({
 			...config,
-			dir: path.join(root, "base"),
+			base: path.join(root, "base"),
 			silent: true,
 			permissions: { rules: [{ caller: `${target.key}.**`, target: "secret.**", effect: "deny" }] }
 		});

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:04-07:00 (1791090904)
+ *	@Last modified time: 2026-11-16T18:29:06-08:00 (1794882546)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -40,7 +40,7 @@ describe.each(getMatrixConfigs({ mode: "lazy" }))(
 
 		beforeEach(async () => {
 			const { default: slothlet } = await import("@cldmv/slothlet");
-			api = await slothlet({ ...config, base: TEST_DIRS.API_TEST, collision: { initial: "replace", api: "replace" } });
+			api = await slothlet({ ...config, base: TEST_DIRS.API_TEST, api: { collision: { mode: { initial: "replace", api: "replace" } } } });
 		});
 
 		afterEach(async () => {
@@ -78,7 +78,7 @@ describe.each(getMatrixConfigs({ mode: "eager" }))(
 
 		beforeEach(async () => {
 			const { default: slothlet } = await import("@cldmv/slothlet");
-			api = await slothlet({ ...config, base: TEST_DIRS.API_TEST, collision: { initial: "replace", api: "replace" } });
+			api = await slothlet({ ...config, base: TEST_DIRS.API_TEST, api: { collision: { mode: { initial: "replace", api: "replace" } } } });
 		});
 
 		afterEach(async () => {
@@ -109,7 +109,11 @@ describe.each(getMatrixConfigs({ mode: "eager" }))(
 			api = await slothlet({
 				...config,
 				base: TEST_DIRS.API_TEST,
-				collision: { initial: "replace", api: "replace" }
+				api: {
+					collision: {
+						mode: { initial: "replace", api: "replace" }
+					}
+				}
 			});
 		});
 

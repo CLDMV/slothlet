@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:17:31-08:00 (1794874651)
+ *	@Last modified time: 2026-11-16T18:30:24-08:00 (1794882624)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -122,7 +122,7 @@ describe.each(MODES)("Runtime > one copy per process > $name", ({ mode, runtime:
 					mode,
 					runtime: runtimeName,
 					silent: true,
-					permissions: { defaultPolicy: "allow", attribution, rules: list }
+					permissions: { policy: "allow", caller: { attribution }, rules: list }
 				});
 			});
 

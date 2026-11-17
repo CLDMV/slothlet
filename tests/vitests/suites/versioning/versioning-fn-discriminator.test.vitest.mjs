@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:26-07:00 (1791090926)
+ *	@Last modified time: 2026-11-16T18:30:43-08:00 (1794882643)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -40,9 +40,11 @@ describe.each(getMatrixConfigs())("Versioning > Function Discriminator > $name",
 		api = await slothlet({
 			...config,
 			base: `${BASE}/callers`,
-			versionDispatcher: (allVersions, caller) => {
-				receivedArgs.push({ allVersions, caller });
-				return null; // fall to default
+			versioning: {
+				dispatcher: (allVersions, caller) => {
+					receivedArgs.push({ allVersions, caller });
+					return null; // fall to default
+				}
 			}
 		});
 
@@ -77,9 +79,11 @@ describe.each(getMatrixConfigs())("Versioning > Function Discriminator > $name",
 		api = await slothlet({
 			...config,
 			base: `${BASE}/callers`,
-			versionDispatcher: (allVersions, caller) => {
-				capturedCaller = caller;
-				return "v1";
+			versioning: {
+				dispatcher: (allVersions, caller) => {
+					capturedCaller = caller;
+					return "v1";
+				}
 			}
 		});
 
@@ -103,7 +107,9 @@ describe.each(getMatrixConfigs())("Versioning > Function Discriminator > $name",
 		api = await slothlet({
 			...config,
 			base: `${BASE}/callers`,
-			versionDispatcher: (allVersions, caller) => caller.metadata?.targetVersion ?? null
+			versioning: {
+				dispatcher: (allVersions, caller) => caller.metadata?.targetVersion ?? null
+			}
 		});
 
 		await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1", default: true });
@@ -119,8 +125,10 @@ describe.each(getMatrixConfigs())("Versioning > Function Discriminator > $name",
 		api = await slothlet({
 			...config,
 			base: `${BASE}/callers`,
-			versionDispatcher: () => {
-				throw new Error("discriminator exploded");
+			versioning: {
+				dispatcher: () => {
+					throw new Error("discriminator exploded");
+				}
 			}
 		});
 

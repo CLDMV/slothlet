@@ -24,7 +24,7 @@ export class ModesProcessor extends ComponentBase {
      * @param {boolean} recursive - Whether to descend into subdirectories at all.
      * @param {boolean} [populateDirectly=false] - Pour this directory's contents directly into `api` (no nested namespace level) — used for transparent-folder and lazy-materialization callers.
      * @param {string} [apiPathPrefix=""] - Dotted api path prefix this directory's own entries are built under.
-     * @param {string} [collisionContext="initial"] - `"initial"` or `"api"` — which `config.collision` policy governs this build.
+     * @param {string} [collisionContext="initial"] - `"initial"` or `"api"` — which `config.api.collision.mode` policy governs this build.
      * @param {string|null} [moduleID=null] - Module id every leaf produced by this call is attributed to.
      * @param {string|null} [sourceFolder=null] - Filesystem path this directory was scanned from, for metadata.
      * @param {string|null} [cacheBust=null] - Cache-busting value forwarded to dynamic imports.

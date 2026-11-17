@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:19-07:00 (1791090919)
+ *	@Last modified time: 2026-11-16T18:30:05-08:00 (1794882605)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -32,7 +32,7 @@ describe.each(getMatrixConfigs())("Permissions > Read-Level Gating > $name", ({ 
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				rules: [{ caller: "callers.**", target: "db.secrets.**", effect: "deny" }]
 			}
 		});
@@ -51,8 +51,10 @@ describe.each(getMatrixConfigs())("Permissions > Read-Level Gating > $name", ({ 
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "deny",
-				readGating: false,
+				policy: "deny",
+				gating: {
+					read: false
+				},
 				rules: [{ caller: "callers.**", target: "db.secrets.**", effect: "deny" }]
 			}
 		});
@@ -68,8 +70,10 @@ describe.each(getMatrixConfigs())("Permissions > Read-Level Gating > $name", ({ 
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "allow",
-				readGating: true,
+				policy: "allow",
+				gating: {
+					read: true
+				},
 				rules: [{ caller: "callers.**", target: "db.secrets.**", effect: "deny" }]
 			}
 		});
@@ -87,8 +91,10 @@ describe.each(getMatrixConfigs())("Permissions > Read-Level Gating > $name", ({ 
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "deny",
-				readGating: true,
+				policy: "deny",
+				gating: {
+					read: true
+				},
 				rules: [{ caller: "callers.**", target: "db.secrets.token", effect: "allow" }]
 			}
 		});
@@ -110,8 +116,10 @@ describe.each(getMatrixConfigs())("Permissions > Read-Level Gating > $name", ({ 
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "deny",
-				readGating: true,
+				policy: "deny",
+				gating: {
+					read: true
+				},
 				// Allow only the call target — no rules for the `admin` / `admin.manage` segments.
 				rules: [{ caller: "callers.**", target: "admin.**", effect: "allow" }]
 			}
@@ -127,8 +135,10 @@ describe.each(getMatrixConfigs())("Permissions > Read-Level Gating > $name", ({ 
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "deny",
-				readGating: true,
+				policy: "deny",
+				gating: {
+					read: true
+				},
 				rules: [{ caller: "**", target: "db.secrets.**", effect: "deny" }]
 			}
 		});
@@ -144,8 +154,10 @@ describe.each(getMatrixConfigs())("Permissions > Read-Level Gating > $name", ({ 
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "deny",
-				readGating: true,
+				policy: "deny",
+				gating: {
+					read: true
+				},
 				rules: [{ caller: "**", target: "db.secrets.**", effect: "deny" }]
 			}
 		});
@@ -161,8 +173,10 @@ describe.each(getMatrixConfigs())("Permissions > Read-Level Gating > $name", ({ 
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "allow",
-				readGating: true,
+				policy: "allow",
+				gating: {
+					read: true
+				},
 				rules: [{ caller: "callers.**", target: "db.secrets.token", effect: "deny" }]
 			}
 		});
@@ -194,8 +208,10 @@ describe.each(getMatrixConfigs())("Permissions > Read-Level Gating > $name", ({ 
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "allow",
-				readGating: true,
+				policy: "allow",
+				gating: {
+					read: true
+				},
 				rules: [{ caller: "callers.**", target: "db.secrets.**", effect: "deny" }]
 			}
 		});
@@ -215,8 +231,10 @@ describe.each(getMatrixConfigs())("Permissions > Read-Level Gating > $name", ({ 
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "deny",
-				readGating: true,
+				policy: "deny",
+				gating: {
+					read: true
+				},
 				rules: [{ caller: "callers.**", target: "db.secrets.*", effect: "allow" }]
 			}
 		});
@@ -245,8 +263,10 @@ describe.each(getMatrixConfigs())("Permissions > Read-Level Gating > $name", ({ 
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "allow",
-				readGating: true,
+				policy: "allow",
+				gating: {
+					read: true
+				},
 				rules: [{ caller: "callers.**", target: "db.secrets.**", effect: "deny" }]
 			}
 		});
@@ -270,8 +290,10 @@ describe.each(getMatrixConfigs())("Permissions > Read-Level Gating > $name", ({ 
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "deny",
-				readGating: true,
+				policy: "deny",
+				gating: {
+					read: true
+				},
 				rules: [{ caller: "callers.**", target: "db.secrets.*", effect: "allow" }]
 			}
 		});
@@ -335,9 +357,11 @@ describe.each(getMatrixConfigs())("Permissions > Read-Level Gating > $name", ({ 
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				audit: "verbose",
-				readGating: true,
+				gating: {
+					read: true
+				},
 				rules: [{ caller: "callers.**", target: "db.secrets.token", effect: "deny" }]
 			}
 		});
@@ -362,9 +386,11 @@ describe.each(getMatrixConfigs())("Permissions > Read-Level Gating > $name", ({ 
 			...config,
 			base: BASE,
 			permissions: {
-				enabled: false,
-				defaultPolicy: "deny",
-				readGating: true,
+				mode: false,
+				policy: "deny",
+				gating: {
+					read: true
+				},
 				rules: [{ caller: "**", target: "db.secrets.**", effect: "deny" }]
 			}
 		});
@@ -378,8 +404,10 @@ describe.each(getMatrixConfigs())("Permissions > Read-Level Gating > $name", ({ 
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "allow",
-				readGating: true,
+				policy: "allow",
+				gating: {
+					read: true
+				},
 				rules: [{ caller: "callers.**", target: "db.secrets.token", effect: "deny", condition: { scope: "restricted" } }]
 			}
 		});
@@ -409,8 +437,10 @@ describe.each(getMatrixConfigs())("Permissions > Read-Level Gating > $name", ({ 
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "allow",
-				readGating: true,
+				policy: "allow",
+				gating: {
+					read: true
+				},
 				rules: [{ caller: "callers.**", target: "db.secrets.token", effect: "deny", condition: { scope: "restricted" } }]
 			}
 		});
@@ -444,8 +474,10 @@ describe.each(getMatrixConfigs())("Permissions > Read-Level Gating > $name", ({ 
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "allow",
-				readGating: false,
+				policy: "allow",
+				gating: {
+					read: false
+				},
 				rules: [{ caller: "callers.**", target: "db.secrets.token", effect: "deny" }]
 			}
 		});
@@ -471,8 +503,10 @@ describe.each(getMatrixConfigs())("Permissions > Read-Level Gating > $name", ({ 
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "allow",
-				readGating: true,
+				policy: "allow",
+				gating: {
+					read: true
+				},
 				rules: [{ caller: "callers.**", target: "db.secrets.token", effect: "deny" }]
 			}
 		});
@@ -501,9 +535,11 @@ describe.each(getMatrixConfigs())("Permissions > Read-Level Gating > $name", ({ 
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				audit: "verbose",
-				readGating: true,
+				gating: {
+					read: true
+				},
 				rules: [
 					// Explicit deny on dataReaderB so the rule-based "permission:denied"
 					// event fires (default-policy fallthrough emits "permission:default").
@@ -550,7 +586,7 @@ describe.each(getMatrixConfigs())("Permissions > Read-Level Gating > $name", ({ 
 		api = await slothlet({
 			...config,
 			base: BASE,
-			permissions: { defaultPolicy: "allow" }
+			permissions: { policy: "allow" }
 		});
 
 		expect(() => api.slothlet.permissions.control.readGating("yes")).toThrow(/INVALID_ARGUMENT/);

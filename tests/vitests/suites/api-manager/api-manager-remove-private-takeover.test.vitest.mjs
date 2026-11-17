@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T23:16:04-08:00 (1794813364)
+ *	@Last modified time: 2026-11-16T18:28:38-08:00 (1794882518)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -71,8 +71,10 @@ describe.each(configs)("removing a takeover of private members > $mode / $runtim
 			runtime: config.runtime,
 			silent: true,
 			permissions: {
-				defaultPolicy: "allow",
-				attribution: config.attribution,
+				policy: "allow",
+				caller: {
+					attribution: config.attribution
+				},
 				rules: [],
 				private: { scope: config.scope, host: config.host }
 			}
@@ -109,8 +111,10 @@ describe.each(configs)("removing a takeover of private members > $mode / $runtim
 			runtime: config.runtime,
 			silent: true,
 			permissions: {
-				defaultPolicy: "allow",
-				attribution: config.attribution,
+				policy: "allow",
+				caller: {
+					attribution: config.attribution
+				},
 				rules: [],
 				private: { scope: config.scope, host: config.host }
 			}

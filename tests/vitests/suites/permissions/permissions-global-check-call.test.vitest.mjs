@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T20:14:27-08:00 (1794802467)
+ *	@Last modified time: 2026-11-16T18:29:51-08:00 (1794882591)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -80,7 +80,7 @@ describe.each(getMatrixConfigs())("Permissions > global.checkCall (#508) > $name
 
 	it("agrees with checkAccess for rules without conditions, synchronously", async () => {
 		api = await build({
-			defaultPolicy: "allow",
+			policy: "allow",
 			rules: [{ caller: "untrusted.**", target: "admin.**", effect: "deny" }]
 		});
 		const { checkCall, checkAccess } = api.slothlet.permissions.global;
@@ -101,7 +101,7 @@ describe.each(getMatrixConfigs())("Permissions > global.checkCall (#508) > $name
 	it("forwards { args, target } to function conditions — which checkAccess never sees", async () => {
 		const seen = [];
 		api = await build({
-			defaultPolicy: "deny",
+			policy: "deny",
 			rules: [
 				{
 					caller: "callers.**",
@@ -134,7 +134,7 @@ describe.each(getMatrixConfigs())("Permissions > global.checkCall (#508) > $name
 
 	it("callMeta.target is the concrete target so one globbed rule can branch per target", async () => {
 		api = await build({
-			defaultPolicy: "deny",
+			policy: "deny",
 			rules: [
 				{
 					caller: "callers.**",
@@ -154,7 +154,7 @@ describe.each(getMatrixConfigs())("Permissions > global.checkCall (#508) > $name
 
 	it("evaluates conditions against the ambient context.run() context, combined with the args", async () => {
 		api = await build({
-			defaultPolicy: "deny",
+			policy: "deny",
 			rules: [
 				{
 					caller: "callers.**",
@@ -177,7 +177,7 @@ describe.each(getMatrixConfigs())("Permissions > global.checkCall (#508) > $name
 
 	it("resolves a stale required principal first (a Promise) and answers synchronously once it is current", async () => {
 		api = await build({
-			defaultPolicy: "deny",
+			policy: "deny",
 			rules: [
 				{
 					caller: "client.**",
@@ -222,7 +222,7 @@ describe.each(getMatrixConfigs())("Permissions > global.checkCall (#508) > $name
 	// ── Module-private targets + no self-call bypass ─────────────────────────────
 
 	it("allows a module-private target to a supplied caller of the same module, under private.host allow too", async () => {
-		api = await build({ defaultPolicy: "allow", rules: [], private: { host: "allow" } }, PRIVATE);
+		api = await build({ policy: "allow", rules: [], private: { host: "allow" } }, PRIVATE);
 		// Ownership is recorded as a lazy folder loads; a silent query answers for loaded paths.
 		await api.reporting.peek.rate();
 		const audit = collectAudit(api);
@@ -242,13 +242,13 @@ describe.each(getMatrixConfigs())("Permissions > global.checkCall (#508) > $name
 	});
 
 	it("allows a module-private target to a supplied caller of the same module under the default host policy too", async () => {
-		api = await build({ defaultPolicy: "allow", rules: [] }, PRIVATE);
+		api = await build({ policy: "allow", rules: [] }, PRIVATE);
 		await api.reporting.peek.rate();
 		expect(api.slothlet.permissions.global.checkCall("reporting.peek", "billing.internals._scale", [100])).toBe(true);
 	});
 
 	it("never applies the self-call bypass: the supplied caller has no source file", async () => {
-		api = await build({ defaultPolicy: "deny", rules: [] });
+		api = await build({ policy: "deny", rules: [] });
 		const { checkCall } = api.slothlet.permissions.global;
 
 		// The real gate lets a same-file call through (callSelf → identity live in self-caller.mjs)...
@@ -262,7 +262,7 @@ describe.each(getMatrixConfigs())("Permissions > global.checkCall (#508) > $name
 
 	it("emits the audit lifecycle events as a real call would, tagged via: 'checkCall'", async () => {
 		api = await build({
-			defaultPolicy: "allow",
+			policy: "allow",
 			audit: "verbose",
 			rules: [
 				{ caller: "untrusted.**", target: "admin.**", effect: "deny" },
@@ -298,7 +298,7 @@ describe.each(getMatrixConfigs())("Permissions > global.checkCall (#508) > $name
 
 	it("emits permission:denied under the default audit level and nothing for an allow", async () => {
 		api = await build({
-			defaultPolicy: "allow",
+			policy: "allow",
 			rules: [{ caller: "untrusted.**", target: "admin.**", effect: "deny" }]
 		});
 		const audit = collectAudit(api);
@@ -325,8 +325,8 @@ describe.each(getMatrixConfigs())("Permissions > global.checkCall (#508) > $name
 
 		// Explicitly disabled with a deny default and a deny rule: still true.
 		api = await build({
-			enabled: false,
-			defaultPolicy: "deny",
+			mode: false,
+			policy: "deny",
 			rules: [{ caller: "untrusted.**", target: "admin.**", effect: "deny" }]
 		});
 		expect(api.slothlet.permissions.global.checkCall("untrusted.plugin", "admin.manage")).toBe(true);
@@ -335,7 +335,7 @@ describe.each(getMatrixConfigs())("Permissions > global.checkCall (#508) > $name
 	// ── Host-only ────────────────────────────────────────────────────────────────
 
 	it("is host-only: a module caller is refused (PERMISSION_DENIED) by a built-in rule, unlike the gatable checkAccess", async () => {
-		api = await build({ defaultPolicy: "allow", rules: [] });
+		api = await build({ policy: "allow", rules: [] });
 
 		const call = await api.callers.checkCallCaller.attempt("payments.charge", "db.read", []);
 		expect(call).toEqual({ ok: false, code: "PERMISSION_DENIED" });
@@ -353,7 +353,7 @@ describe.each(getMatrixConfigs())("Permissions > global.checkCall (#508) > $name
 
 	it("the host can grant checkCall to a trusted module with an instance rule on the exact target", async () => {
 		api = await build({
-			defaultPolicy: "allow",
+			policy: "allow",
 			rules: [
 				{ caller: "callers.checkCallCaller.**", target: "slothlet.permissions.global.checkCall", effect: "allow" },
 				{ caller: "untrusted.**", target: "admin.**", effect: "deny" }
@@ -367,7 +367,7 @@ describe.each(getMatrixConfigs())("Permissions > global.checkCall (#508) > $name
 	// ── Validation ───────────────────────────────────────────────────────────────
 
 	it("throws INVALID_ARGUMENT for a non-string or empty caller/target and a non-array args", async () => {
-		api = await build({ defaultPolicy: "allow", rules: [] });
+		api = await build({ policy: "allow", rules: [] });
 		const { checkCall } = api.slothlet.permissions.global;
 
 		expect(() => checkCall(7, "db.read", [])).toThrow(/INVALID_ARGUMENT/);
@@ -401,7 +401,7 @@ describe("PermissionManager > checkCall enforcement options (#508)", () => {
 	const makeManager = (rules = [], extra = {}) => {
 		const lifecycle = { emit: vi.fn() };
 		const instance = new PermissionManager({
-			config: { permissions: { enabled: true, defaultPolicy: "deny", rules, ...extra } },
+			config: { permissions: { mode: true, policy: "deny", rules, ...extra } },
 			handlers: { lifecycle },
 			debug: () => {},
 			SlothletError

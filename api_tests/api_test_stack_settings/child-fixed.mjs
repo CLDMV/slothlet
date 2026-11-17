@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:15:40-08:00 (1794874540)
+ *	@Last modified time: 2026-11-16T18:26:45-08:00 (1794882405)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -35,7 +35,7 @@ const api = await slothlet({
 	mode,
 	runtime,
 	silent: true,
-	permissions: { defaultPolicy: "allow", attribution, references: { capture: capture === "true" }, rules: ROUTES.rules }
+	permissions: { policy: "allow", caller: { attribution, capture: capture === "true" }, rules: ROUTES.rules }
 });
 const answers = {};
 

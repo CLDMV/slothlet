@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:40-08:00 (1794874600)
+ *	@Last modified time: 2026-11-16T18:28:50-08:00 (1794882530)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -144,7 +144,7 @@ describe.each(MODES)("Config > helpers > whose code a helper's is > $name", ({ m
 						runtime,
 						silent: true,
 						...(helpers ? { helpers } : {}),
-						permissions: { defaultPolicy: "allow", attribution, rules: list }
+						permissions: { policy: "allow", caller: { attribution }, rules: list }
 					});
 					// Load every file, so a lazy tree records the same imports an eager one does.
 					for (const file of CJS_IMPORTERS) await api[file].bumpCjs();
@@ -189,7 +189,7 @@ describe.each(MODES)("Config > helpers > a CommonJS helper's own code > $name", 
 						runtime,
 						helpers,
 						silent: true,
-						permissions: { defaultPolicy: "allow", attribution, rules: list }
+						permissions: { policy: "allow", caller: { attribution }, rules: list }
 					});
 					for (const file of CJS_IMPORTERS) await api[file].bumpCjs();
 				});
@@ -223,7 +223,7 @@ function runFirstInstance(helpers, list) {
 	const script = `
 		import slothlet from "@cldmv/slothlet";
 		const keep = setInterval(() => {}, 1000);
-		const api = await slothlet({ base: ${JSON.stringify(DIR)}, helpers: ${JSON.stringify(helpers)}, silent: true, permissions: { defaultPolicy: "allow", attribution: "fast", rules: ${JSON.stringify(list)} } });
+		const api = await slothlet({ base: ${JSON.stringify(DIR)}, helpers: ${JSON.stringify(helpers)}, silent: true, permissions: { policy: "allow", rules: ${JSON.stringify(list)}, caller: { attribution: "fast" } } });
 		const settle = async (fn) => { try { return await fn(); } catch (error) { return error?.code ?? String(error?.message ?? error); } };
 		const queued = [await api.one.viaQueue(), await api.two.viaQueue()];
 		const { run } = await api.two.mislabelled();

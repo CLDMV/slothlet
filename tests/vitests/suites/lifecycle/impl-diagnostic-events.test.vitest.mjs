@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T22:54:03-08:00 (1794812043)
+ *	@Last modified time: 2026-11-16T18:29:24-08:00 (1794882564)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -64,7 +64,7 @@ describe.each([["eager"], ["lazy"]])("impl:warning / impl:error — runtime (%s 
 			base: dir,
 			mode,
 			runtime: "async",
-			api: { mutations: { add: true, remove: true, reload: true }, collision: { initial: "merge", api: "merge" } }
+			api: { mutations: { add: true, remove: true, reload: true }, collision: { mode: { initial: "merge", api: "merge" } } }
 		});
 		for (const ev of ["impl:warning", "impl:error"]) {
 			api.slothlet.lifecycle.on(ev, (payload) => events.push({ event: ev, payload }));

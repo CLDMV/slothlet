@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-11T13:14:56-08:00 (1794431696)
+ *	@Last modified time: 2026-11-16T18:30:10-08:00 (1794882610)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -53,7 +53,7 @@ describe.each(matrix)("file-level code under a callable api > $mode / $runtime /
 			mode,
 			runtime,
 			silent: true,
-			permissions: { defaultPolicy: "allow", attribution, rules: [{ caller, target: "vault.**", effect: "deny" }] }
+			permissions: { policy: "allow", caller: { attribution }, rules: [{ caller, target: "vault.**", effect: "deny" }] }
 		});
 		expect(typeof api).toBe("function");
 		const helper = await api.samename.give();

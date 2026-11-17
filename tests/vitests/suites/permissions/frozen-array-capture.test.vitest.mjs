@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-25T19:07:49-07:00 (1792980469)
+ *	@Last modified time: 2026-11-16T18:29:37-08:00 (1794882577)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -40,7 +40,7 @@ const BASE = new URL("../../../../api_tests/api_test_frozen_array_capture", impo
  * @returns {object} The permissions config.
  */
 const denyProbe = (targets) => ({
-	defaultPolicy: "allow",
+	policy: "allow",
 	rules: targets.map((target) => ({ caller: "probe.**", target, effect: "deny" }))
 });
 
@@ -235,7 +235,7 @@ describe.each(getMatrixConfigs({}))("frozen array capture (#655) > Config: $name
 
 	describe("3. ordinary reads still work", () => {
 		it("every shape reads as plain JS through self with permissions on", async () => {
-			api = await slothlet({ ...config, base: BASE, silent: true, permissions: { defaultPolicy: "allow" } });
+			api = await slothlet({ ...config, base: BASE, silent: true, permissions: { policy: "allow" } });
 			const all = (value) => ({
 				index: { value: JSON.stringify(value[0]) },
 				spread: { value: JSON.stringify(value) },
@@ -258,7 +258,7 @@ describe.each(getMatrixConfigs({}))("frozen array capture (#655) > Config: $name
 		});
 
 		it("an array frozen after a first read still reads as plain JS", async () => {
-			api = await slothlet({ ...config, base: BASE, silent: true, permissions: { defaultPolicy: "allow" } });
+			api = await slothlet({ ...config, base: BASE, silent: true, permissions: { policy: "allow" } });
 			expect((await api.probe.readArray("later")).index).toEqual({ value: JSON.stringify({ l: 1 }) });
 			Object.freeze(api.store.later);
 			const outcomes = await api.probe.readArray("later");
@@ -268,7 +268,7 @@ describe.each(getMatrixConfigs({}))("frozen array capture (#655) > Config: $name
 		});
 
 		it("a frozen array's element is the same object on every read", async () => {
-			api = await slothlet({ ...config, base: BASE, silent: true, permissions: { defaultPolicy: "allow" } });
+			api = await slothlet({ ...config, base: BASE, silent: true, permissions: { policy: "allow" } });
 			const first = await api.probe.give(["objs", 0]);
 			const second = await api.probe.give(["objs", 0]);
 			expect(first.node).toBe(second.node);
@@ -279,7 +279,7 @@ describe.each(getMatrixConfigs({}))("frozen array capture (#655) > Config: $name
 		const kinds = ["arrow", "method", "klass", "plain", "bound"];
 
 		it.each(kinds)("a kept %s reports its prototype as the node does", async (kind) => {
-			api = await slothlet({ ...config, base: BASE, silent: true, permissions: { defaultPolicy: "allow" } });
+			api = await slothlet({ ...config, base: BASE, silent: true, permissions: { policy: "allow" } });
 			const node = api.store.kinds[kind];
 			const descriptor = Object.getOwnPropertyDescriptor(node, "prototype");
 			const expected = {
@@ -296,7 +296,7 @@ describe.each(getMatrixConfigs({}))("frozen array capture (#655) > Config: $name
 		});
 
 		it.each(["arrow", "method", "bound"])("a kept %s has no prototype, as the function has none", async (kind) => {
-			api = await slothlet({ ...config, base: BASE, silent: true, permissions: { defaultPolicy: "allow" } });
+			api = await slothlet({ ...config, base: BASE, silent: true, permissions: { policy: "allow" } });
 			await api.probe.keep(kind, ["kinds", kind]);
 			await api.probe.describeLater(kind, "prototype");
 			const outcome = await waitOutcome(api, "probe", kind);
@@ -309,7 +309,7 @@ describe.each(getMatrixConfigs({}))("frozen array capture (#655) > Config: $name
 			["plain", '"PLAIN"'],
 			["bound", '"BOUND"']
 		])("a kept %s still calls", async (kind, result) => {
-			api = await slothlet({ ...config, base: BASE, silent: true, permissions: { defaultPolicy: "allow" } });
+			api = await slothlet({ ...config, base: BASE, silent: true, permissions: { policy: "allow" } });
 			await api.probe.keep(kind, ["kinds", kind]);
 			await api.probe.useLater(kind, [], true);
 			expect(await waitOutcome(api, "probe", kind)).toEqual({ value: result });
@@ -322,7 +322,7 @@ describe.each(getMatrixConfigs({}))("frozen array capture (#655) > Config: $name
 			["arrow", false],
 			["method", false]
 		])("a kept %s constructs exactly when the function does (%s)", async (kind, constructs) => {
-			api = await slothlet({ ...config, base: BASE, silent: true, permissions: { defaultPolicy: "allow" } });
+			api = await slothlet({ ...config, base: BASE, silent: true, permissions: { policy: "allow" } });
 			await api.probe.keep(kind, ["kinds", kind]);
 			await api.probe.constructLater(kind);
 			const outcome = await waitOutcome(api, "probe", kind);
@@ -337,7 +337,7 @@ describe.each(getMatrixConfigs({}))("frozen array capture (#655) > Config: $name
 			["mut", "seal"],
 			["sealedMut", "freeze"]
 		])("the owner can close its own %s through self (%s)", async (name, close) => {
-			api = await slothlet({ ...config, base: BASE, silent: true, permissions: { defaultPolicy: "allow" } });
+			api = await slothlet({ ...config, base: BASE, silent: true, permissions: { policy: "allow" } });
 			expect(await api.store.changeOwn(name, { close })).toBe("done");
 			expect(close === "freeze" ? Object.isFrozen(api.store[name]) : Object.isSealed(api.store[name])).toBe(true);
 		});
@@ -347,7 +347,7 @@ describe.each(getMatrixConfigs({}))("frozen array capture (#655) > Config: $name
 			["mut", "seal"],
 			["mut", "preventExtensions"]
 		])("the owner can mark an element of its closed %s read-only (%s)", async (name, close) => {
-			api = await slothlet({ ...config, base: BASE, silent: true, permissions: { defaultPolicy: "allow" } });
+			api = await slothlet({ ...config, base: BASE, silent: true, permissions: { policy: "allow" } });
 			expect(await api.store.changeOwn(name, { close, readOnly: 1 })).toBe("done");
 			expect(Object.getOwnPropertyDescriptor(api.store[name], 1).writable).toBe(false);
 			expect(await api.store.changeOwn(name, { close: "freeze" })).toBe("done");
@@ -357,7 +357,7 @@ describe.each(getMatrixConfigs({}))("frozen array capture (#655) > Config: $name
 			["delete", { remove: 2 }, ["0", "1"], '[{"a":1},2,null]', 3],
 			["shrink", { set: ["length", 1] }, ["0"], '[{"a":1}]', 1]
 		])("a kept view of a closed array still enumerates after its owner's %s", async (_label, change, keys, json, length) => {
-			api = await slothlet({ ...config, base: BASE, silent: true, permissions: { defaultPolicy: "allow" } });
+			api = await slothlet({ ...config, base: BASE, silent: true, permissions: { policy: "allow" } });
 			await api.probe.keep("arr", ["closedArr"]);
 			await api.probe.enumerateLater("arr", "2", "before");
 			expect((await waitOutcome(api, "probe", "before")).value).toBeTruthy();
@@ -368,7 +368,7 @@ describe.each(getMatrixConfigs({}))("frozen array capture (#655) > Config: $name
 		});
 
 		it("a kept view reads what the owner wrote before freezing", async () => {
-			api = await slothlet({ ...config, base: BASE, silent: true, permissions: { defaultPolicy: "allow" } });
+			api = await slothlet({ ...config, base: BASE, silent: true, permissions: { policy: "allow" } });
 			await api.probe.keep("arr", ["sealedMut"]);
 			expect(await api.store.changeOwn("sealedMut", { set: [0, 9] })).toBe("done");
 			expect(await api.store.changeOwn("sealedMut", { close: "freeze" })).toBe("done");
@@ -377,7 +377,7 @@ describe.each(getMatrixConfigs({}))("frozen array capture (#655) > Config: $name
 		});
 
 		it.each([["ns"], ["prims"], ["objs"], ["sealed"], ["mfns"]])("a kept view of %s inspects as the node does", async (name) => {
-			api = await slothlet({ ...config, base: BASE, silent: true, permissions: { defaultPolicy: "allow" } });
+			api = await slothlet({ ...config, base: BASE, silent: true, permissions: { policy: "allow" } });
 			await api.probe.keep(name, [name]);
 			await api.probe.inspectLater(name);
 			const outcome = await waitOutcome(api, "probe", name);
@@ -422,7 +422,7 @@ describe.each(getMatrixConfigs({}))("frozen array capture (#655) > Config: $name
 
 		it.each([
 			["a top-level node", {}],
-			["capture off", { references: { capture: false } }]
+			["capture off", { caller: { capture: false } }]
 		])("a closed node lists its keys for a reader denied one of them: %s", async (_label, extra) => {
 			api = await slothlet({ ...config, base: BASE, silent: true, permissions: { ...denyProbe(["listed.1"]), ...extra } });
 			const keys = JSON.stringify(["0", "1", "2", "length"]);
@@ -445,7 +445,7 @@ describe.each(getMatrixConfigs({}))("frozen array capture (#655) > Config: $name
 		});
 
 		it("a kept view of a closed node inspects as the node is now", async () => {
-			api = await slothlet({ ...config, base: BASE, silent: true, permissions: { defaultPolicy: "allow" } });
+			api = await slothlet({ ...config, base: BASE, silent: true, permissions: { policy: "allow" } });
 			await api.probe.keep("iObj", ["iObj"]);
 			expect(await api.store.changeOwn("iObj", { close: "preventExtensions" })).toBe("done");
 			await api.probe.enumerateLater("iObj", "n", "closed");
@@ -482,7 +482,7 @@ describe.each(getMatrixConfigs({}))("frozen array capture (#655) > Config: $name
 		});
 
 		it.each([["Point"], ["shapes"]])("a kept view of %s inspects as the node does", async (name) => {
-			api = await slothlet({ ...config, base: BASE, silent: true, permissions: { defaultPolicy: "allow" } });
+			api = await slothlet({ ...config, base: BASE, silent: true, permissions: { policy: "allow" } });
 			await api.probe.keep(name, [name]);
 			await api.probe.inspectLater(name);
 			const outcome = await waitOutcome(api, "probe", name);
@@ -508,7 +508,7 @@ describe.each(getMatrixConfigs({}))("frozen array capture (#655) > Config: $name
 		const locked = { caller: "probe.**", target: "store.ruled.2", effect: "deny", condition: { lock: true } };
 
 		it("an element refused once reads once it is allowed", async () => {
-			api = await slothlet({ ...config, base: BASE, silent: true, permissions: { defaultPolicy: "allow", rules: [locked] } });
+			api = await slothlet({ ...config, base: BASE, silent: true, permissions: { policy: "allow", rules: [locked] } });
 			const refused = await api.slothlet.context.run({ lock: true }, () => api.probe.readPath(["ruled", 2]));
 			expect(refused).toEqual({ error: "PERMISSION_DENIED" });
 			expect(await api.probe.readPath(["ruled", 2])).toEqual({ value: '"S3CRET"' });
@@ -516,7 +516,7 @@ describe.each(getMatrixConfigs({}))("frozen array capture (#655) > Config: $name
 		});
 
 		it("an element read once is refused, every way, once it is denied", async () => {
-			api = await slothlet({ ...config, base: BASE, silent: true, permissions: { defaultPolicy: "allow", rules: [locked] } });
+			api = await slothlet({ ...config, base: BASE, silent: true, permissions: { policy: "allow", rules: [locked] } });
 			expect(await api.probe.describePath(["ruled"], 2)).toEqual({ value: '"S3CRET"' });
 			const later = await api.slothlet.context.run({ lock: true }, async () => ({
 				read: await api.probe.readPath(["ruled", 2]),
@@ -527,7 +527,7 @@ describe.each(getMatrixConfigs({}))("frozen array capture (#655) > Config: $name
 		});
 
 		it("an element refused, then allowed by removing the rule, reads", async () => {
-			api = await slothlet({ ...config, base: BASE, silent: true, permissions: { defaultPolicy: "allow", rules: [] } });
+			api = await slothlet({ ...config, base: BASE, silent: true, permissions: { policy: "allow", rules: [] } });
 			const id = api.slothlet.permissions.addRule({ caller: "probe.**", target: "store.ruled.2", effect: "deny" });
 			expect(await api.probe.readPath(["ruled", 0])).toEqual({ value: "1" });
 			expect(await api.probe.readPath(["ruled", 2])).toEqual({ error: "PERMISSION_DENIED" });
@@ -548,7 +548,7 @@ describe.each(getMatrixConfigs({}))("frozen array capture (#655) > Config: $name
 
 	describe("10. functions of every kind inspect as the node does", () => {
 		it.each([["asyncFn"], ["generatorFn"]])("a kept view of %s inspects as the node does", async (name) => {
-			api = await slothlet({ ...config, base: BASE, silent: true, permissions: { defaultPolicy: "allow" } });
+			api = await slothlet({ ...config, base: BASE, silent: true, permissions: { policy: "allow" } });
 			await api.probe.keep(name, [name]);
 			await api.probe.inspectLater(name);
 			const outcome = await waitOutcome(api, "probe", name);
@@ -594,7 +594,7 @@ describe.each(getMatrixConfigs({}))("frozen array capture (#655) > Config: $name
 		});
 
 		it("a class shows the methods its prototype holds when hidden members are shown", async () => {
-			api = await slothlet({ ...config, base: BASE, silent: true, permissions: { defaultPolicy: "allow" } });
+			api = await slothlet({ ...config, base: BASE, silent: true, permissions: { policy: "allow" } });
 			const outcome = await api.probe.inspectHiddenNow(["kinds", "klass"]);
 			expect(outcome.value).toContain("[tag]");
 		});

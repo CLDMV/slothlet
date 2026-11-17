@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-06T06:24:36-08:00 (1793975076)
+ *	@Last modified time: 2026-11-16T18:24:37-08:00 (1794882277)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -63,7 +63,7 @@ it("reports every call", async () => {
 				runtime,
 				silent: true,
 				hook: { enabled: true },
-				permissions: { defaultPolicy: "deny", rules: RULES }
+				permissions: { policy: "deny", rules: RULES }
 			};
 			const { api, ctx } = await boot(slothlet, config);
 			out[`${mode}/${runtime}/owner`] = await api.ext.a.activate(ctx);

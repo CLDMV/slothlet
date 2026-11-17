@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T00:46:26-08:00 (1794818786)
+ *	@Last modified time: 2026-11-16T18:30:19-08:00 (1794882619)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -59,10 +59,12 @@ const WRITTEN = ["wset", "wdef", "wfix", "data"];
  * @type {Record<string, function(string): (object|undefined)>}
  */
 const PERMISSIONS = {
-	"no write rule": (attribution) => ({ defaultPolicy: "allow", attribution, rules: [] }),
+	"no write rule": (attribution) => ({ policy: "allow", caller: { attribution }, rules: [] }),
 	"write rules granting each member": (attribution) => ({
-		defaultPolicy: "allow",
-		attribution,
+		policy: "allow",
+		caller: {
+			attribution
+		},
 		rules: ["", "zz."].flatMap((prefix) =>
 			WRITTEN.map((member) => ({ caller: "w.**", target: `${prefix}${member}:write`, effect: "allow" }))
 		)
@@ -388,7 +390,7 @@ describe.each(ROOTS)("the api root's integrity > %s", (root) => {
 				const NAMES_ASKED = ["inherited", "unruled", "deepRuled", "deepUnruled"];
 
 				it("reads and lists each member as the root reads it, and leaves the rest out", async () => {
-					api = await build(root, { mode, runtime, permissions: { defaultPolicy: "deny", attribution, rules } });
+					api = await build(root, { mode, runtime, permissions: { policy: "deny", caller: { attribution }, rules } });
 					const prototype = Object.assign(Object.create({ deepRuled: 1, deepUnruled: 2 }), { inherited: 5, unruled: 6 });
 					Object.setPrototypeOf(api, prototype);
 					// The host is handed the object itself, and reads everything.
@@ -426,7 +428,7 @@ describe.each(ROOTS)("the api root's integrity > %s", (root) => {
 
 				it("an inherited object member the module may read nothing beneath is left out of its listings", async () => {
 					const objectRules = [...rules, { caller: "w.ops.protoObjects", target: "partly.a", effect: "allow" }];
-					api = await build(root, { mode, runtime, permissions: { defaultPolicy: "deny", attribution, rules: objectRules } });
+					api = await build(root, { mode, runtime, permissions: { policy: "deny", caller: { attribution }, rules: objectRules } });
 					Object.setPrototypeOf(api, { nothing: { a: 1 }, partly: { a: 1, b: 2 } });
 					for (const via of ["given", "api"]) {
 						// Plain JS lists both; the module may read nothing beneath `nothing`, which is left out as a node leaves out
@@ -444,7 +446,7 @@ describe.each(ROOTS)("the api root's integrity > %s", (root) => {
 				});
 
 				it("a closed root holds the checked prototype for every holder", async () => {
-					api = await build(root, { mode, runtime, permissions: { defaultPolicy: "deny", attribution, rules } });
+					api = await build(root, { mode, runtime, permissions: { policy: "deny", caller: { attribution }, rules } });
 					const prototype = { inherited: 5, unruled: 6 };
 					Object.setPrototypeOf(api, prototype);
 					Object.freeze(api);

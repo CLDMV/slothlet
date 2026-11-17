@@ -100,7 +100,7 @@ export class ComponentBase {
      * Named with ____ prefix to avoid shadowing user API names like 'config'.
      *
      * @example
-     * const collisionMode = this.____config.collision.api;
+     * const collisionMode = this.____config.api.collision.mode.api;
      */
     get ____config(): object;
     /**
@@ -190,7 +190,7 @@ export class ComponentBase {
      * @param {"dropped"|"replaced"|"merged"|"stacked"} data.resolution - What became of the two
      *   writers: `dropped` (incoming discarded, `owner` retained), `replaced` (incoming won, `owner`
      *   shadowed), `merged` (namespace nodes combined, both retained), `stacked` (both run as a
-     *   routine stack under `stackRoutines`).
+     *   routine stack under `routines.stack`).
      * @param {string|null} data.incoming - moduleID of the arriving writer (`null` when unknown).
      * @param {string|null} data.owner - moduleID of the writer that already held the path (`null`
      *   when unknown).

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-17T00:00:00-07:00 (1792220400)
+ *	@Last modified time: 2026-11-16T18:29:42-08:00 (1794882582)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -78,7 +78,7 @@ describe.each(getMatrixConfigs())("Permissions > caller-supplied code, third rou
 		api = await slothlet({
 			...config,
 			base: path.join(DIR, "base"),
-			permissions: { defaultPolicy: "deny", rules: RULES }
+			permissions: { policy: "deny", rules: RULES }
 		});
 		await api.slothlet.api.add("callee", path.join(DIR, "callee"), { moduleID: "callee-mod" });
 		await api.slothlet.api.add("supplier", path.join(DIR, "supplier"), { moduleID: "supplier-mod" });

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-13T00:01:56-08:00 (1794556916)
+ *	@Last modified time: 2026-11-16T18:30:06-08:00 (1794882606)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -93,7 +93,7 @@ describe.each(matrix)(
 			 * @returns {Promise<void>}
 			 */
 			async function open() {
-				api = await slothlet({ base: BASE, mode, runtime, silent: true, permissions: { defaultPolicy: "allow", attribution, rules } });
+				api = await slothlet({ base: BASE, mode, runtime, silent: true, permissions: { policy: "allow", caller: { attribution }, rules } });
 				await api.vault.get();
 				await api.runner.call(() => 1);
 				await api.other.call(() => 1);
@@ -144,7 +144,13 @@ describe.each(["eager", "lazy"].flatMap((mode) => ["precise", "fast"].map((attri
 		 * @returns {Promise<string[]>} The answers.
 		 */
 		async function answers(runtime, rules) {
-			const api = await slothlet({ base: BASE, mode, runtime, silent: true, permissions: { defaultPolicy: "allow", attribution, rules } });
+			const api = await slothlet({
+				base: BASE,
+				mode,
+				runtime,
+				silent: true,
+				permissions: { policy: "allow", caller: { attribution }, rules }
+			});
 			try {
 				await api.vault.get();
 				await api.runner.call(() => 1);

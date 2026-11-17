@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-14T20:02:33-08:00 (1794715353)
+ *	@Last modified time: 2026-11-16T18:30:09-08:00 (1794882609)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -99,7 +99,7 @@ describe.each(matrix)(
 				mode,
 				runtime,
 				silent: true,
-				permissions: { defaultPolicy: "allow", attribution, references: { capture }, rules: ROUTES.rules }
+				permissions: { policy: "allow", caller: { attribution, capture }, rules: ROUTES.rules }
 			});
 			for (const route of ROUTE_NAMES) unchanged[route] = await answer(api, route, "none");
 		});

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T01:15:12-08:00 (1794820512)
+ *	@Last modified time: 2026-11-16T18:29:35-08:00 (1794882575)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -94,7 +94,7 @@ describe.each(configs)("closed node listing (#825) > $mode / $runtime", ({ mode,
 		 * @returns {Promise<object>} The node.
 		 */
 		const closedNode = async (give, how) => {
-			api = await slothlet({ base: NODE_FIXTURE, silent: true, mode, runtime, permissions: { defaultPolicy: "deny", rules } });
+			api = await slothlet({ base: NODE_FIXTURE, silent: true, mode, runtime, permissions: { policy: "deny", rules } });
 			await api.slothlet.api.add("lister", LISTER, { moduleID: "lister" });
 			await api.leaf.only;
 			await api.lister;
@@ -138,7 +138,7 @@ describe.each(configs)("closed node listing (#825) > $mode / $runtime", ({ mode,
 		 * @returns {Promise<object>} The api.
 		 */
 		const closedRoot = async (rules, how) => {
-			api = await slothlet({ base: join(ROOT_FIXTURE, root), silent: true, mode, runtime, permissions: { defaultPolicy: "deny", rules } });
+			api = await slothlet({ base: join(ROOT_FIXTURE, root), silent: true, mode, runtime, permissions: { policy: "deny", rules } });
 			await api.slothlet.api.add("lister", LISTER, { moduleID: "lister" });
 			for (const member of ["data", "pnum", "tool"]) await api[member];
 			await api.lister;

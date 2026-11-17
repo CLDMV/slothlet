@@ -47,19 +47,21 @@ Configure the version discriminator when creating a slothlet instance:
 // String discriminator (default behavior — looks up key in caller's version metadata)
 const api = await slothlet({
 	base: "./api",
-	versionDispatcher: "version"
+	versioning: { dispatcher: "version" }
 });
 
 // Function discriminator (full control)
 const api = await slothlet({
 	base: "./api",
-	versionDispatcher: (allVersions, caller) => {
-		if (caller.metadata.role === "admin") return "v2";
-		return caller.version ?? null;
+	versioning: {
+		dispatcher: (allVersions, caller) => {
+			if (caller.metadata.role === "admin") return "v2";
+			return caller.version ?? null;
+		}
 	}
 });
 
-// Not set / undefined — behaves exactly like versionDispatcher: "version"
+// Not set / undefined — behaves exactly like versioning: { dispatcher: "version" }
 const api = await slothlet({
 	base: "./api"
 });
@@ -67,10 +69,10 @@ const api = await slothlet({
 
 ### Configuration Options
 
-- **`versionDispatcher`** (`string | function | null | undefined`): Controls version routing at dispatch time.
+- **`versioning.dispatcher`** (`string | function | null | undefined`): Controls version routing at dispatch time.
   - **String**: the key to look up in the caller's version metadata (e.g. `"version"` reads `callerVersionMeta.version`)
   - **Function**: receives `(allVersions, caller)` objects, must return a version tag string or `null`/`undefined`
-  - **`null` / not set**: behaves identically to `versionDispatcher: "version"` — reads `callerVersionMeta.version` and falls back to the default version
+  - **`null` / not set**: behaves identically to `versioning: { dispatcher: "version" }` — reads `callerVersionMeta.version` and falls back to the default version
 
 ---
 
@@ -128,7 +130,7 @@ The discriminator runs inside the dispatcher proxy every time a property is acce
 ### String Discriminator
 
 ```javascript
-const api = await slothlet({ base: "./api", versionDispatcher: "version" });
+const api = await slothlet({ base: "./api", versioning: { dispatcher: "version" } });
 ```
 
 At dispatch time, Slothlet reads `caller.versionMetadata["version"]` and uses that as the version tag. If the returned value is not a registered tag for the path, falls through to the default.
@@ -138,11 +140,13 @@ At dispatch time, Slothlet reads `caller.versionMetadata["version"]` and uses th
 ```javascript
 const api = await slothlet({
 	base: "./api",
-	versionDispatcher: (allVersions, caller) => {
-		// allVersions — { [versionTag]: { version, default, metadata, versionMetadata } }
-		// caller      — { version, default, metadata, versionMetadata }
-		if (caller.versionMetadata?.stable === false) return "v1"; // route unstable callers to v1
-		return caller.version ?? null;
+	versioning: {
+		dispatcher: (allVersions, caller) => {
+			// allVersions — { [versionTag]: { version, default, metadata, versionMetadata } }
+			// caller      — { version, default, metadata, versionMetadata }
+			if (caller.versionMetadata?.stable === false) return "v1"; // route unstable callers to v1
+			return caller.version ?? null;
+		}
 	}
 });
 ```
@@ -438,13 +442,13 @@ await api.slothlet.api.reload({ apiPath: "v2.auth" });
 
 ## Hooks and Versioning
 
-Hook registration participates in the same dispatch seam as calls: `api.slothlet.hook.on(typePattern, handler, { versioned: true })` — where `typePattern` is the usual `pattern:type` string, e.g. `"auth.login:before"` — resolves the pattern half's logical path through the configured [discriminator](#discriminator) (a per-registration `versionDispatcher` overrides it and may select several tags), registers against the selected **physical** paths, and hands the handler the firing tag as structured context (`version`). A dispatcher returning nothing takes the same [default-version resolution](#default-version-resolution) a call does. See [HOOKS.md — Versioned Registration](HOOKS.md#versioned-registration) for the full contract.
+Hook registration participates in the same dispatch seam as calls: `api.slothlet.hook.on(typePattern, handler, { versioned: true })` — where `typePattern` is the usual `pattern:type` string, e.g. `"auth.login:before"` — resolves the pattern half's logical path through the configured [discriminator](#discriminator) (a per-registration `dispatcher` overrides it and may select several tags), registers against the selected **physical** paths, and hands the handler the firing tag as structured context (`version`). A dispatcher returning nothing takes the same [default-version resolution](#default-version-resolution) a call does. See [HOOKS.md — Versioned Registration](HOOKS.md#versioned-registration) for the full contract.
 
 ## Error Reference
 
 | Code                                | When it occurs                                                                                                                                                                                     |
 | ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `INVALID_CONFIG_VERSION_DISPATCHER` | `versionDispatcher` is not a string or function                                                                                                                                                    |
+| `INVALID_CONFIG_VERSION_DISPATCHER` | `versioning.dispatcher` is not a string or function                                                                                                                                                |
 | `INVALID_CONFIG_VERSION_TAG`        | `versionConfig.version` is missing or not a non-empty string                                                                                                                                       |
 | `VERSION_NOT_FOUND`                 | Requested version tag is not registered for the path                                                                                                                                               |
 | `VERSION_NO_DEFAULT`                | No default version and discriminator returned nothing resolvable — this includes the case where a function discriminator returns an unrecognized tag (treated as `null`, falls through to default) |
@@ -460,7 +464,7 @@ import { slothlet } from "@cldmv/slothlet";
 
 const api = await slothlet({
 	base: "./api/base",
-	versionDispatcher: "version"
+	versioning: { dispatcher: "version" }
 });
 
 // Mount v1 as the default

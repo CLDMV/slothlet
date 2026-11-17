@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:27-07:00 (1791090927)
+ *	@Last modified time: 2026-11-16T18:30:45-08:00 (1794882645)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -40,7 +40,9 @@ describe.each(getMatrixConfigs())("Versioning > Routing > $name", ({ config }) =
 		api = await slothlet({
 			...config,
 			base: `${BASE}/callers`,
-			versionDispatcher: (allVersions, caller) => caller.metadata?.callerVersion ?? null
+			versioning: {
+				dispatcher: (allVersions, caller) => caller.metadata?.callerVersion ?? null
+			}
 		});
 
 		await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1", default: true });
@@ -58,7 +60,9 @@ describe.each(getMatrixConfigs())("Versioning > Routing > $name", ({ config }) =
 		api = await slothlet({
 			...config,
 			base: `${BASE}/callers`,
-			versionDispatcher: (allVersions, caller) => caller.metadata?.callerVersion ?? null
+			versioning: {
+				dispatcher: (allVersions, caller) => caller.metadata?.callerVersion ?? null
+			}
 		});
 
 		await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1", default: true });
@@ -73,7 +77,7 @@ describe.each(getMatrixConfigs())("Versioning > Routing > $name", ({ config }) =
 	});
 
 	it("routes via string discriminator using caller versionMetadata.version", async () => {
-		api = await slothlet({ ...config, base: `${BASE}/callers`, versionDispatcher: "version" });
+		api = await slothlet({ ...config, base: `${BASE}/callers`, versioning: { dispatcher: "version" } });
 
 		await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1", default: true });
 		await api.slothlet.api.add("auth", `${BASE}/v2`, {}, { version: "v2" });

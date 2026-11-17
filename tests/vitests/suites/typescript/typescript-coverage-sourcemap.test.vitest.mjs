@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:17:37-08:00 (1794874657)
+ *	@Last modified time: 2026-11-16T18:30:35-08:00 (1794882635)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -182,7 +182,7 @@ describe("a real NODE_V8_COVERAGE process", () => {
 	function runChild({ typescript, silent = false, coverageDir }) {
 		const script = [
 			`import slothlet from ${JSON.stringify(pathToFileURL(path.join(REPO_ROOT, "index.mjs")).href)};`,
-			`const api = await slothlet({ dir: ${JSON.stringify(apiDir)}, mode: "eager", silent: ${silent}, typescript: ${JSON.stringify(typescript)} });`,
+			`const api = await slothlet({ base: ${JSON.stringify(apiDir)}, mode: "eager", silent: ${silent}, typescript: ${JSON.stringify(typescript)} });`,
 			`await api.other();`,
 			`try { await api.boom("x"); } catch (error) { process.stdout.write(String(error.stack)); }`,
 			`await api.slothlet.shutdown();`

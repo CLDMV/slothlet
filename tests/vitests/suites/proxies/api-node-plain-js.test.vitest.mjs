@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:17:27-08:00 (1794874647)
+ *	@Last modified time: 2026-11-16T18:30:18-08:00 (1794882618)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -46,7 +46,7 @@ const MODES = ["eager", "lazy"];
 const RUNTIMES = ["async", "live"];
 const PERMISSIONS = [
 	{ name: "permissions off", permissions: null },
-	{ name: "permissions on", permissions: { defaultPolicy: "allow" } }
+	{ name: "permissions on", permissions: { policy: "allow" } }
 ];
 
 const matrix = MODES.flatMap((mode) => RUNTIMES.flatMap((runtime) => PERMISSIONS.map((entry) => ({ mode, runtime, ...entry }))));
@@ -525,7 +525,7 @@ describe.each(guarded)("api node writes, permission system on > $mode / $runtime
 			silent: true,
 			mode,
 			runtime,
-			permissions: { defaultPolicy: "allow", attribution, rules }
+			permissions: { policy: "allow", caller: { attribution }, rules }
 		});
 		for (const name of ["owner", "writer", "reader"]) await api.slothlet.api.add(name, join(FIXTURE, name), { moduleID: name });
 		for (const node of [api.owner, api.owner.config, api.owner.config.nested, api.writer, api.reader]) await node;

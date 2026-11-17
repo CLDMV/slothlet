@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-12T02:00:45-08:00 (1794477645)
+ *	@Last modified time: 2026-11-16T18:29:36-08:00 (1794882576)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -68,7 +68,7 @@ describe.each(matrix)("crossing views follow runtime rule changes > $mode / $run
 			silent: true,
 			mode,
 			runtime,
-			permissions: { defaultPolicy: "allow", attribution, rules }
+			permissions: { policy: "allow", caller: { attribution }, rules }
 		});
 		await api.slothlet.api.add("owner", join(FIXTURE, "owner"), { moduleID: "owner" });
 		await api.slothlet.api.add("reader", join(FIXTURE, "reader"), { moduleID: "reader" });

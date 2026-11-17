@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:10-08:00 (1794874570)
+ *	@Last modified time: 2026-11-16T18:27:52-08:00 (1794882472)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -533,7 +533,7 @@ export class PermissionManager extends ComponentBase {
 
 	/**
 	 * Whether terminal data-value property reads are permission-gated.
-	 * On by default when permissions are configured — opt out via `permissions.readGating: false`.
+	 * On by default when permissions are configured — opt out via `permissions.gating.read: false`.
 	 * @type {boolean}
 	 * @private
 	 */
@@ -542,7 +542,7 @@ export class PermissionManager extends ComponentBase {
 	/**
 	 * Whether a function read out of the api keeps the identity of the module that read it.
 	 *
-	 * On by default when permissions are configured — opt out via `permissions.references.capture: false`.
+	 * On by default when permissions are configured — opt out via `permissions.caller.capture: false`.
 	 * Without it, a reference captured inside a module and invoked later from a boundary that carries no
 	 * caller is treated as host-initiated, which is more authority than the capturing module has.
 	 * @type {boolean}
@@ -591,7 +591,7 @@ export class PermissionManager extends ComponentBase {
 
 	/**
 	 * Base event level applied when no event rule matches a subscriber/event pair. Built-in default
-	 * "notify" (open subscription, payload opt-in); overridable via `permissions.events.default`.
+	 * "notify" (open subscription, payload opt-in); overridable via `permissions.events.policy`.
 	 * @type {"deny"|"notify"|"allow"}
 	 * @private
 	 */
@@ -747,15 +747,17 @@ export class PermissionManager extends ComponentBase {
 		// every field below is present and valid.
 		const permConfig = slothlet.config?.permissions;
 		if (permConfig) {
-			// The "allow" fallback in || is uncovered when all tests supply defaultPolicy explicitly.
+			// The "allow" fallback in || is uncovered when all tests supply policy explicitly.
 			/* v8 ignore next */
-			this.#defaultPolicy = permConfig.defaultPolicy || "allow";
-			this.#enabled = permConfig.mode ? permConfig.mode === "on" || permConfig.mode === "strict" : permConfig.enabled !== false;
-			this.#disabled = permConfig.mode === "disabled";
-			this.#strict = permConfig.mode === "strict";
+			this.#defaultPolicy = permConfig.policy || "allow";
+			// An absent mode is "on"; `true` and `false` are the boolean forms of "on" and "off".
+			const mode = permConfig.mode === undefined || permConfig.mode === true ? "on" : permConfig.mode === false ? "off" : permConfig.mode;
+			this.#enabled = mode === "on" || mode === "strict";
+			this.#disabled = mode === "disabled";
+			this.#strict = mode === "strict";
 			this.#audit = permConfig.audit || "default";
-			this.#readGating = permConfig.readGating !== false;
-			this.#capture = permConfig.references?.capture !== false;
+			this.#readGating = permConfig.gating?.read !== false;
+			this.#capture = permConfig.caller?.capture !== false;
 			// Module privacy (#260): whether the HOST may read `_`/`__` exports. Secure default deny.
 			this.#privateHost = permConfig.private?.host === "allow" ? "allow" : "deny";
 			// What a private member is private to; normalization guarantees "module" or "folder".
@@ -773,7 +775,7 @@ export class PermissionManager extends ComponentBase {
 			// Event rules (#407): base default level + config-level event rules (instance layer).
 			// Config normalization guarantees `events` is present with a valid `default` and array `rules`.
 			if (permConfig.events) {
-				if (permConfig.events.default) this.#eventDefault = permConfig.events.default;
+				if (permConfig.events.policy) this.#eventDefault = permConfig.events.policy;
 				if (Arrays.isArray(permConfig.events.rules)) {
 					for (let i = 0; i < permConfig.events.rules.length; i++) {
 						this.addEventRule(permConfig.events.rules[i], null);
@@ -804,7 +806,7 @@ export class PermissionManager extends ComponentBase {
 		// Built-in allow rules: the caller-identity utilities `slothlet.lockCaller` and
 		// `slothlet.bind` grant no security-sensitive access — they only pin a callback's
 		// caller identity, which strengthens enforcement. Allowing them by default means a
-		// `defaultPolicy: "deny"` configuration does not have to allow them explicitly.
+		// `policy: "deny"` configuration does not have to allow them explicitly.
 		// A more specific user rule can still deny them for a particular module.
 		this.addRule({ caller: "**", target: "slothlet.lockCaller", effect: "allow" }, "__builtin__");
 		this.addRule({ caller: "**", target: "slothlet.bind", effect: "allow" }, "__builtin__");
@@ -820,7 +822,7 @@ export class PermissionManager extends ComponentBase {
 		// Built-in allow rules (#468): `slothlet.metadata.caller` / `slothlet.metadata.self` reveal
 		// identity only — who is calling this module, and which module this is — which is what a module
 		// needs to enforce its own policy (e.g. scoping records by caller). They grant no data or
-		// control access, so like lockCaller/bind a `defaultPolicy: "deny"` host need not re-allow
+		// control access, so like lockCaller/bind a `policy: "deny"` host need not re-allow
 		// them. `slothlet.metadata.get(path)`, which reads arbitrary metadata, stays gated, and a user
 		// rule of equal or higher specificity still overrides these.
 		this.addRule({ caller: "**", target: "slothlet.metadata.caller", effect: "allow" }, "__builtin__");
@@ -876,7 +878,7 @@ export class PermissionManager extends ComponentBase {
 		// coarse call gate. The broad deny keeps runtime rule mutation (`slothlet.event.rules.*`), the
 		// supplied-identity query (`resolveLevel`) and the delivery controls (`strategy`/`deliver`, #497)
 		// host-only — modules cannot override event policy or delivery — while the specific allows keep
-		// on/once/off/emit usable under a `defaultPolicy: "deny"` configuration. A consumer rule of equal
+		// on/once/off/emit usable under a `policy: "deny"` configuration. A consumer rule of equal
 		// specificity still wins (instance layer > builtin), so the host can tighten any of these.
 		this.addRule({ caller: "**", target: "slothlet.event.**", effect: "deny" }, "__builtin__");
 		this.addRule({ caller: "**", target: "slothlet.event.on", effect: "allow" }, "__builtin__");
@@ -1119,7 +1121,7 @@ export class PermissionManager extends ComponentBase {
 	/**
 	 * Resolve the delivery level for a subscriber/event pair (#407): "deny" | "notify" | "allow".
 	 * Most-specific-wins with the layered tiebreak (see {@link RULE_LAYER_RANK}); falls back to the
-	 * base default (`permissions.events.default`, built-in "notify") when no rule matches. A host
+	 * base default (`permissions.events.policy`, built-in "notify") when no rule matches. A host
 	 * subscription (no module caller) is trusted like a host-initiated call and always resolves "allow".
 	 *
 	 * Event levels are part of the permission system, so the pool follows its mode: while it is not on (`"off"`,
@@ -1288,7 +1290,7 @@ export class PermissionManager extends ComponentBase {
 
 	/**
 	 * Unregister a principal. Only its owner or the host may do so. Rules that require it stop
-	 * matching (their calls fall to `defaultPolicy`).
+	 * matching (their calls fall to `policy`).
 	 *
 	 * @param {string} name - Principal name.
 	 * @param {string|string[]|null} [callerModuleID=null] - Calling module's id, or a list of them (#597); `null` for the host.
@@ -2476,7 +2478,7 @@ export class PermissionManager extends ComponentBase {
 	 * or after {@link disable}) none is evaluated, the built-in ones — the framework's namespace and root functions,
 	 * and the framework's own keys on api nodes — included, and the ownership rule alone decides. An allow is a
 	 * grant, a lift of a built-in rule included: the write goes through whatever the module owns. With no matching
-	 * write rule the rules say nothing — `defaultPolicy` grants nothing here — and the ownership rule alone decides.
+	 * write rule the rules say nothing — `policy` grants nothing here — and the ownership rule alone decides.
 	 * A denial is audited like any other.
 	 *
 	 * @param {string} callerPath - Api path of the module writing.
@@ -2564,7 +2566,7 @@ export class PermissionManager extends ComponentBase {
 
 	/**
 	 * Whether the call and read rules could refuse `callerPath` a call or read at `targetPath` or anywhere beneath it,
-	 * read from the rule set alone: a deny `defaultPolicy`, or a deny or conditional rule for the caller whose target
+	 * read from the rule set alone: a deny `policy`, or a deny or conditional rule for the caller whose target
 	 * pattern can reach the subtree. A value held as itself takes no check of its own, so a reader is handed one that
 	 * reaches a node's own members only when no read of them could be refused. Hook-target rules decide no read.
 	 *
@@ -3018,7 +3020,7 @@ export class PermissionManager extends ComponentBase {
 	/**
 	 * Whether terminal data-value property reads are permission-gated.
 	 * Separate from {@link isEnabled} so call enforcement is unaffected by this default-on
-	 * flag (opt out via `permissions.readGating: false`).
+	 * flag (opt out via `permissions.gating.read: false`).
 	 *
 	 * @returns {boolean} True if read gating is enabled.
 	 * @example

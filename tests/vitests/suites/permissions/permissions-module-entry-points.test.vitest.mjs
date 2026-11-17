@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T17:14:58-08:00 (1794878098)
+ *	@Last modified time: 2026-11-16T18:30:02-08:00 (1794882602)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -34,10 +34,10 @@ import slothlet from "@cldmv/slothlet";
 import { TEST_DIRS, withSuppressedSlothletErrorOutput, withSuppressedSlothletErrorOutputSync } from "../../setup/vitest-helper.mjs";
 
 /** Honors a per-call `collisionMode` / `mutateExisting`, which `api.add` otherwise ignores. */
-const OVERRIDE = { api: { mutations: { allowCollisionOverride: true } } };
+const OVERRIDE = { api: { collision: { override: true } } };
 
 /** Turns the permission system on, so a write rule grants a write. */
-const PERMISSIONS_ON = { permissions: { defaultPolicy: "allow" } };
+const PERMISSIONS_ON = { permissions: { policy: "allow" } };
 
 const FIXTURE = TEST_DIRS.API_TEST_SELF_WRITE_REACH;
 const GUEST = path.join(FIXTURE, "guest");
@@ -259,7 +259,7 @@ describe.each(CONFIGS)("module-code entry points (#625) — $mode / $runtime", (
 
 	describe("metadata.setGlobal", () => {
 		it("is refused to module code with the permission system on, and changes nothing", async () => {
-			await load({ permissions: { defaultPolicy: "allow" } });
+			await load({ permissions: { policy: "allow" } });
 			expect(await withSuppressedSlothletErrorOutput(() => api.guest.x.callSetter("setGlobal", ""))).toBe("PERMISSION_DENIED");
 			expect(api.slothlet.metadata.getFor("victim.v").planted).toBeUndefined();
 			api.slothlet.metadata.setGlobal("hostGlobal", 1);
@@ -268,7 +268,7 @@ describe.each(CONFIGS)("module-code entry points (#625) — $mode / $runtime", (
 
 		it("is granted to module code by an allow", async () => {
 			await load({
-				permissions: { defaultPolicy: "allow", rules: [{ caller: "guest.**", target: "slothlet.metadata.setGlobal", effect: "allow" }] }
+				permissions: { policy: "allow", rules: [{ caller: "guest.**", target: "slothlet.metadata.setGlobal", effect: "allow" }] }
 			});
 			expect(await api.guest.x.callSetter("setGlobal", "")).toBe("done");
 			expect(api.slothlet.metadata.getFor("victim.v").planted).toBe(1);

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-14T09:10:46-08:00 (1794676246)
+ *	@Last modified time: 2026-11-16T18:29:59-08:00 (1794882599)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -100,7 +100,7 @@ function childScript(copyDir) {
 			const api = await slothlet({
 				base: FIXTURE, mode: config.mode, runtime: config.runtime, silent: true,
 				typescript: { mode: "fast", sourcemap: true },
-				permissions: { defaultPolicy: "allow", attribution: config.attribution, rules: rulesFor(FILES) }
+				permissions: { policy: "allow", rules: rulesFor(FILES), caller: { attribution: config.attribution } }
 			});
 			out.files[name] = {};
 			for (const file of FILES) out.files[name][file] = await read(api, file);
@@ -112,7 +112,7 @@ function childScript(copyDir) {
 			for (const file of ["dup.mjs", "vault.mjs", "runner.mjs"]) fs.copyFileSync(path.join(FIXTURE, file), path.join(dir, file));
 			const copy = await slothlet({
 				base: dir, mode: config.mode, runtime: config.runtime, silent: true,
-				permissions: { defaultPolicy: "allow", attribution: config.attribution, rules: rulesFor(["dup"]) }
+				permissions: { policy: "allow", rules: rulesFor(["dup"]), caller: { attribution: config.attribution } }
 			});
 			await copy.dup;
 			const original = fs.readFileSync(path.join(dir, "dup.mjs"), "utf8");

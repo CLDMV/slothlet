@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-10T21:30:07-08:00 (1794375007)
+ *	@Last modified time: 2026-11-16T18:30:25-08:00 (1794882625)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -82,7 +82,7 @@ const READ_RULES = [
 const PERMISSIONS = [
 	{ label: "no permissions config", options: {} },
 	{ label: "permissions with defaults", options: { permissions: {} } },
-	{ label: "permissions defaultPolicy deny", options: { permissions: { defaultPolicy: "deny", rules: READ_RULES } } }
+	{ label: "permissions defaultPolicy deny", options: { permissions: { policy: "deny", rules: READ_RULES } } }
 ];
 
 /**
@@ -226,7 +226,7 @@ describe.each(CONFIGS)("what a module reaches through self (#625) — $mode / $r
 				mode,
 				runtime,
 				silent: true,
-				permissions: { ...options.permissions, references: { capture: false } }
+				permissions: { ...options.permissions, caller: { capture: false } }
 			});
 			instances.push(api);
 			await api.slothlet.api.add("victim", path.join(FIXTURE, "victim"), { moduleID: "victim" });
@@ -485,7 +485,7 @@ describe.each(CONFIGS)("reading back a member a module made on a folder — $mod
 			mode,
 			runtime,
 			silent: true,
-			permissions: { defaultPolicy: "deny", rules: [...MADE_BASE_RULES, ...rules] }
+			permissions: { policy: "deny", rules: [...MADE_BASE_RULES, ...rules] }
 		});
 		instances.push(api);
 		await api.slothlet.api.add("zz", MADE, { moduleID: "zz" });

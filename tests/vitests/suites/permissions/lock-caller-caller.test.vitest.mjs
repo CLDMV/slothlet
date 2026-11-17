@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-31T15:24:49-07:00 (1793485489)
+ *	@Last modified time: 2026-11-16T18:29:37-08:00 (1794882577)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -88,7 +88,7 @@ describe.each(getMatrixConfigs())("Permissions > lockCaller.caller (#477) > $nam
 	 * @returns {Promise<object>} The api.
 	 */
 	const build = async (rules, defaultPolicy = "allow", extra = {}) => {
-		api = await slothlet({ ...config, base: BASE, permissions: { defaultPolicy, rules, ...extra } });
+		api = await slothlet({ ...config, base: BASE, permissions: { policy: defaultPolicy, rules, ...extra } });
 		await api.scheduler.service.clear();
 		return api;
 	};

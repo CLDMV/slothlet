@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:09-08:00 (1794874569)
+ *	@Last modified time: 2026-11-16T18:27:48-08:00 (1794882468)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -102,7 +102,7 @@ export class ModesProcessor extends ComponentBase {
 	 * Prefers `collisionModeOverride` — the real per-call mode from the caller (e.g.
 	 * `api.add()`'s `forceOverwrite`) — over `getOwnershipCollisionMode()`'s config-default
 	 * fallback (#365, #367; the latter fixed a separate bug where that fallback's own
-	 * `collisionContext` lookup never matched `config.collision`'s `{ initial, api }` keys, so it
+	 * `collisionContext` lookup never matched `config.api.collision.mode`'s `{ initial, api }` keys, so it
 	 * silently always returned `"merge"` regardless of either value).
 	 *
 	 * The resolved value — from EITHER source — is then clamped to `"replace"`/`"merge-replace"`
@@ -232,7 +232,7 @@ export class ModesProcessor extends ComponentBase {
 	 * of the ~13 call sites (#372/#373 review).
 	 *
 	 * Reverting `RoutineManager.raw` alone is not enough when `materializeOnCreate` (driven by
-	 * `config.backgroundMaterialize`) is set: the constructed wrapper can already be materializing
+	 * `config.loader.materialize`) is set: the constructed wrapper can already be materializing
 	 * in the background, and that materialization completing AFTER this revert re-applies its
 	 * result and re-fires `impl:changed` — undoing the rollback (see `UnifiedWrapper#___invalidate()`
 	 * and its two `invalid`-flag checks inside `___materialize()`). `registerWrapper()` lets this
@@ -584,7 +584,7 @@ export class ModesProcessor extends ComponentBase {
 	 * @param {boolean} recursive - Whether to descend into subdirectories at all.
 	 * @param {boolean} [populateDirectly=false] - Pour this directory's contents directly into `api` (no nested namespace level) — used for transparent-folder and lazy-materialization callers.
 	 * @param {string} [apiPathPrefix=""] - Dotted api path prefix this directory's own entries are built under.
-	 * @param {string} [collisionContext="initial"] - `"initial"` or `"api"` — which `config.collision` policy governs this build.
+	 * @param {string} [collisionContext="initial"] - `"initial"` or `"api"` — which `config.api.collision.mode` policy governs this build.
 	 * @param {string|null} [moduleID=null] - Module id every leaf produced by this call is attributed to.
 	 * @param {string|null} [sourceFolder=null] - Filesystem path this directory was scanned from, for metadata.
 	 * @param {string|null} [cacheBust=null] - Cache-busting value forwarded to dynamic imports.
@@ -623,7 +623,7 @@ export class ModesProcessor extends ComponentBase {
 		/* v8 ignore next 2 */
 		const modes_effectiveCollisionMode =
 			collisionModeOverride ||
-			(collisionContext === "initial" ? this.slothlet.config.collision?.initial : this.slothlet.config.collision?.api) ||
+			(collisionContext === "initial" ? this.slothlet.config.api.collision.mode.initial : this.slothlet.config.api.collision.mode.api) ||
 			"replace";
 
 		const categoryName = isRoot && !populateDirectly ? null : this.slothlet.helpers.sanitize.sanitizePropertyName(directory.name);
@@ -1140,7 +1140,7 @@ export class ModesProcessor extends ComponentBase {
 										Arrays.isArray(exportedValue) && files.length > 1
 											? copyForComposition(exportedValue, { addsMembers: true })
 											: exportedValue,
-									materializeOnCreate: this.slothlet.config.backgroundMaterialize,
+									materializeOnCreate: this.slothlet.config.loader.materialize,
 									filePath: file.path,
 									// moduleID is always provided; || file.moduleID fallback is unreachable.
 									/* v8 ignore next */
@@ -1158,7 +1158,9 @@ export class ModesProcessor extends ComponentBase {
 								/* v8 ignore next 2 */
 								const modes_case1CollisionMode =
 									collisionModeOverride ||
-									(collisionContext === "initial" ? this.slothlet.config.collision?.initial : this.slothlet.config.collision?.api) ||
+									(collisionContext === "initial"
+										? this.slothlet.config.api.collision.mode.initial
+										: this.slothlet.config.api.collision.mode.api) ||
 									"merge";
 								const modes_case1Proxy = wrapper.createProxy();
 								WeakMapMethods.set(this.#folderModuleValues, modes_case1Proxy, exportedValue);
@@ -1293,7 +1295,9 @@ export class ModesProcessor extends ComponentBase {
 						/* v8 ignore next 2 */
 						const modes_eagerCollisionMode =
 							collisionModeOverride ||
-							(collisionContext === "initial" ? this.slothlet.config.collision?.initial : this.slothlet.config.collision?.api) ||
+							(collisionContext === "initial"
+								? this.slothlet.config.api.collision.mode.initial
+								: this.slothlet.config.api.collision.mode.api) ||
 							"merge";
 						// Two competing callables are a conflict like any other member: under merge/warn the FIRST
 						// loaded wins, so an existing callable KEEPS the slot — this module's default function loses
@@ -1355,7 +1359,7 @@ export class ModesProcessor extends ComponentBase {
 								initialImpl: this.slothlet.helpers.modesUtils.cloneWrapperImpl(callableModule, mode),
 								// A folder's only file whose module value is null or undefined is the folder's value (#792).
 								nullishDefault: callableModule === null || callableModule === undefined ? { value: callableModule } : null,
-								materializeOnCreate: this.slothlet.config.backgroundMaterialize,
+								materializeOnCreate: this.slothlet.config.loader.materialize,
 								filePath: file.path,
 								// moduleID is always provided; || file.moduleID fallback is unreachable.
 								/* v8 ignore next */
@@ -1418,7 +1422,7 @@ export class ModesProcessor extends ComponentBase {
 												mode: effectiveMode,
 												apiPath: modes_namedApiPath,
 												initialImpl: mod[key],
-												materializeOnCreate: this.slothlet.config.backgroundMaterialize,
+												materializeOnCreate: this.slothlet.config.loader.materialize,
 												filePath: file.path,
 												moduleID: modes_namedModuleID,
 												sourceFolder
@@ -1514,7 +1518,7 @@ export class ModesProcessor extends ComponentBase {
 												mode: effectiveMode,
 												apiPath: modes_hybridApiPath,
 												initialImpl: this.slothlet.helpers.modesUtils.cloneWrapperImpl(propValue, mode),
-												materializeOnCreate: this.slothlet.config.backgroundMaterialize,
+												materializeOnCreate: this.slothlet.config.loader.materialize,
 												filePath: file.path,
 												moduleID: modes_hybridModuleID,
 												sourceFolder
@@ -1568,7 +1572,7 @@ export class ModesProcessor extends ComponentBase {
 													mode: effectiveMode,
 													apiPath: modes_hybridOtherApiPath,
 													initialImpl: this.slothlet.helpers.modesUtils.cloneWrapperImpl(mod[key], mode),
-													materializeOnCreate: this.slothlet.config.backgroundMaterialize,
+													materializeOnCreate: this.slothlet.config.loader.materialize,
 													filePath: file.path,
 													moduleID: modes_hybridOtherModuleID,
 													sourceFolder
@@ -1642,7 +1646,7 @@ export class ModesProcessor extends ComponentBase {
 												mode: effectiveMode,
 												apiPath: modes_multiApiPath,
 												initialImpl: this.slothlet.helpers.modesUtils.cloneWrapperImpl(mod[key], mode),
-												materializeOnCreate: this.slothlet.config.backgroundMaterialize,
+												materializeOnCreate: this.slothlet.config.loader.materialize,
 												filePath: file.path,
 												moduleID: modes_multiModuleID,
 												sourceFolder
@@ -1730,7 +1734,7 @@ export class ModesProcessor extends ComponentBase {
 											mode: effectiveMode,
 											apiPath: modes_preferredApiPath,
 											initialImpl: this.slothlet.helpers.modesUtils.cloneWrapperImpl(mod[key], mode),
-											materializeOnCreate: this.slothlet.config.backgroundMaterialize,
+											materializeOnCreate: this.slothlet.config.loader.materialize,
 											filePath: file.path,
 											moduleID: modes_preferredModuleID,
 											sourceFolder
@@ -1774,16 +1778,10 @@ export class ModesProcessor extends ComponentBase {
 				// directly into the parent folder namespace, dissolving the intermediate
 				// per-file namespace hop (e.g. api.notifications.helpers.formatPhone
 				// becomes api.notifications.formatPhone).
-				// Skipped when the consumer has opted out via suppressFixes: ["C03_116"].
 				// Skipped at root because C03's contract is "dissolve into the parent FOLDER
 				// namespace" — root has no parent folder and dissolving file namespaces at
 				// root would collapse every no-default root file's exports into the API surface.
-				if (
-					decision.flattenToRoot &&
-					moduleContent &&
-					!isRoot &&
-					!(this.slothlet.config.suppressFixes && SetMethods.has(this.slothlet.config.suppressFixes, "C03_116"))
-				) {
+				if (decision.flattenToRoot && moduleContent && !isRoot) {
 					// Tracks which keys' assignToApiPath call actually succeeded, so the registration
 					// loop below can skip a skip/warn-rejected key instead of recording it as owned
 					// (#366 review — see #373).
@@ -1805,7 +1803,7 @@ export class ModesProcessor extends ComponentBase {
 										mode: effectiveMode,
 										apiPath: modes_hoistedApiPath,
 										initialImpl: value,
-										materializeOnCreate: this.slothlet.config.backgroundMaterialize,
+										materializeOnCreate: this.slothlet.config.loader.materialize,
 										filePath: file.path,
 										moduleID: modes_hoistedModuleID,
 										sourceFolder
@@ -1901,7 +1899,7 @@ export class ModesProcessor extends ComponentBase {
 											mode: effectiveMode,
 											apiPath: modes_addapiApiPath,
 											initialImpl: value,
-											materializeOnCreate: this.slothlet.config.backgroundMaterialize,
+											materializeOnCreate: this.slothlet.config.loader.materialize,
 											filePath: file.path,
 											moduleID: modes_addapiModuleID,
 											sourceFolder
@@ -1964,7 +1962,7 @@ export class ModesProcessor extends ComponentBase {
 										mode: effectiveMode,
 										apiPath: modes_categoryApiPath,
 										initialImpl: moduleContent,
-										materializeOnCreate: this.slothlet.config.backgroundMaterialize,
+										materializeOnCreate: this.slothlet.config.loader.materialize,
 										filePath: file.path,
 										moduleID: modes_categoryModuleID,
 										sourceFolder,
@@ -2031,7 +2029,7 @@ export class ModesProcessor extends ComponentBase {
 								initialImpl: moduleContent, // Use moduleContent directly, don't clone (preserves added properties)
 								// A file whose module value is null or undefined reads as that value (#792).
 								nullishDefault: moduleContent === null || moduleContent === undefined ? { value: moduleContent } : null,
-								materializeOnCreate: this.slothlet.config.backgroundMaterialize,
+								materializeOnCreate: this.slothlet.config.loader.materialize,
 								filePath: file.path,
 								moduleID: modes_propertyModuleID,
 								sourceFolder
@@ -2209,9 +2207,7 @@ export class ModesProcessor extends ComponentBase {
 									// Starting from `{}` dropped the default object's members in eager mode only (#583).
 									// Copied, so the module's own default object is not mutated; a named export conflicting
 									// with the default's own member resolves by collision mode (#421, #587).
-									// config.collision fallback unreachable — config.api?.collision is always set.
-									/* v8 ignore next */
-									const addapiCollisionConfig = this.slothlet.config.api?.collision || this.slothlet.config.collision;
+									const addapiCollisionConfig = this.slothlet.config.api.collision.mode;
 									const addapiCollisionMode =
 										collisionModeOverride || (collisionContext === "initial" ? addapiCollisionConfig.initial : addapiCollisionConfig.api);
 									// A primitive default holds no members: it is kept under `default` beside the named exports.
@@ -2260,9 +2256,7 @@ export class ModesProcessor extends ComponentBase {
 											// above — so a forceOverwrite-driven api.add() resolves this internal
 											// default-vs-named-export collision as "replace" too, instead of silently
 											// falling back to the instance's configured default (#372/#373 review).
-											// config.api.collision is always set; the config.collision fallback is unreachable.
-											/* v8 ignore next */
-											const collisionConfig = this.slothlet.config.api?.collision || this.slothlet.config.collision;
+											const collisionConfig = this.slothlet.config.api.collision.mode;
 											// || "merge" fallback unreachable — collisionConfig always has an initial/api value.
 											/* v8 ignore next */
 											const collisionMode =
@@ -2291,7 +2285,7 @@ export class ModesProcessor extends ComponentBase {
 										} else if (typeof implToWrap === "object" && implToWrap !== null) {
 											// Object default: copied, so the module's own default object is not mutated; a
 											// conflicting named export resolves by collision mode (#421, #587).
-											const objectCollisionConfig = this.slothlet.config.api?.collision || this.slothlet.config.collision;
+											const objectCollisionConfig = this.slothlet.config.api.collision.mode;
 											const objectCollisionMode =
 												collisionModeOverride ||
 												(collisionContext === "initial" ? objectCollisionConfig?.initial : objectCollisionConfig?.api) ||
@@ -2341,9 +2335,7 @@ export class ModesProcessor extends ComponentBase {
 								// as "replace" too, instead of silently falling back to the instance's configured
 								// default and retaining file content a true replace should have discarded
 								// (#372/#373 review).
-								// config.collision fallback unreachable — config.api?.collision is always set.
-								/* v8 ignore next */
-								const modes_eagerCollisionConfig = this.slothlet.config.api?.collision || this.slothlet.config.collision;
+								const modes_eagerCollisionConfig = this.slothlet.config.api.collision.mode;
 								// || "merge" fallback unreachable — collision config always provides an initial/api value.
 								/* v8 ignore next */
 								const modes_eagerCollisionMode =
@@ -2453,7 +2445,7 @@ export class ModesProcessor extends ComponentBase {
 											initialImpl: implToWrap, // Use implToWrap directly, don't clone (preserves added properties)
 											// A self-named file whose module value is null or undefined is the folder's value (#792).
 											nullishDefault: implToWrap === null || implToWrap === undefined ? { value: implToWrap } : null,
-											materializeOnCreate: this.slothlet.config.backgroundMaterialize,
+											materializeOnCreate: this.slothlet.config.loader.materialize,
 											filePath: file.path,
 											moduleID: modes_subDirModuleID,
 											sourceFolder
@@ -2607,7 +2599,7 @@ export class ModesProcessor extends ComponentBase {
 					// IMPORTANT: Only extract for merge/merge-replace modes. In replace mode,
 					// the folder completely replaces the file - no file exports should persist.
 					// The replace mode collision in api-assignment.mjs handles materialization.
-					const collisionConfig = this.slothlet.config.api?.collision;
+					const collisionConfig = this.slothlet.config.api?.collision?.mode;
 					// Third || arm ("replace") unreachable — collisionConfig always provides an initial/api value.
 					/* v8 ignore start */
 					const modes_initialCollisionMode =
@@ -2661,7 +2653,7 @@ export class ModesProcessor extends ComponentBase {
 					// carries no initialImpl (its impl is only set later, on materialization), so
 					// RoutineManager's raw capture is a safe no-op here in the common case — but a
 					// rejected wrapper whose materialization is still later triggered (e.g. a caller
-					// holding its own reference, or `backgroundMaterialize` kicking it off before this
+					// holding its own reference, or `loader.materialize` kicking it off before this
 					// decision is even known) could still fire a real impl:changed for this (apiPath,
 					// moduleID) pair after the fact. registerWrapper() below covers that: the
 					// underlying UnifiedWrapper (via resolveWrapper on the proxy this method returns)
@@ -2683,7 +2675,7 @@ export class ModesProcessor extends ComponentBase {
 							config: this.slothlet.config,
 							collisionContext,
 							// modes_initialCollisionMode already resolves collisionModeOverride ||
-							// config.collision[collisionContext] — pass it through so a
+							// config.api.collision.mode[collisionContext] — pass it through so a
 							// forceOverwrite-driven mount's internal file/folder collision agrees with
 							// the mount's own top-level decision instead of re-deriving purely from
 							// config here (#365/#366 review).
@@ -2821,7 +2813,7 @@ export class ModesProcessor extends ComponentBase {
 								mode: effectiveMode,
 								apiPath: modes_rootApiPath,
 								initialImpl: this.slothlet.helpers.modesUtils.cloneWrapperImpl(defaultFunc, mode),
-								materializeOnCreate: this.slothlet.config.backgroundMaterialize,
+								materializeOnCreate: this.slothlet.config.loader.materialize,
 								filePath: file.path,
 								moduleID: modes_rootModuleID,
 								sourceFolder
@@ -2926,11 +2918,11 @@ export class ModesProcessor extends ComponentBase {
 			// Compute actual subdirectory sourceFolder path
 			// If parent sourceFolder exists, append this directory name
 			// Otherwise use config dir as base
-			// sourceFolder is always provided by callers; config?.dir fallback unreachable.
+			// sourceFolder is always provided by callers; config?.base fallback unreachable.
 			/* v8 ignore start */
 			const actualSourceFolder = sourceFolder
 				? regExpReplace(/\\/g, `${sourceFolder}/${dir.sourceName ?? dir.name}`, "/")
-				: regExpReplace(/\\/g, `${this.slothlet.config?.dir}/${dir.sourceName ?? dir.name}`, "/");
+				: regExpReplace(/\\/g, `${this.slothlet.config?.base}/${dir.sourceName ?? dir.name}`, "/");
 			/* v8 ignore stop */
 
 			// Compute parent API path prefix - strip the last segment (which is this directory)
@@ -3032,7 +3024,7 @@ export class ModesProcessor extends ComponentBase {
 							if (moduleKeys.length > 0 && (typeof implToWrap === "function" || (typeof implToWrap === "object" && implToWrap !== null))) {
 								// Use the wrapper's own effective mode (createLazySubdirectoryWrapper's
 								// `collisionMode` param, already override-or-config-resolved by its caller)
-								// instead of re-deriving from config.collision.initial directly — this
+								// instead of re-deriving from config.api.collision.mode.initial directly — this
 								// materializer can be for an api.add()-mounted lazy subtree, whose
 								// effective policy may be collision.api or an explicit per-call override,
 								// not necessarily collision.initial (PR #366 review).
@@ -3088,9 +3080,9 @@ export class ModesProcessor extends ComponentBase {
 										moduleID: moduleID,
 										filePath: file.path,
 										exportPath: this.slothlet.handlers.ownership?.resolveExportPath(file.path, value) ?? null,
-										// sourceFolder is always passed by every call site; config?.dir fallback is never evaluated.
+										// sourceFolder is always passed by every call site; config?.base fallback is never evaluated.
 										/* v8 ignore next */
-										sourceFolder: sourceFolder || this.slothlet.config?.dir
+										sourceFolder: sourceFolder || this.slothlet.config?.base
 									});
 								}
 							}
@@ -3425,7 +3417,7 @@ export class ModesProcessor extends ComponentBase {
 			mode: "lazy",
 			apiPath,
 			materializeFunc: lazy_materializeFunc,
-			materializeOnCreate: this.slothlet.config.backgroundMaterialize,
+			materializeOnCreate: this.slothlet.config.loader.materialize,
 			filePath: dir.path, // Use directory path so lifecycle events can tag system metadata
 			moduleID: moduleID, // Use parent moduleID
 			sourceFolder,

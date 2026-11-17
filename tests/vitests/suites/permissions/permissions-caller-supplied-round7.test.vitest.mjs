@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-31T09:04:32-07:00 (1793462672)
+ *	@Last modified time: 2026-11-16T18:29:43-08:00 (1794882583)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -118,7 +118,7 @@ describe.each(getMatrixConfigs())("Permissions > caller-supplied code, seventh r
 	 * @returns {Promise<object>} The api.
 	 */
 	const build = async () => {
-		api = await slothlet({ ...config, base: path.join(DIR, "base"), hook: true, permissions: { defaultPolicy: "deny", rules: RULES } });
+		api = await slothlet({ ...config, base: path.join(DIR, "base"), hook: true, permissions: { policy: "deny", rules: RULES } });
 		await api.vault.secret.whoami();
 		await api.slothlet.api.add("callee", path.join(DIR, "callee"), { moduleID: "callee-mod" });
 		return api;
@@ -195,7 +195,7 @@ describe.each(getMatrixConfigs())("Permissions > host calls while a module's add
 	 * @returns {Promise<object>} The api.
 	 */
 	const build = async () => {
-		api = await slothlet({ ...config, base: path.join(DIR, "base"), hook: true, permissions: { defaultPolicy: "deny", rules: REL_RULES } });
+		api = await slothlet({ ...config, base: path.join(DIR, "base"), hook: true, permissions: { policy: "deny", rules: REL_RULES } });
 		await api.vault.secret.whoami();
 		await api.slothlet.api.add("callee", path.join(DIR, "callee"), { moduleID: "callee-mod" });
 		await api.slothlet.api.add("reladder", path.join(DIR, "reladder"), { moduleID: "reladder-mod" });
@@ -327,7 +327,7 @@ describe.each(getMatrixConfigs({ runtime: "live", mode: "lazy" }))(
 				...config,
 				base: path.join(DIR5, "base"),
 				hook: true,
-				permissions: { defaultPolicy: "deny", rules: [{ caller: "**", target: "slothlet.**", effect: "allow" }] }
+				permissions: { policy: "deny", rules: [{ caller: "**", target: "slothlet.**", effect: "allow" }] }
 			});
 			await api.slothlet.api.add("supplier", path.join(DIR5, "supplier"), { moduleID: "supplier-mod" });
 			const reported = await uncaughtDuring(async () => {

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-12T02:00:54-08:00 (1794477654)
+ *	@Last modified time: 2026-11-16T18:29:47-08:00 (1794882587)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -64,7 +64,7 @@ describe.each(matrix)("an access from deep inside Node's own code > $mode / $run
 			mode,
 			runtime,
 			silent: true,
-			permissions: { defaultPolicy: "allow", attribution, rules: RULES, references: { capture: false } }
+			permissions: { policy: "allow", caller: { attribution, capture: false }, rules: RULES }
 		});
 		await api.vault;
 		await api.bag;

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:08-08:00 (1794874568)
+ *	@Last modified time: 2026-11-16T18:27:48-08:00 (1794882468)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -1621,11 +1621,11 @@ export class ApiBuilder extends ComponentBase {
 					// per-call knobs — honoring a per-call override could bypass the instance's collision
 					// config (#380). Locked by default: they are IGNORED (kept out of the mount) but WARN
 					// loudly instead of the old silent strip — a throw here could break a live app that
-					// still passes them. Opt in with config.api.mutations.allowCollisionOverride to honor
+					// still passes them. Opt in with config.api.collision.override to honor
 					// them. forceOverwrite stays the always-available targeted escape hatch regardless.
 					const LOCKED_ADD_OPTIONS = ["collisionMode", "mutateExisting", "recordHistory"];
 					let effectiveOptions = options;
-					if (!config.api?.mutations?.allowCollisionOverride) {
+					if (!config.api?.collision?.override) {
 						const passed = filterList(LOCKED_ADD_OPTIONS, (key) => key in options);
 						if (passed.length > 0) {
 							// Console warning honors `silent`, like every other SlothletWarning site.
@@ -3311,9 +3311,9 @@ export class ApiBuilder extends ComponentBase {
 			 * @returns {Promise<void>}
 			 *
 			 * @description
-			 * Runs every `mode: "shutdown"` routine's cascade (when `autoRoutines` is `true`; a root
+			 * Runs every `mode: "shutdown"` routine's cascade (when `routines.auto` is `true`; a root
 			 * `shutdown` export then runs once, as a contribution), then releases the instance. It never
-			 * calls the root `shutdown`/`destroy` user hooks itself, so with `autoRoutines: false` no module
+			 * calls the root `shutdown`/`destroy` user hooks itself, so with `routines.auto: false` no module
 			 * code runs. `api.shutdown()` is the entry point that also calls the root `shutdown` hook.
 			 */
 			shutdown: async () => {

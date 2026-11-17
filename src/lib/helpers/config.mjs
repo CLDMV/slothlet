@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:12-08:00 (1794874572)
+ *	@Last modified time: 2026-11-16T18:27:55-08:00 (1794882475)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -35,18 +35,15 @@ import { compilePattern } from "#helpers/pattern-matcher";
 import {
 	ArrayMethods,
 	Arrays,
-	concatLists,
 	filterList,
 	mapList,
 	Numbers,
 	Objects,
-	Set,
 	setFrom,
 	SetMethods,
 	setToArray,
 	String,
-	StringMethods,
-	splitText
+	StringMethods
 } from "#helpers/intrinsics";
 import { createClock } from "#helpers/clock";
 
@@ -65,19 +62,6 @@ const VALID_ROUTINE_ORDERS = setFrom(["mount", "depth"]);
 const DEFAULT_ROUTINE_ORDER_BY_MODE = Objects.freeze({ startup: "mount", shutdown: "depth", destroy: "depth", manual: "mount" });
 
 /**
- * The two implicit routines `collectLifecycleHooks: true` expands into — replacing what used to be
- * a wholly separate discovery mechanism (`_collectLifecycleHooks`, now removed). Root-anchored so
- * they reproduce the old system's whole-tree, cross-mount-boundary scope for literally-named
- * `shutdown`/`destroy` leaves; `order: "depth"` reproduces its deepest-first teardown order. See
- * `docs/LIFECYCLE.md` ("Routines") for the full replacement rationale.
- * @type {ReadonlyArray<{name: string, mode: string, order: string}>}
- */
-const COLLECT_LIFECYCLE_HOOKS_IMPLICIT_ROUTINES = Objects.freeze([
-	Objects.freeze({ name: "^**.shutdown", mode: "shutdown", order: "depth" }),
-	Objects.freeze({ name: "^**.destroy", mode: "destroy", order: "depth" })
-]);
-
-/**
  * Routine names a caller may never configure. `"slothlet"` is the control namespace a routine's
  * own root cascade would need to live under, so reusing it as a routine name would be
  * self-referential. `__proto__`/`constructor`/`prototype` are rejected for the same reason
@@ -90,8 +74,7 @@ const COLLECT_LIFECYCLE_HOOKS_IMPLICIT_ROUTINES = Objects.freeze([
 const ROUTINE_NAME_RESERVED = setFrom(["slothlet", "__proto__", "constructor", "prototype"]);
 
 /**
- * Normalize the `hook` config (V2-style support) into a canonical
- * `{ enabled, pattern, suppressErrors }` object.
+ * Normalize the `hook` config into a canonical `{ enabled, pattern, errors, pin }` object.
  *
  * Accepts the boolean form (enable/disable with the catch-all pattern), the string form
  * (enable, restricting hooks to a global path pattern — e.g. `"database.*"`), or the full
@@ -104,11 +87,15 @@ const ROUTINE_NAME_RESERVED = setFrom(["slothlet", "__proto__", "constructor", "
  * itself from the same source of truth.
  *
  * @param {boolean|string|Object} [hook] - Raw hook config in any supported form.
- * @returns {{enabled: boolean, pattern: (string|null), suppressErrors: boolean, pin: boolean}} Normalized hook config.
+ * `errors` is `"suppress"` (a hook error is reported to the error hooks and not thrown) or `false`; `true` is the
+ * boolean form of `"suppress"`.
+ *
+ * @returns {{enabled: boolean, pattern: (string|null), errors: ("suppress"|false), pin: boolean}} Normalized hook config.
+ * @throws {SlothletError} INVALID_CONFIG when `hook.errors` is not `"suppress"`, `true` or `false`.
  * @public
  */
 export function normalizeHookConfig(hook) {
-	const hookConfig = { enabled: false, pattern: "**", suppressErrors: false, pin: true };
+	const hookConfig = { enabled: false, pattern: "**", errors: false, pin: true };
 	if (hook === true || hook === false) {
 		// Boolean: enabled/disabled with all patterns
 		hookConfig.enabled = hook;
@@ -118,10 +105,16 @@ export function normalizeHookConfig(hook) {
 		hookConfig.enabled = true;
 		hookConfig.pattern = hook;
 	} else if (hook && typeof hook === "object") {
-		// Object: { enabled, pattern, suppressErrors }
+		// Object: { enabled, pattern, errors, pin }
 		hookConfig.enabled = hook.enabled !== false; // Default true if object provided
 		hookConfig.pattern = hook.pattern || "**";
-		hookConfig.suppressErrors = hook.suppressErrors || false;
+		hookConfig.errors = configChoice(
+			hook.errors === true ? "suppress" : hook.errors,
+			["suppress", false],
+			false,
+			"hook.errors",
+			'"suppress" or false'
+		);
 		hookConfig.pin = hook.pin !== false;
 	}
 	return hookConfig;
@@ -131,9 +124,9 @@ export function normalizeHookConfig(hook) {
  * Build an instance's clock from the host's `clock` option.
  * The option is read once, when the instance is created, and kept by the instance alone: it is never part of the
  * normalised config an instance hands out, so only the host that creates the instance can supply it.
- * @param {{now?: Function, setTimeout?: Function, clearTimeout?: Function}} [clock] - The option as given. Each member is optional and must be
+ * @param {{now?: Function, set?: Function, clear?: Function}} [clock] - The option as given. Each member is optional and must be
  *   a function; one left out is the copy slothlet took when it loaded. Absent means no `clock` option at all.
- * @returns {object} The frozen clock `{ now, setTimeout, clearTimeout, hostTimers }`.
+ * @returns {object} The frozen clock `{ now, setTimeout, clearTimeout, hostTimers }` (`set` and `clear` as the timer functions).
  * @throws {SlothletError} INVALID_CONFIG when it is not an object whose given members are functions.
  * @public
  * @example
@@ -154,7 +147,7 @@ export function normalizeClockConfig(clock) {
 							: typeof clock === "object"
 								? "an object with a member that is not a function"
 								: typeof clock,
-				expected: "an object whose now, setTimeout and clearTimeout members are functions",
+				expected: "an object whose now, set and clear members are functions",
 				hint: "HINT_INVALID_CONFIG"
 			},
 			null,
@@ -201,52 +194,87 @@ export function expandPermissionsShorthand(permissions) {
 }
 
 /**
+ * Validate that a config group, when given, is a plain object (not an array, not a primitive).
+ * `typeof [] === "object"`, and an array would make every option inside the group read as unset — a silently
+ * defaulted misconfiguration on a security-relevant block.
+ * @param {*} value - The group as given.
+ * @param {string} option - Its dotted config path, for the error.
+ * @returns {object} The group, or an empty object when it was not given.
+ * @throws {SlothletError} INVALID_CONFIG when it is given and is not an object.
+ * @private
+ */
+function configGroup(value, option) {
+	if (value === undefined) return {};
+	if (typeof value !== "object" || value === null || Arrays.isArray(value)) {
+		throw new SlothletError("INVALID_CONFIG", { option, value, expected: "object", hint: "HINT_INVALID_CONFIG" }, null, {
+			validationError: true
+		});
+	}
+	return value;
+}
+
+/**
+ * Validate one enumerated config value.
+ * @param {*} value - The value as given (`undefined` takes the default).
+ * @param {Array<*>} allowed - The accepted values.
+ * @param {*} fallback - The default.
+ * @param {string} option - Its dotted config path, for the error.
+ * @param {string} expected - The accepted values as the error states them.
+ * @returns {*} The value, or the default.
+ * @throws {SlothletError} INVALID_CONFIG for any other value.
+ * @private
+ */
+function configChoice(value, allowed, fallback, option, expected) {
+	if (value === undefined) return fallback;
+	if (ArrayMethods.includes(allowed, value)) return value;
+	throw new SlothletError("INVALID_CONFIG", { option, value, expected, hint: "HINT_INVALID_CONFIG" }, null, { validationError: true });
+}
+
+/**
  * Normalize the `permissions` option to its full object form (or `null` for no permissions config).
  *
+ * The normalized form has the same shape as the option, every member filled in, so feeding it back in (a reload)
+ * gives the same result.
+ *
  * @param {object|string|boolean|null} [permissions] - Raw permissions config from user. A bare `"on"`, `"strict"`, `"off"` or `"disabled"` means `{ mode }`; `true` and `false` mean `"on"` and `"off"`.
- * @param {string} [permissions.defaultPolicy="allow"] - Fallback policy: "allow" or "deny".
- * @param {"on"|"strict"|"off"|"disabled"} [permissions.mode] - `"on"` (the default for a `permissions` block): every rule
+ * @param {"allow"|"deny"} [permissions.policy="allow"] - What a call no rule decides gets.
+ * @param {"on"|"strict"|"off"|"disabled"|boolean} [permissions.mode="on"] - `"on"` (the default for a `permissions` block): every rule
  *   applies. `"strict"`: as `"on"`, chosen in the config only (it cannot be left at runtime), and the instance refuses to
  *   start while a check of the permission baseline is not met (docs/PERMISSIONS.md). `"off"`: only the built-in rules that keep module code off the framework's own namespace, root
  *   functions, and keys on api nodes apply (as with no `permissions` config at all). `"disabled"`: nothing applies.
- *   Takes precedence over `enabled`.
- * @param {boolean} [permissions.enabled=true] - `true` for `mode: "on"`, `false` for `mode: "off"`.
+ *   `true` and `false` mean `"on"` and `"off"`.
  * @param {string|boolean} [permissions.audit="default"] - Audit level: `"default"` (denied + self-bypass only),
  *   `"verbose"` (all decisions). `true` and `false` are accepted and both normalize to `"default"`.
- * @param {object} [permissions.references] - Options governing api functions held as references.
- * @param {boolean} [permissions.references.capture=true] - When `true` (the default), a function read
- *   out of the api carries the identity of the module that read it, so it stays enforced as that module
- *   wherever it is later invoked. Set `false` to restore the older host-initiated treatment.
- * @param {boolean} [permissions.failOpenOnAbsentCaller=false] - When `false` (the default), calls
- *   and reads occurring inside an active context with no resolvable (or forged) caller identity
- *   fail closed (denied); only genuinely host-initiated calls are exempt via the trusted-root
- *   marker. Set `true` to restore the legacy fail-open behaviour.
- * @param {boolean} [permissions.readGating=true] - When `true` (the default), reading a terminal
- *   data value (primitive, Buffer, TypedArray, Date, Map, etc.) off a module API path is
- *   permission-checked, the same way calls are. Set `false` to opt out and gate calls only.
- * @param {boolean} [permissions.owner=false] - When `true`, a caller leaf may access any target leaf
- *   currently owned by the same module (the moduleID of the initial load or of an `api.add()`), across
- *   directories, where the default policy would otherwise deny. An explicit deny rule still wins (#509).
- * @param {"leaf"|"chain"} [permissions.ceiling="leaf"] - Code a caller hands to a leaf runs as the caller with the
+ * @param {object} [permissions.caller] - How the caller of a call or read is identified.
+ * @param {boolean} [permissions.caller.anonymous=false] - When `false` (the default), calls and reads occurring inside an
+ *   active context with no resolvable (or forged) caller identity fail closed (denied); only genuinely host-initiated
+ *   calls are exempt. `true` lets them through.
+ * @param {"precise"|"fast"} [permissions.caller.attribution="precise"] - How the definer of code a module hands out is
+ *   known (#726). `"precise"` (the default) wraps a returned value that is itself code to record its definer; `"fast"`
+ *   wraps nothing and tells every definer from the stack.
+ * @param {boolean} [permissions.caller.capture=true] - When `true` (the default), a function read out of the api carries
+ *   the identity of the module that read it, so it stays enforced as that module wherever it is later invoked.
+ * @param {"leaf"|"chain"} [permissions.caller.ceiling="leaf"] - Code a caller hands to a leaf runs as the caller with the
  *   leaf as its ceiling (#597). With `"leaf"` (the default) that ceiling is the leaf the code is running inside;
  *   with `"chain"` it accumulates across every leaf the code was handed through, and all of them are enforced.
- * @param {boolean} [permissions.provenance=true] - Code is told apart by where it was written: a module's function
+ * @param {boolean} [permissions.caller.provenance=true] - Code is told apart by where it was written: a module's function
  *   running inside another module's call, reached by a route slothlet does not see, runs as that module with the
- *   call as its ceiling (#597). `false` turns this off, and such a function runs with the permissions of whichever
- *   call runs it.
- * @param {"precise"|"fast"} [permissions.attribution="precise"] - How the definer of code a module hands out is known
- *   (#726). `"precise"` (the default) wraps a returned value that is itself code to record its definer; `"fast"`
- *   wraps nothing and tells every definer from the stack.
- * @param {boolean|number} [permissions.typedArrayMembers=false] - Whether a typed array or `Buffer` one module hands
+ *   call as its ceiling (#597). `false` turns this off.
+ * @param {object} [permissions.gating] - What is gated besides calls.
+ * @param {boolean|number} [permissions.gating.buffers=false] - Whether a typed array or `Buffer` one module hands
  *   another is checked for members of its own under string keys. `false` never lists its keys, `true` always does,
  *   a whole number lists arrays of up to that many kilobytes.
+ * @param {boolean} [permissions.gating.read=true] - When `true` (the default), reading a terminal data value off a module
+ *   API path is permission-checked, the same way calls are.
+ * @param {boolean} [permissions.owner=false] - When `true`, a caller leaf may access any target leaf currently owned by
+ *   the same module, across directories, where the policy would otherwise deny. An explicit deny rule still wins (#509).
  * @param {Array<object>} [permissions.rules=[]] - Initial permission rules.
- * @returns {object|null} Normalized permissions config, or null when permissions is absent or not an object.
+ * @returns {object|null} Normalized permissions config, or null when permissions is absent or off by shorthand.
  * @public
  *
  * @example
- * normalizePermissionsConfig({ defaultPolicy: "deny", rules: [{ caller: "**", target: "admin.**", effect: "deny" }] });
- * // => { defaultPolicy: "deny", enabled: true, mode: "on", audit: "default", readGating: true, owner: false, ceiling: "leaf", provenance: true, attribution: "precise", rules: [...] }
+ * normalizePermissionsConfig({ policy: "deny", rules: [{ caller: "**", target: "admin.**", effect: "deny" }] });
+ * // => { policy: "deny", mode: "on", audit: "default", caller: { anonymous: false, ... }, gating: { buffers: false, read: true }, ... }
  */
 export function normalizePermissionsConfig(permissions) {
 	const expanded = expandPermissionsShorthand(permissions);
@@ -268,198 +296,51 @@ export function normalizePermissionsConfig(permissions) {
 		return null;
 	}
 
-	// Validate defaultPolicy
-	let defaultPolicy;
-	if (permissions.defaultPolicy === "deny") {
-		defaultPolicy = "deny";
-	} else if (permissions.defaultPolicy === "allow" || permissions.defaultPolicy === undefined) {
-		defaultPolicy = "allow";
-	} else {
-		throw new SlothletError(
-			"INVALID_CONFIG",
-			{
-				option: "permissions.defaultPolicy",
-				value: permissions.defaultPolicy,
-				expected: '"allow" or "deny"',
-				hint: "HINT_INVALID_CONFIG"
-			},
-			null,
-			{ validationError: true }
-		);
-	}
+	const policy = configChoice(permissions.policy, ["allow", "deny"], "allow", "permissions.policy", '"allow" or "deny"');
 
-	let mode;
-	if (permissions.mode === "on" || permissions.mode === "strict" || permissions.mode === "off" || permissions.mode === "disabled") {
-		mode = permissions.mode;
-	} else if (permissions.mode === undefined) {
-		mode = permissions.enabled === false ? "off" : "on";
-	} else {
-		throw new SlothletError(
-			"INVALID_CONFIG",
-			{
-				option: "permissions.mode",
-				value: permissions.mode,
-				expected: '"on", "strict", "off" or "disabled"',
-				hint: "HINT_INVALID_CONFIG"
-			},
-			null,
-			{ validationError: true }
-		);
-	}
-	const enabled = mode === "on" || mode === "strict";
+	// `true` and `false` are the boolean forms of "on" and "off".
+	const rawMode = permissions.mode === true ? "on" : permissions.mode === false ? "off" : permissions.mode;
+	const mode = configChoice(
+		rawMode,
+		["on", "strict", "off", "disabled"],
+		"on",
+		"permissions.mode",
+		'"on", "strict", "off", "disabled" or a boolean'
+	);
 
-	// Validate audit
-	let audit;
-	if (permissions.audit === "verbose") {
-		audit = "verbose";
-	} else if (permissions.audit === "default" || permissions.audit === undefined) {
-		audit = "default";
-	} else if (permissions.audit === true) {
-		// Boolean true normalizes to "default" (denied + self-bypass events only)
-		audit = "default";
-	} else if (permissions.audit === false) {
-		// Boolean false normalizes to "default" (denied + self-bypass events only; audit is not disabled)
-		audit = "default";
-	} else {
-		throw new SlothletError(
-			"INVALID_CONFIG",
-			{
-				option: "permissions.audit",
-				value: permissions.audit,
-				expected: '"default" or "verbose"',
-				hint: "HINT_INVALID_CONFIG"
-			},
-			null,
-			{ validationError: true }
-		);
-	}
+	// `true` and `false` normalize to "default" (denied + self-bypass events only; audit is never switched off).
+	const rawAudit = permissions.audit === true || permissions.audit === false ? "default" : permissions.audit;
+	const audit = configChoice(rawAudit, ["default", "verbose"], "default", "permissions.audit", '"default" or "verbose"');
 
-	// Validate readGating — gates terminal data-value property reads.
-	// Defaults to true (opt-out): reads are enforced alongside calls unless explicitly disabled.
-	let readGating;
-	if (permissions.readGating === false) {
-		readGating = false;
-	} else if (permissions.readGating === true || permissions.readGating === undefined) {
-		readGating = true;
-	} else {
-		throw new SlothletError(
-			"INVALID_CONFIG",
-			{
-				option: "permissions.readGating",
-				value: permissions.readGating,
-				expected: "boolean",
-				hint: "HINT_INVALID_CONFIG"
-			},
-			null,
-			{ validationError: true }
-		);
-	}
+	const owner = configChoice(permissions.owner, [true, false], false, "permissions.owner", "boolean");
 
-	// Validate failOpenOnAbsentCaller — controls the fail-closed default for calls/reads that
-	// occur inside an active context but with no resolvable (or forged) caller identity.
-	// Defaults to false (fail closed): only genuinely host-initiated calls (via the trusted-root
-	// marker) are exempt. Set true to restore the legacy fail-open behaviour for one release.
-	let failOpenOnAbsentCaller;
-	if (permissions.failOpenOnAbsentCaller === true) {
-		failOpenOnAbsentCaller = true;
-	} else if (permissions.failOpenOnAbsentCaller === false || permissions.failOpenOnAbsentCaller === undefined) {
-		failOpenOnAbsentCaller = false;
-	} else {
-		throw new SlothletError(
-			"INVALID_CONFIG",
-			{
-				option: "permissions.failOpenOnAbsentCaller",
-				value: permissions.failOpenOnAbsentCaller,
-				expected: "boolean",
-				hint: "HINT_INVALID_CONFIG"
-			},
-			null,
-			{ validationError: true }
-		);
-	}
+	// How the caller of a call or read is identified.
+	const callerGroup = configGroup(permissions.caller, "permissions.caller");
+	const caller = {
+		anonymous: configChoice(callerGroup.anonymous, [true, false], false, "permissions.caller.anonymous", "boolean"),
+		attribution: configChoice(
+			callerGroup.attribution,
+			["precise", "fast"],
+			"precise",
+			"permissions.caller.attribution",
+			'"precise" | "fast"'
+		),
+		capture: configChoice(callerGroup.capture, [true, false], true, "permissions.caller.capture", "boolean"),
+		ceiling: configChoice(callerGroup.ceiling, ["leaf", "chain"], "leaf", "permissions.caller.ceiling", '"leaf" | "chain"'),
+		provenance: configChoice(callerGroup.provenance, [true, false], true, "permissions.caller.provenance", "boolean")
+	};
 
-	// Validate owner (#509) — lets a module reach every leaf it owns, across its own directories,
-	// where the default policy would otherwise deny. Defaults to false (opt-in).
-	let owner;
-	if (permissions.owner === true) {
-		owner = true;
-	} else if (permissions.owner === false || permissions.owner === undefined) {
-		owner = false;
-	} else {
+	// Every gating option. `buffers`: whether a typed array or `Buffer` one module hands another is checked for members of
+	// its own under string keys (`bytes.item = …`), which means listing its keys; a whole number lists arrays of up to
+	// that many kilobytes.
+	const gatingGroup = configGroup(permissions.gating, "permissions.gating");
+	const buffers = gatingGroup.buffers === undefined ? false : gatingGroup.buffers;
+	if (typeof buffers !== "boolean" && !(Numbers.isSafeInteger(buffers) && buffers >= 0)) {
 		throw new SlothletError(
 			"INVALID_CONFIG",
 			{
-				option: "permissions.owner",
-				value: permissions.owner,
-				expected: "boolean",
-				hint: "HINT_INVALID_CONFIG"
-			},
-			null,
-			{ validationError: true }
-		);
-	}
-
-	// Validate ceiling (#597) — whether code handed on through several leaves stays under all of them ("chain"), or
-	// only under the leaf it is running inside ("leaf", the default).
-	const ceiling = permissions.ceiling === undefined ? "leaf" : permissions.ceiling;
-	if (ceiling !== "leaf" && ceiling !== "chain") {
-		throw new SlothletError(
-			"INVALID_CONFIG",
-			{
-				option: "permissions.ceiling",
-				value: permissions.ceiling,
-				expected: '"leaf" | "chain"',
-				hint: "HINT_INVALID_CONFIG"
-			},
-			null,
-			{ validationError: true }
-		);
-	}
-
-	// Validate provenance (#597) — whether a module's function reached by a route slothlet does not see is told
-	// apart by where it was written. Defaults to true: turning it off has to be asked for.
-	const provenance = permissions.provenance === undefined ? true : permissions.provenance;
-	if (typeof provenance !== "boolean") {
-		throw new SlothletError(
-			"INVALID_CONFIG",
-			{
-				option: "permissions.provenance",
-				value: permissions.provenance,
-				expected: "boolean",
-				hint: "HINT_INVALID_CONFIG"
-			},
-			null,
-			{ validationError: true }
-		);
-	}
-
-	// Validate attribution (#726) — whether a returned value that is itself code is wrapped to record its definer
-	// ("precise", the default) or every definer is told from the stack with nothing wrapped ("fast").
-	const attribution = permissions.attribution === undefined ? "precise" : permissions.attribution;
-	if (attribution !== "precise" && attribution !== "fast") {
-		throw new SlothletError(
-			"INVALID_CONFIG",
-			{
-				option: "permissions.attribution",
-				value: permissions.attribution,
-				expected: '"precise" | "fast"',
-				hint: "HINT_INVALID_CONFIG"
-			},
-			null,
-			{ validationError: true }
-		);
-	}
-
-	// Validate typedArrayMembers — whether a typed array or `Buffer` one module hands another is checked for members
-	// of its own under string keys (`bytes.item = …`), which means listing its keys, every index among them. `false`
-	// (the default) never lists; `true` always does; a whole number lists arrays of up to that many kilobytes.
-	const typedArrayMembers = permissions.typedArrayMembers === undefined ? false : permissions.typedArrayMembers;
-	if (typeof typedArrayMembers !== "boolean" && !(Numbers.isSafeInteger(typedArrayMembers) && typedArrayMembers >= 0)) {
-		throw new SlothletError(
-			"INVALID_CONFIG",
-			{
-				option: "permissions.typedArrayMembers",
-				value: permissions.typedArrayMembers,
+				option: "permissions.gating.buffers",
+				value: buffers,
 				expected: "boolean | whole number of kilobytes",
 				hint: "HINT_INVALID_CONFIG"
 			},
@@ -467,181 +348,60 @@ export function normalizePermissionsConfig(permissions) {
 			{ validationError: true }
 		);
 	}
+	const gating = {
+		buffers,
+		read: configChoice(gatingGroup.read, [true, false], true, "permissions.gating.read", "boolean")
+	};
 
-	// Validate references.capture — controls whether a function read out of the api keeps the identity of
-	// the module that read it, so it stays enforced as that module when invoked later from a boundary
-	// carrying no caller. Defaults to true. Set false to restore the older behaviour, where such a call
-	// was treated as host-initiated; kept as a compatibility escape for code that relied on it.
-	// Arrays are rejected alongside primitives: `typeof [] === "object"`, and an array would make
-	// every option inside the block read as unset — a silently-defaulted misconfiguration on a
-	// security-relevant block. Mirrors the manifest and lifecycle array rejections.
-	if (
-		permissions.references !== undefined &&
-		(typeof permissions.references !== "object" || permissions.references === null || Arrays.isArray(permissions.references))
-	) {
-		throw new SlothletError(
-			"INVALID_CONFIG",
-			{
-				option: "permissions.references",
-				value: permissions.references,
-				expected: "object",
-				hint: "HINT_INVALID_CONFIG"
-			},
-			null,
-			{ validationError: true }
-		);
-	}
-	let capture;
-	if (permissions.references?.capture === false) {
-		capture = false;
-	} else if (permissions.references?.capture === true || permissions.references?.capture === undefined) {
-		capture = true;
-	} else {
-		throw new SlothletError(
-			"INVALID_CONFIG",
-			{
-				option: "permissions.references.capture",
-				value: permissions.references.capture,
-				expected: "boolean",
-				hint: "HINT_INVALID_CONFIG"
-			},
-			null,
-			{ validationError: true }
-		);
-	}
-
-	// Validate rules
 	if (permissions.rules !== undefined && !Arrays.isArray(permissions.rules)) {
 		throw new SlothletError(
 			"INVALID_CONFIG",
-			{
-				option: "permissions.rules",
-				value: permissions.rules,
-				expected: "array",
-				hint: "HINT_INVALID_CONFIG"
-			},
+			{ option: "permissions.rules", value: permissions.rules, expected: "array", hint: "HINT_INVALID_CONFIG" },
 			null,
 			{ validationError: true }
 		);
 	}
-
 	const rules = Arrays.isArray(permissions.rules) ? permissions.rules : [];
 
-	// Validate the module-privacy block (#260). Rejects arrays the same way the manifest,
-	// lifecycle, and references blocks do (`typeof [] === "object"`).
-	if (
-		permissions.private !== undefined &&
-		(typeof permissions.private !== "object" || permissions.private === null || Arrays.isArray(permissions.private))
-	) {
-		throw new SlothletError(
-			"INVALID_CONFIG",
-			{
-				option: "permissions.private",
-				value: permissions.private,
-				expected: "object",
-				hint: "HINT_INVALID_CONFIG"
-			},
-			null,
-			{ validationError: true }
-		);
-	}
-	let privateHost;
-	if (permissions.private?.host === "allow") {
-		privateHost = "allow";
-	} else if (permissions.private?.host === "deny" || permissions.private?.host === undefined) {
-		// Secure default: the privacy claim covers the host too unless deliberately opened.
-		privateHost = "deny";
-	} else {
-		throw new SlothletError(
-			"INVALID_CONFIG",
-			{
-				option: "permissions.private.host",
-				value: permissions.private.host,
-				expected: '"deny" or "allow"',
-				hint: "HINT_INVALID_CONFIG"
-			},
-			null,
-			{ validationError: true }
-		);
-	}
+	// Module privacy (#260). `host`: secure default deny, the privacy claim covers the host too unless deliberately
+	// opened. `scope`: what a private member is private to, its owning module (default) or the folder that exports it.
+	const privateGroup = configGroup(permissions.private, "permissions.private");
+	const privacy = {
+		host: configChoice(privateGroup.host, ["deny", "allow"], "deny", "permissions.private.host", '"deny" or "allow"'),
+		scope: configChoice(privateGroup.scope, ["module", "folder"], "module", "permissions.private.scope", '"module" or "folder"')
+	};
 
-	// What a private member is private to: its owning module ID (default) or the folder that exports it.
-	const privateScope = permissions.private?.scope === undefined ? "module" : permissions.private.scope;
-	if (privateScope !== "module" && privateScope !== "folder") {
+	// The event-rule section (#407): a three-level construct (deny/notify/allow), distinct from the binary call `rules`.
+	// `policy` is the level applied when no event rule matches a subscriber/event pair (built-in: "notify", subscription
+	// open and payload opt-in).
+	const eventsGroup = configGroup(permissions.events, "permissions.events");
+	const eventPolicy = configChoice(
+		eventsGroup.policy,
+		["deny", "notify", "allow"],
+		"notify",
+		"permissions.events.policy",
+		'"deny", "notify", or "allow"'
+	);
+	if (eventsGroup.rules !== undefined && !Arrays.isArray(eventsGroup.rules)) {
 		throw new SlothletError(
 			"INVALID_CONFIG",
-			{
-				option: "permissions.private.scope",
-				value: permissions.private.scope,
-				expected: '"module" or "folder"',
-				hint: "HINT_INVALID_CONFIG"
-			},
+			{ option: "permissions.events.rules", value: eventsGroup.rules, expected: "array", hint: "HINT_INVALID_CONFIG" },
 			null,
 			{ validationError: true }
 		);
 	}
-
-	// Validate the event-rule section (#407). Separate three-level construct (deny/notify/allow),
-	// distinct from the binary call/hook `rules` above. `default` is the base level applied when no
-	// event rule matches a subscriber/event pair (built-in default: "notify"); `rules` are
-	// { caller, event, effect } entries resolved most-specific-wins with the same layered tiebreak.
-	// Rejects arrays like the other sub-blocks (`typeof [] === "object"`).
-	if (
-		permissions.events !== undefined &&
-		(typeof permissions.events !== "object" || permissions.events === null || Arrays.isArray(permissions.events))
-	) {
-		throw new SlothletError(
-			"INVALID_CONFIG",
-			{ option: "permissions.events", value: permissions.events, expected: "object", hint: "HINT_INVALID_CONFIG" },
-			null,
-			{ validationError: true }
-		);
-	}
-	let eventDefault;
-	if (permissions.events?.default === undefined) {
-		// Built-in default: subscription is open, payload is opt-in (data requires an `allow` grant).
-		eventDefault = "notify";
-	} else if (permissions.events.default === "deny" || permissions.events.default === "notify" || permissions.events.default === "allow") {
-		eventDefault = permissions.events.default;
-	} else {
-		throw new SlothletError(
-			"INVALID_CONFIG",
-			{
-				option: "permissions.events.default",
-				value: permissions.events.default,
-				expected: '"deny", "notify", or "allow"',
-				hint: "HINT_INVALID_CONFIG"
-			},
-			null,
-			{ validationError: true }
-		);
-	}
-	if (permissions.events?.rules !== undefined && !Arrays.isArray(permissions.events.rules)) {
-		throw new SlothletError(
-			"INVALID_CONFIG",
-			{ option: "permissions.events.rules", value: permissions.events.rules, expected: "array", hint: "HINT_INVALID_CONFIG" },
-			null,
-			{ validationError: true }
-		);
-	}
-	const eventRules = Arrays.isArray(permissions.events?.rules) ? permissions.events.rules : [];
+	const eventRules = Arrays.isArray(eventsGroup.rules) ? eventsGroup.rules : [];
 
 	return {
-		defaultPolicy,
-		enabled,
+		policy,
 		mode,
 		audit,
-		readGating,
-		failOpenOnAbsentCaller,
 		owner,
-		ceiling,
-		provenance,
-		attribution,
-		typedArrayMembers,
-		references: { capture },
-		private: { host: privateHost, scope: privateScope },
+		caller,
+		gating,
 		rules,
-		events: { default: eventDefault, rules: eventRules }
+		private: privacy,
+		events: { policy: eventPolicy, rules: eventRules }
 	};
 }
 
@@ -808,9 +568,7 @@ export class Config extends ComponentBase {
 	 * // => { add: false, remove: false, reload: false }
 	 */
 	normalizeMutations(mutations) {
-		// Note: allowCollisionOverride defaults to FALSE (opt-in), unlike the others — a per-call
-		// collision override to api.add is a policy escape and is locked by default (#380).
-		const defaults = { add: true, remove: true, reload: true, permissions: true, events: true, allowCollisionOverride: false };
+		const defaults = { add: true, remove: true, reload: true, permissions: true, events: true };
 
 		// If mutations is not an object, use defaults
 		if (!mutations || typeof mutations !== "object") {
@@ -825,10 +583,7 @@ export class Config extends ComponentBase {
 			permissions: mutations.permissions === false ? false : true,
 			// Gates the runtime event-rule mutation surface (api.slothlet.event.rules.*), mirroring
 			// `permissions` for the call-rule surface (#407). Defaults to true.
-			events: mutations.events === false ? false : true,
-			// Gates per-call collisionMode / mutateExisting / recordHistory overrides on api.add.
-			// Locked by default (#380): passing them throws unless this is explicitly true.
-			allowCollisionOverride: mutations.allowCollisionOverride === true ? true : false
+			events: mutations.events === false ? false : true
 		};
 	}
 
@@ -943,8 +698,7 @@ export class Config extends ComponentBase {
 	}
 
 	/**
-	 * Normalize the `hook` config (V2-style support) into a canonical
-	 * `{ enabled, pattern, suppressErrors }` object.
+	 * Normalize the `hook` config into a canonical `{ enabled, pattern, errors, pin }` object.
 	 *
 	 * Accepts the boolean form (enable/disable with the catch-all pattern), the string form
 	 * (enable, restricting hooks to a global path pattern — e.g. `"database.*"`), or the full
@@ -954,7 +708,7 @@ export class Config extends ComponentBase {
 	 * transformConfig runs, so it cannot rely on the normalized config being in place yet).
 	 *
 	 * @param {boolean|string|Object} [hook] - Raw hook config in any supported form.
-	 * @returns {{enabled: boolean, pattern: (string|null), suppressErrors: boolean, pin: boolean}} Normalized hook config.
+	 * @returns {{enabled: boolean, pattern: (string|null), errors: ("suppress"|false), pin: boolean}} Normalized hook config.
 	 * @public
 	 */
 	normalizeHook(hook) {
@@ -962,7 +716,101 @@ export class Config extends ComponentBase {
 	}
 
 	/**
-	 * Transform and validate configuration
+	 * Normalize the `api.collision` group: `{ mode, override }`, or a bare mode string as the shorthand for `{ mode }`.
+	 * @param {string|{mode?: (string|{initial?: string, api?: string}), override?: boolean}} [collision] - The group as given.
+	 * @returns {{mode: {initial: string, api: string}, override: boolean}} The normalized group.
+	 * @throws {SlothletError} INVALID_CONFIG when it is neither a string nor an object, or `override` is not a boolean.
+	 * @public
+	 * @example
+	 * config.normalizeApiCollision("warn"); // => { mode: { initial: "warn", api: "warn" }, override: false }
+	 */
+	normalizeApiCollision(collision) {
+		const group = typeof collision === "string" ? { mode: collision } : configGroup(collision, "api.collision");
+		return {
+			mode: this.normalizeCollision(group.mode ?? null),
+			override: configChoice(group.override, [true, false], false, "api.collision.override", "boolean")
+		};
+	}
+
+	/**
+	 * Normalize the `loader` group: how leaf files are found and loaded.
+	 * @param {object} [loader] - The group as given.
+	 * @param {Function} [loader.import] - Every leaf load goes through it: `(specifier) => Promise<module>`.
+	 * @param {{files: Array, directories: Array}} [loader.files] - The browser file list (`files.generate()`); giving one
+	 *   selects browser mode.
+	 * @param {boolean} [loader.materialize=false] - Lazy mode: materialize every path in the background after init.
+	 * @param {"node"|"browser"} [loader.platform] - Where slothlet runs; auto-detected when omitted.
+	 * @param {Function} [loader.resolve] - Browser: a file list entry to an importable URL.
+	 * @returns {{import: (Function|null), files: (object|null), materialize: boolean, platform: ("node"|"browser"), resolve: (Function|null)}}
+	 *   The normalized group.
+	 * @throws {SlothletError} INVALID_CONFIG_IMPORT when `import` is given and is not a function.
+	 * @public
+	 * @example
+	 * config.normalizeLoader({}); // => { import: null, files: null, materialize: false, platform: "node", resolve: null }
+	 */
+	normalizeLoader(loader) {
+		const group = configGroup(loader, "loader");
+		// Validate the injectable leaf importer (#235): a function or nothing.
+		if (group.import !== undefined && group.import !== null && typeof group.import !== "function") {
+			throw new this.SlothletError("INVALID_CONFIG_IMPORT", {
+				received: typeof group.import,
+				validationError: true
+			});
+		}
+		const files = group.files ?? null;
+		return {
+			import: group.import ?? null,
+			files,
+			materialize: group.materialize === true,
+			// A file list is a strong browser-mode signal: it selects browser mode unless the platform is given.
+			platform: this.normalizeEnvTarget(group.platform, files !== null),
+			resolve: group.resolve ?? null
+		};
+	}
+
+	/**
+	 * Normalize the `routines` group (object form only).
+	 * @param {object} [routines] - The group as given.
+	 * @param {boolean} [routines.auto=false] - Startup/shutdown/destroy routines fire by themselves.
+	 * @param {Array} [routines.entries] - The routines; see {@link Config#normalizeRoutines}. Omitted keeps the defaults.
+	 * @param {boolean} [routines.stack=false] - Every module contributing the same routine name at one api path runs, in
+	 *   mount order; `false` runs only the collision winner.
+	 * @returns {{auto: boolean, entries: Array<object>, stack: boolean}} The normalized group.
+	 * @throws {SlothletError} INVALID_CONFIG when it is not an object, or a member is invalid.
+	 * @public
+	 * @example
+	 * config.normalizeRoutinesGroup({ auto: true }).auto; // true
+	 */
+	normalizeRoutinesGroup(routines) {
+		if (Arrays.isArray(routines)) {
+			throw new this.SlothletError(
+				"INVALID_CONFIG",
+				{
+					option: "routines",
+					value: "array",
+					expected: 'an object, e.g. { entries: ["initialize:startup", "shutdown:shutdown"] }',
+					hint: "HINT_INVALID_CONFIG",
+					validationError: true
+				},
+				null,
+				{ validationError: true }
+			);
+		}
+		const group = configGroup(routines, "routines");
+		return {
+			auto: configChoice(group.auto, [true, false], false, "routines.auto", "boolean"),
+			entries: this.normalizeRoutines(group.entries),
+			// Independent of the collision mode entirely (#365): a module that lost a collision, under ANY collision mode,
+			// does not still run through the routine system unless this is turned on.
+			stack: configChoice(group.stack, [true, false], false, "routines.stack", "boolean")
+		};
+	}
+
+	/**
+	 * Transform and validate configuration.
+	 *
+	 * The result has the shape of the option object (`slothlet({...})`) with every group filled in, so feeding it back in
+	 * (a reload) gives the same result.
 	 * @param {Object} config - Raw configuration options
 	 * @returns {Object} Normalized configuration
 	 * @throws {SlothletError} If configuration is invalid
@@ -970,106 +818,60 @@ export class Config extends ComponentBase {
 	 */
 	transformConfig(config = {}) {
 		// Determine execution environment target before any filesystem operations.
-		// manifest presence acts as a fallback browser-mode signal.
-		const hasManifest = config.manifest != null;
-		const envTarget = this.normalizeEnvTarget(config.platform, hasManifest);
+		const loader = this.normalizeLoader(config.loader);
+		const envTarget = loader.platform;
 
-		// Accept `base` as the primary option; `dir` is a deprecated v3 alias.
-		// `base` is always required — in node mode it is the API directory path;
-		// in browser mode it is the base URL used to resolve module specifiers when
-		// no resolveModuleSpecifier override is provided.
-		const rawBase = config.base ?? config.dir;
-		if (config.dir !== undefined && config.dir !== null && config.base === undefined && !config.silent) {
-			new this.SlothletWarning("V3_CONFIG_DEPRECATED", {
-				option: "dir",
-				replacement: "base"
-			});
-		}
+		// `base` is required in both modes: in node mode it is the API directory path; in browser mode it is the base URL
+		// used to resolve module specifiers when no `loader.resolve` is given.
 		// #471: no base at all (absent or null) is an instance whose tree is built entirely through
 		// api.slothlet.api.add() — it composes an empty root, in node and browser mode alike. A base
-		// that is present but falsy (e.g. "") is a mistake and still fails. A browser manifest that
+		// that is present but falsy (e.g. "") is a mistake and still fails. A browser file list that
 		// lists files describes a base tree, which cannot be resolved without a base, so it needs one.
+		const rawBase = config.base;
 		const noBase = rawBase === undefined || rawBase === null;
-		const manifestListsEntries =
-			config.manifest != null &&
-			typeof config.manifest === "object" &&
-			((Arrays.isArray(config.manifest.files) && config.manifest.files.length > 0) ||
-				(Arrays.isArray(config.manifest.directories) && config.manifest.directories.length > 0));
-		if ((!noBase && !rawBase) || (noBase && manifestListsEntries)) {
+		const files = loader.files;
+		const filesListEntries =
+			files !== null &&
+			typeof files === "object" &&
+			((Arrays.isArray(files.files) && files.files.length > 0) || (Arrays.isArray(files.directories) && files.directories.length > 0));
+		if ((!noBase && !rawBase) || (noBase && filesListEntries)) {
 			throw new this.SlothletError("INVALID_CONFIG_DIR_MISSING", {}, null, { validationError: true });
 		}
 
 		// Browser-mode specific validation. With no base there is no base tree to describe, so the
-		// manifest is only required when a base is given.
+		// file list is only required when a base is given.
 		if (envTarget === "browser") {
-			if (!noBase && (!config.manifest || typeof config.manifest !== "object" || Arrays.isArray(config.manifest))) {
+			if (!noBase && (!files || typeof files !== "object" || Arrays.isArray(files))) {
 				throw new this.SlothletError("INVALID_CONFIG_BROWSER_REQUIRES_MANIFEST", {}, null, { validationError: true });
 			}
-			if (!noBase && (!Arrays.isArray(config.manifest.files) || !Arrays.isArray(config.manifest.directories))) {
+			if (!noBase && (!Arrays.isArray(files.files) || !Arrays.isArray(files.directories))) {
 				throw new this.SlothletError(
 					"INVALID_CONFIG_BROWSER_MANIFEST_INVALID",
 					{
-						received: typeof config.manifest
+						received: typeof files
 					},
 					null,
 					{ validationError: true }
 				);
 			}
-			// resolveModuleSpecifier is optional — if omitted (undefined) or normalized to null
-			// (the config normalization below stores `?? null`), it defaults to new URL(path, dir).
-			// Only a provided NON-function value is rejected. Treating null like undefined keeps
-			// transformConfig idempotent, so reload() — which re-feeds the already-normalized
-			// config — does not throw (#91).
-			if (
-				config.resolveModuleSpecifier !== undefined &&
-				config.resolveModuleSpecifier !== null &&
-				typeof config.resolveModuleSpecifier !== "function"
-			) {
-				throw new this.SlothletError(
-					"INVALID_CONFIG_BROWSER_RESOLVE_SPECIFIER_INVALID",
-					{ received: typeof config.resolveModuleSpecifier },
-					null,
-					{ validationError: true }
-				);
+			// loader.resolve is optional — if omitted (undefined) or normalized to null it defaults to new URL(path, base).
+			// Only a provided NON-function value is rejected. Treating null like undefined keeps transformConfig
+			// idempotent, so reload() — which re-feeds the already-normalized config — does not throw (#91).
+			if (loader.resolve !== null && typeof loader.resolve !== "function") {
+				throw new this.SlothletError("INVALID_CONFIG_BROWSER_RESOLVE_SPECIFIER_INVALID", { received: typeof loader.resolve }, null, {
+					validationError: true
+				});
 			}
 		}
 
 		// Resolve relative paths from caller's context (node mode only).
 		// In browser mode base is a URL string — pass it through as-is.
-		const resolvedDir = noBase ? null : envTarget === "browser" ? rawBase : this.slothlet.helpers.resolver.resolvePathFromCaller(rawBase);
+		const resolvedBase = noBase ? null : envTarget === "browser" ? rawBase : this.slothlet.helpers.resolver.resolvePathFromCaller(rawBase);
 
-		// ===== BACKWARD COMPATIBILITY =====
-		// Handle deprecated allowMutation config (v2 compatibility)
-		let mutations = null;
-		if (config.allowMutation === false) {
-			// Map allowMutation: false to all mutations disabled
-			mutations = { add: false, remove: false, reload: false };
-			if (!config.silent) {
-				new this.SlothletWarning("V3_CONFIG_DEPRECATED", {
-					option: "allowMutation",
-					replacement: "api.mutations: { add: false, remove: false, reload: false }"
-				});
-			}
-		}
-
-		// Handle root-level collision config (deprecated alias of api.collision).
-		// This was an early-v3 development shape (never a v2 option); it is kept as a supported
-		// deprecated alias — normalized and applied below — and may be removed in a future major.
-		let collision = null;
-		if (config.collision && !config.api?.collision) {
-			collision = this.normalizeCollision(config.collision);
-			if (!config.silent) {
-				new this.SlothletWarning("V3_CONFIG_DEPRECATED", {
-					option: "collision",
-					replacement: "api.collision"
-				});
-			}
-		}
-
-		// Process api.* namespace (new v3 structure)
-		const apiConfig = config.api || {};
-		const finalCollision = apiConfig.collision ? this.normalizeCollision(apiConfig.collision) : collision || this.normalizeCollision(null);
-		const finalMutations = apiConfig.mutations ? this.normalizeMutations(apiConfig.mutations) : mutations || this.normalizeMutations(null);
+		// Process the api.* group.
+		const apiConfig = configGroup(config.api, "api");
+		const collision = this.normalizeApiCollision(apiConfig.collision);
+		const mutations = this.normalizeMutations(apiConfig.mutations);
 
 		// Validate scope.merge strategy if provided
 		let scopeConfig = config.scope;
@@ -1091,7 +893,7 @@ export class Config extends ComponentBase {
 			}
 		}
 
-		// Parse hook configuration (V2-style support) — shared with the HookManager.
+		// Parse hook configuration — shared with the HookManager.
 		const hookConfig = this.normalizeHook(config.hook);
 
 		// Parse tracking configuration
@@ -1104,36 +906,23 @@ export class Config extends ComponentBase {
 			trackingConfig.materialization = config.tracking.materialization === true;
 		}
 
-		// backgroundMaterialize implies materialization tracking - auto-enable
-		if (config.backgroundMaterialize === true) {
+		// loader.materialize implies materialization tracking - auto-enable
+		if (loader.materialize) {
 			trackingConfig.materialization = true;
 		}
 
-		// Validate the injectable leaf importer (#235): a function or nothing.
-		if (config.import !== undefined && config.import !== null && typeof config.import !== "function") {
-			throw new this.SlothletError("INVALID_CONFIG_IMPORT", {
-				received: typeof config.import,
+		// Validate the versioning group's dispatcher: a version metadata key, a function, or nothing.
+		const versioningGroup = configGroup(config.versioning, "versioning");
+		const dispatcher = versioningGroup.dispatcher ?? null;
+		if (dispatcher !== null && typeof dispatcher !== "string" && typeof dispatcher !== "function") {
+			throw new this.SlothletError("INVALID_CONFIG_VERSION_DISPATCHER", {
+				received: typeof dispatcher,
 				validationError: true
 			});
 		}
 
-		// Validate versionDispatcher option
-		if (config.versionDispatcher !== undefined && config.versionDispatcher !== null) {
-			if (typeof config.versionDispatcher !== "string" && typeof config.versionDispatcher !== "function") {
-				throw new this.SlothletError("INVALID_CONFIG_VERSION_DISPATCHER", {
-					received: typeof config.versionDispatcher,
-					validationError: true
-				});
-			}
-		}
-
 		// Normalize permissions configuration
 		const permissionsConfig = this.normalizePermissions(config.permissions);
-
-		// Normalize suppressFixes — array of rule IDs (e.g. ["C03"]) that opt out of specific
-		// bug-fix behaviors. Each listed rule emits a deprecation warning. This option is
-		// temporary and will be removed in v4 when the corrected behaviors become permanent.
-		const suppressFixes = this.normalizeSuppressFixes(config.suppressFixes, config.silent);
 
 		// Parse i18n configuration (dev-facing; process-global)
 		let i18nConfig = null;
@@ -1146,131 +935,35 @@ export class Config extends ComponentBase {
 		// Normalize + validate the construction-time lifecycle subscription map (#148).
 		const lifecycleConfig = this.normalizeLifecycle(config.lifecycle);
 
-		// `autoRoutines` (#341) is the non-deprecated replacement for `collectLifecycleHooks` — see
-		// the TEMPORARY v3-compat note on both properties below in the returned config object.
-		// `collectLifecycleHooks` is accepted as a deprecated alias for backward compatibility: when
-		// `autoRoutines` is not explicitly given, `collectLifecycleHooks`'s value (default `false`)
-		// carries over. An explicit `autoRoutines` always wins.
-		if (config.collectLifecycleHooks !== undefined && config.autoRoutines === undefined && !config.silent) {
-			new this.SlothletWarning("V3_CONFIG_DEPRECATED", {
-				option: "collectLifecycleHooks",
-				replacement: "autoRoutines"
-			});
-		}
-		const autoRoutines = config.autoRoutines !== undefined ? config.autoRoutines === true : config.collectLifecycleHooks === true;
-
-		// `collectLifecycleHooks: true` now REPLACES what used to be a wholly separate discovery
-		// mechanism (`_collectLifecycleHooks`, removed) — it expands into the two implicit routines
-		// below (root-anchored, `order: "depth"`, reproducing that mechanism's whole-tree,
-		// cross-mount-boundary, deepest-first scope for literally-named `shutdown`/`destroy` leaves).
-		// Because a root-anchored `shutdown`/`destroy` routine strictly SUBSUMES any narrower
-		// mount-relative routine of the same mode (it matches everything the narrower one would, plus
-		// more), any existing `mode: "shutdown"` / `mode: "destroy"` routine — including the built-in
-		// defaults — is DROPPED rather than run alongside the implicit ones: keeping both would
-		// double-invoke the same contributor once per matching routine. `startup`/`manual` routines
-		// are untouched. Skips an implicit entry the caller already configured explicitly (by exact
-		// name) rather than risk running the identical pattern twice.
-		const normalizedRoutines = this.normalizeRoutines(config.routines);
-		const routines =
-			config.collectLifecycleHooks === true
-				? concatLists(
-						filterList(normalizedRoutines, (routine) => routine.mode !== "shutdown" && routine.mode !== "destroy"),
-						mapList(
-							filterList(
-								COLLECT_LIFECYCLE_HOOKS_IMPLICIT_ROUTINES,
-								(implicit) => !ArrayMethods.some(normalizedRoutines, (routine) => routine.name === implicit.name)
-							),
-							(implicit) => ({ ...implicit, recursive: false })
-						)
-					)
-				: normalizedRoutines;
-
 		// Build normalized config
 		return {
 			...config,
-			base: resolvedDir,
-			dir: resolvedDir,
-			manifest: config.manifest ?? null,
-			resolveModuleSpecifier: config.resolveModuleSpecifier ?? null,
-			envTarget,
+			base: resolvedBase,
+			loader,
 			mode: this.normalizeMode(config.mode),
 			runtime: this.normalizeRuntime(config.runtime),
 			helpers: this.normalizeHelpers(config.helpers),
-			apiDepth: config.apiDepth !== undefined ? config.apiDepth : DEFAULT_API_DEPTH,
+			depth: config.depth !== undefined ? config.depth : DEFAULT_API_DEPTH,
 			reference: config.reference || null,
 			context: config.context || null,
 			i18n: i18nConfig,
 			lifecycle: lifecycleConfig,
-			routines,
+			routines: this.normalizeRoutinesGroup(config.routines),
 			debug: this.normalizeDebug(config.debug),
 			diagnostics: config.diagnostics === true,
-			// TEMPORARY v3-compat gate (#341): remove `collectLifecycleHooks` at v4, and default
-			// `autoRoutines` to `true` (matching the issue's original "routines auto-run" design) once
-			// this deprecation window closes — see docs/LIFECYCLE.md#routines and CONFIGURATION.md.
-			collectLifecycleHooks: config.collectLifecycleHooks === true,
-			autoRoutines,
-			// Independent of collisionMode entirely (#365) — two modules colliding at the same
-			// composed api path did not stack anything before #341, and #341 should not have made
-			// stacking an implicit side effect of whichever collisionMode happened to be in play.
-			// `false` by default: a module that lost a collision, under ANY collisionMode, does not
-			// still run via the routine system unless this is explicitly opted into.
-			stackRoutines: config.stackRoutines === true,
 			hook: hookConfig,
-			collision: finalCollision,
 			api: {
-				collision: finalCollision,
-				mutations: finalMutations
+				collision,
+				mutations
 			},
 			scope: scopeConfig,
 			tracking: trackingConfig,
-			backgroundMaterialize: config.backgroundMaterialize === true,
 			silent: config.silent === true,
 			typescript: this.normalizeTypeScript(config.typescript),
 			env: this.normalizeEnv(config.env),
-			versionDispatcher: config.versionDispatcher ?? null,
-			import: config.import ?? null,
-			permissions: permissionsConfig,
-			suppressFixes
+			versioning: { dispatcher },
+			permissions: permissionsConfig
 		};
-	}
-
-	/**
-	 * Normalize and validate the suppressFixes option. Emits a deprecation warning for each
-	 * rule ID present. Invalid entries (non-strings, unknown rule IDs) are silently dropped.
-	 *
-	 * @param {string[]|undefined} suppressFixes - Raw suppressFixes value from user config.
-	 * @param {boolean} silent - If true, suppress warnings.
-	 * @returns {Set<string>} Normalized set of suppressed rule IDs.
-	 * @example
-	 * // Rule IDs use the <rule>_<PR> form. The C03 fix landed in PR #116.
-	 * normalizeSuppressFixes(["C03_116"], false); // emits WARN_SUPPRESS_FIX_ACTIVE for C03_116
-	 * @public
-	 */
-	normalizeSuppressFixes(suppressFixes, silent) {
-		// Known suppressible rule IDs — extend this list as more fixes land in v3.
-		// Format: <rule>_<PR number> (e.g. "C03_116" = API rule C03, fixed in PR #116).
-		const KNOWN_FIX_IDS = setFrom(["C03_116"]);
-		const REPO_PR_BASE = "https://github.com/CLDMV/slothlet/pull/";
-
-		if (!Arrays.isArray(suppressFixes) || suppressFixes.length === 0) {
-			return new Set();
-		}
-
-		const result = new Set();
-		for (let ofIndex = 0, ofList = suppressFixes; ofIndex < ofList.length; ofIndex++) {
-			const rule = ofList[ofIndex];
-			if (typeof rule !== "string" || !SetMethods.has(KNOWN_FIX_IDS, rule)) {
-				continue;
-			}
-			SetMethods.add(result, rule);
-			if (!silent) {
-				// Extract PR number from the trailing _<number> segment of the rule ID
-				const prNumber = ArrayMethods.pop(splitText(rule, "_"));
-				const url = `${REPO_PR_BASE}${prNumber}`;
-				new this.SlothletWarning("WARN_SUPPRESS_FIX_ACTIVE", { rule, url });
-			}
-		}
-		return result;
 	}
 
 	/**
@@ -1307,12 +1000,7 @@ export class Config extends ComponentBase {
 			this.#validateTypeScriptOption("sourcemap", typescript.sourcemap, "boolean", "a boolean");
 			this.#validateTypeScriptOption("module", typescript.module, "string", 'a string such as "esnext"');
 			this.#validateTypeScriptOption("strict", typescript.strict, "boolean", "a boolean");
-			this.#validateTypeScriptOption(
-				"compilerOptions",
-				typescript.compilerOptions,
-				"plain-object",
-				"a plain object of tsconfig.json compilerOptions"
-			);
+			this.#validateTypeScriptOption("compiler", typescript.compiler, "plain-object", "a plain object of tsconfig.json compilerOptions");
 			return {
 				enabled: true,
 				mode,
@@ -1322,7 +1010,7 @@ export class Config extends ComponentBase {
 				sourcemap: typescript.sourcemap ?? null,
 				module: typescript.module ?? null,
 				strict: typescript.strict ?? null,
-				compilerOptions: typescript.compilerOptions ?? null
+				compiler: typescript.compiler ?? null
 			};
 		}
 

@@ -377,7 +377,7 @@ export class ApiManager extends ComponentBase {
     private _setShadowParked;
     /**
      * Invalidate every UnifiedWrapper found in a rejected candidate's subtree, so a still-in-flight
-     * `backgroundMaterialize: true` materialization cannot re-apply the rejected content later.
+     * `loader.materialize: true` materialization cannot re-apply the rejected content later.
      * @param {unknown} api - Candidate subtree (or leaf) to walk.
      * @param {WeakSet} [visited] - Cycle guard for the recursive walk.
      * @param {?Array<object>} [liveKept=null] - When given, a wrapper that is still the live node at its own

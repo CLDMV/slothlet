@@ -272,7 +272,7 @@ Isolate tenants from each other's resources using conditions on shared API paths
 const api = await slothlet({
 	base: "./api",
 	permissions: {
-		defaultPolicy: "deny",
+		policy: "deny",
 		rules: [
 			// Allow tenant-a modules to reach tenant-a data
 			{ caller: "**", target: "data.tenantA.**", effect: "allow", condition: { tenant: "tenant-a" } },
@@ -309,13 +309,13 @@ Because the two rules are equally specific, the last-registered rule (the allow)
 
 ### Combining With Default Policy
 
-With `defaultPolicy: "deny"`, conditions can open specific paths per context rather than using broad allow rules:
+With `policy: "deny"`, conditions can open specific paths per context rather than using broad allow rules:
 
 ```javascript
 const api = await slothlet({
 	base: "./api",
 	permissions: {
-		defaultPolicy: "deny",
+		policy: "deny",
 		rules: [
 			// Only allow the billing module to be reached when the request is flagged as internal
 			{ caller: "**", target: "billing.**", effect: "allow", condition: { internal: true } }
@@ -338,7 +338,7 @@ A context-level condition can express "may this caller reach `project.get` at al
 const api = await slothlet({
 	base: "./api",
 	permissions: {
-		defaultPolicy: "deny",
+		policy: "deny",
 		rules: [
 			// The predicate names the resource from the call's own arguments.
 			{ caller: "**", target: "project.get", effect: "allow", condition: (ctx, { args }) => hasRole(ctx.caller, args[0], "read") },

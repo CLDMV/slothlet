@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T19:52:13-07:00 (1792378333)
+ *	@Last modified time: 2026-11-16T18:29:56-08:00 (1794882596)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -33,7 +33,7 @@ describe.each(getMatrixConfigs())("Permissions > Internal Route Proxy Coverage >
 			...config,
 			base: `${BASE}/callers`,
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				rules: []
 			}
 		});
@@ -50,7 +50,7 @@ describe.each(getMatrixConfigs())("Permissions > Internal Route Proxy Coverage >
 			...config,
 			base: `${BASE}/callers`,
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				rules: []
 			}
 		});
@@ -67,7 +67,7 @@ describe.each(getMatrixConfigs())("Permissions > Internal Route Proxy Coverage >
 			diagnostics: true,
 			base: `${BASE}/callers`,
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				rules: []
 			}
 		});
@@ -82,7 +82,7 @@ describe.each(getMatrixConfigs())("Permissions > Internal Route Proxy Coverage >
 			diagnostics: true,
 			base: `${BASE}/callers`,
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				rules: []
 			}
 		});
@@ -96,7 +96,7 @@ describe.each(getMatrixConfigs())("Permissions > Internal Route Proxy Coverage >
 			...config,
 			base: `${BASE}/callers`,
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				rules: []
 			}
 		});
@@ -121,7 +121,7 @@ describe.each(getMatrixConfigs())("Permissions > Internal Route Proxy Coverage >
 			...config,
 			base: `${BASE}/callers`,
 			permissions: {
-				defaultPolicy: "deny",
+				policy: "deny",
 				rules: [
 					{ caller: "**", target: "internalProxyHelper.**", effect: "allow" },
 					{ caller: "internalProxyHelper.**", target: "slothlet.permissions", effect: "allow" },
@@ -145,7 +145,7 @@ describe.each(getMatrixConfigs())("Permissions > Internal Route Proxy Coverage >
 			...config,
 			base: `${BASE}/callers`,
 			permissions: {
-				defaultPolicy: "deny",
+				policy: "deny",
 				rules: [
 					{ caller: "**", target: "internalProxyHelper.**", effect: "allow" },
 					{ caller: "internalProxyHelper.**", target: "slothlet.permissions", effect: "allow" },
@@ -169,7 +169,7 @@ describe.each(getMatrixConfigs())("Permissions > Internal Route Proxy Coverage >
 			...config,
 			base: `${BASE}/callers`,
 			permissions: {
-				defaultPolicy: "deny",
+				policy: "deny",
 				rules: [
 					{ caller: "**", target: "internalProxyHelper.**", effect: "allow" },
 					{ caller: "internalProxyHelper.**", target: "slothlet.permissions", effect: "allow" },
@@ -193,7 +193,7 @@ describe.each(getMatrixConfigs())("Permissions > Internal Route Proxy Coverage >
 			...config,
 			base: `${BASE}/callers`,
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				rules: []
 			}
 		});
@@ -211,7 +211,7 @@ describe.each(getMatrixConfigs())("Permissions > Internal Route Proxy Coverage >
 			...config,
 			base: `${BASE}/callers`,
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				rules: [
 					{ caller: "internalProxyHelper.**", target: "slothlet.permissions", effect: "deny" },
 					{ caller: "internalProxyHelper.**", target: "payments.**", effect: "allow" }
@@ -234,7 +234,7 @@ describe.each(getMatrixConfigs())("Permissions > Internal Route Proxy Coverage >
 			...config,
 			base: `${BASE}/callers`,
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				rules: [
 					{ caller: "internalProxyHelper.**", target: "slothlet.permissions", effect: "deny" },
 					{ caller: "internalProxyHelper.**", target: "**", effect: "allow" }
@@ -257,7 +257,7 @@ describe.each(getMatrixConfigs())("Permissions > Internal Route Proxy Coverage >
 			...config,
 			base: `${BASE}/callers`,
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				rules: []
 			}
 		});
@@ -277,7 +277,7 @@ describe.each(getMatrixConfigs())("Permissions > Internal Route Proxy Coverage >
 			...config,
 			base: `${BASE}/callers`,
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				rules: []
 			}
 		});
@@ -309,7 +309,7 @@ describe.each(getMatrixConfigs())("Permissions > conditionMatches branches (canT
 			...config,
 			base: `${BASE}/callers`,
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				rules: [
 					{ caller: "internalProxyHelper.**", target: "slothlet.permissions", effect: "deny" },
 					{ caller: "internalProxyHelper.**", target: "slothlet.permissions.addRule", effect: "allow" }
@@ -332,7 +332,7 @@ describe.each(getMatrixConfigs())("Permissions > conditionMatches branches (canT
 			...config,
 			base: `${BASE}/callers`,
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				rules: [
 					{ caller: "internalProxyHelper.**", target: "slothlet.permissions", effect: "deny" },
 					{ caller: "internalProxyHelper.**", target: "slothlet.permissions.addRule", effect: "allow" }
@@ -367,7 +367,7 @@ describe.each(getMatrixConfigs())("Permissions > conditionMatches branches (canT
 			...config,
 			base: `${BASE}/callers`,
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				rules: [
 					{ caller: "internalProxyHelper.**", target: "slothlet.permissions", effect: "deny" },
 					{ caller: "internalProxyHelper.**", target: "slothlet.permissions.addRule", effect: "allow", condition: () => true }
@@ -386,7 +386,7 @@ describe.each(getMatrixConfigs())("Permissions > conditionMatches branches (canT
 			...config,
 			base: `${BASE}/callers`,
 			permissions: {
-				defaultPolicy: "deny",
+				policy: "deny",
 				rules: [
 					{ caller: "**", target: "internalProxyHelper.**", effect: "allow" },
 					{
@@ -417,7 +417,7 @@ describe.each(getMatrixConfigs())("Permissions > conditionMatches branches (canT
 			...config,
 			base: `${BASE}/callers`,
 			permissions: {
-				defaultPolicy: "deny",
+				policy: "deny",
 				rules: [
 					{ caller: "**", target: "internalProxyHelper.**", effect: "allow" },
 					{ caller: "internalProxyHelper.**", target: "slothlet.permissions.addRule", effect: "allow", condition: { role: "admin" } }
@@ -441,7 +441,7 @@ describe.each(getMatrixConfigs())("Permissions > conditionMatches branches (canT
 			...config,
 			base: `${BASE}/callers`,
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				rules: [
 					{ caller: "internalProxyHelper.**", target: "slothlet.permissions", effect: "deny" },
 					{ caller: "internalProxyHelper.**", target: "slothlet.permissions.addRule", effect: "allow", condition: { role: "admin" } }
@@ -461,7 +461,7 @@ describe.each(getMatrixConfigs())("Permissions > conditionMatches branches (canT
 			...config,
 			base: `${BASE}/callers`,
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				rules: [
 					{ caller: "internalProxyHelper.**", target: "slothlet.permissions", effect: "deny" },
 					{
@@ -487,7 +487,7 @@ describe.each(getMatrixConfigs())("Permissions > conditionMatches branches (canT
 			...config,
 			base: `${BASE}/callers`,
 			permissions: {
-				defaultPolicy: "deny",
+				policy: "deny",
 				rules: [
 					{ caller: "**", target: "internalProxyHelper.**", effect: "allow" },
 					{
@@ -519,7 +519,7 @@ describe.each(getMatrixConfigs())("Permissions > conditionMatches branches (canT
 			...config,
 			base: `${BASE}/callers`,
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				rules: [
 					{ caller: "internalProxyHelper.**", target: "slothlet.permissions", effect: "deny" },
 					{
@@ -545,7 +545,7 @@ describe.each(getMatrixConfigs())("Permissions > conditionMatches branches (canT
 			...config,
 			base: `${BASE}/callers`,
 			permissions: {
-				defaultPolicy: "deny",
+				policy: "deny",
 				rules: [
 					{ caller: "**", target: "internalProxyHelper.**", effect: "allow" },
 					{
@@ -579,7 +579,7 @@ describe.each(getMatrixConfigs())("Permissions > conditionMatches branches (canT
 			...config,
 			base: `${BASE}/callers`,
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				rules: [
 					{ caller: "internalProxyHelper.**", target: "slothlet.permissions", effect: "deny" },
 					{ caller: "internalProxyHelper.**", target: "slothlet.permissions.addRule", effect: "allow", condition: nullProtoCondition }
@@ -611,7 +611,7 @@ describe.each(getMatrixConfigs())("Permissions > proxy traversal edge branches >
 			...config,
 			base: `${BASE}/callers`,
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				rules: [
 					{ caller: "internalProxyHelper.**", target: "slothlet.permissions", effect: "deny" },
 					{
@@ -637,7 +637,7 @@ describe.each(getMatrixConfigs())("Permissions > proxy traversal edge branches >
 			...config,
 			base: `${BASE}/callers`,
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				rules: [
 					{ caller: "internalProxyHelper.**", target: "slothlet.version", effect: "deny" },
 					{ caller: "internalProxyHelper.**", target: "slothlet.version.patch", effect: "allow" }

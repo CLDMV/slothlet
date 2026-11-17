@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:17:09-08:00 (1794874629)
+ *	@Last modified time: 2026-11-16T18:29:43-08:00 (1794882583)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -93,7 +93,7 @@ describe.each(getMatrixConfigs())("Permissions > caller-supplied code, fifth rou
 	 * @param {object} [permissions] - Permissions to build with instead of the fixture's rules.
 	 * @returns {Promise<object>} The api.
 	 */
-	const build = async (permissions = { defaultPolicy: "deny", rules: RULES }) => {
+	const build = async (permissions = { policy: "deny", rules: RULES }) => {
 		api = await slothlet({ ...config, base: path.join(DIR, "base"), hook: true, permissions });
 		await api.vault.secret.whoami();
 		await api.slothlet.api.add("callee", path.join(DIR, "callee"), { moduleID: "callee-mod" });
@@ -103,7 +103,7 @@ describe.each(getMatrixConfigs())("Permissions > caller-supplied code, fifth rou
 	};
 
 	/** Build with every call allowed, for the plain-JavaScript shape. */
-	const buildOpen = () => build({ defaultPolicy: "allow", rules: [] });
+	const buildOpen = () => build({ policy: "allow", rules: [] });
 
 	it("control: the callee's own call is its own", async () => {
 		await build();
@@ -288,7 +288,7 @@ describe.each(getMatrixConfigs())("Permissions > caller-supplied code, fifth rou
 	});
 
 	it("a module removed whole drops the record of what it made", async () => {
-		await build({ defaultPolicy: "allow", rules: [] });
+		await build({ policy: "allow", rules: [] });
 		const instance = resolveWrapper(api.callee).slothlet;
 		await api.supplier.bag.klass();
 		await api.callee.ops.makeClient();
@@ -511,7 +511,7 @@ describe("Frame placement > scripts learned from a shut-down instance are releas
 		const [{ config }] = getMatrixConfigs();
 		/** One cycle: build, run a call that is checked for supplied code, shut down. */
 		const cycle = async () => {
-			const api = await slothlet({ ...config, base: path.join(DIR, "base"), permissions: { defaultPolicy: "allow", rules: [] } });
+			const api = await slothlet({ ...config, base: path.join(DIR, "base"), permissions: { policy: "allow", rules: [] } });
 			await api.slothlet.api.add("callee", path.join(DIR, "callee"), { moduleID: "callee-mod" });
 			await api.slothlet.api.add("supplier", path.join(DIR, "supplier"), { moduleID: "supplier-mod" });
 			expect(await api.supplier.probe.throughCallee()).toBe("pong");

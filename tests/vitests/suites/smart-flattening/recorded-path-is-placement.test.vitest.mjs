@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-12T02:01:19-08:00 (1794477679)
+ *	@Last modified time: 2026-11-16T18:30:28-08:00 (1794882628)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -126,7 +126,7 @@ describe.each(["eager", "lazy"])("a node records the path it is reached at (#743
 	const totals = { walked: 0 };
 
 	it.each(FIXTURES)("$name loaded as a base folder", async ({ dir }) => {
-		const api = await slothlet({ dir, mode, silent: true });
+		const api = await slothlet({ base: dir, mode, silent: true });
 		try {
 			const { walked, drift } = await walkTree(api, [], mode === "lazy");
 			totals.walked += walked;
@@ -138,7 +138,7 @@ describe.each(["eager", "lazy"])("a node records the path it is reached at (#743
 
 	it.each(FIXTURES)("$name mounted with api.add", async ({ dir }) => {
 		for (const mount of mountPathsFor(dir)) {
-			const api = await slothlet({ dir: path.join(API_TESTS, "api_test_globstar_zero", "work"), mode, silent: true });
+			const api = await slothlet({ base: path.join(API_TESTS, "api_test_globstar_zero", "work"), mode, silent: true });
 			try {
 				await api.slothlet.api.add(mount, dir);
 				const { walked, drift } = await walkTree(api[mount.split(".")[0]], [mount.split(".")[0]], mode === "lazy");

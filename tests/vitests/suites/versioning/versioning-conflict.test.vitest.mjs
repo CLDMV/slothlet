@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-11T17:44:47-07:00 (1791765887)
+ *	@Last modified time: 2026-11-16T18:30:42-08:00 (1794882642)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -88,7 +88,7 @@ describe.each(getMatrixConfigs())("Versioning > Conflict > $name", ({ config }) 
 	it("throws INVALID_CONFIG_VERSION_DISPATCHER for non-string non-function versionDispatcher", async () => {
 		// api is intentionally not assigned; slothlet rejects before creating an instance
 		await withSuppressedSlothletErrorOutput(async () => {
-			await expect(slothlet({ ...config, base: `${BASE}/callers`, versionDispatcher: 42 })).rejects.toThrow();
+			await expect(slothlet({ ...config, base: `${BASE}/callers`, versioning: { dispatcher: 42 } })).rejects.toThrow();
 		});
 	});
 

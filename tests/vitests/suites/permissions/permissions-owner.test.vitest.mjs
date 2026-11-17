@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:18-07:00 (1791090918)
+ *	@Last modified time: 2026-11-16T18:30:04-08:00 (1794882604)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -79,31 +79,31 @@ describe.each(getMatrixConfigs())("Permissions > owner grant (#509) > $name", ({
 	}
 
 	it("allows a module's cross-subdirectory call to its own leaf with owner: true", async () => {
-		await build({ defaultPolicy: "deny", owner: true });
+		await build({ policy: "deny", owner: true });
 		expect(await outcome(() => api.launcher.main.activate())).toEqual({ ok: true, value: "created" });
 	});
 
 	it("denies the same cross-subdirectory call without the option", async () => {
-		await build({ defaultPolicy: "deny" });
+		await build({ policy: "deny" });
 		expect(await outcome(() => api.launcher.main.activate())).toEqual({ ok: false, code: "PERMISSION_DENIED" });
 	});
 
 	it("denies it with owner: false (the default)", async () => {
-		await build({ defaultPolicy: "deny", owner: false });
+		await build({ policy: "deny", owner: false });
 		expect(await outcome(() => api.launcher.main.activate())).toEqual({ ok: false, code: "PERMISSION_DENIED" });
 	});
 
 	it("read-gates a module's own data leaf in a subdirectory: allowed with owner, denied without", async () => {
-		await build({ defaultPolicy: "deny", owner: true });
+		await build({ policy: "deny", owner: true });
 		expect(await outcome(() => api.launcher.main.limit())).toEqual({ ok: true, value: 5 });
 		await api.shutdown();
 
-		await build({ defaultPolicy: "deny" });
+		await build({ policy: "deny" });
 		expect(await outcome(() => api.launcher.main.limit())).toEqual({ ok: false, code: "PERMISSION_DENIED" });
 	});
 
 	it("gives a second module mounted into the same namespace nothing", async () => {
-		await build({ defaultPolicy: "deny", owner: true }, { other: true });
+		await build({ policy: "deny", owner: true }, { other: true });
 		// The extension still reaches its own leaves with the other module merged in beside them.
 		expect(await outcome(() => api.launcher.main.activate())).toEqual({ ok: true, value: "created" });
 		expect(await outcome(() => api.launcher.main.limit())).toEqual({ ok: true, value: 5 });
@@ -114,7 +114,7 @@ describe.each(getMatrixConfigs())("Permissions > owner grant (#509) > $name", ({
 
 	it("an explicit deny rule on one of the module's own leaves still denies it", async () => {
 		await build({
-			defaultPolicy: "deny",
+			policy: "deny",
 			owner: true,
 			rules: [{ caller: "launcher.**", target: "launcher.session.store.destroy", effect: "deny" }]
 		});
@@ -124,14 +124,14 @@ describe.each(getMatrixConfigs())("Permissions > owner grant (#509) > $name", ({
 	});
 
 	it("an explicit deny rule added at runtime overrides the grant too", async () => {
-		await build({ defaultPolicy: "deny", owner: true });
+		await build({ policy: "deny", owner: true });
 		expect(await outcome(() => api.launcher.main.activate())).toEqual({ ok: true, value: "created" });
 		api.slothlet.permissions.addRule({ caller: "launcher.main.**", target: "launcher.session.**", effect: "deny" });
 		expect(await outcome(() => api.launcher.main.activate())).toEqual({ ok: false, code: "PERMISSION_DENIED" });
 	});
 
 	it("grants base-loaded modules their own cross-directory calls, and nothing across owners", async () => {
-		await build({ defaultPolicy: "deny", owner: true });
+		await build({ policy: "deny", owner: true });
 		// Everything the initial load composes is owned by the base module.
 		expect(await outcome(() => api.core.alpha.callBeta())).toEqual({ ok: true, value: "pong" });
 		// Base → added extension and extension → base cross owners: denied.
@@ -140,7 +140,7 @@ describe.each(getMatrixConfigs())("Permissions > owner grant (#509) > $name", ({
 	});
 
 	it("denies base-loaded cross-directory calls without the option", async () => {
-		await build({ defaultPolicy: "deny" });
+		await build({ policy: "deny" });
 		expect(await outcome(() => api.core.alpha.callBeta())).toEqual({ ok: false, code: "PERMISSION_DENIED" });
 	});
 
@@ -148,7 +148,7 @@ describe.each(getMatrixConfigs())("Permissions > owner grant (#509) > $name", ({
 		for (const owner of [false, true]) {
 			await build(
 				{
-					defaultPolicy: "allow",
+					policy: "allow",
 					owner,
 					rules: [{ caller: "launcher.**", target: "launcher.session.store.destroy", effect: "deny" }]
 				},
@@ -164,7 +164,7 @@ describe.each(getMatrixConfigs())("Permissions > owner grant (#509) > $name", ({
 	});
 
 	it("keeps the grant correct after the co-mounted module is removed", async () => {
-		await build({ defaultPolicy: "deny", owner: true }, { other: true });
+		await build({ policy: "deny", owner: true }, { other: true });
 		expect(await outcome(() => api.launcher.intruder.poke())).toEqual({ ok: false, code: "PERMISSION_DENIED" });
 
 		await api.slothlet.api.remove("other");
@@ -175,7 +175,7 @@ describe.each(getMatrixConfigs())("Permissions > owner grant (#509) > $name", ({
 	});
 
 	it("tracks the new owner after the module is removed and its folder re-added under another moduleID", async () => {
-		await build({ defaultPolicy: "deny", owner: true }, { other: true });
+		await build({ policy: "deny", owner: true }, { other: true });
 		expect(await outcome(() => api.launcher.main.activate())).toEqual({ ok: true, value: "created" });
 
 		await api.slothlet.api.remove("ext");
@@ -186,7 +186,7 @@ describe.each(getMatrixConfigs())("Permissions > owner grant (#509) > $name", ({
 	});
 
 	it("keeps the grant correct across a scoped reload", async () => {
-		await build({ defaultPolicy: "deny", owner: true });
+		await build({ policy: "deny", owner: true });
 		expect(await outcome(() => api.launcher.main.activate())).toEqual({ ok: true, value: "created" });
 
 		await api.slothlet.api.reload("ext");
@@ -197,7 +197,7 @@ describe.each(getMatrixConfigs())("Permissions > owner grant (#509) > $name", ({
 	});
 
 	it("keeps the grant correct across a full reload", async () => {
-		await build({ defaultPolicy: "deny", owner: true }, { other: true });
+		await build({ policy: "deny", owner: true }, { other: true });
 		expect(await outcome(() => api.launcher.main.activate())).toEqual({ ok: true, value: "created" });
 
 		const reloaded = await api.slothlet.reload();
@@ -209,7 +209,7 @@ describe.each(getMatrixConfigs())("Permissions > owner grant (#509) > $name", ({
 	});
 
 	it("answers silent checkAccess queries by current owner, and never grants the framework surface", async () => {
-		await build({ defaultPolicy: "deny", owner: true }, { other: true });
+		await build({ policy: "deny", owner: true }, { other: true });
 		// Ownership is recorded as leaves compose; under lazy mode that is on first use, so use them first.
 		expect(await outcome(() => api.launcher.main.activate())).toEqual({ ok: true, value: "created" });
 		expect(await outcome(() => api.core.alpha.callBeta())).toEqual({ ok: true, value: "pong" });
@@ -226,7 +226,7 @@ describe.each(getMatrixConfigs())("Permissions > owner grant (#509) > $name", ({
 	});
 
 	it('emits permission:owner-allow for a granted access under audit: "verbose"', async () => {
-		await build({ defaultPolicy: "deny", owner: true, audit: "verbose" });
+		await build({ policy: "deny", owner: true, audit: "verbose" });
 		const seen = [];
 		api.slothlet.lifecycle.on("permission:owner-allow", (data) => {
 			seen.push(data);
@@ -242,14 +242,14 @@ describe.each(getMatrixConfigs())("Permissions > owner grant (#509) > $name", ({
 
 describe("Permissions > owner grant (#509) > config validation", () => {
 	it.each([["yes"], [1], [null], [{}]])("rejects owner: %j with INVALID_CONFIG", async (value) => {
-		await expect(slothlet({ base: BASE, permissions: { defaultPolicy: "deny", owner: value } })).rejects.toMatchObject({
+		await expect(slothlet({ base: BASE, permissions: { policy: "deny", owner: value } })).rejects.toMatchObject({
 			code: "INVALID_CONFIG"
 		});
 	});
 
 	it("accepts owner: true and owner: false", async () => {
 		for (const owner of [true, false]) {
-			const inst = await slothlet({ base: BASE, permissions: { defaultPolicy: "deny", owner } });
+			const inst = await slothlet({ base: BASE, permissions: { policy: "deny", owner } });
 			expect(typeof inst.core.alpha.callBeta).toBe("function");
 			await inst.shutdown();
 		}

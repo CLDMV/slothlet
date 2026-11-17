@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-26T16:16:11-07:00 (1793056571)
+ *	@Last modified time: 2026-11-16T18:30:14-08:00 (1794882614)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -75,7 +75,7 @@ describe.each(CONFIGS)("writes with the permission system off (#625) — $mode /
 
 	describe.each([
 		["no permissions config", {}, "PERMISSION_DENIED"],
-		["enabled: false", { permissions: { enabled: false, rules: [GRANT] } }, "PERMISSION_DENIED"],
+		["enabled: false", { permissions: { mode: false, rules: [GRANT] } }, "PERMISSION_DENIED"],
 		["mode: disabled", { permissions: { mode: "disabled", rules: [GRANT] } }, "done"]
 	])("with %s", (_label, options, framework) => {
 		it("keeps base-module code off the framework namespace unless the system is disabled", async () => {
@@ -114,7 +114,7 @@ describe.each(CONFIGS)("writes with the permission system off (#625) — $mode /
 
 	describe("with the system on", () => {
 		it("reports its mode, and moves between on and off from the host", async () => {
-			await load({ permissions: { defaultPolicy: "allow" } });
+			await load({ permissions: { policy: "allow" } });
 			expect(api.slothlet.permissions.control.mode).toBe("on");
 			api.slothlet.permissions.control.disable();
 			expect(api.slothlet.permissions.control.mode).toBe("off");
@@ -123,7 +123,7 @@ describe.each(CONFIGS)("writes with the permission system off (#625) — $mode /
 		});
 
 		it("refuses base-module code and modules the framework namespace, and grants by rule", async () => {
-			await load({ permissions: { defaultPolicy: "allow", rules: [GRANT] } });
+			await load({ permissions: { policy: "allow", rules: [GRANT] } });
 			expect(withSuppressedSlothletErrorOutputSync(() => api.root.writeNamespace())).toBe("PERMISSION_DENIED");
 			expect(api.slothlet.lifted).toBeUndefined();
 			const framework = withSuppressedSlothletErrorOutputSync(() => api.guest.x.writeAt("slothlet.metadata"));
@@ -133,7 +133,7 @@ describe.each(CONFIGS)("writes with the permission system off (#625) — $mode /
 		});
 
 		it("stops deciding writes after control.disable(), and decides them again after control.enable()", async () => {
-			await load({ permissions: { defaultPolicy: "allow", rules: [GRANT] } });
+			await load({ permissions: { policy: "allow", rules: [GRANT] } });
 			api.slothlet.permissions.control.disable();
 			// Off, the framework namespace is still kept from module code; ownership and `:write` rules are not checked.
 			expect(withSuppressedSlothletErrorOutputSync(() => api.root.writeNamespace())).toBe("PERMISSION_DENIED");

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:00-07:00 (1791090900)
+ *	@Last modified time: 2026-11-16T18:28:46-08:00 (1794882526)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -134,7 +134,7 @@ describe("modes-processor: category wrapper creation (lines 92-219)", () => {
 		_api = await slothlet({
 			...makeConfig(),
 			base: DIRS.NESTED,
-			api: { collision: { initial: "merge", api: "merge" } }
+			api: { collision: { mode: { initial: "merge", api: "merge" } } }
 		});
 		// Adding same dir again should reuse existing wrapper
 		await _api.slothlet.api.add("services", DIRS.NESTED);
@@ -206,7 +206,8 @@ describe("modes-processor: addapi flatten-to-category (lines 525-680)", () => {
 		_api = await slothlet({
 			...makeConfig(),
 			base: DIRS.FOLDER_DIFFERENT,
-			api: { mutations: { allowCollisionOverride: true } } // #380: honor per-call collisionMode below
+			api: { collision: { override: true } }
+			// #380: honor per-call collisionMode below
 		});
 
 		// Add addapi dir → triggers addapi flatten path
@@ -240,7 +241,7 @@ describe("modes-processor: lazy file-folder collision extraction (lines 1181-121
 		_api = await slothlet({
 			...makeConfig({ mode: "lazy" }),
 			base: DIRS.CONFLICT,
-			api: { collision: { initial: "merge", api: "merge" } }
+			api: { collision: { mode: { initial: "merge", api: "merge" } } }
 		});
 
 		// After materialization, config should have BOTH file and folder exports
@@ -258,7 +259,7 @@ describe("modes-processor: lazy file-folder collision extraction (lines 1181-121
 		_api = await slothlet({
 			...makeConfig({ mode: "lazy" }),
 			base: DIRS.CONFLICT,
-			api: { collision: { initial: "replace", api: "replace" } }
+			api: { collision: { mode: { initial: "replace", api: "replace" } } }
 		});
 		expect(_api.config).toBeDefined();
 	});
@@ -279,7 +280,8 @@ describe("modes-processor: eager folder transparency (lines 1040-1060)", () => {
 		_api = await slothlet({
 			...makeConfig(),
 			base: TEST_DIRS.API_TEST,
-			api: { mutations: { allowCollisionOverride: true } } // #380: honor per-call collisionMode below
+			api: { collision: { override: true } }
+			// #380: honor per-call collisionMode below
 		});
 
 		// Add folder_config under "config" prefix
@@ -520,7 +522,7 @@ describe("modes-processor: eager file-folder collision merge (lines 822-952)", (
 		_api = await slothlet({
 			...makeConfig(),
 			base: DIRS.CONFLICT,
-			api: { collision: { initial: "merge", api: "merge" } }
+			api: { collision: { mode: { initial: "merge", api: "merge" } } }
 		});
 
 		// Both file and folder exports should be accessible under config
@@ -536,7 +538,7 @@ describe("modes-processor: eager file-folder collision merge (lines 822-952)", (
 		_api = await slothlet({
 			...makeConfig(),
 			base: DIRS.CONFLICT,
-			api: { collision: { initial: "warn", api: "warn" } }
+			api: { collision: { mode: { initial: "warn", api: "warn" } } }
 		});
 		expect(_api.config).toBeDefined();
 	});
@@ -554,7 +556,7 @@ describe("modes-processor: single-file folder with generic name (lines 771-873)"
 		_api = await slothlet({
 			...makeConfig({ debug: { modes: true } }),
 			base: DIRS.NESTED,
-			api: { collision: { initial: "merge", api: "merge" } }
+			api: { collision: { mode: { initial: "merge", api: "merge" } } }
 		});
 
 		// The nested fixture triggers single-file subfolder detection for services/
@@ -568,7 +570,7 @@ describe("modes-processor: single-file folder with generic name (lines 771-873)"
 		_api = await slothlet({
 			...makeConfig(),
 			base: DIRS.FILE_FOLDER_LAZY,
-			api: { collision: { initial: "merge", api: "merge" } }
+			api: { collision: { mode: { initial: "merge", api: "merge" } } }
 		});
 
 		expect(_api.services !== undefined).toBe(true);

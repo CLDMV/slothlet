@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:09-08:00 (1794874569)
+ *	@Last modified time: 2026-11-16T18:27:50-08:00 (1794882470)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -119,7 +119,7 @@ export class ApiCacheManager extends ComponentBase {
 	 *   endpoint: ".",
 	 *   moduleID: "base_abc123",
 	 *   api: apiTree,
-	 *   folderPath: this.____config.dir,
+	 *   folderPath: this.____config.base,
 	 *   mode: "lazy",
 	 *   sanitizeOptions: {},
 	 *   collisionMode: "merge",

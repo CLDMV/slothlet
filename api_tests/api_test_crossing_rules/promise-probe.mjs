@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-11T13:12:37-08:00 (1794431557)
+ *	@Last modified time: 2026-11-16T18:24:05-08:00 (1794882245)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -44,7 +44,7 @@ if (kind === "plain") {
 		base: path.join(here, "host"),
 		runtime,
 		silent: true,
-		permissions: { defaultPolicy: "allow", attribution: kind }
+		permissions: { policy: "allow", caller: { attribution: kind } }
 	});
 	await api.slothlet.api.add("pledge", path.join(here, "pledge"), { moduleID: "pledge" });
 	await api.slothlet.api.add("taker", path.join(here, "taker"), { moduleID: "taker" });

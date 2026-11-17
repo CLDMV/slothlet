@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T12:52:57-08:00 (1794775977)
+ *	@Last modified time: 2026-11-16T18:29:56-08:00 (1794882596)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -63,7 +63,7 @@ describe.each(MATRIX)("code a file's load started, in a folder > $mode / $runtim
 
 	describe.each(RULE_SETS)("$label", ({ rules, answer }) => {
 		it.each(RUNNERS)("%s answers from its load's queue as inside a call", async (runner) => {
-			api = await slothlet({ base: BASE, mode, runtime, silent: true, permissions: { defaultPolicy: "allow", attribution, rules } });
+			api = await slothlet({ base: BASE, mode, runtime, silent: true, permissions: { policy: "allow", caller: { attribution }, rules } });
 			await api.vault;
 			await api[runner];
 			expect(await api[runner].now()).toBe(answer);

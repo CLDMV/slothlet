@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-08T14:46:13-08:00 (1794177973)
+ *	@Last modified time: 2026-11-16T18:29:55-08:00 (1794882595)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -253,7 +253,7 @@ describe.each(CONFIGS)("Permissions > a host record leaf is its own entity at it
 				mode,
 				runtime,
 				silent: true,
-				permissions: { defaultPolicy: "deny", rules: RULES }
+				permissions: { policy: "deny", rules: RULES }
 			});
 			await api.slothlet.api.add(
 				mount.split("."),

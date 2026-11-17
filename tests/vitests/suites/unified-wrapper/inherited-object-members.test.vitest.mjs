@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-07T00:02:08-08:00 (1794038528)
+ *	@Last modified time: 2026-11-16T18:30:37-08:00 (1794882637)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -49,10 +49,10 @@ const RUNTIMES = ["async", "live"];
 
 const PERMISSIONS = [
 	{ name: "permissions off", permissions: null },
-	{ name: "permissions on, allow, no rules", permissions: { defaultPolicy: "allow", rules: [] } },
+	{ name: "permissions on, allow, no rules", permissions: { policy: "allow", rules: [] } },
 	{
 		name: "permissions on, allow, deny rule elsewhere",
-		permissions: { defaultPolicy: "allow", rules: [{ caller: "**", target: "elsewhere.**", effect: "deny" }] }
+		permissions: { policy: "allow", rules: [{ caller: "**", target: "elsewhere.**", effect: "deny" }] }
 	}
 ];
 

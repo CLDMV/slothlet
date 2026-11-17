@@ -2,12 +2,12 @@
  *
  *	@Project: @cldmv/slothlet
  *	@Filename: /tests/vitests/suites/lifecycle/lifecycle-listener-result.test.vitest.mjs
- *	@Date: 2026-11-16T04:00:00-08:00 (1794830400)
+ *	@Date: 2026-11-16T01:33:20-08:00 (1794821600)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T04:00:00-08:00 (1794830400)
+ *	@Last modified time: 2026-11-16T18:29:24-08:00 (1794882564)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -32,7 +32,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const BASE = path.resolve(__dirname, "../../../../api_tests/api_test_lifecycle_results");
 const EXTRA = path.join(BASE, "extra-src");
 const REFUSED = "threw PERMISSION_DENIED";
-const PERMISSIONS = { defaultPolicy: "allow", rules: [{ caller: "sub.**", target: "vault.**", effect: "deny" }] };
+const PERMISSIONS = { policy: "allow", rules: [{ caller: "sub.**", target: "vault.**", effect: "deny" }] };
 const SHAPES = ["thenGetter", "thenMethod", "catchMethod", "asyncBody"];
 
 describe.each(getMatrixConfigs())("Lifecycle > a subscriber's result is settled as the subscriber > $name", ({ config }) => {
@@ -50,7 +50,7 @@ describe.each(getMatrixConfigs())("Lifecycle > a subscriber's result is settled 
 	 * @returns {Promise<{records: Array<object>, events: number}>} What the subscriber recorded, and how many events fired.
 	 */
 	async function run(shape, byModule) {
-		api = await slothlet({ ...config, dir: BASE, permissions: PERMISSIONS, silent: true });
+		api = await slothlet({ ...config, base: BASE, permissions: PERMISSIONS, silent: true });
 		let events = 0;
 		api.slothlet.lifecycle.on("impl:created", () => {
 			events++;

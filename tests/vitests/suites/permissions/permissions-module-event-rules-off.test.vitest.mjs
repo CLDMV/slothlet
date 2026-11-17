@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-13T07:23:44-08:00 (1794583424)
+ *	@Last modified time: 2026-11-16T18:30:02-08:00 (1794882602)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -66,7 +66,7 @@ describe.each(CONFIGS)(
 		 */
 		async function load(permissionMode) {
 			const permissions =
-				permissionMode === "none" ? undefined : { mode: permissionMode, attribution, defaultPolicy: "allow", rules: [GUEST_EVENTS] };
+				permissionMode === "none" ? undefined : { mode: permissionMode, caller: { attribution }, policy: "allow", rules: [GUEST_EVENTS] };
 			api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, ...(permissions ? { permissions } : {}) });
 			await api.slothlet.api.add("victim", path.join(FIXTURE, "victim"), { moduleID: "victim" });
 			await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { moduleID: "guest" });

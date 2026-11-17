@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-23T23:14:10-07:00 (1792822450)
+ *	@Last modified time: 2026-11-16T18:30:14-08:00 (1794882614)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -266,7 +266,7 @@ describe.each(CONFIGS)("module write rules (#625) — $mode / $runtime", ({ mode
 		});
 
 		it("refuses a manager under defaultPolicy allow with no explicit host rule", async () => {
-			await load({ permissions: { defaultPolicy: "allow" } });
+			await load({ permissions: { policy: "allow" } });
 			expect(withSuppressedSlothletErrorOutputSync(() => api.mgr.x.addRuleFor(GUEST_ALLOW_VICTIM))).toBe("INVALID_PERMISSION_RULE");
 		});
 

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:21-07:00 (1791090921)
+ *	@Last modified time: 2026-11-16T18:30:21-08:00 (1794882621)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -22,8 +22,11 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { getMatrixConfigs, TEST_DIRS, withSuppressedSlothletErrorOutput } from "../../setup/vitest-helper.mjs";
 
-// Ownership-enabled configurations only (collision mode with merge)
-const OWNERSHIP_CONFIGS = getMatrixConfigs({ api: { collision: { initial: "merge", api: "merge" } } });
+// Every matrix config, with merge collisions set on each (no matrix config carries an `api` key to filter on).
+const OWNERSHIP_CONFIGS = getMatrixConfigs({}).map(({ name, config }) => ({
+	name,
+	config: { ...config, api: { ...config.api, collision: { mode: { initial: "merge", api: "merge" } } } }
+}));
 
 // Basic configurations for validation testing
 const BASIC_CONFIGS = getMatrixConfigs({});
@@ -82,13 +85,38 @@ describe.each(OWNERSHIP_CONFIGS)("Rule 12 Ownership Tracking - $name", ({ name: 
 			forceOverwrite: true
 		});
 
-		// Default allowAddApiOverwrite is true, so cross-module should succeed
-		// If allowAddApiOverwrite were false, this would throw
-		await expect(
-			api.slothlet.api.add("plugins.moduleC", TEST_DIRS.API_TEST_MIXED, {
-				moduleID: "moduleD" // Different module trying to overwrite
-			})
-		).resolves.not.toThrow();
+		const before = await api.slothlet.api.leaves("moduleC");
+		const mixedKeys = ["interop", "mathCjs", "mathEsm"];
+		expect(before.length).toBeGreaterThan(0);
+
+		// These configs collide by merge: a different module adding at an owned path succeeds.
+		await api.slothlet.api.add("plugins.moduleC", TEST_DIRS.API_TEST_MIXED, {
+			moduleID: "moduleD" // Different module adding at moduleC's path
+		});
+
+		// The path now carries API_TEST_MIXED's top-level keys, and moduleC's own keys are still there (a merge, not a replace).
+		for (const key of mixedKeys) {
+			expect(api.plugins.moduleC[key]).toBeDefined();
+		}
+		expect(api.plugins.moduleC.math).toBeDefined();
+
+		// moduleD owns exactly the leaves API_TEST_MIXED contributed; moduleC keeps its own and owns none of those.
+		const ownedByD = await api.slothlet.api.leaves("moduleD");
+		expect([...ownedByD].sort()).toEqual(
+			[
+				"plugins.moduleC.interop.interopCjs.testCrossCall",
+				"plugins.moduleC.interop.interopEsm.testCrossCall",
+				"plugins.moduleC.mathCjs.divide",
+				"plugins.moduleC.mathCjs.multiply",
+				"plugins.moduleC.mathEsm.add",
+				"plugins.moduleC.mathEsm.subtract"
+			].sort()
+		);
+		const ownedByC = await api.slothlet.api.leaves("moduleC");
+		expect(ownedByC).toEqual(before);
+		for (const leaf of ownedByD) {
+			expect(ownedByC).not.toContain(leaf);
+		}
 	});
 });
 
@@ -112,22 +140,37 @@ describe.each(BASIC_CONFIGS)("Rule 12 Configuration Validation - $name", ({ name
 		}
 	});
 
-	it("should require api.mutations.reload when using forceOverwrite", async () => {
-		await withSuppressedSlothletErrorOutput(async () => {
-			try {
-				await api.slothlet.api.add("test.path", TEST_DIRS.API_TEST, {
-					forceOverwrite: true,
-					moduleID: "testModule"
-				});
-				// If we reach here without reload enabled, it should have thrown
-				if (!config.api?.mutations?.reload) {
-					throw new Error("Expected forceOverwrite to require reload mutation");
-				}
-			} catch (error) {
-				// Verify the error is about reload requirement
-				expect(error.message).toContain("reload");
-			}
-		});
+	it("should gate a forceOverwrite add on api.mutations.add, not api.mutations.reload", async () => {
+		const addForced = (target) =>
+			target.slothlet.api.add("test.path", TEST_DIRS.API_TEST, { forceOverwrite: true, moduleID: "testModule" });
+
+		// Reload mutations off: slothlet does not tie forceOverwrite to reload, so the add still resolves.
+		const noReload = await slothlet({ ...config, base: TEST_DIRS.API_TEST, api: { ...config.api, mutations: { reload: false } } });
+		try {
+			await addForced(noReload);
+			expect(noReload.test.path).toBeDefined();
+		} finally {
+			await noReload.shutdown();
+		}
+
+		// Reload mutations on: the same add resolves.
+		const withReload = await slothlet({ ...config, base: TEST_DIRS.API_TEST, api: { ...config.api, mutations: { reload: true } } });
+		try {
+			await addForced(withReload);
+			expect(withReload.test.path).toBeDefined();
+		} finally {
+			await withReload.shutdown();
+		}
+
+		// Add mutations off: the same forceOverwrite add is refused with the real code.
+		const noAdd = await slothlet({ ...config, base: TEST_DIRS.API_TEST, api: { ...config.api, mutations: { add: false } } });
+		try {
+			await withSuppressedSlothletErrorOutput(async () => {
+				await expect(addForced(noAdd)).rejects.toMatchObject({ code: "INVALID_CONFIG_MUTATIONS_DISABLED" });
+			});
+		} finally {
+			await noAdd.shutdown();
+		}
 	});
 });
 
@@ -151,7 +194,9 @@ describe("Rule 12 with allowApiOverwrite: false", () => {
 			eager: true,
 			api: {
 				mutations: { reload: true },
-				collision: { initial: "replace", api: "skip" }
+				collision: {
+					mode: { initial: "replace", api: "skip" }
+				}
 			}
 		});
 		apisToClean.push(api);
@@ -175,7 +220,9 @@ describe("Rule 12 with allowApiOverwrite: false", () => {
 			eager: true,
 			api: {
 				mutations: { reload: true },
-				collision: { initial: "merge-replace", api: "error" }
+				collision: {
+					mode: { initial: "merge-replace", api: "error" }
+				}
 			}
 		});
 		apisToClean.push(api);
@@ -205,7 +252,9 @@ describe("Rule 12 with allowApiOverwrite: false", () => {
 			eager: true,
 			api: {
 				mutations: { reload: true },
-				collision: { initial: "merge-replace", api: "error" }
+				collision: {
+					mode: { initial: "merge-replace", api: "error" }
+				}
 			}
 		});
 		apisToClean.push(api);
@@ -238,7 +287,9 @@ describe("Rule 12 with allowApiOverwrite: false", () => {
 			eager: false,
 			api: {
 				mutations: { reload: true },
-				collision: { initial: "replace", api: "skip" }
+				collision: {
+					mode: { initial: "replace", api: "skip" }
+				}
 			}
 		});
 		apisToClean.push(api);
@@ -259,7 +310,9 @@ describe("Rule 12 with allowApiOverwrite: false", () => {
 			eager: false,
 			api: {
 				mutations: { reload: true },
-				collision: { initial: "merge-replace", api: "error" }
+				collision: {
+					mode: { initial: "merge-replace", api: "error" }
+				}
 			}
 		});
 		apisToClean.push(api);
@@ -286,7 +339,9 @@ describe("Rule 12 with allowApiOverwrite: false", () => {
 			eager: false,
 			api: {
 				mutations: { reload: true },
-				collision: { initial: "merge-replace", api: "error" }
+				collision: {
+					mode: { initial: "merge-replace", api: "error" }
+				}
 			}
 		});
 		apisToClean.push(api);

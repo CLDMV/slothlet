@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:37-08:00 (1794874597)
+ *	@Last modified time: 2026-11-16T18:28:42-08:00 (1794882522)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -84,8 +84,8 @@ describe.each(getBrowserMatrixConfigs())(
 			// `resolveModuleSpecifier` may return `string | URL`; a URL must get the same per-instance query.
 			const baseUrl = pathToFileURL(ROOT + path.sep);
 			const resolveModuleSpecifier = ({ path: relative }) => new URL(relative, baseUrl);
-			const first = await create({ resolveModuleSpecifier });
-			const second = await create({ resolveModuleSpecifier });
+			const first = await create({ loader: { resolve: resolveModuleSpecifier } });
+			const second = await create({ loader: { resolve: resolveModuleSpecifier } });
 			expect(await first.counter.bump()).toBe(1);
 			expect(await first.counter.bump()).toBe(2);
 			expect(await second.counter.bump()).toBe(1);

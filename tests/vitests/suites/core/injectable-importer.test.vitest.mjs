@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:46-08:00 (1794874606)
+ *	@Last modified time: 2026-11-16T18:29:00-08:00 (1794882540)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -50,9 +50,11 @@ describe("Core > injectable leaf importer (#235)", () => {
 		api = await slothlet({
 			mode: "eager",
 			base: BASE,
-			import: (moduleUrl) => {
-				seen.push(moduleUrl);
-				return import(moduleUrl);
+			loader: {
+				import: (moduleUrl) => {
+					seen.push(moduleUrl);
+					return import(moduleUrl);
+				}
 			}
 		});
 
@@ -72,9 +74,11 @@ describe("Core > injectable leaf importer (#235)", () => {
 		api = await slothlet({
 			mode: "eager",
 			base: BASE,
-			import: (moduleUrl) => {
-				seen.push(moduleUrl);
-				return import(moduleUrl);
+			loader: {
+				import: (moduleUrl) => {
+					seen.push(moduleUrl);
+					return import(moduleUrl);
+				}
 			}
 		});
 
@@ -91,9 +95,11 @@ describe("Core > injectable leaf importer (#235)", () => {
 		api = await slothlet({
 			mode: "lazy",
 			base: BASE,
-			import: (moduleUrl) => {
-				seen.push(moduleUrl);
-				return import(moduleUrl);
+			loader: {
+				import: (moduleUrl) => {
+					seen.push(moduleUrl);
+					return import(moduleUrl);
+				}
 			}
 		});
 
@@ -109,9 +115,11 @@ describe("Core > injectable leaf importer (#235)", () => {
 		api = await slothlet({
 			mode: "eager",
 			base: BASE,
-			import: (moduleUrl) => {
-				seen.push(moduleUrl);
-				return import(moduleUrl);
+			loader: {
+				import: (moduleUrl) => {
+					seen.push(moduleUrl);
+					return import(moduleUrl);
+				}
 			}
 		});
 
@@ -123,7 +131,7 @@ describe("Core > injectable leaf importer (#235)", () => {
 	});
 
 	it("rejects a non-function importer with a named config error", async () => {
-		await expect(slothlet({ mode: "eager", base: BASE, import: "not-a-function" })).rejects.toThrow(/INVALID_CONFIG_IMPORT/);
+		await expect(slothlet({ mode: "eager", base: BASE, loader: { import: "not-a-function" } })).rejects.toThrow(/INVALID_CONFIG_IMPORT/);
 	});
 });
 
@@ -177,7 +185,7 @@ describe("Core > coverage-run hint (#235)", () => {
 	});
 
 	it("stays silent once the importer is configured — the fix is in place", async () => {
-		const out = await probe({ import: (url) => import(url) }, { worker: COVERAGE_WORKER, externalized: true });
+		const out = await probe({ loader: { import: (url) => import(url) } }, { worker: COVERAGE_WORKER, externalized: true });
 		expect(out.fired).toBe(false);
 	});
 

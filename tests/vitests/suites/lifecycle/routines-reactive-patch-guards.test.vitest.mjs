@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:34-07:00 (1791091714)
+ *	@Last modified time: 2026-11-16T18:29:25-08:00 (1794882565)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -67,10 +67,12 @@ afterEach(async () => {
 describe("routine reactive-patch post-await guards (#362)", () => {
 	it("478 — bails when the resolved parent container no longer exists on the tree", async () => {
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST_ROUTINES,
+			base: TEST_DIRS.API_TEST_ROUTINES,
 			mode: "eager",
-			routines: [{ name: "^ghost.leaf", mode: "manual" }],
-			stackRoutines: true,
+			routines: {
+				entries: [{ name: "^ghost.leaf", mode: "manual" }],
+				stack: true
+			},
 			silent: true
 		});
 		const rm = resolveWrapper(api.ping).slothlet.handlers.routineManager;
@@ -88,10 +90,12 @@ describe("routine reactive-patch post-await guards (#362)", () => {
 
 	it("497 — bails when the resolved target wrapper has been invalidated", async () => {
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST_ROUTINES,
+			base: TEST_DIRS.API_TEST_ROUTINES,
 			mode: "eager",
-			routines: [{ name: "^auth.someleaf", mode: "manual" }],
-			stackRoutines: true,
+			routines: {
+				entries: [{ name: "^auth.someleaf", mode: "manual" }],
+				stack: true
+			},
 			silent: true
 		});
 		await api.slothlet.api.add(["auth"], TEST_DIRS.API_TEST_ROUTINES_AUTH1);
@@ -116,9 +120,11 @@ describe("routine reactive-patch post-await guards (#362)", () => {
 
 	it("reactively reinstalls the root cascade at api.<name>, and never recreates an api.slothlet mirror (#399)", async () => {
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST_ROUTINES,
+			base: TEST_DIRS.API_TEST_ROUTINES,
 			mode: "eager",
-			routines: [{ name: "initialize", mode: "manual" }],
+			routines: {
+				entries: [{ name: "initialize", mode: "manual" }]
+			},
 			silent: true
 		});
 		const rm = resolveWrapper(api.ping).slothlet.handlers.routineManager;
@@ -151,10 +157,12 @@ describe("routine reactive-patch post-await guards (#362)", () => {
 	// to mutate state inside the resolve window, then restore it.
 	async function withLazyAdminResolveHook(routineName, hook) {
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST_ROUTINES_NESTED,
+			base: TEST_DIRS.API_TEST_ROUTINES_NESTED,
 			mode: "lazy",
-			routines: [{ name: routineName, mode: "manual" }],
-			stackRoutines: true,
+			routines: {
+				entries: [{ name: routineName, mode: "manual" }],
+				stack: true
+			},
 			silent: true
 		});
 		const rm = resolveWrapper(api.other).slothlet.handlers.routineManager;

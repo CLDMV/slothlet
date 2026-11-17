@@ -123,7 +123,12 @@
 			"collision",
 			"glob",
 			"caller",
-			"callback"
+			"callback",
+			"base",
+			"loader",
+			"platform",
+			"resolve",
+			"dispatcher"
 		],
 		"file_extensions": ["mjs", "cjs", "js", "json"],
 		"typescript_feature": ["TypeScript", "typescript", "types", "esbuild", "typegen"],
@@ -529,6 +534,11 @@
 		"Callback",
 		"fork",
 		"workflows",
-		"un"
+		"un",
+		"base",
+		"loader",
+		"platform",
+		"resolve",
+		"dispatcher"
 	]
 }

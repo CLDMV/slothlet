@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-14T09:11:41-08:00 (1794676301)
+ *	@Last modified time: 2026-11-16T18:30:29-08:00 (1794882629)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -28,8 +28,10 @@ describe.each(MODES)("a folder's only file with a default-export function is the
 	describe("a permission rule names the path a node is reached at (precise)", () => {
 		const attribution = "precise";
 		const permissions = (targets) => ({
-			defaultPolicy: "allow",
-			attribution,
+			policy: "allow",
+			caller: {
+				attribution
+			},
 			rules: targets.map((target) => ({ caller: "probe.**", target, effect: "deny" }))
 		});
 

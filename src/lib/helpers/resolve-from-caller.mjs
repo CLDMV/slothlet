@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:14-08:00 (1794874574)
+ *	@Last modified time: 2026-11-16T18:27:58-08:00 (1794882478)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -230,7 +230,7 @@ export class Resolver extends ComponentBase {
 	resolvePathFromCaller(rel) {
 		// Browser mode: no filesystem, no V8 stack-based resolution.
 		// Return the path as-is so the rest of the pipeline (builder, loader) can use it
-		// directly as a manifest key or pass it to resolveModuleSpecifier.
+		// directly as a manifest key or pass it to loader.resolve.
 		// Use optional chaining because Resolver may be instantiated with `null`
 		// (e.g. unit tests that construct it bare to exercise pure-resolution logic).
 		if (this.slothlet?.envTarget === "browser") {

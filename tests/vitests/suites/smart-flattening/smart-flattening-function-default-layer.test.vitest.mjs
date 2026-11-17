@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-11T22:04:28-07:00 (1791781468)
+ *	@Last modified time: 2026-11-16T18:30:32-08:00 (1794882632)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -73,7 +73,7 @@ describe.each(getMatrixConfigs())("function default with named exports > $name",
 		["stamp", "stamp.side"]
 	])("a %s default function whose own members share names with its named exports", (folder, side) => {
 		it("gives the named prototype, name and length exports the slots under merge", async () => {
-			api = await slothlet({ ...config, base: BASE, collision: { initial: "merge", api: "merge" } });
+			api = await slothlet({ ...config, base: BASE, api: { collision: { mode: { initial: "merge", api: "merge" } } } });
 			await api[folder];
 			expect(await api[folder](2)).toBe(`${folder}:2`);
 			expect(api[folder].prototype).toBe(`${folder}.prototype`);
@@ -84,7 +84,7 @@ describe.each(getMatrixConfigs())("function default with named exports > $name",
 
 		// Under replace the module also replaces what an earlier sibling composed (`side.mjs` sorts first).
 		it("gives the named exports the slots under replace", async () => {
-			api = await slothlet({ ...config, base: BASE, collision: { initial: "replace", api: "replace" } });
+			api = await slothlet({ ...config, base: BASE, api: { collision: { mode: { initial: "replace", api: "replace" } } } });
 			await api[folder];
 			expect(await api[folder](2)).toBe(`${folder}:2`);
 			expect(api[folder].prototype).toBe(`${folder}.prototype`);

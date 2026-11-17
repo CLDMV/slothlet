@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-13T23:21:07-08:00 (1794640867)
+ *	@Last modified time: 2026-11-16T18:30:17-08:00 (1794882617)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -89,7 +89,7 @@ describe.each(guarded)("an exact deny on an object member's path > $mode / $runt
 		api = null;
 	});
 
-	const build = (rules) => mount({ mode, runtime, permissions: { defaultPolicy: "allow", attribution, rules } });
+	const build = (rules) => mount({ mode, runtime, permissions: { policy: "allow", caller: { attribution }, rules } });
 
 	it.each([
 		{ form: "the member's path", target: "owner.ruled.nested" },

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-01T09:25:30-08:00 (1793553930)
+ *	@Last modified time: 2026-11-16T18:30:47-08:00 (1794882647)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -51,9 +51,8 @@
  * | `--eager` | | Use eager loading mode |
  * | `--raw` | | Print raw `util.inspect` output only |
  * | `--runtime <type>` | `async` | Context runtime: `async` or `live` |
- * | `--apiDepth <n>` | unlimited | Slothlet `apiDepth` config option |
+ * | `--apiDepth <n>` | unlimited | Slothlet `depth` config option |
  * | `--debug` | | Enable Slothlet debug output |
- * | `--allowMutation` | | Allow runtime API mutation |
  * | `--hooks` | | Enable lifecycle hooks |
  * | `--help` / `-h` | | Show usage information |
  */
@@ -375,7 +374,7 @@ async function inspectApi(apiName, options = {}) {
 
 		// Build slothlet configuration (both v2 and v3 use 'mode' now)
 		const config = {
-			dir: apiPath,
+			base: apiPath,
 			mode: lazy ? "lazy" : "eager",
 			...(slothletConfig.runtime ? { runtime: slothletConfig.runtime } : {}),
 			...slothletConfig
@@ -657,7 +656,7 @@ async function main() {
 		console.log("\nExamples:");
 		console.log("  node tools/inspect-api-structure.mjs api_test");
 		console.log("  node tools/inspect-api-structure.mjs api_test --eager");
-		console.log("  node tools/inspect-api-structure.mjs api_test --eager --allowMutation --runtime live");
+		console.log("  node tools/inspect-api-structure.mjs api_test --eager --runtime live");
 		console.log("\nOptions:");
 		console.log("  --depth <n>           Maximum depth to traverse (default: 3)");
 		console.log("  --show-methods        Show available methods for functions");
@@ -667,8 +666,7 @@ async function main() {
 		console.log("  --runtime <type>      Runtime type: 'async' or 'live' (default: async)");
 		console.log("  --apiDepth <n>        Set API depth limit (default: no limit)");
 		console.log("  --debug               Enable debug mode");
-		console.log("\nV3 Options:");
-		console.log("  --allowMutation       Allow runtime mutation of API properties");
+		console.log("\nOther options:");
 		console.log("  --hooks               Enable lifecycle hooks");
 		return;
 	}
@@ -683,7 +681,7 @@ async function main() {
 			options.maxDepth = parseInt(args[i + 1], 10);
 			i++; // Skip next arg
 		} else if (args[i] === "--apiDepth" && i + 1 < args.length) {
-			slothletConfig.apiDepth = parseInt(args[i + 1], 10);
+			slothletConfig.depth = parseInt(args[i + 1], 10);
 			i++; // Skip next arg
 		} else if (args[i] === "--runtime" && i + 1 < args.length) {
 			slothletConfig.runtime = args[i + 1];
@@ -696,12 +694,6 @@ async function main() {
 			options.lazy = false;
 		} else if (args[i] === "--raw") {
 			options.raw = true;
-		} else if (args[i] === "--allowApiOverwrite") {
-			slothletConfig.allowApiOverwrite = true;
-		} else if (args[i] === "--hotReload") {
-			slothletConfig.hotReload = true;
-		} else if (args[i] === "--allowMutation") {
-			slothletConfig.allowMutation = true;
 		} else if (args[i] === "--hooks") {
 			// The option is `hook`; a `hooks` key is not read, so this flag used to enable nothing (#583).
 			slothletConfig.hook = true;

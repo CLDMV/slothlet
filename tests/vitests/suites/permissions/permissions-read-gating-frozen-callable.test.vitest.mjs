@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-10T21:29:56-08:00 (1794374996)
+ *	@Last modified time: 2026-11-16T18:30:05-08:00 (1794882605)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -77,7 +77,7 @@ describe.each(getMatrixConfigs({}))("Permissions > Read Gating > a frozen callab
 		api = await slothlet({
 			...config,
 			base: root,
-			permissions: { defaultPolicy: "allow", rules: [{ caller: "rogue.**", target: "vault.**", effect: "deny" }] }
+			permissions: { policy: "allow", rules: [{ caller: "rogue.**", target: "vault.**", effect: "deny" }] }
 		});
 		expect(await api.vault(1, 2)).toBe("vault:12");
 		expect(await api.vault.key).toBe("SECRET");
@@ -104,7 +104,7 @@ describe.each(getMatrixConfigs({}))("Permissions > Read Gating > a frozen callab
 			base: root,
 			// The members only: `vault.**` would name the callable node `vault` itself too (`**` matches zero segments), and
 			// the caller could then not freeze it at all.
-			permissions: { defaultPolicy: "allow", rules: [{ caller: "rogue.**", target: "vault.*", effect: "deny" }] }
+			permissions: { policy: "allow", rules: [{ caller: "rogue.**", target: "vault.*", effect: "deny" }] }
 		});
 		expect(await api.vault.key).toBe("SECRET");
 		const keys = Object.keys(api.vault);

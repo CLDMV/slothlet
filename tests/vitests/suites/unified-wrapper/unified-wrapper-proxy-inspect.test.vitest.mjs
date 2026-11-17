@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:25-07:00 (1791090925)
+ *	@Last modified time: 2026-11-16T18:30:41-08:00 (1794882641)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -224,7 +224,7 @@ describe("unified-wrapper: debug.wrapper=true access to power/add (lines 2314, 2
 			mode: "eager",
 			runtime: "async",
 			debug: { wrapper: true },
-			api: { collision: { initial: "merge" } }
+			api: { collision: { mode: { initial: "merge" } } }
 		});
 
 		// api.math is a merged namespace from collision fixture
@@ -239,7 +239,7 @@ describe("unified-wrapper: debug.wrapper=true access to power/add (lines 2314, 2
 			mode: "eager",
 			runtime: "async",
 			debug: { wrapper: true },
-			api: { collision: { initial: "merge" } }
+			api: { collision: { mode: { initial: "merge" } } }
 		});
 
 		// api.math.add from collision fixture (math/ folder)
@@ -252,7 +252,7 @@ describe("unified-wrapper: debug.wrapper=true access to power/add (lines 2314, 2
 			mode: "lazy",
 			runtime: "async",
 			debug: { wrapper: true },
-			api: { collision: { initial: "merge" } }
+			api: { collision: { mode: { initial: "merge" } } }
 		});
 
 		// Trigger materialization by accessing power

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:16-07:00 (1791090916)
+ *	@Last modified time: 2026-11-16T18:29:45-08:00 (1794882585)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -39,7 +39,7 @@ describe.each(getMatrixConfigs())("Permissions > Construct Parity > $name", ({ c
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				rules: [{ caller: "callers.**", target: "widgets.**", effect: "deny" }]
 			}
 		});
@@ -52,7 +52,7 @@ describe.each(getMatrixConfigs())("Permissions > Construct Parity > $name", ({ c
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				rules: [{ caller: "callers.**", target: "widgets.**", effect: "allow" }]
 			}
 		});
@@ -67,7 +67,7 @@ describe.each(getMatrixConfigs())("Permissions > Construct Parity > $name", ({ c
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				rules: [{ caller: "**", target: "widgets.**", effect: "deny" }]
 			}
 		});

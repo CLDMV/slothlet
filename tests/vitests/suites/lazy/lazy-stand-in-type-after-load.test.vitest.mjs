@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T12:51:10-08:00 (1794775870)
+ *	@Last modified time: 2026-11-16T18:29:23-08:00 (1794882563)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -61,7 +61,7 @@ describe.each(configs)("a kept member's __type once its lazy folder has loaded >
 
 	it.each(KEYS)("is the kind of what the member reads as: %s", async (key) => {
 		const expected = await kindOf(key);
-		api = await slothlet({ base: FIXTURE, mode: "lazy", runtime, silent: true, permissions: { defaultPolicy: "allow", ...permissions } });
+		api = await slothlet({ base: FIXTURE, mode: "lazy", runtime, silent: true, permissions: { policy: "allow", ...permissions } });
 		const kept = api.d[key];
 		expect(kept.__type).toBe(api.slothlet.types.IN_FLIGHT);
 		await api.d;

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:14-08:00 (1794874574)
+ *	@Last modified time: 2026-11-16T18:27:59-08:00 (1794882479)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -169,7 +169,7 @@ const CHILD_PROCESS_FORK = NODE_CHILD_PROCESS?.fork;
 export function warnIfCoverageWithoutImporter(config, { worker = globalThis.__vitest_worker__, externalized = RUNTIME_EXTERNALIZED } = {}) {
 	if (worker?.config?.coverage?.enabled !== true) return false;
 	if (!externalized) return false;
-	if (typeof config?.import === "function") return false;
+	if (typeof config?.loader?.import === "function") return false;
 	if (config?.silent) return false;
 	new SlothletWarning("WARNING_COVERAGE_IMPORTER_UNSET", {});
 	return true;
@@ -670,7 +670,7 @@ export class Loader extends ComponentBase {
 	async #loadModuleFile(filePath, instanceID, moduleID, cacheBust = null) {
 		try {
 			// Browser mode: filesystem paths and pathToFileURL are not available.
-			// Delegate to the callback the user supplied via config.resolveModuleSpecifier.
+			// Delegate to the callback the user supplied via config.loader.resolve.
 			if (this.slothlet.envTarget === "browser") {
 				return this.#loadModuleBrowser(filePath, instanceID, moduleID, cacheBust);
 			}
@@ -708,7 +708,7 @@ export class Loader extends ComponentBase {
 					if (!typescriptConfig.types?.output) {
 						throw new this.SlothletError("TS_STRICT_REQUIRES_OUTPUT", {}, null, { validationError: true });
 					}
-					if (!typescriptConfig.types?.interfaceName) {
+					if (!typescriptConfig.types?.name) {
 						throw new this.SlothletError("TS_STRICT_REQUIRES_INTERFACE_NAME", {}, null, { validationError: true });
 					}
 
@@ -719,14 +719,13 @@ export class Loader extends ComponentBase {
 						// The worker ships next to this file (src/lib/processors → dist/lib/processors).
 						const scriptPath = typeGenerationWorkerPath();
 
-						// Prepare config for child process
-						// Note: Child process needs 'dir' not 'root', and should use eager mode
+						// The child process builds the same tree in eager, fast mode; `types` is the worker's own field,
+						// not a slothlet option.
 						const childConfig = JSON.stringify({
-							dir: this.slothlet.config.root || this.slothlet.config.dir,
-							mode: "eager",
-							typescript: {
-								enabled: true,
-								mode: "fast"
+							config: {
+								base: this.slothlet.config.root || this.slothlet.config.base,
+								mode: "eager",
+								typescript: "fast"
 							},
 							types: typescriptConfig.types
 						});
@@ -792,7 +791,7 @@ export class Loader extends ComponentBase {
 							module: typescriptConfig.module,
 							strict: typescriptConfig.strict,
 							typeDefinitionPath: typescriptConfig.types.output,
-							compilerOptions: typescriptConfig.compilerOptions,
+							compilerOptions: typescriptConfig.compiler,
 							sourcemap
 						});
 						// Check for type errors
@@ -875,7 +874,7 @@ export class Loader extends ComponentBase {
 			// it loads itself, so a configured importer receives the exact cache-busted URL and its
 			// module namespace is used unchanged — per-instance isolation, mount identity, and reload
 			// busting ride the URL either way; only whose import() executes differs.
-			const customImport = this.slothlet?.config?.import;
+			const customImport = this.slothlet?.config?.loader?.import;
 			// The live runtime matches a suspended call's frames against the file it was imported from; a
 			// TypeScript leaf runs from its compiled copy, not its source, so that location is recorded (#601 review).
 			let byMount = MapMethods.get(this.#importedLocations, filePath);
@@ -1307,7 +1306,7 @@ export class Loader extends ComponentBase {
 	 * this.#scanDirectoryBrowser("billing", { fileFilter: (n) => n === "invoice.mjs" });
 	 */
 	#scanDirectoryBrowser(dir, options = {}) {
-		const manifest = this.slothlet.config?.manifest;
+		const manifest = this.slothlet.config?.loader?.files;
 		// manifest is validated during transformConfig; this guard protects against
 		// accidental calls before config is fully applied.
 		/* v8 ignore next 3 */
@@ -1316,14 +1315,14 @@ export class Loader extends ComponentBase {
 		}
 
 		// Compute the relative path by stripping the base URL/path prefix.
-		// When dir equals config.dir (the root), the relative path is empty → root scan.
+		// When dir equals config.base (the root), the relative path is empty → root scan.
 		// When dir is a relative segment like "utils", it passes through unchanged.
 		// The `|| ""` fallbacks on each line are defensive: real callers always go
-		// through transformConfig (config.dir non-empty) and pass a resolved dir
+		// through transformConfig (config.base non-empty) and pass a resolved dir
 		// via scanDirectory's public callers (modes/{eager,lazy}.mjs + api.add).
 		// Direct internal `loader.scanDirectory("")` is not a supported path.
 		/* v8 ignore next */
-		const configBase = regExpReplace(/\/$/, this.slothlet.config?.dir || "", "");
+		const configBase = regExpReplace(/\/$/, this.slothlet.config?.base || "", "");
 		/* v8 ignore next */
 		let relativePath = regExpReplace(/\/$/, dir || "", "");
 		if (configBase && StringMethods.startsWith(relativePath, configBase)) {
@@ -1400,7 +1399,7 @@ export class Loader extends ComponentBase {
 		for (let i = 0, files = node.files || []; i < files.length; i++) {
 			const file = files[i];
 			const filePath = file.path || file.relativePath || "";
-			const fullName = file.fullName || ArrayMethods.pop(splitText(filePath, "/"));
+			const fullName = file.full || ArrayMethods.pop(splitText(filePath, "/"));
 			const lastDot = StringMethods.lastIndexOf(fullName, ".");
 			const ext = lastDot >= 0 ? (typeof fullName === "string" ? StringMethods.slice(fullName, lastDot) : copyList(fullName, lastDot)) : "";
 
@@ -1475,7 +1474,7 @@ export class Loader extends ComponentBase {
 	}
 
 	/**
-	 * Browser-mode module loading: delegates to the `resolveModuleSpecifier` callback
+	 * Browser-mode module loading: delegates to the `loader.resolve` callback
 	 * supplied in `config`, or falls back to resolving relative to `config.base`. Plain
 	 * filesystem paths are automatically converted to `file://` URLs so callers do not
 	 * need to prefix `base` with `"file://"`.
@@ -1485,13 +1484,13 @@ export class Loader extends ComponentBase {
 	 * @private
 	 *
 	 * @example
-	 * // Default resolver — no resolveModuleSpecifier needed when base is a filesystem path:
+	 * // Default resolver — no loader.resolve needed when base is a filesystem path:
 	 * // config.base = "/srv/api"  →  loads file:///srv/api/auth.mjs
 	 * await this.#loadModuleBrowser("auth.mjs");
 	 *
 	 * @example
-	 * // Custom resolver — user supplies resolveModuleSpecifier:
-	 * // config.resolveModuleSpecifier = ({ path }) => `https://cdn.example.com/api/${path}`;
+	 * // Custom resolver — user supplies loader.resolve:
+	 * // config.loader.resolve = ({ path }) => `https://cdn.example.com/api/${path}`;
 	 * await this.#loadModuleBrowser("auth.mjs");
 	 */
 	async #loadModuleBrowser(filePath, instanceID, moduleID, cacheBust = null) {
@@ -1499,13 +1498,11 @@ export class Loader extends ComponentBase {
 		// Plain filesystem paths (no URL scheme) are automatically converted to file:// URLs
 		// so callers can pass base: "/path/to/api" without manually prefixing "file://".
 		const resolveModuleSpecifier =
-			this.slothlet.config?.resolveModuleSpecifier ??
+			this.slothlet.config?.loader?.resolve ??
 			(({ path: p }) => {
-				// `?? config?.dir ?? ""` chain: transformConfig sets both `base` and
-				// `dir` to the same resolved value, so `config?.base ?? ...` always
-				// hits the first arm in normal flow. Both fallback arms are defensive.
+				// `?? ""`: transformConfig always sets `base`, so the fallback arm is defensive.
 				/* v8 ignore next */
-				const base = this.slothlet.config?.base ?? this.slothlet.config?.dir ?? "";
+				const base = this.slothlet.config?.base ?? "";
 				// If base already has a URL scheme (file://, https://, etc.) keep it; otherwise
 				// convert a plain filesystem path to a file:// URL with a trailing slash so that
 				// new URL(relativePath, base) resolves correctly.
@@ -1533,7 +1530,7 @@ export class Loader extends ComponentBase {
 		/* v8 ignore next */
 		const name = lastDot >= 0 ? StringMethods.slice(fullName, 0, lastDot) : fullName;
 
-		const specifier = resolveModuleSpecifier({ path: filePath, name, fullName });
+		const specifier = resolveModuleSpecifier({ path: filePath, name, full: fullName });
 		const imported = withInstanceQuery(specifier, instanceID, moduleID, cacheBust);
 		// The live runtime tells a suspended call apart from the host by the module's location in a stack
 		// frame. A resolver can return a URL that does not end in the manifest path (a `blob:` or `data:`

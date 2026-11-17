@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-31T20:52:53-07:00 (1793505173)
+ *	@Last modified time: 2026-11-16T18:30:10-08:00 (1794882610)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -41,7 +41,7 @@ import slothletInstance from "@cldmv/slothlet";
  * @returns {Promise<object>} The api.
  */
 const slothlet = (config) =>
-	slothletInstance(config?.permissions ? { ...config, permissions: { provenance: false, ...config.permissions } } : config);
+	slothletInstance(config?.permissions ? { ...config, permissions: { caller: { provenance: false }, ...config.permissions } } : config);
 import { TEST_DIRS, withSuppressedSlothletErrorOutput, withSuppressedSlothletErrorOutputSync } from "../../setup/vitest-helper.mjs";
 
 const FIXTURE = TEST_DIRS.API_TEST_SELF_WRITE_REACH;
@@ -90,7 +90,7 @@ describe.each(CONFIGS)("ownership across a permission toggle (#625) — $mode / 
 	}
 
 	it("records a member a module places through the api it is handed as the module's, and holds it once enabled", async () => {
-		await load({ permissions: { enabled: false } });
+		await load({ permissions: { mode: false } });
 		globalThis[Symbol.for(PROBE)] = (self) => {
 			/**
 			 * Write into the victim's subtree.
@@ -117,7 +117,7 @@ describe.each(CONFIGS)("ownership across a permission toggle (#625) — $mode / 
 		["captured references off", false],
 		["captured references on", true]
 	])("holds a later change through a view a module read while the system was off, once it is on (%s)", async (_label, capture) => {
-		await load({ permissions: { references: { capture } } });
+		await load({ permissions: { caller: { capture } } });
 		api.slothlet.permissions.control.disable();
 		await api.guest.x.keepVictimFrozenMembers();
 		api.slothlet.permissions.control.enable();
@@ -131,7 +131,7 @@ describe.each(CONFIGS)("ownership across a permission toggle (#625) — $mode / 
 	it.runIf(runtime === "live")(
 		"refuses a change through the api a module is handed from code it cannot attribute, with the system off",
 		async () => {
-			await load({ permissions: { enabled: false } });
+			await load({ permissions: { mode: false } });
 			await api.slothlet.api.add("twin", path.join(FIXTURE, "twin"), { moduleID: "twin" });
 			/**
 			 * A promise and the function that resolves it.
@@ -161,8 +161,8 @@ describe.each(CONFIGS)("ownership across a permission toggle (#625) — $mode / 
 	describe.each([
 		["no permissions config", {}, "off"],
 		["mode: off", { permissions: { mode: "off" } }, "off"],
-		["enabled: false", { permissions: { enabled: false } }, "off"],
-		["the system on", { permissions: { defaultPolicy: "allow" } }, "on"],
+		["enabled: false", { permissions: { mode: false } }, "off"],
+		["the system on", { permissions: { policy: "allow" } }, "on"],
 		["mode: disabled", { permissions: { mode: "disabled" } }, "disabled"]
 	])("with %s", (_label, options, systemMode) => {
 		// What the built-in write rules decide: the framework's own namespace is kept from module code unless disabled.

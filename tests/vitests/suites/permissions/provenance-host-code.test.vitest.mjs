@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T20:45:24-08:00 (1794804324)
+ *	@Last modified time: 2026-11-16T18:30:15-08:00 (1794882615)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -96,7 +96,7 @@ beforeAll(() => {
 			"const settle = (promise) => Promise.resolve(promise).then((value) => value, (error) => error.code ?? error.message);",
 			"const out = {};",
 			'for (const mode of ["eager", "lazy"]) for (const runtime of ["async", "live"]) for (const provenance of [true, false]) {',
-			'\tconst api = await slothlet({ base, mode, runtime, silent: true, permissions: { defaultPolicy: "allow", provenance } });',
+			'\tconst api = await slothlet({ base, mode, runtime, silent: true, permissions: { policy: "allow", caller: { provenance } } });',
 			'\tawait api.slothlet.api.add("mem", { read: async () => self.vault.secret });',
 			"\tout[`${mode}/${runtime}/${provenance}`] = {",
 			"\t\tglobalFunction: await settle(api.m.callGlobal()),",

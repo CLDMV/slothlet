@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:17-07:00 (1791090917)
+ *	@Last modified time: 2026-11-16T18:29:52-08:00 (1794882592)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -32,7 +32,7 @@ describe.each(getMatrixConfigs())("Permissions > global.rulesForPath > $name", (
 			...config,
 			base: `${BASE}/payments`,
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				rules: [
 					{ caller: "untrusted.**", target: "admin.**", effect: "deny" },
 					{ caller: "callers.**", target: "admin.**", effect: "allow" },

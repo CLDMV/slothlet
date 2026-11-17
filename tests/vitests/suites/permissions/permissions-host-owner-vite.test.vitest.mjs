@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:17:15-08:00 (1794874635)
+ *	@Last modified time: 2026-11-16T18:29:55-08:00 (1794882595)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -44,7 +44,7 @@ import { makeContext as otherPackageContext } from "../../../../api_tests/api_te
 
 const FIXTURE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../../api_tests/api_test_host_owner_code");
 const CONTEXT_FILE = path.join(FIXTURE, "host", "context.mjs");
-const PERMISSIONS = { defaultPolicy: "deny", rules: [{ caller: "ext.**", target: "host.**", effect: "allow" }] };
+const PERMISSIONS = { policy: "deny", rules: [{ caller: "ext.**", target: "host.**", effect: "allow" }] };
 const CALLS = ["pin", "meta", "emit", "hostLeaf"];
 
 /** What each call gives when the host's code runs as the module's call (the plain-Node owner case's answers). */

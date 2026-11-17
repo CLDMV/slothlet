@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:12-07:00 (1791090912)
+ *	@Last modified time: 2026-11-16T18:29:29-08:00 (1794882569)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -93,7 +93,7 @@ describe("Modes > documented collision table (merge: first loaded wins, both sou
 	});
 
 	it("merge-replace: the second loaded wins conflicts, both sources still added", async () => {
-		api = await slothlet({ mode: "eager", base: BASE, collision: "merge-replace" });
+		api = await slothlet({ mode: "eager", base: BASE, api: { collision: "merge-replace" } });
 
 		// Same shape, inverted conflict outcome per the table row: the directory (second) wins
 		// `level`; the file's non-conflicting `origin` still carries across.
@@ -141,7 +141,7 @@ describe("Modes > documented collision table (merge: first loaded wins, both sou
 	});
 
 	it("merge-replace hands the slot to the second-loaded callable", async () => {
-		api = await slothlet({ mode: "eager", base: BASE, collision: "merge-replace" });
+		api = await slothlet({ mode: "eager", base: BASE, api: { collision: "merge-replace" } });
 
 		expect(api.pair.crog("x")).toBe("crog:x");
 		expect(api.pair.crog.origin).toBe("dir");
@@ -309,7 +309,7 @@ describe("Modes > documented collision table (merge: first loaded wins, both sou
 	});
 
 	it("skip: the first loaded is kept and the second discarded silently", async () => {
-		api = await slothlet({ mode: "eager", base: BASE, collision: "skip" });
+		api = await slothlet({ mode: "eager", base: BASE, api: { collision: "skip" } });
 
 		// The root file (first) holds the slot as-is; the directory's callable and members are
 		// discarded — the exact behaviour merge was wrongly exhibiting before this fix.

@@ -7,20 +7,20 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:12-08:00 (1794874572)
+ *	@Last modified time: 2026-11-16T18:27:56-08:00 (1794882476)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
  */
 
 /**
- * @fileoverview Browser-safe factory for the `resolveModuleSpecifier` callback.
+ * @fileoverview Browser-safe factory for the `loader.resolve` callback.
  *
  * @description
  * Consumers reach it as `files.resolver` from `@cldmv/slothlet/files`; this file is package-private
  * (`#helpers/manifest-resolver`).
  *
- * `createManifestResolver(base)` produces a `resolveModuleSpecifier` function that
+ * `createManifestResolver(base)` produces a `loader.resolve` function that
  * resolves manifest-relative file paths to absolute URLs using the standard
  * `new URL(path, base)` algorithm. This is the correct resolver for any deployment
  * where API modules are served from a known base URL (the vast majority of use cases).
@@ -44,8 +44,7 @@
  * import { slothlet } from "@cldmv/slothlet";
  *
  * const api = await slothlet({
- *   manifest,
- *   resolveModuleSpecifier: createManifestResolver(import.meta.url)
+ *   loader: { files: manifest, resolve: createManifestResolver(import.meta.url) }
  * });
  *
  * @example
@@ -53,8 +52,7 @@
  * import { createManifestResolver } from "#helpers/manifest-resolver";
  *
  * const api = await slothlet({
- *   manifest,
- *   resolveModuleSpecifier: createManifestResolver(new URL("./api/", import.meta.url))
+ *   loader: { files: manifest, resolve: createManifestResolver(new URL("./api/", import.meta.url)) }
  * });
  *
  * @module @cldmv/slothlet/helpers/manifest-resolver
@@ -64,31 +62,31 @@
 import { StringMethods, TypeError, URL, URLMethods } from "#helpers/intrinsics";
 
 /**
- * Create a `resolveModuleSpecifier` callback that resolves manifest file entries
+ * Create a `loader.resolve` callback that resolves manifest file entries
  * to absolute URLs using a fixed base URL.
  *
  * The returned function implements the exact signature expected by
- * `slothlet({ resolveModuleSpecifier })`: it receives a manifest file entry object
+ * `slothlet({ loader: { resolve } })`: it receives a manifest file entry object
  * and returns an importable URL string.
  *
  * @param {string|URL} base - The base URL that all manifest paths are relative to.
  *   Pass `import.meta.url` when API modules sit next to your entry point, or
  *   `new URL("./api/", import.meta.url)` when they are in a sub-directory.
- * @returns {(entry: { path: string, name: string, fullName: string }) => string}
- *   A `resolveModuleSpecifier` function ready to pass to `slothlet()`.
+ * @returns {(entry: { path: string, name: string, full: string }) => string}
+ *   A `loader.resolve` function ready to pass to `slothlet()`.
  *
  * @throws {TypeError} If `base` is not a string or URL instance.
  *
  * @example
  * // Modules in the same directory as the current file
  * const resolver = createManifestResolver(import.meta.url);
- * // resolver({ path: "math.mjs", name: "math", fullName: "math.mjs" })
+ * // resolver({ path: "math.mjs", name: "math", full: "math.mjs" })
  * // => "https://example.com/app/math.mjs"
  *
  * @example
  * // Modules in an ./api/ sub-directory
  * const resolver = createManifestResolver(new URL("./api/", import.meta.url));
- * // resolver({ path: "auth.mjs", name: "auth", fullName: "auth.mjs" })
+ * // resolver({ path: "auth.mjs", name: "auth", full: "auth.mjs" })
  * // => "https://example.com/app/api/auth.mjs"
  *
  * @example
@@ -98,8 +96,7 @@ import { StringMethods, TypeError, URL, URLMethods } from "#helpers/intrinsics";
  * import { createManifestResolver } from "#helpers/manifest-resolver";
  *
  * const api = await slothlet({
- *   manifest,
- *   resolveModuleSpecifier: createManifestResolver(new URL("./api/", import.meta.url))
+ *   loader: { files: manifest, resolve: createManifestResolver(new URL("./api/", import.meta.url)) }
  * });
  */
 function createManifestResolver(base) {
@@ -118,7 +115,7 @@ function createManifestResolver(base) {
 	/**
 	 * Resolve a manifest file entry to an absolute URL string.
 	 *
-	 * @param {{ path: string, name: string, fullName: string }} entry - Manifest file entry.
+	 * @param {{ path: string, name: string, full: string }} entry - Manifest file entry.
 	 * @returns {string} Absolute URL for the module.
 	 */
 	return function resolveModuleSpecifier(entry) {

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:06-07:00 (1791090906)
+ *	@Last modified time: 2026-11-16T18:29:13-08:00 (1794882553)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -56,7 +56,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("HookManager > on()
 
 	beforeEach(async () => {
 		const { default: slothlet } = await import("@cldmv/slothlet");
-		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST, collision: { initial: "replace", api: "replace" } });
+		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST, api: { collision: { mode: { initial: "replace", api: "replace" } } } });
 	});
 
 	afterEach(async () => {
@@ -126,7 +126,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("HookManager > off(
 
 	beforeEach(async () => {
 		const { default: slothlet } = await import("@cldmv/slothlet");
-		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST, collision: { initial: "replace", api: "replace" } });
+		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST, api: { collision: { mode: { initial: "replace", api: "replace" } } } });
 	});
 
 	afterEach(async () => {
@@ -154,7 +154,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("HookManager > disa
 
 	beforeEach(async () => {
 		const { default: slothlet } = await import("@cldmv/slothlet");
-		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST, collision: { initial: "replace", api: "replace" } });
+		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST, api: { collision: { mode: { initial: "replace", api: "replace" } } } });
 	});
 
 	afterEach(async () => {
@@ -187,7 +187,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("HookManager > list
 
 	beforeEach(async () => {
 		const { default: slothlet } = await import("@cldmv/slothlet");
-		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST, collision: { initial: "replace", api: "replace" } });
+		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST, api: { collision: { mode: { initial: "replace", api: "replace" } } } });
 	});
 
 	afterEach(async () => {
@@ -270,7 +270,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))(
 
 		beforeEach(async () => {
 			const { default: slothlet } = await import("@cldmv/slothlet");
-			api = await slothlet({ ...config, base: TEST_DIRS.API_TEST, collision: { initial: "replace", api: "replace" } });
+			api = await slothlet({ ...config, base: TEST_DIRS.API_TEST, api: { collision: { mode: { initial: "replace", api: "replace" } } } });
 		});
 
 		afterEach(async () => {
@@ -318,8 +318,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))(
 			api = await slothlet({
 				...config,
 				base: TEST_DIRS.API_TEST,
-				collision: { initial: "replace", api: "replace" },
-				api: { mutations: { reload: true } }
+				api: { mutations: { reload: true }, collision: { mode: { initial: "replace", api: "replace" } } }
 			});
 		});
 
@@ -351,7 +350,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))(
 
 		beforeEach(async () => {
 			const { default: slothlet } = await import("@cldmv/slothlet");
-			api = await slothlet({ ...config, base: TEST_DIRS.API_TEST, collision: { initial: "replace", api: "replace" } });
+			api = await slothlet({ ...config, base: TEST_DIRS.API_TEST, api: { collision: { mode: { initial: "replace", api: "replace" } } } });
 		});
 
 		afterEach(async () => {
@@ -383,7 +382,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))(
 
 		beforeEach(async () => {
 			const { default: slothlet } = await import("@cldmv/slothlet");
-			api = await slothlet({ ...config, base: TEST_DIRS.API_TEST, collision: { initial: "replace", api: "replace" } });
+			api = await slothlet({ ...config, base: TEST_DIRS.API_TEST, api: { collision: { mode: { initial: "replace", api: "replace" } } } });
 		});
 
 		afterEach(async () => {
@@ -412,8 +411,12 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("HookManager > erro
 		api = await slothlet({
 			...config,
 			base: TEST_DIRS.API_TEST,
-			// suppressErrors intentionally left false so errors propagate for assertion
-			collision: { initial: "replace", api: "replace" }
+			api: {
+				// suppressErrors intentionally left false so errors propagate for assertion
+				collision: {
+					mode: { initial: "replace", api: "replace" }
+				}
+			}
 		});
 	});
 
@@ -449,7 +452,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))(
 
 		beforeEach(async () => {
 			const { default: slothlet } = await import("@cldmv/slothlet");
-			api = await slothlet({ ...config, base: TEST_DIRS.API_TEST, collision: { initial: "replace", api: "replace" } });
+			api = await slothlet({ ...config, base: TEST_DIRS.API_TEST, api: { collision: { mode: { initial: "replace", api: "replace" } } } });
 		});
 
 		afterEach(async () => {

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T21:10:11-08:00 (1794805811)
+ *	@Last modified time: 2026-11-16T18:28:33-08:00 (1794882513)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -58,7 +58,7 @@ describe.each(configs)("api.leaves from a module > $mode / $runtime / $attributi
 	});
 
 	it("shows a module its own module's leaves, privates included, and another module's without them", async () => {
-		api = await slothlet({ base: BASE, mode, runtime, silent: true, permissions: { defaultPolicy: "allow", attribution, rules: [] } });
+		api = await slothlet({ base: BASE, mode, runtime, silent: true, permissions: { policy: "allow", caller: { attribution }, rules: [] } });
 		await api.slothlet.api.add("ext", EXT, { moduleID: "ext-mod" });
 		expect(all.ext.some(isPrivate)).toBe(true);
 		expect(all.base.some(isPrivate)).toBe(true);

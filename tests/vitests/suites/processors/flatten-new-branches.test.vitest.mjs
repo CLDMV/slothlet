@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:17:26-08:00 (1794874646)
+ *	@Last modified time: 2026-11-16T18:30:15-08:00 (1794882615)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -292,7 +292,7 @@ describe("Flatten.buildCategoryDecisions — C14 parent-level-flatten (generic f
 function makeMockWithHelpers(collisionMode = "merge") {
 	return {
 		config: {
-			collision: { initial: collisionMode, api: collisionMode }
+			api: { collision: { mode: { initial: collisionMode, api: collisionMode } } }
 		},
 		debug: vi.fn(),
 		SlothletError,
@@ -614,7 +614,7 @@ describe("Flatten.processModuleForAPI — object default+named collision modes (
 	it("resolves the mode from collisionConfig.api when collisionContext='api'", () => {
 		// initial=merge (keep) vs api=replace (overwrite): collisionContext='api' must pick the api slot.
 		const mock = makeMockWithHelpers("merge");
-		mock.config.collision = { initial: "merge", api: "replace" };
+		mock.config.api.collision.mode = { initial: "merge", api: "replace" };
 		const flatten = new Flatten(mock);
 		const mod = { default: { version: "original" }, version: "named-api" };
 		const result = flatten.processModuleForAPI({
@@ -631,10 +631,9 @@ describe("Flatten.processModuleForAPI — object default+named collision modes (
 	});
 
 	it("reads the collision config from config.api.collision when present", () => {
-		// config.api.collision takes precedence over config.collision in the object-default branch.
+		// The object-default branch reads config.api.collision.mode.
 		const mock = makeMockWithHelpers("merge");
-		delete mock.config.collision;
-		mock.config.api = { collision: { initial: "replace", api: "replace" } };
+		mock.config.api = { collision: { mode: { initial: "replace", api: "replace" } } };
 		const flatten = new Flatten(mock);
 		const mod = { default: { version: "original" }, version: "named-apicfg" };
 		const result = flatten.processModuleForAPI({

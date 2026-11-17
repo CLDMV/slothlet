@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:06-07:00 (1791090906)
+ *	@Last modified time: 2026-11-16T18:29:14-08:00 (1794882554)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -42,7 +42,7 @@ async function createApiInstance(baseConfig, overrides = {}) {
 // All configurations with hooks enabled
 const HOOK_SUBSET_MATRIX = getMatrixConfigs({ hook: { enabled: true } }).map(({ name, config }) => ({
 	name,
-	config: { ...config, base: TEST_DIRS.API_TEST, collision: { initial: "replace", api: "replace" } }
+	config: { ...config, base: TEST_DIRS.API_TEST, api: { collision: { mode: { initial: "replace", api: "replace" } } } }
 }));
 
 describe.each(HOOK_SUBSET_MATRIX)("Hook Subsets - $name", ({ config }) => {

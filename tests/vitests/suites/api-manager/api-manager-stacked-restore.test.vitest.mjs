@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:58-07:00 (1791090898)
+ *	@Last modified time: 2026-11-16T18:28:39-08:00 (1794882519)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -72,7 +72,7 @@ async function makeApi(base, extra = {}) {
 		...base,
 		...extra,
 		base: TEST_DIRS.API_TEST,
-		api: { ...extra.api, mutations: { ...extra.api?.mutations, allowCollisionOverride: true } }
+		api: { ...extra.api, mutations: { ...extra.api?.mutations }, collision: { override: true } }
 	});
 }
 

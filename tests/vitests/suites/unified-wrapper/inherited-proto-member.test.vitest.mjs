@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-07T00:02:08-08:00 (1794038528)
+ *	@Last modified time: 2026-11-16T18:30:37-08:00 (1794882637)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -57,7 +57,7 @@ async function plainAttack() {
 	return victim.check();
 }
 
-const DENY_VICTIM = { defaultPolicy: "allow", rules: [{ caller: "attacker.**", target: "victim.**", effect: "deny" }] };
+const DENY_VICTIM = { policy: "allow", rules: [{ caller: "attacker.**", target: "victim.**", effect: "deny" }] };
 
 const PERMISSIONS = [
 	{ name: "permissions off", permissions: null },

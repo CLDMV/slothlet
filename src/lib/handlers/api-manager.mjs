@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:09-08:00 (1794874569)
+ *	@Last modified time: 2026-11-16T18:27:51-08:00 (1794882471)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -419,7 +419,7 @@ export class ApiManager extends ComponentBase {
 		// Browser mode: no filesystem available. Determine file vs directory from the
 		// path string: if the last segment contains a dot we treat it as a file,
 		// otherwise as a directory. The caller's loader is responsible for honouring
-		// this classification via resolveModuleSpecifier + the manifest.
+		// this classification via loader.resolve + the file list.
 		if (this.slothlet.envTarget === "browser") {
 			// `resolvedPath` is guaranteed a string by the validation above, so
 			// `.split("/").pop()` always returns a string (possibly empty) — no fallback needed.
@@ -1784,7 +1784,7 @@ export class ApiManager extends ComponentBase {
 
 	/**
 	 * Invalidate every UnifiedWrapper found in a rejected candidate's subtree, so a still-in-flight
-	 * `backgroundMaterialize: true` materialization cannot re-apply the rejected content later.
+	 * `loader.materialize: true` materialization cannot re-apply the rejected content later.
 	 * @param {unknown} api - Candidate subtree (or leaf) to walk.
 	 * @param {WeakSet} [visited] - Cycle guard for the recursive walk.
 	 * @param {?Array<object>} [liveKept=null] - When given, a wrapper that is still the live node at its own
@@ -2346,7 +2346,7 @@ export class ApiManager extends ComponentBase {
 				const wrapper = resolveWrapper(removedImpl);
 				// Permanently invalidate — checked by ___materialize()'s own `invalid` guard (both
 				// before starting and again after its async work resolves) so a still-in-flight
-				// backgroundMaterialize: true materialization on this now-removed wrapper can't apply
+				// loader.materialize: true materialization on this now-removed wrapper can't apply
 				// its result later. Without this, a later impl:changed from that stale materialization
 				// would be silently accepted if the same moduleID is re-added before it resolves — the
 				// re-add's own clearUnregistered() call lifts the ownership-level stale-registration
@@ -2440,9 +2440,9 @@ export class ApiManager extends ComponentBase {
 
 		if (normalizedModuleId === "base" || normalizedModuleId === "core") {
 			const baseApi = await this.slothlet.builders.builder.buildAPI({
-				dir: this.____config.dir,
+				dir: this.____config.base,
 				// #471: an instance with no base directory restores from an empty root.
-				noBase: this.____config.dir === null,
+				noBase: this.____config.base === null,
 				mode: this.____config.mode,
 				moduleID: "base" // Use "base" as moduleID for temporary API
 			});
@@ -3297,7 +3297,7 @@ export class ApiManager extends ComponentBase {
 		} else {
 			// collision.api is always set in config; the "error" fallback is unreachable.
 			/* v8 ignore next */
-			collisionMode = restOptions.collisionMode || this.____config.api?.collision?.api || "error";
+			collisionMode = restOptions.collisionMode || this.____config.api?.collision?.mode?.api || "error";
 		}
 
 		const mutateExisting = !!(restOptions.mutateExisting || collisionMode === "merge");
@@ -3363,7 +3363,7 @@ export class ApiManager extends ComponentBase {
 		const priorEntriesForModule = this.slothlet.handlers.ownership?.snapshotModuleEntries(moduleID) || new Map();
 		// Same reasoning, for RoutineManager's independent raw-capture cache (#372/#373): its
 		// onImplCreated subscriber captures every constructed wrapper's function too, regardless of
-		// whether this build is later accepted — relevant only under stackRoutines: true, which
+		// whether this build is later accepted — relevant only under routines.stack: true, which
 		// bypasses the ownership filter entirely.
 		// routineManager is always registered and snapshotRawEntries always returns a Map, so the `|| new Map()` fallback is unreachable.
 		/* v8 ignore next */
@@ -3672,7 +3672,7 @@ export class ApiManager extends ComponentBase {
 							this.slothlet.handlers.routineManager.revertSpeculativeSubtree(rootSource[key], moduleID, key, priorRawEntriesForModule);
 						}
 						// Also invalidate any wrapper in this rejected key's subtree: with
-						// backgroundMaterialize: true its materialization may already be in flight, and
+						// loader.materialize: true its materialization may already be in flight, and
 						// left alone its later completion would re-emit impl:changed and re-capture this
 						// never-mounted content, undoing the revert above (#372 review).
 						this.invalidateSpeculativeWrappers(rootSource[key]);

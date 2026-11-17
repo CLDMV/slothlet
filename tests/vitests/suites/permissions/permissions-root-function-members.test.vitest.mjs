@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T10:00:00-08:00 (1794765600)
+ *	@Last modified time: 2026-11-16T18:30:07-08:00 (1794882607)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -78,13 +78,17 @@ const REFUSED = {
 };
 
 const POLICIES = [
-	{ label: "default deny, no rule", permissions: (attribution) => ({ defaultPolicy: "deny", attribution }), root: REFUSED },
+	{ label: "default deny, no rule", permissions: (attribution) => ({ policy: "deny", caller: { attribution } }), root: REFUSED },
 	{
 		label: "default deny, the reader allowed every target",
-		permissions: (attribution) => ({ defaultPolicy: "deny", attribution, rules: [{ caller: "reader.**", target: "**", effect: "allow" }] }),
+		permissions: (attribution) => ({
+			policy: "deny",
+			caller: { attribution },
+			rules: [{ caller: "reader.**", target: "**", effect: "allow" }]
+		}),
 		root: PLAIN
 	},
-	{ label: "default allow", permissions: (attribution) => ({ defaultPolicy: "allow", attribution }), root: PLAIN },
+	{ label: "default allow", permissions: (attribution) => ({ policy: "allow", caller: { attribution } }), root: PLAIN },
 	{ label: "permissions off", permissions: () => undefined, root: PLAIN },
 	{ label: "permissions disabled", permissions: () => ({ mode: "disabled" }), root: PLAIN }
 ];

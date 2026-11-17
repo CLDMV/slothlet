@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-03T05:36:51-08:00 (1793713011)
+ *	@Last modified time: 2026-11-16T18:29:51-08:00 (1794882591)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -114,7 +114,7 @@ describe.each(getMatrixConfigs())("Permissions > members of an api function (#63
 	 * @param {object} [permissions] - The permissions config.
 	 * @returns {Promise<object>} The api.
 	 */
-	const build = async (permissions = { defaultPolicy: "allow", rules: DENY_CALLEE }) => {
+	const build = async (permissions = { policy: "allow", rules: DENY_CALLEE }) => {
 		api = await slothlet({ ...config, base: DIR, permissions });
 		return api;
 	};
@@ -171,7 +171,7 @@ describe.each(getMatrixConfigs())("Permissions > members of an api function (#63
 	});
 
 	it.each(Object.entries(ALLOWED_LOADED))("a module allowed the node reaches its member: %s", async (shape, expected) => {
-		await build({ defaultPolicy: "allow", rules: [] });
+		await build({ policy: "allow", rules: [] });
 		await load();
 		expect(await attempt(shape)).toEqual({ value: expected });
 	});
@@ -179,7 +179,7 @@ describe.each(getMatrixConfigs())("Permissions > members of an api function (#63
 	it.each(Object.entries(ALLOWED_AWAITED))(
 		"a module allowed the node reaches its member before the node loads: %s",
 		async (shape, expected) => {
-			await build({ defaultPolicy: "allow", rules: [] });
+			await build({ policy: "allow", rules: [] });
 			expect(await attempt(shape)).toEqual({ value: expected });
 		}
 	);
@@ -199,7 +199,7 @@ describe.each(getMatrixConfigs())("Permissions > members of an api function (#63
 	});
 
 	it("a frozen node's members reach a module allowed the node", async () => {
-		await build({ defaultPolicy: "allow", rules: [] });
+		await build({ policy: "allow", rules: [] });
 		await load();
 		Object.freeze(api.callee.ops.Client);
 		Object.freeze(api.callee.ops.fn);
@@ -221,7 +221,7 @@ describe.each(getMatrixConfigs())("Permissions > members of an api function (#63
 		["denied", DENY_CALLEE],
 		["allowed", []]
 	])("the inspect hook shows a module the node, never its runnable code (%s)", async (_label, rules) => {
-		await build({ defaultPolicy: "allow", rules });
+		await build({ policy: "allow", rules });
 		await load();
 		for (const [shape, marker] of Object.entries(INSPECT_RUNS)) {
 			const result = await attempt(shape);
@@ -257,7 +257,7 @@ describe.each(getMatrixConfigs())("Permissions > members of an api function (#63
 		expect(await attempt("frozenEmitterMethod")).toEqual({ error: "PERMISSION_DENIED" });
 		expect(await attempt("frozenEmitterClass")).toEqual({ error: "PERMISSION_DENIED" });
 		await api.shutdown();
-		await build({ defaultPolicy: "allow", rules: [] });
+		await build({ policy: "allow", rules: [] });
 		await load();
 		Object.freeze(api.callee.bus);
 		expect(await attempt("frozenEmitterMethod")).toEqual({ value: "bus" });
@@ -271,7 +271,7 @@ describe.each(getMatrixConfigs())("Permissions > members of an api function (#63
 		expect(await attempt("objectProxyDescriptor")).toEqual({ error: "PERMISSION_DENIED" });
 		expect(await attempt("objectHiddenProxyDescriptor")).toEqual({ error: "PERMISSION_DENIED" });
 		await api.shutdown();
-		await build({ defaultPolicy: "allow", rules: [] });
+		await build({ policy: "allow", rules: [] });
 		await load();
 		expect(await attempt("objectProxyDescriptor")).toEqual({ value: "epx" });
 		expect(await attempt("objectHiddenProxyDescriptor")).toEqual({ value: "opx" });
@@ -287,7 +287,7 @@ describe.each(getMatrixConfigs())("Permissions > members of an api function (#63
 		["freeze", false]
 	])("an emitter the host closed with %s (read gating %s)", (closing, readGating) => {
 		it("still works as a value for a module denied the node, which is refused its prototype and none of whose code runs", async () => {
-			await build({ defaultPolicy: "allow", readGating, rules: DENY_CALLEE });
+			await build({ policy: "allow", gating: { read: readGating }, rules: DENY_CALLEE });
 			await load();
 			Object[closing](api.callee.bus);
 			// A frozen node describes its members as fixed, so a member's value is read as the read gate allows it: the
@@ -306,7 +306,7 @@ describe.each(getMatrixConfigs())("Permissions > members of an api function (#63
 		});
 
 		it("keeps its own prototype for the host, its module and a module allowed it", async () => {
-			await build({ defaultPolicy: "allow", readGating, rules: DENY_CALLEE });
+			await build({ policy: "allow", gating: { read: readGating }, rules: DENY_CALLEE });
 			await load();
 			Object[closing](api.callee.bus);
 			const prototype = Object.getPrototypeOf(api.callee.bus);
@@ -315,7 +315,7 @@ describe.each(getMatrixConfigs())("Permissions > members of an api function (#63
 			expect(prototype.kind.call({})).toBe("bus");
 			expect(await api.callee.checks.owner()).toEqual([true, true]);
 			await api.shutdown();
-			await build({ defaultPolicy: "allow", readGating, rules: [] });
+			await build({ policy: "allow", gating: { read: readGating }, rules: [] });
 			await load();
 			Object[closing](api.callee.bus);
 			expect(await attempt("permittedOwnerView")).toEqual({ value: "true,true" });
@@ -366,14 +366,14 @@ describe.each(getMatrixConfigs())("Permissions > members of an api function (#63
 		// A method the emitter inherits from Node's own class is no code of its module's, and stays the emitter's to use.
 		expect(await attempt("hubSharedMethod")).toEqual({ value: 0 });
 		await api.shutdown();
-		await build({ defaultPolicy: "allow", rules: [] });
+		await build({ policy: "allow", rules: [] });
 		await load();
 		expect(await attempt("hubMethod")).toEqual({ value: "hub" });
 		expect(await attempt("hubGetter")).toEqual({ value: "hubinfo" });
 	});
 
 	it("the inspect hook of a module's view of a frozen node shows it when called with no arguments", async () => {
-		await build({ defaultPolicy: "allow", rules: [] });
+		await build({ policy: "allow", rules: [] });
 		await load();
 		Object.freeze(api.callee.ops.obj);
 		expect(await attempt("viewInspectRead")).toEqual({ value: "string" });
@@ -381,7 +381,7 @@ describe.each(getMatrixConfigs())("Permissions > members of an api function (#63
 	});
 
 	it("the form the inspect hook shows a module is the one util.inspect gives the host", async () => {
-		await build({ defaultPolicy: "allow", rules: [] });
+		await build({ policy: "allow", rules: [] });
 		await load();
 		expect(await attempt("inspectSubLabel")).toEqual({ value: util.inspect(api.callee.ops.Sub) });
 		expect(await attempt("inspectSubLabel")).toEqual({ value: "[class Sub extends Base]" });
@@ -403,7 +403,7 @@ describe.each(getMatrixConfigs())("Permissions > members of an api function (#63
 	});
 
 	it("the check is the node's call check, made with read gating off as well", async () => {
-		await build({ defaultPolicy: "allow", readGating: false, rules: DENY_CALLEE });
+		await build({ policy: "allow", gating: { read: false }, rules: DENY_CALLEE });
 		await load();
 		expect(await attempt("staticMethod")).toEqual({ error: "PERMISSION_DENIED" });
 		expect(await attempt("prototypeConstructor")).toEqual({ error: "PERMISSION_DENIED" });

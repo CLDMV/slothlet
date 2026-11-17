@@ -151,10 +151,10 @@ typescript: {
     sourcemap: true,           // Inline source maps. Default: on during a coverage run, otherwise off
     module: "esnext",          // Strict mode only. Module kind for the type check. Default: "esnext"
     strict: true,              // Strict mode only. tsc's strict checking. Default: true
-    compilerOptions: {},       // Strict mode only. Extra tsc compiler options (tsconfig.json form)
+    compiler: {},              // Strict mode only. Extra tsc compiler options (tsconfig.json form)
     types: {                   // Type generation. Strict mode only.
         output: "./types/api.d.ts",   // Required. Path to write the .d.ts file
-        interfaceName: "MyAPI"        // Required. Name of the generated interface
+        name: "MyAPI"                 // Required. Name of the generated interface
     }
 }
 ```
@@ -183,21 +183,21 @@ Strict mode only. The module kind tsc checks and emits against: `"esnext"`, `"es
 
 Strict mode only. Sets tsc's `strict` flag (`noImplicitAny`, `strictNullChecks`, and the rest of the strict family). Default: `true`. Set `strict: false` to type-check with the strict family off.
 
-#### `compilerOptions`
+#### `compiler`
 
-Strict mode only. Extra tsc compiler options, written as in the `compilerOptions` block of a `tsconfig.json` (string values such as `module: "commonjs"` are accepted), applied on top of the options above. Relative paths resolve against the current working directory. An unknown option or an invalid value throws `INVALID_CONFIG`.
+Strict mode only. Extra tsc compiler options, written as in the compilerOptions block of a `tsconfig.json` (string values such as `module: "commonjs"` are accepted), applied on top of the options above. Relative paths resolve against the current working directory. An unknown option or an invalid value throws `INVALID_CONFIG`.
 
 ```javascript
 typescript: {
     mode: "strict",
-    types: { output: "./types/api.d.ts", interfaceName: "MyAPI" },
-    compilerOptions: { noUnusedLocals: true, noUnusedParameters: true }
+    types: { output: "./types/api.d.ts", name: "MyAPI" },
+    compiler: { noUnusedLocals: true, noUnusedParameters: true }
 }
 ```
 
 #### Validation
 
-`target` and `module` must be strings, `sourcemap` and `strict` booleans, and `compilerOptions` a plain object. Any other value throws `INVALID_CONFIG` when `slothlet()` is called.
+`target` and `module` must be strings, `sourcemap` and `strict` booleans, and `compiler` a plain object. Any other value throws `INVALID_CONFIG` when `slothlet()` is called.
 
 ---
 
@@ -242,7 +242,7 @@ const api = await slothlet({
 
 Strict mode is slower than fast mode due to full compilation. It is well-suited for production validation, CI checks, or anywhere you want to catch type errors at startup.
 
-How strict the check is can be tuned with [`strict`](#strict), [`module`](#module), and [`compilerOptions`](#compileroptions):
+How strict the check is can be tuned with [`strict`](#strict), [`module`](#module), and [`compiler`](#compiler):
 
 ```javascript
 const api = await slothlet({
@@ -250,8 +250,8 @@ const api = await slothlet({
 	typescript: {
 		mode: "strict",
 		strict: true,
-		compilerOptions: { noUnusedLocals: true },
-		types: { output: "./types/api.d.ts", interfaceName: "MyAPI" }
+		compiler: { noUnusedLocals: true },
+		types: { output: "./types/api.d.ts", name: "MyAPI" }
 	}
 });
 ```
@@ -262,7 +262,7 @@ const api = await slothlet({
 
 Strict mode can generate a `.d.ts` declaration file from the loaded API structure. This gives consumers of your API full type safety and IDE autocomplete without any manual type writing.
 
-Both `types.output` and `types.interfaceName` are required when `types` is specified:
+Both `types.output` and `types.name` are required when `types` is specified:
 
 ```javascript
 const api = await slothlet({
@@ -271,7 +271,7 @@ const api = await slothlet({
 		mode: "strict",
 		types: {
 			output: "./types/api.d.ts",
-			interfaceName: "MyAPI"
+			name: "MyAPI"
 		}
 	}
 });
@@ -359,7 +359,7 @@ import fs from "fs";
 import path from "path";
 
 const outputPath = "./types/api.d.ts";
-const api = await slothlet({ base: "./api", typescript: { mode: "strict", types: { output: outputPath, interfaceName: "MyAPI" } } });
+const api = await slothlet({ base: "./api", typescript: { mode: "strict", types: { output: outputPath, name: "MyAPI" } } });
 
 // ...use api...
 
@@ -499,11 +499,11 @@ TypeScript compilation failed with 2 error(s) in api/math.ts:
 
 ### Missing required `types` fields
 
-If `mode: "strict"` is set with a `types` object but `output` or `interfaceName` is missing:
+If `mode: "strict"` is set with a `types` object but `output` or `name` is missing:
 
 ```text
 SlothletError: TypeScript strict mode requires 'types.output' to be configured in your typescript config.
-SlothletError: TypeScript strict mode requires 'types.interfaceName' to be configured in your typescript config.
+SlothletError: TypeScript strict mode requires 'types.name' to be configured in your typescript config.
 ```
 
 ---

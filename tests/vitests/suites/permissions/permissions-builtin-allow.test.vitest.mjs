@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:15-07:00 (1791090915)
+ *	@Last modified time: 2026-11-16T18:29:40-08:00 (1794882580)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -31,7 +31,7 @@ describe.each(getMatrixConfigs())("Permissions > Built-in Allow (lockCaller / bi
 		api = await slothlet({
 			...config,
 			base: BASE,
-			permissions: { defaultPolicy: "deny" }
+			permissions: { policy: "deny" }
 		});
 
 		const global = api.slothlet.permissions.global;
@@ -43,7 +43,7 @@ describe.each(getMatrixConfigs())("Permissions > Built-in Allow (lockCaller / bi
 		api = await slothlet({
 			...config,
 			base: BASE,
-			permissions: { defaultPolicy: "deny" }
+			permissions: { policy: "deny" }
 		});
 
 		const global = api.slothlet.permissions.global;
@@ -57,7 +57,7 @@ describe.each(getMatrixConfigs())("Permissions > Built-in Allow (lockCaller / bi
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "deny",
+				policy: "deny",
 				rules: [{ caller: "untrusted.plugin", target: "slothlet.lockCaller", effect: "deny" }]
 			}
 		});

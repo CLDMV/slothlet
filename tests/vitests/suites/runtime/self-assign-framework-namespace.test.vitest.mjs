@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T00:34:37-08:00 (1794818077)
+ *	@Last modified time: 2026-11-16T18:30:24-08:00 (1794882624)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -49,7 +49,7 @@ const CONFIGS = [
 const READ_NAMESPACE = { caller: "**", target: "slothlet.**", effect: "allow" };
 const PERMISSIONS = [
 	{ label: "permissions with defaults", options: { permissions: {} } },
-	{ label: "permissions defaultPolicy deny", options: { permissions: { defaultPolicy: "deny", rules: [READ_NAMESPACE] } } }
+	{ label: "permissions defaultPolicy deny", options: { permissions: { policy: "deny", rules: [READ_NAMESPACE] } } }
 ];
 
 const MEMBERS = ["lockCaller", "bind", "metadata", "hook", "event", "permissions", "api", "reload", "version"];

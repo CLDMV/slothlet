@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:25-07:00 (1791090925)
+ *	@Last modified time: 2026-11-16T18:30:40-08:00 (1794882640)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -128,7 +128,9 @@ async function makeLazyCollision() {
 		base: TEST_DIRS.API_TEST_COLLISIONS,
 		mode: "lazy",
 		silent: true,
-		collision: "merge"
+		api: {
+			collision: "merge"
+		}
 	});
 	return {
 		api,
@@ -224,7 +226,7 @@ describe("lazyGetTrap — __type special property (lines 2082–2117)", () => {
 				base: TEST_DIRS.API_TEST_PRIMITIVES,
 				mode,
 				silent: true,
-				permissions: { defaultPolicy: "allow", rules: [{ caller: "probe.**", target: name, effect: "deny" }] }
+				permissions: { policy: "allow", rules: [{ caller: "probe.**", target: name, effect: "deny" }] }
 			});
 			try {
 				await api.slothlet.api.add("probe", {

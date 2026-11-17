@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:10-08:00 (1794874570)
+ *	@Last modified time: 2026-11-16T18:27:52-08:00 (1794882472)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -3715,7 +3715,7 @@ function runtime_takesAccess(key, target) {
  * Verdicts:
  * - `"allow"` — permit without a rule check. Only two situations qualify: (a) no active context AND
  *   the instance's base store carries the {@link TRUSTED_ROOT} marker (a genuinely host-initiated
- *   call/read), or (b) the explicit `permissions.failOpenOnAbsentCaller` opt-out is set.
+ *   call/read), or (b) the explicit `permissions.caller.anonymous` opt-out is set.
  * - `"deny"` — fail closed: a caller identity is expected but missing (context present, no
  *   `currentWrapper`) or forged (a `currentWrapper` not in {@link genuineWrappers}).
  * - `"enforce"` — a genuine inter-module caller is present; proceed to `enforceAccess`. Returns the
@@ -3777,7 +3777,7 @@ function resolveEnforcedCaller(wrapper, ctxOverride, kept = null, preResolved = 
 		const instances = wrapper.slothlet.contextManager?.instances;
 		const store = ctx ?? (instances ? MapMethods.get(instances, wrapper.slothlet.instanceID) : undefined);
 		if (store && store[trustedRootOwn.TRUSTED_ROOT] === true) return { verdict: "allow", identity, ctx };
-		if (wrapper.slothlet.config?.permissions?.failOpenOnAbsentCaller) return { verdict: "allow", identity, ctx };
+		if (wrapper.slothlet.config?.permissions?.caller?.anonymous) return { verdict: "allow", identity, ctx };
 		return { verdict: "deny", identity, ctx };
 	}
 	// A caller identity is present but not a genuine wrapper — a forged object. Fail closed.
@@ -3841,7 +3841,7 @@ function runtime_enforceNodeReportRead(wrapper, nodePath, callerOverride) {
 /**
  * Enforce read-level permission gating for a property read off a module API path.
  *
- * Default-on whenever permissions are configured; opt out via `permissions.readGating: false`. Gates **terminal data values** — primitives
+ * Default-on whenever permissions are configured; opt out via `permissions.gating.read: false`. Gates **terminal data values** — primitives
  * and built-in objects (`Buffer`, every `TypedArray` view, `ArrayBuffer`, `DataView`,
  * `Map`, `Set`, `WeakMap`, `WeakSet`, `Date`, `RegExp`, `Promise`, `Error`). Plain
  * objects, arrays, and functions become child namespace/callable `UnifiedWrapper`
@@ -5907,7 +5907,7 @@ if (isNode) runtime_recordNodeObjectPrototypes();
  * socket's `TCP` handle and idle `Timeout`, a zlib stream's or a hash's native handle), read from streams made before any module's code runs (#708).
  * Like an emitter's listener table, that state holds Node's own closures and the callbacks handed to the stream (a
  * `write` callback, a pipe destination), so it is not read for code (see {@link runtime_slotHoldsCode}). With
- * `permissions.provenance` on (the default) such a callback, or a module's function planted there, still runs as the
+ * `permissions.caller.provenance` on (the default) such a callback, or a module's function planted there, still runs as the
  * module whose file it is in; with it off, it runs with the permissions of whichever call runs it.
  * @type {WeakSet<object>}
  * @private
@@ -6292,10 +6292,10 @@ function runtime_selfReadAsDefiner(selfProxy, prop, loadingInstanceID = null, ho
 	const leaf = definer.wrapper;
 	const checks = Boolean(leaf.slothlet?.handlers?.permissionManager?.isEnabled?.());
 	// With `provenance` off no code is told by its frames: it runs under its caller, and the host's code has no `self`.
-	if (checks && leaf.slothlet.config?.permissions?.provenance === false) return null;
+	if (checks && leaf.slothlet.config?.permissions?.caller?.provenance === false) return null;
 	// With `references.capture` off a node read here would carry no reader, and a call through it, made while no call
 	// runs, would be taken for the host's: such code gets no `self`, as before it could be read as its definer at all.
-	if (checks && leaf.slothlet.config?.permissions?.references?.capture === false) return null;
+	if (checks && leaf.slothlet.config?.permissions?.caller?.capture === false) return null;
 	const contextManager = leaf.slothlet?.contextManager;
 	// Calls are in flight and the live runtime cannot tell which of them runs this code (two api paths of one module
 	// resuming in a file they share), or that it is none of them: the caller is unknown, so the read is refused. Its
@@ -6454,7 +6454,7 @@ function runtime_selfToJSON(key) {
 function runtime_hostRunDefiner(slothlet, unaccounted = false, resolved = null, held = resolved) {
 	const contextManager = slothlet?.contextManager;
 	if (!contextManager?.runInContext || !slothlet.handlers?.permissionManager?.isEnabled?.()) return null;
-	if (slothlet.config?.permissions?.provenance === false) return null;
+	if (slothlet.config?.permissions?.caller?.provenance === false) return null;
 	const identity = contextManager.getCallerIdentity?.(slothlet.instanceID);
 	if (resolved && identity) {
 		resolved.store = contextManager.tryGetContext?.(slothlet.instanceID) ?? null;
@@ -7147,7 +7147,7 @@ function runtime_handOutValue(maker, owner, value) {
 		// Only a value that is itself code is a stand-in: data — plain objects and arrays, the language's and Node's own
 		// objects — passes as itself however deep it nests, unsearched, and code nested in it is told by its frames when
 		// it runs (#726).
-		if (owner.slothlet?.config?.permissions?.provenance !== false) {
+		if (owner.slothlet?.config?.permissions?.caller?.provenance !== false) {
 			if (!runtime_isCodeObject(value)) return value;
 			return runtime_membrane(maker, owner, value);
 		}
@@ -8109,7 +8109,7 @@ function runtime_generatorStandIn(maker, owner, original) {
 /**
  * A module's Proxy export as its node holds it (#597): its stand-in — under the layer the build laid over it, when it
  * has one — so every touch of it, slothlet's own checks included, runs its traps as a call of the node, under either
- * `permissions.attribution` while the permission system is on (#726). Any other value is held as it is.
+ * `permissions.caller.attribution` while the permission system is on (#726). Any other value is held as it is.
  * @param {object} wrapper - The node's wrapper.
  * @param {*} impl - The value.
  * @returns {*} What the node holds.
@@ -8361,7 +8361,7 @@ function runtime_contextReadAsDefiner(contextProxy, prop) {
 	if (definer === null || definer.unplaced) return undefined;
 	const leaf = definer.wrapper ?? definer.leaves[0];
 	const slothlet = leaf?.slothlet;
-	if (slothlet?.handlers?.permissionManager?.isEnabled?.() && slothlet.config?.permissions?.provenance === false) return undefined;
+	if (slothlet?.handlers?.permissionManager?.isEnabled?.() && slothlet.config?.permissions?.caller?.provenance === false) return undefined;
 	const contextManager = slothlet?.contextManager;
 	const instanceID = contextManager?.runInContext ? runtime_makerInstanceID(slothlet) : null;
 	if (instanceID === null) return undefined;
@@ -9477,7 +9477,7 @@ const TYPED_ARRAY_LENGTH = Reflect.getOwnPropertyDescriptor(Reflect.getPrototype
 /**
  * Whether an object whose internal data holds no references ({@link runtime_isOpaqueData}) holds nothing else either,
  * so it can be handed on as it is: its prototype is the language's or Node's own, and it has no member of its own beyond
- * what its kind gives it. A typed array's members under string keys are read only where `permissions.typedArrayMembers`
+ * what its kind gives it. A typed array's members under string keys are read only where `permissions.gating.buffers`
  * asks for it: listing them lists every index, which costs milliseconds on a buffer of any size. Otherwise only its
  * prototype and its symbol keys are checked.
  * @param {object} value - Such an object.
@@ -9491,7 +9491,7 @@ function runtime_isPristineData(value, slothlet) {
 	const types = util.types;
 	if (types.isArrayBufferView(value) && !types.isDataView(value)) {
 		if (Objects.getOwnPropertySymbols(value).length !== 0) return false;
-		const listed = slothlet?.config?.permissions?.typedArrayMembers;
+		const listed = slothlet?.config?.permissions?.gating?.buffers;
 		if (listed !== true && typeof listed !== "number") return true;
 		// Past the cap the array is not listed, as with the option off.
 		if (listed !== true && Reflect.apply(TYPED_ARRAY_BYTE_LENGTH, value, []) > listed * 1024) return true;
@@ -9516,7 +9516,7 @@ function runtime_isPristineData(value, slothlet) {
  * primitives, see {@link runtime_isPristineData}) pass as they are. A stand-in of another module's code is viewed like
  * the code it stands for.
  * @param {object|Function} value - The value.
- * @param {object|null} [slothlet] - The instance it crosses in, whose `permissions.typedArrayMembers` decides whether a
+ * @param {object|null} [slothlet] - The instance it crosses in, whose `permissions.gating.buffers` decides whether a
  *   typed array's own keys are listed.
  * @returns {boolean} True when it is viewed.
  * @private
@@ -11274,7 +11274,7 @@ function runtime_noteRootFile(slothlet, filePath, moduleID) {
 /**
  * The leaf the api root's function runs as: a node of the base module at the root's path (`""`), built from the root
  * file, so a call of the root enters it as a call of a function node enters the node. The root's own code then runs
- * as the root (rules whose caller pattern matches `""`, `**` among them, and `defaultPolicy`), whoever called it. It
+ * as the root (rules whose caller pattern matches `""`, `**` among them, and `policy`), whoever called it. It
  * has no Proxy of its own and is reached only as the identity of the root's calls. Null when the api root is no
  * function.
  * @param {object} slothlet - The instance.
@@ -13296,7 +13296,7 @@ function runtime_runAroundPipeline(wrapper, hookManager, arounds, strategy, this
 			hookManager.executeErrorHooks(path, originalError, recorded, callArgs, api, ctx);
 		}
 		hookManager.executeAlwaysHooks(path, callArgs, undefined, true, [originalError], api, ctx);
-		if (wrapper.slothlet.config?.hook?.suppressErrors === true) return undefined;
+		if (wrapper.slothlet.config?.hook?.errors === "suppress") return undefined;
 		throw error;
 	};
 
@@ -15090,9 +15090,9 @@ class UnifiedWrapper extends ComponentBase {
 				filePath,
 				exportPath: internal.exportPath,
 				memberExportPaths: internal.memberExportPaths,
-				// sourceFolder is always provided by the caller; the config.dir fallback is never reached.
+				// sourceFolder is always provided by the caller; the config.base fallback is never reached.
 				/* v8 ignore next */
-				sourceFolder: sourceFolder || slothlet.config?.dir
+				sourceFolder: sourceFolder || slothlet.config?.base
 			});
 		}
 
@@ -16075,7 +16075,7 @@ class UnifiedWrapper extends ComponentBase {
 					// This matches v2 behavior where 'materialized' variable is set immediately
 					const lazy_setImpl = (value) => {
 						// A caller can ___invalidate() this wrapper AFTER materialization already
-						// started (e.g. backgroundMaterialize: true kicked it off before a collision
+						// started (e.g. loader.materialize: true kicked it off before a collision
 						// decision rejected the candidate) — the guard at this method's own top only
 						// catches invalidation BEFORE materialization starts, not while it's in flight.
 						// Re-checking here stops a rejected candidate's materializeFunc from applying
@@ -18689,7 +18689,7 @@ class UnifiedWrapper extends ComponentBase {
 			runtime_followModuleObject(wrapper, target, prop);
 			// A member of built-in data or an error the node holds is a read of that value at the node's path.
 			runtime_gateDataNodeMember(wrapper, prop, kept, access);
-			// Read-level permission gating (default-on; opt out via permissions.readGating: false).
+			// Read-level permission gating (default-on; opt out via permissions.gating.read: false).
 			// Delegates to the module-level runtime_enforceReadGate — shared with the
 			// waiting-proxy resolver so lazy reads are gated identically.
 			const enforceReadGate = (resolvedValue) => runtime_enforceReadGate(wrapper, prop, resolvedValue, undefined, kept, access);
@@ -19833,7 +19833,7 @@ class UnifiedWrapper extends ComponentBase {
 								hookManager.executeErrorHooks(___path, originalError, sourceInfo, args, api, ctx);
 							}
 							hookManager.executeAlwaysHooks(___path, args, undefined, true, [originalError], api, ctx);
-							if (wrapper.slothlet.config?.hook?.suppressErrors === true) return undefined;
+							if (wrapper.slothlet.config?.hook?.errors === "suppress") return undefined;
 							throw error;
 						}
 
@@ -20089,7 +20089,7 @@ class UnifiedWrapper extends ComponentBase {
 								}
 
 								// Check if errors should be suppressed
-								const suppressErrors = wrapper.slothlet.config?.hook?.suppressErrors === true;
+								const suppressErrors = wrapper.slothlet.config?.hook?.errors === "suppress";
 								if (suppressErrors) {
 									return undefined;
 								}
@@ -20111,7 +20111,7 @@ class UnifiedWrapper extends ComponentBase {
 							}
 
 							// Check if errors should be suppressed
-							const suppressErrors = wrapper.slothlet.config?.hook?.suppressErrors === true;
+							const suppressErrors = wrapper.slothlet.config?.hook?.errors === "suppress";
 							if (suppressErrors) {
 								return undefined;
 							}
@@ -20145,7 +20145,7 @@ class UnifiedWrapper extends ComponentBase {
 				}
 
 				// Check if errors should be suppressed
-				const suppressErrors = wrapper.slothlet.config?.hook?.suppressErrors === true;
+				const suppressErrors = wrapper.slothlet.config?.hook?.errors === "suppress";
 				if (suppressErrors) {
 					// Don't throw - return undefined after always hooks run
 					return undefined;

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T12:51:07-08:00 (1794775867)
+ *	@Last modified time: 2026-11-16T18:29:21-08:00 (1794882561)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -128,7 +128,7 @@ async function eagerAnswers(key, runtime, attribution, rules = []) {
 		mode: "eager",
 		runtime,
 		silent: true,
-		permissions: { defaultPolicy: "allow", attribution, rules }
+		permissions: { policy: "allow", caller: { attribution }, rules }
 	});
 	try {
 		const taken = await taking(api, key);
@@ -149,7 +149,7 @@ describe.each(configs)(
 		});
 
 		const build = (rules = []) =>
-			slothlet({ base: FIXTURE, mode, runtime, silent: true, permissions: { defaultPolicy: "allow", attribution, rules } });
+			slothlet({ base: FIXTURE, mode, runtime, silent: true, permissions: { policy: "allow", caller: { attribution }, rules } });
 
 		it.each(KEYS)("answers the host as the value does once the folder has loaded: %s", async (key) => {
 			const expected = answers(await twin(key));

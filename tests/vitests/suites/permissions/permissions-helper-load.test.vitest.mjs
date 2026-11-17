@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-11T23:57:40-08:00 (1794470260)
+ *	@Last modified time: 2026-11-16T18:29:53-08:00 (1794882593)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -115,7 +115,13 @@ describe.each(MATRIX)("Permissions > what a helper file starts when it loads > $
 		let api;
 
 		beforeAll(async () => {
-			api = await slothlet({ base: DIR, mode, runtime, silent: true, permissions: { defaultPolicy: "allow", attribution, rules: list } });
+			api = await slothlet({
+				base: DIR,
+				mode,
+				runtime,
+				silent: true,
+				permissions: { policy: "allow", caller: { attribution }, rules: list }
+			});
 			await loadAll(api);
 		});
 
@@ -166,7 +172,7 @@ function runFirstInstance(list) {
 	const script = `
 		import slothlet from "@cldmv/slothlet";
 		const keep = setInterval(() => {}, 1000);
-		const api = await slothlet({ base: ${JSON.stringify(base)}, silent: true, permissions: { defaultPolicy: "allow", attribution: "fast", rules: ${JSON.stringify(list)} } });
+		const api = await slothlet({ base: ${JSON.stringify(base)}, silent: true, permissions: { policy: "allow", rules: ${JSON.stringify(list)}, caller: { attribution: "fast" } } });
 		process.stdout.write("RESULT " + JSON.stringify([await api.one.viaQueue(), await api.two.viaQueue()]) + "\\n");
 		await api.shutdown();
 		clearInterval(keep);

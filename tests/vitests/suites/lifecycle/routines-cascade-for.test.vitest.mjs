@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:34-07:00 (1791091714)
+ *	@Last modified time: 2026-11-16T18:29:25-08:00 (1794882565)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -36,10 +36,12 @@ describe.each(["eager", "lazy"])("routines #400 — cascade:false + .for(key) + 
 	describe("cascade: false suppresses the root run-all cascade", () => {
 		it("a nested-only routine gets NO root api.<name> cascade (the per-entity case)", async () => {
 			const api = await slothlet({
-				dir: TEST_DIRS.API_TEST_ROUTINES_SELF,
+				base: TEST_DIRS.API_TEST_ROUTINES_SELF,
 				mode,
-				routines: [{ name: "activate", mode: "manual", cascade: false, recursive: true }],
-				stackRoutines: true,
+				routines: {
+					entries: [{ name: "activate", mode: "manual", cascade: false, recursive: true }],
+					stack: true
+				},
 				silent: true
 			});
 			try {
@@ -55,9 +57,11 @@ describe.each(["eager", "lazy"])("routines #400 — cascade:false + .for(key) + 
 
 		it("cascade defaults to true — the root cascade is created as before", async () => {
 			const api = await slothlet({
-				dir: TEST_DIRS.API_TEST_ROUTINES,
+				base: TEST_DIRS.API_TEST_ROUTINES,
 				mode,
-				routines: [{ name: "initialize", mode: "manual" }],
+				routines: {
+					entries: [{ name: "initialize", mode: "manual" }]
+				},
 				silent: true
 			});
 			try {
@@ -70,10 +74,12 @@ describe.each(["eager", "lazy"])("routines #400 — cascade:false + .for(key) + 
 
 		it("cascade:false leaves a same-named root contributor as its own leaf, not a run-all cascade", async () => {
 			const api = await slothlet({
-				dir: TEST_DIRS.API_TEST_ROUTINES,
+				base: TEST_DIRS.API_TEST_ROUTINES,
 				mode,
-				routines: [{ name: "initialize", mode: "manual", cascade: false }],
-				stackRoutines: true,
+				routines: {
+					entries: [{ name: "initialize", mode: "manual", cascade: false }],
+					stack: true
+				},
 				silent: true
 			});
 			try {
@@ -95,10 +101,12 @@ describe.each(["eager", "lazy"])("routines #400 — cascade:false + .for(key) + 
 	describe(".contributors + .for(key) on a co-owned path", () => {
 		it("lists the co-owners and invokes exactly one by moduleID, its args passed through", async () => {
 			const api = await slothlet({
-				dir: TEST_DIRS.API_TEST_ROUTINES,
+				base: TEST_DIRS.API_TEST_ROUTINES,
 				mode,
-				routines: [{ name: "initialize", mode: "manual", cascade: false }],
-				stackRoutines: true,
+				routines: {
+					entries: [{ name: "initialize", mode: "manual", cascade: false }],
+					stack: true
+				},
 				silent: true
 			});
 			try {
@@ -128,10 +136,12 @@ describe.each(["eager", "lazy"])("routines #400 — cascade:false + .for(key) + 
 
 		it(".for(key) forwards positional args and runs in the contributor's own extent (ambient self.* resolves)", async () => {
 			const api = await slothlet({
-				dir: TEST_DIRS.API_TEST_ROUTINES_SELF,
+				base: TEST_DIRS.API_TEST_ROUTINES_SELF,
 				mode,
-				routines: [{ name: "activate", mode: "manual", cascade: false, recursive: true }],
-				stackRoutines: true,
+				routines: {
+					entries: [{ name: "activate", mode: "manual", cascade: false, recursive: true }],
+					stack: true
+				},
 				silent: true
 			});
 			try {
@@ -150,10 +160,12 @@ describe.each(["eager", "lazy"])("routines #400 — cascade:false + .for(key) + 
 
 		it(".for(key) throws INVALID_ARGUMENT for a moduleID that doesn't contribute here", async () => {
 			const api = await slothlet({
-				dir: TEST_DIRS.API_TEST_ROUTINES,
+				base: TEST_DIRS.API_TEST_ROUTINES,
 				mode,
-				routines: [{ name: "initialize", mode: "manual", cascade: false }],
-				stackRoutines: true,
+				routines: {
+					entries: [{ name: "initialize", mode: "manual", cascade: false }],
+					stack: true
+				},
 				silent: true
 			});
 			try {
@@ -176,9 +188,11 @@ describe.each(["eager", "lazy"])("routines #400 — cascade:false + .for(key) + 
 			// stackRoutines is NOT enabled here: a plain call runs only the path's current owner, but
 			// .for(key) can still address either co-owner by moduleID — selecting one is the whole point.
 			const api = await slothlet({
-				dir: TEST_DIRS.API_TEST_ROUTINES,
+				base: TEST_DIRS.API_TEST_ROUTINES,
 				mode,
-				routines: [{ name: "initialize", mode: "manual", cascade: false }],
+				routines: {
+					entries: [{ name: "initialize", mode: "manual", cascade: false }]
+				},
 				silent: true
 			});
 			try {
@@ -209,10 +223,12 @@ describe.each(["eager", "lazy"])("routines #400 — cascade:false + .for(key) + 
 		// call — threw. The descriptors are now configurable, so the invariant imposes no constraint.
 		it("reading a routine slot's descriptors through the wrapper does not throw the proxy invariant", async () => {
 			const api = await slothlet({
-				dir: TEST_DIRS.API_TEST_ROUTINES_SELF,
+				base: TEST_DIRS.API_TEST_ROUTINES_SELF,
 				mode,
-				routines: [{ name: "activate", mode: "manual", cascade: false, recursive: true }],
-				stackRoutines: true,
+				routines: {
+					entries: [{ name: "activate", mode: "manual", cascade: false, recursive: true }],
+					stack: true
+				},
 				silent: true
 			});
 			try {
@@ -257,15 +273,17 @@ describe("routines #400 — config validation", () => {
 	it("rejects a non-boolean cascade with INVALID_CONFIG", async () => {
 		await withSuppressedSlothletErrorOutput(async () => {
 			await expect(
-				slothlet({ dir: TEST_DIRS.API_TEST_ROUTINES, routines: [{ name: "initialize", cascade: "yes" }], silent: true })
+				slothlet({ base: TEST_DIRS.API_TEST_ROUTINES, routines: { entries: [{ name: "initialize", cascade: "yes" }] }, silent: true })
 			).rejects.toMatchObject({ code: "INVALID_CONFIG" });
 		});
 	});
 
 	it("accepts cascade only via the object form (string shorthand always defaults it to true)", async () => {
 		const api = await slothlet({
-			dir: TEST_DIRS.API_TEST_ROUTINES,
-			routines: ["initialize:manual"],
+			base: TEST_DIRS.API_TEST_ROUTINES,
+			routines: {
+				entries: ["initialize:manual"]
+			},
 			silent: true
 		});
 		try {

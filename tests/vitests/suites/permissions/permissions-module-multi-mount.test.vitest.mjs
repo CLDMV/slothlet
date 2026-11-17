@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-26T02:52:53-07:00 (1793008373)
+ *	@Last modified time: 2026-11-16T18:30:03-08:00 (1794882603)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -69,7 +69,7 @@ describe.each(CONFIGS)("modules mounted at several paths (#625) — $mode / $run
 			mode,
 			runtime,
 			silent: true,
-			permissions: { defaultPolicy: "allow" },
+			permissions: { policy: "allow" },
 			...options
 		});
 		await api.slothlet.api.add("guest", GUEST, { moduleID: "gmod" });

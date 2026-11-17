@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:19-07:00 (1791090919)
+ *	@Last modified time: 2026-11-16T18:30:07-08:00 (1794882607)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -35,7 +35,7 @@ describe.each(getMatrixConfigs())("Permissions > Control-surface seal (H2) > $na
 	});
 
 	it("after seal(), policy-mutating methods throw PERMISSION_SEALED; sealed === true", async () => {
-		api = await slothlet({ ...config, base: BASE, permissions: { defaultPolicy: "allow" } });
+		api = await slothlet({ ...config, base: BASE, permissions: { policy: "allow" } });
 		const P = api.slothlet.permissions;
 
 		expect(P.control.sealed).toBe(false);
@@ -53,7 +53,7 @@ describe.each(getMatrixConfigs())("Permissions > Control-surface seal (H2) > $na
 		api = await slothlet({
 			...config,
 			base: BASE,
-			permissions: { defaultPolicy: "allow", rules: [{ caller: "callers.**", target: "payments.**", effect: "deny" }] }
+			permissions: { policy: "allow", rules: [{ caller: "callers.**", target: "payments.**", effect: "deny" }] }
 		});
 		const P = api.slothlet.permissions;
 
@@ -78,7 +78,7 @@ describe.each(getMatrixConfigs())("Permissions > Control-surface seal (H2) > $na
 	});
 
 	it("shutdown() still works after seal()", async () => {
-		api = await slothlet({ ...config, base: BASE, permissions: { defaultPolicy: "allow" } });
+		api = await slothlet({ ...config, base: BASE, permissions: { policy: "allow" } });
 		api.slothlet.permissions.control.seal();
 		await api.shutdown();
 		api = null; // shutdown succeeded
@@ -89,7 +89,7 @@ describe.each(getMatrixConfigs())("Permissions > Control-surface seal (H2) > $na
 		// reload() constructs a fresh PermissionManager (#sealed resets to false). Without the
 		// save/re-apply around reload, the control surface would silently unseal — contradicting
 		// seal()'s documented one-way guarantee.
-		api = await slothlet({ ...config, base: BASE, permissions: { defaultPolicy: "deny" } });
+		api = await slothlet({ ...config, base: BASE, permissions: { policy: "deny" } });
 		const P = api.slothlet.permissions;
 		P.control.seal();
 		expect(P.control.sealed).toBe(true);
@@ -102,7 +102,7 @@ describe.each(getMatrixConfigs())("Permissions > Control-surface seal (H2) > $na
 	});
 
 	it("module-land seal() is blocked by the builtin control.** deny rule (regression)", async () => {
-		api = await slothlet({ ...config, base: BASE, permissions: { defaultPolicy: "allow" } });
+		api = await slothlet({ ...config, base: BASE, permissions: { policy: "allow" } });
 		let denied = false;
 		await withSuppressedSlothletErrorOutput(async () => {
 			try {

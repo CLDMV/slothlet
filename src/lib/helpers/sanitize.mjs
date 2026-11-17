@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:14-08:00 (1794874574)
+ *	@Last modified time: 2026-11-16T18:27:58-08:00 (1794882478)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -268,12 +268,13 @@ export class Sanitize extends ComponentBase {
 	 *
 	 * @param {string} input - String to sanitize
 	 * @param {Object} [options] - Sanitization configuration. Omit it to use the instance's `sanitize` config (defaults when there is none)
-	 * @param {boolean} [options.lowerFirst=true] - Lowercase first character of first segment
-	 * @param {boolean} [options.preserveAllUpper=false] - Preserve all-uppercase identifiers
-	 * @param {boolean} [options.preserveAllLower=false] - Preserve all-lowercase identifiers
+	 * @param {boolean} [options.first=true] - Lowercase first character of first segment
+	 * @param {Object} [options.preserve={}] - Names kept as they are
+	 * @param {boolean} [options.preserve.upper=false] - Preserve all-uppercase identifiers
+	 * @param {boolean} [options.preserve.lower=false] - Preserve all-lowercase identifiers
 	 * @param {Object} [options.rules={}] - Transformation rules
 	 * @param {string[]} [options.rules.leave=[]] - Preserve exactly (case-sensitive, supports globs)
-	 * @param {string[]} [options.rules.leaveInsensitive=[]] - Preserve exactly (case-insensitive, supports globs)
+	 * @param {string[]} [options.rules.nocase=[]] - Preserve exactly (case-insensitive, supports globs)
 	 * @param {string[]} [options.rules.upper=[]] - Force UPPERCASE (supports globs and **STRING**)
 	 * @param {string[]} [options.rules.lower=[]] - Force lowercase (supports globs and **STRING**)
 	 * @returns {string} Valid JavaScript identifier
@@ -299,7 +300,7 @@ export class Sanitize extends ComponentBase {
 	 * @example
 	 * // Case preservation
 	 * sanitizePropertyName("COMMON_APPS", {
-	 *   preserveAllUpper: true
+	 *   preserve: { upper: true }
 	 * }); // "COMMON_APPS"
 	 *
 	 * @example
@@ -315,11 +316,13 @@ export class Sanitize extends ComponentBase {
 		// No explicit options: use the instance's `sanitize` config, so every name the loader derives from a
 		// file or folder follows it (#814). The standalone export has no instance and falls back to defaults.
 		const effective = options ?? this.slothlet?.config?.sanitize ?? {};
-		const { lowerFirst = true, preserveAllUpper = false, preserveAllLower = false, rules = {} } = effective;
+		const { first: lowerFirst = true, preserve = {}, rules = {} } = effective;
+		const preserveAllUpper = preserve?.upper === true;
+		const preserveAllLower = preserve?.lower === true;
 
 		// Normalize rules to string arrays
 		const leaveRules = mapList(rules.leave || [], (s) => String(s));
-		const leaveInsensitiveRules = mapList(rules.leaveInsensitive || [], (s) => String(s));
+		const leaveInsensitiveRules = mapList(rules.nocase || [], (s) => String(s));
 		const upperRules = mapList(rules.upper || [], (s) => String(s));
 		const lowerRules = mapList(rules.lower || [], (s) => String(s));
 

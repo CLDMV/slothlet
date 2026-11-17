@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:36-07:00 (1791091716)
+ *	@Last modified time: 2026-11-16T18:29:30-08:00 (1794882570)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -56,8 +56,10 @@ describe("routine stacks are installed for modules mounted via addModule()/addMo
 			mode: "eager",
 			runtime: "async",
 			silent: true,
-			routines: [{ name: "^ext.widget.initialize", mode: "manual" }],
-			api: { collision: { initial: "merge", api: "merge" } }
+			routines: {
+				entries: [{ name: "^ext.widget.initialize", mode: "manual" }]
+			},
+			api: { collision: { mode: { initial: "merge", api: "merge" } } }
 		});
 
 		const res = await api.slothlet.api.modules.addModule("@local/routine-widget", { discover: { scanRoot: FIX_ROUTINE_MODULE } });
@@ -81,8 +83,10 @@ describe("routine stacks are installed for modules mounted via addModule()/addMo
 			mode: "eager",
 			runtime: "async",
 			silent: true,
-			routines: [{ name: "^ext.widget.initialize", mode: "manual" }],
-			api: { collision: { initial: "merge", api: "merge" } }
+			routines: {
+				entries: [{ name: "^ext.widget.initialize", mode: "manual" }]
+			},
+			api: { collision: { mode: { initial: "merge", api: "merge" } } }
 		});
 
 		const found = await api.slothlet.api.modules.discover({ scanRoot: FIX_ROUTINE_MODULE });

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-12T02:00:59-08:00 (1794477659)
+ *	@Last modified time: 2026-11-16T18:29:54-08:00 (1794882594)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -75,7 +75,7 @@ describe.each(matrix)(
 			 * @returns {Promise<{made: Function, box: {run: Function}}>} What the author handed out.
 			 */
 			async function open() {
-				api = await slothlet({ base: BASE, mode, runtime, silent: true, permissions: { defaultPolicy: "allow", attribution, rules } });
+				api = await slothlet({ base: BASE, mode, runtime, silent: true, permissions: { policy: "allow", caller: { attribution }, rules } });
 				await api.vault.get();
 				return { made: await api.author.make(), box: await api.author.box() };
 			}
@@ -110,7 +110,7 @@ describe.each(matrix)(
 				mode,
 				runtime,
 				silent: true,
-				permissions: { defaultPolicy: "deny", attribution, rules: [] }
+				permissions: { policy: "deny", caller: { attribution }, rules: [] }
 			});
 			expect(await api.slothlet.context.run({ user: "u" }, () => api.vault.get())).toBe("SECRET");
 		});

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:19-07:00 (1791090919)
+ *	@Last modified time: 2026-11-16T18:30:07-08:00 (1794882607)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -72,7 +72,7 @@ describe.each(getMatrixConfigs())("Permissions > scheduler attribution > $name",
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				rules: [{ caller: "callers.**", target: "db.secrets.**", effect: "deny" }]
 			}
 		});
@@ -118,7 +118,7 @@ describe.each(getMatrixConfigs())("Permissions > scheduler attribution > $name",
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "deny",
+				policy: "deny",
 				rules: [
 					{ caller: "callers.dataReader.**", target: "db.secrets.**", effect: "allow" },
 					{ caller: "**", target: "callers.**", effect: "allow" }
@@ -174,7 +174,7 @@ describe("Permissions > scheduler attribution > mixed runtimes in one process", 
 			mode: "eager",
 			runtime,
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				rules: [{ caller: "callers.**", target: "db.secrets.**", effect: "deny" }]
 			}
 		});

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-14T09:09:11-08:00 (1794676151)
+ *	@Last modified time: 2026-11-16T18:28:40-08:00 (1794882520)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -40,7 +40,7 @@ const EXTRA = path.join(path.dirname(TEST_DIRS.API_TEST), "api_test_restart_extr
  * generation of the fixture was shut down.
  * @type {object}
  */
-const TRACKER_ROUTINES = { autoRoutines: true, routines: [{ name: "^tracker.shutdown", mode: "shutdown" }] };
+const TRACKER_ROUTINES = { routines: { auto: true, entries: [{ name: "^tracker.shutdown", mode: "shutdown" }] } };
 
 /**
  * Read the fixture's shared module-state record.
@@ -200,7 +200,7 @@ describe.each(getMatrixConfigs({}))("api.slothlet.restart() (#504) > $name", ({ 
 
 	it("drops runtime permission rules while config-declared rules apply", async () => {
 		await create({
-			permissions: { defaultPolicy: "allow", rules: [{ caller: "probe.**", target: "secret.blocked", effect: "deny" }] }
+			permissions: { policy: "allow", rules: [{ caller: "probe.**", target: "secret.blocked", effect: "deny" }] }
 		});
 		api.slothlet.permissions.addRule({ caller: "probe.**", target: "secret.open", effect: "deny" });
 		await expect(settle(() => api.probe.callBlocked())).rejects.toThrow("PERMISSION_DENIED");
@@ -334,7 +334,7 @@ describe.each(getMatrixConfigs({}))("api.slothlet.restart() (#504) > $name", ({ 
 			...config,
 			base: BASE,
 			silent: true,
-			permissions: { defaultPolicy: "allow", rules: [{ caller: "probe.**", target: "secret.blocked", effect: "deny" }] }
+			permissions: { policy: "allow", rules: [{ caller: "probe.**", target: "secret.blocked", effect: "deny" }] }
 		};
 		api = await slothlet(options);
 		options.base = EXTRA;
@@ -360,7 +360,7 @@ describe.each(getMatrixConfigs({}))("api.slothlet.restart() (#504) > $name", ({ 
 
 	it("restarts a sealed instance into an unsealed one with only the original config's rules", async () => {
 		await create({
-			permissions: { defaultPolicy: "allow", rules: [{ caller: "probe.**", target: "secret.blocked", effect: "deny" }] }
+			permissions: { policy: "allow", rules: [{ caller: "probe.**", target: "secret.blocked", effect: "deny" }] }
 		});
 		api.slothlet.permissions.addRule({ caller: "probe.**", target: "secret.open", effect: "deny" });
 		api.slothlet.permissions.control.seal();
@@ -385,14 +385,14 @@ describe.each(getMatrixConfigs({}))("api.slothlet.restart() (#504) > $name", ({ 
 	});
 
 	it("is host-only by default: a module calling restart() is denied (defaultPolicy allow)", async () => {
-		await create({ permissions: { defaultPolicy: "allow" } });
+		await create({ permissions: { policy: "allow" } });
 		const before = api.slothlet.instanceID;
 		await expect(settle(() => api.probe.restartInstance())).rejects.toThrow("PERMISSION_DENIED");
 		expect(api.slothlet.instanceID).toBe(before);
 	});
 
 	it("runs the user's root shutdown during the teardown, also when a permitted module triggered the restart", async () => {
-		await create({ permissions: { defaultPolicy: "allow", rules: [{ caller: "probe.**", target: "slothlet.restart", effect: "allow" }] } });
+		await create({ permissions: { policy: "allow", rules: [{ caller: "probe.**", target: "slothlet.restart", effect: "allow" }] } });
 		const first = api.slothlet.instanceID;
 		await api.slothlet.restart();
 		expect(fixtureState().userShutdowns).toHaveLength(1);
@@ -407,7 +407,7 @@ describe.each(getMatrixConfigs({}))("api.slothlet.restart() (#504) > $name", ({ 
 	});
 
 	it("lets the host restart, and a host allow rule lets a trusted module restart", async () => {
-		await create({ permissions: { defaultPolicy: "allow", rules: [{ caller: "probe.**", target: "slothlet.restart", effect: "allow" }] } });
+		await create({ permissions: { policy: "allow", rules: [{ caller: "probe.**", target: "slothlet.restart", effect: "allow" }] } });
 		const first = api.slothlet.instanceID;
 		await api.slothlet.restart();
 		const second = api.slothlet.instanceID;

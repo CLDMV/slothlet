@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:17:39-08:00 (1794874659)
+ *	@Last modified time: 2026-11-16T18:30:37-08:00 (1794882637)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -333,7 +333,7 @@ describe("Array elements are full slothlet nodes (api.add + permission gating)",
 	});
 
 	it("permission rules gate a method on an array element (deny-all via an inter-module caller)", async () => {
-		const api = await slothlet({ base: root, mode: "eager", permissions: { defaultPolicy: "allow" } });
+		const api = await slothlet({ base: root, mode: "eager", permissions: { policy: "allow" } });
 		apis.push(api);
 		// Allowed by default: caller.go() calls self.data.items[0].run() (an inter-module call).
 		expect(await api.caller.go()).toBe("secret-x");
@@ -343,7 +343,7 @@ describe("Array elements are full slothlet nodes (api.add + permission gating)",
 	});
 
 	it("denies ONE deep path on an array element (data.items.*.plugin.hello) while siblings pass", async () => {
-		const api = await slothlet({ base: root, mode: "eager", permissions: { defaultPolicy: "allow" } });
+		const api = await slothlet({ base: root, mode: "eager", permissions: { policy: "allow" } });
 		apis.push(api);
 		// `*` must match the array index, and gating must be path-precise: deny only plugin.hello.
 		api.slothlet.permissions.addRule({ caller: "caller.**", target: "data.items.*.plugin.hello", effect: "deny" });
@@ -358,7 +358,7 @@ describe("Array elements are full slothlet nodes (api.add + permission gating)",
 		const api = await slothlet({
 			base: root,
 			mode: "eager",
-			permissions: { defaultPolicy: "deny", rules: [{ caller: "caller.**", target: "data.items.*.plugin.hello", effect: "allow" }] }
+			permissions: { policy: "deny", rules: [{ caller: "caller.**", target: "data.items.*.plugin.hello", effect: "allow" }] }
 		});
 		apis.push(api);
 		// Only data.items.*.plugin.hello is allowed; everything else under the element is denied.
@@ -735,7 +735,7 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])("An array element's path fo
 	});
 
 	it("a rule for an index applies to the element at that index, including a reference held from before it moved", async () => {
-		api = await slothlet({ base: root, mode, permissions: { defaultPolicy: "allow" } });
+		api = await slothlet({ base: root, mode, permissions: { policy: "allow" } });
 		expect(await api.caller.hold(1)).toBe("y");
 		api.slothlet.permissions.addRule({ caller: "caller.**", target: "data.items.0.**", effect: "deny" });
 		expect(await api.caller.callHeld()).toBe("run-y");
@@ -1171,7 +1171,12 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])("A named export called leng
 	beforeEach(async () => {
 		root = makeRoot(`named-length-${mode}`);
 		await writeModule(join(root, "lst4.mjs"), "export default [1, 2];\nexport const length = 99;\n");
-		api = await slothlet({ base: root, mode, silent: true, api: { collision: { initial: "merge-replace", api: "merge-replace" } } });
+		api = await slothlet({
+			base: root,
+			mode,
+			silent: true,
+			api: { collision: { mode: { initial: "merge-replace", api: "merge-replace" } } }
+		});
 		await api.lst4;
 	});
 

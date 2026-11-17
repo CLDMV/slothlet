@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-12T07:00:09-08:00 (1794495609)
+ *	@Last modified time: 2026-11-16T18:29:36-08:00 (1794882576)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -59,8 +59,8 @@ describe.each(matrix)("typed array members > $mode / $runtime / $attribution", (
 	});
 
 	const open = async (typedArrayMembers) => {
-		const permissions = { defaultPolicy: "allow", attribution };
-		if (typedArrayMembers !== undefined) permissions.typedArrayMembers = typedArrayMembers;
+		const permissions = { policy: "allow", caller: { attribution } };
+		if (typedArrayMembers !== undefined) permissions.gating = { buffers: typedArrayMembers };
 		api = await mount({ mode, runtime, permissions });
 	};
 
@@ -135,7 +135,7 @@ describe.each(matrix)("typed array members > $mode / $runtime / $attribution", (
 describe("typed array members > configuration", () => {
 	it.each([["yes"], [-1], [1.5], [Number.NaN], [Number.POSITIVE_INFINITY], [null], [{}]])("refuses %j", async (value) => {
 		await expect(
-			slothlet({ base: join(FIXTURE, "host"), silent: true, permissions: { defaultPolicy: "allow", typedArrayMembers: value } })
+			slothlet({ base: join(FIXTURE, "host"), silent: true, permissions: { policy: "allow", gating: { buffers: value } } })
 		).rejects.toMatchObject({ code: "INVALID_CONFIG" });
 	});
 
@@ -143,7 +143,7 @@ describe("typed array members > configuration", () => {
 		const api = await slothlet({
 			base: join(FIXTURE, "host"),
 			silent: true,
-			permissions: { defaultPolicy: "allow", typedArrayMembers: value }
+			permissions: { policy: "allow", gating: { buffers: value } }
 		});
 		expect(await api.host.ping()).toBe("pong");
 		await api.shutdown();

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T00:00:00-08:00 (1794729600)
+ *	@Last modified time: 2026-11-16T18:30:15-08:00 (1794882615)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -43,10 +43,10 @@ const configs = ["eager", "lazy"].flatMap((mode) =>
 /** Permission setups: what the module is denied under each. */
 const SETUPS = {
 	off: { permissions: undefined, deniesMarker: false, deniesDiag: false },
-	"on, no rule": { permissions: { defaultPolicy: "allow" }, deniesMarker: false, deniesDiag: false },
+	"on, no rule": { permissions: { policy: "allow" }, deniesMarker: false, deniesDiag: false },
 	"on, deny rules": {
 		permissions: {
-			defaultPolicy: "allow",
+			policy: "allow",
 			rules: [
 				{ caller: "reader.**", target: `slothlet.env.${MARKER_NAME}`, effect: "deny" },
 				{ caller: "reader.**", target: "slothlet.diag", effect: "deny" }
@@ -107,7 +107,7 @@ describe.each(Object.keys(SETUPS))("self.slothlet as a module lists and inspects
 				diagnostics: true,
 				mode,
 				runtime,
-				...(setup.permissions ? { permissions: { ...setup.permissions, attribution } } : {})
+				...(setup.permissions ? { permissions: { ...setup.permissions, caller: { attribution } } } : {})
 			});
 			await api.reader;
 			return api;

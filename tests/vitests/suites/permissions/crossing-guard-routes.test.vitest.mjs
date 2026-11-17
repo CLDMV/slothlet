@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-10T21:29:39-08:00 (1794374979)
+ *	@Last modified time: 2026-11-16T18:29:35-08:00 (1794882575)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -89,7 +89,7 @@ describe.each(matrix)("crossing guard routes > $mode / $runtime / $attribution",
 	});
 
 	it("refuses a reader with no write rule every change to the owner's code, by every route", async () => {
-		api = await mount({ mode, runtime, permissions: { defaultPolicy: "allow", attribution, events: { default: "allow" } } });
+		api = await mount({ mode, runtime, permissions: { policy: "allow", caller: { attribution }, events: { policy: "allow" } } });
 		const outcome = await plantByEveryRoute(api);
 		// Every route hands the reader something of the owner's, except the one the owner's own write is refused on: a
 		// function is its module's code, so the owner storing a member on the reader's function is a write to the reader.
@@ -123,7 +123,7 @@ describe.each(matrix)("crossing guard routes > $mode / $runtime / $attribution",
 	});
 
 	it("refuses the same reader by every detour: out of stack, through a function the owner runs, and round the owner", async () => {
-		api = await mount({ mode, runtime, hook: { enabled: true }, permissions: { defaultPolicy: "allow", attribution } });
+		api = await mount({ mode, runtime, hook: { enabled: true }, permissions: { policy: "allow", caller: { attribution } } });
 		const outcome = {};
 		let index = 0;
 		for (const name of await api.reader.detours()) {
@@ -162,8 +162,10 @@ describe.each(matrix)("crossing guard routes > $mode / $runtime / $attribution",
 			mode,
 			runtime,
 			permissions: {
-				defaultPolicy: "allow",
-				attribution,
+				policy: "allow",
+				caller: {
+					attribution
+				},
 				rules: [
 					{ caller: "deputy.**", target: "owner.**:write", effect: "allow" },
 					{ caller: "deputy.**", target: "owner:write", effect: "allow" }
@@ -181,14 +183,14 @@ describe.each(matrix)("crossing guard routes > $mode / $runtime / $attribution",
 	});
 
 	it("hands a module's own hook on its own function the module's own values", async () => {
-		api = await mount({ mode, runtime, hook: { enabled: true }, permissions: { defaultPolicy: "allow", attribution } });
+		api = await mount({ mode, runtime, hook: { enabled: true }, permissions: { policy: "allow", caller: { attribution } } });
 		expect(await api.owner.ownHook()).toBe("true,true");
 	});
 
 	it("keeps a function of an object the owner hands over as data, and leaves its data the reader's to change, where nothing showed the object to be a prototype", async () => {
 		// Only the data crosses here: the owner hands on nothing made from the object, so it is data like any other. Once
 		// something inheriting from it crosses, it is the owner's code whole (see crossing-rules).
-		api = await mount({ mode, runtime, permissions: { defaultPolicy: "allow", attribution } });
+		api = await mount({ mode, runtime, permissions: { policy: "allow", caller: { attribution } } });
 		expect(await api.reader.prototypeAsData("__data_")).toEqual({ replaced: "LOOSE_SET_NOT_OWNED", added: "written" });
 		expect(await api.owner.changed()).toEqual([]);
 		expect(await api.owner.landed("__data_")).toEqual(["objProto:added"]);
@@ -198,7 +200,7 @@ describe.each(matrix)("crossing guard routes > $mode / $runtime / $attribution",
 		api = await mount({
 			mode,
 			runtime,
-			permissions: { defaultPolicy: "allow", attribution, events: { default: "allow" }, rules: ALLOW_READER_WRITES }
+			permissions: { policy: "allow", caller: { attribution }, events: { policy: "allow" }, rules: ALLOW_READER_WRITES }
 		});
 		for (const route of ["returned", "inData", "callbackArgument", "asyncReturned", "storedInObject", "runtimeContext"]) {
 			const prefix = `__granted_${route}_`;

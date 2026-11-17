@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-12T02:01:01-08:00 (1794477661)
+ *	@Last modified time: 2026-11-16T18:29:58-08:00 (1794882598)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -86,7 +86,7 @@ describe.each(matrix)("a module's exported function handed out > $mode / $runtim
 	});
 
 	it.each(RULE_SETS)("$label", async ({ rules, expected }) => {
-		api = await slothlet({ base: BASE, mode, runtime, silent: true, permissions: { defaultPolicy: "allow", attribution, rules } });
+		api = await slothlet({ base: BASE, mode, runtime, silent: true, permissions: { policy: "allow", caller: { attribution }, rules } });
 		const got = await api.sup.probe();
 		for (const [route, answer] of Object.entries(expected)) expect([route, got[route]]).toEqual([route, answer]);
 	});
@@ -97,7 +97,7 @@ describe.each(matrix)("a module's exported function handed out > $mode / $runtim
 			mode,
 			runtime,
 			silent: true,
-			permissions: { defaultPolicy: "allow", attribution, rules: [{ caller: "sup.**", target: "vault.**", effect: "deny" }] }
+			permissions: { policy: "allow", caller: { attribution }, rules: [{ caller: "sup.**", target: "vault.**", effect: "deny" }] }
 		});
 		expect(await (await api.bag.boundLeaf())()).toBe("SECRET");
 		expect(await (await api.bag.inData()).run()).toBe("SECRET");

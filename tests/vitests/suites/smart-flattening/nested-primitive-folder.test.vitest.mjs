@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T12:54:28-08:00 (1794776068)
+ *	@Last modified time: 2026-11-16T18:30:28-08:00 (1794882628)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -93,7 +93,13 @@ describe.each(configs)(
 		 * @returns {Promise<object>} The api.
 		 */
 		const load = async (rules = []) => {
-			api = await slothlet({ base: FIXTURE, mode, runtime, silent: true, permissions: { attribution, defaultPolicy: "allow", rules } });
+			api = await slothlet({
+				base: FIXTURE,
+				mode,
+				runtime,
+				silent: true,
+				permissions: { caller: { attribution }, policy: "allow", rules }
+			});
 			return api;
 		};
 

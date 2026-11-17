@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:27-07:00 (1791090927)
+ *	@Last modified time: 2026-11-16T18:30:43-08:00 (1794882643)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -40,7 +40,10 @@ describe.each(getMatrixConfigs())("Versioning > Force Symbol > $name", ({ config
 		api = await slothlet({
 			...config,
 			base: `${BASE}/callers`,
-			versionDispatcher: () => "v2" // would normally route to v2
+			versioning: {
+				dispatcher: () => "v2"
+			}
+			// would normally route to v2
 		});
 
 		await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1", default: true });
@@ -62,7 +65,9 @@ describe.each(getMatrixConfigs())("Versioning > Force Symbol > $name", ({ config
 		api = await slothlet({
 			...config,
 			base: `${BASE}/callers`,
-			versionDispatcher: () => null
+			versioning: {
+				dispatcher: () => null
+			}
 		});
 
 		await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1", default: true });

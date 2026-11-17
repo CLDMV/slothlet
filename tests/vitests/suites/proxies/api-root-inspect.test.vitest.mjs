@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T00:00:00-08:00 (1794729600)
+ *	@Last modified time: 2026-11-16T18:30:19-08:00 (1794882619)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -76,8 +76,10 @@ describe.each(ROOTS)("util.inspect of the api root > %s", (root) => {
 				mode,
 				runtime,
 				permissions: {
-					defaultPolicy: "allow",
-					attribution,
+					policy: "allow",
+					caller: {
+						attribution
+					},
 					rules: [
 						{ caller: "i.**", target: "pnum", effect: "deny" },
 						{ caller: "i.**", target: "data", effect: "deny" }

@@ -255,7 +255,7 @@ api.greet.VERSION; // ✅ named export attached as a property
 **Behavior**: Files with a default export (C02) are preserved as their own named namespace. Files without a default export (C03) have their named exports hoisted directly into the parent folder namespace — the file's own intermediate namespace is dissolved.
 **Processing Path**: C02 → `preserveAsNamespace: true`; C03 → `flattenToRoot: true` (keys merged into `targetApi`)
 
-> **Bug Fix (PR [#116](https://github.com/CLDMV/slothlet/pull/116))**: Prior to this fix, C03 fell through to standard namespace wrapping, causing named-only files to appear nested under a `filename` sub-namespace (e.g. `api.notifications.helpers.formatPhone`) instead of being hoisted to the folder level (`api.notifications.formatPhone`). If you depend on the pre-fix nested behavior and need time to migrate, you can temporarily restore it with `suppressFixes: ["C03_116"]` — see [Bug-Fix Suppression](../docs/CONFIGURATION.md#bug-fix-suppression-suppressfixes) in the configuration docs. This option will be removed in v4.
+> **Bug Fix (PR [#116](https://github.com/CLDMV/slothlet/pull/116))**: Prior to this fix, C03 fell through to standard namespace wrapping, causing named-only files to appear nested under a `filename` sub-namespace (e.g. `api.notifications.helpers.formatPhone`) instead of being hoisted to the folder level (`api.notifications.formatPhone`). The pre-fix nesting cannot be restored in v4.
 
 **Verified Examples**:
 
@@ -572,8 +572,10 @@ const api = await slothlet({
 	base: "./api",
 	api: {
 		collision: {
-			initial: "merge", // During initial API build
-			api: "replace" // During api.slothlet.api.add()
+			mode: {
+				initial: "merge", // During initial API build
+				api: "replace" // During api.slothlet.api.add()
+			}
 		}
 	}
 });
@@ -619,7 +621,7 @@ await api.slothlet.api.remove("module-b");
 
 ### Collision Modes
 
-Collision mode is fixed at instance initialization (the `collision` config option — see [CONFIGURATION.md](CONFIGURATION.md)). Passing `collisionMode` to an individual `api.add()` call is locked by default — it emits a `WARNING_API_ADD_OPTION_LOCKED` warning and is ignored (the add still succeeds), unless `api.mutations.allowCollisionOverride: true` is set, which makes a per-call `collisionMode` take effect. `forceOverwrite` (below) is the always-available per-call escape hatch regardless of that flag.
+Collision mode is fixed at instance initialization (the `api.collision.mode` config option — see [CONFIGURATION.md](CONFIGURATION.md)). Passing `collisionMode` to an individual `api.add()` call is locked by default — it emits a `WARNING_API_ADD_OPTION_LOCKED` warning and is ignored (the add still succeeds), unless `api.collision.override: true` is set, which makes a per-call `collisionMode` take effect. `forceOverwrite` (below) is the always-available per-call escape hatch regardless of that flag.
 
 | Mode                | Behavior                                   |
 | ------------------- | ------------------------------------------ |
@@ -814,7 +816,7 @@ api.thing("x"); // ✅ the leaf itself, mounted directly (nothing to hoist)
 
 **Category**: Routines
 **Status**: ✅ Implemented (`src/lib/handlers/routine-manager.mjs`)
-**Conditions**: [T01–T10](API-RULES/API-ROUTINE-CONDITIONS.md) — `stackRoutines` Gate, Name Matching, Slot-Type Selection, Last-Wins, Cascade-Slot Exclusivity, `cascade:false` Suppression, Root-Builtin Exclusion, Execution Order, `.for`/`.contributors` Surface, Return Shape
+**Conditions**: [T01–T10](API-RULES/API-ROUTINE-CONDITIONS.md) — `routines.stack` Gate, Name Matching, Slot-Type Selection, Last-Wins, Cascade-Slot Exclusivity, `cascade:false` Suppression, Root-Builtin Exclusion, Execution Order, `.for`/`.contributors` Surface, Return Shape
 
 **Purpose**: Governs how contributions to a named routine are collected and whether an api slot becomes a plain value, a per-path stacked callable, or a root cascade callable — including the contributor gate, name matching, execution order, and the scalar-vs-array return shape.
 

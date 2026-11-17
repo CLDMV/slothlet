@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:25-07:00 (1791090925)
+ *	@Last modified time: 2026-11-16T18:30:39-08:00 (1794882639)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -229,7 +229,11 @@ describe("unified-wrapper: _extractFullImpl via hot reload (lines 451-466)", () 
 			base: TEST_DIRS.API_TEST,
 			mode: "eager",
 			silent: true,
-			collision: { initial: "merge" }
+			api: {
+				collision: {
+					mode: { initial: "merge" }
+				}
+			}
 		});
 
 		// Reload the "config" path — simple module with object properties.

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:57-07:00 (1791090897)
+ *	@Last modified time: 2026-11-16T18:28:34-08:00 (1794882514)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -191,7 +191,11 @@ describe("api-manager mutateApiValue debug.api paths", () => {
 			mode: "eager",
 			runtime: "async",
 			debug: { api: true },
-			collision: { initial: "replace", api: "replace" }
+			api: {
+				collision: {
+					mode: { initial: "replace", api: "replace" }
+				}
+			}
 		});
 		// Add ext, then re-add → replace mode → setValueAtPath replace path fires
 		await api.slothlet.api.add("repExt", TEST_DIRS.API_TEST_MIXED);
@@ -221,7 +225,11 @@ describe("api-manager syncWrapper merge-replace path", () => {
 			mode: "eager",
 			runtime: "async",
 			debug: { api: true },
-			collision: { initial: "merge-replace", api: "merge-replace" }
+			api: {
+				collision: {
+					mode: { initial: "merge-replace", api: "merge-replace" }
+				}
+			}
 		});
 		// First add creates wrapper
 		await api.slothlet.api.add("mrExt", TEST_DIRS.API_TEST_MIXED);
@@ -237,7 +245,11 @@ describe("api-manager syncWrapper merge-replace path", () => {
 			mode: "eager",
 			runtime: "async",
 			debug: { api: true },
-			collision: { initial: "merge-replace", api: "merge-replace" }
+			api: {
+				collision: {
+					mode: { initial: "merge-replace", api: "merge-replace" }
+				}
+			}
 		});
 		// Both API_TEST and API_TEST_MIXED will be added to "ns" namespace
 		// API_TEST has math, config, etc. Adding API_TEST_MIXED to same path
@@ -268,7 +280,11 @@ describe("api-manager setValueAtPath skip and warn collision modes", () => {
 			mode: "eager",
 			runtime: "async",
 			debug: { api: true },
-			collision: { initial: "skip", api: "skip" }
+			api: {
+				collision: {
+					mode: { initial: "skip", api: "skip" }
+				}
+			}
 		});
 		// Add first dir
 		const before = await api.slothlet.api.add("skipExt", TEST_DIRS.API_TEST_MIXED);
@@ -285,9 +301,14 @@ describe("api-manager setValueAtPath skip and warn collision modes", () => {
 			base: TEST_DIRS.API_TEST,
 			mode: "eager",
 			runtime: "async",
-			silent: true, // suppress warning output
+			silent: true,
+			// suppress warning output
 			debug: { api: true },
-			collision: { initial: "warn", api: "warn" }
+			api: {
+				collision: {
+					mode: { initial: "warn", api: "warn" }
+				}
+			}
 		});
 		await api.slothlet.api.add("warnExt", TEST_DIRS.API_TEST_MIXED);
 		// Second add → warn mode → SlothletWarning emitted → setValueAtPath returns false

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:00-07:00 (1791090900)
+ *	@Last modified time: 2026-11-16T18:28:48-08:00 (1794882528)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -201,7 +201,7 @@ describe("modes-processor: eager file-folder merge existing impl into new implTo
 			mode: "eager",
 			runtime: "async",
 			hook: { enabled: false },
-			api: { collision: { initial: "merge", api: "merge" } },
+			api: { collision: { mode: { initial: "merge", api: "merge" } } },
 			base: DIRS.OBJECT_DEFAULT_MERGE
 		});
 
@@ -224,7 +224,7 @@ describe("modes-processor: eager file-folder merge existing impl into new implTo
 			runtime: "async",
 			hook: { enabled: false },
 			debug: { modes: true },
-			api: { collision: { initial: "merge", api: "merge" } },
+			api: { collision: { mode: { initial: "merge", api: "merge" } } },
 			base: DIRS.OBJECT_DEFAULT_MERGE
 		});
 
@@ -260,7 +260,11 @@ describe("modes-processor: lazy function-default file+folder collision (lines 11
 			mode: "lazy",
 			runtime: "async",
 			hook: { enabled: false },
-			collision: { initial: "merge" },
+			api: {
+				collision: {
+					mode: { initial: "merge" }
+				}
+			},
 			base: DIRS.FN_FILE_FOLDER_LAZY
 		});
 
@@ -278,7 +282,11 @@ describe("modes-processor: lazy function-default file+folder collision (lines 11
 			mode: "lazy",
 			runtime: "async",
 			hook: { enabled: false },
-			collision: { initial: "merge" },
+			api: {
+				collision: {
+					mode: { initial: "merge" }
+				}
+			},
 			debug: { modes: true },
 			base: DIRS.FN_FILE_FOLDER_LAZY
 		});
@@ -308,7 +316,11 @@ describe("modes-processor: lazy single-file folder fn with prop collision — me
 			mode: "lazy",
 			runtime: "async",
 			hook: { enabled: false },
-			collision: { initial: "merge" },
+			api: {
+				collision: {
+					mode: { initial: "merge" }
+				}
+			},
 			base: DIRS.LAZY_FN_COLLISION
 		});
 
@@ -327,7 +339,11 @@ describe("modes-processor: lazy single-file folder fn with prop collision — me
 			mode: "lazy",
 			runtime: "async",
 			hook: { enabled: false },
-			collision: { initial: "merge" },
+			api: {
+				collision: {
+					mode: { initial: "merge" }
+				}
+			},
 			debug: { modes: true },
 			base: DIRS.LAZY_FN_COLLISION
 		});
@@ -348,7 +364,11 @@ describe("modes-processor: lazy single-file folder fn with prop collision — er
 			mode: "lazy",
 			runtime: "async",
 			hook: { enabled: false },
-			collision: { initial: "error" },
+			api: {
+				collision: {
+					mode: { initial: "error" }
+				}
+			},
 			base: DIRS.LAZY_FN_COLLISION
 		});
 
@@ -369,7 +389,11 @@ describe("modes-processor: lazy single-file folder fn with prop collision — wa
 			mode: "lazy",
 			runtime: "async",
 			hook: { enabled: false },
-			collision: { initial: "warn" },
+			api: {
+				collision: {
+					mode: { initial: "warn" }
+				}
+			},
 			base: DIRS.LAZY_FN_COLLISION
 		});
 
@@ -457,7 +481,11 @@ describe("modes-processor: lazy calc/calc.mjs shouldAttachNamedExport=false cont
 			mode: "lazy",
 			runtime: "async",
 			hook: { enabled: false },
-			collision: { initial: "merge" },
+			api: {
+				collision: {
+					mode: { initial: "merge" }
+				}
+			},
 			base: DIRS.FN_FN_FOLDER
 		});
 
@@ -501,7 +529,7 @@ describe("modes-processor: lazy materialize returns wrapper when nestedValue has
 			mode: "lazy",
 			runtime: "async",
 			hook: { enabled: false },
-			api: { collision: { initial: "merge" } },
+			api: { collision: { mode: { initial: "merge" } } },
 			base: DIRS.LAZY_NESTED_FILE_FOLDER
 		});
 
@@ -520,7 +548,7 @@ describe("modes-processor: lazy materialize returns wrapper when nestedValue has
 			mode: "lazy",
 			runtime: "async",
 			hook: { enabled: false },
-			api: { collision: { initial: "merge" } },
+			api: { collision: { mode: { initial: "merge" } } },
 			debug: { modes: true },
 			base: DIRS.LAZY_NESTED_FILE_FOLDER
 		});
@@ -541,7 +569,7 @@ describe("modes-processor: FLATTEN_MULTI_EXPORT_BLOCKED debug log when skip bloc
 			mode: "eager",
 			runtime: "async",
 			hook: { enabled: false },
-			api: { collision: { initial: "skip" } },
+			api: { collision: { mode: { initial: "skip" } } },
 			base: DIRS.MULTI_EXPORT_SKIP
 		});
 
@@ -558,7 +586,7 @@ describe("modes-processor: FLATTEN_MULTI_EXPORT_BLOCKED debug log when skip bloc
 			mode: "eager",
 			runtime: "async",
 			hook: { enabled: false },
-			api: { collision: { initial: "skip" } },
+			api: { collision: { mode: { initial: "skip" } } },
 			debug: { modes: true },
 			base: DIRS.MULTI_EXPORT_SKIP
 		});
@@ -577,9 +605,11 @@ describe("modes-processor: FLATTEN_MULTI_EXPORT_BLOCKED debug log when skip bloc
 			mode: "eager",
 			runtime: "async",
 			hook: { enabled: false },
-			api: { collision: { initial: "skip" } },
-			routines: [{ name: "sharedKey", mode: "manual" }],
-			stackRoutines: true,
+			api: { collision: { mode: { initial: "skip" } } },
+			routines: {
+				entries: [{ name: "sharedKey", mode: "manual" }],
+				stack: true
+			},
 			base: DIRS.MULTI_EXPORT_SKIP
 		});
 
@@ -605,9 +635,11 @@ describe("modes-processor: FLATTEN_MULTI_EXPORT_BLOCKED debug log when skip bloc
 			mode: "eager",
 			runtime: "async",
 			hook: { enabled: false },
-			api: { collision: { api: "error" } },
-			routines: [{ name: "sharedKey", mode: "manual" }],
-			stackRoutines: true,
+			api: { collision: { mode: { api: "error" } } },
+			routines: {
+				entries: [{ name: "sharedKey", mode: "manual" }],
+				stack: true
+			},
 			base: TEST_DIRS.API_TEST_ADD_ROOT_BASE
 		});
 
@@ -636,8 +668,10 @@ describe("modes-processor: FLATTEN_MULTI_EXPORT_BLOCKED debug log when skip bloc
 				mode: "eager",
 				runtime: "async",
 				hook: { enabled: false },
-				api: { collision: { initial: "skip" } },
-				backgroundMaterialize: true,
+				api: { collision: { mode: { initial: "skip" } } },
+				loader: {
+					materialize: true
+				},
 				base: DIRS.MULTI_EXPORT_SKIP
 			});
 
@@ -663,7 +697,7 @@ describe("modes-processor: FLATTEN_MULTI_EXPORT_BLOCKED debug log when skip bloc
 			mode: "eager",
 			runtime: "async",
 			hook: { enabled: false },
-			api: { collision: { initial: "skip" } },
+			api: { collision: { mode: { initial: "skip" } } },
 			base: DIRS.MULTI_EXPORT_SKIP
 		});
 

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:22-07:00 (1791090922)
+ *	@Last modified time: 2026-11-16T18:30:31-08:00 (1794882631)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -362,7 +362,9 @@ describe.each(FULL_MATRIX)("Smart Flattening Folders - $name", ({ name: ___name,
 		// materialization stays on so lazy settles the inner wrapper before the outer one.
 		const api = await slothlet({
 			...config,
-			backgroundMaterialize: true,
+			loader: {
+				materialize: true
+			},
 			base: path.join(__dirname, `../../../../${API_TEST_BASE}/smart_flatten/api_smart_flatten_solo_subfolder`)
 		});
 

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-31T15:24:51-07:00 (1793485491)
+ *	@Last modified time: 2026-11-16T18:29:42-08:00 (1794882582)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -101,7 +101,7 @@ describe.each(getMatrixConfigs())("Permissions > caller-supplied code, second ro
 			...config,
 			base: path.join(DIR, "base"),
 			hook: true,
-			permissions: { defaultPolicy: "deny", rules: RULES, events: { default: "allow" }, ...permissions }
+			permissions: { policy: "deny", rules: RULES, events: { policy: "allow" }, ...permissions }
 		});
 		await api.slothlet.api.add("callee", path.join(DIR, "callee"), { moduleID: "callee-mod" });
 		await api.slothlet.api.add("supplier", path.join(DIR, "supplier"), { moduleID: "supplier-mod" });
@@ -228,7 +228,7 @@ describe.each(getMatrixConfigs())("Permissions > caller-supplied code, second ro
 		it('ceiling must be "leaf" or "chain", and provenance a boolean', async () => {
 			for (const permissions of [{ ceiling: "yes" }, { ceiling: true }, { provenance: "yes" }]) {
 				await expect(
-					slothlet({ ...config, base: path.join(DIR, "base"), permissions: { defaultPolicy: "deny", ...permissions } })
+					slothlet({ ...config, base: path.join(DIR, "base"), permissions: { policy: "deny", ...permissions } })
 				).rejects.toMatchObject({ code: "INVALID_CONFIG" });
 			}
 		});
@@ -284,14 +284,16 @@ describe.each(getMatrixConfigs())("Permissions > caller-supplied code on a versi
 		api = await slothlet({
 			...config,
 			base: path.join(DIR, "base"),
-			versionDispatcher: (_allVersions, caller) => {
-				const apiPath = caller?.metadata?.apiPath ?? "";
-				if (apiPath.startsWith("supplier.")) return "v2";
-				if (apiPath.startsWith("callee.")) return "v1";
-				return null;
+			versioning: {
+				dispatcher: (_allVersions, caller) => {
+					const apiPath = caller?.metadata?.apiPath ?? "";
+					if (apiPath.startsWith("supplier.")) return "v2";
+					if (apiPath.startsWith("callee.")) return "v1";
+					return null;
+				}
 			},
 			permissions: {
-				defaultPolicy: "deny",
+				policy: "deny",
 				rules: [
 					{ caller: "supplier.**", target: "callee.**", effect: "allow" },
 					{ caller: "supplier.**", target: "v2.auth.**", effect: "allow" },

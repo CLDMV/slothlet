@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T00:00:00-08:00 (1794729600)
+ *	@Last modified time: 2026-11-16T18:30:13-08:00 (1794882613)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -111,7 +111,7 @@ describe.each(getMatrixConfigs())("Permissions > a copy of a module's file is it
 			api = await slothlet({
 				...config,
 				base: path.join(DIR, "base"),
-				permissions: { defaultPolicy: "deny", rules: RULES, attribution }
+				permissions: { policy: "deny", rules: RULES, caller: { attribution } }
 			});
 			await api.slothlet.api.add("trusted", path.join(DIR, "trusted"), { moduleID: "trusted-mod" });
 			await api.slothlet.api.add("trustedesm", path.join(DIR, "trustedesm"), { moduleID: "trustedesm-mod" });
@@ -197,7 +197,7 @@ describe.each(getMatrixConfigs())(
 				api = await slothlet({
 					...config,
 					base: path.join(DIR, "base"),
-					permissions: { defaultPolicy: "deny", rules: RULES, attribution }
+					permissions: { policy: "deny", rules: RULES, caller: { attribution } }
 				});
 				await api.slothlet.api.add("trusted", path.join(DIR, "trusted"), { moduleID: "trusted-mod" });
 				await api.slothlet.api.add("trustedesm", path.join(DIR, "trustedesm"), { moduleID: "trustedesm-mod" });
@@ -238,7 +238,7 @@ describe.each(getMatrixConfigs())("Permissions > a helper's code run by the host
 		});
 
 		it("control: the trusted module reaches the secret through its helper", async () => {
-			api = await slothlet({ ...config, helpers, base: path.join(DIR, "base"), permissions: { defaultPolicy: "deny", rules: RULES } });
+			api = await slothlet({ ...config, helpers, base: path.join(DIR, "base"), permissions: { policy: "deny", rules: RULES } });
 			await api.slothlet.api.add("trustedesm", path.join(DIR, "trustedesm"), { moduleID: "trustedesm-mod" });
 			expect(await attempt(() => api.trustedesm.ops.viaHelper())).toEqual({ ok: true, value: "s3cret" });
 		});
@@ -250,7 +250,7 @@ describe.each(getMatrixConfigs())("Permissions > a helper's code run by the host
 					...config,
 					helpers,
 					base: path.join(DIR, "base"),
-					permissions: { defaultPolicy: "deny", rules: RULES, attribution }
+					permissions: { policy: "deny", rules: RULES, caller: { attribution } }
 				});
 				await api.slothlet.api.add("trustedesm", path.join(DIR, "trustedesm"), { moduleID: "trustedesm-mod" });
 				await api.slothlet.api.add("reader", path.join(DIR, "reader"), { moduleID: "reader-mod" });
@@ -262,7 +262,7 @@ describe.each(getMatrixConfigs())("Permissions > a helper's code run by the host
 		);
 
 		it("the reader's copy, loaded as the trusted module's helper copy and run by the host, is refused", async () => {
-			api = await slothlet({ ...config, helpers, base: path.join(DIR, "base"), permissions: { defaultPolicy: "deny", rules: RULES } });
+			api = await slothlet({ ...config, helpers, base: path.join(DIR, "base"), permissions: { policy: "deny", rules: RULES } });
 			await api.slothlet.api.add("trustedesm", path.join(DIR, "trustedesm"), { moduleID: "trustedesm-mod" });
 			await api.slothlet.api.add("reader", path.join(DIR, "reader"), { moduleID: "reader-mod" });
 			const { fn } = await api.reader.probe.helperCopy();

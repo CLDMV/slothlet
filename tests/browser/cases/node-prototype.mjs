@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T13:39:38-08:00 (1794778778)
+ *	@Last modified time: 2026-11-16T18:28:03-08:00 (1794882483)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -104,7 +104,7 @@ async function build(env, config, permissions) {
 		fixture: FIXTURE,
 		root: "host",
 		files: FILES,
-		options: { mode: config.mode, runtime: config.runtime, permissions: { attribution: config.attribution, ...permissions } }
+		options: { mode: config.mode, runtime: config.runtime, permissions: { caller: { attribution: config.attribution }, ...permissions } }
 	});
 	await api.slothlet.api.add("reader", env.mountTarget(api, { from: "reader", files: ["reader.mjs"] }), { moduleID: "reader" });
 	for (const path of ["leaf", "leaf.only", "grp", "sub", "sub.lay", "sub.other", "reader", "reader.reader"]) await at(api, path);
@@ -167,7 +167,7 @@ export const rows = [
 					options: {
 						mode: config.mode,
 						runtime: config.runtime,
-						permissions: { attribution: config.attribution, defaultPolicy: "deny", rules: ROOT_RULES }
+						permissions: { caller: { attribution: config.attribution }, policy: "deny", rules: ROOT_RULES }
 					}
 				});
 				try {
@@ -219,7 +219,11 @@ export const rows = [
 					fixture: "api_tests/api_test_api_root_integrity",
 					root,
 					files: ["data.mjs", "pnum.mjs", "root.mjs", "tool.mjs"],
-					options: { mode: config.mode, runtime: config.runtime, permissions: { attribution: config.attribution, defaultPolicy: "allow" } }
+					options: {
+						mode: config.mode,
+						runtime: config.runtime,
+						permissions: { caller: { attribution: config.attribution }, policy: "allow" }
+					}
 				});
 				try {
 					checks.push([root, observeRoot(api), observeRoot(plain())]);
@@ -237,7 +241,7 @@ export const rows = [
 		async run(env, config) {
 			const checks = [];
 			for (const [path, plain] of NODES) {
-				const api = await build(env, config, { defaultPolicy: "allow" });
+				const api = await build(env, config, { policy: "allow" });
 				try {
 					checks.push([path, observe(at(api, path)), observe(plain())]);
 					if (path !== "leaf") checks.push([`${path} is a function`, typeof at(api, path), "function"]);
@@ -264,7 +268,7 @@ export const rows = [
 				{ caller: "reader.reader.call", target: `${path}.hello`, effect: "allow" },
 				{ caller: "reader.reader.listed", target: `${path}.inherited`, effect: "allow" }
 			]);
-			const api = await build(env, config, { defaultPolicy: "deny", rules });
+			const api = await build(env, config, { policy: "deny", rules });
 			try {
 				const checks = [];
 				for (const path of paths) {

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:37-07:00 (1791091717)
+ *	@Last modified time: 2026-11-16T18:29:31-08:00 (1794882571)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -145,7 +145,7 @@ describe.each(getMatrixConfigs().filter(({ name }) => name === "EAGER" || name =
 		});
 
 		it.each(["skip", "warn"])("a %s-rejected re-add keeps the placement the live content was added under", async (collisionMode) => {
-			api = await slothlet({ ...config, base: BASE, silent: true, api: { mutations: { allowCollisionOverride: true } } });
+			api = await slothlet({ ...config, base: BASE, silent: true, api: { collision: { override: true } } });
 			await api.slothlet.api.add("launcher", EXT, { moduleID: "launcher" });
 			await api.slothlet.api.add("launcher.session", SHADOW, { moduleID: "shadow", forceOverwrite: true });
 			await api.slothlet.api.add("launcher.session", SHADOW, { moduleID: "shadow", collisionMode });
@@ -157,7 +157,7 @@ describe.each(getMatrixConfigs().filter(({ name }) => name === "EAGER" || name =
 		});
 
 		it("a merge re-add of the same module at the same endpoint replaces the recorded placement", async () => {
-			api = await slothlet({ ...config, base: BASE, silent: true, api: { mutations: { allowCollisionOverride: true } } });
+			api = await slothlet({ ...config, base: BASE, silent: true, api: { collision: { override: true } } });
 			await api.slothlet.api.add("launcher.session", SHADOW, { moduleID: "shadow", forceOverwrite: true });
 			await api.slothlet.api.add("launcher.session", SHADOW, { moduleID: "shadow", collisionMode: "merge" });
 

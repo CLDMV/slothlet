@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-13T07:23:40-08:00 (1794583420)
+ *	@Last modified time: 2026-11-16T18:29:52-08:00 (1794882592)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -74,7 +74,13 @@ describe.each(matrix)("handed-out code after a runtime rule change > $mode / $ru
 	 * @returns {Promise<void>}
 	 */
 	async function load(defaultPolicy, rules = []) {
-		api = await slothlet({ base: BASE, mode, runtime, silent: true, permissions: { defaultPolicy, attribution, rules } });
+		api = await slothlet({
+			base: BASE,
+			mode,
+			runtime,
+			silent: true,
+			permissions: { policy: defaultPolicy, caller: { attribution }, rules }
+		});
 		expect(await api.holder.keep()).toEqual(["leafRef", "boundLeaf", "inData", "closure"]);
 	}
 
@@ -134,7 +140,7 @@ describe.each(matrix)("handed-out code after a runtime rule change > $mode / $ru
 			mode,
 			runtime,
 			silent: true,
-			permissions: { mode: "off", defaultPolicy: "allow", attribution, rules: [] }
+			permissions: { mode: "off", policy: "allow", caller: { attribution }, rules: [] }
 		});
 		expect(await api.holder.keep()).toEqual(["leafRef", "boundLeaf", "inData", "closure"]);
 		api.slothlet.permissions.addRule({ caller: "holder.**", target: "vault.**", effect: "deny" });

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:04-07:00 (1791090904)
+ *	@Last modified time: 2026-11-16T18:29:06-08:00 (1794882546)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -77,7 +77,7 @@ describe.each(["eager", "lazy"])("UnifiedWrapper > live view object/function wri
 		const route = ROUTES[routeName];
 
 		const boot = async (extra = {}) => {
-			api = await slothlet({ base: BASE, mode, permissions: { defaultPolicy: "allow" }, ...extra });
+			api = await slothlet({ base: BASE, mode, permissions: { policy: "allow" }, ...extra });
 			return route.setup(api);
 		};
 
@@ -247,8 +247,10 @@ describe("UnifiedWrapper > live view object/function writes (#495) — permissio
 			base: BASE,
 			mode: "eager",
 			permissions: {
-				defaultPolicy: "allow",
-				readGating: true,
+				policy: "allow",
+				gating: {
+					read: true
+				},
 				rules: [{ caller: "untrusted.**", target: "store.**", effect: "deny" }]
 			}
 		});
@@ -265,7 +267,7 @@ describe("UnifiedWrapper > live view object/function writes (#495) — permissio
 	});
 
 	it("an object write against a frozen underlying object throws instead of silently reporting success", async () => {
-		api = await slothlet({ base: BASE, mode: "eager", permissions: { defaultPolicy: "allow" } });
+		api = await slothlet({ base: BASE, mode: "eager", permissions: { policy: "allow" } });
 		const raw = await api.store.assign();
 		const before = raw.deviceFeatures;
 		Object.freeze(raw);
@@ -279,7 +281,7 @@ describe("UnifiedWrapper > live view object/function writes (#495) — permissio
 	});
 
 	it("a write through a stale view of a removed module does not reach the old underlying object", async () => {
-		api = await slothlet({ base: BASE, mode: "eager", permissions: { defaultPolicy: "allow" } });
+		api = await slothlet({ base: BASE, mode: "eager", permissions: { policy: "allow" } });
 		await api.slothlet.api.add("devices.d1", DEVICE_DIR, { moduleID: "device-d1" });
 		const conn = await api.devices.d1.session.open();
 		const staleView = api.devices.d1.connection;
@@ -297,7 +299,7 @@ describe("UnifiedWrapper > live view object/function writes (#495) — permissio
 	});
 
 	it("a child adopted onto the view by an internal eager re-adopt is still served after adoption moved it off impl", async () => {
-		api = await slothlet({ base: BASE, mode: "eager", permissions: { defaultPolicy: "allow" } });
+		api = await slothlet({ base: BASE, mode: "eager", permissions: { policy: "allow" } });
 		await api.store.assign();
 		const xWrapper = resolveWrapper(api.store.x);
 
@@ -311,7 +313,7 @@ describe("UnifiedWrapper > live view object/function writes (#495) — permissio
 	});
 
 	it("an object write onto an ORDINARY (non-live) namespace still stores a userAssigned wrapper on the namespace", async () => {
-		api = await slothlet({ base: BASE, mode: "eager", permissions: { defaultPolicy: "allow" } });
+		api = await slothlet({ base: BASE, mode: "eager", permissions: { policy: "allow" } });
 
 		const extra = { a: 1 };
 		api.store.extra = extra;
@@ -324,7 +326,7 @@ describe("UnifiedWrapper > live view object/function writes (#495) — permissio
 	});
 
 	it("the view assigned on an api.add()-mounted leaf keeps its writes, and stays two-way, across a reload of that module", async () => {
-		api = await slothlet({ base: BASE, mode: "eager", permissions: { defaultPolicy: "allow" } });
+		api = await slothlet({ base: BASE, mode: "eager", permissions: { policy: "allow" } });
 		await api.slothlet.api.add("devices.d1", DEVICE_DIR, { moduleID: "device-d1" });
 		const conn = await api.devices.d1.session.open();
 
@@ -348,7 +350,7 @@ describe("UnifiedWrapper > live view object/function writes (#495) — permissio
 	});
 
 	it("the wrap-on-set view keeps its writes across a selective reload of its owning module", async () => {
-		api = await slothlet({ base: BASE, mode: "eager", permissions: { defaultPolicy: "allow" } });
+		api = await slothlet({ base: BASE, mode: "eager", permissions: { policy: "allow" } });
 		const raw = await api.store.assign();
 
 		api.store.x.deviceFeatures = ["cmd"];

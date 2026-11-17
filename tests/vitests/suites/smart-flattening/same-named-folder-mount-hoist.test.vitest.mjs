@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-13T17:26:29-08:00 (1794619589)
+ *	@Last modified time: 2026-11-16T18:30:29-08:00 (1794882629)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -169,7 +169,7 @@ async function load(root, dotted) {
  */
 async function build(fixture, at, options) {
 	const dir = path.join(FIXTURES, fixture);
-	const api = await slothlet({ dir: at === "base" ? dir : BASE, silent: true, ...options });
+	const api = await slothlet({ base: at === "base" ? dir : BASE, silent: true, ...options });
 	if (at === "base") await api.slothlet.api.add("probe", BASE);
 	else await api.slothlet.api.add(at, dir);
 	return api;
@@ -280,8 +280,10 @@ describe.each([
 
 	describe.each(["precise", "fast"])("a permission rule names the path a node is reached at (%s)", (attribution) => {
 		const permissions = (targets) => ({
-			defaultPolicy: "allow",
-			attribution,
+			policy: "allow",
+			caller: {
+				attribution
+			},
 			rules: targets.map((target) => ({ caller: "probe.**", target, effect: "deny" }))
 		});
 

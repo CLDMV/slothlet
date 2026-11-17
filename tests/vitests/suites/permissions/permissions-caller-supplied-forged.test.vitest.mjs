@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-17T00:00:00-07:00 (1792220400)
+ *	@Last modified time: 2026-11-16T18:29:42-08:00 (1794882582)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -49,7 +49,7 @@ const RULES = [
 
 /** The victim receives `vault.leak` in full; the attacker is refused it. */
 const EVENTS = {
-	default: "notify",
+	policy: "notify",
 	rules: [
 		{ caller: "victim.**", event: "vault.leak", effect: "allow" },
 		{ caller: "attacker.**", event: "vault.leak", effect: "deny" }
@@ -73,7 +73,7 @@ describe.each(getMatrixConfigs())("Permissions > code placed on a caller keeps t
 			...config,
 			base: path.join(DIR, "base"),
 			hook: true,
-			permissions: { defaultPolicy: "deny", rules: RULES, events: EVENTS }
+			permissions: { policy: "deny", rules: RULES, events: EVENTS }
 		});
 		await api.slothlet.api.add("attacker", path.join(DIR, "attacker"), { moduleID: "attacker-mod" });
 		return api;

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-13T23:20:21-08:00 (1794640821)
+ *	@Last modified time: 2026-11-16T18:29:03-08:00 (1794882543)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -57,7 +57,7 @@ describe.each(getMatrixConfigs())("Events > rule specificity (#767) > $name", ({
 			...config,
 			base: BASE,
 			silent: true,
-			permissions: { defaultPolicy: "allow", events: { default: "notify", rules }, ...permissions }
+			permissions: { policy: "allow", events: { policy: "notify", rules }, ...permissions }
 		});
 	};
 

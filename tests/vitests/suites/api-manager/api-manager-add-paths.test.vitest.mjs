@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:57-07:00 (1791090897)
+ *	@Last modified time: 2026-11-16T18:28:33-08:00 (1794882513)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -74,7 +74,7 @@ async function makeApi(baseConfig, overrides = {}) {
 	return slothlet({
 		...baseConfig,
 		...overrides,
-		api: { ...overrides.api, mutations: { ...overrides.api?.mutations, allowCollisionOverride: true } }
+		api: { ...overrides.api, mutations: { ...overrides.api?.mutations }, collision: { override: true } }
 	});
 }
 
@@ -261,7 +261,8 @@ describe("addApiComponent — debug.api=true traces add paths", () => {
 			runtime: "async",
 			hook: { enabled: false },
 			debug: { api: true },
-			api: { mutations: { allowCollisionOverride: true } } // #380: honor per-call collisionMode below
+			api: { collision: { override: true } }
+			// #380: honor per-call collisionMode below
 		});
 		expect(api.math).toBeDefined();
 
@@ -281,7 +282,8 @@ describe("addApiComponent — debug.api=true traces add paths", () => {
 			runtime: "async",
 			hook: { enabled: false },
 			debug: { api: true },
-			api: { mutations: { allowCollisionOverride: true } } // #380: honor per-call collisionMode below
+			api: { collision: { override: true } }
+			// #380: honor per-call collisionMode below
 		});
 
 		// Remove existing config first to allow clean add

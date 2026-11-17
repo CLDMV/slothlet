@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:27-07:00 (1791091707)
+ *	@Last modified time: 2026-11-16T18:29:02-08:00 (1794882542)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -48,7 +48,7 @@ describe.each(getMatrixConfigs())("Events > caller() self-identity > $name", ({ 
 	});
 
 	it("reports the calling module leaf's own dotted api path (ungated — a module may read its own identity)", async () => {
-		api = await slothlet({ ...config, base: BASE, permissions: { defaultPolicy: "allow" } });
+		api = await slothlet({ ...config, base: BASE, permissions: { policy: "allow" } });
 		expect(await api.whoami.here()).toBe("whoami.here");
 	});
 
@@ -57,8 +57,8 @@ describe.each(getMatrixConfigs())("Events > caller() self-identity > $name", ({ 
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "allow",
-				events: { default: "notify", rules: [{ caller: "whoami.**", event: "orders.*", effect: "allow" }] }
+				policy: "allow",
+				events: { policy: "notify", rules: [{ caller: "whoami.**", event: "orders.*", effect: "allow" }] }
 			}
 		});
 		const { identity, level } = await api.whoami.subscribeAndReport("orders.created");
@@ -73,8 +73,8 @@ describe.each(getMatrixConfigs())("Events > caller() self-identity > $name", ({ 
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "allow",
-				events: { default: "notify", rules: [{ caller: "whoami.**", event: "secret.*", effect: "deny" }] }
+				policy: "allow",
+				events: { policy: "notify", rules: [{ caller: "whoami.**", event: "secret.*", effect: "deny" }] }
 			}
 		});
 		const { identity, level } = await api.whoami.subscribeAndReport("secret.data");

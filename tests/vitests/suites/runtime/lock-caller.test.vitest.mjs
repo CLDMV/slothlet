@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-10T21:30:03-08:00 (1794375003)
+ *	@Last modified time: 2026-11-16T18:30:22-08:00 (1794882622)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -63,7 +63,7 @@ describe.each(getMatrixConfigs())("Runtime > lockCaller/bind > $name", ({ config
 		api = await slothlet({
 			...config,
 			base: BASE,
-			permissions: { defaultPolicy: "allow", rules: PERMISSION_RULES, ...extra }
+			permissions: { policy: "allow", rules: PERMISSION_RULES, ...extra }
 		});
 		await api.producer.relay.setup();
 		return api;

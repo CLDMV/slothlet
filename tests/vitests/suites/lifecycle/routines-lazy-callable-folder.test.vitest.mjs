@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-13T07:23:26-08:00 (1794583406)
+ *	@Last modified time: 2026-11-16T18:29:25-08:00 (1794882565)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -40,7 +40,7 @@ const BASE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../.
  * @returns {Promise<string[]>} The functions the routine ran.
  */
 async function runRoutine(options, name, extra = {}) {
-	const api = await slothlet({ ...options, silent: true, routines: [{ name, mode: "manual" }] });
+	const api = await slothlet({ ...options, silent: true, routines: { entries: [{ name, mode: "manual" }] } });
 	try {
 		if (extra.mountAt) await api.slothlet.api.add(extra.mountAt, BASE);
 		globalThis.__slothletGlobstarLog = [];
@@ -61,34 +61,36 @@ describe.each(["async", "live"])("a lazy callable folder's own function is a rou
 		["svc", ["svc"]],
 		["^svc.**", ["svc", "svc.start"]]
 	])("routine %s runs what eager runs", async (name, expected) => {
-		const eager = await runRoutine({ dir: BASE, mode: "eager", runtime }, name);
+		const eager = await runRoutine({ base: BASE, mode: "eager", runtime }, name);
 		expect(eager).toEqual(expected);
-		const lazy = await runRoutine({ dir: BASE, mode: "lazy", runtime }, name);
+		const lazy = await runRoutine({ base: BASE, mode: "lazy", runtime }, name);
 		expect(lazy).toEqual(eager);
 	});
 
 	it("routine ^ext.svc.** on a folder mounted with api.add() runs what eager runs", async () => {
 		const name = "^ext.svc.**";
-		const eager = await runRoutine({ dir: path.join(BASE, "work"), mode: "eager", runtime }, name, { mountAt: "ext" });
+		const eager = await runRoutine({ base: path.join(BASE, "work"), mode: "eager", runtime }, name, { mountAt: "ext" });
 		expect(eager).toEqual(["svc", "svc.start"]);
-		const lazy = await runRoutine({ dir: path.join(BASE, "work"), mode: "lazy", runtime }, name, { mountAt: "ext" });
+		const lazy = await runRoutine({ base: path.join(BASE, "work"), mode: "lazy", runtime }, name, { mountAt: "ext" });
 		expect(lazy).toEqual(eager);
 	});
 
 	it("bare routine svc on a folder mounted with api.add() runs what eager runs", async () => {
-		const eager = await runRoutine({ dir: path.join(BASE, "work"), mode: "eager", runtime }, "svc", { mountAt: "ext" });
+		const eager = await runRoutine({ base: path.join(BASE, "work"), mode: "eager", runtime }, "svc", { mountAt: "ext" });
 		expect(eager).toEqual(["svc"]);
-		const lazy = await runRoutine({ dir: path.join(BASE, "work"), mode: "lazy", runtime }, "svc", { mountAt: "ext" });
+		const lazy = await runRoutine({ base: path.join(BASE, "work"), mode: "lazy", runtime }, "svc", { mountAt: "ext" });
 		expect(lazy).toEqual(eager);
 	});
 
 	it("a lazy node under a bare routine's name that fails to load contributes nothing, and the instance still loads", async () => {
 		const api = await slothlet({
-			dir: TEST_DIRS.API_TEST_LIFECYCLE_HOOKS_FAIL,
+			base: TEST_DIRS.API_TEST_LIFECYCLE_HOOKS_FAIL,
 			mode: "lazy",
 			runtime,
 			silent: true,
-			routines: [{ name: "broken", mode: "manual" }]
+			routines: {
+				entries: [{ name: "broken", mode: "manual" }]
+			}
 		});
 		try {
 			expect(await api.broken()).toEqual([]);
@@ -98,7 +100,13 @@ describe.each(["async", "live"])("a lazy callable folder's own function is a rou
 	});
 
 	it("api.svc() and api.svc.start() still answer in lazy mode with the routine configured", async () => {
-		const api = await slothlet({ dir: BASE, mode: "lazy", runtime, silent: true, routines: [{ name: "^svc.**", mode: "manual" }] });
+		const api = await slothlet({
+			base: BASE,
+			mode: "lazy",
+			runtime,
+			silent: true,
+			routines: { entries: [{ name: "^svc.**", mode: "manual" }] }
+		});
 		try {
 			expect(await api.svc.start()).toBe("svc.start");
 			expect(await api.svc()).toBe("svc");

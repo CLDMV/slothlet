@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:15:48-08:00 (1794874548)
+ *	@Last modified time: 2026-11-16T18:26:58-08:00 (1794882418)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -62,7 +62,7 @@ export async function runCalls(slothlet) {
 				mode,
 				runtime,
 				silent: true,
-				permissions: { defaultPolicy: "deny", rules: RULES }
+				permissions: { policy: "deny", rules: RULES }
 			});
 			await api.slothlet.api.add("host", { echo: (value) => `echo:${value}` }, { moduleID: "host-mod" });
 			// A query of its own each round, so every round imports the package's files anew after its instance exists.

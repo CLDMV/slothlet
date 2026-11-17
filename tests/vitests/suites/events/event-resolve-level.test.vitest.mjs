@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:28-07:00 (1791091708)
+ *	@Last modified time: 2026-11-16T18:29:03-08:00 (1794882543)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -51,9 +51,9 @@ describe.each(getMatrixConfigs())("Events > resolveLevel (host-side level query)
 		...config,
 		base: BASE,
 		permissions: {
-			defaultPolicy: "allow",
+			policy: "allow",
 			events: {
-				default: "notify",
+				policy: "notify",
 				rules: [
 					{ caller: "reporting.**", event: "orders.*", effect: "allow" },
 					{ caller: "blocked.**", event: "orders.*", effect: "deny" },

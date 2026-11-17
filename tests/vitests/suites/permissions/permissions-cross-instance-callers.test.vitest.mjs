@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-31T20:52:49-07:00 (1793505169)
+ *	@Last modified time: 2026-11-16T18:29:46-08:00 (1794882586)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -36,7 +36,7 @@ import slothletInstance from "@cldmv/slothlet";
  * @returns {Promise<object>} The api.
  */
 const slothlet = (config) =>
-	slothletInstance(config?.permissions ? { ...config, permissions: { provenance: false, ...config.permissions } } : config);
+	slothletInstance(config?.permissions ? { ...config, permissions: { caller: { provenance: false }, ...config.permissions } } : config);
 import { TEST_DIRS, withSuppressedSlothletErrorOutput } from "../../setup/vitest-helper.mjs";
 
 const FIXTURE = TEST_DIRS.API_TEST_SELF_WRITE_REACH;

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-14T09:00:00-08:00 (1794675600)
+ *	@Last modified time: 2026-11-16T18:29:20-08:00 (1794882560)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -71,8 +71,10 @@ const options = ({ mode, runtime, permissions }) => ({
 		? {}
 		: {
 				permissions: {
-					defaultPolicy: "allow",
-					attribution: permissions,
+					policy: "allow",
+					caller: {
+						attribution: permissions
+					},
 					// `data:` and `blob:` imports and code from strings are built-in capabilities (D4 ruling part 1); this suite is about what they reach.
 					rules: [
 						{ caller: "**", target: "capability:imports", effect: "allow" },

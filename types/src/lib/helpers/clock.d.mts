@@ -12,8 +12,8 @@ export function clockOf(slothlet: {
 } | null | undefined): Clock;
 /**
  * Build an instance's clock from the host's `clock` option.
- * @param {{now?: Function, setTimeout?: Function, clearTimeout?: Function}|undefined} option - The option as the host
- *   gave it; absent means the default clock.
+ * @param {{now?: Function, set?: Function, clear?: Function}|undefined} option - The option as the host gave it (`set`
+ *   schedules a callback as `setTimeout` does, `clear` cancels one as `clearTimeout` does); absent means the default clock.
  * @returns {Clock|null} The clock, or `null` when the option is not an object whose given members are functions.
  * @internal
  * @example
@@ -22,8 +22,8 @@ export function clockOf(slothlet: {
  */
 export function createClock(option: {
     now?: Function;
-    setTimeout?: Function;
-    clearTimeout?: Function;
+    set?: Function;
+    clear?: Function;
 } | undefined): Clock | null;
 /**
  * The clock of an instance whose host gave none: the functions slothlet loaded with.

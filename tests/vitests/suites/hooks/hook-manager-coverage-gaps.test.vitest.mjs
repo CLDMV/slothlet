@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:06-07:00 (1791090906)
+ *	@Last modified time: 2026-11-16T18:29:13-08:00 (1794882553)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -74,7 +74,7 @@ describe("HookManager.list — filter.enabled mismatch with hook.enabled (line 3
 			runtime: "async",
 			hook: true,
 			base: TEST_DIRS.API_TEST,
-			api: { collision: { initial: "replace", api: "replace" } }
+			api: { collision: { mode: { initial: "replace", api: "replace" } } }
 		});
 
 		// Register a hook — it is enabled by default
@@ -101,7 +101,7 @@ describe("HookManager.list — filter.enabled mismatch with hook.enabled (line 3
 			runtime: "async",
 			hook: true,
 			base: TEST_DIRS.API_TEST,
-			api: { collision: { initial: "replace", api: "replace" } }
+			api: { collision: { mode: { initial: "replace", api: "replace" } } }
 		});
 
 		const hookId = api.slothlet.hook.on("**:before", () => {});
@@ -128,7 +128,7 @@ describe("HookManager.executeErrorHooks — error?.constructor?.name || 'Error' 
 			runtime: "async",
 			hook: true,
 			base: TEST_DIRS.API_TEST,
-			api: { collision: { initial: "replace", api: "replace" } }
+			api: { collision: { mode: { initial: "replace", api: "replace" } } }
 		});
 
 		const sl = getSlInstance(api);
@@ -161,7 +161,7 @@ describe("HookManager.executeErrorHooks — error?.constructor?.name || 'Error' 
 			runtime: "async",
 			hook: true,
 			base: TEST_DIRS.API_TEST,
-			api: { collision: { initial: "replace", api: "replace" } }
+			api: { collision: { mode: { initial: "replace", api: "replace" } } }
 		});
 
 		const sl = getSlInstance(api);
@@ -194,7 +194,7 @@ describe("HookManager.#removeHook — cleanup: patternHooks becomes empty after 
 			runtime: "async",
 			hook: true,
 			base: TEST_DIRS.API_TEST,
-			api: { collision: { initial: "replace", api: "replace" } }
+			api: { collision: { mode: { initial: "replace", api: "replace" } } }
 		});
 
 		// Register a single hook with a completely unique pattern so this bucket has exactly 1 entry.
@@ -222,7 +222,7 @@ describe("HookManager.#removeHook — patternHooks still has items after removal
 			runtime: "async",
 			hook: true,
 			base: TEST_DIRS.API_TEST,
-			api: { collision: { initial: "replace", api: "replace" } }
+			api: { collision: { mode: { initial: "replace", api: "replace" } } }
 		});
 
 		// Register TWO hooks with the exact same type + pattern (same bucket).

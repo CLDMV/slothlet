@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:20-07:00 (1791090920)
+ *	@Last modified time: 2026-11-16T18:30:11-08:00 (1794882611)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -32,7 +32,7 @@ describe.each(getMatrixConfigs())("Permissions > Dynamic api.add > $name", ({ co
 			...config,
 			base: `${BASE}/callers`,
 			permissions: {
-				defaultPolicy: "allow"
+				policy: "allow"
 			}
 		});
 

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-12T08:32:47-07:00 (1791819167)
+ *	@Last modified time: 2026-11-16T18:30:30-08:00 (1794882630)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -63,7 +63,7 @@ describe.each(getMatrixConfigs({}))("setters on an object default > Config: $nam
 	});
 
 	it.each(["merge", "merge-replace"])("keeps a file's setter running through its collision with a folder under %s", async (mode) => {
-		api = await slothlet({ ...config, base: BASE, collision: { initial: mode, api: mode } });
+		api = await slothlet({ ...config, base: BASE, api: { collision: { mode: { initial: mode, api: mode } } } });
 		await api.pane;
 		expect(api.pane.folderOnly).toBe(1);
 		// The file's `_w` is its own member, kept through the collision, so the getter reads it before any write.

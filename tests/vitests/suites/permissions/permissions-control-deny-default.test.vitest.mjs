@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:16-07:00 (1791090916)
+ *	@Last modified time: 2026-11-16T18:29:46-08:00 (1794882586)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -32,7 +32,7 @@ describe.each(getMatrixConfigs())("Permissions > Control Deny Default > $name", 
 			...config,
 			base: `${BASE}/callers`,
 			permissions: {
-				defaultPolicy: "allow"
+				policy: "allow"
 			}
 		});
 
@@ -48,7 +48,7 @@ describe.each(getMatrixConfigs())("Permissions > Control Deny Default > $name", 
 		api = await slothlet({
 			...config,
 			base: `${BASE}/callers`,
-			permissions: { defaultPolicy: "allow", enabled: false }
+			permissions: { policy: "allow", mode: false }
 		});
 
 		await withSuppressedSlothletErrorOutput(async () => {
@@ -66,7 +66,7 @@ describe.each(getMatrixConfigs())("Permissions > Control Deny Default > $name", 
 		api = await slothlet({
 			...config,
 			base: `${BASE}/callers`,
-			permissions: { defaultPolicy: "allow", enabled: false }
+			permissions: { policy: "allow", mode: false }
 		});
 
 		await withSuppressedSlothletErrorOutput(async () => {
@@ -86,8 +86,8 @@ describe.each(getMatrixConfigs())("Permissions > Control Deny Default > $name", 
 			...config,
 			base: `${BASE}/callers`,
 			permissions: {
-				defaultPolicy: "allow",
-				enabled: false,
+				policy: "allow",
+				mode: false,
 				rules: [{ caller: "controlCaller.*", target: "slothlet.permissions.control.**", effect: "allow" }]
 			}
 		});

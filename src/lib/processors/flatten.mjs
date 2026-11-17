@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:14-08:00 (1794874574)
+ *	@Last modified time: 2026-11-16T18:27:59-08:00 (1794882479)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -432,7 +432,7 @@ export class Flatten extends ComponentBase {
 	 * @private
 	 */
 	#defaultConflictMode(collisionModeOverride, collisionContext) {
-		const collisionConfig = this.slothlet.config.api?.collision || this.slothlet.config.collision;
+		const collisionConfig = this.slothlet.config.api.collision.mode;
 		return collisionModeOverride || (collisionContext === "initial" ? collisionConfig.initial : collisionConfig.api);
 	}
 
@@ -592,7 +592,7 @@ export class Flatten extends ComponentBase {
 					this.slothlet.helpers.modesUtils.ensureNamedExportFunction(mod.default, propertyName)
 				);
 				const members = {};
-				const collisionConfig = this.slothlet.config.api?.collision || this.slothlet.config.collision;
+				const collisionConfig = this.slothlet.config.api.collision.mode;
 				// Per-call override (e.g. api.add({ forceOverwrite: true })) takes priority over the
 				// config default, matching every other collision decision in this same build
 				// (#372/#373 review, suppressed finding).
@@ -617,7 +617,7 @@ export class Flatten extends ComponentBase {
 				// module's own default object is not mutated (#587).
 				const moduleContent = this.cloneDefault(mod.default);
 				const members = {};
-				const collisionConfig = this.slothlet.config.api?.collision || this.slothlet.config.collision;
+				const collisionConfig = this.slothlet.config.api.collision.mode;
 				const collisionMode = collisionModeOverride || (collisionContext === "initial" ? collisionConfig.initial : collisionConfig.api);
 				for (let ofIndex = 0, ofList = moduleKeys; ofIndex < ofList.length; ofIndex++) {
 					const key = ofList[ofIndex];

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:09-08:00 (1794874569)
+ *	@Last modified time: 2026-11-16T18:27:49-08:00 (1794882469)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -142,7 +142,7 @@ export class ComponentBase {
 	 * Named with ____ prefix to avoid shadowing user API names like 'config'.
 	 *
 	 * @example
-	 * const collisionMode = this.____config.collision.api;
+	 * const collisionMode = this.____config.api.collision.mode.api;
 	 */
 	get ____config() {
 		return this.____slothlet.config;
@@ -249,7 +249,7 @@ export class ComponentBase {
 	 * @param {"dropped"|"replaced"|"merged"|"stacked"} data.resolution - What became of the two
 	 *   writers: `dropped` (incoming discarded, `owner` retained), `replaced` (incoming won, `owner`
 	 *   shadowed), `merged` (namespace nodes combined, both retained), `stacked` (both run as a
-	 *   routine stack under `stackRoutines`).
+	 *   routine stack under `routines.stack`).
 	 * @param {string|null} data.incoming - moduleID of the arriving writer (`null` when unknown).
 	 * @param {string|null} data.owner - moduleID of the writer that already held the path (`null`
 	 *   when unknown).

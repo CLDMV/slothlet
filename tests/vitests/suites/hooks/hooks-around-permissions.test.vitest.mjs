@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T22:53:42-08:00 (1794812022)
+ *	@Last modified time: 2026-11-16T18:29:15-08:00 (1794882555)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -92,14 +92,14 @@ describe.each(getMatrixConfigs())("Hooks > around permissions and pinning (#496)
 	};
 
 	it("denies a module registering a concrete-target around hook on a denied path", async () => {
-		api = await boot({ defaultPolicy: "deny", rules: [] });
+		api = await boot({ policy: "deny", rules: [] });
 		const r = await tryCall(() => api.auditor.arm("db.write:around"));
 		expect(r.ok).toBe(false);
 		expect(r.code).toBe("PERMISSION_DENIED");
 	});
 
 	it("allows and fires an around hook with a matching `:around` rule", async () => {
-		api = await boot({ defaultPolicy: "deny", rules: [{ caller: "auditor.**", target: "db.read:around", effect: "allow" }] });
+		api = await boot({ policy: "deny", rules: [{ caller: "auditor.**", target: "db.read:around", effect: "allow" }] });
 		const sink = [];
 		expect((await tryCall(() => api.auditor.arm("db.read:around", sink))).ok).toBe(true);
 		expect(await api.db.read()).toBe("data");
@@ -107,23 +107,23 @@ describe.each(getMatrixConfigs())("Hooks > around permissions and pinning (#496)
 	});
 
 	it("an `:around` rule grants only around — a before hook on the same path stays denied", async () => {
-		api = await boot({ defaultPolicy: "deny", rules: [{ caller: "auditor.**", target: "db.read:around", effect: "allow" }] });
+		api = await boot({ policy: "deny", rules: [{ caller: "auditor.**", target: "db.read:around", effect: "allow" }] });
 		expect((await tryCall(() => api.auditor.arm("db.read:before"))).code).toBe("PERMISSION_DENIED");
 	});
 
 	it("`:hook` grants around hooks too", async () => {
-		api = await boot({ defaultPolicy: "deny", rules: [{ caller: "auditor.**", target: "db.read:hook", effect: "allow" }] });
+		api = await boot({ policy: "deny", rules: [{ caller: "auditor.**", target: "db.read:hook", effect: "allow" }] });
 		expect((await tryCall(() => api.auditor.arm("db.read:around"))).ok).toBe(true);
 	});
 
 	it("an around-only deny blocks the hook while the path stays callable", async () => {
-		api = await boot({ defaultPolicy: "allow", rules: [{ caller: "auditor.**", target: "db.read:around", effect: "deny" }] });
+		api = await boot({ policy: "allow", rules: [{ caller: "auditor.**", target: "db.read:around", effect: "deny" }] });
 		expect((await tryCall(() => api.auditor.arm("db.read:around"))).code).toBe("PERMISSION_DENIED");
 		expect(await api.db.read()).toBe("data");
 	});
 
 	it("fire-time gating: a glob around hook fires only on paths its owner may hook", async () => {
-		api = await boot({ defaultPolicy: "deny", rules: [{ caller: "auditor.**", target: "db.read:around", effect: "allow" }] });
+		api = await boot({ policy: "deny", rules: [{ caller: "auditor.**", target: "db.read:around", effect: "allow" }] });
 		const sink = [];
 		await api.auditor.arm("db.*:around", sink);
 		expect(await api.db.write(1)).toBe("wrote:1");

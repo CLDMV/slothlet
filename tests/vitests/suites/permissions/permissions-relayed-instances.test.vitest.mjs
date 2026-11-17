@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T01:00:00-08:00 (1794819600)
+ *	@Last modified time: 2026-11-16T18:30:05-08:00 (1794882605)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -55,7 +55,13 @@ describe.each(MATRIX)("Permissions > an instance inside a call handed a callback
 	let api;
 
 	beforeAll(async () => {
-		api = await slothlet({ base: DIR, mode, runtime, silent: true, permissions: { defaultPolicy: "allow", attribution, rules: RULES } });
+		api = await slothlet({
+			base: DIR,
+			mode,
+			runtime,
+			silent: true,
+			permissions: { policy: "allow", caller: { attribution }, rules: RULES }
+		});
 		// Load every file, so a lazy node answers as an eager one.
 		await api.vault.get();
 		await api.bag.call(() => 1);

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-31T20:52:28-07:00 (1793505148)
+ *	@Last modified time: 2026-11-16T18:28:58-08:00 (1794882538)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -38,7 +38,7 @@ import slothletInstance from "@cldmv/slothlet";
  * @returns {Promise<object>} The api.
  */
 const slothlet = (config) =>
-	slothletInstance(config?.permissions ? { ...config, permissions: { provenance: false, ...config.permissions } } : config);
+	slothletInstance(config?.permissions ? { ...config, permissions: { caller: { provenance: false }, ...config.permissions } } : config);
 import { self } from "@cldmv/slothlet/runtime";
 import { getMatrixConfigs } from "../../setup/vitest-helper.mjs";
 
@@ -99,7 +99,7 @@ describe.each(getMatrixConfigs({ runtime: "async" }))("Context > writable self.X
 		api = await slothlet({
 			...config,
 			base: BASE,
-			api: { mutations: { add: true, remove: true, reload: true, allowCollisionOverride: true } }
+			api: { mutations: { add: true, remove: true, reload: true }, collision: { override: true } }
 		});
 		await api.slothlet.api.add("other", OTHER);
 		await api.slothlet.api.add("registry", REGISTRY);
@@ -118,7 +118,7 @@ describe.each(getMatrixConfigs({ runtime: "async" }))("Context > writable self.X
 		api = await slothlet({
 			...config,
 			base: BASE,
-			api: { mutations: { add: true, remove: true, reload: true, allowCollisionOverride: true } }
+			api: { mutations: { add: true, remove: true, reload: true }, collision: { override: true } }
 		});
 		await api.slothlet.api.add("other", OTHER);
 		await api.slothlet.api.add("registry", REGISTRY);
@@ -134,7 +134,7 @@ describe.each(getMatrixConfigs({ runtime: "async" }))("Context > writable self.X
 		api = await slothlet({
 			...config,
 			base: BASE,
-			api: { mutations: { add: true, remove: true, reload: true, allowCollisionOverride: true } }
+			api: { mutations: { add: true, remove: true, reload: true }, collision: { override: true } }
 		});
 		await api.slothlet.api.add("other", OTHER);
 		const moduleID = await api.slothlet.api.add("registry", REGISTRY);
@@ -155,7 +155,7 @@ describe.each(getMatrixConfigs({ runtime: "async" }))("Context > writable self.X
 		api = await slothlet({
 			...config,
 			base: BASE,
-			api: { mutations: { add: true, remove: true, reload: true, allowCollisionOverride: true } }
+			api: { mutations: { add: true, remove: true, reload: true }, collision: { override: true } }
 		});
 		await api.slothlet.api.add("other", OTHER);
 		await api.slothlet.api.add("registry", REGISTRY);
@@ -229,7 +229,7 @@ describe.each(getMatrixConfigs())("Context > wrap-on-set data read-gating parity
 			...config,
 			base: BASE,
 			api: { mutations: { add: true, remove: true, reload: true } },
-			permissions: { defaultPolicy: "allow", rules: [{ caller: "reader.**", target: "vault.**", effect: "deny" }] }
+			permissions: { policy: "allow", rules: [{ caller: "reader.**", target: "vault.**", effect: "deny" }] }
 		});
 		await api.slothlet.api.add("vault", VAULT);
 		await api.slothlet.api.add("reader", READER);
