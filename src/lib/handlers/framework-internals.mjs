@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:09-08:00 (1794874569)
+ *	@Last modified time: 2026-11-17T13:35:16-08:00 (1794951316)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -37,7 +37,7 @@
  * consumer's private member that happened to share the name, reopening exactly what #269 closed.
  */
 
-import { FunctionMethods, Functions, setFrom, SetMethods, WeakMap, WeakMapMethods, WeakSet, WeakSetMethods } from "#helpers/intrinsics";
+import { setFrom, SetMethods, WeakMap, WeakMapMethods, WeakSet, WeakSetMethods } from "#helpers/intrinsics";
 import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "#helpers/instance-imports";
 
 /**
@@ -50,7 +50,7 @@ import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "#helpers/ins
 const FRAMEWORK_INTERNAL = new WeakSet();
 
 /** `WeakSet.prototype.has` as it was when slothlet loaded, so a module replacing it changes no answer below. */
-const weakSetHas = FunctionMethods.bind(Functions.prototype.call, WeakSet.prototype.has);
+const weakSetHas = WeakSetMethods.has;
 
 /**
  * Reserved marker keys slothlet stamps as OWN properties on framework-internal objects.

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:11-08:00 (1794874571)
+ *	@Last modified time: 2026-11-17T13:35:18-08:00 (1794951318)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -51,7 +51,6 @@ import {
 	concatLists,
 	filterList,
 	FunctionMethods,
-	Functions,
 	Map,
 	mapEntriesToArray,
 	mapKeysToArray,
@@ -167,7 +166,7 @@ export function layerHeldKeys(layer) {
 const BOUND_ORIGINALS = new WeakMap();
 
 /** `WeakMap.prototype.has` as it was when slothlet loaded, so a module replacing it changes no answer of {@link isCompositionProxy}. */
-const weakMapHas = FunctionMethods.bind(Functions.prototype.call, WeakMap.prototype.has);
+const weakMapHas = WeakMapMethods.has;
 
 /**
  * Whether a value is one of the Proxies composition makes: a layer ({@link layerOver}) or a method read

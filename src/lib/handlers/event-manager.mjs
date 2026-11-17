@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:28:45-08:00 (1794882525)
+ *	@Last modified time: 2026-11-17T13:35:16-08:00 (1794951316)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -64,7 +64,7 @@ import {
 	MapMethods,
 	Numbers,
 	Objects,
-	Promise,
+	PrototypeFunctions,
 	Reflect,
 	SafePromise,
 	Set,
@@ -80,7 +80,7 @@ import {
 const { runtime_eventPayloadFor } = unifiedWrapperInternals("lib/handlers/event-manager");
 
 /** The functions the dispatcher uses, taken when slothlet loaded. */
-const promiseThen = Promise.prototype.then;
+const promiseThen = PrototypeFunctions.Promise.then;
 const reflectApply = Reflect.apply;
 
 /**

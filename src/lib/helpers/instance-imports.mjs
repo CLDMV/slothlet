@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T13:26:58-08:00 (1794950818)
+ *	@Last modified time: 2026-11-17T13:35:20-08:00 (1794951320)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -91,6 +91,7 @@ import {
 	NativeProxy,
 	Objects,
 	Processes,
+	PrototypeFunctions,
 	Reflect,
 	RegExpMethods,
 	regExpReplace,
@@ -887,7 +888,7 @@ const HOST = (() => {
 	const update = hashPrototype.update;
 	const digest = hashPrototype.digest;
 	const Decoder = TextDecoder;
-	const decode = Decoder.prototype.decode;
+	const decode = PrototypeFunctions.TextDecoder.decode;
 	return Objects.freeze({
 		randomUUID: FunctionMethods.bind(crypto.randomUUID, crypto),
 		// What a loaded script is recorded under (see recordLoadedSource): the hash and the decoding are the ones in place

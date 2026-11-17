@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:11-08:00 (1794874571)
+ *	@Last modified time: 2026-11-17T13:35:18-08:00 (1794951318)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -69,6 +69,7 @@ import {
 	Number,
 	Objects,
 	Processes,
+	PrototypeFunctions,
 	RangeError,
 	ReferenceError,
 	Reflect,
@@ -101,14 +102,14 @@ const isArray = Arrays.isArray;
 const ObjectPrototype = Objects.prototype;
 const NativeMap = Map;
 const NativeSet = Set;
-const mapForEach = Map.prototype.forEach;
-const setForEach = Set.prototype.forEach;
-const mapSet = Map.prototype.set;
-const setAdd = Set.prototype.add;
-const mapGet = Map.prototype.get;
-const mapHas = Map.prototype.has;
-const mapSize = getOwnPropertyDescriptor(Map.prototype, "size").get;
-const setSize = getOwnPropertyDescriptor(Set.prototype, "size").get;
+const mapForEach = PrototypeFunctions.Map.forEach;
+const setForEach = PrototypeFunctions.Set.forEach;
+const mapSet = PrototypeFunctions.Map.set;
+const setAdd = PrototypeFunctions.Set.add;
+const mapGet = PrototypeFunctions.Map.get;
+const mapHas = PrototypeFunctions.Map.has;
+const mapSize = PrototypeFunctions.Map.size;
+const setSize = PrototypeFunctions.Set.size;
 
 /**
  * A getter of a built-in prototype, as it was when slothlet loaded, or null where the platform has none.
@@ -127,7 +128,7 @@ const errorBrand = typeof NativeError.isError === "function" ? NativeError.isErr
 const NativeArrayBuffer = ArrayBuffer;
 const NativeUint8Array = Uint8Array;
 const NativeDataView = DataView;
-const dateGetTime = Date.prototype.getTime;
+const dateGetTime = PrototypeFunctions.Date.getTime;
 const regExpSource = getterOf(RegExp.prototype, "source");
 /** The flag getters of `RegExp.prototype`, each with the letter it stands for, in the order `flags` lists them. */
 const REGEXP_FLAGS = filterList(

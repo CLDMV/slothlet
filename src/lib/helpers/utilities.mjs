@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T13:27:00-08:00 (1794950820)
+ *	@Last modified time: 2026-11-17T13:35:22-08:00 (1794951322)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -81,7 +81,7 @@ export class Utilities extends ComponentBase {
 		const result = { ...target };
 
 		for (const key in source) {
-			if (FunctionMethods.call(Objects.prototype.hasOwnProperty, source, key)) {
+			if (Objects.hasOwn(source, key)) {
 				if (this.isPlainObject(source[key])) {
 					// Recurse: start from target[key] if it's a plain object, otherwise {}
 					// so new nested keys in source always produce a fresh copy.

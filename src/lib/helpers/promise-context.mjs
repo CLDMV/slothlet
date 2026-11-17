@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:13-08:00 (1794874573)
+ *	@Last modified time: 2026-11-17T13:35:21-08:00 (1794951321)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -42,7 +42,17 @@
 import { pinManyToCurrentCaller } from "#helpers/caller-pinning";
 import { inheritsFrom } from "#helpers/platform";
 import { openLayer, closeLayer, holdsValue, markLayer } from "#helpers/boundary-patch-layers";
-import { FunctionMethods, Objects, Promise, Promises, Symbols, TypeError, WeakSet, WeakSetMethods } from "#helpers/intrinsics";
+import {
+	FunctionMethods,
+	Objects,
+	Promise,
+	Promises,
+	PrototypeFunctions,
+	Symbols,
+	TypeError,
+	WeakSet,
+	WeakSetMethods
+} from "#helpers/intrinsics";
 import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "#helpers/instance-imports";
 
 /**
@@ -70,7 +80,7 @@ function runtime_unwrapThen(then) {
  * @type {Function}
  * @private
  */
-const NATIVE_THEN = runtime_unwrapThen(Promise.prototype.then);
+const NATIVE_THEN = runtime_unwrapThen(PrototypeFunctions.Promise.then);
 
 /**
  * Register reactions on a promise without pinning them to the current caller.
@@ -96,6 +106,24 @@ export function nativeThen(promise, onFulfilled, onRejected) {
 		if (!inheritsFrom(error, TypeError) || !inheritsFrom(promise, Promise)) throw error;
 		return FunctionMethods.call(NATIVE_THEN, Promises.resolve(promise), onFulfilled, onRejected);
 	}
+}
+
+/**
+ * Register reactions on a promise of the engine's own as its `then` would while this copy's patch is installed: through
+ * this copy's wrapper, which pins them to the current caller (see {@link enablePromisePatching}), or the engine's `then`
+ * when no patch is installed. Neither is read off the promise or `Promise.prototype`, so a `then` module code put there
+ * is never called.
+ *
+ * @param {Promise<*>} promise - A promise of the engine's own (not a Proxy).
+ * @param {Function} [onFulfilled] - Fulfillment reaction.
+ * @param {Function} [onRejected] - Rejection reaction.
+ * @returns {Promise<*>} The derived promise, as `then` returns it.
+ * @internal
+ * @example
+ * pinnedThen(promise, (value) => value, (error) => { throw error; });
+ */
+export function pinnedThen(promise, onFulfilled, onRejected) {
+	return FunctionMethods.call(installed === null ? NATIVE_THEN : installed.wrapper, promise, onFulfilled, onRejected);
 }
 
 /**

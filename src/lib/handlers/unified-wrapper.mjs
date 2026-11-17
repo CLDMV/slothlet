@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T12:09:03-08:00 (1794946143)
+ *	@Last modified time: 2026-11-17T13:35:17-08:00 (1794951317)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -59,7 +59,7 @@ import {
 	unwrapThrown
 } from "#handlers/hook-manager";
 import { isSharedExport, internals as sharedValuesInternals } from "#handlers/shared-values";
-import { engineThenOf } from "#helpers/promise-context";
+import { engineThenOf, pinnedThen } from "#helpers/promise-context";
 import { isBoxedPrimitive, internals as cloneContextInternals } from "#helpers/clone-context";
 import { isFunctionSourcePatch, internals as functionSourceContextInternals } from "#helpers/function-source-context";
 import {
@@ -121,6 +121,7 @@ import {
 	promiseAll,
 	PromiseMethods,
 	Promises,
+	PrototypeFunctions,
 	queueMicrotask,
 	RangeError,
 	ReferenceError,
@@ -200,7 +201,7 @@ const ____COLLISION_MERGED_PROPERTY = Symbol("collisionMergedProperty");
  * @returns {boolean} True if obj has own property key
  * @private
  */
-const hasOwn = (obj, key) => FunctionMethods.call(Objects.prototype.hasOwnProperty, obj, key);
+const hasOwn = (obj, key) => Objects.hasOwn(obj, key);
 
 /**
  * Nodes the framework itself is writing right now, each with how many of its writes to it are open.
@@ -741,9 +742,12 @@ function runtime_selfIsMethodNode(thisArg, method) {
 function runtime_selfViewResult(result, reader, slothlet = null, from = null) {
 	// Only a plain native promise is followed: any other thenable is handed back exactly as it is.
 	if (runtime_inherits(result, Promise) && Objects.getPrototypeOf(result) === Promise.prototype) {
-		if (slothlet === null) return result.then((value) => runtime_selfView(value, reader, from));
+		// A promise of the engine's own is reacted to with the language's `then`, never one read off it; a Proxy that
+		// reports the promise prototype through its own `then`, as before.
+		const then = util.types.isPromise(result) ? FunctionMethods.bind(pinnedThen, null, result) : FunctionMethods.bind(result.then, result);
+		if (slothlet === null) return then((value) => runtime_selfView(value, reader, from));
 		// What it rejects with reaches the reader as values crossing between modules do (#667).
-		return result.then(
+		return then(
 			(value) => runtime_selfView(value, reader, from),
 			(error) => {
 				throw runtime_crossTo(error, reader, slothlet, from);
@@ -884,9 +888,9 @@ function runtime_hasInternalSlots(value) {
  * which an `instanceof` in slothlet's code would run with slothlet's values (#632).
  * @private
  */
-const INTRINSIC_HAS_INSTANCE = Functions.prototype[Symbol.hasInstance];
+const INTRINSIC_HAS_INSTANCE = PrototypeFunctions.Function.hasInstance;
 /** @private */
-const WEAKREF_DEREF = typeof WeakRef === "function" ? WeakRef.prototype.deref : null;
+const WEAKREF_DEREF = PrototypeFunctions.WeakRef.deref ?? null;
 /** @private */
 const ERROR_BRAND =
 	typeof Errors.isError === "function"
@@ -907,6 +911,18 @@ const IS_PROXY = typeof util?.types?.isProxy === "function" ? util.types.isProxy
  */
 function runtime_inherits(value, ctor) {
 	return inheritsFrom(value, ctor);
+}
+
+/**
+ * Whether a value is a promise of the engine's own whose prototype is `Promise.prototype`: one `await` reacts to with
+ * the language's own `then`, never reading one off it. Told by the engine's brand check, so a Proxy is never one and
+ * none of its traps run.
+ * @param {*} value - The value.
+ * @returns {boolean} True for such a promise.
+ * @private
+ */
+function runtime_isEnginePromise(value) {
+	return value !== null && typeof value === "object" && util.types.isPromise(value) && Reflect.getPrototypeOf(value) === Promise.prototype;
 }
 
 /**
@@ -1244,7 +1260,7 @@ function runtime_inheritedEngineMember(impl, prop, value) {
 	if (hasOwn(impl, prop)) return null;
 	const answered = layerMethodOriginal(value) ?? value;
 	// A callable node's own answer for `valueOf` (see runtime_valueOfFor), read through a layer over that node.
-	const original = WeakSetMethods.has(NODE_VALUE_OFS, answered) ? Objects.prototype.valueOf : answered;
+	const original = WeakSetMethods.has(NODE_VALUE_OFS, answered) ? PrototypeFunctions.Object.valueOf : answered;
 	// Recognised by identity rather than by walking the value's prototypes: a layer over another api node has none to
 	// walk (a node reports none). Only `Object.prototype` and `Function.prototype` are meant: their methods work on any
 	// receiver, where a `Map`'s or a `Date`'s need the value itself and stay bound to it.
@@ -1275,7 +1291,7 @@ function runtime_valueOfFor(node) {
 	let method = WeakMapMethods.get(NODE_VALUE_OF_BY_NODE, node);
 	if (method) return method;
 	method = function valueOf() {
-		return this === undefined || this === null ? node : Reflect.apply(Objects.prototype.valueOf, this, []);
+		return this === undefined || this === null ? node : Reflect.apply(PrototypeFunctions.Object.valueOf, this, []);
 	};
 	WeakSetMethods.add(NODE_VALUE_OFS, method);
 	WeakMapMethods.set(NODE_VALUE_OF_BY_NODE, node, method);
@@ -1437,7 +1453,7 @@ function runtime_selfDataView(value, reader, slothlet, parts, through) {
 	let settled = null;
 	const viewedPromise = () =>
 		(settled ??= FunctionMethods.call(
-			Promise.prototype.then,
+			PrototypeFunctions.Promise.then,
 			raw,
 			(resolved) => held(resolved),
 			(reason) => Promises.reject(held(reason))
@@ -1509,7 +1525,7 @@ function runtime_selfDataView(value, reader, slothlet, parts, through) {
 		if (holdsValues && typeof returned.next === "function") {
 			// An iterator as the engine's are (its helpers, `toArray()`, `map()`, …, and its tag), yielding viewed values.
 			const iterator = Objects.create(typeof Iterator === "function" ? Iterator.prototype : Objects.prototype);
-			const tag = StringMethods.slice(FunctionMethods.call(Objects.prototype.toString, returned), 8, -1);
+			const tag = StringMethods.slice(ObjectMethods.toString(returned), 8, -1);
 			Objects.defineProperties(iterator, {
 				next: {
 					value: (...args) => {
@@ -6968,12 +6984,15 @@ const WELL_KNOWN_SYMBOLS = setFrom(
 const SLOT_CALLBACK_METHODS = setFrom(
 	filterList(
 		concatLists(
-			[Map.prototype.forEach, Set.prototype.forEach, Promise.prototype.then, Promise.prototype.catch, Promise.prototype.finally],
+			[
+				PrototypeFunctions.Map.forEach,
+				PrototypeFunctions.Set.forEach,
+				PrototypeFunctions.Promise.then,
+				PrototypeFunctions.Promise.catch,
+				PrototypeFunctions.Promise.finally
+			],
 			typeof Iterator === "function"
-				? mapList(
-						["forEach", "some", "every", "find", "reduce", "map", "filter", "flatMap"],
-						(name) => Reflect.getOwnPropertyDescriptor(Iterator.prototype, name)?.value
-					)
+				? mapList(["forEach", "some", "every", "find", "reduce", "map", "filter", "flatMap"], (name) => PrototypeFunctions.Iterator[name])
 				: []
 		),
 		(method) => typeof method === "function"
@@ -6993,7 +7012,7 @@ const NATIVE_ITERATOR_PROTOTYPES = (() => {
 	const samples = [
 		() => [][Symbol.iterator](),
 		() => /a/g[Symbol.matchAll](""),
-		() => Reflect.apply(Iterator.prototype.map, ArrayMethods.values([]), [(value) => value]),
+		() => Reflect.apply(PrototypeFunctions.Iterator.map, ArrayMethods.values([]), [(value) => value]),
 		() => Iterators.from({ next: () => ({ done: true, value: undefined }) }),
 		() => new Intl.Segmenter().segment("")[Symbol.iterator]()
 	];
@@ -7046,9 +7065,9 @@ const VM_NATIVE_SCRIPT = (() => {
  * @private
  */
 const SLOT_READERS = {
-	mapEntries: Map.prototype.entries,
-	setValues: Set.prototype.values,
-	then: Promise.prototype.then
+	mapEntries: PrototypeFunctions.Map.entries,
+	setValues: PrototypeFunctions.Set.values,
+	then: PrototypeFunctions.Promise.then
 };
 
 /**
@@ -7212,12 +7231,12 @@ function runtime_holdsCode(value, depth, budget) {
 const ORDINARY_OBJECTS = new WeakSet();
 
 /**
- * The engine's own `Symbol.prototype.valueOf`, taken when slothlet loaded: it reads a boxed symbol's internal data and
+ * The engine's own `PrototypeFunctions.Symbol.valueOf`, taken when slothlet loaded: it reads a boxed symbol's internal data and
  * throws for any other object.
  * @type {Function}
  * @private
  */
-const SYMBOL_VALUE_OF = Symbol.prototype.valueOf;
+const SYMBOL_VALUE_OF = PrototypeFunctions.Symbol.valueOf;
 
 /**
  * Whether a boxed primitive is a boxed symbol, which `structuredClone` refuses.
@@ -8385,7 +8404,7 @@ function runtime_kindStandIn(maker, owner, original, made = maker.made) {
 function runtime_generatorStandIn(maker, owner, original) {
 	const existing = WeakMapMethods.get(maker.made, original);
 	if (existing) return existing;
-	const isAsync = FunctionMethods.call(Objects.prototype.isPrototypeOf, GENERATOR_PROTOTYPES.asyncGenerator, original);
+	const isAsync = FunctionMethods.call(PrototypeFunctions.Object.isPrototypeOf, GENERATOR_PROTOTYPES.asyncGenerator, original);
 	const steps = isAsync ? GENERATOR_PROTOTYPES.asyncGenerator : GENERATOR_PROTOTYPES.generator;
 	// A step's result is no one's value (R3-D17): the step runs as the module and the value in it is handed out as the
 	// module's, while the `{ value, done }` around it is a plain result, as the engine makes one (#758). An async step's
@@ -11683,9 +11702,9 @@ function runtime_rootCall(slothlet, thisArg, args, construct = false) {
  */
 const FUNCTION_INVOKERS = Objects.freeze({
 	__proto__: null,
-	call: Functions.prototype.call,
-	apply: Functions.prototype.apply,
-	bind: Functions.prototype.bind
+	call: PrototypeFunctions.Function.call,
+	apply: PrototypeFunctions.Function.apply,
+	bind: PrototypeFunctions.Function.bind
 });
 
 /**
@@ -13635,9 +13654,11 @@ function runtime_runAroundPipeline(wrapper, hookManager, arounds, strategy, this
 			const afterResult = await hookManager.executeAfterHooksAsync(path, settled, coreArgs, api, ctx, errorSink);
 			return afterResult.modified ? afterResult.result : settled;
 		};
-		const run = hookManager
-			.executeAroundChain(arounds, path, callArgs, api, ctx, { ...options, core, isAsync: true })
-			.then(settleValue, settleError);
+		const run = pinnedThen(
+			hookManager.executeAroundChain(arounds, path, callArgs, api, ctx, { ...options, core, isAsync: true }),
+			settleValue,
+			settleError
+		);
 		// Same contract as a call promoted by an async before/after hook: a target declared `async`
 		// already hands its callers a Promise; a promoted synchronous one hands back a guarded one.
 		return promoted && !leafIsAsync ? runtime_guardPromotedResult(run, path, wrapper.SlothletError) : run;
@@ -13662,8 +13683,15 @@ function runtime_runAroundPipeline(wrapper, hookManager, arounds, strategy, this
 				return afterResult.modified ? afterResult.result : resolved;
 			};
 			const recordAsTarget = (error) => errorSink(error, functionSource(error));
-			if (runtime_inherits(result, Promise)) {
-				return result.then(afterReaction, (error) => {
+			// A promise of the engine's own is reacted to with the language's `then`, as `await` reacts to it; one of a
+			// module's class through its own `then`, as `await` calls it.
+			const react = runtime_isEnginePromise(result)
+				? FunctionMethods.bind(pinnedThen, null, result)
+				: runtime_inherits(result, Promise)
+					? FunctionMethods.bind(result.then, result)
+					: null;
+			if (react !== null) {
+				return react(afterReaction, (error) => {
 					recordAsTarget(error);
 					throw error;
 				});
@@ -13687,6 +13715,7 @@ function runtime_runAroundPipeline(wrapper, hookManager, arounds, strategy, this
 	// The only thenable an around hook may return on this pipeline is one `next()` returned, passed
 	// through or derived from (`next().then(check)`); observe it when it settles.
 	if (value && typeof value === "object" && typeof value.then === "function") {
+		if (runtime_isEnginePromise(value)) return pinnedThen(value, settleValue, settleError);
 		return runtime_inherits(value, Promise) ? value.then(settleValue, settleError) : settleThenable(value, settleValue, settleError);
 	}
 	return settleValue(value);
@@ -18074,10 +18103,7 @@ class UnifiedWrapper extends ComponentBase {
 							// unchanged for everything except the shape that was losing data.
 							const callableCarriesWrapperMembers =
 								typeof finalImpl === "function" &&
-								ArrayMethods.some(
-									Objects.keys(current),
-									(key) => !isFrameworkReservedKey(key) && !FunctionMethods.call(Objects.prototype.hasOwnProperty, finalImpl, key)
-								);
+								ArrayMethods.some(Objects.keys(current), (key) => !isFrameworkReservedKey(key) && !Objects.hasOwn(finalImpl, key));
 							// A module awaiting a callable node gets the node, as it does once the node has loaded, and never the
 							// function behind it: that function carries no gate, so calling it would skip the node's call check
 							// (#632). The host, which no rule gates, still gets the function itself.
@@ -18198,7 +18224,7 @@ class UnifiedWrapper extends ComponentBase {
 				}
 				if (prop === "valueOf") {
 					// For waiting proxies, we can't access impl yet, so use target
-					return FunctionMethods.bind(Functions.prototype.valueOf, waitingTarget);
+					return FunctionMethods.bind(PrototypeFunctions.Object.valueOf, waitingTarget);
 				}
 				// prop === "toJSON" is never accessed on a lazy unmaterialized property-chain proxy in tests.
 				/* v8 ignore start */
@@ -19165,7 +19191,7 @@ class UnifiedWrapper extends ComponentBase {
 				}
 				// A namespace given another prototype reads its `constructor` from there, through the member read below.
 				const constructorFrom = runtime_inheritsFrom(wrapper, prop);
-				if (constructorFrom === undefined || constructorFrom === Objects.prototype) return Objects.prototype.constructor;
+				if (constructorFrom === undefined || constructorFrom === Objects.prototype) return NativeObject;
 			}
 			if (prop === util.inspect.custom) {
 				// What the node shows to `util.inspect` (see runtime_inspectShown): the same as its target's own hook.
@@ -19295,7 +19321,7 @@ class UnifiedWrapper extends ComponentBase {
 					return FunctionMethods.bind(method, fnImpl);
 				}
 				// A loaded object node reads its `valueOf` through the member read below.
-				if (impl === null || typeof impl !== "object") return FunctionMethods.bind(Functions.prototype.valueOf, target);
+				if (impl === null || typeof impl !== "object") return FunctionMethods.bind(PrototypeFunctions.Object.valueOf, target);
 			}
 			if (prop === "toJSON" && !memberShadowsWrapperProp) {
 				// Called by JSON.stringify / util.inspect / pretty-format during serialization.
@@ -19605,7 +19631,7 @@ class UnifiedWrapper extends ComponentBase {
 			// Reached only when impl doesn't have the key but target does (e.g., a property
 			// set directly on the wrapper object before the proxy was created).
 			/* v8 ignore next */
-			if (value === undefined && FunctionMethods.call(Objects.prototype.hasOwnProperty, target, prop)) {
+			if (value === undefined && Objects.hasOwn(target, prop)) {
 				value = target[prop];
 			}
 
@@ -19662,7 +19688,7 @@ class UnifiedWrapper extends ComponentBase {
 			// as it is, so reading it is checked as a call of the node (#632).
 			// A member inherited from the engine runs on the node, as on the plain value (#630).
 			const currentImpl = wrapper.____slothletInternal.impl;
-			if (typeof currentImpl === "function" && !FunctionMethods.call(Objects.prototype.propertyIsEnumerable, currentImpl, prop)) {
+			if (typeof currentImpl === "function" && !FunctionMethods.call(PrototypeFunctions.Object.propertyIsEnumerable, currentImpl, prop)) {
 				const inherited = runtime_inheritedEngineMember(currentImpl, prop, value);
 				if (inherited) return inherited.value;
 				// A member inherited from a prototype given to the node is no part of the module's function: it is read as
@@ -19686,7 +19712,7 @@ class UnifiedWrapper extends ComponentBase {
 				if (
 					runtime_holdsDataKind(currentImpl) &&
 					hasOwn(currentImpl, prop) &&
-					!FunctionMethods.call(Objects.prototype.propertyIsEnumerable, currentImpl, prop)
+					!FunctionMethods.call(PrototypeFunctions.Object.propertyIsEnumerable, currentImpl, prop)
 				) {
 					runtime_enforceCodeMember(wrapper, value, kept);
 					return value;
@@ -20151,16 +20177,20 @@ class UnifiedWrapper extends ComponentBase {
 					});
 				}
 
-				// Check if result is a Promise (async function)
-				if (result && typeof result === "object" && typeof result.then === "function") {
+				// Check if result is a Promise (async function). A promise of the engine's own is reacted to with the language's
+				// `then`, as `await` reacts to it, so a `then` module code put on `Promise.prototype` never sees it.
+				const enginePromise = runtime_isEnginePromise(result);
+				if (enginePromise || (result && typeof result === "object" && typeof result.then === "function")) {
 					// Mark as async so finally block skips always hooks (we handle them in the promise chain)
 					isAsync = true;
 					// Async result - attach hooks to Promise chain. A hand-written thenable is reacted to as `await`
 					// would, so a reaction that throws never surfaces at its own `then`'s call site.
 					return (
-						runtime_inherits(result, Promise)
-							? FunctionMethods.bind(result.then, result)
-							: FunctionMethods.bind(settleThenable, null, result)
+						enginePromise
+							? FunctionMethods.bind(pinnedThen, null, result)
+							: runtime_inherits(result, Promise)
+								? FunctionMethods.bind(result.then, result)
+								: FunctionMethods.bind(settleThenable, null, result)
 					)(
 						(resolvedResult) => {
 							try {
@@ -20327,7 +20357,7 @@ class UnifiedWrapper extends ComponentBase {
 				return true;
 			}
 
-			return FunctionMethods.call(Objects.prototype.hasOwnProperty, target, prop);
+			return Objects.hasOwn(target, prop);
 		};
 
 		/**
@@ -21826,7 +21856,7 @@ export function readApiMember(container, key) {
 	// A plain object (the api root while it is built) holds its members as own properties; what it
 	// inherits (`toString`, `hasOwnProperty`, …) is `Object.prototype`'s, and treating it as an existing
 	// node would write the mount into the global builtin.
-	if (!wrapper) return FunctionMethods.call(Objects.prototype.hasOwnProperty, container, key) ? container[key] : undefined;
+	if (!wrapper) return Objects.hasOwn(container, key) ? container[key] : undefined;
 	// The framework reads its own tree, often while a module's call is executing (that module's own
 	// `api.add`), and works on the node itself: a read under a module's identity hands back that module's
 	// captured view, which is not the node, so the mount would merge the node into itself and write to it

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:28:47-08:00 (1794882527)
+ *	@Last modified time: 2026-11-17T13:35:17-08:00 (1794951317)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -947,7 +947,7 @@ export class VersionManager extends ComponentBase {
 				// ── 4. constructor ────────────────────────────────────────────
 				// UnifiedWrapper intercepts "constructor" at L2351 before delegating to impl[prop].
 				/* v8 ignore next */
-				if (prop === "constructor") return Objects.prototype.constructor;
+				if (prop === "constructor") return NativeObject;
 
 				// ── 5. Symbol.toStringTag → delegate to resolved versioned wrapper ─
 				if (prop === Symbol.toStringTag) {

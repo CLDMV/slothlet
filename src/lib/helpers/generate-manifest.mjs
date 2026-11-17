@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:28:49-08:00 (1794882529)
+ *	@Last modified time: 2026-11-17T13:35:19-08:00 (1794951319)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -86,7 +86,6 @@ import {
 	Arrays,
 	concatLists,
 	filterList,
-	FunctionMethods,
 	JSON,
 	listPush,
 	Map,
@@ -649,7 +648,7 @@ function pickBrowserTarget(value) {
 	if (typeof value === "object") {
 		for (let ofIndex = 0, ofList = ["browser", "import", "module", "default"]; ofIndex < ofList.length; ofIndex++) {
 			const cond = ofList[ofIndex];
-			if (FunctionMethods.call(Objects.prototype.hasOwnProperty, value, cond)) {
+			if (Objects.hasOwn(value, cond)) {
 				const t = pickBrowserTarget(value[cond]);
 				if (t) return t;
 			}

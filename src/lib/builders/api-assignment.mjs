@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:28:44-08:00 (1794882524)
+ *	@Last modified time: 2026-11-17T13:35:15-08:00 (1794951315)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -33,7 +33,6 @@ import {
 	ArrayMethods,
 	Error,
 	filterList,
-	FunctionMethods,
 	Map,
 	MapMethods,
 	Objects,
@@ -142,9 +141,7 @@ export class ApiAssignment extends ComponentBase {
 			if (isFrameworkReservedKey(folderKey)) continue;
 			// Own-member tests: `in` walks the prototype chain, so an export named after an inherited
 			// member (`call`, `bind`, `toString`) would read as already present and be dropped.
-			const alreadyPresent =
-				FunctionMethods.call(Objects.prototype.hasOwnProperty, keptWrapper, folderKey) ||
-				(!!keptImpl && FunctionMethods.call(Objects.prototype.hasOwnProperty, keptImpl, folderKey));
+			const alreadyPresent = Objects.hasOwn(keptWrapper, folderKey) || (!!keptImpl && Objects.hasOwn(keptImpl, folderKey));
 			if (alreadyPresent) {
 				// #441: the survivor already owns this name, so the folded-off folder's member is dropped.
 				// This is the "completely invisible" case — a self-named-namespace fold emits no per-leaf
@@ -690,7 +687,7 @@ export class ApiAssignment extends ComponentBase {
 						const existingChildKeys2 = filterList(Objects.keys(existingWrapper), (k) => !isFrameworkReservedKey(k));
 						for (let ofIndex = 0, ofList = existingChildKeys2; ofIndex < ofList.length; ofIndex++) {
 							const key2 = ofList[ofIndex];
-							const keyOnValue = FunctionMethods.call(Objects.prototype.hasOwnProperty, valueWrapper, key2);
+							const keyOnValue = Objects.hasOwn(valueWrapper, key2);
 							if (keyOnValue && isMergeReplace) {
 								// merge-replace: the second source's member wins the conflict — leave it.
 								continue;
@@ -726,7 +723,7 @@ export class ApiAssignment extends ComponentBase {
 						const key = ofList[ofIndex];
 						const isInternal = isFrameworkReservedKey(key);
 						// CRITICAL: Use hasOwnProperty to avoid matching ComponentBase prototype getters
-						const keyExists = !isInternal && FunctionMethods.call(Objects.prototype.hasOwnProperty, existingWrapper, key);
+						const keyExists = !isInternal && Objects.hasOwn(existingWrapper, key);
 
 						if (!keyExists) {
 							// A getter stays a getter, running on the node that holds the slot (#585 review).
@@ -761,7 +758,7 @@ export class ApiAssignment extends ComponentBase {
 								const ____existingChildKeys = filterList(Objects.keys(existingChildWrapper), (k) => !isFrameworkReservedKey(k));
 								for (let ofIndex = 0, ofList = newChildKeys; ofIndex < ofList.length; ofIndex++) {
 									const childKey = ofList[ofIndex];
-									const childKeyExists = FunctionMethods.call(Objects.prototype.hasOwnProperty, existingChildWrapper, childKey);
+									const childKeyExists = Objects.hasOwn(existingChildWrapper, childKey);
 									// childKeyExists is always false during initial merge (keys are new).
 									/* v8 ignore next */
 									if (!childKeyExists) {

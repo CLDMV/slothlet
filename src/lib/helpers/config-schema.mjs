@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:55:17-08:00 (1794884117)
+ *	@Last modified time: 2026-11-17T13:35:19-08:00 (1794951319)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -19,7 +19,7 @@
  * @module @cldmv/slothlet/helpers/config-schema
  * @internal
  */
-import { ArrayMethods, Arrays, concatLists, FunctionMethods, Objects, Symbol, WeakSet, WeakSetMethods } from "#helpers/intrinsics";
+import { ArrayMethods, Arrays, concatLists, Objects, Symbol, WeakSet, WeakSetMethods } from "#helpers/intrinsics";
 import { SlothletError } from "#errors";
 
 /**
@@ -219,7 +219,7 @@ export function assertKnownKeys(value, schema, where, path = []) {
 	for (let i = 0, keys = Objects.keys(value); i < keys.length; i++) {
 		const key = keys[i];
 		const keyPath = concatLists(path, [key]);
-		if (!FunctionMethods.call(Objects.prototype.hasOwnProperty, schema, key)) {
+		if (!Objects.hasOwn(schema, key)) {
 			throw new SlothletError("INVALID_CONFIG_UNKNOWN_KEY", { where, key: ArrayMethods.join(keyPath, "."), path: keyPath });
 		}
 		const child = schema[key];

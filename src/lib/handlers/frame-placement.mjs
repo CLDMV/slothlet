@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T09:14:21-08:00 (1794935661)
+ *	@Last modified time: 2026-11-17T13:35:16-08:00 (1794951316)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -60,6 +60,7 @@ import {
 	Math,
 	Objects,
 	Processes,
+	PrototypeFunctions,
 	Reflect,
 	RegExp,
 	RegExpMethods,
@@ -132,12 +133,12 @@ const HASH_PROTOTYPE = NODE_CRYPTO ? Objects.getPrototypeOf(Reflect.apply(CRYPTO
 const HASH_UPDATE = HASH_PROTOTYPE?.update;
 const HASH_DIGEST = HASH_PROTOTYPE?.digest;
 const CapturedTextDecoder = TextDecoder;
-const TEXT_DECODE = TextDecoder.prototype.decode;
+const TEXT_DECODE = PrototypeFunctions.TextDecoder.decode;
 const JSON_PARSE = JSON.parse;
-const MAP_FOREACH = Map.prototype.forEach;
-const SET_FOREACH = Set.prototype.forEach;
+const MAP_FOREACH = PrototypeFunctions.Map.forEach;
+const SET_FOREACH = PrototypeFunctions.Set.forEach;
 const CapturedURLSearchParams = URLSearchParams;
-const CapturedURLSearchParamsGet = URLSearchParams.prototype.get;
+const CapturedURLSearchParamsGet = PrototypeFunctions.URLSearchParams.get;
 
 /**
  * Call one of the captured `fs` functions.

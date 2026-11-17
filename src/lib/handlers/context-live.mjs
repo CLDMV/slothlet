@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T13:32:37-08:00 (1794951157)
+ *	@Last modified time: 2026-11-17T13:35:16-08:00 (1794951316)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -988,7 +988,7 @@ export class LiveContextManager {
 	 * @private
 	 */
 	#baselineFor(store) {
-		if (!FunctionMethods.call(Objects.prototype.hasOwnProperty, store, "__baselineWrapper")) {
+		if (!Objects.hasOwn(store, "__baselineWrapper")) {
 			store.__baselineWrapper = store.currentWrapper ?? null;
 			// A replayed or scoped flow whose identity was code supplied from higher up keeps its ceiling (#597).
 			store.__baselineCeiling = store.currentCeiling ?? null;

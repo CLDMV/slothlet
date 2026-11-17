@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T13:32:44-08:00 (1794951164)
+ *	@Last modified time: 2026-11-17T13:35:23-08:00 (1794951323)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -1156,7 +1156,7 @@ class Slothlet {
 			? ArrayMethods.reduce(
 					include,
 					(acc, key) => {
-						if (FunctionMethods.call(Objects.prototype.hasOwnProperty, NativeProcess.env, key)) {
+						if (Objects.hasOwn(NativeProcess.env, key)) {
 							acc[key] = NativeProcess.env[key];
 						}
 						return acc;
@@ -1526,7 +1526,7 @@ class Slothlet {
 			const rootInherits = (prop) => {
 				if (!isCallable) return false;
 				rootPrototypeNow();
-				return rootPrototype.given && !FunctionMethods.call(Objects.prototype.hasOwnProperty, this.api, prop);
+				return rootPrototype.given && !Objects.hasOwn(this.api, prop);
 			};
 			// The prototype the root has now, as the root itself holds it: an object root's is its api's.
 			const rootHeld = () => (isCallable ? rootPrototypeNow() : Reflect.getPrototypeOf(this.api));
@@ -1556,7 +1556,7 @@ class Slothlet {
 							// is the target of another proxy) is the target's.
 							if (fixed && typeof prop === "symbol" && !(prop in this.api)) return fixed.value;
 							// The root's `__proto__` is the prototype it reports, as an object's or a function's is.
-							if (prop === "__proto__" && !FunctionMethods.call(Objects.prototype.hasOwnProperty, this.api, prop)) {
+							if (prop === "__proto__" && !Objects.hasOwn(this.api, prop)) {
 								const from = rootHeld();
 								return from === null ? undefined : Reflect.get(from, prop, this.boundApi);
 							}
@@ -1567,7 +1567,7 @@ class Slothlet {
 								if (from === null) return runtime_rootMemberRead(this, prop, undefined);
 								return runtime_rootInheritedRead(this, rootViews, from, prop, Reflect.get(from, prop, this.boundApi));
 							}
-							if (!isCallable && rootGiven() && !FunctionMethods.call(Objects.prototype.hasOwnProperty, this.api, prop)) {
+							if (!isCallable && rootGiven() && !Objects.hasOwn(this.api, prop)) {
 								const from = rootHeld();
 								if (from !== null) return runtime_rootInheritedRead(this, rootViews, from, prop, this.api[prop]);
 							}
@@ -1597,7 +1597,7 @@ class Slothlet {
 						deleteProperty: (target, prop) => {
 							if (!this.api) return true;
 							runtime_assertRootChange(this, prop);
-							const held = FunctionMethods.call(Objects.prototype.hasOwnProperty, this.api, prop);
+							const held = Objects.hasOwn(this.api, prop);
 							if (!Reflect.deleteProperty(this.api, prop)) return false;
 							if (!held && Reflect.isExtensible(target)) return true;
 							return Reflect.deleteProperty(target, prop);

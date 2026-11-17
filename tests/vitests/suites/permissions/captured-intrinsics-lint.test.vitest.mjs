@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:17:03-08:00 (1794874623)
+ *	@Last modified time: 2026-11-17T13:36:23-08:00 (1794951383)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -101,6 +101,37 @@ describe("slothlet/captured-intrinsics", () => {
 		expect(lint(IMPORT + "String.fromCharCode(65);\n")).toEqual([
 			"3: `String.fromCharCode` reads a member module code can replace on the shared constructor. Use Strings.fromCharCode."
 		]);
+	});
+
+	it("reports a member read off a captured constructor's prototype, at load or later, under any local name", () => {
+		const PROTOTYPE = "reads a member module code can replace on the shared prototype.";
+		const messages = lint(
+			'import { Objects, Promise as P, Map, Functions, FunctionMethods } from "#helpers/intrinsics";\n' +
+				"const then = P.prototype.then;\n" +
+				"export const has = (value, key) => FunctionMethods.call(Objects.prototype.hasOwnProperty, value, key);\n" +
+				"export const method = (name) => Map.prototype[name];\n" +
+				"export const call = () => Functions.prototype.call;\n" +
+				"export const tag = (value) => Object.prototype.toString.call(value);\n"
+		);
+		expect(messages.filter((message) => message.includes(PROTOTYPE))).toEqual([
+			"2: `P.prototype.then` reads a member module code can replace on the shared prototype. Call the copy taken at load, `PromiseMethods.then(value, …)`, or take the function itself as `PrototypeFunctions.Promise.then`, from #helpers/intrinsics.",
+			"3: `Objects.prototype.hasOwnProperty` reads a member module code can replace on the shared prototype. Call the copy taken at load, `ObjectMethods.hasOwnProperty(value, …)`, or take the function itself as `PrototypeFunctions.Object.hasOwnProperty`, from #helpers/intrinsics.",
+			"4: `Map.prototype[name]` reads a member module code can replace on the shared prototype. Call the copy taken at load, `MapMethods.[…](value, …)`, or take the function itself as `PrototypeFunctions.Map.[…]`, from #helpers/intrinsics.",
+			"5: `Functions.prototype.call` reads a member module code can replace on the shared prototype. Call the copy taken at load, `FunctionMethods.call(value, …)`, or take the function itself as `PrototypeFunctions.Function.call`, from #helpers/intrinsics."
+		]);
+		// The global `Object` is reported as a global.
+		expect(messages.some((message) => message.startsWith("6: `Object` here is the global"))).toBe(true);
+	});
+
+	it("leaves the prototype object itself, a write to its member and the reads kept on purpose alone", () => {
+		expect(
+			lint(
+				'import { Objects, EventTarget, PrototypeFunctions, ObjectMethods } from "#helpers/intrinsics";\n' +
+					"export const isPlain = (value) => Objects.getPrototypeOf(value) === Objects.prototype;\n" +
+					"export function patch(fn) {\n\tconst below = EventTarget.prototype.addEventListener;\n\tEventTarget.prototype.addEventListener = fn;\n\treturn below;\n}\n" +
+					"export const has = (value, key) => ObjectMethods.hasOwnProperty(value, key) && PrototypeFunctions.Object.valueOf !== value;\n"
+			)
+		).toEqual([]);
 	});
 
 	const NODE_MEMBER = "reads a member of a Node built-in module after slothlet loaded";

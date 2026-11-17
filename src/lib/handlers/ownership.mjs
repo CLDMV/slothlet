@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:28:46-08:00 (1794882526)
+ *	@Last modified time: 2026-11-17T13:35:17-08:00 (1794951317)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -28,7 +28,6 @@ import {
 	concatLists,
 	copyList,
 	filterList,
-	FunctionMethods,
 	listPush,
 	listSplice,
 	Map,
@@ -302,8 +301,7 @@ export class OwnershipManager extends ComponentBase {
 		// Merge into an existing entry rather than replace it: the same file loaded again (a reload, or
 		// a second mount of it) yields new value identities, while wrappers from an earlier load may
 		// still be looked up against the earlier ones.
-		const isCommonJS =
-			StringMethods.endsWith(filePath, ".cjs") || FunctionMethods.call(Objects.prototype.hasOwnProperty, mod, "module.exports");
+		const isCommonJS = StringMethods.endsWith(filePath, ".cjs") || Objects.hasOwn(mod, "module.exports");
 		let entry = MapMethods.get(this.exportIndex, filePath);
 		if (!entry) {
 			entry = { values: new WeakMap(), members: new WeakMap(), keys: new Map(), commonJS: isCommonJS };

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T11:23:41-08:00 (1794943421)
+ *	@Last modified time: 2026-11-17T13:35:17-08:00 (1794951317)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -41,9 +41,9 @@ import { openLayer, closeLayer, holdsValue, markLayer } from "#helpers/boundary-
 import {
 	concatLists,
 	FunctionMethods,
-	Functions,
 	listPush,
 	Processes,
+	PrototypeFunctions,
 	Reflect,
 	Symbol,
 	WeakMap,
@@ -309,7 +309,7 @@ function enableAsyncResourcePatching() {
 			 * @returns {boolean} Whether it is an `AsyncResource`.
 			 */
 			static [Symbol.hasInstance](value) {
-				return FunctionMethods.call(Functions.prototype[Symbol.hasInstance], Below, value);
+				return FunctionMethods.call(PrototypeFunctions.Function.hasInstance, Below, value);
 			}
 		}
 		return AsyncResource;

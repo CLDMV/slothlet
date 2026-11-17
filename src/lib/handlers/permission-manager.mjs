@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T07:56:11-08:00 (1794930971)
+ *	@Last modified time: 2026-11-17T13:35:17-08:00 (1794951317)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -42,7 +42,6 @@ import {
 	concatLists,
 	copyList,
 	filterList,
-	FunctionMethods,
 	listPush,
 	Map,
 	mapEntries,
@@ -189,7 +188,7 @@ const VIA_PATHS = Objects.freeze({ __proto__: null, checkCall: Objects.freeze(["
  * @internal
  */
 function resolveRuleLayer(layer, ownerModuleID) {
-	if (layer && FunctionMethods.call(Objects.prototype.hasOwnProperty, RULE_LAYER_RANK, layer)) return layer;
+	if (layer && Objects.hasOwn(RULE_LAYER_RANK, layer)) return layer;
 	if (ownerModuleID === "__builtin__") return "builtin";
 	return "instance";
 }

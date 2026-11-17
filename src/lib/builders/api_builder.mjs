@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T12:09:57-08:00 (1794946197)
+ *	@Last modified time: 2026-11-17T13:35:15-08:00 (1794951315)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -47,7 +47,6 @@ import {
 	copyList,
 	filterList,
 	FunctionMethods,
-	Functions,
 	listPush,
 	listUnshift,
 	Map,
@@ -55,8 +54,8 @@ import {
 	mapKeys,
 	mapKeysToArray,
 	mapList,
-	mapValues,
 	MapMethods,
+	mapValues,
 	Math,
 	NativeProxy,
 	NumberMethods,
@@ -66,6 +65,7 @@ import {
 	Set,
 	setFrom,
 	SetMethods,
+	settledWith,
 	setToArray,
 	setValues,
 	splitText,
@@ -76,8 +76,7 @@ import {
 	WeakMap,
 	WeakMapMethods,
 	WeakSet,
-	WeakSetMethods,
-	settledWith
+	WeakSetMethods
 } from "#helpers/intrinsics";
 const {
 	resolveWrapper,
@@ -373,12 +372,7 @@ function runtime_readAddOptions(slothlet, source, options) {
 	assertOptionKeys(given, "slothlet.api.add");
 	let content = source;
 	let merged = given;
-	if (
-		source &&
-		typeof source === "object" &&
-		!Arrays.isArray(source) &&
-		FunctionMethods.call(Objects.prototype.hasOwnProperty, source, "exports")
-	) {
+	if (source && typeof source === "object" && !Arrays.isArray(source) && Objects.hasOwn(source, "exports")) {
 		const sibling = { ...source };
 		delete sibling.exports;
 		assertOptionKeys(sibling, "slothlet.api.add");
@@ -588,7 +582,7 @@ function runtime_captureShell(fn) {
 	} catch {
 		constructible = false;
 	}
-	if (constructible) return FunctionMethods.call(Functions.prototype.bind, function slothlet_capturedFunction() {}, null);
+	if (constructible) return FunctionMethods.bind(function slothlet_capturedFunction() {}, null);
 	return () => {};
 }
 
@@ -655,7 +649,7 @@ export class ApiBuilder extends ComponentBase {
 				const ofEntry = ofList[ofIndex],
 					key = ofEntry[0],
 					ref = ofEntry[1];
-				if (ref && FunctionMethods.call(Objects.prototype.hasOwnProperty, userApi, key) && userApi[key] === ref) {
+				if (ref && Objects.hasOwn(userApi, key) && userApi[key] === ref) {
 					try {
 						delete userApi[key];
 					} catch (_) {
@@ -4876,7 +4870,7 @@ export class ApiBuilder extends ComponentBase {
 					const base = parentOwners ?? null;
 					let child = base;
 					const claim = (key, owner) => {
-						const existing = child && FunctionMethods.call(Objects.prototype.hasOwnProperty, child, key) ? child[key] : undefined;
+						const existing = child && Objects.hasOwn(child, key) ? child[key] : undefined;
 						if (existing !== undefined && existing !== owner) {
 							throw new slothlet.SlothletError("CONTEXT_KEY_OWNED", { key: String(key) });
 						}

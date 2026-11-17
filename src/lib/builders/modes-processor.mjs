@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:28:44-08:00 (1794882524)
+ *	@Last modified time: 2026-11-17T13:35:15-08:00 (1794951315)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -170,7 +170,7 @@ export class ModesProcessor extends ComponentBase {
 		for (let level = content; level && level !== Objects.prototype; level = Objects.getPrototypeOf(level)) {
 			for (let ofIndex = 0, ofList = Objects.getOwnPropertyNames(level); ofIndex < ofList.length; ofIndex++) {
 				const key = ofList[ofIndex];
-				if (key === "constructor" || FunctionMethods.call(Objects.prototype.hasOwnProperty, members, key)) continue;
+				if (key === "constructor" || Objects.hasOwn(members, key)) continue;
 				const descriptor = Objects.getOwnPropertyDescriptor(level, key);
 				if (level === content && !descriptor.enumerable) continue;
 				if (typeof descriptor.value === "function" && isCompositionLayer(content)) {
@@ -379,7 +379,7 @@ export class ModesProcessor extends ComponentBase {
 			// `toString` or `call` would read as already present and be dropped, while the proxy surface
 			// serves wrapper children ahead of anything inherited. Defined with the descriptor shape adoption
 			// gives children (non-writable, enumerable, configurable) rather than assigned.
-			if (isFrameworkReservedKey(key) || FunctionMethods.call(Objects.prototype.hasOwnProperty, fn, key)) continue;
+			if (isFrameworkReservedKey(key) || Objects.hasOwn(fn, key)) continue;
 			const accessor = this.#accessorToCarry(sourceWrapper, key);
 			Objects.defineProperty(
 				fn,
@@ -445,7 +445,7 @@ export class ModesProcessor extends ComponentBase {
 	 * this.#defaultOutranksSelfNamed(exports, "calc"); // true
 	 */
 	#defaultOutranksSelfNamed(exports, name) {
-		return FunctionMethods.call(Objects.prototype.hasOwnProperty, exports, "default") && exports[name] !== exports.default;
+		return Objects.hasOwn(exports, "default") && exports[name] !== exports.default;
 	}
 
 	/**
@@ -460,7 +460,7 @@ export class ModesProcessor extends ComponentBase {
 		const members = new Map();
 		for (let ofIndex = 0, ofList = ["name", "length", "prototype"]; ofIndex < ofList.length; ofIndex++) {
 			const key = ofList[ofIndex];
-			if (FunctionMethods.call(Objects.prototype.hasOwnProperty, sourceWrapper, key)) MapMethods.set(members, key, sourceWrapper[key]);
+			if (Objects.hasOwn(sourceWrapper, key)) MapMethods.set(members, key, sourceWrapper[key]);
 		}
 		return members;
 	}
@@ -913,9 +913,9 @@ export class ModesProcessor extends ComponentBase {
 				const moduleName = this.slothlet.helpers.sanitize.sanitizePropertyName(file.name);
 				const moduleKeys = filterList(Objects.keys(exports), (k) => k !== "default");
 				const analysis = {
-					hasDefault: FunctionMethods.call(Objects.prototype.hasOwnProperty, exports, "default"),
+					hasDefault: Objects.hasOwn(exports, "default"),
 					hasNamed: moduleKeys.length > 0,
-					defaultExportType: FunctionMethods.call(Objects.prototype.hasOwnProperty, exports, "default") ? typeof exports.default : null
+					defaultExportType: Objects.hasOwn(exports, "default") ? typeof exports.default : null
 				};
 				listPush(loadedModules, { file, mod: exports, moduleName, moduleKeys, analysis });
 			} catch (error) {
@@ -1173,10 +1173,7 @@ export class ModesProcessor extends ComponentBase {
 										const existingKey = ofList[ofIndex];
 										// Conflicts resolve as in Case 2 below: the earlier contribution (the existing side)
 										// wins, except under merge-replace, where the incoming module's member wins.
-										if (
-											modes_case1CollisionMode === "merge-replace" &&
-											FunctionMethods.call(Objects.prototype.hasOwnProperty, exportedValue, existingKey)
-										) {
+										if (modes_case1CollisionMode === "merge-replace" && Objects.hasOwn(exportedValue, existingKey)) {
 											continue;
 										}
 										// Carried as described, so an accessor stays live on this module's node (#585 review).
@@ -1314,7 +1311,7 @@ export class ModesProcessor extends ComponentBase {
 								const namedKey = ofList[ofIndex];
 								// Own-member test: `in` walks Function.prototype on this callable slot, so an export named
 								// `call` / `bind` / `toString` would read as already present and never be added.
-								if (!FunctionMethods.call(Objects.prototype.hasOwnProperty, existingCategory, namedKey)) {
+								if (!Objects.hasOwn(existingCategory, namedKey)) {
 									existingCategory[namedKey] = mod[namedKey];
 								}
 							}
@@ -1327,7 +1324,7 @@ export class ModesProcessor extends ComponentBase {
 								for (let ofIndex = 0, ofList = Objects.keys(mod.default); ofIndex < ofList.length; ofIndex++) {
 									const fnKey = ofList[ofIndex];
 									if (isFrameworkReservedKey(fnKey)) continue;
-									if (!FunctionMethods.call(Objects.prototype.hasOwnProperty, existingCategory, fnKey)) {
+									if (!Objects.hasOwn(existingCategory, fnKey)) {
 										existingCategoryW.___adoptForeignMember(fnKey, mod.default);
 									}
 								}
@@ -1349,7 +1346,7 @@ export class ModesProcessor extends ComponentBase {
 								// Own-member tests: `callableModule` is a function, so `in` would walk Function.prototype and
 								// treat an export named `call` / `bind` / `toString` as already defined — merge-replace would
 								// skip carrying it, and merge would mis-record it as a conflict the first source won.
-								const existingKeyOnCallable = FunctionMethods.call(Objects.prototype.hasOwnProperty, callableModule, existingKey);
+								const existingKeyOnCallable = Objects.hasOwn(callableModule, existingKey);
 								if (modes_eagerCollisionMode === "merge-replace" && existingKeyOnCallable) {
 									continue;
 								}
@@ -1888,7 +1885,7 @@ export class ModesProcessor extends ComponentBase {
 							// and written through the instance) keeps both halves on the folder, as the object itself would
 							// answer it (#590). Defined only where the folder has no member of that name yet; a name
 							// already taken goes through the collision rules below.
-							if (member.accessor && !FunctionMethods.call(Objects.prototype.hasOwnProperty, targetApi, key)) {
+							if (member.accessor && !Objects.hasOwn(targetApi, key)) {
 								Objects.defineProperty(targetApi, key, {
 									__proto__: null,
 									get: member.accessor.get,
@@ -2183,13 +2180,11 @@ export class ModesProcessor extends ComponentBase {
 							const exports = this.slothlet.processors.loader.extractExports(mod, file.path);
 							const moduleKeys = filterList(Objects.keys(exports), (k) => k !== "default");
 							const analysis = {
-								hasDefault: FunctionMethods.call(Objects.prototype.hasOwnProperty, exports, "default"),
+								hasDefault: Objects.hasOwn(exports, "default"),
 								hasNamed: moduleKeys.length > 0,
-								defaultExportType: FunctionMethods.call(Objects.prototype.hasOwnProperty, exports, "default")
-									? typeof exports.default
-									: null
+								defaultExportType: Objects.hasOwn(exports, "default") ? typeof exports.default : null
 							};
-							const modContent = FunctionMethods.call(Objects.prototype.hasOwnProperty, exports, "default") ? exports.default : exports;
+							const modContent = Objects.hasOwn(exports, "default") ? exports.default : exports;
 							const categoryDecision = await this.slothlet.processors.flatten.buildCategoryDecisions({
 								categoryName: subDirName,
 								mod: modContent,
@@ -2252,7 +2247,7 @@ export class ModesProcessor extends ComponentBase {
 								} else if (this.slothlet.processors.flatten.primitiveDefaultNamespace(exports.default, exports, moduleKeys)) {
 									// A primitive default holds no members: it is kept under `default` beside the named exports.
 									implToWrap = this.slothlet.processors.flatten.primitiveDefaultNamespace(exports.default, exports, moduleKeys);
-								} else if (FunctionMethods.call(Objects.prototype.hasOwnProperty, exports, "default")) {
+								} else if (Objects.hasOwn(exports, "default")) {
 									// Default export - use it. With named exports it gets a callable layer, so they are not
 									// written to the module's function (or through a Proxy's traps); alone it is the
 									// function itself, which keeps what it is (an async function stays one).
@@ -2957,11 +2952,11 @@ export class ModesProcessor extends ComponentBase {
 					const exports = this.slothlet.processors.loader.extractExports(mod, file.path);
 					const moduleKeys = filterList(Objects.keys(exports), (k) => k !== "default");
 					const analysis = {
-						hasDefault: FunctionMethods.call(Objects.prototype.hasOwnProperty, exports, "default"),
+						hasDefault: Objects.hasOwn(exports, "default"),
 						hasNamed: moduleKeys.length > 0,
-						defaultExportType: FunctionMethods.call(Objects.prototype.hasOwnProperty, exports, "default") ? typeof exports.default : null
+						defaultExportType: Objects.hasOwn(exports, "default") ? typeof exports.default : null
 					};
-					const modContent = FunctionMethods.call(Objects.prototype.hasOwnProperty, exports, "default") ? exports.default : exports;
+					const modContent = Objects.hasOwn(exports, "default") ? exports.default : exports;
 					const categoryDecision = await this.slothlet.processors.flatten.buildCategoryDecisions({
 						categoryName,
 						mod: modContent,
@@ -2978,7 +2973,7 @@ export class ModesProcessor extends ComponentBase {
 					if (
 						filenameMatchesFolder &&
 						moduleKeys.length === 0 &&
-						FunctionMethods.call(Objects.prototype.hasOwnProperty, exports, "default") &&
+						Objects.hasOwn(exports, "default") &&
 						(exports.default === null || (typeof exports.default !== "object" && typeof exports.default !== "function"))
 					) {
 						return exports.default;
@@ -3011,7 +3006,7 @@ export class ModesProcessor extends ComponentBase {
 						} else if (this.slothlet.processors.flatten.primitiveDefaultNamespace(exports.default, exports, moduleKeys)) {
 							// A primitive default holds no members: it is kept under `default` beside the named exports.
 							implToWrap = this.slothlet.processors.flatten.primitiveDefaultNamespace(exports.default, exports, moduleKeys);
-						} else if (FunctionMethods.call(Objects.prototype.hasOwnProperty, exports, "default")) {
+						} else if (Objects.hasOwn(exports, "default")) {
 							// An object default is copied, so the module's own default object is not mutated (#587). A
 							// function default gets a callable layer only when named exports are added to it.
 							implToWrap =
@@ -3306,7 +3301,7 @@ export class ModesProcessor extends ComponentBase {
 							MapMethods.set(lazy_wrapperMembers, key, materialized[key]);
 						continue;
 					}
-					if (collisionMode === "merge-replace" && FunctionMethods.call(Objects.prototype.hasOwnProperty, mainValue, key)) continue;
+					if (collisionMode === "merge-replace" && Objects.hasOwn(mainValue, key)) continue;
 					const lazy_accessor = this.#accessorToCarry(materialized, key);
 					if (lazy_accessor) Objects.defineProperty(mainValue, key, lazy_accessor);
 					else holdMember(mainValue, key, materialized[key]);

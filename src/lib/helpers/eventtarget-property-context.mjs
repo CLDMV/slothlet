@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:28:49-08:00 (1794882529)
+ *	@Last modified time: 2026-11-17T13:35:19-08:00 (1794951319)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -59,6 +59,7 @@ import {
 	FunctionMethods,
 	listPush,
 	Objects,
+	PrototypeFunctions,
 	StringMethods,
 	WeakMap,
 	WeakMapMethods,
@@ -274,7 +275,7 @@ function runtime_patchDiscoveredHandlers() {
 			typeof value !== "function" ||
 			isSlothletProxy(value) ||
 			!value.prototype ||
-			!FunctionMethods.call(Objects.prototype.isPrototypeOf, base, value.prototype)
+			!FunctionMethods.call(PrototypeFunctions.Object.isPrototypeOf, base, value.prototype)
 		)
 			continue;
 		for (let ofIndex = 0, ofList = runtime_ownHandlerNames(value.prototype); ofIndex < ofList.length; ofIndex++) {
@@ -284,7 +285,7 @@ function runtime_patchDiscoveredHandlers() {
 	}
 
 	// A Window or worker global: WebIDL declares its handlers on the global object itself.
-	if (FunctionMethods.call(Objects.prototype.isPrototypeOf, base, globalThis)) {
+	if (FunctionMethods.call(PrototypeFunctions.Object.isPrototypeOf, base, globalThis)) {
 		for (let ofIndex = 0, ofList = runtime_ownHandlerNames(globalThis); ofIndex < ofList.length; ofIndex++) {
 			const propName = ofList[ofIndex];
 			runtime_patchHandlerAccessor(globalThis, propName);

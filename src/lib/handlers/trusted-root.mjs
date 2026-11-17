@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:28:47-08:00 (1794882527)
+ *	@Last modified time: 2026-11-17T13:35:17-08:00 (1794951317)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -45,7 +45,6 @@ import {
 	concatLists,
 	Dates,
 	filterList,
-	FunctionMethods,
 	listPush,
 	Map,
 	mapKeysToArray,
@@ -263,11 +262,12 @@ function enforceContextKeyWrite(ctx, prop) {
 function enforceOwnedContextWrite(ctx, ownerKey, pathKey, writerCtx = ctx) {
 	const owners = ctx?.__contextOwners;
 	// `owners` is a null-prototype map (see `buildContextOwners` in api_builder.mjs), but the lookup
-	// still goes through `hasOwnProperty` rather than a bare `owners[ownerKey]` as a second, independent
+	// still goes through an own-member check (`Object.hasOwn` as slothlet loaded it, which module code replacing
+	// `Object.prototype.hasOwnProperty` does not reach) rather than a bare `owners[ownerKey]` as a second, independent
 	// guard: a caller-supplied key like "__proto__" or "constructor" must never be resolved as an
 	// inherited property (of the map itself, or of whatever `owners` turns out to be) and mistaken
 	// for an existing claim.
-	if (!owners || !FunctionMethods.call(Objects.prototype.hasOwnProperty, owners, ownerKey)) return;
+	if (!owners || !Objects.hasOwn(owners, ownerKey)) return;
 	const owner = owners[ownerKey];
 	// The writers are who is executing — resolved the way the call gate resolves its caller — and, for code a caller
 	// supplied to another module's call, every call of the ceiling it runs under (#597): each of them has to own the
@@ -436,7 +436,7 @@ function makeProtectedContextView(ctx, getContext, ownerKey, value, path) {
  */
 function readProtectedContextValue(ctx, prop, getContext) {
 	const owners = ctx.__contextOwners;
-	if (owners && FunctionMethods.call(Objects.prototype.hasOwnProperty, owners, prop)) {
+	if (owners && Objects.hasOwn(owners, prop)) {
 		return makeProtectedContextView(ctx, getContext, prop, ctx.context[prop], String(prop));
 	}
 	return ctx.context[prop];
