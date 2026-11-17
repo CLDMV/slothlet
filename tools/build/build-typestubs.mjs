@@ -150,7 +150,7 @@ function resolveInternal(spec, importsMap) {
 		if (key === spec) return { src, stub };
 		if (key.endsWith("*") && spec.startsWith(key.slice(0, -1))) {
 			const name = spec.slice(key.length - 1);
-			return { src: src.replace("*", name), stub: stub.replace("*", name) };
+			return { src: src.replace(/\*/g, name), stub: stub.replace(/\*/g, name) };
 		}
 	}
 	return null;
