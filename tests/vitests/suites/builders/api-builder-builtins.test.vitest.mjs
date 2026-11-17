@@ -418,7 +418,7 @@ describe("api_builder – WARNING_RESERVED_PROPERTY_CONFLICT (line 108)", () => 
 		});
 
 		// WARNING_RESERVED_PROPERTY_CONFLICT captured by SlothletWarning
-		const warnings = Array.from(api.slothlet.diag.SlothletWarning.captured || []); // per instance (#819)
+		const warnings = Array.from(api.slothlet.warnings.get() || []); // per instance (#819)
 		const hasReservedWarning = warnings.some((w) => w.code === "WARNING_RESERVED_PROPERTY_CONFLICT");
 		expect(hasReservedWarning).toBe(true);
 	});

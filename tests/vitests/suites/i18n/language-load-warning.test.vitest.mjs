@@ -24,6 +24,7 @@ import slothlet from "@cldmv/slothlet";
 import { SlothletWarning } from "@cldmv/slothlet/errors";
 import { getLanguage, setLanguage, setLanguageAsync } from "@cldmv/slothlet/i18n";
 import { TEST_DIRS } from "../../setup/vitest-helper.mjs";
+import { printedWarnings } from "../../setup/warning-capture.mjs";
 
 const CODE = "WARNING_LANGUAGE_LOAD_FAILED";
 
@@ -32,7 +33,7 @@ const CODE = "WARNING_LANGUAGE_LOAD_FAILED";
  * @param {object} api - Bound api.
  * @returns {object[]} Warnings.
  */
-const failed = (api) => api.slothlet.diag.SlothletWarning.captured.filter((w) => w.code === CODE);
+const failed = (api) => api.slothlet.warnings.get().filter((w) => w.code === CODE);
 
 describe("a failed locale load is a coded SlothletWarning (#820)", () => {
 	let api;
@@ -40,7 +41,6 @@ describe("a failed locale load is a coded SlothletWarning (#820)", () => {
 
 	beforeEach(() => {
 		SlothletWarning.suppressConsole = true;
-		SlothletWarning.clearCaptured();
 	});
 
 	afterEach(async () => {
@@ -87,10 +87,12 @@ describe("a failed locale load is a coded SlothletWarning (#820)", () => {
 		expect(failed(api)).toEqual([]);
 	});
 
-	it("outside any instance the warning lands on the process-level class", async () => {
-		setLanguage("zz-zz");
-		await setLanguageAsync("yy-yy");
-		expect(SlothletWarning.captured.filter((w) => w.code === CODE).map((w) => w.context.lang)).toEqual(["zz-zz", "yy-yy"]);
+	it("outside any instance the warning is printed", async () => {
+		const printed = await printedWarnings(async () => {
+			setLanguage("zz-zz");
+			await setLanguageAsync("yy-yy");
+		});
+		expect(printed.filter((w) => w.code === CODE).map((w) => w.context.lang)).toEqual(["zz-zz", "yy-yy"]);
 	});
 
 	it("prints no bare console.warn line of its own", async () => {

@@ -84,18 +84,14 @@ describe.each(MATRIX_CONFIGS)("allowInitialOverwrite - $name", ({ config }) => {
 	});
 
 	it("should emit warning when blocking overwrites (unless silent: true)", async () => {
-		// Import SlothletWarning to clear before creating API
-		const { SlothletWarning } = await import("@cldmv/slothlet/errors");
-		SlothletWarning.clearCaptured();
-
 		// V3: Use collision: { initial: "warn" } to emit warnings when blocking
 		api = await createApiInstance(config, {
 			api: { collision: { initial: "warn" } },
 			silent: false
 		});
 
-		// Can now access warnings via api.slothlet.diag namespace
-		const warnings = api.slothlet.diag.SlothletWarning.captured;
+		// The instance's own warnings (#819)
+		const warnings = api.slothlet.warnings.get();
 		// Warnings only occur if there's an actual collision at the same path
 		// Since files get numbered (overwriteTest1, overwriteTest2), no collision happens
 		// This test can't work as designed in v3 - skip the warning check
@@ -103,10 +99,6 @@ describe.each(MATRIX_CONFIGS)("allowInitialOverwrite - $name", ({ config }) => {
 	});
 
 	it("should NOT emit warning when silent: true", async () => {
-		// Import SlothletWarning to clear before creating API
-		const { SlothletWarning } = await import("@cldmv/slothlet/errors");
-		SlothletWarning.clearCaptured();
-
 		// V3: Use collision: { initial: "skip" } for silent blocking
 		api = await createApiInstance(config, {
 			api: { collision: { initial: "skip" } },
@@ -114,7 +106,7 @@ describe.each(MATRIX_CONFIGS)("allowInitialOverwrite - $name", ({ config }) => {
 		});
 
 		// Should NOT have emitted warnings (silent mode) - access via api namespace
-		const warnings = api.slothlet.diag.SlothletWarning.captured;
+		const warnings = api.slothlet.warnings.get();
 		expect(warnings.length).toBe(0);
 	});
 

@@ -39,33 +39,25 @@ export class SlothletError extends Error {
  */
 export class SlothletWarning {
     /**
-     * Warnings captured while console output is suppressed (for testing).
-     * On this class it is the process-level list: it holds warnings raised outside any slothlet
-     * instance (module-level coverage notices, for example). Each instance has its own subclass with its own
-     * list, reached as `api.slothlet.diag.SlothletWarning.captured` (see {@link SlothletWarning.forInstance}).
-     * @type {SlothletWarning[]}
-     */
-    static captured: SlothletWarning[];
-    /**
      * Suppress console output and capture instead. On this class it is the process-level setting; an
      * instance's class follows it until that instance sets its own value (assign `null` to follow it again).
      * @type {boolean}
      */
     static suppressConsole: boolean;
     /**
-     * Create the warning class for one slothlet instance (#819). The subclass keeps its own `captured` list and
-     * its own `suppressConsole` setting, so warnings, `clearCaptured()` and console suppression on one instance
-     * never reach another. `suppressConsole` follows the process-level value until the instance sets its own.
-     * Warnings are still `instanceof SlothletWarning`.
+     * Create the warning class for one slothlet instance (#819). Every warning made with it is recorded in `records`,
+     * the instance's own list (read as `api.slothlet.warnings.get()`), so warnings on one instance never reach another.
+     * The subclass keeps its own `suppressConsole` setting, which follows the process-level value until the instance
+     * sets its own. Warnings are still `instanceof SlothletWarning`.
+     * @param {SlothletWarning[]} [records] - The list every warning made with the class is pushed to.
      * @returns {Function} The per-instance class (a subclass of `SlothletWarning`).
      * @public
+     * @example
+     * const records = [];
+     * const InstanceWarning = SlothletWarning.forInstance(records);
+     * new InstanceWarning("WARNING_DIRECTORY_EMPTY", { folder: "./api" }); // records.length === 1
      */
-    public static forInstance(): Function;
-    /**
-     * Clear captured warnings (for testing). On an instance's class this clears that instance only.
-     * @public
-     */
-    public static clearCaptured(): void;
+    public static forInstance(records?: SlothletWarning[]): Function;
     /**
      * Create and emit a warning with automatic translation
      * @param {string} code - Warning code identifier

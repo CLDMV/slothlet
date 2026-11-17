@@ -1599,6 +1599,17 @@ Like every built-in call rule, it is enforced only while the permission system i
 { caller: "admin.**", target: "slothlet.restart", effect: "allow" }
 ```
 
+### `warnings` — Host-Only by Default
+
+[`api.slothlet.warnings`](CONFIGURATION.md#apislothletwarnings) holds every warning the instance raised, about every module, and `clear()` empties it. A built-in rule denies it to every module:
+
+```javascript
+// Built-in rule registered for every instance:
+{ caller: "**", target: "slothlet.warnings.**", effect: "deny" }
+```
+
+Like every built-in call rule, it is enforced only while the permission system is on. An instance rule outranks it (`{ caller: "monitor.**", target: "slothlet.warnings.get", effect: "allow" }`).
+
 ### Lifecycle methods and default routines — Host-Only
 
 Reloading or shutting the instance down is a host decision, so built-in rules deny it to modules.

@@ -31,7 +31,9 @@ import {
 	Reflect,
 	StringMethods,
 	stringOf,
-	Symbols
+	Symbols,
+	WeakMap,
+	WeakMapMethods
 } from "#helpers/intrinsics";
 
 /**
@@ -183,19 +185,16 @@ export class SlothletError extends Error {
 }
 
 /**
+ * The warning list of each instance's warning class (see {@link SlothletWarning.forInstance}).
+ * @type {WeakMap<Function, SlothletWarning[]>}
+ */
+const INSTANCE_RECORDS = new WeakMap();
+
+/**
  * Warning class for non-fatal issues with i18n support
  * @public
  */
 export class SlothletWarning {
-	/**
-	 * Warnings captured while console output is suppressed (for testing).
-	 * On this class it is the process-level list: it holds warnings raised outside any slothlet
-	 * instance (module-level coverage notices, for example). Each instance has its own subclass with its own
-	 * list, reached as `api.slothlet.diag.SlothletWarning.captured` (see {@link SlothletWarning.forInstance}).
-	 * @type {SlothletWarning[]}
-	 */
-	static captured = [];
-
 	/**
 	 * Suppress console output and capture instead. On this class it is the process-level setting; an
 	 * instance's class follows it until that instance sets its own value (assign `null` to follow it again).
@@ -204,28 +203,30 @@ export class SlothletWarning {
 	static suppressConsole = false;
 
 	/**
-	 * Create the warning class for one slothlet instance (#819). The subclass keeps its own `captured` list and
-	 * its own `suppressConsole` setting, so warnings, `clearCaptured()` and console suppression on one instance
-	 * never reach another. `suppressConsole` follows the process-level value until the instance sets its own.
-	 * Warnings are still `instanceof SlothletWarning`.
+	 * Create the warning class for one slothlet instance (#819). Every warning made with it is recorded in `records`,
+	 * the instance's own list (read as `api.slothlet.warnings.get()`), so warnings on one instance never reach another.
+	 * The subclass keeps its own `suppressConsole` setting, which follows the process-level value until the instance
+	 * sets its own. Warnings are still `instanceof SlothletWarning`.
+	 * @param {SlothletWarning[]} [records] - The list every warning made with the class is pushed to.
 	 * @returns {Function} The per-instance class (a subclass of `SlothletWarning`).
 	 * @public
+	 * @example
+	 * const records = [];
+	 * const InstanceWarning = SlothletWarning.forInstance(records);
+	 * new InstanceWarning("WARNING_DIRECTORY_EMPTY", { folder: "./api" }); // records.length === 1
 	 */
-	static forInstance() {
+	static forInstance(records = []) {
 		const Process = SlothletWarning;
 		let own = null;
 		class InstanceSlothletWarning extends Process {
-			static captured = [];
 			static get suppressConsole() {
 				return own ?? Process.suppressConsole;
 			}
 			static set suppressConsole(value) {
 				own = value;
 			}
-			static clearCaptured() {
-				InstanceSlothletWarning.captured = [];
-			}
 		}
+		WeakMapMethods.set(INSTANCE_RECORDS, InstanceSlothletWarning, records);
 		return InstanceSlothletWarning;
 	}
 
@@ -276,10 +277,10 @@ export class SlothletWarning {
 			if (hasCause) {
 				globalThis.console.warn("Cause:", cause instanceof Error ? cause.stack : cause);
 			}
-		} else {
-			// Only capture when console is suppressed (for testing)
-			listPush(Home.captured, this);
 		}
+		// A warning raised through an instance is recorded on that instance, whether or not it reached the console.
+		const records = WeakMapMethods.get(INSTANCE_RECORDS, Home);
+		if (records) listPush(records, this);
 	}
 
 	/**
@@ -288,14 +289,6 @@ export class SlothletWarning {
 	 */
 	toString() {
 		return `[${this.code}] ${this.name}: ${this.message}`;
-	}
-
-	/**
-	 * Clear captured warnings (for testing). On an instance's class this clears that instance only.
-	 * @public
-	 */
-	static clearCaptured() {
-		SlothletWarning.captured = [];
 	}
 }
 

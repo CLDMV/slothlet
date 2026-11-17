@@ -14,13 +14,14 @@
  */
 
 /**
- * @fileoverview #819 — warning capture and console suppression are per instance. Two instances do not share
- * `api.slothlet.diag.SlothletWarning.captured`, `clearCaptured()` on one leaves the other's list alone, and
- * `suppressConsole` set on one instance does not touch the other. A warning raised outside any instance lands
- * on the process-level `SlothletWarning` from `@cldmv/slothlet/errors`.
+ * @fileoverview #819 — warnings are recorded per instance. Two instances do not share `api.slothlet.warnings.get()`,
+ * `warnings.clear()` on one leaves the other's list alone, a printed warning is recorded too, and a warning raised
+ * outside any instance is recorded on none. `api.slothlet.warnings` is there without `diagnostics`.
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import slothlet from "@cldmv/slothlet";
 import { SlothletWarning } from "@cldmv/slothlet/errors";
 import { TEST_DIRS } from "../../setup/vitest-helper.mjs";
@@ -44,21 +45,20 @@ const raise = (api) => api.slothlet.api.add("extra", { exports: { ping: () => "p
  * @param {object} api - Bound api.
  * @returns {string[]} Codes.
  */
-const codes = (api) => api.slothlet.diag.SlothletWarning.captured.map((w) => w.code);
+const codes = (api) => api.slothlet.warnings.get().map((w) => w.code);
 
 describe.each(CASES)("warning capture is per instance (#819) > $mode / $runtime", ({ mode, runtime }) => {
 	let a;
 	let b;
 
-	const make = () => slothlet({ base: TEST_DIRS.API_TEST, mode, runtime, diagnostics: true });
+	const make = () => slothlet({ base: TEST_DIRS.API_TEST, mode, runtime });
 
 	beforeEach(() => {
 		SlothletWarning.suppressConsole = true;
-		SlothletWarning.clearCaptured();
 	});
 
 	afterEach(async () => {
-		SlothletWarning.suppressConsole = false;
+		SlothletWarning.suppressConsole = true;
 		vi.restoreAllMocks();
 		if (a) await a.shutdown();
 		if (b) await b.shutdown();
@@ -73,42 +73,77 @@ describe.each(CASES)("warning capture is per instance (#819) > $mode / $runtime"
 		expect(codes(b)).not.toContain("WARNING_API_ADD_OPTION_LOCKED");
 	});
 
-	it("clearCaptured() on one instance leaves the other's warnings", async () => {
+	it("warnings.clear() on one instance leaves the other's warnings", async () => {
 		a = await make();
 		b = await make();
 		await raise(a);
 		await raise(b);
-		a.slothlet.diag.SlothletWarning.clearCaptured();
+		a.slothlet.warnings.clear();
 		expect(codes(a)).toEqual([]);
 		expect(codes(b)).toContain("WARNING_API_ADD_OPTION_LOCKED");
 	});
 
-	it("suppressConsole on one instance does not change the other", async () => {
+	it("a warning that reaches the console is recorded too", async () => {
 		a = await make();
-		b = await make();
 		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-		a.slothlet.diag.SlothletWarning.suppressConsole = false;
+		SlothletWarning.suppressConsole = false;
 		await raise(a);
 		expect(warn).toHaveBeenCalled();
-		warn.mockClear();
-		await raise(b);
-		expect(warn).not.toHaveBeenCalled();
-		expect(codes(b)).toContain("WARNING_API_ADD_OPTION_LOCKED");
-		expect(codes(a)).not.toContain("WARNING_API_ADD_OPTION_LOCKED");
+		expect(codes(a)).toContain("WARNING_API_ADD_OPTION_LOCKED");
 	});
 
-	it("a warning raised outside any instance lands on the process-level class", async () => {
+	it("get() returns a copy: changing it leaves the instance's list alone", async () => {
 		a = await make();
-		SlothletWarning.clearCaptured();
+		await raise(a);
+		const list = a.slothlet.warnings.get();
+		list.length = 0;
+		expect(codes(a)).toContain("WARNING_API_ADD_OPTION_LOCKED");
+	});
+
+	it("a warning raised outside any instance is recorded on none", async () => {
+		a = await make();
 		new SlothletWarning("WARNING_API_ADD_OPTION_LOCKED", { option: "x" });
-		expect(SlothletWarning.captured.map((w) => w.code)).toContain("WARNING_API_ADD_OPTION_LOCKED");
 		expect(codes(a)).not.toContain("WARNING_API_ADD_OPTION_LOCKED");
-		SlothletWarning.clearCaptured();
+		expect(SlothletWarning).not.toHaveProperty("captured");
+		expect(SlothletWarning).not.toHaveProperty("clearCaptured");
+	});
+
+	it("diag no longer hands out the warning class", async () => {
+		a = await slothlet({ base: TEST_DIRS.API_TEST, mode, runtime, diagnostics: true });
+		expect(a.slothlet.diag).not.toHaveProperty("SlothletWarning");
 	});
 
 	it("instance warnings are still SlothletWarning instances", async () => {
 		a = await make();
 		await raise(a);
-		expect(a.slothlet.diag.SlothletWarning.captured[0]).toBeInstanceOf(SlothletWarning);
+		expect(a.slothlet.warnings.get()[0]).toBeInstanceOf(SlothletWarning);
+	});
+});
+
+describe("slothlet.warnings is host-only while permissions are on", () => {
+	const BASE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../../api_tests/api_test_warnings");
+	let api;
+
+	afterEach(async () => {
+		if (api) await api.shutdown();
+		api = null;
+	});
+
+	it("module code is refused by the built-in rule", async () => {
+		api = await slothlet({ base: BASE, permissions: { mode: "on" } });
+		await expect((async () => api.monitor.codes())()).rejects.toMatchObject({ code: "PERMISSION_DENIED" });
+	});
+
+	it("a rule on slothlet.warnings.get lets module code read it", async () => {
+		api = await slothlet({
+			base: BASE,
+			permissions: { mode: "on", rules: [{ caller: "monitor.**", target: "slothlet.warnings.get", effect: "allow" }] }
+		});
+		expect(await api.monitor.codes()).toEqual(api.slothlet.warnings.get().map((w) => w.code));
+	});
+
+	it("with permissions off, module code reads it", async () => {
+		api = await slothlet({ base: BASE });
+		expect(Array.isArray(await api.monitor.codes())).toBe(true);
 	});
 });

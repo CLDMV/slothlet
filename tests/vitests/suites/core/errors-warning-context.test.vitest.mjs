@@ -47,7 +47,6 @@ import { SlothletWarning } from "@cldmv/slothlet/errors";
 afterEach(() => {
 	// Always restore suppressConsole after each test regardless of outcome
 	SlothletWarning.suppressConsole = true;
-	SlothletWarning.captured = [];
 	vi.restoreAllMocks();
 });
 
@@ -96,10 +95,12 @@ describe("SlothletWarning — empty contextData skips context log (line 184 fals
 
 		// suppressConsole=true by default — the entire outer if is skipped
 		SlothletWarning.suppressConsole = true;
-		new SlothletWarning("WARNING_METADATA_MISMATCH", {});
+		const records = [];
+		const InstanceWarning = SlothletWarning.forInstance(records);
+		new InstanceWarning("WARNING_METADATA_MISMATCH", {});
 
-		// No console output — captured array used instead
+		// No console output — the instance's list still records it
 		expect(warnSpy).not.toHaveBeenCalled();
-		expect(SlothletWarning.captured.length).toBeGreaterThan(0);
+		expect(records.map((w) => w.code)).toEqual(["WARNING_METADATA_MISMATCH"]);
 	});
 });

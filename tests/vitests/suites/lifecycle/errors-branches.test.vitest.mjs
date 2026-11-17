@@ -30,18 +30,17 @@
  *   with `{ validationError: true }`.  `HINT_INVALID_CONFIG_DIR_MISSING` exists in
  *   en-us.json as a genuine hint string, so the constructor takes line 62.
  *
- * **Line 184 — `SlothletWarning.captured.push(this)`**
+ * **Recording a warning on its instance (`api.slothlet.warnings`)**
  *
- *   Fires when a `SlothletWarning` is constructed while
- *   `SlothletWarning.suppressConsole === true`.  The global vitest setup sets this
- *   flag to `true` before any test runs, so any warning goes into `captured[]`
- *   instead of printing to the console.
+ *   Every `SlothletWarning` raised through an instance's class is pushed to that
+ *   instance's list, whether or not it reaches the console (the global vitest setup
+ *   keeps it off the console).
  *
  *   Trigger path through slothlet:
  *   `slothlet({ dir, allowMutation: false })` — `allowMutation` is a v2 deprecated
  *   config key.  `transformConfig` detects it and creates `V3_CONFIG_DEPRECATED` via
  *   `new this.SlothletWarning(...)` (gated behind `if (!config.silent)`).
- *   Because `suppressConsole` is true, line 184 fires: `captured.push(this)`.
+ *   Every warning raised through an instance is recorded on it, printed or not.
  *   NOTE: `silent: true` must NOT be passed here — it suppresses the warning entirely.
  *
  * @module tests/vitests/suites/lifecycle/errors-branches
@@ -83,7 +82,7 @@ describe("SlothletError — static HINT_<CODE> lookup via slothlet config valida
 
 // ─── SlothletWarning captured branch (line 184) ───────────────────────────────
 
-describe("SlothletWarning — captured.push via deprecated-config warning through slothlet (line 184)", () => {
+describe("SlothletWarning — recorded on the instance via a deprecated-config warning", () => {
 	let api;
 
 	afterEach(async () => {
@@ -94,18 +93,18 @@ describe("SlothletWarning — captured.push via deprecated-config warning throug
 		// Capture is per instance (#819): nothing to drain on the process-level class.
 	});
 
-	it("slothlet with allowMutation:false creates a V3_CONFIG_DEPRECATED warning captured in captured[] (line 184)", async () => {
+	it("slothlet with allowMutation:false records a V3_CONFIG_DEPRECATED warning on the instance", async () => {
 		// allowMutation is a v2 deprecated key → transformConfig calls new SlothletWarning(...).
 		// suppressConsole is true (set globally in vitest.setup.mjs).
-		// The warning constructor takes the else branch → line 184: captured.push(this).
+		// The warning is recorded on the instance whether or not it is printed.
 		// IMPORTANT: do NOT pass silent:true here — it gates the warning creation entirely.
 		api = await slothlet({ base: TEST_DIRS.API_TEST, allowMutation: false, diagnostics: true });
-		expect(api.slothlet.diag.SlothletWarning.captured.length).toBeGreaterThan(0);
+		expect(api.slothlet.warnings.get().length).toBeGreaterThan(0);
 	});
 
 	it("the captured warning has code V3_CONFIG_DEPRECATED (line 184)", async () => {
 		api = await slothlet({ base: TEST_DIRS.API_TEST, allowMutation: false, diagnostics: true });
-		const codes = api.slothlet.diag.SlothletWarning.captured.map((w) => w.code);
+		const codes = api.slothlet.warnings.get().map((w) => w.code);
 		expect(codes).toContain("V3_CONFIG_DEPRECATED");
 	});
 });

@@ -42,7 +42,6 @@ const BASE_TMP = join(process.cwd(), "tmp", `impl-diagnostic-events-${process.pi
 // (The `silent: true` gating of those console warnings is covered by its own describe block below.)
 beforeEach(() => {
 	SlothletWarning.suppressConsole = true;
-	SlothletWarning.clearCaptured();
 });
 afterEach(() => {
 	SlothletWarning.suppressConsole = false;
@@ -348,7 +347,7 @@ describe("silent gates init-time console warnings, not events", () => {
 			lifecycle: { "impl:warning": (payload) => events.push(payload) }
 		});
 		// Console warning is silent-gated → never constructed → not captured (on this instance, #819).
-		expect(api.slothlet.diag.SlothletWarning.captured.some((w) => w.code === "WARNING_RESERVED_PROPERTY_CONFLICT")).toBe(false);
+		expect(api.slothlet.warnings.get().some((w) => w.code === "WARNING_RESERVED_PROPERTY_CONFLICT")).toBe(false);
 		// The event is additive → fires even under silent.
 		expect(events.some((p) => p.code === "WARNING_RESERVED_PROPERTY_CONFLICT")).toBe(true);
 		await api.shutdown().catch(() => {});
@@ -356,7 +355,7 @@ describe("silent gates init-time console warnings, not events", () => {
 
 	it("without silent, the reserved-property console warning IS emitted (control)", async () => {
 		const api = await slothlet({ base: TEST_DIRS.API_TEST_RESERVED_NAME, mode: "eager", diagnostics: true });
-		expect(api.slothlet.diag.SlothletWarning.captured.some((w) => w.code === "WARNING_RESERVED_PROPERTY_CONFLICT")).toBe(true);
+		expect(api.slothlet.warnings.get().some((w) => w.code === "WARNING_RESERVED_PROPERTY_CONFLICT")).toBe(true);
 		await api.shutdown().catch(() => {});
 	});
 });

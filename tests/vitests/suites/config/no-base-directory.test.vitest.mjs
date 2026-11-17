@@ -39,18 +39,17 @@ const FRAMEWORK_ROOT_KEYS = new Set(["slothlet", "shutdown", "destroy", "initial
 const userKeys = (api) => Object.keys(api).filter((key) => !FRAMEWORK_ROOT_KEYS.has(key));
 
 /**
- * Codes of warnings the instance captured (per instance, #819; needs `diagnostics: true`).
+ * Codes of warnings the instance captured (per instance, #819).
  * @param {object} instance - Bound api.
  * @returns {string[]} Warning codes.
  */
-const warningCodes = (instance) => instance.slothlet.diag.SlothletWarning.captured.map((w) => w.code);
+const warningCodes = (instance) => instance.slothlet.warnings.get().map((w) => w.code);
 
 describe.each(getMatrixConfigs())("No base directory (#471) > $name", ({ config }) => {
 	let api;
 
 	beforeEach(() => {
 		SlothletWarning.suppressConsole = true;
-		SlothletWarning.clearCaptured();
 	});
 
 	afterEach(async () => {

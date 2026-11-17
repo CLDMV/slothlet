@@ -82,12 +82,12 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])("Hidden entries + empty-fol
 	 */
 	async function captureWarnings(fn) {
 		SlothletWarning.suppressConsole = true;
-		apis.at(-1)?.slothlet.diag.SlothletWarning.clearCaptured();
+		apis.at(-1)?.slothlet.warnings.clear();
 		try {
 			await fn();
-			return [...apis.at(-1).slothlet.diag.SlothletWarning.captured];
+			return [...apis.at(-1).slothlet.warnings.get()];
 		} finally {
-			apis.at(-1)?.slothlet.diag.SlothletWarning.clearCaptured();
+			apis.at(-1)?.slothlet.warnings.clear();
 			SlothletWarning.suppressConsole = false;
 		}
 	}

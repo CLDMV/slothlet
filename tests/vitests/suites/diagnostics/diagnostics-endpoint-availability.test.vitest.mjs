@@ -54,7 +54,6 @@
  *     inspect         - returns full getDiagnostics() snapshot
  *     owner           - ownership diagnostics: { get }
  *     caches          - cache diagnostics: { get, getAllModuleIDs, has }
- *     SlothletWarning - SlothletWarning class (for captured-warning access in tests)
  *     hook            - hook manager introspection: { enabled, compilePattern }
  *                       present whenever diagnostics is on (hookManager is always instantiated,
  *                       even when hook.enabled: false - it's just in disabled state)
@@ -98,7 +97,8 @@ const ALWAYS_PRESENT_KEYS = [
 	"shutdown",
 	"owner",
 	"materialize",
-	"lifecycle"
+	"lifecycle",
+	"warnings"
 ];
 
 /**
@@ -132,7 +132,7 @@ const EXPECTED_OWNER_SUBKEYS = ["get"];
 const EXPECTED_MATERIALIZE_SUBKEYS = ["materialized", "get", "wait"];
 const EXPECTED_LIFECYCLE_SUBKEYS = ["on", "off"];
 
-const EXPECTED_DIAG_SUBKEYS = ["describe", "reference", "context", "inspect", "owner", "caches", "SlothletWarning", "hook"];
+const EXPECTED_DIAG_SUBKEYS = ["describe", "reference", "context", "inspect", "owner", "caches", "hook"];
 const EXPECTED_DIAG_CACHES_SUBKEYS = ["get", "getAllModuleIDs", "has"];
 const EXPECTED_DIAG_OWNER_SUBKEYS = ["get"];
 
@@ -341,7 +341,7 @@ describe("api.slothlet - diagnostics endpoint availability", () => {
 					expect(api.slothlet.diag).toBeDefined();
 				});
 
-				it("api.slothlet.diag should have describe, reference, context, inspect, owner, caches, SlothletWarning", () => {
+				it("api.slothlet.diag should have describe, reference, context, inspect, owner, caches", () => {
 					expectKeysPresent(api.slothlet.diag, EXPECTED_DIAG_SUBKEYS, "api.slothlet.diag");
 				});
 
@@ -365,8 +365,10 @@ describe("api.slothlet - diagnostics endpoint availability", () => {
 					}
 				});
 
-				it("api.slothlet.diag.SlothletWarning should be a class/function", () => {
-					expect(typeof api.slothlet.diag.SlothletWarning).toBe("function");
+				it("api.slothlet.warnings should have get and clear (outside diag)", () => {
+					expect(api.slothlet.diag).not.toHaveProperty("SlothletWarning");
+					expect(typeof api.slothlet.warnings.get).toBe("function");
+					expect(typeof api.slothlet.warnings.clear).toBe("function");
 				});
 
 				it("api.slothlet.diag.hook should be defined (hookManager is always instantiated) and reflect hook.enabled state", () => {

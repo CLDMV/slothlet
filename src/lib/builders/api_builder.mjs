@@ -2414,6 +2414,32 @@ export class ApiBuilder extends ComponentBase {
 			},
 
 			/**
+			 * This instance's warnings (#819): every `SlothletWarning` raised through the instance, printed or not.
+			 * @type {object}
+			 */
+			warnings: {
+				/**
+				 * This instance's warnings, oldest first.
+				 * @returns {SlothletWarning[]} A new array of the warnings.
+				 * @public
+				 * @example
+				 * const codes = api.slothlet.warnings.get().map((warning) => warning.code);
+				 */
+				get: () => copyList(slothlet.warningRecords),
+
+				/**
+				 * Empty this instance's warning list.
+				 * @returns {void}
+				 * @public
+				 * @example
+				 * api.slothlet.warnings.clear();
+				 */
+				clear: () => {
+					slothlet.warningRecords.length = 0;
+				}
+			},
+
+			/**
 			 * Context API for per-request context isolation.
 			 * @type {object}
 			 */
@@ -4550,17 +4576,6 @@ export class ApiBuilder extends ComponentBase {
 						return false;
 					}
 				},
-
-				/**
-				 * This instance's SlothletWarning class: `captured`, `clearCaptured()` and `suppressConsole` apply to this instance only
-				 * @type {Function}
-				 * @example
-				 * // Access captured warnings in tests
-				 * api.slothlet.diag.SlothletWarning.clearCaptured();
-				 * // ... trigger warnings ...
-				 * const warnings = api.slothlet.diag.SlothletWarning.captured;
-				 */
-				SlothletWarning: slothlet.SlothletWarning,
 
 				/**
 				 * Hook system diagnostics (only when hooks enabled)

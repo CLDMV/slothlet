@@ -465,10 +465,6 @@ export type SlothletAPI = {
              * - The `reference` config value as passed to `slothlet()`.
              */
             reference?: object | undefined;
-            /**
-             * - The `SlothletWarning` class — access `.captured` for warnings emitted during tests. Only available when `diagnostics: true`. %%sig: (): SlothletWarning%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', diagnostics: true });|const SlothletWarning = api.slothlet.diag.SlothletWarning;|console.log(SlothletWarning.captured); // array of captured warnings%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ base: './api', diagnostics: true });|  const SlothletWarning = api.slothlet.diag.SlothletWarning;|  console.log(SlothletWarning.captured); // array of captured warnings|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ base: './api', diagnostics: true });|  const SlothletWarning = api.slothlet.diag.SlothletWarning;|  console.log(SlothletWarning.captured); // array of captured warnings|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ base: './api', diagnostics: true });|const SlothletWarning = api.slothlet.diag.SlothletWarning;|console.log(SlothletWarning.captured); // array of captured warnings%%
-             */
-            SlothletWarning?: (() => SlothletWarning) | undefined;
         } | undefined;
         hook: {
             clear: Function;
@@ -562,8 +558,11 @@ export type SlothletAPI = {
         restart: Function;
         run: Function;
         scope: Function;
+        warnings: {
+            get: Function;
+            clear: Function;
+        };
         shutdown: () => Promise<void>;
     };
 };
-import { SlothletWarning } from "#errors";
 //# sourceMappingURL=slothlet.d.mts.map

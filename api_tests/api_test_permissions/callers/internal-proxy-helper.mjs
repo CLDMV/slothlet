@@ -56,16 +56,17 @@ export const readPermissionsSymbolProbeDescriptor = () => {
 };
 
 /**
- * Construct a warning object through a slothlet internal route.
- * Exercises internal route proxy `construct` trap.
+ * Construct an object through a slothlet internal route: the class the host passed as `reference.Probe`, read
+ * through `self.slothlet.diag.reference`. Exercises the internal route proxy `construct` trap.
  *
- * @returns {boolean} True when construction produced an object instance.
+ * @returns {boolean} True when construction produced an instance of the class.
  * @example
- * const built = api.internalProxyHelper.constructWarningThroughDiag();
+ * const built = api.internalProxyHelper.constructThroughDiag();
  */
-export const constructWarningThroughDiag = () => {
-	const warning = new self.slothlet.diag.SlothletWarning("WARNING_RESERVED_PROPERTY_CONFLICT");
-	return warning instanceof self.slothlet.diag.SlothletWarning;
+export const constructThroughDiag = () => {
+	const Probe = self.slothlet.diag.reference.Probe;
+	const built = new Probe();
+	return built instanceof Probe;
 };
 
 /**

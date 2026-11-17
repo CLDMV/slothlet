@@ -838,6 +838,24 @@ See [TYPESCRIPT.md](TYPESCRIPT.md) for the full TypeScript configuration referen
 
 ---
 
+## `api.slothlet.warnings`
+
+Every `SlothletWarning` raised through an instance is recorded on that instance, whether or not it was printed. The list is always there; it needs no `diagnostics`. Two instances never share it.
+
+```javascript
+const api = await slothlet({ base: "./api" });
+
+const codes = api.slothlet.warnings.get().map((warning) => warning.code);
+api.slothlet.warnings.clear();
+```
+
+- `warnings.get()` - this instance's warnings, oldest first, as a new array.
+- `warnings.clear()` - empties this instance's list.
+
+A warning raised outside any instance (for example a coverage notice from module load, or `setLanguage()` called on `@cldmv/slothlet/i18n` directly) is only printed; no instance records it. Warnings are `instanceof SlothletWarning` (from `@cldmv/slothlet/errors`). Module code reaches `slothlet.warnings` only through a rule that allows it while permissions are on.
+
+---
+
 ## The `api.slothlet.diag.*` Namespace
 
 Available only when `diagnostics: true` is set. Provides runtime introspection for testing and debugging.
@@ -929,24 +947,6 @@ Expands a glob pattern string into a `RegExp`. Only available when `hook` is als
 ```javascript
 const re = diag.hook.compilePattern("math.*");
 ```
-
-### `diag.SlothletWarning`
-
-This instance's `SlothletWarning` class. Capture and console suppression are per instance: two instances never share a `captured` list, `clearCaptured()` on one leaves the other's warnings alone, and `suppressConsole` set on one does not change the other. Used in tests to capture and assert on warnings.
-
-```javascript
-// In tests
-diag.SlothletWarning.clearCaptured();
-// ... trigger code that may emit warnings ...
-const warnings = diag.SlothletWarning.captured;
-expect(warnings).toHaveLength(1);
-```
-
-- `captured` - warnings this instance raised while console output was suppressed.
-- `clearCaptured()` - empties this instance's list.
-- `suppressConsole` - when `true`, this instance's warnings are captured instead of printed. It follows the process-level setting until you assign it on the instance (assign `null` to follow the process-level value again).
-
-Warnings raised outside any instance (for example a coverage notice from module load) go to the process-level class, `SlothletWarning` from `@cldmv/slothlet/errors`, which has its own `captured`, `clearCaptured()` and `suppressConsole`. Setting `SlothletWarning.suppressConsole = true` there also suppresses console output for every instance that has not set its own, but each instance still captures into its own list. Warnings from either class are `instanceof SlothletWarning`.
 
 ---
 

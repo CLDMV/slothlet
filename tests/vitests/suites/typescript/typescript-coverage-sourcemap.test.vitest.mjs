@@ -33,6 +33,7 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { writeFile, rm, mkdir, readdir, readFile } from "node:fs/promises";
 import { makeTestTmpDir } from "../../setup/test-fixtures-tmp.mjs";
+import { printedWarnings } from "../../setup/warning-capture.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, "../../../..");
@@ -127,24 +128,18 @@ describe("resolveSourcemap", () => {
 
 describe("warnIfCoverageWithoutSourcemap", () => {
 	/**
-	 * Run the decision helper with captured warnings.
+	 * Run the decision helper and count the warnings it printed.
 	 * @param {object} config - Instance config under test.
 	 * @param {object} overrides - Injected environment inputs.
 	 * @returns {Promise<{fired: boolean, captured: number}>} Whether it warned and how many captures.
 	 */
 	async function probe(config, overrides) {
 		const { warnIfCoverageWithoutSourcemap } = await import("#processors/loader");
-		const { SlothletWarning } = await import("@cldmv/slothlet/errors");
-		SlothletWarning.clearCaptured();
-		const prior = SlothletWarning.suppressConsole;
-		SlothletWarning.suppressConsole = true;
-		try {
-			const fired = warnIfCoverageWithoutSourcemap(config, overrides);
-			return { fired, captured: SlothletWarning.captured.filter((w) => w.code === WARNING_CODE).length };
-		} finally {
-			SlothletWarning.suppressConsole = prior;
-			SlothletWarning.clearCaptured();
-		}
+		let fired;
+		const printed = printedWarnings(() => {
+			fired = warnIfCoverageWithoutSourcemap(config, overrides);
+		});
+		return { fired, captured: printed.filter((w) => w.code === WARNING_CODE).length };
 	}
 
 	const OFF = { typescript: { enabled: true, mode: "fast", sourcemap: false } };

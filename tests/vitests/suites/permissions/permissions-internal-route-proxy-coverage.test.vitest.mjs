@@ -61,10 +61,11 @@ describe.each(getMatrixConfigs())("Permissions > Internal Route Proxy Coverage >
 		expect(ok).toBe(true);
 	});
 
-	it("exercises construct trap by creating SlothletWarning via slothlet.diag", async () => {
+	it("exercises construct trap by constructing a class read through slothlet.diag", async () => {
 		api = await slothlet({
 			...config,
 			diagnostics: true,
+			reference: { Probe: class Probe {} },
 			base: `${BASE}/callers`,
 			permissions: {
 				defaultPolicy: "allow",
@@ -72,7 +73,7 @@ describe.each(getMatrixConfigs())("Permissions > Internal Route Proxy Coverage >
 			}
 		});
 
-		const constructed = await api.internalProxyHelper.constructWarningThroughDiag();
+		const constructed = await api.internalProxyHelper.constructThroughDiag();
 		expect(constructed).toBe(true);
 	});
 

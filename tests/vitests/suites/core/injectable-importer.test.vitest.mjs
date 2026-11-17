@@ -33,6 +33,7 @@
 
 import { describe, it, expect, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
+import { printedWarnings } from "../../setup/warning-capture.mjs";
 
 const BASE = new URL("../../../../api_tests/api_test_underscore", import.meta.url).pathname;
 const MOD_FILE = new URL("../../../../api_tests/api_test_underscore/mod/mod.mjs", import.meta.url).pathname;
@@ -129,24 +130,18 @@ describe("Core > injectable leaf importer (#235)", () => {
 
 describe("Core > coverage-run hint (#235)", () => {
 	/**
-	 * Runs the decision helper with captured warnings and restores console suppression.
+	 * Runs the decision helper and counts the coverage hint among the warnings it printed.
 	 * @param {object} config - Config under test.
 	 * @param {object} overrides - Injected environment inputs.
 	 * @returns {Promise<{fired: boolean, captured: number}>} Whether it warned and how many captures.
 	 */
 	async function probe(config, overrides) {
 		const { warnIfCoverageWithoutImporter } = await import("#processors/loader");
-		const { SlothletWarning } = await import("@cldmv/slothlet/errors");
-		SlothletWarning.clearCaptured();
-		const prior = SlothletWarning.suppressConsole;
-		SlothletWarning.suppressConsole = true;
-		try {
-			const fired = warnIfCoverageWithoutImporter(config, overrides);
-			return { fired, captured: SlothletWarning.captured.filter((w) => w.code === "WARNING_COVERAGE_IMPORTER_UNSET").length };
-		} finally {
-			SlothletWarning.suppressConsole = prior;
-			SlothletWarning.clearCaptured();
-		}
+		let fired;
+		const printed = printedWarnings(() => {
+			fired = warnIfCoverageWithoutImporter(config, overrides);
+		});
+		return { fired, captured: printed.filter((w) => w.code === "WARNING_COVERAGE_IMPORTER_UNSET").length };
 	}
 
 	const COVERAGE_WORKER = { config: { coverage: { enabled: true, provider: "v8" } } };
@@ -187,20 +182,17 @@ describe("Core > coverage-run hint (#235)", () => {
 	});
 
 	it("never fires from an in-repo boot, where slothlet is the project under test", async () => {
-		const { SlothletWarning } = await import("@cldmv/slothlet/errors");
-		SlothletWarning.clearCaptured();
-		const prior = SlothletWarning.suppressConsole;
-		SlothletWarning.suppressConsole = true;
 		let api;
 		try {
 			// The real boot consults the helper with REAL environment inputs; in this suite slothlet
 			// is transformed project code (not externalized), so the hint must not fire even under
 			// the repo's own coverage runs.
-			api = await slothlet({ mode: "eager", base: BASE });
-			expect(SlothletWarning.captured.filter((w) => w.code === "WARNING_COVERAGE_IMPORTER_UNSET")).toHaveLength(0);
+			const printed = await printedWarnings(async () => {
+				api = await slothlet({ mode: "eager", base: BASE });
+			});
+			expect(printed.filter((w) => w.code === "WARNING_COVERAGE_IMPORTER_UNSET")).toHaveLength(0);
+			expect(api.slothlet.warnings.get().filter((w) => w.code === "WARNING_COVERAGE_IMPORTER_UNSET")).toHaveLength(0);
 		} finally {
-			SlothletWarning.suppressConsole = prior;
-			SlothletWarning.clearCaptured();
 			if (api) await api.shutdown();
 		}
 	});

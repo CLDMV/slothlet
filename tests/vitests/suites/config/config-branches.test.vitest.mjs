@@ -35,6 +35,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { Config } from "#helpers/config";
 import { SlothletError, SlothletWarning } from "@cldmv/slothlet/errors";
+import { recordingWarningClass } from "../../setup/warning-capture.mjs";
 
 /**
  * Minimal mock slothlet satisfying Config's ComponentBase requirements and the
@@ -444,30 +445,18 @@ describe("Config.transformConfig — v2 warnings suppressed by silent:true (line
 	it("emits no warning when allowMutation:false and silent:true (line 253 false branch)", () => {
 		// silent:true causes if (!config.silent) at line 253 to take the false branch,
 		// skipping the new SlothletWarning() call entirely.
-		const cfg = new Config(makeMock());
-		SlothletWarning.suppressConsole = true;
-		try {
-			const priorLength = SlothletWarning.captured.length;
-			cfg.transformConfig({ base: ".", allowMutation: false, silent: true });
-			expect(SlothletWarning.captured.length).toBe(priorLength);
-		} finally {
-			SlothletWarning.captured.splice(0);
-			SlothletWarning.suppressConsole = false;
-		}
+		const { SlothletWarning: Warning, records } = recordingWarningClass();
+		const cfg = new Config({ ...makeMock(), SlothletWarning: Warning });
+		cfg.transformConfig({ base: ".", allowMutation: false, silent: true });
+		expect(records).toEqual([]);
 	});
 
 	it("emits no warning when root-level collision and silent:true (line 267 false branch)", () => {
 		// silent:true causes if (!config.silent) at line 267 to take the false branch.
-		const cfg = new Config(makeMock());
-		SlothletWarning.suppressConsole = true;
-		try {
-			const priorLength = SlothletWarning.captured.length;
-			cfg.transformConfig({ base: ".", collision: "merge", silent: true });
-			expect(SlothletWarning.captured.length).toBe(priorLength);
-		} finally {
-			SlothletWarning.captured.splice(0);
-			SlothletWarning.suppressConsole = false;
-		}
+		const { SlothletWarning: Warning, records } = recordingWarningClass();
+		const cfg = new Config({ ...makeMock(), SlothletWarning: Warning });
+		cfg.transformConfig({ base: ".", collision: "merge", silent: true });
+		expect(records).toEqual([]);
 	});
 });
 

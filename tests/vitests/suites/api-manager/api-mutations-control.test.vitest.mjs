@@ -87,7 +87,7 @@ describe.each(MATRIX_CONFIGS)("API mutations control - $name", ({ config }) => {
 		api = await createApiInstance(config, { allowMutation: false, diagnostics: true });
 
 		// Verify V3_CONFIG_DEPRECATED warning was shown
-		const warnings = api.slothlet.diag.SlothletWarning.captured; // per instance (#819)
+		const warnings = api.slothlet.warnings.get(); // per instance (#819)
 		expect(warnings.some((w) => w.code === "V3_CONFIG_DEPRECATED")).toBe(true);
 		const deprecationWarning = warnings.find((w) => w.code === "V3_CONFIG_DEPRECATED");
 		expect(deprecationWarning.message).toContain("allowMutation");
@@ -117,7 +117,7 @@ describe.each(MATRIX_CONFIGS)("API mutations control - $name", ({ config }) => {
 		api = await createApiInstance(config, { allowMutation: false, diagnostics: true });
 
 		// Verify V3_CONFIG_DEPRECATED warning was shown
-		const warnings = api.slothlet.diag.SlothletWarning.captured; // per instance (#819)
+		const warnings = api.slothlet.warnings.get(); // per instance (#819)
 		expect(warnings.some((w) => w.code === "V3_CONFIG_DEPRECATED")).toBe(true);
 		const deprecationWarning = warnings.find((w) => w.code === "V3_CONFIG_DEPRECATED");
 		expect(deprecationWarning.message).toContain("allowMutation");
