@@ -18,7 +18,7 @@ import { self } from "@cldmv/slothlet/runtime";
 /**
  * Report this module's own identity via `self.slothlet.caller()` — a same-instance sanity check that
  * the accessor still names this module correctly when its OWN instance's flow is active.
- * @returns {string|null} This module's dotted api path.
+ * @returns {{path: string[], module: string|null, metadata: object, version: object|null}|null} This module's caller object.
  */
 export function whoami() {
 	return self.slothlet.caller();

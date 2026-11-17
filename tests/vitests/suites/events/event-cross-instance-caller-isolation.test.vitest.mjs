@@ -74,7 +74,7 @@ describe.each(getMatrixConfigs())("Events > cross-instance caller isolation > $n
 
 	it("caller() reports the module's own path within its own instance (baseline)", async () => {
 		const { subscriber } = await twoInstances();
-		expect(await subscriber.probe.whoami()).toBe("probe.whoami");
+		expect((await subscriber.probe.whoami()).path.join(".")).toBe("probe.whoami");
 	});
 
 	it("a foreign instance's caller() is the host (null), not this module, while this module's flow is active", async () => {

@@ -3285,8 +3285,9 @@ export class ApiBuilder extends ComponentBase {
 			},
 
 			/**
-			 * The dotted api path of the caller currently in context — the identity in effect for the running
-			 * code — or `null` for the host (no module caller). It reports the executing module's OWN path:
+			 * The caller object of the identity currently in context — the identity in effect for the running
+			 * code: `{ path, module, metadata, version }` (the same object `metadata.caller()` and `metadata.self()`
+			 * return) — or `null` for the host (no module caller). It reports the executing module's OWN path:
 			 * the same value slothlet attributes calls, hooks, and event subscriptions to, not the identity of
 			 * whoever called that module. A module therefore learns nothing it could not already assert about
 			 * itself, so this accessor is not gated.
@@ -3299,12 +3300,14 @@ export class ApiBuilder extends ComponentBase {
 			 * `event.on` captures at subscribe, `event.resolveLevel(caller(), evt)` agrees with the level an actual
 			 * subscription at that identity would be granted.
 			 *
-			 * @returns {string|null} The current caller's dotted api path, or `null` when there is no module
-			 *   caller in context (the host, or a call made outside any module extent).
+			 * @returns {{path: string[], module: string|null, metadata: object, version: {tag: string, default: string, metadata: object}|null}|null}
+			 *   The current identity as a caller object, or `null` when there is no module caller in context
+			 *   (the host, or a call made outside any module extent).
 			 *
 			 * @example
 			 * // Inside a module leaf, reports that module's own path:
-			 * const me = self.slothlet.caller(); // e.g. "renderer.dashboard"
+			 * const me = self.slothlet.caller(); // e.g. { path: ["renderer", "dashboard"], module, metadata, version }
+			 * me?.path.join("."); // "renderer.dashboard"
 			 */
 			caller: () => {
 				// Scoped to THIS instance: the shared-singleton AsyncLocalStorage propagates across `await`/
@@ -3313,7 +3316,8 @@ export class ApiBuilder extends ComponentBase {
 				// not this instance's caller. Mismatched flow reports host; this instance's own flow reports the
 				// real module — the same instance-scoping the read-gate (#290) already applies.
 				const wrapper = slothlet.contextManager?.getCallerIdentity?.(slothlet.instanceID)?.currentWrapper;
-				return wrapper?.____slothletInternal?.apiPath ?? null;
+				if (!wrapper) return null;
+				return slothlet.handlers?.versionManager?.buildCallerArg?.(wrapper) ?? null;
 			},
 
 			/**
