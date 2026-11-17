@@ -21,6 +21,8 @@
  */
 
 import { describe, it, expect, afterEach, vi } from "vitest";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import slothlet from "@cldmv/slothlet";
 import { SlothletWarning } from "@cldmv/slothlet/errors";
 import { TEST_DIRS } from "../../setup/vitest-helper.mjs";
@@ -97,9 +99,55 @@ describe.each(CASES)("warning capture is per instance (#819) > $mode / $runtime"
 		expect(codes(a)).not.toContain("WARNING_COLLISION_OPTION_LOCKED");
 	});
 
+	it("get() returns a copy: changing it leaves the instance's list alone", async () => {
+		a = await make();
+		await raise(a);
+		const list = a.slothlet.warnings.get();
+		list.length = 0;
+		expect(codes(a)).toContain("WARNING_COLLISION_OPTION_LOCKED");
+	});
+
+	it("the warning class has no process-wide captured list", () => {
+		expect(SlothletWarning).not.toHaveProperty("captured");
+		expect(SlothletWarning).not.toHaveProperty("clearCaptured");
+	});
+
+	it("diag no longer hands out the warning class", async () => {
+		a = await make();
+		expect(a.slothlet.diag).not.toHaveProperty("SlothletWarning");
+	});
+
 	it("instance warnings are still SlothletWarning instances", async () => {
 		a = await make();
 		await raise(a);
 		expect(a.slothlet.warnings.get()[0]).toBeInstanceOf(SlothletWarning);
+	});
+});
+
+describe("slothlet.warnings is host-only while permissions are on", () => {
+	const BASE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../../api_tests/api_test_warnings");
+	let api;
+
+	afterEach(async () => {
+		if (api) await api.shutdown();
+		api = null;
+	});
+
+	it("module code is refused by the built-in rule", async () => {
+		api = await slothlet({ base: BASE, permissions: { mode: "on" } });
+		await expect((async () => api.monitor.codes())()).rejects.toMatchObject({ code: "PERMISSION_DENIED" });
+	});
+
+	it("a rule on slothlet.warnings.get lets module code read it", async () => {
+		api = await slothlet({
+			base: BASE,
+			permissions: { mode: "on", rules: [{ caller: "monitor.**", target: "slothlet.warnings.get", effect: "allow" }] }
+		});
+		expect(await api.monitor.codes()).toEqual(api.slothlet.warnings.get().map((w) => w.code));
+	});
+
+	it("with permissions off, module code reads it", async () => {
+		api = await slothlet({ base: BASE });
+		expect(Array.isArray(await api.monitor.codes())).toBe(true);
 	});
 });
