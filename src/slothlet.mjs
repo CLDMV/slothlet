@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:28:54-08:00 (1794882534)
+ *	@Last modified time: 2026-11-17T07:39:20-08:00 (1794929960)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -251,8 +251,8 @@ const INTERNAL_CONFIG_KEYS = setFrom(["dir", "envTarget"]);
  *
  * `seen` maps each source container to its copy, so a container referenced twice is copied once and
  * stays shared in the copy. It also ends cycles: the snapshot is taken before the config is
- * validated, so a cyclic value that validation later refuses is copied without recursing forever,
- * and a cycle through an array (which `metadata`'s cycle check does not walk) is carried as a cycle.
+ * validated, so a cyclic value that validation later refuses (`metadata` refuses a cycle through
+ * plain objects and arrays alike with `INVALID_ARGUMENT`) is copied without recursing forever.
  *
  * @param {unknown} value - Value to copy.
  * @param {boolean} freeze - Freeze each copied container.

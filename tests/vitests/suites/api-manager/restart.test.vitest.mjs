@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:29:32-08:00 (1794882572)
+ *	@Last modified time: 2026-11-17T07:39:43-08:00 (1794929983)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -653,18 +653,10 @@ describe.each(getMatrixConfigs({}))("api.slothlet.restart() (#504) > held refere
 		expect(resolveWrapper(api.counter).slothlet.context).not.toBe(context);
 	});
 
-	it("carries a cycle through an array in metadata into the snapshot and the restarted instance", async () => {
+	it("refuses a cycle through an array in metadata at creation", async () => {
 		const list = [1];
 		list.push(list);
-		await create({ metadata: { list } });
-		const snapshot = resolveWrapper(api.counter).slothlet._originalConfig;
-		expect(snapshot.metadata.list).not.toBe(list);
-		expect(snapshot.metadata.list[1]).toBe(snapshot.metadata.list);
-
-		await api.slothlet.restart();
-		const restarted = api.slothlet.metadata.get("counter").list;
-		expect(restarted).not.toBe(list);
-		expect(restarted[1]).toBe(restarted);
+		await expect(create({ metadata: { list } })).rejects.toMatchObject({ code: "INVALID_ARGUMENT" });
 	});
 
 	if (config.mode === "lazy") {

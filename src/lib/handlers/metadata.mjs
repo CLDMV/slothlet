@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:28:46-08:00 (1794882526)
+ *	@Last modified time: 2026-11-17T07:39:14-08:00 (1794929954)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -117,13 +117,17 @@ export class Metadata extends ComponentBase {
 			this.#assertSafeMetadataKeySegment(metadataKey);
 		}
 
+		if (utilities?.isPlainObject(currentValue) || Arrays.isArray(currentValue)) {
+			this.#assertAcyclic(currentValue, argumentName, metadataKey);
+		}
 		if (utilities?.isPlainObject(currentValue)) {
-			this.#assertAcyclicPlainObject(currentValue, argumentName, metadataKey);
 			this.#assertNoReservedMetadataKeys(currentValue, metadataKey);
 		}
 
+		if (utilities?.isPlainObject(nextValue) || Arrays.isArray(nextValue)) {
+			this.#assertAcyclic(nextValue, argumentName, metadataKey);
+		}
 		if (utilities?.isPlainObject(nextValue)) {
-			this.#assertAcyclicPlainObject(nextValue, argumentName, metadataKey);
 			this.#assertNoReservedMetadataKeys(nextValue, metadataKey);
 		}
 
@@ -135,22 +139,25 @@ export class Metadata extends ComponentBase {
 	}
 
 	/**
-	 * Reject circular plain objects before merging metadata values.
+	 * Reject circular references in a metadata value, through plain objects and arrays in any mix
+	 * (object → array → object, an array holding itself, …) before merging.
 	 * Shared references across sibling branches are allowed because the recursion
 	 * path is released on unwind; only back-edges on the active path throw.
 	 *
-	 * @param {unknown} value - Metadata value to validate.
+	 * @param {unknown} value - Metadata value to validate (a plain object or an array).
 	 * @param {string} argumentName - User-facing argument name used in the error context.
 	 * @param {string|null} [metadataKey=null] - Optional metadata key being merged.
 	 * @returns {void}
+	 * @throws {SlothletError} INVALID_ARGUMENT when the value reaches itself.
 	 * @private
 	 */
-	#assertAcyclicPlainObject(value, argumentName, metadataKey = null) {
+	#assertAcyclic(value, argumentName, metadataKey = null) {
 		const utilities = this.slothlet.helpers?.utilities;
+		const isContainer = (candidate) => Arrays.isArray(candidate) || utilities.isPlainObject(candidate);
 		// Only #mergeMetadataValue() calls this helper, and both call sites already guard with
-		// utilities.isPlainObject(...) before invoking it. The non-plain early return is unreachable.
+		// a plain-object / array check before invoking it. The non-container early return is unreachable.
 		/* v8 ignore next */
-		if (!utilities?.isPlainObject(value)) return;
+		if (!isContainer(value)) return;
 
 		const validate = (candidate, ancestors = new WeakSet()) => {
 			if (WeakSetMethods.has(ancestors, candidate)) {
@@ -165,7 +172,7 @@ export class Metadata extends ComponentBase {
 			try {
 				for (let ofIndex = 0, ofList = Objects.values(candidate); ofIndex < ofList.length; ofIndex++) {
 					const nestedValue = ofList[ofIndex];
-					if (utilities.isPlainObject(nestedValue)) {
+					if (isContainer(nestedValue)) {
 						validate(nestedValue, ancestors);
 					}
 				}
