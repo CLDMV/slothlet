@@ -195,7 +195,7 @@ describe.each(CONFIGS)("module mount lifecycle (#625) — $mode / $runtime", ({ 
 	it.each([
 		["by moduleID", (a) => a.slothlet.api.remove("g1"), KID_STAYS],
 		["by path", (a) => a.slothlet.api.remove("guest"), GONE],
-		["scoped", (a) => a.slothlet.api.remove("g1", "guest"), KID_STAYS]
+		["scoped", (a) => a.slothlet.api.remove("guest", "g1"), KID_STAYS]
 	])("leaves the same state after a removal %s as a reload then produces", async (_label, remove, expected) => {
 		await boot();
 		await api.slothlet.api.add("guest", GUEST, { moduleID: "g1" });

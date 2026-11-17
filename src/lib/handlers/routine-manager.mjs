@@ -700,7 +700,7 @@ export class RoutineManager extends ComponentBase {
 	 * @public
 	 *
 	 * @description
-	 * The scoped two-argument `api.remove(apiPath, moduleID)` deletes the ENTIRE live subtree
+	 * The scoped two-argument `api.remove(apiPath, id)` deletes the ENTIRE live subtree
 	 * rooted at `apiPath` (`ApiManager#deletePath`), but `impl:removed` only ever fires for the
 	 * exact property that was deleted — never for descendants that were simply carried away with
 	 * it. A nested routine capture like `auth.initialize` therefore survived indefinitely in `raw`

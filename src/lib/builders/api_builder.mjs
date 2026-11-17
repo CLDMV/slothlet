@@ -1673,27 +1673,27 @@ export class ApiBuilder extends ComponentBase {
 				},
 
 				/**
-				 * @param {string} pathOrModuleId - API path or module ID to remove.
-				 * @param {string} [apiPath] - Optional mount path to scope removal to. When given, the first
-				 *   argument is treated as a moduleID and ONLY that module's node at `apiPath` is removed —
-				 *   other modules sharing the path, and that module's other mounts, are left untouched. Omit
-				 *   it for the whole-module (by id) or whole-subtree (by path) removal.
+				 * @param {string} target - API path or module ID to remove.
+				 * @param {string} [id] - Optional module ID to scope the removal to. When given, `target` is the api
+				 *   path and ONLY module `id`'s node at that path is removed — other modules sharing the path, and
+				 *   that module's other mounts, are left untouched. Omit it for the whole-module (by id) or
+				 *   whole-subtree (by path) removal.
 				 * @returns {Promise<boolean>} True if something was removed, false if nothing matched.
 				 * @public
 				 *
 				 * @description
 				 * Removes API modules by apiPath or moduleID from the current instance. `remove(id)` removes
 				 * every path the module owns; `remove(apiPath)` removes that path's whole subtree; and the
-				 * two-argument `remove(moduleID, apiPath)` removes only that module's single node at the path.
+				 * two-argument `remove(apiPath, id)` removes only that module's single node at the path.
 				 *
 				 * @example
 				 * await api.slothlet.api.remove("plugins.tools"); // by api path
 				 * @example
 				 * await api.slothlet.api.remove("plugins-core");  // by module id (all its paths)
 				 * @example
-				 * await api.slothlet.api.remove("plugins-core", "plugins.tools"); // just that module's node
+				 * await api.slothlet.api.remove("plugins.tools", "plugins-core"); // just that module's node
 				 */
-				remove: async function slothlet_api_remove(pathOrModuleId, apiPath) {
+				remove: async function slothlet_api_remove(target, id) {
 					// Check if remove mutation is allowed
 					if (!config.api?.mutations?.remove) {
 						throw new slothlet.SlothletError("INVALID_CONFIG_MUTATIONS_DISABLED", {
@@ -1701,24 +1701,28 @@ export class ApiBuilder extends ComponentBase {
 							validationError: true
 						});
 					}
-					if (typeof pathOrModuleId !== "string") {
+					if (typeof target !== "string") {
 						throw new slothlet.SlothletError("INVALID_ARGUMENT", {
-							argument: "pathOrModuleId",
+							argument: "target",
 							expected: "string",
-							received: typeof pathOrModuleId,
+							received: typeof target,
 							validationError: true
 						});
 					}
-					// The optional scoping path, when supplied, must be a string.
-					if (apiPath !== undefined && typeof apiPath !== "string") {
+					// The optional scoping module id, when supplied, must be a string.
+					if (id !== undefined && typeof id !== "string") {
 						throw new slothlet.SlothletError("INVALID_ARGUMENT", {
-							argument: "apiPath",
+							argument: "id",
 							expected: "string",
-							received: typeof apiPath,
+							received: typeof id,
 							validationError: true
 						});
 					}
-					const removeResult = await slothlet.handlers.apiManager.removeApiComponent(pathOrModuleId, { scopedApiPath: apiPath });
+					// Scoped: module `id`'s node at the path `target`. Unscoped: `target` is a path or a module id.
+					const removeResult =
+						id === undefined
+							? await slothlet.handlers.apiManager.removeApiComponent(target, { scopedApiPath: undefined })
+							: await slothlet.handlers.apiManager.removeApiComponent(id, { scopedApiPath: target });
 					// Mirror add()'s rebuild above: a removal can leave 2+ contributors still stacked at a
 					// path whose sole remaining live property is a bare function reinstalled by ownership's
 					// "restore" (removeApiComponent never touches RoutineManager's stacked-callable

@@ -297,7 +297,7 @@ describe("RoutineManager — revertRawEntry restores the ORIGINAL wrapper mappin
 
 describe("RoutineManager — pruneSubtree prunes descendant raw entries when a scoped removal deletes a whole subtree (#372/#373 review, suppressed finding)", () => {
 	it("prunes the exact path and every descendant, leaving unrelated paths alone", () => {
-		// The scoped api.remove(apiPath, moduleID) deletes the ENTIRE live subtree rooted at
+		// The scoped api.remove(apiPath, id) deletes the ENTIRE live subtree rooted at
 		// apiPath, but impl:removed only ever fires for the exact property deleted — never for
 		// descendants carried away with it. A nested routine capture like "auth.initialize" would
 		// otherwise survive indefinitely in `raw` after removing "auth".
