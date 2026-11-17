@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:39-08:00 (1794874599)
+ *	@Last modified time: 2026-11-16T18:28:48-08:00 (1794882528)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -27,8 +27,8 @@ const makeUtils = () => new ModesUtils({ config: {}, debug: () => {}, SlothletEr
 describe("ModesUtils.getOwnershipCollisionMode — config-default resolution", () => {
 	it("returns the configured mode for the given context", () => {
 		const u = makeUtils();
-		expect(u.getOwnershipCollisionMode({ collision: { initial: "replace", api: "skip" } }, "initial")).toBe("replace");
-		expect(u.getOwnershipCollisionMode({ collision: { initial: "replace", api: "skip" } }, "api")).toBe("skip");
+		expect(u.getOwnershipCollisionMode({ api: { collision: { mode: { initial: "replace", api: "skip" } } } }, "initial")).toBe("replace");
+		expect(u.getOwnershipCollisionMode({ api: { collision: { mode: { initial: "replace", api: "skip" } } } }, "api")).toBe("skip");
 	});
 
 	it("falls back to 'merge' when collision config is absent or lacks the context", () => {

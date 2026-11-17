@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:12-07:00 (1791090912)
+ *	@Last modified time: 2026-11-16T18:29:30-08:00 (1794882570)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -74,7 +74,9 @@ async function bootWithMutations(flags) {
 		runtime: "async",
 		silent: true,
 		api: {
-			collision: { initial: "merge", api: "merge" },
+			collision: {
+				mode: { initial: "merge", api: "merge" }
+			},
 			mutations: { add: flags.add ?? true, remove: flags.remove ?? true }
 		}
 	});
@@ -124,7 +126,9 @@ describe("api.slothlet.api.modules.* — mutation guards", () => {
 			runtime: "async",
 			silent: true,
 			api: {
-				collision: { initial: "merge", api: "merge" },
+				collision: {
+					mode: { initial: "merge", api: "merge" }
+				},
 				mutations: { add: true, remove: true }
 			}
 		});

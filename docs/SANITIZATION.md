@@ -39,8 +39,8 @@ sanitize("my-module"); // "myModule"
 sanitize("get-user-data"); // "getUserData"
 
 // With options
-sanitize("MyModule", { lowerFirst: false }); // "MyModule"
-sanitize("COMMON_APPS", { preserveAllUpper: true }); // "COMMON_APPS"
+sanitize("MyModule", { first: false }); // "MyModule"
+sanitize("COMMON_APPS", { preserve: { upper: true } }); // "COMMON_APPS"
 
 // With rules
 sanitize("auto-ip", {
@@ -72,44 +72,44 @@ The sanitization system uses **two-level segmentation**:
 
 ## Options
 
-### `lowerFirst` (default: `true`)
+### `first` (default: `true`)
 
 Lowercase the first character of the first primary segment for camelCase convention.
 
 ```javascript
 sanitize("MyModule"); // "myModule"
-sanitize("MyModule", { lowerFirst: false }); // "MyModule"
+sanitize("MyModule", { first: false }); // "MyModule"
 sanitize("parse-json"); // "parseJson"
 ```
 
-### `preserveAllUpper` (default: `false`)
+### `preserve.upper` (default: `false`)
 
 Automatically preserve sub-segments that are entirely uppercase.
 
 ```javascript
-sanitize("COMMON_APPS", { preserveAllUpper: true }); // "COMMON_APPS"
-sanitize("Mixed_APPS", { preserveAllUpper: true }); // "mixed_APPS"
-sanitize("get-API-status", { preserveAllUpper: true }); // "getAPIStatus"
+sanitize("COMMON_APPS", { preserve: { upper: true } }); // "COMMON_APPS"
+sanitize("Mixed_APPS", { preserve: { upper: true } }); // "mixed_APPS"
+sanitize("get-API-status", { preserve: { upper: true } }); // "getAPIStatus"
 ```
 
 **Note**: Only applies to sub-segments that are **entirely** uppercase. Mixed case like `"Mixed"` will still be transformed.
 
-### `preserveAllLower` (default: `false`)
+### `preserve.lower` (default: `false`)
 
 Automatically preserve sub-segments that are entirely lowercase.
 
 ```javascript
-sanitize("common_apps", { preserveAllLower: true }); // "common_apps"
-sanitize("Mixed_apps", { preserveAllLower: true }); // "mixed_apps"
+sanitize("common_apps", { preserve: { lower: true } }); // "common_apps"
+sanitize("Mixed_apps", { preserve: { lower: true } }); // "mixed_apps"
 ```
 
 > [!NOTE]
-> `preserveAllLower` operates at the **sub-segment level** (split by underscores). Hyphens still cause primary-segment splitting, which are then joined without camelCase capitalization:
+> `preserve.lower` operates at the **sub-segment level** (split by underscores). Hyphens still cause primary-segment splitting, which are then joined without camelCase capitalization:
 >
 > ```javascript
-> sanitize("parse-xml-data", { preserveAllLower: true }); // "parsexmldata" (joined, no caps)
+> sanitize("parse-xml-data", { preserve: { lower: true } }); // "parsexmldata" (joined, no caps)
 > sanitize("parse-xml-data", {}); // "parseXmlData" (normal camelCase)
-> sanitize("common_apps", { preserveAllLower: true }); // "common_apps" (underscores preserved)
+> sanitize("common_apps", { preserve: { lower: true } }); // "common_apps" (underscores preserved)
 > ```
 
 ## Rules
@@ -138,17 +138,17 @@ sanitize("auto-ip", {
 > [!IMPORTANT]
 > `leave` is **case-sensitive**. This was a bug in older versions where it behaved case-insensitively.
 
-### `leaveInsensitive` (case-insensitive)
+### `nocase` (case-insensitive)
 
 Preserve segments exactly as-is. Case-insensitive matching.
 
 ```javascript
 sanitize("autoIP", {
-	rules: { leaveInsensitive: ["autoip"] }
+	rules: { nocase: ["autoip"] }
 }); // "autoIP"
 
 sanitize("AutoIP", {
-	rules: { leaveInsensitive: ["autoip"] }
+	rules: { nocase: ["autoip"] }
 }); // "AutoIP"
 ```
 
@@ -283,9 +283,9 @@ sanitize("buildApiUrlParser", {
 When multiple rules could apply to the same segment, they are evaluated in this order:
 
 1. **`leave` (case-sensitive)** - Highest priority
-2. **`leaveInsensitive` (case-insensitive)**
-3. **`preserveAllUpper` option** - Overrides transformation rules
-4. **`preserveAllLower` option** - Overrides transformation rules
+2. **`nocase` (case-insensitive)**
+3. **`preserve.upper` option** - Overrides transformation rules
+4. **`preserve.lower` option** - Overrides transformation rules
 5. **`upper` rules** - Takes precedence over `lower`
 6. **`lower` rules**
 7. **Default camelCase transformation** - Lowest priority
@@ -301,9 +301,9 @@ sanitize("autoIP", {
 	}
 }); // "autoIP"
 
-// preserveAllUpper overrides lower
+// preserve.upper overrides lower
 sanitize("COMMON_APPS", {
-	preserveAllUpper: true,
+	preserve: { upper: true },
 	rules: { lower: ["apps"] }
 }); // "COMMON_APPS"
 
@@ -360,15 +360,15 @@ sanitize("$scope"); // "$scope"
 ```javascript
 // Multiple options and rules
 sanitize("Mixed_API_some-json-DATA", {
-	lowerFirst: true,
-	preserveAllUpper: true,
+	first: true,
+	preserve: { upper: true },
 	rules: {
 		upper: ["json"],
 		lower: ["data"],
 		leave: ["API"]
 	}
 }); // "mixed_API_someJSONDATA"
-// Note: preserveAllUpper keeps "DATA" uppercase, overriding lower:["data"]
+// Note: preserve.upper keeps "DATA" uppercase, overriding lower:["data"]
 
 // Complex pattern matching
 sanitize("get-http-api-status", {
@@ -474,12 +474,14 @@ Tests are located at:
 function sanitize(
 	input: string,
 	options?: {
-		lowerFirst?: boolean;
-		preserveAllUpper?: boolean;
-		preserveAllLower?: boolean;
+		first?: boolean;
+		preserve?: {
+			upper?: boolean;
+			lower?: boolean;
+		};
 		rules?: {
 			leave?: string[];
-			leaveInsensitive?: string[];
+			nocase?: string[];
 			upper?: string[];
 			lower?: string[];
 		};
@@ -491,12 +493,13 @@ function sanitize(
 
 - **`input`** (string): The string to sanitize (filename, path segment, etc.)
 - **`options`** (object, optional): Configuration options
-  - **`lowerFirst`** (boolean, default: `true`): Lowercase first character
-  - **`preserveAllUpper`** (boolean, default: `false`): Preserve all-uppercase segments
-  - **`preserveAllLower`** (boolean, default: `false`): Preserve all-lowercase segments
+  - **`first`** (boolean, default: `true`): Lowercase first character
+  - **`preserve`** (object, optional): Names kept as they are
+    - **`upper`** (boolean, default: `false`): Preserve all-uppercase segments
+    - **`lower`** (boolean, default: `false`): Preserve all-lowercase segments
   - **`rules`** (object, optional): Transformation rules
     - **`leave`** (string[], case-sensitive): Preserve segments exactly
-    - **`leaveInsensitive`** (string[], case-insensitive): Preserve segments exactly
+    - **`nocase`** (string[], case-insensitive): Preserve segments exactly
     - **`upper`** (string[]): Force segments to UPPERCASE
     - **`lower`** (string[]): Force segments to lowercase (pattern matches preserved through camelCase)
 

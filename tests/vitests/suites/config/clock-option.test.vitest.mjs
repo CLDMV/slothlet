@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:40-08:00 (1794874600)
+ *	@Last modified time: 2026-11-16T18:28:49-08:00 (1794882529)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -61,7 +61,7 @@ describe.each(getMatrixConfigs())("Config > clock > $name", ({ config }) => {
 				...config,
 				base: PERMISSIONS,
 				clock,
-				permissions: { defaultPolicy: "deny", attribution, rules: [REQUIRES_ROLES, ...extra] }
+				permissions: { policy: "deny", caller: { attribution }, rules: [REQUIRES_ROLES, ...extra] }
 			});
 
 		it("a principal with maxAge goes stale when the fake clock passes it, and not before, with no real wait", async () => {
@@ -200,7 +200,7 @@ describe.each(getMatrixConfigs())("Config > clock > $name", ({ config }) => {
 			silent: true,
 			mode: "lazy",
 			tracking: { materialization: true },
-			clock: { now: Date.now, setTimeout: recording, clearTimeout }
+			clock: { now: Date.now, set: recording, clear: clearTimeout }
 		});
 		// Installed before the instance existed: slothlet's own deferred work waits for the fake clock to move.
 		expect(scheduled.length).toBeGreaterThan(0);
@@ -216,7 +216,7 @@ describe.each(getMatrixConfigs())("Config > clock > $name", ({ config }) => {
 			...config,
 			base: PERMISSIONS,
 			silent: true,
-			permissions: { defaultPolicy: "allow", rules: [{ caller: "untrusted.**", target: "admin.**", effect: "deny" }] }
+			permissions: { policy: "allow", rules: [{ caller: "untrusted.**", target: "admin.**", effect: "deny" }] }
 		});
 		vi.useFakeTimers();
 		vi.setSystemTime(new Date("2001-01-01T00:00:00Z"));
@@ -234,14 +234,14 @@ describe.each(getMatrixConfigs())("Config > clock > $name", ({ config }) => {
 			base: PERMISSIONS,
 			silent: true,
 			clock: { now: () => 111 },
-			permissions: { defaultPolicy: "allow", rules: [{ caller: "untrusted.**", target: "admin.**", effect: "deny" }] }
+			permissions: { policy: "allow", rules: [{ caller: "untrusted.**", target: "admin.**", effect: "deny" }] }
 		});
 		const other = await slothlet({
 			...config,
 			base: PERMISSIONS,
 			silent: true,
 			clock: { now: () => 222 },
-			permissions: { defaultPolicy: "allow", rules: [{ caller: "untrusted.**", target: "admin.**", effect: "deny" }] }
+			permissions: { policy: "allow", rules: [{ caller: "untrusted.**", target: "admin.**", effect: "deny" }] }
 		});
 		try {
 			const stamps = { one: [], two: [] };
@@ -299,8 +299,8 @@ describe("Config > clock > validation", () => {
 		["null", null],
 		["an array of one function", [() => 1]],
 		["now that is not a function", { now: 5 }],
-		["setTimeout that is not a function", { setTimeout: "x" }],
-		["clearTimeout that is not a function", { clearTimeout: {} }]
+		["set that is not a function", { set: "x" }],
+		["clear that is not a function", { clear: {} }]
 	])("%s is INVALID_CONFIG", async (_label, clock) => {
 		await expect(slothlet({ base: PLAIN, silent: true, clock })).rejects.toMatchObject({ code: "INVALID_CONFIG" });
 		expect(() => normalizeClockConfig(clock)).toThrow(expect.objectContaining({ code: "INVALID_CONFIG" }));
@@ -311,7 +311,7 @@ describe("Config > clock > validation", () => {
 		expect(Object.isFrozen(empty)).toBe(true);
 		expect(empty.hostTimers).toBe(false);
 		expect(Math.abs(empty.now() - Date.now())).toBeLessThan(1000);
-		expect(normalizeClockConfig({ setTimeout }).hostTimers).toBe(true);
+		expect(normalizeClockConfig({ set: setTimeout }).hostTimers).toBe(true);
 		const half = normalizeClockConfig({ now: () => 3 });
 		expect(half.now()).toBe(3);
 		expect(half.hostTimers).toBe(false);
@@ -321,11 +321,11 @@ describe("Config > clock > validation", () => {
 	it("calls the host's functions with no receiver and passes timer arguments through", () => {
 		const calls = [];
 		const clock = normalizeClockConfig({
-			setTimeout: function (...args) {
+			set: function (...args) {
 				calls.push([this, ...args]);
 				return 7;
 			},
-			clearTimeout: function (handle) {
+			clear: function (handle) {
 				calls.push([this, "clear", handle]);
 			}
 		});

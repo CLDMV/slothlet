@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:24-07:00 (1791091704)
+ *	@Last modified time: 2026-11-16T18:28:50-08:00 (1794882530)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -15,7 +15,7 @@
 
 /**
  * @fileoverview Coverage for remaining Config normalization branches (routines validation,
- * collectLifecycleHooks deprecation, routines:null). Drives each branch through the real
+ * routines.entries: null). Drives each branch through the real
  * `slothlet({...})` config path.
  * @module tests/vitests/suites/config/config-coverage
  */
@@ -35,7 +35,9 @@ afterEach(async () => {
 describe("Config normalization coverage", () => {
 	it('rejects an array routine entry, reporting its type as "array" (config.mjs:955 ternary-true)', async () => {
 		await withSuppressedSlothletErrorOutput(async () => {
-			await expect(slothlet({ dir: TEST_DIRS.API_TEST_ROUTINES, routines: [["not-a-string"]], silent: true })).rejects.toMatchObject({
+			await expect(
+				slothlet({ base: TEST_DIRS.API_TEST_ROUTINES, routines: { entries: [["not-a-string"]] }, silent: true })
+			).rejects.toMatchObject({
 				code: "INVALID_CONFIG"
 			});
 		});
@@ -47,7 +49,9 @@ describe("Config normalization coverage", () => {
 		let deep = "x";
 		for (let i = 0; i < 12; i++) deep = `{${deep},y}`;
 		await withSuppressedSlothletErrorOutput(async () => {
-			await expect(slothlet({ dir: TEST_DIRS.API_TEST_ROUTINES, routines: [{ name: `^${deep}` }], silent: true })).rejects.toMatchObject({
+			await expect(
+				slothlet({ base: TEST_DIRS.API_TEST_ROUTINES, routines: { entries: [{ name: `^${deep}` }] }, silent: true })
+			).rejects.toMatchObject({
 				code: "INVALID_CONFIG"
 			});
 		});
@@ -56,20 +60,14 @@ describe("Config normalization coverage", () => {
 	it("rejects an invalid routine order (config.mjs:1072-1073)", async () => {
 		await withSuppressedSlothletErrorOutput(async () => {
 			await expect(
-				slothlet({ dir: TEST_DIRS.API_TEST_ROUTINES, routines: [{ name: "initialize", order: "sideways" }], silent: true })
+				slothlet({ base: TEST_DIRS.API_TEST_ROUTINES, routines: { entries: [{ name: "initialize", order: "sideways" }] }, silent: true })
 			).rejects.toMatchObject({ code: "INVALID_CONFIG" });
 		});
 	});
 
-	it("routines: null normalizes to no routines (config.mjs:916-917)", async () => {
-		// null takes the `routines === null` early-return (an empty routine set), like routines: [].
-		api = await slothlet({ dir: TEST_DIRS.API_TEST_ROUTINES, routines: null, silent: true });
-		expect(api).toBeDefined();
-	});
-
-	it("collectLifecycleHooks (without explicit autoRoutines, non-silent) emits the V3 deprecation warning (config.mjs:574-575)", async () => {
-		// silent is falsy here so the `!config.silent` deprecation branch runs and constructs the warning.
-		api = await slothlet({ dir: TEST_DIRS.API_TEST_ROUTINES, collectLifecycleHooks: true });
+	it("routines.entries: null normalizes to no routines (config.mjs:916-917)", async () => {
+		// null takes the `routines === null` early-return (an empty routine set), like entries: [].
+		api = await slothlet({ base: TEST_DIRS.API_TEST_ROUTINES, routines: { entries: null }, silent: true });
 		expect(api).toBeDefined();
 	});
 });

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:23-07:00 (1791091703)
+ *	@Last modified time: 2026-11-16T18:28:46-08:00 (1794882526)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -39,6 +39,20 @@ import { describe, it, expect, beforeEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
 import { resolveWrapper } from "#handlers/unified-wrapper";
 import { TEST_DIRS } from "../../setup/vitest-helper.mjs";
+
+/**
+ * The routines v3's `collectLifecycleHooks: true` expanded into: startup routines kept, and root-anchored, deepest-first
+ * `shutdown` / `destroy` routines that reach every nested leaf of that name, with `routines.auto` on.
+ * @type {object}
+ */
+const COLLECT_ROUTINES = {
+	auto: true,
+	entries: [
+		{ name: "initialize", mode: "startup" },
+		{ name: "^**.shutdown", mode: "shutdown", order: "depth" },
+		{ name: "^**.destroy", mode: "destroy", order: "depth" }
+	]
+};
 
 /**
  * Retrieve the raw slothlet instance from any wrapper in the API.
@@ -88,7 +102,7 @@ describe.each(["eager", "lazy"])("mode: %s", (mode) => {
 
 	describe("collectLifecycleHooks: true — nested hooks fire before the root hook", () => {
 		it("api.shutdown() invokes nested shutdown hooks before the root shutdown hook", async () => {
-			const api = await slothlet({ base: TEST_DIRS.API_TEST_LIFECYCLE_HOOKS, silent: true, mode, collectLifecycleHooks: true });
+			const api = await slothlet({ base: TEST_DIRS.API_TEST_LIFECYCLE_HOOKS, silent: true, mode, routines: COLLECT_ROUTINES });
 			getSlothlet(api).userHooks.shutdown = () => globalThis.__slothletHookLog.push("root:shutdown");
 
 			await api.shutdown();
@@ -102,7 +116,7 @@ describe.each(["eager", "lazy"])("mode: %s", (mode) => {
 		});
 
 		it("api.destroy() invokes nested destroy hooks, then the root destroy hook, then nested shutdown hooks (via internal api.shutdown()) — each exactly once", async () => {
-			const api = await slothlet({ base: TEST_DIRS.API_TEST_LIFECYCLE_HOOKS, silent: true, mode, collectLifecycleHooks: true });
+			const api = await slothlet({ base: TEST_DIRS.API_TEST_LIFECYCLE_HOOKS, silent: true, mode, routines: COLLECT_ROUTINES });
 			getSlothlet(api).userHooks.destroy = () => globalThis.__slothletHookLog.push("root:destroy");
 
 			const destroyFn = api.destroy;
@@ -122,7 +136,7 @@ describe.each(["eager", "lazy"])("mode: %s", (mode) => {
 		});
 
 		it("auto-invoked nested shutdown hooks preserve the owning-node receiver (method using `this`)", async () => {
-			const api = await slothlet({ base: TEST_DIRS.API_TEST_LIFECYCLE_HOOKS, silent: true, mode, collectLifecycleHooks: true });
+			const api = await slothlet({ base: TEST_DIRS.API_TEST_LIFECYCLE_HOOKS, silent: true, mode, routines: COLLECT_ROUTINES });
 
 			await api.shutdown();
 
@@ -135,7 +149,7 @@ describe.each(["eager", "lazy"])("mode: %s", (mode) => {
 		});
 
 		it("auto-invoked nested destroy hooks preserve the owning-node receiver (method using `this`)", async () => {
-			const api = await slothlet({ base: TEST_DIRS.API_TEST_LIFECYCLE_HOOKS, silent: true, mode, collectLifecycleHooks: true });
+			const api = await slothlet({ base: TEST_DIRS.API_TEST_LIFECYCLE_HOOKS, silent: true, mode, routines: COLLECT_ROUTINES });
 
 			const destroyFn = api.destroy;
 			await destroyFn();
@@ -146,7 +160,7 @@ describe.each(["eager", "lazy"])("mode: %s", (mode) => {
 		});
 
 		it("a second api.destroy() call after the first does not throw and does not re-push nested log entries", async () => {
-			const api = await slothlet({ base: TEST_DIRS.API_TEST_LIFECYCLE_HOOKS, silent: true, mode, collectLifecycleHooks: true });
+			const api = await slothlet({ base: TEST_DIRS.API_TEST_LIFECYCLE_HOOKS, silent: true, mode, routines: COLLECT_ROUTINES });
 
 			const destroyFn = api.destroy;
 			await destroyFn();
@@ -208,7 +222,7 @@ describe("collectLifecycleHooks: true — lazy materialize-failure guard (F1)", 
 			base: TEST_DIRS.API_TEST_LIFECYCLE_HOOKS_FAIL,
 			silent: true,
 			mode: "lazy",
-			collectLifecycleHooks: true
+			routines: COLLECT_ROUTINES
 		});
 
 		// api.shutdown() invokes only the genuine hook, never a waiting proxy from the broken
@@ -257,7 +271,7 @@ describe.each(["eager", "lazy"])("collectLifecycleHooks — routine system walk 
 			base: TEST_DIRS.API_TEST_LIFECYCLE_HOOKS_WALK,
 			silent: true,
 			mode,
-			collectLifecycleHooks: true,
+			routines: COLLECT_ROUTINES,
 			reference
 		});
 		// The reference data is merged onto the root and deeply reachable as plain data.
@@ -282,7 +296,7 @@ describe.each(["eager", "lazy"])("collectLifecycleHooks — routine system walk 
 			base: TEST_DIRS.API_TEST_LIFECYCLE_HOOKS_WALK,
 			silent: true,
 			mode,
-			collectLifecycleHooks: true
+			routines: COLLECT_ROUTINES
 		});
 		await api.slothlet.api.add("auth", `${TEST_DIRS.API_TEST_VERSIONED}/v1`, {}, { version: "v1", default: true });
 		await api.slothlet.api.add("auth", `${TEST_DIRS.API_TEST_VERSIONED}/v2`, {}, { version: "v2" });

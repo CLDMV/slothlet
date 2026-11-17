@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:40-08:00 (1794874600)
+ *	@Last modified time: 2026-11-16T18:28:51-08:00 (1794882531)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -119,7 +119,7 @@ describe.each(["eager", "lazy"])("sanitize config names loaded files and folders
 	});
 
 	it("browser (manifest) mode names files and folders by the config", async () => {
-		api = await slothlet({ base: root, manifest, mode, sanitize: SANITIZE });
+		api = await slothlet({ base: root, loader: { files: manifest }, mode, sanitize: SANITIZE });
 		expect(await api.autoIP.first()).toBe("first");
 		expect(await api.netIP.info.one()).toBe("one");
 		expect(api.autoIp).toBeUndefined();

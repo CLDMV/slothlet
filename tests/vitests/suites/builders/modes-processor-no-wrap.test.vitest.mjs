@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:00-07:00 (1791090900)
+ *	@Last modified time: 2026-11-16T18:28:46-08:00 (1794882526)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -199,7 +199,7 @@ describe("modes-processor: Case 2 shouldAttachNamedExport guard (lines 343, 344)
 			mode: "eager",
 			runtime: "async",
 			hook: { enabled: false },
-			api: { collision: { initial: "merge", api: "merge" } },
+			api: { collision: { mode: { initial: "merge", api: "merge" } } },
 			base: DIRS.FOLDER_WITH_NAMED
 		});
 
@@ -252,7 +252,7 @@ describe("modes-processor: eager file-folder collision object→function merge (
 			mode: "eager",
 			runtime: "async",
 			hook: { enabled: false },
-			api: { collision: { initial: "merge", api: "merge" } },
+			api: { collision: { mode: { initial: "merge", api: "merge" } } },
 			base: DIRS.OBJ_FN_FOLDER
 		});
 
@@ -275,7 +275,7 @@ describe("modes-processor: eager file-folder collision object→function merge (
 			runtime: "async",
 			hook: { enabled: false },
 			debug: { modes: true },
-			api: { collision: { initial: "merge", api: "merge" } },
+			api: { collision: { mode: { initial: "merge", api: "merge" } } },
 			base: DIRS.OBJ_FN_FOLDER
 		});
 
@@ -289,7 +289,7 @@ describe("modes-processor: eager file-folder collision object→function merge (
 			mode: "eager",
 			runtime: "async",
 			hook: { enabled: false },
-			api: { collision: { initial: "merge-replace", api: "merge-replace" } },
+			api: { collision: { mode: { initial: "merge-replace", api: "merge-replace" } } },
 			base: DIRS.OBJ_FN_FOLDER
 		});
 
@@ -302,7 +302,7 @@ describe("modes-processor: eager file-folder collision object→function merge (
 			mode: "eager",
 			runtime: "async",
 			hook: { enabled: false },
-			api: { collision: { initial: "warn", api: "warn" } },
+			api: { collision: { mode: { initial: "warn", api: "warn" } } },
 			base: DIRS.OBJ_FN_FOLDER
 		});
 
@@ -331,7 +331,7 @@ describe("modes-processor: modes_existingChildKeys function-copy (line 991)", ()
 			mode: "eager",
 			runtime: "async",
 			hook: { enabled: false },
-			api: { collision: { initial: "merge", api: "merge" } },
+			api: { collision: { mode: { initial: "merge", api: "merge" } } },
 			base: DIRS.OBJ_FN_FOLDER
 		});
 
@@ -384,7 +384,7 @@ describe("modes-processor: addapi-metadata-default in lazy subfolder materializa
 			mode: "lazy",
 			runtime: "async",
 			hook: { enabled: false },
-			api: { collision: { initial: "merge", api: "merge" } },
+			api: { collision: { mode: { initial: "merge", api: "merge" } } },
 			base: DIRS.ADDAPI_SUBFOLDER
 		});
 
@@ -427,7 +427,7 @@ describe("modes-processor: lazy file-folder collision with function root impl (l
 			mode: "lazy",
 			runtime: "async",
 			hook: { enabled: false },
-			api: { collision: { initial: "merge", api: "merge" } },
+			api: { collision: { mode: { initial: "merge", api: "merge" } } },
 			base: DIRS.FN_FN_FOLDER
 		});
 
@@ -445,7 +445,7 @@ describe("modes-processor: lazy file-folder collision with function root impl (l
 			runtime: "async",
 			hook: { enabled: false },
 			debug: { modes: true },
-			api: { collision: { initial: "merge", api: "merge" } },
+			api: { collision: { mode: { initial: "merge", api: "merge" } } },
 			base: DIRS.FN_FN_FOLDER
 		});
 
@@ -459,7 +459,7 @@ describe("modes-processor: lazy file-folder collision with function root impl (l
 			mode: "lazy",
 			runtime: "async",
 			hook: { enabled: false },
-			api: { collision: { initial: "merge-replace", api: "merge-replace" } },
+			api: { collision: { mode: { initial: "merge-replace", api: "merge-replace" } } },
 			base: DIRS.FN_FN_FOLDER
 		});
 
@@ -476,7 +476,7 @@ describe("modes-processor: lazy file-folder collision with function root impl (l
 			mode: "lazy",
 			runtime: "async",
 			hook: { enabled: false },
-			api: { collision: { initial: "merge", api: "merge" } },
+			api: { collision: { mode: { initial: "merge", api: "merge" } } },
 			base: DIRS.OBJ_FN_FOLDER
 		});
 

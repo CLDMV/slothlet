@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-11T13:14:55-08:00 (1794431695)
+ *	@Last modified time: 2026-11-16T18:30:08-08:00 (1794882608)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -47,8 +47,8 @@ const RULES = [
 
 const VARIANTS = [
 	{ label: "default", permissions: {}, provenance: true },
-	{ label: "capture off", permissions: { references: { capture: false } }, provenance: true },
-	{ label: "provenance off", permissions: { provenance: false }, provenance: false }
+	{ label: "capture off", permissions: { caller: { capture: false } }, provenance: true },
+	{ label: "provenance off", permissions: { caller: { provenance: false } }, provenance: false }
 ];
 const MATRIX = [];
 for (const variant of VARIANTS)
@@ -68,7 +68,7 @@ describe.each(MATRIX)("Permissions > who makes each access of a member expressio
 			mode,
 			runtime,
 			silent: true,
-			permissions: { defaultPolicy: "allow", attribution, rules: RULES, ...variant.permissions }
+			permissions: { policy: "allow", caller: { attribution }, rules: RULES, ...variant.permissions }
 		});
 		// Load every file, so a lazy node answers as an eager one.
 		await api.vault.get();

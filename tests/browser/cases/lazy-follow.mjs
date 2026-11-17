@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T13:15:57-08:00 (1794777357)
+ *	@Last modified time: 2026-11-16T18:28:02-08:00 (1794882482)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -115,7 +115,7 @@ const withoutType = ({ type: ___type, ...rest }) => rest;
  * @param {object[]} [rules=[]] - Rules.
  * @returns {object} The settings.
  */
-const permissionsOf = (config, rules = []) => config.permissions ?? { attribution: config.attribution, defaultPolicy: "allow", rules };
+const permissionsOf = (config, rules = []) => config.permissions ?? { caller: { attribution: config.attribution }, policy: "allow", rules };
 
 const keptConfigs = [
 	...matrix(),
@@ -185,7 +185,7 @@ export const rows = [
 			const options = (permissions = {}) => ({
 				mode: config.mode,
 				runtime: config.runtime,
-				permissions: { attribution: config.attribution, defaultPolicy: "allow", rules: [], ...permissions }
+				permissions: { caller: { attribution: config.attribution }, policy: "allow", rules: [], ...permissions }
 			});
 			const loadAll = async (api) => {
 				for (const path of TYPE_PATHS) await at(api, path);

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-14T08:00:00-08:00 (1794672000)
+ *	@Last modified time: 2026-11-16T18:30:00-08:00 (1794882600)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -145,7 +145,7 @@ describe.each(MATRIX)(
 		 * @returns {Promise<void>}
 		 */
 		async function open(rules) {
-			api = await slothlet({ base: BASE, mode, runtime, silent: true, permissions: { defaultPolicy: "allow", attribution, rules } });
+			api = await slothlet({ base: BASE, mode, runtime, silent: true, permissions: { policy: "allow", caller: { attribution }, rules } });
 			await api.a.start(boxed);
 		}
 

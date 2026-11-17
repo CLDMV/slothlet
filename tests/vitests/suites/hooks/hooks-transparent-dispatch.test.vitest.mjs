@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:32-07:00 (1791091712)
+ *	@Last modified time: 2026-11-16T18:29:17-08:00 (1794882557)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -521,7 +521,7 @@ describe("Hooks > transparent dispatch guards and reversibility (#253/#251)", ()
 	});
 
 	it("resolves undefined under suppressErrors when an async handler throws", async () => {
-		api = await slothlet({ mode: "eager", base: BASE, hook: { enabled: true, suppressErrors: true } });
+		api = await slothlet({ mode: "eager", base: BASE, hook: { enabled: true, errors: true } });
 		await api.slothlet.api.add("svc", TARGETS);
 		api.slothlet.hook.on(
 			"svc.mulSync:before",
@@ -568,7 +568,7 @@ describe("Hooks > transparent dispatch guards and reversibility (#253/#251)", ()
 	});
 
 	it("suppresses a throwing async after handler and keeps the settled result", async () => {
-		api = await slothlet({ mode: "eager", base: BASE, hook: { enabled: true, suppressErrors: true } });
+		api = await slothlet({ mode: "eager", base: BASE, hook: { enabled: true, errors: true } });
 		await api.slothlet.api.add("svc", TARGETS);
 		const seen = [];
 		api.slothlet.hook.on(
@@ -784,7 +784,7 @@ describe("Hooks > transparent dispatch impl shapes (#253)", () => {
 	});
 
 	it("resolves undefined for a throwing target under suppressErrors", async () => {
-		const sup = await slothlet({ mode: "eager", base: BASE, hook: { enabled: true, suppressErrors: true } });
+		const sup = await slothlet({ mode: "eager", base: BASE, hook: { enabled: true, errors: true } });
 		try {
 			await sup.slothlet.api.add("boom", {
 				exports: {

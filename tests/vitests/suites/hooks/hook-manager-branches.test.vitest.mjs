@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:06-07:00 (1791090906)
+ *	@Last modified time: 2026-11-16T18:29:13-08:00 (1794882553)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -55,7 +55,7 @@ describe("HookManager.getHooksForPath — hooks disabled fast-path (line 377)", 
 		api = await slothlet({
 			base: TEST_DIRS.API_TEST,
 			hook: false,
-			api: { collision: { initial: "replace", api: "replace" } }
+			api: { collision: { mode: { initial: "replace", api: "replace" } } }
 		});
 	});
 
@@ -81,7 +81,7 @@ describe("HookManager.importHooks — restores disabled hook on reload (line 949
 		api = await slothlet({
 			base: TEST_DIRS.API_TEST,
 			hook: { enabled: true },
-			api: { collision: { initial: "replace", api: "replace" } }
+			api: { collision: { mode: { initial: "replace", api: "replace" } } }
 		});
 	});
 

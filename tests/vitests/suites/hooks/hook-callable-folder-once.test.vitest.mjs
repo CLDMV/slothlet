@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-13T21:30:00-08:00 (1794634200)
+ *	@Last modified time: 2026-11-16T18:29:12-08:00 (1794882552)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -41,7 +41,7 @@ describe.each(getMatrixConfigs())("Hooks > a callable folder fires once per call
 		["at the base", "e"],
 		["mounted at zz", "zz.e"]
 	])("fires the before and after hooks once %s, for the folder and for its sibling's function", async (_label, prefix) => {
-		api = await slothlet({ ...config, dir: prefix === "e" ? FIXTURE : undefined, silent: true, hook: true });
+		api = await slothlet({ ...config, base: prefix === "e" ? FIXTURE : undefined, silent: true, hook: true });
 		if (prefix !== "e") await api.slothlet.api.add("zz", FIXTURE);
 		const seen = [];
 		for (const hookPath of [prefix, `${prefix}.y.b`]) {

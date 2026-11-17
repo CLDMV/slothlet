@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-10T21:29:44-08:00 (1794374984)
+ *	@Last modified time: 2026-11-16T18:29:42-08:00 (1794882582)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -170,7 +170,7 @@ describe.each(CONFIGS)("Permissions > a host leaf's own body runs as the leaf (#
 			mode,
 			runtime,
 			silent: true,
-			permissions: { defaultPolicy: "deny", rules: RULES }
+			permissions: { policy: "deny", rules: RULES }
 		});
 		await api.slothlet.api.add(
 			["host", "access"],

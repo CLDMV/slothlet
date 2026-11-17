@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-12T22:51:00-08:00 (1794552660)
+ *	@Last modified time: 2026-11-16T18:30:01-08:00 (1794882601)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -83,7 +83,7 @@ function runFirstInstance(config, list) {
 		const keep = setInterval(() => {}, 1000);
 		const api = await slothlet({
 			base: ${JSON.stringify(DIR)}, mode: ${JSON.stringify(config.mode)}, runtime: ${JSON.stringify(config.runtime)}, silent: true,
-			permissions: { defaultPolicy: "allow", attribution: ${JSON.stringify(config.attribution)}, rules: ${JSON.stringify(list)} }
+			permissions: { policy: "allow", rules: ${JSON.stringify(list)}, caller: { attribution: ${JSON.stringify(config.attribution)} } }
 		});
 		process.stdout.write("RESULT " + JSON.stringify(await api.second.viaQueue()) + "\\n");
 		await api.shutdown();
@@ -141,7 +141,7 @@ function runHelperRows() {
 			for (const { rules, list } of ${JSON.stringify(HELPER_RULE_SETS.map(({ rules, list }) => ({ rules, list })))}) {
 				const api = await slothlet({
 					base: ${JSON.stringify(DIR)}, mode, runtime, silent: true,
-					permissions: { defaultPolicy: "allow", attribution, rules: list }
+					permissions: { policy: "allow", rules: list, caller: { attribution } }
 				});
 				// A lazy tree loads the files in the order an eager one does.
 				await api.early.ping();

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T12:58:25-07:00 (1792353505)
+ *	@Last modified time: 2026-11-16T18:29:43-08:00 (1794882583)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -92,7 +92,7 @@ describe.each(getMatrixConfigs())("A module adds a folder however it is spelled 
 		["through a parent segment", () => `${DIR7}/brokenplug/../slowplug`],
 		["through a symlink", () => path.join(LINKS, "slowplug")]
 	])("%s: the added module's top level after its await is refused", async (_label, folder) => {
-		api = await slothlet({ ...config, base: path.join(DIR7, "base"), hook: true, permissions: { defaultPolicy: "deny", rules: RULES } });
+		api = await slothlet({ ...config, base: path.join(DIR7, "base"), hook: true, permissions: { policy: "deny", rules: RULES } });
 		await api.vault.secret.whoami();
 		await api.slothlet.api.add("callee", path.join(DIR7, "callee"), { moduleID: "callee-mod" });
 		const adding = api.callee.adder.addWhile(folder());

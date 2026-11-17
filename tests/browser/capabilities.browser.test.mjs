@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T00:00:00-08:00 (1794816000)
+ *	@Last modified time: 2026-11-16T18:28:02-08:00 (1794882482)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -111,10 +111,12 @@ describe.each(["eager", "lazy"])("built-in capabilities in a browser > %s", (mod
 		const slothlet = mod.default ?? mod.slothlet;
 		const BASE = new URL("/" + codeStringsRel + "/", location.origin).href;
 		const api = await slothlet({
-			platform: "browser",
 			base: BASE,
-			manifest: codeStringsManifest,
-			resolveModuleSpecifier: ({ path }) => new URL(path, BASE).href,
+			loader: {
+				platform: "browser",
+				files: codeStringsManifest,
+				resolve: ({ path }) => new URL(path, BASE).href
+			},
 			mode,
 			silent: true,
 			permissions
@@ -124,7 +126,7 @@ describe.each(["eager", "lazy"])("built-in capabilities in a browser > %s", (mod
 	};
 
 	it("refuses module code every route by default, under a rule allowing everything; the host runs each", async () => {
-		const api = await boot({ defaultPolicy: "deny", rules: [OPEN] });
+		const api = await boot({ policy: "deny", rules: [OPEN] });
 		try {
 			expect(await tryAll(api.coder.probe.attempt)).toEqual(ALL_REFUSED);
 			const host = {};
@@ -137,7 +139,7 @@ describe.each(["eager", "lazy"])("built-in capabilities in a browser > %s", (mod
 
 	it("opens it for exactly the leaf a rule names", async () => {
 		const api = await boot({
-			defaultPolicy: "deny",
+			policy: "deny",
 			rules: [OPEN, { caller: "coder.probe.attempt", target: "capability:code", effect: "allow" }]
 		});
 		try {

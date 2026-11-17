@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:17:01-08:00 (1794874621)
+ *	@Last modified time: 2026-11-16T18:29:29-08:00 (1794882569)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -580,7 +580,7 @@ describe("ModuleManager coverage gaps", () => {
 			runtime: "async",
 			silent: true,
 			diagnostics: true,
-			api: { collision: { initial: "merge", api: "merge" } }
+			api: { collision: { mode: { initial: "merge", api: "merge" } } }
 		});
 		return api.slothlet.api.modules;
 	}

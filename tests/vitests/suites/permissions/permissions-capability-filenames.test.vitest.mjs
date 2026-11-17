@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T00:00:00-08:00 (1794816000)
+ *	@Last modified time: 2026-11-16T18:29:44-08:00 (1794882584)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -109,7 +109,7 @@ describe.each(getMatrixConfigs())("Permissions > capability:code and the file na
 		 * @param {object} [permissions] - The permission settings.
 		 * @returns {Promise<object>} The api.
 		 */
-		const build = async (permissions = { defaultPolicy: "deny", rules: RULES, attribution }) => {
+		const build = async (permissions = { policy: "deny", rules: RULES, caller: { attribution } }) => {
 			api = await slothlet({ ...config, silent: true, base: path.join(ROOT, "base"), permissions });
 			await api.slothlet.api.add("coder", path.join(ROOT, "coder"), { moduleID: "coder" });
 			await api.slothlet.api.add("other", path.join(ROOT, "other"), { moduleID: "other" });
@@ -127,7 +127,7 @@ describe.each(getMatrixConfigs())("Permissions > capability:code and the file na
 		});
 
 		it.each([["off"], ["disabled"]])("with the permission system %s nothing is checked", async (mode) => {
-			await build({ mode, defaultPolicy: "deny", rules: [OPEN], attribution });
+			await build({ mode, policy: "deny", rules: [OPEN], caller: { attribution } });
 			for (const route of ROUTES) expect([route, await api.coder.probe.compileUnder(route, SIBLING)]).toEqual([route, ALLOWED]);
 		});
 	});

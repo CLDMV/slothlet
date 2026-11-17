@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-14T20:02:43-08:00 (1794715363)
+ *	@Last modified time: 2026-11-16T18:30:17-08:00 (1794882617)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -37,8 +37,8 @@ const FIXTURE = resolve("api_tests/api_test_api_node_default_value");
 const MODES = ["eager", "lazy"];
 const RUNTIMES = ["async", "live"];
 const PERMISSIONS = [
-	{ name: "permissions on, precise", permissions: { mode: "on", defaultPolicy: "allow", attribution: "precise" } },
-	{ name: "permissions on, fast", permissions: { mode: "on", defaultPolicy: "allow", attribution: "fast" } },
+	{ name: "permissions on, precise", permissions: { mode: "on", policy: "allow", caller: { attribution: "precise" } } },
+	{ name: "permissions on, fast", permissions: { mode: "on", policy: "allow", caller: { attribution: "fast" } } },
 	{ name: "permissions off", permissions: { mode: "off" } },
 	{ name: "permissions disabled", permissions: { mode: "disabled" } }
 ];

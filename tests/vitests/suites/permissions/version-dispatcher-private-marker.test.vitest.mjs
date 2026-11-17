@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:20-07:00 (1791090920)
+ *	@Last modified time: 2026-11-16T18:30:15-08:00 (1794882615)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -45,7 +45,7 @@ describe.each(["eager", "lazy"])("Permissions > version-dispatcher marker (#283)
 	});
 
 	it("version-dispatching a field that collides with an existing module composes without denying slothlet's own marker", async () => {
-		api = await slothlet({ mode, base: TEST_DIRS.API_TEST, permissions: { defaultPolicy: "allow", rules: [] } });
+		api = await slothlet({ mode, base: TEST_DIRS.API_TEST, permissions: { policy: "allow", rules: [] } });
 
 		// A module already exists at advanced.activationEvents; version-dispatching the SAME path makes
 		// slothlet merge the dispatcher (which carries __isVersionDispatcher/__logicalPath) into that
@@ -59,7 +59,7 @@ describe.each(["eager", "lazy"])("Permissions > version-dispatcher marker (#283)
 	});
 
 	it("keeps slothlet's own marker readable by the host but stays scoped to the marker keys", async () => {
-		api = await slothlet({ mode, base: TEST_DIRS.API_TEST, permissions: { defaultPolicy: "allow", rules: [] } });
+		api = await slothlet({ mode, base: TEST_DIRS.API_TEST, permissions: { policy: "allow", rules: [] } });
 		await api.slothlet.api.add(["advanced", "activationEvents"], FIELD_BASE, {}, {});
 		await api.slothlet.api.add(["advanced", "activationEvents"], `${VBASE}/v1`, {}, { version: "v1", default: true });
 		await api.slothlet.api.add(["advanced", "activationEvents"], `${VBASE}/v2`, {}, { version: "v2" });
@@ -77,7 +77,7 @@ describe.each(["eager", "lazy"])("Permissions > version-dispatcher marker (#283)
 	it("does not open an unrelated consumer module-private member to the host (#269 preserved)", async () => {
 		// Scope guard: the exemption is for slothlet's OWN marker keys only. A genuine consumer
 		// `__`-private member (billing.internals.__rate) must still be denied to the host by default.
-		api = await slothlet({ mode, base: PRIVATE_BASE, permissions: { defaultPolicy: "allow", rules: [] } });
+		api = await slothlet({ mode, base: PRIVATE_BASE, permissions: { policy: "allow", rules: [] } });
 		let read;
 		try {
 			read = await api.billing.internals.__rate;

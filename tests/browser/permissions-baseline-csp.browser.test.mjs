@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:19-08:00 (1794874579)
+ *	@Last modified time: 2026-11-16T18:28:07-08:00 (1794882487)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -35,12 +35,14 @@ const boot = async (mode) => {
 	const slothlet = mod.default ?? mod.slothlet;
 	const BASE = new URL("/" + fixtureRel + "/", location.origin).href;
 	return slothlet({
-		platform: "browser",
 		base: BASE,
-		manifest,
-		resolveModuleSpecifier: ({ path }) => new URL(path, BASE).href,
+		loader: {
+			platform: "browser",
+			files: manifest,
+			resolve: ({ path }) => new URL(path, BASE).href
+		},
 		mode: "eager",
-		permissions: { mode, defaultPolicy: "allow" }
+		permissions: { mode, policy: "allow" }
 	});
 };
 

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:59-07:00 (1791090899)
+ *	@Last modified time: 2026-11-16T18:28:42-08:00 (1794882522)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -256,7 +256,7 @@ describe.each(getBrowserMatrixConfigs({ hook: { enabled: true } }))("Browser Mod
 	});
 
 	it("throwing before: hook returns undefined — does not propagate", async () => {
-		api = await slothlet({ ...browserCfg(config), hook: { enabled: true, pattern: "**", suppressErrors: true } });
+		api = await slothlet({ ...browserCfg(config), hook: { enabled: true, pattern: "**", errors: true } });
 
 		api.slothlet.hook.on(
 			"math.add:before",
@@ -271,7 +271,7 @@ describe.each(getBrowserMatrixConfigs({ hook: { enabled: true } }))("Browser Mod
 	});
 
 	it("throwing after: hook does NOT suppress the real function return value", async () => {
-		api = await slothlet({ ...browserCfg(config), hook: { enabled: true, pattern: "**", suppressErrors: true } });
+		api = await slothlet({ ...browserCfg(config), hook: { enabled: true, pattern: "**", errors: true } });
 
 		api.slothlet.hook.on(
 			"math.add:after",
@@ -287,7 +287,7 @@ describe.each(getBrowserMatrixConfigs({ hook: { enabled: true } }))("Browser Mod
 	});
 
 	it("**:error hook fires with source type and message when before: hook throws under suppression", async () => {
-		api = await slothlet({ ...browserCfg(config), hook: { enabled: true, pattern: "**", suppressErrors: true } });
+		api = await slothlet({ ...browserCfg(config), hook: { enabled: true, pattern: "**", errors: true } });
 
 		let errorCtx = null;
 		api.slothlet.hook.on(
@@ -314,7 +314,7 @@ describe.each(getBrowserMatrixConfigs({ hook: { enabled: true } }))("Browser Mod
 	});
 
 	it("**:error hook fires with source type 'after' when after: hook throws under suppression", async () => {
-		api = await slothlet({ ...browserCfg(config), hook: { enabled: true, pattern: "**", suppressErrors: true } });
+		api = await slothlet({ ...browserCfg(config), hook: { enabled: true, pattern: "**", errors: true } });
 
 		let errorCtx = null;
 		api.slothlet.hook.on(

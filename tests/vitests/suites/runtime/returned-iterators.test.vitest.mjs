@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-06T18:38:20-08:00 (1794019100)
+ *	@Last modified time: 2026-11-16T18:30:22-08:00 (1794882622)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -54,7 +54,7 @@ async function seen(lists) {
 describe("iterators of the language's own a module hands out", () => {
 	it.each(CONFIGS)("step as in plain JavaScript ($mode, $runtime, permissions $permissions)", async ({ mode, runtime, permissions }) => {
 		const plain = await seen(await import(pathToFileURL(path.join(BASE, "lists.mjs")).href));
-		const api = await slothlet({ dir: BASE, mode, runtime, ...(permissions ? { permissions: { defaultPolicy: "allow" } } : {}) });
+		const api = await slothlet({ base: BASE, mode, runtime, ...(permissions ? { permissions: { policy: "allow" } } : {}) });
 		try {
 			expect(await seen(api.lists)).toEqual(plain);
 		} finally {

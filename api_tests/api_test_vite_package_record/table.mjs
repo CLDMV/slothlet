@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T17:05:17-08:00 (1794791117)
+ *	@Last modified time: 2026-11-16T18:27:01-08:00 (1794882421)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -67,8 +67,10 @@ export async function packageTable(slothlet) {
 				runtime,
 				silent: true,
 				permissions: {
-					defaultPolicy: "allow",
-					attribution,
+					policy: "allow",
+					caller: {
+						attribution
+					},
 					rules: denied ? [{ caller: `${denied}.**`, target: "vault.**", effect: "deny" }] : []
 				}
 			});

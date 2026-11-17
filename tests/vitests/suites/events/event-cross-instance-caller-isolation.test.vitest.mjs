@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:27-07:00 (1791091707)
+ *	@Last modified time: 2026-11-16T18:29:02-08:00 (1794882542)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -43,7 +43,7 @@ import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
 const PROBE_BASE = TEST_DIRS.API_TEST_CROSS_INSTANCE;
 
 /** Serving-side event rules: the host is trusted; a `probe.**` subscriber is allowed on `orders.*`. */
-const TRUSTED_EVENTS = { default: "notify", rules: [{ caller: "probe.**", event: "orders.*", effect: "allow" }] };
+const TRUSTED_EVENTS = { policy: "notify", rules: [{ caller: "probe.**", event: "orders.*", effect: "allow" }] };
 
 describe.each(getMatrixConfigs())("Events > cross-instance caller isolation > $name", ({ config }) => {
 	/** The two instances torn down after each test. @type {object[]} */
@@ -66,8 +66,8 @@ describe.each(getMatrixConfigs())("Events > cross-instance caller isolation > $n
 	 * @returns {Promise<{ trusted: object, subscriber: object }>} The wired pair.
 	 */
 	async function twoInstances() {
-		const trusted = await slothlet({ ...config, base: PROBE_BASE, permissions: { defaultPolicy: "allow", events: TRUSTED_EVENTS } });
-		const subscriber = await slothlet({ ...config, base: PROBE_BASE, permissions: { defaultPolicy: "allow" } });
+		const trusted = await slothlet({ ...config, base: PROBE_BASE, permissions: { policy: "allow", events: TRUSTED_EVENTS } });
+		const subscriber = await slothlet({ ...config, base: PROBE_BASE, permissions: { policy: "allow" } });
 		instances.push(trusted, subscriber);
 		return { trusted, subscriber };
 	}

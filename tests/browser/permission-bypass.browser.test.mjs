@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T08:05:10-08:00 (1794758710)
+ *	@Last modified time: 2026-11-16T18:28:07-08:00 (1794882487)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -43,13 +43,15 @@ describe("browser permission bypass routes", () => {
 		const slothlet = mod.default ?? mod.slothlet;
 		const BASE = new URL("/" + fixtureRel + "/", location.origin).href;
 		return slothlet({
-			platform: "browser",
 			base: BASE,
-			manifest,
-			resolveModuleSpecifier: ({ path }) => new URL(path, BASE).href,
+			loader: {
+				platform: "browser",
+				files: manifest,
+				resolve: ({ path }) => new URL(path, BASE).href
+			},
 			mode: "eager",
 			permissions: {
-				defaultPolicy: "deny",
+				policy: "deny",
 				rules: [
 					{ caller: "probe.**", target: "math.**", effect: "allow" },
 					{ caller: "**", target: "{probe,rogue}.**", effect: "allow" }
@@ -134,9 +136,9 @@ describe("browser: a module denied a root file's value is refused it", () => {
 	// `numval.mjs` (`export default 42`) sits at the api root next to the two reading modules.
 	const MANIFEST = {
 		files: [
-			{ path: "allowed.mjs", name: "allowed", fullName: "allowed.mjs" },
-			{ path: "denied.mjs", name: "denied", fullName: "denied.mjs" },
-			{ path: "numval.mjs", name: "numval", fullName: "numval.mjs" }
+			{ path: "allowed.mjs", name: "allowed", full: "allowed.mjs" },
+			{ path: "denied.mjs", name: "denied", full: "denied.mjs" },
+			{ path: "numval.mjs", name: "numval", full: "numval.mjs" }
 		],
 		directories: []
 	};
@@ -154,10 +156,12 @@ describe("browser: a module denied a root file's value is refused it", () => {
 		const slothlet = mod.default ?? mod.slothlet;
 		const BASE = new URL("/" + FIXTURE + "/", location.origin).href;
 		return slothlet({
-			platform: "browser",
 			base: BASE,
-			manifest: MANIFEST,
-			resolveModuleSpecifier: ({ path }) => new URL(path, BASE).href,
+			loader: {
+				platform: "browser",
+				files: MANIFEST,
+				resolve: ({ path }) => new URL(path, BASE).href
+			},
 			...options
 		});
 	};
@@ -166,7 +170,7 @@ describe("browser: a module denied a root file's value is refused it", () => {
 
 	describe.each(configs)("$mode / $runtime / $attribution", ({ mode, runtime, attribution }) => {
 		it("the denied module is refused the value, awaited or not, and does not see it listed; the host reads it", async () => {
-			const api = await build({ mode, runtime, permissions: { defaultPolicy: "allow", attribution, rules: DENY } });
+			const api = await build({ mode, runtime, permissions: { policy: "allow", caller: { attribution }, rules: DENY } });
 			try {
 				expect(await api.denied.read("numval")).toEqual({ threw: "PERMISSION_DENIED" });
 				expect(await api.denied.settle("numval")).toEqual({ threw: "PERMISSION_DENIED" });
@@ -180,7 +184,7 @@ describe("browser: a module denied a root file's value is refused it", () => {
 		});
 
 		it("a module no rule names reads the value and sees it listed", async () => {
-			const api = await build({ mode, runtime, permissions: { defaultPolicy: "allow", attribution, rules: DENY } });
+			const api = await build({ mode, runtime, permissions: { policy: "allow", caller: { attribution }, rules: DENY } });
 			try {
 				expect(await api.allowed.read("numval")).toBe(42);
 				expect(await api.allowed.settle("numval")).toBe(42);

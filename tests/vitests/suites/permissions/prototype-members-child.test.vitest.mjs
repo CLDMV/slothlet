@@ -2,12 +2,12 @@
  *
  *	@Project: @cldmv/slothlet
  *	@Filename: /tests/vitests/suites/permissions/prototype-members-child.test.vitest.mjs
- *	@Date: 2026-11-16T05:00:00-08:00 (1794834000)
+ *	@Date: 2026-11-16T01:34:54-08:00 (1794821694)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T05:00:00-08:00 (1794834000)
+ *	@Last modified time: 2026-11-16T18:30:14-08:00 (1794882614)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -236,7 +236,7 @@ beforeAll(() => {
 		"const out = {};",
 		"const api = await slothlet({",
 		"\tdir: API, mode, runtime, hook: true, silent: true,",
-		"\tpermissions: { defaultPolicy: 'allow', attribution, rules: [{ caller: 'guest.**', target: 'math.**', effect: 'deny' }] }",
+		"\tpermissions: { policy: 'allow', rules: [{ caller: 'guest.**', target: 'math.**', effect: 'deny' }], caller: { attribution } }",
 		"});",
 		"await api.slothlet.api.add('owner', OWNER, { moduleID: 'owner' });",
 		"await api.slothlet.api.add('reader', READER, { moduleID: 'reader' });",

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:56-07:00 (1791090896)
+ *	@Last modified time: 2026-11-16T18:28:30-08:00 (1794882510)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -88,7 +88,11 @@ describe("api-assignment: Case 2 lazy-folder collision with replace mode fires d
 		_api = await slothlet({
 			base: TEST_DIRS.API_TEST_COLLISIONS,
 			mode: "lazy",
-			collision: { initial: "replace" },
+			api: {
+				collision: {
+					mode: { initial: "replace" }
+				}
+			},
 			silent: true
 		});
 
@@ -104,7 +108,11 @@ describe("api-assignment: Case 2 lazy-folder collision with replace mode fires d
 		_api = await slothlet({
 			base: TEST_DIRS.API_TEST_COLLISIONS,
 			mode: "lazy",
-			collision: { initial: "replace" },
+			api: {
+				collision: {
+					mode: { initial: "replace" }
+				}
+			},
 			silent: true
 		});
 
@@ -127,7 +135,11 @@ describe("api-assignment: api_test math.mjs + math/ collision in lazy replace mo
 		_api = await slothlet({
 			base: TEST_DIRS.API_TEST,
 			mode: "lazy",
-			collision: { initial: "replace" },
+			api: {
+				collision: {
+					mode: { initial: "replace" }
+				}
+			},
 			silent: true
 		});
 

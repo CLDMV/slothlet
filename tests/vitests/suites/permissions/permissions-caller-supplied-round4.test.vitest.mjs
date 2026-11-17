@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-17T00:00:00-07:00 (1792220400)
+ *	@Last modified time: 2026-11-16T18:29:42-08:00 (1794882582)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -72,7 +72,7 @@ describe.each(getMatrixConfigs())("Permissions > caller-supplied code, fourth ro
 	 * @param {object} [permissions] - Permissions to build with instead of the fixture's rules.
 	 * @returns {Promise<object>} The api.
 	 */
-	const build = async (permissions = { defaultPolicy: "deny", rules: RULES }) => {
+	const build = async (permissions = { policy: "deny", rules: RULES }) => {
 		api = await slothlet({ ...config, base: path.join(DIR, "base"), permissions });
 		await api.slothlet.api.add("callee", path.join(DIR, "callee"), { moduleID: "callee-mod" });
 		await api.slothlet.api.add("supplier", path.join(DIR, "supplier"), { moduleID: "supplier-mod" });
@@ -145,7 +145,7 @@ describe.each(getMatrixConfigs())("Permissions > caller-supplied code, fourth ro
 		});
 
 		it("control: a generator object keeps its identity, prototype and protocol", async () => {
-			await build({ defaultPolicy: "allow", rules: [] });
+			await build({ policy: "allow", rules: [] });
 			const generator = api.supplier.bag.gen();
 			expect(Object.prototype.toString.call(generator)).toBe("[object Generator]");
 			expect(generator[Symbol.iterator]()).toBe(generator);
@@ -180,7 +180,7 @@ describe.each(getMatrixConfigs())("Permissions > caller-supplied code, fourth ro
 		});
 
 		it("control: a returned function keeps its plain-JavaScript shape", async () => {
-			await build({ defaultPolicy: "allow", rules: [] });
+			await build({ policy: "allow", rules: [] });
 			const fn = api.supplier.bag.shaped();
 			expect([fn.name, fn.length, typeof fn.prototype, typeof fn]).toEqual(["shapedOne", 2, "object", "function"]);
 			expect(fn.call({ tag: "t" }, 1, 2)).toEqual(["t", 1, 2]);

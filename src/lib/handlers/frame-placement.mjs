@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:09-08:00 (1794874569)
+ *	@Last modified time: 2026-11-16T18:27:51-08:00 (1794882471)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -1651,7 +1651,7 @@ function ownReceiver(parent, identity) {
 	if (!parent?.flagged || !identity || identity.unresolved || !parent.wrapper) return null;
 	if (!WeakSetMethods.has(trustedRootOwn.genuineWrappers, parent.wrapper)) return null;
 	// With `provenance` off no frames are read, so code the parent was handed is not told from the parent's own.
-	if (parent.wrapper.slothlet?.config?.permissions?.provenance === false) return null;
+	if (parent.wrapper.slothlet?.config?.permissions?.caller?.provenance === false) return null;
 	if (identity.currentWrapper !== parent.wrapper || (identity.ceiling ?? null) !== (parent.ceiling ?? null)) return null;
 	return parent;
 }
@@ -1954,7 +1954,7 @@ function supplierChainCeiling(record) {
  * function a module passed by any route — a callback, a shared object, a global, a built-in it replaced — runs as no
  * module inside a call it was not handed to; otherwise it answers without reading the stack.
  *
- * The ceiling is the leaf the code is running inside. With `permissions.ceiling: "chain"` it is cumulative instead: the
+ * The ceiling is the leaf the code is running inside. With `permissions.caller.ceiling: "chain"` it is cumulative instead: the
  * leaf, every call between it and the supplier (the supplier's code runs inside each of them), and every ceiling
  * those calls and the supplier's own call already carried, so a nested resolution cannot shed one an earlier
  * resolution imposed.
@@ -3972,7 +3972,7 @@ function outerCallerCeiling(contextManager, instanceID, slothlet = null, origin 
 
 /**
  * Whether what a module hands out and is handed is set up as that module's code (#597, #726): only while the
- * permission system of the wrapper's instance is on and `permissions.attribution` is `"precise"` (the default). Then a
+ * permission system of the wrapper's instance is on and `permissions.caller.attribution` is `"precise"` (the default). Then a
  * value that is itself code (a function, a class, a class instance, a generator, a promise, a Proxy export) is a
  * stand-in recording the module as its definer; plain data passes as itself unsearched, and code nested in it is told
  * by its frames when it runs. With `"fast"`, or with the permission system not on (no `permissions` config,
@@ -3983,12 +3983,12 @@ function outerCallerCeiling(contextManager, instanceID, slothlet = null, origin 
  */
 export function handsOutAsModule(wrapper) {
 	const slothlet = wrapper?.slothlet;
-	return slothlet?.config?.permissions?.attribution !== "fast" && slothlet?.handlers?.permissionManager?.isEnabled?.() === true;
+	return slothlet?.config?.permissions?.caller?.attribution !== "fast" && slothlet?.handlers?.permissionManager?.isEnabled?.() === true;
 }
 
 /**
  * Whether a module call's result is passed through {@link attributeResult} (#726): while the permission system of the
- * wrapper's instance is on, under either `permissions.attribution`. `"precise"` hands out code as stand-ins there;
+ * wrapper's instance is on, under either `permissions.caller.attribution`. `"precise"` hands out code as stand-ins there;
  * `"fast"` hands back only a node's own Proxy export as the node's member.
  * @param {object|null|undefined} wrapper - A wrapper of the module.
  * @returns {boolean} True while results are attributed.
@@ -4683,7 +4683,7 @@ function runtime_anyInstanceChecks() {
  */
 function runtime_guardsForeignCode(record) {
 	const slothlet = record?.wrapper?.slothlet;
-	return Boolean(slothlet?.handlers?.permissionManager?.isEnabled?.() && slothlet.config?.permissions?.provenance !== false);
+	return Boolean(slothlet?.handlers?.permissionManager?.isEnabled?.() && slothlet.config?.permissions?.caller?.provenance !== false);
 }
 
 /**
@@ -5111,7 +5111,7 @@ const REFUSED_SUPPLIER = Objects.freeze({ unaccounted: true, refused: true });
 
 /**
  * The answer {@link resolveSupplier} gives for a supplier found up a chain: its wrapper, under the leaf — or, with
- * `permissions.ceiling: "chain"`, under every call from the leaf up to it and every ceiling those calls and its own call
+ * `permissions.caller.ceiling: "chain"`, under every call from the leaf up to it and every ceiling those calls and its own call
  * carried.
  * @param {{wrapper: object, parent: object|null, ceiling?: object|null}} record - The leaf's call.
  * @param {{currentWrapper: object, record: object}} supplier - The supplier's call.
@@ -5119,9 +5119,9 @@ const REFUSED_SUPPLIER = Objects.freeze({ unaccounted: true, refused: true });
  * @private
  */
 function runtime_supplierAnswer(record, supplier) {
-	// By default the supplier is held to the leaf its code is running inside; `permissions.ceiling: "chain"` carries
+	// By default the supplier is held to the leaf its code is running inside; `permissions.caller.ceiling: "chain"` carries
 	// every call it was handed through, and the ceilings they carried, as well.
-	if (record.wrapper.slothlet?.config?.permissions?.ceiling !== "chain")
+	if (record.wrapper.slothlet?.config?.permissions?.caller?.ceiling !== "chain")
 		return { wrapper: supplier.currentWrapper, ceiling: record.wrapper };
 	const parts = [supplier.record.ceiling];
 	for (let current = record, depth = 0; current && current !== supplier.record && depth < MAX_CHAIN; current = current.parent, depth++) {

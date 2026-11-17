@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-11T13:14:54-08:00 (1794431694)
+ *	@Last modified time: 2026-11-16T18:30:05-08:00 (1794882605)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -58,7 +58,13 @@ describe.each(MATRIX)("Permissions > a closure relayed through an allowed leaf >
 	let api;
 
 	beforeAll(async () => {
-		api = await slothlet({ base: DIR, mode, runtime, silent: true, permissions: { defaultPolicy: "allow", attribution, rules: RULES } });
+		api = await slothlet({
+			base: DIR,
+			mode,
+			runtime,
+			silent: true,
+			permissions: { policy: "allow", caller: { attribution }, rules: RULES }
+		});
 		await api.slothlet.api.add(["host", "records"], {
 			run(fn) {
 				return fn();

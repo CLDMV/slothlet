@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:15-08:00 (1794874575)
+ *	@Last modified time: 2026-11-16T18:28:00-08:00 (1794882480)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -1063,7 +1063,7 @@ function convertCompilerOptions(ts, compilerOptions) {
 		throw new SlothletError(
 			"INVALID_CONFIG",
 			{
-				option: "typescript.compilerOptions",
+				option: "typescript.compiler",
 				value: ArrayMethods.join(
 					mapList(errors, (error) => ts.flattenDiagnosticMessageText(error.messageText, " ")),
 					" "

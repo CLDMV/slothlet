@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:13-07:00 (1791090913)
+ *	@Last modified time: 2026-11-16T18:29:31-08:00 (1794882571)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -66,8 +66,10 @@ describe("Ownership Tracking on Cross-Module Replacement", () => {
 					// Initialize slothlet with core API first
 					const mergedConfig = {
 						...config,
-						base: coreDir, // Start with core directory
-						api: { collision: { api: "replace" } } // Enable replacement for ownership tracking
+						base: coreDir,
+						// Start with core directory
+						api: { collision: { mode: { api: "replace" } } }
+						// Enable replacement for ownership tracking
 					};
 					const api = await slothlet(mergedConfig);
 
@@ -166,8 +168,10 @@ describe("Ownership Tracking on Cross-Module Replacement", () => {
 					// Initialize slothlet with matrix config + test-specific overrides
 					const mergedConfig = {
 						...config,
-						base: tempBase, // Use unique temp directory instead of shared api_tests/api_test
-						api: { collision: { api: "replace" } } // Enable replacement for ownership tracking
+						base: tempBase,
+						// Use unique temp directory instead of shared api_tests/api_test
+						api: { collision: { mode: { api: "replace" } } }
+						// Enable replacement for ownership tracking
 					};
 					const api = await slothlet(mergedConfig);
 
@@ -229,8 +233,10 @@ describe("Ownership Tracking on Cross-Module Replacement", () => {
 					// Initialize slothlet with matrix config + test-specific overrides
 					const mergedConfig = {
 						...config,
-						base: tempBase, // Use unique temp directory instead of shared api_tests/api_test
-						api: { collision: { api: "merge" } } // Use merge mode - different properties coexist
+						base: tempBase,
+						// Use unique temp directory instead of shared api_tests/api_test
+						api: { collision: { mode: { api: "merge" } } }
+						// Use merge mode - different properties coexist
 					};
 					const api = await slothlet(mergedConfig);
 

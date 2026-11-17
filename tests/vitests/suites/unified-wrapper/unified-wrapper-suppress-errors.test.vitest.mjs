@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:25-07:00 (1791090925)
+ *	@Last modified time: 2026-11-16T18:30:41-08:00 (1794882641)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -51,11 +51,15 @@ import { TEST_DIRS } from "../../setup/vitest-helper.mjs";
  */
 async function makeSuppressApi(dir = TEST_DIRS.API_TEST, extra = {}) {
 	return slothlet({
-		dir,
+		base: dir,
 		mode: "eager",
 		runtime: "async",
-		hook: { enabled: true, suppressErrors: true },
-		collision: { initial: "replace", api: "replace" },
+		hook: { enabled: true, errors: true },
+		api: {
+			collision: {
+				mode: { initial: "replace", api: "replace" }
+			}
+		},
 		...extra
 	});
 }
@@ -67,7 +71,7 @@ async function makeSuppressApi(dir = TEST_DIRS.API_TEST, extra = {}) {
  */
 async function makeNormalApi(dir = TEST_DIRS.API_TEST) {
 	return slothlet({
-		dir,
+		base: dir,
 		mode: "eager",
 		runtime: "async",
 		hook: { enabled: true }

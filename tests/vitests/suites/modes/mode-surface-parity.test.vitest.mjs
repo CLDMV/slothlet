@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:12-07:00 (1791090912)
+ *	@Last modified time: 2026-11-16T18:29:29-08:00 (1794882569)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -104,7 +104,7 @@ describe("Modes > surface parity on a file+directory collision", () => {
 	});
 
 	it("eager replace-mode collision keeps the clobber semantics", async () => {
-		api = await slothlet({ mode: "eager", base: DEBUG_BASE, collision: "replace" });
+		api = await slothlet({ mode: "eager", base: DEBUG_BASE, api: { collision: "replace" } });
 
 		// Under replace the self-named module's composition wins the slot outright — the merge that
 		// default mode performs is deliberately skipped, so the root file's exports and the earlier

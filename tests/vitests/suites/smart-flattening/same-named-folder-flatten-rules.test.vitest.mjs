@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-14T09:11:39-08:00 (1794676299)
+ *	@Last modified time: 2026-11-16T18:30:29-08:00 (1794882629)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -176,7 +176,7 @@ async function walk(node, keys, lazy, out, depth) {
 async function load(fixture, at, { mode, runtime }) {
 	const dir = path.join(FIXTURES, fixture);
 	const out = { tree: [], drift: [] };
-	const api = await slothlet({ dir: at === "base" ? dir : BASE, mode, runtime, silent: true });
+	const api = await slothlet({ base: at === "base" ? dir : BASE, mode, runtime, silent: true });
 	try {
 		if (at === "base") {
 			for (const key of Object.keys(api)) {

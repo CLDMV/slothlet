@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:17:38-08:00 (1794874658)
+ *	@Last modified time: 2026-11-16T18:30:36-08:00 (1794882636)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -96,7 +96,7 @@ describe("type-generation worker, driven in-process (#500)", () => {
 			mode: "eager",
 			silent: true,
 			typescript: { enabled: true, mode: "fast" },
-			types: { output, interfaceName: "WorkerApi" }
+			types: { output, name: "WorkerApi" }
 		});
 		return { configJson, output };
 	}

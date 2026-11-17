@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:34-07:00 (1791091714)
+ *	@Last modified time: 2026-11-16T18:29:24-08:00 (1794882564)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -56,10 +56,12 @@ async function build({ leaf = "ping", ...opts } = {}) {
 describe("RoutineManager coverage — revert helpers, guards, materialization (#341/#362/#366)", () => {
 	it("onImplCreated ignores a re-touch whose impl is already a stacked callable (self-referential guard, #372)", async () => {
 		const { rm } = await build({
-			dir: TEST_DIRS.API_TEST_ROUTINES,
+			base: TEST_DIRS.API_TEST_ROUTINES,
 			mode: "eager",
-			routines: [{ name: "^auth.x", mode: "manual" }],
-			stackRoutines: true
+			routines: {
+				entries: [{ name: "^auth.x", mode: "manual" }],
+				stack: true
+			}
 		});
 		const before = rm.raw.length;
 		const branded = function slothletRoutineStack() {};
@@ -73,10 +75,12 @@ describe("RoutineManager coverage — revert helpers, guards, materialization (#
 
 	it("revertRawEntry drops a purely-speculative capture that had no prior contribution", async () => {
 		const { rm } = await build({
-			dir: TEST_DIRS.API_TEST_ROUTINES,
+			base: TEST_DIRS.API_TEST_ROUTINES,
 			mode: "eager",
-			routines: [{ name: "^spec.leaf", mode: "manual" }],
-			stackRoutines: true
+			routines: {
+				entries: [{ name: "^spec.leaf", mode: "manual" }],
+				stack: true
+			}
 		});
 		// A candidate captured a raw entry (no genuine prior), then its assignment was rejected.
 		rm.onImplCreated({ apiPath: "spec.leaf", moduleID: "spec-mod", wrapper: { __impl: function leaf() {} } });
@@ -87,10 +91,12 @@ describe("RoutineManager coverage — revert helpers, guards, materialization (#
 
 	it("revertSpeculativeSubtree no-ops on a non-object api, a visited node, and skip-prop keys", async () => {
 		const { rm } = await build({
-			dir: TEST_DIRS.API_TEST_ROUTINES,
+			base: TEST_DIRS.API_TEST_ROUTINES,
 			mode: "eager",
-			routines: [{ name: "^z.leaf", mode: "manual" }],
-			stackRoutines: true
+			routines: {
+				entries: [{ name: "^z.leaf", mode: "manual" }],
+				stack: true
+			}
 		});
 		// 824: null / primitive api → early return, no throw.
 		expect(() => rm.revertSpeculativeSubtree(null, "m", "", new Map())).not.toThrow();
@@ -107,10 +113,12 @@ describe("RoutineManager coverage — revert helpers, guards, materialization (#
 
 	it("revertSpeculativeState restores a prior contribution's tracked wrapper (934)", async () => {
 		const { rm } = await build({
-			dir: TEST_DIRS.API_TEST_ROUTINES,
+			base: TEST_DIRS.API_TEST_ROUTINES,
 			mode: "eager",
-			routines: [{ name: "^rs.leaf", mode: "manual" }],
-			stackRoutines: true
+			routines: {
+				entries: [{ name: "^rs.leaf", mode: "manual" }],
+				stack: true
+			}
 		});
 		const priorFn = function priorLeaf() {};
 		const priorWrapper = { ___invalidate() {} };
@@ -128,15 +136,21 @@ describe("RoutineManager coverage — revert helpers, guards, materialization (#
 	});
 
 	it("runCascade returns undefined for an unconfigured routine name (1352)", async () => {
-		const { rm } = await build({ dir: TEST_DIRS.API_TEST_ROUTINES, mode: "eager", routines: [{ name: "initialize", mode: "manual" }] });
+		const { rm } = await build({
+			base: TEST_DIRS.API_TEST_ROUTINES,
+			mode: "eager",
+			routines: { entries: [{ name: "initialize", mode: "manual" }] }
+		});
 		expect(await rm.runCascade("not-a-configured-routine")).toBeUndefined();
 	});
 
 	it("runPath returns undefined after the instance is torn down (post-destroy guard, 1049)", async () => {
 		const { api: a, rm } = await build({
-			dir: TEST_DIRS.API_TEST_ROUTINES,
+			base: TEST_DIRS.API_TEST_ROUTINES,
 			mode: "eager",
-			routines: [{ name: "initialize", mode: "manual" }]
+			routines: {
+				entries: [{ name: "initialize", mode: "manual" }]
+			}
 		});
 		const savedApi = rm.slothlet.api;
 		try {
@@ -150,10 +164,12 @@ describe("RoutineManager coverage — revert helpers, guards, materialization (#
 
 	it("runPath with no routine arg runs the raw pathEntries directly (1051 null-routine arm), and skips an unresolvable receiver (969/975)", async () => {
 		const { rm } = await build({
-			dir: TEST_DIRS.API_TEST_ROUTINES,
+			base: TEST_DIRS.API_TEST_ROUTINES,
 			mode: "eager",
-			routines: [{ name: "initialize", mode: "manual" }],
-			stackRoutines: true
+			routines: {
+				entries: [{ name: "initialize", mode: "manual" }],
+				stack: true
+			}
 		});
 		globalThis.__rmCovLog = [];
 		// A real root contributor exists at "initialize"; runPath(path) with NO routine argument
@@ -175,10 +191,12 @@ describe("RoutineManager coverage — revert helpers, guards, materialization (#
 
 	it("rebuildStacks skips a path whose parent container no longer resolves (1585)", async () => {
 		const { api: a, rm } = await build({
-			dir: TEST_DIRS.API_TEST_ROUTINES,
+			base: TEST_DIRS.API_TEST_ROUTINES,
 			mode: "eager",
-			routines: [{ name: "^ghostp.deep.leaf", mode: "manual" }],
-			stackRoutines: true
+			routines: {
+				entries: [{ name: "^ghostp.deep.leaf", mode: "manual" }],
+				stack: true
+			}
 		});
 		rm.onImplCreated({ apiPath: "ghostp.deep.leaf", moduleID: "gd1", wrapper: { __impl: function leaf() {} } });
 		rm.onImplCreated({ apiPath: "ghostp.deep.leaf", moduleID: "gd2", wrapper: { __impl: function leaf() {} } });
@@ -191,10 +209,12 @@ describe("RoutineManager coverage — revert helpers, guards, materialization (#
 
 	it("revertRawEntry with no prior AND no current entry no-ops safely (788 idx===-1 arm)", async () => {
 		const { rm } = await build({
-			dir: TEST_DIRS.API_TEST_ROUTINES,
+			base: TEST_DIRS.API_TEST_ROUTINES,
 			mode: "eager",
-			routines: [{ name: "^gone.leaf", mode: "manual" }],
-			stackRoutines: true
+			routines: {
+				entries: [{ name: "^gone.leaf", mode: "manual" }],
+				stack: true
+			}
 		});
 		// No raw entry was ever captured for this pair, and there's no prior — the drop branch runs
 		// with idx === -1 (nothing to splice), exercising the false arm of `if (idx !== -1)` (788).
@@ -203,10 +223,12 @@ describe("RoutineManager coverage — revert helpers, guards, materialization (#
 
 	it("resolveContainer treats a throwing intermediate segment read like a missing one (1472)", async () => {
 		const { rm } = await build({
-			dir: TEST_DIRS.API_TEST_ROUTINES,
+			base: TEST_DIRS.API_TEST_ROUTINES,
 			mode: "eager",
-			routines: [{ name: "^mid.child.leaf", mode: "manual" }],
-			stackRoutines: true
+			routines: {
+				entries: [{ name: "^mid.child.leaf", mode: "manual" }],
+				stack: true
+			}
 		});
 		// A composed node whose OWN child read throws (e.g. a user module exporting an object with a
 		// throwing getter). rebuildStacks resolves the parent path "mid.child": stepping into `mid`
@@ -228,10 +250,12 @@ describe("RoutineManager coverage — revert helpers, guards, materialization (#
 	it("resolveContainer bails when a lazy segment fails to materialize mid-path (1479)", async () => {
 		const { api: a, rm } = await build({
 			leaf: "other",
-			dir: TEST_DIRS.API_TEST_ROUTINES_NESTED,
+			base: TEST_DIRS.API_TEST_ROUTINES_NESTED,
 			mode: "lazy",
-			routines: [{ name: "^admin.deep.leaf", mode: "manual" }],
-			stackRoutines: true
+			routines: {
+				entries: [{ name: "^admin.deep.leaf", mode: "manual" }],
+				stack: true
+			}
 		});
 		// `admin` is a lazy, not-yet-materialized segment. Force its _materialize to reject; resolving
 		// the parent path "admin.deep" awaits admin._materialize inside #resolveContainer, which
@@ -254,10 +278,12 @@ describe("RoutineManager coverage — revert helpers, guards, materialization (#
 	it("materializeFor skips a mount endpoint that no longer resolves (1272)", async () => {
 		const { api: a, rm } = await build({
 			leaf: "other",
-			dir: TEST_DIRS.API_TEST_ROUTINES_NESTED,
+			base: TEST_DIRS.API_TEST_ROUTINES_NESTED,
 			mode: "lazy",
-			routines: [{ name: "admin.initialize", mode: "manual" }],
-			stackRoutines: true
+			routines: {
+				entries: [{ name: "admin.initialize", mode: "manual" }],
+				stack: true
+			}
 		});
 		// A dotted (bounded, non-recursive) routine drives #materializeFor's per-endpoint loop. Seed a
 		// stale ownership endpoint that points at a path no longer on the tree, so its
@@ -280,10 +306,12 @@ describe("RoutineManager coverage — lazy materialization walkers (#341)", () =
 	it("a ^-anchored routine cascade materializes the whole tree, skipping the root's reserved keys (1126)", async () => {
 		const { api: a, rm } = await build({
 			leaf: "other",
-			dir: TEST_DIRS.API_TEST_ROUTINES_NESTED,
+			base: TEST_DIRS.API_TEST_ROUTINES_NESTED,
 			mode: "lazy",
-			routines: [{ name: "^**.initialize", mode: "manual" }],
-			stackRoutines: true
+			routines: {
+				entries: [{ name: "^**.initialize", mode: "manual" }],
+				stack: true
+			}
 		});
 		const adminWrapper = resolveWrapper(a.admin);
 		expect(adminWrapper.____slothletInternal.state.materialized).toBe(false);
@@ -308,9 +336,11 @@ describe("RoutineManager coverage — lazy materialization walkers (#341)", () =
 			leaf: "math",
 			base: TEST_DIRS.API_TEST,
 			mode: "lazy",
-			routines: [{ name: "initialize", mode: "manual", recursive: true }],
-			stackRoutines: true,
-			api: { collision: { initial: "merge", api: "merge" } }
+			routines: {
+				entries: [{ name: "initialize", mode: "manual", recursive: true }],
+				stack: true
+			},
+			api: { collision: { mode: { initial: "merge", api: "merge" } } }
 		});
 		// A `base:` (no `dir:`) instance has only named mounts — no "." / "" base endpoint — so
 		// #materializeFor's recursive branch takes the per-mount loop (1289-1291), resolving and
@@ -330,10 +360,12 @@ describe("RoutineManager coverage — lazy materialization walkers (#341)", () =
 	it("a recursive routine with only named mount endpoints walks each mount's subtree (materializeFor per-mount loop 1282-else/1289-1291, materializeTree mount-root ____ skip 1126)", async () => {
 		const { api: a, rm } = await build({
 			leaf: "other",
-			dir: TEST_DIRS.API_TEST_ROUTINES_NESTED,
+			base: TEST_DIRS.API_TEST_ROUTINES_NESTED,
 			mode: "lazy",
-			routines: [{ name: "initialize", mode: "manual", recursive: true }],
-			stackRoutines: true
+			routines: {
+				entries: [{ name: "initialize", mode: "manual", recursive: true }],
+				stack: true
+			}
 		});
 		const ownership = resolveWrapper(a.other).slothlet.handlers.ownership;
 		const adminWrapper = resolveWrapper(a.admin);
@@ -362,14 +394,16 @@ describe("RoutineManager coverage — lazy materialization walkers (#341)", () =
 	it("materializeGlobPath: dotted routine into a primitive node stops (1161), and a throwing literal/wildcard child read is skipped (1191/1213)", async () => {
 		const { api: a, rm } = await build({
 			leaf: "other",
-			dir: TEST_DIRS.API_TEST_ROUTINES_NESTED,
+			base: TEST_DIRS.API_TEST_ROUTINES_NESTED,
 			mode: "lazy",
-			routines: [
-				{ name: "prim.leaf", mode: "manual" },
-				{ name: "boom.leaf", mode: "manual" },
-				{ name: "wild.*.leaf", mode: "manual" }
-			],
-			stackRoutines: true
+			routines: {
+				entries: [
+					{ name: "prim.leaf", mode: "manual" },
+					{ name: "boom.leaf", mode: "manual" },
+					{ name: "wild.*.leaf", mode: "manual" }
+				],
+				stack: true
+			}
 		});
 		const otherWrapper = resolveWrapper(a.other);
 		const rootApi = otherWrapper.slothlet.api;
@@ -405,10 +439,12 @@ describe("RoutineManager coverage — lazy materialization walkers (#341)", () =
 	it("materializeGlobPath swallows a failed lazy materialization down a dotted routine path (1171/1479)", async () => {
 		const { api: a, rm } = await build({
 			leaf: "other",
-			dir: TEST_DIRS.API_TEST_ROUTINES_NESTED,
+			base: TEST_DIRS.API_TEST_ROUTINES_NESTED,
 			mode: "lazy",
-			routines: [{ name: "admin.initialize", mode: "manual" }],
-			stackRoutines: true
+			routines: {
+				entries: [{ name: "admin.initialize", mode: "manual" }],
+				stack: true
+			}
 		});
 		// `admin` is a lazy, not-yet-materialized subfolder. Force its _materialize to reject; the
 		// dotted routine's #materializeFor → #materializeGlobPath (and #resolveContainer) must catch
@@ -430,10 +466,12 @@ describe("RoutineManager coverage — lazy materialization walkers (#341)", () =
 describe("RoutineManager coverage — runPathFor / contributorsAt selector-and-enumerator gaps (#400)", () => {
 	it("#runEntries falls back to a direct Reflect.apply when there is no live extent to enter (1012 canEnterExtent-false branch)", async () => {
 		const { rm } = await build({
-			dir: TEST_DIRS.API_TEST_ROUTINES,
+			base: TEST_DIRS.API_TEST_ROUTINES,
 			mode: "eager",
-			routines: [{ name: "initialize", mode: "manual" }],
-			stackRoutines: true
+			routines: {
+				entries: [{ name: "initialize", mode: "manual" }],
+				stack: true
+			}
 		});
 		globalThis.__rmCovLog = [];
 		rm.onImplCreated({
@@ -459,9 +497,11 @@ describe("RoutineManager coverage — runPathFor / contributorsAt selector-and-e
 
 	it("runPathFor returns undefined after the instance is torn down (post-destroy guard, 1111)", async () => {
 		const { api: a, rm } = await build({
-			dir: TEST_DIRS.API_TEST_ROUTINES,
+			base: TEST_DIRS.API_TEST_ROUTINES,
 			mode: "eager",
-			routines: [{ name: "initialize", mode: "manual" }]
+			routines: {
+				entries: [{ name: "initialize", mode: "manual" }]
+			}
 		});
 		const savedApi = rm.slothlet.api;
 		try {
@@ -475,10 +515,12 @@ describe("RoutineManager coverage — runPathFor / contributorsAt selector-and-e
 
 	it("runPathFor with no routine arg runs the raw pathEntries directly, selecting only by moduleID (1113 null-routine arm)", async () => {
 		const { rm } = await build({
-			dir: TEST_DIRS.API_TEST_ROUTINES,
+			base: TEST_DIRS.API_TEST_ROUTINES,
 			mode: "eager",
-			routines: [{ name: "initialize", mode: "manual" }],
-			stackRoutines: true
+			routines: {
+				entries: [{ name: "initialize", mode: "manual" }],
+				stack: true
+			}
 		});
 		globalThis.__rmCovLog = [];
 		rm.onImplCreated({
@@ -500,10 +542,12 @@ describe("RoutineManager coverage — runPathFor / contributorsAt selector-and-e
 
 	it("runPathFor throws ROUTINE_FAILED when the selected contributor fails (1131 failure branch)", async () => {
 		const { rm } = await build({
-			dir: TEST_DIRS.API_TEST_ROUTINES,
+			base: TEST_DIRS.API_TEST_ROUTINES,
 			mode: "eager",
-			routines: [{ name: "initialize", mode: "manual" }],
-			stackRoutines: true
+			routines: {
+				entries: [{ name: "initialize", mode: "manual" }],
+				stack: true
+			}
 		});
 		rm.onImplCreated({
 			apiPath: "initialize",
@@ -521,7 +565,11 @@ describe("RoutineManager coverage — runPathFor / contributorsAt selector-and-e
 	});
 
 	it("runPathFor's INVALID_ARGUMENT falls back to a generic routine label and 'no contributors' message with no routine arg + no contributors at all (1120/1121/1149)", async () => {
-		const { rm } = await build({ dir: TEST_DIRS.API_TEST_ROUTINES, mode: "eager", routines: [{ name: "initialize", mode: "manual" }] });
+		const { rm } = await build({
+			base: TEST_DIRS.API_TEST_ROUTINES,
+			mode: "eager",
+			routines: { entries: [{ name: "initialize", mode: "manual" }] }
+		});
 		// No routine argument (routine?.name falls back to "the routine", 1120) at a path with zero
 		// contributors at all, not just zero matching this key (available.length === 0 → "(no
 		// contributors at this path)", 1121; contributorsAt's own null-routine arm, 1149).

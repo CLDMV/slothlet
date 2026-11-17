@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-10T21:29:11-08:00 (1794374951)
+ *	@Last modified time: 2026-11-16T18:28:56-08:00 (1794882536)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -122,10 +122,12 @@ describe.each(PLATFORMS)("Live runtime > suspended caller attribution (#512) > $
 		api = await slothlet({
 			...base,
 			hidden: ["ext", "rogue", "shared"],
-			routines: [{ name: "activate", mode: "manual", cascade: false }],
-			stackRoutines: true,
+			routines: {
+				entries: [{ name: "activate", mode: "manual", cascade: false }],
+				stack: true
+			},
 			silent: true,
-			permissions: { defaultPolicy: "deny", rules: RULES }
+			permissions: { policy: "deny", rules: RULES }
 		});
 		const extID = await api.slothlet.api.add(["ext"], EXT_DIR);
 		const rogueID = await api.slothlet.api.add(["rogue"], ROGUE_DIR);
@@ -375,10 +377,12 @@ describe.each(getMatrixConfigs({ runtime: "live" }))(
 			api = await slothlet({
 				...config,
 				base: null,
-				routines: [{ name: "activate", mode: "manual", cascade: false }],
-				stackRoutines: true,
+				routines: {
+					entries: [{ name: "activate", mode: "manual", cascade: false }],
+					stack: true
+				},
 				silent: true,
-				permissions: { defaultPolicy: "deny", rules: RULES }
+				permissions: { policy: "deny", rules: RULES }
 			});
 			const extID = await api.slothlet.api.add(["ext"], EXT_DIR);
 			await api.slothlet.api.add(["rogue"], ROGUE_DIR);
@@ -490,10 +494,12 @@ describe.each(getMatrixConfigs({ runtime: "live" }))(
 					...config,
 					base: ROOT,
 					hidden: ["ext", "rogue", "shared"],
-					routines: [{ name: "activate", mode: "manual", cascade: false }],
-					stackRoutines: true,
+					routines: {
+						entries: [{ name: "activate", mode: "manual", cascade: false }],
+						stack: true
+					},
 					silent: true,
-					permissions: { defaultPolicy: "deny", rules: RULES, attribution }
+					permissions: { policy: "deny", rules: RULES, caller: { attribution } }
 				});
 				const extID = await api.slothlet.api.add(["ext"], EXT_DIR);
 				await api.slothlet.api.add(["rogue"], ROGUE_DIR);

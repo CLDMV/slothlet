@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:37-08:00 (1794874597)
+ *	@Last modified time: 2026-11-16T18:28:43-08:00 (1794882523)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -112,7 +112,7 @@ describe("scheduleMacrotask (#578)", () => {
 describe.each(getBrowserMatrixConfigs())("browser compose without setImmediate (#578) > $name", ({ config }) => {
 	it("raises no WARNING_LIFECYCLE_HANDLER_ERROR for function leaves", async () => {
 		vi.stubGlobal("setImmediate", undefined);
-		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST_BROWSER, manifest, diagnostics: true });
+		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST_BROWSER, loader: { files: manifest }, diagnostics: true });
 		// Touch the leaves so lazy mode materializes them and fires impl:created too.
 		expect(await api.math.add(2, 3)).toBe(5);
 		expect(await api.utils.format.upper("a")).toBe("A");
@@ -125,9 +125,11 @@ describe.each(getBrowserMatrixConfigs())("browser compose without setImmediate (
 describe("reactive routine stack patch without setImmediate (#578)", () => {
 	it("patches a late contributor into its stack", async () => {
 		api = await slothlet({
-			dir: TEST_DIRS.API_TEST_ROUTINES,
-			routines: [{ name: "^auth.initialize", mode: "manual" }],
-			stackRoutines: true,
+			base: TEST_DIRS.API_TEST_ROUTINES,
+			routines: {
+				entries: [{ name: "^auth.initialize", mode: "manual" }],
+				stack: true
+			},
 			silent: true
 		});
 		await api.slothlet.api.add(["auth"], TEST_DIRS.API_TEST_ROUTINES_AUTH1);

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:57-07:00 (1791090897)
+ *	@Last modified time: 2026-11-16T18:28:35-08:00 (1794882515)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -98,7 +98,6 @@ describe.each(getMatrixConfigs({ mode: "eager" }))("API Manager File Validation 
 			// Create with debug.api = true — covers debug blocks in syncWrapper and mutateApiValue
 			api = await createApiInstance(config, {
 				base: TEST_DIRS.API_TEST,
-				allowMutation: true,
 				debug: { api: true }
 			});
 
@@ -110,7 +109,6 @@ describe.each(getMatrixConfigs({ mode: "eager" }))("API Manager File Validation 
 		it("should execute debug logging for addition at a nested namespace when debug.api=true", async () => {
 			api = await createApiInstance(config, {
 				base: TEST_DIRS.API_TEST_MIXED,
-				allowMutation: true,
 				debug: { api: true }
 			});
 

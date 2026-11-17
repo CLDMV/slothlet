@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-12T23:04:26-08:00 (1794553466)
+ *	@Last modified time: 2026-11-16T18:29:08-08:00 (1794882548)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -72,7 +72,7 @@ function runSteps(config, folder) {
 		const base = ${JSON.stringify(path.join(FIXTURE, folder))};
 		const build = () => slothlet({
 			base, mode: ${JSON.stringify(config.mode)}, runtime: ${JSON.stringify(config.runtime)}, silent: true,
-			permissions: { defaultPolicy: "allow", attribution: ${JSON.stringify(config.attribution)}, rules: [{ caller: "beta.**", target: "store.sealed.hid", effect: "deny" }] }
+			permissions: { policy: "allow", rules: [{ caller: "beta.**", target: "store.sealed.hid", effect: "deny" }], caller: { attribution: ${JSON.stringify(config.attribution)} } }
 		});
 		const use = async (api) => {
 			const out = {};

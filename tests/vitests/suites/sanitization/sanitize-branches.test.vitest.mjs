@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:17:32-08:00 (1794874652)
+ *	@Last modified time: 2026-11-16T18:30:26-08:00 (1794882626)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -155,7 +155,7 @@ describe("sanitizePropertyName — **string** leave rule triggers lookahead rege
 	});
 
 	it("leave rule '**url**' case-insensitive triggers lookahead regex (line 50)", () => {
-		const result = sanitizePropertyName("parseUrlString", { leaveInsensitive: ["**url**"] });
+		const result = sanitizePropertyName("parseUrlString", { rules: { nocase: ["**url**"] } });
 		expect(typeof result).toBe("string");
 		expect(result.length).toBeGreaterThan(0);
 	});

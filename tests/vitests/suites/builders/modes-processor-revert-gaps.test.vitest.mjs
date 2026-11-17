@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:23-07:00 (1791091703)
+ *	@Last modified time: 2026-11-16T18:28:47-08:00 (1794882527)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -81,7 +81,7 @@ afterEach(async () => {
 
 describe.each(["eager", "lazy"])("modes-processor raw-value revert gaps (#366/#372) — mode: %s", (mode) => {
 	it("hoisting two sibling no-default files' colliding raw `shared` export under collision:skip reverts the loser via #revertOwnershipEntry's restoreEntry arm", async () => {
-		api = await slothlet({ base: OWNERSHIP_REVERT_DIR, mode, silent: true, collision: { initial: "skip" } });
+		api = await slothlet({ base: OWNERSHIP_REVERT_DIR, mode, silent: true, api: { collision: { mode: { initial: "skip" } } } });
 
 		// Trigger lazy materialization (no-op in eager) so both hoisted/addapi namespaces exist.
 		if (typeof api.notifications.email === "function") await api.notifications.email("a@x");
@@ -93,7 +93,7 @@ describe.each(["eager", "lazy"])("modes-processor raw-value revert gaps (#366/#3
 	});
 
 	it("hoisting a raw `constructor` export under collision:skip always collides with the namespace proxy's own inherited constructor and reverts via #revertOwnershipEntry's removePath arm", async () => {
-		api = await slothlet({ base: OWNERSHIP_REVERT_DIR, mode, silent: true, collision: { initial: "skip" } });
+		api = await slothlet({ base: OWNERSHIP_REVERT_DIR, mode, silent: true, api: { collision: { mode: { initial: "skip" } } } });
 
 		if (typeof api.notifications.email === "function") await api.notifications.email("a@x");
 		await api.plugins;
@@ -113,7 +113,7 @@ describe.each(["eager", "lazy"])("modes-processor raw-value revert gaps (#366/#3
 	});
 
 	it("an addapi file alone in its folder is the folder's value, so its default keeps its own `constructor` (Rule 11/C24)", async () => {
-		api = await slothlet({ base: OWNERSHIP_REVERT_DIR, mode, silent: true, collision: { initial: "skip" } });
+		api = await slothlet({ base: OWNERSHIP_REVERT_DIR, mode, silent: true, api: { collision: { mode: { initial: "skip" } } } });
 
 		await api.plugins;
 		expect(api.plugins.constructor).toBe("not-a-function");
@@ -121,7 +121,7 @@ describe.each(["eager", "lazy"])("modes-processor raw-value revert gaps (#366/#3
 	});
 
 	it("a non-colliding hoisted/addApi-merged key still assigns and registers ownership normally alongside its rejected sibling", async () => {
-		api = await slothlet({ base: OWNERSHIP_REVERT_DIR, mode, silent: true, collision: { initial: "skip" } });
+		api = await slothlet({ base: OWNERSHIP_REVERT_DIR, mode, silent: true, api: { collision: { mode: { initial: "skip" } } } });
 
 		if (typeof api.notifications.email === "function") await api.notifications.email("a@x");
 		await api.plugins;

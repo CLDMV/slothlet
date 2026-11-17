@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:14-07:00 (1791090914)
+ *	@Last modified time: 2026-11-16T18:29:38-08:00 (1794882578)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -32,8 +32,8 @@ describe("PermissionManager > condition runtimeContext fallback", () => {
 		manager = new PermissionManager({
 			config: {
 				permissions: {
-					enabled: true,
-					defaultPolicy: "deny",
+					mode: true,
+					policy: "deny",
 					rules: [
 						{
 							caller: "callers.**",
@@ -60,7 +60,7 @@ describe("PermissionManager > condition runtimeContext fallback", () => {
 
 	it("checkAccess treats null options as an empty options object", () => {
 		manager = new PermissionManager({
-			config: { permissions: { enabled: true, defaultPolicy: "allow", rules: [] } },
+			config: { permissions: { mode: true, policy: "allow", rules: [] } },
 			handlers: {},
 			debug() {},
 			SlothletError
@@ -72,7 +72,7 @@ describe("PermissionManager > condition runtimeContext fallback", () => {
 
 	it("checkAccess rejects non-object options and non-boolean useCache", () => {
 		manager = new PermissionManager({
-			config: { permissions: { enabled: true, defaultPolicy: "allow", rules: [] } },
+			config: { permissions: { mode: true, policy: "allow", rules: [] } },
 			handlers: {},
 			debug() {},
 			SlothletError
@@ -85,7 +85,7 @@ describe("PermissionManager > condition runtimeContext fallback", () => {
 
 	it("rejects Date as condition — non-plain objects must not validate", () => {
 		manager = new PermissionManager({
-			config: { permissions: { enabled: true, defaultPolicy: "allow", rules: [] } },
+			config: { permissions: { mode: true, policy: "allow", rules: [] } },
 			handlers: {},
 			debug() {},
 			SlothletError
@@ -103,7 +103,7 @@ describe("PermissionManager > condition runtimeContext fallback", () => {
 
 	it("rejects RegExp as condition — non-plain objects must not validate", () => {
 		manager = new PermissionManager({
-			config: { permissions: { enabled: true, defaultPolicy: "allow", rules: [] } },
+			config: { permissions: { mode: true, policy: "allow", rules: [] } },
 			handlers: {},
 			debug() {},
 			SlothletError
@@ -121,7 +121,7 @@ describe("PermissionManager > condition runtimeContext fallback", () => {
 
 	it("rejects null entries inside condition arrays", () => {
 		manager = new PermissionManager({
-			config: { permissions: { enabled: true, defaultPolicy: "allow", rules: [] } },
+			config: { permissions: { mode: true, policy: "allow", rules: [] } },
 			handlers: {},
 			debug() {},
 			SlothletError
@@ -139,7 +139,7 @@ describe("PermissionManager > condition runtimeContext fallback", () => {
 
 	it("matchesCondition rejects primitive payloads on the public helper", () => {
 		manager = new PermissionManager({
-			config: { permissions: { enabled: true, defaultPolicy: "allow", rules: [] } },
+			config: { permissions: { mode: true, policy: "allow", rules: [] } },
 			handlers: {},
 			debug() {},
 			SlothletError
@@ -150,7 +150,7 @@ describe("PermissionManager > condition runtimeContext fallback", () => {
 
 	it("matchesCondition rejects invalid entries inside arrays on the public helper", () => {
 		manager = new PermissionManager({
-			config: { permissions: { enabled: true, defaultPolicy: "allow", rules: [] } },
+			config: { permissions: { mode: true, policy: "allow", rules: [] } },
 			handlers: {},
 			debug() {},
 			SlothletError
@@ -164,8 +164,8 @@ describe("PermissionManager > condition runtimeContext fallback", () => {
 		manager = new PermissionManager({
 			config: {
 				permissions: {
-					enabled: true,
-					defaultPolicy: "deny",
+					mode: true,
+					policy: "deny",
 					rules: [
 						{
 							caller: "callers.**",
@@ -203,7 +203,7 @@ describe("PermissionManager > enforceHookAccess host caller", () => {
 	it("allows a host caller (null owner) and emits no audit event", () => {
 		const channels = [];
 		manager = new PermissionManager({
-			config: { permissions: { enabled: true, defaultPolicy: "deny", rules: [] } },
+			config: { permissions: { mode: true, policy: "deny", rules: [] } },
 			handlers: {},
 			debug(channel) {
 				channels.push(channel);

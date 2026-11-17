@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:56-07:00 (1791090896)
+ *	@Last modified time: 2026-11-16T18:28:30-08:00 (1794882510)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -87,7 +87,7 @@ async function makeCollisionApi(collisionConfig = "merge", debugApi = false) {
 		base: collisionFixtureWithExtraFile || TEST_DIRS.API_TEST_COLLISIONS,
 		mode: "lazy",
 		runtime: "async",
-		api: { collision: { initial: collisionConfig } }
+		api: { collision: { mode: { initial: collisionConfig } } }
 	};
 	if (debugApi) {
 		opts.debug = { api: true };
@@ -243,7 +243,7 @@ describe("api-assignment — lazy api.add() collision", () => {
 			base: TEST_DIRS.API_TEST,
 			mode: "lazy",
 			runtime: "async",
-			api: { collision: { api: "merge" } }
+			api: { collision: { mode: { api: "merge" } } }
 		});
 
 		// api.math is lazy unmaterialized from API_TEST
@@ -262,7 +262,7 @@ describe("api-assignment — lazy api.add() collision", () => {
 			base: TEST_DIRS.API_TEST,
 			mode: "lazy",
 			runtime: "async",
-			api: { collision: { api: "replace" } }
+			api: { collision: { mode: { api: "replace" } } }
 		});
 
 		const collisionMathFile = TEST_DIRS.API_TEST_COLLISIONS + "/math.mjs";
@@ -343,7 +343,7 @@ describe("api-assignment — eager api.add() recursive wrapper merge (lines 497-
 			base: TEST_DIRS.API_TEST,
 			mode: "eager",
 			runtime: "async",
-			api: { collision: { api: "merge" } }
+			api: { collision: { mode: { api: "merge" } } }
 		});
 
 		// Add api_test_collisions dir at "coll" endpoint — math folder inside creates api.coll.math
@@ -361,7 +361,7 @@ describe("api-assignment — eager api.add() recursive wrapper merge (lines 497-
 			base: TEST_DIRS.API_TEST,
 			mode: "eager",
 			runtime: "async",
-			api: { collision: { api: "merge-replace" } }
+			api: { collision: { mode: { api: "merge-replace" } } }
 		});
 
 		// Add collision fixture twice to the same endpoint → merge-replace collision
@@ -375,7 +375,7 @@ describe("api-assignment — eager api.add() recursive wrapper merge (lines 497-
 			base: TEST_DIRS.API_TEST,
 			mode: "eager",
 			runtime: "async",
-			api: { collision: { api: "replace" } }
+			api: { collision: { mode: { api: "replace" } } }
 		});
 
 		await api.slothlet.api.add("coll3", collisionFixtureWithExtraFile || TEST_DIRS.API_TEST_COLLISIONS, { moduleID: "coll3-first" });

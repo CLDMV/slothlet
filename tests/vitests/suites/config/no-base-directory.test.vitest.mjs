@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T22:52:44-08:00 (1794811964)
+ *	@Last modified time: 2026-11-16T18:28:50-08:00 (1794882530)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -91,7 +91,7 @@ describe.each(getMatrixConfigs())("No base directory (#471) > $name", ({ config 
 	});
 
 	it("permissions and removal work on an api.add-built tree", async () => {
-		api = await slothlet({ ...withoutBase(), permissions: { defaultPolicy: "allow", rules: [] } });
+		api = await slothlet({ ...withoutBase(), permissions: { policy: "allow", rules: [] } });
 		await api.slothlet.api.add("tools", { exports: { ping: () => "pong" } }, { moduleID: "tools-mod" });
 		expect(await api.tools.ping()).toBe("pong");
 		expect(await api.slothlet.api.remove("tools-mod")).toBe(true);
@@ -108,7 +108,7 @@ describe.each(getMatrixConfigs())("No base directory (#471) > $name", ({ config 
 	});
 
 	it("browser mode allows no base too: an empty root built through api.add", async () => {
-		api = await slothlet({ ...withoutBase(), platform: "browser" });
+		api = await slothlet({ ...withoutBase(), loader: { platform: "browser" } });
 		expect(userKeys(api)).toEqual([]);
 		await api.slothlet.api.add("tools", { exports: { ping: () => "pong" } });
 		expect(await api.tools.ping()).toBe("pong");

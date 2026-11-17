@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-11T09:26:14-07:00 (1791735974)
+ *	@Last modified time: 2026-11-16T18:28:29-08:00 (1794882509)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -106,7 +106,7 @@ async function expectLeaves(node, leaves) {
  * @returns {Promise<object>} Slothlet API proxy.
  */
 function createInstance(config, collisionApi) {
-	const apiConfig = { ...config.api, mutations: { add: true, remove: true, reload: true, allowCollisionOverride: true } };
+	const apiConfig = { ...config.api, mutations: { add: true, remove: true, reload: true }, collision: { override: true } };
 	if (collisionApi) apiConfig.collision = { ...(config.api?.collision ?? {}), api: collisionApi };
 	// allowCollisionOverride lets a per-call `collisionMode` take effect.
 	return slothlet({ ...config, base: TEST_DIRS.API_TEST, silent: true, api: apiConfig });

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-12T23:27:21-08:00 (1794554841)
+ *	@Last modified time: 2026-11-16T18:29:56-08:00 (1794882596)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -75,7 +75,7 @@ function runCases(config) {
 		const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 		const build = (deny) => slothlet({
 			base: ${JSON.stringify(BASE)}, mode: config.mode, runtime: config.runtime, silent: true,
-			permissions: { defaultPolicy: "allow", attribution: config.attribution, rules: deny ? [{ caller: "guest.**", target: "vault.**", effect: "deny" }] : [] }
+			permissions: { policy: "allow", rules: deny ? [{ caller: "guest.**", target: "vault.**", effect: "deny" }] : [], caller: { attribution: config.attribution } }
 		});
 		const runHelpers = async (api) => {
 			const out = {};

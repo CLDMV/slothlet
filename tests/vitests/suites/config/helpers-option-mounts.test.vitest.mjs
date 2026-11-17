@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-12T23:33:41-08:00 (1794555221)
+ *	@Last modified time: 2026-11-16T18:28:50-08:00 (1794882530)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -103,7 +103,7 @@ async function scenario(build, dir, config, helpers, rules) {
 		runtime: config.runtime,
 		helpers,
 		silent: true,
-		...(rules ? { permissions: { defaultPolicy: "allow", attribution: config.attribution, rules } } : {})
+		...(rules ? { permissions: { policy: "allow", caller: { attribution: config.attribution }, rules } } : {})
 	});
 	try {
 		await api.slothlet.api.add("again", dir);

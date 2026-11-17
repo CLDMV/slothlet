@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-26T02:52:54-07:00 (1793008374)
+ *	@Last modified time: 2026-11-16T18:30:03-08:00 (1794882603)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -100,7 +100,7 @@ describe.each(CONFIGS)("versioned and array-path api.add from module code (#625)
 	});
 
 	it("checks an array path from module code as the path it names", async () => {
-		await load({ permissions: { defaultPolicy: "allow" } });
+		await load({ permissions: { policy: "allow" } });
 		expect(await api.guest.x.addAt(["guest", "s2"], GUEST, { moduleID: "s2" })).toBe("done");
 		expect(typeof api.guest.s2.x.listSelf).toBe("function");
 		expect(await withSuppressedSlothletErrorOutput(() => api.guest.x.addAt(["victim", "x"], GUEST, { moduleID: "vx" }))).toBe(

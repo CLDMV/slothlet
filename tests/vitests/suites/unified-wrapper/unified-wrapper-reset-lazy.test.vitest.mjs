@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:25-07:00 (1791090925)
+ *	@Last modified time: 2026-11-16T18:30:41-08:00 (1794882641)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -319,7 +319,7 @@ describe("unified-wrapper: _extractFullImpl metadata paths (lines 457-468)", () 
 			base: TEST_DIRS.API_TEST_COLLISIONS,
 			mode: "eager",
 			runtime: "async",
-			api: { collision: { initial: "merge" } }
+			api: { collision: { mode: { initial: "merge" } } }
 		});
 
 		// math has both file and folder exports merged → wrapper has many children

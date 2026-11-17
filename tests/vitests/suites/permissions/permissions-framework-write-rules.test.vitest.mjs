@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-26T16:16:01-07:00 (1793056561)
+ *	@Last modified time: 2026-11-16T18:29:50-08:00 (1794882590)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -46,7 +46,7 @@ const CONFIGS = [
 const CALL_NAMESPACE = { caller: "**", target: "slothlet.**", effect: "allow" };
 const PERMISSIONS = [
 	{ label: "permissions with defaults", options: { permissions: {} } },
-	{ label: "permissions defaultPolicy deny", options: { permissions: { defaultPolicy: "deny", rules: [CALL_NAMESPACE] } } }
+	{ label: "permissions defaultPolicy deny", options: { permissions: { policy: "deny", rules: [CALL_NAMESPACE] } } }
 ];
 
 describe.each(CONFIGS)("lifting the built-in write rules (#625) — $mode / $runtime", ({ mode, runtime }) => {

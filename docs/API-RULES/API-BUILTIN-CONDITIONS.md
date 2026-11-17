@@ -54,11 +54,11 @@ if (userApi.slothlet) {
 **Related Rule**: [Rule 21](../API-RULES.md#rule-21-reserved-keys--built-in-surface)
 **Status**: ✅ Active
 
-**Pattern**: Per-call `collisionMode` / `mutateExisting` / `recordHistory` on `api.slothlet.api.add()` are stripped (with a warning) unless `api.mutations.allowCollisionOverride` is set; `forceOverwrite` / `moduleID` / `metadata` always pass through.
+**Pattern**: Per-call `collisionMode` / `mutateExisting` / `recordHistory` on `api.slothlet.api.add()` are stripped (with a warning) unless `api.collision.override` is set; `forceOverwrite` / `moduleID` / `metadata` always pass through.
 
 **Source(s)**: `src/lib/builders/api_builder.mjs:785-806` (lock) · `:807-813` (always-allowed)
 
-**Trigger**: `!config.api?.mutations?.allowCollisionOverride` and a locked option is present
+**Trigger**: `!config.api?.mutations?.api.collision.override` and a locked option is present
 **Result**: `WARNING_API_ADD_OPTION_LOCKED`; the option is dropped and the mount uses the instance policy. (Shipped: [#419](https://github.com/CLDMV/slothlet/pull/419).)
 
 ---

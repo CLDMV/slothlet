@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:34-07:00 (1791091714)
+ *	@Last modified time: 2026-11-16T18:29:26-08:00 (1794882566)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -35,7 +35,7 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 
 	describe("cascade surface (#399) — root api.<name> only, never mirrored onto api.slothlet.<name>", () => {
 		it("installs the routine cascade at api.<name> and does NOT mirror it onto api.slothlet.<name>", async () => {
-			const api = await slothlet({ dir: TEST_DIRS.API_TEST_ROUTINES, mode, autoRoutines: true, silent: true });
+			const api = await slothlet({ base: TEST_DIRS.API_TEST_ROUTINES, mode, routines: { auto: true }, silent: true });
 			try {
 				// Root cascade — the intended, canonical surface.
 				expect(typeof api.initialize).toBe("function");
@@ -56,7 +56,7 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 
 	describe("bare mount-relative matching (default routines)", () => {
 		it("mode: startup — the default `initialize` routine auto-runs once, as the final step of compose", async () => {
-			const api = await slothlet({ dir: TEST_DIRS.API_TEST_ROUTINES, mode, autoRoutines: true, silent: true });
+			const api = await slothlet({ base: TEST_DIRS.API_TEST_ROUTINES, mode, routines: { auto: true }, silent: true });
 			try {
 				expect(globalThis.__slothletRoutineLog).toEqual(["root:initialize"]);
 				// Ordinary sibling leaves are unaffected.
@@ -67,7 +67,7 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 		});
 
 		it("two independently-mounted modules sharing a mount point both run their contribution, in mount order", async () => {
-			const api = await slothlet({ dir: TEST_DIRS.API_TEST_ROUTINES, mode, autoRoutines: true, stackRoutines: true, silent: true });
+			const api = await slothlet({ base: TEST_DIRS.API_TEST_ROUTINES, mode, routines: { auto: true, stack: true }, silent: true });
 			try {
 				globalThis.__slothletRoutineLog = [];
 				await api.slothlet.api.add(["auth"], TEST_DIRS.API_TEST_ROUTINES_AUTH1);
@@ -95,7 +95,7 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 			// polluting the ownership stack with a phantom "the stacked callable is its own
 			// contribution" entry on every rebuild — corrupting whichever module ownership later
 			// considers the "current owner" for restore/removal purposes.
-			const api = await slothlet({ dir: TEST_DIRS.API_TEST_ROUTINES, mode, autoRoutines: true, stackRoutines: true, silent: true });
+			const api = await slothlet({ base: TEST_DIRS.API_TEST_ROUTINES, mode, routines: { auto: true, stack: true }, silent: true });
 			try {
 				await api.slothlet.api.add(["auth"], TEST_DIRS.API_TEST_ROUTINES_AUTH1);
 				await api.slothlet.api.add(["auth"], TEST_DIRS.API_TEST_ROUTINES_AUTH2);
@@ -125,7 +125,9 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 			const api = await slothlet({
 				base: TEST_DIRS.API_TEST_ROUTINES_ROOT_ADD_BASE,
 				mode,
-				routines: [{ name: "initialize", mode: "manual" }],
+				routines: {
+					entries: [{ name: "initialize", mode: "manual" }]
+				},
 				silent: true
 			});
 			try {
@@ -141,7 +143,7 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 		});
 
 		it("a bare name does NOT match a nested leaf one level below the mount's own top level", async () => {
-			const api = await slothlet({ dir: TEST_DIRS.API_TEST_ROUTINES_NESTED, mode, autoRoutines: true, silent: true });
+			const api = await slothlet({ base: TEST_DIRS.API_TEST_ROUTINES_NESTED, mode, routines: { auto: true }, silent: true });
 			try {
 				// Only the mount's own top-level initialize.mjs counts — admin/initialize.mjs does not,
 				// even though its final segment is also "initialize".
@@ -154,7 +156,7 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 		});
 
 		it("re-running api.slothlet.api.add() after initial compose re-derives the stack without re-firing startup", async () => {
-			const api = await slothlet({ dir: TEST_DIRS.API_TEST_ROUTINES, mode, autoRoutines: true, stackRoutines: true, silent: true });
+			const api = await slothlet({ base: TEST_DIRS.API_TEST_ROUTINES, mode, routines: { auto: true, stack: true }, silent: true });
 			try {
 				// Startup already fired during compose; mounting auth1/auth2 afterward must not re-fire it.
 				globalThis.__slothletRoutineLog = [];
@@ -173,7 +175,7 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 		});
 
 		it("a later mount at the same path that contributes nothing of its own does not double-register the earlier contributor", async () => {
-			const api = await slothlet({ dir: TEST_DIRS.API_TEST_ROUTINES, mode, autoRoutines: true, silent: true });
+			const api = await slothlet({ base: TEST_DIRS.API_TEST_ROUTINES, mode, routines: { auto: true }, silent: true });
 			try {
 				await api.slothlet.api.add(["auth"], TEST_DIRS.API_TEST_ROUTINES_AUTH1); // has its own "initialize"
 				await api.slothlet.api.add(["auth"], TEST_DIRS.API_TEST_ROUTINES_MANUAL); // does NOT export "initialize"
@@ -190,10 +192,12 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 	describe("dotted mount-relative matching (recursive: false, default)", () => {
 		it("a fixed relative path matches only that exact sub-path, not the mount's own top level", async () => {
 			const api = await slothlet({
-				dir: TEST_DIRS.API_TEST_ROUTINES_NESTED,
+				base: TEST_DIRS.API_TEST_ROUTINES_NESTED,
 				mode,
-				routines: [{ name: "admin.initialize", mode: "startup" }],
-				autoRoutines: true,
+				routines: {
+					entries: [{ name: "admin.initialize", mode: "startup" }],
+					auto: true
+				},
 				silent: true
 			});
 			try {
@@ -207,9 +211,11 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 			"materializing a fixed relative path under one mount never force-materializes an unrelated mount's own untouched subdirectory (lazy mode only)",
 			async () => {
 				const api = await slothlet({
-					dir: TEST_DIRS.API_TEST_ROUTINES_SCOPED,
+					base: TEST_DIRS.API_TEST_ROUTINES_SCOPED,
 					mode,
-					routines: [{ name: "admin.initialize", mode: "manual" }],
+					routines: {
+						entries: [{ name: "admin.initialize", mode: "manual" }]
+					},
 					silent: true
 				});
 				try {
@@ -231,9 +237,11 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 
 		it("a dotted name containing a glob metacharacter still matches (and force-materializes) a nested contributor", async () => {
 			const api = await slothlet({
-				dir: TEST_DIRS.API_TEST_ROUTINES_NESTED,
+				base: TEST_DIRS.API_TEST_ROUTINES_NESTED,
 				mode,
-				routines: [{ name: "*.initialize", mode: "manual" }],
+				routines: {
+					entries: [{ name: "*.initialize", mode: "manual" }]
+				},
 				silent: true
 			});
 			try {
@@ -255,9 +263,11 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 			"a dotted name containing a single-level wildcard force-materializes only the matching branch, not an unrelated sibling subfolder (lazy mode only)",
 			async () => {
 				const api = await slothlet({
-					dir: TEST_DIRS.API_TEST_ROUTINES_SCOPED,
+					base: TEST_DIRS.API_TEST_ROUTINES_SCOPED,
 					mode,
-					routines: [{ name: "admin.*", mode: "manual" }],
+					routines: {
+						entries: [{ name: "admin.*", mode: "manual" }]
+					},
 					silent: true
 				});
 				try {
@@ -280,9 +290,11 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 			"a dotted name ending in ** force-materializes its own narrowed branch's entire subtree, never a sibling subtree (lazy mode only)",
 			async () => {
 				const api = await slothlet({
-					dir: TEST_DIRS.API_TEST_ROUTINES_SCOPED,
+					base: TEST_DIRS.API_TEST_ROUTINES_SCOPED,
 					mode,
-					routines: [{ name: "admin.**", mode: "manual" }],
+					routines: {
+						entries: [{ name: "admin.**", mode: "manual" }]
+					},
 					silent: true
 				});
 				try {
@@ -307,10 +319,12 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 			"a brace-expanded dotted name only materializes its concrete alternatives, never an unrelated sibling (lazy mode only)",
 			async () => {
 				const api = await slothlet({
-					dir: TEST_DIRS.API_TEST_ROUTINES_SCOPED,
+					base: TEST_DIRS.API_TEST_ROUTINES_SCOPED,
 					mode,
 					// "ghost" doesn't exist under this mount — must not error, just contribute nothing.
-					routines: [{ name: "{admin,ghost}.*", mode: "manual" }],
+					routines: {
+						entries: [{ name: "{admin,ghost}.*", mode: "manual" }]
+					},
 					silent: true
 				});
 				try {
@@ -331,10 +345,12 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 	describe("recursive mount-relative matching", () => {
 		it("recursive: true finds the name at both the mount's own top level and nested within it", async () => {
 			const api = await slothlet({
-				dir: TEST_DIRS.API_TEST_ROUTINES_NESTED,
+				base: TEST_DIRS.API_TEST_ROUTINES_NESTED,
 				mode,
-				routines: [{ name: "initialize", mode: "startup", recursive: true }],
-				autoRoutines: true,
+				routines: {
+					entries: [{ name: "initialize", mode: "startup", recursive: true }],
+					auto: true
+				},
 				silent: true
 			});
 			try {
@@ -350,9 +366,11 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 	describe("root-anchored (^) glob matching", () => {
 		it("^ext.*.initialize matches every plugin's own initialize under ext, across separate mounts", async () => {
 			const api = await slothlet({
-				dir: TEST_DIRS.API_TEST_ROUTINES,
+				base: TEST_DIRS.API_TEST_ROUTINES,
 				mode,
-				routines: [{ name: "^ext.*.initialize", mode: "manual" }],
+				routines: {
+					entries: [{ name: "^ext.*.initialize", mode: "manual" }]
+				},
 				silent: true
 			});
 			try {
@@ -372,11 +390,17 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 
 		it("a skip-rejected add's raw-captured contribution does not run under stackRoutines — root-anchored matching bypasses ownership entirely (#372/#373)", async () => {
 			const api = await slothlet({
-				dir: TEST_DIRS.API_TEST_ROUTINES,
+				base: TEST_DIRS.API_TEST_ROUTINES,
 				mode,
-				routines: [{ name: "^ext.*.initialize", mode: "manual" }],
-				stackRoutines: true,
-				collision: { api: "skip" },
+				routines: {
+					entries: [{ name: "^ext.*.initialize", mode: "manual" }],
+					stack: true
+				},
+				api: {
+					collision: {
+						mode: { api: "skip" }
+					}
+				},
 				silent: true
 			});
 			try {
@@ -398,10 +422,12 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 
 		it("removing the CURRENT winner by its exact api path prunes its raw contribution too (#372 review)", async () => {
 			const api = await slothlet({
-				dir: TEST_DIRS.API_TEST_ROUTINES,
+				base: TEST_DIRS.API_TEST_ROUTINES,
 				mode,
-				routines: [{ name: "^ext.*.initialize", mode: "manual" }],
-				stackRoutines: true,
+				routines: {
+					entries: [{ name: "^ext.*.initialize", mode: "manual" }],
+					stack: true
+				},
 				silent: true
 			});
 			try {
@@ -432,7 +458,7 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 
 	describe("flat registration-order cascade across distinct mount points", () => {
 		it("the root cascade runs every mount's own contribution, not just one shared path", async () => {
-			const api = await slothlet({ dir: TEST_DIRS.API_TEST_ROUTINES, mode, silent: true });
+			const api = await slothlet({ base: TEST_DIRS.API_TEST_ROUTINES, mode, silent: true });
 			try {
 				await api.slothlet.api.add(["auth"], TEST_DIRS.API_TEST_ROUTINES_AUTH1);
 				await api.slothlet.api.add(["billing"], TEST_DIRS.API_TEST_ROUTINES_AUTH2);
@@ -451,7 +477,7 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 			["api.shutdown()", async (api) => api.shutdown()],
 			["api.slothlet.shutdown()", async (api) => api.slothlet.shutdown()]
 		])("%s runs every shutdown-mode contributor via the existing dispose path", async (____label, dispose) => {
-			const api = await slothlet({ dir: TEST_DIRS.API_TEST_ROUTINES, mode, autoRoutines: true, stackRoutines: true, silent: true });
+			const api = await slothlet({ base: TEST_DIRS.API_TEST_ROUTINES, mode, routines: { auto: true, stack: true }, silent: true });
 			await api.slothlet.api.add(["auth"], TEST_DIRS.API_TEST_ROUTINES_AUTH1);
 			await api.slothlet.api.add(["auth"], TEST_DIRS.API_TEST_ROUTINES_AUTH2);
 
@@ -464,11 +490,13 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 	describe("mode: destroy", () => {
 		it("api.destroy() runs every destroy-mode contributor, and shutdown-mode routines still run too (destroy() calls the root shutdown() internally)", async () => {
 			const api = await slothlet({
-				dir: TEST_DIRS.API_TEST_ROUTINES,
+				base: TEST_DIRS.API_TEST_ROUTINES,
 				mode,
-				routines: [...slothlet.defaults.routines, "destroy:destroy"],
-				autoRoutines: true,
-				stackRoutines: true,
+				routines: {
+					entries: [...slothlet.defaults.routines, "destroy:destroy"],
+					auto: true,
+					stack: true
+				},
 				silent: true
 			});
 			await api.slothlet.api.add(["auth"], TEST_DIRS.API_TEST_ROUTINES_AUTH1);
@@ -487,10 +515,12 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 
 		it("a plain api.shutdown() call does NOT run destroy-mode routines", async () => {
 			const api = await slothlet({
-				dir: TEST_DIRS.API_TEST_ROUTINES,
+				base: TEST_DIRS.API_TEST_ROUTINES,
 				mode,
-				routines: [{ name: "destroy", mode: "destroy" }],
-				autoRoutines: true,
+				routines: {
+					entries: [{ name: "destroy", mode: "destroy" }],
+					auto: true
+				},
 				silent: true
 			});
 			await api.slothlet.api.add(["auth"], TEST_DIRS.API_TEST_ROUTINES_AUTH1);
@@ -505,10 +535,12 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 			// deferred ROUTINE_FAILED aggregate for a mode: "shutdown" routine — that throw must not
 			// skip destroy()'s own isDestroyed/key-clearing/api-nulling cleanup below it.
 			const api = await slothlet({
-				dir: TEST_DIRS.API_TEST_ROUTINES,
+				base: TEST_DIRS.API_TEST_ROUTINES,
 				mode,
-				routines: [{ name: "initialize", mode: "shutdown" }],
-				autoRoutines: true,
+				routines: {
+					entries: [{ name: "initialize", mode: "shutdown" }],
+					auto: true
+				},
 				silent: true
 			});
 			await api.slothlet.api.add(["bad"], TEST_DIRS.API_TEST_ROUTINES_BAD); // bad's "initialize" throws
@@ -533,10 +565,12 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 		// deeper-mounted auth2 first regardless of mount sequence.
 		it('order: "depth" (the mode: "shutdown" default) runs the deeper-mounted contributor first, regardless of mount sequence', async () => {
 			const api = await slothlet({
-				dir: TEST_DIRS.API_TEST_ROUTINES,
+				base: TEST_DIRS.API_TEST_ROUTINES,
 				mode,
-				routines: [{ name: "shutdown", mode: "shutdown", order: "depth" }],
-				autoRoutines: true,
+				routines: {
+					entries: [{ name: "shutdown", mode: "shutdown", order: "depth" }],
+					auto: true
+				},
 				silent: true
 			});
 			await api.slothlet.api.add(["billing"], TEST_DIRS.API_TEST_ROUTINES_AUTH1); // mounted 1st, shallower (billing.shutdown)
@@ -549,10 +583,12 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 
 		it('order: "mount" runs contributors in mount sequence regardless of relative depth', async () => {
 			const api = await slothlet({
-				dir: TEST_DIRS.API_TEST_ROUTINES,
+				base: TEST_DIRS.API_TEST_ROUTINES,
 				mode,
-				routines: [{ name: "shutdown", mode: "shutdown", order: "mount" }],
-				autoRoutines: true,
+				routines: {
+					entries: [{ name: "shutdown", mode: "shutdown", order: "mount" }],
+					auto: true
+				},
 				silent: true
 			});
 			await api.slothlet.api.add(["billing"], TEST_DIRS.API_TEST_ROUTINES_AUTH1); // mounted 1st, shallower
@@ -567,10 +603,12 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 
 		it('mode: "startup" defaults to order: "mount" (registration order), not depth', async () => {
 			const api = await slothlet({
-				dir: TEST_DIRS.API_TEST_ROUTINES,
+				base: TEST_DIRS.API_TEST_ROUTINES,
 				mode,
-				routines: [{ name: "initialize", mode: "startup" }],
-				autoRoutines: true,
+				routines: {
+					entries: [{ name: "initialize", mode: "startup" }],
+					auto: true
+				},
 				silent: true
 			});
 			try {
@@ -595,10 +633,12 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 	describe("mode: manual", () => {
 		it("never auto-runs at compose end or on dispose; only an explicit call runs it", async () => {
 			const api = await slothlet({
-				dir: TEST_DIRS.API_TEST_ROUTINES_MANUAL,
+				base: TEST_DIRS.API_TEST_ROUTINES_MANUAL,
 				mode,
-				routines: ["launch"],
-				autoRoutines: true,
+				routines: {
+					entries: ["launch"],
+					auto: true
+				},
 				silent: true
 			});
 			try {
@@ -617,9 +657,11 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 	describe("internal state hygiene", () => {
 		it("reset() also clears the compiled-pattern cache, not just captured contributors", async () => {
 			const api = await slothlet({
-				dir: TEST_DIRS.API_TEST_ROUTINES,
+				base: TEST_DIRS.API_TEST_ROUTINES,
 				mode,
-				routines: [{ name: "^ext.*.initialize", mode: "manual" }],
+				routines: {
+					entries: [{ name: "^ext.*.initialize", mode: "manual" }]
+				},
 				silent: true
 			});
 			try {
@@ -636,9 +678,11 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 
 		it("onImplCreated removes a stale raw contribution when the same path's impl later changes to a non-function", async () => {
 			const api = await slothlet({
-				dir: TEST_DIRS.API_TEST_ROUTINES,
+				base: TEST_DIRS.API_TEST_ROUTINES,
 				mode,
-				routines: [{ name: "^stale.initialize" }],
+				routines: {
+					entries: [{ name: "^stale.initialize" }]
+				},
 				silent: true
 			});
 			try {
@@ -661,7 +705,7 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 
 	describe("error propagation (best-effort, aggregated)", () => {
 		it("a throwing contributor does not block a LATER contributor from still running (best-effort, not fail-fast)", async () => {
-			const api = await slothlet({ dir: TEST_DIRS.API_TEST_ROUTINES, mode, stackRoutines: true, silent: true });
+			const api = await slothlet({ base: TEST_DIRS.API_TEST_ROUTINES, mode, routines: { stack: true }, silent: true });
 			try {
 				await api.slothlet.api.add(["ns"], TEST_DIRS.API_TEST_ROUTINES_GOOD); // runs, succeeds
 				await api.slothlet.api.add(["ns"], TEST_DIRS.API_TEST_ROUTINES_BAD); // runs, throws
@@ -685,7 +729,7 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 		});
 
 		it("aggregates every failure across multiple failing contributors, not just the first", async () => {
-			const api = await slothlet({ dir: TEST_DIRS.API_TEST_ROUTINES, mode, silent: true });
+			const api = await slothlet({ base: TEST_DIRS.API_TEST_ROUTINES, mode, silent: true });
 			try {
 				await api.slothlet.api.add(["ns2"], TEST_DIRS.API_TEST_ROUTINES_BAD);
 				await api.slothlet.api.add(["billing"], TEST_DIRS.API_TEST_ROUTINES_BAD);
@@ -708,10 +752,18 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 	describe("collectLifecycleHooks interaction", () => {
 		it("collectLifecycleHooks: true does not double-invoke a routine-stack contributor sharing the shutdown name", async () => {
 			const api = await slothlet({
-				dir: TEST_DIRS.API_TEST_ROUTINES,
+				base: TEST_DIRS.API_TEST_ROUTINES,
 				mode,
-				collectLifecycleHooks: true,
-				stackRoutines: true,
+				// The routines v3's collectLifecycleHooks: true expanded into.
+				routines: {
+					auto: true,
+					entries: [
+						{ name: "initialize", mode: "startup" },
+						{ name: "^**.shutdown", mode: "shutdown", order: "depth" },
+						{ name: "^**.destroy", mode: "destroy", order: "depth" }
+					],
+					stack: true
+				},
 				silent: true
 			});
 			await api.slothlet.api.add(["auth"], TEST_DIRS.API_TEST_ROUTINES_AUTH1);
@@ -722,7 +774,6 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 
 			// Each contributor must appear exactly once — collectLifecycleHooks' tree walk must skip the
 			// branded stacked callable rather than invoking it a second time on top of the routine cascade.
-			// collectLifecycleHooks: true also implies autoRoutines (deprecated alias) — see config.mjs.
 			expect(globalThis.__slothletRoutineLog.filter((entry) => entry === "auth1:shutdown")).toHaveLength(1);
 			expect(globalThis.__slothletRoutineLog.filter((entry) => entry === "auth2:shutdown")).toHaveLength(1);
 		});
@@ -733,10 +784,16 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 			// does not exercise: a `recursive: true` mount-relative routine searches WITHIN one mount's
 			// subtree, which is exactly where collectLifecycleHooks' own walk would also look.
 			const api = await slothlet({
-				dir: TEST_DIRS.API_TEST_ROUTINES,
+				base: TEST_DIRS.API_TEST_ROUTINES,
 				mode,
-				routines: [{ name: "shutdown", mode: "shutdown", recursive: true }],
-				collectLifecycleHooks: true,
+				// v3 collectLifecycleHooks: true replaced the recursive shutdown routine with its root-anchored ones.
+				routines: {
+					entries: [
+						{ name: "^**.shutdown", mode: "shutdown", order: "depth" },
+						{ name: "^**.destroy", mode: "destroy", order: "depth" }
+					],
+					auto: true
+				},
 				silent: true
 			});
 			await api.slothlet.api.add(["auth"], TEST_DIRS.API_TEST_ROUTINES_NESTED);
@@ -759,13 +816,15 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 			// callable installed at "auth.initialize" must invoke only the one routine it was actually
 			// built for, not every raw entry that happens to share that apiPath.
 			const api = await slothlet({
-				dir: TEST_DIRS.API_TEST_ROUTINES_CROSSPATH_ROOT,
+				base: TEST_DIRS.API_TEST_ROUTINES_CROSSPATH_ROOT,
 				mode,
-				routines: [
-					{ name: "auth.initialize", mode: "manual" },
-					{ name: "initialize", mode: "manual" }
-				],
-				stackRoutines: true,
+				routines: {
+					entries: [
+						{ name: "auth.initialize", mode: "manual" },
+						{ name: "initialize", mode: "manual" }
+					],
+					stack: true
+				},
 				silent: true
 			});
 			await api.slothlet.api.add(["auth"], TEST_DIRS.API_TEST_ROUTINES_CROSSPATH_MOUNTED);
@@ -783,10 +842,12 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 	describe("reactive per-path stack self-heal without a further add()/reload()/cascade trigger (#362)", () => {
 		it("a genuinely distinct late contributor, captured after an ordinary write already discarded the stack, still runs", async () => {
 			const api = await slothlet({
-				dir: TEST_DIRS.API_TEST_ROUTINES,
+				base: TEST_DIRS.API_TEST_ROUTINES,
 				mode,
-				routines: [{ name: "^auth.initialize", mode: "manual" }],
-				stackRoutines: true,
+				routines: {
+					entries: [{ name: "^auth.initialize", mode: "manual" }],
+					stack: true
+				},
 				silent: true
 			});
 			try {
@@ -838,10 +899,12 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 
 		it("a lone contributor is left alone — no reactive rewrap when there is nothing to stack", async () => {
 			const api = await slothlet({
-				dir: TEST_DIRS.API_TEST_ROUTINES,
+				base: TEST_DIRS.API_TEST_ROUTINES,
 				mode,
-				routines: [{ name: "^auth.initialize", mode: "manual" }],
-				stackRoutines: true,
+				routines: {
+					entries: [{ name: "^auth.initialize", mode: "manual" }],
+					stack: true
+				},
 				silent: true
 			});
 			try {
@@ -867,9 +930,11 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 
 		it("cascade forwards its arguments, unchanged, to every matching contributor tree-wide", async () => {
 			const api = await slothlet({
-				dir: TEST_DIRS.API_TEST_ROUTINES_CASCADE_ARGS,
+				base: TEST_DIRS.API_TEST_ROUTINES_CASCADE_ARGS,
 				mode,
-				routines: [{ name: "initialize", mode: "manual" }],
+				routines: {
+					entries: [{ name: "initialize", mode: "manual" }]
+				},
 				silent: true
 			});
 			try {
@@ -893,9 +958,11 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 			// test can prove the healed slot is a genuine tree-wide cascade, not just a per-path fix
 			// scoped to the root.
 			const api = await slothlet({
-				dir: TEST_DIRS.API_TEST_ROUTINES,
+				base: TEST_DIRS.API_TEST_ROUTINES,
 				mode,
-				routines: [{ name: "initialize", mode: "manual" }],
+				routines: {
+					entries: [{ name: "initialize", mode: "manual" }]
+				},
 				silent: true
 			});
 			try {
@@ -950,13 +1017,15 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 			// asserts the SAME deterministic winner (the LAST configured routine matching this path)
 			// rather than whichever routine's reactive patch merely happened to fire first.
 			const api = await slothlet({
-				dir: TEST_DIRS.API_TEST_ROUTINES_CROSSPATH_ROOT,
+				base: TEST_DIRS.API_TEST_ROUTINES_CROSSPATH_ROOT,
 				mode,
-				routines: [
-					{ name: "auth.initialize", mode: "manual" },
-					{ name: "initialize", mode: "manual" }
-				],
-				stackRoutines: true,
+				routines: {
+					entries: [
+						{ name: "auth.initialize", mode: "manual" },
+						{ name: "initialize", mode: "manual" }
+					],
+					stack: true
+				},
 				silent: true
 			});
 			try {
@@ -1005,10 +1074,12 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 			// patch ran on an immediate microtask chain instead of a macrotask boundary, its own write
 			// could land BEFORE that slower real assignment, which would then silently clobber it.
 			const api = await slothlet({
-				dir: TEST_DIRS.API_TEST_ROUTINES,
+				base: TEST_DIRS.API_TEST_ROUTINES,
 				mode,
-				routines: [{ name: "^auth.initialize", mode: "manual" }],
-				stackRoutines: true,
+				routines: {
+					entries: [{ name: "^auth.initialize", mode: "manual" }],
+					stack: true
+				},
 				silent: true
 			});
 			try {
@@ -1051,10 +1122,12 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 
 		it("does NOT reactively heal while a build is in progress — the build's own rebuildStacks() is authoritative (#362)", async () => {
 			const api = await slothlet({
-				dir: TEST_DIRS.API_TEST_ROUTINES,
+				base: TEST_DIRS.API_TEST_ROUTINES,
 				mode,
-				routines: [{ name: "^auth.initialize", mode: "manual" }],
-				stackRoutines: true,
+				routines: {
+					entries: [{ name: "^auth.initialize", mode: "manual" }],
+					stack: true
+				},
 				silent: true
 			});
 			try {
@@ -1112,10 +1185,12 @@ describe.each(["eager", "lazy"])("routine self.* context under the root cascade 
 
 	it("api.initialize() (root cascade) resolves a contributor's ambient self.* unwrapped", async () => {
 		const api = await slothlet({
-			dir: TEST_DIRS.API_TEST_ROUTINES_SELF,
+			base: TEST_DIRS.API_TEST_ROUTINES_SELF,
 			mode,
-			routines: [{ name: "initialize", mode: "manual", recursive: true }],
-			stackRoutines: true,
+			routines: {
+				entries: [{ name: "initialize", mode: "manual", recursive: true }],
+				stack: true
+			},
 			silent: true
 		});
 		try {
@@ -1128,10 +1203,12 @@ describe.each(["eager", "lazy"])("routine self.* context under the root cascade 
 
 	it("per-path api.worker.initialize() still resolves ambient self.* (regression guard)", async () => {
 		const api = await slothlet({
-			dir: TEST_DIRS.API_TEST_ROUTINES_SELF,
+			base: TEST_DIRS.API_TEST_ROUTINES_SELF,
 			mode,
-			routines: [{ name: "initialize", mode: "manual", recursive: true }],
-			stackRoutines: true,
+			routines: {
+				entries: [{ name: "initialize", mode: "manual", recursive: true }],
+				stack: true
+			},
 			silent: true
 		});
 		try {
@@ -1144,10 +1221,12 @@ describe.each(["eager", "lazy"])("routine self.* context under the root cascade 
 
 	it("the root cascade forwards its arguments to each contributor (self.* + ctx)", async () => {
 		const api = await slothlet({
-			dir: TEST_DIRS.API_TEST_ROUTINES_SELF,
+			base: TEST_DIRS.API_TEST_ROUTINES_SELF,
 			mode,
-			routines: [{ name: "activate", mode: "manual", recursive: true }],
-			stackRoutines: true,
+			routines: {
+				entries: [{ name: "activate", mode: "manual", recursive: true }],
+				stack: true
+			},
 			silent: true
 		});
 		try {
@@ -1160,10 +1239,12 @@ describe.each(["eager", "lazy"])("routine self.* context under the root cascade 
 
 	it("a DEEP-merged contributor (api.add, nested path) resolves self.* under the cascade", async () => {
 		const api = await slothlet({
-			dir: TEST_DIRS.API_TEST_ROUTINES_SELF,
+			base: TEST_DIRS.API_TEST_ROUTINES_SELF,
 			mode,
-			routines: [{ name: "initialize", mode: "manual", recursive: true }],
-			stackRoutines: true,
+			routines: {
+				entries: [{ name: "initialize", mode: "manual", recursive: true }],
+				stack: true
+			},
 			silent: true
 		});
 		try {
@@ -1179,10 +1260,12 @@ describe.each(["eager", "lazy"])("routine self.* context under the root cascade 
 
 	it("STACKED contributors at one shared path all resolve self.* under the cascade", async () => {
 		const api = await slothlet({
-			dir: TEST_DIRS.API_TEST_ROUTINES_SELF,
+			base: TEST_DIRS.API_TEST_ROUTINES_SELF,
 			mode,
-			routines: [{ name: "initialize", mode: "manual", recursive: true }],
-			stackRoutines: true,
+			routines: {
+				entries: [{ name: "initialize", mode: "manual", recursive: true }],
+				stack: true
+			},
 			silent: true
 		});
 		try {
@@ -1202,11 +1285,13 @@ describe.each(["eager", "lazy"])("routine self.* context under the root cascade 
 
 	it("an AUTO-FIRED startup routine resolves ambient self.* at compose end (autoRoutines)", async () => {
 		const api = await slothlet({
-			dir: TEST_DIRS.API_TEST_ROUTINES_SELF,
+			base: TEST_DIRS.API_TEST_ROUTINES_SELF,
 			mode,
-			autoRoutines: true,
-			routines: [{ name: "initialize", mode: "startup", recursive: true }],
-			stackRoutines: true,
+			routines: {
+				auto: true,
+				entries: [{ name: "initialize", mode: "startup", recursive: true }],
+				stack: true
+			},
 			silent: true
 		});
 		try {
@@ -1226,11 +1311,13 @@ describe.each(["eager", "lazy"])("routine self.* context under the root cascade 
 	describe("each contributor runs under its OWN caller identity (permissions)", () => {
 		const mkApi = () =>
 			slothlet({
-				dir: TEST_DIRS.API_TEST_ROUTINES_PERM,
+				base: TEST_DIRS.API_TEST_ROUTINES_PERM,
 				mode,
-				permissions: { defaultPolicy: "deny", rules: [{ caller: "a**", target: "secret**", effect: "allow" }] },
-				routines: [{ name: "initialize", mode: "manual", recursive: true }],
-				stackRoutines: true,
+				permissions: { policy: "deny", rules: [{ caller: "a**", target: "secret**", effect: "allow" }] },
+				routines: {
+					entries: [{ name: "initialize", mode: "manual", recursive: true }],
+					stack: true
+				},
 				silent: true
 			});
 

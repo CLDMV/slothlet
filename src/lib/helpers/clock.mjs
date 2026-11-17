@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:11-08:00 (1794874571)
+ *	@Last modified time: 2026-11-16T18:27:55-08:00 (1794882475)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -77,8 +77,8 @@ export function clockOf(slothlet) {
 
 /**
  * Build an instance's clock from the host's `clock` option.
- * @param {{now?: Function, setTimeout?: Function, clearTimeout?: Function}|undefined} option - The option as the host
- *   gave it; absent means the default clock.
+ * @param {{now?: Function, set?: Function, clear?: Function}|undefined} option - The option as the host gave it (`set`
+ *   schedules a callback as `setTimeout` does, `clear` cancels one as `clearTimeout` does); absent means the default clock.
  * @returns {Clock|null} The clock, or `null` when the option is not an object whose given members are functions.
  * @internal
  * @example
@@ -88,7 +88,7 @@ export function clockOf(slothlet) {
 export function createClock(option) {
 	if (option === undefined) return DEFAULT_CLOCK;
 	if (option === null || typeof option !== "object" || Arrays.isArray(option)) return null;
-	const { now, setTimeout, clearTimeout } = option;
+	const { now, set: setTimeout, clear: clearTimeout } = option;
 	for (let ofIndex = 0, ofList = [now, setTimeout, clearTimeout]; ofIndex < ofList.length; ofIndex++) {
 		const member = ofList[ofIndex];
 		if (member !== undefined && typeof member !== "function") return null;

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:09-08:00 (1794874569)
+ *	@Last modified time: 2026-11-16T18:27:51-08:00 (1794882471)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -462,7 +462,7 @@ export class HookManager extends ComponentBase {
 
 		this.enabled = hookConfig.enabled;
 		this.defaultPattern = hookConfig.pattern || "**";
-		this.suppressErrors = hookConfig.suppressErrors || false;
+		this.suppressErrors = hookConfig.errors === "suppress";
 
 		// Pin-enforcement policy. When true (default) a per-registration `lockCaller: false` on a
 		// MODULE hook is ignored (force-pinned) — an unpinned module hook runs without an enforced

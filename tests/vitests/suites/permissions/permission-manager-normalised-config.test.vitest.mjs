@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:17:06-08:00 (1794874626)
+ *	@Last modified time: 2026-11-16T18:29:38-08:00 (1794882578)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -45,8 +45,8 @@ const RAW_FORMS = [
 	["true", true, "on"],
 	["false", false, "off"],
 	["an empty object", {}, "on"],
-	["enabled: false", { enabled: false }, "off"],
-	["mode over enabled", { mode: "off", enabled: true }, "off"],
+	["mode: false", { mode: false }, "off"],
+	["mode: true", { mode: true }, "on"],
 	["audit: true", { audit: true }, "on"],
 	["audit: false", { audit: false, mode: "on" }, "on"],
 	["a mode with no other field", { mode: "disabled" }, "disabled"]
@@ -67,7 +67,10 @@ describe.each(CONFIGS)("The permission manager reads the normalised permissions 
 	 * @returns {Promise<object>} The composed api.
 	 */
 	async function load(permissions, attribution) {
-		const given = permissions !== null && typeof permissions === "object" ? { ...permissions, attribution } : permissions;
+		const given =
+			permissions !== null && typeof permissions === "object"
+				? { ...permissions, caller: { ...permissions.caller, attribution } }
+				: permissions;
 		api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, permissions: given });
 		await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { moduleID: "guest" });
 		return api;

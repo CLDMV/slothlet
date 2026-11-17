@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:03-07:00 (1791090903)
+ *	@Last modified time: 2026-11-16T18:29:04-08:00 (1794882544)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -76,7 +76,7 @@ describe.each(getMatrixConfigs())("Events > event system (#407) > $name", ({ con
 
 	// ── Module path: three levels ────────────────────────────────────────────────
 	it("a module with no matching rule gets the notify default: trigger only, no payload", async () => {
-		api = await slothlet({ ...config, base: BASE, permissions: { defaultPolicy: "allow", events: { default: "notify" } } });
+		api = await slothlet({ ...config, base: BASE, permissions: { policy: "allow", events: { policy: "notify" } } });
 		const level = await api.subscriber.subscribe("news.item");
 		expect(level).toBe("notify");
 		await api.emitter.fire("news.item", { secret: "top" });
@@ -91,8 +91,8 @@ describe.each(getMatrixConfigs())("Events > event system (#407) > $name", ({ con
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "allow",
-				events: { default: "notify", rules: [{ caller: "subscriber.**", event: "secret.*", effect: "allow" }] }
+				policy: "allow",
+				events: { policy: "notify", rules: [{ caller: "subscriber.**", event: "secret.*", effect: "allow" }] }
 			}
 		});
 		const level = await api.subscriber.subscribe("secret.data");
@@ -108,8 +108,8 @@ describe.each(getMatrixConfigs())("Events > event system (#407) > $name", ({ con
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "allow",
-				events: { default: "notify", rules: [{ caller: "subscriber.**", event: "blocked.*", effect: "deny" }] }
+				policy: "allow",
+				events: { policy: "notify", rules: [{ caller: "subscriber.**", event: "blocked.*", effect: "deny" }] }
 			}
 		});
 		const level = await api.subscriber.subscribe("blocked.thing");
@@ -125,9 +125,9 @@ describe.each(getMatrixConfigs())("Events > event system (#407) > $name", ({ con
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				events: {
-					default: "notify",
+					policy: "notify",
 					rules: [
 						{ caller: "**", event: "**", effect: "deny" },
 						{ caller: "subscriber.**", event: "open.*", effect: "allow" }
@@ -144,8 +144,8 @@ describe.each(getMatrixConfigs())("Events > event system (#407) > $name", ({ con
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "allow",
-				events: { default: "notify", rules: [{ caller: "subscriber.**", event: "evt.*", effect: "allow" }] }
+				policy: "allow",
+				events: { policy: "notify", rules: [{ caller: "subscriber.**", event: "evt.*", effect: "allow" }] }
 			}
 		});
 		// Instance rule grants allow.
@@ -169,7 +169,7 @@ describe.each(getMatrixConfigs())("Events > event system (#407) > $name", ({ con
 
 	// ── Reload replay ────────────────────────────────────────────────────────────
 	it("a runtime-added event rule replays across reload", async () => {
-		api = await slothlet({ ...config, base: BASE, permissions: { defaultPolicy: "allow", events: { default: "notify" } } });
+		api = await slothlet({ ...config, base: BASE, permissions: { policy: "allow", events: { policy: "notify" } } });
 		const id = api.slothlet.event.rules.add({ caller: "subscriber.**", event: "kept.*", effect: "allow" });
 		expect(typeof id).toBe("string");
 		// Before reload: allow.

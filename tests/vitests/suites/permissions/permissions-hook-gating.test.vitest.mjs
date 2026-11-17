@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T22:54:54-08:00 (1794812094)
+ *	@Last modified time: 2026-11-16T18:29:54-08:00 (1794882594)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -81,14 +81,14 @@ describe.each(getMatrixConfigs())("Permissions > hook gating (#118) > $name", ({
 	};
 
 	it("denies a module registering a concrete-target hook on a denied path", async () => {
-		api = await boot({ defaultPolicy: "deny", rules: [] });
+		api = await boot({ policy: "deny", rules: [] });
 		const r = await tryCall(() => api.auditor.arm("db.write:before"));
 		expect(r.ok).toBe(false);
 		expect(r.code).toBe("PERMISSION_DENIED");
 	});
 
 	it("allows + fires a concrete-target hook with a matching hook rule", async () => {
-		api = await boot({ defaultPolicy: "deny", rules: [{ caller: "auditor.**", target: "db.read:before", effect: "allow" }] });
+		api = await boot({ policy: "deny", rules: [{ caller: "auditor.**", target: "db.read:before", effect: "allow" }] });
 		const sink = [];
 		const r = await tryCall(() => api.auditor.arm("db.read:before", sink));
 		expect(r.ok).toBe(true);
@@ -97,7 +97,7 @@ describe.each(getMatrixConfigs())("Permissions > hook gating (#118) > $name", ({
 	});
 
 	it("fire-time gating: a glob hook fires only on paths the owner may hook (layered fallback)", async () => {
-		api = await boot({ defaultPolicy: "deny", rules: [{ caller: "auditor.**", target: "db.read:before", effect: "allow" }] });
+		api = await boot({ policy: "deny", rules: [{ caller: "auditor.**", target: "db.read:before", effect: "allow" }] });
 		const sink = [];
 		await api.auditor.arm("db.*:before", sink); // glob → registers; gated per concrete path at fire time
 		await api.db.write(1);
@@ -106,14 +106,14 @@ describe.each(getMatrixConfigs())("Permissions > hook gating (#118) > $name", ({
 	});
 
 	it("`:hook` grants every hook type on the path", async () => {
-		api = await boot({ defaultPolicy: "deny", rules: [{ caller: "auditor.**", target: "db.read:hook", effect: "allow" }] });
+		api = await boot({ policy: "deny", rules: [{ caller: "auditor.**", target: "db.read:hook", effect: "allow" }] });
 		expect((await tryCall(() => api.auditor.arm("db.read:before"))).ok).toBe(true);
 		expect((await tryCall(() => api.auditor.arm("db.read:after"))).ok).toBe(true);
 		expect((await tryCall(() => api.auditor.arm("db.read:error"))).ok).toBe(true);
 	});
 
 	it("a hook-only deny blocks hooking a path that is still callable", async () => {
-		api = await boot({ defaultPolicy: "allow", rules: [{ caller: "auditor.**", target: "db.read:before", effect: "deny" }] });
+		api = await boot({ policy: "allow", rules: [{ caller: "auditor.**", target: "db.read:before", effect: "deny" }] });
 		const r = await tryCall(() => api.auditor.arm("db.read:before"));
 		expect(r.ok).toBe(false);
 		expect(r.code).toBe("PERMISSION_DENIED");
@@ -121,7 +121,7 @@ describe.each(getMatrixConfigs())("Permissions > hook gating (#118) > $name", ({
 	});
 
 	it("management baseline: hook.disable is denied, hook.list is allowed", async () => {
-		api = await boot({ defaultPolicy: "allow", rules: [] });
+		api = await boot({ policy: "allow", rules: [] });
 		const dis = await tryCall(() => api.auditor.callDisable());
 		expect(dis.ok).toBe(false);
 		expect(dis.code).toBe("PERMISSION_DENIED");
@@ -137,7 +137,7 @@ describe.each(getMatrixConfigs())("Permissions > hook gating (#118) > $name", ({
 	});
 
 	it("the pin runtime switch is host-only when permissions are enabled", async () => {
-		api = await boot({ defaultPolicy: "allow", rules: [] });
+		api = await boot({ policy: "allow", rules: [] });
 		const mod = await tryCall(() => api.auditor.callPinDisable());
 		expect(mod.ok).toBe(false);
 		expect(mod.code).toBe("PERMISSION_DENIED");
@@ -159,7 +159,7 @@ describe.each(getMatrixConfigs())("Permissions > hook gating (#118) > $name", ({
 	});
 
 	it("host-registered hooks fire regardless of permissions (no owner identity to gate)", async () => {
-		api = await boot({ defaultPolicy: "deny", rules: [] });
+		api = await boot({ policy: "deny", rules: [] });
 		const sink = [];
 		api.slothlet.hook.on("db.read:before", (ctx) => sink.push(ctx.path)); // host caller → ownerPath null
 		await api.db.read();
@@ -168,7 +168,7 @@ describe.each(getMatrixConfigs())("Permissions > hook gating (#118) > $name", ({
 
 	it("colon-but-non-hook-type and empty-path targets are treated as plain call rules", async () => {
 		api = await boot({
-			defaultPolicy: "allow",
+			policy: "allow",
 			rules: [
 				{ caller: "**", target: "db.read:xyz", effect: "deny" }, // 'xyz' is not a hook type → call rule
 				{ caller: "**", target: ":before", effect: "deny" } // empty path before the type → call rule
@@ -183,7 +183,7 @@ describe.each(getMatrixConfigs())("Permissions > hook gating (#118) > $name", ({
 
 	it("a more specific hook rule overrides a broader one", async () => {
 		api = await boot({
-			defaultPolicy: "deny",
+			policy: "deny",
 			rules: [
 				{ caller: "auditor.**", target: "db.**:hook", effect: "allow" }, // broad: any hook on db.**
 				{ caller: "auditor.**", target: "db.write:before", effect: "deny" } // specific: deny before-hook on db.write
@@ -214,7 +214,7 @@ describe.each(getMatrixConfigs())("Permissions > hook gating (#118) > $name", ({
 	});
 
 	it("a before-only hook rule denies an after-hook on the same path (per-type)", async () => {
-		api = await boot({ defaultPolicy: "deny", rules: [{ caller: "auditor.**", target: "db.read:before", effect: "allow" }] });
+		api = await boot({ policy: "deny", rules: [{ caller: "auditor.**", target: "db.read:before", effect: "allow" }] });
 		expect((await tryCall(() => api.auditor.arm("db.read:before"))).ok).toBe(true); // before allowed
 		const after = await tryCall(() => api.auditor.arm("db.read:after"));
 		expect(after.ok).toBe(false); // after not covered → falls back to the (denied) call decision
@@ -223,7 +223,7 @@ describe.each(getMatrixConfigs())("Permissions > hook gating (#118) > $name", ({
 
 	it("equal-specificity hook rules: the last-registered wins", async () => {
 		api = await boot({
-			defaultPolicy: "deny",
+			policy: "deny",
 			rules: [
 				{ caller: "auditor.**", target: "db.read:before", effect: "allow" },
 				{ caller: "auditor.**", target: "db.read:before", effect: "deny" } // identical target/spec, later → wins

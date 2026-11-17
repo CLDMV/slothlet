@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:21-07:00 (1791090921)
+ *	@Last modified time: 2026-11-16T18:30:21-08:00 (1794882621)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -23,7 +23,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { getMatrixConfigs, TEST_DIRS, withSuppressedSlothletErrorOutput } from "../../setup/vitest-helper.mjs";
 
 // Ownership-enabled configurations only (collision mode with merge)
-const OWNERSHIP_CONFIGS = getMatrixConfigs({ api: { collision: { initial: "merge", api: "merge" } } });
+const OWNERSHIP_CONFIGS = getMatrixConfigs({ api: { collision: { mode: { initial: "merge", api: "merge" } } } });
 
 // Basic configurations for validation testing
 const BASIC_CONFIGS = getMatrixConfigs({});
@@ -151,7 +151,9 @@ describe("Rule 12 with allowApiOverwrite: false", () => {
 			eager: true,
 			api: {
 				mutations: { reload: true },
-				collision: { initial: "replace", api: "skip" }
+				collision: {
+					mode: { initial: "replace", api: "skip" }
+				}
 			}
 		});
 		apisToClean.push(api);
@@ -175,7 +177,9 @@ describe("Rule 12 with allowApiOverwrite: false", () => {
 			eager: true,
 			api: {
 				mutations: { reload: true },
-				collision: { initial: "merge-replace", api: "error" }
+				collision: {
+					mode: { initial: "merge-replace", api: "error" }
+				}
 			}
 		});
 		apisToClean.push(api);
@@ -205,7 +209,9 @@ describe("Rule 12 with allowApiOverwrite: false", () => {
 			eager: true,
 			api: {
 				mutations: { reload: true },
-				collision: { initial: "merge-replace", api: "error" }
+				collision: {
+					mode: { initial: "merge-replace", api: "error" }
+				}
 			}
 		});
 		apisToClean.push(api);
@@ -238,7 +244,9 @@ describe("Rule 12 with allowApiOverwrite: false", () => {
 			eager: false,
 			api: {
 				mutations: { reload: true },
-				collision: { initial: "replace", api: "skip" }
+				collision: {
+					mode: { initial: "replace", api: "skip" }
+				}
 			}
 		});
 		apisToClean.push(api);
@@ -259,7 +267,9 @@ describe("Rule 12 with allowApiOverwrite: false", () => {
 			eager: false,
 			api: {
 				mutations: { reload: true },
-				collision: { initial: "merge-replace", api: "error" }
+				collision: {
+					mode: { initial: "merge-replace", api: "error" }
+				}
 			}
 		});
 		apisToClean.push(api);
@@ -286,7 +296,9 @@ describe("Rule 12 with allowApiOverwrite: false", () => {
 			eager: false,
 			api: {
 				mutations: { reload: true },
-				collision: { initial: "merge-replace", api: "error" }
+				collision: {
+					mode: { initial: "merge-replace", api: "error" }
+				}
 			}
 		});
 		apisToClean.push(api);

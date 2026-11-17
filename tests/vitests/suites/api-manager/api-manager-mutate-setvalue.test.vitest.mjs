@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:57-07:00 (1791090897)
+ *	@Last modified time: 2026-11-16T18:28:35-08:00 (1794882515)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -65,7 +65,7 @@ async function makeDebugApi(overrides = {}) {
 		debug: { api: true },
 		// #380: these tests exercise per-call collisionMode on api.add, which is locked by default;
 		// opt in so the override is honored (and no ignore-warning fires).
-		api: { mutations: { allowCollisionOverride: true } },
+		api: { collision: { override: true } },
 		...overrides
 	});
 }
@@ -188,8 +188,10 @@ describe("setValueAtPath — merge on primitive triggers warning", () => {
 			base: TEST_DIRS.API_TEST,
 			mode: "eager",
 			hook: { enabled: false },
-			api: { mutations: { allowCollisionOverride: true } }, // #380: honor the per-call collisionMode below
-			silent: true // suppress warnings to avoid noise in test output
+			api: { collision: { override: true } },
+			// #380: honor the per-call collisionMode below
+			silent: true
+			// suppress warnings to avoid noise in test output
 		});
 
 		// Set a custom plain primitive on the API (stored on the wrapper)
@@ -215,7 +217,8 @@ describe("setValueAtPath — merge on primitive triggers warning", () => {
 			base: TEST_DIRS.API_TEST,
 			mode: "eager",
 			hook: { enabled: false },
-			api: { mutations: { allowCollisionOverride: true } } // #380: honor the per-call collisionMode below
+			api: { collision: { override: true } }
+			// #380: honor the per-call collisionMode below
 		});
 
 		// The root string export from api_test is a primitive if rootstring.mjs exports a string

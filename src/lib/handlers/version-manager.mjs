@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:10-08:00 (1794874570)
+ *	@Last modified time: 2026-11-16T18:27:53-08:00 (1794882473)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -543,7 +543,7 @@ export class VersionManager extends ComponentBase {
 	 * const tag = versionManager.resolveForPath("auth", allVersions, caller); // "v2"
 	 */
 	resolveForPath(logicalPath, allVersions, caller) {
-		const discriminator = this.slothlet.config?.versionDispatcher ?? "version";
+		const discriminator = this.slothlet.config?.versioning?.dispatcher ?? "version";
 
 		let resolvedTag = null;
 

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T22:53:59-08:00 (1794812039)
+ *	@Last modified time: 2026-11-16T18:29:23-08:00 (1794882563)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -58,7 +58,7 @@ import { TEST_DIRS, withSuppressedSlothletErrorOutput } from "../../setup/vitest
  * @returns {Promise<object>} The api.
  */
 const slothlet = (config) =>
-	slothletInstance(config?.permissions ? { ...config, permissions: { provenance: false, ...config.permissions } } : config);
+	slothletInstance(config?.permissions ? { ...config, permissions: { caller: { provenance: false }, ...config.permissions } } : config);
 
 const FIXTURE = TEST_DIRS.API_TEST_LAZY_UNLOADED_WRITE;
 const BREAK = Symbol.for("slothlet.test.i653.break");

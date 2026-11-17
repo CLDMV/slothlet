@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T09:00:00-08:00 (1794762000)
+ *	@Last modified time: 2026-11-16T18:28:05-08:00 (1794882485)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -51,10 +51,12 @@ describe("browser: a helper file an api leaf imports and slothlet's internal exp
 		const mod = await import("@cldmv/slothlet");
 		const slothlet = mod.default ?? mod.slothlet;
 		return slothlet({
-			platform: "browser",
 			base: BASE,
-			manifest: helperManifest,
-			resolveModuleSpecifier: ({ path }) => new URL(path, BASE).href,
+			loader: {
+				platform: "browser",
+				files: helperManifest,
+				resolve: ({ path }) => new URL(path, BASE).href
+			},
 			mode,
 			permissions
 		});
@@ -62,7 +64,7 @@ describe("browser: a helper file an api leaf imports and slothlet's internal exp
 
 	describe.each([
 		{ label: "permissions off", permissions: undefined },
-		{ label: "permissions on", permissions: { defaultPolicy: "allow" } },
+		{ label: "permissions on", permissions: { policy: "allow" } },
 		{ label: "permissions disabled", permissions: { mode: "disabled" } }
 	])("$label", ({ permissions }) => {
 		it.each(["eager", "lazy"])("%s: the helper in the module's folder is refused, the page is answered", async (mode) => {

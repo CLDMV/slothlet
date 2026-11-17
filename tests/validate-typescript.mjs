@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T19:48:32-08:00 (1794800912)
+ *	@Last modified time: 2026-11-16T18:28:12-08:00 (1794882492)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -276,10 +276,10 @@ async function validateMainExport(): Promise<boolean> {
         base: './api_tests/api_test',
         mode: 'lazy',        // 'eager' | 'lazy'
         runtime: 'async',    // 'async' | 'live'
-        platform: 'node',    // execution target (independent of env)
+        loader: { platform: 'node' }, // execution target (independent of env)
         env: { include: ['NODE_ENV'] }, // process.env snapshot allowlist (independent of platform)
         debug: false,
-        apiDepth: 5,
+        depth: 5,
         hook: true,
         silent: false,
         context: { test: true },
@@ -291,11 +291,6 @@ async function validateMainExport(): Promise<boolean> {
     const api3 = await slothlet({}); // Empty object
     const api4 = await slothlet({ base: './test' }); // Single property
     
-    // Deprecated alias still type-checks (dir -> base)
-    const apiLegacy = await slothlet({
-        dir: './api_tests/api_test', // deprecated alias for base
-        mode: 'eager'
-    });
     
     // Test type extraction
     type SlothletType = typeof slothlet;

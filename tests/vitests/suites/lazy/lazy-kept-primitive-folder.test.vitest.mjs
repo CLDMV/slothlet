@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T12:51:07-08:00 (1794775867)
+ *	@Last modified time: 2026-11-16T18:29:22-08:00 (1794882562)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -39,7 +39,7 @@ const KEYS = ["num", "str", "bool", "big", "sym"];
 const configs = [
 	...["eager", "lazy"].flatMap((mode) =>
 		["async", "live"].flatMap((runtime) =>
-			["precise", "fast"].map((attribution) => ({ mode, runtime, permissions: { attribution }, name: attribution }))
+			["precise", "fast"].map((attribution) => ({ mode, runtime, permissions: { caller: { attribution } }, name: attribution }))
 		)
 	),
 	...["async", "live"].flatMap((runtime) =>
@@ -85,7 +85,7 @@ describe.each(configs)("a kept lazy folder node that loads as a primitive > $mod
 	 * @returns {Promise<object>} The api.
 	 */
 	const load = async (rules = []) => {
-		api = await slothlet({ base: FIXTURE, mode, runtime, silent: true, permissions: { defaultPolicy: "allow", rules, ...permissions } });
+		api = await slothlet({ base: FIXTURE, mode, runtime, silent: true, permissions: { policy: "allow", rules, ...permissions } });
 		await api.zz;
 		return api;
 	};

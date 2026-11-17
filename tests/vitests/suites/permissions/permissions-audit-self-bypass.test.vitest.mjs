@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:14-07:00 (1791090914)
+ *	@Last modified time: 2026-11-16T18:29:40-08:00 (1794882580)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -32,7 +32,7 @@ describe.each(getMatrixConfigs())("Permissions > Audit Self Bypass > $name", ({ 
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "deny",
+				policy: "deny",
 				audit: true,
 				rules: []
 			}

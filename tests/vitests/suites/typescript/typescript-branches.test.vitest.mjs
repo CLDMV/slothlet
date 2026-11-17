@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:17:37-08:00 (1794874657)
+ *	@Last modified time: 2026-11-16T18:30:34-08:00 (1794882634)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -145,7 +145,7 @@ describe("loader.mjs L114 — fork message handler: else-if (msg.type === 'error
 								// blockFile is a regular FILE → outputDir exists but is not a dir
 								// → fork's writeFileSync throws ENOTDIR
 								output: path.join(blockFile, "types.d.ts"),
-								interfaceName: "TestAPI"
+								name: "TestAPI"
 							}
 						}
 					});

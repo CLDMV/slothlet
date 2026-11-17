@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-10T21:30:03-08:00 (1794375003)
+ *	@Last modified time: 2026-11-16T18:30:22-08:00 (1794882622)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -39,8 +39,8 @@ const matrix = ["eager", "lazy"].flatMap((mode) =>
 	["async", "live"].flatMap((runtime) =>
 		[
 			{ name: "permissions off", permissions: null },
-			{ name: "precise", permissions: { defaultPolicy: "allow", attribution: "precise" } },
-			{ name: "fast", permissions: { defaultPolicy: "allow", attribution: "fast" } }
+			{ name: "precise", permissions: { policy: "allow", caller: { attribution: "precise" } } },
+			{ name: "fast", permissions: { policy: "allow", caller: { attribution: "fast" } } }
 		].map((entry) => ({ mode, runtime, ...entry }))
 	)
 );

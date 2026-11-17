@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-13T21:50:06-08:00 (1794635406)
+ *	@Last modified time: 2026-11-16T18:29:33-08:00 (1794882573)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -183,15 +183,15 @@ beforeAll(() => {
 		"};",
 		"const out = {};",
 		"// slothlet's own files load with the first instance (index.mjs imports them then): one built and shut down first.",
-		"const warm = await slothlet({ dir: EXTRA, mode, runtime });",
+		"const warm = await slothlet({ base: EXTRA, mode, runtime });",
 		"await warm.shutdown();",
 		"if (replace === 'yes') replaceAll();",
 		"if (replace === 'node') replaceNode();",
 		"let api = null;",
 		"out.built = await step(async () => {",
 		"\tapi = await slothlet({",
-		"\t\tdir: API, mode, runtime, hook: true,",
-		"\t\tpermissions: { defaultPolicy: 'allow', attribution, rules: [{ caller: 'guest.**', target: 'math.**', effect: 'deny' }] }",
+		"\t\tbase: API, mode, runtime, hook: true,",
+		"\t\tpermissions: { policy: 'allow', rules: [{ caller: 'guest.**', target: 'math.**', effect: 'deny' }], caller: { attribution } }",
 		"\t});",
 		"\treturn 'built';",
 		"});",
@@ -221,7 +221,7 @@ beforeAll(() => {
 		"\t\treturn 'done';",
 		"\t});",
 		"}",
-		"out.refusedConfig = await step(() => slothlet({ dir: API + 'missing' }));",
+		"out.refusedConfig = await step(() => slothlet({ base: API + 'missing' }));",
 		"restoreAll();",
 		"if (replace === 'node') out.nodeHits = [...nodeHits];",
 		"process.stdout.write(JSON.stringify(out) + '\\n');",

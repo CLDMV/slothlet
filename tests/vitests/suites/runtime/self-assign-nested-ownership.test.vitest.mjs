@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-10T21:30:06-08:00 (1794375006)
+ *	@Last modified time: 2026-11-16T18:30:24-08:00 (1794882624)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -38,7 +38,7 @@ const FIXTURE = TEST_DIRS.API_TEST_NESTED_SELF_ASSIGN;
  * The permission system on, allowing every read and call: ownership decides the writes, and it decides them only
  * while the system is on (#625).
  */
-const PERMISSIONS_ON = { permissions: { defaultPolicy: "allow" } };
+const PERMISSIONS_ON = { permissions: { policy: "allow" } };
 
 const CONFIGS = [
 	{ mode: "eager", runtime: "async" },
@@ -173,7 +173,7 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 		});
 
 		it("refuses it under defaultPolicy allow with no matching rule", async () => {
-			await mountAll({ permissions: { defaultPolicy: "allow" } });
+			await mountAll({ permissions: { policy: "allow" } });
 			expect(withSuppressedSlothletErrorOutputSync(() => api.supplier.attack.writeCalleeSymbol())).toEqual(NOT_OWNED);
 		});
 
@@ -310,8 +310,10 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 			mode,
 			runtime,
 			silent: true,
-			stackRoutines: true,
-			routines: [{ name: "initialize", mode: "manual" }],
+			routines: {
+				stack: true,
+				entries: [{ name: "initialize", mode: "manual" }]
+			},
 			// The host's grant is a write rule, which applies only while the permission system is on; the host reads the
 			// framework's `__`-prefixed routine-stack marker below.
 			permissions: { private: { host: "allow" } }
@@ -336,7 +338,7 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 		"mounts a module's own api.add at %s below another module's mount point a host rule grants it (defaultPolicy allow: %s, awaited by the module: %s)",
 		async (at, allow, awaited) => {
 			// The host's grant is a write rule, which applies only while the permission system is on.
-			await mountModules({ permissions: allow ? { defaultPolicy: "allow" } : {} });
+			await mountModules({ permissions: allow ? { policy: "allow" } : {} });
 			for (const rule of grantMount(at)) api.slothlet.permissions.addRule(rule);
 			const folder = path.join(FIXTURE, "vault");
 			if (awaited) await api.supplier.attack.addAt(at, folder, "k4");
@@ -349,7 +351,7 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 
 	it.each([[true], [false]])("leaves nothing behind when a module's api.add is refused (awaited by the module: %s)", async (awaited) => {
 		await mountModules({
-			permissions: { defaultPolicy: "allow", rules: [{ caller: "supplier.**", target: "slothlet.api.add", effect: "deny" }] }
+			permissions: { policy: "allow", rules: [{ caller: "supplier.**", target: "slothlet.api.add", effect: "deny" }] }
 		});
 		const folder = path.join(FIXTURE, "vault");
 		await withSuppressedSlothletErrorOutput(async () => {
@@ -884,7 +886,7 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 
 	it("runs a kept lockCaller.caller as the module that read it when the host calls it later", async () => {
 		await mountSideChannels({
-			permissions: { defaultPolicy: "allow", rules: [{ caller: "evil.**", target: "slothlet.lockCaller.caller", effect: "allow" }] }
+			permissions: { policy: "allow", rules: [{ caller: "evil.**", target: "slothlet.lockCaller.caller", effect: "allow" }] }
 		});
 		await api.slothlet.api.add("front", path.join(FIXTURE, "front"), { moduleID: "front" });
 		const later = await api.front.relay.keepCallerPin();
@@ -896,7 +898,7 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 
 	it("pins the host, not the module, for code pinned to the host that a kept framework function runs later", async () => {
 		await mountSideChannels({
-			permissions: { defaultPolicy: "allow", rules: [{ caller: "evil.**", target: "slothlet.lockCaller.caller", effect: "allow" }] }
+			permissions: { policy: "allow", rules: [{ caller: "evil.**", target: "slothlet.lockCaller.caller", effect: "allow" }] }
 		});
 		const { run } = await api.evil.x.keepContextRun();
 		const { job } = await api.evil.x.pinForCaller(() =>

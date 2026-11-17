@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:54-07:00 (1791090894)
+ *	@Last modified time: 2026-11-16T18:28:11-08:00 (1794882491)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -116,7 +116,7 @@ function listApiMethods(api) {
  * const api = await createApiInstance(CJS_API_DIR, { user: "alice" });
  */
 async function createApiInstance(dir, context) {
-	const api = await slothlet({ dir, context });
+	const api = await slothlet({ base: dir, context });
 	await assertContextFields(api, context);
 	return api;
 }

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:09-08:00 (1794874569)
+ *	@Last modified time: 2026-11-16T18:27:51-08:00 (1794882471)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -1842,7 +1842,10 @@ export class LiveContextManager {
 		MapMethods.set(this.instances, instanceID, store);
 		// With permissions on, who started a flow is recorded for as long as the instance lives (see runningFlowStarter).
 		const permissions = config?.permissions;
-		if (permissions && (permissions.mode ? permissions.mode === "on" || permissions.mode === "strict" : permissions.enabled !== false)) {
+		if (
+			permissions &&
+			(permissions.mode === undefined || permissions.mode === true || permissions.mode === "on" || permissions.mode === "strict")
+		) {
 			store.__recordsFlowStarters = true;
 			this.#holdFlowStarters();
 		}

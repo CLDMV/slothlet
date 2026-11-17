@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-17T00:00:00-07:00 (1792220400)
+ *	@Last modified time: 2026-11-16T18:29:41-08:00 (1794882581)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -62,7 +62,7 @@ describe.each(getMatrixConfigs())("Permissions > caller-supplied code keeps the 
 	 * @returns {Promise<object>} The api.
 	 */
 	const build = async () => {
-		api = await slothlet({ ...config, base: BASE, permissions: { defaultPolicy: "deny", rules: RULES } });
+		api = await slothlet({ ...config, base: BASE, permissions: { policy: "deny", rules: RULES } });
 		return api;
 	};
 

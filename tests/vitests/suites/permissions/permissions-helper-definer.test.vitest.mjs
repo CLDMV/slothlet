@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-13T00:01:48-08:00 (1794556908)
+ *	@Last modified time: 2026-11-16T18:29:53-08:00 (1794882593)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -159,7 +159,13 @@ describe.each(MATRIX)("Permissions > a helper's function a leaf hands out > $nam
 		let api;
 
 		beforeAll(async () => {
-			api = await slothlet({ base: DIR, mode, runtime, silent: true, permissions: { defaultPolicy: "allow", attribution, rules: list } });
+			api = await slothlet({
+				base: DIR,
+				mode,
+				runtime,
+				silent: true,
+				permissions: { policy: "allow", caller: { attribution }, rules: list }
+			});
 			await loadAll(api);
 		});
 

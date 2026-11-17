@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-04T19:18:25-08:00 (1793848705)
+ *	@Last modified time: 2026-11-16T18:26:46-08:00 (1794882406)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -29,13 +29,13 @@ const KINDS = ["onwrite", "readableState", "events", "on", "writeCallback", "han
 const PERMISSIONS = {
 	// Code from strings is a built-in capability (D4 ruling part 1); the probe is about where the planted code runs.
 	evilDenied: {
-		defaultPolicy: "allow",
+		policy: "allow",
 		rules: [
 			{ caller: "evil.**", target: "vault.**", effect: "deny" },
 			{ caller: "**", target: "capability:code", effect: "allow" }
 		]
 	},
-	allAllowed: { defaultPolicy: "allow", rules: [{ caller: "**", target: "capability:code", effect: "allow" }] }
+	allAllowed: { policy: "allow", rules: [{ caller: "**", target: "capability:code", effect: "allow" }] }
 };
 
 const connections = new Set();

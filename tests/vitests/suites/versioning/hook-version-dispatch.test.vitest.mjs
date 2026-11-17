@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:26-07:00 (1791090926)
+ *	@Last modified time: 2026-11-16T18:30:42-08:00 (1794882642)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -95,7 +95,7 @@ describe("Versioning > hook registration dispatch (#250)", () => {
 	});
 
 	it("resolves { versioned: true } through the instance dispatcher like a call", async () => {
-		api = await bootVersioned({ versionDispatcher: () => "v2" });
+		api = await bootVersioned({ versioning: { dispatcher: () => "v2" } });
 		const fires = [];
 		api.slothlet.hook.on("auth.login:before", ({ version }) => void fires.push(version), {
 			id: "seamed",
@@ -109,7 +109,7 @@ describe("Versioning > hook registration dispatch (#250)", () => {
 	});
 
 	it("falls back to the default version when the dispatcher returns nothing", async () => {
-		api = await bootVersioned({ versionDispatcher: () => null });
+		api = await bootVersioned({ versioning: { dispatcher: () => null } });
 		const fires = [];
 		api.slothlet.hook.on("auth.login:before", ({ version }) => void fires.push(version), {
 			id: "defaulted",

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:20-07:00 (1791090920)
+ *	@Last modified time: 2026-11-16T18:30:16-08:00 (1794882616)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -104,7 +104,7 @@ describe("loader.mjs L115 — child.on(error) fork-spawn failure path", () => {
 						mode: "strict",
 						types: {
 							output: join(fixtureRoot, "generated", "api.d.ts"),
-							interfaceName: "ForkErrorAPI"
+							name: "ForkErrorAPI"
 						}
 					}
 				})

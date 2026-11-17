@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:08-07:00 (1791090908)
+ *	@Last modified time: 2026-11-16T18:29:17-08:00 (1794882557)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -39,7 +39,12 @@ describe.each(describe_each_matrix)("Hooks Suppress Errors > Config: '$name'", (
 			...config,
 			base: TEST_DIRS.API_TEST,
 			hook: { enabled: true, pattern: "**", ...hooksConfig },
-			collision: { initial: "replace", api: "replace" } // Use folder version, ignore file collisions
+			api: {
+				collision: {
+					mode: { initial: "replace", api: "replace" }
+				}
+			}
+			// Use folder version, ignore file collisions
 		});
 		return api;
 	}
@@ -74,7 +79,7 @@ describe.each(describe_each_matrix)("Hooks Suppress Errors > Config: '$name'", (
 	});
 
 	it("throws errors when suppressErrors is false", async () => {
-		await createApi({ suppressErrors: false });
+		await createApi({ errors: false });
 
 		const { flags } = registerErrorHook();
 
@@ -93,7 +98,7 @@ describe.each(describe_each_matrix)("Hooks Suppress Errors > Config: '$name'", (
 	});
 
 	it("suppresses before hook errors when enabled", async () => {
-		await createApi({ suppressErrors: true });
+		await createApi({ errors: "suppress" });
 
 		const { flags, lastContext } = registerErrorHook();
 
@@ -114,7 +119,7 @@ describe.each(describe_each_matrix)("Hooks Suppress Errors > Config: '$name'", (
 	});
 
 	it("suppresses function errors when enabled", async () => {
-		await createApi({ suppressErrors: true });
+		await createApi({ errors: "suppress" });
 
 		const { flags, lastContext } = registerErrorHook();
 
@@ -134,7 +139,7 @@ describe.each(describe_each_matrix)("Hooks Suppress Errors > Config: '$name'", (
 	});
 
 	it("suppresses after hook errors when enabled", async () => {
-		await createApi({ suppressErrors: true });
+		await createApi({ errors: "suppress" });
 
 		const { flags, lastContext } = registerErrorHook();
 
@@ -156,7 +161,7 @@ describe.each(describe_each_matrix)("Hooks Suppress Errors > Config: '$name'", (
 	});
 
 	it("does not throw for always hook errors when suppressErrors is enabled", async () => {
-		await createApi({ suppressErrors: true });
+		await createApi({ errors: "suppress" });
 
 		const { flags } = registerErrorHook();
 
@@ -175,14 +180,14 @@ describe.each(describe_each_matrix)("Hooks Suppress Errors > Config: '$name'", (
 	});
 
 	it("returns actual result when no errors occur under suppression", async () => {
-		await createApi({ suppressErrors: true });
+		await createApi({ errors: "suppress" });
 
 		const result = await api.math.add(10, 20);
 		expect(result).toBe(30);
 	});
 
 	it("suppresses failures while allowing other calls to succeed", async () => {
-		await createApi({ suppressErrors: true });
+		await createApi({ errors: "suppress" });
 
 		const errors = [];
 
@@ -214,7 +219,7 @@ describe.each(describe_each_matrix)("Hooks Suppress Errors > Config: '$name'", (
 	});
 
 	it("respects hooks enable/disable toggling with suppressErrors", async () => {
-		await createApi({ suppressErrors: true });
+		await createApi({ errors: "suppress" });
 
 		api.slothlet.hook.on(
 			"**:before",
@@ -237,7 +242,7 @@ describe.each(describe_each_matrix)("Hooks Suppress Errors > Config: '$name'", (
 	});
 
 	it("delivers errors to multiple error hooks when suppressed", async () => {
-		await createApi({ suppressErrors: true });
+		await createApi({ errors: "suppress" });
 
 		const flags = { all: [] };
 

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:13-08:00 (1794874573)
+ *	@Last modified time: 2026-11-16T18:27:56-08:00 (1794882476)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -69,6 +69,6 @@ export class ModesUtils extends ComponentBase {
 	 * @public
 	 */
 	getOwnershipCollisionMode(config, collisionContext = "initial") {
-		return config.collision?.[collisionContext] || "merge";
+		return config.api?.collision?.mode?.[collisionContext] || "merge";
 	}
 }

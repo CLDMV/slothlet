@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-14T00:00:00-08:00 (1794643200)
+ *	@Last modified time: 2026-11-16T18:30:28-08:00 (1794882628)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -107,7 +107,7 @@ describe.each(MODES)("a root file's members are nodes at the paths they are reac
 		});
 
 		describe.each(ATTRIBUTIONS)("permissions, %s attribution", (attribution) => {
-			const options = (rules) => ({ mode, runtime, permissions: { defaultPolicy: "allow", attribution, rules } });
+			const options = (rules) => ({ mode, runtime, permissions: { policy: "allow", caller: { attribution }, rules } });
 
 			it("a deny on a member's path refuses that member and nothing beside it", async () => {
 				const denyAdd = await build(place, options([{ caller: `${P}probe.**`, target: `${P}add`, effect: "deny" }]));
@@ -129,7 +129,7 @@ describe.each(MODES)("a root file's members are nodes at the paths they are reac
 	});
 
 	describe.each(ATTRIBUTIONS)("loaded as the base folder, %s attribution", (attribution) => {
-		const options = (rules) => ({ mode, runtime, permissions: { defaultPolicy: "allow", attribution, rules } });
+		const options = (rules) => ({ mode, runtime, permissions: { policy: "allow", caller: { attribution }, rules } });
 
 		it("a deny naming a member as the caller refuses that member's access, whoever calls it", async () => {
 			const api = await build("", options([{ caller: "peek", target: "vault.**", effect: "deny" }]));
@@ -244,7 +244,7 @@ describe.each(MODES)("a root file's members of every kind answer as plain JavaSc
 
 		it("a routine a root file's member provides runs once from the root cascade, and once more where it is placed", async () => {
 			globalThis.__rootKindsLaunches = 0;
-			const { api, root } = await buildAt("api_test_root_contributor_kinds", place, { mode, runtime, routines: ["launch"] });
+			const { api, root } = await buildAt("api_test_root_contributor_kinds", place, { mode, runtime, routines: { entries: ["launch"] } });
 			try {
 				// The root cascade is `api.launch`; at the base load the member is placed there too.
 				await api.launch();
@@ -280,7 +280,7 @@ describe.each(MODES)("a root file's members of every kind answer as plain JavaSc
 		});
 
 		it("writes by module code onto a member answer as they do on any node, in every permission mode", async () => {
-			for (const permissions of [undefined, { defaultPolicy: "allow" }, "disabled"]) {
+			for (const permissions of [undefined, { policy: "allow" }, "disabled"]) {
 				const { api, root } = await buildAt("api_test_root_contributor_members", place, {
 					mode,
 					runtime,
@@ -299,7 +299,7 @@ describe.each(MODES)("a root file's members of every kind answer as plain JavaSc
 			const { api, root } = await buildAt("api_test_root_contributor_members", place, {
 				mode,
 				runtime,
-				permissions: { mode: "disabled", attribution, rules: [{ caller: "**", target: `${P}add`, effect: "deny" }] }
+				permissions: { mode: "disabled", caller: { attribution }, rules: [{ caller: "**", target: `${P}add`, effect: "deny" }] }
 			});
 			try {
 				expect(await root.probe.call(`${P}add`, 2, 3)).toBe(5);

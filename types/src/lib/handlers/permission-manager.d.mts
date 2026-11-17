@@ -92,7 +92,7 @@ export class PermissionManager extends ComponentBase {
     /**
      * Resolve the delivery level for a subscriber/event pair (#407): "deny" | "notify" | "allow".
      * Most-specific-wins with the layered tiebreak (see {@link RULE_LAYER_RANK}); falls back to the
-     * base default (`permissions.events.default`, built-in "notify") when no rule matches. A host
+     * base default (`permissions.events.policy`, built-in "notify") when no rule matches. A host
      * subscription (no module caller) is trusted like a host-initiated call and always resolves "allow".
      *
      * Event levels are part of the permission system, so the pool follows its mode: while it is not on (`"off"`,
@@ -153,7 +153,7 @@ export class PermissionManager extends ComponentBase {
     }, ownerModuleID?: string | string[] | null, invoke?: (arg0: Function, arg1: Array<any>) => any): void;
     /**
      * Unregister a principal. Only its owner or the host may do so. Rules that require it stop
-     * matching (their calls fall to `defaultPolicy`).
+     * matching (their calls fall to `policy`).
      *
      * @param {string} name - Principal name.
      * @param {string|string[]|null} [callerModuleID=null] - Calling module's id, or a list of them (#597); `null` for the host.
@@ -498,7 +498,7 @@ export class PermissionManager extends ComponentBase {
      * or after {@link disable}) none is evaluated, the built-in ones — the framework's namespace and root functions,
      * and the framework's own keys on api nodes — included, and the ownership rule alone decides. An allow is a
      * grant, a lift of a built-in rule included: the write goes through whatever the module owns. With no matching
-     * write rule the rules say nothing — `defaultPolicy` grants nothing here — and the ownership rule alone decides.
+     * write rule the rules say nothing — `policy` grants nothing here — and the ownership rule alone decides.
      * A denial is audited like any other.
      *
      * @param {string} callerPath - Api path of the module writing.
@@ -536,7 +536,7 @@ export class PermissionManager extends ComponentBase {
     writeSubtree(callerPath: string, targetPath: string): "deny" | "grant" | null;
     /**
      * Whether the call and read rules could refuse `callerPath` a call or read at `targetPath` or anywhere beneath it,
-     * read from the rule set alone: a deny `defaultPolicy`, or a deny or conditional rule for the caller whose target
+     * read from the rule set alone: a deny `policy`, or a deny or conditional rule for the caller whose target
      * pattern can reach the subtree. A value held as itself takes no check of its own, so a reader is handed one that
      * reaches a node's own members only when no read of them could be refused. Hook-target rules decide no read.
      *
@@ -789,7 +789,7 @@ export class PermissionManager extends ComponentBase {
     /**
      * Whether terminal data-value property reads are permission-gated.
      * Separate from {@link isEnabled} so call enforcement is unaffected by this default-on
-     * flag (opt out via `permissions.readGating: false`).
+     * flag (opt out via `permissions.gating.read: false`).
      *
      * @returns {boolean} True if read gating is enabled.
      * @example

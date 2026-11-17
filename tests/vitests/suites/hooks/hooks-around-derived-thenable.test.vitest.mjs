@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-16T21:59:39-07:00 (1792213179)
+ *	@Last modified time: 2026-11-16T18:29:15-08:00 (1794882555)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -385,7 +385,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))(
 		});
 
 		it("with errors suppressed, a derived rejection resolves to undefined and reaches the error hooks once", async () => {
-			api = await boot(config, { suppressErrors: true });
+			api = await boot(config, { errors: "suppress" });
 			const errors = [];
 			api.slothlet.hook.on("svc.rejectThenable:error", ({ error, source }) => errors.push(`${error.message}:${source.type}`), { id: "er" });
 			api.slothlet.hook.on("svc.rejectThenable:around", ({ next }) => next().then((value) => value), { id: "derived" });

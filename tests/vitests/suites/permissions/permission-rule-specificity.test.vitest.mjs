@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-14T20:01:58-08:00 (1794715318)
+ *	@Last modified time: 2026-11-16T18:29:38-08:00 (1794882578)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -57,7 +57,7 @@ describe("Permissions > rule specificity (#770) > the rule manager", () => {
 	 */
 	const build = (rules, permissions = {}) => {
 		const manager = new PermissionManager({
-			config: { permissions: { mode: "on", defaultPolicy: "allow", ...permissions } },
+			config: { permissions: { mode: "on", policy: "allow", ...permissions } },
 			handlers: {},
 			debug() {},
 			SlothletError
@@ -83,7 +83,7 @@ describe("Permissions > rule specificity (#770) > the rule manager", () => {
 
 		it("ranks a.b.** over a.** over ** in every order", () => {
 			for (const order of orderings([rule("a.b.**", "deny"), rule("a.**", "allow"), rule("**", "deny")])) {
-				const manager = build(order, { defaultPolicy: "deny" });
+				const manager = build(order, { policy: "deny" });
 				expect(manager.checkAccess("m.n", "a.b.c")).toBe(false);
 				expect(manager.checkAccess("m.n", "a.x")).toBe(true);
 				expect(manager.checkAccess("m.n", "z")).toBe(false);
@@ -208,7 +208,7 @@ describe("Permissions > rule specificity (#770) > the rule manager", () => {
 
 		it("ranks the same hook type by literal segments, in either order", () => {
 			for (const order of orderings([hook("db.**:before", "deny"), hook("db.write.**:before", "allow")])) {
-				const manager = build(order, { defaultPolicy: "deny" });
+				const manager = build(order, { policy: "deny" });
 				expect(manager.checkHookAccess("a.b", "db.write.x", "before")).toBe(true);
 				expect(manager.checkHookAccess("a.b", "db.read.x", "before")).toBe(false);
 			}
@@ -258,7 +258,7 @@ describe.each(CONFIGS)("Permissions > rule specificity (#770) > an instance > $m
 	 * @returns {Promise<void>}
 	 */
 	const load = async (rules, attribution) => {
-		api = await slothlet({ base: FIXTURE, mode, runtime, silent: true, permissions: { defaultPolicy: "allow", attribution, rules } });
+		api = await slothlet({ base: FIXTURE, mode, runtime, silent: true, permissions: { policy: "allow", caller: { attribution }, rules } });
 	};
 
 	/** What calling `payments.charge.process` as the payments caller answers. */

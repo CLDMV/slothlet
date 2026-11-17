@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-12T08:31:48-07:00 (1791819108)
+ *	@Last modified time: 2026-11-16T18:28:40-08:00 (1794882520)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -57,7 +57,7 @@ describe("All API Structures Validation", () => {
 
 		for (const config of matrixConfigs) {
 			// Create a key from all config params except mode
-			const key = `${config.config.runtime}_${config.config.allowApiOverwrite}_${config.config.apiDepth}_${config.config.hook?.enabled ?? false}`;
+			const key = `${config.config.runtime}_${config.config.allowApiOverwrite}_${config.config.depth}_${config.config.hook?.enabled ?? false}`;
 
 			if (!configGroups.has(key)) {
 				configGroups.set(key, { eager: null, lazy: null });
@@ -137,11 +137,8 @@ describe("All API Structures Validation", () => {
 			if (config.hook?.enabled) {
 				args.push("--hooks");
 			}
-			if (config.allowApiOverwrite) {
-				args.push("--allowApiOverwrite");
-			}
-			if (config.apiDepth !== undefined) {
-				args.push("--apiDepth", config.apiDepth.toString());
+			if (config.depth !== undefined) {
+				args.push("--apiDepth", config.depth.toString());
 			}
 			if (config.debug) {
 				args.push("--debug");

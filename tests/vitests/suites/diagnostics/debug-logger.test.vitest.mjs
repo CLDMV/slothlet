@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:03-07:00 (1791090903)
+ *	@Last modified time: 2026-11-16T18:29:00-08:00 (1794882540)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -161,25 +161,25 @@ describe("SlothletWarning - unsuppressed console output (lines 181-185) and toSt
 	it("outputs to console.warn when suppressConsole is false (lines 181-185)", () => {
 		SlothletWarning.suppressConsole = false;
 		// Create a warning — should call console.warn (lines 181-185)
-		const w = new SlothletWarning("V3_CONFIG_DEPRECATED", { option: "allowMutation", replacement: "api.mutations" });
+		const w = new SlothletWarning("WARNING_API_ADD_OPTION_LOCKED", { option: "collisionMode" });
 		expect(warnSpy).toHaveBeenCalled();
 		// The warning object itself should be valid
-		expect(w.code).toBe("V3_CONFIG_DEPRECATED");
+		expect(w.code).toBe("WARNING_API_ADD_OPTION_LOCKED");
 	});
 
 	it("outputs Context: line when suppressConsole is false and context has data", () => {
 		SlothletWarning.suppressConsole = false;
-		new SlothletWarning("V3_CONFIG_DEPRECATED", { option: "allowMutation", replacement: "api.mutations" });
+		new SlothletWarning("WARNING_API_ADD_OPTION_LOCKED", { option: "collisionMode" });
 		const calls = warnSpy.mock.calls;
 		// First call: the main warning message. Possibly second call: "Context:" line.
 		expect(calls.length).toBeGreaterThanOrEqual(1);
 	});
 
 	it("toString() returns formatted string representation of the warning (line 198)", () => {
-		const w = new SlothletWarning("V3_CONFIG_DEPRECATED", { option: "allowMutation", replacement: "api.mutations" });
+		const w = new SlothletWarning("WARNING_API_ADD_OPTION_LOCKED", { option: "collisionMode" });
 		// Line 198: `return \`[${this.code}] ${this.name}: ${this.message}\``
 		const str = w.toString();
-		expect(str).toContain("V3_CONFIG_DEPRECATED");
+		expect(str).toContain("WARNING_API_ADD_OPTION_LOCKED");
 		expect(str).toContain("SlothletWarning");
 	});
 });

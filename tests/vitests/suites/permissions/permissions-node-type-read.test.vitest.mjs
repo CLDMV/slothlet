@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T12:53:14-08:00 (1794775994)
+ *	@Last modified time: 2026-11-16T18:30:04-08:00 (1794882604)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -81,7 +81,7 @@ describe.each(configs)("a module's read of a node's __type > $mode / $runtime / 
 			mode,
 			runtime,
 			silent: true,
-			permissions: { attribution, defaultPolicy: "allow", rules: [], ...permissions }
+			permissions: { caller: { attribution }, policy: "allow", rules: [], ...permissions }
 		});
 		return api;
 	};
@@ -107,12 +107,12 @@ describe.each(configs)("a module's read of a node's __type > $mode / $runtime / 
 	});
 
 	it.each(PATHS)("is refused under a default deny, and answered with an allow on the node's path: %s", async (path) => {
-		await load({ defaultPolicy: "deny", rules: [{ caller: "reader.**", target: "reader.**", effect: "allow" }] });
+		await load({ policy: "deny", rules: [{ caller: "reader.**", target: "reader.**", effect: "allow" }] });
 		await loadAll(api);
 		expect(api.reader.type(path)).toEqual({ threw: "PERMISSION_DENIED" });
 		await api.shutdown();
 		await load({
-			defaultPolicy: "deny",
+			policy: "deny",
 			rules: [
 				{ caller: "reader.**", target: "reader.**", effect: "allow" },
 				{ caller: "reader.**", target: path, effect: "allow" }

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T20:14:49-08:00 (1794802489)
+ *	@Last modified time: 2026-11-16T18:30:04-08:00 (1794882604)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -82,7 +82,7 @@ describe.each(configs)("module-private members > $mode / $runtime / $attribution
 			mode,
 			runtime,
 			silent: true,
-			permissions: { defaultPolicy: "allow", attribution, rules: [], ...(privateConfig ? { private: privateConfig } : {}) }
+			permissions: { policy: "allow", caller: { attribution }, rules: [], ...(privateConfig ? { private: privateConfig } : {}) }
 		});
 
 	describe("the default: private to the module that owns the member", () => {
@@ -163,8 +163,10 @@ describe.each(configs)("module-private members > $mode / $runtime / $attribution
 				runtime,
 				silent: true,
 				permissions: {
-					defaultPolicy: "deny",
-					attribution,
+					policy: "deny",
+					caller: {
+						attribution
+					},
 					rules: [
 						{ caller: "**", target: "billing.internals.__rate", effect: "allow" },
 						{ caller: "**", target: "**", effect: "allow" }

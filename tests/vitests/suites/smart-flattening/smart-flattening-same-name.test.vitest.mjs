@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-08T21:28:45-07:00 (1791520125)
+ *	@Last modified time: 2026-11-16T18:30:33-08:00 (1794882633)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -159,7 +159,11 @@ describe.each(getMatrixConfigs())("self-named object vs sibling conflict (#583 r
 	});
 
 	it.each(Object.entries(SIBLING_CONFLICT))("collision.initial %s", async (initial, { a, keys }) => {
-		api = await slothlet({ ...config, base: path.join(TEST_DIRS.SMART_FLATTEN, "api_smart_flatten_same_name_j"), collision: { initial } });
+		api = await slothlet({
+			...config,
+			base: path.join(TEST_DIRS.SMART_FLATTEN, "api_smart_flatten_same_name_j"),
+			api: { collision: { mode: { initial } } }
+		});
 		expect(await api.s.a()).toBe(a);
 		expect(await api.s.b()).toBe("object-b");
 		await api.s;
@@ -197,13 +201,15 @@ describe.each(getMatrixConfigs())("object default vs a same-named named export (
 	 * @returns {Promise<object>} `{ node }` or `{ error }`.
 	 */
 	const compose = async (initial, shape) => {
-		const collision = { initial, api: initial };
+		const collision = { mode: { initial, api: initial } };
 		try {
 			if (shape === "mount") {
 				api = await slothlet({
 					...config,
 					silent: true,
-					collision,
+					api: {
+						collision
+					},
 					base: path.join(TEST_DIRS.SMART_FLATTEN, "api_smart_flatten_same_name_i")
 				});
 				await api.slothlet.api.add("plugin", path.join(TEST_DIRS.SMART_FLATTEN, "api_smart_flatten_addapi_conflict_mount"));
@@ -211,7 +217,7 @@ describe.each(getMatrixConfigs())("object default vs a same-named named export (
 				return { node: api.plugin };
 			}
 			const base = shape === "folder" ? "api_smart_flatten_addapi_conflict" : "api_smart_flatten_object_default_conflict";
-			api = await slothlet({ ...config, silent: true, collision, base: path.join(TEST_DIRS.SMART_FLATTEN, base) });
+			api = await slothlet({ ...config, silent: true, api: { collision }, base: path.join(TEST_DIRS.SMART_FLATTEN, base) });
 			const node = shape === "folder" ? api.addapi : api.cfg;
 			await node;
 			// Lazy defers a module's load until first access; touch a member so its import runs here.

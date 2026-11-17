@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T01:52:39-08:00 (1794822759)
+ *	@Last modified time: 2026-11-16T18:30:20-08:00 (1794882620)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -42,8 +42,8 @@ const MODES = ["eager", "lazy"];
 const RUNTIMES = ["async", "live"];
 const PERMISSIONS = [
 	{ name: "permissions off", permissions: null },
-	{ name: "permissions on, precise", permissions: { defaultPolicy: "allow", attribution: "precise" } },
-	{ name: "permissions on, fast", permissions: { defaultPolicy: "allow", attribution: "fast" } }
+	{ name: "permissions on, precise", permissions: { policy: "allow", caller: { attribution: "precise" } } },
+	{ name: "permissions on, fast", permissions: { policy: "allow", caller: { attribution: "fast" } } }
 ];
 const matrix = MODES.flatMap((mode) => RUNTIMES.flatMap((runtime) => PERMISSIONS.map((entry) => ({ mode, runtime, ...entry }))));
 
@@ -492,7 +492,7 @@ describe.each(matrix)("setPrototypeOf on an api node > $mode / $runtime / $name"
 		const at = (path) => path.split(".").reduce((node, key) => node[key], api);
 
 		it.each(PATHS)("%s: an inherited member is read and called under the rules a member of the node's own is", async (path) => {
-			await build({ defaultPolicy: "deny", rules });
+			await build({ policy: "deny", rules });
 			const prototype = {
 				inherited: 5,
 				unruled: 6,
@@ -537,7 +537,7 @@ describe.each(matrix)("setPrototypeOf on an api node > $mode / $runtime / $name"
 		});
 
 		it.each(PATHS)("%s: the prototype a module is handed reads and lists each member as the node does", async (path) => {
-			await build({ defaultPolicy: "deny", rules });
+			await build({ policy: "deny", rules });
 			const deep = { deepRuled: 1, deepUnruled: 2 };
 			const prototype = Object.assign(Object.create(deep), {
 				inherited: 5,
@@ -583,7 +583,7 @@ describe.each(matrix)("setPrototypeOf on an api node > $mode / $runtime / $name"
 		});
 
 		it.each(PATHS)("%s: an inherited object member the module may read nothing beneath is left out of its listings", async (path) => {
-			await build({ defaultPolicy: "deny", rules });
+			await build({ policy: "deny", rules });
 			const node = at(path);
 			expect(Reflect.setPrototypeOf(node, { nothing: { a: 1 }, partly: { a: 1, b: 2 } })).toBe(true);
 			// The same members, held by the node itself.
@@ -605,7 +605,7 @@ describe.each(matrix)("setPrototypeOf on an api node > $mode / $runtime / $name"
 		});
 
 		it("the module owning the node writes through the prototype it is handed, onto the object", async () => {
-			await build({ defaultPolicy: "deny", rules });
+			await build({ policy: "deny", rules });
 			const prototype = { inherited: 5 };
 			expect(await api.ev.change("ns", prototype)).toBe("done");
 			expect(await api.ev.write("written", 1)).toBe("done");
@@ -613,7 +613,7 @@ describe.each(matrix)("setPrototypeOf on an api node > $mode / $runtime / $name"
 		});
 
 		it.each(PATHS)("%s: a closed node holds the checked prototype for every holder", async (path) => {
-			await build({ defaultPolicy: "deny", rules });
+			await build({ policy: "deny", rules });
 			const prototype = { inherited: 5, unruled: 6 };
 			const node = at(path);
 			Object.setPrototypeOf(node, prototype);
@@ -632,7 +632,7 @@ describe.each(matrix)("setPrototypeOf on an api node > $mode / $runtime / $name"
 		});
 
 		it("the module that set the prototype reads what it inherits as it reads its own member", async () => {
-			await build({ defaultPolicy: "deny", rules });
+			await build({ policy: "deny", rules });
 			expect(await api.ev.change("ns", { inherited: 5 })).toBe("done");
 			api.ev.ownData = 5;
 			expect(await api.ev.read("inherited")).toEqual(await api.ev.read("ownData"));

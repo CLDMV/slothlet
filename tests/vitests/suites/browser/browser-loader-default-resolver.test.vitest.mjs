@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:59-07:00 (1791090899)
+ *	@Last modified time: 2026-11-16T18:28:43-08:00 (1794882523)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -55,7 +55,9 @@ describe("Browser loader > default resolver — URL base variants", () => {
 		// use base as-is.
 		api = await slothlet({
 			base: `file://${FIXTURE_DIR}/`,
-			manifest: BROWSER_MANIFEST,
+			loader: {
+				files: BROWSER_MANIFEST
+			},
 			mode: "eager"
 		});
 		expect(api.math.add(2, 3)).toBe(5);
@@ -66,7 +68,9 @@ describe("Browser loader > default resolver — URL base variants", () => {
 		// append "/" so new URL() resolves directory-style.
 		api = await slothlet({
 			base: `file://${FIXTURE_DIR}`,
-			manifest: BROWSER_MANIFEST,
+			loader: {
+				files: BROWSER_MANIFEST
+			},
 			mode: "eager"
 		});
 		expect(api.math.add(2, 3)).toBe(5);
@@ -78,20 +82,10 @@ describe("Browser loader > default resolver — URL base variants", () => {
 		// without a trailing slash, this one adds the WITH-trailing-slash variant.
 		api = await slothlet({
 			base: `${FIXTURE_DIR}/`,
-			manifest: BROWSER_MANIFEST,
+			loader: {
+				files: BROWSER_MANIFEST
+			},
 			mode: "eager"
-		});
-		expect(api.math.add(2, 3)).toBe(5);
-	});
-
-	it("still works when config.dir is provided instead of config.base (back-compat)", async () => {
-		// Exercises line 605 arm 1: config?.base ?? config?.dir → uses dir fallback.
-		// `dir:` is deprecated but still accepted; this covers the fallback chain.
-		api = await slothlet({
-			dir: FIXTURE_DIR,
-			manifest: BROWSER_MANIFEST,
-			mode: "eager",
-			silent: true
 		});
 		expect(api.math.add(2, 3)).toBe(5);
 	});

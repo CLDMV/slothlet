@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-11T13:14:56-08:00 (1794431696)
+ *	@Last modified time: 2026-11-16T18:30:10-08:00 (1794882610)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -161,7 +161,7 @@ async function build({ attribution, mode, runtime }, rules) {
 		mode,
 		runtime,
 		silent: true,
-		permissions: { defaultPolicy: "allow", attribution, rules }
+		permissions: { policy: "allow", caller: { attribution }, rules }
 	});
 	await api.slothlet.api.add("plug", path.join(DIR, "plug"), { moduleID: "plug" });
 	await api.slothlet.api.add("dedupe", path.join(DIR, "dedupe"), { moduleID: "dedupe" });
@@ -228,7 +228,7 @@ function runCommonJS({ attribution, mode, runtime }) {
 		const out = [];
 		for (const caller of ["cjsfile", "cjsfile.*"]) {
 			const api = await slothlet({ base: ${JSON.stringify(path.join(DIR, "base"))}, mode: ${JSON.stringify(mode)}, runtime: ${JSON.stringify(runtime)},
-				silent: true, permissions: { defaultPolicy: "allow", attribution: ${JSON.stringify(attribution)},
+				silent: true, permissions: { policy: "allow", caller: { attribution: ${JSON.stringify(attribution)} },
 				rules: [{ caller, target: "vault.**", effect: "deny" }] } });
 			await api.vault.get();
 			await api.cjsfile.result();

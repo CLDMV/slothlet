@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:11-07:00 (1791090911)
+ *	@Last modified time: 2026-11-16T18:29:27-08:00 (1794882567)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -47,7 +47,7 @@ describe.each(getMatrixConfigs())("Metadata Collision Modes > Config: '$name'", 
 			api = await slothlet({
 				...config,
 				base: TEST_DIRS.API_TEST_COLLISIONS,
-				api: { collision: { initial: "merge" } }
+				api: { collision: { mode: { initial: "merge" } } }
 			});
 
 			// Merge mode: BOTH file and folder should be present
@@ -84,7 +84,7 @@ describe.each(getMatrixConfigs())("Metadata Collision Modes > Config: '$name'", 
 			api = await slothlet({
 				...config,
 				base: TEST_DIRS.API_TEST_COLLISIONS,
-				api: { collision: { initial: "skip" } }
+				api: { collision: { mode: { initial: "skip" } } }
 			});
 
 			expect(api.math).toBeDefined();
@@ -112,7 +112,7 @@ describe.each(getMatrixConfigs())("Metadata Collision Modes > Config: '$name'", 
 			api = await slothlet({
 				...config,
 				base: TEST_DIRS.API_TEST_COLLISIONS,
-				api: { collision: { initial: "warn" } }
+				api: { collision: { mode: { initial: "warn" } } }
 			});
 
 			expect(api.math).toBeDefined();
@@ -140,7 +140,7 @@ describe.each(getMatrixConfigs())("Metadata Collision Modes > Config: '$name'", 
 			api = await slothlet({
 				...config,
 				base: TEST_DIRS.API_TEST_COLLISIONS,
-				api: { collision: { initial: "replace" } }
+				api: { collision: { mode: { initial: "replace" } } }
 			});
 
 			expect(api.math).toBeDefined();
@@ -176,7 +176,7 @@ describe.each(getMatrixConfigs())("Metadata Collision Modes > Config: '$name'", 
 					api = await slothlet({
 						...config,
 						base: TEST_DIRS.API_TEST_COLLISIONS,
-						api: { collision: { initial: "error" } }
+						api: { collision: { mode: { initial: "error" } } }
 					});
 				}).rejects.toThrow();
 			});
@@ -188,7 +188,7 @@ describe.each(getMatrixConfigs())("Metadata Collision Modes > Config: '$name'", 
 			api = await slothlet({
 				...config,
 				base: TEST_DIRS.API_TEST,
-				api: { collision: { api: "skip" } }
+				api: { collision: { mode: { api: "skip" } } }
 			});
 
 			await materialize(api, "rootMath.add", 1, 2);
@@ -220,7 +220,7 @@ describe.each(getMatrixConfigs())("Metadata Collision Modes > Config: '$name'", 
 			api = await slothlet({
 				...config,
 				base: TEST_DIRS.API_TEST,
-				api: { collision: { api: "warn" } }
+				api: { collision: { mode: { api: "warn" } } }
 			});
 
 			await materialize(api, "rootMath.add", 1, 2);
@@ -252,7 +252,7 @@ describe.each(getMatrixConfigs())("Metadata Collision Modes > Config: '$name'", 
 			api = await slothlet({
 				...config,
 				base: TEST_DIRS.API_TEST,
-				api: { collision: { api: "replace" } }
+				api: { collision: { mode: { api: "replace" } } }
 			});
 
 			await materialize(api, "rootMath.add", 1, 2);
@@ -286,7 +286,7 @@ describe.each(getMatrixConfigs())("Metadata Collision Modes > Config: '$name'", 
 			api = await slothlet({
 				...config,
 				base: TEST_DIRS.API_TEST,
-				api: { collision: { api: "merge" } }
+				api: { collision: { mode: { api: "merge" } } }
 			});
 
 			// Add initial API with metadata
@@ -329,7 +329,7 @@ describe.each(getMatrixConfigs())("Metadata Collision Modes > Config: '$name'", 
 			api = await slothlet({
 				...config,
 				base: TEST_DIRS.API_TEST,
-				api: { collision: { api: "error" } }
+				api: { collision: { mode: { api: "error" } } }
 			});
 
 			await materialize(api, "rootMath.add", 1, 2);
@@ -365,7 +365,7 @@ describe.each(getMatrixConfigs())("Metadata Collision Modes > Config: '$name'", 
 			api = await slothlet({
 				...config,
 				base: TEST_DIRS.API_TEST,
-				api: { collision: { api: "merge" } }
+				api: { collision: { mode: { api: "merge" } } }
 			});
 
 			// Add API with metadata
@@ -394,7 +394,7 @@ describe.each(getMatrixConfigs())("Metadata Collision Modes > Config: '$name'", 
 			api = await slothlet({
 				...config,
 				base: TEST_DIRS.API_TEST,
-				api: { collision: { api: "merge" } }
+				api: { collision: { mode: { api: "merge" } } }
 			});
 
 			// Add API with metadata

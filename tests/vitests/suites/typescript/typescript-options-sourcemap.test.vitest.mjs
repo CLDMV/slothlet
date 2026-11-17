@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:17:37-08:00 (1794874657)
+ *	@Last modified time: 2026-11-16T18:30:35-08:00 (1794882635)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -125,7 +125,7 @@ describe("stack traces under --enable-source-maps", () => {
 	function stackFromChild(typescript) {
 		const script = [
 			`import slothlet from ${JSON.stringify(pathToFileURL(path.join(REPO_ROOT, "index.mjs")).href)};`,
-			`const api = await slothlet({ dir: ${JSON.stringify(path.dirname(leafPath))}, mode: "eager", silent: true, typescript: ${JSON.stringify(typescript)} });`,
+			`const api = await slothlet({ base: ${JSON.stringify(path.dirname(leafPath))}, mode: "eager", silent: true, typescript: ${JSON.stringify(typescript)} });`,
 			`try { await api.boom("x"); } catch (error) { process.stdout.write(String(error.stack)); }`,
 			`await api.slothlet.shutdown();`
 		].join("\n");
@@ -153,7 +153,7 @@ describe("stack traces under --enable-source-maps", () => {
 		const stack = stackFromChild({
 			mode: "strict",
 			sourcemap: true,
-			types: { output: path.join(root, "strict-stack.d.ts"), interfaceName: "StackAPI" }
+			types: { output: path.join(root, "strict-stack.d.ts"), name: "StackAPI" }
 		});
 		expect(stack).toContain("boom-499:x");
 		expect(stack).toContain(`${leafPath}:3`);

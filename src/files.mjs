@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T00:00:00-08:00 (1794816000)
+ *	@Last modified time: 2026-11-16T18:27:44-08:00 (1794882464)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -42,7 +42,7 @@
  * // page.mjs (browser)
  * import { slothlet } from "@cldmv/slothlet";
  * import { files } from "@cldmv/slothlet/files";
- * const api = await slothlet({ manifest, resolveModuleSpecifier: files.resolver(new URL("./api/", import.meta.url)) });
+ * const api = await slothlet({ loader: { files: manifest, resolve: files.resolver(new URL("./api/", import.meta.url)) } });
  */
 
 import { createManifestResolver } from "#helpers/manifest-resolver";

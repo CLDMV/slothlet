@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-12T11:35:13-07:00 (1791830113)
+ *	@Last modified time: 2026-11-16T18:29:22-08:00 (1794882562)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -375,7 +375,7 @@ describe.each(matrixConfigs)("Lazy Materialization Tracking > Config: $name", ({
 					writeFileSync(path.join(dir, "shutdown", "run.mjs"), "export function run() {\n\treturn 2;\n}\n");
 					writeFileSync(path.join(dir, "shutdown", "inner", "peek.mjs"), "export function peek() {\n\treturn 3;\n}\n");
 				}
-				const hookApi = await slothlet({ ...config, base: dir, backgroundMaterialize: true });
+				const hookApi = await slothlet({ ...config, base: dir, loader: { materialize: true } });
 				try {
 					await loadAll(hookApi);
 					expect(await waitSettles(hookApi)).toBe(true);

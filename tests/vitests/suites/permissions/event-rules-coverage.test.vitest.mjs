@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:37-07:00 (1791091717)
+ *	@Last modified time: 2026-11-16T18:29:36-08:00 (1794882576)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -40,7 +40,7 @@ describe("PermissionManager event rules (#407) — runtime removal + validation"
 		api = await slothlet({
 			base: BASE,
 			api: { mutations: { events: true } },
-			permissions: { defaultPolicy: "allow", events: { default: "notify" } }
+			permissions: { policy: "allow", events: { policy: "notify" } }
 		});
 		const id = api.slothlet.event.rules.add({ caller: "subscriber.**", event: "evt.*", effect: "allow" });
 		expect(typeof id).toBe("string");
@@ -53,7 +53,7 @@ describe("PermissionManager event rules (#407) — runtime removal + validation"
 		api = await slothlet({
 			base: BASE,
 			api: { mutations: { events: false } },
-			permissions: { defaultPolicy: "allow", events: { default: "notify" } }
+			permissions: { policy: "allow", events: { policy: "notify" } }
 		});
 		expect(() => api.slothlet.event.rules.remove("anything")).toThrow(/MUTATIONS_DISABLED/);
 	});
@@ -62,7 +62,7 @@ describe("PermissionManager event rules (#407) — runtime removal + validation"
 		api = await slothlet({
 			base: BASE,
 			api: { mutations: { events: true } },
-			permissions: { defaultPolicy: "allow", events: { default: "notify" } }
+			permissions: { policy: "allow", events: { policy: "notify" } }
 		});
 		const add = (rule) => () => api.slothlet.event.rules.add(rule);
 		expect(add(null)).toThrow(/INVALID_PERMISSION_RULE/); // not an object
@@ -75,9 +75,9 @@ describe("PermissionManager event rules (#407) — runtime removal + validation"
 		api = await slothlet({
 			base: BASE,
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				events: {
-					default: "notify",
+					policy: "notify",
 					rules: [{ caller: "subscriber.**", event: "cond.*", effect: "allow", condition: { tenant: "tenant-a" } }]
 				}
 			}
@@ -93,7 +93,7 @@ describe("PermissionManager event rules (#407) — runtime removal + validation"
 		api = await slothlet({
 			base: BASE,
 			api: { mutations: { events: true } },
-			permissions: { defaultPolicy: "allow", events: { default: "notify" } }
+			permissions: { policy: "allow", events: { policy: "notify" } }
 		});
 		const id = api.slothlet.event.rules.add({ caller: "subscriber.**", event: "rm.*", effect: "allow" });
 		expect(await api.subscriber.subscribe("rm.data")).toBe("allow");
@@ -111,9 +111,9 @@ describe("PermissionManager event rules (#407) — runtime removal + validation"
 		api = await slothlet({
 			base: BASE,
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				events: {
-					default: "notify",
+					policy: "notify",
 					rules: [
 						{ caller: "**", event: "**", effect: "deny" }, // broad — matches everything
 						{ caller: "**", event: "open.*", effect: "allow" } // more specific for open.*
@@ -132,8 +132,8 @@ describe("PermissionManager event rules (#407) — runtime removal + validation"
 			base: BASE,
 			api: { mutations: { events: true } },
 			permissions: {
-				defaultPolicy: "allow",
-				events: { default: "notify", rules: [{ caller: "**", event: "tie.*", effect: "deny" }] }
+				policy: "allow",
+				events: { policy: "notify", rules: [{ caller: "**", event: "tie.*", effect: "deny" }] }
 			}
 		});
 		// A runtime rule with IDENTICAL specificity but a higher layer must win the equal-specificity tiebreak.
@@ -145,9 +145,9 @@ describe("PermissionManager event rules (#407) — runtime removal + validation"
 		api = await slothlet({
 			base: BASE,
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				events: {
-					default: "notify",
+					policy: "notify",
 					// Two instance-layer rules of identical specificity → equal spec AND equal layer, so the
 					// comparator falls to the registration-order tiebreak (last-registered wins).
 					rules: [

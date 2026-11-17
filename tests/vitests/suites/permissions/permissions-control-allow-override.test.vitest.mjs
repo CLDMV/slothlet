@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:16-07:00 (1791090916)
+ *	@Last modified time: 2026-11-16T18:29:46-08:00 (1794882586)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -32,7 +32,7 @@ describe.each(getMatrixConfigs())("Permissions > Control Allow Override > $name"
 			...config,
 			base: `${BASE}/callers`,
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				rules: [{ caller: "callers.**", target: "slothlet.permissions.control.**", effect: "allow" }]
 			}
 		});
@@ -50,7 +50,7 @@ describe.each(getMatrixConfigs())("Permissions > Control Allow Override > $name"
 			...config,
 			base: `${BASE}/callers`,
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				rules: [{ caller: "controlCaller.*", target: "slothlet.permissions.control.**", effect: "allow" }]
 			}
 		});
@@ -67,7 +67,7 @@ describe.each(getMatrixConfigs())("Permissions > Control Allow Override > $name"
 			...config,
 			base: `${BASE}/callers`,
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				rules: [{ caller: "controlCaller.*", target: "slothlet.permissions.control.**", effect: "allow" }]
 			}
 		});

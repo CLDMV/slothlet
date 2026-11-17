@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T12:49:03-08:00 (1794775743)
+ *	@Last modified time: 2026-11-16T18:28:36-08:00 (1794882516)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -200,7 +200,7 @@ describe.each(TEST_MATRIX)("add after remove > $name", ({ config }) => {
 				seen.push(String(href));
 				return import(href);
 			};
-			api = await slothlet({ ...config, base: path.join(root, "base"), silent: true, import: importer });
+			api = await slothlet({ ...config, base: path.join(root, "base"), silent: true, loader: { import: importer } });
 			const stamps = () => seen.filter((href) => href.includes("/plug/p.mjs")).map((href) => new URL(href).searchParams.has("_reload"));
 
 			await api.slothlet.api.add("plug", path.join(root, "plug"), { moduleID: "pm" });

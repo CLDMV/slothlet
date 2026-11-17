@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T08:00:00-08:00 (1794758400)
+ *	@Last modified time: 2026-11-16T18:29:40-08:00 (1794882580)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -93,7 +93,7 @@ describe.each(MATRIX)(
 					mode,
 					runtime,
 					silent: true,
-					permissions: { defaultPolicy: "allow", attribution, rules: set.rules, references: { capture } }
+					permissions: { policy: "allow", caller: { attribution, capture }, rules: set.rules }
 				});
 			}, 60000);
 
@@ -131,7 +131,7 @@ function runChildRows() {
 			for (const { label, rules } of ${JSON.stringify(RULE_SETS)}) {
 				const api = await slothlet({
 					base: ${JSON.stringify(BASE)}, mode, runtime, silent: true,
-					permissions: { defaultPolicy: "allow", attribution, rules, references: { capture } }
+					permissions: { policy: "allow", rules, caller: { attribution, capture } }
 				});
 				for (const route of ${JSON.stringify(OWN_ROUTES)})
 					out[[mode, runtime, attribution, capture, label, route].join(" | ")] = await api.runner.now(route, ${TOO_DEEP});

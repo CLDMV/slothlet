@@ -61,7 +61,7 @@ export class ApiCacheManager extends ComponentBase {
      *   endpoint: ".",
      *   moduleID: "base_abc123",
      *   api: apiTree,
-     *   folderPath: this.____config.dir,
+     *   folderPath: this.____config.base,
      *   mode: "lazy",
      *   sanitizeOptions: {},
      *   collisionMode: "merge",

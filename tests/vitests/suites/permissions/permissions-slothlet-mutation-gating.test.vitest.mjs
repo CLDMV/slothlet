@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:20-07:00 (1791090920)
+ *	@Last modified time: 2026-11-16T18:30:08-08:00 (1794882608)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -32,7 +32,7 @@ describe.each(getMatrixConfigs())("Permissions > Slothlet Mutation Gating > $nam
 			...config,
 			base: `${BASE}/callers`,
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				rules: [{ caller: "controlCaller.**", target: "slothlet.permissions.addRule", effect: "deny" }]
 			}
 		});
@@ -62,7 +62,7 @@ describe.each(getMatrixConfigs())("Permissions > Slothlet Mutation Gating > $nam
 			...config,
 			base: `${BASE}/callers`,
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				rules: [{ caller: "controlCaller.**", target: "slothlet.permissions.addRule", effect: "deny" }]
 			}
 		});
@@ -92,7 +92,7 @@ describe.each(getMatrixConfigs())("Permissions > Slothlet Mutation Gating > $nam
 			...config,
 			base: `${BASE}/callers`,
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				rules: [{ caller: "controlCaller.**", target: "slothlet.i18n.translate.name", effect: "deny" }]
 			}
 		});
@@ -112,7 +112,7 @@ describe.each(getMatrixConfigs())("Permissions > Slothlet Mutation Gating > $nam
 			...config,
 			base: `${BASE}/callers`,
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				rules: []
 			}
 		});
@@ -150,7 +150,7 @@ describe.each(getMatrixConfigs())("Permissions > Slothlet Mutation Gating > $nam
 			...config,
 			base: `${BASE}/callers`,
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				rules: []
 			}
 		});
@@ -188,7 +188,7 @@ describe.each(getMatrixConfigs())("Permissions > Slothlet Mutation Gating > $nam
 			...config,
 			base: `${BASE}/callers`,
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				rules: []
 			}
 		});
@@ -216,7 +216,7 @@ describe.each(getMatrixConfigs())("Permissions > Slothlet Mutation Gating > $nam
 			...config,
 			base: `${BASE}/callers`,
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				rules: []
 			}
 		});
@@ -244,7 +244,7 @@ describe.each(getMatrixConfigs())("Permissions > Slothlet Mutation Gating > $nam
 			...config,
 			base: `${BASE}/callers`,
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				rules: [{ caller: "controlCaller.**", target: "slothlet.i18n.translate.length", effect: "deny" }]
 			}
 		});
@@ -264,7 +264,7 @@ describe.each(getMatrixConfigs())("Permissions > Slothlet Mutation Gating > $nam
 			...config,
 			base: `${BASE}/callers`,
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				rules: [{ caller: "controlCaller.**", target: "slothlet.materialize.materialized", effect: "deny" }]
 			}
 		});
@@ -284,7 +284,7 @@ describe.each(getMatrixConfigs())("Permissions > Slothlet Mutation Gating > $nam
 			...config,
 			base: `${BASE}/callers`,
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				rules: [{ caller: "controlCaller.**", target: "slothlet.permissions.control.enabled", effect: "deny" }]
 			}
 		});
@@ -304,7 +304,7 @@ describe.each(getMatrixConfigs())("Permissions > Slothlet Mutation Gating > $nam
 			...config,
 			base: `${BASE}/callers`,
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				rules: [{ caller: "controlCaller.**", target: "slothlet.permissions", effect: "deny" }]
 			}
 		});
@@ -324,7 +324,7 @@ describe.each(getMatrixConfigs())("Permissions > Slothlet Mutation Gating > $nam
 			...config,
 			base: `${BASE}/callers`,
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				rules: [{ caller: "controlCaller.**", target: "slothlet.permissions.removeRule", effect: "deny" }]
 			}
 		});
@@ -354,7 +354,7 @@ describe.each(getMatrixConfigs())("Permissions > Slothlet Mutation Gating > $nam
 			...config,
 			base: `${BASE}/callers`,
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				rules: [{ caller: "controlCaller.**", target: "slothlet.metadata.setGlobal", effect: "deny" }]
 			}
 		});
@@ -377,7 +377,7 @@ describe.each(getMatrixConfigs())("Permissions > Slothlet Mutation Gating > $nam
 			...config,
 			base: `${BASE}/callers`,
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				rules: [{ caller: "controlCaller.**", target: "slothlet.i18n.setLanguage", effect: "deny" }]
 			}
 		});
@@ -400,7 +400,7 @@ describe.each(getMatrixConfigs())("Permissions > Slothlet Mutation Gating > $nam
 			...config,
 			base: `${BASE}/callers`,
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				rules: [{ caller: "controlCaller.**", target: "slothlet.version", effect: "deny" }]
 			}
 		});
@@ -422,7 +422,7 @@ describe.each(getMatrixConfigs())("Permissions > Slothlet Mutation Gating > $nam
 			...config,
 			base: `${BASE}/callers`,
 			permissions: {
-				defaultPolicy: "deny",
+				policy: "deny",
 				rules: []
 			}
 		});
@@ -443,7 +443,7 @@ describe.each(getMatrixConfigs())("Permissions > Slothlet Mutation Gating > $nam
 			...config,
 			base: `${BASE}/callers`,
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				rules: []
 			}
 		});

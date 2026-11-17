@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-08T16:47:46-08:00 (1794185266)
+ *	@Last modified time: 2026-11-16T18:29:03-08:00 (1794882543)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -32,7 +32,7 @@ import { getMatrixConfigs } from "../../setup/vitest-helper.mjs";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const BASE = path.resolve(__dirname, "../../../../api_tests/api_test_listener_results");
 const REFUSED = "threw PERMISSION_DENIED";
-const PERMISSIONS = { defaultPolicy: "allow", rules: [{ caller: "sub.**", target: "vault.**", effect: "deny" }] };
+const PERMISSIONS = { policy: "allow", rules: [{ caller: "sub.**", target: "vault.**", effect: "deny" }] };
 const SHAPES = ["thenGetter", "thenMethod", "catchMethod", "asyncBody"];
 // The value a listener's result settles to is the listener's too: the dispatcher never reads it.
 const SETTLED_TO = ["nestedThen", "asyncResolvesThenGetter"];

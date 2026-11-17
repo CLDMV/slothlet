@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-11T10:14:52-08:00 (1794420892)
+ *	@Last modified time: 2026-11-16T18:29:36-08:00 (1794882576)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -124,7 +124,7 @@ describe.each(matrix)("crossing rules > $mode / $runtime / $attribution", ({ mod
 		{ order: "the function with no rule reads it first", first: "plain", second: "writer" },
 		{ order: "the function the rule names reads it first", first: "writer", second: "plain" }
 	])("hands a function a write rule names the value itself when $order", async ({ first, second }) => {
-		api = await mount({ mode, runtime, permissions: { defaultPolicy: "allow", attribution, rules: ALLOW_WRITER_LEAF } });
+		api = await mount({ mode, runtime, permissions: { policy: "allow", caller: { attribution }, rules: ALLOW_WRITER_LEAF } });
 		const outcome = { [first]: await api.reader[first](`__${first}_`), [second]: await api.reader[second](`__${second}_`) };
 		// Plain JavaScript hands every reader the object itself; the function with no write rule is the deviation the
 		// guard needs, and its write onto the owner's class is refused.
@@ -142,7 +142,7 @@ describe.each(matrix)("crossing rules > $mode / $runtime / $attribution", ({ mod
 			silent: true,
 			mode,
 			runtime,
-			permissions: { defaultPolicy: "allow", attribution, rules: DENY_GUEST_WRITES }
+			permissions: { policy: "allow", caller: { attribution }, rules: DENY_GUEST_WRITES }
 		});
 		// The rule names the write, so each is refused as a write the rule denies.
 		expect(await api.guest.reach("__denied_")).toEqual({
@@ -159,7 +159,7 @@ describe.each(matrix)("crossing rules > $mode / $runtime / $attribution", ({ mod
 			silent: true,
 			mode,
 			runtime,
-			permissions: { defaultPolicy: "allow", attribution }
+			permissions: { policy: "allow", caller: { attribution } }
 		});
 		// Plain JavaScript: both files hold the instance itself, and the write lands.
 		expect(await api.guest.reach("__open_")).toEqual({ returned: "written", callback: "written", stored: "written" });
@@ -174,7 +174,7 @@ describe.each(matrix)("crossing rules > $mode / $runtime / $attribution", ({ mod
 				silent: true,
 				mode,
 				runtime,
-				permissions: { defaultPolicy: "allow", attribution, rules: denyKinWrites(file) }
+				permissions: { policy: "allow", caller: { attribution }, rules: denyKinWrites(file) }
 			});
 			// The rule names the write, so each is refused as a write the rule denies, whether the file loaded before the owner's
 			// or after it, and whatever the other files of the folder may write.
@@ -197,7 +197,7 @@ describe.each(matrix)("crossing rules > $mode / $runtime / $attribution", ({ mod
 				silent: true,
 				mode,
 				runtime,
-				permissions: { defaultPolicy: "allow", attribution, rules: denyKinWrites(file) }
+				permissions: { policy: "allow", caller: { attribution }, rules: denyKinWrites(file) }
 			});
 			// The owner runs it, but the view it writes through is the file's: the write has to be the file's to make too.
 			expect(await api[file].deputy()).toEqual({
@@ -211,14 +211,26 @@ describe.each(matrix)("crossing rules > $mode / $runtime / $attribution", ({ mod
 	);
 
 	it("lands a write a bound built-in makes through the owner for a file of the same folder no rule refuses", async () => {
-		api = await slothlet({ base: join(FIXTURE, "kin"), silent: true, mode, runtime, permissions: { defaultPolicy: "allow", attribution } });
+		api = await slothlet({
+			base: join(FIXTURE, "kin"),
+			silent: true,
+			mode,
+			runtime,
+			permissions: { policy: "allow", caller: { attribution } }
+		});
 		// Plain JavaScript: every write lands.
 		expect(await api.reader.deputy()).toEqual({ node: "written", constructed: "written", returned: "written", nested: "written" });
 		expect(await api.owner.landed("__kin_bound_")).toEqual(["node", "constructed", "returned", "nested"]);
 	});
 
 	it("leaves a class a node exports to a file of the same folder where no rule stands between them", async () => {
-		api = await slothlet({ base: join(FIXTURE, "kin"), silent: true, mode, runtime, permissions: { defaultPolicy: "allow", attribution } });
+		api = await slothlet({
+			base: join(FIXTURE, "kin"),
+			silent: true,
+			mode,
+			runtime,
+			permissions: { policy: "allow", caller: { attribution } }
+		});
 		// Plain JavaScript: every write lands.
 		expect(await api.reader.reach()).toEqual({
 			node: "written",
@@ -241,7 +253,7 @@ describe.each(matrix)("crossing rules > $mode / $runtime / $attribution", ({ mod
 				silent: true,
 				mode,
 				runtime,
-				permissions: { defaultPolicy: "allow", attribution, rules: SPLIT_RULES }
+				permissions: { policy: "allow", caller: { attribution }, rules: SPLIT_RULES }
 			});
 			// Each write is the writing file's, and one a built-in the owner runs makes is the file's that handed it over.
 			expect(await splitWrites(api, order)).toEqual(SPLIT_EXPECTED);
@@ -259,7 +271,7 @@ describe.each(matrix)("crossing rules > $mode / $runtime / $attribution", ({ mod
 				silent: true,
 				mode,
 				runtime,
-				permissions: { defaultPolicy: "allow", attribution, rules: SPLIT_RULES }
+				permissions: { policy: "allow", caller: { attribution }, rules: SPLIT_RULES }
 			});
 			await api.slothlet.api.add("owner", join(FIXTURE, "split", "owner"), { moduleID: "owner" });
 			await api.slothlet.api.add("readers", join(FIXTURE, "split", "readers"), { moduleID: "readers" });
@@ -273,7 +285,7 @@ describe.each(matrix)("crossing rules > $mode / $runtime / $attribution", ({ mod
 			silent: true,
 			mode,
 			runtime,
-			permissions: { defaultPolicy: "allow", attribution }
+			permissions: { policy: "allow", caller: { attribution } }
 		});
 		// Plain JavaScript: every write lands.
 		expect(await splitWrites(api, ["narrow", "wide"])).toEqual({
@@ -289,7 +301,7 @@ describe.each(matrix)("crossing rules > $mode / $runtime / $attribution", ({ mod
 	});
 
 	it("keeps the owner's code from a view a module holds past the instance's shutdown", async () => {
-		api = await mount({ mode, runtime, permissions: { defaultPolicy: "allow", attribution } });
+		api = await mount({ mode, runtime, permissions: { policy: "allow", caller: { attribution } } });
 		expect(await api.reader.keep()).toBe(true);
 		await api.shutdown();
 		api = null;
@@ -329,7 +341,7 @@ describe.each(matrix)("crossing rules > $mode / $runtime / $attribution", ({ mod
 	it.each(["instanceFirst", "dataFirst"])(
 		"holds an object a module uses as a prototype to that module's write rules when it is handed on as data (%s)",
 		async (order) => {
-			api = await mount({ mode, runtime, permissions: { defaultPolicy: "allow", attribution } });
+			api = await mount({ mode, runtime, permissions: { policy: "allow", caller: { attribution } } });
 			const refused = "LOOSE_SET_NOT_OWNED";
 			expect(await api.reader.prototypeAsData("__data_", order)).toEqual({
 				replaced: refused,
@@ -378,7 +390,7 @@ describe.each(matrix)("crossing rules > $mode / $runtime / $attribution", ({ mod
 	};
 
 	it("hands another module's listener and hook a view of what a module returned and the host relays as it is", async () => {
-		await relay({ permissions: { defaultPolicy: "allow", attribution, events: { default: "allow" } } }, (data) => data);
+		await relay({ permissions: { policy: "allow", caller: { attribution }, events: { policy: "allow" } } }, (data) => data);
 		expect(await api.reader.received("__relay_")).toEqual({
 			heardWrapped: true,
 			heardWrite: "LOOSE_SET_NOT_OWNED",
@@ -392,7 +404,7 @@ describe.each(matrix)("crossing rules > $mode / $runtime / $attribution", ({ mod
 
 	it("hands another module's listener and hook a view of an instance a module returned and the host relays", async () => {
 		await relay(
-			{ permissions: { defaultPolicy: "allow", attribution, events: { default: "allow" } } },
+			{ permissions: { policy: "allow", caller: { attribution }, events: { policy: "allow" } } },
 			(instance) => instance,
 			"makeInstance"
 		);
@@ -407,7 +419,7 @@ describe.each(matrix)("crossing rules > $mode / $runtime / $attribution", ({ mod
 	});
 
 	it("hands another module's hook a view of what a module passes its own function", async () => {
-		api = await mount({ mode, runtime, hook: { enabled: true }, permissions: { defaultPolicy: "allow", attribution } });
+		api = await mount({ mode, runtime, hook: { enabled: true }, permissions: { policy: "allow", caller: { attribution } } });
 		await api.reader.listen();
 		expect(await api.owner.useOwn()).toBe("object");
 		const { hookedWrapped, hookedWrite } = await api.reader.received("__own_");
@@ -416,7 +428,9 @@ describe.each(matrix)("crossing rules > $mode / $runtime / $attribution", ({ mod
 	});
 
 	it("hands a listener and a hook what the host built itself as it is", async () => {
-		await relay({ permissions: { defaultPolicy: "allow", attribution, events: { default: "allow" } } }, (data) => ({ inst: data.inst }));
+		await relay({ permissions: { policy: "allow", caller: { attribution }, events: { policy: "allow" } } }, (data) => ({
+			inst: data.inst
+		}));
 		// The host holds the owner's real objects, and what it builds from them is its own to hand on.
 		expect(await api.reader.received("__built_")).toEqual({
 			heardWrapped: false,
@@ -428,7 +442,7 @@ describe.each(matrix)("crossing rules > $mode / $runtime / $attribution", ({ mod
 	});
 
 	it("decides the same with the language's own functions replaced after slothlet loaded", async () => {
-		api = await mount({ mode, runtime, permissions: { defaultPolicy: "allow", attribution } });
+		api = await mount({ mode, runtime, permissions: { policy: "allow", caller: { attribution } } });
 		// A module can replace a built-in for everyone, as in plain JavaScript; what slothlet decides does not follow it.
 		expect(await api.reader.steered("__steered_")).toEqual({
 			reached: "both",
@@ -442,7 +456,7 @@ describe.each(matrix)("crossing rules > $mode / $runtime / $attribution", ({ mod
 		"with the global %s replaced after slothlet loaded",
 		(name) => {
 			it("still hands a view of another module's instance and refuses the write through it", async () => {
-				api = await mount({ mode, runtime, permissions: { defaultPolicy: "allow", attribution } });
+				api = await mount({ mode, runtime, permissions: { policy: "allow", caller: { attribution } } });
 				// The same outcome as with nothing replaced: the views slothlet makes rest on the constructors it loaded with.
 				expect(await api.reader.steeredConstructor(`__ctor_${name}_`, name)).toEqual({
 					reached: "both",
@@ -454,7 +468,7 @@ describe.each(matrix)("crossing rules > $mode / $runtime / $attribution", ({ mod
 
 			it("still refuses a call a rule denies", async () => {
 				const rules = [{ caller: "reader.**", target: "owner.fresh", effect: "deny" }];
-				api = await mount({ mode, runtime, permissions: { defaultPolicy: "allow", attribution, rules } });
+				api = await mount({ mode, runtime, permissions: { policy: "allow", caller: { attribution }, rules } });
 				expect(await api.reader.steeredConstructor(`__ctor_denied_${name}_`, name)).toEqual({ reached: "PERMISSION_DENIED" });
 			});
 		}

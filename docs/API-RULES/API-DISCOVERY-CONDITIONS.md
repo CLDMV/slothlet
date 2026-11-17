@@ -147,7 +147,7 @@ if (subStructure.files.length === 0 && subStructure.directories.length === 0) { 
 **Related Rule**: [Rule 14](../API-RULES.md#rule-14-api-directory-scan--inclusion)
 **Status**: ✅ Active
 
-**Pattern**: Subdirectories beyond `apiDepth`/`maxDepth`, or all subdirectories when `recursive` is false, are silently dropped (no truncation notice).
+**Pattern**: Subdirectories beyond `depth`/`maxDepth`, or all subdirectories when `recursive` is false, are silently dropped (no truncation notice).
 
 **Source(s)**: `src/lib/processors/loader.mjs:500-519`
 

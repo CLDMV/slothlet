@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T02:17:41-08:00 (1794824261)
+ *	@Last modified time: 2026-11-16T18:30:26-08:00 (1794882626)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -60,7 +60,11 @@ const POLICIES = [
 	{ label: "permissions on, default allow", permissions: (attribution) => ({ attribution }), exact: false },
 	{
 		label: "permissions on, default deny, the probe allowed everything",
-		permissions: (attribution) => ({ attribution, defaultPolicy: "deny", rules: [{ caller: "probe.**", target: "**", effect: "allow" }] }),
+		permissions: (attribution) => ({
+			caller: { attribution },
+			policy: "deny",
+			rules: [{ caller: "probe.**", target: "**", effect: "allow" }]
+		}),
 		exact: false
 	}
 ];
@@ -180,7 +184,9 @@ describe.each(CONFIGS)("a module's self takes the api root's form > $mode / $run
 					runtime,
 					silent: true,
 					permissions: {
-						attribution,
+						caller: {
+							attribution
+						},
 						rules: [
 							{ caller: "probe.**", target: "**", effect: "deny" },
 							{ caller: "probe.**", target: "math.**", effect: "allow" }
@@ -444,7 +450,7 @@ const JSON_POLICIES = [
 	},
 	{
 		label: "default deny, no rule",
-		permissions: (attribution) => ({ attribution, defaultPolicy: "deny" }),
+		permissions: (attribution) => ({ caller: { attribution }, policy: "deny" }),
 		// The file's node is traversal, listed with nothing the module may read.
 		config: {},
 		hidden: DENIED,
@@ -454,8 +460,10 @@ const JSON_POLICIES = [
 	{
 		label: "default deny, the probe allowed the config",
 		permissions: (attribution) => ({
-			attribution,
-			defaultPolicy: "deny",
+			caller: {
+				attribution
+			},
+			policy: "deny",
 			rules: [{ caller: "probe.**", target: "config.**", effect: "allow" }]
 		}),
 		config: { settings: SETTINGS },

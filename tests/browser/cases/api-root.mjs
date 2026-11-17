@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T13:15:57-08:00 (1794777357)
+ *	@Last modified time: 2026-11-16T18:28:02-08:00 (1794882482)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -45,10 +45,12 @@ const NAMES = ["data", "pnum", "tool", "rnum", "wset", "wdef", "wfix"];
 const WRITTEN = ["wset", "wdef", "wfix", "data"];
 
 const PERMISSIONS = {
-	"no write rule": (attribution) => ({ defaultPolicy: "allow", attribution, rules: [] }),
+	"no write rule": (attribution) => ({ policy: "allow", caller: { attribution }, rules: [] }),
 	"write rules granting each member": (attribution) => ({
-		defaultPolicy: "allow",
-		attribution,
+		policy: "allow",
+		caller: {
+			attribution
+		},
 		rules: ["", "zz."].flatMap((prefix) =>
 			WRITTEN.map((member) => ({ caller: "w.**", target: `${prefix}${member}:write`, effect: "allow" }))
 		)

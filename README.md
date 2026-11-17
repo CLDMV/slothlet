@@ -45,7 +45,7 @@ Every feature has been hardened with a comprehensive test suite - over **5,300 t
 
 ### Latest: v3.24.0 (November 2026)
 
-- **Code a module made runs as that module** — with permissions on, a callback, getter, conversion or Proxy trap a caller hands to a leaf now runs as the caller, with the leaf it runs inside as its ceiling, so both have to be allowed; closures, factories, classes, instances and accessors a module hands out keep running as the module that made them, wherever they are called later. New `permissions.ceiling: "chain"` holds supplied code to every leaf it passed through, and frames are matched to the script that runs them, so code compiled under another module's file name is not that module's (#597).
+- **Code a module made runs as that module** — with permissions on, a callback, getter, conversion or Proxy trap a caller hands to a leaf now runs as the caller, with the leaf it runs inside as its ceiling, so both have to be allowed; closures, factories, classes, instances and accessors a module hands out keep running as the module that made them, wherever they are called later. New `permissions.caller.ceiling: "chain"` holds supplied code to every leaf it passed through, and frames are matched to the script that runs them, so code compiled under another module's file name is not that module's (#597).
 - **Fixes** — `new` on a lazy folder that has not loaded yet constructs the class (subclassing one before it loads throws `LAZY_SUBCLASS_BEFORE_LOAD`), a cyclic object read through `self` inside a module closes its cycle again so deep equality finishes, and development moves to Node 22.22 while the runtime floor stays at 22.15 (#686, #694, #689).
 - [View full v3.24.0 Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v3/v3.24.0.md)
 
@@ -103,7 +103,7 @@ Path-based access control for inter-module API calls **and** data-value reads (v
 - **Glob pattern rules** — same `*`, `**`, `?`, `{a,b}` syntax as hooks
 - **Most-specific-wins** — exact patterns override broad globs; tiebreak by registration order
 - **Self-call bypass** — calls within the same source file always succeed
-- **Read-level gating** _(v3.7)_ — terminal data-value reads (`Buffer`, `TypedArray`, `Date`, `Map`, primitives, …) checked against the rule set; on by default, `readGating: false` to opt out
+- **Read-level gating** _(v3.7)_ — terminal data-value reads (`Buffer`, `TypedArray`, `Date`, `Map`, primitives, …) checked against the rule set; on by default, `gating.read: false` to opt out
 - **Audit events** — `permission:denied`, `permission:allowed`, `permission:default`, `permission:self-bypass`
 - **Runtime management** — `api.slothlet.permissions.addRule()`, `.removeRule()`, `.self.*`, `.global.*`, `.control.*`
 - **Context conditions** _(v3.4)_ — optional `condition` field; accepts a plain object (deep leaf matching), function, or array (OR); evaluated against per-request ALS context
@@ -147,7 +147,7 @@ Automatic context preservation across all asynchronous boundaries:
 
 Run slothlet in the browser, web workers, and Electron renderers — anywhere there is no filesystem:
 
-- **Manifest-driven loading**: a build-time manifest replaces `readdir`; API leaves load via your `resolveModuleSpecifier`
+- **Manifest-driven loading**: a build-time manifest replaces `readdir`; API leaves load via your `loader.resolve`
 - **One-call setup**: `files.assets(apiDir)` from `@cldmv/slothlet/files` returns both the API `manifest` **and** the `importmap` for slothlet's own modules, so consumers never hand-roll module resolution
 - **Bundler-friendly**: bundled apps need only the manifest; raw-ESM pages and Electron renderers get the importmap too
 - **Full parity**: `self`, hooks, permissions, metadata, i18n, lifecycle events, and api mutation all work in-browser (live-binding context manager)
@@ -221,21 +221,21 @@ The most-used options are summarized below. The complete reference — every opt
 | `permissions` | `object` | `undefined` | Path-based access control; see **[PERMISSIONS.md](https://github.com/CLDMV/slothlet/blob/master/docs/PERMISSIONS.md)**       |
 | `i18n`        | `object` | `{}`        | Language for translated error/debug messages — see **[I18N.md](https://github.com/CLDMV/slothlet/blob/master/docs/I18N.md)** |
 
-Also configurable: `apiDepth`, `hidden` (globs hiding files/folders from the API), `debug`, `reference`, `sanitize`, `backgroundMaterialize`, `api.collision`, `api.mutations`, `versionDispatcher`, `typescript`, plus diagnostics and lifecycle internals. All documented in **[CONFIGURATION.md](https://github.com/CLDMV/slothlet/blob/master/docs/CONFIGURATION.md)**.
+Also configurable: `depth`, `hidden` (globs hiding files/folders from the API), `debug`, `reference`, `sanitize`, `loader.materialize`, `api.collision`, `api.mutations`, `versioning.dispatcher`, `typescript`, plus diagnostics and lifecycle internals. All documented in **[CONFIGURATION.md](https://github.com/CLDMV/slothlet/blob/master/docs/CONFIGURATION.md)**.
 
 ---
 
 ## 🔀 Loading Modes
 
-| Mode                               | Startup       | Function calls                               | Best for                                   |
-| ---------------------------------- | ------------- | -------------------------------------------- | ------------------------------------------ |
-| **Eager** (default)                | Loads upfront | Sync stays sync, async stays async           | Production, predictable performance        |
-| **Lazy**                           | 2.2× faster   | All calls awaited; materialized on first use | Large APIs, startup-sensitive apps         |
-| **Lazy + `backgroundMaterialize`** | 2.2× faster   | Pre-warmed by background loader              | Best of both — lazy startup, eager runtime |
+| Mode                            | Startup       | Function calls                               | Best for                                   |
+| ------------------------------- | ------------- | -------------------------------------------- | ------------------------------------------ |
+| **Eager** (default)             | Loads upfront | Sync stays sync, async stays async           | Production, predictable performance        |
+| **Lazy**                        | 2.2× faster   | All calls awaited; materialized on first use | Large APIs, startup-sensitive apps         |
+| **Lazy + `loader.materialize`** | 2.2× faster   | Pre-warmed by background loader              | Best of both — lazy startup, eager runtime |
 
 ```javascript
 // Lazy + background materialization
-const api = await slothlet({ mode: "lazy", base: "./api", backgroundMaterialize: true });
+const api = await slothlet({ mode: "lazy", base: "./api", loader: { materialize: true } });
 api.slothlet.lifecycle.on("materialized:complete", ({ total }) => console.log(`${total} modules ready`));
 await api.slothlet.materialize.wait(); // optional: gate traffic on ready
 ```
@@ -403,7 +403,7 @@ try {
 - **[Context Propagation](https://github.com/CLDMV/slothlet/blob/master/docs/CONTEXT-PROPAGATION.md)** — per-request isolation, EventEmitter / class propagation, merge strategies
 - **[Lifecycle Events](https://github.com/CLDMV/slothlet/blob/master/docs/LIFECYCLE.md)** — `materialized:complete`, `impl:*` events, subscription API
 - **[Hot Reload & Dynamic API](https://github.com/CLDMV/slothlet/blob/master/docs/RELOAD.md)** — `add`, `remove`, `reload`, collision modes, mutation controls, eager vs lazy semantics
-- **[Versioning](https://github.com/CLDMV/slothlet/blob/master/docs/VERSIONING.md)** — multi-version module dispatch, `versionDispatcher`, version metadata
+- **[Versioning](https://github.com/CLDMV/slothlet/blob/master/docs/VERSIONING.md)** — multi-version module dispatch, `versioning.dispatcher`, version metadata
 - **[Metadata System](https://github.com/CLDMV/slothlet/blob/master/docs/METADATA.md)** — function metadata tagging for security, authorization, auditing
 - **[Module Structure](https://github.com/CLDMV/slothlet/blob/master/docs/MODULE-STRUCTURE.md)** — organization patterns, examples, and the loading-pipeline diagram
 - **[Sanitization](https://github.com/CLDMV/slothlet/blob/master/docs/SANITIZATION.md)** — filename → property-name transformation rules

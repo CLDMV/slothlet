@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-11T17:02:27-07:00 (1791763347)
+ *	@Last modified time: 2026-11-16T18:30:41-08:00 (1794882641)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -536,26 +536,26 @@ describe("browser manifests refuse the same folder and file names (#571)", () =>
 	 * @param {object} manifest - Manifest with the entry under test.
 	 * @returns {Promise<object>} The composed api.
 	 */
-	const composeManifest = (manifest) => slothlet({ base: TEST_DIRS.API_TEST_BROWSER, mode: "eager", manifest });
-	const math = { path: "math.mjs", name: "math", fullName: "math.mjs" };
+	const composeManifest = (manifest) => slothlet({ base: TEST_DIRS.API_TEST_BROWSER, mode: "eager", loader: { files: manifest } });
+	const math = { path: "math.mjs", name: "math", full: "math.mjs" };
 	const folder = (name) => ({
 		path: name,
 		name,
-		files: [{ path: `${name}/format.mjs`, name: "format", fullName: "format.mjs" }],
+		files: [{ path: `${name}/format.mjs`, name: "format", full: "format.mjs" }],
 		directories: []
 	});
 
 	it("refuses a `then` file", async () => {
-		await expect(
-			composeManifest({ files: [math, { path: "then.mjs", name: "then", fullName: "then.mjs" }], directories: [] })
-		).rejects.toThrow(/MODULE_THENABLE_NAME/);
+		await expect(composeManifest({ files: [math, { path: "then.mjs", name: "then", full: "then.mjs" }], directories: [] })).rejects.toThrow(
+			/MODULE_THENABLE_NAME/
+		);
 	});
 
 	it("refuses folder and file names that sanitize to `then` or a framework-reserved key", async () => {
 		await expect(composeManifest({ files: [math], directories: [folder("Then")] })).rejects.toThrow(/MODULE_THENABLE_NAME/);
 		await expect(composeManifest({ files: [math], directories: [folder("_materialize-")] })).rejects.toThrow(/MODULE_RESERVED_DIRNAME/);
 		await expect(
-			composeManifest({ files: [math, { path: "-_impl.mjs", name: "-_impl", fullName: "-_impl.mjs" }], directories: [] })
+			composeManifest({ files: [math, { path: "-_impl.mjs", name: "-_impl", full: "-_impl.mjs" }], directories: [] })
 		).rejects.toThrow(/MODULE_RESERVED_FILENAME/);
 	});
 

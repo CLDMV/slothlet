@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T12:51:08-08:00 (1794775868)
+ *	@Last modified time: 2026-11-16T18:29:22-08:00 (1794882562)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -65,7 +65,7 @@ describe.each(configs)("a lazy namespace folder's own keys once loaded > $runtim
 	});
 
 	it.each([undefined, "fn", "obj"])("are the eager node's: %s", async (key) => {
-		const options = { base: FIXTURE, runtime, silent: true, permissions: { defaultPolicy: "allow", ...permissions } };
+		const options = { base: FIXTURE, runtime, silent: true, permissions: { policy: "allow", ...permissions } };
 		const eager = await slothlet({ ...options, mode: "eager" });
 		const expected = await listings(eager, key);
 		await eager.shutdown();

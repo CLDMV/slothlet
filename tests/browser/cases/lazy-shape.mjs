@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T13:15:58-08:00 (1794777358)
+ *	@Last modified time: 2026-11-16T18:28:02-08:00 (1794882482)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -58,7 +58,10 @@ const LISTING_FILES = [
 
 /** The lazy configs with the permission system on, then off and disabled. */
 const lazyConfigs = [
-	...matrix({ modes: ["lazy"] }).map((config) => ({ ...config, permissions: { defaultPolicy: "allow", attribution: config.attribution } })),
+	...matrix({ modes: ["lazy"] }).map((config) => ({
+		...config,
+		permissions: { policy: "allow", caller: { attribution: config.attribution } }
+	})),
 	...["off", "disabled"].map((mode) => ({
 		mode: "lazy",
 		runtime: "async",

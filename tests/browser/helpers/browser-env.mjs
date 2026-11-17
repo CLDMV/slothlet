@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T13:16:00-08:00 (1794777360)
+ *	@Last modified time: 2026-11-16T18:28:04-08:00 (1794882484)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -58,7 +58,7 @@ function place(root, rel) {
 		}
 		node = dir.children;
 	}
-	node.files.push({ path: rel, name: fullName.replace(/\.[^.]+$/, ""), fullName });
+	node.files.push({ path: rel, name: fullName.replace(/\.[^.]+$/, ""), full: fullName });
 }
 
 /**
@@ -86,10 +86,12 @@ export const env = {
 		}
 		const base = served(fixture, prefix);
 		const api = await slothlet({
-			platform: "browser",
 			base,
-			manifest,
-			resolveModuleSpecifier: ({ path }) => urls.get(path) ?? new URL(path, base).href,
+			loader: {
+				platform: "browser",
+				files: manifest,
+				resolve: ({ path }) => urls.get(path) ?? new URL(path, base).href
+			},
 			silent: true,
 			...options
 		});

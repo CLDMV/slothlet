@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T20:12:17-08:00 (1794802337)
+ *	@Last modified time: 2026-11-16T18:28:33-08:00 (1794882513)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -326,7 +326,7 @@ describe("ApiManager > api.leaves lazy completeness and host exemption (#247)", 
 	});
 
 	it("redacts module-private members the caller could not read", async () => {
-		api = await slothlet({ mode: "eager", base: PRIVATE_DIR, permissions: { defaultPolicy: "allow", rules: [] } });
+		api = await slothlet({ mode: "eager", base: PRIVATE_DIR, permissions: { policy: "allow", rules: [] } });
 
 		// The composed surface already redacts these from the host's `Object.keys`; enumeration is
 		// the same disclosure and now answers the same way.
@@ -336,7 +336,7 @@ describe("ApiManager > api.leaves lazy completeness and host exemption (#247)", 
 	});
 
 	it("returns the unredacted list under includePrivate for the host", async () => {
-		api = await slothlet({ mode: "eager", base: PRIVATE_DIR, permissions: { defaultPolicy: "allow", rules: [] } });
+		api = await slothlet({ mode: "eager", base: PRIVATE_DIR, permissions: { policy: "allow", rules: [] } });
 
 		// The tooling case this method exists for: the host asking for the complete picture.
 		const paths = (await api.slothlet.api.leaves(".", { details: true, includePrivate: true })).map((d) => d.path);
@@ -345,7 +345,7 @@ describe("ApiManager > api.leaves lazy completeness and host exemption (#247)", 
 	});
 
 	it("settles into a private subdirectory, so includePrivate is complete under lazy", async () => {
-		const perms = { defaultPolicy: "allow", rules: [] };
+		const perms = { policy: "allow", rules: [] };
 		api = await slothlet({ mode: "eager", base: PRIVATE_SUBDIR_DIR, permissions: perms });
 		const eagerPaths = (await api.slothlet.api.leaves(".", { details: true, includePrivate: true })).map((d) => d.path).sort();
 		await api.shutdown();
@@ -361,7 +361,7 @@ describe("ApiManager > api.leaves lazy completeness and host exemption (#247)", 
 	});
 
 	it("keeps includePrivate complete under lazy when private terminal reads are gated", async () => {
-		const perms = { defaultPolicy: "allow", rules: [] };
+		const perms = { policy: "allow", rules: [] };
 		api = await slothlet({ mode: "eager", base: PRIVATE_DIR, permissions: perms });
 		const eagerPaths = (await api.slothlet.api.leaves(".", { details: true, includePrivate: true })).map((d) => d.path).sort();
 		await api.shutdown();
@@ -415,7 +415,7 @@ describe("ApiManager > api.leaves lazy completeness and host exemption (#247)", 
 	});
 
 	it("shows the privates of its own module to a MODULE caller in another folder", async () => {
-		api = await slothlet({ mode: "eager", base: PRIVATE_DIR, permissions: { defaultPolicy: "allow", rules: [] } });
+		api = await slothlet({ mode: "eager", base: PRIVATE_DIR, permissions: { policy: "allow", rules: [] } });
 
 		// Called from inside introspect/, so the caller is a module rather than the host. Reaching
 		// slothlet.api.leaves is permitted; that says nothing about billing/'s private members.
@@ -428,7 +428,7 @@ describe("ApiManager > api.leaves lazy completeness and host exemption (#247)", 
 	});
 
 	it("refuses includePrivate to a MODULE caller", async () => {
-		api = await slothlet({ mode: "eager", base: PRIVATE_DIR, permissions: { defaultPolicy: "allow", rules: [] } });
+		api = await slothlet({ mode: "eager", base: PRIVATE_DIR, permissions: { policy: "allow", rules: [] } });
 
 		// The unredacted list is a host capability. Allowing a module to ask for it would let it
 		// self-grant exactly what the redaction above withholds.
@@ -438,7 +438,7 @@ describe("ApiManager > api.leaves lazy completeness and host exemption (#247)", 
 	});
 
 	it("redacts a private member of an INLINE mount, which has no source file", async () => {
-		api = await slothlet({ mode: "eager", base: PRIVATE_DIR, permissions: { defaultPolicy: "allow", rules: [] } });
+		api = await slothlet({ mode: "eager", base: PRIVATE_DIR, permissions: { policy: "allow", rules: [] } });
 		await api.slothlet.api.add("inline", { exports: { __secret: 1, open: 2 } });
 
 		// An object mount registers with filePath null, so the same-module comparison has nothing to
@@ -455,7 +455,7 @@ describe("ApiManager > api.leaves lazy completeness and host exemption (#247)", 
 	});
 
 	it("is unaffected by permission rules on the host's bound handle", async () => {
-		api = await slothlet({ mode: "eager", base: BASE, permissions: { defaultPolicy: "deny", rules: [] } });
+		api = await slothlet({ mode: "eager", base: BASE, permissions: { policy: "deny", rules: [] } });
 		await api.slothlet.api.add("shop", SHOP);
 
 		// Enumeration under a caller identity now redacts (#244 shipped) — the host's bound handle

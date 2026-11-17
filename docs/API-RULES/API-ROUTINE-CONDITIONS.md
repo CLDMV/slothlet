@@ -7,16 +7,16 @@ Stackable-routine conditions — how contributions to a named routine are collec
 
 ---
 
-## T01: `stackRoutines` Contributor Gate
+## T01: `routines.stack` Contributor Gate
 
 **Related Rule**: [Rule 20](../API-RULES.md#rule-20-stackable-routines--cascades)
 **Status**: ✅ Active
 
-**Pattern**: With `stackRoutines` off (default), only the ownership-winner at a shared path counts as a contributor; with it on, every raw contribution counts regardless of collision outcome.
+**Pattern**: With `routines.stack` off (default), only the ownership-winner at a shared path counts as a contributor; with it on, every raw contribution counts regardless of collision outcome.
 
 **Source(s)**: `src/lib/handlers/routine-manager.mjs:273-276` (`#applyStackFilter`, #365) · `:249-260` (`#isCurrentOwner`)
 
-**Trigger**: `config?.stackRoutines`
+**Trigger**: `config?.routines.stack`
 **Result**: all contributions (on) vs owner-only filter (off).
 
 ---
@@ -147,4 +147,4 @@ Stackable-routine conditions — how contributions to a named routine are collec
 
 ---
 
-_Routines family: T01–T10, under Rule 20 (T07 also Rule 21). `autoRoutines` (whether the mode cascade auto-fires) governs invocation timing, not tree shape, and is not a shape condition._
+_Routines family: T01–T10, under Rule 20 (T07 also Rule 21). `routines.auto` (whether the mode cascade auto-fires) governs invocation timing, not tree shape, and is not a shape condition._

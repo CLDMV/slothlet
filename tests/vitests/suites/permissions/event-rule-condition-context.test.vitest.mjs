@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:37-07:00 (1791091717)
+ *	@Last modified time: 2026-11-16T18:29:36-08:00 (1794882576)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -31,9 +31,9 @@ describe("event-rule conditions receive the user context (#511)", () => {
 		api = await slothlet({
 			base: BASE,
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				events: {
-					default: "notify",
+					policy: "notify",
 					rules: [{ caller: "remote.renderer", event: "cond.*", effect: "allow", condition: { tenant: "tenant-a" } }]
 				}
 			}
@@ -54,10 +54,10 @@ describe("event-rule conditions receive the user context (#511)", () => {
 		api = await slothlet({
 			base: BASE,
 			permissions: {
-				defaultPolicy: "deny",
+				policy: "deny",
 				rules: [{ caller: "remote.renderer", target: "probe.**", effect: "allow", condition }],
 				events: {
-					default: "notify",
+					policy: "notify",
 					rules: [{ caller: "remote.renderer", event: "cond.*", effect: "allow", condition }]
 				}
 			}
@@ -78,9 +78,9 @@ describe("event-rule conditions receive the user context (#511)", () => {
 		api = await slothlet({
 			base: BASE,
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				events: {
-					default: "notify",
+					policy: "notify",
 					rules: [{ caller: "subscriber.**", event: "cond.*", effect: "allow", condition: { tenant: "tenant-a" } }]
 				}
 			}

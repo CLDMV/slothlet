@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:27-07:00 (1791091707)
+ *	@Last modified time: 2026-11-16T18:29:03-08:00 (1794882543)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -66,8 +66,8 @@ describe.each(getMatrixConfigs())("Events > delivery strategy (#497) > $name", (
 	 */
 	const compose = async (permissions) => {
 		const effective = permissions ?? {
-			defaultPolicy: "allow",
-			events: { default: "notify", rules: [{ caller: "plug.**", event: "**", effect: "allow" }] }
+			policy: "allow",
+			events: { policy: "notify", rules: [{ caller: "plug.**", event: "**", effect: "allow" }] }
 		};
 		const instance = await slothlet({ ...config, base: BASE, permissions: effective });
 		await instance.slothlet.api.add("plug", BASE, { moduleID: "plug" });
@@ -263,8 +263,8 @@ describe.each(getMatrixConfigs())("Events > delivery strategy (#497) > $name", (
 	// ── Delivery-time enforcement ───────────────────────────────────────────────
 	it("rules and levels are enforced at delivery time: a rule changed after emit applies to the delivery", async () => {
 		api = await compose({
-			defaultPolicy: "allow",
-			events: { default: "notify", rules: [{ caller: "plug.**", event: "evt.*", effect: "allow" }] }
+			policy: "allow",
+			events: { policy: "notify", rules: [{ caller: "plug.**", event: "evt.*", effect: "allow" }] }
 		});
 		const { strategy, queue } = makeQueueStrategy();
 		api.slothlet.event.strategy(strategy);
@@ -291,9 +291,9 @@ describe.each(getMatrixConfigs())("Events > delivery strategy (#497) > $name", (
 
 	it("delivery runs the listener and the rule condition inside the emit-time context", async () => {
 		api = await compose({
-			defaultPolicy: "allow",
+			policy: "allow",
 			events: {
-				default: "notify",
+				policy: "notify",
 				rules: [{ caller: "plug.**", event: "cond.*", effect: "allow", condition: { user: "alice" } }]
 			}
 		});
@@ -428,7 +428,7 @@ describe.each(getMatrixConfigs())("Events > delivery strategy (#497) > $name", (
 	it.each([["allow"], ["deny"]])(
 		"strategy and deliver are host-only: a module caller is refused under defaultPolicy %s",
 		async (defaultPolicy) => {
-			api = await compose({ defaultPolicy });
+			api = await compose({ policy: defaultPolicy });
 			expect(await api.strategist.attemptStrategy()).toEqual({ ok: false, code: "PERMISSION_DENIED" });
 			expect(await api.strategist.attemptDeliver()).toEqual({ ok: false, code: "PERMISSION_DENIED" });
 		}

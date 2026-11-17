@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T22:52:02-08:00 (1794811922)
+ *	@Last modified time: 2026-11-16T18:28:31-08:00 (1794882511)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -76,7 +76,7 @@ describe.each(getMatrixConfigs())("api.add collision-override policy (#380) > $n
 	});
 
 	it("unlocked (allowCollisionOverride:true): collisionMode is honored with no warning", async () => {
-		api = await slothlet({ ...config, diagnostics: true, base: BASE, api: { mutations: { allowCollisionOverride: true } } });
+		api = await slothlet({ ...config, diagnostics: true, base: BASE, api: { collision: { override: true } } });
 		const codes = await withCapturedWarnings(api, () => api.slothlet.api.add("extOverride", ADDDIR, { collisionMode: "replace" }));
 		expect(api.extOverride).toBeDefined();
 		expect(codes).not.toContain("WARNING_API_ADD_OPTION_LOCKED");

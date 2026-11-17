@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-14T00:00:00-08:00 (1794643200)
+ *	@Last modified time: 2026-11-16T18:30:19-08:00 (1794882619)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -113,7 +113,7 @@ const RULE_SETS = {
 	},
 	"a default deny with allows": {
 		everyRoute: true,
-		defaultPolicy: "deny",
+		policy: "deny",
 		rules: (p) => [
 			{ caller: "open.**", target: "**", effect: "allow" },
 			{ caller: "zz.open.**", target: "**", effect: "allow" },
@@ -213,8 +213,10 @@ describe.each(ROOTS)("the api root's listing and reads > %s", (root) => {
 				runtime,
 				context: set.context,
 				permissions: {
-					defaultPolicy: set.defaultPolicy ?? "allow",
-					attribution,
+					policy: set.defaultPolicy ?? "allow",
+					caller: {
+						attribution
+					},
 					rules: [...set.rules("", members), ...set.rules("zz.", members)]
 				}
 			});
@@ -239,7 +241,7 @@ describe.each(ROOTS)("the api root's listing and reads > %s", (root) => {
 				{
 					mode,
 					runtime,
-					permissions: { defaultPolicy: "allow", attribution, rules: [...set.rules("", members), ...set.rules("zz.", members)] }
+					permissions: { policy: "allow", caller: { attribution }, rules: [...set.rules("", members), ...set.rules("zz.", members)] }
 				},
 				{ load: false }
 			);
@@ -249,7 +251,7 @@ describe.each(ROOTS)("the api root's listing and reads > %s", (root) => {
 		});
 
 		it("a file's primitive default export at the root reads as its value, as one level down and in plain JavaScript", async () => {
-			api = await build(root, { mode, runtime, permissions: { defaultPolicy: "allow", attribution, rules: [] } });
+			api = await build(root, { mode, runtime, permissions: { policy: "allow", caller: { attribution }, rules: [] } });
 			const plain = await plainDefaults(root);
 			for (const member of FILE_PRIMITIVES) {
 				expect(described(api[member]), `the host reads ${member}`).toEqual(described(api.zz[member]));

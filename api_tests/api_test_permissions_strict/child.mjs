@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T03:00:00-08:00 (1794826800)
+ *	@Last modified time: 2026-11-16T18:25:55-08:00 (1794882355)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -50,7 +50,7 @@ await record("start", async () => {
 		runtime,
 		permissions: {
 			mode,
-			defaultPolicy: "allow",
+			policy: "allow",
 			rules: [
 				{ caller: "settler.**", target: "vault.**", effect: "deny" },
 				{ caller: "**", target: "only.**", effect: "deny" },

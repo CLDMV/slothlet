@@ -59,7 +59,7 @@ const api = await slothlet({
 	hook: {
 		enabled: true,
 		pattern: "**",
-		suppressErrors: false
+		errors: false
 	}
 });
 ```
@@ -68,20 +68,20 @@ const api = await slothlet({
 
 - **`enabled`** (boolean): Enable or disable hook execution
 - **`pattern`** (string): Default pattern filter for which functions hooks apply to
-- **`suppressErrors`** (boolean): Control error throwing behavior
+- **`errors`** (`"suppress"` | `false`; `true` means `"suppress"`): Control error throwing behavior
   - `false` (default): Errors are sent to error hooks AND then re-thrown
   - `true`: Errors are sent to error hooks but NOT thrown (returns `undefined`)
 
 ### Error Suppression
 
-Error hooks **always receive errors** regardless of this setting. `suppressErrors` only controls whether the error is thrown after all error hooks have executed.
+Error hooks **always receive errors** regardless of this setting. `errors` only controls whether the error is thrown after all error hooks have executed.
 
 > Hooks (including error hooks) only execute when `hook.enabled: true`. If hooks are disabled entirely, errors throw normally with no hook execution. With hooks disabled `api.slothlet.hook` does not exist either (it is present when hooks are enabled, or when `diagnostics: true` is set).
 
 ```javascript
 const api = await slothlet({
 	base: "./api",
-	hook: { enabled: true, suppressErrors: true }
+	hook: { enabled: true, errors: "suppress" }
 });
 
 api.slothlet.hook.on("**:error", ({ path, error }) => {
@@ -99,8 +99,8 @@ if (result === undefined) {
 
 1. Error occurs (in an around hook, before hook, the function, or an after hook)
 2. Error hooks execute with full source context
-3. If `suppressErrors: false` → error is re-thrown
-4. If `suppressErrors: true` → error is NOT thrown; function returns `undefined`
+3. If `errors: false` → error is re-thrown
+4. If `errors: "suppress"` → error is NOT thrown; function returns `undefined`
 
 The full pipeline, outermost first:
 
@@ -110,7 +110,7 @@ always / error observers
    └─ before hooks → function → after hooks
 ```
 
-The observers sit **outside** the around hooks, so they see exactly what the caller receives. On a path with `around` hooks, a failure inside the pipeline propagates through `next()` so an around hook can handle it: an error an around hook catches and swallows never reaches the error hooks, and one it rethrows (after a rollback, say) reaches them once, carrying the source of wherever it was first thrown. `suppressErrors` applies to what escapes the around chain. Error hooks and `always` hooks on such a path receive the arguments the caller passed, since that is the call they observe.
+The observers sit **outside** the around hooks, so they see exactly what the caller receives. On a path with `around` hooks, a failure inside the pipeline propagates through `next()` so an around hook can handle it: an error an around hook catches and swallows never reaches the error hooks, and one it rethrows (after a rollback, say) reaches them once, carrying the source of wherever it was first thrown. `errors` applies to what escapes the around chain. Error hooks and `always` hooks on such a path receive the arguments the caller passed, since that is the call they observe.
 
 ---
 
@@ -633,7 +633,7 @@ api.slothlet.hook.on(
 
 **Important notes:**
 
-- Errors from `before` and `after` hooks are re-thrown after error hooks run (unless `suppressErrors: true`)
+- Errors from `before` and `after` hooks are re-thrown after error hooks run (unless `errors: "suppress"`)
 - On a path with `around` hooks, error hooks run only for the error that escapes the around chain — see [Error Flow](#error-flow)
 - Errors from `always` hooks are caught and passed to error hooks, but do NOT re-throw (never crash execution)
 - Error hooks do not receive errors thrown by other error hooks (no recursion)
@@ -693,7 +693,7 @@ api.slothlet.hook.on(
 
 ## Versioned Registration
 
-Calls route through the [`versionDispatcher`](VERSIONING.md#discriminator) seam; plain hook registration does not — a pattern written against the **logical** path (`"auth.login"`, the shape used for calls) matches nothing once the target mounts versioned, because hooks fire under the **physical** path (`"v1.auth.login"`). Registration can opt into the same seam:
+Calls route through the [`versioning.dispatcher`](VERSIONING.md#discriminator) seam; plain hook registration does not — a pattern written against the **logical** path (`"auth.login"`, the shape used for calls) matches nothing once the target mounts versioned, because hooks fire under the **physical** path (`"v1.auth.login"`). Registration can opt into the same seam:
 
 ```javascript
 // Resolve through the instance's configured dispatcher, exactly as a call would:
@@ -900,7 +900,7 @@ Register a hook.
 - `options.priority` (number, optional) - Execution priority; higher executes first (default: `0`)
 - `options.subset` (string, optional) - Execution phase: `"before"`, `"primary"` (default), or `"after"`
 - `options.pattern` (string, optional) - Path pattern that overrides the one parsed from `typePattern`
-- `options.versioned` (boolean, optional) - Resolve the pattern, written against the logical path, through the instance's configured `versionDispatcher` (default: `false`). See [Versioned Registration](#versioned-registration).
+- `options.versioned` (boolean, optional) - Resolve the pattern, written against the logical path, through the instance's configured `versioning.dispatcher` (default: `false`). See [Versioned Registration](#versioned-registration).
 - `options.versionDispatcher` (Function, optional) - `(allVersions, caller) => tag | tag[] | null` for this registration only, overriding the instance's dispatcher. Implies versioned registration.
 - `options.lockCaller` (boolean, optional) - Pin the registering module's caller identity onto the handler (default: `true`). See [Hooks auto-pin caller identity](#hooks-auto-pin-caller-identity).
 - `options.async` (boolean, optional) - Declare a handler asynchronous when the native async brand cannot show it (a plain function returning a Promise). Applies to `before`, `after` and `around` handlers.

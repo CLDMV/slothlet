@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-26T02:52:58-07:00 (1793008378)
+ *	@Last modified time: 2026-11-16T18:30:14-08:00 (1794882614)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -107,7 +107,7 @@ describe.each(CONFIGS)("host write grants (#625) — $mode / $runtime", ({ mode,
 
 	it.each([
 		["permissions with defaults", { permissions: {} }],
-		["defaultPolicy allow, no write rule", { permissions: { defaultPolicy: "allow" } }]
+		["defaultPolicy allow, no write rule", { permissions: { policy: "allow" } }]
 	])("refuses the writes with no granting rule: %s", async (_label, options) => {
 		await load(options);
 		const report = withSuppressedSlothletErrorOutputSync(() => api.guest.x.writeVictim());

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:12-08:00 (1794874572)
+ *	@Last modified time: 2026-11-16T18:27:56-08:00 (1794882476)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -377,7 +377,7 @@ const HELPER_SEALS = new Map();
  * hook, of the module's instance copy whose code was running when the file was resolved (a `require` it made through
  * `createRequire` of any path). Kept here, out of every
  * module's reach, and read through the frozen reader on the shared object (see {@link SCRIPTS_READER}): whose code
- * an untagged file's code is, under `permissions.provenance`. A file loaded before slothlet's hook was registered has
+ * an untagged file's code is, under `permissions.caller.provenance`. A file loaded before slothlet's hook was registered has
  * no entry: it is the host's.
  * @type {Map<string, Set<string>>}
  * @private

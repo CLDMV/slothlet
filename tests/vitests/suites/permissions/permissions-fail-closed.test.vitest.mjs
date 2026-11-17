@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:17-07:00 (1791090917)
+ *	@Last modified time: 2026-11-16T18:29:50-08:00 (1794882590)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -44,13 +44,13 @@ describe.each(getMatrixConfigs())("Permissions > Fail Closed (H3) > $name", ({ c
 	});
 
 	it("host-initiated call is allowed under defaultPolicy:deny (trusted root)", async () => {
-		api = await slothlet({ ...config, base: BASE, permissions: { defaultPolicy: "deny" } });
+		api = await slothlet({ ...config, base: BASE, permissions: { policy: "deny" } });
 		const result = await api.payments.charge.process(100);
 		expect(result.ok).toBe(true);
 	});
 
 	it("a forged caller wrapper (not in genuineWrappers) is denied", async () => {
-		api = await slothlet({ ...config, base: BASE, permissions: { defaultPolicy: "deny" } });
+		api = await slothlet({ ...config, base: BASE, permissions: { policy: "deny" } });
 		const { cm, instanceID } = instanceHandles(api);
 		const forged = { ____slothletInternal: { apiPath: "attacker", filePath: null } };
 		expect(genuineWrappers.has(forged)).toBe(false);
@@ -72,7 +72,7 @@ describe.each(getMatrixConfigs())("Permissions > Fail Closed (H3) > $name", ({ c
 		// Mirrors the forged-call case above, but exercises the read gate's fail-closed deny
 		// (unified-wrapper `runtime_enforceReadGate`): a terminal Buffer read off a module API
 		// path inside a forged context must throw before any rule check. readGating defaults on.
-		api = await slothlet({ ...config, base: BASE, permissions: { defaultPolicy: "deny" } });
+		api = await slothlet({ ...config, base: BASE, permissions: { policy: "deny" } });
 		const { cm, instanceID } = instanceHandles(api);
 		const forged = { ____slothletInternal: { apiPath: "attacker", filePath: null } };
 		expect(genuineWrappers.has(forged)).toBe(false);
@@ -99,7 +99,7 @@ describe.each(getMatrixConfigs({ runtime: "async" }))("Permissions > Fail Closed
 	});
 
 	it("a stripped-context caller (active context, no caller, not trusted root) is denied", async () => {
-		api = await slothlet({ ...config, base: BASE, permissions: { defaultPolicy: "deny" } });
+		api = await slothlet({ ...config, base: BASE, permissions: { policy: "deny" } });
 		const { cm, instanceID } = instanceHandles(api);
 
 		// runInContext with a null caller creates an execution store with no currentWrapper that does
@@ -121,7 +121,7 @@ describe.each(getMatrixConfigs({ runtime: "async" }))("Permissions > Fail Closed
 		// execution store with no currentWrapper and no trusted-root marker; a terminal Buffer read
 		// off a module API path then fails closed in `runtime_enforceReadGate`. Async-only, matching
 		// the call case: live-mode stores propagate the host trusted-root marker differently.
-		api = await slothlet({ ...config, base: BASE, permissions: { defaultPolicy: "deny" } });
+		api = await slothlet({ ...config, base: BASE, permissions: { policy: "deny" } });
 		const { cm, instanceID } = instanceHandles(api);
 
 		let denied = false;
@@ -139,7 +139,7 @@ describe.each(getMatrixConfigs({ runtime: "async" }))("Permissions > Fail Closed
 		api = await slothlet({
 			...config,
 			base: BASE,
-			permissions: { defaultPolicy: "deny", failOpenOnAbsentCaller: true }
+			permissions: { policy: "deny", caller: { anonymous: true } }
 		});
 		const { cm, instanceID } = instanceHandles(api);
 

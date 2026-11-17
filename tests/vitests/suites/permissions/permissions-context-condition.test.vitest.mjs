@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:16-07:00 (1791090916)
+ *	@Last modified time: 2026-11-16T18:29:46-08:00 (1794882586)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -34,7 +34,7 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "deny",
+				policy: "deny",
 				rules: [
 					{
 						caller: "callers.**",
@@ -61,7 +61,7 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "deny",
+				policy: "deny",
 				rules: [
 					{
 						caller: "callers.**",
@@ -91,7 +91,7 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "deny",
+				policy: "deny",
 				rules: [
 					{ caller: "callers.**", target: "payments.**", effect: "allow", condition: { tenant: "tenant-a" } },
 					{ caller: "callers.**", target: "payments.**", effect: "deny", condition: { tenant: "tenant-b" } }
@@ -123,7 +123,7 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "deny",
+				policy: "deny",
 				rules: [
 					{
 						caller: "callers.**",
@@ -148,7 +148,7 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "deny",
+				policy: "deny",
 				rules: [
 					{
 						caller: "callers.**",
@@ -177,7 +177,7 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "deny",
+				policy: "deny",
 				rules: [
 					{
 						caller: "callers.**",
@@ -209,7 +209,7 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "deny",
+				policy: "deny",
 				rules: [
 					{
 						caller: "callers.**",
@@ -235,7 +235,7 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "deny",
+				policy: "deny",
 				rules: [
 					{
 						caller: "callers.**",
@@ -263,7 +263,7 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "deny",
+				policy: "deny",
 				rules: [
 					{
 						caller: "**",
@@ -291,7 +291,7 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "deny",
+				policy: "deny",
 				rules: [
 					{
 						caller: "callers.controlCaller.callEnable",
@@ -328,7 +328,7 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 			...config,
 			base: `${BASE}/callers`,
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				rules: []
 			}
 		});
@@ -353,7 +353,7 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "deny",
+				policy: "deny",
 				rules: [
 					{
 						caller: "callers.**",
@@ -389,7 +389,7 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "deny",
+				policy: "deny",
 				rules: [{ caller: "callers.**", target: "payments.**", effect: "allow" }]
 			}
 		});
@@ -408,7 +408,7 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "deny",
+				policy: "deny",
 				rules: [{ caller: "callers.**", target: "payments.**", effect: "allow" }]
 			}
 		});
@@ -424,7 +424,7 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "allow"
+				policy: "allow"
 			}
 		});
 
@@ -448,7 +448,7 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "allow"
+				policy: "allow"
 			}
 		});
 
@@ -474,7 +474,7 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "allow"
+				policy: "allow"
 			}
 		});
 
@@ -495,7 +495,7 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "allow"
+				policy: "allow"
 			}
 		});
 
@@ -517,7 +517,7 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "allow"
+				policy: "allow"
 			}
 		});
 
@@ -539,7 +539,7 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "allow"
+				policy: "allow"
 			}
 		});
 
@@ -562,7 +562,7 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				audit: "verbose",
 				rules: [
 					{
@@ -595,7 +595,7 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				audit: "verbose",
 				rules: [{ caller: "callers.**", target: "payments.**", effect: "allow" }]
 			}
@@ -619,7 +619,7 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "deny",
+				policy: "deny",
 				rules: [
 					{
 						caller: "callers.**",
@@ -645,7 +645,7 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "deny",
+				policy: "deny",
 				rules: [
 					{
 						caller: "callers.**",
@@ -671,7 +671,7 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "deny",
+				policy: "deny",
 				rules: [
 					{
 						caller: "callers.**",
@@ -701,7 +701,7 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "deny",
+				policy: "deny",
 				rules: [
 					{
 						caller: "callers.**",
@@ -727,7 +727,7 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "deny",
+				policy: "deny",
 				rules: [
 					{
 						caller: "callers.**",
@@ -753,7 +753,7 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "deny",
+				policy: "deny",
 				rules: [
 					{
 						caller: "callers.**",
@@ -783,7 +783,7 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "deny",
+				policy: "deny",
 				rules: [
 					{
 						caller: "callers.**",
@@ -812,7 +812,7 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 		api = await slothlet({
 			...config,
 			base: `${BASE}/callers`,
-			permissions: { defaultPolicy: "allow", rules: [] }
+			permissions: { policy: "allow", rules: [] }
 		});
 
 		try {
@@ -834,7 +834,7 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 		api = await slothlet({
 			...config,
 			base: `${BASE}/callers`,
-			permissions: { defaultPolicy: "allow", rules: [] }
+			permissions: { policy: "allow", rules: [] }
 		});
 
 		try {
@@ -857,7 +857,7 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "deny",
+				policy: "deny",
 				rules: [{ caller: "callers.**", target: "payments.**", effect: "allow" }]
 			}
 		});
@@ -880,7 +880,7 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				rules: [{ caller: "callers.controlCaller.callEnable", target: "slothlet.permissions.control.**", effect: "allow" }]
 			}
 		});
@@ -895,7 +895,7 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				rules: [{ caller: "callers.controlCaller.callDisable", target: "slothlet.permissions.control.**", effect: "allow" }]
 			}
 		});

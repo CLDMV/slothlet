@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T13:15:57-08:00 (1794777357)
+ *	@Last modified time: 2026-11-16T18:28:02-08:00 (1794882482)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -66,7 +66,12 @@ async function build(env, { mode, runtime, attribution }, rules = []) {
 	const api = await env.compose({
 		fixture: FIXTURE,
 		files: FILES,
-		options: { mode, runtime, collision: { initial: "merge", api: "merge" }, permissions: { defaultPolicy: "allow", attribution, rules } }
+		options: {
+			mode,
+			runtime,
+			api: { collision: { mode: { initial: "merge", api: "merge" } } },
+			permissions: { policy: "allow", caller: { attribution }, rules }
+		}
 	});
 	for (const key of ["math", "shape", "solo", "klass", "own", "later", "reader"]) await api[key];
 	for (const node of [api.math.calc, api.shape.proto, api.later.af]) await node;

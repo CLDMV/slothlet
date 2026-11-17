@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:17:06-08:00 (1794874626)
+ *	@Last modified time: 2026-11-16T18:29:38-08:00 (1794882578)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -39,7 +39,7 @@ const TARGET = "project.files.list";
 const makeManager = (rules = [], extra = {}, clock = undefined) => {
 	const debug = vi.fn();
 	const manager = new PermissionManager({
-		config: { permissions: { enabled: true, defaultPolicy: "deny", rules, ...extra } },
+		config: { permissions: { mode: true, policy: "deny", rules, ...extra } },
 		handlers: {},
 		debug,
 		SlothletError,

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T00:00:00-08:00 (1794729600)
+ *	@Last modified time: 2026-11-16T18:29:51-08:00 (1794882591)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -64,14 +64,14 @@ const DENIED_TARGETS = ["math.**", "deep.**", "named.**", "mnt.**", "cm", "cm.**
 const POLICIES = [
 	{
 		label: "a deny rule on each target",
-		permissions: { defaultPolicy: "allow", rules: DENIED_TARGETS.map((target) => ({ caller: "probe.**", target, effect: "deny" })) },
+		permissions: { policy: "allow", rules: DENIED_TARGETS.map((target) => ({ caller: "probe.**", target, effect: "deny" })) },
 		denies: true,
 		unheld: [],
 		listed: ["slothlet", "slothlet.lockCaller", "slothlet.hook", "slothlet.api"]
 	},
 	{
 		label: "default deny with no rule for the target",
-		permissions: { defaultPolicy: "deny", rules: [] },
+		permissions: { policy: "deny", rules: [] },
 		denies: true,
 		unheld: ["slothlet.api.add"],
 		// `slothlet.api` is not the module's to read at all, so it is not listed here.
@@ -79,7 +79,7 @@ const POLICIES = [
 	},
 	{
 		label: "default allow with no rule",
-		permissions: { defaultPolicy: "allow", rules: [] },
+		permissions: { policy: "allow", rules: [] },
 		denies: false,
 		unheld: [],
 		listed: ["slothlet", "slothlet.lockCaller", "slothlet.hook", "slothlet.api"]
@@ -151,7 +151,7 @@ describe.each(CONFIGS)("Permissions > a function's built-in name and length > $n
 		let api;
 
 		beforeAll(async () => {
-			api = await slothlet({ ...config, base: DIR, silent: true, permissions: { ...permissions, attribution } });
+			api = await slothlet({ ...config, base: DIR, silent: true, permissions: { ...permissions, caller: { attribution } } });
 			await api.slothlet.api.add(["mnt"], MOUNT);
 			// A folder whose root file's default export is a function: a callable mount holding the folder's other members.
 			await api.slothlet.api.add(["cm"], CALLABLE);
@@ -248,7 +248,7 @@ describe.each(CONFIGS)("Permissions > a function's built-in name and length > $n
 	});
 
 	it("lets a module read name and length of nodes it has not loaded, under default deny", async () => {
-		const api = await slothlet({ ...config, base: DIR, silent: true, permissions: { defaultPolicy: "deny", attribution } });
+		const api = await slothlet({ ...config, base: DIR, silent: true, permissions: { policy: "deny", caller: { attribution } } });
 		try {
 			await api.probe;
 			for (const where of ["math.add", "deep.inner.walk", "math.helpers.twice"]) {
@@ -272,7 +272,7 @@ describe.each(CONFIGS)(
 
 		it.each(POLICIES)("is the module's data, held to the rules: $label", async ({ permissions, denies }) => {
 			const rules = permissions.rules.map((rule) => (rule.target === "mnt.**" ? { ...rule, target: "ext.**" } : rule));
-			const api = await slothlet({ ...config, base: DIR, silent: true, permissions: { ...permissions, rules, attribution } });
+			const api = await slothlet({ ...config, base: DIR, silent: true, permissions: { ...permissions, rules, caller: { attribution } } });
 			try {
 				await api.slothlet.api.add(["ext"], EXPORTED);
 				await api.ext.calc;
@@ -313,7 +313,7 @@ describe.each(CONFIGS)(
 		];
 
 		it.each(DENIES)("lists the function and withholds its prototype: $label", async ({ rules }) => {
-			const api = await slothlet({ ...config, base: DIR, silent: true, permissions: { defaultPolicy: "deny", rules, attribution } });
+			const api = await slothlet({ ...config, base: DIR, silent: true, permissions: { policy: "deny", rules, caller: { attribution } } });
 			try {
 				await api.slothlet.api.add(["cm"], CALLABLE);
 				await api.math;

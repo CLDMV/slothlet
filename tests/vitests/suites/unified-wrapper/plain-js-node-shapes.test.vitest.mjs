@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-08T01:03:27-08:00 (1794128607)
+ *	@Last modified time: 2026-11-16T18:30:38-08:00 (1794882638)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -65,10 +65,10 @@ const RUNTIMES = ["async", "live"];
 const PERMISSIONS = [
 	{ name: "permissions off", permissions: null },
 	{ name: "permissions on", permissions: {} },
-	{ name: "permissions on, capture off", permissions: { references: { capture: false } } }
+	{ name: "permissions on, capture off", permissions: { caller: { capture: false } } }
 ];
 
-const DENY_READER = { defaultPolicy: "allow", rules: [{ caller: "reader.**", target: "owner.**", effect: "deny" }] };
+const DENY_READER = { policy: "allow", rules: [{ caller: "reader.**", target: "owner.**", effect: "deny" }] };
 
 /** Grants the reader writes into the owner's subtree, and refuses it nothing. */
 const ALLOW_READER_WRITES = { rules: [{ caller: "reader.**", target: "owner.**:write", effect: "allow" }] };
@@ -96,7 +96,7 @@ const heldInstances = (api) => Object.fromEntries(IDENTITY_CASES.map((name) => [
 
 /** Refuses the reader the owner's classes, exported (`Foo`) and kept to itself (reached as `hiddenInst.constructor`), and nothing else. */
 const DENY_CLASSES = {
-	defaultPolicy: "allow",
+	policy: "allow",
 	rules: ["owner.Foo", "owner.Foo.**", "owner.hiddenInst.constructor", "owner.hiddenInst.constructor.**"].map((target) => ({
 		caller: "reader.**",
 		target,
@@ -719,7 +719,7 @@ describe.each(
 			[
 				{ name: "permissions off", permissions: null, off: true },
 				{ name: "permissions on, no rules", permissions: {}, off: false },
-				{ name: "permissions on, capture off", permissions: { references: { capture: false } }, off: false },
+				{ name: "permissions on, capture off", permissions: { caller: { capture: false } }, off: false },
 				{ name: "reader's writes allowed", permissions: ALLOW_READER_WRITES, off: false }
 			].map((entry) => ({ mode, runtime, ...entry }))
 		)
@@ -903,7 +903,7 @@ describe.each(
 			[
 				{ name: "permissions off", permissions: null, readerGets: "object" },
 				{ name: "permissions on, no rules", permissions: {}, readerGets: "view" },
-				{ name: "permissions on, capture off", permissions: { references: { capture: false } }, readerGets: "view" },
+				{ name: "permissions on, capture off", permissions: { caller: { capture: false } }, readerGets: "view" },
 				{ name: "reader's writes allowed", permissions: ALLOW_READER_WRITES, readerGets: "object" }
 			].map((entry) => ({ mode, runtime, ...entry }))
 		)
@@ -1050,7 +1050,7 @@ describe.each(
 			[
 				{ name: "permissions off", permissions: null, writesLand: true },
 				{ name: "permissions on, no rules", permissions: {}, writesLand: false },
-				{ name: "permissions on, capture off", permissions: { references: { capture: false } }, writesLand: false },
+				{ name: "permissions on, capture off", permissions: { caller: { capture: false } }, writesLand: false },
 				{ name: "reader's writes allowed", permissions: ALLOW_READER_WRITES, writesLand: true }
 			].map((entry) => ({ mode, runtime, ...entry }))
 		)

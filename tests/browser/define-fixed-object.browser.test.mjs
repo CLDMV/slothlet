@@ -2,12 +2,12 @@
  *
  *	@Project: @cldmv/slothlet
  *	@Filename: /tests/browser/define-fixed-object.browser.test.mjs
- *	@Date: 2026-11-16T05:00:00-08:00 (1795352400)
+ *	@Date: 2026-11-16T05:00:00-08:00 (1794834000)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T05:00:00-08:00 (1795352400)
+ *	@Last modified time: 2026-11-16T18:28:04-08:00 (1794882484)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -60,12 +60,14 @@ describe.each(["eager", "lazy"].flatMap((mode) => ["on", "off"].map((permissionM
 			const mod = await import("@cldmv/slothlet");
 			const slothlet = mod.default ?? mod.slothlet;
 			const api = await slothlet({
-				platform: "browser",
+				loader: {
+					platform: "browser"
+				},
 				mode,
 				silent: true,
 				permissions: {
 					mode: permissionMode,
-					defaultPolicy: "allow",
+					policy: "allow",
 					rules: [{ caller: "reader.**", target: "owner.data.locked.hidden", effect: "deny" }]
 				}
 			});

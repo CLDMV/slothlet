@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:34-07:00 (1791091714)
+ *	@Last modified time: 2026-11-16T18:29:24-08:00 (1794882564)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -50,7 +50,7 @@ afterEach(async () => {
 /** Compose pkg_a, subscribe, add pkg_b under `mode`, and return the collision events. */
 async function composeAndAdd({ mode, apiMode = "merge", addOpts = { collisionMode: "merge" } }) {
 	const events = [];
-	api = await slothlet({ base: PKG_A, mode, collision: { initial: "merge", api: apiMode }, silent: true });
+	api = await slothlet({ base: PKG_A, mode, api: { collision: { mode: { initial: "merge", api: apiMode } } }, silent: true });
 	api.slothlet.lifecycle.on("impl:collision", (d) => events.push(d));
 	await api.slothlet.api.add("", PKG_B, { moduleID: "pkgB", ...addOpts });
 	// Force lazy materialization of the composed surface so every resolved leaf is realized.
@@ -142,7 +142,11 @@ describe("impl:collision — folded self-named namespace (the invisible case)", 
 		api = await slothlet({
 			base: COLLISIONS,
 			mode: "lazy",
-			collision: { initial: "merge" },
+			api: {
+				collision: {
+					mode: { initial: "merge" }
+				}
+			},
 			silent: true,
 			lifecycle: { "impl:collision": (d) => events.push(d) }
 		});

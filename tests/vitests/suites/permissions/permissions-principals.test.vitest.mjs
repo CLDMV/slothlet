@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:18-07:00 (1791090918)
+ *	@Last modified time: 2026-11-16T18:30:04-08:00 (1794882604)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -91,7 +91,7 @@ describe.each(getMatrixConfigs())("Permissions > Principals (#459) > $name", ({ 
 		const instance = await slothlet({
 			...config,
 			base: path.join(FIXTURE, "base"),
-			permissions: { defaultPolicy: "deny", rules: [...PLUGIN_GRANTS, ...rules], ...permissions }
+			permissions: { policy: "deny", rules: [...PLUGIN_GRANTS, ...rules], ...permissions }
 		});
 		await instance.slothlet.api.add("roles", path.join(FIXTURE, "roles"), { moduleID: "roles-mod" });
 		await instance.slothlet.api.add("billing", path.join(FIXTURE, "billing"), { moduleID: "billing-mod" });
@@ -364,7 +364,7 @@ describe.each(getMatrixConfigs())("Permissions > Principals (#459) > $name", ({ 
 			...config,
 			base: path.join(FIXTURE, "base"),
 			api: { mutations: { permissions: false } },
-			permissions: { defaultPolicy: "allow" }
+			permissions: { policy: "allow" }
 		});
 		expect(() => api.slothlet.permissions.principal.register("x", { key: () => 1, resolve: () => 1 })).toThrow(
 			/INVALID_CONFIG_MUTATIONS_DISABLED/

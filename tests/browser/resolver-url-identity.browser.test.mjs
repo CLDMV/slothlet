@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-16T19:27:03-07:00 (1792204023)
+ *	@Last modified time: 2026-11-16T18:28:09-08:00 (1794882489)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -42,8 +42,8 @@ const MATH = `export const add = (a, b) => a + b;`;
 
 const MANIFEST = {
 	files: [
-		{ path: "math.mjs", name: "math", fullName: "math.mjs" },
-		{ path: "rogue.mjs", name: "rogue", fullName: "rogue.mjs" }
+		{ path: "math.mjs", name: "math", full: "math.mjs" },
+		{ path: "rogue.mjs", name: "rogue", full: "rogue.mjs" }
 	],
 	directories: []
 };
@@ -63,13 +63,15 @@ describe("a module imported from a URL other than its manifest path (browser, li
 		const slothlet = mod.default ?? mod.slothlet;
 		const urls = { "math.mjs": URL_KINDS[kind](MATH), "rogue.mjs": URL_KINDS[kind](ROGUE) };
 		const api = await slothlet({
-			platform: "browser",
 			base: new URL("/resolver-url-identity/", location.origin).href,
-			manifest: MANIFEST,
-			resolveModuleSpecifier: ({ path }) => urls[path],
+			loader: {
+				platform: "browser",
+				files: MANIFEST,
+				resolve: ({ path }) => urls[path]
+			},
 			mode: "eager",
 			runtime: "live",
-			permissions: { defaultPolicy: "deny", rules: [{ caller: "**", target: "rogue.**", effect: "allow" }] }
+			permissions: { policy: "deny", rules: [{ caller: "**", target: "rogue.**", effect: "allow" }] }
 		});
 		try {
 			expect(await api.rogue.callAfterAwait()).toBe("denied");

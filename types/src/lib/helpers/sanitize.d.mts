@@ -24,12 +24,13 @@ export class Sanitize extends ComponentBase {
      *
      * @param {string} input - String to sanitize
      * @param {Object} [options] - Sanitization configuration. Omit it to use the instance's `sanitize` config (defaults when there is none)
-     * @param {boolean} [options.lowerFirst=true] - Lowercase first character of first segment
-     * @param {boolean} [options.preserveAllUpper=false] - Preserve all-uppercase identifiers
-     * @param {boolean} [options.preserveAllLower=false] - Preserve all-lowercase identifiers
+     * @param {boolean} [options.first=true] - Lowercase first character of first segment
+     * @param {Object} [options.preserve={}] - Names kept as they are
+     * @param {boolean} [options.preserve.upper=false] - Preserve all-uppercase identifiers
+     * @param {boolean} [options.preserve.lower=false] - Preserve all-lowercase identifiers
      * @param {Object} [options.rules={}] - Transformation rules
      * @param {string[]} [options.rules.leave=[]] - Preserve exactly (case-sensitive, supports globs)
-     * @param {string[]} [options.rules.leaveInsensitive=[]] - Preserve exactly (case-insensitive, supports globs)
+     * @param {string[]} [options.rules.nocase=[]] - Preserve exactly (case-insensitive, supports globs)
      * @param {string[]} [options.rules.upper=[]] - Force UPPERCASE (supports globs and **STRING**)
      * @param {string[]} [options.rules.lower=[]] - Force lowercase (supports globs and **STRING**)
      * @returns {string} Valid JavaScript identifier
@@ -55,7 +56,7 @@ export class Sanitize extends ComponentBase {
      * @example
      * // Case preservation
      * sanitizePropertyName("COMMON_APPS", {
-     *   preserveAllUpper: true
+     *   preserve: { upper: true }
      * }); // "COMMON_APPS"
      *
      * @example
@@ -68,12 +69,14 @@ export class Sanitize extends ComponentBase {
      * }); // "getAPIStatus"
      */
     public sanitizePropertyName(input: string, options?: {
-        lowerFirst?: boolean | undefined;
-        preserveAllUpper?: boolean | undefined;
-        preserveAllLower?: boolean | undefined;
+        first?: boolean | undefined;
+        preserve?: {
+            upper?: boolean | undefined;
+            lower?: boolean | undefined;
+        } | undefined;
         rules?: {
             leave?: string[] | undefined;
-            leaveInsensitive?: string[] | undefined;
+            nocase?: string[] | undefined;
             upper?: string[] | undefined;
             lower?: string[] | undefined;
         } | undefined;

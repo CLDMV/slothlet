@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-08T19:20:01-08:00 (1794194401)
+ *	@Last modified time: 2026-11-16T18:30:23-08:00 (1794882623)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -176,9 +176,9 @@ afterAll(() => {
 const PERMISSION_CONFIGS = [
 	["no permissions config", {}, false],
 	['mode: "off"', { permissions: { mode: "off" } }, false],
-	["enabled: false", { permissions: { enabled: false } }, false],
-	['mode: "on", precise', { permissions: { mode: "on", defaultPolicy: "allow" } }, true],
-	['mode: "on", fast', { permissions: { mode: "on", defaultPolicy: "allow", attribution: "fast" } }, false]
+	["enabled: false", { permissions: { mode: false } }, false],
+	['mode: "on", precise', { permissions: { mode: "on", policy: "allow" } }, true],
+	['mode: "on", fast', { permissions: { mode: "on", policy: "allow", caller: { attribution: "fast" } } }, false]
 ];
 
 const MATRIX = [];

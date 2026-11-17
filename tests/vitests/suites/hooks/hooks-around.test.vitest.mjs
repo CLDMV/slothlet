@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:07-07:00 (1791090907)
+ *	@Last modified time: 2026-11-16T18:29:15-08:00 (1794882555)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -328,7 +328,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks > around (#4
 	});
 
 	it("suppressErrors applies to what escapes the around chain", async () => {
-		api = await boot(config, { suppressErrors: true });
+		api = await boot(config, { errors: "suppress" });
 		const errors = [];
 		api.slothlet.hook.on("svc.fail:error", ({ error }) => errors.push(error.message), { id: "er" });
 		api.slothlet.hook.on("svc.fail:around", ({ next }) => next(), { id: "ar" });

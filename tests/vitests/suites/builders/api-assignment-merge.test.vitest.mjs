@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:38-08:00 (1794874598)
+ *	@Last modified time: 2026-11-16T18:28:45-08:00 (1794882525)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -304,7 +304,7 @@ describe("ApiAssignment.assignToApiPath collision-detection – both-plain path 
 			{ env: "prod", debug: true },
 			{
 				useCollisionDetection: true,
-				config: { collision: { initial: "merge" } },
+				config: { api: { collision: { mode: { initial: "merge" } } } },
 				collisionContext: "initial"
 			}
 		);
@@ -331,7 +331,7 @@ describe("ApiAssignment.assignToApiPath collision-detection – both-plain path 
 			{ c: 3 },
 			{
 				useCollisionDetection: true,
-				config: { collision: { initial: "merge" } },
+				config: { api: { collision: { mode: { initial: "merge" } } } },
 				collisionContext: "initial"
 			}
 		);
@@ -355,7 +355,7 @@ describe("ApiAssignment.assignToApiPath collision-detection – both-plain path 
 			{ x: 99 },
 			{
 				useCollisionDetection: true,
-				config: { collision: { initial: "skip" } },
+				config: { api: { collision: { mode: { initial: "skip" } } } },
 				collisionContext: "initial"
 			}
 		);

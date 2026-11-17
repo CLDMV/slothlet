@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T12:54:27-08:00 (1794776067)
+ *	@Last modified time: 2026-11-16T18:30:28-08:00 (1794882628)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -160,7 +160,7 @@ describe.each(getMatrixConfigs())("function default member names > $name", ({ co
 	 * @returns {Promise<object>} The api.
 	 */
 	async function build() {
-		api = await slothlet({ ...config, base: BASE, collision: { initial: "merge", api: "merge" }, silent: true });
+		api = await slothlet({ ...config, base: BASE, api: { collision: { mode: { initial: "merge", api: "merge" } } }, silent: true });
 		for (const key of ["math", "shape", "solo", "pair", "klass", "own", "later"]) await api[key];
 		for (const node of [api.math.calc, api.shape.proto, api.later.af]) await node;
 		return api;
@@ -300,8 +300,10 @@ describe.each(
 			base: BASE,
 			silent: true,
 			permissions: {
-				defaultPolicy: "allow",
-				attribution,
+				policy: "allow",
+				caller: {
+					attribution
+				},
 				rules: [{ caller: "reader.**", target: "math.calc.name", effect: "deny" }]
 			}
 		});

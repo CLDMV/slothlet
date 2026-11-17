@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-09T02:14:32-08:00 (1794219272)
+ *	@Last modified time: 2026-11-16T18:30:11-08:00 (1794882611)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -91,7 +91,7 @@ describe.each(MATRIX)("Permissions > a caller that cannot be determined is refus
 			runtime,
 			hidden: ["ext", "shared"],
 			silent: true,
-			permissions: { defaultPolicy: "deny", attribution, rules: RULES }
+			permissions: { policy: "deny", caller: { attribution }, rules: RULES }
 		});
 		await api.slothlet.api.add(["ext"], `${ROOT}/ext/api`);
 		return api;

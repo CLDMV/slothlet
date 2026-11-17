@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:42-07:00 (1791091722)
+ *	@Last modified time: 2026-11-16T18:30:01-08:00 (1794882601)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -46,7 +46,7 @@ describe.each(getMatrixConfigs())("Permissions > metadata identity built-ins (#4
 	 * @param {object[]} [rules=[]] - User rules.
 	 * @returns {Promise<object>} Bound api.
 	 */
-	const build = (rules = []) => slothlet({ ...config, base: TEST_DIRS.API_TEST, permissions: { defaultPolicy: "deny", rules } });
+	const build = (rules = []) => slothlet({ ...config, base: TEST_DIRS.API_TEST, permissions: { policy: "deny", rules } });
 
 	it("a module may call metadata.caller() and metadata.self() with no user rules", async () => {
 		api = await build();
