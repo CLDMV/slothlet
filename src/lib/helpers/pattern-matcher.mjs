@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-13T21:48:07-08:00 (1794635287)
+ *	@Last modified time: 2026-11-16T16:16:13-08:00 (1794874573)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -27,14 +27,14 @@
  * functions that test against dot-separated API paths.
  *
  * @example
- * import { compilePattern, expandBraces } from "@cldmv/slothlet/helpers/pattern-matcher";
+ * import { compilePattern, expandBraces } from "#helpers/pattern-matcher";
  * const matcher = compilePattern("payments.**");
  * matcher("payments.charge");         // true
  * matcher("payments.stripe.webhook"); // true
  * matcher("admin.manage");            // false
  */
 
-import { SlothletError } from "@cldmv/slothlet/errors";
+import { SlothletError } from "#errors";
 import {
 	appendList,
 	ArrayMethods,
@@ -47,7 +47,7 @@ import {
 	splitText,
 	StringMethods,
 	textReplace
-} from "@cldmv/slothlet/helpers/intrinsics";
+} from "#helpers/intrinsics";
 
 /**
  * Compile a glob pattern into a matcher function.

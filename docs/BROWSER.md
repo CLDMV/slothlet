@@ -6,9 +6,9 @@ Slothlet runs in the browser, web workers, and Electron renderers — anywhere t
 
 ```js
 // build step (Node) — produces everything the browser needs
-import { generateBrowserAssets } from "@cldmv/slothlet/helpers/generate-manifest";
+import { files } from "@cldmv/slothlet/files";
 
-const { manifest, importmap } = await generateBrowserAssets("./src/api");
+const { manifest, importmap } = await files.assets("./src/api");
 // → manifest:  the API-directory listing
 // → importmap: { imports: { "@cldmv/slothlet": "/node_modules/@cldmv/slothlet/…", … }, scopes: { … } }
 ```
@@ -40,69 +40,69 @@ An instance can also start with **no base at all** — omit `base` and `manifest
 Browser mode loads two different kinds of module, resolved at two different times:
 
 - **Your API leaves** are loaded by slothlet **at runtime**. Slothlet walks the manifest and, for each entry, calls your `resolveModuleSpecifier({ path })` to turn the manifest-relative path into a URL and dynamically `import()`s it. The manifest only needs to say _which files exist_; the URL is supplied live by your resolver.
-- **Slothlet's own modules** (`@cldmv/slothlet`, `@cldmv/slothlet/helpers/*`, …) are static imports the browser resolves **before slothlet runs** — so they cannot route through `resolveModuleSpecifier`. They have to be declared in the page's `<script type="importmap">`.
+- **Slothlet's own modules** (`@cldmv/slothlet` and the package-private `#helpers/*`, `#handlers/*`, …) are static imports the browser resolves **before slothlet runs** — so they cannot route through `resolveModuleSpecifier`. They have to be declared in the page's `<script type="importmap">`.
 
-So the manifest is consumed by slothlet (runtime config); the importmap is consumed by the browser (page setup, before any code runs). `generateBrowserAssets` produces both in one call so consumers never hand-roll the importmap.
+So the manifest is consumed by slothlet (runtime config); the importmap is consumed by the browser (page setup, before any code runs). `files.assets` produces both in one call so consumers never hand-roll the importmap.
 
-There is a third kind of module the page must resolve: **the packages your API leaves import.** A leaf that does `import { StorageError } from "@cldmv/rummage-ext-storage/errors"` relies on that package's `exports` map redirecting `./errors` to its real file (`./src/lib/errors.mjs`). Import maps only do plain **prefix substitution** — they never consult a package's `exports` — so `@cldmv/rummage-ext-storage/errors` would resolve to a literal `…/errors` URL and 404 in the browser. `generateBrowserAssets` closes this: it scans the API directory for the packages its leaves import, reads each package's `package.json` `exports`, and emits the **exact** redirected subpath keys (flat entries, wildcard directories, and the browser/`import`/`default` condition of conditional exports). Those sibling packages are served next to `@cldmv/slothlet` under a base **derived from `slothletBase`** (its `node_modules`/CDN parent), so you don't configure them separately — and you can delete any hand-maintained browser-dep allowlists. (#297)
+There is a third kind of module the page must resolve: **the packages your API leaves import.** A leaf that does `import { StorageError } from "@cldmv/rummage-ext-storage/errors"` relies on that package's `exports` map redirecting `./errors` to its real file (`./src/lib/errors.mjs`). Import maps only do plain **prefix substitution** — they never consult a package's `exports` — so `@cldmv/rummage-ext-storage/errors` would resolve to a literal `…/errors` URL and 404 in the browser. `files.assets` closes this: it scans the API directory for the packages its leaves import, reads each package's `package.json` `exports`, and emits the **exact** redirected subpath keys (flat entries, wildcard directories, and the browser/`import`/`default` condition of conditional exports). Those sibling packages are served next to `@cldmv/slothlet` under a base **derived from `base`** (its `node_modules`/CDN parent), so you don't configure them separately — and you can delete any hand-maintained browser-dep allowlists. (#297)
 
 When the optional [`@cldmv/slothlet-i18n`](./I18N.md) language pack is installed, the generated importmap also includes one entry per pack locale (`@cldmv/slothlet-i18n/language/<lang>.json`), so `setLanguage()` can dynamically import non-English locales in the browser. Without the pack, only the bundled `en-us` is available and other locales fall back to English.
 
-> If you bundle your app (Vite, Webpack, esbuild, Rollup), the bundler resolves `@cldmv/slothlet` for you and **no importmap is needed** — use [`generateManifest`](#generatemanifestdir) for just the manifest. The importmap matters only for raw-ESM pages and Electron renderers that load slothlet over the network/file protocol.
+> If you bundle your app (Vite, Webpack, esbuild, Rollup), the bundler resolves `@cldmv/slothlet` for you and **no importmap is needed** — use [`files.generate`](#filesgeneratedir) for just the manifest. The importmap matters only for raw-ESM pages and Electron renderers that load slothlet over the network/file protocol.
 
-## `generateBrowserAssets(apiDir, options?)`
+## `files.assets(apiDir, options?)`
 
 The recommended one-call entry point. Returns `{ manifest, importmap }`.
 
-| Option         | Type     | Default                            | Description                                                                   |
-| -------------- | -------- | ---------------------------------- | ----------------------------------------------------------------------------- |
-| `slothletBase` | `string` | `"/node_modules/@cldmv/slothlet/"` | URL/path prefix where the `@cldmv/slothlet` package is served in the browser. |
+| Option | Type     | Default                            | Description                                                                   |
+| ------ | -------- | ---------------------------------- | ----------------------------------------------------------------------------- |
+| `base` | `string` | `"/node_modules/@cldmv/slothlet/"` | URL/path prefix where the `@cldmv/slothlet` package is served in the browser. |
 
-`slothletBase` is the one thing the build step cannot infer: `import.meta.resolve` knows slothlet's _filesystem_ location, but not the _URL_ you serve it from. The default assumes the conventional layout — slothlet installed as a dependency with `node_modules` served at the web root.
+`base` is the one thing the build step cannot infer: `import.meta.resolve` knows slothlet's _filesystem_ location, but not the _URL_ you serve it from. The default assumes the conventional layout — slothlet installed as a dependency with `node_modules` served at the web root.
 
-The importmap's `imports` maps what any script of the page may import of slothlet: `@cldmv/slothlet`, the runtime (`/runtime`, `/runtime/async`, `/runtime/live`) and `/helpers/manifest-resolver`. Every other specifier of slothlet's is slothlet's own, and the importmap maps it under `scopes`, for slothlet's own files alone (one scope per code folder and entry file under `slothletBase`), so an api leaf or a page script resolving `@cldmv/slothlet/helpers/…` or `#handlers/…` fails (see [MODULE-STRUCTURE.md](./MODULE-STRUCTURE.md#what-a-module-imports-from-slothlet)). Inline the whole object, `scopes` included: a page given `imports` alone cannot load slothlet. A browser loads any served file by its URL, so a file imported by its URL still evaluates; what it exports that is slothlet's own answers only slothlet's own files and the page's own code, and an api leaf using it is refused with `MODULE_INTERNAL_NOT_IMPORTABLE` (see [MODULE-STRUCTURE.md](./MODULE-STRUCTURE.md#using-what-slothlets-own-files-export)).
+The importmap's `imports` maps what any script of the page may import of slothlet: `@cldmv/slothlet`, the runtime (`/runtime`, `/runtime/async`, `/runtime/live`) and `/files`. Every other specifier of slothlet's is slothlet's own, and the importmap maps it under `scopes`, for slothlet's own files alone (one scope per code folder and entry file under `base`), so an api leaf or a page script resolving `#helpers/…` or `#handlers/…` fails (see [MODULE-STRUCTURE.md](./MODULE-STRUCTURE.md#what-a-module-imports-from-slothlet)). Inline the whole object, `scopes` included: a page given `imports` alone cannot load slothlet. A browser loads any served file by its URL, so a file imported by its URL still evaluates; what it exports that is slothlet's own answers only slothlet's own files and the page's own code, and an api leaf using it is refused with `MODULE_INTERNAL_NOT_IMPORTABLE` (see [MODULE-STRUCTURE.md](./MODULE-STRUCTURE.md#using-what-slothlets-own-files-export)).
 
-The importmap entries are resolved with `import.meta.resolve`, so they automatically point at the files that match the build's export conditions — `dist/*` for an installed package, `src/*` in slothlet's own dev tree. Locale JSON files (`@cldmv/slothlet/i18n/language/*.json`), which are loaded via a dynamic template import a static scan can't see, are enumerated and included automatically. You only ever set `slothletBase`; the per-file paths underneath it are filled in for you.
+The importmap entries are resolved with `import.meta.resolve`, so they automatically point at the files that match the build's export conditions — `dist/*` for an installed package, `src/*` in slothlet's own dev tree. Locale JSON files (`@cldmv/slothlet/i18n/language/*.json`), which are loaded via a dynamic template import a static scan can't see, are enumerated and included automatically. You only ever set `base`; the per-file paths underneath it are filled in for you.
 
-## Choosing `slothletBase`
+## Choosing `base`
 
-| Scenario                                                              | `slothletBase`                                 | Notes                                                                                                                                                   |
+| Scenario                                                              | `base`                                         | Notes                                                                                                                                                   |
 | --------------------------------------------------------------------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Installed dependency, `node_modules` served at web root** (default) | `"/node_modules/@cldmv/slothlet/"`             | No override needed. The common case for raw-ESM apps that serve the project root.                                                                       |
 | **Package copied/vendored to the web root**                           | `"/"`                                          | When you publish slothlet's package files at the site root (this is also what the repo's own smoke test uses, since slothlet _is_ the workspace there). |
 | **CDN**                                                               | `"https://cdn.example.com/@cldmv/slothlet@3/"` | Pin a major/exact version. A trailing slash is added if you omit it.                                                                                    |
 | **Sub-path mount**                                                    | `"/vendor/slothlet/"`                          | When the package is served under a custom prefix.                                                                                                       |
-| **Bundled app** (Vite, Webpack, esbuild, Rollup)                      | _(not needed)_                                 | The bundler resolves `@cldmv/slothlet`; skip the importmap and use [`generateManifest`](#generatemanifestdir) for just the manifest.                    |
+| **Bundled app** (Vite, Webpack, esbuild, Rollup)                      | _(not needed)_                                 | The bundler resolves `@cldmv/slothlet`; skip the importmap and use [`files.generate`](#filesgeneratedir) for just the manifest.                         |
 
 ```js
 // default — installed dependency, node_modules at web root
-await generateBrowserAssets("./src/api");
+await files.assets("./src/api");
 
 // CDN
-await generateBrowserAssets("./src/api", { slothletBase: "https://cdn.example.com/@cldmv/slothlet@3/" });
+await files.assets("./src/api", { base: "https://cdn.example.com/@cldmv/slothlet@3/" });
 
 // package served at the web root (vendored copy)
-await generateBrowserAssets("./src/api", { slothletBase: "/" });
+await files.assets("./src/api", { base: "/" });
 ```
 
 ## Electron
 
 In Electron, the generator and the importmap live on **two different sides** — keep them straight:
 
-- **Node / main side** is where `generateBrowserAssets` _runs_. The main process (and `preload` with `nodeIntegration`/a bridge) has filesystem and module-resolution access; the renderer does not. Call it there, then hand `{ manifest, importmap }` to the renderer over IPC or a `contextBridge` preload.
-- **Renderer side** is what `slothletBase` _describes_ — the URL/protocol the renderer fetches slothlet's files from. It is **not** the main process's filesystem path; it's how the renderer addresses those files.
+- **Node / main side** is where `files.assets` _runs_. The main process (and `preload` with `nodeIntegration`/a bridge) has filesystem and module-resolution access; the renderer does not. Call it there, then hand `{ manifest, importmap }` to the renderer over IPC or a `contextBridge` preload.
+- **Renderer side** is what `base` _describes_ — the URL/protocol the renderer fetches slothlet's files from. It is **not** the main process's filesystem path; it's how the renderer addresses those files.
 
 ```js
 // main.mjs (Node side) — generate and forward to the renderer
-import { generateBrowserAssets } from "@cldmv/slothlet/helpers/generate-manifest";
+import { files } from "@cldmv/slothlet/files";
 import { ipcMain } from "electron";
 
 ipcMain.handle("slothlet:assets", async () => {
-	return generateBrowserAssets("./resources/api", {
+	return files.assets("./resources/api", {
 		// The renderer addresses slothlet via whatever you expose to it:
-		slothletBase: "app://slothlet/" // a registered custom protocol, OR
-		// slothletBase: "file:///abs/path/to/app/node_modules/@cldmv/slothlet/"  // loading from disk, OR
-		// slothletBase: "/node_modules/@cldmv/slothlet/"   // when a dev server (electron-vite) serves node_modules
+		base: "app://slothlet/" // a registered custom protocol, OR
+		// base: "file:///abs/path/to/app/node_modules/@cldmv/slothlet/"  // loading from disk, OR
+		// base: "/node_modules/@cldmv/slothlet/"   // when a dev server (electron-vite) serves node_modules
 	});
 });
 ```
@@ -115,29 +115,31 @@ const slothlet = (await import("@cldmv/slothlet")).default;
 const api = await slothlet({ platform: "browser", manifest, resolveModuleSpecifier, mode: "eager" });
 ```
 
-Pick the `slothletBase` that matches how your renderer is loaded: a **custom protocol** you register in main (`protocol.handle("app", …)` serving the package dir → `"app://slothlet/"`), a **`file://`** path when loading the page straight from disk, or the **dev server's** node_modules path under electron-vite.
+Pick the `base` that matches how your renderer is loaded: a **custom protocol** you register in main (`protocol.handle("app", …)` serving the package dir → `"app://slothlet/"`), a **`file://`** path when loading the page straight from disk, or the **dev server's** node_modules path under electron-vite.
 
 ## Lower-level helpers
 
-### `generateManifest(dir)`
+Everything here lives on the one `files` namespace from `@cldmv/slothlet/files`. `files.assets`, `files.generate`, `files.importmap` and `files.specifiers.slothlet` / `files.specifiers.packages` read the disk and run only in Node; called in a page they reject with `FILES_REQUIRES_NODE`. `files.resolver` runs anywhere, so a page imports `@cldmv/slothlet/files` for it without pulling in any `node:` module.
+
+### `files.generate(dir)`
 
 Returns just the API manifest — the `{ files, directories }` tree — for cases where you only need the manifest (bundled apps, or when you build the importmap another way).
 
 ```js
-import { generateManifest } from "@cldmv/slothlet/helpers/generate-manifest";
-const manifest = await generateManifest("./src/api");
+import { files } from "@cldmv/slothlet/files";
+const manifest = await files.generate("./src/api");
 ```
 
-### `createManifestResolver(base)`
+### `files.resolver(base)`
 
 A ready-made `resolveModuleSpecifier` that resolves manifest-relative paths against a base URL (`new URL(entry.path, base)`), which covers the common case of serving API modules from a known base.
 
 ```js
-import { createManifestResolver } from "@cldmv/slothlet/helpers/manifest-resolver";
+import { files } from "@cldmv/slothlet/files";
 const api = await slothlet({
 	platform: "browser",
 	manifest,
-	resolveModuleSpecifier: createManifestResolver(new URL("./api/", import.meta.url))
+	resolveModuleSpecifier: files.resolver(new URL("./api/", import.meta.url))
 });
 ```
 
@@ -159,4 +161,4 @@ const api = await slothlet({
 
 ## Verifying it works
 
-The repository ships a Playwright smoke test (`npm run test:browser`) that builds the assets with `generateBrowserAssets`, serves them, and loads slothlet in a real headless browser — composing an api, exercising `self`, hooks, metadata, i18n, lifecycle events, api mutation, and permissions end-to-end.
+The repository ships a Playwright smoke test (`npm run test:browser`) that builds the assets with `files.assets`, serves them, and loads slothlet in a real headless browser — composing an api, exercising `self`, hooks, metadata, i18n, lifecycle events, api mutation, and permissions end-to-end.

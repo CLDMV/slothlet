@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:01-07:00 (1791090901)
+ *	@Last modified time: 2026-11-16T16:16:41-08:00 (1794874601)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -29,15 +29,12 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { enableSchedulerPatching, disableSchedulerPatching } from "@cldmv/slothlet/helpers/scheduler-context";
-import { enableEventTargetPatching, disableEventTargetPatching } from "@cldmv/slothlet/helpers/eventtarget-context";
-import {
-	enableEventTargetPropertyPatching,
-	disableEventTargetPropertyPatching
-} from "@cldmv/slothlet/helpers/eventtarget-property-context";
-import { enableObserverPatching, disableObserverPatching } from "@cldmv/slothlet/helpers/observer-context";
-import { disableEventEmitterPatching } from "@cldmv/slothlet/helpers/eventemitter-context";
-import { setApiCallerPinner, pinToCurrentCaller } from "@cldmv/slothlet/helpers/caller-pinning";
+import { enableSchedulerPatching, disableSchedulerPatching } from "#helpers/scheduler-context";
+import { enableEventTargetPatching, disableEventTargetPatching } from "#helpers/eventtarget-context";
+import { enableEventTargetPropertyPatching, disableEventTargetPropertyPatching } from "#helpers/eventtarget-property-context";
+import { enableObserverPatching, disableObserverPatching } from "#helpers/observer-context";
+import { disableEventEmitterPatching } from "#helpers/eventemitter-context";
+import { setApiCallerPinner, pinToCurrentCaller } from "#helpers/caller-pinning";
 
 describe("Context > boundary patch helpers > caller pinning registry", () => {
 	afterEach(() => setApiCallerPinner(null));

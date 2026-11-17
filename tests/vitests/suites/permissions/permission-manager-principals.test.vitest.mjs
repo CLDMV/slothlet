@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-13T21:50:15-08:00 (1794635415)
+ *	@Last modified time: 2026-11-16T16:17:06-08:00 (1794874626)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -24,7 +24,7 @@ import { describe, it, expect, afterEach, vi } from "vitest";
 import { PermissionManager } from "#handlers/permission-manager";
 import { MODULE_ID_SEPARATOR } from "#handlers/metadata";
 import { SlothletError } from "@cldmv/slothlet/errors";
-import { normalizeClockConfig } from "@cldmv/slothlet/helpers/config";
+import { normalizeClockConfig } from "#helpers/config";
 
 const CALLER = "client.app.files";
 const TARGET = "project.files.list";

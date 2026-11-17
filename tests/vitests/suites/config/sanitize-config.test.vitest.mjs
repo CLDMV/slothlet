@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T12:00:00-08:00 (1794772800)
+ *	@Last modified time: 2026-11-16T16:16:40-08:00 (1794874600)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -24,7 +24,7 @@ import { describe, it, expect, afterEach, beforeAll, afterAll } from "vitest";
 import fsp from "node:fs/promises";
 import path from "node:path";
 import slothlet from "@cldmv/slothlet";
-import { generateManifest } from "@cldmv/slothlet/helpers/generate-manifest";
+import { generateManifest } from "#helpers/generate-manifest";
 import { makeTestTmpDir } from "../../setup/test-fixtures-tmp.mjs";
 
 const SANITIZE = { rules: { upper: ["*-ip"] } };

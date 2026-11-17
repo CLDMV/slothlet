@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T17:10:24-08:00 (1794791424)
+ *	@Last modified time: 2026-11-16T16:16:13-08:00 (1794874573)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -88,8 +88,8 @@ import {
 	Symbols,
 	WeakMap,
 	WeakSet
-} from "@cldmv/slothlet/helpers/intrinsics";
-import { pinToCurrentCaller } from "@cldmv/slothlet/helpers/caller-pinning";
+} from "#helpers/intrinsics";
+import { pinToCurrentCaller } from "#helpers/caller-pinning";
 
 // Detection runs once. In a browser/worker `process` is absent and this resolves false; the vitest
 // browser run exercises that arm (the node run cannot — `process` is always present there).
@@ -365,7 +365,7 @@ const MACROTASK_HOSTS = Objects.freeze({ setImmediate, MessageChannel, setTimeou
  * @param {Function} fn - Callback to run.
  * @param {{setImmediate: Function|undefined, MessageChannel: Function|undefined, setTimeout: Function}} [hosts] - The
  *   schedulers to pick from: the host's own unless a test hands in others.
- * @param {import("@cldmv/slothlet/helpers/clock").Clock} [clock] - The instance's clock.
+ * @param {import("#helpers/clock").Clock} [clock] - The instance's clock.
  * @returns {void}
  * @internal
  *

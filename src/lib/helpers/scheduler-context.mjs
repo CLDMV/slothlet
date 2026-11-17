@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-13T21:48:08-08:00 (1794635288)
+ *	@Last modified time: 2026-11-16T16:16:14-08:00 (1794874574)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -36,11 +36,11 @@
  * on what the live runtime does and does not bound.
  */
 
-import { pinToCurrentCaller } from "@cldmv/slothlet/helpers/caller-pinning";
-import { checkCapability } from "@cldmv/slothlet/helpers/capability-context";
-import { openLayer, closeLayer, holdsValue, markLayer } from "@cldmv/slothlet/helpers/boundary-patch-layers";
-import { concatLists, listPush, Objects, Reflect } from "@cldmv/slothlet/helpers/intrinsics";
-import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "@cldmv/slothlet/helpers/instance-imports";
+import { pinToCurrentCaller } from "#helpers/caller-pinning";
+import { checkCapability } from "#helpers/capability-context";
+import { openLayer, closeLayer, holdsValue, markLayer } from "#helpers/boundary-patch-layers";
+import { concatLists, listPush, Objects, Reflect } from "#helpers/intrinsics";
+import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "#helpers/instance-imports";
 
 /**
  * Patched scheduler entry points, keyed by the wrapper installed for each.

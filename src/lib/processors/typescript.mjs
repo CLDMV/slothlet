@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-13T21:48:10-08:00 (1794635290)
+ *	@Last modified time: 2026-11-16T16:16:15-08:00 (1794874575)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -26,7 +26,7 @@ import * as nodeFsPromises from "node:fs/promises";
 import * as nodeCrypto from "node:crypto";
 import * as nodeOs from "node:os";
 import * as nodeUrl from "node:url";
-import { SlothletError } from "@cldmv/slothlet/errors";
+import { SlothletError } from "#errors";
 import {
 	ArrayMethods,
 	BufferMethods,
@@ -62,8 +62,8 @@ import {
 	StringMethods,
 	Uint8Array,
 	URLMethods
-} from "@cldmv/slothlet/helpers/intrinsics";
-import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "@cldmv/slothlet/helpers/instance-imports";
+} from "#helpers/intrinsics";
+import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "#helpers/instance-imports";
 
 // Node's built-ins, as slothlet loaded: frozen copies of their members (see helpers/platform), so code that replaces one
 // on Node's module object later does not run here.

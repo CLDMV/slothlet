@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-12T23:18:06-08:00 (1794554286)
+ *	@Last modified time: 2026-11-16T16:14:39-08:00 (1794874479)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -59,7 +59,7 @@ async function reaches(attempt) {
  */
 async function recordModule() {
 	try {
-		return await import("@cldmv/slothlet/helpers/instance-imports");
+		return await import("#helpers/instance-imports");
 	} catch {
 		return null;
 	}

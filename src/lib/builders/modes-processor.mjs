@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T02:43:04-08:00 (1794825784)
+ *	@Last modified time: 2026-11-16T16:16:09-08:00 (1794874569)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -27,7 +27,7 @@
  * await processor.processFiles(api, files, directory, ownership, contextManager, config, 0, "lazy", true, false);
  */
 import { ComponentBase } from "#factories/component-base";
-import { t } from "@cldmv/slothlet/i18n";
+import { t } from "#i18n";
 import {
 	readApiMember,
 	isThenableModuleValue,
@@ -37,7 +37,7 @@ import {
 	internals as unifiedWrapperInternals
 } from "#handlers/unified-wrapper";
 import { getInstanceToken } from "#handlers/lifecycle-token";
-import { isCompositionLayer, copyForComposition, holdMember } from "@cldmv/slothlet/helpers/composition";
+import { isCompositionLayer, copyForComposition, holdMember } from "#helpers/composition";
 import {
 	ArrayMethods,
 	Arrays,
@@ -59,8 +59,8 @@ import {
 	StringMethods,
 	WeakMap,
 	WeakMapMethods
-} from "@cldmv/slothlet/helpers/intrinsics";
-import { internals as instanceImportsInternals } from "@cldmv/slothlet/helpers/instance-imports";
+} from "#helpers/intrinsics";
+import { internals as instanceImportsInternals } from "#helpers/instance-imports";
 const unifiedWrapperOwn = unifiedWrapperInternals("lib/builders/modes-processor");
 const { setInstanceSelfKind, defaultExportLooksCallable } = instanceImportsInternals("lib/builders/modes-processor");
 const { resolveWrapper } = unifiedWrapperOwn;

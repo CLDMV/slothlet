@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-06T17:47:03-08:00 (1794016023)
+ *	@Last modified time: 2026-11-16T16:17:15-08:00 (1794874635)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -36,7 +36,7 @@ import path from "node:path";
 import vm from "node:vm";
 import { fileURLToPath } from "node:url";
 import slothlet from "@cldmv/slothlet";
-import { slothletInstanceImports } from "@cldmv/slothlet/helpers/instance-imports";
+import { slothletInstanceImports } from "#helpers/instance-imports";
 import { getMatrixConfigs } from "../../setup/vitest-helper.mjs";
 import { makeContext } from "../../../../api_tests/api_test_host_owner_code/host/context.mjs";
 import { makeContext as importingContext } from "../../../../api_tests/api_test_host_owner_code/host/imported.mjs";

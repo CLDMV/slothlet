@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-14T09:00:00-08:00 (1794675600)
+ *	@Last modified time: 2026-11-16T16:14:41-08:00 (1794874481)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -38,7 +38,7 @@ export const KEY = Symbol.for("@cldmv/slothlet.test.internalExports");
  * @type {Record<string, string[]>}
  */
 export const EXPORTS = {
-	"@cldmv/slothlet/helpers/instance-imports": [
+	"#helpers/instance-imports": [
 		"registerOwnModule",
 		"noteModuleFile",
 		"setImportRefusal",
@@ -135,34 +135,30 @@ export const EXPORTS = {
 	"#handlers/shared-values": ["recordSharedExports"],
 	"#handlers/context-async": ["asyncContextManager"],
 	"#handlers/context-live": ["liveContextManager"],
-	"@cldmv/slothlet/helpers/reserved-keys": ["WRAPPER_INTERNAL_KEYS", "IMPL_METADATA_KEYS"],
-	"@cldmv/slothlet/helpers/caller-pinning": ["setApiCallerPinner"],
-	"@cldmv/slothlet/helpers/class-instance-wrapper": [
+	"#helpers/reserved-keys": ["WRAPPER_INTERNAL_KEYS", "IMPL_METADATA_KEYS"],
+	"#helpers/caller-pinning": ["setApiCallerPinner"],
+	"#helpers/class-instance-wrapper": [
 		"setModuleInstanceCheck",
 		"runtime_classInstanceCreator",
 		"runtime_wrapClassInstance",
 		"runtime_unwrapClassInstance"
 	],
-	"@cldmv/slothlet/helpers/clone-context": ["setCloneViewReader", "setCloneNodeReader", "enableClonePatching", "disableClonePatching"],
-	"@cldmv/slothlet/helpers/composition": ["setApiNodeCheck"],
-	"@cldmv/slothlet/helpers/eventemitter-context": [
+	"#helpers/clone-context": ["setCloneViewReader", "setCloneNodeReader", "enableClonePatching", "disableClonePatching"],
+	"#helpers/composition": ["setApiNodeCheck"],
+	"#helpers/eventemitter-context": [
 		"setApiContextChecker",
 		"enableEventEmitterPatching",
 		"disableEventEmitterPatching",
 		"cleanupEventEmitterResources"
 	],
-	"@cldmv/slothlet/helpers/function-source-context": [
-		"setFunctionSourceReader",
-		"enableFunctionSourcePatching",
-		"disableFunctionSourcePatching"
-	],
-	"@cldmv/slothlet/helpers/promise-context": ["enablePromisePatching", "disablePromisePatching"],
-	"@cldmv/slothlet/helpers/scheduler-context": ["enableSchedulerPatching", "disableSchedulerPatching"],
-	"@cldmv/slothlet/helpers/observer-context": ["enableObserverPatching", "disableObserverPatching"],
-	"@cldmv/slothlet/helpers/eventtarget-context": ["enableEventTargetPatching", "disableEventTargetPatching"],
-	"@cldmv/slothlet/helpers/eventtarget-property-context": ["enableEventTargetPropertyPatching", "disableEventTargetPropertyPatching"],
-	"@cldmv/slothlet/helpers/async-resource-context": ["enableAsyncResourcePatching", "disableAsyncResourcePatching"],
-	"@cldmv/slothlet/processors/typescript": ["sweepStaleFallbackRoots", "releaseSecureFallbackRoot"],
+	"#helpers/function-source-context": ["setFunctionSourceReader", "enableFunctionSourcePatching", "disableFunctionSourcePatching"],
+	"#helpers/promise-context": ["enablePromisePatching", "disablePromisePatching"],
+	"#helpers/scheduler-context": ["enableSchedulerPatching", "disableSchedulerPatching"],
+	"#helpers/observer-context": ["enableObserverPatching", "disableObserverPatching"],
+	"#helpers/eventtarget-context": ["enableEventTargetPatching", "disableEventTargetPatching"],
+	"#helpers/eventtarget-property-context": ["enableEventTargetPropertyPatching", "disableEventTargetPropertyPatching"],
+	"#helpers/async-resource-context": ["enableAsyncResourcePatching", "disableAsyncResourcePatching"],
+	"#processors/typescript": ["sweepStaleFallbackRoots", "releaseSecureFallbackRoot"],
 	"@cldmv/slothlet/i18n": ["setLanguage", "setLanguageAsync", "initI18n"],
 	"#factories/context": ["getContextManager", "contextManager", "asyncRuntime", "liveRuntime", "asyncContextManager", "liveContextManager"]
 };

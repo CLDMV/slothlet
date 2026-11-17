@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T21:09:19-08:00 (1794805759)
+ *	@Last modified time: 2026-11-16T16:16:10-08:00 (1794874570)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -45,7 +45,7 @@ import {
 	WeakMapMethods,
 	WeakSet,
 	WeakSetMethods
-} from "@cldmv/slothlet/helpers/intrinsics";
+} from "#helpers/intrinsics";
 const { resolveWrapper } = unifiedWrapperInternals("lib/handlers/metadata");
 
 /**

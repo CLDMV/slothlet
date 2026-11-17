@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-13T21:48:03-08:00 (1794635283)
+ *	@Last modified time: 2026-11-16T16:16:12-08:00 (1794874572)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -29,18 +29,9 @@
 // statically to attach `slothlet.defaults`, and index.cjs loads index.mjs through Node's
 // synchronous require(esm), so this module's import graph must stay free of top-level await
 // (the wrapper classes reach `helpers/platform`, which uses it).
-import { internals as reservedKeysInternals } from "@cldmv/slothlet/helpers/reserved-keys";
+import { internals as reservedKeysInternals } from "#helpers/reserved-keys";
 import { internals as frameworkInternalsInternals } from "#handlers/framework-internals";
-import {
-	concatLists,
-	FunctionMethods,
-	NativeProxy,
-	Objects,
-	Reflect,
-	setFrom,
-	setToArray,
-	TypeError
-} from "@cldmv/slothlet/helpers/intrinsics";
+import { concatLists, FunctionMethods, NativeProxy, Objects, Reflect, setFrom, setToArray, TypeError } from "#helpers/intrinsics";
 const reservedKeysOwn = reservedKeysInternals("lib/helpers/defaults");
 const { markSlothletProxy } = frameworkInternalsInternals("lib/helpers/defaults");
 

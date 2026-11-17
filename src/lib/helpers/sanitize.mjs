@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-13T21:48:08-08:00 (1794635288)
+ *	@Last modified time: 2026-11-16T16:16:14-08:00 (1794874574)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -35,7 +35,7 @@ import {
 	String,
 	StringMethods,
 	textReplace
-} from "@cldmv/slothlet/helpers/intrinsics";
+} from "#helpers/intrinsics";
 
 // ============================================================================
 // Sanitize Component Class
@@ -506,11 +506,12 @@ export class Sanitize extends ComponentBase {
 }
 
 // ============================================================================
-// Standalone Function Export (for backward compatibility)
+// Standalone function (public as `sanitize` from @cldmv/slothlet/sanitize)
 // ============================================================================
 
 /**
- * Standalone sanitizePropertyName function for backward compatibility
+ * Turn a file or folder name into the api property name slothlet gives it. Consumers import it as `sanitize` from
+ * `@cldmv/slothlet/sanitize`.
  * @param {string} input - Input string to sanitize
  * @param {object} options - Sanitization options
  * @returns {string} Sanitized property name

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-12T03:42:53-07:00 (1791801773)
+ *	@Last modified time: 2026-11-16T16:16:14-08:00 (1794874574)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -29,7 +29,7 @@
  * const categoryDecisions = flatten.buildCategoryDecisions(options);
  */
 import { ComponentBase } from "#factories/component-base";
-import { copyForComposition, relayer, holdMember } from "@cldmv/slothlet/helpers/composition";
+import { copyForComposition, relayer, holdMember } from "#helpers/composition";
 import {
 	ArrayMethods,
 	Arrays,
@@ -42,7 +42,7 @@ import {
 	setFrom,
 	SetMethods,
 	StringMethods
-} from "@cldmv/slothlet/helpers/intrinsics";
+} from "#helpers/intrinsics";
 
 /**
  * The language's own prototypes. Their members are not a module default's members.

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T03:00:00-08:00 (1794826800)
+ *	@Last modified time: 2026-11-16T16:16:19-08:00 (1794874579)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -65,7 +65,7 @@ describe("permission baseline in a browser with a Content Security Policy that r
 	});
 
 	it("tries each check for real", async () => {
-		const { runBaseline } = await import("@cldmv/slothlet/helpers/permission-baseline");
+		const { runBaseline } = await import("#helpers/permission-baseline");
 		const { met, checks } = await runBaseline("browser");
 		expect(checks.map((check) => [check.id, check.met])).toEqual(IDS.map((id) => [id, MET]));
 		expect(met).toBe(MET);

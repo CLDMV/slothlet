@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-11T23:40:00-08:00 (1794469200)
+ *	@Last modified time: 2026-11-16T16:16:12-08:00 (1794874572)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -39,9 +39,9 @@
  * The wrapper carries the function it wraps under a `Symbol.for` key, so a patch is recognisable from any copy of
  * slothlet in the realm, and this copy installs its wrapper once however many instances ask.
  */
-import { openLayer, closeLayer, holdsValue, markLayer } from "@cldmv/slothlet/helpers/boundary-patch-layers";
-import { Functions, functionToString, Reflect, Symbols, WeakSet, WeakSetMethods } from "@cldmv/slothlet/helpers/intrinsics";
-import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "@cldmv/slothlet/helpers/instance-imports";
+import { openLayer, closeLayer, holdsValue, markLayer } from "#helpers/boundary-patch-layers";
+import { Functions, functionToString, Reflect, Symbols, WeakSet, WeakSetMethods } from "#helpers/intrinsics";
+import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "#helpers/instance-imports";
 
 /**
  * The key the wrapper holds the function it wraps under: the watermark of this patch.

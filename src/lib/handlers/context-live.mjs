@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-13T21:47:56-08:00 (1794635276)
+ *	@Last modified time: 2026-11-16T16:16:09-08:00 (1794874569)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -18,14 +18,14 @@
  * @module @cldmv/slothlet/handlers/context-live
  * @internal
  */
-import { SlothletError } from "@cldmv/slothlet/errors";
-import { DEFAULT_CLOCK } from "@cldmv/slothlet/helpers/clock";
-import { internals as eventemitterContextInternals } from "@cldmv/slothlet/helpers/eventemitter-context";
-import { pinToCurrentCaller, internals as callerPinningInternals } from "@cldmv/slothlet/helpers/caller-pinning";
+import { SlothletError } from "#errors";
+import { DEFAULT_CLOCK } from "#helpers/clock";
+import { internals as eventemitterContextInternals } from "#helpers/eventemitter-context";
+import { pinToCurrentCaller, internals as callerPinningInternals } from "#helpers/caller-pinning";
 import { combineCeilings, internals as trustedRootInternals } from "#handlers/trusted-root";
-import { nativeThen } from "@cldmv/slothlet/helpers/promise-context";
-import { util, inheritsFrom } from "@cldmv/slothlet/helpers/platform";
-import { runtime_isClassInstance, internals as classInstanceWrapperInternals } from "@cldmv/slothlet/helpers/class-instance-wrapper";
+import { nativeThen } from "#helpers/promise-context";
+import { util, inheritsFrom } from "#helpers/platform";
+import { runtime_isClassInstance, internals as classInstanceWrapperInternals } from "#helpers/class-instance-wrapper";
 import {
 	FRAMEWORK_DIR,
 	carriesCallerCode,
@@ -78,8 +78,8 @@ import {
 	WeakRef,
 	WeakRefMethods,
 	WeakSetMethods
-} from "@cldmv/slothlet/helpers/intrinsics";
-import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "@cldmv/slothlet/helpers/instance-imports";
+} from "#helpers/intrinsics";
+import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "#helpers/instance-imports";
 const { setApiContextChecker } = eventemitterContextInternals("lib/handlers/context-live");
 const { setApiCallerPinner } = callerPinningInternals("lib/handlers/context-live");
 const trustedRootOwn = trustedRootInternals("lib/handlers/context-live");
@@ -1822,7 +1822,7 @@ export class LiveContextManager {
 	 * Initialize context for a new instance
 	 * @param {string} instanceID - Unique instance identifier
 	 * @param {Object} config - Instance configuration
-	 * @param {import("@cldmv/slothlet/helpers/clock").Clock} [clock] - The instance's clock, which stamps the store.
+	 * @param {import("#helpers/clock").Clock} [clock] - The instance's clock, which stamps the store.
 	 * @returns {Object} Created context store
 	 * @public
 	 */

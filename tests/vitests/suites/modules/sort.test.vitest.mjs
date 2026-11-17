@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:36-07:00 (1791091716)
+ *	@Last modified time: 2026-11-16T16:17:02-08:00 (1794874622)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -19,7 +19,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { sortModules } from "@cldmv/slothlet/helpers/module-sort";
+import { sortModules } from "#helpers/module-sort";
 
 function makeResult(packageName, priority, mountPath = ["x"]) {
 	return Object.freeze({

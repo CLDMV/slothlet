@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:59-07:00 (1791090899)
+ *	@Last modified time: 2026-11-16T16:16:37-08:00 (1794874597)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -260,7 +260,7 @@ describe.each(getBrowserMatrixConfigs())("Browser Mode > api.slothlet.reload (fu
 //
 //   addModule(nameOrResult)
 //   → #resolveToDiscoverResult() [if cache empty, calls this.discover()]
-//   → discover() → dynamic import("@cldmv/slothlet/helpers/module-discovery")
+//   → discover() → dynamic import("#helpers/module-discovery")
 //   → discoverModules() → fsp.stat(scanRoot) via platform.mjs
 //
 // In a real browser / worker host, `platform.mjs` sets `fsp = null` (the `isNode = false`

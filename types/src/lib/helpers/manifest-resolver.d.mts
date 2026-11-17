@@ -30,7 +30,7 @@
  * // Full slothlet integration
  * import manifest from "./api-manifest.json" assert { type: "json" };
  * import { slothlet } from "@cldmv/slothlet";
- * import { createManifestResolver } from "@cldmv/slothlet/helpers/manifest-resolver";
+ * import { createManifestResolver } from "#helpers/manifest-resolver";
  *
  * const api = await slothlet({
  *   manifest,

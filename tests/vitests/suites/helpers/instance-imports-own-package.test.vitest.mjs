@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-08T16:58:40-08:00 (1794185920)
+ *	@Last modified time: 2026-11-16T16:16:51-08:00 (1794874611)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -32,7 +32,7 @@ import {
 	requireInInstance,
 	releaseInstanceScope,
 	slothletInstanceImports
-} from "@cldmv/slothlet/helpers/instance-imports";
+} from "#helpers/instance-imports";
 
 const OWN_SRC = new URL("../../../../src/", import.meta.url).pathname;
 const MARK = "?slothlet_instance=abc";

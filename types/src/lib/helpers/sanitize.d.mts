@@ -1,5 +1,6 @@
 /**
- * Standalone sanitizePropertyName function for backward compatibility
+ * Turn a file or folder name into the api property name slothlet gives it. Consumers import it as `sanitize` from
+ * `@cldmv/slothlet/sanitize`.
  * @param {string} input - Input string to sanitize
  * @param {object} options - Sanitization options
  * @returns {string} Sanitized property name

@@ -190,7 +190,7 @@ const apart = await slothlet({ base: "./api", helpers: "module" });
 
 - **CommonJS helpers** are copied per api file too, so their state is separate, but a CommonJS file's stack frames carry only its path, not which copy is running. For permissions a CommonJS helper's own code therefore stays held to every api file that loads the helper.
 - **Packages are never copied**: a file in another package (`node_modules`, or a folder with its own named `package.json`) is one module for the whole process, as before.
-- **Browser builds are not affected.** Without Node's resolve hook or the vite plugin (`slothletInstanceImports()`), the browser loads what a file imports itself, so there is one copy and the every-importer rule applies. The option is accepted and does nothing there.
+- **Browser builds are not affected.** Without Node's resolve hook or the vite plugin (`plugin()` from `@cldmv/slothlet/vite`), the browser loads what a file imports itself, so there is one copy and the every-importer rule applies. The option is accepted and does nothing there.
 - A partial reload re-imports the reloaded api files, which link against their existing helper copies, as with `"instance"`.
 
 ```javascript
@@ -454,7 +454,7 @@ The `permissions` block turns the permission system on; every option it takes is
 
 ### `permissions.mode: "strict"`
 
-`"strict"` is `"on"` with two differences: it is chosen in the config only (`control.enable()` and `control.disable()` throw `PERMISSION_STRICT_FIXED`), and the instance refuses to start (`PERMISSION_BASELINE_UNMET`) while a check of the permission baseline is not met. The checks are facts slothlet tries for itself as the instance starts: in a browser, a Content Security Policy that refuses `'unsafe-eval'` and `blob:` and `data:` scripts; under vitest, the `slothletInstanceImports()` plugin. Plain Node has no check. Under `"on"` the same checks run and each one not met is a warning. `api.slothlet.permissions.control.report()` shows what they found.
+`"strict"` is `"on"` with two differences: it is chosen in the config only (`control.enable()` and `control.disable()` throw `PERMISSION_STRICT_FIXED`), and the instance refuses to start (`PERMISSION_BASELINE_UNMET`) while a check of the permission baseline is not met. The checks are facts slothlet tries for itself as the instance starts: in a browser, a Content Security Policy that refuses `'unsafe-eval'` and `blob:` and `data:` scripts; under vitest, the `@cldmv/slothlet/vite` plugin. Plain Node has no check. Under `"on"` the same checks run and each one not met is a warning. `api.slothlet.permissions.control.report()` shows what they found.
 
 ```javascript
 const api = await slothlet({ dir: "./api", permissions: { mode: "strict", rules } });

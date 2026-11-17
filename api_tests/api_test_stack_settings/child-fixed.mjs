@@ -2,12 +2,12 @@
  *
  *	@Project: @cldmv/slothlet
  *	@Filename: /api_tests/api_test_stack_settings/child-fixed.mjs
- *	@Date: 2026-11-15T23:50:00-08:00 (1794815400)
+ *	@Date: 2026-11-15T23:41:50-08:00 (1794814910)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T23:50:00-08:00 (1794815400)
+ *	@Last modified time: 2026-11-16T16:15:40-08:00 (1794874540)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -26,7 +26,7 @@ import { EventEmitter } from "node:events";
 import { writeSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import slothlet from "@cldmv/slothlet";
-import { readStack, stackSites } from "@cldmv/slothlet/helpers/stack-read";
+import { readStack, stackSites } from "#helpers/stack-read";
 import { ROUTES } from "./routes.mjs";
 
 const [change, mode, runtime, attribution, capture] = process.argv.slice(2);

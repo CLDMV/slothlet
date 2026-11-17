@@ -321,7 +321,7 @@ export type SlothletOptions = {
     include?: string[] | undefined;
     /**
      * - Pre-generated directory structure for browser mode.
-     * Produced at build time by `generateManifest()` from `@cldmv/slothlet/helpers/generate-manifest`. Required when `platform: "browser"`.
+     * Produced at build time by `generateManifest()` from `#helpers/generate-manifest`. Required when `platform: "browser"`.
      * Presence of `manifest` auto-triggers browser mode without needing an explicit `platform: "browser"`.
      */
     manifest?: {
@@ -565,5 +565,5 @@ export type SlothletAPI = {
         shutdown: () => Promise<void>;
     };
 };
-import { SlothletWarning } from "@cldmv/slothlet/errors";
+import { SlothletWarning } from "#errors";
 //# sourceMappingURL=slothlet.d.mts.map

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T19:48:25-08:00 (1794800905)
+ *	@Last modified time: 2026-11-16T16:16:15-08:00 (1794874575)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -41,10 +41,10 @@
  */
 
 import { internals as contextInternals } from "#factories/context";
-import { internals as instanceImportsInternals } from "@cldmv/slothlet/helpers/instance-imports";
+import { internals as instanceImportsInternals } from "#helpers/instance-imports";
 // This module's own namespace, registered below as the one copy of this file.
 import * as ownNamespace from "./runtime-livebindings.mjs";
-import { SlothletError } from "@cldmv/slothlet/errors";
+import { SlothletError } from "#errors";
 import { internals as unifiedWrapperInternals } from "#handlers/unified-wrapper";
 import { internals as trustedRootInternals } from "#handlers/trusted-root";
 import { internals as frameworkInternalsInternals } from "#handlers/framework-internals";
@@ -58,7 +58,7 @@ import {
 	String,
 	Symbol,
 	SymbolMethods
-} from "@cldmv/slothlet/helpers/intrinsics";
+} from "#helpers/intrinsics";
 const { registerOwnModule, registerSelfForms, bindInstanceSelf, SELF_BIND_KEY } =
 	instanceImportsInternals("lib/runtime/runtime-livebindings");
 const {

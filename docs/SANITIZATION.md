@@ -22,28 +22,28 @@ The Slothlet sanitization system transforms arbitrary strings (file names, path 
 The sanitization function converts filenames into camelCase identifiers while respecting various transformation rules and case preservation options:
 
 ```javascript
-import { sanitizePropertyName } from "@cldmv/slothlet/helpers/sanitize";
+import { sanitize } from "@cldmv/slothlet/sanitize";
 
-sanitizePropertyName("auto-ip"); // "autoIp"
-sanitizePropertyName("parse-JSON-data"); // "parseJSONData"
-sanitizePropertyName("get-api-status"); // "getApiStatus"
+sanitize("auto-ip"); // "autoIp"
+sanitize("parse-JSON-data"); // "parseJSONData"
+sanitize("get-api-status"); // "getApiStatus"
 ```
 
 ## Basic Usage
 
 ```javascript
-import { sanitizePropertyName } from "@cldmv/slothlet/helpers/sanitize";
+import { sanitize } from "@cldmv/slothlet/sanitize";
 
 // Simple camelCase conversion
-sanitizePropertyName("my-module"); // "myModule"
-sanitizePropertyName("get-user-data"); // "getUserData"
+sanitize("my-module"); // "myModule"
+sanitize("get-user-data"); // "getUserData"
 
 // With options
-sanitizePropertyName("MyModule", { lowerFirst: false }); // "MyModule"
-sanitizePropertyName("COMMON_APPS", { preserveAllUpper: true }); // "COMMON_APPS"
+sanitize("MyModule", { lowerFirst: false }); // "MyModule"
+sanitize("COMMON_APPS", { preserveAllUpper: true }); // "COMMON_APPS"
 
 // With rules
-sanitizePropertyName("auto-ip", {
+sanitize("auto-ip", {
 	rules: { upper: ["*-ip"] }
 }); // "autoIP"
 ```
@@ -77,9 +77,9 @@ The sanitization system uses **two-level segmentation**:
 Lowercase the first character of the first primary segment for camelCase convention.
 
 ```javascript
-sanitizePropertyName("MyModule"); // "myModule"
-sanitizePropertyName("MyModule", { lowerFirst: false }); // "MyModule"
-sanitizePropertyName("parse-json"); // "parseJson"
+sanitize("MyModule"); // "myModule"
+sanitize("MyModule", { lowerFirst: false }); // "MyModule"
+sanitize("parse-json"); // "parseJson"
 ```
 
 ### `preserveAllUpper` (default: `false`)
@@ -87,9 +87,9 @@ sanitizePropertyName("parse-json"); // "parseJson"
 Automatically preserve sub-segments that are entirely uppercase.
 
 ```javascript
-sanitizePropertyName("COMMON_APPS", { preserveAllUpper: true }); // "COMMON_APPS"
-sanitizePropertyName("Mixed_APPS", { preserveAllUpper: true }); // "mixed_APPS"
-sanitizePropertyName("get-API-status", { preserveAllUpper: true }); // "getAPIStatus"
+sanitize("COMMON_APPS", { preserveAllUpper: true }); // "COMMON_APPS"
+sanitize("Mixed_APPS", { preserveAllUpper: true }); // "mixed_APPS"
+sanitize("get-API-status", { preserveAllUpper: true }); // "getAPIStatus"
 ```
 
 **Note**: Only applies to sub-segments that are **entirely** uppercase. Mixed case like `"Mixed"` will still be transformed.
@@ -99,17 +99,17 @@ sanitizePropertyName("get-API-status", { preserveAllUpper: true }); // "getAPISt
 Automatically preserve sub-segments that are entirely lowercase.
 
 ```javascript
-sanitizePropertyName("common_apps", { preserveAllLower: true }); // "common_apps"
-sanitizePropertyName("Mixed_apps", { preserveAllLower: true }); // "mixed_apps"
+sanitize("common_apps", { preserveAllLower: true }); // "common_apps"
+sanitize("Mixed_apps", { preserveAllLower: true }); // "mixed_apps"
 ```
 
 > [!NOTE]
 > `preserveAllLower` operates at the **sub-segment level** (split by underscores). Hyphens still cause primary-segment splitting, which are then joined without camelCase capitalization:
 >
 > ```javascript
-> sanitizePropertyName("parse-xml-data", { preserveAllLower: true }); // "parsexmldata" (joined, no caps)
-> sanitizePropertyName("parse-xml-data", {}); // "parseXmlData" (normal camelCase)
-> sanitizePropertyName("common_apps", { preserveAllLower: true }); // "common_apps" (underscores preserved)
+> sanitize("parse-xml-data", { preserveAllLower: true }); // "parsexmldata" (joined, no caps)
+> sanitize("parse-xml-data", {}); // "parseXmlData" (normal camelCase)
+> sanitize("common_apps", { preserveAllLower: true }); // "common_apps" (underscores preserved)
 > ```
 
 ## Rules
@@ -121,16 +121,16 @@ Rules provide fine-grained control over segment transformation. All rules suppor
 Preserve segments exactly as-is. Case-sensitive matching.
 
 ```javascript
-sanitizePropertyName("autoIP", {
+sanitize("autoIP", {
 	rules: { leave: ["autoIP"] }
 }); // "autoIP"
 
-sanitizePropertyName("auto-ip", {
+sanitize("auto-ip", {
 	rules: { leave: ["ip"] }
 }); // "autoip" (preserves "ip" segment)
 
 // Case mismatch - no preservation
-sanitizePropertyName("auto-ip", {
+sanitize("auto-ip", {
 	rules: { leave: ["IP"] }
 }); // "autoIp"
 ```
@@ -143,11 +143,11 @@ sanitizePropertyName("auto-ip", {
 Preserve segments exactly as-is. Case-insensitive matching.
 
 ```javascript
-sanitizePropertyName("autoIP", {
+sanitize("autoIP", {
 	rules: { leaveInsensitive: ["autoip"] }
 }); // "autoIP"
 
-sanitizePropertyName("AutoIP", {
+sanitize("AutoIP", {
 	rules: { leaveInsensitive: ["autoip"] }
 }); // "AutoIP"
 ```
@@ -158,12 +158,12 @@ Force segments to UPPERCASE. Supports exact matches, glob patterns, and boundary
 
 ```javascript
 // Exact match
-sanitizePropertyName("get-http-status", {
+sanitize("get-http-status", {
 	rules: { upper: ["http"] }
 }); // "getHTTPStatus"
 
 // Multiple segments
-sanitizePropertyName("parse-json-xml-data", {
+sanitize("parse-json-xml-data", {
 	rules: { upper: ["json", "xml"] }
 }); // "parseJSONXMLData"
 ```
@@ -173,16 +173,16 @@ sanitizePropertyName("parse-json-xml-data", {
 Force segments to lowercase. Pattern-matched segments are **preserved in lowercase** through the camelCase phase - `lower` rules take full effect symmetrically with `upper`.
 
 ```javascript
-sanitizePropertyName("validate-USER-id", {
+sanitize("validate-USER-id", {
 	rules: { lower: ["user"] }
 }); // "validateuserId"  (a matching lower rule suppresses capitalization for that segment)
 
 // Pattern-based lower - segment stays fully lowercase (Bug #6 fix)
-sanitizePropertyName("get-API-status", {
+sanitize("get-API-status", {
 	rules: { lower: ["*-api-*"] }
 }); // "getapiStatus"  (api stays lowercase, not capitalized)
 
-sanitizePropertyName("foo-API-json", {
+sanitize("foo-API-json", {
 	rules: { lower: ["json"] }
 }); // "fooAPIjson"  (json stays lowercase)
 ```
@@ -196,7 +196,7 @@ The sanitization system supports three types of pattern matching:
 Simple string matching (case-insensitive for `upper`/`lower` rules).
 
 ```javascript
-sanitizePropertyName("get-api-status", {
+sanitize("get-api-status", {
 	rules: { upper: ["api"] }
 }); // "getAPIStatus"
 ```
@@ -209,17 +209,17 @@ Match patterns before string splitting using wildcards.
 
 ```javascript
 // *-ip matches strings ending with "-ip"
-sanitizePropertyName("auto-ip", {
+sanitize("auto-ip", {
 	rules: { upper: ["*-ip"] }
 }); // "autoIP"
 
 // *-api-* matches strings with "-api-" in the middle
-sanitizePropertyName("get-api-status", {
+sanitize("get-api-status", {
 	rules: { upper: ["*-api-*"] }
 }); // "getAPIStatus"
 
 // Multiple patterns
-sanitizePropertyName("get-http-api-status", {
+sanitize("get-http-api-status", {
 	rules: { upper: ["http", "*-api-*"] }
 }); // "getHTTPAPIStatus"
 ```
@@ -228,12 +228,12 @@ sanitizePropertyName("get-http-api-status", {
 
 ```javascript
 // api_* matches strings starting with "api_"
-sanitizePropertyName("api_helper", {
+sanitize("api_helper", {
 	rules: { upper: ["api_*"] }
 }); // "API_helper"
 
 // *_api_* matches strings with "_api_" in the middle
-sanitizePropertyName("get_api_data", {
+sanitize("get_api_data", {
 	rules: { upper: ["*_api_*"] }
 }); // "get_API_data"
 ```
@@ -244,15 +244,15 @@ Transform parts within already camelCased identifiers.
 
 ```javascript
 // *URL* matches "url" anywhere in the segment
-sanitizePropertyName("buildUrlWithParams", {
+sanitize("buildUrlWithParams", {
 	rules: { upper: ["*URL*"] }
 }); // "buildURLWithParams"
 
-sanitizePropertyName("parseUrl", {
+sanitize("parseUrl", {
 	rules: { upper: ["*URL*"] }
 }); // "parseURL"
 
-sanitizePropertyName("parseUrlFromUrlString", {
+sanitize("parseUrlFromUrlString", {
 	rules: { upper: ["*URL*"] }
 }); // "parseURLFromURLString"
 ```
@@ -263,17 +263,17 @@ Match only when surrounded by other characters (requires positive lookbehind/ahe
 
 ```javascript
 // **url** only matches "url" when it has characters before AND after
-sanitizePropertyName("buildUrlWithParams", {
+sanitize("buildUrlWithParams", {
 	rules: { upper: ["**url**"] }
 }); // "buildURLWithParams"
 
 // Standalone "url" is NOT matched
-sanitizePropertyName("url", {
+sanitize("url", {
 	rules: { upper: ["**url**"] }
 }); // "url"
 
 // Multiple boundary patterns
-sanitizePropertyName("buildApiUrlParser", {
+sanitize("buildApiUrlParser", {
 	rules: { upper: ["**api**", "**url**"] }
 }); // "buildAPIURLParser"
 ```
@@ -294,7 +294,7 @@ When multiple rules could apply to the same segment, they are evaluated in this 
 
 ```javascript
 // leave overrides upper
-sanitizePropertyName("autoIP", {
+sanitize("autoIP", {
 	rules: {
 		leave: ["autoIP"],
 		upper: ["ip"]
@@ -302,13 +302,13 @@ sanitizePropertyName("autoIP", {
 }); // "autoIP"
 
 // preserveAllUpper overrides lower
-sanitizePropertyName("COMMON_APPS", {
+sanitize("COMMON_APPS", {
 	preserveAllUpper: true,
 	rules: { lower: ["apps"] }
 }); // "COMMON_APPS"
 
 // upper overrides lower
-sanitizePropertyName("foo-api", {
+sanitize("foo-api", {
 	rules: {
 		upper: ["api"],
 		lower: ["api"]
@@ -322,44 +322,44 @@ sanitizePropertyName("foo-api", {
 
 ```javascript
 // Simple camelCase
-sanitizePropertyName("auto-ip"); // "autoIp"
-sanitizePropertyName("root-math"); // "rootMath"
-sanitizePropertyName("get-api-status"); // "getApiStatus"
+sanitize("auto-ip"); // "autoIp"
+sanitize("root-math"); // "rootMath"
+sanitize("get-api-status"); // "getApiStatus"
 
 // Underscore preservation
-sanitizePropertyName("my_module"); // "my_module"
-sanitizePropertyName("common_apps"); // "common_apps"
+sanitize("my_module"); // "my_module"
+sanitize("common_apps"); // "common_apps"
 
 // Mixed hyphens and underscores
-sanitizePropertyName("Mixed_APPS_some-thing"); // "mixed_APPS_someThing"
+sanitize("Mixed_APPS_some-thing"); // "mixed_APPS_someThing"
 ```
 
 ### Special Characters and Edge Cases
 
 ```javascript
 // Special characters removed
-sanitizePropertyName("my file!.mjs"); // "myFileMjs"
+sanitize("my file!.mjs"); // "myFileMjs"
 
 // Leading numbers stripped
-sanitizePropertyName("2autoIP"); // "autoIP"
+sanitize("2autoIP"); // "autoIP"
 
 // Leading underscores preserved
-sanitizePropertyName("_test"); // "_test"
-sanitizePropertyName("__private"); // "__private"
+sanitize("_test"); // "_test"
+sanitize("__private"); // "__private"
 
 // Empty/whitespace becomes underscore
-sanitizePropertyName(""); // "_"
-sanitizePropertyName("   "); // "_"
+sanitize(""); // "_"
+sanitize("   "); // "_"
 
 // Dollar signs preserved
-sanitizePropertyName("$scope"); // "$scope"
+sanitize("$scope"); // "$scope"
 ```
 
 ### Complex Combinations
 
 ```javascript
 // Multiple options and rules
-sanitizePropertyName("Mixed_API_some-json-DATA", {
+sanitize("Mixed_API_some-json-DATA", {
 	lowerFirst: true,
 	preserveAllUpper: true,
 	rules: {
@@ -371,12 +371,12 @@ sanitizePropertyName("Mixed_API_some-json-DATA", {
 // Note: preserveAllUpper keeps "DATA" uppercase, overriding lower:["data"]
 
 // Complex pattern matching
-sanitizePropertyName("get-http-api-status", {
+sanitize("get-http-api-status", {
 	rules: { upper: ["http", "*-api-*"] }
 }); // "getHTTPAPIStatus"
 
 // Multiple boundary patterns
-sanitizePropertyName("test-api-url-parser", {
+sanitize("test-api-url-parser", {
 	rules: { upper: ["**api**", "**url**"] }
 }); // "testAPIURLParser"
 ```
@@ -385,22 +385,22 @@ sanitizePropertyName("test-api-url-parser", {
 
 ```javascript
 // API endpoint naming
-sanitizePropertyName("get-user-api"); // "getUserApi"
-sanitizePropertyName("post-json-data", {
+sanitize("get-user-api"); // "getUserApi"
+sanitize("post-json-data", {
 	rules: { upper: ["json"] }
 }); // "postJSONData"
 
 // File-based API generation (the module loader strips the file extension before sanitizing)
-sanitizePropertyName("http-client", {
+sanitize("http-client", {
 	rules: { upper: ["http"] }
 }); // "HTTPClient"
 
 // Database models
-sanitizePropertyName("user_profile"); // "user_profile"
-sanitizePropertyName("order_item_details"); // "order_item_details"
+sanitize("user_profile"); // "user_profile"
+sanitize("order_item_details"); // "order_item_details"
 
 // Technical acronyms
-sanitizePropertyName("parse-xml-to-json", {
+sanitize("parse-xml-to-json", {
 	rules: { upper: ["xml", "json"] }
 }); // "parseXMLToJSON"
 ```
@@ -428,7 +428,7 @@ api.slothlet.sanitize("my-module"); // "myModule"
 This is useful for predicting exactly what API path a given filename will produce at runtime.
 
 > [!NOTE]
-> `api.slothlet.sanitize()` only accepts a string. It does not accept an options object - the options come from the instance config. Use the standalone `sanitizePropertyName` export if you need to pass custom options directly.
+> `api.slothlet.sanitize()` only accepts a string. It does not accept an options object - the options come from the instance config. Use the standalone `sanitize` export if you need to pass custom options directly.
 
 ---
 
@@ -471,7 +471,7 @@ Tests are located at:
 ### Function Signature
 
 ```typescript
-function sanitizePropertyName(
+function sanitize(
 	input: string,
 	options?: {
 		lowerFirst?: boolean;
@@ -506,7 +506,7 @@ function sanitizePropertyName(
 
 ### Throws
 
-- Does not throw for a non-string input — the value is coerced with `String(input)` before sanitizing (e.g. `sanitizePropertyName(123)` returns `"_"`).
+- Does not throw for a non-string input — the value is coerced with `String(input)` before sanitizing (e.g. `sanitize(123)` returns `"_"`).
 
 ---
 

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T21:09:16-08:00 (1794805756)
+ *	@Last modified time: 2026-11-16T16:16:09-08:00 (1794874569)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -36,7 +36,7 @@
  * 	options: { moduleID: "plugins-core", metadata: { version: "1.0.0" } }
  * });
  */
-import { translate } from "@cldmv/slothlet/i18n";
+import { translate } from "#i18n";
 import { ComponentBase } from "#factories/component-base";
 import {
 	readApiMember,
@@ -47,7 +47,7 @@ import {
 	internals as unifiedWrapperInternals
 } from "#handlers/unified-wrapper";
 import { isFrameworkInternal, internals as frameworkInternalsInternals } from "#handlers/framework-internals";
-import { dataMemberOf } from "@cldmv/slothlet/helpers/reserved-keys";
+import { dataMemberOf } from "#helpers/reserved-keys";
 import { MODULE_ID_SEPARATOR } from "#handlers/metadata";
 
 // Node-only static imports resolved via top-level await so `node:*` never
@@ -55,7 +55,7 @@ import { MODULE_ID_SEPARATOR } from "#handlers/metadata";
 // module (#123) and is null in a browser, where add/reload/remove mount from the manifest tree and never
 // touch the filesystem. A file's folder, name and extension come from `fileParts`, which answers in both
 // hosts: a browser adds and reloads single files too (#805).
-import { fsp, fileParts, util } from "@cldmv/slothlet/helpers/platform";
+import { fsp, fileParts, util } from "#helpers/platform";
 import {
 	ArrayMethods,
 	Arrays,
@@ -94,7 +94,7 @@ import {
 	Symbol,
 	WeakSet,
 	WeakSetMethods
-} from "@cldmv/slothlet/helpers/intrinsics";
+} from "#helpers/intrinsics";
 const unifiedWrapperOwn = unifiedWrapperInternals("lib/handlers/api-manager");
 const {
 	resolveWrapper,

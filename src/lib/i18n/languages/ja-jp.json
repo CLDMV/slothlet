@@ -515,6 +515,7 @@
 		"GENERATE_MANIFEST_DIR_UNREADABLE": "generateManifest: ディレクトリ \"{dir}\" を読み取れません: {reason}",
 		"GENERATE_MANIFEST_NOT_DIRECTORY": "generateManifest: \"{dir}\" はディレクトリではありません",
 		"GENERATE_BROWSER_ASSETS_SLOTHLET_BASE_INVALID": "generateBrowserAssets: options.slothletBase はブラウザで @cldmv/slothlet が提供されるパスを示す文字列でなければなりません。受信した値: {received}",
+		"FILES_REQUIRES_NODE": "{operation} には Node.js が必要です。ブラウザにはないファイルシステムを読み取るためです。ビルド手順で呼び出し、その結果をページに渡してください。",
 		"MODULE_MANIFEST_UNKNOWN_FIELD": "パッケージ '{packageName}' の '{manifestPath}' にあるモジュールマニフェストに認識されないトップレベルフィールド '{field}' が含まれています。未知のフィールドは拒否されます。開発者定義の追加項目には専用の 'metadata' ブロックを使用してください。",
 		"HINT_MODULE_MANIFEST_UNKNOWN_FIELD": "'{field}' がタイプミスの場合は修正してください。意図的な開発者メタデータの場合は、'metadata' オブジェクト内に移動してください。",
 		"MODULE_MANIFEST_NAME_MISMATCH": "パッケージ '{packageName}' のモジュールマニフェストは名前 '{manifestName}' を宣言していますが、package.json の名前 '{packageName}' と一致しません。",
@@ -567,7 +568,7 @@
 		"BASELINE_CSP_EVAL_ALLOWED": "このページは文字列からのコード生成を許可しています。Content Security Policy が 'unsafe-eval' を許可しているか、ポリシーがありません。",
 		"BASELINE_CSP_BLOB_ALLOWED": "このページは blob: URL のスクリプトを実行します。Content Security Policy がそれを許可しているか、ポリシーがありません。",
 		"BASELINE_CSP_DATA_ALLOWED": "このページは data: URL のスクリプトを実行します。Content Security Policy がそれを許可しているか、ポリシーがありません。",
-		"BASELINE_VITEST_PLUGIN_ABSENT": "vitest の設定に slothlet の slothletInstanceImports() プラグインがないまま vitest で実行しています。"
+		"BASELINE_VITEST_PLUGIN_ABSENT": "vitest の設定に slothlet の @cldmv/slothlet/vite プラグインがないまま vitest で実行しています。"
 	},
 	"metadata": {
 		"code": "ja-jp",

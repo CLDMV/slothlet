@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-13T21:48:07-08:00 (1794635287)
+ *	@Last modified time: 2026-11-16T16:16:13-08:00 (1794874573)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -39,20 +39,11 @@
  * sandbox. See `docs/PERMISSIONS.md` on what the live runtime does and does not bound.
  */
 
-import { pinManyToCurrentCaller } from "@cldmv/slothlet/helpers/caller-pinning";
-import { inheritsFrom } from "@cldmv/slothlet/helpers/platform";
-import { openLayer, closeLayer, holdsValue, markLayer } from "@cldmv/slothlet/helpers/boundary-patch-layers";
-import {
-	FunctionMethods,
-	Objects,
-	Promise,
-	Promises,
-	Symbols,
-	TypeError,
-	WeakSet,
-	WeakSetMethods
-} from "@cldmv/slothlet/helpers/intrinsics";
-import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "@cldmv/slothlet/helpers/instance-imports";
+import { pinManyToCurrentCaller } from "#helpers/caller-pinning";
+import { inheritsFrom } from "#helpers/platform";
+import { openLayer, closeLayer, holdsValue, markLayer } from "#helpers/boundary-patch-layers";
+import { FunctionMethods, Objects, Promise, Promises, Symbols, TypeError, WeakSet, WeakSetMethods } from "#helpers/intrinsics";
+import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "#helpers/instance-imports";
 
 /**
  * Where a patched `then` keeps the function it replaced. Registered globally so a second copy of

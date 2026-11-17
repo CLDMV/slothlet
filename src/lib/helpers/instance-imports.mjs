@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T02:15:26-08:00 (1794824126)
+ *	@Last modified time: 2026-11-16T16:16:12-08:00 (1794874572)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -116,8 +116,8 @@ import {
 	WeakMapMethods,
 	WeakSet,
 	WeakSetMethods
-} from "@cldmv/slothlet/helpers/intrinsics";
-import { readStack, stackText, unreadError } from "@cldmv/slothlet/helpers/stack-read";
+} from "#helpers/intrinsics";
+import { readStack, stackText, unreadError } from "#helpers/stack-read";
 
 /**
  * Query parameters copied from a leaf onto its helpers: the instance only. The leaf's `module`
@@ -2011,7 +2011,7 @@ function checkModuleImport(specifier, importer) {
 async function viteImportRefusal(specifier, file) {
 	if (IMPORT_REFUSAL === null) {
 		try {
-			const { SlothletError } = await import("@cldmv/slothlet/errors");
+			const { SlothletError } = await import("#errors");
 			IMPORT_REFUSAL = ({ specifier: named, file: target, allowed }) =>
 				new SlothletError("MODULE_INTERNAL_NOT_IMPORTABLE", { specifier: named, file: target, allowed }, null, { validationError: true });
 		} catch {
@@ -2030,8 +2030,8 @@ async function viteImportRefusal(specifier, file) {
  */
 async function viteCapabilityRefusal(importer) {
 	try {
-		const { SlothletError } = await import("@cldmv/slothlet/errors");
-		const { translate } = await import("@cldmv/slothlet/i18n");
+		const { SlothletError } = await import("#errors");
+		const { translate } = await import("#i18n");
 		// The vite server holds none of the instance's rules: the import is no leaf's it could decide for.
 		const refusal = new SlothletError(
 			"CAPABILITY_REFUSED",
@@ -4034,9 +4034,9 @@ function loadedBySource(importers) {
  * @returns {object} A vite plugin (`name`, `enforce`, `resolveId`, `transform`, `load`).
  * @public
  * @example
- * // vitest.config.mjs
- * import { slothletInstanceImports } from "@cldmv/slothlet/helpers/instance-imports";
- * export default defineConfig({ plugins: [slothletInstanceImports()] });
+ * // vitest.config.mjs — consumers import it as `plugin` from @cldmv/slothlet/vite
+ * import { plugin } from "@cldmv/slothlet/vite";
+ * export default defineConfig({ plugins: [plugin()] });
  */
 export function slothletInstanceImports() {
 	/**

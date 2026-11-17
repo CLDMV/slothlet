@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-13T21:49:22-08:00 (1794635362)
+ *	@Last modified time: 2026-11-16T16:16:51-08:00 (1794874611)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -18,7 +18,7 @@
  * records, and the second works through it.
  *
  * @description
- * This suite's own copy of `@cldmv/slothlet/helpers/instance-imports` is the one slothlet runs on, evaluated first.
+ * This suite's own copy of `#helpers/instance-imports` is the one slothlet runs on, evaluated first.
  * A second copy of the same module is loaded by Node itself, through a CommonJS file's `import()`. The module's
  * contract for that case: the copy that loaded first keeps every instance's record; the other copy claims instance
  * IDs there, loads files through the handle it was given, reads the first copy's read-only views, and has the first
@@ -33,7 +33,7 @@ import path from "node:path";
 import nodeModule, { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import slothlet from "@cldmv/slothlet";
-import * as first from "@cldmv/slothlet/helpers/instance-imports";
+import * as first from "#helpers/instance-imports";
 import { makeTestTmpDir } from "../../setup/test-fixtures-tmp.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -50,7 +50,7 @@ describe("Helpers > instance-imports > two copies of the module in one process",
 		// The first copy keeps the record from here on: an instance is built before the second copy loads.
 		api = await slothlet({ base: DIR, silent: true });
 		for (const file of ["one", "two", "three", "four"]) await api[file].bumpCjs();
-		second = await nativeImport("@cldmv/slothlet/helpers/instance-imports");
+		second = await nativeImport("#helpers/instance-imports");
 		root = await makeTestTmpDir("instance-imports-two-copies");
 		fs.writeFileSync(path.join(root, "package.json"), "{}");
 		fs.writeFileSync(path.join(root, "helper.cjs"), "let n = 0; exports.bump = () => ++n;");

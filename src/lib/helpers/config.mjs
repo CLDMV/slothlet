@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T20:11:40-08:00 (1794802300)
+ *	@Last modified time: 2026-11-16T16:16:12-08:00 (1794874572)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -19,19 +19,19 @@
  * @internal
  */
 import { ComponentBase } from "#factories/component-base";
-import { SlothletError } from "@cldmv/slothlet/errors";
+import { SlothletError } from "#errors";
 
 // Node-vs-browser host detection, resolved once in the platform module (#123). Used by
 // Config.normalizeEnvTarget()'s auto-detect fallback path.
-import { isNode as IS_NODE } from "@cldmv/slothlet/helpers/platform";
+import { isNode as IS_NODE } from "#helpers/platform";
 
 // The single source of truth for apiDepth's default — the mode processors + loader read the
 // same constant for their own (defensive, standalone-call-only) parameter defaults.
-import { DEFAULT_API_DEPTH, DEFAULT_ROUTINES } from "@cldmv/slothlet/helpers/defaults";
+import { DEFAULT_API_DEPTH, DEFAULT_ROUTINES } from "#helpers/defaults";
 
 // Validates a routines[] entry's `name` compiles as a real glob pattern at construction time,
 // rather than silently matching nothing forever (see normalizeRoutines()).
-import { compilePattern } from "@cldmv/slothlet/helpers/pattern-matcher";
+import { compilePattern } from "#helpers/pattern-matcher";
 import {
 	ArrayMethods,
 	Arrays,
@@ -47,8 +47,8 @@ import {
 	String,
 	StringMethods,
 	splitText
-} from "@cldmv/slothlet/helpers/intrinsics";
-import { createClock } from "@cldmv/slothlet/helpers/clock";
+} from "#helpers/intrinsics";
+import { createClock } from "#helpers/clock";
 
 /** Valid `mode` values for a routines entry. @type {ReadonlySet<string>} */
 const VALID_ROUTINE_MODES = setFrom(["manual", "startup", "shutdown", "destroy"]);

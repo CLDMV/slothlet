@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-13T21:47:55-08:00 (1794635275)
+ *	@Last modified time: 2026-11-16T16:16:08-08:00 (1794874568)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -42,7 +42,7 @@ import {
 	SetMethods,
 	setValues,
 	String
-} from "@cldmv/slothlet/helpers/intrinsics";
+} from "#helpers/intrinsics";
 const unifiedWrapperOwn = unifiedWrapperInternals("lib/builders/api-assignment");
 const { resolveWrapper, runtime_frameworkWrite } = unifiedWrapperOwn;
 const { markFrameworkInternal } = frameworkInternalsInternals("lib/builders/api-assignment");

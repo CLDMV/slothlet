@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T21:09:19-08:00 (1794805759)
+ *	@Last modified time: 2026-11-16T16:16:10-08:00 (1794874570)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -38,8 +38,8 @@
 
 import { ComponentBase } from "#factories/component-base";
 import { internals as unifiedWrapperInternals } from "#handlers/unified-wrapper";
-import { SlothletError } from "@cldmv/slothlet/errors";
-import { sortModules } from "@cldmv/slothlet/helpers/module-sort";
+import { SlothletError } from "#errors";
+import { sortModules } from "#helpers/module-sort";
 import {
 	ArrayMethods,
 	Arrays,
@@ -57,7 +57,7 @@ import {
 	RegExpMethods,
 	regExpSplit,
 	String
-} from "@cldmv/slothlet/helpers/intrinsics";
+} from "#helpers/intrinsics";
 const { runtime_selfModuleReader } = unifiedWrapperInternals("lib/handlers/module-manager");
 
 /**
@@ -172,7 +172,7 @@ export class ModuleManager extends ComponentBase {
 		// Dynamically imported to keep module-manager free of static node:fs references.
 		// This allows module-manager to be safely imported in browser/bundler contexts
 		// where node:fs is not available; the import only fires when discover() is called.
-		const { discoverModules } = await import("@cldmv/slothlet/helpers/module-discovery");
+		const { discoverModules } = await import("#helpers/module-discovery");
 		const found = await discoverModules(options);
 		MapMethods.clear(this.#cache);
 		for (let ofIndex = 0, ofList = found; ofIndex < ofList.length; ofIndex++) {

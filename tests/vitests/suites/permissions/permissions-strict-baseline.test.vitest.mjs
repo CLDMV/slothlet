@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T03:00:00-08:00 (1794826800)
+ *	@Last modified time: 2026-11-16T16:17:23-08:00 (1794874643)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -48,8 +48,8 @@ import { fileURLToPath } from "node:url";
 import { describe, it, expect, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
 import { SlothletWarning } from "@cldmv/slothlet/errors";
-import { normalizePermissionsConfig } from "@cldmv/slothlet/helpers/config";
-import { runBaseline } from "@cldmv/slothlet/helpers/permission-baseline";
+import { normalizePermissionsConfig } from "#helpers/config";
+import { runBaseline } from "#helpers/permission-baseline";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../..");
 const CHILD = path.join(ROOT, "api_tests", "api_test_permissions_strict", "child.mjs");

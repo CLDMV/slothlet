@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:54-07:00 (1791090894)
+ *	@Last modified time: 2026-11-16T16:16:19-08:00 (1794874579)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -36,7 +36,7 @@ import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { resolve, dirname, join, extname } from "node:path";
 import { chromium } from "playwright";
-import { generateBrowserAssets, generateManifest } from "@cldmv/slothlet/helpers/generate-manifest";
+import { generateBrowserAssets, generateManifest } from "#helpers/generate-manifest";
 
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const FIXTURE_REL = "api_tests/api_test_browser";
@@ -53,7 +53,7 @@ const MIME = {
 };
 
 // slothlet's own browser importmap is produced by generateBrowserAssets (#123) — the smoke test
-// no longer hand-rolls it. The repo is served at "/", so slothletBase is "/"; under
+// no longer hand-rolls it. The repo is served at "/", so base is "/"; under
 // --conditions=slothlet-dev the importmap resolves to /src/* (matching how this test serves the
 // package), and for a real install it would resolve to /dist/* under the consumer's base.
 
@@ -133,7 +133,7 @@ try {
 	// slothlet's own files are slothlet's: a script outside them resolves the main entry and the runtime, and none of
 	// slothlet's other specifiers.
 	const tried = [];
-	for (const spec of ["@cldmv/slothlet/helpers/instance-imports", "#handlers/context-async", "@cldmv/slothlet/i18n"]) {
+	for (const spec of ["#helpers/instance-imports", "#handlers/context-async", "@cldmv/slothlet/i18n"]) {
 		try {
 			await import(spec);
 			tried.push("loaded:" + spec);
@@ -169,9 +169,9 @@ window.__SMOKE__ = out;
 async function main() {
 	// One call yields both halves of the browser setup: the API manifest and slothlet's own
 	// importmap. Here slothlet IS the workspace served at "/", so we override the default
-	// slothletBase ("/node_modules/@cldmv/slothlet/") with "/"; under --conditions=slothlet-dev the
+	// base ("/node_modules/@cldmv/slothlet/") with "/"; under --conditions=slothlet-dev the
 	// importmap resolves to /src/*. A real consumer installs slothlet and uses the default.
-	const { manifest, importmap } = await generateBrowserAssets(join(REPO, FIXTURE_REL), { slothletBase: "/" });
+	const { manifest, importmap } = await generateBrowserAssets(join(REPO, FIXTURE_REL), { base: "/" });
 	const heldManifest = await generateManifest(join(REPO, HELD_REL));
 	const helperManifest = await generateManifest(join(REPO, HELPER_REL));
 	const html = smokeHtml(importmap, manifest, heldManifest, helperManifest);

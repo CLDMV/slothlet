@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-13T21:48:05-08:00 (1794635285)
+ *	@Last modified time: 2026-11-16T16:16:12-08:00 (1794874572)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -17,10 +17,13 @@
  * @fileoverview Build-time helpers that generate slothlet's browser assets from a directory.
  *
  * @description
+ * Consumers reach these through `@cldmv/slothlet/files` (`files.assets`, `files.generate`, `files.importmap`,
+ * `files.specifiers.*`); this file is package-private (`#helpers/generate-manifest`).
+ *
  * Two entry points, both **Node.js-only build-time utilities** (they use `node:fs` / module
  * resolution and run in your build step, a Vite/Webpack plugin, or an Electron main process):
  *
- * - `generateBrowserAssets(apiDir, { slothletBase })` — **the recommended one-call entry.**
+ * - `generateBrowserAssets(apiDir, { base })` — **the recommended one-call entry.**
  *   Returns `{ manifest, importmap }`: the API-directory manifest **and** the importmap covering
  *   both slothlet's own modules (see #123) and the exact `exports` subpaths of the third-party
  *   packages the registered API leaves import (see #297), so browser consumers never hand-roll it.
@@ -53,7 +56,7 @@
  *
  * @example
  * // build.mjs — run this at build time in Node.js
- * import { generateManifest } from "@cldmv/slothlet/helpers/generate-manifest";
+ * import { generateManifest } from "#helpers/generate-manifest";
  * import { writeFileSync } from "node:fs";
  *
  * const manifest = await generateManifest("./src/api");
@@ -63,7 +66,7 @@
  * // app.js — use the manifest at runtime in the browser
  * import manifest from "./public/api-manifest.json" assert { type: "json" };
  * import { slothlet } from "@cldmv/slothlet";
- * import { createManifestResolver } from "@cldmv/slothlet/helpers/manifest-resolver";
+ * import { createManifestResolver } from "#helpers/manifest-resolver";
  *
  * const api = await slothlet({
  *   manifest,
@@ -78,7 +81,7 @@
 import * as nodeFsPromises from "node:fs/promises";
 import * as nodePath from "node:path";
 import * as nodeUrl from "node:url";
-import { SlothletError } from "@cldmv/slothlet/errors";
+import { SlothletError } from "#errors";
 import {
 	ArrayMethods,
 	Arrays,
@@ -103,7 +106,7 @@ import {
 	splitText,
 	String,
 	StringMethods
-} from "@cldmv/slothlet/helpers/intrinsics";
+} from "#helpers/intrinsics";
 
 // Node's built-ins, as slothlet loaded: frozen copies of their members (see helpers/platform), so code that replaces one
 // on Node's module object later does not run here.
@@ -118,6 +121,14 @@ const { fileURLToPath } = nodeUrl;
  * @type {RegExp}
  */
 const SLOTHLET_SPEC_RE = /["'](@cldmv\/slothlet(?:\/[^"']+)?)["']/g;
+
+/**
+ * Matches the quoted package-private specifier (`#slothlet`, `#errors`, `#helpers/config`, …) of a static or dynamic
+ * import in slothlet's own source. The `imports` loop below enumerates only the wildcard `imports` keys; an exact key
+ * reaches the importmap by being imported. Used by the source-scan backstop.
+ * @type {RegExp}
+ */
+const OWN_IMPORT_SPEC_RE = /(?:\bfrom\s*|\bimport\s*\(\s*)["'](#[\w@./-]+)["']/g;
 
 /**
  * Matches the quoted specifier of any static/dynamic import or re-export — `from "x"`, `import "x"`,
@@ -138,7 +149,8 @@ const DEFAULT_SLOTHLET_BASE = "/node_modules/@cldmv/slothlet/";
 
 /**
  * The specifiers of slothlet's any script of the page may import: the package's main entry, the runtime a module's
- * files import `self`, `context` and `instanceID` from, and the manifest resolver a page hands slothlet. Every other
+ * files import `self`, `context` and `instanceID` from, and `@cldmv/slothlet/files` for the resolver a page hands
+ * slothlet. Every other
  * specifier of slothlet's maps only for slothlet's own files (see {@link generateImportMap}).
  * @type {Set<string>}
  */
@@ -147,7 +159,7 @@ const PAGE_SPECIFIERS = setFrom([
 	"@cldmv/slothlet/runtime",
 	"@cldmv/slothlet/runtime/async",
 	"@cldmv/slothlet/runtime/live",
-	"@cldmv/slothlet/helpers/manifest-resolver"
+	"@cldmv/slothlet/files"
 ]);
 
 /**
@@ -261,7 +273,7 @@ async function scanDir(absDir, rootDir) {
  *
  * @example
  * // Build script — produces a manifest and writes it to disk
- * import { generateManifest } from "@cldmv/slothlet/helpers/generate-manifest";
+ * import { generateManifest } from "#helpers/generate-manifest";
  * import { writeFileSync } from "node:fs";
  *
  * const manifest = await generateManifest("./src/api");
@@ -269,7 +281,7 @@ async function scanDir(absDir, rootDir) {
  *
  * @example
  * // Vite plugin — inline manifest into the browser bundle
- * import { generateManifest } from "@cldmv/slothlet/helpers/generate-manifest";
+ * import { generateManifest } from "#helpers/generate-manifest";
  *
  * export function slothletManifestPlugin(apiDir) {
  *   return {
@@ -335,10 +347,10 @@ function slothletPackageRoot() {
  * every flat (non-wildcard) public module specifier a consumer can import resolves via the importmap, including public aggregators that
  * slothlet's own internals never import directly (notably the bare `@cldmv/slothlet/runtime`, whose
  * `/runtime/async` + `/runtime/live` variants are the only ones internally referenced); (2) a per-file
- * enumeration of every wildcard `exports` directory (`./helpers/*`, `./handlers/*`, …) so EVERY exported
- * subpath gets an entry by construction — not just the modules slothlet itself imports, so a browser can
+ * enumeration of every wildcard `exports` and `imports` directory (`#helpers/*`, `#handlers/*`, …) so EVERY
+ * such subpath gets an entry by construction — not just the modules slothlet itself imports, so a browser can
  * never hit a wildcard endpoint the map lacks; and (3) a recursive source scan as a backstop for any
- * imported specifier the first two miss. i18n locales are handled separately — they are dynamic-template imports the
+ * imported specifier the first two miss, which is how the exact `imports` keys (`#slothlet`, `#errors`, …) get in. i18n locales are handled separately — they are dynamic-template imports the
  * static scan can't see, and are enumerated separately from the languages directory. Inclusion here is about
  * specifier resolution, not runtime compatibility — some public exports (e.g. `typegen`) are
  * Node-only and won't execute in a browser even though their specifier resolves. JSON exports (the
@@ -468,6 +480,8 @@ async function collectSlothletSpecifiers(root) {
 					if (RegExpMethods.exec(/[*<>]|\.\.\.|\/$/, spec) !== null || ArrayMethods.some(splitText(spec, "/"), (s) => s === "")) continue;
 					SetMethods.add(specifiers, spec);
 				}
+				OWN_IMPORT_SPEC_RE.lastIndex = 0;
+				while ((m = RegExpMethods.exec(OWN_IMPORT_SPEC_RE, src))) SetMethods.add(specifiers, m[1]);
 			}
 		}
 	}
@@ -478,29 +492,29 @@ async function collectSlothletSpecifiers(root) {
 /**
  * Generate the browser importmap for slothlet's OWN modules.
  *
- * In a browser, slothlet's internal imports (`@cldmv/slothlet`, `@cldmv/slothlet/helpers/*`, …)
+ * In a browser, slothlet's internal imports (`@cldmv/slothlet`, `#helpers/*`, …)
  * are static and resolved by the page's importmap **before slothlet runs** — they cannot route
  * through `resolveModuleSpecifier` (which only governs API-leaf loads). This produces that
  * importmap from slothlet's public export surface so consumers never hand-roll it.
  *
  * Each specifier is resolved via `import.meta.resolve`, which automatically picks the dev
  * (`slothlet-dev` → `src/`) or published (`default` → `dist/`) files based on the conditions of
- * the build process — then rebased onto `slothletBase` (where the package is served).
+ * the build process — then rebased onto `base` (where the package is served).
  *
  * Slothlet's own files are slothlet's: `imports` maps only what any script of the page may import (the main entry,
  * the runtime and the manifest resolver), and every other specifier of slothlet's is mapped under `scopes`, for
- * slothlet's own files alone (its code folders and entry files under `slothletBase`). An api file, or any other
+ * slothlet's own files alone (its code folders and entry files under `base`). An api file, or any other
  * script, importing one of them by its specifier fails to resolve it. Inline the whole object, `scopes` included.
  *
- * @param {string} [slothletBase="/node_modules/@cldmv/slothlet/"] - URL/path prefix where the
+ * @param {string} [base="/node_modules/@cldmv/slothlet/"] - URL/path prefix where the
  *   `@cldmv/slothlet` package is served in the browser. Defaults to the conventional node_modules
  *   location; override with a CDN URL, an Electron protocol path, or `"/"` when the package is
  *   served at the web root.
  * @returns {Promise<{ imports: Object<string,string>, scopes: Object<string, Object<string,string>> }>} An importmap
  *   object ready to inline as `<script type="importmap">`.
  */
-async function generateImportMap(slothletBase = DEFAULT_SLOTHLET_BASE) {
-	const base = StringMethods.endsWith(String(slothletBase), "/") ? String(slothletBase) : `${slothletBase}/`;
+async function generateImportMap(base = DEFAULT_SLOTHLET_BASE) {
+	const served = StringMethods.endsWith(String(base), "/") ? String(base) : `${base}/`;
 	const root = slothletPackageRoot();
 	const imports = {};
 	// Slothlet's own specifiers, for its own files (see PAGE_SPECIFIERS).
@@ -508,10 +522,10 @@ async function generateImportMap(slothletBase = DEFAULT_SLOTHLET_BASE) {
 	// Where slothlet's own files are served: a code folder (`src/`, `dist/`) or an entry file, per mapped file.
 	const ownFiles = new Set();
 	const place = (spec, rel) => {
-		(SetMethods.has(PAGE_SPECIFIERS, spec) ? imports : own)[spec] = base + rel;
+		(SetMethods.has(PAGE_SPECIFIERS, spec) ? imports : own)[spec] = served + rel;
 		SetMethods.add(
 			ownFiles,
-			StringMethods.includes(rel, "/") ? `${base}${StringMethods.slice(rel, 0, StringMethods.indexOf(rel, "/") + 1)}` : base + rel
+			StringMethods.includes(rel, "/") ? `${served}${StringMethods.slice(rel, 0, StringMethods.indexOf(rel, "/") + 1)}` : served + rel
 		);
 	};
 
@@ -557,12 +571,12 @@ async function generateImportMap(slothletBase = DEFAULT_SLOTHLET_BASE) {
 		const packRoot = path.dirname(fileURLToPath(import.meta.resolve("@cldmv/slothlet-i18n/package.json")));
 		// Swap the final `@cldmv/slothlet` segment for the pack, preserving any `@version` suffix so a
 		// versioned CDN base (e.g. .../@cldmv/slothlet@3/) maps to .../@cldmv/slothlet-i18n@3/ not the slothlet base.
-		const packBase = regExpReplace(/@cldmv\/slothlet(@[^/]+)?\/$/, base, "@cldmv/slothlet-i18n$1/");
+		const packBase = regExpReplace(/@cldmv\/slothlet(@[^/]+)?\/$/, served, "@cldmv/slothlet-i18n$1/");
 		// Only enumerate pack locales when the swap actually fired — i.e. `base` ended with the
 		// `@cldmv/slothlet` segment. For a custom base served elsewhere (e.g. at "/") the replace is a
 		// no-op and packBase would point back into the slothlet base; emit nothing rather than wrong
 		// entries (the consumer can supply a pack base explicitly).
-		if (packBase !== base) {
+		if (packBase !== served) {
 			for (
 				let ofIndex = 0, ofList = filterList(await fs.readdir(path.join(packRoot, "languages")), (n) => StringMethods.endsWith(n, ".json"));
 				ofIndex < ofList.length;
@@ -797,7 +811,7 @@ async function scanApiDirSpecifiers(apiDir) {
  * each from the consumer tree ({@link resolvePackageRoot}), expands its `exports`
  * ({@link collectPackageSpecifiers}), and rebases the targets onto where that package is served
  * (`packagesBase` + package name). Slothlet's own specifiers are skipped here — they're covered by
- * the focused collector under `slothletBase`. Every entry is verified to exist on disk so a generated
+ * the focused collector under `base`. Every entry is verified to exist on disk so a generated
  * importmap never carries a URL that 404s by construction. Packages that don't resolve from the
  * consumer tree, or expose no `exports`, are left to the page's prefix map. (#297)
  *
@@ -811,7 +825,7 @@ async function collectGraphImports(apiDir, packagesBase) {
 	const names = new Set();
 	for (const spec of setValues(await scanApiDirSpecifiers(absApiDir))) {
 		const name = packageNameOf(spec);
-		// slothlet's own surface is emitted by generateImportMap under slothletBase — don't double-map it.
+		// slothlet's own surface is emitted by generateImportMap under base — don't double-map it.
 		if (!name || name === "@cldmv/slothlet") continue;
 		SetMethods.add(names, name);
 	}
@@ -834,15 +848,15 @@ async function collectGraphImports(apiDir, packagesBase) {
 }
 
 /**
- * Derive where sibling packages are served from `slothletBase`.
+ * Derive where sibling packages are served from `base`.
  *
  * Sibling packages sit next to `@cldmv/slothlet` under a shared root — a `node_modules` root served
  * at the web root, or a CDN root (`https://cdn/@cldmv/slothlet@3/` → `https://cdn/`). Strip the
- * trailing `@cldmv/slothlet[@version]/` segment to get that root. When `slothletBase` isn't the
+ * trailing `@cldmv/slothlet[@version]/` segment to get that root. When `base` isn't the
  * standard package layout (e.g. slothlet served at `"/"`), fall back to the conventional
  * `"/node_modules/"` root.
  *
- * @param {string} base - The normalized (trailing-slash) `slothletBase`.
+ * @param {string} base - The normalized (trailing-slash) `base`.
  * @returns {string} The served base for sibling packages (ends with `/`).
  */
 function derivePackagesBase(base) {
@@ -863,18 +877,18 @@ function derivePackagesBase(base) {
  * renderer: inline `importmap` into the page's importmap script tag, and pass `manifest` (plus a
  * `resolveModuleSpecifier` for your API base) to `slothlet()`.
  *
- * The importmap covers two surfaces. First, slothlet's own modules (rebased onto `slothletBase`).
+ * The importmap covers two surfaces. First, slothlet's own modules (rebased onto `base`).
  * Second — and this is what the registered API leaves need — the **exact `exports` subpaths** of the
  * other packages in the browser graph: the generator scans the `apiDir` leaves for the packages they
  * import, reads each package's `package.json` `exports`, and emits the redirected subpath keys a
  * plain prefix map can't produce (`@scope/ext/errors` → `…/@scope/ext/src/lib/errors.mjs`). Without
  * these, a subpath the `exports` map redirects resolves to a literal URL and 404s in the browser, so
  * consumers previously hand-maintained allowlists. Those sibling packages are served next to
- * `@cldmv/slothlet` under a base **derived** from `slothletBase` (its node_modules/CDN parent). (#297)
+ * `@cldmv/slothlet` under a base **derived** from `base` (its node_modules/CDN parent). (#297)
  *
  * @param {string} apiDir - Absolute or relative path to the API root directory.
  * @param {object} [options] - Options.
- * @param {string} [options.slothletBase="/node_modules/@cldmv/slothlet/"] - URL/path prefix where
+ * @param {string} [options.base="/node_modules/@cldmv/slothlet/"] - URL/path prefix where
  *   the `@cldmv/slothlet` package is served in the browser. Defaults to the conventional
  *   node_modules location (slothlet installed as a dependency, node_modules served at the web
  *   root). Override with a CDN URL, an Electron protocol path, or `"/"` when the package is served
@@ -882,11 +896,11 @@ function derivePackagesBase(base) {
  * @returns {Promise<{ manifest: { files: Array, directories: Array }, importmap: { imports: Object<string,string>, scopes: Object<string, Object<string,string>> } }>}
  *   The API manifest and slothlet's own browser importmap (see {@link generateImportMap} for its `scopes`).
  *
- * @throws {SlothletError} `GENERATE_BROWSER_ASSETS_SLOTHLET_BASE_INVALID` if `options.slothletBase` is provided but is not a string.
+ * @throws {SlothletError} `GENERATE_BROWSER_ASSETS_SLOTHLET_BASE_INVALID` if `options.base` is provided but is not a string.
  *
  * @example
  * // Build step — slothlet installed in node_modules (default base), ship both to the renderer.
- * import { generateBrowserAssets } from "@cldmv/slothlet/helpers/generate-manifest";
+ * import { generateBrowserAssets } from "#helpers/generate-manifest";
  * const { manifest, importmap } = await generateBrowserAssets("./src/api");
  * // → inline importmap: `<script type="importmap">${JSON.stringify(importmap)}</script>`
  * // → pass manifest to slothlet({ manifest, resolveModuleSpecifier })
@@ -894,24 +908,20 @@ function derivePackagesBase(base) {
  * @example
  * // Override the base for a CDN (or "/" when the package is served at the web root).
  * const { manifest, importmap } = await generateBrowserAssets("./src/api", {
- *   slothletBase: "https://cdn.example.com/@cldmv/slothlet@3/"
+ *   base: "https://cdn.example.com/@cldmv/slothlet@3/"
  * });
  */
 async function generateBrowserAssets(apiDir, options = {}) {
-	const { slothletBase = DEFAULT_SLOTHLET_BASE } = options;
-	if (typeof slothletBase !== "string") {
-		throw new SlothletError("GENERATE_BROWSER_ASSETS_SLOTHLET_BASE_INVALID", { received: typeof slothletBase }, null, {
+	const { base = DEFAULT_SLOTHLET_BASE } = options;
+	if (typeof base !== "string") {
+		throw new SlothletError("GENERATE_BROWSER_ASSETS_SLOTHLET_BASE_INVALID", { received: typeof base }, null, {
 			validationError: true
 		});
 	}
-	// Sibling packages sit next to @cldmv/slothlet under a shared served root, derived from slothletBase.
-	const base = StringMethods.endsWith(String(slothletBase), "/") ? String(slothletBase) : `${slothletBase}/`;
-	const packagesBase = derivePackagesBase(base);
-	const unpacked1 = await promiseAll([
-			generateManifest(apiDir),
-			generateImportMap(slothletBase),
-			collectGraphImports(apiDir, packagesBase)
-		]),
+	// Sibling packages sit next to @cldmv/slothlet under a shared served root, derived from base.
+	const prefix = StringMethods.endsWith(base, "/") ? base : `${base}/`;
+	const packagesBase = derivePackagesBase(prefix);
+	const unpacked1 = await promiseAll([generateManifest(apiDir), generateImportMap(base), collectGraphImports(apiDir, packagesBase)]),
 		manifest = unpacked1[0],
 		importmap = unpacked1[1],
 		graphImports = unpacked1[2];

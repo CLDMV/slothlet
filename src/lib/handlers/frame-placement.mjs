@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-13T21:47:57-08:00 (1794635277)
+ *	@Last modified time: 2026-11-16T16:16:09-08:00 (1794874569)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -25,14 +25,14 @@
  * @module @cldmv/slothlet/handlers/frame-placement
  * @internal
  */
-import { isNode, util } from "@cldmv/slothlet/helpers/platform";
+import { isNode, util } from "#helpers/platform";
 import {
 	rememberNewest,
 	LOADED_BY_SPECIFIER,
 	VITE_HOST_SCRIPTS,
 	VITE_LOADED_BY,
 	internals as instanceImportsInternals
-} from "@cldmv/slothlet/helpers/instance-imports";
+} from "#helpers/instance-imports";
 import { ceilingMembers, combineCeilings, internals as trustedRootInternals } from "#handlers/trusted-root";
 import {
 	appendList,
@@ -83,10 +83,10 @@ import {
 	WeakRefMethods,
 	WeakSet,
 	WeakSetMethods
-} from "@cldmv/slothlet/helpers/intrinsics";
-import { SlothletError } from "@cldmv/slothlet/errors";
-import { hasEngineStack, readStack, stackBudget, unreadError } from "@cldmv/slothlet/helpers/stack-read";
-import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "@cldmv/slothlet/helpers/instance-imports";
+} from "#helpers/intrinsics";
+import { SlothletError } from "#errors";
+import { hasEngineStack, readStack, stackBudget, unreadError } from "#helpers/stack-read";
+import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "#helpers/instance-imports";
 const {
 	instanceCommonJSFiles,
 	instanceCommonJSVersion,

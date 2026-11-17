@@ -2,12 +2,12 @@
  *
  *	@Project: @cldmv/slothlet
  *	@Filename: /tests/vitests/suites/permissions/captured-prototype-methods-lint.test.vitest.mjs
- *	@Date: 2026-11-16T03:00:00-08:00 (1794826800)
+ *	@Date: 2026-11-16T01:19:58-08:00 (1794820798)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T03:00:00-08:00 (1794826800)
+ *	@Last modified time: 2026-11-16T16:17:04-08:00 (1794874624)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -52,7 +52,7 @@ function lint(body, head = "") {
 }
 
 const IMPORTS =
-	'import { ArrayMethods, MapMethods, mapEntries, setValues, listSteps, generatorSteps, Arrays } from "@cldmv/slothlet/helpers/intrinsics";\nimport path from "node:path";';
+	'import { ArrayMethods, MapMethods, mapEntries, setValues, listSteps, generatorSteps, Arrays } from "#helpers/intrinsics";\nimport path from "node:path";';
 
 describe("slothlet/captured-prototype-methods", () => {
 	it.each([
