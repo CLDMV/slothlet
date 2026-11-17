@@ -79,10 +79,7 @@ export async function generate(options = {}) {
 	// promises a SlothletError(INVALID_CONFIG) for bad input — don't let a raw
 	// TypeError escape from `options.dir` dereference.
 	if (options === null || typeof options !== "object" || Arrays.isArray(options)) {
-		throw new SlothletError(
-			"INVALID_CONFIG",
-			{ option: "typegen.options", expected: "plain object", value: options }
-		);
+		throw new SlothletError("INVALID_CONFIG", { option: "typegen.options", expected: "plain object", value: options });
 	}
 
 	assertOptionKeys(options, "typegen.generate");
@@ -90,10 +87,7 @@ export async function generate(options = {}) {
 	assertOption(options.output, "output");
 	assertOption(options.name, "name");
 	if (options.augment !== undefined && typeof options.augment !== "boolean") {
-		throw new SlothletError(
-			"INVALID_CONFIG",
-			{ option: "typegen.augment", expected: "boolean", value: options.augment }
-		);
+		throw new SlothletError("INVALID_CONFIG", { option: "typegen.augment", expected: "boolean", value: options.augment });
 	}
 
 	const api = await slothlet({
@@ -125,9 +119,6 @@ export async function generate(options = {}) {
  */
 function assertOption(value, name) {
 	if (typeof value !== "string" || value.length === 0) {
-		throw new SlothletError(
-			"INVALID_CONFIG",
-			{ option: `typegen.${name}`, expected: "non-empty string", value }
-		);
+		throw new SlothletError("INVALID_CONFIG", { option: `typegen.${name}`, expected: "non-empty string", value });
 	}
 }

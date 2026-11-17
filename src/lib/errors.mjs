@@ -20,7 +20,18 @@
  */
 import { translate, registerWarningClass } from "#i18n";
 import { detectHint } from "#helpers/hint-detector";
-import { ArrayMethods, describeThrown, Error, Errors, filterList, Objects, stringOf, Symbols, WeakMap, WeakMapMethods } from "#helpers/intrinsics";
+import {
+	ArrayMethods,
+	describeThrown,
+	Error,
+	Errors,
+	filterList,
+	Objects,
+	stringOf,
+	Symbols,
+	WeakMap,
+	WeakMapMethods
+} from "#helpers/intrinsics";
 
 /**
  * Custom error class for Slothlet-specific errors with details and i18n

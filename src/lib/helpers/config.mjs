@@ -323,10 +323,11 @@ export function normalizePermissionsConfig(permissions) {
 	const gatingGroup = configGroup(permissions.gating, "permissions.gating");
 	const buffers = gatingGroup.buffers === undefined ? false : gatingGroup.buffers;
 	if (typeof buffers !== "boolean" && !(Numbers.isSafeInteger(buffers) && buffers >= 0)) {
-		throw new SlothletError(
-			"INVALID_CONFIG",
-			{ option: "permissions.gating.buffers", value: buffers, expected: "boolean | whole number of kilobytes" }
-		);
+		throw new SlothletError("INVALID_CONFIG", {
+			option: "permissions.gating.buffers",
+			value: buffers,
+			expected: "boolean | whole number of kilobytes"
+		});
 	}
 	const gating = {
 		buffers,
@@ -334,10 +335,7 @@ export function normalizePermissionsConfig(permissions) {
 	};
 
 	if (permissions.rules !== undefined && !Arrays.isArray(permissions.rules)) {
-		throw new SlothletError(
-			"INVALID_CONFIG",
-			{ option: "permissions.rules", value: permissions.rules, expected: "array" }
-		);
+		throw new SlothletError("INVALID_CONFIG", { option: "permissions.rules", value: permissions.rules, expected: "array" });
 	}
 	const rules = Arrays.isArray(permissions.rules) ? permissions.rules : [];
 
@@ -361,10 +359,7 @@ export function normalizePermissionsConfig(permissions) {
 		'"deny", "notify", or "allow"'
 	);
 	if (eventsGroup.rules !== undefined && !Arrays.isArray(eventsGroup.rules)) {
-		throw new SlothletError(
-			"INVALID_CONFIG",
-			{ option: "permissions.events.rules", value: eventsGroup.rules, expected: "array" }
-		);
+		throw new SlothletError("INVALID_CONFIG", { option: "permissions.events.rules", value: eventsGroup.rules, expected: "array" });
 	}
 	const eventRules = Arrays.isArray(eventsGroup.rules) ? eventsGroup.rules : [];
 
@@ -761,10 +756,11 @@ export class Config extends ComponentBase {
 	 */
 	normalizeRoutinesGroup(routines) {
 		if (Arrays.isArray(routines)) {
-			throw new this.SlothletError(
-				"INVALID_CONFIG",
-				{ option: "routines", value: "array", expected: 'an object, e.g. { entries: ["initialize:startup", "shutdown:shutdown"] }' }
-			);
+			throw new this.SlothletError("INVALID_CONFIG", {
+				option: "routines",
+				value: "array",
+				expected: 'an object, e.g. { entries: ["initialize:startup", "shutdown:shutdown"] }'
+			});
 		}
 		const group = configGroup(routines, "routines");
 		return {

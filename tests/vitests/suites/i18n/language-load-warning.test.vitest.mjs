@@ -19,7 +19,7 @@
  * (the per-instance capture of #819). Outside any instance it lands on the process-level class.
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { describe, it, expect, afterEach, vi } from "vitest";
 import slothlet from "@cldmv/slothlet";
 import { SlothletWarning } from "@cldmv/slothlet/errors";
 import { language } from "@cldmv/slothlet/i18n";
@@ -38,7 +38,6 @@ const failed = (api) => api.slothlet.warnings.get().filter((w) => w.code === COD
 describe("a failed locale load is a coded SlothletWarning (#820)", () => {
 	let api;
 	let other;
-
 
 	afterEach(async () => {
 		vi.restoreAllMocks();

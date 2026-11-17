@@ -153,14 +153,11 @@ const EVENT_EFFECT_VALUES = Objects.freeze(setFrom(["deny", "notify", "allow"]))
  */
 export function validateModuleManifest(manifest, packageContext) {
 	if (!manifest || typeof manifest !== "object" || Arrays.isArray(manifest)) {
-		throw new SlothletError(
-			"MODULE_MANIFEST_INVALID",
-			{
-				package: packageContext?.packageName ?? "<unknown>",
-				manifest: packageContext?.manifestPath ?? "<unknown>",
-				reason: t("MODULE_MANIFEST_REASON_NOT_OBJECT")
-			}
-		);
+		throw new SlothletError("MODULE_MANIFEST_INVALID", {
+			package: packageContext?.packageName ?? "<unknown>",
+			manifest: packageContext?.manifestPath ?? "<unknown>",
+			reason: t("MODULE_MANIFEST_REASON_NOT_OBJECT")
+		});
 	}
 
 	const { packageName, packageVersion, packageDescription, packageRoot, manifestPath } = packageContext;
@@ -170,14 +167,11 @@ export function validateModuleManifest(manifest, packageContext) {
 	for (let ofIndex = 0, ofList = Objects.keys(manifest); ofIndex < ofList.length; ofIndex++) {
 		const key = ofList[ofIndex];
 		if (!SetMethods.has(ALLOWED_TOP_LEVEL_FIELDS, key)) {
-			throw new SlothletError(
-				"MODULE_MANIFEST_UNKNOWN_FIELD",
-				{
-					package: packageName,
-					manifest: manifestPath,
-					field: key
-				}
-			);
+			throw new SlothletError("MODULE_MANIFEST_UNKNOWN_FIELD", {
+				package: packageName,
+				manifest: manifestPath,
+				field: key
+			});
 		}
 	}
 
@@ -186,196 +180,148 @@ export function validateModuleManifest(manifest, packageContext) {
 	const hasFormat1 = hasAnyField(manifest, FORMAT_1_FIELDS),
 		hasFormat2 = hasAnyField(manifest, FORMAT_2_FIELDS);
 	if (hasFormat1 && hasFormat2) {
-		throw new SlothletError(
-			"MODULE_MANIFEST_INVALID",
-			{
-				package: packageName,
-				manifest: manifestPath,
-				reason: t("MODULE_MANIFEST_REASON_MIXED_FORMATS")
-			}
-		);
+		throw new SlothletError("MODULE_MANIFEST_INVALID", {
+			package: packageName,
+			manifest: manifestPath,
+			reason: t("MODULE_MANIFEST_REASON_MIXED_FORMATS")
+		});
 	}
 	const names = hasFormat1 ? FORMAT_1_NAMES : FORMAT_2_NAMES;
 	const expectedSchema = hasFormat1 ? 1 : 2;
 
 	// schema: required, must match the format
 	if (manifest[names.schema] === undefined) {
-		throw new SlothletError(
-			"MODULE_MANIFEST_INVALID",
-			{
-				package: packageName,
-				manifest: manifestPath,
-				reason: t("MODULE_MANIFEST_REASON_MISSING_FIELD", { field: names.schema })
-			}
-		);
+		throw new SlothletError("MODULE_MANIFEST_INVALID", {
+			package: packageName,
+			manifest: manifestPath,
+			reason: t("MODULE_MANIFEST_REASON_MISSING_FIELD", { field: names.schema })
+		});
 	}
 	if (manifest[names.schema] !== expectedSchema) {
-		throw new SlothletError(
-			"MODULE_MANIFEST_FORMAT_UNSUPPORTED",
-			{
-				package: packageName,
-				schema: String(manifest[names.schema])
-			}
-		);
+		throw new SlothletError("MODULE_MANIFEST_FORMAT_UNSUPPORTED", {
+			package: packageName,
+			schema: String(manifest[names.schema])
+		});
 	}
 
 	// mount: required, string or non-empty array of non-empty strings
 	if (manifest[names.mount] === undefined) {
-		throw new SlothletError(
-			"MODULE_MANIFEST_INVALID",
-			{
-				package: packageName,
-				manifest: manifestPath,
-				reason: t("MODULE_MANIFEST_REASON_MISSING_FIELD", { field: names.mount })
-			}
-		);
+		throw new SlothletError("MODULE_MANIFEST_INVALID", {
+			package: packageName,
+			manifest: manifestPath,
+			reason: t("MODULE_MANIFEST_REASON_MISSING_FIELD", { field: names.mount })
+		});
 	}
 	const mountSegments = normalizeMount(manifest[names.mount], names.mount, packageName, manifestPath);
 
 	// Reserved-mount root check (G3) — runs at manifest layer, not downstream.
 	if (SetMethods.has(RESERVED_MOUNT_ROOTS, mountSegments[0])) {
-		throw new SlothletError(
-			"MODULE_RESERVED_MOUNT",
-			{
-				package: packageName,
-				mount: copyList(mountSegments)
-			}
-		);
+		throw new SlothletError("MODULE_RESERVED_MOUNT", {
+			package: packageName,
+			mount: copyList(mountSegments)
+		});
 	}
 
 	// base: required, string, lexically inside packageRoot
 	const base = manifest[names.base];
 	if (base === undefined) {
-		throw new SlothletError(
-			"MODULE_MANIFEST_INVALID",
-			{
-				package: packageName,
-				manifest: manifestPath,
-				reason: t("MODULE_MANIFEST_REASON_MISSING_FIELD", { field: names.base })
-			}
-		);
+		throw new SlothletError("MODULE_MANIFEST_INVALID", {
+			package: packageName,
+			manifest: manifestPath,
+			reason: t("MODULE_MANIFEST_REASON_MISSING_FIELD", { field: names.base })
+		});
 	}
 	if (typeof base !== "string" || base.length === 0) {
-		throw new SlothletError(
-			"MODULE_MANIFEST_INVALID",
-			{
-				package: packageName,
-				manifest: manifestPath,
-				reason: t("MODULE_MANIFEST_REASON_FIELD_TYPE", { field: names.base, expected: t("MODULE_MANIFEST_EXPECTED_NON_EMPTY_STRING") })
-			}
-		);
+		throw new SlothletError("MODULE_MANIFEST_INVALID", {
+			package: packageName,
+			manifest: manifestPath,
+			reason: t("MODULE_MANIFEST_REASON_FIELD_TYPE", { field: names.base, expected: t("MODULE_MANIFEST_EXPECTED_NON_EMPTY_STRING") })
+		});
 	}
 	validateBaseContainment(base, packageRoot, packageName);
 
 	// name: optional in manifest; if present, MUST match package.json's name.
 	if (manifest.name !== undefined) {
 		if (typeof manifest.name !== "string") {
-			throw new SlothletError(
-				"MODULE_MANIFEST_INVALID",
-				{
-					package: packageName,
-					manifest: manifestPath,
-					reason: t("MODULE_MANIFEST_REASON_FIELD_TYPE", { field: "name", expected: t("MODULE_MANIFEST_EXPECTED_STRING") })
-				}
-			);
+			throw new SlothletError("MODULE_MANIFEST_INVALID", {
+				package: packageName,
+				manifest: manifestPath,
+				reason: t("MODULE_MANIFEST_REASON_FIELD_TYPE", { field: "name", expected: t("MODULE_MANIFEST_EXPECTED_STRING") })
+			});
 		}
 		if (manifest.name !== packageName) {
-			throw new SlothletError(
-				"MODULE_MANIFEST_NAME_MISMATCH",
-				{
-					package: packageName,
-					expected: packageName,
-					received: manifest.name
-				}
-			);
+			throw new SlothletError("MODULE_MANIFEST_NAME_MISMATCH", {
+				package: packageName,
+				expected: packageName,
+				received: manifest.name
+			});
 		}
 	}
 
 	// version: optional in manifest; if present, MUST match package.json's version.
 	if (manifest.version !== undefined) {
 		if (typeof manifest.version !== "string") {
-			throw new SlothletError(
-				"MODULE_MANIFEST_INVALID",
-				{
-					package: packageName,
-					manifest: manifestPath,
-					reason: t("MODULE_MANIFEST_REASON_FIELD_TYPE", { field: "version", expected: t("MODULE_MANIFEST_EXPECTED_STRING") })
-				}
-			);
+			throw new SlothletError("MODULE_MANIFEST_INVALID", {
+				package: packageName,
+				manifest: manifestPath,
+				reason: t("MODULE_MANIFEST_REASON_FIELD_TYPE", { field: "version", expected: t("MODULE_MANIFEST_EXPECTED_STRING") })
+			});
 		}
 		if (manifest.version !== packageVersion) {
-			throw new SlothletError(
-				"MODULE_MANIFEST_VERSION_MISMATCH",
-				{
-					package: packageName,
-					expected: packageVersion,
-					received: manifest.version
-				}
-			);
+			throw new SlothletError("MODULE_MANIFEST_VERSION_MISMATCH", {
+				package: packageName,
+				expected: packageVersion,
+				received: manifest.version
+			});
 		}
 	}
 
 	// description: optional; manifest overrides package.json silently.
 	if (manifest.description !== undefined && typeof manifest.description !== "string") {
-		throw new SlothletError(
-			"MODULE_MANIFEST_INVALID",
-			{
-				package: packageName,
-				manifest: manifestPath,
-				reason: t("MODULE_MANIFEST_REASON_FIELD_TYPE", { field: "description", expected: t("MODULE_MANIFEST_EXPECTED_STRING") })
-			}
-		);
+		throw new SlothletError("MODULE_MANIFEST_INVALID", {
+			package: packageName,
+			manifest: manifestPath,
+			reason: t("MODULE_MANIFEST_REASON_FIELD_TYPE", { field: "description", expected: t("MODULE_MANIFEST_EXPECTED_STRING") })
+		});
 	}
 
 	// kind: optional, free-form string
 	if (manifest.kind !== undefined && typeof manifest.kind !== "string") {
-		throw new SlothletError(
-			"MODULE_MANIFEST_INVALID",
-			{
-				package: packageName,
-				manifest: manifestPath,
-				reason: t("MODULE_MANIFEST_REASON_FIELD_TYPE", { field: "kind", expected: t("MODULE_MANIFEST_EXPECTED_STRING") })
-			}
-		);
+		throw new SlothletError("MODULE_MANIFEST_INVALID", {
+			package: packageName,
+			manifest: manifestPath,
+			reason: t("MODULE_MANIFEST_REASON_FIELD_TYPE", { field: "kind", expected: t("MODULE_MANIFEST_EXPECTED_STRING") })
+		});
 	}
 
 	// priority: optional, number, defaults to 0
 	if (manifest.priority !== undefined && (typeof manifest.priority !== "number" || !Numbers.isFinite(manifest.priority))) {
-		throw new SlothletError(
-			"MODULE_MANIFEST_INVALID",
-			{
-				package: packageName,
-				manifest: manifestPath,
-				reason: t("MODULE_MANIFEST_REASON_FIELD_TYPE", { field: "priority", expected: t("MODULE_MANIFEST_EXPECTED_FINITE_NUMBER") })
-			}
-		);
+		throw new SlothletError("MODULE_MANIFEST_INVALID", {
+			package: packageName,
+			manifest: manifestPath,
+			reason: t("MODULE_MANIFEST_REASON_FIELD_TYPE", { field: "priority", expected: t("MODULE_MANIFEST_EXPECTED_FINITE_NUMBER") })
+		});
 	}
 
 	// dependencies: optional, object with string values
 	if (manifest.dependencies !== undefined) {
 		if (typeof manifest.dependencies !== "object" || manifest.dependencies === null || Arrays.isArray(manifest.dependencies)) {
-			throw new SlothletError(
-				"MODULE_MANIFEST_INVALID",
-				{
-					package: packageName,
-					manifest: manifestPath,
-					reason: t("MODULE_MANIFEST_REASON_FIELD_TYPE", { field: "dependencies", expected: t("MODULE_MANIFEST_EXPECTED_PLAIN_OBJECT") })
-				}
-			);
+			throw new SlothletError("MODULE_MANIFEST_INVALID", {
+				package: packageName,
+				manifest: manifestPath,
+				reason: t("MODULE_MANIFEST_REASON_FIELD_TYPE", { field: "dependencies", expected: t("MODULE_MANIFEST_EXPECTED_PLAIN_OBJECT") })
+			});
 		}
 		for (let ofIndex = 0, ofList = Objects.entries(manifest.dependencies); ofIndex < ofList.length; ofIndex++) {
 			const ofEntry = ofList[ofIndex],
 				depName = ofEntry[0],
 				depValue = ofEntry[1];
 			if (typeof depValue !== "string") {
-				throw new SlothletError(
-					"MODULE_MANIFEST_INVALID",
-					{
-						package: packageName,
-						manifest: manifestPath,
-						reason: t("MODULE_MANIFEST_REASON_DEPENDENCY_TYPE", { dependency: depName })
-					}
-				);
+				throw new SlothletError("MODULE_MANIFEST_INVALID", {
+					package: packageName,
+					manifest: manifestPath,
+					reason: t("MODULE_MANIFEST_REASON_DEPENDENCY_TYPE", { dependency: depName })
+				});
 			}
 		}
 	}
@@ -393,14 +339,11 @@ export function validateModuleManifest(manifest, packageContext) {
 	// metadata: optional, plain object (free-form contents allowed inside)
 	if (manifest.metadata !== undefined) {
 		if (typeof manifest.metadata !== "object" || manifest.metadata === null || Arrays.isArray(manifest.metadata)) {
-			throw new SlothletError(
-				"MODULE_MANIFEST_INVALID",
-				{
-					package: packageName,
-					manifest: manifestPath,
-					reason: t("MODULE_MANIFEST_REASON_FIELD_TYPE", { field: "metadata", expected: t("MODULE_MANIFEST_EXPECTED_PLAIN_OBJECT") })
-				}
-			);
+			throw new SlothletError("MODULE_MANIFEST_INVALID", {
+				package: packageName,
+				manifest: manifestPath,
+				reason: t("MODULE_MANIFEST_REASON_FIELD_TYPE", { field: "metadata", expected: t("MODULE_MANIFEST_EXPECTED_PLAIN_OBJECT") })
+			});
 		}
 	}
 
@@ -434,51 +377,39 @@ export function validateModuleManifest(manifest, packageContext) {
 function normalizeMount(mount, field, packageName, manifestPath) {
 	if (typeof mount === "string") {
 		if (mount.length === 0) {
-			throw new SlothletError(
-				"MODULE_MANIFEST_INVALID",
-				{
-					package: packageName,
-					manifest: manifestPath,
-					reason: t("MODULE_MANIFEST_REASON_MOUNT_SHAPE", { field })
-				}
-			);
+			throw new SlothletError("MODULE_MANIFEST_INVALID", {
+				package: packageName,
+				manifest: manifestPath,
+				reason: t("MODULE_MANIFEST_REASON_MOUNT_SHAPE", { field })
+			});
 		}
 		return splitText(mount, ".");
 	}
 	if (Arrays.isArray(mount)) {
 		if (mount.length === 0) {
-			throw new SlothletError(
-				"MODULE_MANIFEST_INVALID",
-				{
-					package: packageName,
-					manifest: manifestPath,
-					reason: t("MODULE_MANIFEST_REASON_MOUNT_SHAPE", { field })
-				}
-			);
+			throw new SlothletError("MODULE_MANIFEST_INVALID", {
+				package: packageName,
+				manifest: manifestPath,
+				reason: t("MODULE_MANIFEST_REASON_MOUNT_SHAPE", { field })
+			});
 		}
 		for (let ofIndex = 0, ofList = mount; ofIndex < ofList.length; ofIndex++) {
 			const segment = ofList[ofIndex];
 			if (typeof segment !== "string" || segment.length === 0) {
-				throw new SlothletError(
-					"MODULE_MANIFEST_INVALID",
-					{
-						package: packageName,
-						manifest: manifestPath,
-						reason: t("MODULE_MANIFEST_REASON_MOUNT_ENTRIES", { field })
-					}
-				);
+				throw new SlothletError("MODULE_MANIFEST_INVALID", {
+					package: packageName,
+					manifest: manifestPath,
+					reason: t("MODULE_MANIFEST_REASON_MOUNT_ENTRIES", { field })
+				});
 			}
 		}
 		return copyList(mount);
 	}
-	throw new SlothletError(
-		"MODULE_MANIFEST_INVALID",
-		{
-			package: packageName,
-			manifest: manifestPath,
-			reason: t("MODULE_MANIFEST_REASON_MOUNT_SHAPE", { field })
-		}
-	);
+	throw new SlothletError("MODULE_MANIFEST_INVALID", {
+		package: packageName,
+		manifest: manifestPath,
+		reason: t("MODULE_MANIFEST_REASON_MOUNT_SHAPE", { field })
+	});
 }
 
 /**
@@ -494,15 +425,12 @@ function validateBaseContainment(base, packageRoot, packageName) {
 	const resolved = path.resolve(packageRoot, base);
 	const rootWithSep = StringMethods.endsWith(packageRoot, path.sep) ? packageRoot : packageRoot + path.sep;
 	if (resolved !== packageRoot && !StringMethods.startsWith(resolved, rootWithSep)) {
-		throw new SlothletError(
-			"MODULE_PATH_TRAVERSAL",
-			{
-				package: packageName,
-				base,
-				resolved,
-				folder: packageRoot
-			}
-		);
+		throw new SlothletError("MODULE_PATH_TRAVERSAL", {
+			package: packageName,
+			base,
+			resolved,
+			folder: packageRoot
+		});
 	}
 }
 
@@ -517,59 +445,44 @@ function validateBaseContainment(base, packageRoot, packageName) {
  */
 function validatePermissions(permissions, packageName, manifestPath) {
 	if (!Arrays.isArray(permissions)) {
-		throw new SlothletError(
-			"MODULE_MANIFEST_INVALID",
-			{
-				package: packageName,
-				manifest: manifestPath,
-				reason: t("MODULE_MANIFEST_REASON_FIELD_TYPE", {
-					field: "permissions",
-					expected: t("MODULE_MANIFEST_EXPECTED_ARRAY_OF_RULE_OBJECTS")
-				})
-			}
-		);
+		throw new SlothletError("MODULE_MANIFEST_INVALID", {
+			package: packageName,
+			manifest: manifestPath,
+			reason: t("MODULE_MANIFEST_REASON_FIELD_TYPE", {
+				field: "permissions",
+				expected: t("MODULE_MANIFEST_EXPECTED_ARRAY_OF_RULE_OBJECTS")
+			})
+		});
 	}
 	for (let i = 0; i < permissions.length; i++) {
 		const rule = permissions[i];
 		if (!rule || typeof rule !== "object" || Arrays.isArray(rule)) {
-			throw new SlothletError(
-				"MODULE_MANIFEST_INVALID",
-				{
-					package: packageName,
-					manifest: manifestPath,
-					reason: t("MODULE_MANIFEST_REASON_PERMISSION_RULE", { index: i })
-				}
-			);
+			throw new SlothletError("MODULE_MANIFEST_INVALID", {
+				package: packageName,
+				manifest: manifestPath,
+				reason: t("MODULE_MANIFEST_REASON_PERMISSION_RULE", { index: i })
+			});
 		}
 		if (typeof rule.caller !== "string" || rule.caller.length === 0) {
-			throw new SlothletError(
-				"MODULE_MANIFEST_INVALID",
-				{
-					package: packageName,
-					manifest: manifestPath,
-					reason: t("MODULE_MANIFEST_REASON_PERMISSION_CALLER", { index: i })
-				}
-			);
+			throw new SlothletError("MODULE_MANIFEST_INVALID", {
+				package: packageName,
+				manifest: manifestPath,
+				reason: t("MODULE_MANIFEST_REASON_PERMISSION_CALLER", { index: i })
+			});
 		}
 		if (typeof rule.target !== "string" || rule.target.length === 0) {
-			throw new SlothletError(
-				"MODULE_MANIFEST_INVALID",
-				{
-					package: packageName,
-					manifest: manifestPath,
-					reason: t("MODULE_MANIFEST_REASON_PERMISSION_TARGET", { index: i })
-				}
-			);
+			throw new SlothletError("MODULE_MANIFEST_INVALID", {
+				package: packageName,
+				manifest: manifestPath,
+				reason: t("MODULE_MANIFEST_REASON_PERMISSION_TARGET", { index: i })
+			});
 		}
 		if (!SetMethods.has(PERMISSION_EFFECT_VALUES, rule.effect)) {
-			throw new SlothletError(
-				"MODULE_MANIFEST_INVALID",
-				{
-					package: packageName,
-					manifest: manifestPath,
-					reason: t("MODULE_MANIFEST_REASON_PERMISSION_EFFECT", { index: i })
-				}
-			);
+			throw new SlothletError("MODULE_MANIFEST_INVALID", {
+				package: packageName,
+				manifest: manifestPath,
+				reason: t("MODULE_MANIFEST_REASON_PERMISSION_EFFECT", { index: i })
+			});
 		}
 	}
 }
@@ -587,40 +500,41 @@ function validatePermissions(permissions, packageName, manifestPath) {
  */
 function validateEventRules(events, packageName, manifestPath) {
 	if (!Arrays.isArray(events)) {
-		throw new SlothletError(
-			"MODULE_MANIFEST_INVALID",
-			{
-				package: packageName,
-				manifest: manifestPath,
-				reason: t("MODULE_MANIFEST_REASON_FIELD_TYPE", { field: "events", expected: t("MODULE_MANIFEST_EXPECTED_ARRAY_OF_RULE_OBJECTS") })
-			}
-		);
+		throw new SlothletError("MODULE_MANIFEST_INVALID", {
+			package: packageName,
+			manifest: manifestPath,
+			reason: t("MODULE_MANIFEST_REASON_FIELD_TYPE", { field: "events", expected: t("MODULE_MANIFEST_EXPECTED_ARRAY_OF_RULE_OBJECTS") })
+		});
 	}
 	for (let i = 0; i < events.length; i++) {
 		const rule = events[i];
 		if (!rule || typeof rule !== "object" || Arrays.isArray(rule)) {
-			throw new SlothletError(
-				"MODULE_MANIFEST_INVALID",
-				{ package: packageName, manifest: manifestPath, reason: t("MODULE_MANIFEST_REASON_PERMISSION_RULE", { index: i }) }
-			);
+			throw new SlothletError("MODULE_MANIFEST_INVALID", {
+				package: packageName,
+				manifest: manifestPath,
+				reason: t("MODULE_MANIFEST_REASON_PERMISSION_RULE", { index: i })
+			});
 		}
 		if (typeof rule.caller !== "string" || rule.caller.length === 0) {
-			throw new SlothletError(
-				"MODULE_MANIFEST_INVALID",
-				{ package: packageName, manifest: manifestPath, reason: t("MODULE_MANIFEST_REASON_PERMISSION_CALLER", { index: i }) }
-			);
+			throw new SlothletError("MODULE_MANIFEST_INVALID", {
+				package: packageName,
+				manifest: manifestPath,
+				reason: t("MODULE_MANIFEST_REASON_PERMISSION_CALLER", { index: i })
+			});
 		}
 		if (typeof rule.event !== "string" || rule.event.length === 0) {
-			throw new SlothletError(
-				"MODULE_MANIFEST_INVALID",
-				{ package: packageName, manifest: manifestPath, reason: t("MODULE_MANIFEST_REASON_EVENT_NAME", { index: i }) }
-			);
+			throw new SlothletError("MODULE_MANIFEST_INVALID", {
+				package: packageName,
+				manifest: manifestPath,
+				reason: t("MODULE_MANIFEST_REASON_EVENT_NAME", { index: i })
+			});
 		}
 		if (!SetMethods.has(EVENT_EFFECT_VALUES, rule.effect)) {
-			throw new SlothletError(
-				"MODULE_MANIFEST_INVALID",
-				{ package: packageName, manifest: manifestPath, reason: t("MODULE_MANIFEST_REASON_EVENT_EFFECT", { index: i }) }
-			);
+			throw new SlothletError("MODULE_MANIFEST_INVALID", {
+				package: packageName,
+				manifest: manifestPath,
+				reason: t("MODULE_MANIFEST_REASON_EVENT_EFFECT", { index: i })
+			});
 		}
 	}
 }

@@ -51,13 +51,6 @@ import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "#helpers/ins
  * Get current directory path
  * @private
  */
-/**
- * Placeholders that name a path as segments. An array given for one of them reads dotted in a message (`drivers.opensearch`), not
- * comma-joined like any other array.
- * @type {Record<string, boolean>}
- */
-const SEGMENT_KEYS = Objects.freeze({ mount: true, path: true });
-
 const translations_dirname = isNode ? path.dirname(url.fileURLToPath(import.meta.url)) : null;
 
 // `defaultTranslations` is imported as a JSON module at the top of this file, so the default

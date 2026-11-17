@@ -160,12 +160,12 @@ const alpha = api.slothlet.api.modules.sort(found, (a, b) => a.package.localeCom
 
 Mounts modules. The target says what to mount:
 
-| Target                                          | Mounts                                                                                               |
-| ----------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| a package name                                  | that module, looked up in the discovery cache (`discover()` runs first when the cache is empty)      |
-| a result this instance's `discover()` or `cache.get()` returned | that module                                                                          |
-| an array of names and results                   | the batch                                                                                            |
-| nothing, or only an options object              | every module `discover()` finds (with `options.discover`), ordered by `sort()` (with `options.sort`) |
+| Target                                                          | Mounts                                                                                               |
+| --------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| a package name                                                  | that module, looked up in the discovery cache (`discover()` runs first when the cache is empty)      |
+| a result this instance's `discover()` or `cache.get()` returned | that module                                                                                          |
+| an array of names and results                                   | the batch                                                                                            |
+| nothing, or only an options object                              | every module `discover()` finds (with `options.discover`), ordered by `sort()` (with `options.sort`) |
 
 Only results this instance's discovery returned count as a result: a result is recognised by identity, never by its shape. Any other object is the options, so `add({ discover: { prefix: "@org/" } })` is a discover run, and an object you built yourself is never mounted as a module.
 
@@ -200,17 +200,16 @@ await api.slothlet.api.modules.add({
 
 **Options:**
 
-| Option          | Default   | Applies to              | Description                                                                                                                                                                                                                            |
-| --------------- | --------- | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `collision` | `"merge"` | all                     | `collision.mode` (or the mode as a bare string): one of `"skip" \| "warn" \| "replace" \| "merge" \| "merge-replace" \| "error"`. When `"error"`, throws `MODULE_MOUNT_COLLISION` if the exact mount is already occupied.                                                           |
-| `version`       | none      | one module              | Disambiguator when the cache holds multiple versions of `name`.                                                                                                                                                                        |
-| `discover`      | `{}`      | a name, a discover run  | The `discover()` options: for the discover run, and for the lazy `discover()` a name triggers when the cache is empty.                                                                                                                 |
+| Option        | Default   | Applies to              | Description                                                                                                                                                                                                                            |
+| ------------- | --------- | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `collision`   | `"merge"` | all                     | `collision.mode` (or the mode as a bare string): one of `"skip" \| "warn" \| "replace" \| "merge" \| "merge-replace" \| "error"`. When `"error"`, throws `MODULE_MOUNT_COLLISION` if the exact mount is already occupied.              |
+| `version`     | none      | one module              | Disambiguator when the cache holds multiple versions of `name`.                                                                                                                                                                        |
+| `discover`    | `{}`      | a name, a discover run  | The `discover()` options: for the discover run, and for the lazy `discover()` a name triggers when the cache is empty.                                                                                                                 |
 | `failure`     | `"throw"` | a batch, a discover run | `"throw"` (default — throw on first failure, mounted entries remain), `"rollback"` (throw + best-effort unmount of entries mounted in this call), or `"best-effort"` (continue past failures, return `{ mounted, failed }` aggregate). |
-| `concurrency`   | `1`       | a batch, a discover run | Mount concurrency. `1` (default) = serial. `Infinity` = all-at-once via `Math.min(concurrency, items.length)`. Lifecycle event order tracks completion order under `concurrency > 1`.                                                  |
-| `sort`          | priority  | a discover run          | Comparator for the found results (see `sort()`).                                                                                                                                                                                       |
+| `concurrency` | `1`       | a batch, a discover run | Mount concurrency. `1` (default) = serial. `Infinity` = all-at-once via `Math.min(concurrency, items.length)`. Lifecycle event order tracks completion order under `concurrency > 1`.                                                  |
+| `sort`        | priority  | a discover run          | Comparator for the found results (see `sort()`).                                                                                                                                                                                       |
 
 **Return shape:** one module → `MountResult`. A batch or a discover run → `MountResult[]` under `"throw"` / `"rollback"`, `{ mounted: MountResult[], failed: FailureEntry[] }` under `"best-effort"`.
-
 
 **`MountResult`**:
 
@@ -276,19 +275,19 @@ api.slothlet.lifecycle.on("modules:discover-complete", ({ stale }) => {
 
 All errors throw `SlothletError` with typed codes. See `src/lib/i18n/languages/en-us.json` for the canonical messages and hints (translated across all 12 supported locales).
 
-| Code                                     | When                                                                            |
-| ---------------------------------------- | ------------------------------------------------------------------------------- |
-| `MODULE_MANIFEST_INVALID`                | Manifest fails JSON parse or schema validation                                  |
-| `MODULE_MANIFEST_UNKNOWN_FIELD`          | Unrecognized top-level field in manifest — use the `metadata` block for extras  |
-| `MODULE_MANIFEST_NAME_MISMATCH`          | Manifest `name` disagrees with `package.json`                                   |
-| `MODULE_MANIFEST_VERSION_MISMATCH`       | Manifest `version` disagrees with `package.json`                                |
-| `MODULE_PATH_TRAVERSAL`                  | `base` resolves outside the package root                                        |
-| `MODULE_MANIFEST_FORMAT_UNSUPPORTED`     | `schema` not `2`, or `schemaVersion` not `1`                                    |
-| `MODULE_PACKAGE_NOT_FOUND`               | `modules.add(name)` and name isn't in the cache after discovery                 |
-| `MODULE_RESERVED_MOUNT`                  | Manifest claims a reserved root (`slothlet`, `shutdown`, `destroy`)             |
-| `MODULE_DUPLICATE_NAME_VERSION_MISMATCH` | Same package name + version at multiple real paths (G7 case 3)                  |
-| `MODULE_MOUNT_COLLISION`                 | Pre-flight detects exact-mount collision and `collision: { mode: "error" }`     |
-| `MODULE_DISCOVERY_REQUIRES_NODE`         | Discovery was asked for in a browser, which has no filesystem to walk           |
+| Code                                     | When                                                                           |
+| ---------------------------------------- | ------------------------------------------------------------------------------ |
+| `MODULE_MANIFEST_INVALID`                | Manifest fails JSON parse or schema validation                                 |
+| `MODULE_MANIFEST_UNKNOWN_FIELD`          | Unrecognized top-level field in manifest — use the `metadata` block for extras |
+| `MODULE_MANIFEST_NAME_MISMATCH`          | Manifest `name` disagrees with `package.json`                                  |
+| `MODULE_MANIFEST_VERSION_MISMATCH`       | Manifest `version` disagrees with `package.json`                               |
+| `MODULE_PATH_TRAVERSAL`                  | `base` resolves outside the package root                                       |
+| `MODULE_MANIFEST_FORMAT_UNSUPPORTED`     | `schema` not `2`, or `schemaVersion` not `1`                                   |
+| `MODULE_PACKAGE_NOT_FOUND`               | `modules.add(name)` and name isn't in the cache after discovery                |
+| `MODULE_RESERVED_MOUNT`                  | Manifest claims a reserved root (`slothlet`, `shutdown`, `destroy`)            |
+| `MODULE_DUPLICATE_NAME_VERSION_MISMATCH` | Same package name + version at multiple real paths (G7 case 3)                 |
+| `MODULE_MOUNT_COLLISION`                 | Pre-flight detects exact-mount collision and `collision: { mode: "error" }`    |
+| `MODULE_DISCOVERY_REQUIRES_NODE`         | Discovery was asked for in a browser, which has no filesystem to walk          |
 
 ---
 

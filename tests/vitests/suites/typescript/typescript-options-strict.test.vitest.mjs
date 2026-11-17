@@ -145,12 +145,7 @@ describe("typescript.compiler", () => {
 	});
 
 	it("rejects an unused local with compiler.noUnusedLocals", async () => {
-		await expectBootRejects(
-			unusedLocalDir,
-			{ compiler: { noUnusedLocals: true } },
-			"TYPESCRIPT_TYPE_CHECK_ERRORS",
-			"'unused' is declared"
-		);
+		await expectBootRejects(unusedLocalDir, { compiler: { noUnusedLocals: true } }, "TYPESCRIPT_TYPE_CHECK_ERRORS", "'unused' is declared");
 	});
 
 	it('applies tsconfig-style string values (compiler.module: "commonjs" rejects import.meta)', async () => {

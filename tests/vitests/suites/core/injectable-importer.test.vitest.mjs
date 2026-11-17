@@ -132,7 +132,9 @@ describe("Core > injectable leaf importer (#235)", () => {
 	});
 
 	it("rejects a non-function importer with a named config error", async () => {
-		await expect(slothlet({ mode: "eager", base: BASE, loader: { import: "not-a-function" } })).rejects.toThrow(/INVALID_CONFIG_IMPORTER_INVALID/);
+		await expect(slothlet({ mode: "eager", base: BASE, loader: { import: "not-a-function" } })).rejects.toThrow(
+			/INVALID_CONFIG_IMPORTER_INVALID/
+		);
 	});
 });
 

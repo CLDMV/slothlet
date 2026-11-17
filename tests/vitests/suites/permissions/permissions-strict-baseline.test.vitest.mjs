@@ -47,7 +47,6 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { describe, it, expect, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
-import { SlothletWarning } from "@cldmv/slothlet/errors";
 import { normalizePermissionsConfig } from "#helpers/config";
 import { runBaseline } from "#helpers/permission-baseline";
 

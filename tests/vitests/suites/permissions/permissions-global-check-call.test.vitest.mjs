@@ -449,10 +449,7 @@ describe("PermissionManager > checkCall enforcement options (#508)", () => {
 
 		// First enforcement caches the decision; the tagged emit must spread, not write `via` into the cache.
 		expect(manager.checkCall("a.x", "b.y", [])).toBe(false);
-		expect(lifecycle.emit).toHaveBeenLastCalledWith(
-			"permission:denied",
-			expect.objectContaining({ via: VIA })
-		);
+		expect(lifecycle.emit).toHaveBeenLastCalledWith("permission:denied", expect.objectContaining({ via: VIA }));
 		expect(manager.enforceAccess("a.x", "b.y")).toBe(false);
 		expect(lifecycle.emit).toHaveBeenLastCalledWith("permission:denied", expect.not.objectContaining({ via: expect.anything() }));
 	});

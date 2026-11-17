@@ -31,11 +31,9 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import slothlet from "@cldmv/slothlet";
-import { SlothletWarning } from "@cldmv/slothlet/errors";
 import { TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
 const BASE_TMP = join(process.cwd(), "tmp", `impl-diagnostic-events-${process.pid}`);
-
 
 // ─── Runtime diagnostics (eager + lazy) ─────────────────────────────────────
 

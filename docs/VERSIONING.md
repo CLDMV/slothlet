@@ -367,10 +367,10 @@ api.slothlet.versioning.metadata.set("auth", "v1", { stable: true, deprecated: f
 
 Two separate metadata systems coexist for versioned modules:
 
-| System           | Set via                                                                           | Read via                                                                              | Contains                         |
-| ---------------- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- | -------------------------------- |
-| Regular Metadata | `options.metadata` in `api.add` or `metadata.set("v1.auth", …)` at runtime        | `metadata.get("auth", { version: "v1" })` / `metadata.get("v1.auth")` / `metadata.caller()` | User module metadata       |
-| Version Metadata | `options.version.metadata` in `api.add` or `versioning.metadata.set()` at runtime | `versioning.metadata.get(logicalPath, versionTag)` / dispatcher args                  | VersionManager-only version data |
+| System           | Set via                                                                           | Read via                                                                                    | Contains                         |
+| ---------------- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- | -------------------------------- |
+| Regular Metadata | `options.metadata` in `api.add` or `metadata.set("v1.auth", …)` at runtime        | `metadata.get("auth", { version: "v1" })` / `metadata.get("v1.auth")` / `metadata.caller()` | User module metadata             |
+| Version Metadata | `options.version.metadata` in `api.add` or `versioning.metadata.set()` at runtime | `versioning.metadata.get(logicalPath, versionTag)` / dispatcher args                        | VersionManager-only version data |
 
 These two objects are **never merged**. The dispatcher args expose both in separate fields (`metadata` and `version.metadata`) so the function can read from either independently. Neither carries what slothlet records about a node (its file, path, module): `api.slothlet.node(target)` reports that.
 

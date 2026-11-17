@@ -22,7 +22,6 @@
 import { writeSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import slothlet from "@cldmv/slothlet";
-import { SlothletWarning } from "@cldmv/slothlet/errors";
 
 const [mode, loading, runtime] = process.argv.slice(2);
 const out = {};

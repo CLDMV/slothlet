@@ -63,9 +63,7 @@ describe.each(getMatrixConfigs())("Versioning > Conflict > $name", ({ config }) 
 			const keysBefore = Object.keys(api);
 
 			await withSuppressedSlothletErrorOutput(async () => {
-				await expect(api.slothlet.api.add("auth", `${BASE}/v1`, { version: { tag: version } })).rejects.toThrow(
-					"API_PATH_INVALID"
-				);
+				await expect(api.slothlet.api.add("auth", `${BASE}/v1`, { version: { tag: version } })).rejects.toThrow("API_PATH_INVALID");
 			});
 			expect(Object.keys(api)).toEqual(keysBefore);
 			expect(api.then).toBeUndefined();

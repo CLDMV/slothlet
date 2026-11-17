@@ -21,10 +21,9 @@
  * but empty directory still warns.
  */
 
-import { describe, it, expect, afterEach, beforeEach } from "vitest";
+import { describe, it, expect, afterEach } from "vitest";
 import path from "node:path";
 import slothlet from "@cldmv/slothlet";
-import { SlothletWarning } from "@cldmv/slothlet/errors";
 import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
 import { makeTestTmpDir } from "../../setup/test-fixtures-tmp.mjs";
 
@@ -47,7 +46,6 @@ const warningCodes = (instance) => instance.slothlet.warnings.get().map((w) => w
 
 describe.each(getMatrixConfigs())("No base directory (#471) > $name", ({ config }) => {
 	let api;
-
 
 	afterEach(async () => {
 		if (api) await api.shutdown();

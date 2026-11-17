@@ -100,7 +100,7 @@ describe.each(OWNERSHIP_CONFIGS)("Rule 12 Ownership Tracking - $name", ({ name: 
 		// These configs collide by merge: a different module adding at an owned path succeeds.
 		await api.slothlet.api.add("plugins.moduleC", TEST_DIRS.API_TEST_MIXED, {
 			id: "moduleD"
-				// Different module adding at moduleC's path
+			// Different module adding at moduleC's path
 		});
 
 		// The path now carries API_TEST_MIXED's top-level keys, and moduleC's own keys are still there (a merge, not a replace).
@@ -151,9 +151,12 @@ describe.each(BASIC_CONFIGS)("Rule 12 Configuration Validation - $name", ({ name
 
 	it("should gate a forceOverwrite add on api.mutations.add, not api.mutations.reload", async () => {
 		const addForced = (target) =>
-			target.slothlet.api.add("test.path", TEST_DIRS.API_TEST, { collision: {
-						force: true
-					}, id: "testModule" });
+			target.slothlet.api.add("test.path", TEST_DIRS.API_TEST, {
+				collision: {
+					force: true
+				},
+				id: "testModule"
+			});
 
 		// Reload mutations off: slothlet does not tie forceOverwrite to reload, so the add still resolves.
 		const noReload = await slothlet({ ...config, base: TEST_DIRS.API_TEST, api: { ...config.api, mutations: { reload: false } } });

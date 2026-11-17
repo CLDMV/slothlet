@@ -28,11 +28,10 @@
  * @module tests/vitests/suites/permissions/permissions-hook-gating
  */
 
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, afterEach } from "vitest";
 import { mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import slothlet from "@cldmv/slothlet";
-import { SlothletWarning } from "@cldmv/slothlet/errors";
 import { getMatrixConfigs } from "../../setup/vitest-helper.mjs";
 
 const DIR = join(process.cwd(), "tmp", "hook-gating-fixture");
@@ -57,7 +56,6 @@ afterAll(() => rmSync(DIR, { recursive: true, force: true }));
 
 describe.each(getMatrixConfigs())("Permissions > hook gating (#118) > $name", ({ config }) => {
 	let api;
-
 
 	afterEach(async () => {
 		if (api) await api.shutdown();

@@ -2969,14 +2969,22 @@ export class PermissionManager extends ComponentBase {
 	setMode(value) {
 		const mode = value === true ? "on" : value === false ? "off" : value;
 		if (mode !== "on" && mode !== "off" && mode !== "strict" && mode !== "disabled") {
-			throw new this.SlothletError("INVALID_ARGUMENT", { argument: "value", expected: '"on", "off", true or false', received: typeof value === "string" ? `"${value}"` : typeof value });
+			throw new this.SlothletError("INVALID_ARGUMENT", {
+				argument: "value",
+				expected: '"on", "off", true or false',
+				received: typeof value === "string" ? `"${value}"` : typeof value
+			});
 		}
 		this.#assertNotStrict("mode");
 		if (mode === "strict") throw new this.SlothletError("PERMISSION_STRICT_FIXED", { method: "mode" });
 		this.#assertNotSealed();
 		if (mode === "disabled") {
 			if (this.#disabled) return;
-			throw new this.SlothletError("INVALID_ARGUMENT", { argument: "value", expected: '"on", "off", true or false ("disabled" is chosen in the config only)', received: '"disabled"' });
+			throw new this.SlothletError("INVALID_ARGUMENT", {
+				argument: "value",
+				expected: '"on", "off", true or false ("disabled" is chosen in the config only)',
+				received: '"disabled"'
+			});
 		}
 		if (mode === "on") this.enable();
 		else this.disable();
@@ -3261,7 +3269,10 @@ export class PermissionManager extends ComponentBase {
 				? !ArrayMethods.includes(CAPABILITIES, StringMethods.slice(rule.target, CAPABILITY_PREFIX.length))
 				: StringMethods.startsWith(rule.target, "slothlet.") && !namesSlothletMember(rule.target)
 		) {
-			throw new this.SlothletError("PERMISSION_RULE_UNKNOWN_TARGET", { target: rule.target, capabilities: ArrayMethods.join(CAPABILITIES, ", ") });
+			throw new this.SlothletError("PERMISSION_RULE_UNKNOWN_TARGET", {
+				target: rule.target,
+				capabilities: ArrayMethods.join(CAPABILITIES, ", ")
+			});
 		}
 		if (rule.condition !== undefined && rule.condition !== null) {
 			this.#assertValidConditionPayload(rule.condition, "PERMISSION_RULE_INVALID");

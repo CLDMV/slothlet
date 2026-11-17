@@ -54,7 +54,6 @@ describe.each(CASES)("warning capture is per instance (#819) > $mode / $runtime"
 
 	const make = (silent = false) => slothlet({ base: TEST_DIRS.API_TEST, mode, runtime, diagnostics: true, silent });
 
-
 	afterEach(async () => {
 		vi.restoreAllMocks();
 		if (a) await a.shutdown();

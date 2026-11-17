@@ -347,7 +347,11 @@ const LOCKED_ADD_OPTIONS = Objects.freeze([
 function runtime_readAddOptions(slothlet, source, options) {
 	const objectArgument = (value, argument) => {
 		if (value === null || typeof value !== "object" || Arrays.isArray(value)) {
-			throw new slothlet.SlothletError("INVALID_ARGUMENT", { argument, expected: "object", received: value === null ? "null" : Arrays.isArray(value) ? "array" : typeof value });
+			throw new slothlet.SlothletError("INVALID_ARGUMENT", {
+				argument,
+				expected: "object",
+				received: value === null ? "null" : Arrays.isArray(value) ? "array" : typeof value
+			});
 		}
 	};
 	const given = options == null ? {} : options;
@@ -1645,8 +1649,7 @@ export class ApiBuilder extends ComponentBase {
 			 */
 			i18n: {
 				// A locale that fails to load is warned about through this instance: its warning class.
-				init: (options = {}) =>
-					initI18n({ SlothletWarning: slothlet.SlothletWarning, ...options }),
+				init: (options = {}) => initI18n({ SlothletWarning: slothlet.SlothletWarning, ...options }),
 				language: {
 					get: getLanguage,
 					// A promise only where the load is asynchronous (a browser); `await` works everywhere.
@@ -1753,7 +1756,11 @@ export class ApiBuilder extends ComponentBase {
 					}
 					// api.add takes (path, source, options); a further argument would otherwise be dropped unread.
 					if (extra.length > 0 && extra[0] !== undefined) {
-						throw new slothlet.SlothletError("INVALID_ARGUMENT", { argument: "arguments", expected: "(path, source, options)", received: `${3 + extra.length} arguments` });
+						throw new slothlet.SlothletError("INVALID_ARGUMENT", {
+							argument: "arguments",
+							expected: "(path, source, options)",
+							received: `${3 + extra.length} arguments`
+						});
 					}
 					const read = runtime_readAddOptions(slothlet, folderPath, options);
 					folderPath = read.source;
@@ -2344,7 +2351,11 @@ export class ApiBuilder extends ComponentBase {
 						// One argument that is a plain object this instance's discovery did not return is the options of a discover run.
 						if (target !== null && typeof target === "object" && !Arrays.isArray(target) && !manager.issued(target)) {
 							if (options !== undefined) {
-								throw new slothlet.SlothletError("INVALID_ARGUMENT", { argument: "target", expected: "module name, discover result or array of them", received: "object" });
+								throw new slothlet.SlothletError("INVALID_ARGUMENT", {
+									argument: "target",
+									expected: "module name, discover result or array of them",
+									received: "object"
+								});
 							}
 							options = target;
 							target = undefined;
@@ -2663,12 +2674,20 @@ export class ApiBuilder extends ComponentBase {
 					} else if (args.length === 1 && keyOrValues !== null && typeof keyOrValues === "object" && !Arrays.isArray(keyOrValues)) {
 						entries = Objects.entries(keyOrValues);
 					} else {
-						throw new slothlet.SlothletError("INVALID_ARGUMENT", { argument: "keyOrValues", expected: "a key and a value, or an object", received: describeScopeReceived(keyOrValues) });
+						throw new slothlet.SlothletError("INVALID_ARGUMENT", {
+							argument: "keyOrValues",
+							expected: "a key and a value, or an object",
+							received: describeScopeReceived(keyOrValues)
+						});
 					}
 					for (let i = 0; i < entries.length; i++) {
 						const key = entries[i][0];
 						if (key === "__proto__" || key === "constructor" || key === "prototype") {
-							throw new slothlet.SlothletError("INVALID_ARGUMENT", { argument: "key", expected: "a context key other than __proto__, constructor or prototype", received: key });
+							throw new slothlet.SlothletError("INVALID_ARGUMENT", {
+								argument: "key",
+								expected: "a context key other than __proto__, constructor or prototype",
+								received: key
+							});
 						}
 					}
 					const contextManager = slothlet.contextManager;
@@ -3968,7 +3987,9 @@ export class ApiBuilder extends ComponentBase {
 					 */
 					register: function slothlet_permissions_principal_register(name, definition) {
 						if (!config.api?.mutations?.permissions) {
-							throw new slothlet.SlothletError("API_MUTATION_DISABLED", { operation: ["slothlet", "permissions", "principal", "register"] });
+							throw new slothlet.SlothletError("API_MUTATION_DISABLED", {
+								operation: ["slothlet", "permissions", "principal", "register"]
+							});
 						}
 						const permissionManager = slothlet.handlers?.permissionManager;
 						/* v8 ignore start */
@@ -4018,7 +4039,9 @@ export class ApiBuilder extends ComponentBase {
 					 */
 					unregister: function slothlet_permissions_principal_unregister(name) {
 						if (!config.api?.mutations?.permissions) {
-							throw new slothlet.SlothletError("API_MUTATION_DISABLED", { operation: ["slothlet", "permissions", "principal", "unregister"] });
+							throw new slothlet.SlothletError("API_MUTATION_DISABLED", {
+								operation: ["slothlet", "permissions", "principal", "unregister"]
+							});
 						}
 						const permissionManager = slothlet.handlers?.permissionManager;
 						/* v8 ignore start */

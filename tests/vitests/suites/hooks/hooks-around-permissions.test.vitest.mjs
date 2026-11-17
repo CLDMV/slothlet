@@ -26,11 +26,10 @@
  * belongs to the intercepted call, so the target still sees that call's own caller.
  */
 
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, afterEach } from "vitest";
 import { mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import slothlet from "@cldmv/slothlet";
-import { SlothletWarning } from "@cldmv/slothlet/errors";
 import { getMatrixConfigs } from "../../setup/vitest-helper.mjs";
 
 const DIR = join(process.cwd(), "tmp", "hook-around-permissions-fixture");
@@ -69,7 +68,6 @@ afterAll(() => rmSync(DIR, { recursive: true, force: true }));
 
 describe.each(getMatrixConfigs())("Hooks > around permissions and pinning (#496) > $name", ({ config }) => {
 	let api;
-
 
 	afterEach(async () => {
 		if (api) await api.shutdown();

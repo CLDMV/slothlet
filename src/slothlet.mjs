@@ -1669,10 +1669,11 @@ class Slothlet {
 		assertOptionKeys(given, "slothlet.reload");
 		const { instance = "new" } = given;
 		if (instance !== "keep" && instance !== "new") {
-			throw new SlothletError(
-				"INVALID_ARGUMENT",
-				{ argument: "options.instance", expected: '"keep" | "new"', received: typeof instance === "string" ? instance : typeof instance }
-			);
+			throw new SlothletError("INVALID_ARGUMENT", {
+				argument: "options.instance",
+				expected: '"keep" | "new"',
+				received: typeof instance === "string" ? instance : typeof instance
+			});
 		}
 		const keepInstanceID = instance === "keep";
 
@@ -2341,12 +2342,9 @@ class Slothlet {
 	 */
 	getAPI() {
 		if (!this.isLoaded) {
-			throw new SlothletError(
-				"INSTANCE_NOT_LOADED",
-				{
-					operation: ["slothlet", "diag", "api"]
-				}
-			);
+			throw new SlothletError("INSTANCE_NOT_LOADED", {
+				operation: ["slothlet", "diag", "api"]
+			});
 		}
 		return this.boundApi;
 	}

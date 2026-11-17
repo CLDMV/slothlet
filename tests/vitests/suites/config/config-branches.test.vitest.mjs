@@ -35,7 +35,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { Config } from "#helpers/config";
 import { SlothletError, SlothletWarning } from "@cldmv/slothlet/errors";
-import { captureWarnings } from "../../setup/warning-capture.mjs";
 
 /**
  * Minimal mock slothlet satisfying Config's ComponentBase requirements and the

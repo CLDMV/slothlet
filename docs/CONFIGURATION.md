@@ -327,13 +327,13 @@ See [METADATA.md](METADATA.md) for per-module collision mode overrides via metad
 
 Controls which runtime API mutation methods are available. Affects the `api.slothlet.api.*` (module mounting), `api.slothlet.permissions.*` (rule management), and `api.slothlet.event.rules.*` (event-rule management) mutation surfaces.
 
-| Property      | Default | Controls                                                                                          |
-| ------------- | ------- | ------------------------------------------------------------------------------------------------- |
-| `add`         | `true`  | `api.slothlet.api.add()` - mount new API modules at runtime                                       |
-| `remove`      | `true`  | `api.slothlet.api.remove()` - unmount API modules at runtime                                      |
-| `reload`      | `true`  | `api.slothlet.api.reload()` - hot-reload a module or directory                                    |
+| Property      | Default | Controls                                                                                              |
+| ------------- | ------- | ----------------------------------------------------------------------------------------------------- |
+| `add`         | `true`  | `api.slothlet.api.add()` - mount new API modules at runtime                                           |
+| `remove`      | `true`  | `api.slothlet.api.remove()` - unmount API modules at runtime                                          |
+| `reload`      | `true`  | `api.slothlet.api.reload()` - hot-reload a module or directory                                        |
 | `permissions` | `true`  | `api.slothlet.permissions.rules.add()` / `rules.remove()` - add or remove permission rules at runtime |
-| `events`      | `true`  | `api.slothlet.event.rules.add()` / `remove()` - add or remove event rules at runtime (host-only)  |
+| `events`      | `true`  | `api.slothlet.event.rules.add()` / `remove()` - add or remove event rules at runtime (host-only)      |
 
 Disable all mutations to create a locked, immutable API:
 
@@ -789,7 +789,7 @@ How leaf files are found and loaded.
 
 | Option        | Default         | Effect                                                                                                                                                                                                                                                                                                                 |
 | ------------- | --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `import`      | none            | `(specifier) => Promise<module>`: every leaf load goes through it instead of slothlet's own `import()`, so a coverage run attributes leaf code (see [TESTING.md](TESTING.md)). Anything but a function throws `INVALID_CONFIG_IMPORTER_INVALID`.                                                                                 |
+| `import`      | none            | `(specifier) => Promise<module>`: every leaf load goes through it instead of slothlet's own `import()`, so a coverage run attributes leaf code (see [TESTING.md](TESTING.md)). Anything but a function throws `INVALID_CONFIG_IMPORTER_INVALID`.                                                                       |
 | `files`       | none            | The browser file list `files.generate()` from `@cldmv/slothlet/files` writes; giving one selects browser mode. See [BROWSER.md](BROWSER.md).                                                                                                                                                                           |
 | `materialize` | `false`         | With `mode: "lazy"`, start materializing every api path in the background right after initialization. The api is usable through its proxies before this completes. A function turns it on and is called once when everything has materialized (see [LIFECYCLE.md](LIFECYCLE.md#a-callback-when-everything-is-loaded)). |
 | `platform`    | auto-detected   | `"node"` or `"browser"`: scan the filesystem, or read `files`. Omitted, it is `"browser"` when `files` is given or no Node `process` is present.                                                                                                                                                                       |
@@ -1001,4 +1001,3 @@ expect(codes).toContain("WARNING_COLLISION_OPTION_LOCKED");
 - `clear()` - empties this instance's list.
 
 Module code is refused by a built-in deny on `slothlet.warnings.**` (the list names other modules' paths and files); a host rule on that target grants it. Warnings raised outside any instance (a locale that failed to load through `@cldmv/slothlet/i18n`, a notice from module load) are printed and kept by no instance. Whether an instance's warning is also printed is that instance's [`silent`](#silent) option. Warnings are `instanceof SlothletWarning`.
-
