@@ -55,6 +55,7 @@ import {
 	listSplice,
 	Map,
 	mapEntries,
+	mapList,
 	MapMethods,
 	mapValuesToArray,
 	NativeProcess,
@@ -236,6 +237,27 @@ export function warnIfCoverageWithoutSourcemap(config, overrides) {
 }
 
 /**
+ * Stands for the leading `.` of a file or folder name inside a dotted path, so a dot-prefixed name (`.git`) stays one
+ * segment and cannot be read as a separator. A character no glob is written with.
+ * @type {string}
+ * @private
+ */
+const LEADING_DOT = "\u0001";
+
+/**
+ * One path segment as {@link compileHidden}'s matchers read it: a name that starts with `.` has that dot replaced by
+ * {@link LEADING_DOT}.
+ * @param {string} name - A raw file (extension stripped) or folder name.
+ * @returns {string} The segment.
+ * @private
+ * @example
+ * hiddenSegment(".git"); // "\u0001git"
+ */
+function hiddenSegment(name) {
+	return StringMethods.startsWith(name, ".") ? LEADING_DOT + StringMethods.slice(name, 1) : name;
+}
+
+/**
  * Compile a `hidden` option (a glob string or array of globs) into a matcher, or null when there's
  * nothing to hide. Globs match an entry's path relative to the API root, built from the RAW on-disk
  * directory/file names — NOT the sanitized API keys. For a file that's the extension-stripped dotted
@@ -243,14 +265,21 @@ export function warnIfCoverageWithoutSourcemap(config, overrides) {
  * `api.draftNotes`) matches `draft-notes`, not `draftNotes`. Reuses slothlet's dot-separated glob
  * dialect: `*` matches one segment, `**` any number of segments (none included, so `secret.**` names the folder
  * `secret` itself as well as everything in it), `?` one char, `{a,b}` alternation. Globs may be written folder-style
- * (`a/b`) — `/` is normalized to `.`.
+ * (`a/b`) — `/` is normalized to `.`. A name's leading `.` is part of the name (`**\/.*`, `.env`, `a..git`), and a
+ * glob ending in `/` matches folders only (`!**\/.*\/`).
+ *
+ * The globs sit over slothlet's built-in rule, which hides every file and folder whose name starts with `.` or `__`:
+ * globs apply in order and the last one that matches an entry decides; an entry no glob matches falls to the built-in
+ * rule. So `"!**\/__*"` brings back `__`-prefixed files and folders, and `["!**\/.*\/", "!**\/__*\/"]` the folders
+ * only. A name the framework reserves is still refused when it is loaded.
  *
  * A folder a glob hides is not scanned. One case is scanned all the same: the glob that hides it also hides everything
  * beneath it (`secret/**`) and a `!` glob follows it, since that glob may un-hide an entry inside
  * (`["secret/**", "!secret/keep"]`). Its entries are then matched one by one, which hides the same ones.
  * @param {string|string[]|null} globs - Hidden glob(s).
- * @returns {?function(string, boolean=): boolean} Matcher over the dot-joined relative path (pass `true` as the
- *   second argument for a folder), or null.
+ * @returns {?function(string, boolean=): (boolean|undefined)} Matcher over the dot-joined relative path, each segment
+ *   made by {@link hiddenSegment} (pass `true` as the second argument for a folder): true to hide, false to show,
+ *   undefined when no glob matches. Null when there are no globs.
  * @private
  */
 function compileHidden(globs) {
@@ -264,31 +293,57 @@ function compileHidden(globs) {
 		// Compile the pattern BODY (without a leading "!") as a positive matcher; the "!" is applied here
 		// as gitignore-style un-hiding, NOT via compilePattern's "match everything except" semantics —
 		// those don't compose under a hide-list (a single `!x` would then hide everything except x).
-		const body = regExpReplace(/\//g, negated ? StringMethods.slice(g, 1) : g, ".");
+		let raw = negated ? StringMethods.slice(g, 1) : g;
+		// A trailing "/" names folders only, as in gitignore.
+		const foldersOnly = StringMethods.endsWith(raw, "/");
+		if (foldersOnly) raw = StringMethods.slice(raw, 0, -1);
+		// A name's leading "." is part of the name: in a folder-style glob each segment's, in a dotted glob one at the start
+		// or right after a separator (`a..git`).
+		const body = StringMethods.includes(raw, "/")
+			? ArrayMethods.join(mapList(splitText(raw, "/"), hiddenSegment), ".")
+			: regExpReplace(/(^|\.)\./g, raw, (_match, before) => before + LEADING_DOT);
 		if (body.length === 0) continue; // bare "!" — nothing to match
-		listPush(rules, { negated, matches: compilePattern(body) });
+		listPush(rules, { negated, foldersOnly, matches: compilePattern(body) });
 	}
 	if (!rules.length) return null;
 	// Evaluate in order, last matching rule wins: a normal glob hides a matched path; a `!`-prefixed glob
-	// un-hides paths an earlier glob hid (gitignore semantics).
+	// un-hides it (gitignore semantics). No match leaves the entry to the built-in rule.
 	return (relDotted, isFolder = false) => {
-		let hidden = false;
+		let verdict;
 		let winner = -1;
 		for (let index = 0; index < rules.length; index++) {
+			const rule = rules[index];
+			if (rule.foldersOnly && !isFolder) continue;
 			// Each rule holds its compiled pattern as its own `matches`.
-			if (rules[index].matches(relDotted)) {
-				hidden = !rules[index].negated;
+			if (rule.matches(relDotted)) {
+				verdict = !rule.negated;
 				winner = index;
 			}
 		}
-		if (hidden && isFolder) {
+		if (verdict === true && isFolder) {
 			// Names no file or folder can have (a `.` would split them), so only a glob that matches everything
 			// beneath the folder matches both.
 			const coversBelow = rules[winner].matches(`${relDotted}.\u0000`) && rules[winner].matches(`${relDotted}.\u0000.\u0000`);
 			if (coversBelow && ArrayMethods.some(copyList(rules, winner + 1), (rule) => rule.negated)) return false;
 		}
-		return hidden;
+		return verdict;
 	};
+}
+
+/**
+ * Whether an entry is hidden: the `hidden` globs decide when one matches it, the built-in `.`/`__` rule otherwise.
+ * @param {?function(string, boolean=): (boolean|undefined)} hiddenMatcher - The compiled `hidden` globs, or null.
+ * @param {string} rel - The entry's dotted path, as {@link compileHidden}'s matcher reads it.
+ * @param {string} name - The entry's own name (a file's with its extension).
+ * @param {boolean} isFolder - Whether the entry is a folder.
+ * @returns {boolean} True to leave the entry out.
+ * @private
+ * @example
+ * isHiddenEntry(null, "\u0001git", ".git", true); // true
+ */
+function isHiddenEntry(hiddenMatcher, rel, name, isFolder) {
+	const verdict = hiddenMatcher ? hiddenMatcher(rel, isFolder) : undefined;
+	return verdict === undefined ? isHiddenEntryName(name) : verdict;
 }
 
 /**
@@ -1087,7 +1142,6 @@ export class Loader extends ComponentBase {
 	 * @param {Function|null} [options.fileFilter=null] - Optional filter function (fileName) => boolean to load specific files only
 	 * @param {string|string[]|Function|null} [options.hidden=null] - Glob(s) hiding files/folders, matched against each entry's
 	 *   path relative to the API root (extension-stripped for files). Internal recursion passes the compiled matcher function.
-	 * @param {boolean} [options.scanHiddenFolders=false] - Deprecated: restore the pre-v3.11 scanning of `.`/`__`-prefixed folders.
 	 * @param {string} [options.rootDir] - API root the relative hidden-glob paths are computed from (defaults to the scanned dir).
 	 * @returns {Promise<Object>} Directory structure
 	 * @public
@@ -1112,15 +1166,13 @@ export class Loader extends ComponentBase {
 			maxDepth = DEFAULT_API_DEPTH,
 			fileFilter = null,
 			hidden = null,
-			scanHiddenFolders = false,
 			rootDir = dir
 		} = options;
 
 		// Compile the hidden matcher once (on the root scan); recursion receives the compiled function.
 		const hiddenMatcher = typeof hidden === "function" ? hidden : compileHidden(hidden);
-		// `.`/`__`-prefixed entries are hidden by default. The deprecated `scanHiddenFolders` opt-out
-		// restores the pre-v3.11 behavior of scanning such *folders* (files keep the prefix skip).
-		const apiRel = (p) => ArrayMethods.join(splitText(path.relative(rootDir, p), path.sep), ".");
+		// `.`/`__`-prefixed entries are hidden by default; a `hidden` glob that matches an entry decides instead.
+		const apiRel = (p) => ArrayMethods.join(mapList(splitText(path.relative(rootDir, p), path.sep), hiddenSegment), ".");
 
 		try {
 			await fsp.stat(dir);
@@ -1152,12 +1204,8 @@ export class Loader extends ComponentBase {
 					continue;
 				}
 
-				// Built-in: skip `.`/`__`-prefixed folders (unless the deprecated opt-out is set), then
-				// skip folders matched by the consumer-supplied `hidden` glob(s).
-				if (!scanHiddenFolders && isHiddenEntryName(entry.name)) {
-					continue;
-				}
-				if (hiddenMatcher && hiddenMatcher(apiRel(fullPath), true)) {
+				// The consumer-supplied `hidden` glob(s) over the built-in `.`/`__` rule.
+				if (isHiddenEntry(hiddenMatcher, apiRel(fullPath), entry.name, true)) {
 					continue;
 				}
 
@@ -1168,7 +1216,6 @@ export class Loader extends ComponentBase {
 						isRootScan: false,
 						currentDepth: currentDepth + 1,
 						hidden: hiddenMatcher,
-						scanHiddenFolders,
 						rootDir
 					});
 					// #156: a folder that yields no files and no kept subfolders must not create a leaf.
@@ -1186,8 +1233,12 @@ export class Loader extends ComponentBase {
 			} else if (entry.isFile()) {
 				const ext = path.extname(entry.name);
 				if (typeof extensions === "string" ? StringMethods.includes(extensions, ext) : ArrayMethods.includes(extensions, ext)) {
-					// Built-in: skip `.`/`__`-prefixed files (JSDoc-only, test helpers, dotfiles, etc.).
-					if (isHiddenEntryName(entry.name)) {
+					const nameWithoutExt = path.basename(entry.name, ext);
+
+					// The consumer-supplied `hidden` glob(s), matched against the file's extension-stripped API path
+					// relative to the API root, over the built-in rule that skips `.`/`__`-prefixed files (JSDoc-only,
+					// test helpers, dotfiles, etc.).
+					if (isHiddenEntry(hiddenMatcher, apiRel(path.join(dir, nameWithoutExt)), entry.name, false)) {
 						continue;
 					}
 
@@ -1196,21 +1247,12 @@ export class Loader extends ComponentBase {
 						continue;
 					}
 
-					const nameWithoutExt = path.basename(entry.name, ext);
-
 					// Reserved-name rejection (#260): a module file named for a framework-reserved key
 					// would overwrite the framework's own handle when its children are adopted — the
 					// `_materialize.mjs` shape used to break composition with a bare TypeError, and
 					// `_impl.mjs` silently emptied the lazy surface. Fail the scan with a named error
-					// instead. Only names the hidden-prefix skip above does NOT already exclude can
-					// reach this (the single-underscore reserved names).
+					// instead, for a `__`-prefixed name a `hidden` glob brought back as for the rest.
 					//
-					// Skip files matched by the consumer-supplied `hidden` glob(s), evaluated against the
-					// file's extension-stripped API path relative to the API root.
-					if (hiddenMatcher && hiddenMatcher(apiRel(path.join(dir, nameWithoutExt)))) {
-						continue;
-					}
-
 					// Checked LAST, after every exclusion: the refusal covers the files this mount
 					// actually loads. A single-file `api.add` filters the listing down to one file, and
 					// `hidden` globs drop files the consumer has excluded — neither reaches the composed
@@ -1347,17 +1389,10 @@ export class Loader extends ComponentBase {
 	 */
 	#manifestNodeToStructure(node, rootPath, options = {}) {
 		// Mirror the disk scan's inclusion gating so browser-manifest mode honors the same runtime
-		// options: consumer `hidden` glob, `apiDepth`/`maxDepth`, `scanHiddenFolders`, dot/`__`-prefix
-		// skip, and empty-subtree pruning (#423). `apiPrefix` accumulates the dotted api-relative path
+		// options: consumer `hidden` glob over the dot/`__`-prefix skip, `apiDepth`/`maxDepth`, and empty-subtree
+		// pruning (#423). `apiPrefix` accumulates the dotted api-relative path
 		// through recursion (browser has no `node:path` for a `path.relative`-based apiRel).
-		const {
-			fileFilter = null,
-			hidden = null,
-			scanHiddenFolders = false,
-			maxDepth = DEFAULT_API_DEPTH,
-			currentDepth = 0,
-			apiPrefix = ""
-		} = options;
+		const { fileFilter = null, hidden = null, maxDepth = DEFAULT_API_DEPTH, currentDepth = 0, apiPrefix = "" } = options;
 		const ALLOWED_EXTS = [".mjs", ".cjs", ".js"];
 		const hiddenMatcher = typeof hidden === "function" ? hidden : compileHidden(hidden);
 		const structure = { files: [], directories: [] };
@@ -1369,9 +1404,8 @@ export class Loader extends ComponentBase {
 			const lastDot = StringMethods.lastIndexOf(fullName, ".");
 			const ext = lastDot >= 0 ? (typeof fullName === "string" ? StringMethods.slice(fullName, lastDot) : copyList(fullName, lastDot)) : "";
 
-			// Skip non-JS files and dot/double-underscore helpers.
+			// Skip non-JS files.
 			if (!ArrayMethods.includes(ALLOWED_EXTS, ext)) continue;
-			if (isHiddenEntryName(fullName)) continue;
 
 			// Apply caller-supplied file filter (used for single-file api.add calls).
 			if (fileFilter && !fileFilter(fullName)) continue;
@@ -1389,8 +1423,8 @@ export class Loader extends ComponentBase {
 					: fullName);
 
 			// Consumer `hidden` glob, matched against the file's extension-stripped api-relative
-			// dotted path — same semantics as the disk scan.
-			if (hiddenMatcher && hiddenMatcher(apiPrefix ? `${apiPrefix}.${name}` : name)) continue;
+			// dotted path, over the dot/double-underscore skip — same semantics as the disk scan.
+			if (isHiddenEntry(hiddenMatcher, apiPrefix ? `${apiPrefix}.${hiddenSegment(name)}` : hiddenSegment(name), fullName, false)) continue;
 
 			// Reserved-name rejection (#260), mirroring the filesystem scan. The hazard is the
 			// composed wrapper shape, not the platform: a manifest carrying `_impl.mjs` would empty
@@ -1415,11 +1449,9 @@ export class Loader extends ComponentBase {
 				const dirPath = dir.path || dir.name || "";
 				const dirName = dir.name || ArrayMethods.pop(splitText(dirPath, "/"));
 
-				// dot/`__`-prefixed folders are hidden unless the deprecated scanHiddenFolders opt-out
-				// is set; then apply the consumer `hidden` glob against the folder's api-relative path.
-				if (!scanHiddenFolders && isHiddenEntryName(dirName)) continue;
-				const dirApiRel = apiPrefix ? `${apiPrefix}.${dirName}` : dirName;
-				if (hiddenMatcher && hiddenMatcher(dirApiRel, true)) continue;
+				// The consumer `hidden` glob against the folder's api-relative path, over the dot/`__` skip.
+				const dirApiRel = apiPrefix ? `${apiPrefix}.${hiddenSegment(dirName)}` : hiddenSegment(dirName);
+				if (isHiddenEntry(hiddenMatcher, dirApiRel, dirName, true)) continue;
 
 				// apiDepth / maxDepth truncation: don't descend past the limit.
 				if (currentDepth >= maxDepth) continue;

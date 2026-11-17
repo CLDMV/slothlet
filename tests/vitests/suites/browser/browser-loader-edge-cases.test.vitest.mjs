@@ -256,7 +256,7 @@ describe("Browser loader > #manifestNodeToStructure gating branches (#423)", () 
 		expect(api.utils.secret).toBeUndefined();
 	});
 
-	it("scanHiddenFolders:true scans a dot-prefixed folder that is skipped by default", async () => {
+	it("a `!**/.*/` hidden glob scans a dot-prefixed folder that is skipped by default", async () => {
 		const manifest = {
 			files: [{ path: "math.mjs", name: "math", fullName: "math.mjs" }],
 			directories: [
@@ -267,12 +267,12 @@ describe("Browser loader > #manifestNodeToStructure gating branches (#423)", () 
 				}
 			]
 		};
-		// Default: the dot-prefixed folder is hidden (hasHiddenPrefix + !scanHiddenFolders).
+		// Default: the dot-prefixed folder is hidden by the built-in rule.
 		const apiDefault = await slothlet(syntheticBrowserConfig(manifest));
 		expect(apiDefault.secret).toBeUndefined();
 		await apiDefault.shutdown();
-		// Opt-in: scanHiddenFolders scans it (sanitized ".secret" -> "secret").
-		api = await slothlet(syntheticBrowserConfig(manifest, { scanHiddenFolders: true }));
+		// A `!` glob brings it back (sanitized ".secret" -> "secret").
+		api = await slothlet(syntheticBrowserConfig(manifest, { hidden: ["!**/.*/"] }));
 		expect(api.secret).toBeDefined();
 		expect(api.secret.keys).toBeDefined();
 	});
