@@ -4,7 +4,7 @@
  * @param {string} route - What the code used.
  * @param {string|null} [importer=null] - The importing file's URL, for an import being linked.
  * @returns {void}
- * @throws {SlothletError} `CAPABILITY_REFUSED`.
+ * @throws {SlothletError} `PERMISSION_CAPABILITY_REFUSED`.
  * @internal
  * @example
  * checkCapability("code", "setTimeout");

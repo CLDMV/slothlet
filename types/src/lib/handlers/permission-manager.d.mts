@@ -32,7 +32,7 @@ export class PermissionManager extends ComponentBase {
      * @param {string|null} [ruleId=null] - Optional rule ID to reuse (for replay).
      * @param {string|null} [layer=null] - Explicit precedence layer; derived from `ownerModuleID` when null.
      * @returns {string} The rule ID (generated or reused).
-     * @throws {SlothletError} INVALID_PERMISSION_RULE if rule is malformed.
+     * @throws {SlothletError} PERMISSION_RULE_INVALID if rule is malformed.
      * @example
      * pm.addRule({ caller: "payments.**", target: "db.write", effect: "allow" }, "mod_abc123");
      */
@@ -68,7 +68,7 @@ export class PermissionManager extends ComponentBase {
      * @param {string|null} [ruleId=null] - Optional rule id to reuse (for reload replay).
      * @param {string|null} [layer=null] - Explicit precedence layer; derived from ownerModuleID when null.
      * @returns {string} The rule id.
-     * @throws {SlothletError} INVALID_PERMISSION_RULE if the rule is malformed.
+     * @throws {SlothletError} PERMISSION_RULE_INVALID if the rule is malformed.
      * @example
      * pm.addEventRule({ caller: "orders.**", event: "orders.*", effect: "allow" }, "mod_orders", null, "manifest");
      */
@@ -142,7 +142,7 @@ export class PermissionManager extends ComponentBase {
      * @returns {void}
      * @throws {SlothletError} PERMISSION_SEALED when the control surface is sealed.
      * @throws {SlothletError} INVALID_ARGUMENT when the name or definition is malformed.
-     * @throws {SlothletError} PRINCIPAL_NAME_OWNED when another module owns the name.
+     * @throws {SlothletError} PERMISSION_PRINCIPAL_NAME_OWNED when another module owns the name.
      * @example
      * pm.registerPrincipal("roles", { key: (ctx) => ctx.user?.id, resolve: (id) => loadRoles(id), maxAge: 30_000 }, "roles_mod");
      */
@@ -159,7 +159,7 @@ export class PermissionManager extends ComponentBase {
      * @param {string|string[]|null} [callerModuleID=null] - Calling module's id, or a list of them (#597); `null` for the host.
      * @returns {boolean} True when a principal was removed.
      * @throws {SlothletError} PERMISSION_SEALED when the control surface is sealed.
-     * @throws {SlothletError} PRINCIPAL_NOT_OWNER when a module other than the owner calls it.
+     * @throws {SlothletError} PERMISSION_PRINCIPAL_NOT_OWNER when a module other than the owner calls it.
      * @example
      * pm.unregisterPrincipal("roles");
      */
@@ -177,7 +177,7 @@ export class PermissionManager extends ComponentBase {
      * @param {*} [identityKey] - Identity to invalidate; omit (`undefined`) to invalidate all identities.
      * @param {string|string[]|null} [callerModuleID=null] - Calling module's id, or a list of them (#597); `null` for the host.
      * @returns {boolean} True when the principal exists.
-     * @throws {SlothletError} PRINCIPAL_NOT_OWNER when a module other than the owner calls it.
+     * @throws {SlothletError} PERMISSION_PRINCIPAL_NOT_OWNER when a module other than the owner calls it.
      * @example
      * pm.invalidatePrincipal("roles", "user-42");
      */
@@ -349,7 +349,7 @@ export class PermissionManager extends ComponentBase {
      *   lost it; read now when omitted. Null is host code.
      * @returns {{ownerModuleID: string|null, layer: string|null, writer: object|null}} Owner and layer to register the
      *   rule with, and the module code registering it (see {@link pinConditions}); all null for host code.
-     * @throws {SlothletError} `INVALID_PERMISSION_RULE` when module code may not manage a rule on that target.
+     * @throws {SlothletError} `PERMISSION_RULE_INVALID` when module code may not manage a rule on that target.
      * @example
      * const { ownerModuleID, layer } = pm.placeModuleRule(rule);
      * pm.addRule(rule, ownerModuleID, null, layer);
@@ -387,7 +387,7 @@ export class PermissionManager extends ComponentBase {
      *
      * @param {string} ruleId - The rule about to be removed.
      * @returns {void}
-     * @throws {SlothletError} `INVALID_PERMISSION_RULE` when module code may not remove the rule.
+     * @throws {SlothletError} `PERMISSION_RULE_INVALID` when module code may not remove the rule.
      * @example
      * pm.assertModuleRuleRemoval("perm-12");
      */
@@ -398,7 +398,7 @@ export class PermissionManager extends ComponentBase {
      *
      * @param {string} ruleId - The event rule about to be removed.
      * @returns {void}
-     * @throws {SlothletError} `INVALID_PERMISSION_RULE` when module code may not remove the event rule.
+     * @throws {SlothletError} `PERMISSION_RULE_INVALID` when module code may not remove the event rule.
      * @example
      * pm.assertModuleEventRuleRemoval("evt-12");
      */
@@ -412,7 +412,7 @@ export class PermissionManager extends ComponentBase {
      *
      * @param {*} rule - The rule handed in.
      * @returns {*} The frozen copy, or `rule` when it is no object.
-     * @throws {SlothletError} `INVALID_PERMISSION_RULE` when a field is an accessor.
+     * @throws {SlothletError} `PERMISSION_RULE_INVALID` when a field is an accessor.
      * @example
      * const rule = pm.snapshotRule(input);
      */
@@ -423,7 +423,7 @@ export class PermissionManager extends ComponentBase {
      *
      * @param {*} rule - The event rule handed in.
      * @returns {*} The frozen copy, or `rule` when it is no object.
-     * @throws {SlothletError} `INVALID_PERMISSION_RULE` when a field is an accessor.
+     * @throws {SlothletError} `PERMISSION_RULE_INVALID` when a field is an accessor.
      * @example
      * const rule = pm.snapshotEventRule(input);
      */
@@ -455,7 +455,7 @@ export class PermissionManager extends ComponentBase {
      *   compiled under the name of a real file outside the caller's own folder, or through Node's binding, whose names
      *   cannot be read.
      * @returns {void}
-     * @throws {SlothletError} `CAPABILITY_REFUSED` when no rule opens the capability for the caller, or for `refusal`.
+     * @throws {SlothletError} `PERMISSION_CAPABILITY_REFUSED` when no rule opens the capability for the caller, or for `refusal`.
      * @example
      * pm.assertCapability(leaf, "code", "new Function");
      */
@@ -470,7 +470,7 @@ export class PermissionManager extends ComponentBase {
      * @param {string} route - What the code used.
      * @param {"foreign-filename"|"binding"|null} [refusal=null] - Refuse whatever the rules say, for this reason.
      * @returns {void}
-     * @throws {SlothletError} `CAPABILITY_REFUSED`.
+     * @throws {SlothletError} `PERMISSION_CAPABILITY_REFUSED`.
      * @example
      * pm.assertCapabilityForPaths(["ext.render"], "code", "new Function");
      */

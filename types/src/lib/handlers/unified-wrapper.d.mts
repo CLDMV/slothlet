@@ -289,7 +289,7 @@ declare function runtime_selfModuleCeilings(slothlet: object, writer?: object | 
 /**
  * Hand out a node of the api reached through `self` as a view that keeps who read it (#625).
  *
- * `self.X = …` with no module executing is refused (`RUNTIME_NO_ACTIVE_CONTEXT_SELF`): nobody is there to
+ * `self.X = …` with no module executing is refused (`CONTEXT_NOT_ACTIVE_SELF`): nobody is there to
  * own the write. A node a module took through `self` and wrote into later from outside any call would
  * otherwise reach the node with no caller, which is the host's standing. So a write through the view made
  * with no module executing (outside a `run()` / `scope()` the host opened) is held to the module that read
@@ -389,7 +389,7 @@ declare function runtime_selfFrameworkView(member: any, reader?: object, slothle
  * @returns {void}
  * @throws {SlothletError} `PERMISSION_DENIED` when module code changes a framework root member the write
  *   rules protect, `LOOSE_SET_UNATTRIBUTED` when the live runtime cannot tell which call is executing, and
- *   `INVALID_CONFIG_API_PATH_INVALID` for the reserved name otherwise.
+ *   `API_PATH_INVALID` for the reserved name otherwise.
  * @internal
  *
  * @example
@@ -979,7 +979,7 @@ declare class UnifiedWrapper extends ComponentBase {
      * to the live namespace — but stays non-callable itself and keeps `typeof` "object".
      *
      * The upgrade is one-way: when the function later goes away (a remove or a reload), the callable
-     * proxy stays and a call throws `INVALID_CONFIG_NOT_A_FUNCTION`, the same as for a namespace that
+     * proxy stays and a call throws `API_PATH_NOT_CALLABLE`, the same as for a namespace that
      * was callable from the start.
      *
      * @returns {void}
