@@ -44,8 +44,8 @@ describe("Public I18N API (api.slothlet.i18n)", () => {
 
 		afterEach(async () => {
 			try {
-				if (api?.slothlet?.i18n?.setLanguage) {
-					api.slothlet.i18n.setLanguage("en-us");
+				if (api?.slothlet?.i18n?.language?.set) {
+					api.slothlet.i18n.language.set("en-us");
 				}
 			} finally {
 				if (api && typeof api.shutdown === "function") {
@@ -62,11 +62,12 @@ describe("Public I18N API (api.slothlet.i18n)", () => {
 			});
 
 			expect(api.slothlet.i18n).toBeDefined();
-			expect(typeof api.slothlet.i18n.setLanguage).toBe("function");
-			expect(typeof api.slothlet.i18n.getLanguage).toBe("function");
+			expect(typeof api.slothlet.i18n.language.set).toBe("function");
+			expect(typeof api.slothlet.i18n.language.get).toBe("function");
+			for (const old of ["setLanguage", "setLanguageAsync", "getLanguage", "initI18n"]) expect(api.slothlet.i18n).not.toHaveProperty(old);
 			expect(typeof api.slothlet.i18n.translate).toBe("function");
 			expect(typeof api.slothlet.i18n.t).toBe("function");
-			expect(typeof api.slothlet.i18n.initI18n).toBe("function");
+			expect(typeof api.slothlet.i18n.init).toBe("function");
 		});
 
 		it("should change translation output when language changes", async () => {
@@ -75,12 +76,12 @@ describe("Public I18N API (api.slothlet.i18n)", () => {
 				base: TEST_DIRS.API_TEST
 			});
 
-			api.slothlet.i18n.setLanguage("en-us");
+			api.slothlet.i18n.language.set("en-us");
 			const english = buildTranslationTestMessage(api.slothlet.i18n).message;
 			expect(english).toContain("No active context");
 
-			api.slothlet.i18n.setLanguage("es-mx");
-			expect(api.slothlet.i18n.getLanguage()).toBe("es-mx");
+			api.slothlet.i18n.language.set("es-mx");
+			expect(api.slothlet.i18n.language.get()).toBe("es-mx");
 
 			const spanish = buildTranslationTestMessage(api.slothlet.i18n).message;
 			expect(spanish).toContain("Sin contexto activo");
@@ -96,10 +97,30 @@ describe("Public I18N API (api.slothlet.i18n)", () => {
 				i18n: { language: "es-mx" }
 			});
 
-			expect(api.slothlet.i18n.getLanguage()).toBe("es-mx");
+			expect(api.slothlet.i18n.language.get()).toBe("es-mx");
 
 			const { message, expectedSpanishFragment } = buildTranslationTestMessage(api.slothlet.i18n);
 			expect(message).toContain(expectedSpanishFragment);
 		});
+	});
+});
+
+describe("@cldmv/slothlet/i18n entry", () => {
+	it("exports init, language, t and translate, and nothing else", async () => {
+		const i18n = await import("@cldmv/slothlet/i18n");
+		expect(Object.keys(i18n).sort()).toEqual(["init", "language", "t", "translate"]);
+		expect(Object.keys(i18n.language).sort()).toEqual(["get", "set"]);
+	});
+
+	it("language.set switches synchronously in Node and returns nothing", async () => {
+		const { language } = await import("@cldmv/slothlet/i18n");
+		try {
+			expect(language.set("es-mx")).toBeUndefined();
+			expect(language.get()).toBe("es-mx");
+			expect(language.set("en-us")).toBeUndefined();
+			expect(language.get()).toBe("en-us");
+		} finally {
+			language.set("en-us");
+		}
 	});
 });

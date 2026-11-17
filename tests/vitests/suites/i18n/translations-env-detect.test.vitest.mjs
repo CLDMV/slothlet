@@ -39,7 +39,7 @@
 
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { SlothletWarning } from "@cldmv/slothlet/errors";
-import { setLanguage, setLanguageAsync, getLanguage, initI18n } from "@cldmv/slothlet/i18n";
+import { setLanguage, setLanguageAsync, getLanguage, initI18n } from "#i18n";
 
 // ─── env variable save/restore helpers ───────────────────────────────────────
 
@@ -444,8 +444,8 @@ describe("i18n_normalizeEnvLanguage() — fallback and base branches", () => {
 
 			// zz-ca file is missing; zz base file exists -> line 85 true branch returns "zz"
 			process.env.LANG = "zz_CA.UTF-8";
-			i18n.initI18n();
-			expect(i18n.getLanguage()).toBe("zz");
+			i18n.init();
+			expect(i18n.language.get()).toBe("zz");
 		} finally {
 			vi.doUnmock("fs");
 			vi.resetModules();

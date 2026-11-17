@@ -37,10 +37,10 @@ describe("i18n — @cldmv/slothlet-i18n pack resolution (tier 1)", () => {
 
 	it("setLanguage loads a non-base locale from the installed pack", async () => {
 		const i18n = await import("@cldmv/slothlet/i18n");
-		i18n.setLanguage(PACK_LOCALE);
-		expect(i18n.getLanguage()).toBe(PACK_LOCALE);
+		i18n.language.set(PACK_LOCALE);
+		expect(i18n.language.get()).toBe(PACK_LOCALE);
 		expect(i18n.translate(PACK_KEY)).toBe(PACK_MESSAGE);
-		i18n.setLanguage("en-us"); // reset shared module state
+		i18n.language.set("en-us"); // reset shared module state
 	});
 
 	it("generateImportMap enumerates the pack's locales when it's installed", async () => {
@@ -80,8 +80,8 @@ describe("i18n — @cldmv/slothlet-i18n pack resolution (tier 1)", () => {
 		SlothletWarning.clearCaptured();
 		try {
 			const i18n = await import("@cldmv/slothlet/i18n");
-			i18n.setLanguage("qa-corrupt");
-			expect(i18n.getLanguage()).toBe("en-us");
+			i18n.language.set("qa-corrupt");
+			expect(i18n.language.get()).toBe("en-us");
 			expect(SlothletWarning.captured.some((w) => w.code === "WARNING_LANGUAGE_LOAD_FAILED" && w.message.includes("qa-corrupt"))).toBe(
 				true
 			);
@@ -99,9 +99,10 @@ describe("i18n — @cldmv/slothlet-i18n pack resolution (tier 1)", () => {
 		SlothletWarning.suppressConsole = true;
 		SlothletWarning.clearCaptured();
 		try {
-			const i18n = await import("@cldmv/slothlet/i18n");
+			// The asynchronous load (the browser path), run directly: language.set takes the synchronous one in Node.
+			const i18n = await import("#i18n");
 			await i18n.setLanguageAsync("qa-corrupt-async");
-			expect(i18n.getLanguage()).toBe("en-us");
+			expect(i18n.language.get()).toBe("en-us");
 			expect(
 				SlothletWarning.captured.some((w) => w.code === "WARNING_LANGUAGE_LOAD_FAILED" && w.message.includes("qa-corrupt-async"))
 			).toBe(true);
@@ -121,9 +122,9 @@ describe("i18n — @cldmv/slothlet-i18n pack resolution (tier 1)", () => {
 		writeFileSync(esMx, "{ not valid json !");
 		try {
 			const i18n = await import("@cldmv/slothlet/i18n");
-			i18n.setLanguage("es-mx");
-			expect(i18n.getLanguage()).toBe("es-mx");
-			i18n.setLanguage("en-us"); // reset shared module state
+			i18n.language.set("es-mx");
+			expect(i18n.language.get()).toBe("es-mx");
+			i18n.language.set("en-us"); // reset shared module state
 		} finally {
 			writeFileSync(esMx, original);
 		}
@@ -150,9 +151,9 @@ describe("i18n — @cldmv/slothlet-i18n pack resolution (tier 1)", () => {
 		}));
 		try {
 			const i18n = await import("@cldmv/slothlet/i18n");
-			i18n.setLanguage("es-mx");
-			expect(i18n.getLanguage()).toBe("es-mx"); // pack path threw → catch → internal copy
-			i18n.setLanguage("en-us");
+			i18n.language.set("es-mx");
+			expect(i18n.language.get()).toBe("es-mx"); // pack path threw → catch → internal copy
+			i18n.language.set("en-us");
 		} finally {
 			vi.doUnmock("#helpers/platform");
 			vi.resetModules();

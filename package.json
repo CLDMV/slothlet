@@ -67,11 +67,11 @@
 		},
 		"./i18n": {
 			"slothlet-dev": {
-				"types": "./types/src/lib/i18n/translations.d.mts",
-				"import": "./src/lib/i18n/translations.mjs"
+				"types": "./types/src/i18n.d.mts",
+				"import": "./src/i18n.mjs"
 			},
-			"types": "./types/stub/lib/i18n/translations.d.mts",
-			"import": "./dist/lib/i18n/translations.mjs"
+			"types": "./types/stub/i18n.d.mts",
+			"import": "./dist/i18n.mjs"
 		},
 		"./i18n/language/*": {
 			"slothlet-dev": "./src/lib/i18n/languages/*",

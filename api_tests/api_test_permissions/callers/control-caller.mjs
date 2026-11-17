@@ -93,7 +93,7 @@ export const callSetGlobalMetadata = (key, value) => self.slothlet.metadata.setG
  * @example
  * api.controlCaller.callSetLanguage("en-us");
  */
-export const callSetLanguage = (lang) => self.slothlet.i18n.setLanguage(lang);
+export const callSetLanguage = (lang) => self.slothlet.i18n.language.set(lang);
 
 /**
  * Read slothlet version via inter-module route access.

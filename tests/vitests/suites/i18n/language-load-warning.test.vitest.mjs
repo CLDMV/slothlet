@@ -22,7 +22,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import slothlet from "@cldmv/slothlet";
 import { SlothletWarning } from "@cldmv/slothlet/errors";
-import { getLanguage, setLanguage, setLanguageAsync } from "@cldmv/slothlet/i18n";
+import { language } from "@cldmv/slothlet/i18n";
 import { TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
 const CODE = "WARNING_LANGUAGE_LOAD_FAILED";
@@ -49,7 +49,7 @@ describe("a failed locale load is a coded SlothletWarning (#820)", () => {
 		if (other) await other.shutdown();
 		api = other = null;
 		SlothletWarning.suppressConsole = false;
-		setLanguage("en-us");
+		language.set("en-us");
 	});
 
 	it("init with an unknown i18n.language warns on that instance, translated, and falls back to English", async () => {
@@ -58,7 +58,7 @@ describe("a failed locale load is a coded SlothletWarning (#820)", () => {
 		expect(warning).toBeInstanceOf(SlothletWarning);
 		expect(warning.context).toEqual({ lang: "zz-zz" });
 		expect(warning.message).toBe("Failed to load language 'zz-zz', falling back to English.");
-		expect(getLanguage()).toBe("en-us");
+		expect(language.get()).toBe("en-us");
 	});
 
 	it("silent suppresses it", async () => {
@@ -73,29 +73,29 @@ describe("a failed locale load is a coded SlothletWarning (#820)", () => {
 		expect(failed(other)).toEqual([]);
 	});
 
-	it("api.slothlet.i18n.setLanguage and setLanguageAsync warn on the instance", async () => {
+	it("api.slothlet.i18n.language.set warns on the instance", async () => {
 		api = await slothlet({ base: TEST_DIRS.API_TEST, diagnostics: true });
-		api.slothlet.i18n.setLanguage("zz-zz");
-		await api.slothlet.i18n.setLanguageAsync("yy-yy");
+		api.slothlet.i18n.language.set("zz-zz");
+		await api.slothlet.i18n.language.set("yy-yy");
 		expect(failed(api).map((w) => w.context.lang)).toEqual(["zz-zz", "yy-yy"]);
 	});
 
-	it("api.slothlet.i18n.setLanguage honours silent", async () => {
+	it("api.slothlet.i18n.language.set honours silent", async () => {
 		api = await slothlet({ base: TEST_DIRS.API_TEST, diagnostics: true, silent: true });
-		api.slothlet.i18n.setLanguage("zz-zz");
-		await api.slothlet.i18n.setLanguageAsync("yy-yy");
+		api.slothlet.i18n.language.set("zz-zz");
+		await api.slothlet.i18n.language.set("yy-yy");
 		expect(failed(api)).toEqual([]);
 	});
 
 	it("outside any instance the warning lands on the process-level class", async () => {
-		setLanguage("zz-zz");
-		await setLanguageAsync("yy-yy");
+		language.set("zz-zz");
+		await language.set("yy-yy");
 		expect(SlothletWarning.captured.filter((w) => w.code === CODE).map((w) => w.context.lang)).toEqual(["zz-zz", "yy-yy"]);
 	});
 
 	it("prints no bare console.warn line of its own", async () => {
 		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-		setLanguage("zz-zz");
+		language.set("zz-zz");
 		expect(warn).not.toHaveBeenCalled();
 	});
 });

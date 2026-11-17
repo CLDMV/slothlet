@@ -380,6 +380,27 @@ async function setLanguageAsync(lang, options) {
 }
 
 /**
+ * Switch the process-wide language. One call for every environment: where the locale can be read synchronously (Node,
+ * or `"en-us"`, which is bundled) the switch is done when it returns, and nothing is returned; where the load is
+ * asynchronous (a browser) it returns a promise that settles once the locale is in place. `await language.set(x)`
+ * works everywhere. A locale that fails to load raises `WARNING_LANGUAGE_LOAD_FAILED` and keeps `"en-us"`.
+ * @param {string} lang - Language code (e.g. "es-mx").
+ * @param {{SlothletWarning?: Function, silent?: boolean}} [options] - Warning class and `silent` flag for a failed load.
+ * @returns {Promise<void>|undefined} A promise only when the load is asynchronous.
+ * @public
+ * @example
+ * language.set("es-mx");         // Node: switched on return
+ * await language.set("es-mx");   // works in a browser too
+ */
+function setLanguageTo(lang, options) {
+	if (isNode || lang === "en-us") {
+		setLanguage(lang, options);
+		return undefined;
+	}
+	return setLanguageAsync(lang, options);
+}
+
+/**
  * Get current language
  * @returns {string} Language code
  * @public
@@ -462,7 +483,7 @@ export const t = translate;
 export function internals(consumer) {
 	if (!mayTakeInternals(consumer, ["lib/builders/api_builder", "slothlet"]))
 		throw ownBindingsRefusal("lib/i18n/translations", import.meta.url);
-	return { initI18n, setLanguage, setLanguageAsync };
+	return { initI18n, setLanguage: setLanguageTo };
 }
 
 /**
@@ -499,5 +520,24 @@ const guarded_setLanguage = guardInternal(setLanguage, "setLanguage", import.met
 /** @type {typeof setLanguageAsync} */
 const guarded_setLanguageAsync = guardInternal(setLanguageAsync, "setLanguageAsync", import.meta.url);
 /** @type {typeof initI18n} */
-const guarded_initI18n = guardInternal(initI18n, "initI18n", import.meta.url);
-export { guarded_setLanguage as setLanguage, guarded_setLanguageAsync as setLanguageAsync, guarded_initI18n as initI18n };
+const guarded_initI18n = guardInternal(initI18n, "init", import.meta.url);
+/** @type {typeof setLanguageTo} */
+const guarded_setLanguageTo = guardInternal(setLanguageTo, "language.set", import.meta.url);
+
+/**
+ * The process-wide language: `language.get()` reads it, `language.set(lang)` switches it (see {@link setLanguageTo}).
+ * @type {{get: typeof getLanguage, set: typeof setLanguageTo}}
+ * @public
+ * @example
+ * import { language } from "@cldmv/slothlet/i18n";
+ * language.set("es-mx");
+ * language.get(); // "es-mx"
+ */
+export const language = Objects.freeze({ get: getLanguage, set: guarded_setLanguageTo });
+
+export {
+	guarded_setLanguage as setLanguage,
+	guarded_setLanguageAsync as setLanguageAsync,
+	guarded_initI18n as initI18n,
+	guarded_initI18n as init
+};

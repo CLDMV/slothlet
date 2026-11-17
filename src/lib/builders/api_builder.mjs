@@ -95,7 +95,7 @@ const {
 const { runtime_codeWritersOnStack } = framePlacementInternals("lib/builders/api_builder");
 const { markSlothletProxy } = frameworkInternalsInternals("lib/builders/api_builder");
 const trustedRootOwn = trustedRootInternals("lib/builders/api_builder");
-const { initI18n, setLanguage, setLanguageAsync } = translationsInternals("lib/builders/api_builder");
+const { initI18n, setLanguage } = translationsInternals("lib/builders/api_builder");
 
 /** The key `util.inspect` reads a custom hook from (the platform shim gives the same one in a browser). */
 const INSPECT_KEY = Symbols.for("nodejs.util.inspect.custom");
@@ -116,12 +116,10 @@ const SELF_FRAMEWORK_ROOT_KEYS = setFrom(["slothlet", "shutdown", "destroy"]);
 /**
  * i18n translation helpers exposed on every Slothlet namespace.
  * @typedef {Object} I18nNamespace
- * @property {Function} setLanguage - Set the active locale (e.g. "en-us"). Synchronous; in a browser, non-default locales load in the background.
- * @property {Function} setLanguageAsync - Set the active locale and await its load. Browser-capable (resolves once the locale module is fetched).
- * @property {Function} getLanguage - Return the current active locale string.
+ * @property {Function} init - Initialise the i18n system with options (the language is detected when none is given).
+ * @property {{get: Function, set: Function}} language - `get()` returns the current locale; `set(lang)` switches it, returning a promise only where the load is asynchronous (a browser), so `await language.set(x)` works everywhere.
  * @property {Function} translate - Translate an error code with optional params.
  * @property {Function} t - Alias for translate.
- * @property {Function} initI18n - Initialise the i18n system with options.
  */
 
 /**
@@ -1531,14 +1529,15 @@ export class ApiBuilder extends ComponentBase {
 			 */
 			i18n: {
 				// A locale that fails to load is warned about through this instance: its warning class and `silent`.
-				setLanguage: (lang) => setLanguage(lang, { SlothletWarning: slothlet.SlothletWarning, silent: slothlet.config?.silent === true }),
-				setLanguageAsync: (lang) =>
-					setLanguageAsync(lang, { SlothletWarning: slothlet.SlothletWarning, silent: slothlet.config?.silent === true }),
-				getLanguage,
+				init: (options = {}) =>
+					initI18n({ SlothletWarning: slothlet.SlothletWarning, silent: slothlet.config?.silent === true, ...options }),
+				language: {
+					get: getLanguage,
+					// A promise only where the load is asynchronous (a browser); `await` works everywhere.
+					set: (lang) => setLanguage(lang, { SlothletWarning: slothlet.SlothletWarning, silent: slothlet.config?.silent === true })
+				},
 				translate,
-				t,
-				initI18n: (options = {}) =>
-					initI18n({ SlothletWarning: slothlet.SlothletWarning, silent: slothlet.config?.silent === true, ...options })
+				t
 			},
 
 			/**

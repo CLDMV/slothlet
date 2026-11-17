@@ -31,7 +31,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { setLanguage, translate, initI18n, getLanguage } from "@cldmv/slothlet/i18n";
+import { setLanguage, translate, initI18n, getLanguage } from "#i18n";
 import { SlothletWarning } from "@cldmv/slothlet/errors";
 
 describe("translations.mjs edge cases", () => {

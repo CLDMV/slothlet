@@ -101,8 +101,8 @@ try {
 	out.metadataGetFor = meta && typeof meta === "object" ? "ok" : "bad:" + typeof meta;
 
 	// i18n: switch locale via the async dynamic-import path (real browser fetch of the locale JSON).
-	await api.slothlet.i18n.setLanguageAsync("es-mx");
-	out.i18n = api.slothlet.i18n.getLanguage(); // "es-mx"
+	await api.slothlet.i18n.language.set("es-mx");
+	out.i18n = api.slothlet.i18n.language.get(); // "es-mx"
 
 	// lifecycle events: subscribe, then trigger via api.add — a live mutation on the SAME instance, so
 	// the subscription stays valid (reload would re-create the lifecycle handler and orphan it).
