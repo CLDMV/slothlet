@@ -535,11 +535,29 @@ function framesOf(frames) {
 }
 
 /**
+ * Run a `run()` / `scope()` callback, waiting for what it returns (see {@link LiveContextManager#runBody}). Its frame,
+ * synchronous or an `await` further out, marks code that runs as part of a `run()` / `scope()` callback.
+ * @param {Function} fn - The callback.
+ * @param {Array<*>} args - Its arguments.
+ * @returns {Promise<*>} What it returned.
+ * @private
+ */
+async function slothlet_liveRunBody(fn, args) {
+	return await Reflect.apply(fn, undefined, args);
+}
+
+/**
  * What a resource scope's callback hands the pin it runs in instead of a promise the pin is not to hold its state for
  * (see {@link LiveContextManager#runScope}): the scope's entry takes the callback's result from the manager.
  * @type {symbol}
  */
 const SCOPE_RESULT = Symbol("slothlet.resourceScope.result");
+
+/**
+ * How many frames are read to find a `run()` / `scope()` callback the code running now is part of.
+ * @type {number}
+ */
+const RUN_BODY_FRAMES = 200;
 
 export class LiveContextManager {
 	/**
@@ -1983,6 +2001,68 @@ export class LiveContextManager {
 				ArrayMethods.pop(this.#enteredFor(store));
 			}
 		}
+	}
+
+	/**
+	 * Run a `run()` / `scope()` callback of the live runtime and wait for what it returns, marked on the stack as one (see
+	 * {@link LiveContextManager#runParent}).
+	 * @param {Function} fn - The callback.
+	 * @param {Array<*>} args - Its arguments.
+	 * @returns {Promise<*>} What it returned.
+	 * @internal
+	 */
+	runBody(fn, args) {
+		return slothlet_liveRunBody(fn, args);
+	}
+
+	/**
+	 * The store a new `run()` / `scope()` of an instance takes its context and caller from. The active-instance field
+	 * names the store of the last `run()` / `scope()` entered until it returns, so a `run()` that is still waiting at an
+	 * `await` would hand its context to a sibling `run()` opened meanwhile from elsewhere. That store is the parent only
+	 * when the code opening the new one is part of its flow: a call of the instance is executing on it, a call waiting on
+	 * it is the code that picked up, or a `run()` / `scope()` callback is on the stack (synchronously or at an `await`
+	 * further out). Otherwise the instance's own store is the parent. Which of several interleaved `run()` callbacks the
+	 * code is part of is not told apart.
+	 * @param {string} instanceID - The instance.
+	 * @returns {object|undefined} The store; undefined when the instance has none.
+	 * @internal
+	 */
+	runParent(instanceID) {
+		const base = MapMethods.get(this.instances, instanceID);
+		const activeID = this.currentInstanceID;
+		const store = activeID && this.#flowBelongsToInstance(activeID, instanceID) ? MapMethods.get(this.instances, activeID) : undefined;
+		if (!store || store === base) return base;
+		if (store.__authoritativeWrapper || ArrayMethods.some(this.#enteredFor(store), (entry) => entry !== null)) return store;
+		const suspended = this.#suspendedFor(store);
+		if (SetMethods.size(suspended)) {
+			const resolved = this.#resolveSuspendedFromStack(suspended);
+			if (resolved && typeof resolved === "object" && !resolved.tied) return store;
+		}
+		return this.#runBodyOnStack() ? store : base;
+	}
+
+	/**
+	 * Whether the code running now is part of a `run()` / `scope()` callback: the callback's frame of slothlet's own (see
+	 * {@link slothlet_liveRunBody}) is on the stack, synchronously or at an `await` further out.
+	 * @returns {boolean} True when it is.
+	 * @private
+	 */
+	#runBodyOnStack() {
+		let frames;
+		try {
+			frames = runtime_captureFrames(RUN_BODY_FRAMES);
+		} catch {
+			// The stack could not be read (the global `Error` was changed): the code is not taken for a callback's.
+			return false;
+		}
+		// Every frame described in full (not the lean walk): the frame is found by its function's name.
+		const walk = Arrays.isArray(frames) ? listSteps(frames) : frames[Symbol.iterator]();
+		for (let step = walk.next(); !step.done; step = walk.next()) {
+			const frame = step.value;
+			if (!StringMethods.startsWith(frame.path, FRAMEWORK_DIR + "/")) continue;
+			if (StringMethods.includes(frame.head ?? "", "slothlet_liveRunBody")) return true;
+		}
+		return false;
 	}
 
 	/**

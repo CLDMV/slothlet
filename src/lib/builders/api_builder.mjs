@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:28:44-08:00 (1794882524)
+ *	@Last modified time: 2026-11-17T11:23:39-08:00 (1794943419)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -4905,27 +4905,9 @@ export class ApiBuilder extends ComponentBase {
 
 				// For live binding mode, use child instance approach
 				if (contextManager.constructor.name === "LiveContextManager") {
-					// CRITICAL: Always get THIS instance's store (base or child), not just current active
-					let currentStore = null;
-
-					// Check if current is THIS instance or a child of THIS instance
-					const currentID = contextManager.currentInstanceID;
-					if (currentID) {
-						const activeStore = MapMethods.get(contextManager.instances, currentID);
-						const isOurContext =
-							currentID === slothlet.instanceID ||
-							activeStore?.parentInstanceID === slothlet.instanceID ||
-							StringMethods.startsWith(currentID, slothlet.instanceID + "__run_");
-
-						if (isOurContext) {
-							currentStore = activeStore;
-						}
-					}
-
-					// Fall back to base store if not in our context
-					if (!currentStore) {
-						currentStore = MapMethods.get(contextManager.instances, slothlet.instanceID);
-					}
+					// The store of THIS instance's flow the code opening the scope is part of: a run()/scope() of it only when
+					// the code runs inside that flow, never one a sibling run() left in the active field while it waits.
+					const currentStore = contextManager.runParent(slothlet.instanceID);
 
 					if (!currentStore) {
 						throw new slothlet.SlothletError("CONTEXT_NOT_FOUND", {
@@ -4998,8 +4980,8 @@ export class ApiBuilder extends ComponentBase {
 						// Set as current instance
 						contextManager.currentInstanceID = childInstanceID;
 
-						// Execute callback
-						return await Reflect.apply(fn, undefined, args);
+						// Execute callback, marked on the stack as a run()/scope() callback (see runParent).
+						return await contextManager.runBody(fn, args);
 					} finally {
 						// Restore previous instance ID and cleanup child
 						contextManager.currentInstanceID = previousInstanceID;
