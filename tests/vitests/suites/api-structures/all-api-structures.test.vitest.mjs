@@ -35,14 +35,28 @@ import { fileURLToPath } from "node:url";
 import { getAllApiTestFoldersSync, getMatrixConfigs } from "../../setup/vitest-helper.mjs";
 
 /**
- * Api paths whose primitive value differs on every load by design (a random per-instance id), so the
- * shape comparison checks their type but not their value. Keyed by fixture; `*` applies to all.
- * @type {Map<string, string[]>}
+ * Api paths whose primitive value differs on every load by design (a random per-instance id, a getter that counts its
+ * own reads), so the shape comparison checks their type but not their value. Keyed by fixture; `*` applies to all. A
+ * RegExp matches every dotted api path it fits (a function holding itself as `me` is read as `me.me…`).
+ * @type {Map<string, Array<string|RegExp>>}
  */
 const VOLATILE_VALUES = new Map([
 	["*", ["slothlet.instance.id"]],
-	["api_tv_test", ["config.state.instanceId"]]
+	["api_tv_test", ["config.state.instanceId"]],
+	["api_test_collisions", [/^pair\.(fnprop|fnsolo)(\.me)*\.live$/]]
 ]);
+
+/**
+ * Blank the value of every node in `shape` whose dotted api path `pattern` matches.
+ * @param {object} shape - A node's shape (`members` holds its children).
+ * @param {RegExp} pattern - The paths to blank.
+ * @param {string} [apiPath=""] - The node's dotted api path.
+ * @returns {void}
+ */
+function blankMatching(shape, pattern, apiPath = "") {
+	if (apiPath && pattern.test(apiPath) && "value" in shape) shape.value = "<volatile>";
+	for (const [key, child] of Object.entries(shape.members ?? {})) blankMatching(child, pattern, apiPath ? `${apiPath}.${key}` : key);
+}
 
 describe("All API Structures Validation", () => {
 	/**
@@ -260,6 +274,10 @@ describe("All API Structures Validation", () => {
 		if (!line) return null;
 		const shape = JSON.parse(line.slice("API Shape: ".length));
 		for (const apiPath of [...(VOLATILE_VALUES.get("*") ?? []), ...(VOLATILE_VALUES.get(folder) ?? [])]) {
+			if (apiPath instanceof RegExp) {
+				blankMatching(shape, apiPath);
+				continue;
+			}
 			const node = apiPath.split(".").reduce((current, segment) => current?.members?.[segment], shape);
 			if (node && "value" in node) node.value = "<volatile>";
 		}

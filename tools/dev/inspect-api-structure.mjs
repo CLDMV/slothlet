@@ -304,6 +304,14 @@ function inspectApiStructure(obj, path = "", depth = 0, maxDepth = 8, visited = 
 }
 
 /**
+ * How deep the load and materialize walks go. A function can hold itself as a member (`fn.me = fn`), and each read of
+ * it is a node one level deeper (`me.me…`, as plain JavaScript reads it), so a walk keyed on node identity alone
+ * never ends.
+ * @type {number}
+ */
+const WALK_DEPTH = 24;
+
+/**
  * Load every node of a lazy api, so it is inspected as eager composes it: once loaded, a lazy node is
  * what eager builds. An unloaded lazy node is a thenable function proxy, and awaiting it loads it; a
  * loaded node is not thenable. A node that fails to load (a module refused at load, say) throws here,
@@ -316,7 +324,8 @@ async function forceMaterializeLazyFolders(api) {
 	if (!api) return;
 	console.log(chalk.gray("  Loading every lazy node..."));
 	const seen = new Set();
-	const load = async (node, isRoot) => {
+	const load = async (node, isRoot, depth) => {
+		if (depth > WALK_DEPTH) return;
 		for (const key of Object.keys(node)) {
 			if (isRoot && (key === "slothlet" || key === "shutdown" || key === "destroy")) continue;
 			let child;
@@ -330,10 +339,10 @@ async function forceMaterializeLazyFolders(api) {
 			if (child === null || (typeof child !== "object" && typeof child !== "function") || seen.has(child)) continue;
 			seen.add(child);
 			if (typeof child === "function" && typeof child.then === "function") child = await child;
-			if (child !== null && (typeof child === "object" || typeof child === "function")) await load(child, false);
+			if (child !== null && (typeof child === "object" || typeof child === "function")) await load(child, false, depth + 1);
 		}
 	};
-	await load(api, true);
+	await load(api, true, 0);
 }
 
 /**
@@ -384,6 +393,7 @@ async function inspectApi(apiName, options = {}) {
 
 		// Load the API
 		const api = await slothlet(config);
+		nodeOf = api.slothlet.node;
 
 		console.log(chalk.green("✅ API loaded successfully"));
 
@@ -445,9 +455,10 @@ async function inspectApi(apiName, options = {}) {
 
 		// Mode-neutral shape of the whole api, for comparing eager and lazy composition (#583). It is not cut
 		// at the display depth, which would make every subtree below it compare equal (#585 review), so
-		// every lazy node is loaded first, at any depth.
-		await findCallablePaths(api, "api", new WeakSet(), false, 0, Infinity);
-		console.log(`\nAPI Shape: ${JSON.stringify(describeApiShape(api, 0, Infinity))}`);
+		// every lazy node is loaded first, down to WALK_DEPTH: past any real api's depth, and where a node that
+		// holds itself (`fn.me = fn`, read as `me.me…`) stops, the same in both modes.
+		await findCallablePaths(api, "api", new WeakSet(), false, 0, WALK_DEPTH);
+		console.log(`\nAPI Shape: ${JSON.stringify(describeApiShape(api, 0, WALK_DEPTH))}`);
 
 		// Shutdown the API instance to clean up resources
 		if (typeof api.shutdown === "function") {
@@ -466,12 +477,13 @@ async function inspectApi(apiName, options = {}) {
  * Recursively materializes lazy proxy structures by calling their ___materialize methods.
  * @param {any} obj - Object to materialize
  * @param {WeakSet} [visited] - Visited objects tracker to prevent infinite recursion
+ * @param {number} [depth=0] - How deep this node is below where the walk started (see {@link WALK_DEPTH}).
  * @returns {Promise<void>}
  * @internal
  */
-async function materializeLazyStructure(obj, visited = new WeakSet()) {
+async function materializeLazyStructure(obj, visited = new WeakSet(), depth = 0) {
 	// Avoid infinite recursion
-	if (!obj || visited.has(obj)) return;
+	if (!obj || visited.has(obj) || depth > WALK_DEPTH) return;
 
 	// Only process objects and functions
 	if (typeof obj !== "object" && typeof obj !== "function") return;
@@ -482,11 +494,6 @@ async function materializeLazyStructure(obj, visited = new WeakSet()) {
 	if (typeof obj === "function" && obj.___materialize && typeof obj.___materialize === "function") {
 		try {
 			await obj.___materialize();
-			// After materialization, get the materialized value and recurse into it
-			const materialized = obj.__materialized;
-			if (materialized && materialized !== obj) {
-				await materializeLazyStructure(materialized, visited);
-			}
 		} catch (_) {
 			// Silently ignore materialization errors
 		}
@@ -494,13 +501,14 @@ async function materializeLazyStructure(obj, visited = new WeakSet()) {
 
 	// Recursively materialize all properties
 	if (typeof obj === "object" || typeof obj === "function") {
-		// Use Object.getOwnPropertyNames to get all properties including non-enumerable ones
-		const propNames = [...new Set([...Object.getOwnPropertyNames(obj), ...Object.keys(obj)])];
+		// The api's own members: every one is enumerable. Walking non-enumerable names too (a function's `prototype`,
+		// its `constructor`) only multiplies the walk below each node.
+		const propNames = Object.keys(obj);
 		for (const prop of propNames) {
 			try {
 				const value = obj[prop];
 				if (value && (typeof value === "object" || typeof value === "function")) {
-					await materializeLazyStructure(value, visited);
+					await materializeLazyStructure(value, visited, depth + 1);
 				}
 			} catch {
 				// Ignore property access errors (getters that throw, etc.)
@@ -521,21 +529,31 @@ async function materializeLazyStructure(obj, visited = new WeakSet()) {
  * @internal
  */
 /**
+ * The loaded api's `slothlet.node`, set once the api is built; null before.
+ * @type {((target: unknown) => ({callable: boolean}|undefined))|null}
+ */
+let nodeOf = null;
+
+/**
  * Whether an api node can be called. A lazy folder is a function-typed proxy even when it is a plain
  * namespace (its callability is unknown until it loads), so `typeof` alone listed every lazy folder as
  * a callable path and the eager/lazy comparison could not match (#583). A slothlet node reports its
- * own callability through `__isCallable` (the tool loads every lazy node before asking); anything
- * else is callable when it is a function.
+ * own callability through `api.slothlet.node(node).callable` (the tool loads every lazy node before
+ * asking); anything else is callable when it is a function.
  * @param {unknown} value - Node to test.
  * @returns {boolean} True when the node is callable.
  * @internal
  */
 function isCallableNode(value) {
 	if (typeof value !== "function") return false;
-	// A loaded lazy namespace reports `null` (its callability was never set), eager reports `false`;
-	// only a non-slothlet function has no flag at all.
-	const flag = value.__isCallable;
-	return flag === undefined ? true : flag === true;
+	let report;
+	try {
+		report = nodeOf ? nodeOf(value) : undefined;
+	} catch {
+		report = undefined;
+	}
+	// Only a non-slothlet function has no report at all.
+	return report === undefined ? true : report.callable === true;
 }
 
 /**

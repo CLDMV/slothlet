@@ -127,6 +127,9 @@ const outcomes = {
 	}),
 	// A reply to vitest's pending fetch of another copy of this file, its code changed before vitest's runner reads it.
 	forged: await attempt(async () => {
+		// Outside vitest's runner there is no pending fetch to forge, and the copy below would import itself: a copy
+		// waiting on its own evaluation never settles, and neither would this file's load.
+		if (ownId === null) throw new Error("no runner");
 		const set = Map.prototype.set;
 		Map.prototype.set = function (key, value) {
 			if (value && typeof value === "object" && value.method === "fetch" && typeof value.resolve === "function") {
