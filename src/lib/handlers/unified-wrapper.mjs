@@ -17161,6 +17161,50 @@ class UnifiedWrapper extends ComponentBase {
 	}
 
 	/**
+	 * Adopt one member of another value (a collision's losing callable) onto this node the way the node's own
+	 * members are adopted: an accessor stays an accessor, run on every read with the node as `this`; an object or
+	 * function becomes a child node at this node's path and the member's key; anything else is held as it is.
+	 *
+	 * @private
+	 * @param {string} key - The member's key.
+	 * @param {object|Function} source - The value holding the member.
+	 * @returns {void}
+	 *
+	 * @description
+	 * A callable folder module that puts members on its own function (`fn.live` as a getter, `fn.me = fn`) keeps
+	 * them on its impl, where the get trap serves them live and wraps a function or object as a child. When that
+	 * folder loses its slot in a collision, its members move to the node that kept the slot; copying their values
+	 * would freeze a getter at the value it had and hand out a self-reference as the bare function (#874).
+	 *
+	 * @example
+	 * keptWrapper.___adoptForeignMember("live", losingFn);
+	 */
+	___adoptForeignMember(key, source) {
+		const descriptor = Reflect.getOwnPropertyDescriptor(source, key);
+		// The caller passes one of the source's own enumerable keys. A module's Proxy function whose traps disagree can
+		// still describe none for it; that case is guarded, and the suite composes no such module.
+		/* v8 ignore next */
+		if (descriptor === undefined) return;
+		if (!("value" in descriptor)) {
+			runtime_defineAdoptedAccessor(this, key, descriptor);
+			return;
+		}
+		const value = descriptor.value;
+		let stored = value;
+		if (
+			value !== null &&
+			(typeof value === "object" || typeof value === "function") &&
+			!util.types.isProxy(value) &&
+			resolveWrapper(value) === null
+		) {
+			const wrapped = this.___createChildWrapper(key, value, null, this.____slothletInternal.deferChildAdopt);
+			// A built-in data object or an error is held as it is, as the get trap holds one.
+			if (wrapped !== null && wrapped !== undefined) stored = wrapped;
+		}
+		Objects.defineProperty(this, key, { __proto__: null, value: stored, writable: false, enumerable: true, configurable: true });
+	}
+
+	/**
 	 * @private
 	 * @param {string|symbol} key - Child property name
 	 * @param {unknown} value - Child value

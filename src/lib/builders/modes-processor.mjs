@@ -1314,15 +1314,17 @@ export class ModesProcessor extends ComponentBase {
 									existingCategory[namedKey] = mod[namedKey];
 								}
 							}
-							// The losing function's own members (`fn.tag = …`) merge the same way: they are not named
-							// exports, but they are members of the module's value, and the lazy settle carries them
-							// across from the folder's extracted impl (mergeOffSlotCollisionFolder).
-							if (typeof mod.default === "function") {
+							// The losing function's own members (`fn.tag = …`, a getter, `fn.me = fn`) merge the same way: they
+							// are not named exports, but they are members of the module's value. They are adopted as the
+							// function's own node would serve them — an accessor stays live, an object or function becomes a
+							// child node at this slot's path (#874) — as the lazy settle adopts them from the folder's impl
+							// (mergeOffSlotCollisionFolder).
+							if (typeof mod.default === "function" && existingCategoryW) {
 								for (let ofIndex = 0, ofList = Objects.keys(mod.default); ofIndex < ofList.length; ofIndex++) {
 									const fnKey = ofList[ofIndex];
 									if (isFrameworkReservedKey(fnKey)) continue;
 									if (!FunctionMethods.call(Objects.prototype.hasOwnProperty, existingCategory, fnKey)) {
-										existingCategory[fnKey] = mod.default[fnKey];
+										existingCategoryW.___adoptForeignMember(fnKey, mod.default);
 									}
 								}
 							}

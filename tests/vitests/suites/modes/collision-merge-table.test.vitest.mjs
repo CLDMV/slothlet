@@ -288,7 +288,41 @@ describe("Modes > documented collision table (merge: first loaded wins, both sou
 				expect(slot("x"), `${label} slot keeps the file callable`).toBe("file-fnprop");
 				expect(slot.origin, `${label} named export`).toBe("dir");
 				expect(slot.tag, `${label} function's own member`).toBe("folder-fn-tag");
-				expect(Object.keys(slot).sort(), `${label} surface`).toEqual(["extra", "origin", "tag"]);
+				expect(Object.keys(slot).sort(), `${label} surface`).toEqual(["extra", "live", "me", "origin", "tag"]);
+			}
+		} finally {
+			await eager.shutdown();
+		}
+	});
+
+	it("adopts a losing folder callable's function members as live members and nodes, as the same folder composes alone (#874)", async () => {
+		// `pair/fnprop/fnprop.mjs` loses its slot to `pair/fnprop.mjs`; `pair/fnsolo/fnsolo.mjs` is the same
+		// module with nothing beside it. Both put a getter (`live`, counting its reads) and a self-reference
+		// (`me = fn`) on the function. Alone, the getter runs on every read and `me` is a node at `<slot>.me`;
+		// the collision must compose the same, in both modes, rather than a snapshot of the folder's function
+		// (a getter frozen at its first value, `me` the bare function with no path).
+		const { resolveWrapper } = await import("#handlers/unified-wrapper");
+		const pathOf = (value) => resolveWrapper(value)?.____slothletInternal.apiPath ?? null;
+		const eager = await slothlet({ mode: "eager", base: BASE });
+		api = await slothlet({ mode: "lazy", base: BASE });
+
+		try {
+			await api.pair.fnprop.extra.ping;
+			await api.pair.fnsolo.extra.ping;
+			const rows = [
+				["eager alone", eager.pair.fnsolo, "pair.fnsolo", "folder-fnsolo"],
+				["eager collision", eager.pair.fnprop, "pair.fnprop", "folder-fnprop"],
+				["lazy alone", await api.pair.fnsolo, "pair.fnsolo", "folder-fnsolo"],
+				["lazy collision", await api.pair.fnprop, "pair.fnprop", "folder-fnprop"]
+			];
+			for (const [label, slot, path, folderAnswer] of rows) {
+				const first = slot.live;
+				expect(slot.live, `${label}: the getter runs on every read`).toBe(first + 1);
+				expect(typeof Object.getOwnPropertyDescriptor(slot, "live").get, `${label}: live is an accessor`).toBe("function");
+				expect(pathOf(slot.me), `${label}: me is a node at its own path`).toBe(`${path}.me`);
+				expect(slot.me(), `${label}: me is the folder's callable`).toBe(folderAnswer);
+				expect(pathOf(slot.me.me), `${label}: me.me nests below it`).toBe(`${path}.me.me`);
+				expect(Object.keys(slot.me).sort(), `${label}: me's members`).toEqual(["live", "me", "tag"]);
 			}
 		} finally {
 			await eager.shutdown();
