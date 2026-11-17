@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:11-08:00 (1794874571)
+ *	@Last modified time: 2026-11-17T11:23:41-08:00 (1794943421)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -70,6 +70,22 @@ function setApiCallerPinner(strategy) {
  */
 export function pinToCurrentCaller(callback) {
 	if (!pinner || typeof callback !== "function") return callback;
+	return pinner(callback);
+}
+
+/**
+ * Bind a callback that runs code in a resource's scope (what an `AsyncResource`, a snapshot or a bound function runs
+ * later) to the caller active right now. Whoever holds the resource chooses the code, so the strategy tells it by its
+ * frames when it runs: the code of the caller it was pinned to keeps the pin, anyone else's runs as whatever was running
+ * where the resource was used. A strategy that offers no `scope` form pins it as any callback.
+ *
+ * @param {Function} callback - The callback.
+ * @returns {Function} The callback, bound to the current caller where one exists.
+ * @internal
+ */
+export function pinScopeToCurrentCaller(callback) {
+	if (!pinner || typeof callback !== "function") return callback;
+	if (typeof pinner.scope === "function") return pinner.scope(callback);
 	return pinner(callback);
 }
 

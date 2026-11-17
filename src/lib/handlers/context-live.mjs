@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:28:45-08:00 (1794882525)
+ *	@Last modified time: 2026-11-17T11:23:39-08:00 (1794943419)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -92,6 +92,7 @@ const {
 	resolveSupplier,
 	loadOnStack,
 	ownReceiver,
+	runningOutsideFlow,
 	runtime_captureFrames,
 	stackHoldsInstanceCode,
 	supplierChainCeiling
@@ -533,6 +534,13 @@ function framesOf(frames) {
 	return typeof frames.lean === "function" ? frames.lean() : frames[Symbol.iterator]();
 }
 
+/**
+ * What a resource scope's callback hands the pin it runs in instead of a promise the pin is not to hold its state for
+ * (see {@link LiveContextManager#runScope}): the scope's entry takes the callback's result from the manager.
+ * @type {symbol}
+ */
+const SCOPE_RESULT = Symbol("slothlet.resourceScope.result");
+
 export class LiveContextManager {
 	/**
 	 * The active-instance field as last written. Calls restore it in settle order, not entry order, so
@@ -555,6 +563,37 @@ export class LiveContextManager {
 	 * @type {Set<object>}
 	 */
 	#busyStores = new Set();
+
+	/**
+	 * The resource scopes running now, innermost last (see {@link LiveContextManager#pinScope}).
+	 * @type {Array<object>}
+	 */
+	#scopes = [];
+
+	/**
+	 * The state a resource scope was entered from, handed from the scope's entry to the code the pin runs inside it.
+	 * @type {object|null}
+	 */
+	#pendingScope = null;
+
+	/**
+	 * Whether a resource scope is being told right now, so the frame reading it does is not told again.
+	 * @type {boolean}
+	 */
+	#tellingScope = false;
+
+	/**
+	 * What a resource scope's callback returned, handed past the pin it ran in (see {@link SCOPE_RESULT}).
+	 * @type {*}
+	 */
+	#scopeResult = undefined;
+
+	/**
+	 * While {@link LiveContextManager#pinScope} pins a callback: what it was pinned to (false until a pin is made).
+	 * Null otherwise.
+	 * @type {object|false|null}
+	 */
+	#pinSource = null;
 
 	/**
 	 * The live instances with permissions on: while there are any, the promise hooks that record who started a flow
@@ -726,6 +765,7 @@ export class LiveContextManager {
 	 * @private
 	 */
 	#resolveActiveID() {
+		if (this.#scopes.length !== 0) this.#settleScope();
 		const raw = this.#removedRunBase(this.#activeID);
 		if (this.#syncDepth > 0 || SetMethods.size(this.#busyStores) === 0) return raw;
 		const rawFamily = raw === null ? null : this.#familyOf(raw);
@@ -1451,8 +1491,9 @@ export class LiveContextManager {
 		 * @param {object|null} ceiling - The call the registering code ran inside, when that call was not its own (#597).
 		 * @returns {Function} The pinned callback.
 		 */
-		const pinListener = (listener, instanceID, wrapper, ceiling) =>
-			function slothlet_pinnedEventListener(...args) {
+		const pinListener = (listener, instanceID, wrapper, ceiling) => {
+			if (this.#pinSource !== null) this.#pinSource = { instanceID, wrapper, ceiling, loading: null };
+			return function slothlet_pinnedEventListener(...args) {
 				// The instance can be gone by the time a deferred callback runs: a listener registered
 				// before shutdown, or a timer already scheduled, still fires afterwards. Re-entering a
 				// context that no longer exists throws CONTEXT_NOT_FOUND, and from a listener or timer
@@ -1484,6 +1525,7 @@ export class LiveContextManager {
 					false
 				);
 			};
+		};
 		/**
 		 * The pinned replacement for a callback a file registered while it loaded: run as the file's module, found when
 		 * the callback runs. With no module to run as (the file's node is gone, or which load registered it could not be
@@ -1492,8 +1534,9 @@ export class LiveContextManager {
 		 * @param {object|false} loading - The load (see createModuleLoad), or false when it could not be told.
 		 * @returns {Function} The pinned callback.
 		 */
-		const pinLoad = (listener, loading) =>
-			function slothlet_pinnedLoadListener(...args) {
+		const pinLoad = (listener, loading) => {
+			if (this.#pinSource !== null) this.#pinSource = { instanceID: null, wrapper: null, ceiling: null, loading };
+			return function slothlet_pinnedLoadListener(...args) {
 				const manager = liveContextManagerRef;
 				const instanceID = loading ? loading.instanceID() : null;
 				// The instance is gone: unpinned, as any callback that outlives its instance.
@@ -1518,10 +1561,259 @@ export class LiveContextManager {
 					loading
 				);
 			};
+		};
 		const pinOne = (listener) => pinMany([listener])[0];
 		pinOne.many = pinMany;
+		pinOne.scope = (listener) => this.#pinScope(pinOne, listener);
 		setApiCallerPinner(pinOne);
 		liveContextManagerRef = this;
+	}
+
+	/**
+	 * Pin a callback that runs code in a resource's scope: what an `AsyncResource`, a function
+	 * `AsyncLocalStorage.snapshot()` made or one `AsyncLocalStorage.bind()` bound runs later (see
+	 * `helpers/async-resource-context`). Whoever holds the resource chooses the code it runs, so the pin is entered as it
+	 * would be for any callback, and the frames tell whose code it is once the code reads anything: the code of the
+	 * module (or the load, or the host) that made the resource keeps it, as does code that code calls; anyone else's code
+	 * runs as whatever was running where the resource was used, as though nothing had been pinned (see
+	 * {@link LiveContextManager#settleScope}). This is the async runtime's rule for code that enters another flow by
+	 * itself (see `runningOutsideFlow` in `handlers/frame-placement`).
+	 * @param {Function} pinOne - The pinner (see {@link LiveContextManager#registerEventEmitterContextChecker}).
+	 * @param {Function} listener - The callback.
+	 * @returns {Function} The pinned callback; the callback itself when there is nothing to pin it to.
+	 * @private
+	 */
+	#pinScope(pinOne, listener) {
+		const manager = this;
+		/**
+		 * The callback, run inside the pin.
+		 * @param {...*} args - Its arguments.
+		 * @returns {*} What it returned.
+		 */
+		const entered = function slothlet_resourceScopeEntered(...args) {
+			return manager.#runScope(listener, this, args);
+		};
+		this.#pinSource = false;
+		let pinned;
+		let source;
+		try {
+			pinned = pinOne(entered);
+		} finally {
+			source = this.#pinSource;
+			this.#pinSource = null;
+		}
+		if (pinned === entered) return listener;
+		return function slothlet_resourceScope(...args) {
+			const outer = manager.#pendingScope;
+			manager.#pendingScope = { state: manager.#scopeState(), ...manager.#scopeSource(source) };
+			let result;
+			try {
+				result = FunctionMethods.apply(pinned, this, args);
+			} finally {
+				manager.#pendingScope = outer;
+			}
+			if (result !== SCOPE_RESULT) return result;
+			result = manager.#scopeResult;
+			manager.#scopeResult = undefined;
+			return result;
+		};
+	}
+
+	/**
+	 * Whose code a resource scope is about to run in, and whether the code using the resource is that code: the module
+	 * of the call or load the scope is pinned to (with the call that code ran inside, when it was handed it), or the
+	 * host's for a pin to the host. Code of the scope's own, or the host's, putting the scope in place keeps it, as in the
+	 * async runtime (see `runningOutsideFlow` in `handlers/frame-placement`): nothing in the scope is told then.
+	 * @param {object|false|null} source - What the scope was pinned to (see {@link LiveContextManager#pinSource}).
+	 * @returns {{owners: Array<object>, family: string|null, kept: boolean}} The scope's code.
+	 * @private
+	 */
+	#scopeSource(source) {
+		const owners = [];
+		let instanceID = null;
+		if (source) {
+			if (source.loading) {
+				const loading = source.loading;
+				instanceID = loading.instanceID();
+				const record = loading.record();
+				if (record?.wrapper) listPush(owners, record.wrapper);
+				// The loaded file itself, which a module's node need not name: its code is the load's.
+				if (typeof loading.filePath === "string")
+					listPush(
+						owners,
+						Objects.freeze({
+							__proto__: null,
+							slothlet: loading.slothlet,
+							____slothletInternal: Objects.freeze({ __proto__: null, filePath: loading.filePath, apiPath: "", moduleID: loading.moduleID })
+						})
+					);
+			} else {
+				instanceID = source.instanceID;
+				if (source.wrapper) listPush(owners, source.wrapper);
+				const ceiling = source.ceiling;
+				if (Arrays.isArray(ceiling)) appendList(owners, ceiling);
+				else if (ceiling) listPush(owners, ceiling);
+			}
+		}
+		const store = instanceID === null ? undefined : MapMethods.get(this.instances, instanceID);
+		const family = store ? (store.parentInstanceID ?? store.instanceID) : null;
+		if (family === null) return { owners, family, kept: true };
+		let answer;
+		this.#tellingScope = true;
+		try {
+			answer = runningOutsideFlow(family, owners);
+		} catch {
+			// The stack could not be read (the global `Error` was changed): the code is not taken for the scope's.
+			answer = { outside: true };
+		} finally {
+			this.#tellingScope = false;
+		}
+		return { owners, family, kept: answer === null || !answer.outside };
+	}
+
+	/**
+	 * Run a resource scope's callback inside the pin it was entered through, remembering what the pin changed so the scope
+	 * can be told (see {@link LiveContextManager#settleScope}).
+	 * @param {Function} listener - The callback.
+	 * @param {*} thisArg - Its receiver.
+	 * @param {Array<*>} args - Its arguments.
+	 * @returns {*} What it returned.
+	 * @private
+	 */
+	#runScope(listener, thisArg, args) {
+		const pending = this.#pendingScope;
+		this.#pendingScope = null;
+		// Put in place by the scope's own code, or not told at all: the pin stands, as for any callback.
+		if (pending === null || pending.kept) return FunctionMethods.apply(listener, thisArg, args);
+		const scope = this.#scopeOf(pending.state, this.#scopeState(), pending);
+		// Nothing was entered (the instance the pin was made for is gone): the callback runs as it is.
+		if (scope === null) return FunctionMethods.apply(listener, thisArg, args);
+		listPush(this.#scopes, scope);
+		let result;
+		try {
+			result = FunctionMethods.apply(listener, thisArg, args);
+		} finally {
+			ArrayMethods.pop(this.#scopes);
+			// Put the pin back in place for its own exit, which restores what it replaced.
+			if (scope.swapped) this.#applyScopeState(scope, "after");
+		}
+		// The pin holds its state until a promise the callback returns settles, for the code after the callback's
+		// `await`s. It is not held for code that was told to be someone else's, nor for an async callback that read
+		// nothing before its first `await`: nothing said whose code that is, and what runs after the `await` is told from
+		// the stack, as any code no pin holds. The pin's exit then restores its state at once.
+		if (scope.swapped || (!scope.own && util.types.isPromise(result))) {
+			this.#scopeResult = result;
+			return SCOPE_RESULT;
+		}
+		return result;
+	}
+
+	/**
+	 * What a pin changes: the active-instance field, and each store's entered calls and caller fields.
+	 * @returns {{activeID: string|null, stores: Array<{store: object, entered: Array<*>, fields: Array<*>}>}} The state.
+	 * @private
+	 */
+	#scopeState() {
+		const stores = [];
+		for (let ofIndex = 0, ofList = mapValuesToArray(this.instances); ofIndex < ofList.length; ofIndex++) {
+			const store = ofList[ofIndex];
+			listPush(stores, {
+				store,
+				entered: copyList(this.#enteredFor(store)),
+				fields: [store.currentWrapper, store.callerWrapper, store.callerCeiling, store.__authoritativeWrapper, store.__authoritativeCeiling]
+			});
+		}
+		return { activeID: this.#activeID, stores };
+	}
+
+	/**
+	 * A resource scope: what its pin changed, and the code that keeps it (see {@link LiveContextManager#scopeSource}).
+	 * Null when the pin entered nothing.
+	 * @param {object} before - The state before the pin (see {@link LiveContextManager#scopeState}).
+	 * @param {object} after - The state inside it.
+	 * @param {{owners: Array<object>, family: string}} source - The code that keeps it.
+	 * @returns {{before: string|null, after: string|null, touched: Array<object>, owners: Array<object>, family: string, swapped: boolean, own: boolean}|null} The scope.
+	 * @private
+	 */
+	#scopeOf(before, after, source) {
+		const store = MapMethods.get(this.instances, after.activeID);
+		if (!store) return null;
+		const touched = [];
+		for (let ofIndex = 0, ofList = after.stores; ofIndex < ofList.length; ofIndex++) {
+			const now = ofList[ofIndex];
+			const was = ArrayMethods.find(before.stores, (state) => state.store === now.store);
+			if (!was) continue;
+			let changed = was.entered.length !== now.entered.length;
+			for (let i = 0; !changed && i < now.fields.length; i++) changed = was.fields[i] !== now.fields[i];
+			if (changed) listPush(touched, { store: now.store, before: was, after: now });
+		}
+		if (!touched.length && before.activeID === after.activeID) return null;
+		return {
+			before: before.activeID,
+			after: after.activeID,
+			touched,
+			owners: source.owners,
+			family: source.family,
+			swapped: false,
+			own: false
+		};
+	}
+
+	/**
+	 * Put the stores a resource scope's pin changed back as they were before it, or as the pin left them.
+	 * @param {object} scope - The scope (see {@link LiveContextManager#scopeOf}).
+	 * @param {"before"|"after"} which - Which state.
+	 * @returns {void}
+	 * @private
+	 */
+	#applyScopeState(scope, which) {
+		this.#activeID = scope[which];
+		for (let ofIndex = 0, ofList = scope.touched; ofIndex < ofList.length; ofIndex++) {
+			const touched = ofList[ofIndex];
+			const { entered, fields } = touched[which];
+			const now = this.#enteredFor(touched.store);
+			now.length = 0;
+			appendList(now, entered);
+			touched.store.currentWrapper = fields[0];
+			touched.store.callerWrapper = fields[1];
+			touched.store.callerCeiling = fields[2];
+			touched.store.__authoritativeWrapper = fields[3];
+			touched.store.__authoritativeCeiling = fields[4];
+		}
+	}
+
+	/**
+	 * Tell the innermost resource scope by the code running in it, once that code reads anything (see
+	 * {@link LiveContextManager#pinScope}): code of anyone but the module the scope was pinned to takes the pin back
+	 * out, so it and the rest of the scope's synchronous code run as whatever was running where the resource was used.
+	 * Only code running directly in the scope is told: a call it entered since was entered as whatever the scope was
+	 * when that call began.
+	 * @returns {void}
+	 * @private
+	 */
+	#settleScope() {
+		const scope = this.#scopes[this.#scopes.length - 1];
+		if (scope.swapped || this.#tellingScope) return;
+		for (let ofIndex = 0, ofList = scope.touched; ofIndex < ofList.length; ofIndex++) {
+			const touched = ofList[ofIndex];
+			if (this.#enteredFor(touched.store).length !== touched.after.entered.length) return;
+		}
+		this.#tellingScope = true;
+		let answer;
+		try {
+			answer = runningOutsideFlow(scope.family, scope.owners);
+		} catch {
+			// The stack could not be read (the global `Error` was changed): the code is not taken for the scope's.
+			answer = { outside: true };
+		} finally {
+			this.#tellingScope = false;
+		}
+		if (answer === null || !answer.outside) {
+			if (answer !== null) scope.own = true;
+			return;
+		}
+		scope.swapped = true;
+		this.#applyScopeState(scope, "before");
 	}
 
 	/**

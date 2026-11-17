@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:11-08:00 (1794874571)
+ *	@Last modified time: 2026-11-17T11:23:41-08:00 (1794943421)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -36,7 +36,7 @@
  * shuts down. A browser has neither class, and nothing is patched there.
  */
 
-import { pinToCurrentCaller } from "#helpers/caller-pinning";
+import { pinScopeToCurrentCaller } from "#helpers/caller-pinning";
 import { openLayer, closeLayer, holdsValue, markLayer } from "#helpers/boundary-patch-layers";
 import {
 	concatLists,
@@ -101,7 +101,7 @@ function runtime_runGiven(fn, thisArg, args) {
 function runtime_pinNow() {
 	// A fresh function each time: a pin belongs to the callback it was made for.
 	const given = (fn, thisArg, args) => runtime_runGiven(fn, thisArg, args);
-	const pinned = pinToCurrentCaller(given);
+	const pinned = pinScopeToCurrentCaller(given);
 	return pinned === given ? null : pinned;
 }
 
@@ -212,7 +212,7 @@ function enableAsyncResourcePatching() {
 	runtime_install(Storage, "bind", (layer) => {
 		const original = layer.below;
 		return function bind(fn, ...rest) {
-			return Reflect.apply(original, this, concatLists([layer.active && !isTakingSnapshot ? pinToCurrentCaller(fn) : fn], rest));
+			return Reflect.apply(original, this, concatLists([layer.active && !isTakingSnapshot ? pinScopeToCurrentCaller(fn) : fn], rest));
 		};
 	});
 
