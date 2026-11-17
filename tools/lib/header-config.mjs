@@ -26,6 +26,7 @@ export const FILE_HEADER_CHECK_FOLDERS = [
 	{ path: ".configs", recursive: true }, // .configs/ folder (recursive)
 	{ path: ".github", recursive: true }, // .github/ folder (recursive)
 	{ path: "api_tests", recursive: true }, // api_tests/ folder (recursive)
+	{ path: "packaging", recursive: true }, // packaging/ folder: satellite packages that carry code (recursive)
 	{ path: ".", recursive: false }, // Root folder only (non-recursive)
 	{ path: "src", recursive: true }, // src/ folder (recursive)
 	{ path: "tests", recursive: true }, // tests/ folder (recursive)
