@@ -72,7 +72,7 @@ const api = await slothlet({
 - **`versioning.dispatcher`** (`string | function | null | undefined`): Controls version routing at dispatch time.
   - **String**: the key to look up in the caller's version metadata (e.g. `"version"` reads `callerVersionMeta.version`)
   - **Function**: receives `(allVersions, caller)` objects, must return a version tag string or `null`/`undefined`
-  - **`null` / not set**: behaves identically to `versionDispatcher: "version"` — reads `callerVersionMeta.version` and falls back to the default version
+  - **`null` / not set**: behaves identically to `versioning: { dispatcher: "version" }` — reads `callerVersionMeta.version` and falls back to the default version
 
 ---
 
@@ -442,7 +442,7 @@ await api.slothlet.api.reload({ apiPath: "v2.auth" });
 
 ## Hooks and Versioning
 
-Hook registration participates in the same dispatch seam as calls: `api.slothlet.hook.on(typePattern, handler, { versioned: true })` — where `typePattern` is the usual `pattern:type` string, e.g. `"auth.login:before"` — resolves the pattern half's logical path through the configured [discriminator](#discriminator) (a per-registration `versionDispatcher` overrides it and may select several tags), registers against the selected **physical** paths, and hands the handler the firing tag as structured context (`version`). A dispatcher returning nothing takes the same [default-version resolution](#default-version-resolution) a call does. See [HOOKS.md — Versioned Registration](HOOKS.md#versioned-registration) for the full contract.
+Hook registration participates in the same dispatch seam as calls: `api.slothlet.hook.on(typePattern, handler, { versioned: true })` — where `typePattern` is the usual `pattern:type` string, e.g. `"auth.login:before"` — resolves the pattern half's logical path through the configured [discriminator](#discriminator) (a per-registration `dispatcher` overrides it and may select several tags), registers against the selected **physical** paths, and hands the handler the firing tag as structured context (`version`). A dispatcher returning nothing takes the same [default-version resolution](#default-version-resolution) a call does. See [HOOKS.md — Versioned Registration](HOOKS.md#versioned-registration) for the full contract.
 
 ## Error Reference
 
