@@ -659,6 +659,37 @@ describe.each(getMatrixConfigs({}))("api.slothlet.restart() (#504) > held refere
 		await expect(create({ metadata: { list } })).rejects.toMatchObject({ code: "INVALID_ARGUMENT" });
 	});
 
+	it("keeps enumerable symbol keys and an own __proto__ key of nested metadata across restart()", async () => {
+		const key = Symbol.for("slothlet.restart.symbolKey");
+		const hidden = Symbol("slothlet.restart.hiddenKey");
+		const tags = { [key]: 1 };
+		Object.defineProperty(tags, hidden, { value: 2, enumerable: false });
+		// JSON.parse makes "__proto__" an own data key, not the object's prototype. Metadata refuses it as a key of its
+		// own objects; the keys of an object inside an array are user data it does not check.
+		const parsed = JSON.parse('{"__proto__": {"polluted": true}, "plain": 1}');
+		await create({ metadata: { tags, list: [parsed] } });
+		const snapshot = resolveWrapper(api.counter).slothlet._originalConfig;
+		expect(snapshot.metadata.tags[key]).toBe(1);
+		expect(Object.getOwnPropertySymbols(snapshot.metadata.tags)).toEqual([key]);
+		const copied = snapshot.metadata.list[0];
+		expect(copied).not.toBe(parsed);
+		expect(Object.getPrototypeOf(copied)).toBe(Object.prototype);
+		expect(Object.getOwnPropertyDescriptor(copied, "__proto__")?.value).toEqual({ polluted: true });
+		expect(copied.polluted).toBeUndefined();
+
+		// The restarted instance reads the same metadata the first one read from the caller's object.
+		const before = api.slothlet.metadata.get("counter");
+		await api.slothlet.restart();
+		const restarted = api.slothlet.metadata.get("counter");
+		expect(Object.getOwnPropertySymbols(restarted.tags)).toEqual(Object.getOwnPropertySymbols(before.tags));
+		expect(restarted.tags[key]).toBe(before.tags[key]);
+		const item = restarted.list[0];
+		expect(Object.getPrototypeOf(item)).toBe(Object.prototype);
+		expect(Object.getOwnPropertyDescriptor(item, "__proto__")?.value).toEqual({ polluted: true });
+		expect(item.polluted).toBeUndefined();
+		expect(item.plain).toBe(1);
+	});
+
 	if (config.mode === "lazy") {
 		it("forwards a held lazy waiting reference to the new instance", async () => {
 			await create();

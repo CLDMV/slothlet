@@ -279,9 +279,18 @@ function copyConfigValue(value, freeze, seen = new Map()) {
 	if (proto !== Objects.prototype && proto !== null) return value;
 	const out = proto === null ? Objects.create(null) : {};
 	MapMethods.set(seen, value, out);
-	for (let ofIndex = 0, ofList = Objects.keys(value); ofIndex < ofList.length; ofIndex++) {
+	// Own enumerable keys, symbols included (user data in `metadata` may carry them). Each is defined, never assigned:
+	// an own "__proto__" key (JSON.parse makes one) stays a key instead of setting the copy's prototype.
+	for (let ofIndex = 0, ofList = Reflect.ownKeys(value); ofIndex < ofList.length; ofIndex++) {
 		const key = ofList[ofIndex];
-		out[key] = copyConfigValue(value[key], freeze, seen);
+		if (!Objects.getOwnPropertyDescriptor(value, key).enumerable) continue;
+		Objects.defineProperty(out, key, {
+			__proto__: null,
+			value: copyConfigValue(value[key], freeze, seen),
+			writable: true,
+			enumerable: true,
+			configurable: true
+		});
 	}
 	return freeze ? Objects.freeze(out) : out;
 }
