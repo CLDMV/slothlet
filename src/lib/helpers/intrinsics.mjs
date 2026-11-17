@@ -2297,6 +2297,27 @@ export function jsonOf(value, depth = 8) {
 }
 
 /**
+ * A thrown value as text, made without running code it carries (a getter, a `toJSON`, a `toString`): an error's own
+ * `message`, else the error as `name: message` from its own data ({@link stringOf}); a string as itself; any other
+ * value's own data as JSON ({@link jsonOf}), falling back to its {@link stringOf} text. What a SlothletError puts in
+ * its message for the value it replaced, and what the hint detector matches.
+ * @param {unknown} thrown - Whatever was thrown.
+ * @returns {string} The text.
+ * @internal
+ * @example
+ * describeThrown(new TypeError("bad")); // "bad"
+ * describeThrown({ code: 404 }); // '{"code":404}'
+ */
+export function describeThrown(thrown) {
+	if (thrown instanceof Error) {
+		const message = getOwnPropertyDescriptor(thrown, "message");
+		return message && hasOwnNative(message, "value") && typeof message.value === "string" ? message.value : stringOf(thrown);
+	}
+	if (typeof thrown === "string") return thrown;
+	return jsonOf(thrown) ?? stringOf(thrown);
+}
+
+/**
  * A copy of plain data for {@link jsonOf}: primitives as they are (a bigint as its digits), arrays and objects as fresh
  * arrays and prototype-less objects of their own enumerable data members, read with the functions taken at load.
  * @param {unknown} value - The value.
