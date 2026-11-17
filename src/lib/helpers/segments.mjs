@@ -1,4 +1,19 @@
 /**
+ *
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /src/lib/helpers/segments.mjs
+ *	@Date: 2026-11-16T19:05:39-08:00 (1794884739)
+ *	@Author: Nate Corcoran <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-11-16T19:05:39-08:00 (1794884739)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ *
+ */
+
+/**
  * @fileoverview The form slothlet reports an api path in: its segments, as an array.
  * @module @cldmv/slothlet/helpers/segments
  * @internal
