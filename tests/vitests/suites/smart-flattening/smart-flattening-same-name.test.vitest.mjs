@@ -50,7 +50,8 @@ async function shapeOf(api) {
 	const walk = async (node, at, depth) => {
 		await node;
 		if (at) {
-			const callable = typeof node === "function" && (node.__isCallable === undefined ? true : node.__isCallable === true);
+			const callable =
+				typeof node === "function" && (api.slothlet.node(node).callable === undefined ? true : api.slothlet.node(node).callable === true);
 			const kind =
 				typeof node === "function" ? (callable ? "fn" : "ns") : node !== null && typeof node === "object" ? "ns" : JSON.stringify(node);
 			out.push(`${at} : ${kind}`);

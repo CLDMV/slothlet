@@ -115,7 +115,7 @@ describe.each(PLATFORMS)(
 			const seen = [];
 			api.slothlet.hook.on("svc.**:around", ({ args, next, caller }) => {
 				const pinned = args.map((arg) => (typeof arg === "function" ? api.slothlet.lockCaller(arg) : arg));
-				seen.push({ hookCaller: caller?.apiPath ?? null, lockCallerPinned: pinned.some((fn, index) => fn !== args[index]) });
+				seen.push({ hookCaller: caller?.path.join(".") ?? null, lockCallerPinned: pinned.some((fn, index) => fn !== args[index]) });
 				return next(pinned);
 			});
 			return seen;

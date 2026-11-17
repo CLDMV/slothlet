@@ -235,7 +235,7 @@ export class ApiManager extends ComponentBase {
      * @public
      *
      * @example
-     * apiManager.writeChecked(["victim", "v", "__mode"]); // true unless permissions are disabled
+     * apiManager.writeChecked(["victim", "v", "__state"]); // true unless permissions are disabled
      */
     public writeChecked(parts: string[]): boolean;
     /**
@@ -632,7 +632,7 @@ export class ApiManager extends ComponentBase {
     private _hasForeignOwnedDescendant;
     /**
      * Remove API modules at runtime.
-     * @param {string} pathOrModuleId - An apiPath (dotted), a moduleID, or the composite `__metadata.moduleID`.
+     * @param {string} pathOrModuleId - An apiPath (dotted), a moduleID, or the internal composite module id.
      * @param {object} [options={}] - Options.
      * @param {string} [options.scopedApiPath] - When set, `pathOrModuleId` is resolved strictly as a
      *   moduleID and only that module's single node at `scopedApiPath` is removed (drives the public
@@ -647,7 +647,7 @@ export class ApiManager extends ComponentBase {
      * @description
      * Removes an API subtree by apiPath, or every path owned by a moduleID. The argument is resolved by
      * splitting on the reserved composite separator ({@link MODULE_ID_SEPARATOR}): a plain id (which can
-     * never contain the separator) passes through whole, while a composite `__metadata.moduleID` strips to
+     * never contain the separator) passes through whole, while a composite module id strips to
      * its base. It matches a registered module verbatim or by its auto-generated `<base>_<hash>` form, and
      * otherwise falls back to treating the argument as an apiPath.
      *

@@ -235,7 +235,7 @@ export const rows = [
 		}
 	},
 	{
-		title: "a kept member's __type is the kind of what it reads as once its folder has loaded (#791)",
+		title: "a kept member's node().type is the kind of what it reads as once its folder has loaded (#791)",
 		configs: lazyConfigs,
 		async run(env, config) {
 			const api = await env.compose({
@@ -245,11 +245,24 @@ export const rows = [
 			});
 			try {
 				const kept = Object.fromEntries(KEYS.map((key) => [key, api.d[key]]));
-				const checks = KEYS.map((key) => [`${key} before the load`, kept[key].__type === api.slothlet.types.IN_FLIGHT, true]);
+				const checks = KEYS.map((key) => [
+					`${key} before the load`,
+					api.slothlet.node(kept[key]).type === api.slothlet.types.IN_FLIGHT,
+					true
+				]);
 				await api.d;
 				for (const key of KEYS) {
 					const value = (await env.plain(HELD, `d/${key}.mjs`)).default;
-					checks.push([`${key} once loaded`, kept[key].__type, typeof value === "object" && value !== null ? "object" : typeof value]);
+					const kind =
+						typeof value === "function"
+							? "function"
+							: value !== null &&
+								  typeof value === "object" &&
+								  Object.getPrototypeOf(value) === Object.prototype &&
+								  Object.keys(value).length > 0
+								? "namespace"
+								: "data";
+					checks.push([`${key} once loaded`, api.slothlet.node(kept[key]).type, kind]);
 				}
 				return checks;
 			} finally {
@@ -270,7 +283,11 @@ export const rows = [
 				const api = await env.compose({ fixture: LISTING, files: LISTING_FILES, options: { ...options, mode: "lazy" } });
 				try {
 					await api.outer;
-					checks.push([`${name}: folders not loaded`, [api.folder.__materialized, api.outer.inner.__materialized], [false, false]]);
+					checks.push([
+						`${name}: folders not loaded`,
+						[api.slothlet.node(api.folder).materialized, api.slothlet.node(api.outer.inner).materialized],
+						[false, false]
+					]);
 					checks.push([`${name}: before the load`, await listings(api), expected]);
 					await api.folder;
 					await api.outer.inner;

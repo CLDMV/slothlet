@@ -65,7 +65,7 @@ describe("RoutineManager coverage — revert helpers, guards, materialization (#
 		});
 		const before = rm.raw.length;
 		const branded = function slothletRoutineStack() {};
-		Object.defineProperty(branded, "__slothletRoutineStack", { value: true, enumerable: false });
+		Object.defineProperty(branded, "____slothletRoutineStack", { value: true, enumerable: false });
 		// A later, unrelated write of the already-installed stacked callable re-fires impl:created;
 		// it must NOT be captured as a fresh contributor (would recurse to OOM on invoke — #372).
 		rm.onImplCreated({ apiPath: "auth.x", moduleID: "self-ref-mod", wrapper: { __impl: branded } });
@@ -106,9 +106,7 @@ describe("RoutineManager coverage — revert helpers, guards, materialization (#
 		const visited = new WeakSet([node]);
 		expect(() => rm.revertSpeculativeSubtree(node, "m", "", new Map(), visited)).not.toThrow();
 		// 864-865: framework/meta keys are skipped during the walk.
-		expect(() =>
-			rm.revertSpeculativeSubtree({ __metadata: {}, __type: {}, _materialize() {}, real: () => {} }, "m", "", new Map())
-		).not.toThrow();
+		expect(() => rm.revertSpeculativeSubtree({ _impl: {}, _materialize() {}, real: () => {} }, "m", "", new Map())).not.toThrow();
 	});
 
 	it("revertSpeculativeState restores a prior contribution's tracked wrapper (934)", async () => {

@@ -126,7 +126,7 @@ const CAPABILITY_REASONS = Objects.freeze({
  * The global metadata setter, the host's unless an allow lifts the built-in deny for a module (#625).
  * @type {string}
  */
-const GLOBAL_METADATA_TARGET = "slothlet.metadata.setGlobal";
+const GLOBAL_METADATA_TARGET = "slothlet.metadata.global";
 
 /**
  * Precedence layers used to break ties when two matching rules have EQUAL specificity.
@@ -471,7 +471,7 @@ export class PermissionManager extends ComponentBase {
 	#reachRuleId = null;
 
 	/**
-	 * Id of the built-in deny on `slothlet.metadata.setGlobal` for modules (#625), which
+	 * Id of the built-in deny on `slothlet.metadata.global` for modules (#625), which
 	 * {@link PermissionManager#assertGlobalMetadataWrite} applies rather than the call gate.
 	 * @type {string|null}
 	 * @private
@@ -829,6 +829,11 @@ export class PermissionManager extends ComponentBase {
 		this.addRule({ caller: "**", target: "slothlet.metadata.caller", effect: "allow" }, "__builtin__");
 		this.addRule({ caller: "**", target: "slothlet.metadata.self", effect: "allow" }, "__builtin__");
 
+		// Built-in allow: `slothlet.node(target)` reports what slothlet knows about a node (its path, file, module, load
+		// state). The call itself grants nothing: whether the caller may reach the target is decided per call, as a
+		// read of the target's own path. So, like metadata.caller, a `defaultPolicy: "deny"` host need not re-allow it.
+		this.addRule({ caller: "**", target: "slothlet.node", effect: "allow" }, "__builtin__");
+
 		// Principals (#459): registering, replacing, or invalidating a resolver decides what facts every
 		// `requires` rule sees, so the principal management surface is host-only by default. The host
 		// grants it to the modules that should define principals, exactly like any other rule.
@@ -849,7 +854,7 @@ export class PermissionManager extends ComponentBase {
 		// specificity (an exact target, `slothlet.permissions.global.checkCall`), which outranks this one.
 		this.addRule({ caller: "**", target: "slothlet.permissions.global.checkCall", effect: "deny" }, "__builtin__");
 
-		// Global metadata (#625): `metadata.setGlobal` changes the metadata every node reports, every other module's
+		// Global metadata (#625): `metadata.global` changes the metadata every node reports, every other module's
 		// included, so it is the host's. An allow for a module lifts it. Checked by assertGlobalMetadataWrite once the
 		// call's arguments are valid, never by the call gate.
 		this.#globalMetadataRuleId = this.addRule({ caller: "**", target: GLOBAL_METADATA_TARGET, effect: "deny" }, "__builtin__");
@@ -2260,7 +2265,7 @@ export class PermissionManager extends ComponentBase {
 	}
 
 	/**
-	 * Refuse module code changing global metadata (#625): `metadata.setGlobal` changes what every node reports, every
+	 * Refuse module code changing global metadata (#625): `metadata.global` changes what every node reports, every
 	 * other module's included, so it is the host's by a built-in deny an allow for the module lifts. Like the other
 	 * built-in rules it applies only while the permission system is on. It is checked once the call's arguments are
 	 * valid, so a malformed call reports what is wrong with it first; the call gate leaves the built-in deny to this

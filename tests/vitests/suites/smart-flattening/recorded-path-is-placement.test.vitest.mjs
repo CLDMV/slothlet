@@ -19,7 +19,7 @@
  * whose last segment repeats a name inside the folder (Rule 13).
  *
  * @description
- * The recorded path (`node.__metadata.apiPath`) is what permission rules, hooks, ownership and metadata key off. The
+ * The recorded path (`api.slothlet.node(node).path.join(".")`) is what permission rules, hooks, ownership and metadata key off. The
  * test walks each tree and compares it with the path walked: the expected value is the walk itself.
  *
  * Fixtures: every folder under `api_tests/smart_flatten/`, plus the base fixtures that hold the folder shapes #743
@@ -60,12 +60,13 @@ const OWN_ROOT_KEYS = new Set(["slothlet", "shutdown", "destroy", "initialize"])
 
 /**
  * Walk a tree and collect every node whose recorded path differs from the path it was reached at.
+ * @param {object} api - The api the tree is read from.
  * @param {object} root - Where the walk starts.
  * @param {string[]} at - The path of `root`.
  * @param {boolean} lazy - Whether to load each node before reading it.
  * @returns {Promise<{walked: number, drift: Array<[string, string]>}>} How many nodes were read, and the differences.
  */
-async function walkTree(root, at, lazy) {
+async function walkTree(api, root, at, lazy) {
 	const drift = [];
 	const seen = new Set();
 	let walked = 0;
@@ -78,16 +79,16 @@ async function walkTree(root, at, lazy) {
 				return;
 			}
 		}
-		let meta;
+		let report;
 		try {
-			meta = node.__metadata;
+			report = api.slothlet.node(node);
 		} catch {
 			return;
 		}
 		if (keys.length > at.length) {
-			if (!meta || typeof meta.apiPath !== "string") return;
+			if (!report) return;
 			walked++;
-			if (meta.apiPath !== keys.join(".")) drift.push([keys.join("."), meta.apiPath]);
+			if (report.path.join(".") !== keys.join(".")) drift.push([keys.join("."), report.path.join(".")]);
 		}
 		if (seen.has(node)) return;
 		seen.add(node);
@@ -128,7 +129,7 @@ describe.each(["eager", "lazy"])("a node records the path it is reached at (#743
 	it.each(FIXTURES)("$name loaded as a base folder", async ({ dir }) => {
 		const api = await slothlet({ base: dir, mode, silent: true });
 		try {
-			const { walked, drift } = await walkTree(api, [], mode === "lazy");
+			const { walked, drift } = await walkTree(api, api, [], mode === "lazy");
 			totals.walked += walked;
 			expect(drift).toEqual([]);
 		} finally {
@@ -141,7 +142,7 @@ describe.each(["eager", "lazy"])("a node records the path it is reached at (#743
 			const api = await slothlet({ base: path.join(API_TESTS, "api_test_globstar_zero", "work"), mode, silent: true });
 			try {
 				await api.slothlet.api.add(mount, dir);
-				const { walked, drift } = await walkTree(api[mount.split(".")[0]], [mount.split(".")[0]], mode === "lazy");
+				const { walked, drift } = await walkTree(api, api[mount.split(".")[0]], [mount.split(".")[0]], mode === "lazy");
 				totals.walked += walked;
 				expect([mount, drift]).toEqual([mount, []]);
 			} finally {

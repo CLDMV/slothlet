@@ -286,7 +286,7 @@ describe.each(getMatrixConfigs())("Permissions > caller-supplied code on a versi
 			base: path.join(DIR, "base"),
 			versioning: {
 				dispatcher: (_allVersions, caller) => {
-					const apiPath = caller?.metadata?.apiPath ?? "";
+					const apiPath = caller?.path?.join(".") ?? "";
 					if (apiPath.startsWith("supplier.")) return "v2";
 					if (apiPath.startsWith("callee.")) return "v1";
 					return null;

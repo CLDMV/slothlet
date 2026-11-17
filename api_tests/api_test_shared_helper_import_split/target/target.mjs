@@ -24,5 +24,5 @@ import { self } from "@cldmv/slothlet/runtime";
  * @returns {string|null} The caller's api path, or null when none is known.
  */
 export function whoami() {
-	return self.slothlet.metadata.caller()?.apiPath ?? null;
+	return self.slothlet.metadata.caller()?.path?.join(".") ?? null;
 }

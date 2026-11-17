@@ -429,7 +429,7 @@ export class PermissionManager extends ComponentBase {
      */
     snapshotEventRule(rule: any): any;
     /**
-     * Refuse module code changing global metadata (#625): `metadata.setGlobal` changes what every node reports, every
+     * Refuse module code changing global metadata (#625): `metadata.global` changes what every node reports, every
      * other module's included, so it is the host's by a built-in deny an allow for the module lifts. Like the other
      * built-in rules it applies only while the permission system is on. It is checked once the call's arguments are
      * valid, so a malformed call reports what is wrong with it first; the call gate leaves the built-in deny to this

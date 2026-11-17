@@ -279,7 +279,7 @@ api.slothlet.hook.on("math.*:around", ({ path, args, next, entry, caller, api, c
 	// args: Array - arguments as this around hook received them
 	// next: (args?: Array) => * - runs the rest of the pipeline; returns its result or throws its error
 	// entry: boolean - true when the call has no module caller (an outside call); false for a nested call
-	// caller: object|null - the calling module's metadata (the shape metadata.caller() returns), null when entry
+	// caller: object|null - the calling leaf: { path: string[], module, metadata (its user metadata), version: { tag, default, metadata } | null }; null when entry
 	// api, ctx - as above
 	return next(args);
 });
@@ -702,11 +702,11 @@ api.slothlet.hook.on("auth.login:before", handler, { versioning: { enabled: true
 // Or override per registration — and select SEVERAL versions at once:
 api.slothlet.hook.on("auth.login:before", handler, {
 	id: "audit-login",
-	versioning: { dispatcher: (allVersions, caller) => Object.keys(allVersions) } // every installed major
+	versioning: { dispatcher: (versions, caller) => Object.keys(versions) } // every installed major
 });
 ```
 
-The dispatcher receives the same `(allVersions, caller)` arguments call dispatch builds — `caller` describing the **registrant** — and may return a registered tag, an **array** of tags, or nothing to take the same default-version resolution a call falls back to. One registration is created per selected tag against the physical path (each passing the ordinary registration permission gate), and the returned id is the **group id**: a single `remove({ id })` unhooks every selected version. The binding survives `exportHooks()`/`importHooks()` reload replay.
+The dispatcher receives the same `(versions, caller)` arguments call dispatch builds — `caller` describing the **registrant** — and may return a registered tag, an **array** of tags, or nothing to take the same default-version resolution a call falls back to. One registration is created per selected tag against the physical path (each passing the ordinary registration permission gate), and the returned id is the **group id**: a single `remove({ id })` unhooks every selected version. The binding survives `exportHooks()`/`importHooks()` reload replay.
 
 Handlers learn which version fired them structurally — the hook context carries `version` (the tag) for version-dispatched registrations and `undefined` otherwise — so nothing needs to be parsed out of `path`:
 
@@ -901,7 +901,7 @@ Register a hook.
 - `options.subset` (string, optional) - Execution phase: `"before"`, `"primary"` (default), or `"after"`
 - `options.pattern` (string, optional) - Path pattern that overrides the one parsed from `typePattern`
 - `options.versioning.enabled` (boolean, optional) - Resolve the pattern, written against the logical path, through the instance's configured `versioning.dispatcher` (default: `false`). See [Versioned Registration](#versioned-registration).
-- `options.versioning.dispatcher` (Function, optional) - `(allVersions, caller) => tag | tag[] | null` for this registration only, overriding the instance's dispatcher. Implies versioned registration.
+- `options.versioning.dispatcher` (Function, optional) - `(versions, caller) => tag | tag[] | null` for this registration only, overriding the instance's dispatcher. Implies versioned registration.
 - `options.pin` (boolean, optional) - Pin the registering module's caller identity onto the handler (default: `true`). See [Hooks auto-pin caller identity](#hooks-auto-pin-caller-identity).
 - `options.async` (boolean, optional) - Declare a handler asynchronous when the native async brand cannot show it (a plain function returning a Promise). Applies to `before`, `after` and `around` handlers.
 

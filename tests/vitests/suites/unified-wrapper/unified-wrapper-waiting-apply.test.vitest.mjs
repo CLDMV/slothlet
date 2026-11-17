@@ -418,7 +418,7 @@ describe("waiting proxy GET trap — materialization trigger (line 1424)", () =>
 		const wp = taskW.___createWaitingProxy(["autoIP"]);
 
 		// Fast-return: __inFlight is returned immediately without hitting line 1424.
-		expect(wp.__inFlight).toBe(false);
+		expect(api.slothlet.node(wp).loading).toBe(false);
 		expect(taskW.____slothletInternal.state.inFlight).toBe(false); // not yet triggered
 
 		// Non-fast-return: falls through to line 1419, fires _materialize() at line 1424.
@@ -994,7 +994,7 @@ describe("waiting proxy GET trap — __type on materialized wrapper and __slothl
 
 		// Access __type: B244 TRUE → propChain walk (empty) → resolvedType depends on current.
 		// task wrapper createProxy() is a proxy wrapping a function → typeof === "function".
-		const type = wp.__type;
+		const type = api.slothlet.node(wp).type;
 		expect(typeof type).toBe("string");
 	});
 
@@ -1019,8 +1019,9 @@ describe("waiting proxy GET trap — __type on materialized wrapper and __slothl
 		const wp = testW.___createWaitingProxy(["objProp"]);
 		// Access __type: chain walks "objProp" → current = { hello: "world" } (plain object).
 		// resolvedType = "object" (B247 TRUE).
-		const type = wp.__type;
-		expect(type).toBe("object");
+		const type = api.slothlet.node(wp).type;
+		// A plain object with members is a namespace (D-4).
+		expect(type).toBe("namespace");
 	});
 
 	it("__slothletPath on a waiting proxy returns the wrapper's API path (B257 true, line 1559-1562)", async () => {
@@ -1033,7 +1034,7 @@ describe("waiting proxy GET trap — __type on materialized wrapper and __slothl
 		const wp = taskW.___createWaitingProxy([]);
 
 		// Access __slothletPath on the waiting proxy.
-		const slothletPath = wp.__slothletPath;
+		const slothletPath = api.slothlet.node(wp).path.join(".");
 		// Should match the wrapper's apiPath.
 		expect(slothletPath).toBe(taskW.____slothletInternal.apiPath);
 	});
@@ -1108,8 +1109,9 @@ describe("waiting proxy GET trap — __type for-loop non-wrapper and null breaks
 		// The impl-based branch at lines 1498-1503 will resolve it instead.
 
 		const wp = testW.___createWaitingProxy(["myProp", "nested"]);
-		const type = wp.__type;
-		expect(type).toBe("number");
+		const type = api.slothlet.node(wp).type;
+		// A number is data (D-4).
+		expect(type).toBe("data");
 	});
 
 	it("__type propChain walk takes B238 true (break) when a value becomes null/undefined (L1483)", async () => {
@@ -1130,8 +1132,8 @@ describe("waiting proxy GET trap — __type for-loop non-wrapper and null breaks
 		testW.____slothletInternal.state.materialized = true;
 
 		const wp = testW.___createWaitingProxy(["myProp", "missing", "x"]);
-		const type = wp.__type;
-		expect(type).toBe("undefined");
+		// The chain reaches nothing: there is no node to report.
+		expect(api.slothlet.node(wp)).toBeUndefined();
 	});
 });
 

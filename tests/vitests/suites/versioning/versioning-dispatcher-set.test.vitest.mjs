@@ -117,8 +117,6 @@ describe.each(getMatrixConfigs())("Versioning > Dispatcher set trap > $name", ({
 		// and must not alter what get returns.
 		expect(() => {
 			api.auth.__isVersionDispatcher = false;
-			api.auth.__apiPath = "overridden";
-			api.auth.__moduleID = "hacked";
 			api.auth.toString = "not-a-function";
 			api.auth.valueOf = null;
 			api.auth.toJSON = null;
@@ -129,7 +127,7 @@ describe.each(getMatrixConfigs())("Versioning > Dispatcher set trap > $name", ({
 
 		// Reads must return the original fixed values, not the written values
 		expect(api.auth.__isVersionDispatcher).toBe(true);
-		expect(api.auth.__apiPath).toBe("auth");
+		expect(api.slothlet.node(api.auth).logical).toEqual(["auth"]);
 		expect(api.auth.toString()).toBe("[VersionDispatcher: auth]");
 		expect(api.auth.then).toBeUndefined();
 		expect(api.auth.length).toBe(0);
@@ -153,13 +151,10 @@ describe.each(getMatrixConfigs())("Versioning > Dispatcher set trap > $name", ({
 
 	it("absorbed writes do not pollute the versioned wrapper", async () => {
 		api = await makeApi(config);
-		const sentinel = {};
-		// Write special-case keys that the dispatcher absorbs
-		api.auth.__isCallable = sentinel;
+		// Write a special-case key that the dispatcher absorbs
 		api.auth.toString = "corrupted";
-		// The versioned wrapper (v1.auth) must be unaffected — __isCallable is always false
-		// from UnifiedWrapper's own get trap regardless of what we write to the dispatcher
-		expect(api.v1.auth.__isCallable).toBe(false);
+		// The versioned wrapper (v1.auth) must be unaffected
+		expect(api.slothlet.node(api.v1.auth).callable).toBe(false);
 		expect(typeof api.v1.auth.toString).not.toBe("string");
 	});
 
@@ -229,11 +224,11 @@ describe.each(getMatrixConfigs())("Versioning > Dispatcher set trap > $name", ({
 		// Node's util.inspect reads the symbol installed directly on the dispatcher target.
 		// Use toContain rather than exact string equality — inspect formatting varies across Node versions.
 		const inspected1 = inspect(dispatcher);
-		expect(inspected1).toContain("__versionDispatcher");
+		expect(inspected1).toContain("path");
 		expect(inspected1).toContain("'auth'");
 		expect(inspected1).toContain("versions");
 		// Explicit property access hits get-trap case 6 and must return the same fallback payload.
-		expect(dispatcher[customSym]()).toEqual({ __versionDispatcher: "auth", versions: [] });
+		expect(dispatcher[customSym]()).toEqual({ path: ["auth"], versions: [] });
 	});
 
 	it("direct dispatcher fallback lists registered versions when registry exists but no wrapper is mounted", () => {
@@ -254,10 +249,10 @@ describe.each(getMatrixConfigs())("Versioning > Dispatcher set trap > $name", ({
 		// so resolveVersionedWrapper() returns undefined and the fallback exposes versions.
 		// Use toContain rather than exact string equality — inspect formatting varies across Node versions.
 		const inspected2 = inspect(dispatcher);
-		expect(inspected2).toContain("__versionDispatcher");
+		expect(inspected2).toContain("path");
 		expect(inspected2).toContain("'auth'");
 		expect(inspected2).toContain("v1");
-		expect(dispatcher[customSym]()).toEqual({ __versionDispatcher: "auth", versions: ["v1"] });
+		expect(dispatcher[customSym]()).toEqual({ path: ["auth"], versions: ["v1"] });
 	});
 
 	describe("a dispatcher mount still in flight", () => {
@@ -405,7 +400,7 @@ describe.each(getMatrixConfigs())("Versioning > Dispatcher set trap > $name", ({
 			const mounted = held.get(api);
 			expect(mounted).toBeDefined();
 			expect(held.get(boundApi)).toBe(mounted);
-			expect(mounted[Symbol.for("nodejs.util.inspect.custom")]()).toEqual({ __versionDispatcher: "auth", versions: ["v2"] });
+			expect(mounted[Symbol.for("nodejs.util.inspect.custom")]()).toEqual({ path: ["auth"], versions: ["v2"] });
 		});
 
 		it("mounts the dispatcher of a path registered again while its earlier mount was in flight", async () => {
@@ -418,7 +413,7 @@ describe.each(getMatrixConfigs())("Versioning > Dispatcher set trap > $name", ({
 			const mounted = held.get(api);
 			expect(mounted).toBeDefined();
 			expect(held.get(boundApi)).toBe(mounted);
-			expect(mounted[Symbol.for("nodejs.util.inspect.custom")]()).toEqual({ __versionDispatcher: "auth", versions: ["v2"] });
+			expect(mounted[Symbol.for("nodejs.util.inspect.custom")]()).toEqual({ path: ["auth"], versions: ["v2"] });
 		});
 	});
 });

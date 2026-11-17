@@ -288,9 +288,25 @@ export async function invokeCallerTest() {
  */
 export async function verifyMetadata(path) {
 	const meta = await self.slothlet.metadata.get(path);
+	const metaNode = self.slothlet.node(path);
 	return {
-		exists: meta !== null,
-		hasSourceFolder: meta?.sourceFolder !== undefined,
+		exists: metaNode !== undefined,
+		hasSourceFolder: typeof metaNode?.folder === "string",
 		metadata: meta
 	};
+}
+
+/**
+ * Test helper that calls self.slothlet.node() from within slothlet context.
+ *
+ * @function getNode
+ * @public
+ * @param {string} [path] - Dot-notation path to a node; omitted for the helper's own node.
+ * @returns {object|undefined} The node report, or undefined when nothing is at the path.
+ *
+ * @example
+ * const report = api.metadataTestHelper.getNode("rootMath.add");
+ */
+export function getNode(path) {
+	return self.slothlet.node(path === undefined ? self.metadataTestHelper.getNode : path);
 }

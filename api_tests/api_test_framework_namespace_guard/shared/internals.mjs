@@ -34,19 +34,9 @@ export const INTERNAL_KEYS = [
 	"___invalidate",
 	"__state",
 	"__invalid",
-	"__mode",
-	"__apiPath",
-	"__slothletPath",
-	"__isCallable",
 	"__materializeOnCreate",
 	"__displayName",
-	"__type",
-	"__metadata",
 	"__filePath",
-	"__sourceFolder",
-	"__moduleID",
-	"__materialized",
-	"__inFlight",
 	"__impl",
 	"_impl",
 	"_materialize",
@@ -59,7 +49,7 @@ export const INTERNAL_KEYS = [
  * @param {function(): *} change - The change.
  * @returns {string} `"done"`, or the error code it was refused with.
  * @example
- * attempt(() => { node.__type = "x"; });
+ * attempt(() => { node.__state = "x"; });
  */
 function attempt(change) {
 	try {

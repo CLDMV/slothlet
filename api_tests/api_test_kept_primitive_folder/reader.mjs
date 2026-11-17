@@ -86,6 +86,6 @@ export function answersOf(node) {
 		string: answer(() => (typeof node.valueOf() === "symbol" ? node.toString() : String(node))),
 		json: answer(() => JSON.stringify({ v: node }, (_, v) => (typeof v === "bigint" ? `${v}n` : v))),
 		loose: answer(() => node == node.valueOf()),
-		type: answer(() => node.__type)
+		type: answer(() => self.slothlet.node(node)?.type)
 	};
 }

@@ -19,8 +19,8 @@
  * @description
  * Covers:
  *   lines 589,609,636,658,678,699  – hook.on/remove/off/enable/disable/list throw HOOKS_NOT_INITIALIZED
- *   lines 727,761,828              – metadata.setGlobal/set/setFor throw METADATA_NOT_AVAILABLE
- *   line  865                      – metadata.removeFor early-returns when handler absent
+ *   lines 727,761,828              – metadata.global/set/setFor throw METADATA_NOT_AVAILABLE
+ *   line  865                      – metadata.remove early-returns when handler absent
  *   line  920                      – owner.get returns null when ownership handler absent
  *   lines 947,949                  – materialize namespace stub (null handler IIFE)
  *   line  976                      – lifecycle namespace noop stub (null handler IIFE)
@@ -202,7 +202,7 @@ describe("api_builder – hook methods throw HOOKS_NOT_INITIALIZED when hookMana
 
 // ---------------------------------------------------------------------------
 // Group B: METADATA_NOT_AVAILABLE throws (lines 727, 761, 828)
-// Group C: metadata.removeFor early return (line 865)
+// Group C: metadata.remove early return (line 865)
 // ---------------------------------------------------------------------------
 describe("api_builder – metadata methods guard against absent metadata handler", () => {
 	let api;
@@ -214,13 +214,13 @@ describe("api_builder – metadata methods guard against absent metadata handler
 		}
 	});
 
-	it("metadata.setGlobal throws METADATA_NOT_AVAILABLE when handler is null (line 727)", async () => {
+	it("metadata.global throws METADATA_NOT_AVAILABLE when handler is null (line 727)", async () => {
 		api = await makeApi();
 		const sl = getSlothlet(api);
 		const orig = sl.handlers.metadata;
 		sl.handlers.metadata = null;
 		try {
-			expect(() => api.slothlet.metadata.setGlobal("version", "1.0")).toThrow(/METADATA_NOT_AVAILABLE/);
+			expect(() => api.slothlet.metadata.global("version", "1.0")).toThrow(/METADATA_NOT_AVAILABLE/);
 		} finally {
 			sl.handlers.metadata = orig;
 		}
@@ -238,52 +238,52 @@ describe("api_builder – metadata methods guard against absent metadata handler
 		}
 	});
 
-	it("metadata.setFor throws METADATA_NOT_AVAILABLE when handler is null (line 828)", async () => {
+	it("metadata.set throws METADATA_NOT_AVAILABLE when handler is null (line 828)", async () => {
 		api = await makeApi();
 		const sl = getSlothlet(api);
 		const orig = sl.handlers.metadata;
 		sl.handlers.metadata = null;
 		try {
-			expect(() => api.slothlet.metadata.setFor("math", "category", "math")).toThrow(/METADATA_NOT_AVAILABLE/);
+			expect(() => api.slothlet.metadata.set("math", "category", "math")).toThrow(/METADATA_NOT_AVAILABLE/);
 		} finally {
 			sl.handlers.metadata = orig;
 		}
 	});
 
-	it("metadata.setForVersion throws METADATA_NOT_AVAILABLE when handler is null — handlersKeys lists keys (line 1006)", async () => {
+	it("metadata.set on a versioned path throws METADATA_NOT_AVAILABLE when handler is null — handlersKeys lists keys (line 1006)", async () => {
 		api = await makeApi();
 		const sl = getSlothlet(api);
 		const orig = sl.handlers.metadata;
 		sl.handlers.metadata = null;
 		try {
 			// handlers object is alive → truthy arm fires: Object.keys(slothlet.handlers).join(", ")
-			expect(() => api.slothlet.metadata.setForVersion("auth", "v1", "stable", true)).toThrow(/METADATA_NOT_AVAILABLE/);
+			expect(() => api.slothlet.metadata.set("v1.auth", "stable", true)).toThrow(/METADATA_NOT_AVAILABLE/);
 		} finally {
 			sl.handlers.metadata = orig;
 		}
 	});
 
-	it("metadata.setForVersion throws METADATA_NOT_AVAILABLE when handlers is null — handlersKeys is 'undefined' (line 1006)", async () => {
+	it("metadata.set on a versioned path throws METADATA_NOT_AVAILABLE when handlers is null — handlersKeys is 'undefined' (line 1006)", async () => {
 		api = await makeApi();
 		const sl = getSlothlet(api);
 		const origHandlers = sl.handlers;
 		sl.handlers = null;
 		try {
 			// handlers itself is null → falsy arm fires: "undefined"
-			expect(() => api.slothlet.metadata.setForVersion("auth", "v1", "stable", true)).toThrow(/METADATA_NOT_AVAILABLE/);
+			expect(() => api.slothlet.metadata.set("v1.auth", "stable", true)).toThrow(/METADATA_NOT_AVAILABLE/);
 		} finally {
 			sl.handlers = origHandlers;
 		}
 	});
 
-	it("metadata.removeFor returns early without throwing when handler is null (line 865)", async () => {
+	it("metadata.remove returns early without throwing when handler is null (line 865)", async () => {
 		api = await makeApi();
 		const sl = getSlothlet(api);
 		const orig = sl.handlers.metadata;
 		sl.handlers.metadata = null;
 		try {
 			// Must NOT throw — guarded by `if (!slothlet.handlers?.metadata) return;`
-			expect(() => api.slothlet.metadata.removeFor("math")).not.toThrow();
+			expect(() => api.slothlet.metadata.remove("math")).not.toThrow();
 		} finally {
 			sl.handlers.metadata = orig;
 		}

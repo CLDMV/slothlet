@@ -10,6 +10,14 @@
  */
 export const MODULE_ID_SEPARATOR: string;
 /**
+ * Add-option key (a symbol, so no consumer option can name it) carrying the parsed `slothlet.module.json` of a package
+ * mount from `modules.add` to the add that mounts it; reported as `slothlet.node(target).manifest`. Recorded with the
+ * add, so a reload's replay records it again.
+ * @type {symbol}
+ * @internal
+ */
+export const MODULE_MANIFEST: symbol;
+/**
  * Metadata handler for introspection of function metadata
  * @class Metadata
  * @extends ComponentBase
@@ -42,20 +50,61 @@ export class Metadata extends ComponentBase {
      */
     private tagSystemMetadata;
     /**
-     * Get system metadata only (without user metadata)
-     * @param {Function|Object} target - Wrapper or function
-     * @returns {Object|null} System metadata or null
+     * The system facts slothlet recorded for a node: its file, folder, api path and owning module.
+     *
+     * @description
+     * Looked up on the wrapper first, then on its impl (for a node whose wrapper was never tagged), the order every
+     * reader uses, so set(), get() and node() always agree on which node they mean. Internal only: consumers read
+     * these facts through `slothlet.node(target)`; user metadata never carries them.
+     *
+     * @param {Function|Object} target - Wrapper, proxy or function.
+     * @returns {{filePath: string, sourceFolder: string, apiPath: string, moduleID: string, baseModuleID: string, taggedAt: number}|null}
+     *   The frozen system record, or null when the target was never tagged.
      * @package
+     * @example
+     * metadata.getSystemMetadata(api.math.add)?.baseModuleID; // "base"
      */
-    getSystemMetadata(target: Function | Object): Object | null;
+    getSystemMetadata(target: Function | Object): {
+        filePath: string;
+        sourceFolder: string;
+        apiPath: string;
+        moduleID: string;
+        baseModuleID: string;
+        taggedAt: number;
+    } | null;
     /**
-     * Get metadata for a target (combines system + user)
-     * For wrappers: checks current impl to ensure metadata is current
-     * @param {Function|Object} target - Wrapper or function
-     * @returns {Object} Combined metadata (deeply frozen)
+     * The user metadata of a node: global < api path chain < the node's own.
+     *
+     * @description
+     * Only what consumers set (through `metadata.global`, `metadata.set`, or the `metadata` option of an add). The system
+     * facts slothlet records (file, folder, path, module) are never merged in; `slothlet.node(target)` reports them.
+     *
+     * @param {Function|Object} target - Wrapper, proxy or function.
+     * @returns {Object} The merged user metadata (deeply frozen).
      * @public
+     * @example
+     * metadata.getMetadata(api.math.add); // { category: "math" }
      */
     public getMetadata(target: Function | Object): Object;
+    /**
+     * Record (or clear) the parsed `slothlet.module.json` of a package mount, reported as `node(target).manifest`.
+     * @param {string} moduleID - The raw module id of the mount.
+     * @param {object|null|undefined} manifest - The normalized manifest, or nothing to clear it.
+     * @returns {void}
+     * @package
+     * @example
+     * metadata.setModuleManifest("pkg-a", manifest);
+     */
+    setModuleManifest(moduleID: string, manifest: object | null | undefined): void;
+    /**
+     * The parsed `slothlet.module.json` of the package mount that owns a module id.
+     * @param {string|null|undefined} moduleID - The raw module id.
+     * @returns {object|undefined} The manifest, or undefined when the module is no package mount.
+     * @package
+     * @example
+     * metadata.getModuleManifest("pkg-a")?.name; // "@acme/pkg-a"
+     */
+    getModuleManifest(moduleID: string | null | undefined): object | undefined;
     /**
      * Set global user metadata (applies to all functions)
      * @param {string} key - Metadata key
@@ -125,7 +174,7 @@ export class Metadata extends ComponentBase {
      * Multiple calls to the same path are merged; later calls override earlier
      * ones for conflicting keys.
      *
-     * Priority (lowest → highest): global → setForPath → set() → system.
+     * Priority (lowest → highest): global → path (closer to the leaf wins) → the function's own.
      *
      * @param {string} apiPath - Dot-notation path (e.g. `"math"`, `"math.add"`)
      * @param {string|Object} keyOrObj - Key string (with `value`) OR metadata object to merge
@@ -198,22 +247,7 @@ export class Metadata extends ComponentBase {
         userMetadataStore: Map<any, any>;
     }): void;
     /**
-     * Get metadata of any function by API path.
-     *
-     * Traverses `this.slothlet.api` using the dot-notation path, materializes
-     * lazy wrappers as needed, then returns the combined metadata for the
-     * resolved target via `getMetadata()`.
-     *
-     * Called by the `api.slothlet.metadata.get()` closure injected in
-     * `slothlet.injectRuntimeMetadataFunctions()`.
-     *
-     * @param {string} path - Dot-notation API path (e.g. `"math.add"`)
-     * @returns {Promise<object|null>} Combined metadata or null
-     * @public
-     */
-    public get(path: string): Promise<object | null>;
-    /**
-     * Get metadata for the currently-executing API function.
+     * The currently-executing API function, as a caller object ({ path, module, metadata, version }).
      *
      * Reads `currentWrapper` from the active context-manager store — the same
      * fast synchronous path used by the unified wrapper's `apply` trap.
@@ -223,12 +257,17 @@ export class Metadata extends ComponentBase {
      * Called by the `api.slothlet.metadata.self()` closure injected in
      * `slothlet.injectRuntimeMetadataFunctions()`.
      *
-     * @returns {object} Combined metadata for the current function
+     * @returns {{path: string[], module: string|null, metadata: object, version: object|null}} The current leaf, as a caller object
      * @public
      */
-    public self(): object;
+    public self(): {
+        path: string[];
+        module: string | null;
+        metadata: object;
+        version: object | null;
+    };
     /**
-     * Get metadata for the API function that called the current function.
+     * The API function that called the current function, as a caller object ({ path, module, metadata, version }).
      *
      * Reads `callerWrapper` from the active context-manager store.
      * Returns `null` when there is no caller in context (e.g. the function
@@ -237,10 +276,15 @@ export class Metadata extends ComponentBase {
      * Called by the `api.slothlet.metadata.caller()` closure injected in
      * `slothlet.injectRuntimeMetadataFunctions()`.
      *
-     * @returns {object|null} Combined metadata for the calling function, or null
+     * @returns {{path: string[], module: string|null, metadata: object, version: object|null}|null} The calling leaf, as a caller object, or null
      * @public
      */
-    public caller(): object | null;
+    public caller(): {
+        path: string[];
+        module: string | null;
+        metadata: object;
+        version: object | null;
+    } | null;
     /**
      * Resolve the wrapper of the API function that called the current function.
      *

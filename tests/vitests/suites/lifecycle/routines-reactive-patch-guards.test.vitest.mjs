@@ -51,11 +51,11 @@ const settle = async () => {
  * Assert the reactive patch installed NO branded routine stack at a slot. In lazy mode, reading a
  * never-materialized key returns a callable look-ahead waiting proxy — not `undefined` — so a
  * `toBeUndefined()` check is nondeterministic. A real installed stacked callable carries
- * `__slothletRoutineStack === true`; a waiting proxy (or an absent slot) never does, so assert the
+ * `____slothletRoutineStack === true`; a waiting proxy (or an absent slot) never does, so assert the
  * brand's absence instead.
  * @param {*} slot - The resolved api slot to check.
  */
-const expectNoStackInstalled = (slot) => expect(typeof slot === "function" && slot.__slothletRoutineStack === true).toBe(false);
+const expectNoStackInstalled = (slot) => expect(typeof slot === "function" && slot.____slothletRoutineStack === true).toBe(false);
 
 /** @type {any} */
 let api;
@@ -135,15 +135,15 @@ describe("routine reactive-patch post-await guards (#362)", () => {
 		// The cascade lives ONLY at the root api.<name> — there is no api.slothlet.<name> mirror to
 		// clobber (#399); the control namespace stays clean.
 		api.initialize = function postWriteA() {};
-		expect(api.initialize.__slothletRoutineCascade).toBeFalsy();
+		expect(api.initialize.____slothletRoutineCascade).toBeFalsy();
 		expect(api.slothlet.initialize).toBeUndefined();
 
 		rm.onImplCreated({ apiPath: "initialize", moduleID: rootEntry.moduleID, wrapper: { __impl: rootEntry.fn } });
 		await settle();
 
 		// Root cascade reinstalled...
-		expect(api.initialize.__slothletRoutineCascade).toBe(true);
-		expect(api.initialize.__slothletRoutineName).toBe("initialize");
+		expect(api.initialize.____slothletRoutineCascade).toBe(true);
+		expect(api.initialize.____slothletRoutineName).toBe("initialize");
 		// ...and still no mirror recreated on the control namespace.
 		expect(api.slothlet.initialize).toBeUndefined();
 	});

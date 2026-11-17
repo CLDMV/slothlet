@@ -59,8 +59,8 @@ describe.each(HOOK_SUBSET_MATRIX)("Hook Subsets - $name", ({ config }) => {
 		api = await createApiInstance(config);
 		// console.log("Config:", config);
 		// console.log("Hooks API available:", !!api.slothlet.hook);
-		// console.log("math.add has __slothletPath:", !!api.math.add.__slothletPath);
-		// console.log("math.add.__slothletPath:", api.math.add.__slothletPath);
+		// console.log("math.add has __slothletPath:", !!api.slothlet.node(api.math.add).path.join("."));
+		// console.log("api.slothlet.node(math.add).path.join("."):", api.slothlet.node(api.math.add).path.join("."));
 		expect(api.slothlet.hook).toBeDefined();
 	});
 

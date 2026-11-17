@@ -60,7 +60,7 @@ const REFUSED = Object.fromEntries(CALLS.map((call) => [call, { ok: false, code:
 
 /** The context's closures as source, compiled again below under the host file's name. */
 const CONTEXT_SOURCE =
-	"(api) => ({ pin: (fn) => typeof api.slothlet.lockCaller(fn), meta: () => api.slothlet.metadata.caller()?.apiPath ?? null, " +
+	"(api) => ({ pin: (fn) => typeof api.slothlet.lockCaller(fn), meta: () => api.slothlet.metadata.caller()?.path?.join('.') ?? null, " +
 	"emit: () => (api.slothlet.event.emit('host:ping', { n: 1 }), 'emitted'), hostLeaf: () => api.host.echo('x') })";
 
 /** The registration the plugin appends, made by the compiled code itself rather than by vitest's runner. */

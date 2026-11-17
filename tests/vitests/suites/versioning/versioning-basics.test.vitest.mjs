@@ -57,8 +57,8 @@ describe.each(getMatrixConfigs())("Versioning > Basics > $name", ({ config }) =>
 
 		// Dispatcher must be present at logical path
 		expect(api.auth).toBeDefined();
-		expect(api.auth.__isCallable).toBe(false);
-		expect(api.auth.__apiPath).toBe("auth");
+		expect(api.slothlet.node(api.auth).callable).toBe(false);
+		expect(api.slothlet.node(api.auth).logical).toEqual(["auth"]);
 	});
 
 	it("versioned namespace functions return correct shapes", async () => {

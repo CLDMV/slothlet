@@ -125,7 +125,7 @@ describe.each(CONFIGS)("aliases a module stores (#625) — $mode / $runtime", ({
 			await load();
 			expect(await withSuppressedSlothletErrorOutput(() => api.guest.x.callSetter("setFor", "guest.x.ref"))).toBe(WRITE);
 			expect(await withSuppressedSlothletErrorOutput(() => api.guest.x.callSetter("reload", "guest.x.ref"))).toBe(WRITE);
-			expect(api.slothlet.metadata.getFor("victim.v").planted).toBeUndefined();
+			expect(api.slothlet.metadata.get("victim.v").planted).toBeUndefined();
 			await victimIntact();
 		});
 
@@ -210,7 +210,7 @@ describe.each(CONFIGS)("aliases a module stores (#625) — $mode / $runtime", ({
 			it("holds the setters through a getter to the rule for the node it reaches, and removes nothing through it", async () => {
 				await load();
 				expect(await api.guest.x.defineGetterAlias("guest.x", "g", "victim.v")).toBe("done");
-				api.slothlet.metadata.setFor("victim.v", "kept", 1);
+				api.slothlet.metadata.set("victim.v", "kept", 1);
 				for (const what of ["setFor", "removeFor", "reload"]) {
 					expect({ what, outcome: await withSuppressedSlothletErrorOutput(() => api.guest.x.callSetter(what, "guest.x.g")) }).toEqual({
 						what,
@@ -218,8 +218,8 @@ describe.each(CONFIGS)("aliases a module stores (#625) — $mode / $runtime", ({
 					});
 				}
 				expect(await withSuppressedSlothletErrorOutput(() => api.guest.x.removeAt("guest.x.g.secret"))).toBe(false);
-				expect(api.slothlet.metadata.getFor("victim.v").kept).toBe(1);
-				expect(api.slothlet.metadata.getFor("victim.v").planted).toBeUndefined();
+				expect(api.slothlet.metadata.get("victim.v").kept).toBe(1);
+				expect(api.slothlet.metadata.get("victim.v").planted).toBeUndefined();
 				await victimIntact();
 			});
 

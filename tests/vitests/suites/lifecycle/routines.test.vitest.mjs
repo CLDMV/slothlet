@@ -39,8 +39,8 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 			try {
 				// Root cascade — the intended, canonical surface.
 				expect(typeof api.initialize).toBe("function");
-				expect(api.initialize.__slothletRoutineCascade).toBe(true);
-				expect(api.initialize.__slothletRoutineName).toBe("initialize");
+				expect(api.initialize.____slothletRoutineCascade).toBe(true);
+				expect(api.initialize.____slothletRoutineName).toBe("initialize");
 
 				// The api.slothlet.<name> mirror must NOT exist (#399): api.slothlet.* is slothlet's own
 				// control namespace, not a home for consumer routine cascades.
@@ -75,7 +75,7 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 
 				// Ordinary recursive-merge would have dropped auth2's contribution entirely (#341's
 				// motivating problem) — the stacked callable must run BOTH, in mount order.
-				expect(api.auth.initialize.__slothletRoutineStack).toBe(true);
+				expect(api.auth.initialize.____slothletRoutineStack).toBe(true);
 				await api.auth.initialize();
 				expect(globalThis.__slothletRoutineLog).toEqual(["auth1:initialize", "auth2:initialize"]);
 
@@ -99,7 +99,7 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 			try {
 				await api.slothlet.api.add(["auth"], TEST_DIRS.API_TEST_ROUTINES_AUTH1);
 				await api.slothlet.api.add(["auth"], TEST_DIRS.API_TEST_ROUTINES_AUTH2);
-				expect(api.auth.initialize.__slothletRoutineStack).toBe(true);
+				expect(api.auth.initialize.____slothletRoutineStack).toBe(true);
 
 				const wrapper =
 					resolveWrapper(api.auth) ||
@@ -111,7 +111,7 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 
 				// Every entry must be a genuine module contribution — never the stacked callable itself.
 				for (const entry of stack) {
-					expect(typeof entry.value === "function" && entry.value.__slothletRoutineStack === true).toBe(false);
+					expect(typeof entry.value === "function" && entry.value.____slothletRoutineStack === true).toBe(false);
 				}
 			} finally {
 				await api.slothlet.shutdown();
@@ -855,7 +855,7 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 				// (single-contributor) stacked callable; `runPath()` always re-reads `raw` fresh, so a
 				// single contributor being wrapped or not is unobservable on its own.
 				await api.slothlet.api.add(["auth"], TEST_DIRS.API_TEST_ROUTINES_AUTH1);
-				expect(api.auth.initialize.__slothletRoutineStack).toBe(true);
+				expect(api.auth.initialize.____slothletRoutineStack).toBe(true);
 
 				const routineManager = resolveWrapper(api.ping).slothlet.handlers.routineManager;
 
@@ -867,7 +867,7 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 				api.auth.initialize = function postWrite() {
 					(globalThis.__slothletRoutineLog ??= []).push("post-write:initialize");
 				};
-				expect(api.auth.initialize.__slothletRoutineStack).toBeFalsy();
+				expect(api.auth.initialize.____slothletRoutineStack).toBeFalsy();
 
 				// A genuinely distinct contributor's own raw capture arriving late — #362's "a second
 				// lazy mount whose own leaf stays untouched at api.add() time and only materializes
@@ -887,7 +887,7 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 				// a tick to land.
 				await new Promise((r) => setTimeout(r, 30));
 
-				expect(api.auth.initialize.__slothletRoutineStack).toBe(true);
+				expect(api.auth.initialize.____slothletRoutineStack).toBe(true);
 
 				globalThis.__slothletRoutineLog = [];
 				await api.auth.initialize();
@@ -919,7 +919,7 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 				// Positive proof the `group.length < 2` skip was actually reached — not just that
 				// nothing broke: the plain write is left completely untouched, never reactively
 				// upgraded to a stacked callable.
-				expect(api.auth.initialize.__slothletRoutineStack).toBeFalsy();
+				expect(api.auth.initialize.____slothletRoutineStack).toBeFalsy();
 
 				await api.auth.initialize();
 				expect(globalThis.__slothletRoutineLog).toEqual(["sole:initialize"]);
@@ -967,7 +967,7 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 			});
 			try {
 				await api.slothlet.api.add(["auth"], TEST_DIRS.API_TEST_ROUTINES_AUTH1);
-				expect(api.initialize.__slothletRoutineCascade).toBe(true);
+				expect(api.initialize.____slothletRoutineCascade).toBe(true);
 
 				const routineManager = resolveWrapper(api.ping).slothlet.handlers.routineManager;
 
@@ -977,7 +977,7 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 				api.initialize = function postWrite() {
 					(globalThis.__slothletRoutineLog ??= []).push("post-write:initialize");
 				};
-				expect(api.initialize.__slothletRoutineCascade).toBeFalsy();
+				expect(api.initialize.____slothletRoutineCascade).toBeFalsy();
 
 				// Re-touch the SAME (apiPath, moduleID) pair that the root fixture itself already
 				// registered — a genuine late re-fire of impl:changed for the root's own contributor,
@@ -994,11 +994,11 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 				// turn, well under this margin.
 				await new Promise((r) => setTimeout(r, 30));
 
-				expect(api.initialize.__slothletRoutineCascade).toBe(true);
+				expect(api.initialize.____slothletRoutineCascade).toBe(true);
 				// The cascade also carries the generic routine-managed marker (both markers coexist —
 				// see #buildCascadeCallable) — distinguishing it from a per-path stack is
-				// __slothletRoutineCascade specifically, not the absence of __slothletRoutineStack.
-				expect(api.initialize.__slothletRoutineStack).toBe(true);
+				// ____slothletRoutineCascade specifically, not the absence of ____slothletRoutineStack.
+				expect(api.initialize.____slothletRoutineStack).toBe(true);
 
 				globalThis.__slothletRoutineLog = [];
 				await api.initialize();
@@ -1055,8 +1055,8 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 
 				await new Promise((r) => setTimeout(r, 30));
 
-				expect(api.auth.initialize.__slothletRoutineStack).toBe(true);
-				expect(api.auth.initialize.__slothletRoutineName).toBe("initialize");
+				expect(api.auth.initialize.____slothletRoutineStack).toBe(true);
+				expect(api.auth.initialize.____slothletRoutineName).toBe("initialize");
 
 				globalThis.__slothletRoutineLog = [];
 				await api.auth.initialize();
@@ -1111,7 +1111,7 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 
 				await new Promise((r) => setTimeout(r, 30));
 
-				expect(api.auth.initialize.__slothletRoutineStack).toBe(true);
+				expect(api.auth.initialize.____slothletRoutineStack).toBe(true);
 				globalThis.__slothletRoutineLog = [];
 				await api.auth.initialize();
 				expect(globalThis.__slothletRoutineLog).toEqual(["delayed-real-assignment:initialize", "late-contributor:initialize"]);
@@ -1152,14 +1152,14 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 				await new Promise((r) => setTimeout(r, 30));
 
 				// Gated: the slot is still the bare clobber write, NOT a healed stack.
-				expect(api.auth.initialize.__slothletRoutineStack).toBeFalsy();
+				expect(api.auth.initialize.____slothletRoutineStack).toBeFalsy();
 
 				// Build finished (depth back to 0): a fresh event now heals normally — proving the gate,
 				// not a broken mechanism, was responsible for the no-op above.
 				routineManager.slothlet.____buildDepth = 0;
 				routineManager.onImplCreated({ apiPath: "auth.initialize", moduleID: "gate-second-module", wrapper: { __impl: lateContributor } });
 				await new Promise((r) => setTimeout(r, 30));
-				expect(api.auth.initialize.__slothletRoutineStack).toBe(true);
+				expect(api.auth.initialize.____slothletRoutineStack).toBe(true);
 			} finally {
 				await api.slothlet.shutdown();
 			}

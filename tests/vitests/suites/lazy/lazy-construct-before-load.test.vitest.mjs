@@ -77,7 +77,7 @@ describe.each([{ runtime: "async" }, { runtime: "live" }])("new before a lazy fo
 
 	it("refuses another new.target while a lazy node that is the class is loading", async () => {
 		api = await slothlet({ base: BASE, mode: "lazy", runtime, silent: true });
-		expect(api.widget.__materialized).toBe(false);
+		expect(api.slothlet.node(api.widget).materialized).toBe(false);
 		/** A constructor other than the node. */
 		function Other() {}
 		expect(() => Reflect.construct(api.widget, [5], Other)).toThrow(expect.objectContaining({ code: "LAZY_SUBCLASS_BEFORE_LOAD" }));

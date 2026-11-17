@@ -41,5 +41,5 @@ export function secret() {
  * api.vault.secret.whoami(); // null
  */
 export function whoami() {
-	return self.slothlet.metadata.caller()?.apiPath ?? null;
+	return self.slothlet.metadata.caller()?.path?.join(".") ?? null;
 }

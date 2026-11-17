@@ -124,7 +124,7 @@ describe.each(getMatrixConfigs())("Versioning > Dispatcher Internals > $name", (
 	it("__metadata on the dispatcher delegates to the resolved versioned wrapper", async () => {
 		api = await makeApi(config);
 		// __metadata should not throw and should return an object (or undefined)
-		const meta = api.auth.__metadata;
+		const meta = api.slothlet.metadata.get(api.auth);
 		// It's either an object or undefined depending on whether metadata handler is active
 		expect(meta === undefined || typeof meta === "object").toBe(true);
 	});
@@ -132,13 +132,13 @@ describe.each(getMatrixConfigs())("Versioning > Dispatcher Internals > $name", (
 	it("__filePath on the dispatcher delegates to the resolved versioned wrapper", async () => {
 		api = await makeApi(config);
 		// __filePath should be a string pointing to the resolved version's source file
-		const fp = api.auth.__filePath;
+		const fp = api.slothlet.node(api.auth).file;
 		expect(fp === undefined || typeof fp === "string").toBe(true);
 	});
 
 	it("__type on the dispatcher delegates to the resolved versioned wrapper", async () => {
 		api = await makeApi(config);
-		const t = api.auth.__type;
+		const t = api.slothlet.node(api.auth).type;
 		expect(t === undefined || typeof t === "string").toBe(true);
 	});
 

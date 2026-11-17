@@ -77,7 +77,7 @@ export const constructWarningThroughDiag = () => {
  * api.internalProxyHelper.callSetGlobalWithEmptyKey();
  */
 export const callSetGlobalWithEmptyKey = () => {
-	self.slothlet.metadata.setGlobal("", "x");
+	self.slothlet.metadata.global("", "x");
 };
 
 /**
@@ -89,7 +89,7 @@ export const callSetGlobalWithEmptyKey = () => {
  * api.internalProxyHelper.callSetGlobalWithInvalidType();
  */
 export const callSetGlobalWithInvalidType = () => {
-	self.slothlet.metadata.setGlobal(7, "x");
+	self.slothlet.metadata.global(7, "x");
 };
 
 /**

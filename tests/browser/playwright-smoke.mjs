@@ -97,7 +97,7 @@ try {
 
 	// metadata: both the namespace presence (typeof) AND a real getFor() read (merged metadata for a path).
 	out.metadataType = typeof api.slothlet.metadata; // "object" | "function"
-	const meta = api.slothlet.metadata.getFor("math.add");
+	const meta = api.slothlet.metadata.get("math.add");
 	out.metadataGetFor = meta && typeof meta === "object" ? "ok" : "bad:" + typeof meta;
 
 	// i18n: switch locale via the async dynamic-import path (real browser fetch of the locale JSON).
@@ -237,7 +237,7 @@ async function main() {
 		"self=5": smoke?.self === 5,
 		"hook=7": smoke?.hook === 7,
 		"metadata(typeof)": smoke?.metadataType === "object" || smoke?.metadataType === "function",
-		"metadata.getFor": smoke?.metadataGetFor === "ok",
+		"metadata.get": smoke?.metadataGetFor === "ok",
 		"i18n=es-mx": smoke?.i18n === "es-mx",
 		events: String(smoke?.events).startsWith("fired"),
 		"api.add": smoke?.added === "mounted",

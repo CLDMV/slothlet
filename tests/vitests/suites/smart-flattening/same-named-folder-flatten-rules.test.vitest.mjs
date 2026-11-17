@@ -157,7 +157,7 @@ async function walk(node, keys, lazy, out, depth) {
 	}
 	const at = keys.join(".");
 	out.tree.push(marker === null ? at : `${at} -> ${marker}`);
-	const recorded = node.__metadata?.apiPath;
+	const recorded = out.api.slothlet.node(node)?.path?.join(".");
 	if (recorded !== at) out.drift.push(`${at} records ${recorded}`);
 	if (depth > 8) return;
 	for (const key of Object.keys(node)) {
@@ -175,8 +175,8 @@ async function walk(node, keys, lazy, out, depth) {
  */
 async function load(fixture, at, { mode, runtime }) {
 	const dir = path.join(FIXTURES, fixture);
-	const out = { tree: [], drift: [] };
 	const api = await slothlet({ base: at === "base" ? dir : BASE, mode, runtime, silent: true });
+	const out = { tree: [], drift: [], api };
 	try {
 		if (at === "base") {
 			for (const key of Object.keys(api)) {

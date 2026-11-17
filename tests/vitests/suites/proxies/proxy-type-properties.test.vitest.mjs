@@ -184,33 +184,24 @@ describe.each(getMatrixConfigs())("Proxy set trap blocked keys > Config: '$name'
 		}
 	});
 
-	it("should silently absorb writes to __mode", async () => {
+	it("the node() report is frozen: a write to it throws and changes nothing", async () => {
 		await materialize(api, "math");
-		const modeBefore = api.math.__mode;
-		api.math.__mode = "totally-fake-mode";
-		const modeAfter = api.math.__mode;
-		expect(modeAfter).toBe(modeBefore);
+		const report = api.slothlet.node(api.math);
+		expect(Object.isFrozen(report)).toBe(true);
+		expect(Object.isFrozen(report.path)).toBe(true);
+		expect(() => {
+			report.mode = "totally-fake-mode";
+		}).toThrow(TypeError);
+		expect(() => {
+			report.path.push("fake");
+		}).toThrow(TypeError);
+		expect(api.slothlet.node(api.math)).toEqual(report);
 	});
 
-	it("should silently absorb writes to __type", async () => {
+	it("__mode / __type on a node are plain consumer names, not framework reports", async () => {
 		await materialize(api, "math");
-		const typeBefore = api.math.__type;
-		api.math.__type = "totally-fake-type";
-		expect(api.math.__type).toBe(typeBefore);
-	});
-
-	it("should silently absorb writes to __apiPath", async () => {
-		await materialize(api, "math");
-		const pathBefore = api.math.__apiPath;
-		api.math.__apiPath = "fake.path";
-		expect(api.math.__apiPath).toBe(pathBefore);
-	});
-
-	it("should silently absorb writes to __isCallable", async () => {
-		await materialize(api, "math");
-		const callableBefore = api.math.__isCallable;
-		api.math.__isCallable = !callableBefore;
-		expect(api.math.__isCallable).toBe(callableBefore);
+		expect(api.math.__mode).toBeUndefined();
+		expect(api.math.__type).toBeUndefined();
 	});
 
 	it("should NOT absorb writes to regular user properties", async () => {
@@ -239,25 +230,13 @@ describe.each(getMatrixConfigs())("Proxy delete trap blocked keys > Config: '$na
 		}
 	});
 
-	it("should silently absorb deletes of __type and preserve the value", async () => {
+	it("a delete on the node() report throws and the next report is unchanged", async () => {
 		await materialize(api, "math");
-		const typeBefore = api.math.__type;
-		delete api.math.__type;
-		expect(api.math.__type).toBe(typeBefore);
-	});
-
-	it("should silently absorb deletes of __mode and preserve the value", async () => {
-		await materialize(api, "math");
-		const modeBefore = api.math.__mode;
-		delete api.math.__mode;
-		expect(api.math.__mode).toBe(modeBefore);
-	});
-
-	it("should silently absorb deletes of __apiPath and preserve the value", async () => {
-		await materialize(api, "math");
-		const pathBefore = api.math.__apiPath;
-		delete api.math.__apiPath;
-		expect(api.math.__apiPath).toBe(pathBefore);
+		const report = api.slothlet.node(api.math);
+		expect(() => {
+			delete report.type;
+		}).toThrow(TypeError);
+		expect(api.slothlet.node(api.math).type).toBe(report.type);
 	});
 
 	it("should silently absorb deletes of ____slothletInternal (critical internal)", async () => {
@@ -267,7 +246,7 @@ describe.each(getMatrixConfigs())("Proxy delete trap blocked keys > Config: '$na
 			delete api.math.____slothletInternal;
 		}).not.toThrow();
 		// The wrapper is still functional after the no-op delete
-		expect(api.math.__type).toBeDefined();
+		expect(api.slothlet.node(api.math).type).toBeDefined();
 	});
 });
 

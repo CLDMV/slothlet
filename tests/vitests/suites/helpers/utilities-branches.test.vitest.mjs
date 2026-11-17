@@ -172,8 +172,7 @@ describe("Utilities.deepClone — inner catch fallback (line 113)", () => {
 		const utils = new Utilities(makeMock());
 		// The outer object has a function property so structuredClone(outer) throws,
 		// putting us in the fallback loop. The 'bad' property holds a Proxy whose
-		// GET trap throws for every key access. When the fallback calls
-		// deepClone(badProxy), obj?.__type inside deepClone triggers the trap →
+		// traps throw. When the fallback calls deepClone(badProxy), enumerating its keys
 		// throws → inner catch fires (line 111) → line 113: cloned.bad = original proxy.
 		const badProxy = new Proxy(
 			{},
@@ -182,7 +181,7 @@ describe("Utilities.deepClone — inner catch fallback (line 113)", () => {
 					throw new Error("proxy: no access to " + String(k));
 				},
 				ownKeys() {
-					return [];
+					throw new Error("proxy: no keys");
 				},
 				getOwnPropertyDescriptor() {
 					return undefined;

@@ -461,14 +461,14 @@ export function addRuleFor(rule) {
 }
 
 /**
- * Write the framework's metadata key on the victim's node.
+ * Write a framework-internal key on the victim's node.
  * @returns {string} `"done"`, or the error code it was refused with.
  * @example
  * writeVictimMetadata(); // "PERMISSION_DENIED"
  */
 export function writeVictimMetadata() {
 	return attempt(() => {
-		Object.defineProperty(self.victim.v, "__metadata", { value: {}, configurable: true });
+		Object.defineProperty(self.victim.v, "__state", { value: {}, configurable: true });
 	});
 }
 
@@ -770,16 +770,16 @@ export async function mountModule(entry, arg, options = {}) {
 export async function callSetter(what, target, tag) {
 	try {
 		const slothlet = self.slothlet;
-		if (what === "setFor") slothlet.metadata.setFor(target, "planted", 1);
-		else if (what === "removeFor") slothlet.metadata.removeFor(target, "planted");
-		else if (what === "setForVersion") slothlet.metadata.setForVersion(target, tag, "planted", 1);
+		if (what === "setFor") slothlet.metadata.set(target, "planted", 1);
+		else if (what === "removeFor") slothlet.metadata.remove(target, "planted");
+		else if (what === "setForVersion") slothlet.metadata.set([tag, ...target.split(".")], "planted", 1);
 		else if (what === "set")
 			slothlet.metadata.set(
 				target.split(".").reduce((node, key) => node[key], self),
 				"planted",
 				1
 			);
-		else if (what === "setGlobal") slothlet.metadata.setGlobal("planted", 1);
+		else if (what === "setGlobal") slothlet.metadata.global("planted", 1);
 		else if (what === "setDefault") slothlet.versioning.setDefault(target, tag);
 		else if (what === "setVersionMetadata") slothlet.versioning.setVersionMetadata(target, tag, { planted: 1 });
 		else await slothlet.api.reload(target);
@@ -1088,10 +1088,10 @@ export function changeReadMetadata(metaPath, logicalPath, tag) {
 	const { metadata, versioning } = self.slothlet;
 	return {
 		pathNested: attempt(() => {
-			metadata.getFor(metaPath).tier.level = 9;
+			metadata.get(metaPath).tier.level = 9;
 		}),
 		pathTop: attempt(() => {
-			metadata.getFor(metaPath).planted = 1;
+			metadata.get(metaPath).planted = 1;
 		}),
 		versionMeta: attempt(() => {
 			versioning.getVersionMetadata(logicalPath, tag).version = "hijacked";

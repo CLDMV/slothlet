@@ -28,7 +28,7 @@
  * Additionally, this file also covers:
  *
  * - **api_builder.mjs line 47-48** (`_resolvePathOrModuleId` moduleID history lookup):
- *   calling `api.slothlet.metadata.setFor(moduleID, ...)` where `moduleID` is the return
+ *   calling `api.slothlet.metadata.set(moduleID, ...)` where `moduleID` is the return
  *   value from `api.slothlet.api.add()` exercises the reverse history scan for
  *   `entry.moduleID === pathOrModuleId`
  *   branch that was previously uncovered.
@@ -116,13 +116,13 @@ describe("_resolvePathOrModuleId — moduleID history lookup (api_builder.mjs li
 		// When we call setFor("dynamic_module_id_test", ...), _resolvePathOrModuleId
 		// checks addHistory for an entry with .moduleID === "dynamic_module_id_test"
 		// and returns the corresponding apiPath — covering lines 47-48.
-		expect(() => api.slothlet.metadata.setFor("dynamic_module_id_test", "source", "dynamicModule")).not.toThrow();
+		expect(() => api.slothlet.metadata.set("dynamic_module_id_test", "source", "dynamicModule")).not.toThrow();
 	});
 
 	it("setFor() with a plain API path (no moduleID match) falls through to return the path directly", async () => {
 		api = await slothlet({ base: TEST_DIRS.API_TEST, silent: true });
 
 		// "math" is not a moduleID in addHistory, so _resolvePathOrModuleId returns it as-is
-		expect(() => api.slothlet.metadata.setFor("math", "category", "arithmetic")).not.toThrow();
+		expect(() => api.slothlet.metadata.set("math", "category", "arithmetic")).not.toThrow();
 	});
 });

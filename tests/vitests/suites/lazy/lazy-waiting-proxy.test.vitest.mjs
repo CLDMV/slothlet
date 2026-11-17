@@ -192,28 +192,28 @@ describe("Waiting proxy — special property fast-paths (lines 1410–1695)", ()
 	});
 
 	it("__mode returns 'lazy' for an unmaterialised wrapper", async () => {
-		const { wp, teardown } = await getWaitingProxy();
+		const { wp, api, teardown } = await getWaitingProxy();
 		try {
-			expect(wp.__mode).toBe("lazy");
+			expect(api.slothlet.node(wp).mode).toBe("lazy");
 		} finally {
 			await teardown();
 		}
 	});
 
 	it("__materialized returns a boolean", async () => {
-		const { wp, teardown } = await getWaitingProxy();
+		const { wp, api, teardown } = await getWaitingProxy();
 		try {
 			// Could be true or false depending on micro-task timing, but always boolean
-			expect(typeof wp.__materialized).toBe("boolean");
+			expect(typeof api.slothlet.node(wp).materialized).toBe("boolean");
 		} finally {
 			await teardown();
 		}
 	});
 
 	it("__inFlight returns a boolean", async () => {
-		const { wp, teardown } = await getWaitingProxy();
+		const { wp, api, teardown } = await getWaitingProxy();
 		try {
-			expect(typeof wp.__inFlight).toBe("boolean");
+			expect(typeof api.slothlet.node(wp).loading).toBe("boolean");
 		} finally {
 			await teardown();
 		}
@@ -247,9 +247,9 @@ describe("Waiting proxy — special property fast-paths (lines 1410–1695)", ()
 
 	it("__type returns a type string or IN_FLIGHT symbol", async () => {
 		// Lines 1451-1521: __type branch
-		const { wp, teardown } = await getWaitingProxy();
+		const { wp, api, teardown } = await getWaitingProxy();
 		try {
-			const type = wp.__type;
+			const type = api.slothlet.node(wp).type;
 			// Either a string type or the IN_FLIGHT symbol
 			expect(type !== null && type !== undefined).toBe(true);
 		} finally {
@@ -265,7 +265,7 @@ describe("Waiting proxy — special property fast-paths (lines 1410–1695)", ()
 			// Trigger materialization and wait
 			await wp._materialize();
 			await new Promise((resolve) => setImmediate(resolve));
-			const type = wp.__type;
+			const type = api.slothlet.node(wp).type;
 			expect(type).toBe("function");
 		} finally {
 			await teardown();
@@ -274,9 +274,9 @@ describe("Waiting proxy — special property fast-paths (lines 1410–1695)", ()
 
 	it("__metadata returns an object (handler or fallback {})", async () => {
 		// Lines 1523-1529: __metadata branch
-		const { wp, teardown } = await getWaitingProxy();
+		const { wp, api, teardown } = await getWaitingProxy();
 		try {
-			const meta = wp.__metadata;
+			const meta = api.slothlet.metadata.get(wp);
 			expect(typeof meta).toBe("object");
 		} finally {
 			await teardown();
@@ -327,9 +327,9 @@ describe("Waiting proxy — special property fast-paths (lines 1410–1695)", ()
 
 	it("__slothletPath returns the api path string", async () => {
 		// Line 1545: __slothletPath branch
-		const { wp, teardown } = await getWaitingProxy();
+		const { wp, api, teardown } = await getWaitingProxy();
 		try {
-			const path = wp.__slothletPath;
+			const path = api.slothlet.node(wp).path.join(".");
 			expect(typeof path).toBe("string");
 			expect(path).toContain("task");
 		} finally {

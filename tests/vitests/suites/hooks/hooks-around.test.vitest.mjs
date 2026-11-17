@@ -381,7 +381,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks > around (#4
 		api.slothlet.hook.on(
 			"svc.**:around",
 			({ path, entry, caller, next }) => {
-				seen.push({ path, entry, caller: caller ? caller.apiPath : caller });
+				seen.push({ path, entry, caller: caller ? caller.path.join(".") : caller });
 				return next();
 			},
 			{ id: "ar" }

@@ -38,6 +38,7 @@
 
 import { ComponentBase } from "#factories/component-base";
 import { internals as unifiedWrapperInternals } from "#handlers/unified-wrapper";
+import { MODULE_MANIFEST } from "#handlers/metadata";
 import { SlothletError } from "#errors";
 import { assertOptionKeys } from "#helpers/config-schema";
 import { sortModules } from "#helpers/module-sort";
@@ -550,7 +551,7 @@ export class ModuleManager extends ComponentBase {
 			folderPath: discoverResult.base,
 			options: {
 				collisionMode: underlyingCollisionMode,
-				metadata: { _module: { manifest: discoverResult.manifest } }
+				[MODULE_MANIFEST]: discoverResult.manifest
 			},
 			versionConfig: versionConfig ?? null,
 			writer

@@ -82,7 +82,7 @@ describe("routines config normalization", () => {
 	it("omitting routines keeps the built-in defaults", async () => {
 		api = await slothlet({ base: TEST_DIRS.API_TEST_ROUTINES, silent: true });
 		expect(typeof api.initialize).toBe("function");
-		expect(api.initialize.__slothletRoutineStack).toBe(true);
+		expect(api.initialize.____slothletRoutineStack).toBe(true);
 	});
 
 	it("routines: [] disables every routine — no auto-run, no generated cascade", async () => {
@@ -91,7 +91,7 @@ describe("routines config normalization", () => {
 		expect(globalThis.__slothletRoutineLog).toEqual([]);
 		// With no configured routines, "initialize" is an ordinary merged leaf — not a cascade.
 		expect(typeof api.initialize).toBe("function");
-		expect(api.initialize.__slothletRoutineStack).toBeUndefined();
+		expect(api.initialize.____slothletRoutineStack).toBeUndefined();
 	});
 
 	it('string entry "name" normalizes to mode "manual"', async () => {
@@ -142,7 +142,7 @@ describe("routines config normalization", () => {
 		expect(globalThis.__slothletRoutineLog).toContain("manual:launch");
 		// The built-in "initialize"/"shutdown" defaults are still active alongside the custom one.
 		expect(typeof api.initialize).toBe("function");
-		expect(api.initialize.__slothletRoutineStack).toBe(true);
+		expect(api.initialize.____slothletRoutineStack).toBe(true);
 	});
 
 	it("filtering slothlet.defaults.routines drops just the named default", async () => {
@@ -152,7 +152,7 @@ describe("routines config normalization", () => {
 			silent: true
 		});
 		// "initialize" (startup) is still configured...
-		expect(api.initialize.__slothletRoutineStack).toBe(true);
+		expect(api.initialize.____slothletRoutineStack).toBe(true);
 		// ...but "shutdown" is no longer a configured routine, so it stays the plain internal builtin.
 		expect(typeof api.shutdown).toBe("function");
 	});

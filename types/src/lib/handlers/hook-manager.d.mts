@@ -550,9 +550,18 @@ export type AroundChainOptions = {
      */
     isAsync: boolean;
     /**
-     * - Calling module's metadata, or null for an entry call.
+     * - The calling leaf (its path segments, module id, user metadata and version record), or null for an entry call.
      */
-    caller: object | null;
+    caller: {
+        path: string[];
+        module: string | null;
+        metadata: object;
+        version: {
+            tag: string;
+            default: boolean;
+            metadata: object;
+        } | null;
+    } | null;
     /**
      * - True when the call has no module caller.
      */

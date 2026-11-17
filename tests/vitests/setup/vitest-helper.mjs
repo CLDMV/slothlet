@@ -219,7 +219,7 @@ export async function materialize(api, path, ...args) {
 	// Check actual type using __type property (for lazy mode compatibility)
 	// __type returns Symbol(inFlight) or Symbol(unmaterialized) for lazy wrappers,
 	// or the actual type string ("function", "object", etc.) after materialization
-	const typeInfo = value?.__type;
+	const typeInfo = api.slothlet.node(value)?.type;
 	// console.log(`[MATERIALIZE] typeof typeInfo="${typeof typeInfo}" typeInfo="${String(typeInfo)}" isSymbol=${typeof typeInfo === "symbol"}`);
 	const isFunction = typeInfo === "function" || (typeof typeInfo !== "symbol" && typeof value === "function");
 	// console.log(`[MATERIALIZE] isFunction=${isFunction} args.length=${args.length}`);

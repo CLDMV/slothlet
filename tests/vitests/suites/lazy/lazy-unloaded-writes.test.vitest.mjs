@@ -935,7 +935,7 @@ describe.each([{ runtime: "async" }, { runtime: "live" }])("writes through an un
 			const reports = {};
 			for (const mode of ["eager", "lazy"]) {
 				await load(mode);
-				reports[mode] = await withSuppressedSlothletErrorOutput(() => api.writer.ops.assign("__metadata", 1));
+				reports[mode] = await withSuppressedSlothletErrorOutput(() => api.writer.ops.assign("__state", 1));
 				await api.slothlet.shutdown();
 				api = null;
 			}

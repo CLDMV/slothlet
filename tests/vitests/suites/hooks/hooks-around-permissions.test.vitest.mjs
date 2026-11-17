@@ -42,7 +42,7 @@ beforeAll(() => {
 	writeFileSync(
 		join(DIR, "db", "who.mjs"),
 		`import { self } from "@cldmv/slothlet/runtime";
-export function who() { return self.slothlet.metadata.caller()?.apiPath ?? null; }
+export function who() { return self.slothlet.metadata.caller()?.path?.join(".") ?? null; }
 `
 	);
 	writeFileSync(
@@ -56,7 +56,7 @@ export function callWho() { return self.db.who(); }
 		`import { self } from "@cldmv/slothlet/runtime";
 export function arm(typePattern, sink) {
 	return self.slothlet.hook.on(typePattern, (ctx) => {
-		if (sink) sink.push({ path: ctx.path, entry: ctx.entry, caller: ctx.caller ? ctx.caller.apiPath : null });
+		if (sink) sink.push({ path: ctx.path, entry: ctx.entry, caller: ctx.caller ? ctx.caller.path.join(".") : null });
 		return typeof ctx.next === "function" ? ctx.next() : undefined;
 	});
 }

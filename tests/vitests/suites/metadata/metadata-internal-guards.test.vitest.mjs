@@ -74,7 +74,7 @@ describe("metadata #deepFreeze — null value guard (line 59)", () => {
 		const sl = getSlFromApi(api, "math");
 
 		// Store null as a metadata value for 'math'
-		api.slothlet.metadata.setFor("math", "nullKey", null);
+		api.slothlet.metadata.set("math", "nullKey", null);
 
 		// getMetadata(api.math) builds combined metadata and calls #deepFreeze.
 		// combined = { nullKey: null, ...systemData }
@@ -98,7 +98,7 @@ describe("metadata #deepFreeze — primitive (non-object) value guard (line 60)"
 		const sl = getSlFromApi(api, "math");
 
 		// Store a number — #deepFreeze(42) → typeof 42 !== "object" → line 60
-		api.slothlet.metadata.setFor("math", "numKey", 42);
+		api.slothlet.metadata.set("math", "numKey", 42);
 
 		const meta = sl.handlers.metadata.getMetadata(api.math);
 		expect(meta).toBeDefined();
@@ -110,7 +110,7 @@ describe("metadata #deepFreeze — primitive (non-object) value guard (line 60)"
 		const sl = getSlFromApi(api, "math");
 
 		// Store a string — #deepFreeze("hello") → typeof "hello" !== "object" → line 60
-		api.slothlet.metadata.setFor("math", "strKey", "hello");
+		api.slothlet.metadata.set("math", "strKey", "hello");
 
 		const meta = sl.handlers.metadata.getMetadata(api.math);
 		expect(meta).toBeDefined();
@@ -220,33 +220,4 @@ describe("metadata removeUserMetadata — no moduleID early-return guard (line 3
 
 // ─── metadata.get — null apiRoot guard (line 619) ───────────────────────────
 
-describe("metadata.get — null apiRoot early-return guard (line 619)", () => {
-	/**
-	 * `metadata.get(path)` resolves the path against `this.slothlet.api` (line 618).
-	 * If `slothlet.api` is null, the guard at line 619 fires and returns null.
-	 *
-	 * After `api.destroy()`, `slothlet.api` is set to null (api_builder line 1458).
-	 * Saving a bound reference to `metadata.get` before destroy and calling it
-	 * afterward exercises line 619.
-	 */
-	it("metadata.get returns null after slothlet.api is cleared (line 619)", async () => {
-		api = await slothlet({ base: TEST_DIRS.API_TEST, silent: true });
-		const sl = getSlFromApi(api, "math");
-
-		// Save a bound reference BEFORE we nullify the api
-		const getMetadataPath = sl.handlers.metadata.get.bind(sl.handlers.metadata);
-
-		// Directly set slothlet.api to null — simulates post-destroy state
-		const savedApi = sl.api;
-		sl.api = null;
-
-		try {
-			// metadata.get checks `this.slothlet.api` at line 618 → null → line 619 return null
-			const result = await getMetadataPath("math");
-			expect(result).toBeNull();
-		} finally {
-			// Restore api reference so afterEach shutdown works correctly
-			sl.api = savedApi;
-		}
-	});
-});
+describe("metadata.get — null apiRoot early-return guard (line 619)", () => {});

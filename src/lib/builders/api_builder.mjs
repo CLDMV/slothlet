@@ -91,6 +91,7 @@ const {
 	runtime_inheritsBuiltin,
 	runtime_isLanguageNameDescriptor,
 	runtime_nodeBehind,
+	runtime_nodeReport,
 	runtime_unwrapSelfView
 } = unifiedWrapperInternals("lib/builders/api_builder");
 const { runtime_codeWritersOnStack } = framePlacementInternals("lib/builders/api_builder");
@@ -159,6 +160,51 @@ function _resolvePathOrModuleId(slothlet, pathOrModuleId) {
 		if (match) return match.apiPath;
 	}
 	return pathOrModuleId;
+}
+
+/**
+ * The node a metadata call on a node acts on: a version dispatcher (`api.auth`) stands for the version it resolves to
+ * for the caller, as any read through it does; any other node is itself.
+ *
+ * @param {object} slothlet - Slothlet instance.
+ * @param {*} target - A function or node.
+ * @returns {*} The node to act on.
+ * @private
+ * @example
+ * _metadataNode(slothlet, api.auth); // api.v2.auth for a caller routed to v2
+ */
+function _metadataNode(slothlet, target) {
+	const dispatcher = slothlet.handlers?.versionManager?.dispatcherOf?.(runtime_nodeBehind(target));
+	return dispatcher ? (dispatcher.resolve() ?? target) : target;
+}
+
+/**
+ * The api path a metadata call names, or null when it names a function or node.
+ *
+ * @param {object} slothlet - Slothlet instance.
+ * @param {*} target - A function or node, a dotted api path, a segment array, or a module id.
+ * @returns {string|null} The dotted api path (a module id resolved to where it was added), or null for a function or node.
+ * @throws {SlothletError} INVALID_METADATA_TARGET when the target is none of these.
+ * @private
+ * @example
+ * _metadataTargetPath(slothlet, ["v1", "auth"]); // "v1.auth"
+ */
+function _metadataTargetPath(slothlet, target) {
+	if (typeof target === "function" || (target !== null && typeof target === "object" && !Arrays.isArray(target))) return null;
+	// An array-backed node is a node, not a segment array.
+	if (Arrays.isArray(target) && resolveWrapper(runtime_nodeBehind(target)) !== null) return null;
+	if (
+		Arrays.isArray(target) &&
+		target.length > 0 &&
+		ArrayMethods.every(target, (segment) => typeof segment === "string" && segment !== "")
+	) {
+		return ArrayMethods.join(target, ".");
+	}
+	if (typeof target === "string" && target !== "") return _resolvePathOrModuleId(slothlet, target);
+	throw new slothlet.SlothletError("INVALID_METADATA_TARGET", {
+		target: Arrays.isArray(target) ? "array" : typeof target,
+		expected: "function, node, api path or module id"
+	});
 }
 
 /**
@@ -1628,14 +1674,14 @@ export class ApiBuilder extends ComponentBase {
 			instanceID: slothlet.instanceID,
 
 			/**
-			 * Type state symbols for checking __type property values
+			 * Type state symbols to compare `api.slothlet.node(target).type` against
 			 * @type {Object}
 			 * @property {symbol} UNMATERIALIZED - Module not loaded yet
 			 * @property {symbol} IN_FLIGHT - Materialization in progress
 			 * @public
 			 *
 			 * @example
-			 * if (api.math.__type === api.slothlet.types.IN_FLIGHT) {
+			 * if (api.slothlet.node(api.math).type === api.slothlet.types.IN_FLIGHT) {
 			 *   console.log("Math module is loading...");
 			 * }
 			 */
@@ -2979,25 +3025,23 @@ export class ApiBuilder extends ComponentBase {
 				 * @public
 				 *
 				 * @description
-				 * Sets global metadata that applies to all functions in the instance.
-				 * Global metadata has lower priority than per-function metadata.
+				 * Sets global metadata that applies to every function in the instance.
+				 * Global metadata has the lowest priority: path and function metadata override it.
 				 * When an object payload is provided, nested objects are recursively copied
 				 * into the metadata tree so reads preserve their original structure.
 				 *
 				 * @example
-				 * // Set global metadata for entire API
-				 * api.slothlet.metadata.setGlobal("version", "1.0.0");
-				 * api.slothlet.metadata.setGlobal("env", "production");
+				 * api.slothlet.metadata.global("version", "1.0.0");
 				 *
 				 * @example
-				 * // Bulk set global metadata via object (nested shape is preserved)
-				 * api.slothlet.metadata.setGlobal({ env: "production", build: { region: "us" } });
+				 * // Bulk set via object (nested shape is preserved)
+				 * api.slothlet.metadata.global({ env: "production", build: { region: "us" } });
 				 */
-				setGlobal: function slothlet_metadata_setGlobal(keyOrObj, value) {
+				global: function slothlet_metadata_global(keyOrObj, value) {
 					// The calling module, checked once the arguments are valid (#625).
 					const caller = runtime_selfModuleReader(slothlet);
 					// Defensive: metadata handler is always registered during load().
-					// This guard fires only if setGlobal is called before load() completes
+					// This guard fires only if metadata.global is called before load() completes
 					// or on an instance that explicitly omits the metadata handler.
 					/* v8 ignore start */
 					if (!slothlet.handlers?.metadata) {
@@ -3111,30 +3155,28 @@ export class ApiBuilder extends ComponentBase {
 				},
 
 				/**
-				 * @param {Function} fn - Target function to tag with metadata.
-				 * @param {string} key - Metadata key.
-				 * @param {unknown} value - Metadata value.
+				 * @param {Function|object|string|string[]} target - A function or node, an api path (dotted string or segment
+				 *   array, a versioned path such as `"v1.auth"` included), or a module id from a previous `api.add()`.
+				 * @param {string|Object<string, unknown>} keyOrObj - Metadata key, or an object of keys to merge.
+				 * @param {unknown} [value] - Value when `keyOrObj` is a key.
 				 * @returns {void}
 				 * @public
 				 *
 				 * @description
-				 * Sets per-function user metadata. User metadata has higher priority than
-				 * global metadata and is mutable (can be updated at runtime).
+				 * Sets user metadata. A function or node gets metadata of its own (the highest priority); a path or module id
+				 * sets it for every function at or under that path, now and later (descendants inherit it, the closer entry
+				 * wins). Later calls merge over earlier ones.
 				 *
 				 * @example
-				 * // Tag a specific function with metadata
 				 * api.slothlet.metadata.set(api.math.add, "description", "Adds two numbers");
-				 * api.slothlet.metadata.set(api.math.add, "version", "2.0.0");
 				 *
 				 * @example
-				 * // Tag multiple functions
-				 * Object.values(api.math).forEach(fn => {
-				 *   if (typeof fn === "function") {
-				 *     api.slothlet.metadata.set(fn, "category", "math");
-				 *   }
-				 * });
+				 * api.slothlet.metadata.set("math", { category: "math", version: "2.0.0" });
+				 *
+				 * @example
+				 * api.slothlet.metadata.set("v1.auth", "stable", true);
 				 */
-				set: function slothlet_metadata_set(fn, key, value) {
+				set: function slothlet_metadata_set(target, keyOrObj, value) {
 					if (!slothlet.handlers?.metadata) {
 						throw new slothlet.SlothletError("METADATA_NOT_AVAILABLE", {
 							handlersKeys: slothlet.handlers
@@ -3145,235 +3187,128 @@ export class ApiBuilder extends ComponentBase {
 							validationError: true
 						});
 					}
-					// Module code sets a node's metadata only where it may write (#625).
-					const node = resolveWrapper(fn);
-					if (node) slothlet.handlers.apiManager.assertModuleWrite(String(node.____slothletInternal.apiPath));
-					return slothlet.handlers.metadata.setUserMetadata(fn, key, value);
+					const path = _metadataTargetPath(slothlet, target);
+					if (path === null) {
+						target = _metadataNode(slothlet, target);
+						// Module code sets a node's metadata only where it may write (#625).
+						const node = resolveWrapper(target);
+						if (node) slothlet.handlers.apiManager.assertModuleWrite(String(node.____slothletInternal.apiPath));
+						if (keyOrObj && typeof keyOrObj === "object" && !Arrays.isArray(keyOrObj)) {
+							for (let ofIndex = 0, ofList = Objects.entries(keyOrObj); ofIndex < ofList.length; ofIndex++) {
+								slothlet.handlers.metadata.setUserMetadata(target, ofList[ofIndex][0], ofList[ofIndex][1]);
+							}
+							return;
+						}
+						return slothlet.handlers.metadata.setUserMetadata(target, keyOrObj, value);
+					}
+					// Module code sets metadata only where it may write (#625).
+					slothlet.handlers.apiManager.assertModuleWrite(path);
+					return slothlet.handlers.metadata.setPathMetadata(path, keyOrObj, value);
 				},
 
 				/**
-				 * @param {Function} fn - Target function to remove metadata from.
-				 * @param {string} [key] - Optional metadata key to remove (removes all if omitted).
+				 * @param {Function|object|string|string[]} target - A function or node, an api path, or a module id.
+				 * @param {string|string[]} [key] - Key(s) to remove. Omit to remove all of the target's metadata.
 				 * @returns {void}
 				 * @public
 				 *
 				 * @description
-				 * Removes user metadata from a function. If key is provided, removes only that
-				 * key. If key is omitted, removes all user metadata for the function.
+				 * Removes user metadata set on the target: the named key(s), or all of it. A path removes only what was set
+				 * for that exact path; it does not walk descendants.
 				 *
 				 * @example
-				 * // Remove specific metadata key
 				 * api.slothlet.metadata.remove(api.math.add, "description");
 				 *
 				 * @example
-				 * // Remove all user metadata from function
-				 * api.slothlet.metadata.remove(api.math.add);
+				 * api.slothlet.metadata.remove("math");
 				 */
-				remove: function slothlet_metadata_remove(fn, key) {
-					// Module code removes a node's metadata only where it may write (#625).
-					const node = resolveWrapper(fn);
-					if (node) slothlet.handlers.apiManager.assertModuleWrite(String(node.____slothletInternal.apiPath));
-					return slothlet.handlers.metadata.removeUserMetadata(fn, key);
-				},
-
-				/**
-				 * @param {string} pathOrModuleId - Dot-notation API path (e.g. `"math"`, `"math.add"`) OR a moduleID from a previous `api.add()` call.
-				 * @param {string|Object} keyOrObj - Single key string (with `value`) or metadata object.
-				 * @param {unknown} [value] - Value when `keyOrObj` is a string key.
-				 * @returns {void}
-				 * @public
-				 *
-				 * @description
-				 * Sets metadata for ALL functions reachable under the given API path.
-				 * Unlike `metadata.set()` which targets a specific function reference,
-				 * `setFor()` uses the path string and applies to all current and
-				 * future functions mounted at (or under) that path.
-				 *
-				 * Accepts either a dot-notation API path or a moduleID from a prior
-				 * `api.add()` call - the moduleID is resolved to its registered apiPath
-				 * before storing, consistent with how `api.reload()` and `api.remove()` work.
-				 *
-				 * Multiple calls to the same path are merged; later calls override earlier
-				 * ones for conflicting keys. Metadata set via `set()` still overrides
-				 * path-level metadata for that specific function.
-				 *
-				 * Survives `api.slothlet.reload()` (full reload) without extra steps.
-				 *
-				 * @example
-				 * // Tag all functions under 'math' with a category (by API path)
-				 * api.slothlet.metadata.setFor("math", "category", "math");
-				 *
-				 * @example
-				 * // Tag by moduleID (resolved to the path it was registered at)
-				 * api.slothlet.metadata.setFor("plugins-core", "version", "2.0.0");
-				 *
-				 * @example
-				 * // Bulk update via object
-				 * api.slothlet.metadata.setFor("math", { category: "math", version: "2.0.0" });
-				 */
-				setFor: function slothlet_metadata_setFor(pathOrModuleId, keyOrObj, value) {
-					if (!slothlet.handlers?.metadata) {
-						throw new slothlet.SlothletError("METADATA_NOT_AVAILABLE", {
-							handlersKeys: slothlet.handlers
-								? ArrayMethods.join(Objects.keys(slothlet.handlers), ", ")
-								: // slothlet.handlers is always truthy here; the : "undefined" arm is dead code.
-									/* v8 ignore next */
-									"undefined",
-							validationError: true
-						});
+				remove: function slothlet_metadata_remove(target, key) {
+					const path = _metadataTargetPath(slothlet, target);
+					if (path === null) {
+						target = _metadataNode(slothlet, target);
+						// Module code removes a node's metadata only where it may write (#625).
+						const node = resolveWrapper(target);
+						if (node) slothlet.handlers.apiManager.assertModuleWrite(String(node.____slothletInternal.apiPath));
+						return slothlet.handlers.metadata.removeUserMetadata(target, key);
 					}
-					const resolvedPath = _resolvePathOrModuleId(slothlet, pathOrModuleId);
-					// Module code sets metadata only where it may write (#625).
-					slothlet.handlers.apiManager.assertModuleWrite(resolvedPath);
-					return slothlet.handlers.metadata.setPathMetadata(resolvedPath, keyOrObj, value);
-				},
-
-				/**
-				 * @param {string} pathOrModuleId - Dot-notation API path (e.g. `"math"`, `"math.add"`) OR a moduleID from a previous `api.add()` call.
-				 * @param {string|string[]} [key] - Key(s) to remove. Omit to remove all path metadata.
-				 * @returns {void}
-				 * @public
-				 *
-				 * @description
-				 * Removes metadata keys (or all metadata) from the path store for the given
-				 * API path or moduleID. Only affects metadata set via `setFor()` for
-				 * this exact path segment.
-				 *
-				 * Accepts either a dot-notation API path or a moduleID from a prior
-				 * `api.add()` call - the moduleID is resolved to its registered apiPath
-				 * before removing, consistent with how `api.reload()` and `api.remove()` work.
-				 *
-				 * @example
-				 * // Remove a single key from the 'math' path store
-				 * api.slothlet.metadata.removeFor("math", "category");
-				 *
-				 * @example
-				 * // Remove all path-level metadata for 'math'
-				 * api.slothlet.metadata.removeFor("math");
-				 *
-				 * @example
-				 * // Remove by moduleID
-				 * api.slothlet.metadata.removeFor("plugins-core", "version");
-				 */
-				removeFor: function slothlet_metadata_removeFor(pathOrModuleId, key) {
+					/* v8 ignore next */
 					if (!slothlet.handlers?.metadata) return;
-					const resolvedPath = _resolvePathOrModuleId(slothlet, pathOrModuleId);
 					// Module code removes metadata only where it may write (#625).
-					slothlet.handlers.apiManager.assertModuleWrite(resolvedPath);
-					return slothlet.handlers.metadata.removePathMetadata(resolvedPath, key);
+					slothlet.handlers.apiManager.assertModuleWrite(path);
+					return slothlet.handlers.metadata.removePathMetadata(path, key);
 				},
 
 				/**
-				 * @param {string} pathOrModuleId - Dot-notation API path (e.g. `"math"`, `"math.add"`) OR a moduleID from a previous `api.add()` call.
-				 * @returns {Object} Merged metadata for the path (not frozen). Includes any global metadata set via `setGlobal()` overlaid with the path-store entries collected root-to-leaf along the apiPath. Returns `{}` only when both the global store AND the path store (plus all ancestor entries) are empty.
+				 * @param {Function|object|string|string[]} target - A function or node, an api path (dotted string or segment
+				 *   array, a versioned path such as `"v1.auth"` included), or a module id from a previous `api.add()`.
+				 * @param {object} [options] - Read options.
+				 * @param {string} [options.version] - A version tag: read the metadata of that version of the logical path
+				 *   `target` (`get("auth", { version: "v1" })` reads what `get("v1.auth")` reads).
+				 * @returns {Object} The target's user metadata (a copy): global < path chain < the function's own.
 				 * @public
 				 *
 				 * @description
-				 * Retrieves user metadata for the given API path or moduleID. The
-				 * returned object is the merged view of two stores: any global
-				 * metadata set via `setGlobal()` (lowest precedence) overlaid with
-				 * the root-to-leaf merge of `setFor()` entries along the apiPath
-				 * (descendants inherit ancestor entries; closer-to-leaf entries
-				 * win).
-				 *
-				 * Unlike `metadata.get(fn)` which targets a specific function reference,
-				 * `getFor()` uses the path string and returns the merged
-				 * global + path-store entries. Does not include immutable system
-				 * metadata (filePath, moduleID, etc.) — only user-supplied entries
-				 * set via `setGlobal()` / `setFor()`.
-				 *
-				 * Accepts either a dot-notation API path or a moduleID from a prior
-				 * `api.add()` call — the moduleID is resolved to its registered apiPath
-				 * before lookup, consistent with how `setFor()` / `removeFor()` work.
+				 * Reads user metadata only, synchronously. The facts slothlet records about a node (its file, folder,
+				 * path and module) are not metadata: `api.slothlet.node(target)` reports them.
 				 *
 				 * @example
-				 * // Get metadata set at exact path
-				 * api.slothlet.metadata.setFor("math", "category", "math");
-				 * api.slothlet.metadata.getFor("math"); // { category: "math" }
+				 * api.slothlet.metadata.get(api.math.add); // { category: "math", description: "Adds two numbers" }
 				 *
 				 * @example
-				 * // Descendants inherit via parent → child merge
-				 * api.slothlet.metadata.setFor("math", "category", "math");
-				 * api.slothlet.metadata.getFor("math.add"); // { category: "math" }
-				 *
-				 * @example
-				 * // Resolve by moduleID
-				 * api.slothlet.metadata.getFor("plugins-core_abc123");
+				 * api.slothlet.metadata.get("auth", { version: "v1" }); // { stable: true }
 				 */
-				getFor: function slothlet_metadata_getFor(pathOrModuleId) {
+				get: function slothlet_metadata_get(target, options) {
 					/* v8 ignore next */
 					if (!slothlet.handlers?.metadata) return {};
-					const resolvedPath = _resolvePathOrModuleId(slothlet, pathOrModuleId);
-					// A copy: changing it never changes what is stored for the path, which only the setters do (#625).
-					return slothlet.helpers.utilities.deepClone(slothlet.handlers.metadata.getPathMetadata(resolvedPath));
-				},
-
-				/**
-				 * @param {string} logicalPath - Logical API path (e.g. `"auth"`).
-				 * @param {string} versionTag - Version tag (e.g. `"v1"`, `"2.3.0"`).
-				 * @param {string|Object} keyOrObj - Single key string (with `value`) or metadata object.
-				 * @param {unknown} [value] - Value when `keyOrObj` is a string key.
-				 * @returns {void}
-				 * @public
-				 *
-				 * @description
-				 * Sets regular module metadata on the versioned module at the given logical path and version tag.
-				 * Resolves via the version registry so dotted version tags (e.g. `"2.3.0"`) are handled safely —
-				 * no manual path construction needed. The metadata is visible in `__metadata` reads and in
-				 * `allVersions[tag].metadata` inside discriminator functions.
-				 *
-				 * @example
-				 * api.slothlet.metadata.setForVersion("auth", "v1", "stable", true);
-				 * api.slothlet.metadata.setForVersion("auth", "v1", { stable: true, region: "us" });
-				 */
-				setForVersion: function slothlet_metadata_setForVersion(logicalPath, versionTag, keyOrObj, value) {
-					if (!slothlet.handlers?.metadata) {
-						throw new slothlet.SlothletError("METADATA_NOT_AVAILABLE", {
-							handlersKeys: slothlet.handlers ? ArrayMethods.join(Objects.keys(slothlet.handlers), ", ") : "undefined",
-							validationError: true
-						});
+					const version = options && typeof options === "object" ? options.version : undefined;
+					if (version !== undefined) {
+						const logical = Arrays.isArray(target) ? ArrayMethods.join(target, ".") : target;
+						const info = typeof logical === "string" ? slothlet.handlers?.versionManager?.list(logical) : undefined;
+						const entry = info?.versions?.[version];
+						if (!entry) return {};
+						// The version's real path, as segments, so a dotted tag ("2.3.0") stays one segment.
+						target = Arrays.isArray(entry.versionedParts) ? mapList(entry.versionedParts, String) : `${version}.${logical}`;
 					}
-					const info = slothlet.handlers?.versionManager?.list(logicalPath);
-					if (!info || !info.versions?.[versionTag]) {
-						throw new slothlet.SlothletError("VERSION_NOT_FOUND", {
-							version: versionTag,
-							apiPath: logicalPath
-						});
-					}
-					const { moduleID } = info.versions[versionTag];
-					const resolvedPath = _resolvePathOrModuleId(slothlet, moduleID);
-					// Module code sets a version's metadata only where it may write (#625).
-					slothlet.handlers.apiManager.assertModuleWrite(resolvedPath);
-					return slothlet.handlers.metadata.setPathMetadata(resolvedPath, keyOrObj, value);
-				},
-
-				/**
-				 * @param {string} logicalPath - Logical API path (e.g. `"auth"`).
-				 * @param {string} versionTag - Version tag (e.g. `"v1"`, `"2.3.0"`).
-				 * @returns {Object} Merged regular user metadata for the versioned module's path.
-				 * @public
-				 *
-				 * @description
-				 * Retrieves regular module metadata set via `setFor()` or `setForVersion()` for the versioned
-				 * module at the given logical path and version tag. Does not include system metadata
-				 * (file path, moduleID, etc.) — only user-supplied path metadata.
-				 *
-				 * For full metadata including system fields, access `api[versionTag][logicalPath].__metadata` directly.
-				 *
-				 * @example
-				 * const meta = api.slothlet.metadata.getForVersion("auth", "v1");
-				 * // { stable: true, region: "us" }
-				 */
-				getForVersion: function slothlet_metadata_getForVersion(logicalPath, versionTag) {
-					/* v8 ignore next */
-					if (!slothlet.handlers?.metadata) return {};
-					const info = slothlet.handlers?.versionManager?.list(logicalPath);
-					if (!info || !info.versions?.[versionTag]) return {};
-					const { moduleID } = info.versions[versionTag];
-					const resolvedPath = _resolvePathOrModuleId(slothlet, moduleID);
-					// A copy, as getFor's (#625).
-					return slothlet.helpers.utilities.deepClone(slothlet.handlers.metadata.getPathMetadata(resolvedPath));
+					const path = _metadataTargetPath(slothlet, target);
+					// A node's metadata is a deeply frozen object built for this read; a path's is a copy. Either way changing it
+					// never changes what is stored, which only the setters do (#625).
+					if (path === null) return slothlet.handlers.metadata.getMetadata(_metadataNode(slothlet, target));
+					return slothlet.helpers.utilities.deepClone(slothlet.handlers.metadata.getPathMetadata(path));
 				}
+			},
+
+			/**
+			 * @param {Function|object|string|string[]} target - An api node (as read from `api`, `self`, or a reference a
+			 *   module kept), or its api path as a dotted string or a segment array.
+			 * @returns {{callable: boolean, file: string|null, folder: string|null, loading: boolean, logical?: string[], manifest?: object, materialized: boolean, mode: string, module: string|null, path: string[], type: symbol|string}|undefined}
+			 *   One frozen report, or undefined when `target` is no api node.
+			 * @throws {SlothletError} PERMISSION_DENIED when the caller may not reach the target.
+			 * @public
+			 *
+			 * @description
+			 * Reports what slothlet knows about a node: its api path (segments), the file and folder it came from, the
+			 * module that owns it (the id used with `api.add` / `api.remove`), its mode and load state, whether it can be
+			 * called, and its type. Nodes carry no framework keys of their own; this is where those facts are read.
+			 *
+			 * `type` is `api.slothlet.types.UNMATERIALIZED` or `IN_FLIGHT` until a lazy node has loaded (reading the
+			 * report never starts the load), then `"function"`, `"data"` or `"namespace"` (a node with members; a callable
+			 * folder is a namespace with `callable: true`). `logical` is present on a
+			 * versioned node read through its logical path (`api.auth` → `logical: ["auth"]`, `path: ["v2", "auth"]`), and
+			 * `manifest` (the parsed `slothlet.module.json`) on a node of a package mount.
+			 *
+			 * The caller must be allowed to reach the target: with permissions on, the report is decided as a read of the
+			 * node's own path. Calling `node` itself is allowed by a built-in rule.
+			 *
+			 * @example
+			 * api.slothlet.node(api.math.add);
+			 * // { callable: true, file: "/app/api/math.mjs", folder: "/app/api", loading: false, materialized: true,
+			 * //   mode: "eager", module: "base", path: ["math", "add"], type: "function" }
+			 *
+			 * @example
+			 * api.slothlet.node("math").type === "namespace"; // true
+			 */
+			node: function slothlet_node(target) {
+				return runtime_nodeReport(slothlet, target);
 			},
 
 			/**
@@ -3468,8 +3403,9 @@ export class ApiBuilder extends ComponentBase {
 			},
 
 			/**
-			 * The dotted api path of the caller currently in context — the identity in effect for the running
-			 * code — or `null` for the host (no module caller). It reports the executing module's OWN path:
+			 * The caller object of the identity currently in context — the identity in effect for the running
+			 * code: `{ path, module, metadata, version }` (the same object `metadata.caller()` and `metadata.self()`
+			 * return) — or `null` for the host (no module caller). It reports the executing module's OWN path:
 			 * the same value slothlet attributes calls, hooks, and event subscriptions to, not the identity of
 			 * whoever called that module. A module therefore learns nothing it could not already assert about
 			 * itself, so this accessor is not gated.
@@ -3482,12 +3418,14 @@ export class ApiBuilder extends ComponentBase {
 			 * `event.on` captures at subscribe, `event.resolveLevel(caller(), evt)` agrees with the level an actual
 			 * subscription at that identity would be granted.
 			 *
-			 * @returns {string|null} The current caller's dotted api path, or `null` when there is no module
-			 *   caller in context (the host, or a call made outside any module extent).
+			 * @returns {{path: string[], module: string|null, metadata: object, version: {tag: string, default: string, metadata: object}|null}|null}
+			 *   The current identity as a caller object, or `null` when there is no module caller in context
+			 *   (the host, or a call made outside any module extent).
 			 *
 			 * @example
 			 * // Inside a module leaf, reports that module's own path:
-			 * const me = self.slothlet.caller(); // e.g. "renderer.dashboard"
+			 * const me = self.slothlet.caller(); // e.g. { path: ["renderer", "dashboard"], module, metadata, version }
+			 * me?.path.join("."); // "renderer.dashboard"
 			 */
 			caller: () => {
 				// Scoped to THIS instance: the shared-singleton AsyncLocalStorage propagates across `await`/
@@ -3496,7 +3434,8 @@ export class ApiBuilder extends ComponentBase {
 				// not this instance's caller. Mismatched flow reports host; this instance's own flow reports the
 				// real module — the same instance-scoping the read-gate (#290) already applies.
 				const wrapper = slothlet.contextManager?.getCallerIdentity?.(slothlet.instanceID)?.currentWrapper;
-				return wrapper?.____slothletInternal?.apiPath ?? null;
+				if (!wrapper) return null;
+				return slothlet.handlers?.versionManager?.buildCallerArg?.(wrapper) ?? null;
 			},
 
 			/**

@@ -33,7 +33,7 @@ import { self } from "@cldmv/slothlet/runtime";
  * await api.keystore.key.lock("k", () => 1);
  */
 export async function lock(name, fn) {
-	const holder = self.slothlet.metadata.caller()?.apiPath ?? null;
+	const holder = self.slothlet.metadata.caller()?.path?.join(".") ?? null;
 	await new Promise((resolve) => setTimeout(resolve, 0));
 	const result = await fn();
 	return { name, holder, result };

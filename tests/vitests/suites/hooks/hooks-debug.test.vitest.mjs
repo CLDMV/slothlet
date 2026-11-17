@@ -141,9 +141,9 @@ describe.each(getMatrixConfigs({ hook: { enabled: true }, diagnostics: true }))(
 		expect(typeof api.math.add).toBe("function");
 
 		// Check slothlet path metadata
-		expect(api.math.add.__slothletPath).toBeDefined();
-		expect(typeof api.math.add.__slothletPath).toBe("string");
-		expect(api.math.add.__slothletPath).toMatch(/math\.add/);
+		expect(api.slothlet.node(api.math.add).path.join(".")).toBeDefined();
+		expect(typeof api.slothlet.node(api.math.add).path.join(".")).toBe("string");
+		expect(api.slothlet.node(api.math.add).path.join(".")).toMatch(/math\.add/);
 	});
 
 	it("should enable hook pattern debugging", () => {

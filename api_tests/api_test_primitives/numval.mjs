@@ -18,7 +18,7 @@
  * @module api_test_primitives.numval
  * @memberof module:api_test_primitives
  * @example
- * // api.numval.__type === "number"
+ * // api.slothlet.node(api.numval).type === "data"
  */
 /**
  * @namespace numval

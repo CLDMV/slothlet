@@ -92,29 +92,29 @@ for (const { config, name } of lazyConfigs) {
 			// so it must be an unmaterialized lazy wrapper immediately after slothlet() resolves.
 			// The cache stores this.api directly, so checking api.string here is checking
 			// what is inside the cached entry's api tree.
-			expect(api.string.__materialized).toBe(false);
-			expect(api.string.__inFlight).toBe(false);
+			expect(api.slothlet.node(api.string).materialized).toBe(false);
+			expect(api.slothlet.node(api.string).loading).toBe(false);
 		});
 
 		// ─── 3. First access through the live api triggers materialization ───
 
 		it("should materialize a lazy wrapper only on first access through the api", async () => {
-			expect(api.string.__materialized).toBe(false);
+			expect(api.slothlet.node(api.string).materialized).toBe(false);
 
 			// Accessing a function through the proxy fires getTrap → _materialize().
 			// The await ensures materialization has completed before the assertion.
 			const result = await api.string.upper("hello");
 			expect(result).toBe("HELLO");
 
-			expect(api.string.__materialized).toBe(true);
+			expect(api.slothlet.node(api.string).materialized).toBe(true);
 		});
 
 		// ─── 4. getCacheDiagnostics() must NOT trigger materialization ───
 
 		it("getCacheDiagnostics() should not cause lazy wrappers to materialize", () => {
 			// Baseline - wrapper is not materialized before diagnostics call
-			expect(api.string.__materialized).toBe(false);
-			expect(api.string.__inFlight).toBe(false);
+			expect(api.slothlet.node(api.string).materialized).toBe(false);
+			expect(api.slothlet.node(api.string).loading).toBe(false);
 
 			// getCacheDiagnostics() internally calls _countPaths(entry.api).
 			// If _countPaths() uses Object.entries() on the api tree, it hits the
@@ -124,8 +124,8 @@ for (const { config, name } of lazyConfigs) {
 			api.slothlet.diag.caches.get();
 
 			// State must be completely unchanged after a diagnostic call
-			expect(api.string.__materialized).toBe(false);
-			expect(api.string.__inFlight).toBe(false);
+			expect(api.slothlet.node(api.string).materialized).toBe(false);
+			expect(api.slothlet.node(api.string).loading).toBe(false);
 		});
 
 		// ─── 5. api.add() in lazy mode also stores lazy wrappers ───
@@ -142,7 +142,7 @@ for (const { config, name } of lazyConfigs) {
 			// stored a lazy (unmaterialized) wrapper - not a fully loaded module.
 			// Note: __inFlight may be true at this point if background materialization
 			// has started post-add(); that is expected and orthogonal to this check.
-			expect(api.plugins.interop.__materialized).toBe(false);
+			expect(api.slothlet.node(api.plugins.interop).materialized).toBe(false);
 		});
 	});
 }

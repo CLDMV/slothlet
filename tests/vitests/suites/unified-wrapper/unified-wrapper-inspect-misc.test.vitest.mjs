@@ -191,7 +191,7 @@ describe("__metadata fallback when metadata handler is null (line 2122)", () => 
 		const originalMetadata = sl.handlers.metadata;
 		sl.handlers.metadata = null;
 		try {
-			const meta = api.math.__metadata;
+			const meta = api.slothlet.metadata.get(api.math);
 			expect(meta).toEqual({});
 		} finally {
 			sl.handlers.metadata = originalMetadata;

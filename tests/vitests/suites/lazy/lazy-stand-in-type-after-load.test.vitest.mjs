@@ -14,13 +14,13 @@
  */
 
 /**
- * @fileoverview The `__type` of a member read before its lazy folder loads, and kept, is the kind of what the member
- * reads as once the folder has loaded: "string" for a file's default-export string, "number" for a number, "object" for
- * an object or a Map, "function" for a function.
+ * @fileoverview The `slothlet.node(member).type` of a member read before its lazy folder loads, and kept, is the kind of
+ * what the member reads as once the folder has loaded: "function" for a function, "namespace" for an object with members,
+ * "data" for anything else (a string, a number, an array, a Map).
  *
  * @description
- * Before the folder loads the member's `__type` is the in-flight state. The expected kind is `typeof` of the file's
- * default export imported plainly (a function as "function", every other object as "object").
+ * Before the folder loads the member's type is the in-flight state. The expected kind is the kind of the file's default
+ * export imported plainly.
  * @module tests/vitests/suites/lazy/lazy-stand-in-type-after-load
  */
 
@@ -48,23 +48,28 @@ const configs = ["async", "live"].flatMap((runtime) =>
  */
 async function kindOf(key) {
 	const value = (await import(`${pathToFileURL(join(FIXTURE, "d", `${key}.mjs`)).href}?plain-twin-type`)).default;
-	return typeof value === "object" && value !== null ? "object" : typeof value;
+	if (typeof value === "function") return "function";
+	const plainObject = value !== null && typeof value === "object" && Object.getPrototypeOf(value) === Object.prototype;
+	return plainObject && Object.keys(value).length > 0 ? "namespace" : "data";
 }
 
-describe.each(configs)("a kept member's __type once its lazy folder has loaded > lazy / $runtime / $name", ({ runtime, permissions }) => {
-	let api;
+describe.each(configs)(
+	"a kept member's node().type once its lazy folder has loaded > lazy / $runtime / $name",
+	({ runtime, permissions }) => {
+		let api;
 
-	afterEach(async () => {
-		await api?.shutdown?.();
-		api = null;
-	});
+		afterEach(async () => {
+			await api?.shutdown?.();
+			api = null;
+		});
 
-	it.each(KEYS)("is the kind of what the member reads as: %s", async (key) => {
-		const expected = await kindOf(key);
-		api = await slothlet({ base: FIXTURE, mode: "lazy", runtime, silent: true, permissions: { policy: "allow", ...permissions } });
-		const kept = api.d[key];
-		expect(kept.__type).toBe(api.slothlet.types.IN_FLIGHT);
-		await api.d;
-		expect(kept.__type).toBe(expected);
-	});
-});
+		it.each(KEYS)("is the kind of what the member reads as: %s", async (key) => {
+			const expected = await kindOf(key);
+			api = await slothlet({ base: FIXTURE, mode: "lazy", runtime, silent: true, permissions: { policy: "allow", ...permissions } });
+			const kept = api.d[key];
+			expect(api.slothlet.node(kept).type).toBe(api.slothlet.types.IN_FLIGHT);
+			await api.d;
+			expect(api.slothlet.node(kept).type).toBe(expected);
+		});
+	}
+);

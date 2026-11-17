@@ -156,8 +156,8 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])("Leaf-exported nested array
 		expect(items.length).toBe(2);
 		// ...but each element is a real wrapper with a proper apiPath (the hook for api.add / permission
 		// rules / context at arr[i] and deeper), not a raw object.
-		expect(items[0].__apiPath).toBe("widget.items.0");
-		expect(items[1].__apiPath).toBe("widget.items.1");
+		expect(api.slothlet.node(items[0]).path.join(".")).toBe("widget.items.0");
+		expect(api.slothlet.node(items[1]).path.join(".")).toBe("widget.items.1");
 		// Nested members on a wrapped element still work (callable + data).
 		expect(items[0].greet()).toBe("hi a");
 		expect(items[1].id).toBe("b");
@@ -695,11 +695,11 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])("An array element's path fo
 		api = await slothlet({ base: root, mode });
 		await api.caller.hold(0);
 		const second = api.data.items[1];
-		expect(second.__slothletPath).toBe("data.items.1");
+		expect(api.slothlet.node(second).path.join(".")).toBe("data.items.1");
 		const first = api.data.items.shift();
-		expect(second.__slothletPath).toBe("data.items.0");
-		expect(second.run.__slothletPath).toBe("data.items.0.run");
-		expect(first.__slothletPath).toBe("data.items");
+		expect(api.slothlet.node(second).path.join(".")).toBe("data.items.0");
+		expect(api.slothlet.node(second.run).path.join(".")).toBe("data.items.0.run");
+		expect(api.slothlet.node(first).path.join(".")).toBe("data.items");
 		expect(first.run()).toBe("run-x");
 	});
 
@@ -714,7 +714,7 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])("An array element's path fo
 		api = await slothlet({ base: root, mode });
 		const second = api.data.items[1];
 		api.data.items.shift();
-		expect(second.__slothletPath).toBe("data.items.0");
+		expect(api.slothlet.node(second).path.join(".")).toBe("data.items.0");
 		expect(await api.data.indexOfCalls()).toBe(0);
 	});
 
@@ -982,9 +982,9 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])(
 
 		it("a member named 4294967295 is a property, not a position: its path stays when the property is deleted", () => {
 			const held = api.box.items["4294967295"];
-			expect(held.__slothletPath).toBe("box.items.4294967295");
+			expect(api.slothlet.node(held).path.join(".")).toBe("box.items.4294967295");
 			delete api.box.items["4294967295"];
-			expect(held.__slothletPath).toBe("box.items.4294967295");
+			expect(api.slothlet.node(held).path.join(".")).toBe("box.items.4294967295");
 		});
 
 		it("preventExtensions on an array whose own preventExtensions refuses is refused, as on the array", () => {
@@ -997,7 +997,7 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])(
 			const tag = Symbol.for("slothlet.test.tag");
 			const member = api.box.items[0][tag];
 			expect(member.deep).toBe(1);
-			expect(member.__slothletPath).toBe("box.items.0.Symbol(slothlet.test.tag)");
+			expect(api.slothlet.node(member).path.join(".")).toBe("box.items.0.Symbol(slothlet.test.tag)");
 		});
 
 		it("deleting a named member of an array invalidates its wrapper, as deleting an object's member does", () => {
@@ -1020,9 +1020,9 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])(
 
 		it("a value kept under 4294967295 does not stand in for a position the element has left", () => {
 			const held = api.box.dupes[0];
-			expect(held.__slothletPath).toBe("box.dupes.0");
+			expect(api.slothlet.node(held).path.join(".")).toBe("box.dupes.0");
 			delete api.box.dupes[0];
-			expect(held.__slothletPath).toBe("box.dupes");
+			expect(api.slothlet.node(held).path.join(".")).toBe("box.dupes");
 		});
 
 		it("a prototype set on an array member is the one it reports, before and after it is sealed", () => {
@@ -1048,7 +1048,7 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])(
 		it("an element an array inherits keeps the index it was read at", () => {
 			const held = api.box.inheritor_[0];
 			expect(held.id).toBe("inherited");
-			expect(held.__slothletPath).toBe("box.inheritor_.0");
+			expect(api.slothlet.node(held).path.join(".")).toBe("box.inheritor_.0");
 		});
 
 		it.each([
@@ -1109,24 +1109,24 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])(
 		it("an object an array proxy supplies from its get trap keeps the index it was read at", () => {
 			const held = api.box.virtualList[0];
 			expect(held.id).toBe("virtual");
-			expect(held.__slothletPath).toBe("box.virtualList.0");
+			expect(api.slothlet.node(held).path.join(".")).toBe("box.virtualList.0");
 		});
 
 		it("an inherited element moved to another inherited index follows it", async () => {
 			const held = api.box.mover[1];
-			expect(held.__slothletPath).toBe("box.mover.1");
+			expect(api.slothlet.node(held).path.join(".")).toBe("box.mover.1");
 			await api.box.moveInherited();
-			expect(held.__slothletPath).toBe("box.mover.0");
+			expect(api.slothlet.node(held).path.join(".")).toBe("box.mover.0");
 		});
 
 		it("a proxy array's virtual element keeps its index without asking whether the array is a proxy", () => {
 			const held = api.box.virtualList[0];
-			expect(held.__slothletPath).toBe("box.virtualList.0");
+			expect(api.slothlet.node(held).path.join(".")).toBe("box.virtualList.0");
 			// Where the engine cannot tell a proxy (browser builds), the answer must not depend on it. slothlet asks through
 			// the copy of `util.types` it took when it loaded, so the stand-in goes on that copy.
 			const spy = vi.spyOn(platformUtil.types, "isProxy").mockReturnValue(false);
 			try {
-				expect(held.__slothletPath).toBe("box.virtualList.0");
+				expect(api.slothlet.node(held).path.join(".")).toBe("box.virtualList.0");
 			} finally {
 				spy.mockRestore();
 			}

@@ -72,7 +72,7 @@ describe.each(CONFIGS)(
 				const { api, root } = await build(place, { mode, runtime });
 				try {
 					for (const name of ["add", "peek", "me", "cfg", "cfg.f"]) {
-						expect([name, path.basename(String(nodeAt(root, name).__metadata?.filePath))]).toEqual([name, "calc.mjs"]);
+						expect([name, path.basename(String(api.slothlet.node(nodeAt(root, name))?.file))]).toEqual([name, "calc.mjs"]);
 					}
 				} finally {
 					await api.slothlet.shutdown();

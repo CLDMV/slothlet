@@ -106,8 +106,7 @@ export class Utilities extends ComponentBase {
 			return cloneTakingViews(obj);
 		} catch {
 			// Fallback for Proxy / function / symbol values that structuredClone rejects.
-			// Use .__type for Slothlet-wrapped objects, otherwise fall back to typeof.
-			const objType = obj?.__type || typeof obj;
+			const objType = typeof obj;
 			if (obj === null || (objType !== "object" && objType !== "function")) return obj;
 			// Callables (plain functions AND callable Proxies) cannot be reconstructed from a
 			// property copy — retain them BY REFERENCE. A live reference in context (an rpc

@@ -3811,7 +3811,7 @@ function runtime_viewNodePath(child, inner) {
 }
 
 /**
- * Gate a read of what a node reports about itself (its `__type`) as a read of the node's own path.
+ * Gate a read of what a node reports about itself (`slothlet.node(target)`) as a read of the node's own path.
  *
  * @description
  * The report is the framework's, not a member of the module, so it is checked against the node's path: a reader the
@@ -3819,7 +3819,8 @@ function runtime_viewNodePath(child, inner) {
  * while permissions or read gating are off, as every read gate is.
  * @param {object} wrapper - The node's wrapper (for a stand-in, its node's wrapper).
  * @param {string} nodePath - The node's api path.
- * @param {{currentWrapper: object, ceiling: *, context: object|null}} callerOverride - The reader.
+ * @param {{currentWrapper: object, ceiling: *, context: object|null}|undefined} callerOverride - The reader, or
+ *   undefined for the live caller.
  * @returns {void}
  * @throws {SlothletError} PERMISSION_DENIED when the rules deny the reader the node.
  * @private
@@ -3836,6 +3837,217 @@ function runtime_enforceNodeReportRead(wrapper, nodePath, callerOverride) {
 		caller: decision.caller,
 		target: nodePath
 	});
+}
+
+/**
+ * The node a value read out of the api stands for: through any per-reader view (`self`'s or a captured one) to the
+ * node itself, and from a node a restart replaced to the live one at its path.
+ * @param {*} value - A value read out of the api.
+ * @returns {*} The node, or the value itself when it is none.
+ * @private
+ * @example
+ * runtime_reportedNode(self.math); // the api.math proxy behind the view
+ */
+function runtime_reportedNode(value) {
+	let current = value;
+	for (let guard = 0; guard < 16 && current !== null && (typeof current === "object" || typeof current === "function"); guard++) {
+		const next = WeakMapMethods.get(SELF_VIEW_NODES, current) ?? WeakMapMethods.get(capturedViewTargets, current);
+		if (next === undefined || next === current) break;
+		// A node's own proxy is the node: a view mapping that leads off it (to the value it holds) is not followed.
+		if (resolveWrapper(current) !== null && resolveWrapper(next) === null) break;
+		current = next;
+	}
+	return runtime_liveThis(current);
+}
+
+/**
+ * The kind a value has once loaded (#D-4): `"namespace"` when it has members of its own, `"function"` for a callable
+ * with none, `"data"` for anything else.
+ * @param {*} value - The value.
+ * @returns {"function"|"data"|"namespace"} Its kind.
+ * @private
+ * @example
+ * runtime_valueKind(() => 1); // "function"
+ */
+function runtime_valueKind(value) {
+	if (value !== null && typeof value === "object" && !Arrays.isArray(value) && !runtime_isTerminalData(value)) {
+		return Objects.keys(value).length > 0 ? "namespace" : "data";
+	}
+	return typeof value === "function" ? "function" : "data";
+}
+
+/**
+ * What `slothlet.node(target)` reports about a wrapper it reached.
+ * @param {UnifiedWrapper} wrapper - The node's wrapper.
+ * @param {string[]|null} [path=null] - The path to report, when it is not the wrapper's own (a stand-in's chain).
+ * @param {{value: *}|null} [held=null] - What a stand-in's chain read as once its node loaded, when that is no node.
+ * @returns {object} The frozen report.
+ * @private
+ * @example
+ * runtime_wrapperReport(wrapper);
+ */
+function runtime_wrapperReport(wrapper, path = null, held = null) {
+	const internal = wrapper.____slothletInternal;
+	const slothlet = wrapper.slothlet;
+	const handlers = slothlet.handlers;
+	const system = handlers?.metadata?.getSystemMetadata?.(wrapper) ?? null;
+	const lazy = internal.mode === "lazy";
+	const materialized = internal.state.materialized === true;
+	const loading = internal.state.inFlight === true;
+
+	// A report is a read of what slothlet knows: it never starts loading a lazy node.
+	let type;
+	let callable;
+	if (held) {
+		type = runtime_valueKind(held.value);
+		callable = typeof held.value === "function";
+	} else if (lazy && loading) {
+		type = TYPE_STATES.IN_FLIGHT;
+		callable = false;
+	} else if (lazy && !materialized) {
+		type = TYPE_STATES.UNMATERIALIZED;
+		callable = false;
+	} else if (path !== null) {
+		// A stand-in whose chain reaches nothing yet.
+		type = TYPE_STATES.IN_FLIGHT;
+		callable = false;
+	} else {
+		const impl = internal.impl;
+		if (impl === null || (typeof impl !== "object" && typeof impl !== "function") || Arrays.isArray(impl) || runtime_isTerminalData(impl)) {
+			// A node holding a plain value (a primitive, an array, built-in data such as a Map) is that value: data.
+			callable = false;
+			type = "data";
+		} else {
+			callable = internal.isCallable === true || typeof impl === "function";
+			const members = filterList(Objects.keys(wrapper), (key) => !isFrameworkReservedKey(key));
+			// A callable with members of its own is a callable namespace (a callable folder); one with none is a function.
+			if (members.length > 0) type = "namespace";
+			else if (callable) type = "function";
+			else type = runtime_valueKind(impl);
+		}
+	}
+
+	const rawModule = system?.baseModuleID ?? internal.moduleID ?? null;
+	const separatorAt = typeof rawModule === "string" ? StringMethods.indexOf(rawModule, "__slothlet_sep__") : -1;
+	const module = separatorAt === -1 ? rawModule : StringMethods.slice(rawModule, 0, separatorAt);
+	const versionManager = handlers?.versionManager;
+	const segments =
+		path ??
+		(versionManager?.pathSegments
+			? versionManager.pathSegments(String(internal.apiPath ?? ""))
+			: internal.apiPath
+				? splitText(String(internal.apiPath), ".")
+				: []);
+
+	const report = {
+		callable,
+		file: internal.filePath ?? system?.filePath ?? null,
+		folder: internal.sourceFolder ?? system?.sourceFolder ?? null,
+		loading: held ? false : loading,
+		materialized: held ? true : materialized,
+		mode: internal.mode,
+		module,
+		path: Objects.freeze(copyList(segments)),
+		type
+	};
+	const manifest = handlers?.metadata?.getModuleManifest?.(module);
+	if (manifest) report.manifest = manifest;
+	return report;
+}
+
+/**
+ * `slothlet.node(target)`: one frozen report of what slothlet knows about an api node.
+ *
+ * @description
+ * `target` is a node (as read from the api, `self`, or a module's held reference) or its api path (a dotted string or a
+ * segment array). The caller must be allowed to reach the target: the report is decided as a read of the node's own
+ * path (with permissions on and read gating on), so a caller the rules deny the node is refused it.
+ *
+ * Reports `{ callable, file, folder, loading, materialized, mode, module, path, type }`, plus `logical` on a versioned
+ * node read through its logical path and `manifest` on a node of a package mount. `type` is
+ * `slothlet.types.UNMATERIALIZED` / `IN_FLIGHT` until a lazy node has loaded, then `"function"`, `"data"` or
+ * `"namespace"`. `path` and `logical` are segment arrays.
+ *
+ * @param {object} slothlet - Slothlet instance.
+ * @param {*} target - Node, dotted api path, or segment array.
+ * @returns {object|undefined} The frozen report, or undefined when `target` is no api node.
+ * @throws {SlothletError} PERMISSION_DENIED when the caller may not reach the target.
+ * @internal
+ * @example
+ * runtime_nodeReport(slothlet, api.math.add).path; // ["math", "add"]
+ */
+function runtime_nodeReport(slothlet, target) {
+	// A segment array names a path; an array-backed node (its proxy is an array too) is a node.
+	if (typeof target === "string" || (Arrays.isArray(target) && resolveWrapper(runtime_reportedNode(target)) === null)) {
+		const segments = typeof target === "string" ? (target === "" ? [] : splitText(target, ".")) : target;
+		if (!ArrayMethods.every(segments, (segment) => typeof segment === "string" && segment !== "")) return undefined;
+		if (segments.length === 0) return undefined;
+		let current = slothlet.api;
+		let parent = null;
+		for (let i = 0; i < segments.length; i++) {
+			if (current === null || current === undefined || (typeof current !== "object" && typeof current !== "function")) return undefined;
+			parent = current;
+			current = current[segments[i]];
+		}
+		if (current === undefined) return undefined;
+		// A path that reaches plain data is reported as data of the node holding it.
+		const holder = resolveWrapper(runtime_reportedNode(current));
+		if (holder === null && !slothlet.handlers?.versionManager?.dispatcherOf?.(runtime_reportedNode(current))) {
+			const parentWrapper = resolveWrapper(runtime_reportedNode(parent));
+			if (parentWrapper === null) return undefined;
+			return Objects.freeze(runtime_wrapperReport(parentWrapper, mapList(segments, String), { value: current }));
+		}
+		target = current;
+	}
+
+	const node = runtime_reportedNode(target);
+	const wrapper = resolveWrapper(node);
+	if (wrapper === null) {
+		// A version dispatcher mounted as the logical path's node itself.
+		const dispatcher = slothlet.handlers?.versionManager?.dispatcherOf?.(node);
+		if (!dispatcher) return undefined;
+		const resolved = dispatcher.resolve();
+		const resolvedWrapper = resolved ? resolveWrapper(runtime_reportedNode(resolved)) : null;
+		if (!resolvedWrapper) return undefined;
+		runtime_enforceNodeReportRead(resolvedWrapper, String(resolvedWrapper.____slothletInternal.apiPath ?? ""), undefined);
+		const report = runtime_wrapperReport(resolvedWrapper);
+		report.logical = Objects.freeze(splitText(dispatcher.logicalPath, "."));
+		return Objects.freeze(report);
+	}
+
+	const chain = WeakMapMethods.get(WAITING_CHAINS, node);
+	if (chain && chain.length > 0) {
+		// A stand-in for a chain below a lazy node: once the node has loaded, the report of what the chain reads as.
+		const viewPath = runtime_viewNodePath(node, wrapper);
+		runtime_enforceNodeReportRead(wrapper, viewPath, undefined);
+		const reached = runtime_standInNode(wrapper, chain);
+		if (reached !== STAND_IN_UNLOADED) {
+			if (reached === undefined) return undefined;
+			const reachedNode = runtime_reportedNode(reached);
+			if (resolveWrapper(reachedNode) !== null && !WeakSetMethods.has(STAND_INS, reachedNode))
+				return runtime_nodeReport(slothlet, reachedNode);
+			const base = slothlet.handlers?.versionManager?.pathSegments?.(String(wrapper.____slothletInternal.apiPath ?? "")) ?? [];
+			return Objects.freeze(runtime_wrapperReport(wrapper, concatLists(base, mapList(chain, String)), { value: reached }));
+		}
+		const base = slothlet.handlers?.versionManager?.pathSegments?.(String(wrapper.____slothletInternal.apiPath ?? "")) ?? [];
+		return Objects.freeze(runtime_wrapperReport(wrapper, concatLists(base, mapList(chain, String))));
+	}
+
+	runtime_enforceNodeReportRead(wrapper, String(wrapper.____slothletInternal.apiPath ?? ""), undefined);
+
+	// A version dispatcher reports the version it resolves to for this caller, with the logical path it was read at.
+	const dispatcher = slothlet.handlers?.versionManager?.dispatcherOf?.(wrapper.____slothletInternal.impl);
+	if (dispatcher) {
+		const logical = Objects.freeze(splitText(dispatcher.logicalPath, "."));
+		const resolved = dispatcher.resolve();
+		const resolvedWrapper = resolved ? resolveWrapper(runtime_reportedNode(resolved)) : null;
+		if (resolvedWrapper)
+			runtime_enforceNodeReportRead(resolvedWrapper, String(resolvedWrapper.____slothletInternal.apiPath ?? ""), undefined);
+		const report = resolvedWrapper ? runtime_wrapperReport(resolvedWrapper) : runtime_wrapperReport(wrapper);
+		report.logical = logical;
+		return Objects.freeze(report);
+	}
+	return Objects.freeze(runtime_wrapperReport(wrapper));
 }
 
 /**
@@ -11026,7 +11238,9 @@ function runtime_loadedAsNamespace(wrapper) {
 	const internal = wrapper.____slothletInternal;
 	if (internal.mode !== "lazy" || !internal.state.materialized) return false;
 	const impl = internal.impl;
-	return impl !== null && typeof impl === "object" && !Arrays.isArray(impl) && !impl.__isCallable;
+	return (
+		impl !== null && typeof impl === "object" && !Arrays.isArray(impl) && resolveWrapper(impl)?.____slothletInternal.isCallable !== true
+	);
 }
 
 /**
@@ -12712,17 +12926,6 @@ function runtime_capturedView(child, capturedCaller, gated = true, ceiling = nul
 		// A view that gates nothing hands out what the child does, a node as a view of the same kind: a member handed
 		// out fixed reaches module code with no view of `self` over it, and so does every node read through that member.
 		if (!gated) return resolveWrapper(resolved) === null ? resolved : runtime_capturedView(resolved, capturedCaller, false, ceiling);
-		// A node's `__type` is what the node reports about itself, not a member of its module: it is decided as a read
-		// of the node's own path, so its name is never taken for a module-private member, and a reader the rules deny
-		// the node is refused it (#796).
-		if (prop === "__type") {
-			runtime_enforceNodeReportRead(inner, runtime_viewNodePath(child, inner), {
-				currentWrapper: capturedCaller,
-				ceiling,
-				context: inner.slothlet.contextManager?.tryGetContext?.()?.context ?? null
-			});
-			return resolved;
-		}
 		// `undefined` is skipped deliberately, and not as an optimisation. Awaiting or inspecting a
 		// wrapper probes for properties that are not there — `then` above all — and every absent
 		// property classifies as terminal data. Gating those would turn a denied *enumeration*, which
@@ -13231,7 +13434,8 @@ function runtime_runAroundPipeline(wrapper, hookManager, arounds, strategy, this
 	// at the moment of the call.
 	const callerWrapper = contextManager.getCallerIdentity(instanceID)?.currentWrapper ?? null;
 	const entry = !callerWrapper;
-	const caller = callerWrapper ? wrapper.slothlet.handlers.metadata.getMetadata(callerWrapper) : null;
+	// The same `caller` object a version dispatcher and a permission record get: { path, module, metadata, version }.
+	const caller = callerWrapper ? (wrapper.slothlet.handlers.versionManager?.buildCallerArg(callerWrapper) ?? null) : null;
 
 	// Only a pinned (module-registered) around hook runs under a different identity than the call, so
 	// only then is the call's own flow captured for its next() to restore.
@@ -13441,7 +13645,7 @@ export { IMPL_METADATA_KEYS } from "#helpers/reserved-keys";
 export { isFrameworkReservedKey };
 
 /**
- * Symbols for __type property states
+ * Symbols for the load states `slothlet.node(target).type` reports
  * @public
  */
 export const TYPE_STATES = {
@@ -14019,7 +14223,7 @@ function runtime_indexOfElement(array, value) {
  * names the index the element sits at now: its recorded index while the element is still there, the
  * first index holding it after an array method moved it, and the array's own path once it has left the
  * array. A wrapper below an element extends its parent's current path. Permission checks, hooks and
- * `__slothletPath` all read this path, so a rule for `arr.0` applies to whatever sits at `arr[0]`,
+ * `slothlet.node` all read this path, so a rule for `arr.0` applies to whatever sits at `arr[0]`,
  * including through a reference taken before the element moved there.
  *
  * @param {object} internal - The child wrapper's internal state.
@@ -14396,7 +14600,7 @@ const STAND_IN_UNLOADED = Symbol("slothlet.standInUnloaded");
  * @type {Set<string|symbol>}
  * @private
  */
-const STAND_IN_OWN_READS = setFrom(["then", "__type", "__metadata", "__slothletPath", util.inspect.custom]);
+const STAND_IN_OWN_READS = setFrom(["then", util.inspect.custom]);
 
 /**
  * What a stand-in for a chain below a lazy node stands for, once the node has loaded: the chain read off the node now,
@@ -15564,7 +15768,7 @@ class UnifiedWrapper extends ComponentBase {
 	/**
 	 * Core implementation-application logic shared by ___setImpl and lazy materialization.
 	 * Clones the implementation (protecting the API cache from ___adoptImplChildren's
-	 * delete operations), clears the invalid flag, upgrades __isCallable when a
+	 * delete operations), clears the invalid flag, upgrades callability when a
 	 * callable impl arrives on a configurable wrapper, updates __filePath for lazy
 	 * folder wrappers, and adopts children.
 	 *
@@ -15908,7 +16112,7 @@ class UnifiedWrapper extends ComponentBase {
 
 		// Emit impl:changed event for lifecycle management
 		if (newImpl && this.slothlet.handlers?.lifecycle) {
-			const wrapperMetadata = this.slothlet.handlers.metadata.getMetadata(this);
+			const wrapperMetadata = this.slothlet.handlers.metadata.getSystemMetadata(this);
 			// Use provided moduleID (for replacements) or extract from metadata. Every ___setImpl
 			// caller now passes a string moduleID (or null) — the stale-signature caller that passed
 			// the slothlet instance was fixed in #274 (a7a711f), so the former object-coercion guard
@@ -17157,10 +17361,10 @@ class UnifiedWrapper extends ComponentBase {
 		}
 
 		// Get parent wrapper's metadata to inherit filePath and moduleID
-		const parentMetadata = this.slothlet.handlers?.metadata?.getMetadata(this);
+		const parentMetadata = this.slothlet.handlers?.metadata?.getSystemMetadata(this);
 
 		// Try to get child's actual filePath from its own metadata first (if already tagged during materialization)
-		const childExistingMetadata = this.slothlet.handlers?.metadata?.getMetadata(value);
+		const childExistingMetadata = this.slothlet.handlers?.metadata?.getSystemMetadata(value);
 		let childFilePath = childExistingMetadata?.filePath || null;
 		let childModuleId = null;
 
@@ -17427,7 +17631,7 @@ class UnifiedWrapper extends ComponentBase {
 		}
 
 		// Waiting proxies always use function target since they represent unknown/in-flight values
-		// Native typeof will always return "function" - use __type property for actual state
+		// Native typeof will always return "function" - use slothlet.node(target).type for actual state
 		const waitingTarget = createNamedProxyTarget(`${wrapper.____slothletInternal.apiPath}_waitingProxy`, "waitingProxyTarget");
 		// Its `name` is writable, as a bound function's `length` and `name` are not, so that only a freeze makes the target
 		// read as frozen: a seal or a preventExtensions leaves it as it was (#653, see runtime_lockAsStandIn).
@@ -17789,9 +17993,6 @@ class UnifiedWrapper extends ComponentBase {
 				}
 				if (prop === "____slothletInternal") return undefined; // blocked: do not expose internal state through waiting proxy
 				if (prop === "_materialize") return FunctionMethods.bind(wrapper._materialize, wrapper);
-				if (prop === "__mode") return wrapper.____slothletInternal.mode;
-				if (prop === "__materialized") return wrapper.____slothletInternal.state.materialized;
-				if (prop === "__inFlight") return wrapper.____slothletInternal.state.inFlight;
 				// Note: __impl / _impl are NOT exposed through the waiting proxy - use resolveWrapper(proxy).__impl internally.
 
 				// Once the node has loaded, a stand-in kept from before answers as what it stands for answers a read of its
@@ -17853,106 +18054,6 @@ class UnifiedWrapper extends ComponentBase {
 					/* v8 ignore next */
 					return waitingTarget;
 				}
-				if (prop === "__type") {
-					wrapper.slothlet.debug("wrapper", {
-						key: "DEBUG_MODE_WAITING_TYPE",
-						apiPath: wrapper.apiPath,
-						propChain: ArrayMethods.join(propChain, ","),
-						materialized: wrapper.____slothletInternal.state.materialized,
-						hasImpl: wrapper.____slothletInternal.impl !== null
-					});
-					// CRITICAL: After wrapper materialization, resolve the propChain and return actual type
-					// This fixes collision merge scenarios where waiting proxies are created before materialization
-					// After materialization, these proxies should report the correct type, not IN_FLIGHT
-					// impl is always null (not undefined) at this point; the impl===undefined arm is never evaluated.
-					/* v8 ignore start */
-					if (
-						wrapper.____slothletInternal.state.materialized ||
-						(wrapper.____slothletInternal.impl !== null && wrapper.____slothletInternal.impl !== undefined)
-					) {
-						/* v8 ignore stop */
-						// Loaded: the kind of what the chain reads as now, a file's primitive default export by its value.
-						const node = runtime_standInNode(wrapper, propChain);
-						if (node !== STAND_IN_UNLOADED) {
-							// A node (or a reader's view of one) reports its own kind: a lazy folder's proxy is a function to
-							// `typeof` whatever it loads as.
-							const behind = runtime_nodeBehind(node);
-							if (resolveWrapper(behind) !== null && !WeakSetMethods.has(STAND_INS, behind)) return node.__type;
-							return typeof node === "function" ? "function" : typeof node === "object" && node !== null ? "object" : typeof node;
-						}
-						// Wrapper has materialized - walk propChain to determine actual type
-						let current = wrapper.createProxy();
-						for (let ofIndex = 0, ofList = propChain; ofIndex < ofList.length; ofIndex++) {
-							const chainProp = ofList[ofIndex];
-							if (!current) break;
-							const currentWrapper = resolveWrapper(current);
-							if (currentWrapper) {
-								const isInternal = isFrameworkReservedKey(chainProp);
-								// Own members only: a wrapper's own enumerable keys are exactly its adopted module
-								// members, while `in` would keep walking into UnifiedWrapper.prototype — whose private
-								// methods are underscore-named but NOT in the reserved set, so the narrowed predicate
-								// alone no longer blocks them.
-								if (!isInternal && hasOwn(currentWrapper, chainProp)) {
-									current = currentWrapper[chainProp];
-									wrapper.slothlet.debug("wrapper", {
-										key: "DEBUG_MODE_WAITING_TYPE_WALK_WRAPPER",
-										chainProp: String(chainProp),
-										typeOf: typeof current
-									});
-									continue;
-								}
-								if (
-									currentWrapper.____slothletInternal.impl &&
-									typeof currentWrapper.____slothletInternal.impl === "object" &&
-									currentWrapper.____slothletInternal.impl !== null &&
-									chainProp in currentWrapper.____slothletInternal.impl
-								) {
-									current = currentWrapper.____slothletInternal.impl[chainProp];
-									wrapper.slothlet.debug("wrapper", {
-										key: "DEBUG_MODE_WAITING_TYPE_WALK_IMPL",
-										chainProp: String(chainProp),
-										typeOf: typeof current
-									});
-									continue;
-								}
-							}
-							wrapper.slothlet.debug("wrapper", {
-								key: "DEBUG_MODE_WAITING_TYPE_WALK_DIRECT",
-								chainProp: String(chainProp),
-								typeOf: typeof current
-							});
-							current = current[chainProp];
-						}
-						// Return the actual type of the resolved value
-						const resolvedType =
-							typeof current === "function" ? "function" : typeof current === "object" && current !== null ? "object" : typeof current;
-						wrapper.slothlet.debug("wrapper", {
-							key: "DEBUG_MODE_WAITING_TYPE_RESOLVED",
-							apiPath: wrapper.apiPath,
-							propChain: ArrayMethods.join(propChain, ","),
-							resolvedType
-						});
-						return resolvedType;
-					}
-					// Waiting proxies return IN_FLIGHT if wrapper not yet materialized
-					wrapper.slothlet.debug("wrapper", {
-						key: "DEBUG_MODE_WAITING_TYPE_INFLIGHT",
-						apiPath: wrapper.apiPath,
-						propChain: ArrayMethods.join(propChain, ",")
-					});
-					return TYPE_STATES.IN_FLIGHT;
-				}
-				if (prop === "__metadata") {
-					// Return metadata through wrapper
-					// handlers.metadata is always initialized before any waiting proxy is created; the missing-handler branch is unreachable.
-					/* v8 ignore next */
-					if (wrapper.slothlet.handlers?.metadata) {
-						return wrapper.slothlet.handlers.metadata.getMetadata(wrapper);
-					}
-					// handlers.metadata is always initialised before any waiting proxy is created; this fallback is unreachable.
-					/* v8 ignore next */
-					return {};
-				}
 				if (typeof prop === "symbol") return undefined;
 				if (prop === "length") {
 					// For waiting proxies in lazy mode, we can't know the length until materialized
@@ -17978,8 +18079,6 @@ class UnifiedWrapper extends ComponentBase {
 					return () => undefined;
 				}
 				/* v8 ignore stop */
-				if (prop === "__slothletPath") return wrapper.____slothletInternal.apiPath;
-
 				// CRITICAL: Check if wrapper.____slothletInternal.impl is already set
 				// This allows property access once _impl is populated (matches v2 behavior)
 				// Lifecycle events, metadata, and ownership may still be in progress
@@ -18151,7 +18250,7 @@ class UnifiedWrapper extends ComponentBase {
 				// If materialization is in flight but not complete, return waiting proxy
 				if (wrapper.____slothletInternal.state.inFlight) {
 					// Materialization started but not complete yet
-					// Return waiting proxy to allow chaining, but __type will return IN_FLIGHT symbol
+					// Return waiting proxy to allow chaining, but slothlet.node(target).type reports IN_FLIGHT
 					return wrapper.___createWaitingProxy(concatLists(propChain, [prop]));
 				}
 
@@ -18629,7 +18728,7 @@ class UnifiedWrapper extends ComponentBase {
 		// Proxy target depends on whether this is callable
 		// For callable endpoints, use a function as proxy target so typeof === "function"
 		// For non-callable, use wrapper itself as target
-		// CRITICAL: In lazy mode with unknown callability (__isCallable === false but configurable),
+		// CRITICAL: In lazy mode with unknown callability (isCallable === false but configurable),
 		// we MUST use a function target because callability isn't known until materialization.
 		// Once the proxy is created, its target type can't change, so we default to function
 		// for lazy mode. The apply trap handles non-callable cases gracefully.
@@ -18695,7 +18794,7 @@ class UnifiedWrapper extends ComponentBase {
 			const enforceReadGate = (resolvedValue) => runtime_enforceReadGate(wrapper, prop, resolvedValue, undefined, kept, access);
 
 			// CRITICAL: For non-configurable properties on target, must return actual value
-			// This satisfies proxy invariants when target has __mode, __apiPath, etc.
+			// This satisfies proxy invariants when target has non-configurable own props.
 			if (target !== wrapper && prop in target) {
 				const desc = Objects.getOwnPropertyDescriptor(target, prop);
 				// The function stub target is a bound function with no non-configurable own property (see
@@ -18741,29 +18840,12 @@ class UnifiedWrapper extends ComponentBase {
 			// Impl-metadata names count as reserved here too: `__childFilePaths` rides on a lazy impl and is
 			// absent from `INTERNAL_KEYS`, so without this it fell through to the impl read below and handed
 			// absolute host paths to any caller — while eager, having no such impl, returned undefined.
-			// `__filePath` is reserved as well but stays readable via `allowedInternals`.
 			const isInternalProp = isFrameworkReservedKey(prop);
 
 			// Allow access to specific internal APIs that have explicit handlers below
 			// CRITICAL: Every prop with an explicit handler in the getTrap MUST be listed here,
 			// otherwise the filter short-circuits before the handler runs.
-			const allowedInternals = setFrom([
-				"_materialize",
-				"__mode",
-				"__apiPath",
-				"__isCallable",
-				"__materializeOnCreate",
-				"__displayName",
-				"__type",
-				"__materialized",
-				"__inFlight",
-				"__slothletPath",
-				"__metadata",
-				// Read-only server-info props - exposed through proxy, immutable (write/delete blocked)
-				"__filePath",
-				"__sourceFolder",
-				"__moduleID"
-			]);
+			const allowedInternals = setFrom(["_materialize", "__materializeOnCreate", "__displayName"]);
 			if (isInternalProp && !SetMethods.has(allowedInternals, prop)) {
 				return undefined; // Hide internal properties from external access
 			}
@@ -18784,82 +18866,11 @@ class UnifiedWrapper extends ComponentBase {
 				});
 			}
 
-			if (prop === "__mode") return wrapper.____slothletInternal.mode;
-			if (prop === "__apiPath") return wrapper.____slothletInternal.apiPath;
-			if (prop === "__isCallable") return wrapper.____slothletInternal.isCallable;
 			if (prop === "__materializeOnCreate") return wrapper.____slothletInternal.materializeOnCreate;
-			if (prop === "__materialized") return wrapper.____slothletInternal.state.materialized;
-			if (prop === "__inFlight") return wrapper.____slothletInternal.state.inFlight;
 			if (prop === "__displayName") return wrapper.____slothletInternal.displayName;
-			if (prop === "__type") {
-				// Trigger materialization if needed
-				if (
-					wrapper.____slothletInternal.mode === "lazy" &&
-					!wrapper.____slothletInternal.state.materialized &&
-					!wrapper.____slothletInternal.state.inFlight
-				) {
-					// Fire-and-forget — rejection suppressed to avoid unhandled-rejection event.
-					/* v8 ignore next */
-					PromiseMethods.catch(wrapper._materialize(), () => {});
-				}
-
-				// Return state symbols for lazy mode if not ready
-				if (wrapper.____slothletInternal.mode === "lazy" && wrapper.____slothletInternal.state.inFlight) {
-					return TYPE_STATES.IN_FLIGHT;
-				}
-				if (wrapper.____slothletInternal.mode === "lazy" && !wrapper.____slothletInternal.state.materialized) {
-					return TYPE_STATES.UNMATERIALIZED;
-				}
-
-				// Return typeof the actual impl (not the proxy target)
-				const impl = wrapper.____slothletInternal.impl;
-				if (typeof impl === "function") {
-					return "function";
-				}
-				if (impl && typeof impl === "object" && typeof impl.default === "function") {
-					return "function";
-				}
-				if (impl && typeof impl === "object") {
-					return "object";
-				}
-				// Handle primitives
-				if (typeof impl === "string") {
-					return "string";
-				}
-				if (typeof impl === "number") {
-					return "number";
-				}
-				if (typeof impl === "boolean") {
-					return "boolean";
-				}
-				if (typeof impl === "symbol") {
-					return "symbol";
-				}
-				if (typeof impl === "bigint") {
-					return "bigint";
-				}
-				return "undefined";
-			}
 			if (prop === "_materialize") return FunctionMethods.bind(wrapper._materialize, wrapper);
-			if (prop === "__slothletPath") return wrapper.____slothletInternal.apiPath;
-			// Note: "____slothletInternal" is NOT in allowedInternals so the filter above returns undefined first.
-			if (prop === "__metadata") {
-				// Return combined system + user metadata
-				if (wrapper.slothlet.handlers?.metadata) {
-					return wrapper.slothlet.handlers.metadata.getMetadata(wrapper);
-				}
-				return {};
-			}
 			// Note: "__state", "_impl", "__impl" are intentionally NOT handled here - blocked from proxy.
-			// filePath is always set on mounted wrappers; the ?? undefined fallback is dead.
-			/* v8 ignore next */
-			if (prop === "__filePath") return wrapper.____slothletInternal.filePath ?? undefined;
-			// sourceFolder is always set on mounted wrappers; the ?? undefined fallback is dead.
-			/* v8 ignore next */
-			if (prop === "__sourceFolder") return wrapper.____slothletInternal.sourceFolder ?? undefined;
-			// moduleID is always set on mounted wrappers; the ?? undefined fallback is dead.
-			/* v8 ignore next */
-			if (prop === "__moduleID") return wrapper.____slothletInternal.moduleID ?? undefined;
+			// A node reports what slothlet knows about it through `slothlet.node(target)`, never through keys of its own.
 			// "__invalid" is not in allowedInternals so the filter above always short-circuits before this line.
 			/* v8 ignore next */
 			if (prop === "__invalid") return wrapper.____slothletInternal.invalid;
@@ -20499,7 +20510,7 @@ class UnifiedWrapper extends ComponentBase {
 
 			// A function target's own `length` / `name` come first, as on any function. A lazy folder that loaded as a
 			// namespace lists none, as the eager node does: its function target only stood in while it loaded.
-			const uw_listsAsFunction = (typeof target === "function" || (target && target.__isCallable)) && !runtime_loadedAsNamespace(wrapper);
+			const uw_listsAsFunction = typeof target === "function" && !runtime_loadedAsNamespace(wrapper);
 			if (uw_listsAsFunction) {
 				SetMethods.add(keys, "length");
 				SetMethods.add(keys, "name");
@@ -20937,21 +20948,10 @@ class UnifiedWrapper extends ComponentBase {
 				"_impl",
 				"___getState",
 				"__state",
-				// Read-only informational props
-				"__mode",
-				"__apiPath",
-				"__slothletPath",
-				"__isCallable",
+				// Read-only internal props
 				"__materializeOnCreate",
 				"__displayName",
-				"__type",
-				"__metadata",
-				"__invalid",
-				"__filePath",
-				"__sourceFolder",
-				"__moduleID",
-				"__materialized",
-				"__inFlight"
+				"__invalid"
 			]);
 			if (SetMethods.has(internalKeys, prop)) {
 				// Module code meets the write rules first, so a deletion is refused as a definition is (#625).
@@ -21853,6 +21853,7 @@ export function internals(consumer) {
 		releaseStandInChanges,
 		resolveWrapper,
 		runtime_assertCapability,
+		runtime_nodeReport,
 		runtime_assertFrameworkRootChange,
 		runtime_codeLabel,
 		runtime_contextRead,

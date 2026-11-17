@@ -34,7 +34,7 @@ export function writeTargetLiteralPrefix(pattern: string): string[];
  * @returns {boolean} Whether it names the framework's own.
  * @example
  * isFrameworkWriteTarget("slothlet.**"); // true
- * isFrameworkWriteTarget("victim.**.__metadata"); // true
+ * isFrameworkWriteTarget("victim.**.__state"); // true
  */
 export function isFrameworkWriteTarget(pattern: string): boolean;
 /**
