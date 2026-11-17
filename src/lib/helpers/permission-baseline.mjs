@@ -242,10 +242,9 @@ let frameOnFound;
  * Whether Node's `AsyncContextFrame` is on: inside a storage of the probe's own, run with a fresh marker, the marker is
  * not found on the running async resource or a fresh promise. Tested once per process.
  *
- * Where the frame is off, Node puts what every storage holds on each async resource as it is made, promises included.
- * Where it is on, a promise carries nothing a module can list, but an `AsyncResource` keeps the whole frame (a map of
- * every storage's value) under a symbol of its own, so a new `AsyncResource` holds the marker in both modes and is not
- * looked at.
+ * Where the frame is off, Node puts what every storage holds on each async resource as it is made, promises included,
+ * so the running resource and a fresh promise both hold the marker. Where it is on, neither does. The check reads only
+ * those two; no other kind of resource is made or looked at.
  * @returns {boolean} True when the marker is out of reach.
  * @private
  */
