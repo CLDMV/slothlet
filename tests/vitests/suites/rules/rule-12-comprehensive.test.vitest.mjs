@@ -22,8 +22,11 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { getMatrixConfigs, TEST_DIRS, withSuppressedSlothletErrorOutput } from "../../setup/vitest-helper.mjs";
 
-// Ownership-enabled configurations only (collision mode with merge)
-const OWNERSHIP_CONFIGS = getMatrixConfigs({ api: { collision: { mode: { initial: "merge", api: "merge" } } } });
+// Every matrix config, with merge collisions set on each (no matrix config carries an `api` key to filter on).
+const OWNERSHIP_CONFIGS = getMatrixConfigs({}).map(({ name, config }) => ({
+	name,
+	config: { ...config, api: { ...config.api, collision: { mode: { initial: "merge", api: "merge" } } } }
+}));
 
 // Basic configurations for validation testing
 const BASIC_CONFIGS = getMatrixConfigs({});
