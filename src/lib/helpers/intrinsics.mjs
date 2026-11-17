@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:12-08:00 (1794874572)
+ *	@Last modified time: 2026-11-17T12:27:13-08:00 (1794947233)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -80,9 +80,9 @@ const NativeReflect = globalThis.Reflect;
 const NativePromise = globalThis.Promise;
 const NativeSymbol = globalThis.Symbol;
 const { getOwnPropertyNames, getOwnPropertyDescriptor, freeze, create } = NativeObject;
+const hasOwnAtLoad = NativeObject.hasOwn;
 const { apply } = NativeReflect;
 const getPrototypeOfNative = NativeReflect.getPrototypeOf;
-const setPrototypeOfNative = NativeReflect.setPrototypeOf;
 const ownKeysNative = NativeReflect.ownKeys;
 const defineOwnAtLoad = NativeReflect.defineProperty;
 const globalThisMap = globalThis.Map;
@@ -112,8 +112,56 @@ function staticsOf(source) {
 }
 
 /**
+ * A data descriptor with no members beyond its own four. Its prototype is an empty object with no prototype, so a
+ * member it lacks (`get`, `set`) reads as absent whatever module code put on `Object.prototype`. Every instance gets
+ * the same four members in the same order, so the engine keeps one shape for all of them.
+ * @param {*} value - The property's value.
+ * @param {boolean} writable - Whether the property is writable.
+ * @param {boolean} enumerable - Whether the property is enumerable.
+ * @param {boolean} configurable - Whether the property is configurable.
+ * @private
+ */
+function DataDescriptor(value, writable, enumerable, configurable) {
+	this.value = value;
+	this.writable = writable;
+	this.enumerable = enumerable;
+	this.configurable = configurable;
+}
+DataDescriptor.prototype = freeze(create(null));
+
+/**
+ * An accessor descriptor with no members beyond its own four; see {@link DataDescriptor}.
+ * @param {Function|undefined} get - The getter.
+ * @param {Function|undefined} set - The setter.
+ * @param {boolean} enumerable - Whether the property is enumerable.
+ * @param {boolean} configurable - Whether the property is configurable.
+ * @private
+ */
+function AccessorDescriptor(get, set, enumerable, configurable) {
+	this.get = get;
+	this.set = set;
+	this.enumerable = enumerable;
+	this.configurable = configurable;
+}
+AccessorDescriptor.prototype = freeze(create(null));
+
+/**
+ * Copy a descriptor the engine made into a {@link DataDescriptor} or an {@link AccessorDescriptor}. The engine's
+ * descriptor always holds all four of its members as its own, so each read below finds an own member and nothing on
+ * `Object.prototype` is consulted. Copying is several times cheaper than giving the engine's object a new prototype.
+ * @param {PropertyDescriptor} descriptor - A complete descriptor from `getOwnPropertyDescriptor`.
+ * @returns {PropertyDescriptor} The copy.
+ * @private
+ */
+function plainDescriptor(descriptor) {
+	return hasOwnAtLoad(descriptor, "value")
+		? new DataDescriptor(descriptor.value, descriptor.writable, descriptor.enumerable, descriptor.configurable)
+		: new AccessorDescriptor(descriptor.get, descriptor.set, descriptor.enumerable, descriptor.configurable);
+}
+
+/**
  * {@link staticsOf} for `Reflect` or `Object`, with `getOwnPropertyDescriptor` (and `Object.getOwnPropertyDescriptors`)
- * answering descriptors with no prototype: a member a descriptor lacks (`get` on a data descriptor, `value` on an
+ * answering descriptors that inherit nothing: a member a descriptor lacks (`get` on a data descriptor, `value` on an
  * accessor) reads as absent, whatever module code put on `Object.prototype`, and a descriptor handed back to
  * `defineProperty` or a proxy trap is read for its own members only.
  * @param {object|Function} source - `Reflect` or `Object`.
@@ -130,17 +178,16 @@ function withPlainDescriptors(source) {
 	const describe = copy.getOwnPropertyDescriptor;
 	copy.getOwnPropertyDescriptor = (target, key) => {
 		const descriptor = describe(target, key);
-		if (descriptor !== undefined) setPrototypeOfNative(descriptor, null);
-		return descriptor;
+		return descriptor === undefined ? undefined : plainDescriptor(descriptor);
 	};
 	if (typeof copy.getOwnPropertyDescriptors === "function") {
 		const describeAll = copy.getOwnPropertyDescriptors;
 		copy.getOwnPropertyDescriptors = (target) => {
 			const all = describeAll(target);
 			const keys = ownKeysNative(all);
-			for (let i = 0; i < keys.length; i++) setPrototypeOfNative(all[keys[i]], null);
-			setPrototypeOfNative(all, null);
-			return all;
+			const plain = create(null);
+			for (let i = 0; i < keys.length; i++) plain[keys[i]] = plainDescriptor(all[keys[i]]);
+			return plain;
 		};
 	}
 	return freeze(copy);
