@@ -446,7 +446,7 @@ describe.each(getMatrixConfigs({}))("Proxy Internals Attack Vectors - $name", ({
 		expect(mat.____slothlet).toBeUndefined();
 		expect(mat["____slothlet"]).toBeUndefined();
 		// Verify the plain object still exposes its three legitimate members
-		expect(typeof mat.materialized).toBe("boolean");
+		expect(typeof mat.complete).toBe("boolean");
 		expect(typeof mat.get).toBe("function");
 		expect(typeof mat.wait).toBe("function");
 	});

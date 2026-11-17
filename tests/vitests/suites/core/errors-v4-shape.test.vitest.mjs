@@ -27,7 +27,7 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { SlothletError, SlothletWarning } from "@cldmv/slothlet/errors";
 import { translate } from "@cldmv/slothlet/i18n";
-import { generateTypes } from "@cldmv/slothlet/typegen";
+import { generate } from "@cldmv/slothlet/typegen";
 
 describe("SlothletError v4 shape", () => {
 	it("takes (code, details, { cause }) and exposes details, cause and no v3 channels", () => {
@@ -71,7 +71,7 @@ describe("SlothletError v4 shape", () => {
 	});
 
 	it("keeps the construction flags out of the details of a config error (#836)", async () => {
-		const error = await generateTypes(null).catch((thrown) => thrown);
+		const error = await generate(null).catch((thrown) => thrown);
 		expect(error.code).toBe("INVALID_CONFIG");
 		expect("validationError" in error.details).toBe(false);
 		expect("stub" in error.details).toBe(false);
@@ -79,7 +79,7 @@ describe("SlothletError v4 shape", () => {
 	});
 
 	it("gives a translated hint where a site used to pass English text (#835)", async () => {
-		const error = await generateTypes({ dir: "./api", output: 5, interfaceName: "Api" }).catch((thrown) => thrown);
+		const error = await generate({ base: "./api", output: 5, name: "Api" }).catch((thrown) => thrown);
 		expect(error.code).toBe("INVALID_CONFIG");
 		expect(error.hint).toBe(translate("HINT_INVALID_CONFIG"));
 		expect(error.message).not.toMatch(/HINT_/);

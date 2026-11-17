@@ -190,7 +190,7 @@ describe.each(getMatrixConfigs())("Permissions > rule targets in slothlet's own 
 			base: BASE,
 			permissions: {
 				policy: "allow",
-				events: { default: "notify", rules: [{ caller: "**", event: "slothlet.nope.**", effect: "deny" }] }
+				events: { policy: "notify", rules: [{ caller: "**", event: "slothlet.nope.**", effect: "deny" }] }
 			}
 		});
 		expect(api).toBeDefined();

@@ -55,12 +55,12 @@ describe("modules.add tells its own discover results from options", () => {
 		(api = await slothlet({
 			base: TEST_DIRS.API_TEST,
 			silent: true,
-			api: { collision: { initial: "merge", api: "merge" }, ...(mutations ? { mutations } : {}) }
+			api: { collision: { mode: { initial: "merge", api: "merge" } }, ...(mutations ? { mutations } : {}) }
 		}));
 
 	it("mounts a result discover() returned", async () => {
 		await boot();
-		const [result] = await api.slothlet.api.modules.discover({ scanRoot: FIX_NPM, prefix: "packrat-extension-" });
+		const [result] = await api.slothlet.api.modules.discover({ root: FIX_NPM, prefix: "packrat-extension-" });
 		const mounted = await api.slothlet.api.modules.add(result);
 		expect(mounted).toBeTruthy();
 		expect(api.slothlet.api.modules.stale()).toEqual([]);
@@ -68,7 +68,7 @@ describe("modules.add tells its own discover results from options", () => {
 
 	it("never mounts an object it did not return, even one shaped like a result", async () => {
 		await boot();
-		const [result] = await api.slothlet.api.modules.discover({ scanRoot: FIX_NPM, prefix: "packrat-extension-" });
+		const [result] = await api.slothlet.api.modules.discover({ root: FIX_NPM, prefix: "packrat-extension-" });
 		const error = await withSuppressedSlothletErrorOutput(() => errorOf(() => api.slothlet.api.modules.add([{ ...result }])));
 		expect(error.code).toBe("INVALID_ARGUMENT");
 	});
@@ -76,15 +76,15 @@ describe("modules.add tells its own discover results from options", () => {
 	it("runs discover, sort and mount for options alone", async () => {
 		await boot();
 		const out = await api.slothlet.api.modules.add({
-			discover: { scanRoot: FIX_NPM, prefix: "packrat-extension-" },
-			onFailure: "best-effort"
+			discover: { root: FIX_NPM, prefix: "packrat-extension-" },
+			failure: "best-effort"
 		});
 		expect(out.mounted.length).toBeGreaterThan(0);
 	});
 
 	it("refuses an options object followed by options", async () => {
 		await boot();
-		const error = await errorOf(() => api.slothlet.api.modules.add({ discover: {} }, { onFailure: "throw" }));
+		const error = await errorOf(() => api.slothlet.api.modules.add({ discover: {} }, { failure: "throw" }));
 		expect(error.code).toBe("INVALID_ARGUMENT");
 	});
 
@@ -99,7 +99,9 @@ describe("modules.add tells its own discover results from options", () => {
 
 describe("warnings are kept per instance at api.slothlet.warnings", () => {
 	it("get() returns a copy and clear() empties the list", async () => {
-		api = await slothlet({ base: TEST_DIRS.API_TEST, allowMutation: false });
+		api = await slothlet({ base: TEST_DIRS.API_TEST, silent: true });
+		// A per-call collision mode the instance locks raises WARNING_COLLISION_OPTION_LOCKED.
+		await api.slothlet.api.add("extra", { exports: { ping: () => "pong" } }, { collision: { mode: "replace" } });
 		const first = api.slothlet.warnings.get();
 		expect(first.length).toBeGreaterThan(0);
 		first.length = 0;
