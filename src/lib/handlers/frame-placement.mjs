@@ -4160,11 +4160,13 @@ function frameDefiner(running = null) {
  * @param {string} instanceID - The instance the flow belongs to.
  * @param {ReadonlyArray<object>} owners - The calls of the flow: the call it names and the calls above it. Empty for a
  *   flow the host opened.
- * @returns {{outside: false, clean: boolean, found: boolean}|{outside: true, reader: object|null}|null} For the flow's
- *   code, whether every frame up to where the code's job began or slothlet entered a call is the flow's (`clean`), and
- *   whether a frame of the flow's own code was found (`found`; false when nothing but slothlet's and Node's code is on
- *   the stack, as when Node runs a job it was handed); otherwise the leaf the code is (null when no single leaf of the
- *   instance stands for it). Null when the instance is not running.
+ * @returns {{outside: false, clean: boolean, found: boolean}|{outside: true, reader: object|null, begun: boolean}|null} For
+ *   the flow's code, whether every frame up to where the code's job began or slothlet entered a call is the flow's
+ *   (`clean`), and whether a frame of the flow's own code was found (`found`; false when nothing but slothlet's and
+ *   Node's code is on the stack, as when Node runs a job it was handed); otherwise the leaf the code is (null when no
+ *   single leaf of the instance stands for it), and whether the flow was put in place by an async resource's scope that
+ *   Node itself entered as it began the job (`begun`: a bound function Node was handed), which the frames cannot tell
+ *   apart. Null when the instance is not running.
  * @param {boolean} [making=false] - Whether the code is told as it makes an async resource (from an async hook's
  *   `init`): Node's own frames that make the resource (a timer's, an immediate's, a microtask's) sit above the code
  *   that asked for it, and are not where a job began.
@@ -4271,8 +4273,10 @@ function runningOutsideFlow(instanceID, owners, making = false) {
 		if (!ended && !cut && !frames.truncated) ended = true;
 		if (!ended && own === undefined && frames.truncated) return { own: undefined, clean: false, found: false };
 		const found = own === true;
+		// A scope nothing of anyone's put in place: Node began the job with it (a bound function it was handed).
+		const begun = switched && own === undefined && !cut && ended;
 		own ??= !foreign && !switched;
-		return { own, clean: own && ended && !foreign && !switched, found };
+		return { own, clean: own && ended && !foreign && !switched, found, begun };
 	};
 	// The deciding frame is nearly always a few frames below slothlet's own: a short capture settles it, and the stack is
 	// read further only when it does not. Cut off even then, the code is not taken for the flow's.
@@ -4281,7 +4285,7 @@ function runningOutsideFlow(instanceID, owners, making = false) {
 	if (answer.own === true) return { outside: false, clean: answer.clean, found: answer.found };
 	// The leaf the code running is, read as code run while no call runs is read.
 	const definer = runtime_definerAt(runtime_captureFrames(24), instanceID);
-	return { outside: true, reader: definer?.wrapper?.slothlet === slothlet ? definer.wrapper : null };
+	return { outside: true, reader: definer?.wrapper?.slothlet === slothlet ? definer.wrapper : null, begun: answer.begun === true };
 }
 
 /**

@@ -117,6 +117,27 @@ const MADE_IN = new WeakMap();
 const PROMISE_MADE_IN = new WeakMap();
 
 /**
+ * The callback slot of a timer or an immediate made while a flow ran, with the function in it when it was made: code
+ * holding the timer can put another function there later, which is then not what the flow handed Node. A microtask's
+ * resource is entered only by Node, with the callback it was queued with.
+ * @type {WeakMap<object, {slot: string|null, fn: *}>}
+ * @private
+ */
+const JOB_CALLBACK = new WeakMap();
+
+/**
+ * The callback slot each kind of job Node runs a function it was handed from: a job of any other kind (a socket, a
+ * stream) runs whatever its holder adds to it.
+ * @type {Map<string, string|null>}
+ * @private
+ */
+const JOB_SLOTS = new Map([
+	["Timeout", "_onTimeout"],
+	["Immediate", "_onImmediate"],
+	["Microtask", null]
+]);
+
+/**
  * Marks a {@link MADE_IN} entry of an `AsyncResource` code can enter itself.
  * @type {symbol}
  * @private
@@ -547,6 +568,12 @@ export class AsyncContextManager {
 	#jobsMarked = false;
 
 	/**
+	 * The resources whose callbacks are running now, innermost last (see {@link AsyncContextManager#flowJobBelow}).
+	 * @type {Array<object>}
+	 */
+	#jobStack = [];
+
+	/**
 	 * The marked resources whose callbacks are running now, innermost last, each with its stand-in store.
 	 * @type {Array<{resource: object, view: object}>}
 	 */
@@ -696,6 +723,8 @@ export class AsyncContextManager {
 			this.#telling = false;
 		}
 		if (answer === null) return store;
+		// A function bound to a resource of the flow, which the flow's own code handed Node: the flow, as the bind meant.
+		if (answer.outside && answer.begun && scoped && this.#jobHook !== null && this.#flowJobBelow(resource, store)) return store;
 		if (answer.outside) {
 			const view = this.outsideView(store, instanceID, answer.reader);
 			if (view !== undefined) this.#adopt(view);
@@ -758,11 +787,13 @@ export class AsyncContextManager {
 			},
 			before() {
 				manager.#stretch++;
+				manager.#jobBegins();
 				if (manager.#jobsMarked) manager.#jobStarts();
 			},
 			after() {
 				manager.#stretch++;
 				if (manager.#runningJobs.length !== 0) manager.#jobEnds();
+				manager.#jobFinishes();
 			}
 		});
 		Reflect.apply(HOOK_METHODS.enable, hook, []);
@@ -781,6 +812,7 @@ export class AsyncContextManager {
 		this.#jobHook = null;
 		this.#jobsMarked = false;
 		this.#runningJobs = [];
+		this.#jobStack = [];
 		this.#lastTold = null;
 		jobHooks--;
 		Reflect.apply(HOOK_METHODS.disable, hook, []);
@@ -813,6 +845,10 @@ export class AsyncContextManager {
 			const scope = type !== "PROMISE" && type !== "Microtask" && AsyncResource !== null && inheritsFrom(resource, AsyncResource);
 			WeakMapMethods.set(MADE_IN, resource, scope ? { __proto__: null, [SCOPE]: store } : store);
 			if (type === "PROMISE") WeakMapMethods.set(PROMISE_MADE_IN, resource, store);
+			else if (MapMethods.has(JOB_SLOTS, type)) {
+				const slot = MapMethods.get(JOB_SLOTS, type);
+				WeakMapMethods.set(JOB_CALLBACK, resource, { slot, fn: slot === null ? null : resource[slot] });
+			}
 			if (this.store.entered() === store) return;
 			// The code running now runs in the store its callback was made in: the flow's own continuation (an await, a
 			// timer, a reaction). Anything else (a scope entered, a snapshot, a timer given another's context) is told.
@@ -837,6 +873,54 @@ export class AsyncContextManager {
 		} catch {
 			// The resource is left unmarked: its callback is told as before, by its frames when it touches slothlet.
 		}
+	}
+
+	/**
+	 * A resource's callback starts: kept on {@link AsyncContextManager#jobStack} until it ends.
+	 * @returns {void}
+	 */
+	#jobBegins() {
+		try {
+			listPush(this.#jobStack, executionAsyncResource());
+		} catch {
+			// Not kept: a scope it begins is told by its frames alone.
+		}
+	}
+
+	/**
+	 * A resource's callback ends. Node calls `after` for every `before`, so the innermost entry is its own.
+	 * @returns {void}
+	 */
+	#jobFinishes() {
+		const stack = this.#jobStack;
+		if (stack.length !== 0 && stack[stack.length - 1] === executionAsyncResource()) ArrayMethods.pop(stack);
+	}
+
+	/**
+	 * Whether the async resource scope running now (`resource`, put in place by Node as it began a job: a function bound
+	 * to the resource that Node was handed) was handed to Node by the flow's own code in `store`: the job Node began it
+	 * from is a promise, a timer, an immediate or a microtask made in that store by the flow's code (unmarked in
+	 * {@link OUTSIDE_JOBS}), and still runs the function it was made with. The flow chose to have Node run the bound
+	 * function then, as it would call it itself. A module that binds a resource of the flow and hands that to Node from
+	 * its own flow, or from inside the flow it entered by itself, makes the job elsewhere or marked.
+	 * @param {object} resource - The async resource whose scope is running.
+	 * @param {object} store - The flow running now.
+	 * @returns {boolean} Whether the flow handed the job to Node.
+	 */
+	#flowJobBelow(resource, store) {
+		const stack = this.#jobStack;
+		let index = stack.length - 1;
+		if (index >= 0 && stack[index] === resource) index--;
+		const job = index >= 0 ? stack[index] : undefined;
+		if (job === null || typeof job !== "object" || WeakMapMethods.has(OUTSIDE_JOBS, job)) return false;
+		if (WeakMapMethods.get(PROMISE_MADE_IN, job) === store) return true;
+		if (WeakMapMethods.get(MADE_IN, job) !== store) return false;
+		const made = WeakMapMethods.get(JOB_CALLBACK, job);
+		if (made === undefined) return false;
+		if (made.slot === null) return true;
+		// Read as a data property: an accessor put there could answer Node and this check differently.
+		const slot = Objects.getOwnPropertyDescriptor(job, made.slot);
+		return slot !== undefined && "value" in slot && slot.value === made.fn;
 	}
 
 	/**

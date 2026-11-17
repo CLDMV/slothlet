@@ -286,6 +286,17 @@ beforeAll(() => {
 		"\tshared().resource.runInAsyncScope(() => schedule(how, note));",
 		"\treturn true;",
 		"}",
+		"// Binds another module's api node to the host's resource from its own call, and hands the bound function to Node.",
+		"export function hostResourceBindSchedule(how) {",
+		"\tschedule(how, shared().hostResource.bind(self.job.note));",
+		"\treturn true;",
+		"}",
+		"// The same bind, made inside the run it entered by itself through the host's resource.",
+		"export function hostResourceBindInside(how) {",
+		"\tconst note = self.job.note;",
+		"\tshared().hostResource.runInAsyncScope(() => schedule(how, shared().hostResource.bind(note)));",
+		"\treturn true;",
+		"}",
 		"// The other call's own function, run through its resource by this module (a pool running a requester's callback).",
 		"export function adminSchedule(how) {",
 		"\treturn shared().resource.runInAsyncScope(shared().adminSchedule, null, how);",
@@ -309,6 +320,9 @@ beforeAll(() => {
 		"}",
 		"export function schedules(how) {",
 		"\tschedule(how, self.job.note);",
+		"}",
+		"export function schedulesBound(how) {",
+		"\tschedule(how, AsyncResource.bind(self.job.note));",
 		"}",
 		"export async function schedulesAfterAwait(how) {",
 		"\tawait null;",
@@ -393,7 +407,7 @@ beforeAll(() => {
 		"\t\t\tshared.hostTimer = setTimeout(() => {}, 60000);",
 		"\t\t});",
 		"\t\tfor (const how of HOWS) {",
-		'\t\t\tfor (const route of ["hostResourceSchedule", "hostSnapshotSchedule", "hostTimerSchedule"]) {',
+		'\t\t\tfor (const route of ["hostResourceSchedule", "hostSnapshotSchedule", "hostTimerSchedule", "hostResourceBindSchedule", "hostResourceBindInside"]) {',
 		'\t\t\t\tout[route + ":" + how] = await notes(() => api.slothlet.context.run({ user: "mallory" }, () => api.evil[route](how)));',
 		"\t\t\t}",
 		"\t\t\t// The host's own resource, used by the host afterwards, still runs in its run (the pool pattern).",
@@ -408,6 +422,18 @@ beforeAll(() => {
 		"\t\t\t);",
 		'\t\t\tout["call:" + how] = await notes(() => api.slothlet.context.run({ user: "root" }, () => api.job.schedules(how)));',
 		'\t\t\tout["callAfterAwait:" + how] = await notes(() => api.slothlet.context.run({ user: "root" }, () => api.job.schedulesAfterAwait(how)));',
+		"\t\t\t// A function the run's own code binds inside the run (a resource of the run, or a resource bind() makes) and",
+		"\t\t\t// hands Node keeps the run when Node calls it.",
+		'\t\t\tout["hostBound:" + how] = await notes(() =>',
+		'\t\t\t\tapi.slothlet.context.run({ user: "root" }, () => schedule(how, new AsyncResource("bind").bind(api.job.note)))',
+		"\t\t\t);",
+		'\t\t\tout["hostStaticBound:" + how] = await notes(() =>',
+		'\t\t\t\tapi.slothlet.context.run({ user: "root" }, async () => {',
+		"\t\t\t\t\tawait null;",
+		"\t\t\t\t\tschedule(how, AsyncResource.bind(api.job.note));",
+		"\t\t\t\t})",
+		"\t\t\t);",
+		'\t\t\tout["callBound:" + how] = await notes(() => api.slothlet.context.run({ user: "root" }, () => api.job.schedulesBound(how)));',
 		"\t\t}",
 		"\t\tclearTimeout(shared.hostTimer);",
 		'\t\tout.mode = mode === "none" ? null : api.slothlet.permissions.control.mode();',
@@ -794,7 +820,7 @@ describe.each(FRAMES)("Permissions > jobs scheduled by module code that entered 
 		});
 
 		it.each(HOWS)("an api node handed to Node (%s) from inside a run() the host opened runs outside the run", (how) => {
-			for (const route of ["hostResourceSchedule", "hostSnapshotSchedule", "hostTimerSchedule"]) {
+			for (const route of ["hostResourceSchedule", "hostSnapshotSchedule", "hostTimerSchedule", "hostResourceBindInside"]) {
 				expect([route, result[route + ":" + how]]).toEqual([route, [null]]);
 			}
 			expect(result.mode).toBe(mode);
@@ -816,6 +842,16 @@ describe.each(FRAMES)("Permissions > jobs scheduled by module code that entered 
 
 		it.each(HOWS)("the host's own resource, used by the host after a module entered it, keeps the run (%s)", (how) => {
 			expect(result["hostAfter:" + how]).toEqual(["root"]);
+		});
+
+		it.each(HOWS)("a function the run's own code binds inside the run and hands Node (%s) keeps the run", (how) => {
+			expect(result["hostBound:" + how]).toEqual(["root"]);
+			expect(result["hostStaticBound:" + how]).toEqual(["root"]);
+			expect(result["callBound:" + how]).toEqual(["root"]);
+		});
+
+		it.each(HOWS)("an api node a module binds to the host's resource from its own call and hands Node (%s) runs outside the run", (how) => {
+			expect(result["hostResourceBindSchedule:" + how]).toEqual([null]);
 		});
 
 		it.each(HOWS)("a call's own scheduling (%s) keeps the run, also after an await", (how) => {
