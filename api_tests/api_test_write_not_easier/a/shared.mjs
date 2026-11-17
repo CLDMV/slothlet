@@ -35,6 +35,12 @@ export function who() {
 export const count = 1;
 
 /**
+ * A data object of the first module's, holding an array.
+ * @type {{list: number[], v: number}}
+ */
+export const data = { list: [1], v: 1 };
+
+/**
  * A class of the first module's, whose prototype method the second module tries to replace.
  */
 export class Box {

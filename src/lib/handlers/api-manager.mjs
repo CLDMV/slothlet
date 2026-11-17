@@ -148,6 +148,22 @@ const FRAMEWORK_ROOT_SEGMENTS = setFrom(["slothlet", "shutdown", "destroy"]);
 const CREATED_SOURCE = "created";
 
 /**
+ * Member names the language reads off a value by itself, to serialize it or turn it into a primitive: a module that
+ * gives a value one of them takes over how the value reads, whether or not the value had the member before.
+ * @type {Set<string>}
+ * @private
+ */
+const PROTOCOL_KEYS = setFrom(["toJSON", "toString", "toLocaleString", "valueOf"]);
+
+/**
+ * Own members of a function that are part of the function itself rather than members it holds: a write over the
+ * function is judged at the function's own path, not at these.
+ * @type {Set<string>}
+ * @private
+ */
+const FUNCTION_OWN_KEYS = setFrom(["length", "name", "prototype", "arguments", "caller"]);
+
+/**
  * Where an `api.add`'s history record keeps how each of its `permissions` rules was placed (#625), so a reload replays
  * the rules module code mounted with at the layer they were added at. A symbol no caller can pass; its presence also
  * marks the add as a replay.
@@ -858,19 +874,116 @@ export class ApiManager extends ComponentBase {
 		const internal = callerWrapper.____slothletInternal;
 		const callerPath = String(internal?.apiPath ?? "");
 		const targetPath = ArrayMethods.join(parts, ".");
-		const { exists, accessor, filePath } = this.#memberAt(parts, inFlight);
+		const { exists, accessor, filePath, value, inherited } = this.#memberAt(parts, inFlight);
 		// A member held as an accessor is read by running its getter, which no read gate checks: the write is held to the
 		// ownership and write rules alone, as reading it is to none.
 		if (accessor) return;
 		const runtimeContext = this.slothlet.contextManager?.tryGetContext?.(this.slothlet.instanceID)?.context ?? null;
+		const callerFilePath = internal?.filePath ?? null;
 		// A deny naming an object member of a module's data exactly covers what the member holds, for reads (see
 		// {@link PermissionManager#enforceAccess}'s `dataMember`): a write beneath it is held to the same extension.
-		const allowed = permissionManager.enforceAccess(callerPath, targetPath, internal?.filePath ?? null, filePath, runtimeContext, null, {
-			moduleCaller: true,
-			newMember: !exists,
-			dataMember: runtime_dataReadOptions(this.slothlet).dataMember
-		});
-		if (!allowed) throw new this.SlothletError("PERMISSION_DENIED", { caller: callerPath, target: segmentsOf(targetPath) });
+		const options = { moduleCaller: true, newMember: false, dataMember: runtime_dataReadOptions(this.slothlet).dataMember };
+		const check = (path, targetFile, newMember = false) => {
+			options.newMember = newMember;
+			if (!permissionManager.enforceAccess(callerPath, path, callerFilePath, targetFile, runtimeContext, null, options)) {
+				throw new this.SlothletError("PERMISSION_DENIED", { caller: callerPath, target: segmentsOf(path) });
+			}
+		};
+		// A member the value inherits, or one the language reads off it by itself, changes how the value behaves: shadowing
+		// it is a write to the value, held to the access of the node that holds it.
+		if (inherited) return check(ArrayMethods.join(copyList(parts, 0, parts.length - 1), "."), filePath);
+		check(targetPath, filePath, !exists);
+		// Replacing, redefining or deleting a node takes over every member it holds: each is held to its own access.
+		if (exists) this.#assertMembersBeneath(targetPath, value, filePath, check, inFlight);
+	}
+
+	/**
+	 * Hold a write over a node to the access of every member the node holds, at any depth: functions to the call gate,
+	 * data values to the read gate, as reading or calling each would be decided. Namespaces and object members of data
+	 * are walked, not checked, as reading one is traversal. A member held as an accessor is not followed, as no read gate
+	 * runs its getter. What the walk cannot see (a lazy node not loaded yet) is taken from the ownership registry: every
+	 * recorded function or data value beneath the path. Costs nothing for a leaf.
+	 *
+	 * @param {string} targetPath - The node's api path.
+	 * @param {*} node - The node, as the live tree holds it.
+	 * @param {string|null} filePath - The node's source file.
+	 * @param {function(string, string|null): void} check - Refuses one member, by its path and source file.
+	 * @param {{moduleID: string, prior: Map<string, *>}|null} [inFlight=null] - An add in flight: what it registered for
+	 *   itself is new, not a member the write takes over (see {@link ApiManager#ownsPath}).
+	 * @returns {void}
+	 * @throws {SlothletError} `PERMISSION_DENIED` for the first member the module would be refused.
+	 * @private
+	 */
+	#assertMembersBeneath(targetPath, node, filePath, check, inFlight = null) {
+		if (node === null || (typeof node !== "object" && typeof node !== "function")) return;
+		const seen = new Set();
+		const visited = new WeakSet();
+		const walk = (path, current, currentFile) => {
+			const raw = resolveWrapper(current);
+			const holder = raw ?? current;
+			if (WeakSetMethods.has(visited, holder)) return;
+			WeakSetMethods.add(visited, holder);
+			if (raw) currentFile = raw.____slothletInternal.filePath ?? currentFile;
+			const holders = raw ? [raw, raw.____slothletInternal.impl] : [current];
+			const isFunction = typeof current === "function";
+			const keys = new Set();
+			for (let h = 0; h < holders.length; h++) {
+				const own = holders[h];
+				if (own === null || (typeof own !== "object" && typeof own !== "function")) continue;
+				for (let ofIndex = 0, ofList = Reflect.ownKeys(own); ofIndex < ofList.length; ofIndex++) {
+					const key = ofList[ofIndex];
+					if (typeof key !== "string" || isFrameworkReservedKey(key)) continue;
+					if (isFunction && SetMethods.has(FUNCTION_OWN_KEYS, key)) continue;
+					if (Arrays.isArray(own) && key === "length") continue;
+					SetMethods.add(keys, key);
+				}
+			}
+			for (const key of setValues(keys)) {
+				const { found, value } = this.#rawMember(current, key);
+				if (!found) continue;
+				const childPath = `${path}.${key}`;
+				SetMethods.add(seen, childPath);
+				let child = value;
+				const dispatch = versionDispatcherRecord(child);
+				if (dispatch) child = runtime_nodeBehind(runtime_unwrapSelfView(dispatch.resolve())) ?? child;
+				const childWrapper = resolveWrapper(child);
+				const childFile = childWrapper?.____slothletInternal.filePath ?? currentFile;
+				if (typeof child === "function") {
+					check(childPath, childFile);
+					walk(childPath, child, childFile);
+				} else if (child === null || typeof child !== "object") {
+					check(childPath, childFile);
+				} else if (childWrapper !== null || Arrays.isArray(child) || this.#isPlainObject(child)) {
+					walk(childPath, child, childFile);
+				} else {
+					check(childPath, childFile);
+				}
+			}
+		};
+		walk(targetPath, node, filePath);
+		const ownership = this.slothlet.handlers.ownership;
+		if (!ownership?.pathToModule) return;
+		const prefix = `${targetPath}.`;
+		for (const path of mapKeys(ownership.pathToModule)) {
+			if (SetMethods.has(seen, path) || !StringMethods.startsWith(path, prefix) || !this.#recordedHeld(path, inFlight)) continue;
+			const entry = ownership.getCurrentOwner(path);
+			if (entry === null) continue;
+			const recorded = entry.value;
+			const wrapper = resolveWrapper(recorded);
+			if (wrapper !== null ? wrapper.____slothletInternal.isCallable : recorded === null || typeof recorded !== "object")
+				check(path, wrapper?.____slothletInternal.filePath ?? entry.filePath ?? null);
+		}
+	}
+
+	/**
+	 * Whether a value is a plain object: its prototype is `Object.prototype` (of any realm) or null.
+	 * @param {object} value - The value.
+	 * @returns {boolean} True for a plain object.
+	 * @private
+	 */
+	#isPlainObject(value) {
+		const proto = Reflect.getPrototypeOf(value);
+		return proto === null || Reflect.getPrototypeOf(proto) === null;
 	}
 
 	/**
@@ -883,8 +996,10 @@ export class ApiManager extends ComponentBase {
 	 * @param {string[]} parts - Segments of the api path.
 	 * @param {{moduleID: string, prior: Map<string, *>}|null} [inFlight=null] - An add in flight whose content is being
 	 *   checked (see {@link ApiManager#ownsPath}).
-	 * @returns {{exists: boolean, accessor: boolean, filePath: string|null}} Whether the member exists, whether it is
-	 *   held as an accessor, and the node's source file.
+	 * @returns {{exists: boolean, accessor: boolean, filePath: string|null, value: *, inherited: boolean}} Whether the
+	 *   member exists, whether it is held as an accessor, the node's source file, the member's value, and, for a member
+	 *   that does not exist, whether its holder inherits one of that name or the language reads it off the holder by
+	 *   itself ({@link PROTOCOL_KEYS}).
 	 * @private
 	 */
 	#memberAt(parts, inFlight = null) {
@@ -893,9 +1008,21 @@ export class ApiManager extends ComponentBase {
 		let exists = true;
 		for (let index = 0; index < parts.length; index++) {
 			const { found, value, accessor } = this.#rawMember(node, parts[index]);
-			if (accessor) return { exists: true, accessor: index === parts.length - 1, filePath };
+			if (accessor) return { exists: true, accessor: index === parts.length - 1, filePath, value: undefined, inherited: false };
 			if (!found) {
 				exists = false;
+				if (index === parts.length - 1 && index > 0) {
+					const raw = resolveWrapper(node);
+					const holder = raw ? raw.____slothletInternal.impl : node;
+					const reachable =
+						holder !== null && (typeof holder === "object" || typeof holder === "function") && !util.types.isProxy(holder)
+							? parts[index] in holder
+							: false;
+					const owned = this.#recordedHeld(ArrayMethods.join(parts, "."), inFlight);
+					if (!owned && (reachable || SetMethods.has(PROTOCOL_KEYS, parts[index]))) {
+						return { exists: false, accessor: false, filePath, value: undefined, inherited: true };
+					}
+				}
 				break;
 			}
 			let next = value;
@@ -905,19 +1032,29 @@ export class ApiManager extends ComponentBase {
 			if (wrapper) filePath = wrapper.____slothletInternal.filePath ?? filePath;
 			node = next;
 		}
-		if (!exists) {
-			const at = ArrayMethods.join(parts, ".");
-			const ownership = this.slothlet.handlers.ownership;
-			// An add in flight has registered its own content already; that content is new, not a member it takes over.
-			exists =
-				inFlight === null
-					? ownership.getCurrentOwner(at) !== null
-					: ArrayMethods.some(
-							ownership.getPathHistory(at),
-							(entry) => String(entry.moduleID) !== inFlight.moduleID || MapMethods.has(inFlight.prior, at)
-						);
-		}
-		return { exists, accessor: false, filePath };
+		const reached = exists;
+		if (!exists) exists = this.#recordedHeld(ArrayMethods.join(parts, "."), inFlight);
+		return { exists, accessor: false, filePath, value: reached ? node : undefined, inherited: false };
+	}
+
+	/**
+	 * Whether the ownership registry holds a member at a path: its current owner, or, while an add is in flight, any
+	 * entry other than the content that add registered for itself where its module did not own the path before it began,
+	 * which is new, not a member it takes over.
+	 *
+	 * @param {string} at - The api path.
+	 * @param {{moduleID: string, prior: Map<string, *>}|null} inFlight - An add in flight (see {@link ApiManager#ownsPath}).
+	 * @returns {boolean} Whether a member is recorded there.
+	 * @private
+	 */
+	#recordedHeld(at, inFlight) {
+		const ownership = this.slothlet.handlers.ownership;
+		return inFlight === null
+			? ownership.getCurrentOwner(at) !== null
+			: ArrayMethods.some(
+					ownership.getPathHistory(at),
+					(entry) => String(entry.moduleID) !== inFlight.moduleID || MapMethods.has(inFlight.prior, at)
+				);
 	}
 
 	/**

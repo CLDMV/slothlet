@@ -159,3 +159,75 @@ export async function removeAt(apiPath) {
 		return error?.code ?? String(error);
 	}
 }
+
+/**
+ * One write that replaces, redefines or deletes a node holding the first module's members, by its name.
+ * @type {Record<string, function(): *>}
+ */
+const CONTAINER_WRITES = {
+	assign: () => {
+		self.p.shared = { who: () => "b" };
+	},
+	define: () => {
+		Object.defineProperty(self.p, "shared", { value: { who: () => "b" }, configurable: true, writable: true, enumerable: true });
+	},
+	remove: () => {
+		if (!delete self.p.shared) throw new Error("NOT_DELETED");
+	},
+	mount: () => {
+		self.p = { shared: { who: () => "b" } };
+	}
+};
+
+/**
+ * Make one write to a node holding the first module's members.
+ * @param {string} name - The write, a key of CONTAINER_WRITES.
+ * @returns {string} Its outcome.
+ * @example
+ * containerWrite("assign");
+ */
+export function containerWrite(name) {
+	return attempt(CONTAINER_WRITES[name]);
+}
+
+/**
+ * Replace the second module's own node.
+ * @returns {string} Its outcome.
+ * @example
+ * containerWriteOwn();
+ */
+export function containerWriteOwn() {
+	return attempt(() => {
+		self.p.intruder = { mine: () => "b2" };
+	});
+}
+
+/**
+ * One write that shadows a member the first module's values inherit, by its name.
+ * @type {Record<string, function(): *>}
+ */
+const SHADOW_WRITES = {
+	call: () => {
+		self.p.shared.who.call = () => "b";
+	},
+	push: () => {
+		self.p.shared.data.list.push = () => "b";
+	},
+	toJSON: () => {
+		self.p.shared.data.toJSON = () => "b";
+	},
+	toString: () => {
+		self.p.shared.Box.prototype.toString = () => "b";
+	}
+};
+
+/**
+ * Shadow one inherited member of the first module's values.
+ * @param {string} name - The write, a key of SHADOW_WRITES.
+ * @returns {string} Its outcome.
+ * @example
+ * shadowWrite("call");
+ */
+export function shadowWrite(name) {
+	return attempt(SHADOW_WRITES[name]);
+}

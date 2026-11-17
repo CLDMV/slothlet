@@ -166,13 +166,103 @@ describe.each(CONFIGS)("writing is never easier than accessing — $mode / $runt
 	});
 
 	describe("policy allow", () => {
-		it("lets every write through with no rule against it, as today", async () => {
+		it("lets every write through when no rule refuses the second module", async () => {
 			expect(await outcomes({})).toEqual(every(WRITES, "done"));
 		});
 
 		it("refuses only the writes to a member a rule refuses the second module", async () => {
 			const permissions = { rules: [{ caller: "p.intruder.**", target: "p.shared.who", effect: "deny" }] };
 			expect(await outcomes(permissions)).toEqual({ ...every(WHO_WRITES, "PERMISSION_DENIED"), data: "done", prototype: "done" });
+		});
+	});
+
+	/**
+	 * Make one write from `B` on a fresh instance through `intruder[fn]` and report it with what the host reads after.
+	 * @param {object|undefined} permissions - The permissions config.
+	 * @param {string} fn - `containerWrite` or `shadowWrite`.
+	 * @param {string} name - The write.
+	 * @returns {Promise<{outcome: string, who: string, call: *, json: string, text: string}>} Its outcome and `A`'s state.
+	 */
+	async function reachOnce(permissions, fn, name) {
+		await load(permissions);
+		const outcome = await withSuppressedSlothletErrorOutput(() => api.p.intruder[fn](name));
+		const shared = api.p.shared;
+		const state = {
+			outcome,
+			who: typeof shared?.who === "function" ? shared.who() : String(shared?.who),
+			call: typeof shared?.who === "function" ? shared.who.call(null) : undefined,
+			json: shared?.data === undefined ? "" : JSON.stringify(shared.data),
+			text: shared?.Box === undefined ? "" : String(new shared.Box())
+		};
+		await api.slothlet.shutdown();
+		api = null;
+		return state;
+	}
+
+	/** Every write `B` makes to a node holding `A`'s members (see `b/intruder.mjs`). */
+	const CONTAINER_WRITES = ["assign", "define", "remove", "mount"];
+
+	/** Every write `B` makes that shadows a member `A`'s values inherit. */
+	const SHADOW_WRITES = ["call", "push", "toJSON", "toString"];
+
+	/** What the host reads of `A`'s members when nothing replaced them. */
+	const UNTOUCHED = { who: "a", call: "a", json: '{"list":[1],"v":1}', text: "[object Object]" };
+
+	describe("a write over a node holding members is held to the access of every member beneath it", () => {
+		it("refuses replacing, redefining or deleting a node of the first module's under policy deny with the owner grant", async () => {
+			for (const name of CONTAINER_WRITES) {
+				expect({ name, ...(await reachOnce(DENY_OWNER, "containerWrite", name)) }).toEqual({
+					name,
+					outcome: "PERMISSION_DENIED",
+					...UNTOUCHED
+				});
+			}
+		});
+
+		it("refuses it under policy allow when a rule refuses the second module one member beneath", async () => {
+			const permissions = { rules: [{ caller: "p.intruder.**", target: "p.shared.who", effect: "deny" }] };
+			for (const name of CONTAINER_WRITES) {
+				expect({ name, ...(await reachOnce(permissions, "containerWrite", name)) }).toEqual({
+					name,
+					outcome: "PERMISSION_DENIED",
+					...UNTOUCHED
+				});
+			}
+		});
+
+		it("lets it through when the second module may access every member beneath", async () => {
+			const permissions = { ...DENY_OWNER, rules: [{ caller: "p.intruder.**", target: "p.shared.**", effect: "allow" }] };
+			const state = await reachOnce(permissions, "containerWrite", "assign");
+			expect([state.outcome, state.who]).toEqual(["done", "b"]);
+			expect((await reachOnce({}, "containerWrite", "remove")).outcome).toBe("done");
+		});
+
+		it("lets the second module replace its own node", async () => {
+			await load(DENY_OWNER);
+			expect(await api.p.intruder.containerWriteOwn()).toBe("done");
+			expect(api.p.intruder.mine()).toBe("b2");
+		});
+	});
+
+	describe("shadowing a member the first module's values inherit is a write to an existing member", () => {
+		it("refuses every shadowing write under policy deny with the owner grant, and the host reads the first module's values", async () => {
+			for (const name of SHADOW_WRITES) {
+				expect({ name, ...(await reachOnce(DENY_OWNER, "shadowWrite", name)) }).toEqual({
+					name,
+					outcome: "PERMISSION_DENIED",
+					...UNTOUCHED
+				});
+			}
+		});
+
+		it("refuses shadowing beneath a path a rule refuses the second module under policy allow", async () => {
+			const permissions = { rules: [{ caller: "p.intruder.**", target: "p.shared.Box.**", effect: "deny" }] };
+			expect(await reachOnce(permissions, "shadowWrite", "toString")).toEqual({ outcome: "PERMISSION_DENIED", ...UNTOUCHED });
+		});
+
+		it("lets the shadowing writes through once a rule lets the second module access the first module's members", async () => {
+			const permissions = { ...DENY_OWNER, rules: [{ caller: "p.intruder.**", target: "p.shared.**", effect: "allow" }] };
+			for (const name of SHADOW_WRITES) expect([name, (await reachOnce(permissions, "shadowWrite", name)).outcome]).toEqual([name, "done"]);
 		});
 	});
 
