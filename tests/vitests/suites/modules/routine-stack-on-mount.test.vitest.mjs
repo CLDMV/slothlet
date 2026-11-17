@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:36-07:00 (1791091716)
+ *	@Last modified time: 2026-11-16T17:25:49-08:00 (1794878749)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -61,7 +61,7 @@ describe("routine stacks are installed for modules mounted via addModule()/addMo
 		});
 
 		const res = await api.slothlet.api.modules.addModule("@local/routine-widget", { discover: { scanRoot: FIX_ROUTINE_MODULE } });
-		expect(res.mountPath).toBe("ext.widget");
+		expect(res.mount).toEqual(["ext", "widget"]);
 
 		// The mount path must have installed the routine's stacked callable (fails pre-#362-Fix-B:
 		// the leaf stays the bare mounted function, __slothletRoutineStack undefined).

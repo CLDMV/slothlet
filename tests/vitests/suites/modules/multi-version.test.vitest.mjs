@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:12-07:00 (1791090912)
+ *	@Last modified time: 2026-11-16T17:25:49-08:00 (1794878749)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -62,7 +62,7 @@ afterEach(async () => {
 describe("addModules — multi-version mounting (G7 case 2)", () => {
 	it("discovers two versions of the same package across separate scanRoots", async () => {
 		const found = await api.slothlet.api.modules.discover({ scanRoot: [FIX_V1, FIX_V2] });
-		const multivEntries = found.filter((r) => r.packageName === "@org/multiv");
+		const multivEntries = found.filter((r) => r.package === "@org/multiv");
 		expect(multivEntries.length).toBe(2);
 		const versions = multivEntries.map((r) => r.manifest.version).sort();
 		expect(versions).toEqual(["1.2.3", "2.0.0"]);
@@ -71,17 +71,17 @@ describe("addModules — multi-version mounting (G7 case 2)", () => {
 	it("mounts both versions under versioned paths when passed together to addModules()", async () => {
 		const mm = api.slothlet.api.modules;
 		const found = await mm.discover({ scanRoot: [FIX_V1, FIX_V2] });
-		const multivOnly = found.filter((r) => r.packageName === "@org/multiv");
+		const multivOnly = found.filter((r) => r.package === "@org/multiv");
 		const mounted = await mm.addModules(multivOnly);
 		expect(mounted.length).toBe(2);
-		const paths = mounted.map((m) => m.mountPath).sort();
+		const paths = mounted.map((m) => m.mount.join(".")).sort();
 		expect(paths).toEqual(["v1.drivers.multiv", "v2.drivers.multiv"]);
 	});
 
 	it("marks the highest semver as the default version (dispatcher serves it at the unversioned path)", async () => {
 		const mm = api.slothlet.api.modules;
 		const found = await mm.discover({ scanRoot: [FIX_V1, FIX_V2] });
-		const multivOnly = found.filter((r) => r.packageName === "@org/multiv");
+		const multivOnly = found.filter((r) => r.package === "@org/multiv");
 		await mm.addModules(multivOnly);
 
 		// Direct access at versioned paths should return the correct version content
@@ -95,7 +95,7 @@ describe("addModules — multi-version mounting (G7 case 2)", () => {
 	it("includes versionConfig in the mount result for multi-version entries", async () => {
 		const mm = api.slothlet.api.modules;
 		const found = await mm.discover({ scanRoot: [FIX_V1, FIX_V2] });
-		const multivOnly = found.filter((r) => r.packageName === "@org/multiv");
+		const multivOnly = found.filter((r) => r.package === "@org/multiv");
 		const mounted = await mm.addModules(multivOnly);
 
 		for (const m of mounted) {
@@ -106,15 +106,15 @@ describe("addModules — multi-version mounting (G7 case 2)", () => {
 		// Exactly one of the two should be default
 		const defaults = mounted.filter((m) => m.versionConfig.default === true);
 		expect(defaults.length).toBe(1);
-		expect(defaults[0].discoverResult.manifest.version).toBe("2.0.0");
+		expect(defaults[0].found.manifest.version).toBe("2.0.0");
 	});
 
 	it("does NOT route through versionConfig when addModules() is called with a single item", async () => {
 		const mm = api.slothlet.api.modules;
 		const found = await mm.discover({ scanRoot: [FIX_V1] });
-		const mounted = await mm.addModules(found.filter((r) => r.packageName === "@org/multiv"));
+		const mounted = await mm.addModules(found.filter((r) => r.package === "@org/multiv"));
 		expect(mounted.length).toBe(1);
-		expect(mounted[0].mountPath).toBe("drivers.multiv");
+		expect(mounted[0].mount).toEqual(["drivers", "multiv"]);
 		expect(mounted[0].versionConfig).toBeNull();
 	});
 
@@ -124,7 +124,7 @@ describe("addModules — multi-version mounting (G7 case 2)", () => {
 
 		const mm = api.slothlet.api.modules;
 		const found = await mm.discover({ scanRoot: [FIX_V1, FIX_V2] });
-		const multivOnly = found.filter((r) => r.packageName === "@org/multiv");
+		const multivOnly = found.filter((r) => r.package === "@org/multiv");
 		await mm.addModules(multivOnly);
 
 		expect(events.length).toBe(2);
@@ -139,7 +139,7 @@ describe("addModules — multi-version + S7 pre-flight collision", () => {
 	it("checks the EFFECTIVE versioned path for collisions (not the plain mountPath)", async () => {
 		const mm = api.slothlet.api.modules;
 		const found = await mm.discover({ scanRoot: [FIX_V1, FIX_V2] });
-		const multivOnly = found.filter((r) => r.packageName === "@org/multiv");
+		const multivOnly = found.filter((r) => r.package === "@org/multiv");
 		// First mount both versions
 		await mm.addModules(multivOnly);
 		// Re-mounting v1 alone (single-item, no versionConfig) attempts to mount at plain "drivers.multiv".

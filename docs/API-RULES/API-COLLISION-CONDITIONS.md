@@ -199,7 +199,7 @@ The change to a callable proxy is one-way: when no function is left (`remove()` 
 **Related Rule**: [Rule 17](../API-RULES.md#rule-17-collision-resolution)
 **Status**: ✅ Active
 
-**Pattern**: The order modules are processed — default `priority` descending, then `packageName` ascending by raw codepoint — is the precedence "last wins"/"first wins" resolution iterates. A caller comparator overrides it.
+**Pattern**: The order modules are processed — default `priority` descending, then `package` ascending by raw codepoint — is the precedence "last wins"/"first wins" resolution iterates. A caller comparator overrides it.
 
 **Source(s)**: `src/lib/helpers/module-sort.mjs:80-89` (default) · `:60-63` (comparator override)
 
@@ -213,7 +213,7 @@ The change to a callable proxy is one-way: when no function is left (`remove()` 
 **Related Rule**: [Rule 17](../API-RULES.md#rule-17-collision-resolution)
 **Status**: ✅ Active
 
-**Pattern**: For an external-module mount under `collisionMode: "error"`, an exact-mountPath collision is thrown before the mount runs (the underlying build then uses `merge`).
+**Pattern**: For an external-module mount under `collisionMode: "error"`, an exact-mount collision is thrown before the mount runs (the underlying build then uses `merge`).
 
 **Source(s)**: `src/lib/handlers/module-manager.mjs:427-442` (tagged `S7`) · `:445` (`error` → `merge` for the underlying add)
 

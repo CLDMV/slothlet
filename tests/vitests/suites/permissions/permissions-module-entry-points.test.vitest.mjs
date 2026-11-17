@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-26T02:52:51-07:00 (1793008371)
+ *	@Last modified time: 2026-11-16T17:26:34-08:00 (1794878794)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -84,9 +84,9 @@ describe.each(CONFIGS)("module-code entry points (#625) — $mode / $runtime", (
 
 	describe("mounting a module with a manifest", () => {
 		const evilResult = () => ({
-			packageName: "evil",
-			mountPath: ["guest", "sub"],
-			apiDir: path.join(EVIL, "evilgrant", "api"),
+			package: "evil",
+			mount: ["guest", "sub"],
+			base: path.join(EVIL, "evilgrant", "api"),
 			manifest: {
 				version: "1.0.0",
 				permissions: [
@@ -288,15 +288,15 @@ describe.each(CONFIGS)("module-code entry points (#625) — $mode / $runtime", (
 
 	describe("api.modules.removeModule", () => {
 		/**
-		 * A discover result for a `good` package version mounted at `mountPath`.
+		 * A discover result for a `good` package version mounted at `mount`.
 		 * @param {string} version - The version.
-		 * @param {string[]} mountPath - Where it mounts.
+		 * @param {string[]} mount - Where it mounts.
 		 * @returns {object} The discover result.
 		 */
-		const goodResult = (version, mountPath) => ({
-			packageName: "good",
-			mountPath,
-			apiDir: path.join(GOOD, "goodgrant", "api"),
+		const goodResult = (version, mount) => ({
+			package: "good",
+			mount,
+			base: path.join(GOOD, "goodgrant", "api"),
 			manifest: { version }
 		});
 

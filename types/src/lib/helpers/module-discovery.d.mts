@@ -8,16 +8,18 @@
  */
 /**
  * @typedef {object} DiscoverResult
- * @property {string} packageName - Package name from package.json.
- * @property {string} packageRoot - Resolved absolute filesystem path to the package directory.
- * @property {string[]} mountPath - Normalized mountPath segments (always an array).
- * @property {string} apiDir - Absolute resolved filesystem path to the apiDir inside the package.
+ * @property {string} package - Package name from package.json.
+ * @property {string} folder - Resolved absolute filesystem path to the package directory.
+ * @property {string[]} mount - Normalized mount segments (always an array).
+ * @property {string} base - Absolute resolved filesystem path to the manifest's `base` folder inside the package.
  * @property {object} manifest - Normalized + deep-frozen manifest (per M3).
  */
 /**
  * Walk the filesystem and return validated module candidates.
  *
  * @param {DiscoverOptions} [options] - Discovery options.
+ * @param {object} [hooks] - Internal hooks.
+ * @param {(code: string, details: object) => void} [hooks.warn] - Called with a warning code and its details for a manifest that is valid but deprecated (format 1).
  * @returns {Promise<DiscoverResult[]>} Discovered modules in walk order (apply `sort()` for deterministic ordering).
  * @throws {SlothletError} `MODULE_*` codes on manifest validation failures or G7 duplicate-name-version-mismatch.
  *
@@ -33,7 +35,9 @@
  *   filter: (m) => m.kind === "driver"
  * });
  */
-export function discoverModules(options?: DiscoverOptions): Promise<DiscoverResult[]>;
+export function discoverModules(options?: DiscoverOptions, hooks?: {
+    warn?: ((code: string, details: object) => void) | undefined;
+}): Promise<DiscoverResult[]>;
 export type DiscoverOptions = {
     /**
      * - Filesystem path(s) to scan. Default: upward-walk from process.cwd() to nearest node_modules ancestor.
@@ -60,19 +64,19 @@ export type DiscoverResult = {
     /**
      * - Package name from package.json.
      */
-    packageName: string;
+    package: string;
     /**
      * - Resolved absolute filesystem path to the package directory.
      */
-    packageRoot: string;
+    folder: string;
     /**
-     * - Normalized mountPath segments (always an array).
+     * - Normalized mount segments (always an array).
      */
-    mountPath: string[];
+    mount: string[];
     /**
-     * - Absolute resolved filesystem path to the apiDir inside the package.
+     * - Absolute resolved filesystem path to the manifest's `base` folder inside the package.
      */
-    apiDir: string;
+    base: string;
     /**
      * - Normalized + deep-frozen manifest (per M3).
      */

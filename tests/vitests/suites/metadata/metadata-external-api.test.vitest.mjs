@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:11-07:00 (1791090911)
+ *	@Last modified time: 2026-11-16T17:25:44-08:00 (1794878744)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -809,11 +809,11 @@ describe.each(getMatrixConfigs())("External Metadata API > Config: '$name'", ({ 
 			// Mirrors B1's resolution: helpers store the full manifest once at the
 			// mount point under "_module" and rely on getFor for retrieval.
 			const manifest = {
-				schemaVersion: 1,
+				schema: 2,
 				name: "@org/test-driver",
 				version: "1.0.0",
-				mountPath: ["rootMath"],
-				apiDir: "./api",
+				mount: ["rootMath"],
+				base: "./api",
 				kind: "driver",
 				priority: 100
 			};
