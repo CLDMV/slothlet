@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:10-08:00 (1794874570)
+ *	@Last modified time: 2026-11-16T17:12:38-08:00 (1794877958)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -56,7 +56,9 @@ import {
 	promiseAll,
 	RegExpMethods,
 	regExpSplit,
-	String
+	String,
+	WeakSet,
+	WeakSetMethods
 } from "#helpers/intrinsics";
 const { runtime_selfModuleReader } = unifiedWrapperInternals("lib/handlers/module-manager");
 
@@ -140,6 +142,15 @@ export class ModuleManager extends ComponentBase {
 	#mounted = new Map();
 
 	/**
+	 * Every result this instance's `discover()` returned. `addModule` / `addModules` mount an object only when it is
+	 * one of these: a result is recognised by identity, never by its shape, so an object built to look like one (or a
+	 * copy of one) is refused rather than mounted unvalidated. The results themselves are frozen by discovery.
+	 * @type {WeakSet<DiscoverResult>}
+	 * @private
+	 */
+	#issued = new WeakSet();
+
+	/**
 	 * @param {object} slothlet - Parent slothlet instance.
 	 */
 	constructor(slothlet) {
@@ -179,6 +190,7 @@ export class ModuleManager extends ComponentBase {
 			const result = ofList[ofIndex];
 			const key = `${result.packageName}@${result.manifest.version}`;
 			MapMethods.set(this.#cache, key, result);
+			WeakSetMethods.add(this.#issued, result);
 		}
 		await this.#emit("modules:discover-complete", {
 			found,
@@ -236,13 +248,15 @@ export class ModuleManager extends ComponentBase {
 	// ─── Mount ─────────────────────────────────────────────────────────────
 
 	/**
-	 * Mount a single module — by name (cache lookup), by DiscoverResult directly,
-	 * or with a lazy-trigger discover() if the name is not cached.
+	 * Mount a single module — by name (cache lookup), by a DiscoverResult this
+	 * instance's discover() returned, or with a lazy-trigger discover() if the
+	 * name is not cached. Any other object is refused as an invalid argument.
 	 *
 	 * @param {string|DiscoverResult} nameOrResult
 	 * @param {AddModuleOptions} [options]
 	 * @returns {Promise<MountResult>}
 	 * @throws {SlothletError} `MODULE_PACKAGE_NOT_FOUND` when a name cannot be resolved.
+	 * @throws {SlothletError} `INVALID_ARGUMENT` when `nameOrResult` is an object this instance's discover() did not return.
 	 * @throws {SlothletError} `MODULE_MOUNT_COLLISION` when the exact mountPath is already occupied and `collisionMode` is `"error"`.
 	 */
 	async addModule(nameOrResult, options = {}, writer = runtime_selfModuleReader(this.slothlet)) {
@@ -266,7 +280,8 @@ export class ModuleManager extends ComponentBase {
 	/**
 	 * Mount a list of modules.
 	 *
-	 * @param {Array<string|DiscoverResult>} items - Heterogeneous array; strings resolved through the discovery cache.
+	 * @param {Array<string|DiscoverResult>} items - Heterogeneous array; strings resolved through the discovery cache,
+	 *   objects only as results this instance's discover() returned (any other object refuses the whole batch).
 	 * @param {AddModulesOptions} [options]
 	 * @returns {Promise<MountResult[] | {mounted: MountResult[], failed: FailureEntry[]}>} Plain array under `throw`/`rollback`; aggregate object under `best-effort`.
 	 */
@@ -387,20 +402,22 @@ export class ModuleManager extends ComponentBase {
 	 * @param {string|DiscoverResult} arg
 	 * @param {object} options - Passed through to lazy discover().
 	 * @returns {Promise<DiscoverResult>}
+	 * @throws {SlothletError} `INVALID_ARGUMENT` when `arg` is neither a name nor a result this instance's `discover()`
+	 *   returned.
 	 * @throws {SlothletError} `MODULE_PACKAGE_NOT_FOUND` when a name cannot be resolved after discovery.
 	 * @private
 	 */
 	async #resolveToDiscoverResult(arg, options) {
-		if (arg && typeof arg === "object" && typeof arg.packageName === "string") {
-			return arg;
-		}
+		// Only a result this instance's discover() returned mounts as one: it was validated when discovered, and it is
+		// frozen. Any other object, whatever its shape, is not a discover result.
+		if (WeakSetMethods.has(this.#issued, arg)) return arg;
 		if (typeof arg !== "string") {
 			throw new SlothletError(
 				"INVALID_ARGUMENT",
 				{
 					argument: "module name or DiscoverResult",
-					expected: "string or DiscoverResult object",
-					received: typeof arg
+					expected: "a package name, or a result this instance's discover() returned",
+					received: arg === null ? "null" : typeof arg
 				},
 				null,
 				{ validationError: true }
@@ -423,7 +440,7 @@ export class ModuleManager extends ComponentBase {
 				"MODULE_PACKAGE_NOT_FOUND",
 				{
 					packageName: arg,
-					hint: "addModule(name) requires the package to be installed under one of the scanned roots. Run discover() first, or pass a DiscoverResult object directly."
+					hint: "addModule(name) requires the package to be installed under one of the scanned roots. Run discover() first, or pass a result discover() returned."
 				},
 				null,
 				{ validationError: true }

@@ -83,20 +83,23 @@ export class ModuleManager extends ComponentBase {
      */
     getStaleMounts(): MountResult[];
     /**
-     * Mount a single module — by name (cache lookup), by DiscoverResult directly,
-     * or with a lazy-trigger discover() if the name is not cached.
+     * Mount a single module — by name (cache lookup), by a DiscoverResult this
+     * instance's discover() returned, or with a lazy-trigger discover() if the
+     * name is not cached. Any other object is refused as an invalid argument.
      *
      * @param {string|DiscoverResult} nameOrResult
      * @param {AddModuleOptions} [options]
      * @returns {Promise<MountResult>}
      * @throws {SlothletError} `MODULE_PACKAGE_NOT_FOUND` when a name cannot be resolved.
+     * @throws {SlothletError} `INVALID_ARGUMENT` when `nameOrResult` is an object this instance's discover() did not return.
      * @throws {SlothletError} `MODULE_MOUNT_COLLISION` when the exact mountPath is already occupied and `collisionMode` is `"error"`.
      */
     addModule(nameOrResult: string | DiscoverResult, options?: AddModuleOptions, writer?: any): Promise<MountResult>;
     /**
      * Mount a list of modules.
      *
-     * @param {Array<string|DiscoverResult>} items - Heterogeneous array; strings resolved through the discovery cache.
+     * @param {Array<string|DiscoverResult>} items - Heterogeneous array; strings resolved through the discovery cache,
+     *   objects only as results this instance's discover() returned (any other object refuses the whole batch).
      * @param {AddModulesOptions} [options]
      * @returns {Promise<MountResult[] | {mounted: MountResult[], failed: FailureEntry[]}>} Plain array under `throw`/`rollback`; aggregate object under `best-effort`.
      */
