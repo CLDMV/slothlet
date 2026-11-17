@@ -100,21 +100,67 @@ const OUTSIDE_JOBS = new WeakMap();
  * The store each async resource made while a flow ran was made in: Node runs the resource's callback in that store,
  * unless something put another in place (code entering a resource, a snapshot or a timer of another flow). An
  * `AsyncResource` anyone can enter is held under a {@link SCOPE} record instead, so its scope never counts as made in its
- * store. A microtask's resource is Node's own, entered only by Node.
+ * store. A microtask's resource is Node's own, entered only by Node. A promise is marked by {@link PromiseFlow} instead.
  * @type {WeakMap<object, object>}
  * @private
  */
 const MADE_IN = new WeakMap();
 
 /**
- * The store each promise made while a flow ran was made in (see {@link MADE_IN}). A promise's job runs only what was
- * fixed when it was made (an `await`'s continuation, the reaction `then()` registered, the thenable it resolves to):
- * no one can enter it with code of their own later, as anyone can an `AsyncResource`'s scope or a timer's callback slot.
- * One the flow's own code made, unmarked in {@link OUTSIDE_JOBS}, runs that code's continuation in the flow.
- * @type {WeakMap<object, object>}
+ * An empty list for {@link AsyncContextManager#jobStack}: an array with no prototype, so the hook writes its elements
+ * directly, without a setter module code put on `Array.prototype` or `Object.prototype` ever running.
+ * @returns {Array<object>} The list.
  * @private
  */
-const PROMISE_MADE_IN = new WeakMap();
+function jobStackList() {
+	return Objects.setPrototypeOf([], null);
+}
+
+/**
+ * Hands the object it is constructed with back as the instance, so a subclass's private field is put on that object.
+ * @private
+ */
+class Stamped {
+	/**
+	 * @param {object} target - The object to stamp.
+	 */
+	constructor(target) {
+		return target;
+	}
+}
+
+/**
+ * The store each promise made while a flow ran was made in (as {@link MADE_IN} for every other resource), held in a
+ * private field put on the promise: only this class reads it, nothing can forge it, and putting it costs a fraction of
+ * a `WeakMap` entry (the async hook runs for every promise a flow makes). A promise's job runs only what was fixed when
+ * it was made (an `await`'s continuation, the reaction `then()` registered, the thenable it resolves to): no one can
+ * enter it with code of their own later, as anyone can an `AsyncResource`'s scope or a timer's callback slot. One the
+ * flow's own code made, unmarked in {@link OUTSIDE_JOBS}, runs that code's continuation in the flow.
+ * @private
+ */
+class PromiseFlow extends Stamped {
+	#store;
+
+	/**
+	 * @param {object} promise - The promise.
+	 * @param {object} store - The store it is made in.
+	 */
+	constructor(promise, store) {
+		super(promise);
+		this.#store = store;
+	}
+
+	/**
+	 * The store a promise was made in.
+	 * @param {*} value - An async resource.
+	 * @returns {object|undefined} The store, or undefined when it is no promise marked here.
+	 */
+	static of(value) {
+		return value !== null && typeof value === "object" && #store in value ? value.#store : undefined;
+	}
+}
+Objects.freeze(Stamped.prototype);
+Objects.freeze(PromiseFlow.prototype);
 
 /**
  * The callback slot of a timer or an immediate made while a flow ran, with the function in it when it was made: code
@@ -164,8 +210,8 @@ const HOOK_METHODS = (() => {
 })();
 
 /**
- * How many async hooks telling jobs apart are installed (0 or 1): one while any instance on the async runtime has the
- * permission system on (see {@link AsyncContextManager#initialize}).
+ * How many async hooks telling jobs apart are installed (0 or 1): one while any instance on the async runtime exists,
+ * whatever its permission mode (see {@link AsyncContextManager#initialize}).
  * @type {number}
  * @private
  */
@@ -548,8 +594,8 @@ export class AsyncContextManager {
 	#runBound = new WeakMap();
 
 	/**
-	 * How many instances on this runtime have the permission system on: the async hook that tells jobs apart (see
-	 * {@link AsyncContextManager#holdJobHook}) is installed while any does.
+	 * How many instances live on this runtime: the async hook that tells jobs apart (see
+	 * {@link AsyncContextManager#holdJobHook}) is installed while any does, in every permission mode.
 	 * @type {number}
 	 */
 	#jobHookInstances = 0;
@@ -571,7 +617,7 @@ export class AsyncContextManager {
 	 * The resources whose callbacks are running now, innermost last (see {@link AsyncContextManager#flowJobBelow}).
 	 * @type {Array<object>}
 	 */
-	#jobStack = [];
+	#jobStack = jobStackList();
 
 	/**
 	 * The marked resources whose callbacks are running now, innermost last, each with its stand-in store.
@@ -744,14 +790,14 @@ export class AsyncContextManager {
 	}
 
 	/**
-	 * Whether the job running now is a promise's that the flow's own code made in `store` (see {@link PROMISE_MADE_IN}).
+	 * Whether the job running now is a promise's that the flow's own code made in `store` (see {@link PromiseFlow}).
 	 * @param {object|undefined} resource - The async resource running now.
 	 * @param {object} store - The flow running now.
 	 * @returns {boolean} Whether it is.
 	 */
 	#ownContinuation(resource, store) {
 		if (resource === null || typeof resource !== "object") return false;
-		return WeakMapMethods.get(PROMISE_MADE_IN, resource) === store && !WeakMapMethods.has(OUTSIDE_JOBS, resource);
+		return PromiseFlow.of(resource) === store && !WeakMapMethods.has(OUTSIDE_JOBS, resource);
 	}
 
 	/**
@@ -771,9 +817,11 @@ export class AsyncContextManager {
 	}
 
 	/**
-	 * Count an instance with the permission system on, installing the async hook that tells jobs apart for the first: a
-	 * job (a promise's reaction, a timer, an immediate, a microtask, an `AsyncResource`'s scope) made by code that
-	 * entered a flow by itself runs outside that flow, even when that code never touched slothlet there.
+	 * Count an instance, installing the async hook that tells jobs apart for the first: a job (a promise's reaction, a
+	 * timer, an immediate, a microtask, an `AsyncResource`'s scope) made by code that entered a flow by itself runs
+	 * outside that flow, even when that code never touched slothlet there, and one the flow's own code made keeps the
+	 * flow. A `run()` / `scope()` is isolated in every permission mode, so every instance counts. Outside every flow `init`
+	 * returns at once, and `before` / `after` only keep the stack of running callbacks.
 	 * @returns {void}
 	 * @internal
 	 */
@@ -802,7 +850,7 @@ export class AsyncContextManager {
 	}
 
 	/**
-	 * Uncount an instance with the permission system on, removing the async hook after the last.
+	 * Uncount an instance, removing the async hook after the last.
 	 * @returns {void}
 	 * @internal
 	 */
@@ -812,7 +860,7 @@ export class AsyncContextManager {
 		this.#jobHook = null;
 		this.#jobsMarked = false;
 		this.#runningJobs = [];
-		this.#jobStack = [];
+		this.#jobStack = jobStackList();
 		this.#lastTold = null;
 		jobHooks--;
 		Reflect.apply(HOOK_METHODS.disable, hook, []);
@@ -840,20 +888,22 @@ export class AsyncContextManager {
 			}
 			if (this.#telling) return;
 			if (store === undefined || store[FLOW_OF] !== undefined || !isFlow(store)) return;
-			if (MapMethods.get(this.instances, store.parentInstanceID ?? store.instanceID)?.__tellsJobs !== true) return;
+			if (!MapMethods.has(this.instances, store.parentInstanceID ?? store.instanceID)) return;
 			// Recorded for the resource's own callback: the store it is made in, or a scope anyone can enter.
-			const scope = type !== "PROMISE" && type !== "Microtask" && AsyncResource !== null && inheritsFrom(resource, AsyncResource);
-			WeakMapMethods.set(MADE_IN, resource, scope ? { __proto__: null, [SCOPE]: store } : store);
-			if (type === "PROMISE") WeakMapMethods.set(PROMISE_MADE_IN, resource, store);
-			else if (MapMethods.has(JOB_SLOTS, type)) {
-				const slot = MapMethods.get(JOB_SLOTS, type);
-				WeakMapMethods.set(JOB_CALLBACK, resource, { slot, fn: slot === null ? null : resource[slot] });
+			if (type === "PROMISE") new PromiseFlow(resource, store);
+			else {
+				const scope = type !== "Microtask" && AsyncResource !== null && inheritsFrom(resource, AsyncResource);
+				WeakMapMethods.set(MADE_IN, resource, scope ? { __proto__: null, [SCOPE]: store } : store);
+				if (MapMethods.has(JOB_SLOTS, type)) {
+					const slot = MapMethods.get(JOB_SLOTS, type);
+					WeakMapMethods.set(JOB_CALLBACK, resource, { slot, fn: slot === null ? null : resource[slot] });
+				}
 			}
 			if (this.store.entered() === store) return;
 			// The code running now runs in the store its callback was made in: the flow's own continuation (an await, a
 			// timer, a reaction). Anything else (a scope entered, a snapshot, a timer given another's context) is told.
 			const current = executionAsyncResource();
-			if (WeakMapMethods.get(MADE_IN, current) === store) return;
+			if (PromiseFlow.of(current) === store || WeakMapMethods.get(MADE_IN, current) === store) return;
 			const last = this.#lastTold;
 			let active;
 			if (last !== null && last.stretch === this.#stretch && last.store === store) active = last.active;
@@ -881,7 +931,8 @@ export class AsyncContextManager {
 	 */
 	#jobBegins() {
 		try {
-			listPush(this.#jobStack, executionAsyncResource());
+			const stack = this.#jobStack;
+			stack[stack.length] = executionAsyncResource();
 		} catch {
 			// Not kept: a scope it begins is told by its frames alone.
 		}
@@ -893,7 +944,7 @@ export class AsyncContextManager {
 	 */
 	#jobFinishes() {
 		const stack = this.#jobStack;
-		if (stack.length !== 0 && stack[stack.length - 1] === executionAsyncResource()) ArrayMethods.pop(stack);
+		if (stack.length !== 0 && stack[stack.length - 1] === executionAsyncResource()) stack.length--;
 	}
 
 	/**
@@ -913,7 +964,7 @@ export class AsyncContextManager {
 		if (index >= 0 && stack[index] === resource) index--;
 		const job = index >= 0 ? stack[index] : undefined;
 		if (job === null || typeof job !== "object" || WeakMapMethods.has(OUTSIDE_JOBS, job)) return false;
-		if (WeakMapMethods.get(PROMISE_MADE_IN, job) === store) return true;
+		if (PromiseFlow.of(job) === store) return true;
 		if (WeakMapMethods.get(MADE_IN, job) !== store) return false;
 		const made = WeakMapMethods.get(JOB_CALLBACK, job);
 		if (made === undefined) return false;
@@ -1110,16 +1161,9 @@ export class AsyncContextManager {
 		};
 
 		MapMethods.set(this.instances, instanceID, store);
-		// With permissions on, the jobs code that entered a flow by itself makes there are told apart for as long as the
-		// instance lives (see holdJobHook).
-		const permissions = config?.permissions;
-		if (
-			permissions &&
-			(permissions.mode === undefined || permissions.mode === true || permissions.mode === "on" || permissions.mode === "strict")
-		) {
-			Objects.defineProperty(store, "__tellsJobs", { __proto__: null, value: true, writable: true, enumerable: false });
-			this.holdJobHook();
-		}
+		// In every permission mode the jobs code that entered a flow by itself makes there are told apart for as long as
+		// the instance lives (see holdJobHook): a `run()` / `scope()` is isolated whether permissions are on or not.
+		this.holdJobHook();
 		return store;
 	}
 
@@ -1753,10 +1797,7 @@ export class AsyncContextManager {
 
 		// Remove from instances map
 		MapMethods.delete(this.instances, instanceID);
-		if (store.__tellsJobs === true) {
-			store.__tellsJobs = false;
-			this.releaseJobHook();
-		}
+		this.releaseJobHook();
 	}
 
 	/**

@@ -27,7 +27,9 @@
  *
  * Code that enters a flow by itself acts outside it: as the leaf it is, with the instance's own context. Code the flow
  * runs keeps it: the call's own code after an `await`, another module's function the call (or the host) calls, and
- * the call's own function run in its flow by a module holding the call's resource.
+ * the call's own function run in its flow by a module holding the call's resource. Context is isolated per run in
+ * every permission mode (no `permissions` config, `"off"`, `"disabled"`, `"on"`, `"strict"`); only the permission
+ * decisions depend on the mode.
  *
  * A child process runs each configuration, with Node's default async context and, where the Node running the suite has
  * the switch, with `AsyncContextFrame` off.
@@ -611,6 +613,8 @@ beforeAll(() => {
 		'\t\tawait Reflect.apply(reader, { mark: "this" }, ["afterAwait"]);',
 		"\t});",
 		'\tawait outside("outside");',
+		"\t// The function itself, read outside every run, called by the run's own code and awaited there.",
+		'\tout.asyncReaderRaw = await api.slothlet.context.run({ user: "root" }, () => outside("raw"));',
 		"\tout.asyncReaderSeen = shared.seen;",
 		"\tawait api.slothlet.shutdown();",
 		"}",
@@ -654,6 +658,7 @@ const FRAMES = process.allowedNodeEnvironmentFlags.has("--no-async-context-frame
 const CONFIGS = [
 	["no permissions config", "none", "provenance", "precise"],
 	["permissions off", "off", "provenance", "precise"],
+	["permissions disabled", "disabled", "provenance", "precise"],
 	["permissions on", "on", "provenance", "precise"],
 	["permissions on, attribution fast", "on", "provenance", "fast"],
 	["permissions on, provenance off", "on", "noprovenance", "precise"],
@@ -786,6 +791,11 @@ describe.each(FRAMES)("Permissions > a flow entered by module code itself > %s",
 			expect(result.asyncReaderPromise).toBe(true);
 		});
 
+		it("a module's async function read outside every run and called by the run's own code keeps the run after its awaits", () => {
+			expect(result.asyncReaderSeen.raw).toEqual(["root", "root", "root", null]);
+			expect(result.asyncReaderRaw).toEqual(["root", "root", "root", null]);
+		});
+
 		it("the async function is the same value in one run, shaped as itself, and outside every run sees no run", () => {
 			expect(result.asyncReaderSame).toBe(true);
 			expect(result.asyncReaderShape).toEqual(["function", "asyncReader", 1]);
@@ -794,15 +804,10 @@ describe.each(FRAMES)("Permissions > a flow entered by module code itself > %s",
 	});
 });
 
-// The permission-on configurations: with the permission system on, slothlet tells the async resources code that entered
-// a flow by itself makes there (an async hook), so a job it hands Node runs outside the flow even when the code never
-// touched slothlet inside it.
-const CHECKED_CONFIGS = [
-	["permissions on", "on", "provenance", "precise"],
-	["permissions on, attribution fast", "on", "provenance", "fast"],
-	["permissions on, provenance off", "on", "noprovenance", "precise"],
-	["permissions on, provenance off, attribution fast", "on", "noprovenance", "fast"]
-];
+// Every configuration: on the async runtime slothlet tells the async resources code that entered a flow by itself makes
+// there (an async hook, installed while any async instance lives, whatever its permission mode), so a job it hands Node
+// runs outside the flow even when the code never touched slothlet inside it, and a job the flow's own code hands Node
+// keeps the flow.
 
 // "strict" refuses to start without AsyncContextFrame (a baseline check): run only where Node has it on by default.
 const STRICT_CONFIG = ["permissions strict", "strict", "provenance", "precise"];
@@ -811,7 +816,7 @@ const framesOnByDefault = process.allowedNodeEnvironmentFlags.has("--no-async-co
 const HOWS = ["then", "timeout", "immediate", "microtask", "nested"];
 
 describe.each(FRAMES)("Permissions > jobs scheduled by module code that entered a flow by itself > %s", (_label, nodeFlags) => {
-	const configs = framesOnByDefault && nodeFlags.length === 0 ? [...CHECKED_CONFIGS, STRICT_CONFIG] : CHECKED_CONFIGS;
+	const configs = framesOnByDefault && nodeFlags.length === 0 ? [...CONFIGS, STRICT_CONFIG] : CONFIGS;
 	describe.each(configs)("%s", (_name, mode, provenance, attribution) => {
 		let result;
 
@@ -823,7 +828,7 @@ describe.each(FRAMES)("Permissions > jobs scheduled by module code that entered 
 			for (const route of ["hostResourceSchedule", "hostSnapshotSchedule", "hostTimerSchedule", "hostResourceBindInside"]) {
 				expect([route, result[route + ":" + how]]).toEqual([route, [null]]);
 			}
-			expect(result.mode).toBe(mode);
+			expect(result.mode).toBe(mode === "none" ? null : mode);
 		});
 
 		it.each(HOWS)("an api node handed to Node (%s) from inside another request's call runs outside that request", (how) => {
@@ -861,7 +866,7 @@ describe.each(FRAMES)("Permissions > jobs scheduled by module code that entered 
 	});
 });
 
-describe("Permissions > the async hook that tells jobs apart is installed only while permissions are on", () => {
+describe("Permissions > the async hook that tells jobs apart is installed while any async instance lives", () => {
 	const instances = [];
 	const make = async (permissions) => {
 		const config = { base: path.join(ROOT, "api"), silent: true, runtime: "async" };
@@ -875,24 +880,44 @@ describe("Permissions > the async hook that tells jobs apart is installed only w
 		while (instances.length) await instances.pop().slothlet.shutdown();
 	});
 
-	it("no permissions config, permissions off and disabled install no hook", async () => {
+	it.each([
+		["no permissions config", undefined],
+		["permissions off", { mode: "off" }],
+		["permissions disabled", { mode: "disabled" }],
+		["permissions on", { mode: "on" }]
+	])("%s: one hook for every async instance, removed after the last shuts down", async (_name, permissions) => {
+		// Zero unless another async instance of this worker is still alive: at most one hook per process.
+		const base = jobHookCount();
+		expect(base).toBeLessThanOrEqual(1);
+		const first = await make(permissions);
+		expect(jobHookCount()).toBe(1);
+		await make(permissions);
+		expect(jobHookCount()).toBe(1);
+		await first.slothlet.shutdown();
+		instances.splice(instances.indexOf(first), 1);
+		expect(jobHookCount()).toBe(1);
+		await instances.pop().slothlet.shutdown();
+		expect(jobHookCount()).toBe(base);
+	});
+
+	it("instances of every permission mode share the one hook", async () => {
 		const base = jobHookCount();
 		await make();
 		await make({ mode: "off" });
 		await make({ mode: "disabled" });
+		await make({ mode: "on" });
+		expect(jobHookCount()).toBe(1);
+		while (instances.length) await instances.pop().slothlet.shutdown();
 		expect(jobHookCount()).toBe(base);
 	});
 
-	it("permissions on installs one hook for every instance, removed after the last shuts down", async () => {
+	it("a live-runtime instance installs no hook", async () => {
 		const base = jobHookCount();
-		const first = await make({ mode: "on" });
-		expect(jobHookCount()).toBe(base === 0 ? 1 : base);
-		await make({ mode: "on" });
-		expect(jobHookCount()).toBe(base === 0 ? 1 : base);
-		await first.slothlet.shutdown();
-		instances.splice(instances.indexOf(first), 1);
-		expect(jobHookCount()).toBe(base === 0 ? 1 : base);
-		await instances.pop().slothlet.shutdown();
-		expect(jobHookCount()).toBe(base);
+		const api = await slothlet({ base: path.join(ROOT, "api"), silent: true, runtime: "live" });
+		try {
+			expect(jobHookCount()).toBe(base);
+		} finally {
+			await api.slothlet.shutdown();
+		}
 	});
 });
