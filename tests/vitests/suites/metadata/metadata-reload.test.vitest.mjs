@@ -378,14 +378,14 @@ describe.each(getMatrixConfigs())("Metadata Hot Reload > Config: '$name'", ({ co
 			expect(metaAfter.version).toBe("2.0.0");
 		});
 
-		it("should preserve global metadata set via api.slothlet.metadata.setGlobal() after reload", async () => {
+		it("should preserve global metadata set via api.slothlet.metadata.global() after reload", async () => {
 			if (!api.slothlet?.reload) {
 				return;
 			}
 
 			// Set global metadata
-			api.slothlet.metadata.setGlobal("appVersion", "3.0.0");
-			api.slothlet.metadata.setGlobal("environment", "test");
+			api.slothlet.metadata.global("appVersion", "3.0.0");
+			api.slothlet.metadata.global("environment", "test");
 
 			await materialize(api, "rootMath.add", 1, 2);
 			expect(api.rootMath.add.__metadata.appVersion).toBe("3.0.0");

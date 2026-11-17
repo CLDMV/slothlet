@@ -276,8 +276,8 @@ describe.each(CONFIGS)("Permissions > rule specificity (#770) > an instance > $m
 			for (const order of orderings([rule("payments.**", "allow", "callers.**"), rule("payments.charge.**", "deny", "callers.**")])) {
 				await load(order, attribution);
 				expect(await charge()).toBe("PERMISSION_DENIED");
-				expect(api.slothlet.permissions.global.checkAccess("callers.paymentsCaller.callCharge", "payments.charge.process")).toBe(false);
-				expect(api.slothlet.permissions.global.checkAccess("callers.paymentsCaller.callCharge", "payments.webhook.handleWebhook")).toBe(
+				expect(api.slothlet.permissions.global.check.access("callers.paymentsCaller.callCharge", "payments.charge.process")).toBe(false);
+				expect(api.slothlet.permissions.global.check.access("callers.paymentsCaller.callCharge", "payments.webhook.handleWebhook")).toBe(
 					true
 				);
 				await api.shutdown();
@@ -289,7 +289,7 @@ describe.each(CONFIGS)("Permissions > rule specificity (#770) > an instance > $m
 			for (const order of orderings([rule("payments.**", "deny", "callers.**"), rule("payments.charge.**", "allow", "callers.**")])) {
 				await load(order, attribution);
 				expect(await charge()).toBe("allowed");
-				expect(api.slothlet.permissions.global.checkAccess("callers.paymentsCaller.callCharge", "payments.webhook.handleWebhook")).toBe(
+				expect(api.slothlet.permissions.global.check.access("callers.paymentsCaller.callCharge", "payments.webhook.handleWebhook")).toBe(
 					false
 				);
 				await api.shutdown();
@@ -299,12 +299,12 @@ describe.each(CONFIGS)("Permissions > rule specificity (#770) > an instance > $m
 
 		it("lets a narrower rule added at runtime win over a broader one in the config, and the reverse by layer at a tie", async () => {
 			await load([rule("payments.charge.**", "allow", "callers.**")], attribution);
-			const broad = api.slothlet.permissions.addRule(rule("payments.**", "deny", "callers.**"));
+			const broad = api.slothlet.permissions.rules.add(rule("payments.**", "deny", "callers.**"));
 			expect(await charge()).toBe("allowed");
-			api.slothlet.permissions.removeRule(broad);
-			const equal = api.slothlet.permissions.addRule(rule("payments.charge.**", "deny", "callers.**"));
+			api.slothlet.permissions.rules.remove(broad);
+			const equal = api.slothlet.permissions.rules.add(rule("payments.charge.**", "deny", "callers.**"));
 			expect(await charge()).toBe("PERMISSION_DENIED");
-			api.slothlet.permissions.removeRule(equal);
+			api.slothlet.permissions.rules.remove(equal);
 			expect(await charge()).toBe("allowed");
 		});
 	});

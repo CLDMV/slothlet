@@ -18,7 +18,7 @@
  * that call, as the host's own code anywhere else does (#714).
  * @description
  * rummage creates its slothlet instance from `node_modules/@cldmv/rummage/src/ext-host/api-tree.mjs` and hands each
- * extension a context whose closures (`ctx.commands.register` pinning a handler with `lockCaller`, `slothlet.metadata`
+ * extension a context whose closures (`ctx.commands.register` pinning a handler with `pin`, `slothlet.metadata`
  * and `slothlet.event` calls, `host.*` leaves) are written in other files of the same package. The extension's
  * `activate` calls them, so the host's code runs inside the module's call. rummage's files are loaded before slothlet,
  * so slothlet's loader recorded no importer for them.
@@ -26,7 +26,7 @@
  * The fixture mirrors that: `owner-host` (under `node_modules`, loaded before slothlet) creates the instance and builds
  * the context in its `context.mjs`. Its code runs as the module whose call it is in, as docs/PERMISSIONS.md ("Code passed
  * by routes slothlet does not see") gives a file no module loaded — the host's own, running its own source — so
- * `lockCaller`, `metadata`, `event` and the host leaf are reached. Two things stay refused: `stranger-pkg`, a package that did not create the instance and that no module
+ * `pin`, `metadata`, `event` and the host leaf are reached. Two things stay refused: `stranger-pkg`, a package that did not create the instance and that no module
  * imports, building the same closures; and the owner's closures compiled again under the owner file's name from
  * another source.
  *
@@ -45,7 +45,7 @@ const CALLS = ["pin", "meta", "emit", "hostLeaf"];
 
 /**
  * What each call of the context gives when the host's code runs as the module's call: `ext.a.activate` may call
- * `lockCaller`, `metadata` and `event` (built-in allows) and the host leaf (the fixture's rule), and `metadata.caller()`
+ * `pin`, `metadata` and `event` (built-in allows) and the host leaf (the fixture's rule), and `metadata.caller()`
  * inside it is the host, which has no caller path.
  */
 const HOST_ANSWERS = {

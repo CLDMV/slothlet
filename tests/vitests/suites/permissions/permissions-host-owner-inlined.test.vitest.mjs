@@ -23,7 +23,7 @@
  * suites (`permissions-host-owner-code`, `permissions-host-owner-calls`) assert it, lazy equal to eager, in both
  * runtimes ("Where the source cannot be checked": slothlet reads vitest's records once, when it loads, and never again):
  *
- * - the context the owner package hands a module (`lockCaller`, `metadata`, `event`, a host leaf) is reached: the
+ * - the context the owner package hands a module (`pin`, `metadata`, `event`, a host leaf) is reached: the
  *   host's own file running its own source runs as the module's call ("Code passed by routes slothlet does not see");
  * - the host record leaf's own body, handed a callback, runs as the leaf; only the code the caller hands in runs as the
  *   caller ("Code a caller hands to a leaf runs as the caller"), so the store partition `host.records.**` may open is

@@ -15,14 +15,14 @@
 
 /**
  * @fileoverview `api.slothlet.caller()` — the current caller's ambient api path (self-identity), the
- * grow-side counterpart of `event.resolveLevel`. A cross-boundary event-forwarding layer reads it to
+ * grow-side counterpart of `event.level`. A cross-boundary event-forwarding layer reads it to
  * attribute a far subscription to the subscribing module's REAL identity rather than trusting a
  * caller-supplied one.
  *
  * @description
  * Exercises: the host short-circuit (`null`), a module reading its own dotted path, that it is ungated
  * (a module may read its own identity), and — the load-bearing property — that `caller()` reports the
- * SAME identity `event.on` attributes a subscription to, so `resolveLevel(caller(), evt)` equals the
+ * SAME identity `event.on` attributes a subscription to, so `event.level(caller(), evt)` equals the
  * level an actual subscription at that identity is granted. Across the full eager/lazy × async/live matrix.
  *
  * @module tests/vitests/suites/events/event-caller-identity.test.vitest
@@ -52,7 +52,7 @@ describe.each(getMatrixConfigs())("Events > caller() self-identity > $name", ({ 
 		expect(await api.whoami.here()).toBe("whoami.here");
 	});
 
-	it("reports the identity event.on attributes the subscription to — resolveLevel(caller(), evt) matches the granted level", async () => {
+	it("reports the identity event.on attributes the subscription to — event.level(caller(), evt) matches the granted level", async () => {
 		api = await slothlet({
 			...config,
 			base: BASE,
@@ -65,10 +65,10 @@ describe.each(getMatrixConfigs())("Events > caller() self-identity > $name", ({ 
 		expect(identity).toBe("whoami.subscribeAndReport"); // the leaf's own path
 		expect(level).toBe("allow"); // whoami.** granted allow for orders.*
 		// The host-side resolver, given that identity, agrees with the level the live subscription was granted.
-		expect(api.slothlet.event.resolveLevel(identity, "orders.created")).toBe(level);
+		expect(api.slothlet.event.level(identity, "orders.created")).toBe(level);
 	});
 
-	it("tracks a rule that would downgrade the same identity — resolveLevel stays in agreement", async () => {
+	it("tracks a rule that would downgrade the same identity — event.level stays in agreement", async () => {
 		api = await slothlet({
 			...config,
 			base: BASE,
@@ -79,6 +79,6 @@ describe.each(getMatrixConfigs())("Events > caller() self-identity > $name", ({ 
 		});
 		const { identity, level } = await api.whoami.subscribeAndReport("secret.data");
 		expect(level).toBe("deny"); // subscription refused
-		expect(api.slothlet.event.resolveLevel(identity, "secret.data")).toBe("deny");
+		expect(api.slothlet.event.level(identity, "secret.data")).toBe("deny");
 	});
 });

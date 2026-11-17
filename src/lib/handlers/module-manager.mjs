@@ -56,7 +56,9 @@ import {
 	promiseAll,
 	RegExpMethods,
 	regExpSplit,
-	String
+	String,
+	WeakSet,
+	WeakSetMethods
 } from "#helpers/intrinsics";
 const { runtime_selfModuleReader } = unifiedWrapperInternals("lib/handlers/module-manager");
 
@@ -73,6 +75,25 @@ const { runtime_selfModuleReader } = unifiedWrapperInternals("lib/handlers/modul
  * @type {string}
  */
 const DEFAULT_MODULE_COLLISION_MODE = "merge";
+
+/**
+ * Every discover result slothlet handed out. `modules.add()` takes one of these back as a module to mount and
+ * reads any other object as options, so a result is told apart by where it came from, never by its shape.
+ * @type {WeakSet<object>}
+ */
+const DISCOVER_RESULTS = new WeakSet();
+
+/**
+ * Whether `value` is a discover result slothlet itself returned (from `discover()` or the discovery cache).
+ * @param {unknown} value - Any value.
+ * @returns {boolean} True for a result slothlet created.
+ * @example
+ * isDiscoverResult((await api.slothlet.api.modules.discover())[0]); // true
+ * isDiscoverResult({ packageName: "x" }); // false
+ */
+export function isDiscoverResult(value) {
+	return value !== null && typeof value === "object" && WeakSetMethods.has(DISCOVER_RESULTS, value);
+}
 
 /**
  * @typedef {import("../helpers/module-discovery.mjs").DiscoverResult} DiscoverResult
@@ -162,9 +183,9 @@ export class ModuleManager extends ComponentBase {
 	 */
 	async discover(options = {}) {
 		// Discovery walks the filesystem for module packages, which a browser does not have: refuse it by name
-		// rather than fail on a missing Node builtin (#817). addDiscovered() and addModule(name) run it too.
+		// rather than fail on a missing Node builtin (#817). modules.add() with no target and modules.add(name) run it too.
 		if (this.slothlet.envTarget === "browser") {
-			throw new SlothletError("MODULE_DISCOVERY_REQUIRES_NODE", { operation: "api.slothlet.api.modules.discover()" }, null, {
+			throw new SlothletError("MODULE_DISCOVERY_REQUIRES_NODE", { operation: ["slothlet", "api", "modules", "discover"] }, null, {
 				validationError: true
 			});
 		}
@@ -177,6 +198,7 @@ export class ModuleManager extends ComponentBase {
 		MapMethods.clear(this.#cache);
 		for (let ofIndex = 0, ofList = found; ofIndex < ofList.length; ofIndex++) {
 			const result = ofList[ofIndex];
+			WeakSetMethods.add(DISCOVER_RESULTS, result);
 			const key = `${result.packageName}@${result.manifest.version}`;
 			MapMethods.set(this.#cache, key, result);
 		}
@@ -391,15 +413,15 @@ export class ModuleManager extends ComponentBase {
 	 * @private
 	 */
 	async #resolveToDiscoverResult(arg, options) {
-		if (arg && typeof arg === "object" && typeof arg.packageName === "string") {
+		if (isDiscoverResult(arg)) {
 			return arg;
 		}
 		if (typeof arg !== "string") {
 			throw new SlothletError(
 				"INVALID_ARGUMENT",
 				{
-					argument: "module name or DiscoverResult",
-					expected: "string or DiscoverResult object",
+					argument: "module name or discover result",
+					expected: "a package name, or a result discover() returned",
 					received: typeof arg
 				},
 				null,
@@ -423,7 +445,7 @@ export class ModuleManager extends ComponentBase {
 				"MODULE_PACKAGE_NOT_FOUND",
 				{
 					packageName: arg,
-					hint: "addModule(name) requires the package to be installed under one of the scanned roots. Run discover() first, or pass a DiscoverResult object directly."
+					hint: "modules.add(name) needs the package installed under one of the scanned roots. Run discover() first, or pass a result discover() returned."
 				},
 				null,
 				{ validationError: true }

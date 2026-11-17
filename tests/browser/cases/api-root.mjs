@@ -20,7 +20,7 @@
  * @description
  * Each root (a folder of files, one whose root file's default export is a function, one whose is an async function)
  * is the api and is mounted again at `zz`, so the root has a twin one level down; a `writer` module mounted at `w` owns
- * neither. A module's change through the api the host handed it or `self.slothlet.diag.getAPI()` answers at the root
+ * neither. A module's change through the api the host handed it or `self.slothlet.diag.api()` answers at the root
  * as at the twin; closing the root is refused to it. The host's own changes answer as on a plain object. Eager and
  * lazy mode, the async and live runtime, both attributions, with and without write rules granting the members.
  * @module tests/browser/cases/api-root

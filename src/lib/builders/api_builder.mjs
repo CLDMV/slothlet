@@ -34,6 +34,7 @@ import { isNode, AsyncResource, loadJson } from "#helpers/platform";
 import { ComponentBase } from "#factories/component-base";
 import { TYPE_STATES, isCallableValue, internals as unifiedWrapperInternals } from "#handlers/unified-wrapper";
 import { DELIVERY_REASONS } from "#handlers/event-manager";
+import { isDiscoverResult } from "#handlers/module-manager";
 import { internals as framePlacementInternals } from "#handlers/frame-placement";
 import { internals as frameworkInternalsInternals } from "#handlers/framework-internals";
 import { ceilingMembers, combineCeilings, identityCeilings, internals as trustedRootInternals } from "#handlers/trusted-root";
@@ -141,7 +142,7 @@ const SELF_FRAMEWORK_ROOT_KEYS = setFrom(["slothlet", "shutdown", "destroy"]);
 // Rule 21 (B01): Reserved root keys protected (slothlet/shutdown/destroy) — ~L271 / ~L260
 // Rule 21 (B02): slothlet.diag namespace gated by config.diagnostics — ~L3144
 // Rule 21 (B03): api.add() locks caller collision options — ~L785
-// Rule 21 (B04): versioning.unregister unknown tag → no-op — ~L2678
+// Rule 21 (B04): versioning.remove unknown tag → no-op — ~L2678
 
 function _resolvePathOrModuleId(slothlet, pathOrModuleId) {
 	const history = slothlet.handlers?.apiManager?.state?.addHistory;
@@ -505,7 +506,7 @@ export class ApiBuilder extends ComponentBase {
 		// Strip any previously-attached slothlet builtins from userApi before checking for user hooks.
 		// When the API root is a function module (e.g. a root-function.mjs default export), the mode
 		// builder may return the SAME function object on successive calls if the ESM module cache is
-		// not busted (e.g. keepInstanceID reload keeps the same instanceID query param, so Node's ESM
+		// not busted (e.g. a reload with instance: "keep" keeps the same instanceID query param, so Node's ESM
 		// loader serves the cached module). That function still carries shutdown/slothlet/destroy from
 		// the previous buildFinalAPI invocation. Without stripping them we'd mistake our own builtins
 		// for user-provided lifecycle hooks, creating infinite recursion in createShutdownFunction.
@@ -605,7 +606,7 @@ export class ApiBuilder extends ComponentBase {
 		});
 
 		// Save references to our own builtin functions so the next buildFinalAPI call
-		// (e.g. on a keepInstanceID reload) can distinguish them from user-exported functions.
+		// (e.g. on a reload with instance: "keep") can distinguish them from user-exported functions.
 		this.slothlet._ownBuiltins = {
 			shutdown: shutdownFn,
 			slothlet: slothletNamespace,
@@ -647,7 +648,7 @@ export class ApiBuilder extends ComponentBase {
 		 *   for the host.
 		 * @throws {SlothletError} When the current caller is denied access to `targetPath`.
 		 * @example
-		 * enforceInternalPermission("slothlet.permissions.addRule");
+		 * enforceInternalPermission("slothlet.permissions.rules.add");
 		 */
 		const enforceInternalPermission = (targetPath) => {
 			const ctx = slothlet.contextManager?.tryGetContext?.(slothlet.instanceID);
@@ -846,7 +847,7 @@ export class ApiBuilder extends ComponentBase {
 		 * Called by the module that read it, as it normally is, it runs exactly as before.
 		 *
 		 * The host reads functions as they are. Properties read off a captured function are read as the module
-		 * reading them, so `lockCaller.caller` taken from a captured `lockCaller` is captured too.
+		 * reading them, so `pin.caller` taken from a captured `pin` is captured too.
 		 *
 		 * @param {*} value - A value the namespace proxy is returning.
 		 * @param {object|null|undefined} identity - Who read it.
@@ -896,7 +897,7 @@ export class ApiBuilder extends ComponentBase {
 				);
 			};
 			// A target of its own: the function's own properties include ones a Proxy of it would have to report as they
-			// are (`lockCaller.caller`), and a captured reader's has to be handed out instead. The shell is the same kind of
+			// are (`pin.caller`), and a captured reader's has to be handed out instead. The shell is the same kind of
 			// function as the one it captures, so what a Proxy has to report from its target agrees with the function: a
 			// plain function when it has its own `prototype`, a bound one (constructible, with none) when it can be
 			// constructed without one, and an arrow otherwise.
@@ -1327,7 +1328,7 @@ export class ApiBuilder extends ComponentBase {
 					return filterList(keys, (prop) => {
 						const descriptor = Reflect.getOwnPropertyDescriptor(target, prop);
 						if (!descriptor?.configurable) return true;
-						// A member named like a function's own (`slothlet.caller`, `lockCaller.caller`) is described only to a reader
+						// A member named like a function's own (`slothlet.caller`, `pin.caller`) is described only to a reader
 						// that may read it (see getOwnPropertyDescriptor), so it is listed only to that reader.
 						if (isMetaProperty(prop)) {
 							try {
@@ -1614,7 +1615,7 @@ export class ApiBuilder extends ComponentBase {
 					// Check if add mutation is allowed
 					if (!config.api?.mutations?.add) {
 						throw new slothlet.SlothletError("INVALID_CONFIG_MUTATIONS_DISABLED", {
-							operation: "api.add",
+							operation: ["slothlet", "api", "add"],
 							validationError: true
 						});
 					}
@@ -1697,7 +1698,7 @@ export class ApiBuilder extends ComponentBase {
 					// Check if remove mutation is allowed
 					if (!config.api?.mutations?.remove) {
 						throw new slothlet.SlothletError("INVALID_CONFIG_MUTATIONS_DISABLED", {
-							operation: "api.remove",
+							operation: ["slothlet", "api", "remove"],
 							validationError: true
 						});
 					}
@@ -2091,7 +2092,7 @@ export class ApiBuilder extends ComponentBase {
 					// Check if reload mutation is allowed
 					if (!config.api?.mutations?.reload) {
 						throw new slothlet.SlothletError("INVALID_CONFIG_MUTATIONS_DISABLED", {
-							operation: "api.reload",
+							operation: ["slothlet", "api", "reload"],
 							validationError: true
 						});
 					}
@@ -2180,32 +2181,51 @@ export class ApiBuilder extends ComponentBase {
 					},
 
 					/**
-					 * @param {string|import("../helpers/module-discovery.mjs").DiscoverResult} nameOrResult
-					 * @param {import("../handlers/module-manager.mjs").AddModuleOptions} [options]
+					 * Mount modules. The target says which:
+					 * - a package name, or a result `discover()` / `cache.get()` returned: mounts that one module;
+					 * - an array of those: mounts the batch;
+					 * - nothing (or only an options object): runs `discover()`, `sort()` and mounts every result.
+					 * Only results slothlet itself returned count as a result; any other object is the options.
+					 * @param {string|import("../helpers/module-discovery.mjs").DiscoverResult|Array<string|import("../helpers/module-discovery.mjs").DiscoverResult>|object} [target]
+					 * @param {object} [options] - `collisionMode`, `version` (one module), `onFailure` and `concurrency` (a batch or a
+					 *   discover run), `discover` (the discover options) and `sort` (a comparator, discover run only).
+					 * @returns {Promise<*>} The mount result (one module) or the batch result.
+					 * @example
+					 * await api.slothlet.api.modules.add("@org/driver");
+					 * await api.slothlet.api.modules.add(["@org/a", "@org/b"], { concurrency: 2 });
+					 * await api.slothlet.api.modules.add({ discover: { prefix: "@org/" } });
 					 */
-					addModule: async function slothlet_modules_addModule(nameOrResult, options) {
+					add: async function slothlet_modules_add(target, options) {
 						if (!config.api?.mutations?.add) {
 							throw new slothlet.SlothletError("INVALID_CONFIG_MUTATIONS_DISABLED", {
-								operation: "api.modules.addModule",
+								operation: ["slothlet", "api", "modules", "add"],
 								validationError: true
 							});
 						}
 						// The calling module, read before any await (#625): see ModuleManager#addModule.
-						return slothlet.handlers.moduleManager.addModule(nameOrResult, options, runtime_selfModuleReader(slothlet));
-					},
-
-					/**
-					 * @param {Array<string|import("../helpers/module-discovery.mjs").DiscoverResult>} items
-					 * @param {import("../handlers/module-manager.mjs").AddModulesOptions} [options]
-					 */
-					addModules: async function slothlet_modules_addModules(items, options) {
-						if (!config.api?.mutations?.add) {
-							throw new slothlet.SlothletError("INVALID_CONFIG_MUTATIONS_DISABLED", {
-								operation: "api.modules.addModules",
-								validationError: true
-							});
+						const writer = runtime_selfModuleReader(slothlet);
+						const manager = slothlet.handlers.moduleManager;
+						// One argument that is a plain object slothlet did not return is the options of a discover run.
+						if (target !== null && typeof target === "object" && !Arrays.isArray(target) && !isDiscoverResult(target)) {
+							if (options !== undefined) {
+								throw new slothlet.SlothletError("INVALID_ARGUMENT", {
+									argument: "target",
+									expected: "module name, discover result or array of them",
+									received: "object",
+									validationError: true
+								});
+							}
+							options = target;
+							target = undefined;
 						}
-						return slothlet.handlers.moduleManager.addModules(items, options, runtime_selfModuleReader(slothlet));
+						if (target === undefined || target === null) {
+							const { sort: comparator, discover: discoverOptions, collisionMode, onFailure, concurrency } = options ?? {};
+							const found = await manager.discover(discoverOptions ?? {});
+							const ordered = manager.sort(found, comparator);
+							return manager.addModules(ordered, { collisionMode, onFailure, concurrency }, writer);
+						}
+						if (Arrays.isArray(target)) return manager.addModules(target, options, writer);
+						return manager.addModule(target, options, writer);
 					},
 
 					/**
@@ -2213,10 +2233,10 @@ export class ApiBuilder extends ComponentBase {
 					 * @param {{version?: string}} [opts]
 					 * @returns {Promise<boolean>}
 					 */
-					removeModule: async function slothlet_modules_removeModule(name, opts) {
+					remove: async function slothlet_modules_remove(name, opts) {
 						if (!config.api?.mutations?.remove) {
 							throw new slothlet.SlothletError("INVALID_CONFIG_MUTATIONS_DISABLED", {
-								operation: "api.modules.removeModule",
+								operation: ["slothlet", "api", "modules", "remove"],
 								validationError: true
 							});
 						}
@@ -2225,44 +2245,30 @@ export class ApiBuilder extends ComponentBase {
 					},
 
 					/**
-					 * Convenience: chain discover() → sort() → addModules() in one call.
-					 * Forwards `sort` option as the comparator and the rest as the discover/addModules options.
-					 * @param {import("../helpers/module-discovery.mjs").DiscoverOptions & import("../handlers/module-manager.mjs").AddModulesOptions & {sort?: (a, b) => number}} [options]
+					 * The discovery cache: what the last `discover()` found.
+					 * @type {object}
 					 */
-					addDiscovered: async function slothlet_modules_addDiscovered(options = {}) {
-						if (!config.api?.mutations?.add) {
-							throw new slothlet.SlothletError("INVALID_CONFIG_MUTATIONS_DISABLED", {
-								operation: "api.modules.addDiscovered",
-								validationError: true
-							});
+					cache: {
+						/**
+						 * @returns {import("../helpers/module-discovery.mjs").DiscoverResult[]} Snapshot of the current discovery cache.
+						 */
+						get: function slothlet_modules_cache_get() {
+							return slothlet.handlers.moduleManager.getDiscoveryCache();
+						},
+
+						/**
+						 * Empty the discovery cache. Does not unmount any modules.
+						 * @returns {void}
+						 */
+						clear: function slothlet_modules_cache_clear() {
+							return slothlet.handlers.moduleManager.clearDiscoveryCache();
 						}
-						const { sort: comparator, collisionMode, onFailure, concurrency, ...discoverOptions } = options;
-						// The calling module, read before the discovery's await loses it (#625).
-						const writer = runtime_selfModuleReader(slothlet);
-						const found = await slothlet.handlers.moduleManager.discover(discoverOptions);
-						const ordered = slothlet.handlers.moduleManager.sort(found, comparator);
-						return slothlet.handlers.moduleManager.addModules(ordered, { collisionMode, onFailure, concurrency }, writer);
-					},
-
-					/**
-					 * @returns {import("../helpers/module-discovery.mjs").DiscoverResult[]} Snapshot of the current discovery cache.
-					 */
-					getDiscoveryCache: function slothlet_modules_getDiscoveryCache() {
-						return slothlet.handlers.moduleManager.getDiscoveryCache();
-					},
-
-					/**
-					 * Clear the discovery cache. Does not unmount any modules.
-					 * @returns {void}
-					 */
-					clearDiscoveryCache: function slothlet_modules_clearDiscoveryCache() {
-						return slothlet.handlers.moduleManager.clearDiscoveryCache();
 					},
 
 					/**
 					 * @returns {import("../handlers/module-manager.mjs").MountResult[]} Mounts whose package+version no longer appears in the discovery cache (S3b).
 					 */
-					getStaleMounts: function slothlet_modules_getStaleMounts() {
+					stale: function slothlet_modules_stale() {
 						return slothlet.handlers.moduleManager.getStaleMounts();
 					}
 				}
@@ -2308,7 +2314,7 @@ export class ApiBuilder extends ComponentBase {
 			 * ambient when they fire. A `self.*` call inside such a callback is then attributed
 			 * to the wrong module and permission rules keyed to the registering module fail.
 			 *
-			 * `lockCaller` captures the registering module's `currentWrapper` at call time and,
+			 * `pin` captures the registering module's `currentWrapper` at call time and,
 			 * on every invocation of the returned wrapper, overrides **only** the caller
 			 * identity on the live context store. The request-scoped context set later in the
 			 * lifecycle stays live and visible; `self` stays the live proxy. This is
@@ -2316,7 +2322,7 @@ export class ApiBuilder extends ComponentBase {
 			 * async context.
 			 *
 			 * Called with no active context (no module wrapper to capture) it is a no-op
-			 * passthrough — `lockCaller` is meaningful only when called from inside a module
+			 * passthrough — `pin` is meaningful only when called from inside a module
 			 * (during `init()` or a request).
 			 *
 			 * Errors thrown by `fn` propagate unchanged — the original error type, `code`,
@@ -2337,9 +2343,9 @@ export class ApiBuilder extends ComponentBase {
 			 * @example
 			 * // Inside a module's init(): pin caller identity onto a Fastify hook.
 			 * // Async hook → use async runtime mode so identity survives awaits.
-			 * server.addHook("onRequest", self.slothlet.lockCaller(handler));
+			 * server.addHook("onRequest", self.slothlet.pin(handler));
 			 */
-			lockCaller: function slothlet_lockCaller(fn) {
+			pin: function slothlet_pin(fn) {
 				if (typeof fn !== "function") {
 					throw new slothlet.SlothletError("INVALID_ARGUMENT", {
 						argument: "fn",
@@ -2349,7 +2355,7 @@ export class ApiBuilder extends ComponentBase {
 					});
 				}
 				// Capture the registering module's identity now (null when called outside a module).
-				// Resolved per flow: the whole point of lockCaller is to pin *this* module, so reading
+				// Resolved per flow: the whole point of pin is to pin *this* module, so reading
 				// the live runtime's shared field could pin whichever module happened to enter last.
 				// Scoped to this instance, as enforcement is: with another instance in flight the live
 				// runtime's shared active-instance field can name that one instead (#592).
@@ -2384,7 +2390,7 @@ export class ApiBuilder extends ComponentBase {
 			 * @public
 			 *
 			 * @description
-			 * Convenience re-export of Node's `AsyncResource.bind`. Unlike {@link lockCaller},
+			 * Convenience re-export of Node's `AsyncResource.bind`. Unlike {@link pin},
 			 * which overrides only the caller identity and leaves the request-scoped context
 			 * live, `bind` freezes the **entire** async context captured at registration time —
 			 * every `AsyncLocalStorage`, including slothlet's caller and request context.
@@ -2723,53 +2729,59 @@ export class ApiBuilder extends ComponentBase {
 				},
 
 				/**
-				 * Restrict hook execution to an API path pattern at runtime (global path filter).
-				 * Unlike enable/disable (which toggle individual registered hooks), this narrows
-				 * which API paths the hook system applies to — the runtime form of `hook.pattern`.
-				 * @param {string} pattern - Glob path pattern to restrict execution to (e.g. "math.*").
-				 * @returns {number} Number of patterns now in the active filter.
-				 * @public
-				 *
-				 * @example
-				 * api.slothlet.hook.enablePattern("database.*"); // only intercept database.* paths
+				 * The runtime global path filter: which api paths the hook system applies to.
+				 * @type {object}
 				 */
-				enablePattern: function slothlet_hook_enablePattern(pattern) {
-					if (!slothlet.handlers?.hookManager) {
-						throw new slothlet.SlothletError("HOOKS_NOT_INITIALIZED", { validationError: true });
-					}
-					return slothlet.handlers.hookManager.enablePattern(pattern);
-				},
+				pattern: {
+					/**
+					 * Restrict hook execution to an API path pattern at runtime (global path filter).
+					 * Unlike enable/disable (which toggle individual registered hooks), this narrows
+					 * which API paths the hook system applies to — the runtime form of `hook.pattern`.
+					 * @param {string} pattern - Glob path pattern to restrict execution to (e.g. "math.*").
+					 * @returns {number} Number of patterns now in the active filter.
+					 * @public
+					 *
+					 * @example
+					 * api.slothlet.hook.pattern.enable("database.*"); // only intercept database.* paths
+					 */
+					enable: function slothlet_hook_pattern_enable(pattern) {
+						if (!slothlet.handlers?.hookManager) {
+							throw new slothlet.SlothletError("HOOKS_NOT_INITIALIZED", { validationError: true });
+						}
+						return slothlet.handlers.hookManager.enablePattern(pattern);
+					},
 
-				/**
-				 * Remove a path pattern from the runtime global path filter. When the last pattern
-				 * is removed the filter deactivates and hooks apply to every path again.
-				 * @param {string} pattern - The previously-enabled path pattern to remove.
-				 * @returns {number} Number of patterns remaining in the filter.
-				 * @public
-				 *
-				 * @example
-				 * api.slothlet.hook.disablePattern("database.*");
-				 */
-				disablePattern: function slothlet_hook_disablePattern(pattern) {
-					if (!slothlet.handlers?.hookManager) {
-						throw new slothlet.SlothletError("HOOKS_NOT_INITIALIZED", { validationError: true });
-					}
-					return slothlet.handlers.hookManager.disablePattern(pattern);
-				},
+					/**
+					 * Remove a path pattern from the runtime global path filter. When the last pattern
+					 * is removed the filter deactivates and hooks apply to every path again.
+					 * @param {string} pattern - The previously-enabled path pattern to remove.
+					 * @returns {number} Number of patterns remaining in the filter.
+					 * @public
+					 *
+					 * @example
+					 * api.slothlet.hook.pattern.disable("database.*");
+					 */
+					disable: function slothlet_hook_pattern_disable(pattern) {
+						if (!slothlet.handlers?.hookManager) {
+							throw new slothlet.SlothletError("HOOKS_NOT_INITIALIZED", { validationError: true });
+						}
+						return slothlet.handlers.hookManager.disablePattern(pattern);
+					},
 
-				/**
-				 * Reset the runtime global path filter back to the configured `hook.pattern` default.
-				 * @returns {void}
-				 * @public
-				 *
-				 * @example
-				 * api.slothlet.hook.resetPatternFilter();
-				 */
-				resetPatternFilter: function slothlet_hook_resetPatternFilter() {
-					if (!slothlet.handlers?.hookManager) {
-						throw new slothlet.SlothletError("HOOKS_NOT_INITIALIZED", { validationError: true });
+					/**
+					 * Reset the runtime global path filter back to the configured `hook.pattern` default.
+					 * @returns {void}
+					 * @public
+					 *
+					 * @example
+					 * api.slothlet.hook.pattern.reset();
+					 */
+					reset: function slothlet_hook_pattern_reset() {
+						if (!slothlet.handlers?.hookManager) {
+							throw new slothlet.SlothletError("HOOKS_NOT_INITIALIZED", { validationError: true });
+						}
+						return slothlet.handlers.hookManager.resetPatternFilter();
 					}
-					return slothlet.handlers.hookManager.resetPatternFilter();
 				},
 
 				/**
@@ -2868,18 +2880,18 @@ export class ApiBuilder extends ComponentBase {
 				 *
 				 * @example
 				 * // Set global metadata for entire API
-				 * api.slothlet.metadata.setGlobal("version", "1.0.0");
-				 * api.slothlet.metadata.setGlobal("env", "production");
+				 * api.slothlet.metadata.global("version", "1.0.0");
+				 * api.slothlet.metadata.global("env", "production");
 				 *
 				 * @example
 				 * // Bulk set global metadata via object (nested shape is preserved)
-				 * api.slothlet.metadata.setGlobal({ env: "production", build: { region: "us" } });
+				 * api.slothlet.metadata.global({ env: "production", build: { region: "us" } });
 				 */
-				setGlobal: function slothlet_metadata_setGlobal(keyOrObj, value) {
+				global: function slothlet_metadata_global(keyOrObj, value) {
 					// The calling module, checked once the arguments are valid (#625).
 					const caller = runtime_selfModuleReader(slothlet);
 					// Defensive: metadata handler is always registered during load().
-					// This guard fires only if setGlobal is called before load() completes
+					// This guard fires only if global is called before load() completes
 					// or on an instance that explicitly omits the metadata handler.
 					/* v8 ignore start */
 					if (!slothlet.handlers?.metadata) {
@@ -3259,28 +3271,16 @@ export class ApiBuilder extends ComponentBase {
 			},
 
 			/**
-			 * Alias for api.slothlet.context.scope - execute a function with isolated context.
-			 * @see api.slothlet.context.scope
-			 */
-			scope: this.createScopeFunction(),
-
-			/**
-			 * Alias for api.slothlet.context.run - execute a callback with isolated context data.
-			 * @see api.slothlet.context.run
-			 */
-			run: this.createRunFunction(),
-
-			/**
 			 * Reload entire instance (creates new references)
 			 * @param {Object} [options={}] - Reload options forwarded to Slothlet#reload.
-			 * @param {boolean} [options.keepInstanceID=false] - Keep the same instanceID (resets context store in place).
+			 * @param {"keep"|"new"} [options.instance="new"] - `"keep"` keeps the same instance id (resets the context store in place).
 			 * @returns {Promise<void>}
 			 */
 			reload: async (options = {}) => {
 				// Check if reload mutation is allowed
 				if (!config.api?.mutations?.reload) {
 					throw new slothlet.SlothletError("INVALID_CONFIG_MUTATIONS_DISABLED", {
-						operation: "reload",
+						operation: ["slothlet", "reload"],
 						validationError: true
 					});
 				}
@@ -3296,7 +3296,7 @@ export class ApiBuilder extends ComponentBase {
 			restart: async () => {
 				if (!config.api?.mutations?.reload) {
 					throw new slothlet.SlothletError("INVALID_CONFIG_MUTATIONS_DISABLED", {
-						operation: "restart",
+						operation: ["slothlet", "restart"],
 						validationError: true
 					});
 				}
@@ -3350,6 +3350,35 @@ export class ApiBuilder extends ComponentBase {
 			},
 
 			/**
+			 * The warnings this instance raised (#819), whether or not they were printed.
+			 * @type {object}
+			 * @public
+			 */
+			warnings: {
+				/**
+				 * This instance's warnings, oldest first.
+				 * @returns {Array<import("#errors").SlothletWarning>} A copy of the list.
+				 * @public
+				 * @example
+				 * const codes = api.slothlet.warnings.get().map((w) => w.code);
+				 */
+				get: function slothlet_warnings_get() {
+					return copyList(slothlet.warnings);
+				},
+
+				/**
+				 * Empty this instance's warning list.
+				 * @returns {void}
+				 * @public
+				 * @example
+				 * api.slothlet.warnings.clear();
+				 */
+				clear: function slothlet_warnings_clear() {
+					slothlet.warnings.length = 0;
+				}
+			},
+
+			/**
 			 * The dotted api path of the caller currently in context — the identity in effect for the running
 			 * code — or `null` for the host (no module caller). It reports the executing module's OWN path:
 			 * the same value slothlet attributes calls, hooks, and event subscriptions to, not the identity of
@@ -3359,9 +3388,9 @@ export class ApiBuilder extends ComponentBase {
 			 * The motivating consumer is a cross-boundary event-forwarding layer such as `@cldmv/slothlet-vine`:
 			 * when a module subscribes to a far event through the vine, the vine reads this to attribute the
 			 * forwarded subscription to that module's real identity on the trusted (serving) side — rather than
-			 * trusting a caller-supplied identity — and resolves its delivery level there with `event.resolveLevel`.
+			 * trusting a caller-supplied identity — and resolves its delivery level there with `event.level`.
 			 * It is the grow-side counterpart of that host-only query, and because it reports the same identity
-			 * `event.on` captures at subscribe, `event.resolveLevel(caller(), evt)` agrees with the level an actual
+			 * `event.on` captures at subscribe, `event.level(caller(), evt)` agrees with the level an actual
 			 * subscription at that identity would be granted.
 			 *
 			 * @returns {string|null} The current caller's dotted api path, or `null` when there is no module
@@ -3388,7 +3417,7 @@ export class ApiBuilder extends ComponentBase {
 			 *
 			 * @example
 			 * // Check if fully materialized
-			 * if (api.slothlet.materialize.materialized) {
+			 * if (api.slothlet.materialize.complete) {
 			 *   console.log("All lazy folders loaded!");
 			 * }
 			 *
@@ -3408,10 +3437,10 @@ export class ApiBuilder extends ComponentBase {
 				 * Read materialization state with an internal permission re-check.
 				 * @returns {boolean} Current materialized state.
 				 * @example
-				 * const done = api.slothlet.materialize.materialized;
+				 * const done = api.slothlet.materialize.complete;
 				 */
 				const getMaterializedState = () => {
-					enforceInternalPermission("slothlet.materialize.materialized");
+					enforceInternalPermission("slothlet.materialize.complete");
 					return mgr?.materialized ?? false;
 				};
 
@@ -3443,7 +3472,7 @@ export class ApiBuilder extends ComponentBase {
 				/* v8 ignore start */
 				if (!mgr) {
 					return {
-						get materialized() {
+						get complete() {
 							return getMaterializedState();
 						},
 						get: getMaterializeStats,
@@ -3455,7 +3484,7 @@ export class ApiBuilder extends ComponentBase {
 				// themselves; as configurable members they come to it as the framework's view of them, which refuses
 				// any change and runs a kept one as the module that read it (#625).
 				return {
-					get materialized() {
+					get complete() {
 						return getMaterializedState();
 					},
 					get: getMaterializeStats,
@@ -3493,7 +3522,7 @@ export class ApiBuilder extends ComponentBase {
 			 * WOULD be granted without subscribing (host-only; for trusted boundary layers such as
 			 * `@cldmv/slothlet-vine` to enforce delivery on the serving side). `rules.add`/`rules.remove`
 			 * mutate the event-rule pool at runtime, gated by `config.api.mutations.events` (defaults to
-			 * true) and host-only, mirroring `permissions.addRule`. `strategy(fn)` hands every emit to a host
+			 * true) and host-only, mirroring `permissions.rules.add`. `strategy(fn)` hands every emit to a host
 			 * delivery strategy and `deliver(envelope, listenerId)` delivers a strategy-held envelope to one
 			 * listener (#497) — both host-only.
 			 * @type {object}
@@ -3515,7 +3544,7 @@ export class ApiBuilder extends ComponentBase {
 						once: () => ({ level: "deny", off: noop }),
 						off: () => false,
 						emit: async () => {},
-						resolveLevel: () => "notify",
+						level: () => "notify",
 						strategy: noop,
 						deliver: async () => ({ delivered: false, reason: DELIVERY_REASONS.LISTENER_GONE }),
 						rules: { add: noop, remove: noop }
@@ -3527,7 +3556,7 @@ export class ApiBuilder extends ComponentBase {
 					once: FunctionMethods.bind(handler.once, handler),
 					off: FunctionMethods.bind(handler.off, handler),
 					emit: FunctionMethods.bind(handler.emit, handler),
-					resolveLevel: FunctionMethods.bind(handler.resolveLevel, handler),
+					level: FunctionMethods.bind(handler.resolveLevel, handler),
 					strategy: FunctionMethods.bind(handler.strategy, handler),
 					deliver: FunctionMethods.bind(handler.deliver, handler),
 					rules: {
@@ -3535,14 +3564,14 @@ export class ApiBuilder extends ComponentBase {
 						 * Add an event rule at runtime (gated by `config.api.mutations.events`). The host's rule enters the
 						 * highest "runtime" precedence layer. Module code reaches this only while the permission system is
 						 * off (a built-in rule keeps it host-only otherwise), and is then held to its own events, as its
-						 * `permissions.addRule` is (#625).
+						 * `permissions.rules.add` is (#625).
 						 * @param {object} rule - `{ caller, event, effect }` (effect: deny/notify/allow).
 						 * @returns {string} The rule id.
 						 */
 						add: function slothlet_event_rules_add(rule) {
 							if (!config.api?.mutations?.events) {
 								throw new slothlet.SlothletError("INVALID_CONFIG_MUTATIONS_DISABLED", {
-									operation: "api.slothlet.event.rules.add",
+									operation: ["slothlet", "event", "rules", "add"],
 									validationError: true
 								});
 							}
@@ -3581,7 +3610,7 @@ export class ApiBuilder extends ComponentBase {
 						remove: function slothlet_event_rules_remove(ruleId) {
 							if (!config.api?.mutations?.events) {
 								throw new slothlet.SlothletError("INVALID_CONFIG_MUTATIONS_DISABLED", {
-									operation: "api.slothlet.event.rules.remove",
+									operation: ["slothlet", "event", "rules", "remove"],
 									validationError: true
 								});
 							}
@@ -3672,9 +3701,9 @@ export class ApiBuilder extends ComponentBase {
 				 * @returns {void}
 				 * @public
 				 * @example
-				 * api.slothlet.versioning.setDefault("auth", "v1");
+				 * api.slothlet.versioning.default("auth", "v1");
 				 */
-				setDefault: function slothlet_version_setDefault(logicalPath, versionTag) {
+				default: function slothlet_version_default(logicalPath, versionTag) {
 					// versionManager is always registered when versioning is used; guard for completeness
 					/* v8 ignore next */
 					if (!slothlet.handlers?.versionManager) return;
@@ -3691,9 +3720,9 @@ export class ApiBuilder extends ComponentBase {
 				 * @returns {Promise<boolean>} Resolves `true` when the version was removed.
 				 * @public
 				 * @example
-				 * await api.slothlet.versioning.unregister("auth", "v2");
+				 * await api.slothlet.versioning.remove("auth", "v2");
 				 */
-				unregister: async function slothlet_version_unregister(logicalPath, versionTag) {
+				remove: async function slothlet_version_remove(logicalPath, versionTag) {
 					// versionManager is always registered when versioning is used; guard for completeness
 					/* v8 ignore next */
 					if (!slothlet.handlers?.versionManager) return false;
@@ -3712,44 +3741,50 @@ export class ApiBuilder extends ComponentBase {
 				},
 
 				/**
-				 * Retrieve the VersionManager-only metadata stored at registration time via `versionConfig.metadata`.
-				 * @param {string} logicalPath - Logical API path (e.g. `"auth"`).
-				 * @param {string} versionTag - Version tag (e.g. `"v1"`, `"2.3.0"`).
-				 * @returns {object | undefined} Version metadata or `undefined` when the path/tag is not registered.
-				 * @public
-				 * @example
-				 * const meta = api.slothlet.versioning.getVersionMetadata("auth", "v1");
-				 * // { version: "v1", logicalPath: "auth", stable: true }
+				 * VersionManager-only metadata (not the store `metadata.set` writes).
+				 * @type {object}
 				 */
-				getVersionMetadata: function slothlet_version_getVersionMetadata(logicalPath, versionTag) {
-					// versionManager is always registered when versioning is used; guard for completeness
-					/* v8 ignore next */
-					if (!slothlet.handlers?.versionManager) return undefined;
-					// A copy: changing it never changes the stored version metadata, which only setVersionMetadata does (#625).
-					return slothlet.helpers.utilities.deepClone(slothlet.handlers.versionManager.getVersionMetadataByPath(logicalPath, versionTag));
-				},
+				metadata: {
+					/**
+					 * Retrieve the VersionManager-only metadata stored at registration time via `versionConfig.metadata`.
+					 * @param {string} logicalPath - Logical API path (e.g. `"auth"`).
+					 * @param {string} versionTag - Version tag (e.g. `"v1"`, `"2.3.0"`).
+					 * @returns {object | undefined} Version metadata or `undefined` when the path/tag is not registered.
+					 * @public
+					 * @example
+					 * const meta = api.slothlet.versioning.metadata.get("auth", "v1");
+					 * // { version: "v1", logicalPath: "auth", stable: true }
+					 */
+					get: function slothlet_version_metadata_get(logicalPath, versionTag) {
+						// versionManager is always registered when versioning is used; guard for completeness
+						/* v8 ignore next */
+						if (!slothlet.handlers?.versionManager) return undefined;
+						// A copy: changing it never changes the stored version metadata, which only versioning.metadata.set does (#625).
+						return slothlet.helpers.utilities.deepClone(slothlet.handlers.versionManager.getVersionMetadataByPath(logicalPath, versionTag));
+					},
 
-				/**
-				 * Patch (merge) the VersionManager-only metadata for a registered version at runtime.
-				 * The injected `version` and `logicalPath` keys in the stored object always win over `patch`.
-				 * @param {string} logicalPath - Logical API path (e.g. `"auth"`).
-				 * @param {string} versionTag - Version tag (e.g. `"v1"`, `"2.3.0"`).
-				 * @param {object} patch - Keys to merge into the stored version metadata.
-				 * @returns {void}
-				 * @throws {SlothletError} When the logical path or version is not registered.
-				 * @public
-				 * @example
-				 * api.slothlet.versioning.setVersionMetadata("auth", "v1", { stable: true });
-				 */
-				setVersionMetadata: function slothlet_version_setVersionMetadata(logicalPath, versionTag, patch) {
-					// versionManager is always registered when versioning is used; guard for completeness
-					/* v8 ignore next */
-					if (!slothlet.handlers?.versionManager) return;
-					// Module code changes a version's metadata only where it may write: that version's mount (#625).
-					slothlet.handlers.apiManager.assertModuleWrite(
-						concatLists([String(versionTag)], splitText(StringMethods.trim(String(logicalPath)), "."))
-					);
-					return slothlet.handlers.versionManager.setVersionMetadataByPath(logicalPath, versionTag, patch);
+					/**
+					 * Patch (merge) the VersionManager-only metadata for a registered version at runtime.
+					 * The injected `version` and `logicalPath` keys in the stored object always win over `patch`.
+					 * @param {string} logicalPath - Logical API path (e.g. `"auth"`).
+					 * @param {string} versionTag - Version tag (e.g. `"v1"`, `"2.3.0"`).
+					 * @param {object} patch - Keys to merge into the stored version metadata.
+					 * @returns {void}
+					 * @throws {SlothletError} When the logical path or version is not registered.
+					 * @public
+					 * @example
+					 * api.slothlet.versioning.metadata.set("auth", "v1", { stable: true });
+					 */
+					set: function slothlet_version_metadata_set(logicalPath, versionTag, patch) {
+						// versionManager is always registered when versioning is used; guard for completeness
+						/* v8 ignore next */
+						if (!slothlet.handlers?.versionManager) return;
+						// Module code changes a version's metadata only where it may write: that version's mount (#625).
+						slothlet.handlers.apiManager.assertModuleWrite(
+							concatLists([String(versionTag)], splitText(StringMethods.trim(String(logicalPath)), "."))
+						);
+						return slothlet.handlers.versionManager.setVersionMetadataByPath(logicalPath, versionTag, patch);
+					}
 				}
 			},
 
@@ -3760,110 +3795,116 @@ export class ApiBuilder extends ComponentBase {
 			 */
 			permissions: {
 				/**
-				 * Add a permission rule.
-				 * Gated by `config.api.mutations.permissions` (defaults to `true`).
-				 *
-				 * @param {object} rule - Rule definition: `{ caller, target, effect }`.
-				 * @param {string} rule.caller - Glob pattern matching caller API paths.
-				 * @param {string} rule.target - Glob pattern matching target API paths.
-				 * @param {string} rule.effect - "allow" or "deny".
-				 * @returns {string} The generated rule ID.
-				 * @public
-				 * @example
-				 * api.slothlet.permissions.addRule({ caller: "untrusted.**", target: "**", effect: "deny" });
+				 * Runtime permission rules: add and remove.
+				 * @type {object}
 				 */
-				addRule: function slothlet_permissions_addRule(rule) {
-					// Check if permissions mutation is allowed
-					if (!config.api?.mutations?.permissions) {
-						throw new slothlet.SlothletError("INVALID_CONFIG_MUTATIONS_DISABLED", {
-							operation: "api.slothlet.permissions.addRule",
-							validationError: true
-						});
+				rules: {
+					/**
+					 * Add a permission rule.
+					 * Gated by `config.api.mutations.permissions` (defaults to `true`).
+					 *
+					 * @param {object} rule - Rule definition: `{ caller, target, effect }`.
+					 * @param {string} rule.caller - Glob pattern matching caller API paths.
+					 * @param {string} rule.target - Glob pattern matching target API paths.
+					 * @param {string} rule.effect - "allow" or "deny".
+					 * @returns {string} The generated rule ID.
+					 * @public
+					 * @example
+					 * api.slothlet.permissions.rules.add({ caller: "untrusted.**", target: "**", effect: "deny" });
+					 */
+					add: function slothlet_permissions_rules_add(rule) {
+						// Check if permissions mutation is allowed
+						if (!config.api?.mutations?.permissions) {
+							throw new slothlet.SlothletError("INVALID_CONFIG_MUTATIONS_DISABLED", {
+								operation: ["slothlet", "permissions", "rules", "add"],
+								validationError: true
+							});
+						}
+
+						// Check if permission manager is available
+						const permissionManager = slothlet.handlers?.permissionManager;
+						/* v8 ignore start */
+						if (!permissionManager?.addRule) {
+							throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", {
+								validationError: true
+							});
+						}
+						/* v8 ignore stop */
+
+						// The rule is read once, and that copy is what is placed, registered, and replayed (#625). A rule module
+						// code adds is held to its own subtree unless an explicit allow lifts the built-in reach default, and is
+						// that module's rule, at the module layer, below the host's.
+						rule = permissionManager.snapshotRule(rule);
+						const { ownerModuleID, layer, writer } = permissionManager.placeModuleRule(rule);
+						// Its condition runs as the module, whichever call it is checked for.
+						if (writer) rule = { ...rule, condition: permissionManager.pinConditions(rule.condition, writer) };
+						const ruleId = permissionManager.addRule(rule, ownerModuleID, null, layer);
+
+						// Record in operationHistory for replay on reload
+						if (slothlet.handlers?.apiManager?.state?.operationHistory) {
+							listPush(slothlet.handlers.apiManager.state.operationHistory, {
+								type: "addPermissionRule",
+								rule,
+								ownerModuleID,
+								ruleId,
+								layer,
+								timestamp: slothlet.clock.now()
+							});
+						}
+
+						return ruleId;
+					},
+
+					/**
+					 * Remove a permission rule by ID.
+					 * Self-modification is blocked (a module cannot remove its own rules).
+					 *
+					 * @param {string} ruleId - The rule ID to remove.
+					 * @returns {boolean} True if the rule was removed.
+					 * @public
+					 * @example
+					 * api.slothlet.permissions.rules.remove("perm-3");
+					 */
+					remove: function slothlet_permissions_rules_remove(ruleId) {
+						// Check if permissions mutation is allowed
+						if (!config.api?.mutations?.permissions) {
+							throw new slothlet.SlothletError("INVALID_CONFIG_MUTATIONS_DISABLED", {
+								operation: ["slothlet", "permissions", "rules", "remove"],
+								validationError: true
+							});
+						}
+
+						// Check if permission manager is available
+						const permissionManager = slothlet.handlers?.permissionManager;
+						/* v8 ignore start */
+						if (!permissionManager?.removeRule) {
+							throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", {
+								validationError: true
+							});
+						}
+						/* v8 ignore stop */
+
+						// Per-flow identity: this moduleID decides whether the caller owns the rule it is
+						// removing, so attributing it to a concurrently-suspended module would let one
+						// module drop another's rule.
+						// Code supplied to another module's call removes for both modules (#597).
+						const callerModuleID = runtime_ownerModuleIDs(slothlet.contextManager?.getCallerIdentity?.());
+						// Module code removes only the rules it could add (#625).
+						permissionManager.assertModuleRuleRemoval(ruleId);
+						const result = slothlet.handlers.permissionManager.removeRule(ruleId, callerModuleID);
+
+						// Record in operationHistory for replay on reload
+						if (result && slothlet.handlers?.apiManager?.state?.operationHistory) {
+							listPush(slothlet.handlers.apiManager.state.operationHistory, {
+								type: "removePermissionRule",
+								ruleId,
+								callerModuleID,
+								timestamp: slothlet.clock.now()
+							});
+						}
+
+						return result;
 					}
-
-					// Check if permission manager is available
-					const permissionManager = slothlet.handlers?.permissionManager;
-					/* v8 ignore start */
-					if (!permissionManager?.addRule) {
-						throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", {
-							validationError: true
-						});
-					}
-					/* v8 ignore stop */
-
-					// The rule is read once, and that copy is what is placed, registered, and replayed (#625). A rule module
-					// code adds is held to its own subtree unless an explicit allow lifts the built-in reach default, and is
-					// that module's rule, at the module layer, below the host's.
-					rule = permissionManager.snapshotRule(rule);
-					const { ownerModuleID, layer, writer } = permissionManager.placeModuleRule(rule);
-					// Its condition runs as the module, whichever call it is checked for.
-					if (writer) rule = { ...rule, condition: permissionManager.pinConditions(rule.condition, writer) };
-					const ruleId = permissionManager.addRule(rule, ownerModuleID, null, layer);
-
-					// Record in operationHistory for replay on reload
-					if (slothlet.handlers?.apiManager?.state?.operationHistory) {
-						listPush(slothlet.handlers.apiManager.state.operationHistory, {
-							type: "addPermissionRule",
-							rule,
-							ownerModuleID,
-							ruleId,
-							layer,
-							timestamp: slothlet.clock.now()
-						});
-					}
-
-					return ruleId;
-				},
-
-				/**
-				 * Remove a permission rule by ID.
-				 * Self-modification is blocked (a module cannot remove its own rules).
-				 *
-				 * @param {string} ruleId - The rule ID to remove.
-				 * @returns {boolean} True if the rule was removed.
-				 * @public
-				 * @example
-				 * api.slothlet.permissions.removeRule("perm-3");
-				 */
-				removeRule: function slothlet_permissions_removeRule(ruleId) {
-					// Check if permissions mutation is allowed
-					if (!config.api?.mutations?.permissions) {
-						throw new slothlet.SlothletError("INVALID_CONFIG_MUTATIONS_DISABLED", {
-							operation: "api.slothlet.permissions.removeRule",
-							validationError: true
-						});
-					}
-
-					// Check if permission manager is available
-					const permissionManager = slothlet.handlers?.permissionManager;
-					/* v8 ignore start */
-					if (!permissionManager?.removeRule) {
-						throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", {
-							validationError: true
-						});
-					}
-					/* v8 ignore stop */
-
-					// Per-flow identity: this moduleID decides whether the caller owns the rule it is
-					// removing, so attributing it to a concurrently-suspended module would let one
-					// module drop another's rule.
-					// Code supplied to another module's call removes for both modules (#597).
-					const callerModuleID = runtime_ownerModuleIDs(slothlet.contextManager?.getCallerIdentity?.());
-					// Module code removes only the rules it could add (#625).
-					permissionManager.assertModuleRuleRemoval(ruleId);
-					const result = slothlet.handlers.permissionManager.removeRule(ruleId, callerModuleID);
-
-					// Record in operationHistory for replay on reload
-					if (result && slothlet.handlers?.apiManager?.state?.operationHistory) {
-						listPush(slothlet.handlers.apiManager.state.operationHistory, {
-							type: "removePermissionRule",
-							ruleId,
-							callerModuleID,
-							timestamp: slothlet.clock.now()
-						});
-					}
-
-					return result;
 				},
 
 				/**
@@ -3896,7 +3937,7 @@ export class ApiBuilder extends ComponentBase {
 					register: function slothlet_permissions_principal_register(name, definition) {
 						if (!config.api?.mutations?.permissions) {
 							throw new slothlet.SlothletError("INVALID_CONFIG_MUTATIONS_DISABLED", {
-								operation: "api.slothlet.permissions.principal.register",
+								operation: ["slothlet", "permissions", "principal", "register"],
 								validationError: true
 							});
 						}
@@ -3951,7 +3992,7 @@ export class ApiBuilder extends ComponentBase {
 					unregister: function slothlet_permissions_principal_unregister(name) {
 						if (!config.api?.mutations?.permissions) {
 							throw new slothlet.SlothletError("INVALID_CONFIG_MUTATIONS_DISABLED", {
-								operation: "api.slothlet.permissions.principal.unregister",
+								operation: ["slothlet", "permissions", "principal", "unregister"],
 								validationError: true
 							});
 						}
@@ -4099,111 +4140,123 @@ export class ApiBuilder extends ComponentBase {
 				 */
 				global: {
 					/**
-					 * Check if an arbitrary caller path is allowed to reach a target path.
-					 *
-					 * @param {string} caller - Caller API path.
-					 * @param {string} target - Target API path.
-					 * @returns {boolean} True if access is allowed.
-					 * @public
-					 * @example
-					 * const ok = api.slothlet.permissions.global.checkAccess("payments.charge", "db.write");
+					 * Permission queries for any caller identity.
+					 * @type {object}
 					 */
-					checkAccess: function slothlet_permissions_global_checkAccess(caller, target) {
-						// Check if permission manager is available
-						const permissionManager = slothlet.handlers?.permissionManager;
-						/* v8 ignore start */
-						if (!permissionManager?.checkAccess) {
-							throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", {
-								validationError: true
-							});
-						}
-						/* v8 ignore stop */
+					check: {
+						/**
+						 * Check if an arbitrary caller path is allowed to reach a target path.
+						 *
+						 * @param {string} caller - Caller API path.
+						 * @param {string} target - Target API path.
+						 * @returns {boolean} True if access is allowed.
+						 * @public
+						 * @example
+						 * const ok = api.slothlet.permissions.global.check.access("payments.charge", "db.write");
+						 */
+						access: function slothlet_permissions_global_check_access(caller, target) {
+							// Check if permission manager is available
+							const permissionManager = slothlet.handlers?.permissionManager;
+							/* v8 ignore start */
+							if (!permissionManager?.checkAccess) {
+								throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", {
+									validationError: true
+								});
+							}
+							/* v8 ignore stop */
 
-						const runtimeContext = slothlet.contextManager?.tryGetContext?.()?.context ?? null;
-						return slothlet.handlers.permissionManager.checkAccess(caller, target, null, null, runtimeContext);
+							const runtimeContext = slothlet.contextManager?.tryGetContext?.()?.context ?? null;
+							return slothlet.handlers.permissionManager.checkAccess(caller, target, null, null, runtimeContext);
+						},
+
+						/**
+						 * Would `caller` be allowed to CALL `target` with `args`? The call-gate twin of
+						 * `event.level` (#508): it evaluates exactly what the real call gate evaluates for a
+						 * supplied caller identity — function conditions receive `{ args, target }`, a stale
+						 * `requires` principal is resolved first (the only case that returns a Promise), the caller
+						 * is treated as a module with no source file (no self-call bypass; a module-private target
+						 * is denied), and audit events emit with `via: ["slothlet", "permissions", "global", "check", "call"]`. Conditions are evaluated
+						 * against the ambient `context.run()` context, like `check.access`. Answers `true` when
+						 * enforcement is disabled.
+						 *
+						 * Host-only: a built-in rule denies modules `slothlet.permissions.global.check.call`; the host
+						 * grants it to a trusted boundary layer with an instance rule on that exact target.
+						 *
+						 * @param {string} caller - Caller API path (non-empty).
+						 * @param {string} target - Target API path (non-empty).
+						 * @param {Array<*>} [args=[]] - The arguments of the call being asked about.
+						 * @returns {boolean|Promise<boolean>} True if the call would be allowed; a Promise only when a stale principal had to be resolved.
+						 * @throws {SlothletError} INVALID_ARGUMENT for a non-string / empty `caller` or `target`, or a non-array `args`.
+						 * @public
+						 * @example
+						 * const ok = await api.slothlet.permissions.global.check.call("client.app", "project.files.list", ["p1"]);
+						 */
+						call: function slothlet_permissions_global_check_call(caller, target, args) {
+							// Check if permission manager is available
+							const permissionManager = slothlet.handlers?.permissionManager;
+							/* v8 ignore start */
+							if (!permissionManager?.checkCall) {
+								throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", {
+									validationError: true
+								});
+							}
+							/* v8 ignore stop */
+
+							const runtimeContext = slothlet.contextManager?.tryGetContext?.()?.context ?? null;
+							return slothlet.handlers.permissionManager.checkCall(caller, target, args, runtimeContext);
+						}
 					},
 
 					/**
-					 * Would `caller` be allowed to CALL `target` with `args`? The call-gate twin of
-					 * `event.resolveLevel` (#508): it evaluates exactly what the real call gate evaluates for a
-					 * supplied caller identity — function conditions receive `{ args, target }`, a stale
-					 * `requires` principal is resolved first (the only case that returns a Promise), the caller
-					 * is treated as a module with no source file (no self-call bypass; a module-private target
-					 * is denied), and audit events emit with `via: "checkCall"`. Conditions are evaluated
-					 * against the ambient `context.run()` context, like `checkAccess`. Answers `true` when
-					 * enforcement is disabled.
-					 *
-					 * Host-only: a built-in rule denies modules `slothlet.permissions.global.checkCall`; the host
-					 * grants it to a trusted boundary layer with an instance rule on that exact target.
-					 *
-					 * @param {string} caller - Caller API path (non-empty).
-					 * @param {string} target - Target API path (non-empty).
-					 * @param {Array<*>} [args=[]] - The arguments of the call being asked about.
-					 * @returns {boolean|Promise<boolean>} True if the call would be allowed; a Promise only when a stale principal had to be resolved.
-					 * @throws {SlothletError} INVALID_ARGUMENT for a non-string / empty `caller` or `target`, or a non-array `args`.
-					 * @public
-					 * @example
-					 * const ok = await api.slothlet.permissions.global.checkCall("client.app", "project.files.list", ["p1"]);
+					 * The rules that apply, by target path or by owning module.
+					 * @type {object}
 					 */
-					checkCall: function slothlet_permissions_global_checkCall(caller, target, args) {
-						// Check if permission manager is available
-						const permissionManager = slothlet.handlers?.permissionManager;
-						/* v8 ignore start */
-						if (!permissionManager?.checkCall) {
-							throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", {
-								validationError: true
-							});
+					rules: {
+						/**
+						 * List all rules that match a given target path.
+						 *
+						 * @param {string} path - Target API path.
+						 * @returns {Array<object>} Matching rules.
+						 * @public
+						 * @example
+						 * const rules = api.slothlet.permissions.global.rules.path("db.write");
+						 */
+						path: function slothlet_permissions_global_rules_path(path) {
+							// Check if permission manager is available
+							const permissionManager = slothlet.handlers?.permissionManager;
+							/* v8 ignore start */
+							if (!permissionManager?.getRulesForPath) {
+								throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", {
+									validationError: true
+								});
+							}
+							/* v8 ignore stop */
+
+							return slothlet.handlers.permissionManager.getRulesForPath(path);
+						},
+
+						/**
+						 * List all rules owned by a module.
+						 *
+						 * @param {string} moduleID - Module ID to look up.
+						 * @returns {Array<object>} Rules owned by the module.
+						 * @public
+						 * @example
+						 * const rules = api.slothlet.permissions.global.rules.module("mod_abc123");
+						 */
+						module: function slothlet_permissions_global_rules_module(moduleID) {
+							// Check if permission manager is available
+							const permissionManager = slothlet.handlers?.permissionManager;
+							/* v8 ignore start */
+							if (!permissionManager?.getRulesByModule) {
+								throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", {
+									validationError: true
+								});
+							}
+							/* v8 ignore stop */
+
+							return slothlet.handlers.permissionManager.getRulesByModule(moduleID);
 						}
-						/* v8 ignore stop */
-
-						const runtimeContext = slothlet.contextManager?.tryGetContext?.()?.context ?? null;
-						return slothlet.handlers.permissionManager.checkCall(caller, target, args, runtimeContext);
-					},
-
-					/**
-					 * List all rules that match a given target path.
-					 *
-					 * @param {string} path - Target API path.
-					 * @returns {Array<object>} Matching rules.
-					 * @public
-					 * @example
-					 * const rules = api.slothlet.permissions.global.rulesForPath("db.write");
-					 */
-					rulesForPath: function slothlet_permissions_global_rulesForPath(path) {
-						// Check if permission manager is available
-						const permissionManager = slothlet.handlers?.permissionManager;
-						/* v8 ignore start */
-						if (!permissionManager?.getRulesForPath) {
-							throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", {
-								validationError: true
-							});
-						}
-						/* v8 ignore stop */
-
-						return slothlet.handlers.permissionManager.getRulesForPath(path);
-					},
-
-					/**
-					 * List all rules owned by a module.
-					 *
-					 * @param {string} moduleID - Module ID to look up.
-					 * @returns {Array<object>} Rules owned by the module.
-					 * @public
-					 * @example
-					 * const rules = api.slothlet.permissions.global.rulesByModule("mod_abc123");
-					 */
-					rulesByModule: function slothlet_permissions_global_rulesByModule(moduleID) {
-						// Check if permission manager is available
-						const permissionManager = slothlet.handlers?.permissionManager;
-						/* v8 ignore start */
-						if (!permissionManager?.getRulesByModule) {
-							throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", {
-								validationError: true
-							});
-						}
-						/* v8 ignore stop */
-
-						return slothlet.handlers.permissionManager.getRulesByModule(moduleID);
 					}
 				},
 
@@ -4469,7 +4522,7 @@ export class ApiBuilder extends ComponentBase {
 				 * Get the live bound API object
 				 * @returns {Object} The bound API proxy
 				 */
-				getAPI: () => {
+				api: () => {
 					// Module code gets the api as it reads it through `self` (#625).
 					const reader = runtime_selfModuleReader(slothlet);
 					const api = slothlet.getAPI();
@@ -4477,15 +4530,7 @@ export class ApiBuilder extends ComponentBase {
 				},
 
 				/**
-				 * Get ownership diagnostics for all registered API paths
-				 * @returns {Object|null} Ownership diagnostic data, or null if ownership tracking is disabled
-				 */
-				getOwnership: () => {
-					return slothlet.getOwnership();
-				},
-
-				/**
-				 * Ownership management namespace
+				 * Ownership diagnostics
 				 * @type {object}
 				 */
 				owner: {
@@ -4499,6 +4544,14 @@ export class ApiBuilder extends ComponentBase {
 							return slothlet.handlers.ownership.getPathOwnership(apiPath);
 						}
 						return null;
+					},
+
+					/**
+					 * Get ownership diagnostics for all registered API paths
+					 * @returns {Object|null} Ownership diagnostic data, or null if ownership tracking is disabled
+					 */
+					list: () => {
+						return slothlet.getOwnership();
 					}
 				},
 
@@ -4531,7 +4584,7 @@ export class ApiBuilder extends ComponentBase {
 					 * Get all moduleIDs in cache
 					 * @returns {string[]} Array of moduleIDs
 					 */
-					getAllModuleIDs: () => {
+					ids: () => {
 						if (slothlet.handlers?.apiCacheManager) {
 							return slothlet.handlers.apiCacheManager.getAllModuleIDs();
 						}
@@ -4550,17 +4603,6 @@ export class ApiBuilder extends ComponentBase {
 						return false;
 					}
 				},
-
-				/**
-				 * This instance's SlothletWarning class: `captured`, `clearCaptured()` and `suppressConsole` apply to this instance only
-				 * @type {Function}
-				 * @example
-				 * // Access captured warnings in tests
-				 * api.slothlet.diag.SlothletWarning.clearCaptured();
-				 * // ... trigger warnings ...
-				 * const warnings = api.slothlet.diag.SlothletWarning.captured;
-				 */
-				SlothletWarning: slothlet.SlothletWarning,
 
 				/**
 				 * Hook system diagnostics (only when hooks enabled)
@@ -4583,7 +4625,7 @@ export class ApiBuilder extends ComponentBase {
 							 * @param {string} pattern - Glob pattern
 							 * @returns {Function} Compiled matcher function
 							 */
-							compilePattern: (pattern) => {
+							compile: (pattern) => {
 								return slothlet.handlers.hookManager.getCompilePatternForDiagnostics()(pattern);
 							}
 						}
@@ -4597,31 +4639,31 @@ export class ApiBuilder extends ComponentBase {
 		 * @param {Function} fn - The callback whose caller identity should be pinned.
 		 * @returns {Function} A wrapper that invokes `fn` as the current leaf's caller.
 		 * @throws {SlothletError} PERMISSION_DENIED when the calling module has not been granted
-		 *   `slothlet.lockCaller.caller`; INVALID_ARGUMENT when `fn` is not a function.
+		 *   `slothlet.pin.caller`; INVALID_ARGUMENT when `fn` is not a function.
 		 * @public
 		 *
 		 * @description
-		 * `lockCaller` pins the leaf that calls it, so a service leaf accepting a callback on
+		 * `pin` pins the leaf that calls it, so a service leaf accepting a callback on
 		 * behalf of whoever called it (a scheduler's `every(interval, fn)`, a registry) can only
-		 * pin itself — the callback would run as the service. `lockCaller.caller` pins the
+		 * pin itself — the callback would run as the service. `pin.caller` pins the
 		 * identity `self.slothlet.metadata.caller()` reports at the moment of the call (the same
 		 * resolution, shared through the metadata handler), so the callback runs as the module
 		 * that called the service.
 		 *
-		 * Acting as your caller is a privilege: the api path `slothlet.lockCaller.caller` is
+		 * Acting as your caller is a privilege: the api path `slothlet.pin.caller` is
 		 * denied to every module by a built-in rule, and the host grants it, e.g.
-		 * `{ caller: "scheduler.**", target: "slothlet.lockCaller.caller", effect: "allow" }`.
+		 * `{ caller: "scheduler.**", target: "slothlet.pin.caller", effect: "allow" }`.
 		 * The check runs when the wrapper is created, not when it is invoked.
 		 *
 		 * When the leaf itself was called from outside any module (the host, a transport edge),
 		 * the callback is pinned to **no module caller**: it runs as the host, and
 		 * `metadata.caller()` returns null inside it. This is a real pin, not a passthrough.
 		 *
-		 * Otherwise identical to `lockCaller`: captured once at call time and immutable after;
+		 * Otherwise identical to `pin`: captured once at call time and immutable after;
 		 * `this` and arguments are forwarded; errors from `fn` propagate unchanged; the returned
 		 * wrapper exposes `_slothletOriginal`; instanceID/contextManager are resolved live so a
 		 * callback held across `reload()` targets the current instance. Runtime-mode behaviour is
-		 * the same as `lockCaller`'s — in **async** mode the identity propagates through
+		 * the same as `pin`'s — in **async** mode the identity propagates through
 		 * `AsyncLocalStorage` across every `await`; in **live** mode there is one identity slot per
 		 * instance, so an async callback resumed while other calls are also suspended is attributed
 		 * from the call stack (failing closed, never to the host) — see docs/HOOKS.md.
@@ -4629,14 +4671,14 @@ export class ApiBuilder extends ComponentBase {
 		 * @example
 		 * // scheduler/service.mjs — runs each job as the module that scheduled it.
 		 * export function every(ms, job) {
-		 *   setInterval(self.slothlet.lockCaller.caller(job), ms);
+		 *   setInterval(self.slothlet.pin.caller(job), ms);
 		 * }
 		 */
-		const lockCallerCaller = function slothlet_lockCaller_caller(fn) {
+		const pinCaller = function slothlet_pin_caller(fn) {
 			// Enforced here as well as on the route: the function is handed out as a plain value
 			// (`caller` is a meta-property of the route proxy), so a reference passed on to another
 			// module must still be refused for that module.
-			enforceInternalPermission("slothlet.lockCaller.caller");
+			enforceInternalPermission("slothlet.pin.caller");
 			if (typeof fn !== "function") {
 				throw new slothlet.SlothletError("INVALID_ARGUMENT", {
 					argument: "fn",
@@ -4665,17 +4707,17 @@ export class ApiBuilder extends ComponentBase {
 					? slothlet.contextManager.runInContext(slothlet.instanceID, fn, this, args, capturedCaller, true, false, capturedCeiling)
 					: slothlet.contextManager.runInContext(slothlet.instanceID, fn, this, args, null, true, true);
 			};
-			// Parity with lockCaller / the EventEmitter patch metadata.
+			// Parity with pin / the EventEmitter patch metadata.
 			locked._slothletOriginal = fn;
 			return runtime_markCallerLocked(locked);
 		};
-		// `lockCaller.caller` is its own api path (`slothlet.lockCaller.caller`), so the permission
-		// system gates it independently of `lockCaller`, whose call behaviour is unchanged.
+		// `pin.caller` is its own api path (`slothlet.pin.caller`), so the permission
+		// system gates it independently of `pin`, whose call behaviour is unchanged.
 		// Configurable (still read-only) so the view a module reads `self.slothlet` through can hand it
 		// over wrapped, as it does every other member: kept and called later, it runs as that module (#625).
-		Objects.defineProperty(namespace.lockCaller, "caller", {
+		Objects.defineProperty(namespace.pin, "caller", {
 			__proto__: null,
-			value: lockCallerCaller,
+			value: pinCaller,
 			enumerable: true,
 			writable: false,
 			configurable: true
@@ -4980,7 +5022,7 @@ export class ApiBuilder extends ComponentBase {
 						...runtime_scopeIdentity(slothlet, currentStore),
 						callerWrapper: currentStore.callerWrapper,
 						// Inherit slothlet ref so runtime self set-traps can reach apiManager
-						// from inside `api.slothlet.run()` / `.scope()` callbacks.
+						// from inside `api.slothlet.context.run()` / `.scope()` callbacks.
 						slothlet: currentStore.slothlet,
 						// Inherit + extend owner-locked context keys (opt-in); null when no key is owned.
 						__contextOwners: buildContextOwners(currentStore.__contextOwners)
@@ -5082,7 +5124,7 @@ export class ApiBuilder extends ComponentBase {
 						...runtime_scopeIdentity(slothlet, currentStore),
 						callerWrapper: currentStore.callerWrapper,
 						// Inherit slothlet ref so runtime self set-traps can reach apiManager
-						// from inside `api.slothlet.run()` / `.scope()` callbacks.
+						// from inside `api.slothlet.context.run()` / `.scope()` callbacks.
 						slothlet: currentStore.slothlet,
 						// Inherit + extend owner-locked context keys (opt-in); null when no key is owned.
 						__contextOwners: buildContextOwners(currentStore.__contextOwners)

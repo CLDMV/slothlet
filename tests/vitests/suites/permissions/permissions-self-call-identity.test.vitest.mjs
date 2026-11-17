@@ -132,7 +132,7 @@ describe.each(MATRIX)("Permissions > who makes each access of a member expressio
 		expect(await api.ally.probe("call")).toBe(SECRET);
 	});
 
-	it("runs a callback pinned with lockCaller as the module that pinned it, whoever calls it", async () => {
+	it("runs a callback pinned with pin as the module that pinned it, whoever calls it", async () => {
 		expect(await api.gate.probe("allyLent")).toBe(SECRET);
 		expect(await api.ally.probe("gateLent")).toBe(DENIED);
 	});

@@ -67,7 +67,7 @@ const POLICIES = [
 		permissions: { defaultPolicy: "allow", rules: DENIED_TARGETS.map((target) => ({ caller: "probe.**", target, effect: "deny" })) },
 		denies: true,
 		unheld: [],
-		listed: ["slothlet", "slothlet.lockCaller", "slothlet.hook", "slothlet.api"]
+		listed: ["slothlet", "slothlet.pin", "slothlet.hook", "slothlet.api"]
 	},
 	{
 		label: "default deny with no rule for the target",
@@ -75,14 +75,14 @@ const POLICIES = [
 		denies: true,
 		unheld: ["slothlet.api.add"],
 		// `slothlet.api` is not the module's to read at all, so it is not listed here.
-		listed: ["slothlet", "slothlet.lockCaller", "slothlet.hook"]
+		listed: ["slothlet", "slothlet.pin", "slothlet.hook"]
 	},
 	{
 		label: "default allow with no rule",
 		permissions: { defaultPolicy: "allow", rules: [] },
 		denies: false,
 		unheld: [],
-		listed: ["slothlet", "slothlet.lockCaller", "slothlet.hook", "slothlet.api"]
+		listed: ["slothlet", "slothlet.pin", "slothlet.hook", "slothlet.api"]
 	}
 ];
 
@@ -307,7 +307,7 @@ describe.each(CONFIGS)(
 				label: "default deny with rules for other paths",
 				rules: [
 					{ caller: "probe.**", target: "math.**", effect: "allow" },
-					{ caller: "probe.**", target: "slothlet.lockCaller.caller", effect: "allow" }
+					{ caller: "probe.**", target: "slothlet.pin.caller", effect: "allow" }
 				]
 			}
 		];
@@ -320,14 +320,14 @@ describe.each(CONFIGS)(
 				await api.cm;
 				await api.probe;
 				const run = (fn, ...args) => withSuppressedSlothletErrorOutput(() => api.probe[fn](...args));
-				for (const where of ["slothlet.lockCaller", "slothlet.hook.on", "math.add", "cm", ""]) {
+				for (const where of ["slothlet.pin", "slothlet.hook.on", "math.add", "cm", ""]) {
 					const keys = await run("listed", where);
 					expect(Array.isArray(keys), `${where}: ${keys}`).toBe(true);
 					// Every key listed reads without a refusal, or is a function's own `prototype`, whose read stays refused.
 					for (const key of keys) expect(threw((await run("read", where, key)).dot), `${where}.${key}`).toBe(false);
 				}
 				// The namespace function's own `prototype` is still refused, and its description withholds the value.
-				for (const where of ["slothlet.lockCaller", "slothlet.hook.on"]) {
+				for (const where of ["slothlet.pin", "slothlet.hook.on"]) {
 					const { dot, reflect, descriptor } = await run("read", where, "prototype");
 					expect(dot, where).toBe("THROW PERMISSION_DENIED");
 					expect(reflect, where).toBe("THROW PERMISSION_DENIED");

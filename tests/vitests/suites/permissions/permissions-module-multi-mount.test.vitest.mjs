@@ -102,10 +102,10 @@ describe.each(CONFIGS)("modules mounted at several paths (#625) — $mode / $run
 		await api.slothlet.api.add("b", VICTIM, { moduleID: "vic" });
 		expect(await api.a.v.grant({ caller: "other.**", target: "a.**:write", effect: "allow" })).toMatch(/^perm-/);
 		expect(await api.slothlet.api.remove("vic")).toBe(true);
-		const live = { a: api.a === undefined, b: api.b === undefined, rules: api.slothlet.permissions.global.rulesByModule("vic").length };
+		const live = { a: api.a === undefined, b: api.b === undefined, rules: api.slothlet.permissions.global.rules.module("vic").length };
 		expect(live).toEqual({ a: true, b: true, rules: 0 });
 		await api.slothlet.reload();
-		expect({ a: api.a === undefined, b: api.b === undefined, rules: api.slothlet.permissions.global.rulesByModule("vic").length }).toEqual(
+		expect({ a: api.a === undefined, b: api.b === undefined, rules: api.slothlet.permissions.global.rules.module("vic").length }).toEqual(
 			live
 		);
 	});

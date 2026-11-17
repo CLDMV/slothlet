@@ -30,7 +30,7 @@
  *    not this module's path.
  * 2. A listener subscribed on `foreign` while this module's flow is active is pinned to the HOST there
  *    (its `ownerWrapper` is host, not the leaked foreign module), so the host-only
- *    `foreign.slothlet.event.resolveLevel(...)` succeeds inside its delivery instead of being denied
+ *    `foreign.slothlet.event.level(...)` succeeds inside its delivery instead of being denied
  *    under a leaked identity — the exact failure that stopped the vine's trusted side from forwarding.
  *
  * @module tests/vitests/suites/events/event-cross-instance-caller-isolation.test.vitest
@@ -84,7 +84,7 @@ describe.each(getMatrixConfigs())("Events > cross-instance caller isolation > $n
 		expect(callerOnTrusted).toBe(null); // host — probe belongs to `subscriber`, not `trusted`
 	});
 
-	it("a listener subscribed on a foreign instance is host-pinned — its delivery can drive the host-only resolveLevel", async () => {
+	it("a listener subscribed on a foreign instance is host-pinned — its delivery can drive the host-only event.level", async () => {
 		const { trusted, subscriber } = await twoInstances();
 
 		let sawCaller = "unset";
@@ -94,7 +94,7 @@ describe.each(getMatrixConfigs())("Events > cross-instance caller isolation > $n
 			trusted.slothlet.event.on("orders.created", () => {
 				sawCaller = trusted.slothlet.caller();
 				try {
-					resolveOutcome = trusted.slothlet.event.resolveLevel("probe.here", "orders.created");
+					resolveOutcome = trusted.slothlet.event.level("probe.here", "orders.created");
 				} catch (error) {
 					resolveOutcome = `THREW:${error.code || error.name}`;
 				}
@@ -107,7 +107,7 @@ describe.each(getMatrixConfigs())("Events > cross-instance caller isolation > $n
 
 		// The listener ran pinned to the HOST of `trusted`, not to `subscriber`'s leaked probe identity:
 		expect(sawCaller).toBe(null);
-		// so the host-only resolveLevel answered instead of being denied under the leaked identity.
+		// so the host-only event.level answered instead of being denied under the leaked identity.
 		expect(resolveOutcome).toBe("allow");
 	});
 });

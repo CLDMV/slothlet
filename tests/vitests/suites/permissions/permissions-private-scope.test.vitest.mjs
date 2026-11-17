@@ -184,7 +184,7 @@ describe.each(configs)("module-private members > $mode / $runtime / $attribution
 			// A silent query answers for leaves that have loaded (lazy mode loads a folder on its first read).
 			await api.billing.reader.read("billing.internals.currency");
 			await api.ext.reader.read("ext.vault.name");
-			const { checkCall } = api.slothlet.permissions.global;
+			const { call: checkCall } = api.slothlet.permissions.global.check;
 			expect(checkCall("billing.reader.read", "billing.internals.__rate")).toBe(true);
 			expect(checkCall("ext.reader.read", "billing.internals.__rate")).toBe(false);
 		});

@@ -126,7 +126,7 @@ describe.each(getMatrixConfigs())("Permissions > owner grant (#509) > $name", ({
 	it("an explicit deny rule added at runtime overrides the grant too", async () => {
 		await build({ defaultPolicy: "deny", owner: true });
 		expect(await outcome(() => api.launcher.main.activate())).toEqual({ ok: true, value: "created" });
-		api.slothlet.permissions.addRule({ caller: "launcher.main.**", target: "launcher.session.**", effect: "deny" });
+		api.slothlet.permissions.rules.add({ caller: "launcher.main.**", target: "launcher.session.**", effect: "deny" });
 		expect(await outcome(() => api.launcher.main.activate())).toEqual({ ok: false, code: "PERMISSION_DENIED" });
 	});
 
@@ -213,7 +213,7 @@ describe.each(getMatrixConfigs())("Permissions > owner grant (#509) > $name", ({
 		// Ownership is recorded as leaves compose; under lazy mode that is on first use, so use them first.
 		expect(await outcome(() => api.launcher.main.activate())).toEqual({ ok: true, value: "created" });
 		expect(await outcome(() => api.core.alpha.callBeta())).toEqual({ ok: true, value: "pong" });
-		const check = (caller, target) => api.slothlet.permissions.global.checkAccess(caller, target);
+		const check = (caller, target) => api.slothlet.permissions.global.check.access(caller, target);
 		expect(check("launcher.main.activate", "launcher.session.store.create")).toBe(true);
 		expect(check("core.alpha.callBeta", "core.sub.beta.ping")).toBe(true);
 		expect(check("launcher.intruder.poke", "launcher.session.store.create")).toBe(false);

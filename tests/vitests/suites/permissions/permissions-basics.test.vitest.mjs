@@ -37,8 +37,8 @@ describe.each(getMatrixConfigs())("Permissions > Basics > $name", ({ config }) =
 		});
 
 		expect(api.slothlet.permissions).toBeDefined();
-		expect(api.slothlet.permissions.addRule).toBeTypeOf("function");
-		expect(api.slothlet.permissions.removeRule).toBeTypeOf("function");
+		expect(api.slothlet.permissions.rules.add).toBeTypeOf("function");
+		expect(api.slothlet.permissions.rules.remove).toBeTypeOf("function");
 		expect(api.slothlet.permissions.self).toBeDefined();
 		expect(api.slothlet.permissions.global).toBeDefined();
 		expect(api.slothlet.permissions.control).toBeDefined();
@@ -54,7 +54,7 @@ describe.each(getMatrixConfigs())("Permissions > Basics > $name", ({ config }) =
 			}
 		});
 
-		const rules = api.slothlet.permissions.global.rulesForPath("admin.manage");
+		const rules = api.slothlet.permissions.global.rules.path("admin.manage");
 		expect(rules.length).toBeGreaterThan(0);
 		expect(rules.some((r) => r.caller === "untrusted.**" && r.effect === "deny")).toBe(true);
 	});

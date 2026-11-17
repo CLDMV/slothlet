@@ -4,7 +4,7 @@
 	"apiDir": "./api",
 	"kind": "extension",
 	"permissions": [
-		{ "caller": "vaultmgr.**", "target": "slothlet.permissions.addRule", "effect": "allow" },
+		{ "caller": "vaultmgr.**", "target": "slothlet.permissions.rules.add", "effect": "allow" },
 		{ "caller": "vaultmgr.**", "target": "victim.v.balanceOfNew", "effect": "allow" }
 	]
 }

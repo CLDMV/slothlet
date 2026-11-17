@@ -18,7 +18,7 @@
  *
  * @description
  * `api.slothlet.api.modules.discover()` walks the filesystem for module packages, which a browser does not have. In a
- * browser it, and every call that runs it (`addDiscovered()`, and `addModule(name)` with an empty discovery cache), is
+ * browser it, and every call that runs it (`modules.add()`, and `modules.add(name)` with an empty discovery cache), is
  * refused with `MODULE_DISCOVERY_REQUIRES_NODE` instead of failing on a missing Node builtin.
  *
  * @module tests/browser/module-discovery.browser
@@ -59,13 +59,13 @@ const codeOf = (promise) =>
 	);
 
 describe("module discovery in a real browser (#817)", () => {
-	it.each(["eager", "lazy"])("refuses discover, addDiscovered and a lazy addModule by name with a named error (%s)", async (mode) => {
+	it.each(["eager", "lazy"])("refuses discover, modules.add and a lazy modules.add by name with a named error (%s)", async (mode) => {
 		const api = await build(mode);
 		try {
 			const modules = api.slothlet.api.modules;
 			expect(await codeOf(modules.discover())).toBe("MODULE_DISCOVERY_REQUIRES_NODE");
-			expect(await codeOf(modules.addDiscovered())).toBe("MODULE_DISCOVERY_REQUIRES_NODE");
-			expect(await codeOf(modules.addModule("@example/some-module"))).toBe("MODULE_DISCOVERY_REQUIRES_NODE");
+			expect(await codeOf(modules.add())).toBe("MODULE_DISCOVERY_REQUIRES_NODE");
+			expect(await codeOf(modules.add("@example/some-module"))).toBe("MODULE_DISCOVERY_REQUIRES_NODE");
 			// The instance keeps working.
 			expect(await api.math.add(2, 3)).toBe(5);
 		} finally {

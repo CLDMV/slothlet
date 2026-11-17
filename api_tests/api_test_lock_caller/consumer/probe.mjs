@@ -18,7 +18,7 @@
  *
  * @description
  * Builds callbacks that probe slothlet's caller identity. The `make*` factories run
- * as consumer-module code, so `self.slothlet.lockCaller()` called inside them
+ * as consumer-module code, so `self.slothlet.pin()` called inside them
  * captures the consumer module's identity. The plain (un-pinned) variants exist for
  * comparison — they inherit whatever async context is ambient when invoked.
  *
@@ -77,7 +77,7 @@ export const guarded = () => "guarded-ok";
  * const probe = api.consumer.probe.makeLockedIdentityProbe();
  */
 export function makeLockedIdentityProbe() {
-	return self.slothlet.lockCaller(identityProbe);
+	return self.slothlet.pin(identityProbe);
 }
 
 /**
@@ -95,7 +95,7 @@ export function makePlainIdentityProbe() {
  * @public
  */
 export function makeLockedGuardedCall() {
-	return self.slothlet.lockCaller(guardedCall);
+	return self.slothlet.pin(guardedCall);
 }
 
 /**
@@ -113,7 +113,7 @@ export function makePlainGuardedCall() {
  * @public
  */
 export function makeLockedContextReader() {
-	return self.slothlet.lockCaller(readContext);
+	return self.slothlet.pin(readContext);
 }
 
 /**
@@ -122,7 +122,7 @@ export function makeLockedContextReader() {
  * @public
  */
 export function makeLockedThisProbe() {
-	return self.slothlet.lockCaller(function thisProbe() {
+	return self.slothlet.pin(function thisProbe() {
 		return this;
 	});
 }
@@ -135,7 +135,7 @@ export function makeLockedThisProbe() {
  * @public
  */
 export function makeLockedAsyncIdentityProbe() {
-	return self.slothlet.lockCaller(async () => {
+	return self.slothlet.pin(async () => {
 		await new Promise((resolve) => setTimeout(resolve, 0));
 		return identityProbe();
 	});
@@ -202,7 +202,7 @@ export function registerIdentityHook(pattern, options) {
  */
 export function registerPreLockedHook(pattern) {
 	hookProbedIdentity = null;
-	return self.slothlet.hook.on(`before:${pattern}`, self.slothlet.lockCaller(identityHook));
+	return self.slothlet.hook.on(`before:${pattern}`, self.slothlet.pin(identityHook));
 }
 
 /**
@@ -242,23 +242,23 @@ export function getHookProbedIdentity() {
 }
 
 /**
- * Probe the caller identity from inside an `api.slothlet.run()` callback,
+ * Probe the caller identity from inside an `api.slothlet.context.run()` callback,
  * invoked as consumer module code.
  * @returns {Promise<string>} The identity observed inside the run callback.
  * @public
  */
 export async function probeIdentityViaRun() {
-	return self.slothlet.run({}, () => identityProbe());
+	return self.slothlet.context.run({}, () => identityProbe());
 }
 
 /**
- * Probe the caller identity from inside an `api.slothlet.scope()` callback,
+ * Probe the caller identity from inside an `api.slothlet.context.scope()` callback,
  * invoked as consumer module code.
  * @returns {Promise<string>} The identity observed inside the scope callback.
  * @public
  */
 export async function probeIdentityViaScope() {
-	return self.slothlet.scope({ context: {}, fn: () => identityProbe() });
+	return self.slothlet.context.scope({ context: {}, fn: () => identityProbe() });
 }
 
 /**

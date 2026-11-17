@@ -149,20 +149,20 @@ describe.each(matrix)("a kept node's answers follow the rules alone ($mode, $run
 				await build();
 				await api.a.keep(name);
 				expect(await api.a.reads(name, list)).toEqual(plain(name));
-				const id = api.slothlet.permissions.addRule({ caller: "a.**", target: target(name), effect: "deny" });
+				const id = api.slothlet.permissions.rules.add({ caller: "a.**", target: target(name), effect: "deny" });
 				expect(await api.a.reads(name, list)).toEqual(denied);
 				expect(await api.a.later(name, list)).toEqual(denied);
-				api.slothlet.permissions.removeRule(id);
+				api.slothlet.permissions.rules.remove(id);
 				expect(await api.a.reads(name, list)).toEqual(plain(name));
 				expect(await api.a.later(name, list)).toEqual(plain(name));
 			});
 
 			it("is lifted from the next read when the view was first read under it", async () => {
 				await build();
-				const id = api.slothlet.permissions.addRule({ caller: "a.**", target: target(name), effect: "deny" });
+				const id = api.slothlet.permissions.rules.add({ caller: "a.**", target: target(name), effect: "deny" });
 				await api.a.keep(name);
 				await api.a.reads(name, list);
-				api.slothlet.permissions.removeRule(id);
+				api.slothlet.permissions.rules.remove(id);
 				expect(await api.a.reads(name, list)).toEqual(plain(name));
 			});
 

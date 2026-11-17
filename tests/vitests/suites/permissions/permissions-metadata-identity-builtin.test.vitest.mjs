@@ -15,7 +15,7 @@
 
 /**
  * @fileoverview #468 — `slothlet.metadata.caller` and `slothlet.metadata.self` are allowed by
- * built-in rules, like `slothlet.lockCaller` / `slothlet.bind`: they reveal identity only (who is
+ * built-in rules, like `slothlet.pin` / `slothlet.bind`: they reveal identity only (who is
  * calling me / who am I), which a module needs to enforce its own policy. Under
  * `defaultPolicy: "deny"` with no user rules a module can call them; `metadata.get(path)` (reads
  * arbitrary metadata) stays gated; a user rule still overrides the built-ins.

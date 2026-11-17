@@ -42,7 +42,7 @@ describe("metadata.mjs key-validation coverage", () => {
 	it("set silently accepts an empty-string key (length-zero early return)", () => {
 		// metadata.set hits setUserMetadata → #mergeMetadataValue → #assertSafeMetadataKeySegment("")
 		// where typeof "" === "string" && "".length === 0 → early return, no throw.
-		// (metadata.setGlobal does pre-validation in api_builder.mjs and would throw before reaching this branch.)
+		// (metadata.global does pre-validation in api_builder.mjs and would throw before reaching this branch.)
 		expect(() => api.slothlet.metadata.set(api.rootMath.add, "", "ignored")).not.toThrow();
 	});
 

@@ -33,6 +33,7 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { writeFile, rm, mkdir, readdir, readFile } from "node:fs/promises";
 import { makeTestTmpDir } from "../../setup/test-fixtures-tmp.mjs";
+import { captureWarnings } from "../../setup/warning-capture.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, "../../../..");
@@ -134,17 +135,11 @@ describe("warnIfCoverageWithoutSourcemap", () => {
 	 */
 	async function probe(config, overrides) {
 		const { warnIfCoverageWithoutSourcemap } = await import("#processors/loader");
-		const { SlothletWarning } = await import("@cldmv/slothlet/errors");
-		SlothletWarning.clearCaptured();
-		const prior = SlothletWarning.suppressConsole;
-		SlothletWarning.suppressConsole = true;
-		try {
-			const fired = warnIfCoverageWithoutSourcemap(config, overrides);
-			return { fired, captured: SlothletWarning.captured.filter((w) => w.code === WARNING_CODE).length };
-		} finally {
-			SlothletWarning.suppressConsole = prior;
-			SlothletWarning.clearCaptured();
-		}
+		let fired;
+		const warnings = await captureWarnings(() => {
+			fired = warnIfCoverageWithoutSourcemap(config, overrides);
+		});
+		return { fired, captured: warnings.filter((w) => w.code === WARNING_CODE).length };
 	}
 
 	const OFF = { typescript: { enabled: true, mode: "fast", sourcemap: false } };

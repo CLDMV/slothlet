@@ -17,8 +17,8 @@
  * @fileoverview Integration tests for the ModuleManager handler.
  *
  * @description
- * Exercises discover() cache management, addModule() lazy-discover fallback,
- * addModules() onFailure variants + concurrency, removeModule(), pre-flight
+ * Exercises discover() cache management, modules.add() lazy-discover fallback,
+ * modules.add() onFailure variants + concurrency, modules.remove(), pre-flight
  * collision detection, and stale-mount reconciliation.
  *
  * Uses a real slothlet instance because ModuleManager calls
@@ -68,26 +68,26 @@ describe("ModuleManager.discover()", () => {
 		const mm = await newSlothletWithModules();
 		const found = await mm.discover({ scanRoot: FIX_NPM });
 		expect(found.length).toBe(3);
-		expect(mm.getDiscoveryCache().length).toBe(3);
+		expect(mm.cache.get().length).toBe(3);
 	});
 
 	it("replaces the cache on each discover() call", async () => {
 		const mm = await newSlothletWithModules();
 		await mm.discover({ scanRoot: FIX_NPM });
 		await mm.discover({ scanRoot: FIX_FOLDER });
-		const names = mm
-			.getDiscoveryCache()
+		const names = mm.cache
+			.get()
 			.map((r) => r.packageName)
 			.sort();
 		expect(names).toEqual(["@local/driver-alpha", "@local/driver-beta"]);
 	});
 
-	it("clearDiscoveryCache() empties the cache without affecting mounted modules", async () => {
+	it("cache.clear() empties the cache without affecting mounted modules", async () => {
 		const mm = await newSlothletWithModules();
 		await mm.discover({ scanRoot: FIX_FOLDER });
-		expect(mm.getDiscoveryCache().length).toBe(2);
-		mm.clearDiscoveryCache();
-		expect(mm.getDiscoveryCache().length).toBe(0);
+		expect(mm.cache.get().length).toBe(2);
+		mm.cache.clear();
+		expect(mm.cache.get().length).toBe(0);
 	});
 });
 
@@ -105,13 +105,13 @@ describe("ModuleManager.sort()", () => {
 	});
 });
 
-// ─── addModule() ─────────────────────────────────────────────────────────────
+// ─── modules.add() ─────────────────────────────────────────────────────────────
 
 describe("ModuleManager.addModule()", () => {
 	it("mounts a single module from a DiscoverResult and returns mountResult metadata", async () => {
 		const mm = await newSlothletWithModules();
 		const found = await mm.discover({ scanRoot: FIX_NPM, prefix: "packrat-extension-" });
-		const result = await mm.addModule(found[0]);
+		const result = await mm.add(found[0]);
 		expect(result.packageName).toBe("packrat-extension-baz");
 		expect(result.mountPath).toBe("extensions.baz");
 		expect(typeof result.moduleID).toBe("string");
@@ -120,29 +120,29 @@ describe("ModuleManager.addModule()", () => {
 	it("mounts a module by name when the cache is populated", async () => {
 		const mm = await newSlothletWithModules();
 		await mm.discover({ scanRoot: FIX_NPM });
-		const result = await mm.addModule("@org/packrat-driver-foo");
+		const result = await mm.add("@org/packrat-driver-foo");
 		expect(result.packageName).toBe("@org/packrat-driver-foo");
 		expect(result.mountPath).toBe("drivers.foo");
 	});
 
 	it("lazily triggers discover() when the cache is empty and a name is supplied", async () => {
 		const mm = await newSlothletWithModules();
-		expect(mm.getDiscoveryCache().length).toBe(0);
-		const result = await mm.addModule("@local/driver-alpha", { discover: { scanRoot: FIX_FOLDER } });
+		expect(mm.cache.get().length).toBe(0);
+		const result = await mm.add("@local/driver-alpha", { discover: { scanRoot: FIX_FOLDER } });
 		expect(result.packageName).toBe("@local/driver-alpha");
-		expect(mm.getDiscoveryCache().length).toBe(2); // discover populated it
+		expect(mm.cache.get().length).toBe(2); // discover populated it
 	});
 
 	it("throws MODULE_PACKAGE_NOT_FOUND when a name cannot be resolved after discovery", async () => {
 		const mm = await newSlothletWithModules();
 		await mm.discover({ scanRoot: FIX_FOLDER });
-		await expect(mm.addModule("@org/does-not-exist")).rejects.toThrow(/MODULE_PACKAGE_NOT_FOUND/);
+		await expect(mm.add("@org/does-not-exist")).rejects.toThrow(/MODULE_PACKAGE_NOT_FOUND/);
 	});
 
 	it("stores the manifest as metadata under the mounted path (B1 round-trip)", async () => {
 		const mm = await newSlothletWithModules();
 		await mm.discover({ scanRoot: FIX_NPM, prefix: "packrat-extension-" });
-		await mm.addModule("packrat-extension-baz");
+		await mm.add("packrat-extension-baz");
 
 		const meta = api.slothlet.metadata.getFor("extensions.baz");
 		expect(meta._module).toBeDefined();
@@ -157,28 +157,28 @@ describe("ModuleManager.addModule() — collision pre-flight (S7)", () => {
 	it("throws MODULE_MOUNT_COLLISION when exact mountPath is already occupied and collisionMode=error", async () => {
 		const mm = await newSlothletWithModules();
 		await mm.discover({ scanRoot: FIX_NPM, prefix: "packrat-extension-" });
-		await mm.addModule("packrat-extension-baz");
+		await mm.add("packrat-extension-baz");
 		await withSuppressedSlothletErrorOutput(async () => {
-			await expect(mm.addModule("packrat-extension-baz", { collisionMode: "error" })).rejects.toThrow(/MODULE_MOUNT_COLLISION/);
+			await expect(mm.add("packrat-extension-baz", { collisionMode: "error" })).rejects.toThrow(/MODULE_MOUNT_COLLISION/);
 		});
 	});
 
 	it("allows the mount when collisionMode is 'merge' (slothlet's existing merge behavior takes over)", async () => {
 		const mm = await newSlothletWithModules();
 		await mm.discover({ scanRoot: FIX_NPM, prefix: "packrat-extension-" });
-		await mm.addModule("packrat-extension-baz");
-		const result = await mm.addModule("packrat-extension-baz", { collisionMode: "merge" });
+		await mm.add("packrat-extension-baz");
+		const result = await mm.add("packrat-extension-baz", { collisionMode: "merge" });
 		expect(result.packageName).toBe("packrat-extension-baz");
 	});
 });
 
-// ─── addModules() — onFailure variants and concurrency ──────────────────────
+// ─── modules.add() — onFailure variants and concurrency ──────────────────────
 
 describe("ModuleManager.addModules() — onFailure", () => {
 	it("mounts all items serially under default onFailure='throw'", async () => {
 		const mm = await newSlothletWithModules();
 		await mm.discover({ scanRoot: FIX_NPM });
-		const results = await mm.addModules(["@org/packrat-driver-foo", "@org/packrat-driver-bar"]);
+		const results = await mm.add(["@org/packrat-driver-foo", "@org/packrat-driver-bar"]);
 		expect(Array.isArray(results)).toBe(true);
 		expect(results.map((r) => r.packageName).sort()).toEqual(["@org/packrat-driver-bar", "@org/packrat-driver-foo"]);
 	});
@@ -187,7 +187,7 @@ describe("ModuleManager.addModules() — onFailure", () => {
 		const mm = await newSlothletWithModules();
 		const found = await mm.discover({ scanRoot: FIX_NPM });
 		const fooEntry = found.find((r) => r.packageName === "@org/packrat-driver-foo");
-		const results = await mm.addModules([fooEntry, "@org/packrat-driver-bar"]);
+		const results = await mm.add([fooEntry, "@org/packrat-driver-bar"]);
 		expect(results.length).toBe(2);
 	});
 
@@ -195,7 +195,7 @@ describe("ModuleManager.addModules() — onFailure", () => {
 		const mm = await newSlothletWithModules();
 		await mm.discover({ scanRoot: FIX_NPM });
 		await withSuppressedSlothletErrorOutput(async () => {
-			const result = await mm.addModules(["@org/packrat-driver-foo", "@org/does-not-exist", "packrat-extension-baz"], {
+			const result = await mm.add(["@org/packrat-driver-foo", "@org/does-not-exist", "packrat-extension-baz"], {
 				onFailure: "best-effort"
 			});
 			// Note: name resolution happens up-front; @org/does-not-exist fails before any mount.
@@ -210,11 +210,11 @@ describe("ModuleManager.addModules() — onFailure", () => {
 	it("rolls back mounted modules under onFailure='rollback' when a later mount fails", async () => {
 		const mm = await newSlothletWithModules();
 		await mm.discover({ scanRoot: FIX_NPM });
-		await mm.addModule("packrat-extension-baz"); // pre-mount to force a collision
+		await mm.add("packrat-extension-baz"); // pre-mount to force a collision
 
 		await withSuppressedSlothletErrorOutput(async () => {
 			await expect(
-				mm.addModules(["@org/packrat-driver-foo", "packrat-extension-baz"], {
+				mm.add(["@org/packrat-driver-foo", "packrat-extension-baz"], {
 					collisionMode: "error",
 					onFailure: "rollback"
 				})
@@ -228,10 +228,10 @@ describe("ModuleManager.addModules() — onFailure", () => {
 		expect(checkMeta._module).toBeUndefined();
 	});
 
-	it("throws INVALID_ARGUMENT when items is not an array", async () => {
+	it("throws INVALID_ARGUMENT when the target is neither a name, a discover result nor an array", async () => {
 		const mm = await newSlothletWithModules();
 		await withSuppressedSlothletErrorOutput(async () => {
-			await expect(mm.addModules("not-an-array")).rejects.toThrow(/INVALID_ARGUMENT/);
+			await expect(mm.add(42)).rejects.toThrow(/INVALID_ARGUMENT/);
 		});
 	});
 
@@ -239,54 +239,54 @@ describe("ModuleManager.addModules() — onFailure", () => {
 		const mm = await newSlothletWithModules();
 		await mm.discover({ scanRoot: FIX_NPM });
 		await withSuppressedSlothletErrorOutput(async () => {
-			await expect(mm.addModules(["@org/packrat-driver-foo"], { onFailure: "bogus" })).rejects.toThrow(/INVALID_ARGUMENT/);
+			await expect(mm.add(["@org/packrat-driver-foo"], { onFailure: "bogus" })).rejects.toThrow(/INVALID_ARGUMENT/);
 		});
 	});
 });
 
-// ─── addModules() concurrency (G5) ──────────────────────────────────────────
+// ─── modules.add() concurrency (G5) ──────────────────────────────────────────
 
 describe("ModuleManager.addModules() — concurrency (G5)", () => {
 	it("mounts in parallel when concurrency > 1", async () => {
 		const mm = await newSlothletWithModules();
 		await mm.discover({ scanRoot: FIX_NPM });
-		const results = await mm.addModules(["@org/packrat-driver-foo", "@org/packrat-driver-bar", "packrat-extension-baz"], {
+		const results = await mm.add(["@org/packrat-driver-foo", "@org/packrat-driver-bar", "packrat-extension-baz"], {
 			concurrency: 3
 		});
 		expect(results.length).toBe(3);
 	});
 });
 
-// ─── removeModule() (S3a) ───────────────────────────────────────────────────
+// ─── modules.remove() (S3a) ───────────────────────────────────────────────────
 
 describe("ModuleManager.removeModule()", () => {
 	it("unmounts a previously-mounted module by name and returns true", async () => {
 		const mm = await newSlothletWithModules();
 		await mm.discover({ scanRoot: FIX_NPM, prefix: "packrat-extension-" });
-		await mm.addModule("packrat-extension-baz");
+		await mm.add("packrat-extension-baz");
 
-		const removed = await mm.removeModule("packrat-extension-baz");
+		const removed = await mm.remove("packrat-extension-baz");
 		expect(removed).toBe(true);
 	});
 
 	it("returns false when no module with the given name is mounted", async () => {
 		const mm = await newSlothletWithModules();
-		const removed = await mm.removeModule("never-mounted");
+		const removed = await mm.remove("never-mounted");
 		expect(removed).toBe(false);
 	});
 });
 
-// ─── getStaleMounts() (S3b) ─────────────────────────────────────────────────
+// ─── stale() (S3b) ─────────────────────────────────────────────────
 
 describe("ModuleManager.getStaleMounts() — reconciliation (S3b)", () => {
 	it("reports modules previously mounted but no longer in the discovery cache", async () => {
 		const mm = await newSlothletWithModules();
 		await mm.discover({ scanRoot: FIX_NPM });
-		await mm.addModule("packrat-extension-baz");
+		await mm.add("packrat-extension-baz");
 
 		// Re-discover from a different scanRoot — packrat-extension-baz is no longer in the cache.
 		await mm.discover({ scanRoot: FIX_FOLDER });
-		const stale = mm.getStaleMounts();
+		const stale = mm.stale();
 		expect(stale.length).toBe(1);
 		expect(stale[0].packageName).toBe("packrat-extension-baz");
 	});
@@ -294,10 +294,10 @@ describe("ModuleManager.getStaleMounts() — reconciliation (S3b)", () => {
 	it("returns empty array when all mounts are still in the cache", async () => {
 		const mm = await newSlothletWithModules();
 		await mm.discover({ scanRoot: FIX_FOLDER });
-		await mm.addModule("@local/driver-alpha");
+		await mm.add("@local/driver-alpha");
 		// Same scanRoot on re-discover → driver-alpha still in cache.
 		await mm.discover({ scanRoot: FIX_FOLDER });
-		const stale = mm.getStaleMounts();
+		const stale = mm.stale();
 		expect(stale).toEqual([]);
 	});
 });

@@ -23,7 +23,7 @@
  * object leaf `host.records`. `ext` (denied) asks `bag` for closures that read the vault and hands them to the allowed
  * leaves. Expected values come from the rule: the definer, the leaf the code runs inside and every call that handed
  * the code down have to be allowed. `ext` is one of those calls, so each relay is refused. What stays allowed is what
- * lends on purpose: a closure pinned with `self.slothlet.lockCaller()`, a leaf, and a leaf acting on its own with
+ * lends on purpose: a closure pinned with `self.slothlet.pin()`, a leaf, and a leaf acting on its own with
  * nothing handed in. The host handing the same closure to the same leaf is allowed: the host is no module.
  *
  * Inside a call that was handed code, a closure the leaf asked for itself is held to the leaf alone under "precise",

@@ -528,10 +528,10 @@ describe.each(getMatrixConfigs({}))("frozen array capture (#655) > Config: $name
 
 		it("an element refused, then allowed by removing the rule, reads", async () => {
 			api = await slothlet({ ...config, base: BASE, silent: true, permissions: { defaultPolicy: "allow", rules: [] } });
-			const id = api.slothlet.permissions.addRule({ caller: "probe.**", target: "store.ruled.2", effect: "deny" });
+			const id = api.slothlet.permissions.rules.add({ caller: "probe.**", target: "store.ruled.2", effect: "deny" });
 			expect(await api.probe.readPath(["ruled", 0])).toEqual({ value: "1" });
 			expect(await api.probe.readPath(["ruled", 2])).toEqual({ error: "PERMISSION_DENIED" });
-			api.slothlet.permissions.removeRule(id);
+			api.slothlet.permissions.rules.remove(id);
 			expect(await api.probe.readPath(["ruled", 2])).toEqual({ value: '"S3CRET"' });
 		});
 	});

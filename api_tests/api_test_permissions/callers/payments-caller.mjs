@@ -35,7 +35,7 @@ export const gatedDbWrite = async (gate) => {
 // counterpart so one permitted and one denied caller are in flight together.
 export const gatedInternalRoute = async (gate) => {
 	await gate;
-	return { ok: true, count: (await self.slothlet.permissions.global.rulesForPath("db.write.insert")).length };
+	return { ok: true, count: (await self.slothlet.permissions.global.rules.path("db.write.insert")).length };
 };
 
 // Capture an api function this module IS permitted to use, then hand the reference to a module that is

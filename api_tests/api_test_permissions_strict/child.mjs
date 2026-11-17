@@ -60,7 +60,7 @@ await record("start", async () => {
 	});
 	return "started";
 });
-out.warnings = SlothletWarning.captured.map((warning) => ({ code: warning.code, check: warning.context?.check ?? null }));
+out.warnings = (api?.slothlet.warnings.get() ?? []).map((warning) => ({ code: warning.code, check: warning.context?.check ?? null }));
 if (api) {
 	await record("report", () => api.slothlet.permissions.control.report());
 	await record("mode", () => api.slothlet.permissions.control.mode);

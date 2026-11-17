@@ -40,7 +40,7 @@ describe.each(getMatrixConfigs())("Permissions > Global Gating > $name", ({ conf
 		await api.slothlet.api.add("untrusted", `${BASE}/untrusted`);
 
 		// Global methods are still accessible from the test context (no caller module)
-		const result = api.slothlet.permissions.global.checkAccess("payments", "db");
+		const result = api.slothlet.permissions.global.check.access("payments", "db");
 		expect(result).toBeTypeOf("boolean");
 	});
 

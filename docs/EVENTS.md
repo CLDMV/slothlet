@@ -42,17 +42,17 @@ off(); // stop receiving
 
 All verbs live under `api.slothlet.event` (and `self.slothlet.event` inside modules).
 
-| Member         | Signature                                                         | Notes                                                                                                                                                                                |
-| -------------- | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `on`           | `on(event, listener, { once?, key? }) → { level, off, id }`       | Subscribe. Returns the granted level (`deny`/`notify`/`allow`), an unsubscribe, and the [listener id](#listener-ids). At `deny` the listener is not registered and `off` is a no-op. |
-| `once`         | `once(event, listener, { key? }) → { level, off, id }`            | Subscribe for a single delivery, then auto-unsubscribe.                                                                                                                              |
-| `off`          | `off(event, listener) → boolean`                                  | Remove a listener by reference.                                                                                                                                                      |
-| `emit`         | `emit(event, payload?) → Promise<void>`                           | Publish. Ungated. Resolves once all listeners settle — or, under a deferring [strategy](#host-controlled-delivery-strategy-and-deliver), once the strategy accepts the event.        |
-| `resolveLevel` | `resolveLevel(subscriberPath, event) → "deny"\|"notify"\|"allow"` | Resolve the level a **supplied** identity would be granted, without subscribing. Host-only. See [Resolving a level without subscribing](#resolving-a-level-without-subscribing).     |
-| `rules.add`    | `rules.add(rule) → ruleId`                                        | Add an event rule at runtime. Host-only; gated by `api.mutations.events`. See [Runtime rule mutation](#runtime-rule-mutation).                                                       |
-| `rules.remove` | `rules.remove(ruleId) → boolean`                                  | Remove a runtime event rule. Host-only; gated.                                                                                                                                       |
-| `strategy`     | `strategy(fn \| null) → void`                                     | Hand every emit to a host delivery strategy; `null` restores immediate delivery. Host-only. See [Host-controlled delivery](#host-controlled-delivery-strategy-and-deliver).          |
-| `deliver`      | `deliver(envelope, listenerId) → Promise<result>`                 | Deliver a strategy-held envelope to one listener. Host-only. See [Host-controlled delivery](#host-controlled-delivery-strategy-and-deliver).                                         |
+| Member         | Signature                                                   | Notes                                                                                                                                                                                |
+| -------------- | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `on`           | `on(event, listener, { once?, key? }) → { level, off, id }` | Subscribe. Returns the granted level (`deny`/`notify`/`allow`), an unsubscribe, and the [listener id](#listener-ids). At `deny` the listener is not registered and `off` is a no-op. |
+| `once`         | `once(event, listener, { key? }) → { level, off, id }`      | Subscribe for a single delivery, then auto-unsubscribe.                                                                                                                              |
+| `off`          | `off(event, listener) → boolean`                            | Remove a listener by reference.                                                                                                                                                      |
+| `emit`         | `emit(event, payload?) → Promise<void>`                     | Publish. Ungated. Resolves once all listeners settle — or, under a deferring [strategy](#host-controlled-delivery-strategy-and-deliver), once the strategy accepts the event.        |
+| `level`        | `level(subscriberPath, event) → "deny"\|"notify"\|"allow"`  | Resolve the level a **supplied** identity would be granted, without subscribing. Host-only. See [Resolving a level without subscribing](#resolving-a-level-without-subscribing).     |
+| `rules.add`    | `rules.add(rule) → ruleId`                                  | Add an event rule at runtime. Host-only; gated by `api.mutations.events`. See [Runtime rule mutation](#runtime-rule-mutation).                                                       |
+| `rules.remove` | `rules.remove(ruleId) → boolean`                            | Remove a runtime event rule. Host-only; gated.                                                                                                                                       |
+| `strategy`     | `strategy(fn \| null) → void`                               | Hand every emit to a host delivery strategy; `null` restores immediate delivery. Host-only. See [Host-controlled delivery](#host-controlled-delivery-strategy-and-deliver).          |
+| `deliver`      | `deliver(envelope, listenerId) → Promise<result>`           | Deliver a strategy-held envelope to one listener. Host-only. See [Host-controlled delivery](#host-controlled-delivery-strategy-and-deliver).                                         |
 
 A listener is always called `(payload, meta)`:
 
@@ -69,7 +69,7 @@ Each subscriber's delivery is governed by a three-level effect, resolved from th
 - **`notify`** — subscribed, but delivered only the trigger envelope `{ event, at, instanceID }` — no domain payload. This is the default: subscription is open, payload is opt-_in_.
 - **`allow`** — subscribed with the full domain payload.
 
-**The levels follow the permission mode.** Event levels are part of the permission system, so they are resolved only while it is on (a `permissions` config, `mode: "on"`, or after `control.enable()`). While it is off, which is what no `permissions` config means, or disabled (`mode: "disabled"`), no event rule is evaluated: every subscription is granted `allow` and receives the payload, whatever `events.default`, a manifest's rules or runtime rules say, as call and read rules are not evaluated there either. `on()`'s returned `level`, `resolveLevel`, the `levels` map of a strategy's envelope and the level each delivery is made at all report `allow`. Rules given in the config, by a manifest or through `event.rules.add` are kept and take effect when the system is switched on; a subscription made earlier is then resolved again on the next emit.
+**The levels follow the permission mode.** Event levels are part of the permission system, so they are resolved only while it is on (a `permissions` config, `mode: "on"`, or after `control.enable()`). While it is off, which is what no `permissions` config means, or disabled (`mode: "disabled"`), no event rule is evaluated: every subscription is granted `allow` and receives the payload, whatever `events.default`, a manifest's rules or runtime rules say, as call and read rules are not evaluated there either. `on()`'s returned `level`, `level`, the `levels` map of a strategy's envelope and the level each delivery is made at all report `allow`. Rules given in the config, by a manifest or through `event.rules.add` are kept and take effect when the system is switched on; a subscription made earlier is then resolved again on the next emit.
 
 | Permission mode                                                    | A module's subscription                                                           |
 | ------------------------------------------------------------------ | --------------------------------------------------------------------------------- |
@@ -91,19 +91,19 @@ A **host** subscription — one made with no module caller in context (the compo
 
 ## Resolving a level without subscribing
 
-`resolveLevel(subscriberPath, event)` answers the delivery level a **supplied** subscriber identity would be granted for an event — `deny` / `notify` / `allow` — without registering anything. It is the inverse of `on`: `on` derives the subscriber from the live caller and never trusts a supplied identity, whereas `resolveLevel` is answered _for_ an identity the caller names. Because it lets one caller ask about another identity, it is **host-only** — reachable only from the composing host (or a `run()` / `scope()` descended from it), gated exactly like `rules.*` by the built-in `slothlet.event.**` deny. A `null` `subscriberPath` is a host subscription and always resolves `allow`.
+`level(subscriberPath, event)` answers the delivery level a **supplied** subscriber identity would be granted for an event — `deny` / `notify` / `allow` — without registering anything. It is the inverse of `on`: `on` derives the subscriber from the live caller and never trusts a supplied identity, whereas `level` is answered _for_ an identity the caller names. Because it lets one caller ask about another identity, it is **host-only** — reachable only from the composing host (or a `run()` / `scope()` descended from it), gated exactly like `rules.*` by the built-in `slothlet.event.**` deny. A `null` `subscriberPath` is a host subscription and always resolves `allow`.
 
-The motivating consumer is a cross-boundary event-forwarding layer such as [`@cldmv/slothlet-vine`](https://github.com/CLDMV/slothlet-vine). Slothlet stays boundary-agnostic; a forwarding layer that carries an instance's events to a subscriber living in _another_ instance must enforce that remote subscriber's level on the **trusted (serving) side**, stripping the domain payload before it crosses to an instance that cannot be trusted to withhold it. `resolveLevel` is how the trusted side resolves that remote subscriber's level; the boundary layer then delivers a trigger-only or trigger-plus-payload frame accordingly, and never re-implements the policy itself. Its call-side twin is [`permissions.global.checkCall(caller, target, args)`](PERMISSIONS.md#checkcall-vs-checkaccess), which answers — for a supplied caller identity — whether the call gate would allow a specific call, host-only in the same way.
+The motivating consumer is a cross-boundary event-forwarding layer such as [`@cldmv/slothlet-vine`](https://github.com/CLDMV/slothlet-vine). Slothlet stays boundary-agnostic; a forwarding layer that carries an instance's events to a subscriber living in _another_ instance must enforce that remote subscriber's level on the **trusted (serving) side**, stripping the domain payload before it crosses to an instance that cannot be trusted to withhold it. `level` is how the trusted side resolves that remote subscriber's level; the boundary layer then delivers a trigger-only or trigger-plus-payload frame accordingly, and never re-implements the policy itself. Its call-side twin is [`permissions.global.check.call(caller, target, args)`](PERMISSIONS.md#checkcall-vs-checkaccess), which answers — for a supplied caller identity — whether the call gate would allow a specific call, host-only in the same way.
 
 ```javascript
 // On the serving instance, a forwarding layer resolves a remote subscriber's level, then strips before crossing:
-const level = api.slothlet.event.resolveLevel("renderer.dashboard", "orders.created");
+const level = api.slothlet.event.level("renderer.dashboard", "orders.created");
 // level === "allow"  → forward { event, payload, meta }
 // level === "notify" → forward { event, meta } only (payload never leaves this instance)
 // level === "deny"   → do not forward at all
 ```
 
-The remote subscriber's identity comes from the **grow side**: the forwarding layer reads `api.slothlet.caller()` on the subscribing instance — the dotted api path of the module currently subscribing, captured the same way `on` captures a subscriber — and sends that to the trusted side to resolve. `caller()` returns `null` at the host and is ungated (a module only ever learns its own identity through it, never its caller's), so the identity `resolveLevel` is asked about is the subscriber's real one, not a value the untrusted side asserted for itself.
+The remote subscriber's identity comes from the **grow side**: the forwarding layer reads `api.slothlet.caller()` on the subscribing instance — the dotted api path of the module currently subscribing, captured the same way `on` captures a subscriber — and sends that to the trusted side to resolve. `caller()` returns `null` at the host and is ungated (a module only ever learns its own identity through it, never its caller's), so the identity `level` is asked about is the subscriber's real one, not a value the untrusted side asserted for itself.
 
 ## The event-rule construct
 
@@ -127,7 +127,7 @@ const api = await slothlet({
 - `caller` — a glob matched against the **subscriber's** api path.
 - `event` — a glob matched against the **event name**.
 - `effect` — `deny` | `notify` | `allow`.
-- `condition` — optional, the same condition shape permission rules accept (see [PERMISSIONS-CONDITIONS.md](PERMISSIONS-CONDITIONS.md)), evaluated against the same `ctx`: the `context.run()` context in effect where the level is resolved (the caller of `resolveLevel`, or the emitter at emit time). Function conditions receive `null` call metadata — an emit has no call arguments. A subscriber's level is re-resolved per emit when any event rule is conditional.
+- `condition` — optional, the same condition shape permission rules accept (see [PERMISSIONS-CONDITIONS.md](PERMISSIONS-CONDITIONS.md)), evaluated against the same `ctx`: the `context.run()` context in effect where the level is resolved (the caller of `level`, or the emitter at emit time). Function conditions receive `null` call metadata — an emit has no call arguments. A subscriber's level is re-resolved per emit when any event rule is conditional.
 
 `default` overrides the built-in base level (`notify`) for subscribers that match no rule. Both, and every rule, apply only while the permission system is on (see [Delivery levels](#delivery-levels)).
 
@@ -189,7 +189,7 @@ A manifest rule overrides the built-in default; the composing host's instance an
 
 ## Runtime rule mutation
 
-Event rules are mutable at runtime through a gated, host-only surface — mirroring `permissions.addRule` for call rules:
+Event rules are mutable at runtime through a gated, host-only surface — mirroring `permissions.rules.add` for call rules:
 
 ```javascript
 const id = api.slothlet.event.rules.add({ caller: "reporting.**", event: "orders.*", effect: "allow" });
@@ -199,7 +199,7 @@ api.slothlet.event.rules.remove(id);
 - Runtime rules enter the highest (**runtime**) layer.
 - The surface is gated by `api.mutations.events` (defaults to `true`); set it `false` to freeze the event-rule set, and `rules.add` / `rules.remove` throw.
 - It is **host-only**: the built-in rules keep `event.rules.*` reachable only from the host, so a module cannot rewrite event policy at runtime.
-- While the permission system is off, those built-in rules do not apply, and module code can reach `event.rules.*`. It is then held to its own events, as its `permissions.addRule` is: the rule's `event` pattern must have a literal prefix inside the module's own subtree (`guest.**` for the module mounted at `guest`, never `**` or `other.**`), unless the module may manage rules beyond it. Its rule sits at the module layer, below the host's, and its function conditions run as the module. A module removes only the event rules its own code added, never the host's.
+- While the permission system is off, those built-in rules do not apply, and module code can reach `event.rules.*`. It is then held to its own events, as its `permissions.rules.add` is: the rule's `event` pattern must have a literal prefix inside the module's own subtree (`guest.**` for the module mounted at `guest`, never `**` or `other.**`), unless the module may manage rules beyond it. Its rule sits at the module layer, below the host's, and its function conditions run as the module. A module removes only the event rules its own code added, never the host's.
 - Runtime mutations are recorded and **replayed on `reload()`**, like permission-rule mutations.
 
 Changing the rule set re-resolves the delivery level of existing subscribers on the next emit — a subscriber granted `allow` is downgraded (or upgraded) as soon as a matching rule changes.

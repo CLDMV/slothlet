@@ -19,12 +19,12 @@
  * @description
  * Code supplied to another module's call runs as its supplier, and the call it runs inside has to allow each
  * access as well. These tests pin the second half: an access only the supplier is allowed is refused from inside
- * the callee's call, and every identity taken there — a `lockCaller` pin, a captured reference, a `run()` scope,
- * a relay's `lockCaller.caller` — keeps the callee as its ceiling, so it cannot be used afterwards to carry the
+ * the callee's call, and every identity taken there — a `pin` pin, a captured reference, a `run()` scope,
+ * a relay's `pin.caller` — keeps the callee as its ceiling, so it cannot be used afterwards to carry the
  * supplier past what the callee may do.
  *
  * Fixture: `supplier.probe` may call `callee.**`, `relay.**` and its own `vault.secret.forSupplier` and read
- * `vault.data.level`; only `callee.**` may call `vault.secret.secret`; `relay.**` holds `lockCaller.caller`.
+ * `vault.data.level`; only `callee.**` may call `vault.secret.secret`; `relay.**` holds `pin.caller`.
  *
  * @module tests/vitests/suites/permissions/permissions-caller-supplied-ceiling
  */
@@ -43,8 +43,8 @@ const RULES = [
 	{ caller: "supplier.**", target: "callee.**", effect: "allow" },
 	{ caller: "supplier.**", target: "relay.**", effect: "allow" },
 	{ caller: "callee.**", target: "relay.**", effect: "allow" },
-	{ caller: "relay.**", target: "slothlet.lockCaller.caller", effect: "allow" },
-	{ caller: "**", target: "slothlet.run", effect: "allow" }
+	{ caller: "relay.**", target: "slothlet.pin.caller", effect: "allow" },
+	{ caller: "**", target: "slothlet.context.run", effect: "allow" }
 ];
 
 const DENIED = { ok: false, code: "PERMISSION_DENIED" };
@@ -96,7 +96,7 @@ describe.each(getMatrixConfigs())("Permissions > caller-supplied code keeps the 
 		expect(await withSuppressedSlothletErrorOutput(() => api.supplier.probe.ceilingRead())).toEqual(DENIED);
 	});
 
-	it("a lockCaller pin taken by supplied code keeps the callee as its ceiling", async () => {
+	it("a pin pin taken by supplied code keeps the callee as its ceiling", async () => {
 		await build();
 		expect(await withSuppressedSlothletErrorOutput(() => api.supplier.probe.pinnedInside())).toEqual(DENIED);
 	});
@@ -111,7 +111,7 @@ describe.each(getMatrixConfigs())("Permissions > caller-supplied code keeps the 
 		expect(await withSuppressedSlothletErrorOutput(() => api.supplier.probe.scopeInside())).toEqual(DENIED);
 	});
 
-	it("a relay's lockCaller.caller pin of supplied code keeps the callee as its ceiling", async () => {
+	it("a relay's pin.caller pin of supplied code keeps the callee as its ceiling", async () => {
 		await build();
 		expect(await withSuppressedSlothletErrorOutput(() => api.supplier.probe.relayInside())).toEqual(DENIED);
 	});

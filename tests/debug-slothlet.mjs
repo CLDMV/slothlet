@@ -1181,7 +1181,7 @@ async function runDebug(config, modeLabel, awaitCalls = false) {
 	// documented MIGRATION.md table went unnoticed. Booting both modes over the dedicated
 	// collision base keeps that family under comparison permanently.
 	// The framework's own control tree (api.slothlet, shutdown, destroy) carries mode-varying
-	// STATUS fields (e.g. materialize.materialized) — legitimate differences, not composition
+	// STATUS fields (e.g. materialize.complete) — legitimate differences, not composition
 	// drift. Parity passes compare the composed USER surface only.
 	const pickUserSurface = (apiObj) => {
 		const view = {};

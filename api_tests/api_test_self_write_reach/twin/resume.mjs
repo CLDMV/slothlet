@@ -26,7 +26,7 @@ export async function later(gate) {
 	const permissions = self.slothlet.permissions;
 	await gate;
 	try {
-		permissions.addRule({ caller: "**", target: "slothlet.**:write", effect: "allow" });
+		permissions.rules.add({ caller: "**", target: "slothlet.**:write", effect: "allow" });
 		return "landed";
 	} catch (error) {
 		return error.code;
@@ -40,7 +40,7 @@ export async function later(gate) {
  * @returns {Promise<string>} `"planted"` when the function was placed, else the refusal's code.
  */
 export async function plantLater(gate) {
-	const root = self.slothlet.diag.getAPI();
+	const root = self.slothlet.diag.api();
 	await gate;
 	try {
 		root.plantedTwin = function plantedTwin() {

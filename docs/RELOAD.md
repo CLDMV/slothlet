@@ -451,7 +451,7 @@ See [LIFECYCLE.md](LIFECYCLE.md#instance-events) for the four events and who rec
 | Runtime permission rules, event rules, principals | replayed                                                | **dropped** (config-declared rules re-applied)          |
 | Runtime event subscriptions (`event.on`)          | dropped                                                 | **dropped**                                             |
 | Runtime lifecycle subscribers (`lifecycle.on`)    | dropped                                                 | **dropped** (config `lifecycle` handlers re-subscribed) |
-| User metadata (`metadata.set` / `setGlobal`)      | kept                                                    | **dropped** (config `metadata` re-applied)              |
+| User metadata (`metadata.set` / `global`)         | kept                                                    | **dropped** (config `metadata` re-applied)              |
 | Runtime assignments (`api.x = …`, `self.x = …`)   | cleared (a base `api.slothlet.api.reload()` keeps them) | **dropped**                                             |
 | `control.seal()`                                  | preserved                                               | **dropped** — the new instance starts unsealed          |
 | `api.slothlet.env` snapshot                       | kept                                                    | re-captured (a new instance)                            |

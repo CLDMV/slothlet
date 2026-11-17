@@ -38,7 +38,7 @@ describe.each(getMatrixConfigs())("Permissions > Error Invalid Rule > $name", ({
 		});
 
 		try {
-			api.slothlet.permissions.addRule({
+			api.slothlet.permissions.rules.add({
 				target: "payments.**",
 				effect: "allow"
 			});
@@ -59,7 +59,7 @@ describe.each(getMatrixConfigs())("Permissions > Error Invalid Rule > $name", ({
 		});
 
 		try {
-			api.slothlet.permissions.addRule({
+			api.slothlet.permissions.rules.add({
 				caller: "callers.**",
 				effect: "allow"
 			});
@@ -80,7 +80,7 @@ describe.each(getMatrixConfigs())("Permissions > Error Invalid Rule > $name", ({
 		});
 
 		try {
-			api.slothlet.permissions.addRule({
+			api.slothlet.permissions.rules.add({
 				caller: "callers.**",
 				target: "payments.**",
 				effect: "invalid"
@@ -102,7 +102,7 @@ describe.each(getMatrixConfigs())("Permissions > Error Invalid Rule > $name", ({
 		});
 
 		try {
-			api.slothlet.permissions.addRule(null);
+			api.slothlet.permissions.rules.add(null);
 			expect.unreachable("Should have thrown");
 		} catch (err) {
 			expect(err.message).toContain("INVALID_PERMISSION_RULE");
@@ -120,7 +120,7 @@ describe.each(getMatrixConfigs())("Permissions > Error Invalid Rule > $name", ({
 		});
 
 		try {
-			api.slothlet.permissions.addRule("invalid-string");
+			api.slothlet.permissions.rules.add("invalid-string");
 			expect.unreachable("Should have thrown");
 		} catch (err) {
 			expect(err.message).toContain("INVALID_PERMISSION_RULE");

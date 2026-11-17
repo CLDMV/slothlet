@@ -89,7 +89,7 @@ describe("Background Materialization (config.tracking.materialization)", () => {
 				// With background materialization, all should be materialized
 				expect(stats.remaining).toBe(0);
 				expect(stats.percentage).toBe(100);
-				expect(api.slothlet.materialize.materialized).toBe(true);
+				expect(api.slothlet.materialize.complete).toBe(true);
 
 				await api.shutdown();
 			});
@@ -105,7 +105,7 @@ describe("Background Materialization (config.tracking.materialization)", () => {
 
 				const stats = api.slothlet.materialize.get();
 				expect(stats.remaining).toBe(0);
-				expect(api.slothlet.materialize.materialized).toBe(true);
+				expect(api.slothlet.materialize.complete).toBe(true);
 
 				await api.shutdown();
 			});
@@ -228,7 +228,7 @@ describe("Background Materialization (config.tracking.materialization)", () => {
 				// All should be materialized
 				const stats = api.slothlet.materialize.get();
 				expect(stats.remaining).toBe(0);
-				expect(api.slothlet.materialize.materialized).toBe(true);
+				expect(api.slothlet.materialize.complete).toBe(true);
 
 				await api.shutdown();
 			});
@@ -250,7 +250,7 @@ describe("Background Materialization (config.tracking.materialization)", () => {
 
 				// Should resolve nearly instantly
 				expect(duration).toBeLessThan(100);
-				expect(api.slothlet.materialize.materialized).toBe(true);
+				expect(api.slothlet.materialize.complete).toBe(true);
 
 				await api.shutdown();
 			});
@@ -269,7 +269,7 @@ describe("Background Materialization (config.tracking.materialization)", () => {
 				// Eager mode should always show 100% materialized
 				const stats = api.slothlet.materialize.get();
 				expect(stats.remaining).toBe(0);
-				expect(api.slothlet.materialize.materialized).toBe(true);
+				expect(api.slothlet.materialize.complete).toBe(true);
 
 				await api.shutdown();
 			});

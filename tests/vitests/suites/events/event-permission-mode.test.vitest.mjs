@@ -27,7 +27,7 @@
  * | `mode: "disabled"`                               | `allow`, whatever `events.default` and the rules say |
  * | `mode: "on"` (or a `permissions` block)          | the event rules: built-in `notify`, then `events.default`, manifest, instance and runtime rules |
  *
- * `on()`'s returned `level`, `event.resolveLevel`, the `levels` map a strategy is handed at emit time and the level a
+ * `on()`'s returned `level`, `event.level`, the `levels` map a strategy is handed at emit time and the level a
  * delivery is made at all have to agree.
  * @module tests/vitests/suites/events/event-permission-mode
  */
@@ -70,12 +70,12 @@ const NOT_ON = [
  * @param {string} event - The event name.
  * @param {*} payload - What to emit.
  * @returns {Promise<{on: string, resolved: string, emitLevels: string[], delivered: Array<object>, got: Array<object>}>}
- *   The level `on()` returned, the level `resolveLevel` answers, the levels in the strategy's envelope, what each
+ *   The level `on()` returned, the level `event.level` answers, the levels in the strategy's envelope, what each
  *   `deliver` resolved to, and what the module's listener received.
  */
 async function levelsEverywhere(api, event, payload) {
 	const on = await api.subscriber.subscribe(event);
-	const resolved = api.slothlet.event.resolveLevel("subscriber.subscribe", event);
+	const resolved = api.slothlet.event.level("subscriber.subscribe", event);
 	const held = [];
 	api.slothlet.event.strategy((envelope, listeners) => {
 		held.push({ envelope, listeners });
@@ -122,7 +122,7 @@ describe.each(getMatrixConfigs())("Events > the event pool follows the permissio
 			api = await slothlet({ ...config, base: BASE, silent: true, ...(permissions ? { permissions } : {}) });
 			api.slothlet.event.rules.add({ caller: "subscriber.**", event: "orders.*", effect: "deny" });
 			expect(await api.subscriber.subscribe("orders.created")).toBe("allow");
-			expect(api.slothlet.event.resolveLevel("subscriber.subscribe", "orders.created")).toBe("allow");
+			expect(api.slothlet.event.level("subscriber.subscribe", "orders.created")).toBe("allow");
 			await api.emitter.fire("orders.created", { id: 8 });
 			expect((await api.subscriber.drain()).map((entry) => entry.payload)).toEqual([{ id: 8 }]);
 		});
@@ -205,7 +205,7 @@ describe.each(getMatrixConfigs())("Events > the event pool follows the permissio
 				silent: true,
 				permissions: { mode: "on", defaultPolicy: "allow", events: { default: "deny" } }
 			});
-			await api.slothlet.api.modules.addModule("@local/evt-plugin", { discover: { scanRoot: FIX_EVT_MODULE } });
+			await api.slothlet.api.modules.add("@local/evt-plugin", { discover: { scanRoot: FIX_EVT_MODULE } });
 			// Manifest: { caller: "subscriber.**", event: "manifest.*", effect: "allow" }.
 			expect(await api.subscriber.subscribe("manifest.data")).toBe("allow");
 			expect(await api.subscriber.subscribe("other.thing")).toBe("deny");
@@ -218,7 +218,7 @@ describe.each(getMatrixConfigs())("Events > the event pool follows the permissio
 				silent: true,
 				permissions: { mode, defaultPolicy: "allow", events: { default: "deny" } }
 			});
-			await api.slothlet.api.modules.addModule("@local/evt-plugin", { discover: { scanRoot: FIX_EVT_MODULE } });
+			await api.slothlet.api.modules.add("@local/evt-plugin", { discover: { scanRoot: FIX_EVT_MODULE } });
 			expect(await api.subscriber.subscribe("manifest.data")).toBe("allow");
 			expect(await api.subscriber.subscribe("other.thing")).toBe("allow");
 		});
@@ -237,12 +237,12 @@ describe.each(getMatrixConfigs())("Events > the event pool follows the permissio
 			expect((await api.subscriber.drain()).map((entry) => entry.payload)).toEqual([{ n: 1 }]);
 
 			api.slothlet.permissions.control.enable();
-			expect(api.slothlet.event.resolveLevel("subscriber.subscribe", "news.item")).toBe("notify");
+			expect(api.slothlet.event.level("subscriber.subscribe", "news.item")).toBe("notify");
 			await api.emitter.fire("news.item", { n: 2 });
 			expect((await api.subscriber.drain()).map((entry) => entry.payload)).toEqual([undefined]);
 
 			api.slothlet.permissions.control.disable();
-			expect(api.slothlet.event.resolveLevel("subscriber.subscribe", "news.item")).toBe("allow");
+			expect(api.slothlet.event.level("subscriber.subscribe", "news.item")).toBe("allow");
 			await api.emitter.fire("news.item", { n: 3 });
 			expect((await api.subscriber.drain()).map((entry) => entry.payload)).toEqual([{ n: 3 }]);
 		});

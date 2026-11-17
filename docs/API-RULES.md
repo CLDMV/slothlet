@@ -750,7 +750,7 @@ api.thing("x"); // ✅ the leaf itself, mounted directly (nothing to hoist)
 **Status**: ✅ Implemented (`src/lib/helpers/module-discovery.mjs`, `src/lib/helpers/module-manifest-validator.mjs`)
 **Conditions**: [G09–G14](API-RULES/API-DISCOVERY-CONDITIONS.md#g09-reserved-mountpath-root-rejection) — Reserved MountPath-Root Rejection, External-Module Validity Gate, Real-Path Dedupe & Duplicate `name@version`, Content-Filter Veto, ScanRoot Mode Auto-Detect, CJS Interop Export Shaping
 
-**Purpose**: Governs which installed packages / external modules become part of the api during `discover()` / `addModules()`. A candidate must have a valid `package.json` and resolvable manifest, must not duplicate a `name@version` at a different real path, must survive the consumer content-filter, and must not claim a reserved mount root. npm-mode vs folder-mode scanning selects the candidate universe.
+**Purpose**: Governs which installed packages / external modules become part of the api during `discover()` / `modules.add([...])`. A candidate must have a valid `package.json` and resolvable manifest, must not duplicate a `name@version` at a different real path, must survive the consumer content-filter, and must not claim a reserved mount root. npm-mode vs folder-mode scanning selects the candidate universe.
 
 ---
 
@@ -826,7 +826,7 @@ api.thing("x"); // ✅ the leaf itself, mounted directly (nothing to hoist)
 
 **Category**: Built-in
 **Status**: ✅ Implemented (`src/lib/builders/api_builder.mjs`)
-**Conditions**: [B01–B04](API-RULES/API-BUILTIN-CONDITIONS.md) — Reserved Root Keys, `slothlet.diag` Gating, `api.add` Option Lock, `versioning.unregister` No-Op
+**Conditions**: [B01–B04](API-RULES/API-BUILTIN-CONDITIONS.md) — Reserved Root Keys, `slothlet.diag` Gating, `api.add` Option Lock, `versioning.remove` No-Op
 
 **Purpose**: Governs the framework-owned surface: reserved root keys (`slothlet` replaced with a warning; `shutdown`/`destroy` captured as user hooks and invoked), the diagnostics namespace gate, and the `api.add` option lock. Reserved-key protection at the file/export/mount layers is enforced by G08/G09 (Rules 14/15). Names the api node answers like a function (`name`, `length`, `prototype`, `toString`, `valueOf`, `toJSON`, `constructor`) are not reserved: an export, file, folder or mount of that name is an ordinary member and wins over the node's own answer (see [Module Structure](MODULE-STRUCTURE.md)).
 

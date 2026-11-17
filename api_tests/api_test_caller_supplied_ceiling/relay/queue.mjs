@@ -31,7 +31,7 @@ import { self } from "@cldmv/slothlet/runtime";
  * await api.relay.queue.later(() => 1);
  */
 export function later(fn) {
-	const pinned = self.slothlet.lockCaller.caller(fn);
+	const pinned = self.slothlet.pin.caller(fn);
 	return new Promise((resolve) => setTimeout(resolve, 0)).then(() =>
 		Promise.resolve()
 			.then(() => pinned())

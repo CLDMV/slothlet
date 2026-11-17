@@ -97,11 +97,11 @@ const members = (names) => names.filter((name) => NAMES.includes(name));
 /**
  * Every way plain JavaScript lists an object, applied to the node at a path.
  * @param {string} path - The path; empty for the root.
- * @param {"self"|"kept"|"api"} [via="self"] - Through `self`, the `self` kept at load, or `self.slothlet.diag.getAPI()`.
+ * @param {"self"|"kept"|"api"} [via="self"] - Through `self`, the `self` kept at load, or `self.slothlet.diag.api()`.
  * @returns {object} The listings.
  */
 export function list(path, via = "self") {
-	const root = via === "kept" ? kept : via === "api" ? self.slothlet.diag.getAPI() : self;
+	const root = via === "kept" ? kept : via === "api" ? self.slothlet.diag.api() : self;
 	const node = at(root, path);
 	return {
 		keys: answer(() => members(Object.keys(node))),
@@ -146,7 +146,7 @@ export function list(path, via = "self") {
  * @returns {*} Its description, or `{ threw }`.
  */
 export function read(path, via = "self") {
-	const root = via === "kept" ? kept : via === "api" ? self.slothlet.diag.getAPI() : self;
+	const root = via === "kept" ? kept : via === "api" ? self.slothlet.diag.api() : self;
 	return answer(() => described(at(root, path)));
 }
 

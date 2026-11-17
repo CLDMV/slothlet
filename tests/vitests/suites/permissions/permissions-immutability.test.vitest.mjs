@@ -38,7 +38,7 @@ describe.each(getMatrixConfigs())("Permissions > Immutability > $name", ({ confi
 		});
 
 		// Get the rule for payments
-		const rules = api.slothlet.permissions.global.rulesForPath("payments.charge.process");
+		const rules = api.slothlet.permissions.global.rules.path("payments.charge.process");
 		const denyRule = rules.find((r) => r.effect === "deny" && r.target === "payments.**");
 		expect(denyRule).toBeDefined();
 		expect(denyRule.id).toBeTypeOf("string");
@@ -47,7 +47,7 @@ describe.each(getMatrixConfigs())("Permissions > Immutability > $name", ({ confi
 		denyRule.effect = "allow";
 
 		// Re-fetch — original rule should still be deny
-		const rules2 = api.slothlet.permissions.global.rulesForPath("payments.charge.process");
+		const rules2 = api.slothlet.permissions.global.rules.path("payments.charge.process");
 		const denyRule2 = rules2.find((r) => r.target === "payments.**");
 		expect(denyRule2.effect).toBe("deny");
 	});

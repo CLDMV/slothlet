@@ -69,7 +69,7 @@ describe.each(getMatrixConfigs())("Config > clock > $name", ({ config }) => {
 			api = await build({ now: () => time });
 			const resolve = vi.fn(async () => ({}));
 			api.slothlet.permissions.principal.register("roles", { key: (ctx) => ctx.user, resolve, maxAge: 10 });
-			const { checkCall } = api.slothlet.permissions.global;
+			const { call: checkCall } = api.slothlet.permissions.global.check;
 			await api.slothlet.context.run({ user: "u1" }, async () => {
 				const ask = () => checkCall("client.app", "project.files.list", []);
 				expect(await ask()).toBe(true);
@@ -89,7 +89,7 @@ describe.each(getMatrixConfigs())("Config > clock > $name", ({ config }) => {
 			let time = 5000;
 			api = await build({ now: () => time });
 			api.slothlet.permissions.principal.register("roles", { key: (ctx) => ctx.user, resolve: async () => ({}), maxAge: 10 });
-			const { checkCall } = api.slothlet.permissions.global;
+			const { call: checkCall } = api.slothlet.permissions.global.check;
 			await api.slothlet.context.run({ user: "u1" }, async () => {
 				const ask = () => checkCall("client.app", "project.files.list", []);
 				await ask();
@@ -103,7 +103,7 @@ describe.each(getMatrixConfigs())("Config > clock > $name", ({ config }) => {
 			let answer = 5000;
 			api = await build({ now: () => answer });
 			api.slothlet.permissions.principal.register("roles", { key: (ctx) => ctx.user, resolve: async () => ({}), maxAge: 10 });
-			const { checkCall } = api.slothlet.permissions.global;
+			const { call: checkCall } = api.slothlet.permissions.global.check;
 			await api.slothlet.context.run({ user: "u1" }, async () => {
 				const ask = () => checkCall("client.app", "project.files.list", []);
 				await ask();
@@ -123,7 +123,7 @@ describe.each(getMatrixConfigs())("Config > clock > $name", ({ config }) => {
 				}
 			});
 			api.slothlet.permissions.principal.register("roles", { key: (ctx) => ctx.user, resolve: async () => ({}), maxAge: 10 });
-			const { checkCall } = api.slothlet.permissions.global;
+			const { call: checkCall } = api.slothlet.permissions.global.check;
 			await api.slothlet.context.run({ user: "u1" }, async () => {
 				await checkCall("client.app", "project.files.list", []);
 				broken = true;
@@ -136,7 +136,7 @@ describe.each(getMatrixConfigs())("Config > clock > $name", ({ config }) => {
 			api = await build({ now: () => time }, [{ caller: "untrusted.**", target: "admin.**", effect: "deny" }]);
 			const denied = [];
 			api.slothlet.lifecycle.on("permission:denied", (payload) => denied.push(payload));
-			api.slothlet.permissions.global.checkCall("untrusted.x", "admin.y", []);
+			api.slothlet.permissions.global.check.call("untrusted.x", "admin.y", []);
 			await settle();
 			expect(denied).toHaveLength(1);
 			expect(denied[0].timestamp).toBe(time);
@@ -222,7 +222,7 @@ describe.each(getMatrixConfigs())("Config > clock > $name", ({ config }) => {
 		vi.setSystemTime(new Date("2001-01-01T00:00:00Z"));
 		const denied = [];
 		api.slothlet.lifecycle.on("permission:denied", (payload) => denied.push(payload));
-		api.slothlet.permissions.global.checkCall("untrusted.x", "admin.y", []);
+		api.slothlet.permissions.global.check.call("untrusted.x", "admin.y", []);
 		await vi.advanceTimersByTimeAsync(1);
 		expect(denied).toHaveLength(1);
 		expect(denied[0].timestamp).toBeGreaterThan(Date.parse("2020-01-01T00:00:00Z"));
@@ -247,8 +247,8 @@ describe.each(getMatrixConfigs())("Config > clock > $name", ({ config }) => {
 			const stamps = { one: [], two: [] };
 			api.slothlet.lifecycle.on("permission:denied", (payload) => stamps.one.push(payload.timestamp));
 			other.slothlet.lifecycle.on("permission:denied", (payload) => stamps.two.push(payload.timestamp));
-			api.slothlet.permissions.global.checkCall("untrusted.x", "admin.y", []);
-			other.slothlet.permissions.global.checkCall("untrusted.x", "admin.y", []);
+			api.slothlet.permissions.global.check.call("untrusted.x", "admin.y", []);
+			other.slothlet.permissions.global.check.call("untrusted.x", "admin.y", []);
 			await settle();
 			expect(stamps).toEqual({ one: [111], two: [222] });
 		} finally {

@@ -14,7 +14,7 @@
  */
 
 /**
- * @fileoverview A module mounted via api.modules.addModule()/addModules() must get its configured
+ * @fileoverview A module mounted via api.modules.add()/modules.add() must get its configured
  * routines' stacked callables installed (#362).
  *
  * @description
@@ -49,8 +49,8 @@ afterEach(async () => {
 	}
 });
 
-describe("routine stacks are installed for modules mounted via addModule()/addModules() (#362)", () => {
-	it("addModule() installs the configured routine's stacked callable at the mounted leaf, and it invokes the contributor", async () => {
+describe("routine stacks are installed for modules mounted via modules.add()/modules.add() (#362)", () => {
+	it("modules.add() installs the configured routine's stacked callable at the mounted leaf, and it invokes the contributor", async () => {
 		api = await slothlet({
 			base: TEST_DIRS.API_TEST,
 			mode: "eager",
@@ -60,7 +60,7 @@ describe("routine stacks are installed for modules mounted via addModule()/addMo
 			api: { collision: { initial: "merge", api: "merge" } }
 		});
 
-		const res = await api.slothlet.api.modules.addModule("@local/routine-widget", { discover: { scanRoot: FIX_ROUTINE_MODULE } });
+		const res = await api.slothlet.api.modules.add("@local/routine-widget", { discover: { scanRoot: FIX_ROUTINE_MODULE } });
 		expect(res.mountPath).toBe("ext.widget");
 
 		// The mount path must have installed the routine's stacked callable (fails pre-#362-Fix-B:
@@ -75,7 +75,7 @@ describe("routine stacks are installed for modules mounted via addModule()/addMo
 		expect(globalThis.__slothletRoutineModuleLog).toEqual([{ from: "routine-widget", args: ["alpha", 7] }]);
 	});
 
-	it("addModules() installs the stacked callable the same way", async () => {
+	it("modules.add() installs the stacked callable the same way", async () => {
 		api = await slothlet({
 			base: TEST_DIRS.API_TEST,
 			mode: "eager",
@@ -86,7 +86,7 @@ describe("routine stacks are installed for modules mounted via addModule()/addMo
 		});
 
 		const found = await api.slothlet.api.modules.discover({ scanRoot: FIX_ROUTINE_MODULE });
-		await api.slothlet.api.modules.addModules(found);
+		await api.slothlet.api.modules.add(found);
 
 		expect(api.ext.widget.initialize.__slothletRoutineStack).toBe(true);
 

@@ -91,7 +91,7 @@ describe.each(CONFIGS)("host write grants (#625) — $mode / $runtime", ({ mode,
 
 	it("lets a host rule added at runtime grant the write", async () => {
 		await load({ permissions: {} });
-		for (const rule of GRANT) api.slothlet.permissions.addRule(rule);
+		for (const rule of GRANT) api.slothlet.permissions.rules.add(rule);
 		const report = await api.guest.x.writeVictim();
 		expect(report).toEqual(every(report, "done"));
 	});

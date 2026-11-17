@@ -27,7 +27,7 @@ describe.each(getMatrixConfigs())("Permissions > Cache Invalidation > $name", ({
 		api = null;
 	});
 
-	it("cache clears on addRule — new rule takes effect immediately", async () => {
+	it("cache clears on rules.add — new rule takes effect immediately", async () => {
 		api = await slothlet({
 			...config,
 			base: BASE,
@@ -41,7 +41,7 @@ describe.each(getMatrixConfigs())("Permissions > Cache Invalidation > $name", ({
 		expect(result.ok).toBe(true);
 
 		// Add deny rule — cache should invalidate
-		api.slothlet.permissions.addRule({ caller: "callers.**", target: "payments.**", effect: "deny" });
+		api.slothlet.permissions.rules.add({ caller: "callers.**", target: "payments.**", effect: "deny" });
 
 		// Next call should be denied (cache was cleared)
 		try {
@@ -52,7 +52,7 @@ describe.each(getMatrixConfigs())("Permissions > Cache Invalidation > $name", ({
 		}
 	});
 
-	it("cache clears on removeRule", async () => {
+	it("cache clears on rules.remove", async () => {
 		api = await slothlet({
 			...config,
 			base: BASE,
@@ -61,7 +61,7 @@ describe.each(getMatrixConfigs())("Permissions > Cache Invalidation > $name", ({
 			}
 		});
 
-		const ruleId = api.slothlet.permissions.addRule({ caller: "callers.**", target: "payments.**", effect: "deny" });
+		const ruleId = api.slothlet.permissions.rules.add({ caller: "callers.**", target: "payments.**", effect: "deny" });
 
 		// Denied
 		try {
@@ -72,7 +72,7 @@ describe.each(getMatrixConfigs())("Permissions > Cache Invalidation > $name", ({
 		}
 
 		// Remove rule — cache should invalidate
-		api.slothlet.permissions.removeRule(ruleId);
+		api.slothlet.permissions.rules.remove(ruleId);
 
 		// Now allowed
 		const result = await api.callers.paymentsCaller.callCharge(100);

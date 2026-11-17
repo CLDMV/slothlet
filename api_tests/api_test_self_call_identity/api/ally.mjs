@@ -28,7 +28,7 @@ import { board, attempt } from "../helpers/board.mjs";
 export function post() {
 	board.kept = self.vault;
 	board.keptGet = self.vault.get;
-	board.allyLent = self.slothlet.lockCaller(() => self.vault.get());
+	board.allyLent = self.slothlet.pin(() => self.vault.get());
 	return true;
 }
 

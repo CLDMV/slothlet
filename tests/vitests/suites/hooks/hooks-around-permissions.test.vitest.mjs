@@ -72,13 +72,11 @@ describe.each(getMatrixConfigs())("Hooks > around permissions and pinning (#496)
 
 	beforeEach(() => {
 		SlothletWarning.suppressConsole = true;
-		SlothletWarning.clearCaptured();
 	});
 
 	afterEach(async () => {
 		if (api) await api.shutdown();
 		api = null;
-		SlothletWarning.clearCaptured();
 	});
 
 	const boot = (permissions) => slothlet({ ...config, base: DIR, hook: true, diagnostics: true, ...(permissions ? { permissions } : {}) });
@@ -135,7 +133,7 @@ describe.each(getMatrixConfigs())("Hooks > around permissions and pinning (#496)
 		api = await boot(null);
 		const id = await api.auditor.armOpts("db.read:around", { lockCaller: false });
 		expect(api.slothlet.hook.list({ id }).registeredHooks[0].lockCaller).toBe(true);
-		expect(api.slothlet.diag.SlothletWarning.captured.some((w) => w.code === "HOOK_UNPINNED_IGNORED")).toBe(true);
+		expect(api.slothlet.warnings.get().some((w) => w.code === "HOOK_UNPINNED_IGNORED")).toBe(true);
 	});
 
 	it("a pinned around hook's next() runs the target as the intercepted call, not as the hook owner", async () => {

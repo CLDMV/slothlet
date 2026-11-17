@@ -4,7 +4,7 @@ The metadata system provides secure, immutable function tagging and runtime intr
 
 ## Overview
 
-Every function loaded by slothlet automatically receives **system metadata** - immutable fields like `filePath`, `apiPath`, and `moduleID` that are set by the lifecycle system and cannot be overridden. On top of that, user code can attach **user metadata** at load time (via `api.slothlet.api.add()`), at runtime (via `api.slothlet.metadata.*`), or globally (via `setGlobal()`).
+Every function loaded by slothlet automatically receives **system metadata** - immutable fields like `filePath`, `apiPath`, and `moduleID` that are set by the lifecycle system and cannot be overridden. On top of that, user code can attach **user metadata** at load time (via `api.slothlet.api.add()`), at runtime (via `api.slothlet.metadata.*`), or globally (via `global()`).
 
 All metadata is deeply frozen with recursive `Object.freeze()`. No code can modify an existing metadata value - modifications must go through the metadata API, which creates updated internal state and merges fresh frozen objects on the next read.
 
@@ -49,7 +49,7 @@ Provided by user code. Stored separately and merged with system metadata at read
 
 | Scope    | API                                                         | Priority                                            |
 | -------- | ----------------------------------------------------------- | --------------------------------------------------- |
-| Global   | `api.slothlet.metadata.setGlobal()`                         | Lowest                                              |
+| Global   | `api.slothlet.metadata.global()`                            | Lowest                                              |
 | Path     | `api.slothlet.metadata.setFor()` / `api.slothlet.api.add()` | Middle                                              |
 | Function | `api.slothlet.metadata.set()`                               | Highest (overrides path and global, but not system) |
 
@@ -106,13 +106,13 @@ Empty metadata or no third argument produces no user metadata (only system metad
 
 `api.slothlet.metadata` exposes five methods for managing user metadata after load.
 
-### setGlobal(key, value)
+### global(key, value)
 
 Set a global metadata value applied to all functions in the instance:
 
 ```javascript
-api.slothlet.metadata.setGlobal("environment", "production");
-api.slothlet.metadata.setGlobal("appVersion", "3.0.0");
+api.slothlet.metadata.global("environment", "production");
+api.slothlet.metadata.global("appVersion", "3.0.0");
 
 // All functions now have these in __metadata
 const meta = api.math.add.__metadata;
@@ -199,7 +199,7 @@ api.slothlet.metadata.getFor("math.add"); // → { category: "addition" }
 api.slothlet.metadata.getFor("plugins-core_abc123"); // resolved to its registered apiPath
 ```
 
-Returns a merged plain object (not frozen), copied for each call: changing it, at any depth, changes only the copy, never what is stored for the path. Only `setFor()` and its siblings change that. Includes globals set via `setGlobal()` and inherited ancestor metadata, but **excludes immutable system metadata** (`filePath`, `moduleID`, `apiPath`, `taggedAt`) — those live on individual function wrappers and are accessed via `metadata.get(fn)` or `fn.__metadata`.
+Returns a merged plain object (not frozen), copied for each call: changing it, at any depth, changes only the copy, never what is stored for the path. Only `setFor()` and its siblings change that. Includes globals set via `global()` and inherited ancestor metadata, but **excludes immutable system metadata** (`filePath`, `moduleID`, `apiPath`, `taggedAt`) — those live on individual function wrappers and are accessed via `metadata.get(fn)` or `fn.__metadata`.
 
 Returns `{}` (with any global user metadata merged in) when no path metadata has been set.
 
@@ -281,7 +281,7 @@ When `__metadata` is read, the system merges all metadata layers (lowest to high
 
 | Layer        | Source                                                              |
 | ------------ | ------------------------------------------------------------------- |
-| 1 - Global   | `api.slothlet.metadata.setGlobal()`                                 |
+| 1 - Global   | `api.slothlet.metadata.global()`                                    |
 | 2 - Path     | `api.slothlet.metadata.setFor()`, `api.slothlet.api.add()` metadata |
 | 3 - Function | `api.slothlet.metadata.set()`                                       |
 | 4 - System   | `filePath`, `sourceFolder`, `apiPath`, `moduleID`, `taggedAt`       |
@@ -325,11 +325,11 @@ api.slothlet.metadata.set(api.plugins.someFunc, "trusted", false);
 
 ### Metadata survives full reload
 
-User metadata set via `set()` and `setGlobal()` is automatically preserved across `api.slothlet.reload()`:
+User metadata set via `set()` and `global()` is automatically preserved across `api.slothlet.reload()`:
 
 ```javascript
 api.slothlet.metadata.set(api.math.add, "category", "math");
-api.slothlet.metadata.setGlobal("appVersion", "3.0.0");
+api.slothlet.metadata.global("appVersion", "3.0.0");
 
 await api.slothlet.reload();
 
@@ -580,7 +580,7 @@ export async function handler(data) {
 
 ## API Reference
 
-### api.slothlet.metadata.setGlobal(key, value)
+### api.slothlet.metadata.global(key, value)
 
 Set global metadata applied to all functions.
 

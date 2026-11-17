@@ -22,7 +22,7 @@
  * Fixture `api_test_leaf_call`: `bag.viaLeaf` reads the vault. `holder.keep()` takes, once, the node of `viaLeaf`
  * (`leafRef`), the exported function itself (`boundLeaf`), the exported function inside returned data (`inData`) and a
  * private function (`closure`); `holder.runKept()` runs each of them, and the node `self.bag.viaLeaf`, again. The host
- * adds and removes rules between runs with `api.slothlet.permissions.addRule` / `removeRule`.
+ * adds and removes rules between runs with `api.slothlet.permissions.rules.add` / `rules.remove`.
  *
  * Expected values come from the rules as ruled (PERMISSIONS.md, "A call runs with the callee's rights", and the
  * per-view refusal memo cleared when rules change): an exported function handed out is a call of its node, so the
@@ -97,11 +97,11 @@ describe.each(matrix)("handed-out code after a runtime rule change > $mode / $ru
 	])("$label added after the hand-out refuses, and removed answers again", async ({ rule, whileAdded }) => {
 		await load("allow");
 		expectAnswers(await api.holder.runKept(), ALL_SECRET, "before");
-		const ruleId = api.slothlet.permissions.addRule(rule);
+		const ruleId = api.slothlet.permissions.rules.add(rule);
 		expectAnswers(await api.holder.runKept(), whileAdded, "added");
 		// A second run under the same rules answers the same.
 		expectAnswers(await api.holder.runKept(), whileAdded, "added, again");
-		expect(api.slothlet.permissions.removeRule(ruleId)).toBe(true);
+		expect(api.slothlet.permissions.rules.remove(ruleId)).toBe(true);
 		expectAnswers(await api.holder.runKept(), ALL_SECRET, "removed");
 	});
 
@@ -114,17 +114,17 @@ describe.each(matrix)("handed-out code after a runtime rule change > $mode / $ru
 		const closed = { node: DENIED, boundLeaf: DENIED, inData: DENIED, closure: DENIED };
 		expectAnswers(await api.holder.runKept(), closed, "before");
 
-		const leafId = api.slothlet.permissions.addRule({ caller: "holder.**", target: "bag.viaLeaf", effect: "allow" });
+		const leafId = api.slothlet.permissions.rules.add({ caller: "holder.**", target: "bag.viaLeaf", effect: "allow" });
 		const leafOpen = { node: S, leafRef: S, boundLeaf: S, inData: S, closure: DENIED };
 		expectAnswers(await api.holder.runKept(), leafOpen, "service allowed");
 
-		const vaultId = api.slothlet.permissions.addRule({ caller: "holder.**", target: "vault.**", effect: "allow" });
+		const vaultId = api.slothlet.permissions.rules.add({ caller: "holder.**", target: "vault.**", effect: "allow" });
 		expectAnswers(await api.holder.runKept(), ALL_SECRET, "service and vault allowed");
 
-		expect(api.slothlet.permissions.removeRule(vaultId)).toBe(true);
+		expect(api.slothlet.permissions.rules.remove(vaultId)).toBe(true);
 		expectAnswers(await api.holder.runKept(), leafOpen, "vault allow removed");
 
-		expect(api.slothlet.permissions.removeRule(leafId)).toBe(true);
+		expect(api.slothlet.permissions.rules.remove(leafId)).toBe(true);
 		expectAnswers(await api.holder.runKept(), closed, "both removed");
 	});
 
@@ -137,7 +137,7 @@ describe.each(matrix)("handed-out code after a runtime rule change > $mode / $ru
 			permissions: { mode: "off", defaultPolicy: "allow", attribution, rules: [] }
 		});
 		expect(await api.holder.keep()).toEqual(["leafRef", "boundLeaf", "inData", "closure"]);
-		api.slothlet.permissions.addRule({ caller: "holder.**", target: "vault.**", effect: "deny" });
+		api.slothlet.permissions.rules.add({ caller: "holder.**", target: "vault.**", effect: "deny" });
 		expectAnswers(await api.holder.runKept(), ALL_SECRET, "off");
 		api.slothlet.permissions.control.enable();
 		expectAnswers(await api.holder.runKept(), { node: S, leafRef: S, boundLeaf: S, inData: S, closure: DENIED }, "on");

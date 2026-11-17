@@ -16,7 +16,7 @@
 /**
  * @fileoverview What the framework's metadata and versioning getters hand module code is a copy (#625).
  *
- * `metadata.getFor`, `metadata.getForVersion`, `versioning.getVersionMetadata`, and `versioning.list` answer with
+ * `metadata.getFor`, `metadata.getForVersion`, `versioning.metadata.get`, and `versioning.list` answer with
  * what the framework stores for a path. Module code changing an object it got back changes its own copy, never the
  * store: another module's metadata, its version metadata, and the version registry a dispatcher routes by stay as
  * they were — the setters, which hold module code to its own paths, are the only way to change them.
@@ -60,7 +60,7 @@ describe.each(CONFIGS)("copies the metadata getters hand module code (#625) — 
 		const meta = api.slothlet.metadata.getFor("victim");
 		expect(meta.tier.level).toBe(1);
 		expect(meta.planted).toBeUndefined();
-		const versionMeta = api.slothlet.versioning.getVersionMetadata("svc", "v1");
+		const versionMeta = api.slothlet.versioning.metadata.get("svc", "v1");
 		expect(versionMeta.version).toBe("v1");
 		expect(versionMeta.nested.flag).toBe("ok");
 		const listed = api.slothlet.versioning.list("svc").versions.v1;

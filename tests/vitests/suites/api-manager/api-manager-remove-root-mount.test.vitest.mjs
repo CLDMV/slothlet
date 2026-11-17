@@ -80,12 +80,12 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])('api-manager — remove a "
 		// shared.a first — that trips a *separate* lazy-materialization bug that drops the sibling; this
 		// test targets removal ownership, not materialization order.)
 		expect(await api.shared.b.keepme()).toBe("kept");
-		expect(api.slothlet.diag.caches.getAllModuleIDs().some((id) => id.startsWith("rootmod"))).toBe(true);
+		expect(api.slothlet.diag.caches.ids().some((id) => id.startsWith("rootmod"))).toBe(true);
 
 		await api.slothlet.api.remove("rootmod");
 
 		// The root mount is actually gone…
-		expect(api.slothlet.diag.caches.getAllModuleIDs().some((id) => id.startsWith("rootmod"))).toBe(false);
+		expect(api.slothlet.diag.caches.ids().some((id) => id.startsWith("rootmod"))).toBe(false);
 		// …but the sibling another module added under the shared container survives, and the base is intact.
 		expect(await api.shared.b.keepme()).toBe("kept");
 		expect(await api.math.add(1, 2)).toBe(3);

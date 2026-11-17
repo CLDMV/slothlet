@@ -278,7 +278,7 @@ export class VersionManager extends ComponentBase {
 	 */
 	unregisterVersion(logicalPath, versionTag) {
 		const entry = MapMethods.get(this.#registry, logicalPath);
-		// api.slothlet.versioning.unregister (api_builder.mjs) checks existence before calling us;
+		// api.slothlet.versioning.remove (api_builder.mjs) checks existence before calling us;
 		// this guard is only reached via a direct internal call with a non-existent path.
 		/* v8 ignore next */
 		if (!entry) return false;

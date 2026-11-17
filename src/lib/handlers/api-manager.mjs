@@ -3001,7 +3001,7 @@ export class ApiManager extends ComponentBase {
 		const { metadata = {}, ...restOptions } = effectiveOptions;
 		if (!this.slothlet || !this.slothlet.isLoaded) {
 			throw new this.SlothletError("INVALID_CONFIG_NOT_LOADED", {
-				operation: "addApi",
+				operation: ["slothlet", "api", "add"],
 				validationError: true
 			});
 		}
@@ -3047,7 +3047,7 @@ export class ApiManager extends ComponentBase {
 		// not hold, is refused before anything is mounted.
 		const root = this.slothlet.boundApi;
 		if (root && !Reflect.isExtensible(root) && (parts.length === 0 || !ArrayMethods.includes(Reflect.ownKeys(root), parts[0]))) {
-			throw new this.SlothletError("API_ROOT_CLOSED", { operation: "api.add", validationError: true });
+			throw new this.SlothletError("API_ROOT_CLOSED", { operation: ["slothlet", "api", "add"], validationError: true });
 		}
 
 		// A rule module code mounts with is held to the module's own subtree unless an explicit allow lifts the
@@ -4505,7 +4505,7 @@ export class ApiManager extends ComponentBase {
 		}
 		if (!this.slothlet || !this.slothlet.isLoaded) {
 			throw new this.SlothletError("INVALID_CONFIG_NOT_LOADED", {
-				operation: "removeApi",
+				operation: ["slothlet", "api", "remove"],
 				validationError: true
 			});
 		}
@@ -4722,7 +4722,7 @@ export class ApiManager extends ComponentBase {
 
 			// Clean up VersionManager registration if this was a versioned module.
 			// The apiPath+moduleID branch above handles this for path-based removals;
-			// this branch handles moduleID-only removals (e.g. from api.slothlet.versioning.unregister).
+			// this branch handles moduleID-only removals (e.g. from api.slothlet.versioning.remove).
 			// versionManager is always auto-registered via slothletProperty; the absent-handler arm is unreachable (matches the metadata-handler ignore above).
 			/* v8 ignore else */
 			if (this.slothlet.handlers.versionManager) {
@@ -5138,7 +5138,7 @@ export class ApiManager extends ComponentBase {
 		const { apiPath, moduleID, options } = params || {};
 		if (!this.slothlet || !this.slothlet.isLoaded) {
 			throw new this.SlothletError("INVALID_CONFIG_NOT_LOADED", {
-				operation: "reloadApi",
+				operation: ["slothlet", "api", "reload"],
 				validationError: true
 			});
 		}
@@ -5187,7 +5187,7 @@ export class ApiManager extends ComponentBase {
 		const cacheManager = this.slothlet.handlers.apiCacheManager;
 		if (!cacheManager) {
 			throw new this.SlothletError("CACHE_MANAGER_NOT_AVAILABLE", {
-				operation: "reload",
+				operation: ["slothlet", "api", "reload"],
 				validationError: true
 			});
 		}
@@ -5196,7 +5196,7 @@ export class ApiManager extends ComponentBase {
 		if (!cacheManager.has(moduleID)) {
 			throw new this.SlothletError("CACHE_NOT_FOUND", {
 				moduleID,
-				operation: "reload",
+				operation: ["slothlet", "api", "reload"],
 				validationError: true
 			});
 		}

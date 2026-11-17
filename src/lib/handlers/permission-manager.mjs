@@ -25,6 +25,7 @@
 import { fileParts, util } from "#helpers/platform";
 import { ComponentBase } from "#factories/component-base";
 import { compilePattern, expandBraces } from "#helpers/pattern-matcher";
+import { namesSlothletMember } from "#helpers/slothlet-tree";
 import { translate } from "#i18n";
 import { MODULE_ID_SEPARATOR } from "#handlers/metadata";
 import { DEFAULT_ROUTINES } from "#helpers/defaults";
@@ -125,7 +126,7 @@ const CAPABILITY_REASONS = Objects.freeze({
  * The global metadata setter, the host's unless an allow lifts the built-in deny for a module (#625).
  * @type {string}
  */
-const GLOBAL_METADATA_TARGET = "slothlet.metadata.setGlobal";
+const GLOBAL_METADATA_TARGET = "slothlet.metadata.global";
 
 /**
  * Precedence layers used to break ties when two matching rules have EQUAL specificity.
@@ -162,10 +163,14 @@ const RULE_LAYER_RANK = Objects.freeze({ builtin: 0, manifest: 1, module: 1, man
  * Enforcement options for the call-gate query {@link PermissionManager#checkCall} (#508): the supplied
  * caller is a module (never the host), the audit payload names the query as its origin, and — as for a
  * promoted call whose stale-principal scan has just run — principals count as current under grace.
- * @type {Readonly<{ moduleCaller: true, via: "checkCall", principalGrace: true }>}
+ * @type {Readonly<{ moduleCaller: true, via: ReadonlyArray<string>, principalGrace: true }>}
  * @private
  */
-const CHECK_CALL_OPTIONS = Objects.freeze({ moduleCaller: true, via: "checkCall", principalGrace: true });
+const CHECK_CALL_OPTIONS = Objects.freeze({
+	moduleCaller: true,
+	via: Objects.freeze(["slothlet", "permissions", "global", "check", "call"]),
+	principalGrace: true
+});
 
 /**
  * Resolve a rule's precedence layer from an explicit layer or the owning module id.
@@ -463,14 +468,14 @@ export class PermissionManager extends ComponentBase {
 	#writeRules = new Map();
 
 	/**
-	 * Id of the built-in reach default (`slothlet.permissions.addRule` for rules beyond a module's own subtree, #625).
+	 * Id of the built-in reach default (`slothlet.permissions.rules.add` for rules beyond a module's own subtree, #625).
 	 * @type {string|null}
 	 * @private
 	 */
 	#reachRuleId = null;
 
 	/**
-	 * Id of the built-in deny on `slothlet.metadata.setGlobal` for modules (#625), which
+	 * Id of the built-in deny on `slothlet.metadata.global` for modules (#625), which
 	 * {@link PermissionManager#assertGlobalMetadataWrite} applies rather than the call gate.
 	 * @type {string|null}
 	 * @private
@@ -801,26 +806,31 @@ export class PermissionManager extends ComponentBase {
 		// trusted module (`{ caller: "admin.**", target: "slothlet.restart", effect: "allow" }`).
 		this.addRule({ caller: "**", target: "slothlet.restart", effect: "deny" }, "__builtin__");
 
-		// Built-in allow rules: the caller-identity utilities `slothlet.lockCaller` and
+		// Built-in deny rule: `slothlet.warnings` holds every warning this instance raised, other modules' among them
+		// (their paths and files), so reading or clearing it is the host's by default. An instance rule on the same
+		// target grants it to a module.
+		this.addRule({ caller: "**", target: "slothlet.warnings.**", effect: "deny" }, "__builtin__");
+
+		// Built-in allow rules: the caller-identity utilities `slothlet.pin` and
 		// `slothlet.bind` grant no security-sensitive access — they only pin a callback's
 		// caller identity, which strengthens enforcement. Allowing them by default means a
 		// `defaultPolicy: "deny"` configuration does not have to allow them explicitly.
 		// A more specific user rule can still deny them for a particular module.
-		this.addRule({ caller: "**", target: "slothlet.lockCaller", effect: "allow" }, "__builtin__");
+		this.addRule({ caller: "**", target: "slothlet.pin", effect: "allow" }, "__builtin__");
 		this.addRule({ caller: "**", target: "slothlet.bind", effect: "allow" }, "__builtin__");
 
-		// Built-in deny rule (#477): `slothlet.lockCaller.caller` pins the current leaf's CALLER onto
-		// a callback, so the callback acts as another module — a privilege, unlike `lockCaller`, which
+		// Built-in deny rule (#477): `slothlet.pin.caller` pins the current leaf's CALLER onto
+		// a callback, so the callback acts as another module — a privilege, unlike `pin`, which
 		// only pins the module itself. Host-only by default; the host grants it to the service modules
 		// that run callbacks on their callers' behalf (e.g. `{ caller: "scheduler.**", target:
-		// "slothlet.lockCaller.caller", effect: "allow" }`). The exact-path allow on `slothlet.lockCaller`
+		// "slothlet.pin.caller", effect: "allow" }`). The exact-path allow on `slothlet.pin`
 		// above does not match this deeper path.
-		this.addRule({ caller: "**", target: "slothlet.lockCaller.caller", effect: "deny" }, "__builtin__");
+		this.addRule({ caller: "**", target: "slothlet.pin.caller", effect: "deny" }, "__builtin__");
 
 		// Built-in allow rules (#468): `slothlet.metadata.caller` / `slothlet.metadata.self` reveal
 		// identity only — who is calling this module, and which module this is — which is what a module
 		// needs to enforce its own policy (e.g. scoping records by caller). They grant no data or
-		// control access, so like lockCaller/bind a `defaultPolicy: "deny"` host need not re-allow
+		// control access, so like pin/bind a `defaultPolicy: "deny"` host need not re-allow
 		// them. `slothlet.metadata.get(path)`, which reads arbitrary metadata, stays gated, and a user
 		// rule of equal or higher specificity still overrides these.
 		this.addRule({ caller: "**", target: "slothlet.metadata.caller", effect: "allow" }, "__builtin__");
@@ -833,20 +843,20 @@ export class PermissionManager extends ComponentBase {
 
 		// Built-in reach default (#625): module code manages rules (adds and removes them) for its own subtree only. A
 		// rule on any other target, the framework's own among them, takes an explicit allow on this target for the
-		// module — the host's or a manifest's — which outranks this deny. It decides only that reach; calling `addRule`
+		// module — the host's or a manifest's — which outranks this deny. It decides only that reach; calling `rules.add`
 		// for the module's own subtree is not gated by it (see placeModuleRule).
-		this.#reachRuleId = this.addRule({ caller: "**", target: "slothlet.permissions.addRule", effect: "deny" }, "__builtin__");
+		this.#reachRuleId = this.addRule({ caller: "**", target: "slothlet.permissions.rules.add", effect: "deny" }, "__builtin__");
 
-		// Call-gate query (#508): `global.checkCall` answers "may caller X call target Y with these args"
-		// for a SUPPLIED caller identity, exactly like `event.resolveLevel` answers for a supplied
+		// Call-gate query (#508): `global.check.call` answers "may caller X call target Y with these args"
+		// for a SUPPLIED caller identity, exactly like `event.level` answers for a supplied
 		// subscriber — so it is host-only by the same mechanism (a built-in deny), not merely gatable like
 		// the rest of `global.*`. A module that could ask on another module's behalf would learn that
 		// module's rule outcomes, and the query's audit trail would attribute the probe to the wrong
 		// identity. The host grants it to a trusted boundary layer with an instance rule of equal
-		// specificity (an exact target, `slothlet.permissions.global.checkCall`), which outranks this one.
-		this.addRule({ caller: "**", target: "slothlet.permissions.global.checkCall", effect: "deny" }, "__builtin__");
+		// specificity (an exact target, `slothlet.permissions.global.check.call`), which outranks this one.
+		this.addRule({ caller: "**", target: "slothlet.permissions.global.check.call", effect: "deny" }, "__builtin__");
 
-		// Global metadata (#625): `metadata.setGlobal` changes the metadata every node reports, every other module's
+		// Global metadata (#625): `metadata.global` changes the metadata every node reports, every other module's
 		// included, so it is the host's. An allow for a module lifts it. Checked by assertGlobalMetadataWrite once the
 		// call's arguments are valid, never by the call gate.
 		this.#globalMetadataRuleId = this.addRule({ caller: "**", target: GLOBAL_METADATA_TARGET, effect: "deny" }, "__builtin__");
@@ -861,7 +871,7 @@ export class PermissionManager extends ComponentBase {
 
 		// Built-in hook-management baseline (enforced only when permissions are enabled): modules may
 		// inspect and register hooks (`list`, `on`) but may NOT tamper with other modules' hooks via the
-		// global-effect methods (remove/off/clear, enable/disable, enablePattern/disablePattern/reset).
+		// global-effect methods (remove/off/clear, enable/disable, pattern.enable/disable/reset).
 		// The broad deny is overridden by the two specific allows (most-specific-wins). These are call
 		// targets (no `:type` suffix), so they gate the hook MANAGEMENT surface, not interception.
 		this.addRule({ caller: "**", target: "slothlet.hook.**", effect: "deny" }, "__builtin__");
@@ -1302,7 +1312,7 @@ export class PermissionManager extends ComponentBase {
 		this.#assertNotSealed();
 		const record = MapMethods.get(this.#principals, name);
 		if (!record) return false;
-		this.#assertPrincipalOwner(record, callerModuleID, "unregister");
+		this.#assertPrincipalOwner(record, callerModuleID, ["slothlet", "permissions", "principal", "unregister"]);
 		MapMethods.delete(this.#principals, name);
 		return true;
 	}
@@ -1327,7 +1337,7 @@ export class PermissionManager extends ComponentBase {
 	invalidatePrincipal(name, identityKey = undefined, callerModuleID = null) {
 		const record = MapMethods.get(this.#principals, name);
 		if (!record) return false;
-		this.#assertPrincipalOwner(record, callerModuleID, "invalidate");
+		this.#assertPrincipalOwner(record, callerModuleID, ["slothlet", "permissions", "principal", "invalidate"]);
 		if (identityKey === undefined) {
 			this.#bumpPrincipal(record);
 			return true;
@@ -1747,7 +1757,7 @@ export class PermissionManager extends ComponentBase {
 	 *
 	 * @param {object} record - Principal record.
 	 * @param {string|string[]|null} callerModuleID - Calling module's id, or a list of them (#597); `null` for the host.
-	 * @param {string} operation - Operation name, for the error.
+	 * @param {string[]} operation - The method, as path segments, for the error.
 	 * @returns {void}
 	 * @throws {SlothletError} PRINCIPAL_NOT_OWNER when a non-owner module calls.
 	 * @private
@@ -1897,13 +1907,14 @@ export class PermissionManager extends ComponentBase {
 	 * @param {PermissionCallMeta|null} [callMeta=null] - Call/construct metadata (#455): `{ args, target }`
 	 *   from the invocation, forwarded to function conditions as their second argument. Null for reads,
 	 *   hooks, the internal control surface, and silent queries.
-	 * @param {{ principalGrace?: boolean, moduleCaller?: boolean, via?: string }|null} [options=null] - Enforcement options.
+	 * @param {{ principalGrace?: boolean, moduleCaller?: boolean, via?: ReadonlyArray<string> }|null} [options=null] - Enforcement options.
 	 * @param {boolean} [options.principalGrace=false] - Accept a principal whose epoch is current even if its
 	 *   `maxAge` has elapsed (#459). Set only by a promoted call re-enforcing right after its resolve.
 	 * @param {boolean} [options.moduleCaller=false] - The caller is a module even though no source file is
 	 *   known for it (#508). A module-private target is then denied outright instead of being judged by
 	 *   the `permissions.private.host` policy, which is what a null `callerFilePath` otherwise means.
-	 * @param {string} [options.via] - Origin marker added to the audit payload (`via: "checkCall"`), so an
+	 * @param {ReadonlyArray<string>} [options.via] - Origin marker added to the audit payload: the method path as segments
+	 *   (`via: ["slothlet", "permissions", "global", "check", "call"]`), so an
 	 *   audit consumer can tell a query from the gate of a real call.
 	 * @param {function(string): boolean} [options.dataMember] - Given for a read of data: whether a path above the
 	 *   target is an object member of a module's data. A deny rule naming such a member's path exactly then covers the
@@ -1948,21 +1959,21 @@ export class PermissionManager extends ComponentBase {
 		}
 		if (result.event) {
 			// The decision record may be the cached entry itself — spread rather than mutate it.
-			const via = typeof options?.via === "string" ? options.via : null;
+			const via = Arrays.isArray(options?.via) ? copyList(options.via) : null;
 			this.#emitAuditEvent(result.event, via ? { ...result.payload, via } : result.payload);
 		}
 		return result.allowed;
 	}
 
 	/**
-	 * Place a rule module code is registering — through `slothlet.permissions.addRule` / `removeRule`, or the
+	 * Place a rule module code is registering — through `slothlet.permissions.rules.add` / `rules.remove`, or the
 	 * `permissions` option of an `api.add` it makes (#625) — and refuse it when the module may not.
 	 *
 	 * By default a module manages rules only for its own subtree: the rule's target pattern (a call, hook, or
 	 * write target alike) must have a non-empty literal prefix (the segments before the first glob segment)
 	 * inside the subtree the module owns, and must not name the framework's namespace, root functions, or
 	 * internal keys. Reaching any other target is the built-in default `{ caller: "**", target:
-	 * "slothlet.permissions.addRule", effect: "deny" }`, which decides only that reach (calling `addRule` for the
+	 * "slothlet.permissions.rules.add", effect: "deny" }`, which decides only that reach (calling `rules.add` for the
 	 * module's own subtree is not gated by it): an explicit allow on that target for the module — the host's, or
 	 * a manifest's — lifts it, and the module then manages rules for any target, as the host does.
 	 *
@@ -2243,7 +2254,7 @@ export class PermissionManager extends ComponentBase {
 	}
 
 	/**
-	 * Whether a module may manage rules beyond its own subtree: the call rules for `slothlet.permissions.addRule`,
+	 * Whether a module may manage rules beyond its own subtree: the call rules for `slothlet.permissions.rules.add`,
 	 * the built-in reach default among them, decide for its caller path, and the winner allows. The default
 	 * policy plays no part.
 	 *
@@ -2252,11 +2263,11 @@ export class PermissionManager extends ComponentBase {
 	 * @private
 	 */
 	#mayReachBeyondOwn(callerPath) {
-		return this.#defaultWinner(callerPath, "slothlet.permissions.addRule").effect === "allow";
+		return this.#defaultWinner(callerPath, "slothlet.permissions.rules.add").effect === "allow";
 	}
 
 	/**
-	 * Refuse module code changing global metadata (#625): `metadata.setGlobal` changes what every node reports, every
+	 * Refuse module code changing global metadata (#625): `metadata.global` changes what every node reports, every
 	 * other module's included, so it is the host's by a built-in deny an allow for the module lifts. Like the other
 	 * built-in rules it applies only while the permission system is on. It is checked once the call's arguments are
 	 * valid, so a malformed call reports what is wrong with it first; the call gate leaves the built-in deny to this
@@ -2484,7 +2495,7 @@ export class PermissionManager extends ComponentBase {
 	 * @param {object|null} [runtimeContext=null] - Per-request context for condition evaluation.
 	 * @returns {"deny"|"grant"|null} The decision; null when no write rule matches or the system is off.
 	 * @example
-	 * pm.decideWrite("payments.charge", "slothlet.lockCaller"); // "deny" — the built-in rule denies it
+	 * pm.decideWrite("payments.charge", "slothlet.pin"); // "deny" — the built-in rule denies it
 	 */
 	decideWrite(callerPath, targetPath, runtimeContext = null) {
 		if (!this.#enabled && !this.coversWrite(targetPath)) return null;
@@ -2625,7 +2636,7 @@ export class PermissionManager extends ComponentBase {
 	 *   with principal grace, mirroring a promoted call (#459). Only then is the result a Promise; the
 	 *   fast path (nothing stale) answers synchronously.
 	 * - Audit events emit as for a real call (`permission:denied` always, `allowed`/`default` under
-	 *   `audit: "verbose"`), with `via: "checkCall"` in the payload so a probing peer is visible.
+	 *   `audit: "verbose"`), with `via: ["slothlet", "permissions", "global", "check", "call"]` in the payload so a probing peer is visible.
 	 * - Disabled enforcement answers `true`, like {@link checkAccess}.
 	 *
 	 * @param {string} callerPath - The supplied caller's api path (non-empty).
@@ -3184,18 +3195,17 @@ export class PermissionManager extends ComponentBase {
 				received: rule.effect
 			});
 		}
+		// A target in slothlet's own space names something that exists: a built-in capability, or a member of the fixed
+		// `slothlet.*` tree. One that names nothing would never match, so a rule meant to deny it would silently not apply.
 		if (
-			StringMethods.startsWith(rule.target, CAPABILITY_PREFIX) &&
-			!ArrayMethods.includes(
-				CAPABILITIES,
-				typeof rule.target === "string"
-					? StringMethods.slice(rule.target, CAPABILITY_PREFIX.length)
-					: copyList(rule.target, CAPABILITY_PREFIX.length)
-			)
+			StringMethods.startsWith(rule.target, CAPABILITY_PREFIX)
+				? !ArrayMethods.includes(CAPABILITIES, StringMethods.slice(rule.target, CAPABILITY_PREFIX.length))
+				: StringMethods.startsWith(rule.target, "slothlet.") && !namesSlothletMember(rule.target)
 		) {
-			throw new this.SlothletError("INVALID_PERMISSION_RULE", {
-				reason: translate("PERM_RULE_CAPABILITY_UNKNOWN", { names: ArrayMethods.join(CAPABILITIES, ", ") }),
-				received: rule.target
+			throw new this.SlothletError("PERMISSION_RULE_UNKNOWN_TARGET", {
+				target: rule.target,
+				capabilities: ArrayMethods.join(CAPABILITIES, ", "),
+				validationError: true
 			});
 		}
 		if (rule.condition !== undefined && rule.condition !== null) {

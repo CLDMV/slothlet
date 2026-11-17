@@ -87,7 +87,7 @@ describe.each(MATRIX_CONFIGS)("API mutations control - $name", ({ config }) => {
 		api = await createApiInstance(config, { allowMutation: false, diagnostics: true });
 
 		// Verify V3_CONFIG_DEPRECATED warning was shown
-		const warnings = api.slothlet.diag.SlothletWarning.captured; // per instance (#819)
+		const warnings = api.slothlet.warnings.get(); // per instance (#819)
 		expect(warnings.some((w) => w.code === "V3_CONFIG_DEPRECATED")).toBe(true);
 		const deprecationWarning = warnings.find((w) => w.code === "V3_CONFIG_DEPRECATED");
 		expect(deprecationWarning.message).toContain("allowMutation");
@@ -117,7 +117,7 @@ describe.each(MATRIX_CONFIGS)("API mutations control - $name", ({ config }) => {
 		api = await createApiInstance(config, { allowMutation: false, diagnostics: true });
 
 		// Verify V3_CONFIG_DEPRECATED warning was shown
-		const warnings = api.slothlet.diag.SlothletWarning.captured; // per instance (#819)
+		const warnings = api.slothlet.warnings.get(); // per instance (#819)
 		expect(warnings.some((w) => w.code === "V3_CONFIG_DEPRECATED")).toBe(true);
 		const deprecationWarning = warnings.find((w) => w.code === "V3_CONFIG_DEPRECATED");
 		expect(deprecationWarning.message).toContain("allowMutation");
@@ -508,7 +508,7 @@ describe.each(MATRIX_CONFIGS)("API mutations control - $name", ({ config }) => {
 			await api.slothlet.api.add("test", TEST_DIRS.API_TEST_MIXED);
 		} catch (error) {
 			expect(error.message).toContain("INVALID_CONFIG_MUTATIONS_DISABLED");
-			expect(error.context?.operation).toBe("api.add");
+			expect(error.context?.operation).toEqual(["slothlet", "api", "add"]);
 			expect(error.hint).toBeTruthy();
 		}
 
@@ -517,7 +517,7 @@ describe.each(MATRIX_CONFIGS)("API mutations control - $name", ({ config }) => {
 			await api.slothlet.api.remove("math");
 		} catch (error) {
 			expect(error.message).toContain("INVALID_CONFIG_MUTATIONS_DISABLED");
-			expect(error.context?.operation).toBe("api.remove");
+			expect(error.context?.operation).toEqual(["slothlet", "api", "remove"]);
 			expect(error.hint).toBeTruthy();
 		}
 
@@ -526,7 +526,7 @@ describe.each(MATRIX_CONFIGS)("API mutations control - $name", ({ config }) => {
 			await api.slothlet.reload();
 		} catch (error) {
 			expect(error.message).toContain("INVALID_CONFIG_MUTATIONS_DISABLED");
-			expect(error.context?.operation).toBe("reload");
+			expect(error.context?.operation).toEqual(["slothlet", "reload"]);
 			expect(error.hint).toBeTruthy();
 		}
 	});

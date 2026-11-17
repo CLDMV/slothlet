@@ -14,10 +14,9 @@
  */
 
 /**
- * @fileoverview #819 — warning capture and console suppression are per instance. Two instances do not share
- * `api.slothlet.diag.SlothletWarning.captured`, `clearCaptured()` on one leaves the other's list alone, and
- * `suppressConsole` set on one instance does not touch the other. A warning raised outside any instance lands
- * on the process-level `SlothletWarning` from `@cldmv/slothlet/errors`.
+ * @fileoverview #819 — each instance keeps its own warnings. Two instances do not share
+ * `api.slothlet.warnings.get()`, `warnings.clear()` on one leaves the other's list alone, a warning is kept
+ * whether or not it was printed, and one raised outside any instance is kept by none.
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
@@ -44,7 +43,7 @@ const raise = (api) => api.slothlet.api.add("extra", { exports: { ping: () => "p
  * @param {object} api - Bound api.
  * @returns {string[]} Codes.
  */
-const codes = (api) => api.slothlet.diag.SlothletWarning.captured.map((w) => w.code);
+const codes = (api) => api.slothlet.warnings.get().map((w) => w.code);
 
 describe.each(CASES)("warning capture is per instance (#819) > $mode / $runtime", ({ mode, runtime }) => {
 	let a;
@@ -54,7 +53,6 @@ describe.each(CASES)("warning capture is per instance (#819) > $mode / $runtime"
 
 	beforeEach(() => {
 		SlothletWarning.suppressConsole = true;
-		SlothletWarning.clearCaptured();
 	});
 
 	afterEach(async () => {
@@ -73,42 +71,36 @@ describe.each(CASES)("warning capture is per instance (#819) > $mode / $runtime"
 		expect(codes(b)).not.toContain("WARNING_API_ADD_OPTION_LOCKED");
 	});
 
-	it("clearCaptured() on one instance leaves the other's warnings", async () => {
+	it("warnings.clear() on one instance leaves the other's warnings", async () => {
 		a = await make();
 		b = await make();
 		await raise(a);
 		await raise(b);
-		a.slothlet.diag.SlothletWarning.clearCaptured();
+		a.slothlet.warnings.clear();
 		expect(codes(a)).toEqual([]);
 		expect(codes(b)).toContain("WARNING_API_ADD_OPTION_LOCKED");
 	});
 
-	it("suppressConsole on one instance does not change the other", async () => {
+	it("a warning is kept by its instance whether or not it was printed", async () => {
 		a = await make();
 		b = await make();
 		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-		a.slothlet.diag.SlothletWarning.suppressConsole = false;
+		SlothletWarning.suppressConsole = false;
 		await raise(a);
 		expect(warn).toHaveBeenCalled();
-		warn.mockClear();
-		await raise(b);
-		expect(warn).not.toHaveBeenCalled();
-		expect(codes(b)).toContain("WARNING_API_ADD_OPTION_LOCKED");
-		expect(codes(a)).not.toContain("WARNING_API_ADD_OPTION_LOCKED");
+		expect(codes(a)).toContain("WARNING_API_ADD_OPTION_LOCKED");
+		expect(codes(b)).not.toContain("WARNING_API_ADD_OPTION_LOCKED");
 	});
 
-	it("a warning raised outside any instance lands on the process-level class", async () => {
+	it("a warning raised outside any instance is kept by no instance", async () => {
 		a = await make();
-		SlothletWarning.clearCaptured();
 		new SlothletWarning("WARNING_API_ADD_OPTION_LOCKED", { option: "x" });
-		expect(SlothletWarning.captured.map((w) => w.code)).toContain("WARNING_API_ADD_OPTION_LOCKED");
 		expect(codes(a)).not.toContain("WARNING_API_ADD_OPTION_LOCKED");
-		SlothletWarning.clearCaptured();
 	});
 
 	it("instance warnings are still SlothletWarning instances", async () => {
 		a = await make();
 		await raise(a);
-		expect(a.slothlet.diag.SlothletWarning.captured[0]).toBeInstanceOf(SlothletWarning);
+		expect(a.slothlet.warnings.get()[0]).toBeInstanceOf(SlothletWarning);
 	});
 });

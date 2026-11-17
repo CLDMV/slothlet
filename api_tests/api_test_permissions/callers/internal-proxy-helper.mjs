@@ -56,16 +56,16 @@ export const readPermissionsSymbolProbeDescriptor = () => {
 };
 
 /**
- * Construct a warning object through a slothlet internal route.
+ * Call a slothlet namespace method with `new`.
  * Exercises internal route proxy `construct` trap.
  *
- * @returns {boolean} True when construction produced an object instance.
+ * @returns {boolean} True when construction returned what the method returns (`bind` hands back a function).
  * @example
- * const built = api.internalProxyHelper.constructWarningThroughDiag();
+ * const built = api.internalProxyHelper.constructThroughNamespace();
  */
-export const constructWarningThroughDiag = () => {
-	const warning = new self.slothlet.diag.SlothletWarning("WARNING_RESERVED_PROPERTY_CONFLICT");
-	return warning instanceof self.slothlet.diag.SlothletWarning;
+export const constructThroughNamespace = () => {
+	const bound = new self.slothlet.bind(() => "bound");
+	return typeof bound === "function" && bound() === "bound";
 };
 
 /**
@@ -77,7 +77,7 @@ export const constructWarningThroughDiag = () => {
  * api.internalProxyHelper.callSetGlobalWithEmptyKey();
  */
 export const callSetGlobalWithEmptyKey = () => {
-	self.slothlet.metadata.setGlobal("", "x");
+	self.slothlet.metadata.global("", "x");
 };
 
 /**
@@ -89,7 +89,7 @@ export const callSetGlobalWithEmptyKey = () => {
  * api.internalProxyHelper.callSetGlobalWithInvalidType();
  */
 export const callSetGlobalWithInvalidType = () => {
-	self.slothlet.metadata.setGlobal(7, "x");
+	self.slothlet.metadata.global(7, "x");
 };
 
 /**

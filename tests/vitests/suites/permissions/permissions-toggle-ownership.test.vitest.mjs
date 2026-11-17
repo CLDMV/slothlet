@@ -100,7 +100,7 @@ describe.each(CONFIGS)("ownership across a permission toggle (#625) — $mode / 
 				outcome(() => {
 					self.victim.v.flag = "planted";
 				});
-			self.slothlet.diag.getAPI().plantedRoot = writeVictim;
+			self.slothlet.diag.api().plantedRoot = writeVictim;
 			self.plantedTop = writeVictim;
 		};
 		await api.guest.x.runWithSelf(PROBE);
@@ -177,14 +177,16 @@ describe.each(CONFIGS)("ownership across a permission toggle (#625) — $mode / 
 			await load(options);
 			globalThis[Symbol.for(PROBE)] = (self) => ({
 				addRule: outcome(() => {
-					self.slothlet.permissions.addRule = () => "swallowed";
+					self.slothlet.permissions.rules.add = () => "swallowed";
 				}),
 				control: outcome(() => {
 					self.slothlet.permissions.control = { enable() {}, disable() {} };
 				}),
-				defined: outcome(() => Object.defineProperty(self.slothlet.permissions, "removeRule", { value: () => "gone", configurable: true })),
+				defined: outcome(() =>
+					Object.defineProperty(self.slothlet.permissions.rules, "remove", { value: () => "gone", configurable: true })
+				),
 				removed: outcome(() => {
-					if (!delete self.slothlet.permissions.removeRule) throw new Error("NOT_DELETED");
+					if (!delete self.slothlet.permissions.rules.remove) throw new Error("NOT_DELETED");
 				}),
 				namespace: outcome(() => {
 					self.slothlet.permissions = {};
@@ -193,7 +195,7 @@ describe.each(CONFIGS)("ownership across a permission toggle (#625) — $mode / 
 			const report = await withSuppressedSlothletErrorOutput(() => api.guest.x.runWithSelf(PROBE));
 			expect(report).toEqual(Object.fromEntries(Object.keys(report).map((key) => [key, framework])));
 			if (framework !== "done") {
-				expect(typeof api.slothlet.permissions.addRule({ caller: "guest.**", target: "victim.**", effect: "deny" })).toBe("string");
+				expect(typeof api.slothlet.permissions.rules.add({ caller: "guest.**", target: "victim.**", effect: "deny" })).toBe("string");
 			}
 		});
 
@@ -228,7 +230,7 @@ describe.each(CONFIGS)("ownership across a permission toggle (#625) — $mode / 
 				const ns = self.guest.x.ns;
 				return {
 					addRule: outcome(() => {
-						ns.permissions.addRule = () => "swallowed";
+						ns.permissions.rules.add = () => "swallowed";
 					}),
 					member: outcome(() => {
 						ns.metadata.stored = 1;
@@ -238,7 +240,7 @@ describe.each(CONFIGS)("ownership across a permission toggle (#625) — $mode / 
 			const report = await withSuppressedSlothletErrorOutput(() => api.other.x.runWithSelf(PROBE));
 			expect(report).toEqual({ addRule: framework, member: framework });
 			if (framework !== "done") {
-				expect(typeof api.slothlet.permissions.addRule({ caller: "a.**", target: "b.**", effect: "deny" })).toBe("string");
+				expect(typeof api.slothlet.permissions.rules.add({ caller: "a.**", target: "b.**", effect: "deny" })).toBe("string");
 			}
 		});
 
@@ -286,7 +288,7 @@ describe.each(CONFIGS)("ownership across a permission toggle (#625) — $mode / 
 		it("refuses defining, deleting, or assigning the framework's reserved names through self", async () => {
 			await load(options);
 			globalThis[Symbol.for(PROBE)] = (self) => {
-				const root = self.slothlet.diag.getAPI();
+				const root = self.slothlet.diag.api();
 				const report = {};
 				for (const name of ["slothlet", "shutdown", "destroy"]) {
 					report[`${name}Assign`] = outcome(() => {
@@ -309,20 +311,20 @@ describe.each(CONFIGS)("ownership across a permission toggle (#625) — $mode / 
 			expect(report).toEqual(Object.fromEntries(Object.keys(report).map((key) => [key, code])));
 			expect(typeof api.shutdown).toBe("function");
 			expect(typeof api.destroy).toBe("function");
-			expect(typeof api.slothlet.permissions.addRule).toBe("function");
+			expect(typeof api.slothlet.permissions.rules.add).toBe("function");
 		});
 
 		it.runIf(framework !== "done")("keeps the framework namespace inside an isolated scope a module opens", async () => {
 			await load(options);
-			const hostRule = api.slothlet.permissions.addRule({ caller: "guest.**", target: "guest.**:write", effect: "deny" });
+			const hostRule = api.slothlet.permissions.rules.add({ caller: "guest.**", target: "guest.**:write", effect: "deny" });
 			globalThis[Symbol.for(PROBE)] = (self) =>
-				self.slothlet.scope({
+				self.slothlet.context.scope({
 					context: {},
 					isolation: "full",
 					fn: () => ({
 						report: {
 							addRule: outcome(() => {
-								self.slothlet.permissions.addRule = () => "swallowed";
+								self.slothlet.permissions.rules.add = () => "swallowed";
 							}),
 							member: outcome(() => {
 								self.slothlet.metadata.inScope = 1;
@@ -334,8 +336,8 @@ describe.each(CONFIGS)("ownership across a permission toggle (#625) — $mode / 
 								self.shutdown = 1;
 							})
 						},
-						viewed: self.slothlet.permissions.removeRule !== api.slothlet.permissions.removeRule,
-						removeRule: self.slothlet.permissions.removeRule
+						viewed: self.slothlet.permissions.rules.remove !== api.slothlet.permissions.rules.remove,
+						removeRule: self.slothlet.permissions.rules.remove
 					})
 				});
 			const { report, viewed, removeRule } = await withSuppressedSlothletErrorOutput(() => api.guest.x.runWithSelf(PROBE));
@@ -343,13 +345,13 @@ describe.each(CONFIGS)("ownership across a permission toggle (#625) — $mode / 
 			expect(viewed).toBe(true);
 			// Kept from the scope and called later, outside any call, it still runs as the module: no host rule goes.
 			expect(withSuppressedSlothletErrorOutputSync(() => outcome(() => removeRule(hostRule)))).toBe("INVALID_PERMISSION_RULE");
-			expect(api.slothlet.permissions.removeRule(hostRule)).toBe(true);
+			expect(api.slothlet.permissions.rules.remove(hostRule)).toBe(true);
 		});
 
 		it.runIf(systemMode !== "on")("keeps a module's writes inside an isolated scope in the scope, through a descriptor too", async () => {
 			await load(options);
 			globalThis[Symbol.for(PROBE)] = (self) =>
-				self.slothlet.scope({
+				self.slothlet.context.scope({
 					context: {},
 					isolation: "full",
 					fn: () => ({

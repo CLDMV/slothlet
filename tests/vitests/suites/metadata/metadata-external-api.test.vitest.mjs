@@ -14,12 +14,12 @@
  */
 
 /**
- * @fileoverview Tests for external metadata API (set/remove/setGlobal).
+ * @fileoverview Tests for external metadata API (set/remove/metadata.global).
  *
  * Tests the public API for manipulating metadata from OUTSIDE API context:
  * - api.slothlet.metadata.set(fn, key, value) - Set metadata on specific function
  * - api.slothlet.metadata.remove(fn, key?) - Remove metadata from function
- * - api.slothlet.metadata.setGlobal(key, value) - Set global metadata
+ * - api.slothlet.metadata.global(key, value) - Set global metadata
  *
  * These are EXTERNAL APIs used by users to modify metadata at runtime.
  * They differ from INTERNAL APIs (self.slothlet.metadata.get/self/caller)
@@ -342,7 +342,7 @@ describe.each(getMatrixConfigs())("External Metadata API > Config: '$name'", ({ 
 		});
 	});
 
-	describe("api.slothlet.metadata.setGlobal()", () => {
+	describe("api.slothlet.metadata.global()", () => {
 		beforeEach(async () => {
 			api = await slothlet({
 				...config,
@@ -352,8 +352,8 @@ describe.each(getMatrixConfigs())("External Metadata API > Config: '$name'", ({ 
 
 		it("should set global metadata visible to all functions", async () => {
 			// Set global metadata
-			api.slothlet.metadata.setGlobal("appVersion", "3.0.0");
-			api.slothlet.metadata.setGlobal("environment", "test");
+			api.slothlet.metadata.global("appVersion", "3.0.0");
+			api.slothlet.metadata.global("environment", "test");
 
 			// Materialize multiple functions
 			await materialize(api, "rootMath.add", 1, 2);
@@ -367,7 +367,7 @@ describe.each(getMatrixConfigs())("External Metadata API > Config: '$name'", ({ 
 		});
 
 		it("should accept object payload for global metadata", async () => {
-			api.slothlet.metadata.setGlobal({ appVersion: "3.1.0", environment: "staging" });
+			api.slothlet.metadata.global({ appVersion: "3.1.0", environment: "staging" });
 
 			await materialize(api, "rootMath.add", 1, 2);
 			await materialize(api, "rootMath.multiply", 5, 3);
@@ -378,8 +378,8 @@ describe.each(getMatrixConfigs())("External Metadata API > Config: '$name'", ({ 
 			expect(api.rootMath.multiply.__metadata.environment).toBe("staging");
 		});
 
-		it("should preserve nested object payload shape in setGlobal", async () => {
-			api.slothlet.metadata.setGlobal({
+		it("should preserve nested object payload shape in metadata.global", async () => {
+			api.slothlet.metadata.global({
 				build: { region: "us", env: { tier: "prod" } }
 			});
 
@@ -389,11 +389,11 @@ describe.each(getMatrixConfigs())("External Metadata API > Config: '$name'", ({ 
 			expect(api.rootMath.add.__metadata.build.env.tier).toBe("prod");
 		});
 
-		it("should deep merge nested object payloads across setGlobal calls", async () => {
-			api.slothlet.metadata.setGlobal({
+		it("should deep merge nested object payloads across metadata.global calls", async () => {
+			api.slothlet.metadata.global({
 				build: { region: "us" }
 			});
-			api.slothlet.metadata.setGlobal({
+			api.slothlet.metadata.global({
 				build: { env: { tier: "prod" } }
 			});
 
@@ -403,8 +403,8 @@ describe.each(getMatrixConfigs())("External Metadata API > Config: '$name'", ({ 
 			expect(api.rootMath.add.__metadata.build.env.tier).toBe("prod");
 		});
 
-		it("should reject circular plain objects in string-key setGlobal mode", async () => {
-			api.slothlet.metadata.setGlobal("build", { region: "us" });
+		it("should reject circular plain objects in string-key metadata.global mode", async () => {
+			api.slothlet.metadata.global("build", { region: "us" });
 
 			const circular = {
 				region: "eu"
@@ -412,7 +412,7 @@ describe.each(getMatrixConfigs())("External Metadata API > Config: '$name'", ({ 
 			circular.self = circular;
 
 			try {
-				api.slothlet.metadata.setGlobal("build", circular);
+				api.slothlet.metadata.global("build", circular);
 				expect.unreachable("Should have thrown INVALID_ARGUMENT");
 			} catch (error) {
 				expect(error.message).toContain("INVALID_ARGUMENT");
@@ -424,13 +424,13 @@ describe.each(getMatrixConfigs())("External Metadata API > Config: '$name'", ({ 
 		});
 
 		it("should reject prototype-pollution global metadata keys in string mode", async () => {
-			expect(() => api.slothlet.metadata.setGlobal("__proto__", "polluted")).toThrow(/INVALID_METADATA_KEY/);
-			expect(() => api.slothlet.metadata.setGlobal("constructor", "polluted")).toThrow(/INVALID_METADATA_KEY/);
-			expect(() => api.slothlet.metadata.setGlobal("prototype", "polluted")).toThrow(/INVALID_METADATA_KEY/);
+			expect(() => api.slothlet.metadata.global("__proto__", "polluted")).toThrow(/INVALID_METADATA_KEY/);
+			expect(() => api.slothlet.metadata.global("constructor", "polluted")).toThrow(/INVALID_METADATA_KEY/);
+			expect(() => api.slothlet.metadata.global("prototype", "polluted")).toThrow(/INVALID_METADATA_KEY/);
 		});
 
-		it("should reject prototype-pollution keys when deep-merging setGlobal string-mode objects", async () => {
-			api.slothlet.metadata.setGlobal("build", { region: "us" });
+		it("should reject prototype-pollution keys when deep-merging metadata.global string-mode objects", async () => {
+			api.slothlet.metadata.global("build", { region: "us" });
 
 			const mergePayload = Object.create(null);
 			Object.defineProperty(mergePayload, "__proto__", {
@@ -440,7 +440,7 @@ describe.each(getMatrixConfigs())("External Metadata API > Config: '$name'", ({ 
 				writable: true
 			});
 
-			expect(() => api.slothlet.metadata.setGlobal("build", mergePayload)).toThrow(/INVALID_METADATA_KEY/);
+			expect(() => api.slothlet.metadata.global("build", mergePayload)).toThrow(/INVALID_METADATA_KEY/);
 		});
 
 		it("should reject prototype-pollution segments in nested object mode", async () => {
@@ -453,14 +453,14 @@ describe.each(getMatrixConfigs())("External Metadata API > Config: '$name'", ({ 
 			});
 
 			expect(() =>
-				api.slothlet.metadata.setGlobal({
+				api.slothlet.metadata.global({
 					safe: "ok",
 					build: buildWithProtoKey
 				})
 			).toThrow(/INVALID_METADATA_KEY/);
 
 			expect(() =>
-				api.slothlet.metadata.setGlobal({
+				api.slothlet.metadata.global({
 					safe: "ok",
 					constructor: { nested: true }
 				})
@@ -469,7 +469,7 @@ describe.each(getMatrixConfigs())("External Metadata API > Config: '$name'", ({ 
 
 		it("should override global metadata on specific function", async () => {
 			// Set global metadata
-			api.slothlet.metadata.setGlobal("version", "1.0.0");
+			api.slothlet.metadata.global("version", "1.0.0");
 
 			await materialize(api, "rootMath.add", 1, 2);
 			await materialize(api, "rootMath.multiply", 5, 3);
@@ -484,7 +484,7 @@ describe.each(getMatrixConfigs())("External Metadata API > Config: '$name'", ({ 
 
 		it("should apply global metadata to newly added functions", async () => {
 			// Set global metadata first
-			api.slothlet.metadata.setGlobal("defaultCategory", "utility");
+			api.slothlet.metadata.global("defaultCategory", "utility");
 
 			// Add new API
 			await api.slothlet.api.add("testFunc", TEST_DIRS.API_SMART_FLATTEN);
@@ -497,13 +497,13 @@ describe.each(getMatrixConfigs())("External Metadata API > Config: '$name'", ({ 
 		});
 
 		it("should handle multiple global metadata updates", async () => {
-			api.slothlet.metadata.setGlobal("counter", 1);
+			api.slothlet.metadata.global("counter", 1);
 
 			await materialize(api, "rootMath.add", 1, 2);
 			expect(api.rootMath.add.__metadata.counter).toBe(1);
 
 			// Update global metadata
-			api.slothlet.metadata.setGlobal("counter", 2);
+			api.slothlet.metadata.global("counter", 2);
 
 			// Newly materialized functions should get updated value
 			await materialize(api, "rootMath.multiply", 5, 3);
@@ -522,10 +522,10 @@ describe.each(getMatrixConfigs())("External Metadata API > Config: '$name'", ({ 
 			});
 		});
 
-		it("should handle set/remove/setGlobal in combination", async () => {
+		it("should handle set/remove/metadata.global in combination", async () => {
 			// Set global metadata
-			api.slothlet.metadata.setGlobal("appName", "TestApp");
-			api.slothlet.metadata.setGlobal("version", "1.0.0");
+			api.slothlet.metadata.global("appName", "TestApp");
+			api.slothlet.metadata.global("version", "1.0.0");
 
 			await materialize(api, "rootMath.add", 1, 2);
 
@@ -797,7 +797,7 @@ describe.each(getMatrixConfigs())("External Metadata API > Config: '$name'", ({ 
 		});
 
 		it("should include global user metadata in the returned object", () => {
-			api.slothlet.metadata.setGlobal("env", "production");
+			api.slothlet.metadata.global("env", "production");
 			api.slothlet.metadata.setFor("rootMath", "category", "math");
 
 			const meta = api.slothlet.metadata.getFor("rootMath");

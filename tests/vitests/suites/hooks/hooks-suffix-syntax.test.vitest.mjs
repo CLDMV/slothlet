@@ -36,16 +36,14 @@ describe.each(getMatrixConfigs())("Hooks > suffix syntax + prefix deprecation (#
 
 	beforeEach(() => {
 		SlothletWarning.suppressConsole = true;
-		SlothletWarning.clearCaptured();
 	});
 
 	afterEach(async () => {
 		if (api) await api.shutdown();
 		api = null;
-		SlothletWarning.clearCaptured();
 	});
 
-	const deps = () => api.slothlet.diag.SlothletWarning.captured.filter((w) => w.code === DEP);
+	const deps = () => api.slothlet.warnings.get().filter((w) => w.code === DEP);
 
 	it("canonical suffix `pattern:type` registers and fires (no warning)", async () => {
 		api = await slothlet({ ...config, base: BASE, diagnostics: true, hook: true });
@@ -111,7 +109,7 @@ describe.each(getMatrixConfigs())("Hooks > suffix syntax + prefix deprecation (#
 	it("reload re-registers hooks in suffix form without re-deprecating", async () => {
 		api = await slothlet({ ...config, base: BASE, diagnostics: true, hook: true, api: { mutations: { reload: true } } });
 		api.slothlet.hook.on("math.add:before", () => {}); // canonical suffix
-		api.slothlet.diag.SlothletWarning.clearCaptured();
+		api.slothlet.warnings.clear();
 		await api.slothlet.reload();
 		expect(deps()).toHaveLength(0); // exportHooks emits suffix → replay does not warn
 	});

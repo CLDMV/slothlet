@@ -22,7 +22,7 @@ import * as attacks from "../shared/attacks.mjs";
  * @param {string} name - Member of the namespace.
  * @returns {Record<string, string>} Outcome of each change.
  * @example
- * changeMember("lockCaller");
+ * changeMember("pin");
  */
 export function changeMember(name) {
 	return attacks.changeMember(name);

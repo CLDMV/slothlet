@@ -81,7 +81,7 @@ describe.each(CONFIGS)(
 				expect(api.guest.x.addEventRuleFor({ caller: "**", event: "victim.**", effect: "deny" })).toBe("INVALID_PERMISSION_RULE");
 				// Nothing was registered: switched on, the victim's own event resolves as with no rule at all.
 				api.slothlet.permissions.control.enable();
-				expect(api.slothlet.event.resolveLevel("victim.v", "victim.ping")).toBe("notify");
+				expect(api.slothlet.event.level("victim.v", "victim.ping")).toBe("notify");
 			});
 
 			it("refuses a module removing the host's event rule, even for the module's own events", async () => {
@@ -90,7 +90,7 @@ describe.each(CONFIGS)(
 				expect(hostId).toMatch(/^evt-/);
 				expect(api.guest.x.removeEventRuleFor(hostId)).toBe("INVALID_PERMISSION_RULE");
 				api.slothlet.permissions.control.enable();
-				expect(api.slothlet.event.resolveLevel("victim.v", "guest.ping")).toBe("deny");
+				expect(api.slothlet.event.level("victim.v", "guest.ping")).toBe("deny");
 			});
 		});
 
@@ -103,20 +103,20 @@ describe.each(CONFIGS)(
 				expect(api.slothlet.event.rules.add({ caller: "victim.**", event: "guest.contested.**", effect: "deny" })).toMatch(/^evt-/);
 				expect(api.guest.x.addEventRuleFor({ caller: "victim.**", event: "guest.contested.**", effect: "allow" })).toMatch(/^evt-/);
 				expect(api.guest.x.addEventRuleFor({ caller: "**", event: "victim.**", effect: "deny" })).toBe("INVALID_PERMISSION_RULE");
-				expect(api.slothlet.event.resolveLevel("victim.v", "guest.own.a")).toBe("allow");
-				expect(api.slothlet.event.resolveLevel("victim.v", "guest.contested.a")).toBe("allow");
+				expect(api.slothlet.event.level("victim.v", "guest.own.a")).toBe("allow");
+				expect(api.slothlet.event.level("victim.v", "guest.contested.a")).toBe("allow");
 
 				api.slothlet.permissions.control.enable();
 				expect(api.slothlet.permissions.control.mode).toBe("on");
 				// The module's own rule applies.
-				expect(api.slothlet.event.resolveLevel("victim.v", "guest.own.a")).toBe("deny");
+				expect(api.slothlet.event.level("victim.v", "guest.own.a")).toBe("deny");
 				// Equal specificity: the host's deny outranks the module's later allow.
-				expect(api.slothlet.event.resolveLevel("victim.v", "guest.contested.a")).toBe("deny");
+				expect(api.slothlet.event.level("victim.v", "guest.contested.a")).toBe("deny");
 				// The rule refused while off is not there.
-				expect(api.slothlet.event.resolveLevel("victim.v", "victim.ping")).toBe("notify");
+				expect(api.slothlet.event.level("victim.v", "victim.ping")).toBe("notify");
 				// And the module still removes its own rule.
 				expect(api.guest.x.removeEventRuleFor(own)).toBe(true);
-				expect(api.slothlet.event.resolveLevel("victim.v", "guest.own.a")).toBe("notify");
+				expect(api.slothlet.event.level("victim.v", "guest.own.a")).toBe("notify");
 			});
 
 			it("holds the condition of a rule the module added while off to the module's own writes", async () => {
@@ -143,13 +143,13 @@ describe.each(CONFIGS)(
 				expect(api.slothlet.event.rules.add({ caller: "victim.**", event: "guest.contested.**", effect: "deny" })).toMatch(/^evt-/);
 				expect(api.guest.x.addEventRuleFor({ caller: "victim.**", event: "guest.contested.**", effect: "allow" })).toMatch(/^evt-/);
 				expect(api.guest.x.addEventRuleFor({ caller: "**", event: "victim.**", effect: "deny" })).toBe("INVALID_PERMISSION_RULE");
-				expect(api.slothlet.event.resolveLevel("victim.v", "guest.own.a")).toBe("allow");
+				expect(api.slothlet.event.level("victim.v", "guest.own.a")).toBe("allow");
 
 				api.slothlet.permissions.control.enable();
 				expect(api.slothlet.permissions.control.mode).toBe("on");
-				expect(api.slothlet.event.resolveLevel("victim.v", "guest.own.a")).toBe("deny");
-				expect(api.slothlet.event.resolveLevel("victim.v", "guest.contested.a")).toBe("deny");
-				expect(api.slothlet.event.resolveLevel("victim.v", "victim.ping")).toBe("notify");
+				expect(api.slothlet.event.level("victim.v", "guest.own.a")).toBe("deny");
+				expect(api.slothlet.event.level("victim.v", "guest.contested.a")).toBe("deny");
+				expect(api.slothlet.event.level("victim.v", "victim.ping")).toBe("notify");
 			});
 		});
 	}

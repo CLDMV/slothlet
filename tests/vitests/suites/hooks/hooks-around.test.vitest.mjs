@@ -458,10 +458,10 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks > around (#4
 		api.slothlet.hook.on("svc.**:around", ({ next }) => next() * 2, { id: "double" });
 		expect(await api.svc.mul(2, 3)).toBe(12);
 
-		api.slothlet.hook.enablePattern("other.**");
+		api.slothlet.hook.pattern.enable("other.**");
 		expect(await api.svc.mul(2, 3), "path excluded by the filter").toBe(6);
 
-		api.slothlet.hook.resetPatternFilter();
+		api.slothlet.hook.pattern.reset();
 		expect(await api.svc.mul(2, 3)).toBe(12);
 	});
 });

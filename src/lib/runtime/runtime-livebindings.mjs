@@ -125,7 +125,7 @@ function runtime_resolveExecutingContext(resolved = null) {
 	const executing = identity ? identity.currentWrapper : ctx.currentWrapper;
 	if (executing) return ctx;
 
-	// A host that entered a context on purpose through `api.slothlet.run()` / `.scope()` may use `self`
+	// A host that entered a context on purpose through `api.slothlet.context.run()` / `.scope()` may use `self`
 	// inside its callback, even though a host callback is not a module and so has no caller of its own.
 	// A scope store is recognisable by the parent it descends from, and the trusted marker distinguishes
 	// one the host opened from one a module opened (a module's scope inherits the module as the caller
@@ -315,7 +315,7 @@ const selfTraps = {
 		}
 		// A module never replaces the framework's namespace or root functions, isolated scope or not (#625).
 		if (ctx.slothlet) runtime_assertFrameworkRootChange(ctx.slothlet, prop);
-		// In full-isolation scopes (`api.slothlet.scope({ isolation: "full" }, ...)`)
+		// In full-isolation scopes (`api.slothlet.context.scope({ isolation: "full", ... })`)
 		// `ctx.self` is a copy-on-write view (`makeCopyOnWriteSelf`) — a distinct
 		// object from `slothlet.boundApi` that reads through to the live tree but
 		// captures writes in a per-scope overlay. Routing through apiManager would

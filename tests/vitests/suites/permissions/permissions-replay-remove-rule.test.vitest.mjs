@@ -27,7 +27,7 @@ describe.each(getMatrixConfigs())("Permissions > Replay removeRule > $name", ({ 
 		api = null;
 	});
 
-	it("removeRule survives reload — rule remains removed after replay", async () => {
+	it("rules.remove survives reload — rule remains removed after replay", async () => {
 		api = await slothlet({
 			...config,
 			base: BASE,
@@ -37,8 +37,8 @@ describe.each(getMatrixConfigs())("Permissions > Replay removeRule > $name", ({ 
 		});
 
 		// Add then remove a deny rule
-		const ruleId = api.slothlet.permissions.addRule({ caller: "callers.**", target: "payments.**", effect: "deny" });
-		api.slothlet.permissions.removeRule(ruleId);
+		const ruleId = api.slothlet.permissions.rules.add({ caller: "callers.**", target: "payments.**", effect: "deny" });
+		api.slothlet.permissions.rules.remove(ruleId);
 
 		// Verify allowed (rule removed)
 		const result = await api.callers.paymentsCaller.callCharge(100);

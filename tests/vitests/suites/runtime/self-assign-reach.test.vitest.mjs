@@ -378,7 +378,7 @@ describe.each(CONFIGS)("what a module reaches through self (#625) — $mode / $r
 			});
 			instances.push(isolated);
 			let report;
-			await isolated.slothlet.run({}, async () => {
+			await isolated.slothlet.context.run({}, async () => {
 				report = await isolated.root.changeScopedSelf();
 			});
 			expect(report).toEqual({ define: "done", read: 3, accessor: "TypeError", remove: "done", gone: true });

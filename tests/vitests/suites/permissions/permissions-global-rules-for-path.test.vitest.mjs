@@ -19,7 +19,7 @@ import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
 const BASE = TEST_DIRS.API_TEST_PERMISSIONS;
 
-describe.each(getMatrixConfigs())("Permissions > global.rulesForPath > $name", ({ config }) => {
+describe.each(getMatrixConfigs())("Permissions > global.rules.path > $name", ({ config }) => {
 	let api;
 
 	afterEach(async () => {
@@ -41,10 +41,10 @@ describe.each(getMatrixConfigs())("Permissions > global.rulesForPath > $name", (
 			}
 		});
 
-		const adminRules = api.slothlet.permissions.global.rulesForPath("admin.manage");
+		const adminRules = api.slothlet.permissions.global.rules.path("admin.manage");
 		expect(adminRules.length).toBeGreaterThanOrEqual(2);
 
-		const paymentRules = api.slothlet.permissions.global.rulesForPath("payments.charge");
+		const paymentRules = api.slothlet.permissions.global.rules.path("payments.charge");
 		expect(paymentRules.length).toBeGreaterThanOrEqual(1);
 	});
 });

@@ -40,7 +40,7 @@ Versioned-mount conditions — how multiple versions of a module coexist at an a
 **Related Rule**: [Rule 19](../API-RULES.md#rule-19-versioned-mounts)
 **Status**: ✅ Active
 
-**Pattern**: When 2+ discovered results share a package name in one `addModules()`, each mounts under its version segment and the highest semver is elected default for the plain (unversioned) path.
+**Pattern**: When 2+ discovered results share a package name in one `modules.add([...])`, each mounts under its version segment and the highest semver is elected default for the plain (unversioned) path.
 
 **Source(s)**: `src/lib/handlers/module-manager.mjs:413-414` (version prefix, `G7`) · `:505-533` (`#buildVersionConfigs` default election)
 

@@ -67,7 +67,7 @@ describe.each(CONFIGS)("versioned and array-path api.add from module code (#625)
 		["under a framework root function", "shutdown", "PERMISSION_DENIED"],
 		["inside a rule manager", "mgr", "LOOSE_SET_NOT_OWNED"]
 	])("refuses a version tag that mounts %s, and changes nothing", async (_label, version, code) => {
-		await load({ permissions: { rules: [{ caller: "mgr.**", target: "slothlet.permissions.addRule", effect: "allow" }] } });
+		await load({ permissions: { rules: [{ caller: "mgr.**", target: "slothlet.permissions.rules.add", effect: "allow" }] } });
 		expect(await withSuppressedSlothletErrorOutput(() => api.guest.x.addAtVersion("guest", GUEST, { moduleID: "g2" }, version))).toBe(code);
 		expect(api[version]?.guest).toBeUndefined();
 		expect(await api.victim.v.secret()).toBe("SECRET");

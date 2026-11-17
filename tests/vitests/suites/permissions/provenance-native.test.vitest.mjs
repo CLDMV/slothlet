@@ -68,7 +68,7 @@ beforeAll(() => {
 			"\t\t\tmode,",
 			"\t\t\truntime,",
 			"\t\t\tsilent: true,",
-			'\t\t\tpermissions: { defaultPolicy: "allow", provenance, rules: [{ caller: "scheduler.**", target: "slothlet.lockCaller.caller", effect: "allow" }] }',
+			'\t\t\tpermissions: { defaultPolicy: "allow", provenance, rules: [{ caller: "scheduler.**", target: "slothlet.pin.caller", effect: "allow" }] }',
 			"\t\t});",
 			"\t\tawait sched.scheduler.service.clear();",
 			"\t\tawait sched.client.app.scheduleWhoamiAsService();",

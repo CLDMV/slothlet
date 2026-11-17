@@ -55,7 +55,7 @@ describe.each(getMatrixConfigs())("Versioning > No Default > $name", ({ config }
 		expect(api.auth).toBeDefined();
 
 		// Remove the only version — VersionManager calls teardownDispatcher()
-		await api.slothlet.versioning.unregister("auth", "v1");
+		await api.slothlet.versioning.remove("auth", "v1");
 
 		// Dispatcher is removed from the API tree; api.auth is now undefined.
 		// (VERSION_NO_DEFAULT is a defensive guard inside the dispatcher's get trap

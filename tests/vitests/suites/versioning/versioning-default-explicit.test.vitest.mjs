@@ -69,7 +69,7 @@ describe.each(getMatrixConfigs())("Versioning > Default Explicit > $name", ({ co
 		expect(api.slothlet.versioning.list("auth").default).toBe("v1");
 
 		// Change default to v2
-		api.slothlet.versioning.setDefault("auth", "v2");
+		api.slothlet.versioning.default("auth", "v2");
 
 		expect(api.slothlet.versioning.list("auth").default).toBe("v2");
 	});

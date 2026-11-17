@@ -23,7 +23,7 @@
  * holds has a twin one level down: a folder, a file of named exports, a function, a file's default object, a file's
  * default primitive of every kind, and for the function roots the root file's named primitives of every kind, an object
  * of data and a function. A `reader` module the rules name and an `open` module they do not list and read both through
- * `self`, the `self` they kept at load, and `self.slothlet.diag.getAPI()`, under the same rule written for the root's
+ * `self`, the `self` they kept at load, and `self.slothlet.diag.api()`, under the same rule written for the root's
  * member and for its twin. The expected answers are the twin's, and for the host, and for a module no rule names,
  * the whole listing; a file's primitive default reads as the plain module's default export. Eager and lazy mode, the
  * async and live runtime, both attributions, and the permission system off and disabled.

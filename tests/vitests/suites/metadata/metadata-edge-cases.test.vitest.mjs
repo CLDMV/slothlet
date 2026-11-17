@@ -162,21 +162,21 @@ describe.each(getMatrixConfigs())("Metadata Edge Cases > Config: '$name'", ({ co
 	});
 
 	describe("Circular Reference Handling", () => {
-		it("should reject circular objects passed to metadata.setGlobal", async () => {
+		it("should reject circular objects passed to metadata.global", async () => {
 			const circular = {
 				name: "circular",
 				level: 1
 			};
 			circular.self = circular;
 
-			expect(() => api.slothlet.metadata.setGlobal(circular)).toThrow(/INVALID_ARGUMENT/);
+			expect(() => api.slothlet.metadata.global(circular)).toThrow(/INVALID_ARGUMENT/);
 		});
 
-		it("should allow repeated shared nested objects in metadata.setGlobal", async () => {
+		it("should allow repeated shared nested objects in metadata.global", async () => {
 			const shared = { enabled: true };
 
 			expect(() =>
-				api.slothlet.metadata.setGlobal({
+				api.slothlet.metadata.global({
 					alpha: shared,
 					beta: shared
 				})

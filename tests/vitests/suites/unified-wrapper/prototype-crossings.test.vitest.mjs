@@ -229,7 +229,7 @@ describe.each(MODES.flatMap((mode) => RUNTIMES.map((runtime) => ({ mode, runtime
 			api = await mount({ mode, runtime, permissions: { rules: [ALLOW_READER_WRITES] } });
 			expect(await api.reader.writeThrough("Foo", "__before")).toBe("written");
 			expect(await api.owner.takeFromPrototype("__before")).toBe(true);
-			api.slothlet.permissions.addRule({ caller: "reader.**", target: "owner.Foo.prototype.hi:write", effect: "deny" });
+			api.slothlet.permissions.rules.add({ caller: "reader.**", target: "owner.Foo.prototype.hi:write", effect: "deny" });
 			expect(await api.reader.writeThrough("Foo", "hi")).toBe(DENIED);
 			expect(await api.owner.takeFromPrototype("hi")).toBe(false);
 		});

@@ -41,7 +41,7 @@ describe.each(getMatrixConfigs())("Permissions > Shutdown > $name", ({ config })
 		await api.slothlet.api.add("callers", `${BASE}/callers`);
 
 		// Rules are present before shutdown
-		const rulesBefore = api.slothlet.permissions.global.rulesForPath("payments.charge");
+		const rulesBefore = api.slothlet.permissions.global.rules.path("payments.charge");
 		expect(rulesBefore.length).toBeGreaterThan(0);
 
 		await api.shutdown();

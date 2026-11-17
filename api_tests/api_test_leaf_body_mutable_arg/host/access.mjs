@@ -60,7 +60,7 @@ export function makeAccess(getApi) {
 		},
 
 		check(_) {
-			return attempt(() => getApi().slothlet.permissions.global.checkAccess("project.hand", "vault.get"));
+			return attempt(() => getApi().slothlet.permissions.global.check.access("project.hand", "vault.get"));
 		},
 		who(_) {
 			return attempt(() => getApi().vault.whoami());
@@ -93,7 +93,7 @@ export function makeAccess(getApi) {
 		},
 		async awaitCheck(_) {
 			await Promise.resolve();
-			return attempt(() => getApi().slothlet.permissions.global.checkAccess("project.hand", "vault.get"));
+			return attempt(() => getApi().slothlet.permissions.global.check.access("project.hand", "vault.get"));
 		},
 		async timerWho(_) {
 			await new Promise((resolve) => setTimeout(resolve, 1));

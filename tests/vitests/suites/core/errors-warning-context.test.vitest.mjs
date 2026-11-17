@@ -47,7 +47,6 @@ import { SlothletWarning } from "@cldmv/slothlet/errors";
 afterEach(() => {
 	// Always restore suppressConsole after each test regardless of outcome
 	SlothletWarning.suppressConsole = true;
-	SlothletWarning.captured = [];
 	vi.restoreAllMocks();
 });
 
@@ -98,8 +97,7 @@ describe("SlothletWarning — empty contextData skips context log (line 184 fals
 		SlothletWarning.suppressConsole = true;
 		new SlothletWarning("WARNING_METADATA_MISMATCH", {});
 
-		// No console output — captured array used instead
+		// No console output. A warning raised outside any instance is not kept anywhere: an instance keeps its own.
 		expect(warnSpy).not.toHaveBeenCalled();
-		expect(SlothletWarning.captured.length).toBeGreaterThan(0);
 	});
 });

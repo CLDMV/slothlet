@@ -2291,7 +2291,7 @@ function runtime_registerFrameworkMember(member, slothlet, name) {
  * The framework's own namespace (`self.slothlet`) and root functions (`self.shutdown`, `self.destroy`) as a
  * module reads them (#625).
  *
- * What they do depends on who calls: `diag.getAPI()` hands module code a view of the api and the host the
+ * What they do depends on who calls: `diag.api()` hands module code a view of the api and the host the
  * api itself, `hook.on()` / `lifecycle.on()` register for the module calling or for the host. A function a
  * module read and kept, called later from outside any call, would run as the host. Through the view it runs
  * as the module that read it, and so does every other use of the view — a member read, a write — made with
@@ -2311,7 +2311,7 @@ function runtime_registerFrameworkMember(member, slothlet, name) {
  * @internal
  *
  * @example
- * const diag = runtime_selfFrameworkView(api.slothlet).diag; // later diag.getAPI() still answers the module
+ * const diag = runtime_selfFrameworkView(api.slothlet).diag; // later diag.api() still answers the module
  */
 function runtime_selfFrameworkView(member, reader, slothlet = WeakMapMethods.get(FRAMEWORK_MEMBERS, member)) {
 	if (!slothlet || member === null || (typeof member !== "object" && typeof member !== "function")) return member;
@@ -2604,7 +2604,7 @@ function runtime_asViewReader(reader, use) {
  * own (a function of `self.slothlet` a module kept, called later from outside any call) (#625).
  *
  * Run that way the code has no caller, which reads as "called from the host". What pins the caller
- * (`lockCaller.caller`) pins this module instead, so a kept function never acts as the host.
+ * (`pin.caller`) pins this module instead, so a kept function never acts as the host.
  *
  * @param {object} slothlet - Instance the executing code runs in.
  * @returns {object|null} The reader's wrapper, or null when the executing code is no such use.
@@ -2760,7 +2760,7 @@ function runtime_selfRootView(slothlet, reader) {
 }
 
 /**
- * Functions the framework itself pinned to a caller: a `lockCaller` / `lockCaller.caller` wrapper, a hook
+ * Functions the framework itself pinned to a caller: a `pin` / `pin.caller` wrapper, a hook
  * handler the hook manager pinned to its module, and the handler {@link runtime_selfHookHandler} built over
  * one. Recognised by membership only, never by a property such as `_slothletOriginal`: module code can put
  * any property on its own function, and a handler that passed for pinned would run unpinned, as whichever

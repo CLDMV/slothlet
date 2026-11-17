@@ -55,7 +55,7 @@ export async function afterGateCaptured(gate) {
 			() => "subscribed"
 		),
 		attempt(
-			() => permissions.global.rulesForPath("ext.views.running.render"),
+			() => permissions.global.rules.path("ext.views.running.render"),
 			() => "read"
 		)
 	]);

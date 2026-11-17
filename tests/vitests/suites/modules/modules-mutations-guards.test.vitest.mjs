@@ -21,8 +21,8 @@
  * `config.api.mutations.{add, remove, reload}` and throw
  * `INVALID_CONFIG_MUTATIONS_DISABLED` when the corresponding flag is `false`.
  *
- * The newer `api.slothlet.api.modules.{addModule, addModules, addDiscovered,
- * removeModule}` methods are mounts/unmounts too — they call through to the
+ * The newer `api.slothlet.api.modules.{modules.add, modules.add, modules.add,
+ * modules.remove}` methods are mounts/unmounts too — they call through to the
  * same underlying api-manager component-add/component-remove paths — and must
  * enforce the same flags. Pre-fix, the modules.* wrappers passed straight
  * through to `ModuleManager` and the gate never fired, which let a host
@@ -30,13 +30,13 @@
  * mount and unmount modules via the modules.* namespace, defeating the
  * declared mutation safety boundary.
  *
- * Pre-fix expected failure: addModule / addModules / addDiscovered /
- * removeModule resolve successfully (or throw an unrelated error) when the
+ * Pre-fix expected failure: modules.add / modules.add / modules.add /
+ * modules.remove resolve successfully (or throw an unrelated error) when the
  * corresponding mutation flag is disabled. Post-fix: each rejects with a
  * SlothletError whose code is `INVALID_CONFIG_MUTATIONS_DISABLED`.
  *
- * Read-only methods (`discover`, `sort`, `getDiscoveryCache`,
- * `clearDiscoveryCache`, `getStaleMounts`) are NOT mutations and must NOT
+ * Read-only methods (`discover`, `sort`, `cache.get`,
+ * `cache.clear`, `stale`) are NOT mutations and must NOT
  * fail under disabled flags — covered as sanity checks.
  *
  * @module tests/vitests/suites/modules/modules-mutations-guards.test.vitest
@@ -82,40 +82,40 @@ async function bootWithMutations(flags) {
 }
 
 describe("api.slothlet.api.modules.* — mutation guards", () => {
-	// ─── addModule / addModules / addDiscovered → gated by mutations.add ────
+	// ─── modules.add / modules.add / modules.add → gated by mutations.add ────
 
-	it("addModule(name) throws INVALID_CONFIG_MUTATIONS_DISABLED when mutations.add is false", async () => {
+	it("modules.add(name) throws INVALID_CONFIG_MUTATIONS_DISABLED when mutations.add is false", async () => {
 		const mm = await bootWithMutations({ add: false });
 		const [first] = await mm.discover({ scanRoot: FIX_FOLDER });
 		expect(first?.packageName).toBeTypeOf("string");
 
 		await withSuppressedSlothletErrorOutput(async () => {
-			await expect(mm.addModule(first)).rejects.toThrow("INVALID_CONFIG_MUTATIONS_DISABLED");
+			await expect(mm.add(first)).rejects.toThrow("INVALID_CONFIG_MUTATIONS_DISABLED");
 		});
 	});
 
-	it("addModules([...]) throws INVALID_CONFIG_MUTATIONS_DISABLED when mutations.add is false", async () => {
+	it("modules.add([...]) throws INVALID_CONFIG_MUTATIONS_DISABLED when mutations.add is false", async () => {
 		const mm = await bootWithMutations({ add: false });
 		const found = await mm.discover({ scanRoot: FIX_FOLDER });
 		expect(found.length).toBeGreaterThan(0);
 
 		await withSuppressedSlothletErrorOutput(async () => {
-			await expect(mm.addModules(found)).rejects.toThrow("INVALID_CONFIG_MUTATIONS_DISABLED");
+			await expect(mm.add(found)).rejects.toThrow("INVALID_CONFIG_MUTATIONS_DISABLED");
 		});
 	});
 
-	it("addDiscovered() throws INVALID_CONFIG_MUTATIONS_DISABLED when mutations.add is false (transitive via addModules)", async () => {
+	it("modules.add() throws INVALID_CONFIG_MUTATIONS_DISABLED when mutations.add is false (transitive via modules.add)", async () => {
 		const mm = await bootWithMutations({ add: false });
 
 		await withSuppressedSlothletErrorOutput(async () => {
-			await expect(mm.addDiscovered({ scanRoot: FIX_FOLDER })).rejects.toThrow("INVALID_CONFIG_MUTATIONS_DISABLED");
+			await expect(mm.add({ discover: { scanRoot: FIX_FOLDER } })).rejects.toThrow("INVALID_CONFIG_MUTATIONS_DISABLED");
 		});
 	});
 
-	// ─── removeModule → gated by mutations.remove ──────────────────────────
+	// ─── modules.remove → gated by mutations.remove ──────────────────────────
 
-	it("removeModule(name) throws INVALID_CONFIG_MUTATIONS_DISABLED when mutations.remove is false", async () => {
-		// Mount the module first while mutations.add is allowed so removeModule
+	it("modules.remove(name) throws INVALID_CONFIG_MUTATIONS_DISABLED when mutations.remove is false", async () => {
+		// Mount the module first while mutations.add is allowed so modules.remove
 		// has something to operate on. Bring up a separate instance because the
 		// mutations config is locked at init.
 		const setupApi = await slothlet({
@@ -138,19 +138,19 @@ describe("api.slothlet.api.modules.* — mutation guards", () => {
 
 		// Now boot the real test instance with remove disabled and a mounted
 		// module to operate against. (Mounting succeeds because mutations.add
-		// is still true — the gate fires when removeModule is called.)
+		// is still true — the gate fires when modules.remove is called.)
 		const mm = await bootWithMutations({ add: true, remove: false });
 		const [first] = await mm.discover({ scanRoot: FIX_FOLDER });
-		await mm.addModule(first);
+		await mm.add(first);
 
 		await withSuppressedSlothletErrorOutput(async () => {
-			await expect(mm.removeModule(first.packageName)).rejects.toThrow("INVALID_CONFIG_MUTATIONS_DISABLED");
+			await expect(mm.remove(first.packageName)).rejects.toThrow("INVALID_CONFIG_MUTATIONS_DISABLED");
 		});
 	});
 
 	// ─── Read-only methods are NOT mutations and must NOT throw ────────────
 
-	it("discover / sort / getDiscoveryCache / clearDiscoveryCache / getStaleMounts do NOT throw under disabled mutations", async () => {
+	it("discover / sort / cache.get / cache.clear / stale do NOT throw under disabled mutations", async () => {
 		const mm = await bootWithMutations({ add: false, remove: false });
 
 		// All read-only methods must succeed even with both mutation flags off.
@@ -160,26 +160,26 @@ describe("api.slothlet.api.modules.* — mutation guards", () => {
 		const sorted = mm.sort(found);
 		expect(Array.isArray(sorted)).toBe(true);
 
-		const cache = mm.getDiscoveryCache();
+		const cache = mm.cache.get();
 		expect(Array.isArray(cache)).toBe(true);
 
-		mm.clearDiscoveryCache();
-		expect(mm.getDiscoveryCache().length).toBe(0);
+		mm.cache.clear();
+		expect(mm.cache.get().length).toBe(0);
 
-		const stale = mm.getStaleMounts();
+		const stale = mm.stale();
 		expect(Array.isArray(stale)).toBe(true);
 	});
 
 	// ─── Control: when flags are enabled, mounts/unmounts work as normal ────
 
-	it("addModule + removeModule succeed when both mutation flags are enabled (control)", async () => {
+	it("modules.add + modules.remove succeed when both mutation flags are enabled (control)", async () => {
 		const mm = await bootWithMutations({ add: true, remove: true });
 		const [first] = await mm.discover({ scanRoot: FIX_FOLDER });
 		expect(first?.packageName).toBeTypeOf("string");
 
 		// Both calls must resolve without throwing the mutation-disabled guard.
-		await mm.addModule(first);
-		const removed = await mm.removeModule(first.packageName);
+		await mm.add(first);
+		const removed = await mm.remove(first.packageName);
 		expect(removed).toBe(true);
 	});
 });

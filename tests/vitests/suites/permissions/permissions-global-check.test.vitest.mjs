@@ -19,7 +19,7 @@ import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
 const BASE = TEST_DIRS.API_TEST_PERMISSIONS;
 
-describe.each(getMatrixConfigs())("Permissions > global.checkAccess > $name", ({ config }) => {
+describe.each(getMatrixConfigs())("Permissions > global.check.access > $name", ({ config }) => {
 	let api;
 
 	afterEach(async () => {
@@ -37,14 +37,14 @@ describe.each(getMatrixConfigs())("Permissions > global.checkAccess > $name", ({
 			}
 		});
 
-		const allowed = api.slothlet.permissions.global.checkAccess("payments.charge", "db.read");
+		const allowed = api.slothlet.permissions.global.check.access("payments.charge", "db.read");
 		expect(allowed).toBe(true);
 
-		const denied = api.slothlet.permissions.global.checkAccess("untrusted.plugin", "admin.manage");
+		const denied = api.slothlet.permissions.global.check.access("untrusted.plugin", "admin.manage");
 		expect(denied).toBe(false);
 	});
 
-	it("global.checkAccess returns true when permission system is disabled (no permissions config)", async () => {
+	it("global.check.access returns true when permission system is disabled (no permissions config)", async () => {
 		// No permissions config → PermissionManager is constructed but #enabled = false.
 		// Calling checkAccess directly bypasses the isEnabled() guard in unified-wrapper,
 		// hitting the `if (!this.#enabled) return true` fast path in PermissionManager.
@@ -54,7 +54,7 @@ describe.each(getMatrixConfigs())("Permissions > global.checkAccess > $name", ({
 		});
 
 		// Even with a deny-all approach, disabled manager always allows
-		const result = api.slothlet.permissions.global.checkAccess("any.caller", "any.target");
+		const result = api.slothlet.permissions.global.check.access("any.caller", "any.target");
 		expect(result).toBe(true);
 	});
 });

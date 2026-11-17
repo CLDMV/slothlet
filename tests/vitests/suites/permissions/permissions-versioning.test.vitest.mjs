@@ -39,7 +39,7 @@ describe.each(getMatrixConfigs())("Permissions > Dynamic api.add > $name", ({ co
 		await api.slothlet.api.add("payments", `${BASE}/payments`);
 
 		// Verify checkAccess correctly evaluates a dynamically-added module path under default allow policy
-		const allowed = api.slothlet.permissions.global.checkAccess("callers.paymentsCaller", "payments.charge");
+		const allowed = api.slothlet.permissions.global.check.access("callers.paymentsCaller", "payments.charge");
 		expect(allowed).toBe(true);
 	});
 });

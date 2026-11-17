@@ -25,7 +25,7 @@
  *   let `host.records.**` open a store partition, so the leaf's own request for it is answered;
  * - the host's hook on a module leaf is a hook the host registered, so it is not pinned and runs during the call it
  *   intercepts ("Caller Identity in Callbacks"); its helper in another of the host's files is the host's own code
- *   running its own source, so `lockCaller` (a built-in allow) pins the argument;
+ *   running its own source, so `pin` (a built-in allow) pins the argument;
  * - a module's helper outside its api folder, imported by its leaf, is that module's code ("Code passed by routes
  *   slothlet does not see": a module's own dependency runs as that module), so it reaches the host leaf the rules let
  *   `ext.**` call.
