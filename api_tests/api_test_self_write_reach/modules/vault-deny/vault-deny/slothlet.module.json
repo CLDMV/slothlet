@@ -1,7 +1,7 @@
 {
-	"schemaVersion": 1,
-	"mountPath": ["vault"],
-	"apiDir": "./api",
+	"schema": 2,
+	"mount": ["vault"],
+	"base": "./api",
 	"kind": "extension",
 	"permissions": [{ "caller": "guest.**", "target": "vault.**:write", "effect": "deny" }]
 }

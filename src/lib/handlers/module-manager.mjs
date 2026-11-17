@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T17:12:38-08:00 (1794877958)
+ *	@Last modified time: 2026-11-16T17:23:43-08:00 (1794878623)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -57,6 +57,7 @@ import {
 	promiseAll,
 	RegExpMethods,
 	regExpSplit,
+	splitText,
 	String,
 	WeakSet,
 	WeakSetMethods
@@ -97,25 +98,25 @@ function collisionModeOf(options) {
 
 /**
  * @typedef {object} AddModuleOptions
- * @property {string|{mode?: "skip"|"warn"|"replace"|"merge"|"merge-replace"|"error"}} [collision] - `collision.mode` (or the mode as a bare string): per-mount override; defaults to "merge" (matches `DEFAULT_MODULE_COLLISION_MODE`). Use "error" to throw on any pre-flight mountPath collision against api-manager's `addHistory`.
+ * @property {string|{mode?: "skip"|"warn"|"replace"|"merge"|"merge-replace"|"error"}} [collision] - `collision.mode` (or the mode as a bare string): per-mount override; defaults to "merge" (matches `DEFAULT_MODULE_COLLISION_MODE`). Use "error" to throw on any pre-flight mount collision against api-manager's `addHistory`.
  * @property {string} [version] - When the discovery cache holds multiple versions of the same `name`, mount only the entry whose package.json version matches.
  * @property {DiscoverOptions} [discover] - Options to forward to the lazy discover() call if the cache is empty. Ignored when the cache already holds data.
  */
 
 /**
  * @typedef {object} AddModulesOptions
- * @property {string|{mode?: "skip"|"warn"|"replace"|"merge"|"merge-replace"|"error"}} [collision] - `collision.mode` (or the mode as a bare string): per-call collision policy passed to every mount. Defaults to "merge" (matches `DEFAULT_MODULE_COLLISION_MODE`); use "error" to throw on any pre-flight mountPath collision.
+ * @property {string|{mode?: "skip"|"warn"|"replace"|"merge"|"merge-replace"|"error"}} [collision] - `collision.mode` (or the mode as a bare string): per-call collision policy passed to every mount. Defaults to "merge" (matches `DEFAULT_MODULE_COLLISION_MODE`); use "error" to throw on any pre-flight mount collision.
  * @property {"throw"|"rollback"|"best-effort"} [failure="throw"] - Failure policy. `throw` (default): throw on first failure, leave mounted entries in place. `rollback`: throw on first failure, remove every entry mounted in this call. `best-effort`: collect failures, return aggregate `{ mounted, failed }`.
  * @property {number} [concurrency=1] - Mount concurrency. `1` (default) = serial. Higher values mount in parallel batches.
  */
 
 /**
  * @typedef {object} MountResult
- * @property {string} packageName
- * @property {string} mountPath - Dot-notation path used at the time of mount.
- * @property {string} moduleID - moduleID returned by api.add().
- * @property {DiscoverResult} discoverResult
- * @property {{version: string, default: boolean}|null} versionConfig - Versioning descriptor when the module mounted under a `vMAJOR.<mountPath>` prefix (multi-version case from `#buildVersionConfigs`), otherwise `null`. `version` is the slothlet version tag (`vMAJOR`); `default` indicates whether this entry is the default for the unversioned dispatch path.
+ * @property {string} module - The module id api.add() returned for the mount.
+ * @property {string} package - The package name.
+ * @property {string[]} mount - Segments of the path used at the time of mount, including any version prefix.
+ * @property {DiscoverResult} found - The discovery result the module was mounted from.
+ * @property {{default: boolean, tag: string}|null} version - Versioning descriptor when the module mounted under a `vMAJOR.<mount>` prefix (multi-version case from `#buildVersionConfigs`), otherwise `null`. `tag` is the slothlet version tag (`vMAJOR`); `default` indicates whether this entry is the default for the unversioned dispatch path.
  */
 
 /**
@@ -138,8 +139,8 @@ export class ModuleManager extends ComponentBase {
 	static slothletProperty = "moduleManager";
 
 	/**
-	 * Per-(packageName + version) cache of validated discovery results.
-	 * Keyed by `${packageName}@${version}`. Populated by `discover()` and
+	 * Per-(package + version) cache of validated discovery results.
+	 * Keyed by `${package}@${version}`. Populated by `discover()` and
 	 * `addDiscovered()`; consumed by `addModule(name)` for name-based mounts.
 	 * @type {Map<string, DiscoverResult>}
 	 * @private
@@ -147,7 +148,7 @@ export class ModuleManager extends ComponentBase {
 	#cache = new Map();
 
 	/**
-	 * Records of modules mounted via this manager. Keyed by `${packageName}@${version}`.
+	 * Records of modules mounted via this manager. Keyed by `${package}@${version}`.
 	 * Tracks moduleID + the mountPath used so removeModule() can resolve a name
 	 * back to its mount and so re-discover can detect stale mounts.
 	 * @type {Map<string, MountResult>}
@@ -199,11 +200,13 @@ export class ModuleManager extends ComponentBase {
 		// This allows module-manager to be safely imported in browser/bundler contexts
 		// where node:fs is not available; the import only fires when discover() is called.
 		const { discoverModules } = await import("#helpers/module-discovery");
-		const found = await discoverModules(options);
+		const found = await discoverModules(options, {
+			warn: (details) => new this.slothlet.SlothletWarning("WARNING_MODULE_MANIFEST_FORMAT_1", details)
+		});
 		MapMethods.clear(this.#cache);
 		for (let ofIndex = 0, ofList = found; ofIndex < ofList.length; ofIndex++) {
 			const result = ofList[ofIndex];
-			const key = `${result.packageName}@${result.manifest.version}`;
+			const key = `${result.package}@${result.manifest.version}`;
 			MapMethods.set(this.#cache, key, result);
 			WeakSetMethods.add(this.#issued, result);
 		}
@@ -246,7 +249,7 @@ export class ModuleManager extends ComponentBase {
 	 * in the most recent `discover()` cache. Host calls this after re-discovery
 	 * to decide what to unmount.
 	 *
-	 * @returns {MountResult[]} Mounts whose `${packageName}@${version}` is no longer in the cache.
+	 * @returns {MountResult[]} Mounts whose `${package}@${version}` is no longer in the cache.
 	 */
 	getStaleMounts() {
 		const stale = [];
@@ -392,8 +395,8 @@ export class ModuleManager extends ComponentBase {
 		for (const ofEntry of mapEntries(this.#mounted)) {
 			const key = ofEntry[0],
 				mountResult = ofEntry[1];
-			if (mountResult.packageName !== name) continue;
-			if (opts.version !== undefined && mountResult.discoverResult.manifest.version !== opts.version) continue;
+			if (mountResult.package !== name) continue;
+			if (opts.version !== undefined && mountResult.found.manifest.version !== opts.version) continue;
 			listPush(matches, { key, mountResult });
 		}
 		if (matches.length === 0) return false;
@@ -402,11 +405,11 @@ export class ModuleManager extends ComponentBase {
 		if (writer !== null)
 			for (let ofIndex = 0, ofList = matches; ofIndex < ofList.length; ofIndex++) {
 				const { mountResult } = ofList[ofIndex];
-				apiManager.assertModuleRemovalOf(mountResult.moduleID, writer);
+				apiManager.assertModuleRemovalOf(mountResult.module, writer);
 			}
 		for (let ofIndex = 0, ofList = matches; ofIndex < ofList.length; ofIndex++) {
 			const { key, mountResult } = ofList[ofIndex];
-			await apiManager.removeApiComponent(mountResult.moduleID, { writer });
+			await apiManager.removeApiComponent(mountResult.module, { writer });
 			MapMethods.delete(this.#mounted, key);
 		}
 		return true;
@@ -449,7 +452,7 @@ export class ModuleManager extends ComponentBase {
 
 		const candidates = [];
 		for (const result of mapValues(this.#cache)) {
-			if (result.packageName !== arg) continue;
+			if (result.package !== arg) continue;
 			if (options.version !== undefined && result.manifest.version !== options.version) continue;
 			listPush(candidates, result);
 		}
@@ -457,7 +460,7 @@ export class ModuleManager extends ComponentBase {
 			throw new SlothletError(
 				"MODULE_PACKAGE_NOT_FOUND",
 				{
-					packageName: arg,
+					package: arg,
 					hint: "addModule(name) requires the package to be installed under one of the scanned roots. Run discover() first, or pass a result discover() returned."
 				},
 				null,
@@ -493,11 +496,11 @@ export class ModuleManager extends ComponentBase {
 	 * @private
 	 */
 	async #mountSingle(discoverResult, collisionMode, versionConfig, writer) {
-		const mountPathDotted = ArrayMethods.join(discoverResult.mountPath, ".");
+		const mountPathDotted = ArrayMethods.join(discoverResult.mount, ".");
 		const effectiveMountPath = versionConfig?.version ? `${versionConfig.version}.${mountPathDotted}` : mountPathDotted;
 
 		// S7 helper-layer collision enforcement: the caller-supplied
-		// `collisionMode` controls exact-mountPath collision policy at this
+		// `collisionMode` controls exact-mount collision policy at this
 		// layer. "error" throws MODULE_MOUNT_COLLISION when the EFFECTIVE
 		// mount path (including any version prefix) is occupied. All other
 		// modes defer to slothlet's underlying behavior; ancestor/descendant
@@ -513,8 +516,8 @@ export class ModuleManager extends ComponentBase {
 				throw new SlothletError(
 					"MODULE_MOUNT_COLLISION",
 					{
-						packageName: discoverResult.packageName,
-						mountPath: effectiveMountPath,
+						package: discoverResult.package,
+						mount: splitText(effectiveMountPath, "."),
 						existingModuleID: existing.moduleID,
 						collisionMode
 					},
@@ -544,7 +547,7 @@ export class ModuleManager extends ComponentBase {
 
 		const moduleID = await this.slothlet.handlers.apiManager.addApiComponent({
 			apiPath: mountPathDotted,
-			folderPath: discoverResult.apiDir,
+			folderPath: discoverResult.base,
 			options: {
 				collisionMode: underlyingCollisionMode,
 				metadata: { _module: { manifest: discoverResult.manifest } }
@@ -600,15 +603,15 @@ export class ModuleManager extends ComponentBase {
 		});
 
 		const result = {
-			packageName: discoverResult.packageName,
-			mountPath: effectiveMountPath,
-			moduleID,
-			discoverResult,
-			versionConfig: versionConfig ?? null
+			module: moduleID,
+			package: discoverResult.package,
+			mount: splitText(effectiveMountPath, "."),
+			found: discoverResult,
+			version: versionConfig ? { default: versionConfig.default, tag: versionConfig.version } : null
 		};
-		MapMethods.set(this.#mounted, `${discoverResult.packageName}@${version}`, result);
+		MapMethods.set(this.#mounted, `${discoverResult.package}@${version}`, result);
 		await this.#emit("modules:mount-complete", {
-			name: discoverResult.packageName,
+			name: discoverResult.package,
 			version,
 			mountPath: effectiveMountPath,
 			moduleID
@@ -630,9 +633,9 @@ export class ModuleManager extends ComponentBase {
 		/** @type {Map<string, DiscoverResult[]>} */ const byName = new Map();
 		for (let ofIndex = 0, ofList = resolved; ofIndex < ofList.length; ofIndex++) {
 			const r = ofList[ofIndex];
-			const list = MapMethods.get(byName, r.packageName) ?? [];
+			const list = MapMethods.get(byName, r.package) ?? [];
 			listPush(list, r);
-			MapMethods.set(byName, r.packageName, list);
+			MapMethods.set(byName, r.package, list);
 		}
 
 		/** @type {Map<string, string>} */ const highestByName = new Map();
@@ -647,13 +650,13 @@ export class ModuleManager extends ComponentBase {
 		const configs = new Map();
 		for (let i = 0; i < resolved.length; i++) {
 			const r = resolved[i];
-			const group = MapMethods.get(byName, r.packageName);
+			const group = MapMethods.get(byName, r.package);
 			if (!group || group.length < 2) {
 				MapMethods.set(configs, i, null);
 				continue;
 			}
 			const versionTag = semverToTag(r.manifest.version);
-			const isDefault = r.manifest.version === MapMethods.get(highestByName, r.packageName);
+			const isDefault = r.manifest.version === MapMethods.get(highestByName, r.package);
 			MapMethods.set(configs, i, { version: versionTag, default: isDefault });
 		}
 		return configs;
@@ -801,8 +804,8 @@ export class ModuleManager extends ComponentBase {
 		for (let ofIndex = 0, ofList = mounted; ofIndex < ofList.length; ofIndex++) {
 			const m = ofList[ofIndex];
 			try {
-				await this.slothlet.handlers.apiManager.removeApiComponent(m.moduleID);
-				MapMethods.delete(this.#mounted, `${m.packageName}@${m.discoverResult.manifest.version}`);
+				await this.slothlet.handlers.apiManager.removeApiComponent(m.module);
+				MapMethods.delete(this.#mounted, `${m.package}@${m.found.manifest.version}`);
 			} catch {
 				// Swallow rollback errors — propagating them would mask the original failure.
 			}

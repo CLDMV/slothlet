@@ -63,7 +63,7 @@ describe("routine stacks are installed for modules mounted via addModule()/addMo
 		});
 
 		const res = await api.slothlet.api.modules.addModule("@local/routine-widget", { discover: { root: FIX_ROUTINE_MODULE } });
-		expect(res.mountPath).toBe("ext.widget");
+		expect(res.mount).toEqual(["ext", "widget"]);
 
 		// The mount path must have installed the routine's stacked callable (fails pre-#362-Fix-B:
 		// the leaf stays the bare mounted function, __slothletRoutineStack undefined).

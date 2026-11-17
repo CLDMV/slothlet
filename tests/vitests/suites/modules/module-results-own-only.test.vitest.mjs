@@ -79,7 +79,7 @@ describe("modules.addModule / addModules: own discover results only", () => {
 
 	it("refuses a hand-built object in a batch before mounting any item", async () => {
 		const api = await load();
-		const found = await api.slothlet.api.modules.discover({ scanRoot: FIX_NPM, prefix: "packrat-extension-" });
+		const found = await api.slothlet.api.modules.discover({ root: FIX_NPM, prefix: "packrat-extension-" });
 		await expect(api.slothlet.api.modules.addModules([found[0], handBuilt()])).rejects.toMatchObject({ code: "INVALID_ARGUMENT" });
 		expect(api.handbuilt).toBeUndefined();
 		expect(api.extensions?.baz).toBeUndefined();
@@ -87,7 +87,7 @@ describe("modules.addModule / addModules: own discover results only", () => {
 
 	it("refuses a spread copy of a real result that points somewhere else", async () => {
 		const api = await load();
-		const found = await api.slothlet.api.modules.discover({ scanRoot: FIX_NPM, prefix: "packrat-extension-" });
+		const found = await api.slothlet.api.modules.discover({ root: FIX_NPM, prefix: "packrat-extension-" });
 		const copy = { ...found[0], mountPath: ["elsewhere"] };
 		await expect(api.slothlet.api.modules.addModule(copy)).rejects.toMatchObject({ code: "INVALID_ARGUMENT" });
 		expect(api.elsewhere).toBeUndefined();
@@ -96,7 +96,7 @@ describe("modules.addModule / addModules: own discover results only", () => {
 	it("refuses a result another instance discovered", async () => {
 		const api = await load();
 		const other = await load();
-		const found = await other.slothlet.api.modules.discover({ scanRoot: FIX_NPM, prefix: "packrat-extension-" });
+		const found = await other.slothlet.api.modules.discover({ root: FIX_NPM, prefix: "packrat-extension-" });
 		await expect(api.slothlet.api.modules.addModule(found[0])).rejects.toMatchObject({ code: "INVALID_ARGUMENT" });
 		expect(api.extensions?.baz).toBeUndefined();
 	});
@@ -110,7 +110,7 @@ describe("modules.addModule / addModules: own discover results only", () => {
 	it("mounts a real result from discover(), getDiscoveryCache() and sort()", async () => {
 		const api = await load();
 		const mm = api.slothlet.api.modules;
-		const found = await mm.discover({ scanRoot: FIX_NPM });
+		const found = await mm.discover({ root: FIX_NPM });
 		const baz = found.find((r) => r.packageName === "packrat-extension-baz");
 		const fromCache = mm.getDiscoveryCache().find((r) => r.packageName === "@org/packrat-driver-foo");
 		const sorted = mm.sort(found).find((r) => r.packageName === "@org/packrat-driver-bar");
@@ -122,7 +122,7 @@ describe("modules.addModule / addModules: own discover results only", () => {
 
 	it("keeps a real result as discovered: changes to it don't take, and it mounts where its manifest says", async () => {
 		const api = await load();
-		const found = await api.slothlet.api.modules.discover({ scanRoot: FIX_NPM, prefix: "packrat-extension-" });
+		const found = await api.slothlet.api.modules.discover({ root: FIX_NPM, prefix: "packrat-extension-" });
 		const result = found[0];
 		expect(Object.isFrozen(result)).toBe(true);
 		expect(Object.isFrozen(result.mountPath)).toBe(true);

@@ -201,14 +201,14 @@ if (isFrameworkReservedKey(nameWithoutExt)) {
 **Condition Check**:
 
 ```javascript
-const RESERVED_MOUNTPATH_ROOTS = Object.freeze(new Set(["slothlet", "shutdown", "destroy"]));
-if (RESERVED_MOUNTPATH_ROOTS.has(mountPathSegments[0])) {
-	throw new SlothletError("MODULE_RESERVED_MOUNTPATH" /* … */);
+const RESERVED_MOUNT_ROOTS = Object.freeze(new Set(["slothlet", "shutdown", "destroy"]));
+if (RESERVED_MOUNT_ROOTS.has(mountSegments[0])) {
+	throw new SlothletError("MODULE_RESERVED_MOUNT" /* … */);
 }
 ```
 
-**Trigger**: `RESERVED_MOUNTPATH_ROOTS.has(mountPathSegments[0])`
-**Result**: `throw MODULE_RESERVED_MOUNTPATH` — the module never mounts.
+**Trigger**: `RESERVED_MOUNT_ROOTS.has(mountSegments[0])`
+**Result**: `throw MODULE_RESERVED_MOUNT` — the module never mounts.
 
 ---
 

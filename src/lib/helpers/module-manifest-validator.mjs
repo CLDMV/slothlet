@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:13-08:00 (1794874573)
+ *	@Last modified time: 2026-11-16T17:23:49-08:00 (1794878629)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -27,7 +27,7 @@
  * Path-traversal checks here are LEXICAL ONLY. Runtime symlink/realpath checks
  * belong in `discover()` after this validator passes.
  *
- * The reserved-mountPath list (`slothlet`, `shutdown`, `destroy`) is hardcoded
+ * The reserved-mount list (`slothlet`, `shutdown`, `destroy`) is hardcoded
  * to mirror `normalizeApiPath` in `src/lib/handlers/api-manager.mjs`. If
  * slothlet ever adds reserved roots, both lists must stay in sync.
  */
@@ -37,32 +37,21 @@ import { t } from "#i18n";
 
 // Node-only static import resolved via top-level await so `node:path` never
 // enters the static-import graph in browser bundles. Methods that consume
-// `path` (mountPath/apiDir validation) are Node-only — never invoked in
+// `path` (mount/base validation) are Node-only — never invoked in
 // browser mode because slothlet's browser path skips filesystem validation.
 // path resolved in the platform module (#123); null in a browser — slothlet's browser path skips
 // filesystem manifest validation.
 import { path } from "#helpers/platform";
-import {
-	ArrayMethods,
-	Arrays,
-	copyList,
-	Numbers,
-	Objects,
-	setFrom,
-	SetMethods,
-	String,
-	StringMethods,
-	splitText
-} from "#helpers/intrinsics";
+import { Arrays, copyList, Numbers, Objects, setFrom, SetMethods, String, StringMethods, splitText } from "#helpers/intrinsics";
 
 /**
- * Reserved mountPath root segments. Mirror of the list in
+ * Reserved mount root segments. Mirror of the list in
  * `src/lib/handlers/api-manager.mjs` `normalizeApiPath()`. Any addition there
  * must be reflected here so module discovery rejects reserved-root claims at
  * the manifest layer instead of letting `api.add()` throw downstream.
  * @type {ReadonlySet<string>}
  */
-const RESERVED_MOUNTPATH_ROOTS = Objects.freeze(setFrom(["slothlet", "shutdown", "destroy"]));
+const RESERVED_MOUNT_ROOTS = Objects.freeze(setFrom(["slothlet", "shutdown", "destroy"]));
 
 /**
  * Allowed top-level fields in `slothlet.module.json`. Anything else throws
@@ -71,11 +60,14 @@ const RESERVED_MOUNTPATH_ROOTS = Objects.freeze(setFrom(["slothlet", "shutdown",
  */
 const ALLOWED_TOP_LEVEL_FIELDS = Objects.freeze(
 	setFrom([
+		"schema",
 		"schemaVersion",
 		"name",
 		"version",
 		"description",
+		"mount",
 		"mountPath",
+		"base",
 		"apiDir",
 		"kind",
 		"priority",
@@ -85,6 +77,38 @@ const ALLOWED_TOP_LEVEL_FIELDS = Objects.freeze(
 		"metadata"
 	])
 );
+
+/**
+ * The field names format 1 manifests (deprecated, still read) and format 2 manifests (current) use for the three renamed
+ * fields. A manifest uses one set or the other.
+ */
+const FORMAT_1_NAMES = Objects.freeze({ schema: "schemaVersion", mount: "mountPath", base: "apiDir" });
+const FORMAT_2_NAMES = Objects.freeze({ schema: "schema", mount: "mount", base: "base" });
+const FORMAT_1_FIELDS = Objects.freeze(["schemaVersion", "mountPath", "apiDir"]);
+const FORMAT_2_FIELDS = Objects.freeze(["schema", "mount", "base"]);
+
+/**
+ * Whether the manifest carries any of the named fields.
+ * @param {object} manifest - Parsed manifest.
+ * @param {string[]} fields - Field names to look for.
+ * @returns {boolean} True when at least one is present.
+ * @private
+ */
+function hasAnyField(manifest, fields) {
+	for (let ofIndex = 0, ofList = fields; ofIndex < ofList.length; ofIndex++) {
+		if (manifest[ofList[ofIndex]] !== undefined) return true;
+	}
+	return false;
+}
+
+/**
+ * Whether a parsed manifest is written in the deprecated format 1 (`schemaVersion`, `mountPath`, `apiDir`).
+ * @param {object} manifest - Parsed manifest.
+ * @returns {boolean} True when it uses any format 1 field name.
+ */
+export function isFormat1(manifest) {
+	return hasAnyField(manifest, FORMAT_1_FIELDS);
+}
 
 /**
  * Allowed effect values for permission rules.
@@ -113,7 +137,7 @@ const EVENT_EFFECT_VALUES = Objects.freeze(setFrom(["deny", "notify", "allow"]))
  *   - `name`, `version` always present (from package.json if absent in manifest)
  *   - `description` from manifest (override) or package.json (fallback)
  *   - `priority` defaults to 0 if absent
- *   - `mountPath` normalized to an array of segments
+ *   - `mount` normalized to an array of segments
  * @throws {SlothletError} with `MODULE_*` code on any validation failure.
  *
  * @example
@@ -132,8 +156,8 @@ export function validateModuleManifest(manifest, packageContext) {
 		throw new SlothletError(
 			"MODULE_MANIFEST_INVALID",
 			{
-				packageName: packageContext?.packageName ?? "<unknown>",
-				manifestPath: packageContext?.manifestPath ?? "<unknown>",
+				package: packageContext?.packageName ?? "<unknown>",
+				manifest: packageContext?.manifestPath ?? "<unknown>",
 				reason: t("MODULE_MANIFEST_REASON_NOT_OBJECT")
 			},
 			null,
@@ -151,8 +175,8 @@ export function validateModuleManifest(manifest, packageContext) {
 			throw new SlothletError(
 				"MODULE_MANIFEST_UNKNOWN_FIELD",
 				{
-					packageName,
-					manifestPath,
+					package: packageName,
+					manifest: manifestPath,
 					field: key
 				},
 				null,
@@ -161,86 +185,105 @@ export function validateModuleManifest(manifest, packageContext) {
 		}
 	}
 
-	// schemaVersion: required, must be 1
-	if (manifest.schemaVersion === undefined) {
+	// Format: format 2 names (`schema`, `mount`, `base`) or the deprecated format 1 names (`schemaVersion`, `mountPath`,
+	// `apiDir`). A file may use one set, never both.
+	const hasFormat1 = hasAnyField(manifest, FORMAT_1_FIELDS),
+		hasFormat2 = hasAnyField(manifest, FORMAT_2_FIELDS);
+	if (hasFormat1 && hasFormat2) {
 		throw new SlothletError(
 			"MODULE_MANIFEST_INVALID",
 			{
-				packageName,
-				manifestPath,
-				reason: t("MODULE_MANIFEST_REASON_MISSING_FIELD", { field: "schemaVersion" })
+				package: packageName,
+				manifest: manifestPath,
+				reason: t("MODULE_MANIFEST_REASON_MIXED_FORMATS")
 			},
 			null,
 			{ validationError: true }
 		);
 	}
-	if (manifest.schemaVersion !== 1) {
+	const names = hasFormat1 ? FORMAT_1_NAMES : FORMAT_2_NAMES;
+	const expectedSchema = hasFormat1 ? 1 : 2;
+
+	// schema: required, must match the format
+	if (manifest[names.schema] === undefined) {
 		throw new SlothletError(
-			"MODULE_VERSION_UNSUPPORTED",
+			"MODULE_MANIFEST_INVALID",
 			{
-				packageName,
-				schemaVersion: String(manifest.schemaVersion)
+				package: packageName,
+				manifest: manifestPath,
+				reason: t("MODULE_MANIFEST_REASON_MISSING_FIELD", { field: names.schema })
+			},
+			null,
+			{ validationError: true }
+		);
+	}
+	if (manifest[names.schema] !== expectedSchema) {
+		throw new SlothletError(
+			"MODULE_MANIFEST_FORMAT_UNSUPPORTED",
+			{
+				package: packageName,
+				schema: String(manifest[names.schema])
 			},
 			null,
 			{ validationError: true }
 		);
 	}
 
-	// mountPath: required, string or non-empty array of non-empty strings
-	if (manifest.mountPath === undefined) {
+	// mount: required, string or non-empty array of non-empty strings
+	if (manifest[names.mount] === undefined) {
 		throw new SlothletError(
 			"MODULE_MANIFEST_INVALID",
 			{
-				packageName,
-				manifestPath,
-				reason: t("MODULE_MANIFEST_REASON_MISSING_FIELD", { field: "mountPath" })
+				package: packageName,
+				manifest: manifestPath,
+				reason: t("MODULE_MANIFEST_REASON_MISSING_FIELD", { field: names.mount })
 			},
 			null,
 			{ validationError: true }
 		);
 	}
-	const mountPathSegments = normalizeMountPath(manifest.mountPath, packageName, manifestPath);
+	const mountSegments = normalizeMount(manifest[names.mount], names.mount, packageName, manifestPath);
 
-	// Reserved-mountPath root check (G3) — runs at manifest layer, not downstream.
-	if (SetMethods.has(RESERVED_MOUNTPATH_ROOTS, mountPathSegments[0])) {
+	// Reserved-mount root check (G3) — runs at manifest layer, not downstream.
+	if (SetMethods.has(RESERVED_MOUNT_ROOTS, mountSegments[0])) {
 		throw new SlothletError(
-			"MODULE_RESERVED_MOUNTPATH",
+			"MODULE_RESERVED_MOUNT",
 			{
-				packageName,
-				mountPathRoot: mountPathSegments[0],
-				mountPath: ArrayMethods.join(mountPathSegments, ".")
+				package: packageName,
+				mount: copyList(mountSegments)
 			},
 			null,
 			{ validationError: true }
 		);
 	}
 
-	// apiDir: required, string, lexically inside packageRoot
-	if (manifest.apiDir === undefined) {
+	// base: required, string, lexically inside packageRoot
+	const base = manifest[names.base];
+	if (base === undefined) {
 		throw new SlothletError(
 			"MODULE_MANIFEST_INVALID",
 			{
-				packageName,
-				manifestPath,
-				reason: t("MODULE_MANIFEST_REASON_MISSING_FIELD", { field: "apiDir" })
+				package: packageName,
+				manifest: manifestPath,
+				reason: t("MODULE_MANIFEST_REASON_MISSING_FIELD", { field: names.base })
 			},
 			null,
 			{ validationError: true }
 		);
 	}
-	if (typeof manifest.apiDir !== "string" || manifest.apiDir.length === 0) {
+	if (typeof base !== "string" || base.length === 0) {
 		throw new SlothletError(
 			"MODULE_MANIFEST_INVALID",
 			{
-				packageName,
-				manifestPath,
-				reason: t("MODULE_MANIFEST_REASON_FIELD_TYPE", { field: "apiDir", expected: t("EXPECTED_NON_EMPTY_STRING") })
+				package: packageName,
+				manifest: manifestPath,
+				reason: t("MODULE_MANIFEST_REASON_FIELD_TYPE", { field: names.base, expected: t("MODULE_MANIFEST_EXPECTED_NON_EMPTY_STRING") })
 			},
 			null,
 			{ validationError: true }
 		);
 	}
-	validateApiDirContainment(manifest.apiDir, packageRoot, packageName);
+	validateBaseContainment(base, packageRoot, packageName);
 
 	// name: optional in manifest; if present, MUST match package.json's name.
 	if (manifest.name !== undefined) {
@@ -248,9 +291,9 @@ export function validateModuleManifest(manifest, packageContext) {
 			throw new SlothletError(
 				"MODULE_MANIFEST_INVALID",
 				{
-					packageName,
-					manifestPath,
-					reason: t("MODULE_MANIFEST_REASON_FIELD_TYPE", { field: "name", expected: t("EXPECTED_STRING") })
+					package: packageName,
+					manifest: manifestPath,
+					reason: t("MODULE_MANIFEST_REASON_FIELD_TYPE", { field: "name", expected: t("MODULE_MANIFEST_EXPECTED_STRING") })
 				},
 				null,
 				{ validationError: true }
@@ -260,8 +303,9 @@ export function validateModuleManifest(manifest, packageContext) {
 			throw new SlothletError(
 				"MODULE_MANIFEST_NAME_MISMATCH",
 				{
-					packageName,
-					manifestName: manifest.name
+					package: packageName,
+					expected: packageName,
+					received: manifest.name
 				},
 				null,
 				{ validationError: true }
@@ -275,9 +319,9 @@ export function validateModuleManifest(manifest, packageContext) {
 			throw new SlothletError(
 				"MODULE_MANIFEST_INVALID",
 				{
-					packageName,
-					manifestPath,
-					reason: t("MODULE_MANIFEST_REASON_FIELD_TYPE", { field: "version", expected: t("EXPECTED_STRING") })
+					package: packageName,
+					manifest: manifestPath,
+					reason: t("MODULE_MANIFEST_REASON_FIELD_TYPE", { field: "version", expected: t("MODULE_MANIFEST_EXPECTED_STRING") })
 				},
 				null,
 				{ validationError: true }
@@ -287,9 +331,9 @@ export function validateModuleManifest(manifest, packageContext) {
 			throw new SlothletError(
 				"MODULE_MANIFEST_VERSION_MISMATCH",
 				{
-					packageName,
-					manifestVersion: manifest.version,
-					packageVersion
+					package: packageName,
+					expected: packageVersion,
+					received: manifest.version
 				},
 				null,
 				{ validationError: true }
@@ -302,9 +346,9 @@ export function validateModuleManifest(manifest, packageContext) {
 		throw new SlothletError(
 			"MODULE_MANIFEST_INVALID",
 			{
-				packageName,
-				manifestPath,
-				reason: t("MODULE_MANIFEST_REASON_FIELD_TYPE", { field: "description", expected: t("EXPECTED_STRING") })
+				package: packageName,
+				manifest: manifestPath,
+				reason: t("MODULE_MANIFEST_REASON_FIELD_TYPE", { field: "description", expected: t("MODULE_MANIFEST_EXPECTED_STRING") })
 			},
 			null,
 			{ validationError: true }
@@ -316,9 +360,9 @@ export function validateModuleManifest(manifest, packageContext) {
 		throw new SlothletError(
 			"MODULE_MANIFEST_INVALID",
 			{
-				packageName,
-				manifestPath,
-				reason: t("MODULE_MANIFEST_REASON_FIELD_TYPE", { field: "kind", expected: t("EXPECTED_STRING") })
+				package: packageName,
+				manifest: manifestPath,
+				reason: t("MODULE_MANIFEST_REASON_FIELD_TYPE", { field: "kind", expected: t("MODULE_MANIFEST_EXPECTED_STRING") })
 			},
 			null,
 			{ validationError: true }
@@ -330,9 +374,9 @@ export function validateModuleManifest(manifest, packageContext) {
 		throw new SlothletError(
 			"MODULE_MANIFEST_INVALID",
 			{
-				packageName,
-				manifestPath,
-				reason: t("MODULE_MANIFEST_REASON_FIELD_TYPE", { field: "priority", expected: t("EXPECTED_FINITE_NUMBER") })
+				package: packageName,
+				manifest: manifestPath,
+				reason: t("MODULE_MANIFEST_REASON_FIELD_TYPE", { field: "priority", expected: t("MODULE_MANIFEST_EXPECTED_FINITE_NUMBER") })
 			},
 			null,
 			{ validationError: true }
@@ -345,9 +389,9 @@ export function validateModuleManifest(manifest, packageContext) {
 			throw new SlothletError(
 				"MODULE_MANIFEST_INVALID",
 				{
-					packageName,
-					manifestPath,
-					reason: t("MODULE_MANIFEST_REASON_FIELD_TYPE", { field: "dependencies", expected: t("EXPECTED_PLAIN_OBJECT") })
+					package: packageName,
+					manifest: manifestPath,
+					reason: t("MODULE_MANIFEST_REASON_FIELD_TYPE", { field: "dependencies", expected: t("MODULE_MANIFEST_EXPECTED_PLAIN_OBJECT") })
 				},
 				null,
 				{ validationError: true }
@@ -361,8 +405,8 @@ export function validateModuleManifest(manifest, packageContext) {
 				throw new SlothletError(
 					"MODULE_MANIFEST_INVALID",
 					{
-						packageName,
-						manifestPath,
+						package: packageName,
+						manifest: manifestPath,
 						reason: t("MODULE_MANIFEST_REASON_DEPENDENCY_TYPE", { dependency: depName })
 					},
 					null,
@@ -388,9 +432,9 @@ export function validateModuleManifest(manifest, packageContext) {
 			throw new SlothletError(
 				"MODULE_MANIFEST_INVALID",
 				{
-					packageName,
-					manifestPath,
-					reason: t("MODULE_MANIFEST_REASON_FIELD_TYPE", { field: "metadata", expected: t("EXPECTED_PLAIN_OBJECT") })
+					package: packageName,
+					manifest: manifestPath,
+					reason: t("MODULE_MANIFEST_REASON_FIELD_TYPE", { field: "metadata", expected: t("MODULE_MANIFEST_EXPECTED_PLAIN_OBJECT") })
 				},
 				null,
 				{ validationError: true }
@@ -400,12 +444,12 @@ export function validateModuleManifest(manifest, packageContext) {
 
 	// All validations passed — return the normalized manifest.
 	return {
-		schemaVersion: 1,
+		schema: 2,
 		name: packageName,
 		version: packageVersion,
 		description: manifest.description ?? packageDescription,
-		mountPath: mountPathSegments,
-		apiDir: manifest.apiDir,
+		mount: mountSegments,
+		base,
 		kind: manifest.kind,
 		priority: manifest.priority ?? 0,
 		dependencies: manifest.dependencies,
@@ -416,66 +460,67 @@ export function validateModuleManifest(manifest, packageContext) {
 }
 
 /**
- * Normalize `mountPath` to a non-empty array of non-empty segments.
- * @param {unknown} mountPath - Raw manifest value.
+ * Normalize `mount` to a non-empty array of non-empty segments.
+ * @param {unknown} mount - Raw manifest value.
+ * @param {string} field - The field's name in the manifest's format (`mount` or `mountPath`), for the message.
  * @param {string} packageName - For error context.
  * @param {string} manifestPath - For error context.
  * @returns {string[]} Normalized segments.
  * @throws {SlothletError} `MODULE_MANIFEST_INVALID` on shape error.
  * @private
  */
-function normalizeMountPath(mountPath, packageName, manifestPath) {
-	if (typeof mountPath === "string") {
-		if (mountPath.length === 0) {
+function normalizeMount(mount, field, packageName, manifestPath) {
+	if (typeof mount === "string") {
+		if (mount.length === 0) {
 			throw new SlothletError(
 				"MODULE_MANIFEST_INVALID",
 				{
-					packageName,
-					manifestPath,
-					reason: t("MODULE_MANIFEST_REASON_MOUNTPATH_SHAPE")
+					package: packageName,
+					manifest: manifestPath,
+					reason: t("MODULE_MANIFEST_REASON_MOUNT_SHAPE", { field })
 				},
 				null,
 				{ validationError: true }
 			);
 		}
-		return splitText(mountPath, ".");
+		return splitText(mount, ".");
 	}
-	if (Arrays.isArray(mountPath)) {
-		if (mountPath.length === 0) {
+	if (Arrays.isArray(mount)) {
+		if (mount.length === 0) {
 			throw new SlothletError(
 				"MODULE_MANIFEST_INVALID",
 				{
-					packageName,
-					manifestPath,
-					reason: t("MODULE_MANIFEST_REASON_MOUNTPATH_SHAPE")
+					package: packageName,
+					manifest: manifestPath,
+					reason: t("MODULE_MANIFEST_REASON_MOUNT_SHAPE", { field })
 				},
 				null,
 				{ validationError: true }
 			);
 		}
-		for (let ofIndex = 0, ofList = mountPath; ofIndex < ofList.length; ofIndex++) {
+		for (let ofIndex = 0, ofList = mount; ofIndex < ofList.length; ofIndex++) {
 			const segment = ofList[ofIndex];
 			if (typeof segment !== "string" || segment.length === 0) {
 				throw new SlothletError(
 					"MODULE_MANIFEST_INVALID",
 					{
-						packageName,
-						manifestPath,
-						reason: t("MODULE_MANIFEST_REASON_MOUNTPATH_ENTRIES")
+						package: packageName,
+						manifest: manifestPath,
+						reason: t("MODULE_MANIFEST_REASON_MOUNT_ENTRIES", { field })
 					},
 					null,
 					{ validationError: true }
 				);
 			}
 		}
-		return copyList(mountPath);
+		return copyList(mount);
 	}
 	throw new SlothletError(
 		"MODULE_MANIFEST_INVALID",
 		{
-			packageName,
-			manifestPath,
-			reason: t("MODULE_MANIFEST_REASON_MOUNTPATH_SHAPE")
+			package: packageName,
+			manifest: manifestPath,
+			reason: t("MODULE_MANIFEST_REASON_MOUNT_SHAPE", { field })
 		},
 		null,
 		{ validationError: true }
@@ -483,25 +528,25 @@ function normalizeMountPath(mountPath, packageName, manifestPath) {
 }
 
 /**
- * Verify `apiDir` lexically resolves inside `packageRoot`. Does not touch the
+ * Verify `base` lexically resolves inside `packageRoot`. Does not touch the
  * filesystem — symlink/realpath checks belong in `discover()`.
- * @param {string} apiDir - Raw apiDir value from manifest.
+ * @param {string} base - Raw base value from manifest.
  * @param {string} packageRoot - Absolute filesystem path to package root.
  * @param {string} packageName - For error context.
- * @throws {SlothletError} `MODULE_PATH_TRAVERSAL` if apiDir escapes the root.
+ * @throws {SlothletError} `MODULE_PATH_TRAVERSAL` if base escapes the root.
  * @private
  */
-function validateApiDirContainment(apiDir, packageRoot, packageName) {
-	const resolved = path.resolve(packageRoot, apiDir);
+function validateBaseContainment(base, packageRoot, packageName) {
+	const resolved = path.resolve(packageRoot, base);
 	const rootWithSep = StringMethods.endsWith(packageRoot, path.sep) ? packageRoot : packageRoot + path.sep;
 	if (resolved !== packageRoot && !StringMethods.startsWith(resolved, rootWithSep)) {
 		throw new SlothletError(
 			"MODULE_PATH_TRAVERSAL",
 			{
-				packageName,
-				apiDir,
-				resolvedPath: resolved,
-				packageRoot
+				package: packageName,
+				base,
+				resolved,
+				folder: packageRoot
 			},
 			null,
 			{ validationError: true }
@@ -523,9 +568,12 @@ function validatePermissions(permissions, packageName, manifestPath) {
 		throw new SlothletError(
 			"MODULE_MANIFEST_INVALID",
 			{
-				packageName,
-				manifestPath,
-				reason: t("MODULE_MANIFEST_REASON_FIELD_TYPE", { field: "permissions", expected: t("EXPECTED_ARRAY_OF_RULE_OBJECTS") })
+				package: packageName,
+				manifest: manifestPath,
+				reason: t("MODULE_MANIFEST_REASON_FIELD_TYPE", {
+					field: "permissions",
+					expected: t("MODULE_MANIFEST_EXPECTED_ARRAY_OF_RULE_OBJECTS")
+				})
 			},
 			null,
 			{ validationError: true }
@@ -537,8 +585,8 @@ function validatePermissions(permissions, packageName, manifestPath) {
 			throw new SlothletError(
 				"MODULE_MANIFEST_INVALID",
 				{
-					packageName,
-					manifestPath,
+					package: packageName,
+					manifest: manifestPath,
 					reason: t("MODULE_MANIFEST_REASON_PERMISSION_RULE", { index: i })
 				},
 				null,
@@ -549,8 +597,8 @@ function validatePermissions(permissions, packageName, manifestPath) {
 			throw new SlothletError(
 				"MODULE_MANIFEST_INVALID",
 				{
-					packageName,
-					manifestPath,
+					package: packageName,
+					manifest: manifestPath,
 					reason: t("MODULE_MANIFEST_REASON_PERMISSION_CALLER", { index: i })
 				},
 				null,
@@ -561,8 +609,8 @@ function validatePermissions(permissions, packageName, manifestPath) {
 			throw new SlothletError(
 				"MODULE_MANIFEST_INVALID",
 				{
-					packageName,
-					manifestPath,
+					package: packageName,
+					manifest: manifestPath,
 					reason: t("MODULE_MANIFEST_REASON_PERMISSION_TARGET", { index: i })
 				},
 				null,
@@ -573,8 +621,8 @@ function validatePermissions(permissions, packageName, manifestPath) {
 			throw new SlothletError(
 				"MODULE_MANIFEST_INVALID",
 				{
-					packageName,
-					manifestPath,
+					package: packageName,
+					manifest: manifestPath,
 					reason: t("MODULE_MANIFEST_REASON_PERMISSION_EFFECT", { index: i })
 				},
 				null,
@@ -600,9 +648,9 @@ function validateEventRules(events, packageName, manifestPath) {
 		throw new SlothletError(
 			"MODULE_MANIFEST_INVALID",
 			{
-				packageName,
-				manifestPath,
-				reason: t("MODULE_MANIFEST_REASON_FIELD_TYPE", { field: "events", expected: t("EXPECTED_ARRAY_OF_RULE_OBJECTS") })
+				package: packageName,
+				manifest: manifestPath,
+				reason: t("MODULE_MANIFEST_REASON_FIELD_TYPE", { field: "events", expected: t("MODULE_MANIFEST_EXPECTED_ARRAY_OF_RULE_OBJECTS") })
 			},
 			null,
 			{ validationError: true }
@@ -613,7 +661,7 @@ function validateEventRules(events, packageName, manifestPath) {
 		if (!rule || typeof rule !== "object" || Arrays.isArray(rule)) {
 			throw new SlothletError(
 				"MODULE_MANIFEST_INVALID",
-				{ packageName, manifestPath, reason: t("MODULE_MANIFEST_REASON_PERMISSION_RULE", { index: i }) },
+				{ package: packageName, manifest: manifestPath, reason: t("MODULE_MANIFEST_REASON_PERMISSION_RULE", { index: i }) },
 				null,
 				{ validationError: true }
 			);
@@ -621,7 +669,7 @@ function validateEventRules(events, packageName, manifestPath) {
 		if (typeof rule.caller !== "string" || rule.caller.length === 0) {
 			throw new SlothletError(
 				"MODULE_MANIFEST_INVALID",
-				{ packageName, manifestPath, reason: t("MODULE_MANIFEST_REASON_PERMISSION_CALLER", { index: i }) },
+				{ package: packageName, manifest: manifestPath, reason: t("MODULE_MANIFEST_REASON_PERMISSION_CALLER", { index: i }) },
 				null,
 				{ validationError: true }
 			);
@@ -629,7 +677,7 @@ function validateEventRules(events, packageName, manifestPath) {
 		if (typeof rule.event !== "string" || rule.event.length === 0) {
 			throw new SlothletError(
 				"MODULE_MANIFEST_INVALID",
-				{ packageName, manifestPath, reason: t("MODULE_MANIFEST_REASON_EVENT_NAME", { index: i }) },
+				{ package: packageName, manifest: manifestPath, reason: t("MODULE_MANIFEST_REASON_EVENT_NAME", { index: i }) },
 				null,
 				{ validationError: true }
 			);
@@ -637,7 +685,7 @@ function validateEventRules(events, packageName, manifestPath) {
 		if (!SetMethods.has(EVENT_EFFECT_VALUES, rule.effect)) {
 			throw new SlothletError(
 				"MODULE_MANIFEST_INVALID",
-				{ packageName, manifestPath, reason: t("MODULE_MANIFEST_REASON_EVENT_EFFECT", { index: i }) },
+				{ package: packageName, manifest: manifestPath, reason: t("MODULE_MANIFEST_REASON_EVENT_EFFECT", { index: i }) },
 				null,
 				{ validationError: true }
 			);

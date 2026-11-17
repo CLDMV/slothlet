@@ -1,7 +1,7 @@
 {
-	"schemaVersion": 1,
-	"mountPath": ["lifter"],
-	"apiDir": "./api",
+	"schema": 2,
+	"mount": ["lifter"],
+	"base": "./api",
 	"kind": "extension",
 	"permissions": [
 		{ "caller": "**", "target": "slothlet.**:write", "effect": "allow" },

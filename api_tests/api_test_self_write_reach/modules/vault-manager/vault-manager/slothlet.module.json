@@ -1,7 +1,7 @@
 {
-	"schemaVersion": 1,
-	"mountPath": ["vaultmgr"],
-	"apiDir": "./api",
+	"schema": 2,
+	"mount": ["vaultmgr"],
+	"base": "./api",
 	"kind": "extension",
 	"permissions": [
 		{ "caller": "vaultmgr.**", "target": "slothlet.permissions.addRule", "effect": "allow" },

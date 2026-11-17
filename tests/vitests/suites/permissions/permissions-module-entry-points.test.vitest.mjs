@@ -88,7 +88,7 @@ describe.each(CONFIGS)("module-code entry points (#625) — $mode / $runtime", (
 		 * The evilgrant module's discover result, as the host's `discover()` returns it.
 		 * @returns {Promise<object>} The discover result.
 		 */
-		const evilResult = async () => (await api.slothlet.api.modules.discover({ scanRoot: EVIL }))[0];
+		const evilResult = async () => (await api.slothlet.api.modules.discover({ root: EVIL }))[0];
 
 		it.each([
 			["addModule", () => evilResult()],
@@ -289,9 +289,9 @@ describe.each(CONFIGS)("module-code entry points (#625) — $mode / $runtime", (
 		 */
 		async function mounted() {
 			await load();
-			const [own] = await api.slothlet.api.modules.discover({ scanRoot: GOOD });
+			const [own] = await api.slothlet.api.modules.discover({ root: GOOD });
 			expect(await api.guest.x.mountModule("addModule", own)).toBe("done");
-			const [hosts] = await api.slothlet.api.modules.discover({ scanRoot: GOOD_V2 });
+			const [hosts] = await api.slothlet.api.modules.discover({ root: GOOD_V2 });
 			await api.slothlet.api.modules.addModule(hosts);
 			return api;
 		}

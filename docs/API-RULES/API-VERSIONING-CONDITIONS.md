@@ -44,7 +44,7 @@ Versioned-mount conditions — how multiple versions of a module coexist at an a
 
 **Source(s)**: `src/lib/handlers/module-manager.mjs:413-414` (version prefix, `G7`) · `:505-533` (`#buildVersionConfigs` default election)
 
-**Trigger**: `group.length >= 2` for a `packageName`
+**Trigger**: `group.length >= 2` for a `package`
 **Result**: `effectiveMountPath = ${version}.${path}`; `isDefault = version === pickHighestSemver(versions)`.
 
 ---

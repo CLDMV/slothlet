@@ -4,7 +4,7 @@ Built-in-surface conditions — how slothlet protects reserved keys and shapes t
 
 - **Series**: `B##`
 - **Rule**: [Rule 21 — Reserved Keys & Built-in Surface](../API-RULES.md#rule-21-reserved-keys--built-in-surface)
-- Reserved-key protection at other layers is enforced by G08 (filename), G09 (mountPath), and the reserved-export throw in `loader.mjs` — all under Rule 21's umbrella.
+- Reserved-key protection at other layers is enforced by G08 (filename), G09 (mount), and the reserved-export throw in `loader.mjs` — all under Rule 21's umbrella.
 
 ---
 

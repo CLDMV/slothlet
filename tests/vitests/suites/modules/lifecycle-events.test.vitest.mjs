@@ -136,7 +136,7 @@ describe("modules:mount-* and modules:loaded events — addModule()", () => {
 
 		const [{ payload }] = eventsOfType("modules:loaded");
 		expect(payload.mounted.length).toBe(1);
-		expect(payload.mounted[0].packageName).toBe("packrat-extension-baz");
+		expect(payload.mounted[0].package).toBe("packrat-extension-baz");
 	});
 });
 

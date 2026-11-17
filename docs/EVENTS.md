@@ -178,9 +178,9 @@ A module ships its own event rules in `slothlet.module.json`, registered at the 
 
 ```jsonc
 {
-	"schemaVersion": 1,
-	"mountPath": ["orders"],
-	"apiDir": "./api",
+	"schema": 2,
+	"mount": ["orders"],
+	"base": "./api",
 	"events": [{ "caller": "reporting.**", "event": "orders.*", "effect": "allow" }]
 }
 ```
