@@ -562,7 +562,9 @@
 		"BASELINE_CSP_EVAL_ALLOWED": "このページは文字列からのコード生成を許可しています。Content Security Policy が 'unsafe-eval' を許可しているか、ポリシーがありません。",
 		"BASELINE_CSP_BLOB_ALLOWED": "このページは blob: URL のスクリプトを実行します。Content Security Policy がそれを許可しているか、ポリシーがありません。",
 		"BASELINE_CSP_DATA_ALLOWED": "このページは data: URL のスクリプトを実行します。Content Security Policy がそれを許可しているか、ポリシーがありません。",
-		"BASELINE_VITEST_PLUGIN_ABSENT": "vitest の設定に slothlet の @cldmv/slothlet/vite プラグインがないまま vitest で実行しています。"
+		"BASELINE_VITEST_PLUGIN_ABSENT": "vitest の設定に slothlet の @cldmv/slothlet/vite プラグインがないまま vitest で実行しています。",
+		"INVALID_CONFIG_UNKNOWN_KEY": "{where} に不明なキー '{key}' があります。slothlet v4 にこのオプションはありません。",
+		"HINT_INVALID_CONFIG_UNKNOWN_KEY": "キーの綴りを確認してください。slothlet v3 向けのコードは npx @cldmv/slothlet-migrate で v4 の名前に移行できます。"
 	},
 	"metadata": {
 		"code": "ja-jp",

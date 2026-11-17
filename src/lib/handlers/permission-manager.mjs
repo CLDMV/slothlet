@@ -2928,16 +2928,14 @@ export class PermissionManager extends ComponentBase {
 
 	/**
 	 * Run the permission baseline as the instance starts (see `helpers/permission-baseline`), when the mode is on or
-	 * strict. Under on, each check not met is one warning (unless the instance is silent); under strict, any check not
-	 * met refuses the start.
+	 * strict. Under on, each check not met is one warning; under strict, any check not met refuses the start.
 	 * @param {"node"|"browser"} envTarget - Where the instance runs.
-	 * @param {{silent?: boolean}} [options] - The instance's options.
 	 * @returns {Promise<void>}
 	 * @throws {SlothletError} PERMISSION_BASELINE_UNMET under strict, naming the checks not met.
 	 * @example
-	 * await pm.checkBaseline("node", { silent: false });
+	 * await pm.checkBaseline("node");
 	 */
-	async checkBaseline(envTarget, { silent = false } = {}) {
+	async checkBaseline(envTarget) {
 		this.#baseline = null;
 		if (!this.#enabled) return;
 		const baseline = await runBaseline(envTarget);
@@ -2959,7 +2957,6 @@ export class PermissionManager extends ComponentBase {
 				}
 			);
 		}
-		if (silent) return;
 		for (let ofIndex = 0, ofList = unmet; ofIndex < ofList.length; ofIndex++) {
 			const entry = ofList[ofIndex];
 			new this.SlothletWarning("WARNING_PERMISSION_BASELINE_UNMET", { check: entry.id, reason: entry.reason });

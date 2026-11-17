@@ -39,7 +39,6 @@ describe("API (eager-basic)", () => {
 			api = await slothlet({
 				...config,
 				base: TEST_DIRS.API_TEST,
-				api_mode: "function",
 				reference: { md5: mockMd5 },
 				diagnostics: true,
 				api: { collision: { mode: { initial: "replace", api: "replace" } } }

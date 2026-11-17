@@ -146,13 +146,10 @@ describe("Core > coverage-run hint (#235)", () => {
 		const { warnIfCoverageWithoutImporter } = await import("#processors/loader");
 		const { SlothletWarning } = await import("@cldmv/slothlet/errors");
 		SlothletWarning.clearCaptured();
-		const prior = SlothletWarning.suppressConsole;
-		SlothletWarning.suppressConsole = true;
 		try {
 			const fired = warnIfCoverageWithoutImporter(config, overrides);
 			return { fired, captured: SlothletWarning.captured.filter((w) => w.code === "WARNING_COVERAGE_IMPORTER_UNSET").length };
 		} finally {
-			SlothletWarning.suppressConsole = prior;
 			SlothletWarning.clearCaptured();
 		}
 	}
@@ -189,16 +186,15 @@ describe("Core > coverage-run hint (#235)", () => {
 		expect(out.fired).toBe(false);
 	});
 
-	it("respects silent instances", async () => {
+	it("still records the warning for a silent instance, whose class leaves it unprinted (#838)", async () => {
 		const out = await probe({ silent: true }, { worker: COVERAGE_WORKER, externalized: true });
-		expect(out.fired).toBe(false);
+		expect(out.fired).toBe(true);
+		expect(out.captured).toBe(1);
 	});
 
 	it("never fires from an in-repo boot, where slothlet is the project under test", async () => {
 		const { SlothletWarning } = await import("@cldmv/slothlet/errors");
 		SlothletWarning.clearCaptured();
-		const prior = SlothletWarning.suppressConsole;
-		SlothletWarning.suppressConsole = true;
 		let api;
 		try {
 			// The real boot consults the helper with REAL environment inputs; in this suite slothlet
@@ -207,7 +203,6 @@ describe("Core > coverage-run hint (#235)", () => {
 			api = await slothlet({ mode: "eager", base: BASE });
 			expect(SlothletWarning.captured.filter((w) => w.code === "WARNING_COVERAGE_IMPORTER_UNSET")).toHaveLength(0);
 		} finally {
-			SlothletWarning.suppressConsole = prior;
 			SlothletWarning.clearCaptured();
 			if (api) await api.shutdown();
 		}

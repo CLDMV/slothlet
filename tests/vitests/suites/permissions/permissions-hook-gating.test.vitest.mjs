@@ -59,7 +59,6 @@ describe.each(getMatrixConfigs())("Permissions > hook gating (#118) > $name", ({
 	let api;
 
 	beforeEach(() => {
-		SlothletWarning.suppressConsole = true;
 		SlothletWarning.clearCaptured();
 	});
 

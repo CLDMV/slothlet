@@ -19,7 +19,7 @@
  * @description
  * The SlothletWarning constructor has:
  *   ```javascript
- *   if (!SlothletWarning.suppressConsole) {
+ *   if (!Home.silent) {
  *       console.warn(`...`);
  *       if (Object.keys(contextData).length > 0) {  // ← line 184
  *           console.warn("Context:", contextData);   // ← line 184 TRUE branch (already covered)
@@ -28,13 +28,12 @@
  *   }
  *   ```
  * The FALSE branch of line 184 fires when the warning is emitted to console
- * (suppressConsole=false) but the context has no keys (empty `contextData`).
+ * (the class is not silent) but the context has no keys (empty `contextData`).
  *
  * The `contextData` is the result of `{ key: msgKey, ...contextData } = context`,
  * meaning if `context = {}` then `contextData = {}` (empty) → length 0 → false branch.
  *
- * Warning: This test temporarily disables `suppressConsole` and spies on `console.warn`
- * to prevent actual console output while hitting the uncovered path.
+ * The tests spy on `console.warn` to keep the output out of the log while hitting the uncovered path.
  *
  * @module tests/vitests/suites/core/errors-warning-context
  */
@@ -45,8 +44,6 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import { SlothletWarning } from "@cldmv/slothlet/errors";
 
 afterEach(() => {
-	// Always restore suppressConsole after each test regardless of outcome
-	SlothletWarning.suppressConsole = true;
 	SlothletWarning.captured = [];
 	vi.restoreAllMocks();
 });
@@ -55,11 +52,8 @@ afterEach(() => {
 
 describe("SlothletWarning — empty contextData skips context log (line 184 false branch)", () => {
 	it("emits warning but skips context console.warn when context is empty (line 184 false)", () => {
-		// Spy on console.warn BEFORE disabling suppressConsole
+		// The process-level class prints every warning, so the outer if is entered.
 		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
-
-		// Enable console output (suppressConsole=false) so the outer if is entered
-		SlothletWarning.suppressConsole = false;
 
 		// context = {} → contextData = {} → Object.keys({}).length === 0 → false branch at line 184
 		new SlothletWarning("WARNING_METADATA_MISMATCH", {});
@@ -80,8 +74,6 @@ describe("SlothletWarning — empty contextData skips context log (line 184 fals
 	it("emits warning AND context console.warn when context has keys (line 184 true, control)", () => {
 		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
 
-		SlothletWarning.suppressConsole = false;
-
 		// context has extra key → contextData = { source: "test" } → length 1 → true branch at line 184
 		new SlothletWarning("WARNING_METADATA_MISMATCH", { source: "test" });
 
@@ -91,15 +83,15 @@ describe("SlothletWarning — empty contextData skips context log (line 184 fals
 		expect(contextCall).toBeDefined();
 	});
 
-	it("does NOT emit console.warn at all when suppressConsole=true (confirming outer branch)", () => {
+	it("does NOT emit console.warn at all through a silent instance's class, and still records it (confirming outer branch)", () => {
 		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
 
-		// suppressConsole=true by default — the entire outer if is skipped
-		SlothletWarning.suppressConsole = true;
-		new SlothletWarning("WARNING_METADATA_MISMATCH", {});
+		// A silent instance's class skips the entire outer if (#838).
+		const Silent = SlothletWarning.forInstance(() => true);
+		new Silent("WARNING_METADATA_MISMATCH", {});
 
-		// No console output — captured array used instead
+		// No console output — the warning is recorded all the same
 		expect(warnSpy).not.toHaveBeenCalled();
-		expect(SlothletWarning.captured.length).toBeGreaterThan(0);
+		expect(Silent.captured.length).toBeGreaterThan(0);
 	});
 });

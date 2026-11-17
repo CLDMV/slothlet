@@ -319,25 +319,43 @@ describe("Loader processor (real slothlet integration)", () => {
 		});
 	});
 
-	it("surfaces strict-mode worker startup failure from invalid root path", async () => {
+	it("surfaces the strict-mode type-generation worker's failure when types.output cannot be written", async () => {
 		await writeModule(join(fixtureRoot, "worker-root-fail.ts"), "export const value: number = 42;");
+		// types.output sits under a regular file, so the worker builds the api, then fails creating the output
+		// directory (ENOTDIR) and reports it back over IPC. The parent config itself is valid.
+		const blocker = join(fixtureRoot, "..", `worker-output-blocker-${process.pid}-${Date.now()}`);
+		await writeFile(blocker, "not a directory");
 
-		await withSuppressedSlothletErrorOutput(async () => {
-			await expect(
-				slothlet({
-					base: fixtureRoot,
-					root: "/definitely/not/a/real/slothlet/root",
-					mode: "eager",
-					typescript: {
-						mode: "strict",
-						types: {
-							output: join(fixtureRoot, "generated", "worker-root-fail.d.ts"),
-							name: "WorkerRootFail"
+		try {
+			let caught = null;
+			await withSuppressedSlothletErrorOutput(async () => {
+				try {
+					const api = await slothlet({
+						base: fixtureRoot,
+						mode: "eager",
+						typescript: {
+							mode: "strict",
+							types: {
+								output: join(blocker, "generated", "worker-root-fail.d.ts"),
+								name: "WorkerRootFail"
+							}
 						}
-					}
-				})
-			).rejects.toThrow("TS_TYPE_GENERATION_FAILED");
-		});
+					});
+					activeApis.push(api);
+				} catch (error) {
+					caught = error;
+				}
+			});
+
+			// The loader reports the import of worker-root-fail.ts; the worker's own error is its originalError.
+			expect(caught).not.toBeNull();
+			expect(caught.code).not.toBe("INVALID_CONFIG_UNKNOWN_KEY");
+			expect(caught.code).toBe("MODULE_IMPORT_FAILED");
+			expect(caught.originalError?.code).toBe("TS_TYPE_GENERATION_FAILED");
+			expect(caught.originalError.message).toMatch(/ENOTDIR/);
+		} finally {
+			await rm(blocker, { force: true });
+		}
 	});
 
 	it("silently ignores symlinks during directory scan (L267 arm1 — neither dir nor file)", async () => {

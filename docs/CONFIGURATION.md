@@ -2,6 +2,8 @@
 
 Complete reference for all slothlet configuration options. Pass these as properties of the options object to `slothlet({ ... })`.
 
+Every key must be one listed here, at every level of a group: an unknown key (a typo, or an option name from slothlet v3) throws `INVALID_CONFIG_UNKNOWN_KEY` with `details.key` naming it (`"permissions.defaultPolicy"`) and `details.path` as segments. `npx @cldmv/slothlet-migrate` moves v3 configs to the v4 names. Values whose keys are your own are not checked: `context`, `reference`, `metadata`, `lifecycle`, `loader.files`, `typescript.compiler`, and the items of `permissions.rules`, `permissions.events.rules` and `routines.entries`, which their own validation reads.
+
 ---
 
 ## Quick Reference
@@ -633,7 +635,7 @@ const api = await slothlet({
 **Type**: `boolean`
 **Default**: `false`
 
-Suppresses all console output from slothlet — warnings, deprecation notices, and init-time diagnostics — consistently across every warning site. It gates **only console output**: `impl:warning` / `impl:error` lifecycle events still fire regardless of `silent` (see [LIFECYCLE.md](LIFECYCLE.md)), and it does not affect `debug` logging.
+Keeps slothlet's warnings off the console. It decides only that: every warning is still created and recorded on the instance (`api.slothlet.diag.SlothletWarning.captured`), `impl:warning` / `impl:error` lifecycle events still fire (see [LIFECYCLE.md](LIFECYCLE.md)), and `debug` logging is not affected.
 
 ```javascript
 const api = await slothlet({ base: "./api", silent: true });
@@ -972,7 +974,7 @@ const re = diag.hook.compilePattern("math.*");
 
 ### `diag.SlothletWarning`
 
-This instance's `SlothletWarning` class. Capture and console suppression are per instance: two instances never share a `captured` list, `clearCaptured()` on one leaves the other's warnings alone, and `suppressConsole` set on one does not change the other. Used in tests to capture and assert on warnings.
+This instance's `SlothletWarning` class. Every warning the instance raises is recorded here, whether or not it is printed: two instances never share a `captured` list, and `clearCaptured()` on one leaves the other's warnings alone. Whether a warning is also printed is the instance's [`silent`](#silent) option. Used in tests to assert on warnings.
 
 ```javascript
 // In tests
@@ -982,8 +984,7 @@ const warnings = diag.SlothletWarning.captured;
 expect(warnings).toHaveLength(1);
 ```
 
-- `captured` - warnings this instance raised while console output was suppressed.
+- `captured` - every warning this instance raised.
 - `clearCaptured()` - empties this instance's list.
-- `suppressConsole` - when `true`, this instance's warnings are captured instead of printed. It follows the process-level setting until you assign it on the instance (assign `null` to follow the process-level value again).
 
-Warnings raised outside any instance (for example a coverage notice from module load) go to the process-level class, `SlothletWarning` from `@cldmv/slothlet/errors`, which has its own `captured`, `clearCaptured()` and `suppressConsole`. Setting `SlothletWarning.suppressConsole = true` there also suppresses console output for every instance that has not set its own, but each instance still captures into its own list. Warnings from either class are `instanceof SlothletWarning`.
+Warnings raised outside any instance (for example a coverage notice from module load) go to the process-level class, `SlothletWarning` from `@cldmv/slothlet/errors`, which has its own `captured` and `clearCaptured()` and prints every warning. Warnings from either class are `instanceof SlothletWarning`.

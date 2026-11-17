@@ -96,7 +96,6 @@ describe("setLanguageAsync() — async locale loading", () => {
 
 	it("raises a coded warning and falls back to en-us for an unknown locale (#820)", async () => {
 		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-		SlothletWarning.suppressConsole = true;
 		SlothletWarning.clearCaptured();
 		try {
 			await setLanguageAsync("zz-zz");
@@ -104,9 +103,9 @@ describe("setLanguageAsync() — async locale loading", () => {
 			const warnings = SlothletWarning.captured.filter((w) => w.code === "WARNING_LANGUAGE_LOAD_FAILED");
 			expect(warnings).toHaveLength(1);
 			expect(warnings[0].context).toEqual({ lang: "zz-zz" });
-			expect(warn).not.toHaveBeenCalled();
+			// A warning raised outside any instance is printed by the process-level class (#838).
+			expect(warn.mock.calls.some(([first]) => String(first).includes("[WARNING_LANGUAGE_LOAD_FAILED]"))).toBe(true);
 		} finally {
-			SlothletWarning.suppressConsole = false;
 			SlothletWarning.clearCaptured();
 			warn.mockRestore();
 		}

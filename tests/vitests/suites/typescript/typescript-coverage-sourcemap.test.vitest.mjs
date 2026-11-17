@@ -136,13 +136,10 @@ describe("warnIfCoverageWithoutSourcemap", () => {
 		const { warnIfCoverageWithoutSourcemap } = await import("#processors/loader");
 		const { SlothletWarning } = await import("@cldmv/slothlet/errors");
 		SlothletWarning.clearCaptured();
-		const prior = SlothletWarning.suppressConsole;
-		SlothletWarning.suppressConsole = true;
 		try {
 			const fired = warnIfCoverageWithoutSourcemap(config, overrides);
 			return { fired, captured: SlothletWarning.captured.filter((w) => w.code === WARNING_CODE).length };
 		} finally {
-			SlothletWarning.suppressConsole = prior;
 			SlothletWarning.clearCaptured();
 		}
 	}

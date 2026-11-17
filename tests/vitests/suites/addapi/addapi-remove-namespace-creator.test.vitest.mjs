@@ -126,7 +126,7 @@ for (const { config, name } of getMatrixConfigs()) {
 					silent: true,
 					api: {
 						...config.api,
-						collision: { ...(config.api?.collision ?? {}), api: collisionApi },
+						collision: { mode: { initial: "merge", api: collisionApi } },
 						mutations: { add: true, remove: true, reload: true }
 					}
 				});

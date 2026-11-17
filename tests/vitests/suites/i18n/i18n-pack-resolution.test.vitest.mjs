@@ -76,7 +76,6 @@ describe("i18n — @cldmv/slothlet-i18n pack resolution (tier 1)", () => {
 		writeFileSync(join(PACK_DIR, "languages", "qa-corrupt.json"), "{ not valid json !");
 		// A failed load is a coded SlothletWarning (#820); outside any instance it is captured on the process-level class.
 		const { SlothletWarning } = await import("@cldmv/slothlet/errors");
-		SlothletWarning.suppressConsole = true;
 		SlothletWarning.clearCaptured();
 		try {
 			const i18n = await import("@cldmv/slothlet/i18n");
@@ -86,7 +85,6 @@ describe("i18n — @cldmv/slothlet-i18n pack resolution (tier 1)", () => {
 				true
 			);
 		} finally {
-			SlothletWarning.suppressConsole = false;
 			SlothletWarning.clearCaptured();
 			rmSync(join(PACK_DIR, "languages", "qa-corrupt.json"), { force: true });
 		}
@@ -96,7 +94,6 @@ describe("i18n — @cldmv/slothlet-i18n pack resolution (tier 1)", () => {
 		writeFileSync(join(PACK_DIR, "languages", "qa-corrupt-async.json"), "{ not valid json !");
 		// A failed load is a coded SlothletWarning (#820); outside any instance it is captured on the process-level class.
 		const { SlothletWarning } = await import("@cldmv/slothlet/errors");
-		SlothletWarning.suppressConsole = true;
 		SlothletWarning.clearCaptured();
 		try {
 			// The asynchronous load (the browser path), run directly: language.set takes the synchronous one in Node.
@@ -107,7 +104,6 @@ describe("i18n — @cldmv/slothlet-i18n pack resolution (tier 1)", () => {
 				SlothletWarning.captured.some((w) => w.code === "WARNING_LANGUAGE_LOAD_FAILED" && w.message.includes("qa-corrupt-async"))
 			).toBe(true);
 		} finally {
-			SlothletWarning.suppressConsole = false;
 			SlothletWarning.clearCaptured();
 			rmSync(join(PACK_DIR, "languages", "qa-corrupt-async.json"), { force: true });
 		}

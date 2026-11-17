@@ -180,39 +180,36 @@ export class SlothletError extends Error {
  */
 export class SlothletWarning {
 	/**
-	 * Warnings captured while console output is suppressed (for testing).
-	 * On this class it is the process-level list: it holds warnings raised outside any slothlet
-	 * instance (module-level coverage notices, for example). Each instance has its own subclass with its own
-	 * list, reached as `api.slothlet.diag.SlothletWarning.captured` (see {@link SlothletWarning.forInstance}).
+	 * Warnings raised through this class. On this class it is the process-level list: it holds warnings raised outside
+	 * any slothlet instance (module-level coverage notices, for example). Each instance has its own subclass with its own
+	 * list, reached as `api.slothlet.diag.SlothletWarning.captured` (see {@link SlothletWarning.forInstance}). Every
+	 * warning is recorded, whether or not it is also printed.
 	 * @type {SlothletWarning[]}
 	 */
 	static captured = [];
 
 	/**
-	 * Suppress console output and capture instead. On this class it is the process-level setting; an
-	 * instance's class follows it until that instance sets its own value (assign `null` to follow it again).
+	 * Whether a warning raised through this class stays off the console. The process-level class prints every warning;
+	 * an instance's class reads its instance's `silent` option.
 	 * @type {boolean}
 	 */
-	static suppressConsole = false;
+	static get silent() {
+		return false;
+	}
 
 	/**
-	 * Create the warning class for one slothlet instance (#819). The subclass keeps its own `captured` list and
-	 * its own `suppressConsole` setting, so warnings, `clearCaptured()` and console suppression on one instance
-	 * never reach another. `suppressConsole` follows the process-level value until the instance sets its own.
-	 * Warnings are still `instanceof SlothletWarning`.
+	 * Create the warning class for one slothlet instance (#819). The subclass keeps its own `captured` list, so warnings
+	 * and `clearCaptured()` on one instance never reach another, and prints a warning unless `isSilent()` says the
+	 * instance is silent (#838). Warnings are still `instanceof SlothletWarning`.
+	 * @param {function(): boolean} [isSilent] - Whether the instance's `silent` option is on, read as each warning is raised.
 	 * @returns {Function} The per-instance class (a subclass of `SlothletWarning`).
 	 * @public
 	 */
-	static forInstance() {
-		const Process = SlothletWarning;
-		let own = null;
-		class InstanceSlothletWarning extends Process {
+	static forInstance(isSilent = () => false) {
+		class InstanceSlothletWarning extends SlothletWarning {
 			static captured = [];
-			static get suppressConsole() {
-				return own ?? Process.suppressConsole;
-			}
-			static set suppressConsole(value) {
-				own = value;
+			static get silent() {
+				return isSilent() === true;
 			}
 			static clearCaptured() {
 				InstanceSlothletWarning.captured = [];
@@ -253,10 +250,12 @@ export class SlothletWarning {
 			this.cause = cause;
 		}
 
-		// Emit warning to console unless suppressed. `Home` is the instance's class for a warning raised through
-		// an instance (#819), or this class for one raised outside any instance.
+		// Every warning is recorded on the class it was raised through: the instance's class for a warning raised through
+		// an instance (#819), or this class for one raised outside any instance. Whether it is also printed is that
+		// class's `silent`, decided here and nowhere else (#838).
 		const Home = this.constructor;
-		if (!Home.suppressConsole) {
+		listPush(Home.captured, this);
+		if (!Home.silent) {
 			// The console as it is now: hosts and test runners point it elsewhere after slothlet loads.
 			globalThis.console.warn(`\n⚠️  [${this.code}] ${this.name}\n${this.message}`);
 
@@ -268,9 +267,6 @@ export class SlothletWarning {
 			if (hasCause) {
 				globalThis.console.warn("Cause:", cause instanceof Error ? cause.stack : cause);
 			}
-		} else {
-			// Only capture when console is suppressed (for testing)
-			listPush(Home.captured, this);
 		}
 	}
 

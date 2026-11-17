@@ -49,12 +49,10 @@ describe.each(getMatrixConfigs())("No base directory (#471) > $name", ({ config 
 	let api;
 
 	beforeEach(() => {
-		SlothletWarning.suppressConsole = true;
 		SlothletWarning.clearCaptured();
 	});
 
 	afterEach(async () => {
-		SlothletWarning.suppressConsole = false;
 		if (api) await api.shutdown();
 		api = null;
 	});

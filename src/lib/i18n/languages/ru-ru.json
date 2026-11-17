@@ -562,7 +562,9 @@
 		"BASELINE_CSP_EVAL_ALLOWED": "страница разрешает создавать код из строк: её Content Security Policy разрешает 'unsafe-eval' или отсутствует.",
 		"BASELINE_CSP_BLOB_ALLOWED": "страница выполняет скрипты с адресов blob:: её Content Security Policy разрешает их или отсутствует.",
 		"BASELINE_CSP_DATA_ALLOWED": "страница выполняет скрипты с адресов data:: её Content Security Policy разрешает их или отсутствует.",
-		"BASELINE_VITEST_PLUGIN_ABSENT": "запуск под vitest без плагина @cldmv/slothlet/vite от slothlet в конфигурации vitest."
+		"BASELINE_VITEST_PLUGIN_ABSENT": "запуск под vitest без плагина @cldmv/slothlet/vite от slothlet в конфигурации vitest.",
+		"INVALID_CONFIG_UNKNOWN_KEY": "Неизвестный ключ '{key}' в {where}. В slothlet v4 такой опции нет.",
+		"HINT_INVALID_CONFIG_UNKNOWN_KEY": "Проверьте ключ на опечатку. Код, написанный для slothlet v3, можно перевести на имена v4 командой npx @cldmv/slothlet-migrate."
 	},
 	"metadata": {
 		"code": "ru-ru",

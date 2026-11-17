@@ -71,7 +71,6 @@ describe.each(getMatrixConfigs())("Hooks > around permissions and pinning (#496)
 	let api;
 
 	beforeEach(() => {
-		SlothletWarning.suppressConsole = true;
 		SlothletWarning.clearCaptured();
 	});
 

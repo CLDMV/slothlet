@@ -199,14 +199,14 @@ describe("WARNING_LIFECYCLE_HANDLER_ERROR carries the handler's error (#578)", (
 		expect(warning.message).toContain("'init'");
 	});
 
-	it("stays quiet when the instance is silent", async () => {
+	it("still records the warning when the instance is silent (#838)", async () => {
 		SlothletWarning.clearCaptured();
 		const lc = new Lifecycle({ ...makeMock(), config: { debug: {}, silent: true } });
 		lc.subscribeInternal("impl:created", () => {
 			throw new Error("silenced");
 		});
 		await lc.emitInternal("impl:created", { apiPath: "math.add", moduleID: "base", source: "test" });
-		expect(handlerWarnings()).toEqual([]);
+		expect(handlerWarnings()).toHaveLength(1);
 	});
 
 	it("attaches an async handler's rejection as the cause", async () => {
@@ -225,7 +225,6 @@ describe("WARNING_LIFECYCLE_HANDLER_ERROR carries the handler's error (#578)", (
 
 	it("prints the cause's stack when the warning reaches the console", () => {
 		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
-		SlothletWarning.suppressConsole = false;
 		try {
 			const boom = new Error("printed failure");
 			const warning = new SlothletWarning("WARNING_LIFECYCLE_HANDLER_ERROR", { event: "impl:created" }, boom);
@@ -234,20 +233,17 @@ describe("WARNING_LIFECYCLE_HANDLER_ERROR carries the handler's error (#578)", (
 			expect(printed).toContain("printed failure");
 			expect(printed).toContain(boom.stack.split("\n")[1].trim());
 		} finally {
-			SlothletWarning.suppressConsole = true;
 			warnSpy.mockRestore();
 		}
 	});
 
 	it("prints a thrown non-Error value as-is", () => {
 		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
-		SlothletWarning.suppressConsole = false;
 		try {
 			const warning = new SlothletWarning("WARNING_LIFECYCLE_HANDLER_ERROR", { event: "impl:created" }, "plain string throw");
 			expect(warning.cause).toBe("plain string throw");
 			expect(warnSpy).toHaveBeenCalledWith("Cause:", "plain string throw");
 		} finally {
-			SlothletWarning.suppressConsole = true;
 			warnSpy.mockRestore();
 		}
 	});

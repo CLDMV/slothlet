@@ -68,13 +68,13 @@ describe("OwnershipManager — collision-conflict handling in register() (#366)"
 		expect(own.getCurrentOwner("p").moduleID).toBe("modA");
 	});
 
-	it("warn mode (silent): skips the conflicting registration without emitting a warning", () => {
+	it("warn mode (silent): skips the conflicting registration and still raises the warning (#838)", () => {
 		const own = makeOwn();
 		own.register({ moduleID: "modA", apiPath: "p", value: () => "a", collisionMode: "error" });
 		const before = own.slothlet.__warnings;
 		const b = own.register({ moduleID: "modB", apiPath: "p", value: () => "b", collisionMode: "warn", config: { silent: true } });
 		expect(b).toBeNull();
-		expect(own.slothlet.__warnings).toBe(before);
+		expect(own.slothlet.__warnings).toBe(before + 1);
 	});
 
 	it("error mode: a conflicting registration throws OWNERSHIP_CONFLICT", () => {

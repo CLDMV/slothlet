@@ -562,7 +562,9 @@
 		"BASELINE_CSP_EVAL_ALLOWED": "la page permet de créer du code à partir de chaînes : sa Content Security Policy autorise 'unsafe-eval', ou elle n'en a pas.",
 		"BASELINE_CSP_BLOB_ALLOWED": "la page exécute des scripts d'URL blob: : sa Content Security Policy les autorise, ou elle n'en a pas.",
 		"BASELINE_CSP_DATA_ALLOWED": "la page exécute des scripts d'URL data: : sa Content Security Policy les autorise, ou elle n'en a pas.",
-		"BASELINE_VITEST_PLUGIN_ABSENT": "exécution sous vitest sans le plugin @cldmv/slothlet/vite de slothlet dans la configuration de vitest."
+		"BASELINE_VITEST_PLUGIN_ABSENT": "exécution sous vitest sans le plugin @cldmv/slothlet/vite de slothlet dans la configuration de vitest.",
+		"INVALID_CONFIG_UNKNOWN_KEY": "Clé inconnue '{key}' dans {where}. Ce n'est pas une option de slothlet v4.",
+		"HINT_INVALID_CONFIG_UNKNOWN_KEY": "Vérifiez que la clé n'a pas de faute de frappe. Le code écrit pour slothlet v3 peut passer aux noms de v4 avec npx @cldmv/slothlet-migrate."
 	},
 	"metadata": {
 		"code": "fr-fr",

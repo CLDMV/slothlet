@@ -25,7 +25,6 @@ import slothlet from "@cldmv/slothlet";
 import { SlothletWarning } from "@cldmv/slothlet/errors";
 
 const [mode, loading, runtime] = process.argv.slice(2);
-SlothletWarning.suppressConsole = true;
 const out = {};
 
 /**

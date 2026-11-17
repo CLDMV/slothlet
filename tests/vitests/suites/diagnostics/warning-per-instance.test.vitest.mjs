@@ -14,10 +14,11 @@
  */
 
 /**
- * @fileoverview #819 — warning capture and console suppression are per instance. Two instances do not share
- * `api.slothlet.diag.SlothletWarning.captured`, `clearCaptured()` on one leaves the other's list alone, and
- * `suppressConsole` set on one instance does not touch the other. A warning raised outside any instance lands
- * on the process-level `SlothletWarning` from `@cldmv/slothlet/errors`.
+ * @fileoverview #819 — warning capture is per instance. Two instances do not share
+ * `api.slothlet.diag.SlothletWarning.captured`, and `clearCaptured()` on one leaves the other's list alone. #838 — every
+ * warning is recorded; an instance's `silent` decides only whether it is also printed, and one instance's `silent` does
+ * not touch the other. A warning raised outside any instance lands on the process-level `SlothletWarning` from
+ * `@cldmv/slothlet/errors`.
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
@@ -50,15 +51,13 @@ describe.each(CASES)("warning capture is per instance (#819) > $mode / $runtime"
 	let a;
 	let b;
 
-	const make = () => slothlet({ base: TEST_DIRS.API_TEST, mode, runtime, diagnostics: true });
+	const make = (silent = false) => slothlet({ base: TEST_DIRS.API_TEST, mode, runtime, diagnostics: true, silent });
 
 	beforeEach(() => {
-		SlothletWarning.suppressConsole = true;
 		SlothletWarning.clearCaptured();
 	});
 
 	afterEach(async () => {
-		SlothletWarning.suppressConsole = false;
 		vi.restoreAllMocks();
 		if (a) await a.shutdown();
 		if (b) await b.shutdown();
@@ -83,18 +82,17 @@ describe.each(CASES)("warning capture is per instance (#819) > $mode / $runtime"
 		expect(codes(b)).toContain("WARNING_API_ADD_OPTION_LOCKED");
 	});
 
-	it("suppressConsole on one instance does not change the other", async () => {
-		a = await make();
-		b = await make();
+	it("silent on one instance does not change the other, and both record their warnings (#838)", async () => {
+		a = await make(false);
+		b = await make(true);
 		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-		a.slothlet.diag.SlothletWarning.suppressConsole = false;
 		await raise(a);
 		expect(warn).toHaveBeenCalled();
 		warn.mockClear();
 		await raise(b);
 		expect(warn).not.toHaveBeenCalled();
+		expect(codes(a)).toContain("WARNING_API_ADD_OPTION_LOCKED");
 		expect(codes(b)).toContain("WARNING_API_ADD_OPTION_LOCKED");
-		expect(codes(a)).not.toContain("WARNING_API_ADD_OPTION_LOCKED");
 	});
 
 	it("a warning raised outside any instance lands on the process-level class", async () => {

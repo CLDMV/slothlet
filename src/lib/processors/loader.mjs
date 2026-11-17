@@ -154,24 +154,28 @@ const CHILD_PROCESS_FORK = NODE_CHILD_PROCESS?.fork;
  * @param {object|undefined} [overrides.worker] - The vitest worker global, when present.
  * @param {boolean} [overrides.externalized] - Whether this slothlet copy is outside the runner's
  *   module graph.
+ * @param {Function} [overrides.Warning] - The warning class to raise it through (the instance's), so it is recorded on the
+ *   instance and printed unless the instance is `silent`.
  * @returns {boolean} True when the warning was emitted.
  * @package
  *
  * @description
  * Fires only when every condition of the misattribution scenario holds: a vitest COVERAGE run is
  * active (`__vitest_worker__.config.coverage.enabled` — a plain test run stays silent), this
- * slothlet copy is EXTERNALIZED (an inlined copy attributes fine), no `import` importer is
- * configured (the fix), and the instance is not `silent`. The worker global is vitest-internal,
+ * slothlet copy is EXTERNALIZED (an inlined copy attributes fine), and no `loader.import` importer is
+ * configured (the fix). The worker global is vitest-internal,
  * so it is read defensively — its absence or a shape change simply means no hint, never a wrong
  * one. Detection cannot DO the fix: the importer must be a closure authored in the consumer's own
  * transformed code, which is why this is a pointer to docs/TESTING.md rather than an auto-enable.
  */
-export function warnIfCoverageWithoutImporter(config, { worker = globalThis.__vitest_worker__, externalized = RUNTIME_EXTERNALIZED } = {}) {
+export function warnIfCoverageWithoutImporter(
+	config,
+	{ worker = globalThis.__vitest_worker__, externalized = RUNTIME_EXTERNALIZED, Warning = SlothletWarning } = {}
+) {
 	if (worker?.config?.coverage?.enabled !== true) return false;
 	if (!externalized) return false;
 	if (typeof config?.loader?.import === "function") return false;
-	if (config?.silent) return false;
-	new SlothletWarning("WARNING_COVERAGE_IMPORTER_UNSET", {});
+	new Warning("WARNING_COVERAGE_IMPORTER_UNSET", {});
 	return true;
 }
 
@@ -219,20 +223,22 @@ export function resolveSourcemap(typescriptConfig, overrides) {
  * Warns when a coverage run loads TypeScript leaves with source maps explicitly off (#484).
  *
  * @param {object} config - The instance's transformed config.
- * @param {object} [overrides] - Environment inputs forwarded to {@link isCoverageRun}.
+ * @param {object} [overrides] - Environment inputs forwarded to {@link isCoverageRun}, and `Warning`, the warning class
+ *   to raise it through (the instance's).
  * @returns {boolean} True when the warning was emitted.
  * @package
  *
  * @description
  * Without the inline map, coverage for a TypeScript leaf is recorded against its cache copy and
  * can never reach the `.ts` source. The Loader calls this once per instance, on the first
- * TypeScript leaf it loads; a `silent` instance stays quiet.
+ * TypeScript leaf it loads, through the instance's warning class (`overrides.Warning`), so a `silent` instance records it
+ * without printing.
  */
 export function warnIfCoverageWithoutSourcemap(config, overrides) {
 	if (config?.typescript?.sourcemap !== false) return false;
-	if (config?.silent) return false;
 	if (!isCoverageRun(overrides)) return false;
-	new SlothletWarning("WARNING_COVERAGE_TS_SOURCEMAP_OFF", {});
+	const Warning = overrides?.Warning ?? SlothletWarning;
+	new Warning("WARNING_COVERAGE_TS_SOURCEMAP_OFF", {});
 	return true;
 }
 
@@ -701,7 +707,7 @@ export class Loader extends ComponentBase {
 				const sourcemap = resolveSourcemap(typescriptConfig);
 				if (!this.#coverageSourcemapChecked) {
 					this.#coverageSourcemapChecked = true;
-					warnIfCoverageWithoutSourcemap(this.slothlet.config);
+					warnIfCoverageWithoutSourcemap(this.slothlet.config, { Warning: this.slothlet.SlothletWarning });
 				}
 				if (mode === "strict") {
 					// Validate strict mode config
@@ -723,7 +729,7 @@ export class Loader extends ComponentBase {
 						// not a slothlet option.
 						const childConfig = JSON.stringify({
 							config: {
-								base: this.slothlet.config.root || this.slothlet.config.base,
+								base: this.slothlet.config.base,
 								mode: "eager",
 								typescript: "fast"
 							},
@@ -1273,8 +1279,7 @@ export class Loader extends ComponentBase {
 		}
 
 		// Warn if directory is empty or has no loadable modules (only for root scans or add-api workflows).
-		// Console warning honors `silent`, consistent with every other SlothletWarning site.
-		if (isRootScan && structure.files.length === 0 && structure.directories.length === 0 && !this.____config?.silent) {
+		if (isRootScan && structure.files.length === 0 && structure.directories.length === 0) {
 			new this.SlothletWarning("WARN_DIRECTORY_EMPTY", {
 				dir,
 				resolvedPath: path.resolve(dir)

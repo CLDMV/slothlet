@@ -144,7 +144,6 @@ describe("permissions mode strict > under vitest with the plugin", () => {
 	};
 
 	afterEach(async () => {
-		SlothletWarning.suppressConsole = false;
 		SlothletWarning.captured.length = 0;
 		await api?.shutdown();
 		api = null;
@@ -157,7 +156,6 @@ describe("permissions mode strict > under vitest with the plugin", () => {
 	});
 
 	it("under on, reports every check met and warns nothing", async () => {
-		SlothletWarning.suppressConsole = true;
 		api = await slothlet({ base: BASE, permissions: { mode: "on", rules: RULES } });
 		expect(api.slothlet.permissions.control.report()).toEqual({ mode: "on", baseline: UNDER_VITEST, capabilities: expect.any(Array) });
 		expect(SlothletWarning.captured.filter((warning) => warning.code === "WARNING_PERMISSION_BASELINE_UNMET")).toEqual([]);

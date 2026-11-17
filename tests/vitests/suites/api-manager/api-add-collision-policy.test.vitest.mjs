@@ -32,15 +32,12 @@ const ADDDIR = TEST_DIRS.API_TEST_MIXED;
 /** Run `fn` while capturing the instance's SlothletWarnings (per instance, #819); return the captured warning codes. */
 async function withCapturedWarnings(api, fn) {
 	const Warning = api.slothlet.diag.SlothletWarning;
-	const prev = Warning.suppressConsole;
-	Warning.suppressConsole = true;
 	Warning.clearCaptured();
 	try {
 		await fn();
 		return Warning.captured.map((w) => w.code);
 	} finally {
 		Warning.clearCaptured();
-		Warning.suppressConsole = prev;
 	}
 }
 
@@ -68,11 +65,11 @@ describe.each(getMatrixConfigs())("api.add collision-override policy (#380) > $n
 		expect(codes).toContain("WARNING_API_ADD_OPTION_LOCKED");
 	});
 
-	it("silent suppresses the warning (still ignored, still succeeds)", async () => {
+	it("silent still records the warning, only unprinted (still ignored, still succeeds) (#838)", async () => {
 		api = await slothlet({ ...config, diagnostics: true, base: BASE, silent: true });
 		const codes = await withCapturedWarnings(api, () => api.slothlet.api.add("extSilent", ADDDIR, { collisionMode: "replace" }));
 		expect(api.extSilent).toBeDefined();
-		expect(codes).not.toContain("WARNING_API_ADD_OPTION_LOCKED");
+		expect(codes).toContain("WARNING_API_ADD_OPTION_LOCKED");
 	});
 
 	it("unlocked (allowCollisionOverride:true): collisionMode is honored with no warning", async () => {

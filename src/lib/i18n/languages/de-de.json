@@ -562,7 +562,9 @@
 		"BASELINE_CSP_EVAL_ALLOWED": "Die Seite erlaubt, Code aus Zeichenketten zu erzeugen: Ihre Content Security Policy erlaubt 'unsafe-eval', oder sie hat keine.",
 		"BASELINE_CSP_BLOB_ALLOWED": "Die Seite führt Skripte von blob:-URLs aus: Ihre Content Security Policy erlaubt sie, oder sie hat keine.",
 		"BASELINE_CSP_DATA_ALLOWED": "Die Seite führt Skripte von data:-URLs aus: Ihre Content Security Policy erlaubt sie, oder sie hat keine.",
-		"BASELINE_VITEST_PLUGIN_ABSENT": "Ausführung unter vitest ohne das @cldmv/slothlet/vite-Plugin von slothlet in der vitest-Konfiguration."
+		"BASELINE_VITEST_PLUGIN_ABSENT": "Ausführung unter vitest ohne das @cldmv/slothlet/vite-Plugin von slothlet in der vitest-Konfiguration.",
+		"INVALID_CONFIG_UNKNOWN_KEY": "Unbekannter Schlüssel '{key}' in {where}. Diese Option gibt es in slothlet v4 nicht.",
+		"HINT_INVALID_CONFIG_UNKNOWN_KEY": "Prüfen Sie den Schlüssel auf Tippfehler. Für slothlet v3 geschriebener Code lässt sich mit npx @cldmv/slothlet-migrate auf die v4-Namen umstellen."
 	},
 	"metadata": {
 		"code": "de-de",

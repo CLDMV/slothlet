@@ -688,7 +688,6 @@ export class OwnershipManager extends ComponentBase {
 	 * @param {*} options.value - The actual function/object being registered
 	 * @param {string} [options.source="core"] - Source of registration
 	 * @param {string} [options.collisionMode="error"] - Collision mode: skip, warn, error, merge, replace
-	 * @param {Object} [options.config] - Config object for silent mode check
 	 * @param {string} [options.filePath=null] - File path of the module source (for metadata tracking)
 	 * @param {string[]|null} [options.exportPath=null] - Access path within `filePath`'s module namespace
 	 *   that produced `value` (`["add"]`, `["default"]`, `["default", "member"]`); `null` when the value
@@ -704,7 +703,6 @@ export class OwnershipManager extends ComponentBase {
 		value,
 		source = "core",
 		collisionMode = "error",
-		config = null,
 		filePath = null,
 		exportPath = null,
 		memberExportPaths = null
@@ -735,14 +733,12 @@ export class OwnershipManager extends ComponentBase {
 				// Skip registration silently
 				return null;
 			} else if (collisionMode === "warn") {
-				// Skip registration but emit warning (unless silent)
-				if (!config?.silent) {
-					new this.SlothletWarning("WARNING_OWNERSHIP_CONFLICT", {
-						apiPath,
-						existingModuleId: currentOwner.moduleID,
-						newModuleId: moduleID
-					});
-				}
+				// Skip registration but emit warning (printed unless the instance is silent)
+				new this.SlothletWarning("WARNING_OWNERSHIP_CONFLICT", {
+					apiPath,
+					existingModuleId: currentOwner.moduleID,
+					newModuleId: moduleID
+				});
 				return null;
 			} else {
 				// error mode - throw

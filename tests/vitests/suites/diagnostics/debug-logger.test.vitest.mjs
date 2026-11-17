@@ -155,12 +155,9 @@ describe("SlothletWarning - unsuppressed console output (lines 181-185) and toSt
 
 	afterEach(() => {
 		warnSpy.mockRestore();
-		// Always restore suppression so other tests are not affected
-		SlothletWarning.suppressConsole = true;
 	});
 
-	it("outputs to console.warn when suppressConsole is false (lines 181-185)", () => {
-		SlothletWarning.suppressConsole = false;
+	it("outputs to console.warn through the process-level class (lines 181-185)", () => {
 		// Create a warning — should call console.warn (lines 181-185)
 		const w = new SlothletWarning("WARNING_API_ADD_OPTION_LOCKED", { option: "collisionMode" });
 		expect(warnSpy).toHaveBeenCalled();
@@ -168,8 +165,7 @@ describe("SlothletWarning - unsuppressed console output (lines 181-185) and toSt
 		expect(w.code).toBe("WARNING_API_ADD_OPTION_LOCKED");
 	});
 
-	it("outputs Context: line when suppressConsole is false and context has data", () => {
-		SlothletWarning.suppressConsole = false;
+	it("outputs Context: line when the context has data", () => {
 		new SlothletWarning("WARNING_API_ADD_OPTION_LOCKED", { option: "collisionMode" });
 		const calls = warnSpy.mock.calls;
 		// First call: the main warning message. Possibly second call: "Context:" line.

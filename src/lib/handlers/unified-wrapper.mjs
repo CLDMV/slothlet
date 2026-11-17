@@ -3325,7 +3325,7 @@ function runtime_makeQueuedChange(wrapper, change, generation) {
 	} catch (error) {
 		const apiPath = runtime_standInPath(wrapper, change.chain);
 		const operation = change.op === "lock" ? "preventExtensions" : change.op;
-		if (!wrapper.____config?.silent) new wrapper.SlothletWarning("WARNING_LAZY_WRITE_REFUSED", { apiPath, operation }, error);
+		new wrapper.SlothletWarning("WARNING_LAZY_WRITE_REFUSED", { apiPath, operation }, error);
 		const refused = new wrapper.SlothletError("LAZY_WRITE_REFUSED", { apiPath, operation }, error);
 		if (!WeakMapMethods.has(REFUSED_CHANGES, wrapper.slothlet)) WeakMapMethods.set(REFUSED_CHANGES, wrapper.slothlet, []);
 		// Recorded for the nodes the loads were for: one replaced while it loaded (reloaded, or rebuilt away) does not
