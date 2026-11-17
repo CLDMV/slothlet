@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:28:47-08:00 (1794882527)
+ *	@Last modified time: 2026-11-17T07:56:11-08:00 (1794930971)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -1928,7 +1928,7 @@ export class PermissionManager extends ComponentBase {
 	 * @param {PermissionCallMeta|null} [callMeta=null] - Call/construct metadata (#455): `{ args, target }`
 	 *   from the invocation, forwarded to function conditions as their second argument. Null for reads,
 	 *   hooks, the internal control surface, and silent queries.
-	 * @param {{ principalGrace?: boolean, moduleCaller?: boolean, via?: ReadonlyArray<string> }|null} [options=null] - Enforcement options.
+	 * @param {{ principalGrace?: boolean, moduleCaller?: boolean, newMember?: boolean, via?: ReadonlyArray<string> }|null} [options=null] - Enforcement options.
 	 * @param {boolean} [options.principalGrace=false] - Accept a principal whose epoch is current even if its
 	 *   `ttl` has elapsed (#459). Set only by a promoted call re-enforcing right after its resolve.
 	 * @param {boolean} [options.moduleCaller=false] - The caller is a module even though no source file is
@@ -1937,6 +1937,9 @@ export class PermissionManager extends ComponentBase {
 	 * @param {ReadonlyArray<string>} [options.via] - Origin marker added to the audit payload: the method path as segments
 	 *   (`via: ["slothlet", "permissions", "global", "check", "call"]`), so an
 	 *   audit consumer can tell a query from the gate of a real call.
+	 * @param {boolean} [options.newMember=false] - The target is a member a module is about to create, which will be the
+	 *   caller's own once written: module privacy answers as for a member the caller's module owns, and the default policy
+	 *   alone does not refuse it (a matching rule still decides).
 	 * @param {function(string): boolean} [options.dataMember] - Given for a read of data: whether a path above the
 	 *   target is an object member of a module's data. A deny rule naming such a member's path exactly then covers the
 	 *   target too, as a rule on `path.**` would, so what the member holds is denied with it unless a more specific rule
@@ -1973,7 +1976,8 @@ export class PermissionManager extends ComponentBase {
 				true,
 				callMeta,
 				options?.moduleCaller === true,
-				options?.dataMember ?? null
+				options?.dataMember ?? null,
+				options?.newMember === true
 			);
 		} finally {
 			this.#principalGrace = priorGrace;
@@ -3452,6 +3456,8 @@ export class PermissionManager extends ComponentBase {
 	 *   so it never affects caching either.
 	 * @param {function(string): boolean|null} [dataMember=null] - For a read of data, whether a path above the target is
 	 *   an object member of a module's data (see {@link enforceAccess}).
+	 * @param {boolean} [newMember=false] - The target is a member the caller's module is about to create (see
+	 *   {@link enforceAccess}).
 	 * @returns {{ allowed: boolean, event: string|null, payload: object|null, hasConditionalRules?: boolean }} Decision record.
 	 * @private
 	 */
@@ -3464,7 +3470,8 @@ export class PermissionManager extends ComponentBase {
 		useCache,
 		callMeta,
 		moduleCaller = false,
-		dataMember = null
+		dataMember = null,
+		newMember = false
 	) {
 		// Global toggle: when off, everything is allowed (no event to emit).
 		// Exception: slothlet.permissions.control.** is always subject to rule evaluation while the system is off
@@ -3499,8 +3506,10 @@ export class PermissionManager extends ComponentBase {
 		// synthetic `__`-prefixed children (`slothlet.permissions.__probe__`). Module privacy never
 		// applies there.
 		if (runtime_isPrivateName(targetPath) && targetPath !== "slothlet" && !StringMethods.startsWith(targetPath, "slothlet.")) {
-			const sameModule =
-				this.#privateScope === "folder"
+			// A member the caller's module is about to create is that module's own once written.
+			const sameModule = newMember
+				? this.#callerOwner(callerPath) !== null
+				: this.#privateScope === "folder"
 					? Boolean(callerFilePath && targetFilePath && runtime_sameModuleDir(callerFilePath, targetFilePath))
 					: this.#privateOwner(callerPath, targetPath) !== null;
 			if (sameModule) {
@@ -3556,8 +3565,11 @@ export class PermissionManager extends ComponentBase {
 		// explicit rule (allow or deny) has already decided, so a deny rule always wins over it. Applied
 		// after the cache, never stored in it: ownership moves with add/remove/reload without touching any
 		// rule, so the cached record stays the rules-only verdict and ownership is read live each time.
-		if (this.#owner && !entry.allowed && entry.event === "permission:default") {
-			const moduleID = this.#sharedOwner(callerPath, targetPath);
+		// A member the caller's module is about to create will be that module's own, and holds nothing of another module's
+		// to keep from it: the default policy alone does not refuse it, whether or not the owner grant is on. A rule that
+		// names the caller and the path still decides.
+		if ((this.#owner || newMember) && !entry.allowed && entry.event === "permission:default") {
+			const moduleID = newMember ? this.#newMemberOwner(callerPath, targetPath) : this.#sharedOwner(callerPath, targetPath);
 			if (moduleID !== null) {
 				return {
 					allowed: true,
@@ -3612,11 +3624,37 @@ export class PermissionManager extends ComponentBase {
 	 */
 	#sharedOwner(callerPath, targetPath) {
 		if (SetMethods.has(FRAMEWORK_ROOTS, splitText(String(targetPath), ".", 1)[0])) return null;
-		const ownership = this.slothlet.handlers.ownership;
+		const callerOwner = this.#callerOwner(callerPath);
+		if (callerOwner === null) return null;
+		return this.slothlet.handlers.ownership.getCurrentOwner(targetPath)?.moduleID === callerOwner ? callerOwner : null;
+	}
+
+	/**
+	 * The module that will own a member the caller's module is about to create at `targetPath`: the caller's own, as the
+	 * owner grant reads it, or null when the caller has no owner or the path is in the framework's reserved roots.
+	 *
+	 * @param {string|null} callerPath - Caller leaf's api path.
+	 * @param {string} targetPath - Api path of the member to be created.
+	 * @returns {string|null} The caller's moduleID, or null.
+	 * @private
+	 */
+	#newMemberOwner(callerPath, targetPath) {
+		if (SetMethods.has(FRAMEWORK_ROOTS, splitText(String(targetPath), ".", 1)[0])) return null;
+		return this.#callerOwner(callerPath);
+	}
+
+	/**
+	 * The module that currently owns a caller leaf's path, from the ownership registry.
+	 *
+	 * @param {string|null} callerPath - Caller leaf's api path.
+	 * @returns {string|null} Its moduleID; null for a path with no ownership entry (null or empty included).
+	 * @private
+	 */
+	#callerOwner(callerPath) {
 		// A caller path with no ownership entry (null/empty, or a path nothing registered) owns nothing.
-		const callerOwner = ownership.getCurrentOwner(callerPath)?.moduleID;
-		if (!callerOwner) return null;
-		return ownership.getCurrentOwner(targetPath)?.moduleID === callerOwner ? callerOwner : null;
+		const ownership = this.slothlet.handlers?.ownership;
+		if (!callerPath || !ownership) return null;
+		return ownership.getCurrentOwner(callerPath)?.moduleID || null;
 	}
 
 	/**

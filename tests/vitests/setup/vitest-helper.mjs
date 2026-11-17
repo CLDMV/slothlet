@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:28:27-08:00 (1794882507)
+ *	@Last modified time: 2026-11-17T07:56:33-08:00 (1794930993)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -144,6 +144,7 @@ export const TEST_DIRS = {
 	API_TEST_FRAMEWORK_NAMESPACE_GUARD: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_framework_namespace_guard`),
 	// #625 — what a module reaches through another module's node, symbol keys, and `self` itself.
 	API_TEST_SELF_WRITE_REACH: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_self_write_reach`),
+	API_TEST_WRITE_NOT_EASIER: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_write_not_easier`),
 	// #653 — writes through a lazy node that has not loaded yet.
 	API_TEST_LAZY_UNLOADED_WRITE: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_lazy_unloaded_write`),
 	// A module file compiling code under its own name as vitest's module runner compiles it.

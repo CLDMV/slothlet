@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T07:49:34-08:00 (1794930574)
+ *	@Last modified time: 2026-11-17T07:56:10-08:00 (1794930970)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -782,15 +782,17 @@ export class ApiManager extends ComponentBase {
 	 * the module owns. The built-in ones keep every module off the framework's namespace and root functions and off
 	 * the framework's own keys on api nodes, until an allow lifts one for the callers it names. With the system off
 	 * only those built-in rules (and host rules on what they cover) are checked and ownership refuses nothing, so a
-	 * module writes anywhere outside the framework's own; with it disabled nothing is checked.
+	 * module writes anywhere outside the framework's own; with it disabled nothing is checked. While it is on, a write
+	 * that passes is also held to the access the module would need to call or read the member it changes: writing is
+	 * never easier than accessing.
 	 *
 	 * @param {string[]} parts - Segments of the api path being written.
 	 * @param {object|null} callerWrapper - The executing module's wrapper, or null for host code.
 	 * @param {{moduleID: string, prior: Map<string, *>}|null} [inFlight=null] - An add in flight whose content is
 	 *   being checked (see {@link ApiManager#ownsPath}).
 	 * @returns {void}
-	 * @throws {SlothletError} `PERMISSION_DENIED` when a write rule denies the write, and
-	 *   `LOOSE_SET_NOT_OWNED` when the path is outside the caller's mount point.
+	 * @throws {SlothletError} `PERMISSION_DENIED` when a write rule denies the write or the module would be refused a call
+	 *   or read of the member it changes, and `LOOSE_SET_NOT_OWNED` when the path is outside the caller's mount point.
 	 * @public
 	 */
 	assertOwnedWrite(parts, callerWrapper, inFlight = null) {
@@ -804,9 +806,12 @@ export class ApiManager extends ComponentBase {
 				throw new this.SlothletError("PERMISSION_DENIED", { caller: callerPath, target: segmentsOf(`${targetPath}:write`) });
 			}
 			// An allowing write rule grants the write, whatever the module owns — to a module that is still there.
-			if (decision === "grant" && !this.isRemovedCaller(callerWrapper)) return;
+			if (decision === "grant" && !this.isRemovedCaller(callerWrapper)) return this.#assertWriteAccess(parts, callerWrapper);
 		}
-		if (!this.ownershipEnforced() || this.ownsPath(parts, callerWrapper, inFlight)) return;
+		if (!this.ownershipEnforced() || this.ownsPath(parts, callerWrapper, inFlight)) {
+			if (callerWrapper) this.#assertWriteAccess(parts, callerWrapper);
+			return;
+		}
 		// The caller has a recorded mount point (or it would own the whole tree), so it has a module; its
 		// apiPath is always set alongside, and the `??` guards an inconsistent caller object.
 		/* v8 ignore next */
@@ -815,6 +820,73 @@ export class ApiManager extends ComponentBase {
 			path: segmentsOf(ArrayMethods.join(parts, ".")),
 			caller: callerApiPath
 		});
+	}
+
+	/**
+	 * Refuse a module a write it would not be allowed to read or call: writing is never easier than accessing.
+	 *
+	 * Replacing, redefining, or deleting a member takes over every later call or read of it, so a module may do it only
+	 * where it would be allowed to call or read that member, as the call and read gates decide it (rules, `policy`, the
+	 * owner grant, module privacy, the self-call bypass), on top of the ownership and write rules. A member that does not
+	 * exist yet takes over nothing; it is judged as the read of it would be once written, when it is the writer's own: a
+	 * rule on its path that refuses the writer refuses the write, and the default policy alone does not. Only while the
+	 * permission system is on, and only for module code.
+	 *
+	 * @param {string[]} parts - Segments of the api path being written.
+	 * @param {object} callerWrapper - The executing module's wrapper.
+	 * @returns {void}
+	 * @throws {SlothletError} `PERMISSION_DENIED` when the module would be refused a call or read of the target.
+	 * @private
+	 */
+	#assertWriteAccess(parts, callerWrapper) {
+		const permissionManager = this.slothlet.handlers.permissionManager;
+		if (!permissionManager.isEnabled() || parts.length === 0) return;
+		const internal = callerWrapper.____slothletInternal;
+		const callerPath = String(internal?.apiPath ?? "");
+		const targetPath = ArrayMethods.join(parts, ".");
+		const { exists, accessor, filePath } = this.#memberAt(parts);
+		// A member held as an accessor is read by running its getter, which no read gate checks: the write is held to the
+		// ownership and write rules alone, as reading it is to none.
+		if (accessor) return;
+		const runtimeContext = this.slothlet.contextManager?.tryGetContext?.(this.slothlet.instanceID)?.context ?? null;
+		const allowed = permissionManager.enforceAccess(callerPath, targetPath, internal?.filePath ?? null, filePath, runtimeContext, null, {
+			moduleCaller: true,
+			newMember: !exists
+		});
+		if (!allowed) throw new this.SlothletError("PERMISSION_DENIED", { caller: callerPath, target: segmentsOf(targetPath) });
+	}
+
+	/**
+	 * Whether the live tree holds a member at `parts`, and the source file of the node that holds it (the member's own
+	 * when it is a node), read off the nodes themselves so no read gate, view, or lazy load is involved. A path the
+	 * ownership registry records is held. A path running through an accessor counts as held, since its getter is not run
+	 * here; the member itself held as an accessor is reported as such.
+	 *
+	 * @param {string[]} parts - Segments of the api path.
+	 * @returns {{exists: boolean, accessor: boolean, filePath: string|null}} Whether the member exists, whether it is
+	 *   held as an accessor, and the node's source file.
+	 * @private
+	 */
+	#memberAt(parts) {
+		let node = this.slothlet.api;
+		let filePath = null;
+		let exists = true;
+		for (let index = 0; index < parts.length; index++) {
+			const { found, value, accessor } = this.#rawMember(node, parts[index]);
+			if (accessor) return { exists: true, accessor: index === parts.length - 1, filePath };
+			if (!found) {
+				exists = false;
+				break;
+			}
+			let next = value;
+			const dispatch = versionDispatcherRecord(next);
+			if (dispatch) next = runtime_nodeBehind(runtime_unwrapSelfView(dispatch.resolve())) ?? next;
+			const wrapper = resolveWrapper(next);
+			if (wrapper) filePath = wrapper.____slothletInternal.filePath ?? filePath;
+			node = next;
+		}
+		if (!exists && this.slothlet.handlers.ownership.getCurrentOwner(ArrayMethods.join(parts, ".")) !== null) exists = true;
+		return { exists, accessor: false, filePath };
 	}
 
 	/**
