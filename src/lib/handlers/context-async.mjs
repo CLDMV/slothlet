@@ -20,7 +20,7 @@
  */
 // Node-only ALS resolved in the platform module so node:async_hooks stays out of the browser
 // static graph (#123). Browser uses the live context manager, so this manager never runs there.
-import { AsyncLocalStorage, AsyncResource, executionAsyncResource, inheritsFrom } from "#helpers/platform";
+import { AsyncLocalStorage, AsyncResource, createHook, executionAsyncResource, inheritsFrom } from "#helpers/platform";
 import { nativeThen } from "#helpers/promise-context";
 import { SlothletError } from "#errors";
 import { DEFAULT_CLOCK } from "#helpers/clock";
@@ -86,6 +86,68 @@ const OUTSIDE_FLOW = Symbol("slothlet.outsideFlow");
  * @private
  */
 const FLOW_OF = Symbol("slothlet.flowOf");
+
+/**
+ * The async resources code that entered a flow by itself made there (a promise, a timer, an immediate, a microtask, an
+ * `AsyncResource`), each with the stand-in store that code acted in (see {@link AsyncContextManager#activeStore}). Node
+ * runs such a resource's callback later with nothing of the code on the stack, so what it runs is told by this mark.
+ * @type {WeakMap<object, object>}
+ * @private
+ */
+const OUTSIDE_JOBS = new WeakMap();
+
+/**
+ * The store each async resource made while a flow ran was made in: Node runs the resource's callback in that store,
+ * unless something put another in place (code entering a resource, a snapshot or a timer of another flow). An
+ * `AsyncResource` anyone can enter is held under a {@link SCOPE} record instead, so its scope never counts as made in its
+ * store. A microtask's resource is Node's own, entered only by Node.
+ * @type {WeakMap<object, object>}
+ * @private
+ */
+const MADE_IN = new WeakMap();
+
+/**
+ * Marks a {@link MADE_IN} entry of an `AsyncResource` code can enter itself.
+ * @type {symbol}
+ * @private
+ */
+const SCOPE = Symbol("slothlet.scope");
+
+/**
+ * The `enable()` and `disable()` of Node's async hooks, taken as slothlet loads: code can replace them on the hook's
+ * prototype later. Null where the platform has no `node:async_hooks`.
+ * @type {{enable: Function, disable: Function}|null}
+ * @private
+ */
+const HOOK_METHODS = (() => {
+	if (typeof createHook !== "function") return null;
+	try {
+		const proto = Objects.getPrototypeOf(createHook({}));
+		return typeof proto?.enable === "function" && typeof proto.disable === "function"
+			? { enable: proto.enable, disable: proto.disable }
+			: null;
+	} catch {
+		// A platform whose async hooks cannot be made tells no jobs apart: code that never touches slothlet there is not told.
+		return null;
+	}
+})();
+
+/**
+ * How many async hooks telling jobs apart are installed (0 or 1): one while any instance on the async runtime has the
+ * permission system on (see {@link AsyncContextManager#initialize}).
+ * @type {number}
+ * @private
+ */
+let jobHooks = 0;
+
+/**
+ * How many async hooks telling jobs apart slothlet has installed and not yet removed.
+ * @returns {number} The count.
+ * @internal
+ */
+export function jobHookCount() {
+	return jobHooks;
+}
 
 /**
  * The run-bound stand-ins {@link AsyncContextManager} hands out (see {@link AsyncContextManager#bindToRun}), each with
@@ -392,6 +454,20 @@ class DormantStore {
 }
 
 /**
+ * Whether a store is one code can enter by itself and act in as someone else: a call's flow, a `run()` / `scope()`
+ * flow, or the store of a file's load once the file's module is known (a resource, a snapshot or a timer the file made
+ * while it loaded carries it). The instance's own store, and a load whose module is not known yet (whose code is no
+ * one's), are not.
+ * @param {object} store - The store.
+ * @returns {boolean} True for such a store.
+ * @private
+ */
+function isFlow(store) {
+	if (store.moduleLoad) return !!store.currentWrapper;
+	return !!(store.currentWrapper || store.record || store.parentInstanceID);
+}
+
+/**
  * AsyncLocalStorage-based context manager for async runtime
  * Uses ALS for full context isolation across async operations
  * @public
@@ -439,6 +515,52 @@ export class AsyncContextManager {
 	 * @type {WeakMap<object, WeakMap<Function, Function>>}
 	 */
 	#runBound = new WeakMap();
+
+	/**
+	 * How many instances on this runtime have the permission system on: the async hook that tells jobs apart (see
+	 * {@link AsyncContextManager#holdJobHook}) is installed while any does.
+	 * @type {number}
+	 */
+	#jobHookInstances = 0;
+
+	/**
+	 * The installed async hook, or null.
+	 * @type {object|null}
+	 */
+	#jobHook = null;
+
+	/**
+	 * Whether any resource has been marked in {@link OUTSIDE_JOBS} since the hook was installed: until one is, a callback
+	 * Node runs looks nothing up.
+	 * @type {boolean}
+	 */
+	#jobsMarked = false;
+
+	/**
+	 * The marked resources whose callbacks are running now, innermost last, each with its stand-in store.
+	 * @type {Array<{resource: object, view: object}>}
+	 */
+	#runningJobs = [];
+
+	/**
+	 * Whether the code running is being told as it makes an async resource (see {@link AsyncContextManager#jobMade}).
+	 * @type {boolean}
+	 */
+	#making = false;
+
+	/**
+	 * Counts the callbacks Node starts and ends: the stretch of synchronous code running now is the one the last
+	 * {@link AsyncContextManager#lastTold} was read in while the count is unchanged.
+	 * @type {number}
+	 */
+	#stretch = 0;
+
+	/**
+	 * What the last stretch told at a resource's making was told: its count, the store running, and the stand-in store
+	 * (or the store itself, for the flow's code).
+	 * @type {{stretch: number, store: object, active: object|undefined}|null}
+	 */
+	#lastTold = null;
 
 	/**
 	 * What a call made inside a `run()` / `scope()` by the run's own code hands back, as that code gets it: a module's
@@ -541,8 +663,12 @@ export class AsyncContextManager {
 		// Code that entered a flow by itself put the rest of its run outside the flow: told again against that flow.
 		const outsideOf = store[FLOW_OF];
 		if (outsideOf !== undefined) return this.#stillOutside(store, outsideOf);
-		// Only a call's flow or a `run()` / `scope()` flow carries anything of another's; a file's load is told by its own.
-		if (store.moduleLoad || (!store.currentWrapper && !store.record && !store.parentInstanceID)) return store;
+		// Only a call's flow, a `run()` / `scope()` flow, or the store of a file's load once its module is known carries
+		// anything of another's (a resource, a snapshot or a timer someone else can enter).
+		if (!isFlow(store)) return store;
+		// A callback of a job code that entered a flow by itself handed Node: it is that code's, wherever Node runs it.
+		const jobs = this.#runningJobs;
+		if (jobs.length !== 0) return this.#inOutsideJob(jobs[jobs.length - 1].view, store);
 		// Inside an async resource's scope the flow was put in place by whoever called it: told every time.
 		const resource = executionAsyncResource?.();
 		const scoped = AsyncResource !== null && inheritsFrom(resource, AsyncResource);
@@ -552,7 +678,7 @@ export class AsyncContextManager {
 		this.#telling = true;
 		let answer;
 		try {
-			answer = runningOutsideFlow(instanceID, this.#ownersOf(store));
+			answer = runningOutsideFlow(instanceID, this.#ownersOf(store), this.#making);
 		} finally {
 			this.#telling = false;
 		}
@@ -573,6 +699,147 @@ export class AsyncContextManager {
 			});
 		}
 		return store;
+	}
+
+	/**
+	 * The store code acts in inside a callback of a job that code which entered a flow by itself handed Node (see
+	 * {@link OUTSIDE_JOBS}): outside the flow running there, as the leaf that code was, unless the frames tell the flow's
+	 * own code (see {@link AsyncContextManager#stillOutside}).
+	 * @param {object} view - The stand-in store the job was made in.
+	 * @param {object} store - The flow running now.
+	 * @returns {object|undefined} The store.
+	 */
+	#inOutsideJob(view, store) {
+		if (view[FLOW_OF] === store) return this.#stillOutside(view, store);
+		const instanceID = store.parentInstanceID ?? store.instanceID;
+		const sameInstance = (view.parentInstanceID ?? view.instanceID) === instanceID;
+		const other = this.outsideView(store, instanceID, sameInstance ? view.currentWrapper : null);
+		return other === undefined ? store : this.#stillOutside(other, store);
+	}
+
+	/**
+	 * Count an instance with the permission system on, installing the async hook that tells jobs apart for the first: a
+	 * job (a promise's reaction, a timer, an immediate, a microtask, an `AsyncResource`'s scope) made by code that
+	 * entered a flow by itself runs outside that flow, even when that code never touched slothlet there.
+	 * @returns {void}
+	 * @internal
+	 */
+	holdJobHook() {
+		this.#jobHookInstances++;
+		if (this.#jobHook !== null || HOOK_METHODS === null) return;
+		const manager = this;
+		const hook = createHook({
+			init(asyncId, type, triggerAsyncId, resource) {
+				manager.#jobMade(resource, type);
+			},
+			before() {
+				manager.#stretch++;
+				if (manager.#jobsMarked) manager.#jobStarts();
+			},
+			after() {
+				manager.#stretch++;
+				if (manager.#runningJobs.length !== 0) manager.#jobEnds();
+			}
+		});
+		Reflect.apply(HOOK_METHODS.enable, hook, []);
+		this.#jobHook = hook;
+		jobHooks++;
+	}
+
+	/**
+	 * Uncount an instance with the permission system on, removing the async hook after the last.
+	 * @returns {void}
+	 * @internal
+	 */
+	releaseJobHook() {
+		if (--this.#jobHookInstances > 0 || this.#jobHook === null) return;
+		const hook = this.#jobHook;
+		this.#jobHook = null;
+		this.#jobsMarked = false;
+		this.#runningJobs = [];
+		this.#lastTold = null;
+		jobHooks--;
+		Reflect.apply(HOOK_METHODS.disable, hook, []);
+	}
+
+	/**
+	 * A resource is made: marked when the code making it entered a flow by itself (see {@link OUTSIDE_JOBS}), or runs in
+	 * a callback of a job such code made. Anything else (no flow running, slothlet's own code, the flow's code) is left
+	 * alone. A hook that throws ends the process, so nothing escapes it.
+	 * @param {object} resource - The resource.
+	 * @param {string} type - Its type, as Node names it.
+	 * @returns {void}
+	 */
+	#jobMade(resource, type) {
+		try {
+			if (this.store === null) return;
+			const store = this.store.getStore();
+			// Inside a job such code made, what it makes in the flow it stood outside of (or in its stand-in) is its too;
+			// a call slothlet enters there is that call's.
+			const jobs = this.#runningJobs;
+			if (jobs.length !== 0) {
+				const view = jobs[jobs.length - 1].view;
+				if (store === view || store === view[FLOW_OF]) WeakMapMethods.set(OUTSIDE_JOBS, resource, view);
+				return;
+			}
+			if (this.#telling) return;
+			if (store === undefined || store[FLOW_OF] !== undefined || !isFlow(store)) return;
+			if (MapMethods.get(this.instances, store.parentInstanceID ?? store.instanceID)?.__tellsJobs !== true) return;
+			// Recorded for the resource's own callback: the store it is made in, or a scope anyone can enter.
+			const scope = type !== "PROMISE" && type !== "Microtask" && AsyncResource !== null && inheritsFrom(resource, AsyncResource);
+			WeakMapMethods.set(MADE_IN, resource, scope ? { __proto__: null, [SCOPE]: store } : store);
+			if (this.store.entered() === store) return;
+			// The code running now runs in the store its callback was made in: the flow's own continuation (an await, a
+			// timer, a reaction). Anything else (a scope entered, a snapshot, a timer given another's context) is told.
+			const current = executionAsyncResource();
+			if (WeakMapMethods.get(MADE_IN, current) === store) return;
+			const last = this.#lastTold;
+			let active;
+			if (last !== null && last.stretch === this.#stretch && last.store === store) active = last.active;
+			else {
+				this.#making = true;
+				try {
+					active = this.activeStore();
+				} finally {
+					this.#making = false;
+				}
+				this.#lastTold = { stretch: this.#stretch, store, active };
+			}
+			if (active !== undefined && active !== store && active[FLOW_OF] !== undefined) {
+				WeakMapMethods.set(OUTSIDE_JOBS, resource, active);
+				this.#jobsMarked = true;
+			}
+		} catch {
+			// The resource is left unmarked: its callback is told as before, by its frames when it touches slothlet.
+		}
+	}
+
+	/**
+	 * A resource's callback starts: a marked one runs as the code that made it (see {@link AsyncContextManager#activeStore}).
+	 * @returns {void}
+	 */
+	#jobStarts() {
+		try {
+			const resource = executionAsyncResource();
+			const view = WeakMapMethods.get(OUTSIDE_JOBS, resource);
+			if (view !== undefined) listPush(this.#runningJobs, { resource, view });
+		} catch {
+			// Nothing to track: the callback is told by its frames.
+		}
+	}
+
+	/**
+	 * A resource's callback ends. Node calls `after` for every `before`, also when the callback threw and the error was
+	 * handled, so the innermost marked job ends with its own `after`.
+	 * @returns {void}
+	 */
+	#jobEnds() {
+		try {
+			const jobs = this.#runningJobs;
+			if (jobs[jobs.length - 1].resource === executionAsyncResource()) ArrayMethods.pop(jobs);
+		} catch {
+			// Left as it is: the next `after` of that job takes it off.
+		}
 	}
 
 	/**
@@ -734,6 +1001,16 @@ export class AsyncContextManager {
 		};
 
 		MapMethods.set(this.instances, instanceID, store);
+		// With permissions on, the jobs code that entered a flow by itself makes there are told apart for as long as the
+		// instance lives (see holdJobHook).
+		const permissions = config?.permissions;
+		if (
+			permissions &&
+			(permissions.mode === undefined || permissions.mode === true || permissions.mode === "on" || permissions.mode === "strict")
+		) {
+			Objects.defineProperty(store, "__tellsJobs", { __proto__: null, value: true, writable: true, enumerable: false });
+			this.holdJobHook();
+		}
 		return store;
 	}
 
@@ -1367,6 +1644,10 @@ export class AsyncContextManager {
 
 		// Remove from instances map
 		MapMethods.delete(this.instances, instanceID);
+		if (store.__tellsJobs === true) {
+			store.__tellsJobs = false;
+			this.releaseJobHook();
+		}
 	}
 
 	/**

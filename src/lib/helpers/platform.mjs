@@ -126,6 +126,8 @@ let AsyncResource = null;
 /** @type {any} */
 let executionAsyncResource = null;
 /** @type {any} */
+let createHook = null;
+/** @type {any} */
 let createRequire = null;
 
 if (isNode) {
@@ -164,7 +166,7 @@ if (isNode) {
 	Objects.defineProperty(inspect, "custom", { __proto__: null, value: nodeInspect.custom, enumerable: true });
 	util = Objects.freeze({ ...utilMod, inspect: Objects.freeze(inspect), types: { ...utilMod.types } });
 	({ EventEmitter } = eventsMod);
-	({ AsyncLocalStorage, AsyncResource, executionAsyncResource } = asyncHooksMod);
+	({ AsyncLocalStorage, AsyncResource, executionAsyncResource, createHook } = asyncHooksMod);
 	({ createRequire } = moduleMod);
 	// Browser host: the `else` arm (util shim) runs without `process`; exercised by the vitest browser run.
 } else {
@@ -465,6 +467,7 @@ export {
 	AsyncLocalStorage,
 	AsyncResource,
 	executionAsyncResource,
+	createHook,
 	createRequire,
 	loadJson,
 	fileParts,

@@ -4165,9 +4165,12 @@ function frameDefiner(running = null) {
  *   whether a frame of the flow's own code was found (`found`; false when nothing but slothlet's and Node's code is on
  *   the stack, as when Node runs a job it was handed); otherwise the leaf the code is (null when no single leaf of the
  *   instance stands for it). Null when the instance is not running.
+ * @param {boolean} [making=false] - Whether the code is told as it makes an async resource (from an async hook's
+ *   `init`): Node's own frames that make the resource (a timer's, an immediate's, a microtask's) sit above the code
+ *   that asked for it, and are not where a job began.
  * @internal
  */
-function runningOutsideFlow(instanceID, owners) {
+function runningOutsideFlow(instanceID, owners, making = false) {
 	const reference = MapMethods.get(LIVE_INSTANCES, instanceID);
 	const slothlet = reference ? WeakRefMethods.deref(reference) : null;
 	if (!slothlet) return null;
@@ -4219,15 +4222,22 @@ function runningOutsideFlow(instanceID, owners) {
 		// Whether the frames read reach where slothlet entered a call or the job began.
 		let ended = false;
 		let cut = false;
+		// Making a resource: below the hook's own frames, Node's frames up to the first frame of anyone else's code
+		// (slothlet's included) are the resource's making.
+		let leading = making;
+		let pastHook = false;
 		for (const frame of framesOf(frames)) {
 			if (StringMethods.startsWith(frame.path, FRAMEWORK_DIR + "/")) {
+				if (pastHook) leading = false;
 				if (frame.enter) {
 					ended = true;
 					break;
 				}
 				continue;
 			}
-			if (frame.async || isRunnerFrame(frame)) {
+			if (!StringMethods.startsWith(frame.path, "node:")) leading = false;
+			pastHook = true;
+			if (frame.async || (!leading && isRunnerFrame(frame))) {
 				ended = true;
 				break;
 			}

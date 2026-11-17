@@ -36,7 +36,9 @@
 import path from "node:path";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, afterEach } from "vitest";
+import slothlet from "@cldmv/slothlet";
+import { jobHookCount } from "#handlers/context-async";
 
 const ROOT = path.join(process.cwd(), "tmp", "flow-self-entry");
 const PROBE = path.join(ROOT, "probe.mjs");
@@ -71,16 +73,35 @@ beforeAll(() => {
 		"\treturn fn === reader;",
 		"}"
 	]);
+	// A module whose file, while it loads, leaves async resources of its load where others can reach them.
+	write("api/loader/loader.mjs", [
+		'import { AsyncResource, AsyncLocalStorage } from "node:async_hooks";',
+		'globalThis.__flowSelfEntryLoad = { resource: new AsyncResource("load"), snapshot: AsyncLocalStorage.snapshot() };',
+		"export function ping() {",
+		"\treturn true;",
+		"}"
+	]);
 	// A module whose call, made in the first request, leaves async resources of its flow where others can reach them.
 	write("api/admin/admin.mjs", [
-		'import { context } from "@cldmv/slothlet/runtime";',
+		'import { self, context } from "@cldmv/slothlet/runtime";',
 		'import { AsyncResource, AsyncLocalStorage } from "node:async_hooks";',
+		"// Hands `fn` to Node to run later, the way `how` names, without calling it itself.",
+		"function schedule(how, fn) {",
+		'\tif (how === "then") Promise.resolve().then(fn);',
+		'\telse if (how === "timeout") setTimeout(fn, 0);',
+		'\telse if (how === "immediate") setImmediate(fn);',
+		'\telse if (how === "microtask") queueMicrotask(fn);',
+		'\telse if (how === "nested") new AsyncResource("inner").runInAsyncScope(() => Promise.resolve().then(fn));',
+		"\telse throw new Error(how);",
+		"}",
 		"export async function work(hold) {",
 		"\tconst shared = globalThis.__flowSelfEntry;",
 		'\tshared.resource = new AsyncResource("admin");',
 		"\tshared.snapshot = AsyncLocalStorage.snapshot();",
 		"\tshared.timer = setTimeout(() => {}, 60000);",
 		"\tshared.adminRead = () => ({ user: context.user ?? null });",
+		"\tconst note = self.job.note;",
+		"\tshared.adminSchedule = (how) => schedule(how, note);",
 		"\tawait hold;",
 		"\tclearTimeout(shared.timer);",
 		"\treturn { user: context.user ?? null };",
@@ -164,6 +185,30 @@ beforeAll(() => {
 		"export function timer() {",
 		"\treturn adopt(shared().timer, probe);",
 		"}",
+		"// What the module's code reads and writes, as itself or through what another module's file made while it loaded.",
+		"function loadProbe(tag) {",
+		"\tconst out = probe();",
+		"\ttry {",
+		"\t\tself.secret[tag] = () => tag;",
+		'\t\tout.write = "ok";',
+		"\t} catch (error) {",
+		"\t\tout.write = codeOf(error);",
+		"\t}",
+		"\treturn out;",
+		"}",
+		"const load = () => globalThis.__flowSelfEntryLoad;",
+		"export function loadOwn() {",
+		'\treturn loadProbe("loadOwn");',
+		"}",
+		"export function loadResource() {",
+		'\treturn load().resource.runInAsyncScope(loadProbe, null, "loadResource");',
+		"}",
+		"export function loadSnapshot() {",
+		'\treturn load().snapshot(loadProbe, "loadSnapshot");',
+		"}",
+		"export function loadBound() {",
+		'\treturn load().resource.bind(loadProbe)("loadBound");',
+		"}",
 		"// The call's own function, run in its flow through the call's resource (as a pool runs a requester's callback).",
 		"export function adminCode() {",
 		"\treturn shared().resource.runInAsyncScope(shared().adminRead);",
@@ -211,11 +256,64 @@ beforeAll(() => {
 		"}",
 		"export function resourcePeek() {",
 		'\treturn shared().resource.runInAsyncScope(() => handPeek("evilAdminPeek"));',
+		"}",
+		"// Hands `fn` to Node to run later, the way `how` names, without calling it itself.",
+		"function schedule(how, fn) {",
+		'\tif (how === "then") Promise.resolve().then(fn);',
+		'\telse if (how === "timeout") setTimeout(fn, 0);',
+		'\telse if (how === "immediate") setImmediate(fn);',
+		'\telse if (how === "microtask") queueMicrotask(fn);',
+		'\telse if (how === "nested") new AsyncResource("inner").runInAsyncScope(() => Promise.resolve().then(fn));',
+		"\telse throw new Error(how);",
+		"}",
+		"// Another module's api node, read outside the flow; inside the flow the module's code only hands it to Node.",
+		"export function hostResourceSchedule(how) {",
+		"\tconst note = self.job.note;",
+		"\tshared().hostResource.runInAsyncScope(() => schedule(how, note));",
+		"\treturn true;",
+		"}",
+		"export function hostSnapshotSchedule(how) {",
+		"\tconst note = self.job.note;",
+		"\tshared().hostSnapshot(() => schedule(how, note));",
+		"\treturn true;",
+		"}",
+		"export function hostTimerSchedule(how) {",
+		"\tconst note = self.job.note;",
+		"\treturn adopt(shared().hostTimer, () => (schedule(how, note), true));",
+		"}",
+		"export function resourceSchedule(how) {",
+		"\tconst note = self.job.note;",
+		"\tshared().resource.runInAsyncScope(() => schedule(how, note));",
+		"\treturn true;",
+		"}",
+		"// The other call's own function, run through its resource by this module (a pool running a requester's callback).",
+		"export function adminSchedule(how) {",
+		"\treturn shared().resource.runInAsyncScope(shared().adminSchedule, null, how);",
 		"}"
 	]);
 	// A module whose calls hand out a plain function and an async function that read the context they run in.
 	write("api/job/job.mjs", [
-		'import { context } from "@cldmv/slothlet/runtime";',
+		'import { self, context } from "@cldmv/slothlet/runtime";',
+		'import { AsyncResource } from "node:async_hooks";',
+		"// Hands `fn` to Node to run later, the way `how` names, without calling it itself.",
+		"function schedule(how, fn) {",
+		'\tif (how === "then") Promise.resolve().then(fn);',
+		'\telse if (how === "timeout") setTimeout(fn, 0);',
+		'\telse if (how === "immediate") setImmediate(fn);',
+		'\telse if (how === "microtask") queueMicrotask(fn);',
+		'\telse if (how === "nested") new AsyncResource("inner").runInAsyncScope(() => Promise.resolve().then(fn));',
+		"\telse throw new Error(how);",
+		"}",
+		"export function note() {",
+		"\tglobalThis.__flowSelfEntry.notes.push(context.user ?? null);",
+		"}",
+		"export function schedules(how) {",
+		"\tschedule(how, self.job.note);",
+		"}",
+		"export async function schedulesAfterAwait(how) {",
+		"\tawait null;",
+		"\tschedule(how, self.job.note);",
+		"}",
 		"export function peek(tag) {",
 		"\tconst seen = context.user ?? null;",
 		"\tif (typeof tag === 'string') globalThis.__flowSelfEntry.seen[tag] = seen;",
@@ -237,7 +335,7 @@ beforeAll(() => {
 	write("probe.mjs", [
 		'import slothlet from "@cldmv/slothlet";',
 		'import { AsyncResource, AsyncLocalStorage } from "node:async_hooks";',
-		"const [mode, provenance, attribution] = process.argv.slice(2);",
+		'const [mode, provenance, attribution, part = "self"] = process.argv.slice(2);',
 		'const root = new URL(".", import.meta.url).pathname;',
 		"const tick = () => new Promise((resolve) => setTimeout(resolve, 5));",
 		"const codeOf = (error) => error?.code ?? String(error);",
@@ -260,6 +358,79 @@ beforeAll(() => {
 		"\treturn api;",
 		"}",
 		"const out = {};",
+		"// Hands `fn` to Node to run later, the way `how` names, without calling it itself.",
+		"function schedule(how, fn) {",
+		'\tif (how === "then") Promise.resolve().then(fn);',
+		'\telse if (how === "timeout") setTimeout(fn, 0);',
+		'\telse if (how === "immediate") setImmediate(fn);',
+		'\telse if (how === "microtask") queueMicrotask(fn);',
+		'\telse if (how === "nested") new AsyncResource("inner").runInAsyncScope(() => Promise.resolve().then(fn));',
+		"\telse throw new Error(how);",
+		"}",
+		'const HOWS = ["then", "timeout", "immediate", "microtask", "nested"];',
+		"const settle = () => new Promise((resolve) => setTimeout(resolve, 20));",
+		"// A job Node runs that throws is noted by what it threw.",
+		'if (part === "scheduled") process.setUncaughtExceptionCaptureCallback((error) => globalThis.__flowSelfEntry.notes.push(codeOf(error)));',
+		"// What `fn` (scheduling the job leaf's note) left noted once its jobs ran.",
+		"async function notes(fn) {",
+		"\tglobalThis.__flowSelfEntry.notes = [];",
+		"\ttry {",
+		"\t\tawait fn();",
+		"\t} catch (error) {",
+		"\t\treturn codeOf(error);",
+		"\t}",
+		"\tawait settle();",
+		"\treturn globalThis.__flowSelfEntry.notes;",
+		"}",
+		'if (part === "scheduled") {',
+		"\t// A run() the host opened, entered by evil itself through what the host made there; evil only schedules.",
+		"\t{",
+		"\t\tconst api = await make();",
+		"\t\tconst shared = globalThis.__flowSelfEntry;",
+		'\t\tawait api.slothlet.context.run({ user: "root" }, () => {',
+		'\t\t\tshared.hostResource = new AsyncResource("host");',
+		"\t\t\tshared.hostSnapshot = AsyncLocalStorage.snapshot();",
+		"\t\t\tshared.hostTimer = setTimeout(() => {}, 60000);",
+		"\t\t});",
+		"\t\tfor (const how of HOWS) {",
+		'\t\t\tfor (const route of ["hostResourceSchedule", "hostSnapshotSchedule", "hostTimerSchedule"]) {',
+		'\t\t\t\tout[route + ":" + how] = await notes(() => api.slothlet.context.run({ user: "mallory" }, () => api.evil[route](how)));',
+		"\t\t\t}",
+		"\t\t\t// The host's own resource, used by the host afterwards, still runs in its run (the pool pattern).",
+		'\t\t\tout["hostAfter:" + how] = await notes(() => shared.hostResource.runInAsyncScope(() => schedule(how, api.job.note)));',
+		"\t\t\t// The host's own scheduling inside its run, and a call's own scheduling, keep the run.",
+		'\t\t\tout["host:" + how] = await notes(() => api.slothlet.context.run({ user: "root" }, () => schedule(how, api.job.note)));',
+		'\t\t\tout["hostAfterAwait:" + how] = await notes(() =>',
+		'\t\t\t\tapi.slothlet.context.run({ user: "root" }, async () => {',
+		"\t\t\t\t\tawait null;",
+		"\t\t\t\t\tschedule(how, api.job.note);",
+		"\t\t\t\t})",
+		"\t\t\t);",
+		'\t\t\tout["call:" + how] = await notes(() => api.slothlet.context.run({ user: "root" }, () => api.job.schedules(how)));',
+		'\t\t\tout["callAfterAwait:" + how] = await notes(() => api.slothlet.context.run({ user: "root" }, () => api.job.schedulesAfterAwait(how)));',
+		"\t\t}",
+		"\t\tclearTimeout(shared.hostTimer);",
+		'\t\tout.mode = mode === "none" ? null : api.slothlet.permissions.control.mode();',
+		"\t\tawait api.slothlet.shutdown();",
+		"\t}",
+		"\t// Another request's call (root) held open while evil, in its own request (mallory), enters it and only schedules.",
+		"\t{",
+		"\t\tconst api = await make();",
+		"\t\tlet release;",
+		"\t\tconst hold = new Promise((resolve) => (release = resolve));",
+		'\t\tconst first = api.slothlet.context.run({ user: "root" }, () => api.admin.work(hold));',
+		"\t\tawait tick();",
+		"\t\tfor (const how of HOWS) {",
+		'\t\t\tout["resourceSchedule:" + how] = await notes(() => api.slothlet.context.run({ user: "mallory" }, () => api.evil.resourceSchedule(how)));',
+		'\t\t\tout["adminSchedule:" + how] = await notes(() => api.slothlet.context.run({ user: "mallory" }, () => api.evil.adminSchedule(how)));',
+		"\t\t}",
+		"\t\trelease();",
+		'\t\tout["resourceSchedule:first"] = await first;',
+		"\t\tawait api.slothlet.shutdown();",
+		"\t}",
+		"\tconsole.log(JSON.stringify(out));",
+		"\tprocess.exit(0);",
+		"}",
 		"// One request (root) holds admin's call open while another (mallory) runs evil.",
 		'for (const route of ["own", "resource", "resourceAwait", "snapshot", "bound", "timer", "adminCode", "resourcePeek"]) {',
 		"\tconst api = await make();",
@@ -274,6 +445,20 @@ beforeAll(() => {
 		"\t}",
 		"\trelease();",
 		"\tout[route + ':first'] = await first;",
+		"\tawait api.slothlet.shutdown();",
+		"}",
+		"// Entered through what another module's file made while it loaded.",
+		"{",
+		"\tconst api = await make();",
+		"\tawait api.loader.ping();",
+		'\tfor (const route of ["loadOwn", "loadResource", "loadSnapshot", "loadBound"]) {',
+		"\t\ttry {",
+		'\t\t\tout[route] = await api.slothlet.context.run({ user: "mallory" }, () => api.evil[route]());',
+		"\t\t} catch (error) {",
+		"\t\t\tout[route] = codeOf(error);",
+		"\t\t}",
+		'\t\tout[route + ":planted"] = typeof api.secret[route];',
+		"\t}",
 		"\tawait api.slothlet.shutdown();",
 		"}",
 		"// The first request's call runs evil's function itself, after an await.",
@@ -417,10 +602,12 @@ afterAll(() => {
  * @param {string} mode - The permission mode, or "none" for no permissions config.
  * @param {string} provenance - "noprovenance" to turn `permissions.caller.provenance` off.
  * @param {string} attribution - `permissions.caller.attribution`.
+ * @param {string} [part="self"] - Which part of the probe runs: "self" (code entering a flow by itself) or "scheduled"
+ *   (code entering a flow by itself that only hands Node jobs there).
  * @returns {Record<string, *>} What each route saw.
  */
-function probe(nodeFlags, mode, provenance = "provenance", attribution = "precise") {
-	const result = spawnSync(process.execPath, [...nodeFlags, "--conditions=slothlet-dev", PROBE, mode, provenance, attribution], {
+function probe(nodeFlags, mode, provenance = "provenance", attribution = "precise", part = "self") {
+	const result = spawnSync(process.execPath, [...nodeFlags, "--conditions=slothlet-dev", PROBE, mode, provenance, attribution, part], {
 		cwd: process.cwd(),
 		env: process.env,
 		encoding: "utf8",
@@ -472,6 +659,17 @@ describe.each(FRAMES)("Permissions > a flow entered by module code itself > %s",
 		it("the other request's own call still sees its own context after the await", () => {
 			for (const route of [...SELF_ENTRY_ROUTES, "own", "adminCode"]) expect(result[route + ":first"]).toEqual({ user: "root" });
 		});
+
+		it.each(["loadResource", "loadSnapshot", "loadBound"])(
+			"its own code entering what another module's file made while it loaded (%s) acts as itself",
+			(route) => {
+				expect(result[route].user).toBeNull();
+				expect(result[route].self).toMatch(/^evil(\.|$)/);
+				expect(result[route].secret).toBe(result.loadOwn.secret);
+				expect(result[route].write).toBe(result.loadOwn.write);
+				expect(result[route + ":planted"]).toBe(result["loadOwn:planted"]);
+			}
+		);
 
 		it("the other call's own function, run through its resource, still sees its request", () => {
 			expect(result.adminCode).toEqual({ user: "root" });
@@ -567,5 +765,98 @@ describe.each(FRAMES)("Permissions > a flow entered by module code itself > %s",
 			expect(result.asyncReaderShape).toEqual(["function", "asyncReader", 1]);
 			expect(result.asyncReaderSeen.outside).toEqual([null, null, null, null]);
 		});
+	});
+});
+
+// The permission-on configurations: with the permission system on, slothlet tells the async resources code that entered
+// a flow by itself makes there (an async hook), so a job it hands Node runs outside the flow even when the code never
+// touched slothlet inside it.
+const CHECKED_CONFIGS = [
+	["permissions on", "on", "provenance", "precise"],
+	["permissions on, attribution fast", "on", "provenance", "fast"],
+	["permissions on, provenance off", "on", "noprovenance", "precise"],
+	["permissions on, provenance off, attribution fast", "on", "noprovenance", "fast"]
+];
+
+// "strict" refuses to start without AsyncContextFrame (a baseline check): run only where Node has it on by default.
+const STRICT_CONFIG = ["permissions strict", "strict", "provenance", "precise"];
+const framesOnByDefault = process.allowedNodeEnvironmentFlags.has("--no-async-context-frame");
+
+const HOWS = ["then", "timeout", "immediate", "microtask", "nested"];
+
+describe.each(FRAMES)("Permissions > jobs scheduled by module code that entered a flow by itself > %s", (_label, nodeFlags) => {
+	const configs = framesOnByDefault && nodeFlags.length === 0 ? [...CHECKED_CONFIGS, STRICT_CONFIG] : CHECKED_CONFIGS;
+	describe.each(configs)("%s", (_name, mode, provenance, attribution) => {
+		let result;
+
+		beforeAll(() => {
+			result = probe(nodeFlags, mode, provenance, attribution, "scheduled");
+		});
+
+		it.each(HOWS)("an api node handed to Node (%s) from inside a run() the host opened runs outside the run", (how) => {
+			for (const route of ["hostResourceSchedule", "hostSnapshotSchedule", "hostTimerSchedule"]) {
+				expect([route, result[route + ":" + how]]).toEqual([route, [null]]);
+			}
+			expect(result.mode).toBe(mode);
+		});
+
+		it.each(HOWS)("an api node handed to Node (%s) from inside another request's call runs outside that request", (how) => {
+			expect(result["resourceSchedule:" + how]).toEqual([null]);
+			expect(result["resourceSchedule:first"]).toEqual({ user: "root" });
+		});
+
+		it.each(HOWS)("the other call's own function, run through its resource, schedules (%s) in its request", (how) => {
+			expect(result["adminSchedule:" + how]).toEqual(["root"]);
+		});
+
+		it.each(HOWS)("the host's own scheduling (%s) inside its run keeps the run, also after an await", (how) => {
+			expect(result["host:" + how]).toEqual(["root"]);
+			expect(result["hostAfterAwait:" + how]).toEqual(["root"]);
+		});
+
+		it.each(HOWS)("the host's own resource, used by the host after a module entered it, keeps the run (%s)", (how) => {
+			expect(result["hostAfter:" + how]).toEqual(["root"]);
+		});
+
+		it.each(HOWS)("a call's own scheduling (%s) keeps the run, also after an await", (how) => {
+			expect(result["call:" + how]).toEqual(["root"]);
+			expect(result["callAfterAwait:" + how]).toEqual(["root"]);
+		});
+	});
+});
+
+describe("Permissions > the async hook that tells jobs apart is installed only while permissions are on", () => {
+	const instances = [];
+	const make = async (permissions) => {
+		const config = { base: path.join(ROOT, "api"), silent: true, runtime: "async" };
+		if (permissions !== undefined) config.permissions = permissions;
+		const api = await slothlet(config);
+		instances.push(api);
+		return api;
+	};
+
+	afterEach(async () => {
+		while (instances.length) await instances.pop().slothlet.shutdown();
+	});
+
+	it("no permissions config, permissions off and disabled install no hook", async () => {
+		const base = jobHookCount();
+		await make();
+		await make({ mode: "off" });
+		await make({ mode: "disabled" });
+		expect(jobHookCount()).toBe(base);
+	});
+
+	it("permissions on installs one hook for every instance, removed after the last shuts down", async () => {
+		const base = jobHookCount();
+		const first = await make({ mode: "on" });
+		expect(jobHookCount()).toBe(base === 0 ? 1 : base);
+		await make({ mode: "on" });
+		expect(jobHookCount()).toBe(base === 0 ? 1 : base);
+		await first.slothlet.shutdown();
+		instances.splice(instances.indexOf(first), 1);
+		expect(jobHookCount()).toBe(base === 0 ? 1 : base);
+		await instances.pop().slothlet.shutdown();
+		expect(jobHookCount()).toBe(base);
 	});
 });
