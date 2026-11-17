@@ -3308,7 +3308,7 @@ export class ApiBuilder extends ComponentBase {
 						const entry = info?.versions?.[version];
 						if (!entry) return {};
 						// The version's real path, as segments, so a dotted tag ("2.3.0") stays one segment.
-						target = Arrays.isArray(entry.versionedParts) ? mapList(entry.versionedParts, String) : `${version}.${logical}`;
+						target = Arrays.isArray(entry.path) ? mapList(entry.path, String) : `${version}.${logical}`;
 					}
 					const path = _metadataTargetPath(slothlet, target);
 					// A node's metadata is a deeply frozen object built for this read; a path's is a copy. Either way changing it
@@ -3755,11 +3755,12 @@ export class ApiBuilder extends ComponentBase {
 				/**
 				 * List all registered versions for a logical API path.
 				 * @param {string} logicalPath - Logical API path (e.g. "auth").
-				 * @returns {{ versions: object, default: string|null } | undefined} Version snapshot, or `undefined` when the path is not registered.
+				 * @returns {{ versions: Object<string, { at: number, default: boolean, metadata: object, module: string, path: string[], tag: string }>, default: string|null } | undefined} Version snapshot, or `undefined` when the path is not registered.
 				 * @public
 				 * @example
 				 * const info = api.slothlet.versioning.list("auth");
 				 * if (info) console.log(info.default); // "v2"
+				 * if (info) console.log(info.versions.v1.path); // ["v1", "auth"]
 				 */
 				list: function slothlet_version_list(logicalPath) {
 					// versionManager is always registered when versioning is used; guard for completeness
@@ -3807,7 +3808,7 @@ export class ApiBuilder extends ComponentBase {
 					// Use the stored moduleID rather than reconstructing a dot-delimited path string.
 					// Path string reconstruction would re-split on "." and fragment dotted version
 					// tags (e.g. "2.3.0" → ["2","3","0"]) when passed to removeApiComponent.
-					const { moduleID: versionedModuleID } = info.versions[versionTag];
+					const { module: versionedModuleID } = info.versions[versionTag];
 					// Remove the versioned module from the API tree.
 					// removeApiComponent internally calls versionManager.unregisterVersion via its
 					// version-lifecycle hook, so we do NOT call unregisterVersion again here.
@@ -3828,7 +3829,7 @@ export class ApiBuilder extends ComponentBase {
 					 * @public
 					 * @example
 					 * const meta = api.slothlet.versioning.metadata.get("auth", "v1");
-					 * // { version: "v1", logicalPath: "auth", stable: true }
+					 * // { version: "v1", path: ["auth"], stable: true }
 					 */
 					get: function slothlet_version_metadata_get(logicalPath, versionTag) {
 						// versionManager is always registered when versioning is used; guard for completeness

@@ -53,7 +53,7 @@ describe.each(getMatrixConfigs())("Versioning > Reload > $name", ({ config }) =>
 
 		// Get the moduleID for v1.auth and reload it
 		const list = api.slothlet.versioning.list("auth");
-		const v1ModuleID = list.versions.v1?.moduleID;
+		const v1ModuleID = list.versions.v1?.module;
 		expect(v1ModuleID).toBeDefined();
 
 		await api.slothlet.api.reload(v1ModuleID);
@@ -70,7 +70,7 @@ describe.each(getMatrixConfigs())("Versioning > Reload > $name", ({ config }) =>
 		await api.slothlet.api.add("auth", `${BASE}/v2`, { version: { tag: "v2" } });
 
 		const list = api.slothlet.versioning.list("auth");
-		const v1ID = list.versions.v1?.moduleID;
+		const v1ID = list.versions.v1?.module;
 
 		await api.slothlet.api.reload(v1ID);
 

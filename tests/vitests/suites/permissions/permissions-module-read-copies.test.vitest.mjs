@@ -64,8 +64,8 @@ describe.each(CONFIGS)("copies the metadata getters hand module code (#625) — 
 		expect(versionMeta.version).toBe("v1");
 		expect(versionMeta.nested.flag).toBe("ok");
 		const listed = api.slothlet.versioning.list("svc").versions.v1;
-		expect(listed.versionedParts).toEqual(["v1", "svc"]);
-		expect(listed.versionMeta.nested.flag).toBe("ok");
+		expect(listed.path).toEqual(["v1", "svc"]);
+		expect(listed.metadata.nested.flag).toBe("ok");
 		expect(await api.svc.v.secret()).toBe("SECRET");
 	});
 });

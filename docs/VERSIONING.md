@@ -315,12 +315,14 @@ List all registered versions for a logical path.
 const info = api.slothlet.versioning.list("auth");
 // {
 //   versions: {
-//     v1: { moduleID, versionTag, versionedPath, isDefault, versionMeta, versionedParts, at },
+//     v1: { at, default, metadata, module, path, tag },
 //     v2: { ... }
 //   },
 //   default: "v2"
 // }
 ```
+
+Each entry is `{ at, default, metadata, module, path, tag }`: when the version was registered (a number), whether it is the explicit default, the version-manager metadata given to `version.metadata`, the mounted module's id, the real mounted path as segments (`["v1", "auth"]`; a dotted tag such as `2.3.0` stays one segment) and the tag.
 
 The result is a copy, made for each call: changing it changes nothing in the registry a version dispatcher routes by.
 
@@ -347,14 +349,14 @@ Retrieve the VersionManager-only metadata stored at registration time via `optio
 
 ```javascript
 const meta = api.slothlet.versioning.metadata.get("auth", "v1");
-// { version: "v1", logicalPath: "auth", deprecated: false, stable: true }
+// { version: "v1", path: ["auth"], deprecated: false, stable: true }
 ```
 
 The result is a copy, made for each call: only `versioning.metadata.set()` changes the stored version metadata.
 
 ### `api.slothlet.versioning.metadata.set(logicalPath, versionTag, patch)`
 
-Patch (merge) the VersionManager-only metadata for a registered version at runtime. The injected `version` and `logicalPath` keys always win over any fields in `patch`.
+Patch (merge) the VersionManager-only metadata for a registered version at runtime. The injected `version` and `path` keys always win over any fields in `patch`.
 
 ```javascript
 api.slothlet.versioning.metadata.set("auth", "v1", { stable: true, deprecated: false });

@@ -49,10 +49,36 @@ describe.each(getMatrixConfigs())("Versioning > Runtime API > $name", ({ config 
 		expect(Object.keys(info.versions)).toHaveLength(2);
 
 		const v1entry = info.versions.v1;
-		expect(v1entry).toHaveProperty("versionTag", "v1");
-		expect(v1entry).toHaveProperty("moduleID");
-		expect(v1entry).toHaveProperty("isDefault", true);
-		expect(v1entry).toHaveProperty("versionedPath", "v1.auth");
+		expect(v1entry).toHaveProperty("tag", "v1");
+		expect(v1entry).toHaveProperty("module");
+		expect(v1entry).toHaveProperty("default", true);
+		expect(v1entry).toHaveProperty("path", ["v1", "auth"]);
+	});
+
+	it("versioning.list entries carry only the v4 keys, and versioning.metadata.get reports its path as segments", async () => {
+		api = await slothlet({ ...config, base: `${BASE}/callers` });
+
+		await api.slothlet.api.add("auth", `${BASE}/v1`, { version: { tag: "v1", default: true, metadata: { stable: true } } });
+		await api.slothlet.api.add("auth", `${BASE}/v2`, { version: { tag: "2.3.0" } });
+
+		const info = api.slothlet.versioning.list("auth");
+		expect(Object.keys(info.versions.v1).sort()).toEqual(["at", "default", "metadata", "module", "path", "tag"]);
+		expect(typeof info.versions.v1.at).toBe("number");
+		expect(info.versions.v1.metadata.stable).toBe(true);
+		expect(info.versions.v1.default).toBe(true);
+		expect(info.versions["2.3.0"].default).toBe(false);
+		// A dotted tag stays one segment.
+		expect(info.versions["2.3.0"].path).toEqual(["2.3.0", "auth"]);
+
+		// A fresh copy each call: changing it changes nothing in the registry.
+		info.versions.v1.path.push("x");
+		info.versions.v1.metadata.stable = false;
+		expect(api.slothlet.versioning.list("auth").versions.v1.path).toEqual(["v1", "auth"]);
+		expect(api.slothlet.versioning.list("auth").versions.v1.metadata.stable).toBe(true);
+
+		const meta = api.slothlet.versioning.metadata.get("auth", "v1");
+		expect(meta.path).toEqual(["auth"]);
+		expect(meta).not.toHaveProperty("logicalPath");
 	});
 
 	it("versioning.default changes the default", async () => {
@@ -155,7 +181,7 @@ describe.each(getMatrixConfigs())("Versioning > Runtime API > $name", ({ config 
 		expect(meta).toHaveProperty("stable", true);
 		expect(meta).toHaveProperty("tier", "ga"); // patched
 		expect(meta).toHaveProperty("version", "v1"); // injected key always wins
-		expect(meta).toHaveProperty("logicalPath", "auth"); // injected key always wins
+		expect(meta).toHaveProperty("path", ["auth"]); // injected key always wins
 	});
 
 	it("versioning.metadata.set throws VERSION_NOT_FOUND for unknown path", async () => {
@@ -229,7 +255,7 @@ describe.each(getMatrixConfigs())("Versioning > Runtime API > $name", ({ config 
 		await api.slothlet.api.add("auth", `${BASE}/v1`, { version: { tag: "v1", metadata: { stable: true } } });
 
 		const info = api.slothlet.versioning.list("auth");
-		const { moduleID } = info.versions.v1;
+		const { module: moduleID } = info.versions.v1;
 
 		// Access the internal handler directly to exercise getVersionMetadata(moduleID)
 		const sl = resolveWrapper(api.v1.auth).slothlet;
