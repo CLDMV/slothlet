@@ -29,6 +29,17 @@ import { getMatrixConfigs, TEST_DIRS, withSuppressedSlothletErrorOutput } from "
 // Full matrix for comprehensive testing
 const ALL_CONFIGS = getMatrixConfigs({});
 
+/**
+ * The context managers' registry of instance stores, read directly: `context.diagnostics()` describes one instance
+ * only (#837), so the child stores run() and scope() make are counted on the process-wide managers themselves.
+ * @returns {Promise<{ instancesMapSize: number, instancesMapKeys: string[] }>} Every registered instance id.
+ */
+async function contextRegistry() {
+	const { asyncContextManager, liveContextManager } = await import("#factories/context");
+	const keys = [...asyncContextManager.instances.keys(), ...liveContextManager.instances.keys()];
+	return { instancesMapSize: keys.length, instancesMapKeys: keys };
+}
+
 describe.each(ALL_CONFIGS)("Per-Request Context (.run/.scope) > Config: '$name'", ({ config }) => {
 	let slothlet;
 	let api;
@@ -552,7 +563,7 @@ describe.each(ALL_CONFIGS)("Per-Request Context Multi-Instance > Config: '$name'
 		const baseInstanceID = api1.slothlet.instanceID;
 
 		// Record initial instance count using diagnostics
-		const initialDiag = await api1.slothlet.context.diagnostics();
+		const initialDiag = await contextRegistry();
 		const initialCount = initialDiag.instancesMapSize;
 
 		let childInstanceIDInsideRun = null;
@@ -560,7 +571,7 @@ describe.each(ALL_CONFIGS)("Per-Request Context Multi-Instance > Config: '$name'
 
 		await api1.slothlet.context.run({ counter: 100 }, async () => {
 			// Inside .run(), get diagnostics to see child instance
-			runDiag = await api1.slothlet.context.diagnostics();
+			runDiag = await contextRegistry();
 
 			// Child instance should exist
 			expect(runDiag.instancesMapSize).toBe(initialCount + 1);
@@ -575,7 +586,7 @@ describe.each(ALL_CONFIGS)("Per-Request Context Multi-Instance > Config: '$name'
 		});
 
 		// After .run() completes, child instance should be cleaned up
-		const afterDiag = await api1.slothlet.context.diagnostics();
+		const afterDiag = await contextRegistry();
 		expect(afterDiag.instancesMapSize).toBe(initialCount);
 		expect(afterDiag.instancesMapKeys).not.toContain(childInstanceIDInsideRun);
 
@@ -592,7 +603,7 @@ describe.each(ALL_CONFIGS)("Per-Request Context Multi-Instance > Config: '$name'
 		});
 
 		const baseInstanceID = api1.slothlet.instanceID;
-		const initialDiag = await api1.slothlet.context.diagnostics();
+		const initialDiag = await contextRegistry();
 		const initialCount = initialDiag.instancesMapSize;
 
 		let childInstanceIDInsideRun = null;
@@ -600,7 +611,7 @@ describe.each(ALL_CONFIGS)("Per-Request Context Multi-Instance > Config: '$name'
 		try {
 			await api1.slothlet.context.run({ counter: 100 }, async () => {
 				// Capture child instance ID
-				const runDiag = await api1.slothlet.context.diagnostics();
+				const runDiag = await contextRegistry();
 				const childIDs = runDiag.instancesMapKeys.filter((id) => id.startsWith(baseInstanceID + "__run_"));
 				childInstanceIDInsideRun = childIDs[0];
 
@@ -616,7 +627,7 @@ describe.each(ALL_CONFIGS)("Per-Request Context Multi-Instance > Config: '$name'
 		}
 
 		// Even after error, child instance should be cleaned up
-		const afterDiag = await api1.slothlet.context.diagnostics();
+		const afterDiag = await contextRegistry();
 		expect(afterDiag.instancesMapSize).toBe(initialCount);
 		expect(afterDiag.instancesMapKeys).not.toContain(childInstanceIDInsideRun);
 	});
@@ -630,7 +641,7 @@ describe.each(ALL_CONFIGS)("Per-Request Context Multi-Instance > Config: '$name'
 		});
 
 		const baseInstanceID = api1.slothlet.instanceID;
-		const initialDiag = await api1.slothlet.context.diagnostics();
+		const initialDiag = await contextRegistry();
 		const initialCount = initialDiag.instancesMapSize;
 
 		let outerChildID = null;
@@ -638,7 +649,7 @@ describe.each(ALL_CONFIGS)("Per-Request Context Multi-Instance > Config: '$name'
 
 		await api1.slothlet.context.run({ level: "outer" }, async () => {
 			// Capture outer child ID
-			const outerDiag = await api1.slothlet.context.diagnostics();
+			const outerDiag = await contextRegistry();
 			const outerChildren = outerDiag.instancesMapKeys.filter((id) => id.startsWith(baseInstanceID + "__run_"));
 			outerChildID = outerChildren[0];
 
@@ -646,7 +657,7 @@ describe.each(ALL_CONFIGS)("Per-Request Context Multi-Instance > Config: '$name'
 
 			await api1.slothlet.context.run({ level: "inner" }, async () => {
 				// Capture inner child ID
-				const innerDiag = await api1.slothlet.context.diagnostics();
+				const innerDiag = await contextRegistry();
 				const innerChildren = innerDiag.instancesMapKeys.filter((id) => id.startsWith(baseInstanceID + "__run_") && id !== outerChildID);
 				innerChildID = innerChildren[0];
 
@@ -657,14 +668,14 @@ describe.each(ALL_CONFIGS)("Per-Request Context Multi-Instance > Config: '$name'
 			});
 
 			// After inner .run(), inner child should be cleaned up
-			const afterInnerDiag = await api1.slothlet.context.diagnostics();
+			const afterInnerDiag = await contextRegistry();
 			expect(afterInnerDiag.instancesMapKeys).not.toContain(innerChildID);
 			expect(afterInnerDiag.instancesMapSize).toBe(initialCount + 1);
 			expect(afterInnerDiag.instancesMapKeys).toContain(outerChildID);
 		});
 
 		// After outer .run(), both children should be cleaned up
-		const finalDiag = await api1.slothlet.context.diagnostics();
+		const finalDiag = await contextRegistry();
 		expect(finalDiag.instancesMapKeys).not.toContain(outerChildID);
 		expect(finalDiag.instancesMapKeys).not.toContain(innerChildID);
 		expect(finalDiag.instancesMapSize).toBe(initialCount);

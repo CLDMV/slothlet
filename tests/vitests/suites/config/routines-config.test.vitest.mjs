@@ -26,13 +26,13 @@ import { DEFAULT_ROUTINES, RESERVED_EXPORTS } from "#helpers/defaults";
 import { TEST_DIRS, withSuppressedSlothletErrorOutput } from "../../setup/vitest-helper.mjs";
 
 describe("slothlet.defaults", () => {
-	it("is frozen at every level and carries routines + reservedExports", () => {
+	it("is frozen at every level and carries routines + reserved", () => {
 		expect(Object.isFrozen(slothlet.defaults)).toBe(true);
 		expect(Object.isFrozen(slothlet.defaults.routines)).toBe(true);
 		for (const entry of slothlet.defaults.routines) {
 			expect(Object.isFrozen(entry)).toBe(true);
 		}
-		expect(Object.isFrozen(slothlet.defaults.reservedExports)).toBe(true);
+		expect(Object.isFrozen(slothlet.defaults.reserved)).toBe(true);
 	});
 
 	it("routines is exactly the documented built-in default", () => {
@@ -46,25 +46,25 @@ describe("slothlet.defaults", () => {
 		expect(slothlet.defaults.routines).toBe(DEFAULT_ROUTINES);
 	});
 
-	it("reservedExports is the exact RESERVED_EXPORTS export from helpers/defaults — single source of truth", () => {
-		expect(slothlet.defaults.reservedExports).toBe(RESERVED_EXPORTS);
+	it("reserved is the exact RESERVED_EXPORTS export from helpers/defaults — single source of truth", () => {
+		expect(slothlet.defaults.reserved).toBe(RESERVED_EXPORTS);
 	});
 
-	it("reservedExports is a non-empty Set of framework-internal names", () => {
-		expect(slothlet.defaults.reservedExports).toBeInstanceOf(Set);
-		expect(slothlet.defaults.reservedExports.size).toBeGreaterThan(0);
-		expect(slothlet.defaults.reservedExports.has("____childFilePaths")).toBe(true);
+	it("reserved is a non-empty Set of framework-internal names", () => {
+		expect(slothlet.defaults.reserved).toBeInstanceOf(Set);
+		expect(slothlet.defaults.reserved.size).toBeGreaterThan(0);
+		expect(slothlet.defaults.reserved.has("____childFilePaths")).toBe(true);
 	});
 
-	it("reservedExports genuinely rejects mutation — Object.freeze() alone does not stop Set.add/delete/clear", () => {
+	it("reserved genuinely rejects mutation — Object.freeze() alone does not stop Set.add/delete/clear", () => {
 		// A bare `Object.freeze(new Set())` still lets add/delete/clear through (freeze only locks
 		// own properties, never a Set's internal slots) — this is what actually guards it.
-		const sizeBefore = slothlet.defaults.reservedExports.size;
-		expect(() => slothlet.defaults.reservedExports.add("__not_real")).toThrow(TypeError);
-		expect(() => slothlet.defaults.reservedExports.delete("____childFilePaths")).toThrow(TypeError);
-		expect(() => slothlet.defaults.reservedExports.clear()).toThrow(TypeError);
-		expect(slothlet.defaults.reservedExports.size).toBe(sizeBefore);
-		expect(slothlet.defaults.reservedExports.has("____childFilePaths")).toBe(true);
+		const sizeBefore = slothlet.defaults.reserved.size;
+		expect(() => slothlet.defaults.reserved.add("__not_real")).toThrow(TypeError);
+		expect(() => slothlet.defaults.reserved.delete("____childFilePaths")).toThrow(TypeError);
+		expect(() => slothlet.defaults.reserved.clear()).toThrow(TypeError);
+		expect(slothlet.defaults.reserved.size).toBe(sizeBefore);
+		expect(slothlet.defaults.reserved.has("____childFilePaths")).toBe(true);
 	});
 });
 

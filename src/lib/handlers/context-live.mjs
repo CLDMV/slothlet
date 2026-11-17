@@ -55,7 +55,6 @@ import {
 	listPush,
 	listSteps,
 	Map,
-	mapEntriesToArray,
 	mapKeysToArray,
 	mapList,
 	MapMethods,
@@ -2440,24 +2439,25 @@ export class LiveContextManager {
 	}
 
 	/**
-	 * Get diagnostic information
-	 * @returns {Object} Diagnostic data
+	 * Diagnostics for one instance (#837): what this manager holds for that instance only, never the other instances
+	 * the process-wide manager also serves.
+	 * @param {string} instanceID - The instance.
+	 * @returns {{ type: "live", running: boolean, at: number|null, context: object|null, self: string[], current: { context: object, nested: boolean }|null }}
+	 *   The runtime word, whether a call of the instance is running now, when its record was made, its context data,
+	 *   the top-level names its `self` shows, and the running call's context (and whether it is a nested run/scope).
 	 * @public
 	 */
-	getDiagnostics() {
+	getInstanceDiagnostics(instanceID) {
+		const store = MapMethods.get(this.instances, instanceID) ?? null;
+		const running = this.currentInstanceID === instanceID;
+		const active = running ? this.tryGetContext(instanceID) : null;
 		return {
 			type: "live",
-			currentInstanceID: this.currentInstanceID,
-			instances: mapList(mapEntriesToArray(this.instances), (entry1) => {
-				const id = entry1[0],
-					store = entry1[1];
-				return {
-					id,
-					createdAt: store.createdAt,
-					contextKeys: Objects.keys(store.context),
-					selfKeys: Objects.keys(store.self)
-				};
-			})
+			running,
+			at: store?.createdAt ?? null,
+			context: store?.context ?? null,
+			self: store ? Objects.keys(store.self) : [],
+			current: active ? { context: active.context, nested: !!active.parentContext } : null
 		};
 	}
 }

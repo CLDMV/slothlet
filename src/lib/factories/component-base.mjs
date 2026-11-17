@@ -307,7 +307,7 @@ export class ComponentBase {
 	 * setTrap exempts it since the framework needs to write it directly.
 	 *
 	 * The Set itself is defined in `#helpers/reserved-keys`, a module with no
-	 * imports, so `slothlet.defaults.reservedExports` can be built without loading this class.
+	 * imports, so `slothlet.defaults.reserved` can be built without loading this class.
 	 *
 	 * @type {Set<string>}
 	 * @static

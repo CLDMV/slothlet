@@ -403,7 +403,7 @@ describe("api_builder – diagnostics namespace fallbacks when handlers absent",
 		sl.handlers.apiCacheManager = null;
 		try {
 			const result = api.slothlet.diag.caches.get();
-			expect(result).toEqual({ totalCaches: 0, caches: [] });
+			expect(result).toEqual({ caches: [] });
 		} finally {
 			sl.handlers.apiCacheManager = origCache;
 		}

@@ -81,7 +81,7 @@ for (const { config, name } of lazyConfigs) {
 
 		it("should have exactly one cache entry after startup", () => {
 			const diag = api.slothlet.diag.caches.get();
-			expect(diag.totalCaches).toBe(1);
+			expect(diag.caches.length).toBe(1);
 			expect(diag.caches[0].mode).toBe("lazy");
 		});
 
@@ -136,7 +136,7 @@ for (const { config, name } of lazyConfigs) {
 			await api.slothlet.api.add("plugins", TEST_DIRS.API_TEST_MIXED);
 
 			const diag = api.slothlet.diag.caches.get();
-			expect(diag.totalCaches).toBe(2);
+			expect(diag.caches.length).toBe(2);
 
 			// The interop/ subdir has no matching root-level file so the cache must have
 			// stored a lazy (unmaterialized) wrapper - not a fully loaded module.

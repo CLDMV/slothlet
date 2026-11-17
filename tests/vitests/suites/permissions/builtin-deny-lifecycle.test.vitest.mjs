@@ -97,10 +97,10 @@ describe.each(getMatrixConfigs({}))("Permissions > built-in deny for the lifecyc
 
 	/**
 	 * Whether the instance is still up.
-	 * @returns {boolean} `isLoaded` from diagnostics.
+	 * @returns {boolean} `loaded` from diagnostics.
 	 */
 	function isLoaded() {
-		return api.slothlet.diag.inspect().isLoaded;
+		return api.slothlet.diag.inspect().loaded;
 	}
 
 	/**

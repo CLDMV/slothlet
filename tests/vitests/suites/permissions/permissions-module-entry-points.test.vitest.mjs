@@ -311,8 +311,8 @@ describe.each(CONFIGS)("module-code entry points (#625) — $mode / $runtime", (
 				await withSuppressedSlothletErrorOutput(() => api.atk.x.addAt("atk", HOLDER, { id: "atkpay", collision: { mode: "merge" } }))
 			).toBe("LOOSE_SET_NOT_OWNED");
 			const after = api.slothlet.diag.owner.list();
-			expect(after.modules.map((entry) => entry.moduleID)).not.toContain("atkpay");
-			expect(after.totalPaths).toBe(before.totalPaths);
+			expect(after.modules.map((entry) => entry.module)).not.toContain("atkpay");
+			expect(after.count).toBe(before.count);
 			for (const apiPath of ["atk.deep", "atk.deep.inner", "atk.deep.inner.leaf", "atk.kid.note"]) {
 				expect(api.slothlet.diag.owner.get(apiPath)?.has("atkpay") ?? false).toBe(false);
 			}

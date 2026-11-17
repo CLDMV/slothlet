@@ -2629,9 +2629,10 @@ export class ApiBuilder extends ComponentBase {
 				},
 
 				/**
-				 * Get diagnostics about context retrieval (for testing/debugging).
-				 * Shows how context is retrieved by instance ID in both async and live modes.
-				 * @returns {object} Diagnostic information
+				 * Diagnostics about this instance's context (for testing/debugging), on either runtime.
+				 * @returns {{ instance: string, runtime: "async"|"live", at: number|null, base: object|null, context: object|null, current: { context: object, nested: boolean }|null }}
+				 *   This instance's id, the runtime it runs on, when its context record was made, the context it started
+				 *   with, its context now, and the running call's context (with whether it is a nested run/scope), or null.
 				 * @internal
 				 */
 				diagnostics: () => {
@@ -2640,55 +2641,17 @@ export class ApiBuilder extends ComponentBase {
 					// without the diagnostics feature enabled.
 					/* v8 ignore next */
 					if (!slothlet.config?.diagnostics) return undefined;
-					const managerType = slothlet.contextManager.constructor.name;
-					const result = {
-						instanceID: slothlet.instanceID,
-						managerType,
-						instancesMapSize: slothlet.contextManager.instances.size,
-						instancesMapKeys: mapKeysToArray(slothlet.contextManager.instances),
-						baseContext: slothlet.context
+					// This instance only (#837): the manager is process-wide, so nothing about the other instances it
+					// serves is reported. `context` is the context data alone; the manager's own state is `runtime`.
+					const info = slothlet.contextManager.getInstanceDiagnostics(slothlet.instanceID);
+					return {
+						instance: slothlet.instanceID,
+						runtime: info.type,
+						at: info.at,
+						base: slothlet.context,
+						context: info.context,
+						current: info.current
 					};
-
-					// Get store for THIS instance from instances Map
-					const store = MapMethods.get(slothlet.contextManager.instances, slothlet.instanceID);
-					// The null branch (no store found) fires only when diagnostics() is called
-					// before load() registers the instance — a timing edge case not hit in tests.
-					/* v8 ignore next */
-					result.storeFromInstancesMap = store
-						? {
-								instanceID: store.instanceID,
-								context: store.context,
-								createdAt: store.createdAt
-							}
-						: null;
-
-					// For async mode, also show current ALS context
-					if (managerType === "AsyncContextManager") {
-						try {
-							const currentCtx = slothlet.contextManager.tryGetContext();
-							result.currentALSContext = currentCtx
-								? {
-										instanceID: currentCtx.instanceID,
-										context: currentCtx.context,
-										hasParent: !!currentCtx.parentContext,
-										parentInstanceID: currentCtx.parentInstanceID
-									}
-								: null;
-							// unreachable via tests (2026-03-05): tryGetContext() does not throw under
-							// normal conditions; this is a defensive guard only.
-							/* v8 ignore start */
-						} catch (____error) {
-							result.currentALSContext = null;
-						}
-						/* v8 ignore stop */
-					}
-
-					// For live mode, show currentInstanceID tracking
-					if (managerType === "LiveContextManager") {
-						result.currentInstanceID = slothlet.contextManager.currentInstanceID;
-					}
-
-					return result;
 				},
 
 				/**
@@ -4511,14 +4474,14 @@ export class ApiBuilder extends ComponentBase {
 				caches: {
 					/**
 					 * Get cache diagnostics information
-					 * @returns {Object} Cache diagnostic data with totalCaches and array of cache entries
+					 * @returns {{ caches: Array<{ module: string, path: string[], folder: string, mode: string, count: number, at: number }> }}
+					 *   One entry per cached module.
 					 * @example
 					 * const diag = api.slothlet.diag.caches.get();
 					 * // {
-					 * //   totalCaches: 3,
 					 * //   caches: [
-					 * //     { moduleID: "base_abc", endpoint: ".", pathCount: 45, ... },
-					 * //     { moduleID: "plugins_xyz", endpoint: "plugins", pathCount: 12, ... }
+					 * //     { module: "base_abc", path: [], folder: "/app/api", mode: "eager", count: 45, at: 1708012345 },
+					 * //     { module: "plugins_xyz", path: ["plugins"], folder: "/app/plugins", mode: "eager", count: 12, at: 1708012399 }
 					 * //   ]
 					 * // }
 					 */
@@ -4526,7 +4489,7 @@ export class ApiBuilder extends ComponentBase {
 						if (slothlet.handlers?.apiCacheManager) {
 							return slothlet.handlers.apiCacheManager.getCacheDiagnostics();
 						}
-						return { totalCaches: 0, caches: [] };
+						return { caches: [] };
 					},
 
 					/**

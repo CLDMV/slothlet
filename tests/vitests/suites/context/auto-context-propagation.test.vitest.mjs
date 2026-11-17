@@ -67,7 +67,7 @@ describe("Auto Context Propagation", () => {
 			// V3: Use context.diagnostics() API
 			const contextDiag = api.slothlet.context.diagnostics();
 			expect(contextDiag).toBeTruthy();
-			expect(contextDiag.instanceID).toBeTruthy();
+			expect(contextDiag.instance).toBeTruthy();
 
 			// Skip test if TCP module not available (e.g., in MIXED configurations with limited depth)
 			if (!api.tcp) {
