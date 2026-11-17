@@ -225,3 +225,46 @@ export const mutatePermissionsSymbolKey = () => {
 		})
 	};
 };
+
+/**
+ * Assign a string-keyed member on a namespace object the host handed in, rather than through `self`. The change then
+ * meets the internal route proxy's `set` trap with this module as the caller.
+ *
+ * @param {object} namespace - A namespace object held by the host (for example `api.slothlet.permissions`).
+ * @param {string} key - Member name to assign.
+ * @param {unknown} value - Value to assign.
+ * @returns {unknown} Value read back from the namespace.
+ * @example
+ * api.internalProxyHelper.writeOnHandedNamespace(api.slothlet.permissions, "rules", 1);
+ */
+export const writeOnHandedNamespace = (namespace, key, value) => {
+	namespace[key] = value;
+	return namespace[key];
+};
+
+/**
+ * Define a string-keyed member on a namespace object the host handed in. Meets the `defineProperty` trap.
+ *
+ * @param {object} namespace - A namespace object held by the host.
+ * @param {string} key - Member name to define.
+ * @param {unknown} value - Value of the new descriptor.
+ * @returns {boolean} Whether the definition succeeded.
+ * @example
+ * api.internalProxyHelper.defineOnHandedNamespace(api.slothlet.permissions, "rules", 2);
+ */
+export const defineOnHandedNamespace = (namespace, key, value) => {
+	return Reflect.defineProperty(namespace, key, { configurable: true, enumerable: true, writable: true, value });
+};
+
+/**
+ * Delete a string-keyed member from a namespace object the host handed in. Meets the `deleteProperty` trap.
+ *
+ * @param {object} namespace - A namespace object held by the host.
+ * @param {string} key - Member name to delete.
+ * @returns {boolean} Whether the deletion succeeded.
+ * @example
+ * api.internalProxyHelper.deleteOnHandedNamespace(api.slothlet.permissions, "rules");
+ */
+export const deleteOnHandedNamespace = (namespace, key) => {
+	return delete namespace[key];
+};

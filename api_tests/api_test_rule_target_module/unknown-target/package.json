@@ -1,0 +1,5 @@
+{
+	"name": "@local/unknown-target",
+	"version": "0.1.0",
+	"description": "Test fixture: slothlet module whose manifest declares a permission rule (unknown slothlet target)."
+}

@@ -188,6 +188,90 @@ describe.each(getMatrixConfigs())("Permissions > Internal Route Proxy Coverage >
 		});
 	});
 
+	it("denies a set of a real member by a call rule on it (internal route proxy set trap)", async () => {
+		api = await slothlet({
+			...config,
+			base: `${BASE}/callers`,
+			permissions: {
+				defaultPolicy: "deny",
+				rules: [
+					{ caller: "**", target: "internalProxyHelper.**", effect: "allow" },
+					{ caller: "internalProxyHelper.**", target: "slothlet.permissions", effect: "allow" },
+					{ caller: "internalProxyHelper.**", target: "slothlet.permissions.rules", effect: "deny" }
+				]
+			}
+		});
+
+		await withSuppressedSlothletErrorOutput(async () => {
+			let error;
+			try {
+				await api.internalProxyHelper.writeOnHandedNamespace(api.slothlet.permissions, "rules", 1);
+			} catch (err) {
+				error = err;
+			}
+			expect(error?.code).toBe("PERMISSION_DENIED");
+			// The call rule on the member itself refused it, not a write rule on a made-up key.
+			expect(error.context.target).toBe("slothlet.permissions.rules");
+		});
+		expect(typeof api.slothlet.permissions.rules.add).toBe("function");
+	});
+
+	it("denies a defineProperty of a real member by a call rule on it (internal route proxy defineProperty trap)", async () => {
+		api = await slothlet({
+			...config,
+			base: `${BASE}/callers`,
+			permissions: {
+				defaultPolicy: "deny",
+				rules: [
+					{ caller: "**", target: "internalProxyHelper.**", effect: "allow" },
+					{ caller: "internalProxyHelper.**", target: "slothlet.permissions", effect: "allow" },
+					{ caller: "internalProxyHelper.**", target: "slothlet.permissions.rules", effect: "deny" }
+				]
+			}
+		});
+
+		await withSuppressedSlothletErrorOutput(async () => {
+			let error;
+			try {
+				await api.internalProxyHelper.defineOnHandedNamespace(api.slothlet.permissions, "rules", 2);
+			} catch (err) {
+				error = err;
+			}
+			expect(error?.code).toBe("PERMISSION_DENIED");
+			// The call rule on the member itself refused it, not a write rule on a made-up key.
+			expect(error.context.target).toBe("slothlet.permissions.rules");
+		});
+		expect(typeof api.slothlet.permissions.rules.add).toBe("function");
+	});
+
+	it("denies a delete of a real member by a call rule on it (internal route proxy deleteProperty trap)", async () => {
+		api = await slothlet({
+			...config,
+			base: `${BASE}/callers`,
+			permissions: {
+				defaultPolicy: "deny",
+				rules: [
+					{ caller: "**", target: "internalProxyHelper.**", effect: "allow" },
+					{ caller: "internalProxyHelper.**", target: "slothlet.permissions", effect: "allow" },
+					{ caller: "internalProxyHelper.**", target: "slothlet.permissions.rules", effect: "deny" }
+				]
+			}
+		});
+
+		await withSuppressedSlothletErrorOutput(async () => {
+			let error;
+			try {
+				await api.internalProxyHelper.deleteOnHandedNamespace(api.slothlet.permissions, "rules");
+			} catch (err) {
+				error = err;
+			}
+			expect(error?.code).toBe("PERMISSION_DENIED");
+			// The call rule on the member itself refused it, not a write rule on a made-up key.
+			expect(error.context.target).toBe("slothlet.permissions.rules");
+		});
+		expect(typeof api.slothlet.permissions.rules.add).toBe("function");
+	});
+
 	it("refuses symbol-key mutations as it refuses string-key ones", async () => {
 		api = await slothlet({
 			...config,

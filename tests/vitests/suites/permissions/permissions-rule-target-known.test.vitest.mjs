@@ -20,11 +20,14 @@
  */
 
 import { describe, it, expect, afterEach } from "vitest";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import slothlet from "@cldmv/slothlet";
 import { SLOTHLET_TREE, SLOTHLET_TREE_DATA, namesSlothletMember } from "#helpers/slothlet-tree";
 import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
 const BASE = TEST_DIRS.API_TEST_PERMISSIONS;
+const FIX_RULE_MODULES = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../../api_tests/api_test_rule_target_module");
 
 /**
  * The code a call throws with, or "ok".
@@ -145,5 +148,41 @@ describe.each(getMatrixConfigs())("Permissions > rule targets in slothlet's own 
 			api.slothlet.api.add("extra", { exports: { ping: () => "pong" } }, { permissions: { deny: ["slothlet.event.resolveLevel"] } })
 		);
 		expect(code).toBe("PERMISSION_RULE_UNKNOWN_TARGET");
+	});
+
+	it("a module manifest rule naming nothing in slothlet's space refuses the mount", async () => {
+		api = await slothlet({ ...config, base: BASE, permissions: { defaultPolicy: "allow" } });
+		const code = await codeOf(() => api.slothlet.api.modules.add("@local/unknown-target", { discover: { scanRoot: FIX_RULE_MODULES } }));
+		expect(code).toBe("PERMISSION_RULE_UNKNOWN_TARGET");
+	});
+
+	it("a module manifest rule naming a consumer path that does not exist is not refused", async () => {
+		api = await slothlet({ ...config, base: BASE, permissions: { defaultPolicy: "allow" } });
+		const code = await codeOf(() => api.slothlet.api.modules.add("@local/consumer-target", { discover: { scanRoot: FIX_RULE_MODULES } }));
+		expect(code).toBe("ok");
+		expect(api.plugins["consumer-target"].info.name()).toBe("@local/consumer-target");
+	});
+
+	it("a config rule or api.add rule naming a consumer path that does not exist is not refused", async () => {
+		api = await slothlet({
+			...config,
+			base: BASE,
+			permissions: { defaultPolicy: "allow", rules: [{ caller: "**", target: "no.such.module.**", effect: "deny" }] }
+		});
+		expect(
+			await codeOf(() => api.slothlet.api.add("extra", { exports: { ping: () => "pong" } }, { permissions: { deny: ["nowhere.at.all"] } }))
+		).toBe("ok");
+	});
+
+	it("event rules name events, not targets: an event named like a slothlet member is not refused", async () => {
+		api = await slothlet({
+			...config,
+			base: BASE,
+			permissions: {
+				defaultPolicy: "allow",
+				events: { default: "notify", rules: [{ caller: "**", event: "slothlet.nope.**", effect: "deny" }] }
+			}
+		});
+		expect(api).toBeDefined();
 	});
 });
