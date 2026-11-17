@@ -112,7 +112,7 @@ describe.each(getBrowserMatrixConfigs())("Browser Mode > lifecycle events > $nam
 		await api.slothlet.api.add("extra", `${FIXTURE_DIR}/utils`);
 
 		expect(received).not.toBeNull();
-		expect(received).toHaveProperty("apiPath");
+		expect(received).toHaveProperty("path");
 	});
 
 	it("lifecycle.off — callback does NOT fire after being unsubscribed", async () => {
@@ -154,10 +154,10 @@ describe.each(getBrowserMatrixConfigs())("Browser Mode > lifecycle events > $nam
 
 		const results = [];
 		api.slothlet.lifecycle.on("impl:created", (data) => {
-			results.push("a:" + data.apiPath);
+			results.push("a:" + data.path.join("."));
 		});
 		api.slothlet.lifecycle.on("impl:created", (data) => {
-			results.push("b:" + data.apiPath);
+			results.push("b:" + data.path.join("."));
 		});
 
 		await api.slothlet.api.add("extra", `${FIXTURE_DIR}/utils`);
@@ -206,8 +206,8 @@ describe.each(getBrowserMatrixConfigs())("Browser Mode > lifecycle events > $nam
 
 		expect(events.length).toBeGreaterThan(0);
 		// Each event must identify the api path that was created
-		expect(events[0]).toHaveProperty("apiPath");
-		expect(typeof events[0].apiPath).toBe("string");
+		expect(events[0]).toHaveProperty("path");
+		expect(Array.isArray(events[0].path)).toBe(true);
 	});
 
 	it("impl:created — event payload identifies a path under the mounted namespace", async () => {
@@ -215,7 +215,7 @@ describe.each(getBrowserMatrixConfigs())("Browser Mode > lifecycle events > $nam
 
 		const paths = [];
 		api.slothlet.lifecycle.on("impl:created", (data) => {
-			paths.push(data.apiPath);
+			paths.push(data.path.join("."));
 		});
 
 		await api.slothlet.api.add("ns", `${FIXTURE_DIR}/utils`);
@@ -241,7 +241,7 @@ describe.each(getBrowserMatrixConfigs())("Browser Mode > lifecycle events > $nam
 		await api.slothlet.api.add("extra", `${FIXTURE_DIR}/utils`);
 
 		expect(changed.length).toBeGreaterThan(0);
-		expect(changed[0]).toHaveProperty("apiPath");
+		expect(changed[0]).toHaveProperty("path");
 	});
 });
 
@@ -273,17 +273,17 @@ describe.each(getBrowserMatrixConfigs())("Browser Mode > lifecycle events > impl
 		await api.slothlet.api.remove("extra");
 
 		expect(removed.length).toBeGreaterThan(0);
-		expect(removed[0]).toHaveProperty("apiPath");
+		expect(removed[0]).toHaveProperty("path");
 	});
 
-	it("impl:removed — payload apiPath matches a path under the removed namespace", async () => {
+	it("impl:removed — payload path matches a path under the removed namespace", async () => {
 		api = await slothlet(browserCfg(config));
 
 		await api.slothlet.api.add("removeme", `${FIXTURE_DIR}/utils`);
 
 		const paths = [];
 		api.slothlet.lifecycle.on("impl:removed", (data) => {
-			paths.push(data.apiPath);
+			paths.push(data.path.join("."));
 		});
 
 		await api.slothlet.api.remove("removeme");
@@ -348,7 +348,7 @@ describe.each(getBrowserMatrixConfigs({ mode: "lazy" }))(
 			expect(eventData).toBeDefined();
 			expect(typeof eventData.total).toBe("number");
 			expect(eventData.total).toBeGreaterThan(0);
-			expect(typeof eventData.timestamp).toBe("number");
+			expect(typeof eventData.at).toBe("number");
 		});
 
 		it("materialized:complete — does NOT fire when tracking.materialization is omitted (backgroundMaterialize path)", async () => {

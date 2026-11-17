@@ -40,6 +40,7 @@ import { ComponentBase } from "#factories/component-base";
 import { internals as unifiedWrapperInternals } from "#handlers/unified-wrapper";
 import { SlothletError } from "#errors";
 import { sortModules } from "#helpers/module-sort";
+import { segmentsOf } from "#helpers/segments";
 import {
 	ArrayMethods,
 	Arrays,
@@ -166,7 +167,7 @@ export class ModuleManager extends ComponentBase {
 		if (this.slothlet.envTarget === "browser") {
 			throw new SlothletError("MODULE_DISCOVERY_REQUIRES_NODE", { operation: ["slothlet", "api", "modules", "discover"] });
 		}
-		await this.#emit("modules:discover-start", { scanRoot: options.scanRoot, options });
+		await this.#emit("modules:discover-start", { root: options.scanRoot, options });
 		// Dynamically imported to keep module-manager free of static node:fs references.
 		// This allows module-manager to be safely imported in browser/bundler contexts
 		// where node:fs is not available; the import only fires when discover() is called.
@@ -449,7 +450,7 @@ export class ModuleManager extends ComponentBase {
 			if (existing) {
 				throw new SlothletError("MODULE_MOUNT_COLLISION", {
 					package: discoverResult.packageName,
-					mount: effectiveMountPath,
+					mount: segmentsOf(effectiveMountPath),
 					owner: existing.moduleID,
 					collision: collisionMode
 				});
@@ -540,10 +541,10 @@ export class ModuleManager extends ComponentBase {
 		};
 		MapMethods.set(this.#mounted, `${discoverResult.packageName}@${version}`, result);
 		await this.#emit("modules:mount-complete", {
-			name: discoverResult.packageName,
+			package: discoverResult.packageName,
 			version,
-			mountPath: effectiveMountPath,
-			moduleID
+			mount: segmentsOf(effectiveMountPath),
+			module: moduleID
 		});
 		return result;
 	}

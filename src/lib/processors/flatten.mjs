@@ -28,6 +28,7 @@
  * const decision = flatten.getFlatteningDecision(options);
  * const categoryDecisions = flatten.buildCategoryDecisions(options);
  */
+import { segmentsOf } from "#helpers/segments";
 import { ComponentBase } from "#factories/component-base";
 import { copyForComposition, relayer, holdMember } from "#helpers/composition";
 import {
@@ -415,10 +416,10 @@ export class Flatten extends ComponentBase {
 	namedExportWinsOverDefault(key, collisionMode, apiPath) {
 		if (collisionMode === "merge" || collisionMode === "skip") return false;
 		if (collisionMode === "error") {
-			throw new this.slothlet.SlothletError("COLLISION_DEFAULT_EXPORT_ERROR", { key, path: apiPath });
+			throw new this.slothlet.SlothletError("COLLISION_DEFAULT_EXPORT_ERROR", { key, path: segmentsOf(apiPath) });
 		}
 		if (collisionMode === "warn") {
-			new this.slothlet.SlothletWarning("WARNING_COLLISION_DEFAULT_EXPORT_OVERWRITE", { key, path: apiPath });
+			new this.slothlet.SlothletWarning("WARNING_COLLISION_DEFAULT_EXPORT_OVERWRITE", { key, path: segmentsOf(apiPath) });
 		}
 		return true;
 	}

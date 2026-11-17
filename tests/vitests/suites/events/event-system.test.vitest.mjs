@@ -48,7 +48,7 @@ describe.each(getMatrixConfigs())("Events > event system (#407) > $name", ({ con
 		expect(got.payload).toEqual({ id: 42 });
 		expect(got.meta.event).toBe("orders.created");
 		expect(typeof got.meta.at).toBe("number");
-		expect(got.meta.instanceID).toBeTruthy();
+		expect(got.meta.instance).toBeTruthy();
 		off();
 		got = null;
 		await api.slothlet.event.emit("orders.created", { id: 99 });

@@ -158,7 +158,7 @@ describe.each(getMatrixConfigs())("Events > delivery strategy (#497) > $name", (
 			return defaultDeliver();
 		});
 		await api.plug.emitter.fire("evt", { n: 1 });
-		expect(envelope.emitter).toEqual({ moduleID: "plug", apiPath: "plug.emitter.fire" });
+		expect(envelope.emitter).toEqual({ module: "plug", path: ["plug", "emitter", "fire"] });
 	});
 
 	// ── Strategy: deferred ──────────────────────────────────────────────────────

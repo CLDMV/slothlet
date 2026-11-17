@@ -26,7 +26,7 @@
  *
  * - deny   → subscription refused; the listener is never registered and never fires.
  * - notify → subscribed, but the listener receives only a safe trigger envelope
- *            `{ event, at, instanceID }` (no domain payload). This is the default.
+ *            `{ event, at, instance }` (no domain payload). This is the default.
  * - allow  → subscribed with the full domain payload.
  *
  * Listeners are called `(payload, meta)`: at `allow`, `payload` is the emitted value; at `notify`,
@@ -52,6 +52,7 @@ import { ComponentBase } from "#factories/component-base";
 import { MODULE_ID_SEPARATOR } from "#handlers/metadata";
 import { identityCeilings } from "#handlers/trusted-root";
 import { internals as unifiedWrapperInternals } from "#handlers/unified-wrapper";
+import { segmentsOf } from "#helpers/segments";
 import {
 	ArrayMethods,
 	filterList,
@@ -206,7 +207,7 @@ export class EventManager extends ComponentBase {
 	 *
 	 * @param {string} event - Event name to subscribe to.
 	 * @param {Function} listener - Listener, called `(payload, meta)` on emit. At `notify`, `payload`
-	 *   is `undefined`; `meta` is `{ event, at, instanceID }`.
+	 *   is `undefined`; `meta` is `{ event, at, instance }`.
 	 * @param {object} [options={}] - Options.
 	 * @param {boolean} [options.once=false] - Remove the subscription after its first delivery.
 	 * @param {string|number} [options.key] - Replaces the ordinal `<n>` in the listener id, for a listener
@@ -370,7 +371,7 @@ export class EventManager extends ComponentBase {
 		}
 		if (!set || SetMethods.size(set) === 0) return;
 
-		const meta = { event, at: this.clock.now(), instanceID: this.instanceID };
+		const meta = { event, at: this.clock.now(), instance: this.instanceID };
 		const emitter = this.slothlet.contextManager?.getCallerIdentity?.(this.instanceID)?.currentWrapper ?? null;
 		// Snapshot: allow listeners to off()/subscribe during dispatch, and support `once` removal.
 		await this.#dispatch(event, payload, meta, setToArray(set), emitter);
@@ -381,7 +382,7 @@ export class EventManager extends ComponentBase {
 	 * `emit` and a strategy's `defaultDeliver`.
 	 * @param {string} event - Event name.
 	 * @param {*} payload - Domain payload.
-	 * @param {object} meta - Trigger envelope `{ event, at, instanceID }` handed to every listener.
+	 * @param {object} meta - Trigger envelope `{ event, at, instance }` handed to every listener.
 	 * @param {Array<object>} subs - Subscription records to deliver to.
 	 * @param {object|null} [emitter=null] - The wrapper of the module that emitted, or null for the host.
 	 * @returns {Promise<void>} Resolves once every listener has settled.
@@ -471,7 +472,7 @@ export class EventManager extends ComponentBase {
 	 * @private
 	 */
 	async #emitThroughStrategy(strategy, event, payload, subs) {
-		const meta = { event, at: this.clock.now(), instanceID: this.instanceID };
+		const meta = { event, at: this.clock.now(), instance: this.instanceID };
 		const cm = this.slothlet.contextManager;
 		// The emitter's flow — its user context, caller identity and trust — so a deferred delivery runs
 		// in it, exactly as the immediate one would have. Also the emitter identity for the envelope.
@@ -499,9 +500,12 @@ export class EventManager extends ComponentBase {
 			event,
 			payload,
 			at: meta.at,
-			instanceID: this.instanceID,
+			instance: this.instanceID,
 			emitter: emitterWrapper
-				? Objects.freeze({ moduleID: ownerIdOf(emitterWrapper), apiPath: emitterWrapper.____slothletInternal.apiPath })
+				? Objects.freeze({
+						module: ownerIdOf(emitterWrapper),
+						path: Objects.freeze(segmentsOf(emitterWrapper.____slothletInternal.apiPath))
+					})
 				: null,
 			levels: Objects.freeze(levels),
 			listeners
@@ -524,8 +528,8 @@ export class EventManager extends ComponentBase {
 	 * built-in `slothlet.event.**` deny. The strategy is called per emit as
 	 * `strategy(envelope, listeners, defaultDeliver)`:
 	 *
-	 * - `envelope` — frozen `{ event, payload, at, instanceID, emitter, levels, listeners }`: `emitter` is
-	 *   `{ moduleID, apiPath }` of the emitting module (null for the host); `levels` maps each recipient's
+	 * - `envelope` — frozen `{ event, payload, at, instance, emitter, levels, listeners }`: `emitter` is
+	 *   `{ module, path }` of the emitting module (null for the host); `levels` maps each recipient's
 	 *   listener id to its level resolved at emit time (informational — levels are enforced at delivery).
 	 * - `listeners` — the recipients' listener ids (the same array as `envelope.listeners`).
 	 * - `defaultDeliver()` — delivers now, exactly as without a strategy; returns a promise that settles

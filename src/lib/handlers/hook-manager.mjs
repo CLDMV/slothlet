@@ -19,6 +19,7 @@
  * @internal
  */
 
+import { segmentsOf } from "#helpers/segments";
 import { util, inheritsFrom } from "#helpers/platform";
 import { ComponentBase } from "#factories/component-base";
 import { compilePattern } from "#helpers/pattern-matcher";
@@ -738,7 +739,7 @@ export class HookManager extends ComponentBase {
 			if (!permissionManager.enforceHookAccess(ownerPath, pattern, type, ownerFilePath, null, runtimeContext)) {
 				throw new this.slothlet.SlothletError("PERMISSION_DENIED", {
 					caller: ownerPath,
-					target: `${pattern}:${type}`
+					target: segmentsOf(`${pattern}:${type}`)
 				});
 			}
 			for (let i = 0; i < ownerCeilings.length; i++) {
@@ -749,7 +750,7 @@ export class HookManager extends ComponentBase {
 				) {
 					throw new this.slothlet.SlothletError("PERMISSION_DENIED", {
 						caller: ceiling.path,
-						target: `${pattern}:${type}`
+						target: segmentsOf(`${pattern}:${type}`)
 					});
 				}
 			}

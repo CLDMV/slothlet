@@ -28,6 +28,7 @@ import { compilePattern, expandBraces } from "#helpers/pattern-matcher";
 import { translate } from "#i18n";
 import { MODULE_ID_SEPARATOR } from "#handlers/metadata";
 import { DEFAULT_ROUTINES } from "#helpers/defaults";
+import { segmentsOf } from "#helpers/segments";
 import { runBaseline } from "#helpers/permission-baseline";
 import { isFrameworkWriteTarget, writeTargetLiteralPrefix, internals as reservedKeysInternals } from "#helpers/reserved-keys";
 import { internals as unifiedWrapperInternals } from "#handlers/unified-wrapper";
@@ -166,6 +167,13 @@ const RULE_LAYER_RANK = Objects.freeze({ builtin: 0, manifest: 1, module: 1, man
  * @private
  */
 const CHECK_CALL_OPTIONS = Objects.freeze({ moduleCaller: true, via: "checkCall", principalGrace: true });
+
+/**
+ * The method an audit event's `via` names, as its path from `api` (segments), by the internal marker.
+ * @type {Readonly<Record<string, ReadonlyArray<string>>>}
+ * @private
+ */
+const VIA_PATHS = Objects.freeze({ __proto__: null, checkCall: Objects.freeze(["slothlet", "permissions", "global", "check", "call"]) });
 
 /**
  * Resolve a rule's precedence layer from an explicit layer or the owning module id.
@@ -2273,7 +2281,7 @@ export class PermissionManager extends ComponentBase {
 			rule: this.#serializeRule(winner),
 			conditionMatched: winner.condition != null
 		});
-		throw new this.SlothletError("PERMISSION_DENIED", { caller: callerPath, target: GLOBAL_METADATA_TARGET });
+		throw new this.SlothletError("PERMISSION_DENIED", { caller: callerPath, target: segmentsOf(GLOBAL_METADATA_TARGET) });
 	}
 
 	/**
@@ -3965,7 +3973,15 @@ export class PermissionManager extends ComponentBase {
 
 		const lifecycle = this.slothlet.handlers?.lifecycle;
 		if (lifecycle) {
-			lifecycle.emit(event, { ...payload, timestamp: this.clock.now() });
+			// The public payload: the target as its segments, `at` for the time, `file` / `module` / `via` in the v4
+			// words, and no conditionMatched (it is `rule.condition != null`).
+			const { conditionMatched: ___conditionMatched, filePath, moduleID, via, target, ...rest } = payload;
+			const audit = { ...rest, at: this.clock.now() };
+			if (target !== undefined) audit.target = segmentsOf(target);
+			if (filePath !== undefined) audit.file = filePath;
+			if (moduleID !== undefined) audit.module = moduleID;
+			if (via !== undefined) audit.via = segmentsOf(VIA_PATHS[via] ?? via);
+			lifecycle.emit(event, audit);
 		}
 	}
 

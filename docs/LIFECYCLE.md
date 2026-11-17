@@ -22,12 +22,12 @@ This document covers the lifecycle event system, module type inspection, and bac
 ```javascript
 // Standard EventEmitter pattern
 api.slothlet.lifecycle.on("impl:created", (data) => {
-	console.log(`Module loaded: ${data.apiPath}`);
+	console.log(`Module loaded: ${data.path.join(".")}`);
 });
 
 // on() returns an unsubscribe function
 const unsubscribe = api.slothlet.lifecycle.on("impl:changed", (data) => {
-	console.log(`Module reloaded: ${data.apiPath} from ${data.source}`);
+	console.log(`Module reloaded: ${data.path.join(".")} from ${data.source}`);
 });
 
 // Later, clean up
@@ -57,7 +57,7 @@ const api = await slothlet({
 		// Event name → a handler, or an array of handlers.
 		"impl:warning": (data) => console.warn(`[init] ${data.code}: ${data.message}`),
 		"impl:error": [onError, auditError],
-		"impl:created": (data) => registry.add(data.apiPath)
+		"impl:created": (data) => registry.add(data.path.join("."))
 	}
 });
 ```
@@ -76,14 +76,16 @@ Emitted when a module implementation is first placed on the composed api — dur
 
 ```javascript
 {
-	apiPath: "plugins.auth",         // API path dot-notation
+	path: ["plugins", "auth"],       // API path as its segments
 	impl: [Function],                // The wrapped callable on a stable public field (#433); null before a lazy wrapper materializes
-	source: "initial",               // "initial" | "hot-reload" | "lazy-materialization"
-	moduleID: "plugins_xyz789",      // Module identifier of the placed owner
-	filePath: "/path/to/auth.mjs",   // Absolute source file path
-	sourceFolder: "/path/to/plugins" // Source directory
+	source: "create",                // "create" | "reload" | "materialize": the operation that caused the event
+	module: "plugins_xyz789",        // Module identifier of the placed owner
+	file: "/path/to/auth.mjs",       // Absolute source file path
+	folder: "/path/to/plugins"       // Source folder
 }
 ```
+
+Every api path a lifecycle event reports is a segments array; join it (`data.path.join(".")`) for the dotted form.
 
 > The **raw, unwrapped** `impl` field was removed in v3.16.x (#398): it exposed the module's raw callable, which a subscriber could invoke outside slothlet's enforced boundary. v3.18.0 (#433) restores `impl` as a stable public field carrying the **wrapped** callable, and drops the reserved internal `wrapper.__impl` handle from the **public** event entirely — read `data.impl` for the leaf's (wrapped) implementation; there is no public `wrapper` to reach into. (The internal tier still carries `wrapper` for the framework's own ownership / metadata / routine subscribers.) The event also fires only for the leaf actually placed on the tree, so a registry keyed off it no longer records a contribution that a later merge discards.
 
@@ -101,12 +103,12 @@ Emitted when composing a module into the api **resolves a collision** at a path 
 
 ```javascript
 {
-	apiPath: "shared.alpha",   // API path (dot-notation) where the collision resolved
+	path: ["shared", "alpha"], // API path (segments) where the collision resolved
 	resolution: "dropped",     // "dropped" | "replaced" | "merged"
-	incoming: "storage_b",     // moduleID of the arriving writer
-	owner: "storage_a",        // moduleID of the writer that already held the path
+	incoming: "storage_b",     // module id of the arriving writer
+	owner: "storage_a",        // module id of the writer that already held the path
 	kind: "value",             // "value" (leaf) | "namespace" (node)
-	collisionMode: "merge"     // "skip" | "warn" | "replace" | "merge" | "merge-replace"
+	collision: "merge"         // "skip" | "warn" | "replace" | "merge" | "merge-replace"
 }
 ```
 
@@ -133,9 +135,9 @@ pkg_a/shared/util/fmt.mjs  → shared.util.fmt        pkg_b/shared/beta.mjs     
 api.slothlet.lifecycle.on("impl:collision", (d) => report(d));
 await api.slothlet.api.add("", "/abs/pkg_b", { moduleID: "pkg_b" });
 // impl:collision fires (eager):
-//   { apiPath: "shared.alpha",    resolution: "dropped", incoming: "pkg_b", owner: "pkg_a", kind: "value" }
-//   { apiPath: "shared.util",     resolution: "merged",  incoming: "pkg_b", owner: "pkg_a", kind: "namespace" }
-//   { apiPath: "shared.util.fmt", resolution: "dropped", incoming: "pkg_b", owner: "pkg_a", kind: "value" }
+//   { path: ["shared", "alpha"],         resolution: "dropped", incoming: "pkg_b", owner: "pkg_a", kind: "value" }
+//   { path: ["shared", "util"],          resolution: "merged",  incoming: "pkg_b", owner: "pkg_a", kind: "namespace" }
+//   { path: ["shared", "util", "fmt"],   resolution: "dropped", incoming: "pkg_b", owner: "pkg_a", kind: "value" }
 // shared.beta is unique — no event.
 ```
 
@@ -145,14 +147,18 @@ The event is **fire-and-forget**: like the other `impl:*` events its listeners a
 
 ### `impl:removed`
 
-Emitted when a module is removed via `api.slothlet.api.remove()`.
+Emitted when a module is removed via `api.slothlet.api.remove()`, before its members are deleted.
 
 **Event data:**
 
 ```javascript
 {
-	apiPath: "plugins.oldModule",
-	moduleID: "plugins_old123"
+	path: ["plugins", "oldModule"],   // API path (segments) being removed
+	impl: [Function],                 // The implementation being removed (a module's subscriber gets its own view of it)
+	source: "remove",                 // The operation that caused the event
+	module: "plugins_old123",         // Module identifier of the removed implementation
+	file: "/path/to/oldModule.mjs",   // Absolute source file path
+	folder: "/path/to/plugins"        // Source folder
 }
 ```
 
@@ -164,12 +170,12 @@ Emitted for a **non-throwing** diagnostic warning — a condition slothlet handl
 
 ```javascript
 {
-	apiPath: "",                             // Where the mutation was attempted ("" / "(root)" for the root)
+	path: [],                                // Where the mutation was attempted ([] for the root)
 	code: "WARNING_INLINE_ROOT_COLLISION",   // The i18n diagnostic code
-	message: "Synthetic add at the API root…", // Already-translated human-readable message
-	source: "addApi",                        // Command family: "addApi" | "reload" | "buildAPI" | "module-mount"
-	context: { name: "greet" },              // Structured context passed to the diagnostic
-	moduleID: "plugins_xyz789"               // Module identifier, when one is in scope
+	message: "Inline content at the API root…", // Already-translated human-readable message
+	source: "add",                           // The operation: "add" | "reload" | "build" | "mount"
+	details: { name: "greet" },              // Structured details of the diagnostic (the same keys an error's details use)
+	module: "plugins_xyz789"                 // Module identifier, when one is in scope
 }
 ```
 
@@ -188,19 +194,19 @@ Emitted for a **non-throwing** runtime error — a failure slothlet caught and c
 
 ```javascript
 {
-	apiPath: "plugins.count",
+	path: ["plugins", "count"],
 	code: "WARNING_COLLISION_MERGE_PRIMITIVES",
 	message: "Cannot merge into primitive value…",
-	source: "addApi",
-	context: { apiPath: "plugins.count" },
-	moduleID: "plugins_xyz789",
+	source: "add",
+	details: { path: ["plugins", "count"] },
+	module: "plugins_xyz789",
 	error: SlothletError                     // The originating (non-thrown) error
 }
 ```
 
 ```javascript
 api.slothlet.lifecycle.on("impl:error", (data) => {
-	console.warn(`Handled runtime error at ${data.apiPath}:`, data.error);
+	console.warn(`Handled runtime error at ${data.path.join(".")}:`, data.error);
 });
 ```
 
@@ -213,7 +219,7 @@ Emitted when all lazy-mode modules have been materialized. Requires `tracking: {
 ```javascript
 {
 	total: 15,             // Total modules materialized
-	timestamp: 1708012345  // Unix timestamp (ms)
+	at: 1708012345         // When it completed (the instance clock, ms)
 }
 ```
 
@@ -236,13 +242,13 @@ Four events mark an instance coming up, going down, and being replaced by [`api.
 
 ```javascript
 // restart
-{ instanceID: "slothlet_…" }                                    // the instance being replaced
+{ instance: "slothlet_…" }                                      // the instance being replaced
 // shutdown
-{ instanceID: "slothlet_…", restart: true }                     // restart: false for a plain shutdown
+{ instance: "slothlet_…", restart: true }                       // restart: false for a plain shutdown
 // init
-{ instanceID: "slothlet_…", restart: true }                     // restart: false for the cold start
+{ instance: "slothlet_…", restart: true }                       // restart: false for the cold start
 // restarted
-{ instanceID: "slothlet_…", previousInstanceID: "slothlet_…" }
+{ instance: "slothlet_…", previous: "slothlet_…" }
 ```
 
 **Who receives them.** Each event reaches the subscribers of the instance it is emitted on. A restart builds the new instance from the original config and carries nothing runtime over, so:
@@ -256,8 +262,8 @@ To act once a restart has completed, either declare a `restarted` (or `init`) ha
 const api = await slothlet({
 	base: "./api",
 	lifecycle: {
-		restart: ({ instanceID }) => log(`restarting ${instanceID}`),
-		restarted: ({ instanceID, previousInstanceID }) => log(`${previousInstanceID} → ${instanceID}`)
+		restart: ({ instance }) => log(`restarting ${instance}`),
+		restarted: ({ instance, previous }) => log(`${previous} → ${instance}`)
 	}
 });
 
@@ -278,7 +284,7 @@ Emitted at the start of every `discover()` call (including the lazy-trigger call
 
 ```javascript
 {
-	scanRoot: "/path/to/scan/root",  // The resolved scan root (string | string[] from options)
+	root: "/path/to/scan/root",      // The scan root (string | string[] from options)
 	options: { /* the full discover() options object */ }
 }
 ```
@@ -323,10 +329,10 @@ Emitted once **per successfully mounted module**, immediately after the underlyi
 
 ```javascript
 {
-	name: "@org/some-module",        // packageName from package.json
+	package: "@org/some-module",     // package name from package.json
 	version: "1.4.2",                // semver from package.json
-	mountPath: "drivers.foo",        // effective mountPath; versioned (e.g., "v1.drivers.foo") when multi-version routing applied
-	moduleID: "drivers.foo_abc123"   // moduleID returned by the underlying api.add()
+	mount: ["drivers", "foo"],       // effective mount (segments); versioned (e.g. ["v1", "drivers", "foo"]) when multi-version routing applied
+	module: "drivers.foo_abc123"     // module id returned by the underlying api.add()
 }
 ```
 
@@ -347,8 +353,7 @@ Hosts that need a "settled regardless of outcome" signal should either use `best
 ```javascript
 {
 	mounted: [ /* MountResult[] for every successful mount */ ],
-	failed?: [ /* FailureEntry[] with { item, error } — only present when onFailure was "best-effort" */ ],
-	stale?: [ /* MountResult[] — only present on addDiscovered chains that ran discover() */ ]
+	failed?: [ /* FailureEntry[] with { item, error } — only present when onFailure was "best-effort" */ ]
 }
 ```
 
@@ -378,7 +383,7 @@ api.slothlet.lifecycle.on("materialized:complete", () => {
 
 ```javascript
 api.slothlet.lifecycle.on("impl:changed", (data) => {
-	notifyUser(`Module ${data.apiPath} was reloaded`);
+	notifyUser(`Module ${data.path.join(".")} was reloaded`);
 });
 ```
 
@@ -388,15 +393,15 @@ api.slothlet.lifecycle.on("impl:changed", (data) => {
 const moduleRegistry = new Map();
 
 api.slothlet.lifecycle.on("impl:created", (data) => {
-	moduleRegistry.set(data.apiPath, {
-		moduleID: data.moduleID,
-		filePath: data.filePath,
+	moduleRegistry.set(data.path.join("."), {
+		module: data.module,
+		file: data.file,
 		loadedAt: Date.now()
 	});
 });
 
 api.slothlet.lifecycle.on("impl:removed", (data) => {
-	moduleRegistry.delete(data.apiPath);
+	moduleRegistry.delete(data.path.join("."));
 });
 ```
 
@@ -564,8 +569,8 @@ try {
 } catch (error) {
 	// error.code === "ROUTINE_FAILED"
 	// error.details.count === 2                                // total failures
-	// error.details.failures === [{ apiPath, moduleID }, ...]  // every failure, in order
-	// error.details.apiPath / .moduleID                        // the FIRST failure, for quick access
+	// error.details.failures === [{ path, module, error }, ...]  // every failure, in order (path as segments)
+	// error.details.path / .module                              // the FIRST failure, for quick access
 	// error.cause is the first failure's own thrown error
 }
 ```

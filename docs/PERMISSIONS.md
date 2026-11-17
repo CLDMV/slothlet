@@ -1689,23 +1689,23 @@ A module without the grant gets `PERMISSION_DENIED`. See [`lockCaller.caller`](H
 
 The `PermissionManager` emits lifecycle events for enforcement decisions:
 
-| Event                    | Payload                                                 | When                                    | Emission                |
-| ------------------------ | ------------------------------------------------------- | --------------------------------------- | ----------------------- |
-| `permission:denied`      | `{ caller, target, rule, conditionMatched, timestamp }` | A call was blocked                      | Always                  |
-| `permission:self-bypass` | `{ caller, target, filePath, timestamp }`               | A self-call was detected and bypassed   | Always                  |
-| `permission:allowed`     | `{ caller, target, rule, conditionMatched, timestamp }` | A call was explicitly allowed by a rule | `audit: "verbose"` only |
-| `permission:default`     | `{ caller, target, policy, timestamp }`                 | No rule matched; default policy applied | `audit: "verbose"` only |
-| `permission:owner-allow` | `{ caller, target, moduleID, timestamp }`               | The [owner grant](#owner-grant) allowed | `audit: "verbose"` only |
+| Event                    | Payload                          | When                                    | Emission                |
+| ------------------------ | -------------------------------- | --------------------------------------- | ----------------------- |
+| `permission:denied`      | `{ caller, target, rule, at }`   | A call was blocked                      | Always                  |
+| `permission:self-bypass` | `{ caller, target, file, at }`   | A self-call was detected and bypassed   | Always                  |
+| `permission:allowed`     | `{ caller, target, rule, at }`   | A call was explicitly allowed by a rule | `audit: "verbose"` only |
+| `permission:default`     | `{ caller, target, policy, at }` | No rule matched; default policy applied | `audit: "verbose"` only |
+| `permission:owner-allow` | `{ caller, target, module, at }` | The [owner grant](#owner-grant) allowed | `audit: "verbose"` only |
 
-A decision reached through [`global.checkCall`](#checkcall-vs-checkaccess) emits the same events with an extra `via: "checkCall"` field in the payload, so an audit consumer can tell a query from the gate of a real call.
+`target` is the api path as its segments, and `at` is the instance clock's time. A decision reached through [`global.checkCall`](#checkcall-vs-checkaccess) emits the same events with an extra `via` field, the method's path (`["slothlet", "permissions", "global", "check", "call"]`), so an audit consumer can tell a query from the gate of a real call.
 
-The `conditionMatched` field in `permission:allowed` and `permission:denied` payloads is `true` when the winning rule had a `condition` field, `false` otherwise.
+Whether the winning rule was conditional is `data.rule.condition != null`.
 
 Subscribe via the lifecycle system:
 
 ```javascript
 api.slothlet.lifecycle.on("permission:denied", (data) => {
-	console.log(`Blocked: ${data.caller} → ${data.target}`);
+	console.log(`Blocked: ${data.caller} → ${data.target.join(".")}`);
 	console.log(`Rule: ${data.rule.id} (${data.rule.effect})`);
 });
 ```
@@ -1796,7 +1796,7 @@ A module of one instance that calls into another's api (through a reference the 
 | Code                              | When                                                                                                                                                                                                                                                            |
 | --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `PERMISSION_DENIED`               | A call or a module write was blocked by a permission rule. Includes `caller` and `target` in the error context; a write's target carries the `:write` suffix.                                                                                                   |
-| `PERMISSION_SELF_MODIFY`          | A module attempted to remove its own permission rule. Includes `ruleId` and `moduleID`.                                                                                                                                                                         |
+| `PERMISSION_SELF_MODIFY`          | A module attempted to remove its own permission rule. Includes `id` and `module` in its details.                                                                                                                                                                |
 | `PERMISSION_RULE_INVALID`         | A malformed rule was passed to `addRule()`. Includes `reason` and `received`.                                                                                                                                                                                   |
 | `PERMISSION_CAPABILITY_REFUSED`   | Module code used a [built-in capability](#built-in-capabilities) no rule opens for it, or compiled under a name it may not. Includes `caller`, `capability`, `route`, `reason`, and `reasonCode` (`not-opened`, `unattributed`, `foreign-filename`, `binding`). |
 | `PERMISSION_SEALED`               | A policy-mutating control method (`enable` / `disable` / `addRule` / `removeRule` / `readGating` / `principal.register` / `principal.unregister`) was called after `control.seal()`.                                                                            |

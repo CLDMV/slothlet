@@ -22,6 +22,7 @@
  */
 
 import { ComponentBase } from "#factories/component-base";
+import { segmentsOf } from "#helpers/segments";
 import { getInstanceToken } from "#handlers/lifecycle-token";
 import { internals as unifiedWrapperInternals } from "#handlers/unified-wrapper";
 import {
@@ -29,6 +30,7 @@ import {
 	listPush,
 	Map,
 	MapMethods,
+	Objects,
 	promiseAll,
 	PromiseMethods,
 	Reflect,
@@ -45,6 +47,24 @@ const { runtime_selfModuleReader, runtime_selfView } = unifiedWrapperInternals("
  * @extends ComponentBase
  * @public
  */
+
+/**
+ * The `source` a public event reports, by the operation slothlet ran (D-5): one word for each. The internal stream keeps
+ * its own words.
+ * @type {Readonly<Record<string, string>>}
+ * @private
+ */
+const PUBLIC_SOURCE = Objects.freeze({
+	__proto__: null,
+	initial: "create",
+	"hot-reload": "reload",
+	reload: "reload",
+	"lazy-materialization": "materialize",
+	removal: "remove",
+	buildAPI: "build",
+	addApi: "add",
+	"module-mount": "mount"
+});
 
 /**
  * Run a subscriber and settle what it returns while still inside its call: a `then` it carries (a getter, a thenable's
@@ -232,6 +252,8 @@ export class Lifecycle extends ComponentBase {
 		// Not an async function: the promise handed back is slothlet's own (helpers/intrinsics `SafePromise`), so awaiting
 		// it reads nothing module code can put on `Promise.prototype`.
 		try {
+			if (data && typeof data.source === "string" && PUBLIC_SOURCE[data.source] !== undefined)
+				data = { ...data, source: PUBLIC_SOURCE[data.source] };
 			this.#logEvent(event, data);
 			return this.#notify(MapMethods.get(this.subscribers, event), event, data, MapMethods.get(this.subscriberReaders, event), nodes);
 		} catch (error) {
@@ -281,9 +303,9 @@ export class Lifecycle extends ComponentBase {
 			this.slothlet.debug("lifecycle", {
 				key: "DEBUG_MODE_LIFECYCLE_EVENT",
 				event,
-				apiPath: data.apiPath,
+				apiPath: data.apiPath ?? (data.path ? ArrayMethods.join(data.path, ".") : undefined),
 				source: data.source,
-				moduleID: data.moduleID
+				moduleID: data.moduleID ?? data.module
 			});
 		}
 	}
@@ -300,10 +322,11 @@ export class Lifecycle extends ComponentBase {
 	 */
 	#warnHandlerError(event, data, error) {
 		if (this.____config?.silent) return;
-		if (data.apiPath) {
+		const path = data.path ?? segmentsOf(data.apiPath);
+		if (path && path.length > 0) {
 			new this.SlothletWarning(
 				"WARNING_LIFECYCLE_HANDLER_ERROR",
-				{ key: "WARNING_LIFECYCLE_HANDLER_ERROR_AT_PATH", event, path: data.apiPath, module: data.moduleID },
+				{ key: "WARNING_LIFECYCLE_HANDLER_ERROR_AT_PATH", event, path: segmentsOf(path), module: data.module ?? data.moduleID },
 				{ cause: error }
 			);
 			return;

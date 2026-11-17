@@ -24,6 +24,7 @@
  * @module @cldmv/slothlet/handlers/routine-manager
  * @internal
  */
+import { segmentsOf } from "#helpers/segments";
 import { ComponentBase } from "#factories/component-base";
 import { SlothletError } from "#errors";
 import { internals as unifiedWrapperInternals } from "#handlers/unified-wrapper";
@@ -1155,11 +1156,11 @@ export class RoutineManager extends ComponentBase {
 	 */
 	#throwAggregate(failures) {
 		// Each entry is plain data: the failure's api path, its module and what it threw.
-		const failureEntries = mapList(failures, ({ apiPath, moduleID, error }) => ({ path: apiPath, module: moduleID, error }));
+		const failureEntries = mapList(failures, ({ apiPath, moduleID, error }) => ({ path: segmentsOf(apiPath), module: moduleID, error }));
 		throw new SlothletError(
 			"ROUTINE_FAILED",
 			{
-				path: failures[0].apiPath,
+				path: segmentsOf(failures[0].apiPath),
 				module: failures[0].moduleID,
 				count: failures.length,
 				failures: failureEntries

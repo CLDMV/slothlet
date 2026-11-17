@@ -36,6 +36,7 @@
  * public export — so module-land code can neither read the markers nor spoof registry membership.
  */
 
+import { segmentsOf } from "#helpers/segments";
 import { SlothletError } from "#errors";
 import { internals as frameworkInternalsInternals } from "#handlers/framework-internals";
 import {
@@ -309,7 +310,7 @@ function writersOf(store) {
 		ceiling: store?.currentCeiling ?? null
 	};
 	// A writer that cannot be told apart is no one's, and not the host either.
-	if (identity.unresolved) throw new SlothletError("PERMISSION_DENIED", { caller: null, target: "self" });
+	if (identity.unresolved) throw new SlothletError("PERMISSION_DENIED", { caller: null, target: segmentsOf("self") });
 	if (!identity.currentWrapper) return [];
 	return concatLists([identity.currentWrapper], identityCeilings(identity));
 }

@@ -30,6 +30,7 @@
 // Node-only AsyncResource resolved in the platform module so node:async_hooks stays out of the
 // browser graph (#123). AsyncResource.bind only captures ALS context under Node — in a browser
 // (live context) bind is identity. loadJson reads package.json for the version (Node only).
+import { segmentsOf } from "#helpers/segments";
 import { isNode, AsyncResource, loadJson } from "#helpers/platform";
 import { ComponentBase } from "#factories/component-base";
 import { TYPE_STATES, isCallableValue, internals as unifiedWrapperInternals } from "#handlers/unified-wrapper";
@@ -660,7 +661,7 @@ export class ApiBuilder extends ComponentBase {
 			// Same AMBIGUOUS signal as the other enforcement points; see context-live. Refusing here is
 			// what keeps the internal namespace closed to a caller that cannot be attributed.
 			if (identity?.unresolved) {
-				throw new slothlet.SlothletError("PERMISSION_DENIED", { caller: null, target: targetPath });
+				throw new slothlet.SlothletError("PERMISSION_DENIED", { caller: null, target: segmentsOf(targetPath) });
 			}
 			const callerWrapper = identity?.currentWrapper;
 			if (!callerWrapper) return null;
@@ -669,7 +670,7 @@ export class ApiBuilder extends ComponentBase {
 			if (slothlet.handlers.apiManager.isRemovedCaller(callerWrapper)) {
 				throw new slothlet.SlothletError("PERMISSION_DENIED", {
 					caller: String(callerWrapper.____slothletInternal.apiPath ?? ""),
-					target: targetPath
+					target: segmentsOf(targetPath)
 				});
 			}
 
@@ -691,7 +692,7 @@ export class ApiBuilder extends ComponentBase {
 			if (!permissionManager.enforceAccess(callerPath, targetPath, callerFilePath, null, runtimeContext)) {
 				throw new slothlet.SlothletError("PERMISSION_DENIED", {
 					caller: callerPath,
-					target: targetPath
+					target: segmentsOf(targetPath)
 				});
 			}
 			// Code a caller supplied to another call: every call of its ceiling has to be allowed as well (#597).
@@ -705,7 +706,7 @@ export class ApiBuilder extends ComponentBase {
 					!WeakSetMethods.has(trustedRootOwn.genuineWrappers, ceiling) ||
 					!permissionManager.enforceAccess(ceilingPath, targetPath, ceilingFilePath, null, runtimeContext)
 				) {
-					throw new slothlet.SlothletError("PERMISSION_DENIED", { caller: ceilingPath, target: targetPath });
+					throw new slothlet.SlothletError("PERMISSION_DENIED", { caller: ceilingPath, target: segmentsOf(targetPath) });
 				}
 			}
 			return identity;
@@ -868,7 +869,7 @@ export class ApiBuilder extends ComponentBase {
 			// ceiling it did not already have, as it always ran.
 			const asReader = (invoke) => {
 				const live = liveIdentity();
-				if (live?.unresolved) throw new slothlet.SlothletError("PERMISSION_DENIED", { caller: null, target: "slothlet" });
+				if (live?.unresolved) throw new slothlet.SlothletError("PERMISSION_DENIED", { caller: null, target: segmentsOf("slothlet") });
 				const liveCalls = identityCeilings(live);
 				if (
 					live?.currentWrapper === reader &&
@@ -1068,7 +1069,7 @@ export class ApiBuilder extends ComponentBase {
 			const parts = splitText(changedPath, ".");
 			const identity = slothlet.contextManager?.getCallerIdentity?.(slothlet.instanceID);
 			if (identity?.unresolved) {
-				throw new slothlet.SlothletError("LOOSE_SET_UNATTRIBUTED", { path: changedPath });
+				throw new slothlet.SlothletError("LOOSE_SET_UNATTRIBUTED", { path: segmentsOf(changedPath) });
 			}
 			if (identity?.currentWrapper) {
 				// Code a caller supplied to another module's call changes it only where every module it acts for may (#597).
@@ -1085,7 +1086,7 @@ export class ApiBuilder extends ComponentBase {
 			// No call is running: whose code makes the change decides, so a function a module left where the host calls it
 			// later is still that module's.
 			const writers = runtime_codeWritersOnStack(slothlet);
-			if (writers === null) throw new slothlet.SlothletError("LOOSE_SET_UNATTRIBUTED", { path: changedPath });
+			if (writers === null) throw new slothlet.SlothletError("LOOSE_SET_UNATTRIBUTED", { path: segmentsOf(changedPath) });
 			for (let i = 0; i < writers.length; i++) apiManager.assertOwnedWrite(parts, writers[i]);
 		};
 
@@ -1827,7 +1828,7 @@ export class ApiBuilder extends ComponentBase {
 							// justification, as enforceInternalPermission above.
 							/* v8 ignore next */
 							caller: leavesCaller.____slothletInternal?.apiPath ?? "",
-							target: "slothlet.api.leaves:includePrivate"
+							target: segmentsOf("slothlet.api.leaves:includePrivate")
 						});
 					}
 
@@ -2120,7 +2121,7 @@ export class ApiBuilder extends ComponentBase {
 						const part = pathParts[i];
 						if (!current || (typeof current !== "object" && typeof current !== "function")) {
 							throw new slothlet.SlothletError("API_PATH_NOT_FOUND", {
-								path: pathOrModuleId
+								path: segmentsOf(pathOrModuleId)
 							});
 						}
 						current = current[part];
@@ -2128,7 +2129,7 @@ export class ApiBuilder extends ComponentBase {
 
 					if (current === undefined) {
 						throw new slothlet.SlothletError("API_PATH_NOT_FOUND", {
-							path: pathOrModuleId
+							path: segmentsOf(pathOrModuleId)
 						});
 					}
 
@@ -3177,7 +3178,7 @@ export class ApiBuilder extends ComponentBase {
 					if (!info || !info.versions?.[versionTag]) {
 						throw new slothlet.SlothletError("VERSION_NOT_FOUND", {
 							version: versionTag,
-							path: logicalPath
+							path: segmentsOf(logicalPath)
 						});
 					}
 					const { moduleID } = info.versions[versionTag];

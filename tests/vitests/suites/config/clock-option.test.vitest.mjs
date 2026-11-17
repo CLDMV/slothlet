@@ -139,7 +139,7 @@ describe.each(getMatrixConfigs())("Config > clock > $name", ({ config }) => {
 			api.slothlet.permissions.global.checkCall("untrusted.x", "admin.y", []);
 			await settle();
 			expect(denied).toHaveLength(1);
-			expect(denied[0].timestamp).toBe(time);
+			expect(denied[0].at).toBe(time);
 			expect(denied[0].rule.registeredAt).toBe(time);
 
 			const metas = [];
@@ -225,7 +225,7 @@ describe.each(getMatrixConfigs())("Config > clock > $name", ({ config }) => {
 		api.slothlet.permissions.global.checkCall("untrusted.x", "admin.y", []);
 		await vi.advanceTimersByTimeAsync(1);
 		expect(denied).toHaveLength(1);
-		expect(denied[0].timestamp).toBeGreaterThan(Date.parse("2020-01-01T00:00:00Z"));
+		expect(denied[0].at).toBeGreaterThan(Date.parse("2020-01-01T00:00:00Z"));
 	});
 
 	it("keeps two instances' clocks apart", async () => {
@@ -245,8 +245,8 @@ describe.each(getMatrixConfigs())("Config > clock > $name", ({ config }) => {
 		});
 		try {
 			const stamps = { one: [], two: [] };
-			api.slothlet.lifecycle.on("permission:denied", (payload) => stamps.one.push(payload.timestamp));
-			other.slothlet.lifecycle.on("permission:denied", (payload) => stamps.two.push(payload.timestamp));
+			api.slothlet.lifecycle.on("permission:denied", (payload) => stamps.one.push(payload.at));
+			other.slothlet.lifecycle.on("permission:denied", (payload) => stamps.two.push(payload.at));
 			api.slothlet.permissions.global.checkCall("untrusted.x", "admin.y", []);
 			other.slothlet.permissions.global.checkCall("untrusted.x", "admin.y", []);
 			await settle();

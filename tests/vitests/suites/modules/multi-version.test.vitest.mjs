@@ -130,7 +130,7 @@ describe("addModules — multi-version mounting (G7 case 2)", () => {
 		expect(events.length).toBe(2);
 		const eventVersions = events.map((e) => e.version).sort();
 		expect(eventVersions).toEqual(["1.2.3", "2.0.0"]);
-		const eventPaths = events.map((e) => e.mountPath).sort();
+		const eventPaths = events.map((e) => e.mount.join(".")).sort();
 		expect(eventPaths).toEqual(["v1.drivers.multiv", "v2.drivers.multiv"]);
 	});
 });

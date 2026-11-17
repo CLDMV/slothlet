@@ -87,10 +87,10 @@ describe("modules:discover-* events", () => {
 		expect(completeIdx).toBeGreaterThan(startIdx);
 	});
 
-	it("discover-start payload includes scanRoot and options", async () => {
+	it("discover-start payload includes root and options", async () => {
 		await api.slothlet.api.modules.discover({ scanRoot: FIX_NPM, prefix: "packrat-extension-" });
 		const [{ payload }] = eventsOfType("modules:discover-start");
-		expect(payload.scanRoot).toBe(FIX_NPM);
+		expect(payload.root).toBe(FIX_NPM);
 		expect(payload.options.prefix).toBe("packrat-extension-");
 	});
 
@@ -123,10 +123,10 @@ describe("modules:mount-* and modules:loaded events — addModule()", () => {
 		await mm.addModule("packrat-extension-baz");
 
 		const [{ payload }] = eventsOfType("modules:mount-complete");
-		expect(payload.name).toBe("packrat-extension-baz");
+		expect(payload.package).toBe("packrat-extension-baz");
 		expect(payload.version).toBe("0.5.0");
-		expect(payload.mountPath).toBe("extensions.baz");
-		expect(typeof payload.moduleID).toBe("string");
+		expect(payload.mount).toEqual(["extensions", "baz"]);
+		expect(typeof payload.module).toBe("string");
 	});
 
 	it("loaded payload contains a mounted[] array of length 1", async () => {

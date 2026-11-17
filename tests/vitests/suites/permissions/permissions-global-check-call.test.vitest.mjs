@@ -237,7 +237,11 @@ describe.each(getMatrixConfigs())("Permissions > global.checkCall (#508) > $name
 		await settle();
 		expect(audit).not.toContainEqual({
 			event: "permission:denied",
-			payload: expect.objectContaining({ caller: "reporting.peek", target: "billing.internals._scale", via: "checkCall" })
+			payload: expect.objectContaining({
+				caller: "reporting.peek",
+				target: ["billing", "internals", "_scale"],
+				via: ["slothlet", "permissions", "global", "check", "call"]
+			})
 		});
 	});
 
@@ -280,14 +284,22 @@ describe.each(getMatrixConfigs())("Permissions > global.checkCall (#508) > $name
 		expect(audit.map((entry) => entry.event)).toEqual(["permission:denied", "permission:allowed", "permission:default"]);
 		expect(audit[0].payload).toMatchObject({
 			caller: "untrusted.plugin",
-			target: "admin.manage",
-			via: "checkCall",
-			rule: expect.objectContaining({ caller: "untrusted.**", target: "admin.**", effect: "deny" }),
-			conditionMatched: false
+			target: ["admin", "manage"],
+			via: ["slothlet", "permissions", "global", "check", "call"],
+			rule: expect.objectContaining({ caller: "untrusted.**", target: "admin.**", effect: "deny" })
 		});
-		expect(audit[1].payload).toMatchObject({ caller: "payments.charge", target: "db.read", via: "checkCall" });
-		expect(audit[2].payload).toMatchObject({ caller: "cache.store", target: "widgets.render", via: "checkCall", policy: "allow" });
-		for (const { payload } of audit) expect(payload.timestamp).toBeTypeOf("number");
+		expect(audit[1].payload).toMatchObject({
+			caller: "payments.charge",
+			target: ["db", "read"],
+			via: ["slothlet", "permissions", "global", "check", "call"]
+		});
+		expect(audit[2].payload).toMatchObject({
+			caller: "cache.store",
+			target: ["widgets", "render"],
+			via: ["slothlet", "permissions", "global", "check", "call"],
+			policy: "allow"
+		});
+		for (const { payload } of audit) expect(payload.at).toBeTypeOf("number");
 
 		// The silent query stays silent.
 		checkAccess("untrusted.plugin", "admin.manage");
@@ -309,7 +321,10 @@ describe.each(getMatrixConfigs())("Permissions > global.checkCall (#508) > $name
 		await settle();
 
 		expect(audit).toHaveLength(1);
-		expect(audit[0]).toMatchObject({ event: "permission:denied", payload: { via: "checkCall" } });
+		expect(audit[0]).toMatchObject({
+			event: "permission:denied",
+			payload: { via: ["slothlet", "permissions", "global", "check", "call"] }
+		});
 	});
 
 	// ── Disabled enforcement ─────────────────────────────────────────────────────
@@ -422,7 +437,7 @@ describe("PermissionManager > checkCall enforcement options (#508)", () => {
 		).toBe(false);
 		expect(lifecycle.emit).toHaveBeenCalledWith(
 			"permission:denied",
-			expect.objectContaining({ caller: "reporting.peek", target: "billing.internals._scale", via: "probe" })
+			expect.objectContaining({ caller: "reporting.peek", target: ["billing", "internals", "_scale"], via: ["probe"] })
 		);
 	});
 
@@ -432,7 +447,10 @@ describe("PermissionManager > checkCall enforcement options (#508)", () => {
 
 		// First enforcement caches the decision; the tagged emit must spread, not write `via` into the cache.
 		expect(manager.checkCall("a.x", "b.y", [])).toBe(false);
-		expect(lifecycle.emit).toHaveBeenLastCalledWith("permission:denied", expect.objectContaining({ via: "checkCall" }));
+		expect(lifecycle.emit).toHaveBeenLastCalledWith(
+			"permission:denied",
+			expect.objectContaining({ via: ["slothlet", "permissions", "global", "check", "call"] })
+		);
 		expect(manager.enforceAccess("a.x", "b.y")).toBe(false);
 		expect(lifecycle.emit).toHaveBeenLastCalledWith("permission:denied", expect.not.objectContaining({ via: expect.anything() }));
 	});

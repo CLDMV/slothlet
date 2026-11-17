@@ -24,6 +24,7 @@
  * @package
  */
 
+import { segmentsOf } from "#helpers/segments";
 import { util } from "#helpers/platform";
 import { ComponentBase } from "#factories/component-base";
 import { internals as frameworkInternalsInternals } from "#handlers/framework-internals";
@@ -222,7 +223,7 @@ export class VersionManager extends ComponentBase {
 		if (MapMethods.has(entry.versions, versionTag)) {
 			throw new this.SlothletError("VERSION_REGISTER_DUPLICATE", {
 				version: versionTag,
-				path: logicalPath
+				path: segmentsOf(logicalPath)
 			});
 		}
 
@@ -240,7 +241,7 @@ export class VersionManager extends ComponentBase {
 			isDefault: isDefault ?? false,
 			/* v8 ignore next */
 			versionMeta: versionMeta ?? {},
-			registeredAt: this.clock.now()
+			at: this.clock.now()
 		};
 
 		MapMethods.set(entry.versions, versionTag, versionEntry);
@@ -384,7 +385,7 @@ export class VersionManager extends ComponentBase {
 		if (!entry || !MapMethods.has(entry.versions, versionTag)) {
 			throw new this.SlothletError("VERSION_NOT_FOUND", {
 				version: versionTag,
-				path: logicalPath
+				path: segmentsOf(logicalPath)
 			});
 		}
 		const ve = MapMethods.get(entry.versions, versionTag);
@@ -458,13 +459,13 @@ export class VersionManager extends ComponentBase {
 		if (!entry) {
 			throw new this.SlothletError("VERSION_NOT_FOUND", {
 				version: versionTag,
-				path: logicalPath
+				path: segmentsOf(logicalPath)
 			});
 		}
 		if (!MapMethods.has(entry.versions, versionTag)) {
 			throw new this.SlothletError("VERSION_NOT_FOUND", {
 				version: versionTag,
-				path: logicalPath
+				path: segmentsOf(logicalPath)
 			});
 		}
 		// Clear all explicit defaults, then set the requested one
@@ -958,7 +959,7 @@ export class VersionManager extends ComponentBase {
 				/* v8 ignore next 4 */
 				if (!versionTag) {
 					throw new manager.SlothletError("VERSION_NO_DEFAULT", {
-						path: logicalPath
+						path: segmentsOf(logicalPath)
 					});
 				}
 
@@ -984,7 +985,7 @@ export class VersionManager extends ComponentBase {
 			/* v8 ignore next 5 */
 			apply() {
 				throw new manager.SlothletError("VERSION_DISPATCH_NOT_CALLABLE", {
-					path: logicalPath
+					path: segmentsOf(logicalPath)
 				});
 			},
 

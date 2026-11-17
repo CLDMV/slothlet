@@ -151,7 +151,7 @@ describe("Background Materialization (config.tracking.materialization)", () => {
 				expect(eventEmitted).toBe(true);
 				expect(eventData).toBeDefined();
 				expect(eventData.total).toBeGreaterThanOrEqual(0);
-				expect(typeof eventData.timestamp).toBe("number");
+				expect(typeof eventData.at).toBe("number");
 
 				await api.shutdown();
 			});

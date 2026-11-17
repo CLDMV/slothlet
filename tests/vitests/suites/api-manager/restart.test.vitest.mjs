@@ -250,7 +250,7 @@ describe.each(getMatrixConfigs({}))("api.slothlet.restart() (#504) > $name", ({ 
 		});
 		const oldID = api.slothlet.instanceID;
 		expect(configEvents.map((e) => e.name)).toEqual(["init"]);
-		expect(configEvents[0].data).toMatchObject({ instanceID: oldID, restart: false });
+		expect(configEvents[0].data).toMatchObject({ instance: oldID, restart: false });
 
 		const runtimeEvents = [];
 		for (const name of ["restart", "shutdown", "init", "restarted"]) {
@@ -261,16 +261,16 @@ describe.each(getMatrixConfigs({}))("api.slothlet.restart() (#504) > $name", ({ 
 		await api.slothlet.restart();
 		const newID = api.slothlet.instanceID;
 		expect(configEvents.map((e) => e.name)).toEqual(["restart", "shutdown", "init", "restarted"]);
-		expect(configEvents[0].data).toEqual({ instanceID: oldID });
-		expect(configEvents[1].data).toEqual({ instanceID: oldID, restart: true });
-		expect(configEvents[2].data).toEqual({ instanceID: newID, restart: true });
-		expect(configEvents[3].data).toEqual({ instanceID: newID, previousInstanceID: oldID });
+		expect(configEvents[0].data).toEqual({ instance: oldID });
+		expect(configEvents[1].data).toEqual({ instance: oldID, restart: true });
+		expect(configEvents[2].data).toEqual({ instance: newID, restart: true });
+		expect(configEvents[3].data).toEqual({ instance: newID, previous: oldID });
 		expect(runtimeEvents).toEqual(["restart", "shutdown"]);
 
 		// The runtime subscriber went with the old instance.
 		await api.slothlet.shutdown();
 		expect(runtimeEvents).toEqual(["restart", "shutdown"]);
-		expect(configEvents.at(-1)).toEqual({ name: "shutdown", data: { instanceID: newID, restart: false } });
+		expect(configEvents.at(-1)).toEqual({ name: "shutdown", data: { instance: newID, restart: false } });
 		api = null;
 	});
 
@@ -321,7 +321,7 @@ describe.each(getMatrixConfigs({}))("api.slothlet.restart() (#504) > $name", ({ 
 
 	it("coalesces concurrent restart() calls into one restart", async () => {
 		const inits = [];
-		await create({ lifecycle: { init: (data) => inits.push(data.instanceID) } });
+		await create({ lifecycle: { init: (data) => inits.push(data.instance) } });
 		const [a, b] = await Promise.all([api.slothlet.restart(), api.slothlet.restart()]);
 		expect(a).toBe(api);
 		expect(b).toBe(api);

@@ -25,6 +25,7 @@
  * @module @cldmv/slothlet/handlers/frame-placement
  * @internal
  */
+import { segmentsOf } from "#helpers/segments";
 import { isNode, util } from "#helpers/platform";
 import {
 	rememberNewest,
@@ -583,7 +584,7 @@ function runtime_captureFrames(limit) {
 	const read = readStack(runtime_structuredFrames, { limit });
 	// The global `Error` or its stack settings were changed so that slothlet's own formatter could not be the one that
 	// ran: the frames are not the engine's, and what they would have decided is refused.
-	if (read === null) throw new SlothletError("PERMISSION_DENIED", { caller: null, target: "self" });
+	if (read === null) throw new SlothletError("PERMISSION_DENIED", { caller: null, target: segmentsOf("self") });
 	if (read.value?.structured) return read.value;
 	// An engine without V8's call-site hook formats the trace as text, which is parsed instead.
 	return textFrames(String(read.text ?? ""), limit);
@@ -3953,7 +3954,7 @@ function outerCallerCeiling(contextManager, instanceID, slothlet = null, origin 
 				break;
 			}
 			if (!running) return null;
-			throw new SlothletError("PERMISSION_DENIED", { caller: null, target: "self" });
+			throw new SlothletError("PERMISSION_DENIED", { caller: null, target: segmentsOf("self") });
 		}
 		// No call says who runs it: the leaves whose code is on the stack do (a module running the code from a timer it
 		// reached without slothlet's store or pin). Only read where the frames are (`provenance`), and never inside a

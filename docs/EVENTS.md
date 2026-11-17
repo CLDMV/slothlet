@@ -27,7 +27,7 @@ import { self } from "@cldmv/slothlet/runtime";
 const { level, off } = self.slothlet.event.on("orders.created", (payload, meta) => {
 	// At `allow`: payload is the emitted value. At `notify`: payload is undefined.
 	// With the permission system not on (the default) every subscription is at `allow`.
-	// meta is always { event, at, instanceID }.
+	// meta is always { event, at, instance }.
 });
 
 // Emit. Emitting is never gated — the policy is enforced per subscriber, not on the emit side.
@@ -57,7 +57,7 @@ All verbs live under `api.slothlet.event` (and `self.slothlet.event` inside modu
 A listener is always called `(payload, meta)`:
 
 - `payload` — the emitted value at `allow`; `undefined` at `notify`.
-- `meta` — the trigger envelope, always present: `{ event, at, instanceID }` (`at` is `Date.now()` at emit).
+- `meta` — the trigger envelope, always present: `{ event, at, instance }` (`at` is the instance clock's time at emit).
 
 Because `on`/`once` report the granted level, a subscriber never has to assume it will receive payloads and then silently get nothing — it knows whether it was granted `allow` up front.
 
@@ -66,7 +66,7 @@ Because `on`/`once` report the granted level, a subscriber never has to assume i
 Each subscriber's delivery is governed by a three-level effect, resolved from the subscriber's own identity:
 
 - **`deny`** — subscription is refused. The listener is never registered and never fires.
-- **`notify`** — subscribed, but delivered only the trigger envelope `{ event, at, instanceID }` — no domain payload. This is the default: subscription is open, payload is opt-_in_.
+- **`notify`** — subscribed, but delivered only the trigger envelope `{ event, at, instance }` — no domain payload. This is the default: subscription is open, payload is opt-_in_.
 - **`allow`** — subscribed with the full domain payload.
 
 **The levels follow the permission mode.** Event levels are part of the permission system, so they are resolved only while it is on (a `permissions` config, `mode: "on"`, or after `control.enable()`). While it is off, which is what no `permissions` config means, or disabled (`mode: "disabled"`), no event rule is evaluated: every subscription is granted `allow` and receives the payload, whatever `events.default`, a manifest's rules or runtime rules say, as call and read rules are not evaluated there either. `on()`'s returned `level`, `resolveLevel`, the `levels` map of a strategy's envelope and the level each delivery is made at all report `allow`. Rules given in the config, by a manifest or through `event.rules.add` are kept and take effect when the system is switched on; a subscription made earlier is then resolved again on the next emit.
@@ -262,8 +262,8 @@ It is called once per emit as `fn(envelope, listeners, defaultDeliver)`:
 
 - **`envelope`** — a frozen object:
   - `event`, `payload` — what was emitted.
-  - `at`, `instanceID` — the emit time and instance, as in the listener `meta`.
-  - `emitter` — `{ moduleID, apiPath }` of the emitting module, or `null` when the host emitted.
+  - `at`, `instance` — the emit time and instance, as in the listener `meta`.
+  - `emitter` — `{ module, path }` of the emitting module (`path` as its segments), or `null` when the host emitted.
   - `levels` — each recipient's listener id mapped to its level (`notify` / `allow`) **resolved at emit time**. It is informational: levels are enforced again at delivery (see below).
   - `listeners` — the recipients' listener ids.
 - **`listeners`** — the listener ids that would receive the event (the same array as `envelope.listeners`). A listener the rules deny at emit time is not a recipient.

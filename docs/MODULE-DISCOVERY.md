@@ -246,8 +246,13 @@ Five `modules:*` events emit through slothlet's standard lifecycle handler (subs
 | `modules:loaded`            | After the helper's full async chain settles                             |
 
 ```js
-api.slothlet.lifecycle.on("modules:loaded", ({ mounted, failed, stale }) => {
-	console.log(`mounted ${mounted.length} modules; ${failed?.length ?? 0} failed; ${stale?.length ?? 0} stale`);
+api.slothlet.lifecycle.on("modules:loaded", ({ mounted, failed }) => {
+	console.log(`mounted ${mounted.length} modules; ${failed?.length ?? 0} failed`);
+});
+
+// Stale mounts come from re-discovery, not from a mount: they are on modules:discover-complete.
+api.slothlet.lifecycle.on("modules:discover-complete", ({ stale }) => {
+	console.log(`${stale.length} mounted modules are no longer installed`);
 });
 ```
 

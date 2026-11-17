@@ -24,6 +24,7 @@
  * @module @cldmv/slothlet/processors/loader
  * @internal
  */
+import { segmentsOf } from "#helpers/segments";
 import { ComponentBase } from "#factories/component-base";
 import { DEFAULT_API_DEPTH } from "#helpers/defaults";
 
@@ -1592,7 +1593,7 @@ export class Loader extends ComponentBase {
 				// member. It is refused as a mount path, a `self` write or a routine name is (#585 review).
 				if (key === "__proto__") {
 					throw new this.SlothletError("API_PATH_INVALID", {
-						path: filePath ? `${filePath} (export '__proto__')` : "export '__proto__'",
+						path: segmentsOf(filePath ? `${filePath} (export '__proto__')` : "export '__proto__'"),
 						reason: translate("API_PATH_REASON_UNSAFE_SEGMENT"),
 						index: 0,
 						segment: key
