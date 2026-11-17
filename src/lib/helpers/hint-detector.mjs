@@ -20,7 +20,7 @@
  */
 
 import { ComponentBase } from "#factories/component-base";
-import { FunctionMethods, ObjectMethods, RegExpMethods } from "#helpers/intrinsics";
+import { describeThrown, FunctionMethods, RegExpMethods } from "#helpers/intrinsics";
 
 /**
  * Hint detection rules - pattern matching for the cause's message
@@ -60,7 +60,7 @@ export class HintDetector extends ComponentBase {
 	detectHint(error, errorCode) {
 		// If there is a cause, check pattern rules first
 		if (error) {
-			const errorMessage = error.message || ObjectMethods.toString(error);
+			const errorMessage = describeThrown(error);
 			for (let ofIndex = 0, ofList = HINT_RULES; ofIndex < ofList.length; ofIndex++) {
 				const rule = ofList[ofIndex];
 				if (RegExpMethods.exec(rule.pattern, errorMessage) !== null) {
