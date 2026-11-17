@@ -372,13 +372,13 @@ describe.each(getMatrixConfigs())("Permissions > Slothlet Mutation Gating > $nam
 		expect(api.controlCaller.callEnable.__metadata.securityTag).toBe("allowed");
 	});
 
-	it("blocks internal i18n.setLanguage but keeps external direct call allowed", async () => {
+	it("blocks internal i18n.language.set but keeps external direct call allowed", async () => {
 		api = await slothlet({
 			...config,
 			base: `${BASE}/callers`,
 			permissions: {
 				defaultPolicy: "allow",
-				rules: [{ caller: "controlCaller.**", target: "slothlet.i18n.setLanguage", effect: "deny" }]
+				rules: [{ caller: "controlCaller.**", target: "slothlet.i18n.language.set", effect: "deny" }]
 			}
 		});
 
@@ -391,8 +391,8 @@ describe.each(getMatrixConfigs())("Permissions > Slothlet Mutation Gating > $nam
 			}
 		});
 
-		expect(() => api.slothlet.i18n.setLanguage("en-gb")).not.toThrow();
-		expect(api.slothlet.i18n.getLanguage()).toBe("en-gb");
+		expect(() => api.slothlet.i18n.language.set("en-gb")).not.toThrow();
+		expect(api.slothlet.i18n.language.get()).toBe("en-gb");
 	});
 
 	it("blocks internal primitive route read but keeps external primitive read allowed", async () => {

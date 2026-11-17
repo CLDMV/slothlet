@@ -81,17 +81,16 @@ export class ApiBuilder extends ComponentBase {
  */
 export type I18nNamespace = {
     /**
-     * - Set the active locale (e.g. "en-us"). Synchronous; in a browser, non-default locales load in the background.
+     * - Initialise the i18n system with options (the language is detected when none is given).
      */
-    setLanguage: Function;
+    init: Function;
     /**
-     * - Set the active locale and await its load. Browser-capable (resolves once the locale module is fetched).
+     * - `get()` returns the current locale; `set(lang)` switches it, returning a promise only where the load is asynchronous (a browser), so `await language.set(x)` works everywhere.
      */
-    setLanguageAsync: Function;
-    /**
-     * - Return the current active locale string.
-     */
-    getLanguage: Function;
+    language: {
+        get: Function;
+        set: Function;
+    };
     /**
      * - Translate an error code with optional params.
      */
@@ -100,10 +99,6 @@ export type I18nNamespace = {
      * - Alias for translate.
      */
     t: Function;
-    /**
-     * - Initialise the i18n system with options.
-     */
-    initI18n: Function;
 };
 import { ComponentBase } from "#factories/component-base";
 //# sourceMappingURL=api_builder.d.mts.map
