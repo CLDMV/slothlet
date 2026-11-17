@@ -137,7 +137,7 @@ Enumerates the api paths a module owns — the inverse of the ownership tracking
 const moduleID = await api.slothlet.api.add("modules.acme.shop", "/path/to/extension/api");
 
 await api.slothlet.api.leaves(moduleID);
-// ["modules.acme.shop.connect", "modules.acme.shop.search", …]  — flattened, callable paths
+// [["modules", "acme", "shop", "connect"], ["modules", "acme", "shop", "search"], …]  — callable paths, each as its segments
 
 await api.slothlet.api.leaves("modules.acme.shop"); // same, keyed by mount endpoint
 await api.slothlet.api.leaves("."); // the base load's own leaves
@@ -150,14 +150,14 @@ await api.slothlet.api.leaves("."); // the base load's own leaves
 | any owned path | `"shop.ns"`           | Resolved to the owning module — the enumeration is always module-scoped |
 | `"."` / `""`   | `"."`                 | The base load (the injected `slothlet.*` control tree is excluded)      |
 
-The default return is the **callable** leaf paths — one entry per function a caller can invoke, the one-stub-per-callable contract. Pass `{ details: true }` for every owned path tagged with its kind:
+The default return is the **callable** leaf paths — one entry per function a caller can invoke, the one-stub-per-callable contract. Each path is reported as its segments; join it (`path.join(".")`) for the dotted form. Pass `{ details: true }` for every owned path tagged with its kind:
 
 ```javascript
 await api.slothlet.api.leaves("modules.acme.shop", { details: true });
 // [
-//   { path: "modules.acme.shop",         kind: "namespace" },
-//   { path: "modules.acme.shop.connect", kind: "function" },
-//   { path: "modules.acme.shop.limit",   kind: "data" }
+//   { path: ["modules", "acme", "shop"],            kind: "namespace" },
+//   { path: ["modules", "acme", "shop", "connect"], kind: "function" },
+//   { path: ["modules", "acme", "shop", "limit"],   kind: "data" }
 // ]
 ```
 

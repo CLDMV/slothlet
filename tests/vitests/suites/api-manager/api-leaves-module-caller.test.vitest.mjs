@@ -35,8 +35,8 @@ const configs = ["eager", "lazy"].flatMap((mode) =>
 	["async", "live"].flatMap((runtime) => ["precise", "fast"].map((attribution) => ({ mode, runtime, attribution })))
 );
 
-/** Whether a path's last segment is a private member's name. */
-const isPrivate = (path) => path.slice(path.lastIndexOf(".") + 1).startsWith("_");
+/** Whether a path's last segment is a private member's name (leaves() reports a path as its segments). */
+const isPrivate = (path) => path[path.length - 1].startsWith("_");
 
 /** The listings with no permission config, eager: everything is public there. */
 const all = {};
