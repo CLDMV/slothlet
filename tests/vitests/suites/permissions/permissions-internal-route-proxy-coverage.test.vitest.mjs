@@ -211,7 +211,7 @@ describe.each(getMatrixConfigs())("Permissions > Internal Route Proxy Coverage >
 			}
 			expect(error?.code).toBe("PERMISSION_DENIED");
 			// The call rule on the member itself refused it, not a write rule on a made-up key.
-			expect(error.details.target).toBe("slothlet.permissions.rules");
+			expect(error.details.target).toEqual(["slothlet", "permissions", "rules"]);
 		});
 		expect(typeof api.slothlet.permissions.rules.add).toBe("function");
 	});
@@ -239,7 +239,7 @@ describe.each(getMatrixConfigs())("Permissions > Internal Route Proxy Coverage >
 			}
 			expect(error?.code).toBe("PERMISSION_DENIED");
 			// The call rule on the member itself refused it, not a write rule on a made-up key.
-			expect(error.details.target).toBe("slothlet.permissions.rules");
+			expect(error.details.target).toEqual(["slothlet", "permissions", "rules"]);
 		});
 		expect(typeof api.slothlet.permissions.rules.add).toBe("function");
 	});
@@ -267,7 +267,7 @@ describe.each(getMatrixConfigs())("Permissions > Internal Route Proxy Coverage >
 			}
 			expect(error?.code).toBe("PERMISSION_DENIED");
 			// The call rule on the member itself refused it, not a write rule on a made-up key.
-			expect(error.details.target).toBe("slothlet.permissions.rules");
+			expect(error.details.target).toEqual(["slothlet", "permissions", "rules"]);
 		});
 		expect(typeof api.slothlet.permissions.rules.add).toBe("function");
 	});

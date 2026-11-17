@@ -98,7 +98,7 @@ describe.each(CONFIGS)("module mounts and rule reach (#625) — $mode / $runtime
 			await load();
 			expect(await withSuppressedSlothletErrorOutput(() => api.guest.x.removeAt("victim"))).toBe("LOOSE_SET_NOT_OWNED");
 			expect(await withSuppressedSlothletErrorOutput(() => api.guest.x.removeAt("victim.v"))).toBe("LOOSE_SET_NOT_OWNED");
-			expect(await withSuppressedSlothletErrorOutput(() => api.guest.x.removeAt("victim", "victim.v"))).toBe("LOOSE_SET_NOT_OWNED");
+			expect(await withSuppressedSlothletErrorOutput(() => api.guest.x.removeAt("victim.v", "victim"))).toBe("LOOSE_SET_NOT_OWNED");
 			expect(await api.victim.v.secret()).toBe("SECRET");
 		});
 
@@ -265,7 +265,7 @@ describe.each(CONFIGS)("module mounts and rule reach (#625) — $mode / $runtime
 		it("is the adding module's to remove, by path, by moduleID, or scoped within it", async () => {
 			await load();
 			expect(await api.guest.x.addAt("guest.kid", GUEST, { id: "kid" })).toBe("done");
-			expect(await api.guest.x.removeAt("kid", "guest.kid.x")).toBe(true);
+			expect(await api.guest.x.removeAt("guest.kid.x", "kid")).toBe(true);
 			expect(await api.guest.x.removeAt("guest.kid")).toBe(true);
 			expect(api.guest.kid).toBeUndefined();
 			expect(await api.guest.x.addAt("guest.kid", GUEST, { id: "kid" })).toBe("done");

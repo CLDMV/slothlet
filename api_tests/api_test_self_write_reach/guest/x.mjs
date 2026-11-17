@@ -1196,7 +1196,7 @@ export function registerCallbacks(pattern, event) {
 		),
 		lifecycle: outcome(() =>
 			self.slothlet.lifecycle.on("impl:removed", (data, token) => {
-				lifecycleSeen.push({ event: "impl:removed", apiPath: data?.apiPath ?? null, tokenType: typeof token });
+				lifecycleSeen.push({ event: "impl:removed", apiPath: data?.path ? data.path.join(".") : null, tokenType: typeof token });
 			})
 		)
 	};
@@ -1278,7 +1278,7 @@ export function holdRemoval(prefix) {
 		release = resolve;
 	});
 	globalThis[Symbol.for("slothlet.test.i625.release")] = release;
-	self.slothlet.lifecycle.on("impl:removed", (data) => (String(data?.apiPath ?? "").startsWith(prefix) ? gate : undefined));
+	self.slothlet.lifecycle.on("impl:removed", (data) => ((data?.path ?? []).join(".").startsWith(prefix) ? gate : undefined));
 }
 
 /**

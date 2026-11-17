@@ -77,7 +77,7 @@ export function keepHook(path, type) {
 export function keepLifecycle(event, prefix) {
 	const kept = [];
 	self.slothlet.lifecycle.on(event, (data) => {
-		if (String(data.apiPath).startsWith(prefix)) kept.push(data.impl);
+		if ((data.path ?? []).join(".").startsWith(prefix)) kept.push(data.impl);
 	});
 	return { get: () => kept };
 }

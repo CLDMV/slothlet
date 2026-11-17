@@ -154,7 +154,7 @@ describe.each(CONFIGS)("module rule integrity (#625) — $mode / $runtime", ({ m
 				return true;
 			};
 			const permissions = { allow: [{ target: "guest.**", condition }] };
-			expect(await api.guest.x.addAt("guest.sub", path.join(FIXTURE, "victim"), { moduleID: "gsub", permissions })).toBe("done");
+			expect(await api.guest.x.addAt("guest.sub", path.join(FIXTURE, "victim"), { id: "gsub", permissions })).toBe("done");
 			await withSuppressedSlothletErrorOutput(() => api.guest.sub.v.callAt("guest.x.listSelf"));
 			expect(writes.length).toBeGreaterThan(0);
 			expect([...new Set(writes)]).toEqual(["LOOSE_SET_NOT_OWNED"]);
@@ -175,7 +175,7 @@ describe.each(CONFIGS)("module rule integrity (#625) — $mode / $runtime", ({ m
 				return true;
 			};
 			const permissions = { allow: [{ target: "g.kid.**:write", condition }] };
-			expect(await api.g.x.addAt("g.kid", path.join(FIXTURE, "guest"), { moduleID: "kid", permissions })).toBe("done");
+			expect(await api.g.x.addAt("g.kid", path.join(FIXTURE, "guest"), { id: "kid", permissions })).toBe("done");
 			await api.slothlet.api.remove("gA");
 			await api.slothlet.api.add("z", path.join(FIXTURE, "victim"), { id: "gA" });
 			await withSuppressedSlothletErrorOutput(() => api.g.kid.x.writeAt("g.kid.x"));

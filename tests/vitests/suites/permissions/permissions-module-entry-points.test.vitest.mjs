@@ -183,7 +183,7 @@ describe.each(CONFIGS)("module-code entry points (#625) — $mode / $runtime", (
 					]
 				}
 			});
-			expect(await withSuppressedSlothletErrorOutput(() => api.guest.x.addAtVersion("victim.lib", GUEST, { moduleID: "gv" }, "v1"))).toBe(
+			expect(await withSuppressedSlothletErrorOutput(() => api.guest.x.addAtVersion("victim.lib", GUEST, { id: "gv" }, "v1"))).toBe(
 				"LOOSE_SET_NOT_OWNED"
 			);
 			expect(api.v1?.victim).toBeUndefined();
