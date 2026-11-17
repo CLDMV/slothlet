@@ -20,7 +20,7 @@
  */
 // Node-only ALS resolved in the platform module so node:async_hooks stays out of the browser
 // static graph (#123). Browser uses the live context manager, so this manager never runs there.
-import { AsyncLocalStorage, inheritsFrom } from "#helpers/platform";
+import { AsyncLocalStorage, AsyncResource, executionAsyncResource, inheritsFrom } from "#helpers/platform";
 import { nativeThen } from "#helpers/promise-context";
 import { SlothletError } from "#errors";
 import { DEFAULT_CLOCK } from "#helpers/clock";
@@ -46,16 +46,35 @@ import {
 	MapMethods,
 	Objects,
 	Promise,
+	queueMicrotask,
 	Reflect,
-	WeakMap
+	Symbol,
+	WeakMap,
+	WeakMapMethods,
+	listPush
 } from "#helpers/intrinsics";
 import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "#helpers/instance-imports";
 const { runtime_wrapClassInstance } = classInstanceWrapperInternals("lib/handlers/context-async");
 const { setApiContextChecker } = eventemitterContextInternals("lib/handlers/context-async");
 const trustedRootOwn = trustedRootInternals("lib/handlers/context-async");
 const { buildCapturedFlowStore } = trustedRootOwn;
-const { attributeResult, enterCall, ownReceiver, resolveSupplier, sampleStoreScripts } =
+const { attributeResult, enterCall, ownReceiver, resolveSupplier, runningOutsideFlow, sampleStoreScripts } =
 	framePlacementInternals("lib/handlers/context-async");
+
+/**
+ * Marks the stand-in store {@link AsyncContextManager} hands code that entered a flow by itself when no single leaf
+ * stands for that code: its code is no one's, and its accesses are refused.
+ * @type {symbol}
+ * @private
+ */
+const OUTSIDE_FLOW = Symbol("slothlet.outsideFlow");
+
+/**
+ * What {@link SealedStorage} records for a callback run outside every store (`exit()`).
+ * @type {object}
+ * @private
+ */
+const NO_STORE = Objects.freeze(Objects.create(null));
 
 /**
  * `AsyncLocalStorage` and the methods its instances inherit, taken as slothlet loads, before any module's code runs:
@@ -146,6 +165,9 @@ const unsealStore = StoreToken.storeOf;
  */
 class SealedStorage {
 	#storage;
+	// The stores this storage's `run()` entered whose callbacks are running now, innermost last: the code running inside
+	// one synchronously was called by the code slothlet ran there.
+	#entered = [];
 
 	constructor() {
 		const { Storage, methods } = STORAGE_METHODS;
@@ -171,8 +193,22 @@ class SealedStorage {
 	 * @returns {*} What it returned.
 	 */
 	run(store, fn, ...args) {
-		if (args.length === 0) return this.#storage.run(sealStore(store), fn);
-		return Reflect.apply(this.#storage.run, this.#storage, concatLists([sealStore(store), fn], args));
+		listPush(this.#entered, store);
+		try {
+			if (args.length === 0) return this.#storage.run(sealStore(store), fn);
+			return Reflect.apply(this.#storage.run, this.#storage, concatLists([sealStore(store), fn], args));
+		} finally {
+			ArrayMethods.pop(this.#entered);
+		}
+	}
+
+	/**
+	 * The store the innermost `run()` running now entered, {@link NO_STORE} inside `exit()`, or undefined outside both.
+	 * @returns {object|undefined} The store.
+	 */
+	entered() {
+		const entered = this.#entered;
+		return entered.length ? entered[entered.length - 1] : undefined;
 	}
 
 	/**
@@ -189,7 +225,12 @@ class SealedStorage {
 	 * @returns {*} What it returned.
 	 */
 	exit(fn, ...args) {
-		return Reflect.apply(this.#storage.exit, this.#storage, concatLists([fn], args));
+		listPush(this.#entered, NO_STORE);
+		try {
+			return Reflect.apply(this.#storage.exit, this.#storage, concatLists([fn], args));
+		} finally {
+			ArrayMethods.pop(this.#entered);
+		}
 	}
 
 	/**
@@ -273,6 +314,130 @@ export class AsyncContextManager {
 	}
 
 	/**
+	 * Whether the flow's code is being told apart now (see {@link AsyncContextManager#activeStore}): the frame placement
+	 * that does it reads the manager too, and gets the store as it is.
+	 * @type {boolean}
+	 */
+	#telling = false;
+
+	/**
+	 * A storage of slothlet's own that marks the stretch of synchronous code the flow's code was last told in (see
+	 * {@link AsyncContextManager#activeStore}): a value entered there is seen until the stretch ends, by nothing that ran
+	 * before it, and by nothing a resource made earlier puts in place.
+	 * @type {SealedStorage|null}
+	 */
+	#witness = null;
+
+	/**
+	 * The store the flow's code was last told in, and the mark entered then; cleared once the stretch ends.
+	 * @type {{store: object, mark: object}|null}
+	 */
+	#told = null;
+
+	/**
+	 * The stand-in stores handed to code that entered a flow by itself, by the flow's store and the leaf the code is.
+	 * @type {WeakMap<object, Map<object|null, object>>}
+	 */
+	#outsideViews = new WeakMap();
+
+	/**
+	 * The store the code running now acts in. Node's async context gives a flow's store to any code holding an async
+	 * resource of that flow (an `AsyncResource`, a function `AsyncLocalStorage.snapshot()` or `bind()` made there, the
+	 * context a timer keeps, copied onto a timer of its own), so a module could run its own code in another call's flow,
+	 * or in a `run()` / `scope()` the host opened, and act there with that flow's context and identity. Code slothlet runs
+	 * inside the store it entered, and anything that code calls, is the flow's. Elsewhere (code that picked up after an
+	 * `await`, a timer, a resource's scope) the frames tell whose code it is (see `runningOutsideFlow` in
+	 * `handlers/frame-placement`): a module's code that is not the flow's acts outside the flow, as the leaf it is,
+	 * with the instance's own context (see {@link AsyncContextManager#outsideView}). The host's code is the flow's
+	 * wherever it runs.
+	 * @returns {object|undefined} The store.
+	 * @internal
+	 */
+	activeStore() {
+		const store = this.als.getStore();
+		if (store === undefined || this.#telling || this.store === null) return store;
+		if (this.store.entered() === store) return store;
+		// Only a call's flow or a `run()` / `scope()` flow carries anything of another's; a file's load is told by its own.
+		if (store.moduleLoad || (!store.currentWrapper && !store.record && !store.parentInstanceID)) return store;
+		// Inside an async resource's scope the flow was put in place by whoever called it: told every time.
+		const resource = executionAsyncResource?.();
+		const scoped = AsyncResource !== null && inheritsFrom(resource, AsyncResource);
+		const told = this.#told;
+		if (!scoped && told !== null && told.store === store && this.#witness.getStore() === told.mark) return store;
+		const instanceID = store.parentInstanceID ?? store.instanceID;
+		this.#telling = true;
+		let answer;
+		try {
+			answer = runningOutsideFlow(instanceID, this.#ownersOf(store));
+		} finally {
+			this.#telling = false;
+		}
+		if (answer === null) return store;
+		if (answer.outside) return this.outsideView(store, instanceID, answer.reader);
+		// Every frame of this stretch is the flow's: the rest of the stretch is told by the mark, until it ends. Code queued
+		// before now never sees the mark, and the clearing runs before anything queued after it.
+		if (answer.clean && !scoped) {
+			const mark = Objects.freeze(Objects.create(null));
+			this.#witness.enterWith(mark);
+			this.#told = { store, mark };
+			queueMicrotask(() => {
+				if (this.#told?.mark === mark) this.#told = null;
+			});
+		}
+		return store;
+	}
+
+	/**
+	 * The calls a flow belongs to: the call its store names, the calls above it, and the call that made it.
+	 * @param {object} store - The flow's store.
+	 * @returns {Array<object>} Their wrappers.
+	 * @private
+	 */
+	#ownersOf(store) {
+		const owners = [];
+		const add = (wrapper) => {
+			if (wrapper && !ArrayMethods.includes(owners, wrapper)) listPush(owners, wrapper);
+		};
+		add(store.currentWrapper);
+		add(store.callerWrapper);
+		for (let record = store.record, depth = 0; record && depth < 64; record = record.parent, depth++) add(record.wrapper);
+		return owners;
+	}
+
+	/**
+	 * The store code that entered a flow by itself acts in: the instance's own, as the leaf the code is, with no call
+	 * above it. Where no single leaf stands for the code, no one's: its accesses are refused.
+	 * @param {object} store - The flow's store.
+	 * @param {string} instanceID - The instance.
+	 * @param {object|null} reader - The leaf.
+	 * @returns {object|undefined} The stand-in; undefined when the instance has no store.
+	 * @internal
+	 */
+	outsideView(store, instanceID, reader) {
+		const base = MapMethods.get(this.instances, instanceID);
+		if (!base) return undefined;
+		let views = WeakMapMethods.get(this.#outsideViews, store);
+		if (!views) {
+			views = new Map();
+			WeakMapMethods.set(this.#outsideViews, store, views);
+		}
+		let view = MapMethods.get(views, reader);
+		if (view === undefined || view.instanceID !== base.instanceID || view.context !== base.context) {
+			view = {
+				...base,
+				currentWrapper: reader,
+				callerWrapper: null,
+				currentCeiling: null,
+				callerCeiling: null,
+				record: reader ? { wrapper: reader, parent: null, flagged: false, ceiling: null } : null
+			};
+			if (!reader) Objects.defineProperty(view, OUTSIDE_FLOW, { __proto__: null, value: true });
+			MapMethods.set(views, reader, view);
+		}
+		return view;
+	}
+
+	/**
 	 * The manager's `AsyncLocalStorage` (sealed, see {@link SealedStorage}): the store once it has been made, a stand-in before that which answers that no
 	 * store is active and makes the store when one is run (see {@link AsyncContextManager#openStore}). Null in a browser.
 	 * @type {SealedStorage|DormantStore|null}
@@ -293,6 +458,7 @@ export class AsyncContextManager {
 		if (this.store === null && AsyncLocalStorage) {
 			sampleStoreScripts();
 			this.store = new SealedStorage();
+			this.#witness = new SealedStorage();
 		}
 		return this.store;
 	}
@@ -385,7 +551,7 @@ export class AsyncContextManager {
 		madeCode = false
 	) {
 		// Check if we're already in an active ALS context
-		const activeStore = this.als.getStore();
+		const activeStore = this.activeStore();
 		let baseStore;
 
 		// CHILD INSTANCE APPROACH: Check if active store is this instance OR a child of this instance
@@ -566,7 +732,7 @@ export class AsyncContextManager {
 	 * @public
 	 */
 	captureFlow() {
-		const store = this.als.getStore();
+		const store = this.activeStore();
 		const record = store ? this.#recordOf(store) : null;
 		if (!record?.flagged) return { store };
 		// Resolved now, while the code that is running is on the stack: re-entered later from another stack,
@@ -610,7 +776,7 @@ export class AsyncContextManager {
 	 * @internal
 	 */
 	runAsIdentity(instanceID, identity, fn) {
-		const active = this.als.getStore();
+		const active = this.activeStore();
 		const base =
 			active && (active.instanceID === instanceID || active.parentInstanceID === instanceID)
 				? active
@@ -645,7 +811,7 @@ export class AsyncContextManager {
 	 * @internal
 	 */
 	runUnattributed(instanceID, fn) {
-		const active = this.als.getStore();
+		const active = this.activeStore();
 		if (!active || (active.instanceID !== instanceID && active.parentInstanceID !== instanceID)) return fn();
 		if (!active.currentWrapper && !active.record) return fn();
 		const store = {
@@ -741,7 +907,7 @@ export class AsyncContextManager {
 	 * @public
 	 */
 	getContext() {
-		const store = this.als.getStore();
+		const store = this.activeStore();
 		if (!store) {
 			throw new SlothletError("CONTEXT_NOT_ACTIVE_ASYNC", {});
 		}
@@ -767,7 +933,7 @@ export class AsyncContextManager {
 		// "returns undefined instead of throwing" contract instead of dereferencing a null ALS.
 		// The browser run reaches this `!als` arm through that live-mode self-dispatch path.
 		if (!this.als) return undefined;
-		const store = this.als.getStore();
+		const store = this.activeStore();
 		if (instanceID === undefined) return store;
 		if (store && (store.instanceID === instanceID || store.parentInstanceID === instanceID)) {
 			return store;
@@ -837,6 +1003,8 @@ export class AsyncContextManager {
 		if (!record) {
 			// The store of a file's load (#726) while the file's module cannot be found: its code is no one's.
 			if (store.moduleLoad && !store.currentWrapper) return { currentWrapper: null, unresolved: true };
+			// Code that entered a flow by itself, which no single leaf stands for: no one's either.
+			if (store[OUTSIDE_FLOW] === true) return { currentWrapper: null, unresolved: true, unaccounted: true };
 			return { currentWrapper: store.currentWrapper, ceiling: store.currentCeiling ?? undefined };
 		}
 		const supplier = resolveSupplier(record);

@@ -215,7 +215,7 @@ export async function sensitiveOperation() {
 }
 ```
 
-Returns `null` only when there is no module caller in the active context — a host-initiated call, or code invoked directly from outside the API. `caller()` resolves the caller from the active **context-manager store** (not a stack walk), so it carries across `await`, timers, and callbacks; see [Handle null caller gracefully](#handle-null-caller-gracefully).
+Returns `null` only when there is no module caller in the active context — a host-initiated call, or code invoked directly from outside the API. `caller()` resolves the caller from the active **context-manager store** (not a stack walk), so it carries across `await`, timers, and callbacks; see [Handle null caller gracefully](#handle-null-caller-gracefully). Under the async runtime, a module's code that runs itself in another call's flow through an async resource of that flow gets `null` here and its own leaf from `self()`, not that call's (see [CONTEXT-PROPAGATION.md](CONTEXT-PROPAGATION.md#code-that-enters-another-flow-by-itself-async-runtime)).
 
 ### self.slothlet.metadata.get(target)
 

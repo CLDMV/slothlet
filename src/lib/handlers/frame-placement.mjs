@@ -4112,6 +4112,137 @@ function frameDefiner(running = null) {
 }
 
 /**
+ * Whether the code running now is not the code of the flow it runs in: a module's code that entered, by itself, a flow
+ * the host or another module's call opened. Node's async context hands any code holding an async resource of a flow (an
+ * `AsyncResource`, a function `AsyncLocalStorage.snapshot()` or `bind()` made there, the context a timer or a resource
+ * keeps under a symbol, copied onto a timer of its own) that flow's store, so the store alone does not say whose the code
+ * is. The frames do.
+ *
+ * The frames are read from the access outward, up to where slothlet entered a call or the job began. The flow's own
+ * code is the host's code or the code of a call of the flow (`owners`), with the helpers, packages and Node code they
+ * run, which act for them. The code running is the flow's when the first code of anyone's found is the flow's, or when
+ * code of the flow's is further out (it called the code running, as a call of the flow or the host calling a module's
+ * function does). It is not when the first code found is a module's (or code no file accounts for) and nothing further
+ * out is the flow's. Where an async resource put the flow in place (`runInAsyncScope`, which `bind()` and `snapshot()`
+ * run through), the code that called it put it there: the flow's own code doing so keeps it, anyone else's does not, and
+ * Node's own code beginning the job with it (a timer running a bound function) says nothing, so the code is held to the
+ * frames inside alone.
+ *
+ * @param {string} instanceID - The instance the flow belongs to.
+ * @param {ReadonlyArray<object>} owners - The calls of the flow: the call it names and the calls above it. Empty for a
+ *   flow the host opened.
+ * @returns {{outside: false, clean: boolean}|{outside: true, reader: object|null}|null} For the flow's code, whether
+ *   every frame up to where the code's job began or slothlet entered a call is the flow's (`clean`); otherwise the leaf
+ *   the code is (null when no single leaf of the instance stands for it). Null when the instance is not running.
+ * @internal
+ */
+function runningOutsideFlow(instanceID, owners) {
+	const reference = MapMethods.get(LIVE_INSTANCES, instanceID);
+	const slothlet = reference ? WeakRefMethods.deref(reference) : null;
+	if (!slothlet) return null;
+	// The files of the flow's calls, read once a frame asks.
+	let ownerFiles = null;
+	const runtime_ownsPath = (path) => {
+		if (ownerFiles === null) {
+			ownerFiles = [];
+			for (let i = 0; i < owners.length; i++) {
+				const description = describeCall(owners[i]);
+				if (description.comparablePath) listPush(ownerFiles, description.comparablePath);
+				if (description.realComparablePath) listPush(ownerFiles, description.realComparablePath);
+			}
+		}
+		return path !== null && ArrayMethods.includes(ownerFiles, path);
+	};
+	const ownsFile = (leaf) => {
+		const description = describeCall(leaf);
+		return runtime_ownsPath(description.comparablePath) || runtime_ownsPath(description.realComparablePath);
+	};
+	// What a frame is to the flow: "own" (the host's code or a call of the flow's), "foreign" (another module's code, or
+	// code no file accounts for), or null (a package's or a helper's, which act for their caller).
+	const kindOf = (frame) => {
+		if (frame.evaluated || isForeignScript(frame)) return "foreign";
+		// The copy of a call's own file the instance's loader imported: the call's code, as the frame placement below says.
+		if (runtime_frameInstanceTag(frame.line) === instanceID && runtime_ownsPath(frame.path)) return "own";
+		const leaves =
+			runtime_leafFileCopyOf(frame) !== null ? null : runtime_leavesAtLocation(frame.path, frame.line, instanceID, frame.location ?? null);
+		if (leaves?.length) {
+			for (let i = 0; i < leaves.length; i++) if (ArrayMethods.includes(owners, leaves[i]) || ownsFile(leaves[i])) return "own";
+			return "foreign";
+		}
+		if (runtime_isInstanceFile(frame.path) || runtime_helperOwner(frame, null)) return null;
+		// A package's file, or one a module of the instance loaded: it acts for whoever called it.
+		if (
+			(StringMethods.includes(frame.path, "/node_modules/") && !isInstanceOwnerFile(slothlet, frame.path)) ||
+			SetMethods.size(runtime_packageImportingLeaves(slothlet, frame.path))
+		)
+			return null;
+		return "own";
+	};
+	// `own`: whether the code is the flow's (undefined when the frames read stop before saying). `clean`: whether every
+	// frame read, up to where slothlet entered a call or the job began, is the flow's or acts for it.
+	const decide = (frames) => {
+		let own;
+		let foreign = false;
+		// Past a `runInAsyncScope`: the code that called it put the flow in place, and is looked for.
+		let switched = false;
+		// Whether the frames read reach where slothlet entered a call or the job began.
+		let ended = false;
+		let cut = false;
+		for (const frame of framesOf(frames)) {
+			if (StringMethods.startsWith(frame.path, FRAMEWORK_DIR + "/")) {
+				if (frame.enter) {
+					ended = true;
+					break;
+				}
+				continue;
+			}
+			if (frame.async || isRunnerFrame(frame)) {
+				ended = true;
+				break;
+			}
+			let kind = null;
+			if (StringMethods.startsWith(frame.path, "node:")) {
+				// Code compiled under a `node:` name is no one's.
+				if (!runtime_isNodeScript(frame)) kind = "foreign";
+				else if (frame.path === "node:async_hooks" && StringMethods.endsWith(frame.head ?? "", "runInAsyncScope")) {
+					switched = true;
+					if (own !== undefined) {
+						cut = true;
+						break;
+					}
+				}
+			} else kind = kindOf(frame);
+			if (kind === "own") own ??= true;
+			else if (kind === "foreign") {
+				// Anyone else's code put the flow in place, or runs in it with nothing of the flow's calling it.
+				if (own === undefined && switched) {
+					own = false;
+					cut = true;
+					break;
+				}
+				foreign = true;
+				if (own !== undefined) {
+					cut = true;
+					break;
+				}
+			}
+		}
+		if (!ended && !cut && !frames.truncated) ended = true;
+		if (!ended && own === undefined && frames.truncated) return { own: undefined, clean: false };
+		own ??= !foreign && !switched;
+		return { own, clean: own && ended && !foreign && !switched };
+	};
+	// The deciding frame is nearly always a few frames below slothlet's own: a short capture settles it, and the stack is
+	// read further only when it does not. Cut off even then, the code is not taken for the flow's.
+	let answer = decide(runtime_captureFrames(NEAR_FRAMES));
+	if (answer.own === undefined) answer = decide(runtime_captureFrames(FAR_FRAMES));
+	if (answer.own === true) return { outside: false, clean: answer.clean };
+	// The leaf the code running is, read as code run while no call runs is read.
+	const definer = runtime_definerAt(runtime_captureFrames(24), instanceID);
+	return { outside: true, reader: definer?.wrapper?.slothlet === slothlet ? definer.wrapper : null };
+}
+
+/**
  * The definer of the code doing an access while no call runs, read from frames already captured (see
  * {@link frameDefiner}).
  * @param {Iterable<object> & {truncated: boolean}} frames - The frames.
@@ -5336,6 +5467,7 @@ export function internals(consumer) {
 		recordInstanceOwner,
 		registerLeafFile,
 		resolveSupplier,
+		runningOutsideFlow,
 		runtime_captureFrames,
 		sampleStoreScripts,
 		runtime_codeWritersOnStack,
