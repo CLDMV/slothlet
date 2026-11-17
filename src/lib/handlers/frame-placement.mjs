@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T14:44:06-08:00 (1794955446)
+ *	@Last modified time: 2026-11-17T15:07:35-08:00 (1794956855)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -26,7 +26,7 @@
  * @internal
  */
 import { segmentsOf } from "#helpers/segments";
-import { isNode, util } from "#helpers/platform";
+import { AsyncResource, isNode, util } from "#helpers/platform";
 import {
 	rememberNewest,
 	LOADED_BY_SPECIFIER,
@@ -4260,6 +4260,51 @@ function runningOutsideFlow(instanceID, owners, making = false) {
 }
 
 /**
+ * Node's own `AsyncResource.prototype.runInAsyncScope`, taken as slothlet loads, before any module's code runs: the
+ * function whose frame {@link scopeEnteredByCode} looks for. A wrapper put on the prototype later (the live runtime's,
+ * or a module's) still calls it to enter the scope. Null where the platform has no `node:async_hooks`.
+ * @type {Function|null}
+ * @private
+ */
+const RUN_IN_ASYNC_SCOPE = typeof AsyncResource?.prototype?.runInAsyncScope === "function" ? AsyncResource.prototype.runInAsyncScope : null;
+
+/**
+ * Whether the async resource running now was put in place by code, through `AsyncResource.prototype.runInAsyncScope()`
+ * (which a resource's `bind()` runs through), rather than by Node as it began the resource's job. A promise or a
+ * `process.nextTick()` job carries the async id `runInAsyncScope()` reads, so code holding one can run a function of its
+ * own in that job's scope; Node itself never begins a promise's or a tick's job through `runInAsyncScope()`.
+ *
+ * Told without reading the frames: the capture skips every frame down to the innermost call of `runInAsyncScope()`
+ * (`Error.captureStackTrace`'s second argument), and collects none when no such call is on the stack, so the engine
+ * only walks the stack and formats at most one frame. A call with nothing of anyone's below it (a function bound to the
+ * job that the engine calls by itself) collects none either; the caller tells that apart by another callback running
+ * below the job (see `begunByNode` in `handlers/context-async`). A stack that cannot be read counts as entered by code.
+ *
+ * Used only on a Node whose async hooks cannot leave promises out (22.15, 24.0); the suite's coverage runs on one that
+ * can, and its Node 22.15 leg runs this.
+ * @returns {boolean} True when a call of `runInAsyncScope()` is on the stack, or the stack cannot say.
+ * @internal
+ */
+/* v8 ignore start */
+function scopeEnteredByCode() {
+	if (RUN_IN_ASYNC_SCOPE === null) return true;
+	const read = readStack(runtime_siteCount, { limit: 1, skip: RUN_IN_ASYNC_SCOPE });
+	return read === null || read.value !== 0;
+}
+
+/**
+ * V8's `prepareStackTrace` hook for {@link scopeEnteredByCode}: how many call sites were collected.
+ * @param {Error} _error - The error being captured.
+ * @param {Array<object>} callSites - V8 call sites.
+ * @returns {number} Their count.
+ * @private
+ */
+function runtime_siteCount(_error, callSites) {
+	return callSites.length;
+}
+/* v8 ignore stop */
+
+/**
  * The definer of the code doing an access while no call runs, read from frames already captured (see
  * {@link frameDefiner}).
  * @param {Iterable<object> & {truncated: boolean}} frames - The frames.
@@ -5486,6 +5531,7 @@ export function internals(consumer) {
 		resolveSupplier,
 		runningOutsideFlow,
 		runtime_captureFrames,
+		scopeEnteredByCode,
 		sampleStoreScripts,
 		runtime_codeWritersOnStack,
 		runtime_loadingFileRunning,

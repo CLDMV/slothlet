@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T12:36:59-08:00 (1794947819)
+ *	@Last modified time: 2026-11-17T15:07:35-08:00 (1794956855)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -46,6 +46,7 @@ import {
 	MapMethods,
 	Objects,
 	Promise,
+	Promises,
 	queueMicrotask,
 	Reflect,
 	Symbol,
@@ -58,7 +59,7 @@ const { runtime_wrapClassInstance } = classInstanceWrapperInternals("lib/handler
 const { setApiContextChecker, setListenerFlow } = eventemitterContextInternals("lib/handlers/context-async");
 const trustedRootOwn = trustedRootInternals("lib/handlers/context-async");
 const { buildCapturedFlowStore } = trustedRootOwn;
-const { attributeResult, enterCall, ownReceiver, resolveSupplier, runningOutsideFlow, sampleStoreScripts } =
+const { attributeResult, enterCall, ownReceiver, resolveSupplier, runningOutsideFlow, sampleStoreScripts, scopeEnteredByCode } =
 	framePlacementInternals("lib/handlers/context-async");
 
 /**
@@ -123,10 +124,12 @@ class Stamped {
 /**
  * The store each promise made while a flow ran was made in (as {@link MADE_IN} for every other resource), held in a
  * private field put on the promise: only this class reads it, nothing can forge it, and putting it costs a fraction of
- * a `WeakMap` entry (the async hook runs for every promise a flow makes). A promise's job runs only what was fixed when
- * it was made (an `await`'s continuation, the reaction `then()` registered, the thenable it resolves to): no one can
- * enter it with code of their own later, as anyone can an `AsyncResource`'s scope or a timer's callback slot. One the
- * flow's own code made, unmarked in {@link OUTSIDE_JOBS}, runs that code's continuation in the flow.
+ * a `WeakMap` entry (the async hook runs for every promise a flow makes). The job Node begins for a promise runs only
+ * what was fixed when it was made (an `await`'s continuation, the reaction `then()` registered, the thenable it resolves
+ * to); one the flow's own code made, unmarked in {@link OUTSIDE_JOBS}, runs that code's continuation in the flow. A
+ * promise carries the async id `AsyncResource.prototype.runInAsyncScope()` reads, though, so code holding one can put
+ * its scope in place around code of its own: only a job Node began counts (see
+ * {@link AsyncContextManager#begunByNode}).
  * @private
  */
 class PromiseFlow extends Stamped {
@@ -156,9 +159,9 @@ Objects.freeze(PromiseFlow.prototype);
 /**
  * The callback slot of a timer, an immediate or a `process.nextTick()` job made while a flow ran, with the function in
  * it when it was made: code holding the timer can put another function there later, which is then not what the flow
- * handed Node. A microtask's resource is an `AsyncResource` Node enters once, with the callback it was queued with;
- * `entries` counts how often its scope has been entered, so code that got hold of it and enters it again is not taken
- * for that job.
+ * handed Node. A microtask's resource is an `AsyncResource` Node enters once, with the callback it was queued with, and
+ * Node begins a tick's job once; `entries` counts how often the scope of either has been entered, so code that got hold
+ * of it and enters it again is not taken for that job.
  * @type {WeakMap<object, {slot: string|null, fn: *, entries: number}>}
  * @private
  */
@@ -639,7 +642,7 @@ export class AsyncContextManager {
 		// awaits, a reaction it registered, a function it handed `setTimeout()`) carries on that code: the flow's, with
 		// nothing of the flow's on the stack. Known while the async hook runs. The scope of any other `AsyncResource` is
 		// never one (see MADE_IN).
-		if (this.#jobHook !== null && this.#ownContinuation(resource, store)) return store;
+		if (this.#jobHook !== null && this.#ownContinuation(resource, store) && this.#begunByNode(resource)) return store;
 		const told = this.#told;
 		if (!scoped && told !== null && told.store === store && this.#witness.getStore() === told.mark) return store;
 		const instanceID = store.parentInstanceID ?? store.instanceID;
@@ -683,11 +686,125 @@ export class AsyncContextManager {
 	 */
 	#ownContinuation(resource, store) {
 		if (resource === null || typeof resource !== "object") return false;
+		// Its callback is the one running: a resource whose scope was put in place without an async hook's `before` (a
+		// promise put on Node's async id stack by hand) runs nothing Node began.
+		const stack = this.#jobStack;
+		if (stack.length === 0 || stack[stack.length - 1] !== resource) return false;
 		const flow = PromiseFlow.of(resource);
 		if (flow !== undefined) return flow === store && !WeakMapMethods.has(OUTSIDE_JOBS, resource);
 		if (WeakMapMethods.get(MADE_IN, resource) !== store || WeakMapMethods.has(OUTSIDE_JOBS, resource)) return false;
-		const stack = this.#jobStack;
-		return stack.length !== 0 && stack[stack.length - 1] === resource && runsMadeCallback(resource);
+		return runsMadeCallback(resource);
+	}
+
+	/**
+	 * The stretch {@link AsyncContextManager#begunByNode} last read the stack in, the resource it read it for, and what
+	 * it found.
+	 * @type {{stretch: number, resource: object|null, byNode: boolean}}
+	 */
+	#entry = { stretch: -1, resource: null, byNode: false };
+
+	/**
+	 * The second async hook (see {@link AsyncContextManager#holdScopeHook}), or null.
+	 * @type {object|null}
+	 */
+	#scopeHook = null;
+
+	/**
+	 * Whether Node leaves the second hook out of a promise's job: unknown (null) until the probe promise's job has run.
+	 * @type {boolean|null}
+	 */
+	#promiseJobsLeftOut = null;
+
+	/**
+	 * The promise whose job tells whether Node leaves the second hook out of promise jobs, until that job has run.
+	 * @type {object|null}
+	 */
+	#promiseProbe = null;
+
+	/**
+	 * Whether the second hook ran for the probe promise's job.
+	 * @type {boolean}
+	 */
+	#promiseProbeSeen = false;
+
+	/**
+	 * The promise of the flow's whose scope code put in place through `runInAsyncScope()` while no other callback ran
+	 * below it, until that scope ends.
+	 * @type {object|null}
+	 */
+	#scriptBegun = null;
+
+	/**
+	 * Whether Node itself began the job of `resource` (see {@link AsyncContextManager#ownContinuation}) that is running
+	 * now. A promise's or a `process.nextTick()` job's scope can also be put in place by code holding the object, through
+	 * `AsyncResource.prototype.runInAsyncScope.call(job, fn)`: its own `fn` would then run as the flow's continuation.
+	 * Node begins either job with no other callback running below it (a promise's from the microtask queue, a tick's from
+	 * the tick queue). It begins a tick's job once, before anyone can get hold of the tick object inside it. It begins a
+	 * promise's job without running async hooks that leave promises out, which `runInAsyncScope()` runs (see
+	 * {@link AsyncContextManager#holdScopeHook}); where Node does not leave them out, the stack is walked instead, once
+	 * per stretch of synchronous code (see `scopeEnteredByCode` in `handlers/frame-placement`). A timer's, an immediate's
+	 * and a microtask's job need none of this: code cannot enter a timer's or an immediate's scope, and only the first
+	 * entry of a microtask's counts (see {@link runsMadeCallback}).
+	 * @param {object} resource - The job's async resource.
+	 * @returns {boolean} Whether Node began it.
+	 * @private
+	 */
+	#begunByNode(resource) {
+		const made = WeakMapMethods.get(JOB_CALLBACK, resource);
+		if (made !== undefined && made.slot !== "callback") return true;
+		if (this.#jobStack.length !== 1) return false;
+		if (made !== undefined) return made.entries === 1;
+		if (this.#promiseJobsLeftOut === true) return this.#scriptBegun !== resource;
+		// Node runs every hook for a promise's job (Node 22 and 24 releases before async hooks could leave promises out,
+		// or before the probe's job has run): what put the scope in place is on the stack. The suite's coverage runs on a
+		// Node that leaves them out; its Node 22.15 leg runs this.
+		/* v8 ignore start */
+		const entry = this.#entry;
+		if (entry.stretch === this.#stretch && entry.resource === resource) return entry.byNode;
+		let byNode;
+		this.#telling = true;
+		try {
+			byNode = !scopeEnteredByCode();
+		} finally {
+			this.#telling = false;
+		}
+		entry.stretch = this.#stretch;
+		entry.resource = resource;
+		entry.byNode = byNode;
+		return byNode;
+		/* v8 ignore stop */
+	}
+
+	/**
+	 * Install the second async hook, which Node is asked to leave out of promise jobs (`trackPromises: false`, or the
+	 * hook's own marker for that on a Node whose `createHook()` takes no such option): it then runs only where a promise's
+	 * scope is put in place by code, through `runInAsyncScope()` (see {@link AsyncContextManager#scriptBegins}). Whether
+	 * Node does leave it out is told by the job of a promise made here, before which every promise's job is told by its
+	 * stack (see {@link AsyncContextManager#begunByNode}).
+	 * @returns {void}
+	 * @private
+	 */
+	#holdScopeHook() {
+		const manager = this;
+		const hook = createHook({
+			before() {
+				manager.#scriptBegins();
+			},
+			trackPromises: false
+		});
+		// Node 22 releases whose `createHook()` takes no `trackPromises` still honour the marker it sets.
+		const marker = ArrayMethods.find(Objects.getOwnPropertySymbols(hook), (symbol) => symbol.description === "kNoPromiseHook");
+		// A Node without the marker: the probe below finds promise jobs not left out, and they are told by their stack.
+		/* v8 ignore next */
+		if (marker !== undefined) hook[marker] = true;
+		Reflect.apply(hookMethods.enable, hook, []);
+		this.#scopeHook = hook;
+		this.#promiseJobsLeftOut = null;
+		this.#promiseProbeSeen = false;
+		this.#promiseProbe = nativeThen(Promises.resolve(), () => {
+			this.#promiseJobsLeftOut = !this.#promiseProbeSeen;
+			this.#promiseProbe = null;
+		});
 	}
 
 	/**
@@ -754,6 +871,7 @@ export class AsyncContextManager {
 		Reflect.apply(methods.enable, hook, []);
 		this.#jobHook = hook;
 		jobHooks++;
+		this.#holdScopeHook();
 	}
 
 	/**
@@ -769,8 +887,15 @@ export class AsyncContextManager {
 		this.#runningJobs = [];
 		this.#jobStack = jobStackList();
 		this.#lastTold = null;
+		this.#entry = { stretch: -1, resource: null, byNode: false };
+		this.#scriptBegun = null;
+		this.#promiseProbe = null;
+		this.#promiseJobsLeftOut = null;
+		const scopeHook = this.#scopeHook;
+		this.#scopeHook = null;
 		jobHooks--;
 		Reflect.apply(hookMethods.disable, hook, []);
+		if (scopeHook !== null) Reflect.apply(hookMethods.disable, scopeHook, []);
 	}
 
 	/**
@@ -844,7 +969,7 @@ export class AsyncContextManager {
 			const resource = executionAsyncResource();
 			stack[stack.length] = resource;
 			const made = WeakMapMethods.get(JOB_CALLBACK, resource);
-			if (made !== undefined && made.slot === null) made.entries++;
+			if (made !== undefined && (made.slot === null || made.slot === "callback")) made.entries++;
 		} catch {
 			// Not kept: a scope it begins is told by its frames alone.
 		}
@@ -857,7 +982,26 @@ export class AsyncContextManager {
 	 */
 	#jobFinishes() {
 		const stack = this.#jobStack;
-		if (stack.length !== 0 && stack[stack.length - 1] === executionAsyncResource()) stack.length--;
+		if (stack.length !== 0 && stack[stack.length - 1] === executionAsyncResource()) {
+			if (stack[stack.length - 1] === this.#scriptBegun) this.#scriptBegun = null;
+			stack.length--;
+		}
+	}
+
+	/**
+	 * A callback that is no promise's job begins (the hook of {@link AsyncContextManager#holdScopeHook}, which Node does
+	 * not run for a promise's job): when the resource put in place is a promise the flow's code made, code put it there
+	 * through `runInAsyncScope()`.
+	 * @returns {void}
+	 * @private
+	 */
+	#scriptBegins() {
+		const resource = executionAsyncResource();
+		if (resource === this.#promiseProbe) this.#promiseProbeSeen = true;
+		// Kept only for the outermost callback (the async hook that keeps the stack runs first): a scope entered inside it
+		// is not taken for a job Node began anyway.
+		if (this.#jobStack.length === 1 && this.#jobStack[0] === resource && PromiseFlow.of(resource) !== undefined)
+			this.#scriptBegun = resource;
 	}
 
 	/**
