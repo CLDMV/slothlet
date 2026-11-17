@@ -270,6 +270,31 @@ describe("Modes > documented collision table (merge: first loaded wins, both sou
 		}
 	});
 
+	it("merges a losing folder callable's own function members, identically in both modes", async () => {
+		// `pair/fnprop/fnprop.mjs` sets `folderFnprop.tag` on its function instead of exporting it by name.
+		// A callable impl keeps its function's own properties on the function, where the traps serve them,
+		// so `tag` is never a child of the folder's wrapper: lazy carries it across from the extracted
+		// impl (the snapshot arm of the collision merge), eager from the losing impl's own members.
+		const eager = await slothlet({ mode: "eager", base: BASE });
+		api = await slothlet({ mode: "lazy", base: BASE });
+
+		try {
+			await api.pair.fnprop.extra.ping;
+			const lazySlot = await api.pair.fnprop;
+			for (const [label, slot] of [
+				["eager", eager.pair.fnprop],
+				["lazy", lazySlot]
+			]) {
+				expect(slot("x"), `${label} slot keeps the file callable`).toBe("file-fnprop");
+				expect(slot.origin, `${label} named export`).toBe("dir");
+				expect(slot.tag, `${label} function's own member`).toBe("folder-fn-tag");
+				expect(Object.keys(slot).sort(), `${label} surface`).toEqual(["extra", "origin", "tag"]);
+			}
+		} finally {
+			await eager.shutdown();
+		}
+	});
+
 	it("is idempotent when the collision merge runs again on a settled slot", async () => {
 		const { resolveWrapper } = await import("#handlers/unified-wrapper");
 		api = await slothlet({ mode: "lazy", base: BASE });

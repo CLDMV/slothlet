@@ -164,9 +164,11 @@ export class ApiAssignment extends ComponentBase {
 			Objects.defineProperty(keptWrapper, folderKey, {
 				__proto__: null,
 				// Prefer the live child wrapper over the extracted snapshot of it. The snapshot arm serves
-				// the members adoption never turned into children — its private skip list holds `_state` /
-				// `_invalid`, which are NOT framework-reserved, so a module exporting them reaches the
-				// merged slot only through the extracted product (pair/frog pins this in both modes).
+				// the members that are not wrapper children at all: a callable folder module's impl keeps
+				// its function's own enumerable properties (`fn.extra = …`) on the function, where the
+				// traps serve them, so they never appear among the folder wrapper's own keys and only the
+				// extracted product (the function itself) carries them across. Eager merges the same members
+				// from the losing module's function in modes-processor (pair/fnprop pins both modes).
 				value: MapMethods.has(folderChildren, folderKey) ? MapMethods.get(folderChildren, folderKey) : folderProduct[folderKey],
 				writable: false,
 				enumerable: true,
