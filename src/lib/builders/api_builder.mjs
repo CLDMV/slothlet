@@ -2663,22 +2663,12 @@ export class ApiBuilder extends ComponentBase {
 					} else if (args.length === 1 && keyOrValues !== null && typeof keyOrValues === "object" && !Arrays.isArray(keyOrValues)) {
 						entries = Objects.entries(keyOrValues);
 					} else {
-						throw new slothlet.SlothletError("INVALID_ARGUMENT", {
-							argument: "keyOrValues",
-							expected: "a key and a value, or an object",
-							received: describeScopeReceived(keyOrValues),
-							validationError: true
-						});
+						throw new slothlet.SlothletError("INVALID_ARGUMENT", { argument: "keyOrValues", expected: "a key and a value, or an object", received: describeScopeReceived(keyOrValues) });
 					}
 					for (let i = 0; i < entries.length; i++) {
 						const key = entries[i][0];
 						if (key === "__proto__" || key === "constructor" || key === "prototype") {
-							throw new slothlet.SlothletError("INVALID_ARGUMENT", {
-								argument: "key",
-								expected: "a context key other than __proto__, constructor or prototype",
-								received: key,
-								validationError: true
-							});
+							throw new slothlet.SlothletError("INVALID_ARGUMENT", { argument: "key", expected: "a context key other than __proto__, constructor or prototype", received: key });
 						}
 					}
 					const contextManager = slothlet.contextManager;

@@ -2969,24 +2969,14 @@ export class PermissionManager extends ComponentBase {
 	setMode(value) {
 		const mode = value === true ? "on" : value === false ? "off" : value;
 		if (mode !== "on" && mode !== "off" && mode !== "strict" && mode !== "disabled") {
-			throw new this.SlothletError("INVALID_ARGUMENT", {
-				argument: "value",
-				expected: '"on", "off", true or false',
-				received: typeof value === "string" ? `"${value}"` : typeof value,
-				validationError: true
-			});
+			throw new this.SlothletError("INVALID_ARGUMENT", { argument: "value", expected: '"on", "off", true or false', received: typeof value === "string" ? `"${value}"` : typeof value });
 		}
 		this.#assertNotStrict("mode");
-		if (mode === "strict") throw new this.SlothletError("PERMISSION_STRICT_FIXED", { method: "mode" }, null, { validationError: true });
+		if (mode === "strict") throw new this.SlothletError("PERMISSION_STRICT_FIXED", { method: "mode" });
 		this.#assertNotSealed();
 		if (mode === "disabled") {
 			if (this.#disabled) return;
-			throw new this.SlothletError("INVALID_ARGUMENT", {
-				argument: "value",
-				expected: '"on", "off", true or false ("disabled" is chosen in the config only)',
-				received: '"disabled"',
-				validationError: true
-			});
+			throw new this.SlothletError("INVALID_ARGUMENT", { argument: "value", expected: '"on", "off", true or false ("disabled" is chosen in the config only)', received: '"disabled"' });
 		}
 		if (mode === "on") this.enable();
 		else this.disable();
