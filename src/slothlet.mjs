@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T13:35:23-08:00 (1794951323)
+ *	@Last modified time: 2026-11-17T14:44:14-08:00 (1794955454)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -380,6 +380,27 @@ class Slothlet {
 	 * @type {import("#helpers/clock").Clock}
 	 */
 	#clock = DEFAULT_CLOCK;
+
+	/**
+	 * The ID whose context the instance's code still runs in while a reload has moved it to an ID whose context is not
+	 * set up yet; null once a reload has finished. A reload that failed after switching IDs leaves it set, as the
+	 * instance's code keeps running in that context.
+	 * @type {string|null}
+	 * @private
+	 */
+	#reloadingFrom = null;
+
+	/**
+	 * The ID whose context the instance's code still runs in while a reload is moving it to a new ID (see
+	 * {@link Slothlet#reload}); null when no reload is under way.
+	 * @returns {string|null} The ID, or null.
+	 * @internal
+	 * @example
+	 * slothlet.reloadingFrom; // null
+	 */
+	get reloadingFrom() {
+		return this.#reloadingFrom;
+	}
 
 	/**
 	 * The context a reload carries into the instance it rebuilds, so values `context.set()` made survive it.
@@ -1775,9 +1796,19 @@ class Slothlet {
 		// A normal reload rotates to a fresh random ID, claimed before anything else changes: when no ID can be claimed,
 		// the reload fails with the instance still on the ID and scope it holds, and still working.
 		const oldInstanceID = this.instanceID;
-		const nextScope = keepInstanceID ? null : this.#claimFreshScope(`${oldInstanceID}_reload`);
+		// Every reload's ID is the first ID plus one fresh `_reload_<time>_<random>` part, never the previous ID plus
+		// another: an ID that grew on each reload would soon be too long for the folders named after it.
+		const nextScope = keepInstanceID ? null : this.#claimFreshScope(`${splitText(`${oldInstanceID}`, "_reload_")[0]}_reload`);
+		if (nextScope !== null) {
+			const instances = this.contextManager?.instances;
+			// The context the instance's code runs in until the new one is set up: the current ID's, or, after a reload
+			// that failed once it had switched IDs, the one that reload came from.
+			if (!this.#reloadingFrom || (instances && MapMethods.has(instances, oldInstanceID))) this.#reloadingFrom = oldInstanceID;
+		}
 		try {
-			return await this.#reloadOnto(nextScope, oldInstanceID);
+			const result = await this.#reloadOnto(nextScope, oldInstanceID);
+			if (nextScope !== null) this.#reloadingFrom = null;
+			return result;
 		} catch (error) {
 			// The fresh scope was claimed but never taken: let the ID go again.
 			if (nextScope !== null && this.#importScope !== nextScope) nextScope.release();
@@ -1886,9 +1917,10 @@ class Slothlet {
 		// 5. Reparent any child __run_ context stores that were created before reload.
 		//    Their parentInstanceID points to the old base instanceID; updating it lets
 		//    context.get() still find them for callers that call reload() inside a .run() scope.
+		const reloadedFrom = keepInstanceID ? null : this.#reloadingFrom;
 		for (const ofEntry of mapEntries(this.contextManager.instances)) {
 			const store = ofEntry[1];
-			if (store.parentInstanceID === oldInstanceID) {
+			if (store.parentInstanceID === oldInstanceID || (reloadedFrom !== null && store.parentInstanceID === reloadedFrom)) {
 				store.parentInstanceID = this.instanceID;
 			}
 		}
@@ -1901,6 +1933,16 @@ class Slothlet {
 			(this.contextManager.instances == null ? undefined : MapMethods.has(this.contextManager.instances, oldInstanceID))
 		) {
 			this.contextManager.cleanup(oldInstanceID);
+		}
+		// The context a failed reload left the instance running in goes too, now that a reload has replaced it.
+		if (
+			reloadedFrom !== null &&
+			reloadedFrom !== oldInstanceID &&
+			reloadedFrom !== this.instanceID &&
+			this.contextManager.instances != null &&
+			MapMethods.has(this.contextManager.instances, reloadedFrom)
+		) {
+			this.contextManager.cleanup(reloadedFrom);
 		}
 
 		// 6. Replay operation history in chronological order
@@ -2412,7 +2454,7 @@ class Slothlet {
 		this.#releaseImportScope();
 		releaseModuleMakers(this);
 
-		// Remove on-disk TS transform cache (<projectRoot>/.slothlet-cache/<pid>-<instanceID>/).
+		// Remove on-disk TS transform cache (<projectRoot>/.slothlet-cache/<pid>-<hash of instanceID>/).
 		// Hash-keyed filenames make repeat loads cheap; this keeps the directory bounded
 		// across process runs. Node-only: `fsp` is null in a browser (helpers/platform), so guard
 		// the same way as the reload-time cleanup (a browser never writes a TS cache anyway).

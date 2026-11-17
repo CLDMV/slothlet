@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:28:52-08:00 (1794882532)
+ *	@Last modified time: 2026-11-17T14:44:13-08:00 (1794955453)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -782,7 +782,7 @@ export function rewriteRelativeSpecifiers(code, sourcePath, resolve) {
  * file in the graph produces fresh URLs for every importer — a reload never
  * serves stale linked output.
  *
- * Cache lives at `<projectRoot>/.slothlet-cache/<pid>-<instanceID>/<hash>.mjs` —
+ * Cache lives at `<projectRoot>/.slothlet-cache/<pid>-<hash of instanceID>/<hash>.mjs` —
  * deliberately OUTSIDE `node_modules/` because Node's `READ_PACKAGE_SCOPE` halts
  * at a `node_modules` segment and would otherwise break self-reference resolution
  * (needed when slothlet runs inside its own repo / monorepo workspace, where no
@@ -811,12 +811,25 @@ export async function writeTransformedToCache(originalPath, code, instanceID, tr
 		const projectRoot = packageRoot ?? getSecureFallbackRoot();
 		if (usesFallback) await (fallbackSweepPromise ??= sweepStaleFallbackRoots());
 		await sweepStaleSlothletCache(projectRoot);
-		const cacheDir = path.join(projectRoot, ".slothlet-cache", `${NativeProcess.pid}-${instanceID}`);
+		const cacheDir = path.join(projectRoot, ".slothlet-cache", `${NativeProcess.pid}-${cacheDirKey(instanceID)}`);
 		await mkdir(cacheDir, { recursive: true });
 		return await writeTransformedGraph(absolutePath, code, cacheDir, transform);
 	} finally {
 		if (usesFallback) pendingFallbackWrites--;
 	}
+}
+
+/**
+ * The part of an instance's cache folder name after the PID: a hash of the instance ID, so the name stays the same
+ * length however long the ID is.
+ * @param {string} instanceID - Slothlet instance ID.
+ * @returns {string} 24 hex characters.
+ * @private
+ */
+function cacheDirKey(instanceID) {
+	const hash = createHash("sha256");
+	Reflect.apply(HASH_UPDATE, hash, [`${instanceID}`]);
+	return StringMethods.slice(Reflect.apply(HASH_DIGEST, hash, ["hex"]), 0, 24);
 }
 
 /**

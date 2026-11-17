@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T13:35:16-08:00 (1794951316)
+ *	@Last modified time: 2026-11-17T14:44:06-08:00 (1794955446)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -3808,12 +3808,11 @@ function createModuleLoad(slothlet, filePath, moduleID) {
 		instanceID() {
 			const instances = slothlet?.contextManager?.instances;
 			if (!instances?.has) return null;
-			for (let id = slothlet.instanceID; id;) {
-				if (MapMethods.has(instances, id)) return id;
-				const reloaded = StringMethods.lastIndexOf(id, "_reload_");
-				id = reloaded > 0 ? (typeof id === "string" ? StringMethods.slice(id, 0, reloaded) : copyList(id, 0, reloaded)) : null;
-			}
-			return null;
+			const current = slothlet.instanceID;
+			if (current && MapMethods.has(instances, current)) return current;
+			// While a reload has moved the instance to an ID whose context is not set up yet, the one it is reloading from.
+			const from = slothlet.reloadingFrom;
+			return from && MapMethods.has(instances, from) ? from : null;
 		},
 		wrapper() {
 			if (typeof filePath !== "string" || !runtime_instanceRuns(slothlet)) return null;
@@ -4018,11 +4017,11 @@ const LIVE_INSTANCES = new Map();
 function runtime_instanceRuns(slothlet) {
 	const instances = slothlet?.contextManager?.instances;
 	if (!instances?.has) return false;
-	for (let id = slothlet.instanceID; id;) {
-		if (MapMethods.has(instances, id)) return true;
-		const reloaded = StringMethods.lastIndexOf(id, "_reload_");
-		id = reloaded > 0 ? (typeof id === "string" ? StringMethods.slice(id, 0, reloaded) : copyList(id, 0, reloaded)) : null;
-	}
+	const current = slothlet.instanceID;
+	if (current && MapMethods.has(instances, current)) return true;
+	// While a reload has moved the instance to an ID whose context is not set up yet, the one it is reloading from.
+	const from = slothlet.reloadingFrom;
+	if (from && MapMethods.has(instances, from)) return true;
 	return false;
 }
 
