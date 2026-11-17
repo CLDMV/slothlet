@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:14:41-08:00 (1794874481)
+ *	@Last modified time: 2026-11-17T13:30:55-08:00 (1794951055)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -158,6 +158,7 @@ export const EXPORTS = {
 	"#helpers/eventtarget-context": ["enableEventTargetPatching", "disableEventTargetPatching"],
 	"#helpers/eventtarget-property-context": ["enableEventTargetPropertyPatching", "disableEventTargetPropertyPatching"],
 	"#helpers/async-resource-context": ["enableAsyncResourcePatching", "disableAsyncResourcePatching"],
+	"#helpers/node-callback-context": ["enableNodeCallbackPatching", "disableNodeCallbackPatching"],
 	"#processors/typescript": ["sweepStaleFallbackRoots", "releaseSecureFallbackRoot"],
 	"@cldmv/slothlet/i18n": ["init"],
 	"#i18n": ["setLanguage", "setLanguageAsync", "initI18n"],

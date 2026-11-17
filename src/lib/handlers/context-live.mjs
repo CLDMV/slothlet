@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T12:36:59-08:00 (1794947819)
+ *	@Last modified time: 2026-11-17T13:32:37-08:00 (1794951157)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -1730,9 +1730,30 @@ export class LiveContextManager {
 		};
 		const pinOne = (listener) => pinMany([listener])[0];
 		pinOne.many = pinMany;
+		pinOne.idle = () => this.#nothingToPin();
 		pinOne.scope = (listener) => this.#pinScope(pinOne, listener);
 		setApiCallerPinner(pinOne);
 		liveContextManagerRef = this;
+	}
+
+	/**
+	 * Whether a callback registered now would run exactly as it does unpinned: no `run()` / `scope()` flow is active, no
+	 * module call is executing, waiting or started the flow running now, no file is loading and no resource scope is
+	 * open. The active-instance field then names an instance's own store, as it will when a callback the event loop
+	 * calls from an empty stack runs. A few field reads, so a boundary that sees many calls outside every flow (see
+	 * `helpers/node-callback-context`) pays nothing more.
+	 * @returns {boolean} True when there is nothing to pin.
+	 * @private
+	 */
+	#nothingToPin() {
+		if (this.#syncDepth !== 0 || this.#runningStarter !== null || this.#scopes.length !== 0 || this.#pendingScope !== null) return false;
+		if (SetMethods.size(this.#busyStores) !== 0 || SetMethods.size(this.#loads) !== 0) return false;
+		const id = this.#activeID;
+		if (id === null) return true;
+		const store = MapMethods.get(this.instances, id);
+		// A removed run() / scope() store stands for its instance's own (see removedRunBase).
+		if (store === undefined) return this.#removedRunBase(id) !== id;
+		return !store.parentInstanceID && !store.__authoritativeWrapper && !(store.__enteredCalls?.length > 0);
 	}
 
 	/**

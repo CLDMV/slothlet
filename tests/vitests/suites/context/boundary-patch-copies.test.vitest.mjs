@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:41-08:00 (1794874601)
+ *	@Last modified time: 2026-11-17T13:33:20-08:00 (1794951200)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -29,6 +29,7 @@
  */
 
 import { EventEmitter } from "node:events";
+import fs from "node:fs";
 import { pathToFileURL } from "node:url";
 import { describe, it, expect, afterEach } from "vitest";
 import { setApiCallerPinner } from "#helpers/caller-pinning";
@@ -111,6 +112,14 @@ const BOUNDARIES = [
 		disable: "disableEventTargetPropertyPatching",
 		read: () => Object.getOwnPropertyDescriptor(AbortSignal.prototype, "onabort").get,
 		register: (cb) => void (new AbortController().signal.onabort = cb)
+	},
+	{
+		label: "fs.stat",
+		module: "node-callback-context",
+		enable: "enableNodeCallbackPatching",
+		disable: "disableNodeCallbackPatching",
+		read: () => fs.stat,
+		register: (cb) => fs.stat(".", cb)
 	},
 	{
 		label: "EventEmitter.prototype.on",

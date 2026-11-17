@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T11:23:41-08:00 (1794943421)
+ *	@Last modified time: 2026-11-17T13:32:38-08:00 (1794951158)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -70,6 +70,22 @@ function setApiCallerPinner(strategy) {
  */
 export function pinToCurrentCaller(callback) {
 	if (!pinner || typeof callback !== "function") return callback;
+	return pinner(callback);
+}
+
+/**
+ * Bind a callback to the caller and flow active right now, after one quick check that there is any: outside every
+ * `run()` / `scope()` flow and every module call the callback is handed back as it is, as it would run the same either
+ * way. For a boundary that sees many calls from host code (Node's callback-style APIs, see
+ * `helpers/node-callback-context`). A strategy that offers no `idle` check pins as {@link pinToCurrentCaller} does.
+ *
+ * @param {Function} callback - Callback about to be deferred.
+ * @returns {Function} The callback, bound to the current caller and flow where there is one.
+ * @internal
+ */
+export function pinToCurrentFlow(callback) {
+	if (!pinner || typeof callback !== "function") return callback;
+	if (typeof pinner.idle === "function" && pinner.idle()) return callback;
 	return pinner(callback);
 }
 

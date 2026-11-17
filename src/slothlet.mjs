@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T13:27:01-08:00 (1794950821)
+ *	@Last modified time: 2026-11-17T13:32:44-08:00 (1794951164)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -105,6 +105,7 @@ import { internals as observerContextInternals } from "#helpers/observer-context
 import { internals as promiseContextInternals } from "#helpers/promise-context";
 import { internals as cloneContextInternals } from "#helpers/clone-context";
 import { internals as asyncResourceContextInternals } from "#helpers/async-resource-context";
+import { internals as nodeCallbackContextInternals } from "#helpers/node-callback-context";
 import { internals as functionSourceContextInternals } from "#helpers/function-source-context";
 import { internals as capabilityContextInternals } from "#helpers/capability-context";
 import { DEFAULT_ROUTINES, RESERVED_EXPORTS } from "#helpers/defaults";
@@ -179,6 +180,7 @@ const { enableObserverPatching, disableObserverPatching } = observerContextInter
 const { enablePromisePatching, disablePromisePatching } = promiseContextInternals("slothlet");
 const { enableClonePatching, disableClonePatching } = cloneContextInternals("slothlet");
 const { enableAsyncResourcePatching, disableAsyncResourcePatching } = asyncResourceContextInternals("slothlet");
+const { enableNodeCallbackPatching, disableNodeCallbackPatching } = nodeCallbackContextInternals("slothlet");
 const { enableFunctionSourcePatching, disableFunctionSourcePatching } = functionSourceContextInternals("slothlet");
 const { registerCapabilityCheck, releaseCapabilityCheck } = capabilityContextInternals("slothlet");
 const { claimInstanceScope, setInstanceSelfKind, closeInstanceSelf } = instanceImportsInternals("slothlet");
@@ -1378,6 +1380,9 @@ class Slothlet {
 			// runtime's identity is not part of: what they run is pinned to the caller that made them. Live runtime
 			// only, as the promise patch is, and released with it.
 			enableAsyncResourcePatching();
+			// `fs.readFile(file, cb)`, `dns.lookup(host, cb)`, `crypto.randomBytes(n, cb)`: Node calls these callbacks from
+			// the event loop, past every boundary above, so each is pinned to the flow and caller that handed it in.
+			enableNodeCallbackPatching();
 			SetMethods.add(promisePatchHolders, this.instanceID);
 		}
 
@@ -2343,6 +2348,7 @@ class Slothlet {
 		if (SetMethods.delete(promisePatchHolders, this.instanceID) && SetMethods.size(promisePatchHolders) === 0) {
 			disablePromisePatching();
 			disableAsyncResourcePatching();
+			disableNodeCallbackPatching();
 		}
 		if (SetMethods.size(boundaryPatchHolders) === 0) {
 			disableEventEmitterPatching();
