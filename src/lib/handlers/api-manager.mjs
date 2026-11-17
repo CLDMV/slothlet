@@ -106,6 +106,7 @@ const {
 	runtime_selfModuleCeilings,
 	runtime_selfModuleReader,
 	runtime_unwrapSelfView,
+	runtime_dataReadOptions,
 	releaseModuleMakers
 } = unifiedWrapperOwn;
 const { versionDispatcherRecord } = frameworkInternalsInternals("lib/handlers/api-manager");
@@ -849,9 +850,12 @@ export class ApiManager extends ComponentBase {
 		// ownership and write rules alone, as reading it is to none.
 		if (accessor) return;
 		const runtimeContext = this.slothlet.contextManager?.tryGetContext?.(this.slothlet.instanceID)?.context ?? null;
+		// A deny naming an object member of a module's data exactly covers what the member holds, for reads (see
+		// {@link PermissionManager#enforceAccess}'s `dataMember`): a write beneath it is held to the same extension.
 		const allowed = permissionManager.enforceAccess(callerPath, targetPath, internal?.filePath ?? null, filePath, runtimeContext, null, {
 			moduleCaller: true,
-			newMember: !exists
+			newMember: !exists,
+			dataMember: runtime_dataReadOptions(this.slothlet).dataMember
 		});
 		if (!allowed) throw new this.SlothletError("PERMISSION_DENIED", { caller: callerPath, target: segmentsOf(targetPath) });
 	}

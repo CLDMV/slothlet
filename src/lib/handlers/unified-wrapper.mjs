@@ -21873,6 +21873,7 @@ export function internals(consumer) {
 		runtime_contextRead,
 		runtime_contextReadAsDefiner,
 		runtime_contextWritten,
+		runtime_dataReadOptions,
 		runtime_defineRootInspect,
 		runtime_eventPayloadFor,
 		runtime_frameworkViewCaller,
