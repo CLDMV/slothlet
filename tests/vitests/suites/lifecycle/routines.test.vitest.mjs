@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:34-07:00 (1791091714)
+ *	@Last modified time: 2026-11-16T18:30:08-08:00 (1794882608)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -672,7 +672,7 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 					await expect(api.ns.initialize()).rejects.toMatchObject({
 						code: "ROUTINE_FAILED",
 						name: "SlothletError",
-						context: { apiPath: "ns.initialize", moduleID: expect.any(String), count: 1 }
+						details: { path: "ns.initialize", module: expect.any(String), count: 1 }
 					});
 				});
 				// "good" ran before the failure, and — the actual point of best-effort — "auth1" ran
@@ -693,9 +693,9 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
 				await withSuppressedSlothletErrorOutput(async () => {
 					await expect(api.initialize()).rejects.toMatchObject({
 						code: "ROUTINE_FAILED",
-						context: {
+						details: {
 							count: 2,
-							failures: [{ apiPath: "ns2.initialize" }, { apiPath: "billing.initialize" }]
+							failures: [{ path: "ns2.initialize" }, { path: "billing.initialize" }]
 						}
 					});
 				});
@@ -1098,7 +1098,7 @@ describe.each(["eager", "lazy"])("routines (#341) — mode: %s", (mode) => {
  * #393 — a routine contributor reaching a coordinator through AMBIENT `self.*` must resolve it under
  * the ROOT CASCADE, not only under a per-path call. The cascade is installed as a plain callable at
  * `api[name]`; before the fix it invoked its contributors with no active
- * extent, so `self.*` in a contributor threw RUNTIME_NO_ACTIVE_CONTEXT_SELF — while the identical
+ * extent, so `self.*` in a contributor threw CONTEXT_NOT_ACTIVE_SELF — while the identical
  * contributor called per-path (`api.<path>.<name>()`, which routes through the wrapped leaf's
  * `contextManager.runInContext`) resolved fine. runCascade now runs its loop inside the instance
  * extent, matching per-path behavior. These fixtures use ambient `self.coord.register(...)` (not the
@@ -1276,7 +1276,7 @@ describe.each(["eager", "lazy"])("routine self.* context under the root cascade 
 				expect(globalThis.__slothletPermLog).not.toContain("b:ok");
 				// B's denial surfaces as a routine failure attributed to B, its own PERMISSION_DENIED as cause.
 				expect(cascErr?.code).toBe("ROUTINE_FAILED");
-				expect(cascErr.context.failures.some((f) => f.apiPath.startsWith("b"))).toBe(true);
+				expect(cascErr.details.failures.some((f) => f.path.startsWith("b"))).toBe(true);
 				expect(denialText(cascErr)).toMatch(/PERMISSION_DENIED/);
 			} finally {
 				await api.slothlet.shutdown();

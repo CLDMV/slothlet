@@ -180,12 +180,12 @@ if (recursive && currentDepth < maxDepth) {
 
 ```javascript
 if (isFrameworkReservedKey(nameWithoutExt)) {
-	throw new this.SlothletError("MODULE_RESERVED_FILENAME", { file: entry.name, dir }, null, { validationError: true });
+	throw new this.SlothletError("MODULE_RESERVED_FILE", { file: entry.name, dir });
 }
 ```
 
 **Trigger**: `isFrameworkReservedKey(nameWithoutExt)`
-**Result**: `throw MODULE_RESERVED_FILENAME` — the scan fails.
+**Result**: `throw MODULE_RESERVED_FILE` — the scan fails.
 
 ---
 
@@ -203,12 +203,12 @@ if (isFrameworkReservedKey(nameWithoutExt)) {
 ```javascript
 const RESERVED_MOUNTPATH_ROOTS = Object.freeze(new Set(["slothlet", "shutdown", "destroy"]));
 if (RESERVED_MOUNTPATH_ROOTS.has(mountPathSegments[0])) {
-	throw new SlothletError("MODULE_RESERVED_MOUNTPATH" /* … */);
+	throw new SlothletError("MODULE_RESERVED_MOUNT" /* … */);
 }
 ```
 
 **Trigger**: `RESERVED_MOUNTPATH_ROOTS.has(mountPathSegments[0])`
-**Result**: `throw MODULE_RESERVED_MOUNTPATH` — the module never mounts.
+**Result**: `throw MODULE_RESERVED_MOUNT` — the module never mounts.
 
 ---
 

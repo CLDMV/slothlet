@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:57-07:00 (1791090897)
+ *	@Last modified time: 2026-11-16T18:29:25-08:00 (1794882565)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -23,7 +23,7 @@
  *     - folderPath is an Array → iterates via addApiComponent recursion
  *   addApiComponent single-file path (lines ~1095-1130):
  *     - isFile=true → sets dirForBuild and fileFilter
- *     - invalid extension → throws INVALID_CONFIG_FILE_TYPE
+ *     - invalid extension → throws FILE_TYPE_UNSUPPORTED
  *   addApiComponent single-file apiToMerge (lines ~1261-1277):
  *     - Special apiToMerge reassignment for single-file loads
  *   Metadata registration (lines ~1411-1441):
@@ -172,7 +172,7 @@ describe.each(EAGER_CONFIGS)("addApiComponent — invalid file extension ($name)
 		await new Promise((r) => setTimeout(r, 30));
 	});
 
-	it("throws INVALID_CONFIG_FILE_TYPE for .json extension", async () => {
+	it("throws FILE_TYPE_UNSUPPORTED for .json extension", async () => {
 		api = await makeApi(config, { base: TEST_DIRS.API_TEST });
 
 		// Create a temp path that looks like a .json file (won't exist but isFile check needs it)

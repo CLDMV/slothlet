@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:15-08:00 (1794874575)
+ *	@Last modified time: 2026-11-16T18:28:54-08:00 (1794882534)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -38,7 +38,7 @@ import * as nodePath from "node:path";
 import slothlet from "@cldmv/slothlet";
 import { generateTypes as writeDeclarationFile } from "#processors/type-generator";
 import { SlothletError } from "#errors";
-import { Arrays, Objects, regExpReplace, StringMethods } from "#helpers/intrinsics";
+import { Arrays, Objects } from "#helpers/intrinsics";
 
 // Node's built-ins, as slothlet loaded: frozen copies of their members (see helpers/platform), so code that replaces one
 // on Node's module object later does not run here.
@@ -78,36 +78,22 @@ export async function generateTypes(options = {}) {
 	// promises a SlothletError(INVALID_CONFIG) for bad input — don't let a raw
 	// TypeError escape from `options.dir` dereference.
 	if (options === null || typeof options !== "object" || Arrays.isArray(options)) {
-		throw new SlothletError(
-			"INVALID_CONFIG",
-			{
-				option: "typegen.options",
-				expected: "plain object",
-				value: options,
-				hint: "Call generateTypes({ dir, output, interfaceName }) with an options object.",
-				validationError: true
-			},
-			null,
-			{ validationError: true }
-		);
+		throw new SlothletError("INVALID_CONFIG", {
+			option: "typegen.options",
+			expected: "plain object",
+			value: options
+		});
 	}
 
 	assertOption(options.dir, "dir");
 	assertOption(options.output, "output");
 	assertOption(options.interfaceName, "interfaceName");
 	if (options.augmentRuntime !== undefined && typeof options.augmentRuntime !== "boolean") {
-		throw new SlothletError(
-			"INVALID_CONFIG",
-			{
-				option: "typegen.augmentRuntime",
-				expected: "boolean",
-				value: options.augmentRuntime,
-				hint: "Pass augmentRuntime: false to leave `self` untyped by this declaration, or omit it.",
-				validationError: true
-			},
-			null,
-			{ validationError: true }
-		);
+		throw new SlothletError("INVALID_CONFIG", {
+			option: "typegen.augmentRuntime",
+			expected: "boolean",
+			value: options.augmentRuntime
+		});
 	}
 
 	const api = await slothlet({
@@ -139,27 +125,10 @@ export async function generateTypes(options = {}) {
  */
 function assertOption(value, name) {
 	if (typeof value !== "string" || value.length === 0) {
-		throw new SlothletError(
-			"INVALID_CONFIG",
-			{
-				option: `typegen.${name}`,
-				expected: "non-empty string",
-				value,
-				hint: `Provide options.${name} as a non-empty string when calling generateTypes(). For the CLI, use --${camelToKebab(name)} or the matching positional argument.`,
-				validationError: true
-			},
-			null,
-			{ validationError: true }
-		);
+		throw new SlothletError("INVALID_CONFIG", {
+			option: `typegen.${name}`,
+			expected: "non-empty string",
+			value
+		});
 	}
-}
-
-/**
- * Convert a camelCase string to kebab-case (used to render flag names in error messages).
- * @param {string} s
- * @returns {string}
- * @private
- */
-function camelToKebab(s) {
-	return regExpReplace(/[A-Z]/g, s, (m) => `-${StringMethods.toLowerCase(m)}`);
 }

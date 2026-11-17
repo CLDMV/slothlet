@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T19:51:24-08:00 (1794801084)
+ *	@Last modified time: 2026-11-16T18:30:58-08:00 (1794882658)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -675,7 +675,7 @@ describe.each(CONFIGS)("objects with internal slots a module hands out (#597) â€
 		async (kind) => {
 			await create();
 			// Refused: as the module, or as code of no module running inside the caller's call.
-			expect(["PERMISSION_DENIED", "RUNTIME_NO_ACTIVE_CONTEXT_SELF"]).toContain(await api.esm.viaCallback(kind));
+			expect(["PERMISSION_DENIED", "CONTEXT_NOT_ACTIVE_SELF"]).toContain(await api.esm.viaCallback(kind));
 		}
 	);
 
@@ -780,7 +780,7 @@ describe("a module's own function passed by routes slothlet does not see, run un
 			// A namespace the module kept before any of it was loaded is held to the module as well (hostNsCalled).
 			expect(Object.keys(routes)).toHaveLength(14);
 			for (const [route, value] of Object.entries(routes))
-				expect([config, route, ["PERMISSION_DENIED", "RUNTIME_NO_ACTIVE_CONTEXT_SELF"].includes(value)]).toEqual([config, route, true]);
+				expect([config, route, ["PERMISSION_DENIED", "CONTEXT_NOT_ACTIVE_SELF"].includes(value)]).toEqual([config, route, true]);
 		}
 	});
 });
@@ -846,7 +846,7 @@ describe("what a module of a shut-down instance made, run under Node's own loade
 		// has no context to read `self` from.
 		const untellable = new Set(["cjs/eager/async", "cjs/eager/live"]);
 		for (const [key, value] of Object.entries(out))
-			expect([key, value]).toEqual([key, untellable.has(key) ? "PERMISSION_DENIED" : "RUNTIME_NO_ACTIVE_CONTEXT_SELF"]);
+			expect([key, value]).toEqual([key, untellable.has(key) ? "PERMISSION_DENIED" : "CONTEXT_NOT_ACTIVE_SELF"]);
 	});
 });
 

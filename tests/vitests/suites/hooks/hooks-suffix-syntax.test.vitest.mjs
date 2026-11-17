@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T22:53:48-08:00 (1794812028)
+ *	@Last modified time: 2026-11-16T18:30:00-08:00 (1794882600)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -89,23 +89,23 @@ describe.each(getMatrixConfigs())("Hooks > suffix syntax + prefix deprecation (#
 
 	it("rejects a pattern with no colon", async () => {
 		api = await slothlet({ ...config, base: BASE, diagnostics: true, hook: true });
-		expect(() => api.slothlet.hook.on("math.add", () => {})).toThrow(/INVALID_TYPE_PATTERN/);
+		expect(() => api.slothlet.hook.on("math.add", () => {})).toThrow(/HOOK_PATTERN_INVALID/);
 	});
 
 	it("rejects a pattern whose ends are not a hook type", async () => {
 		api = await slothlet({ ...config, base: BASE, diagnostics: true, hook: true });
-		expect(() => api.slothlet.hook.on("foo:bar", () => {})).toThrow(/INVALID_TYPE_PATTERN/);
+		expect(() => api.slothlet.hook.on("foo:bar", () => {})).toThrow(/HOOK_PATTERN_INVALID/);
 	});
 
 	it("rejects an empty path pattern in suffix and prefix forms", async () => {
 		api = await slothlet({ ...config, base: BASE, diagnostics: true, hook: true });
-		expect(() => api.slothlet.hook.on(":before", () => {})).toThrow(/INVALID_TYPE_PATTERN/);
-		expect(() => api.slothlet.hook.on("before:", () => {})).toThrow(/INVALID_TYPE_PATTERN/);
+		expect(() => api.slothlet.hook.on(":before", () => {})).toThrow(/HOOK_PATTERN_INVALID/);
+		expect(() => api.slothlet.hook.on("before:", () => {})).toThrow(/HOOK_PATTERN_INVALID/);
 	});
 
 	it("rejects a non-string typePattern", async () => {
 		api = await slothlet({ ...config, base: BASE, diagnostics: true, hook: true });
-		expect(() => api.slothlet.hook.on(123, () => {})).toThrow(/INVALID_TYPE_PATTERN/);
+		expect(() => api.slothlet.hook.on(123, () => {})).toThrow(/HOOK_PATTERN_INVALID/);
 	});
 
 	it("reload re-registers hooks in suffix form without re-deprecating", async () => {

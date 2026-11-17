@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:09-08:00 (1794874569)
+ *	@Last modified time: 2026-11-16T18:28:45-08:00 (1794882525)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -285,33 +285,30 @@ export class ApiManager extends ComponentBase {
 
 			for (let i = 0; i < apiPath.length; i++) {
 				if (typeof apiPath[i] !== "string") {
-					throw new this.SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
-						apiPath,
+					throw new this.SlothletError("API_PATH_INVALID", {
+						path: apiPath,
 						segment: apiPath[i],
 						index: i,
-						reason: translate("API_PATH_REASON_ARRAY_ELEMENTS"),
-						validationError: true
+						reason: translate("API_PATH_REASON_ARRAY_ELEMENTS")
 					});
 				}
 				if (StringMethods.trim(apiPath[i]) === "") {
-					throw new this.SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
-						apiPath,
+					throw new this.SlothletError("API_PATH_INVALID", {
+						path: apiPath,
 						segment: apiPath[i],
 						index: i,
-						reason: translate("API_PATH_REASON_ARRAY_EMPTY_SEGMENTS"),
-						validationError: true
+						reason: translate("API_PATH_REASON_ARRAY_EMPTY_SEGMENTS")
 					});
 				}
 			}
 
 			// Check for reserved names
 			if (apiPath[0] === "slothlet" || (apiPath.length === 1 && (apiPath[0] === "shutdown" || apiPath[0] === "destroy"))) {
-				throw new this.SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
-					apiPath,
+				throw new this.SlothletError("API_PATH_INVALID", {
+					path: apiPath,
 					reason: translate("API_PATH_REASON_RESERVED_NAME"),
 					index: undefined,
-					segment: undefined,
-					validationError: true
+					segment: undefined
 				});
 			}
 
@@ -321,12 +318,11 @@ export class ApiManager extends ComponentBase {
 		}
 
 		if (typeof apiPath !== "string") {
-			throw new this.SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
-				apiPath,
+			throw new this.SlothletError("API_PATH_INVALID", {
+				path: apiPath,
 				reason: translate("API_PATH_REASON_INVALID_TYPE"),
 				index: undefined,
-				segment: undefined,
-				validationError: true
+				segment: undefined
 			});
 		}
 
@@ -339,22 +335,20 @@ export class ApiManager extends ComponentBase {
 
 		const parts = splitText(normalized, ".");
 		if (parts.length === 0 || ArrayMethods.some(parts, (part) => StringMethods.trim(part) === "")) {
-			throw new this.SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
-				apiPath: normalized,
+			throw new this.SlothletError("API_PATH_INVALID", {
+				path: normalized,
 				reason: translate("API_PATH_REASON_EMPTY_SEGMENTS"),
 				index: undefined,
-				segment: undefined,
-				validationError: true
+				segment: undefined
 			});
 		}
 
 		if (parts[0] === "slothlet" || normalized === "shutdown" || normalized === "destroy") {
-			throw new this.SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
-				apiPath: normalized,
+			throw new this.SlothletError("API_PATH_INVALID", {
+				path: normalized,
 				reason: translate("API_PATH_REASON_RESERVED_NAME"),
 				index: undefined,
-				segment: undefined,
-				validationError: true
+				segment: undefined
 			});
 		}
 
@@ -373,7 +367,7 @@ export class ApiManager extends ComponentBase {
 	 * @param {string[]} parts - Its segments.
 	 * @param {boolean} [refuseThen=false] - Also refuse a `then` segment.
 	 * @returns {void}
-	 * @throws {SlothletError} INVALID_CONFIG_API_PATH_INVALID naming the segment and its index.
+	 * @throws {SlothletError} API_PATH_INVALID naming the segment and its index.
 	 * @private
 	 */
 	#assertSafeSegments(apiPath, parts, refuseThen = false) {
@@ -382,12 +376,11 @@ export class ApiManager extends ComponentBase {
 			(segment) => (refuseThen && segment === "then") || SetMethods.has(UNSAFE_PATH_SEGMENTS, segment)
 		);
 		if (index === -1) return;
-		throw new this.SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
-			apiPath,
+		throw new this.SlothletError("API_PATH_INVALID", {
+			path: apiPath,
 			reason: parts[index] === "then" ? translate("API_PATH_REASON_THENABLE_SEGMENT") : translate("API_PATH_REASON_UNSAFE_SEGMENT"),
 			index,
-			segment: parts[index],
-			validationError: true
+			segment: parts[index]
 		});
 	}
 
@@ -408,9 +401,8 @@ export class ApiManager extends ComponentBase {
 	 */
 	async resolvePath(inputPath) {
 		if (!inputPath || typeof inputPath !== "string") {
-			throw new this.SlothletError("INVALID_CONFIG_DIR_INVALID", {
-				dir: inputPath,
-				validationError: true
+			throw new this.SlothletError("FOLDER_INVALID", {
+				folder: inputPath
 			});
 		}
 
@@ -445,9 +437,8 @@ export class ApiManager extends ComponentBase {
 			}
 			/* v8 ignore stop */
 			// Use same error code as before for consistency with existing tests
-			throw new this.SlothletError("INVALID_CONFIG_DIR_INVALID", {
-				dir: resolvedPath,
-				validationError: true
+			throw new this.SlothletError("FOLDER_INVALID", {
+				folder: resolvedPath
 			});
 		}
 	}
@@ -469,9 +460,8 @@ export class ApiManager extends ComponentBase {
 	 */
 	async resolveFolderPath(folderPath) {
 		if (!folderPath || typeof folderPath !== "string") {
-			throw new this.SlothletError("INVALID_CONFIG_DIR_INVALID", {
-				dir: folderPath,
-				validationError: true
+			throw new this.SlothletError("FOLDER_INVALID", {
+				folder: folderPath
 			});
 		}
 
@@ -479,18 +469,16 @@ export class ApiManager extends ComponentBase {
 		try {
 			const stats = await fsp.stat(resolvedPath);
 			if (!stats.isDirectory()) {
-				throw new this.SlothletError("INVALID_CONFIG_DIR_INVALID", {
-					dir: resolvedPath,
-					validationError: true
+				throw new this.SlothletError("FOLDER_INVALID", {
+					folder: resolvedPath
 				});
 			}
 		} catch (error) {
 			if (error instanceof this.SlothletError) {
 				throw error;
 			}
-			throw new this.SlothletError("INVALID_CONFIG_DIR_INVALID", {
-				dir: resolvedPath,
-				validationError: true
+			throw new this.SlothletError("FOLDER_INVALID", {
+				folder: resolvedPath
 			});
 		}
 
@@ -626,12 +614,11 @@ export class ApiManager extends ComponentBase {
 				current = next;
 				continue;
 			}
-			throw new this.SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
-				apiPath: ArrayMethods.join(copyList(parts, 0, i + 1), "."),
+			throw new this.SlothletError("API_PATH_INVALID", {
+				path: ArrayMethods.join(copyList(parts, 0, i + 1), "."),
 				reason: translate("API_PATH_REASON_NOT_TRAVERSABLE"),
 				index: undefined,
-				segment: undefined,
-				validationError: true
+				segment: undefined
 			});
 		}
 		return current;
@@ -668,7 +655,7 @@ export class ApiManager extends ComponentBase {
 	 *   writes outside its own namespace.
 	 * @throws {SlothletError} `LOOSE_SET_RESERVED_KEY` when any path segment is
 	 *   a prototype-pollution key (`__proto__`, `prototype`, `constructor`).
-	 * @throws {SlothletError} `INVALID_CONFIG_API_PATH_INVALID` when the path is empty,
+	 * @throws {SlothletError} `API_PATH_INVALID` when the path is empty,
 	 *   contains empty segments (e.g. `"a..b"`), or targets a reserved root name
 	 *   (`slothlet`, `shutdown`, `destroy`).
 	 * @public
@@ -676,7 +663,7 @@ export class ApiManager extends ComponentBase {
 	setOwnedProperty(apiPath, value, callerWrapper) {
 		// Reject prototype-pollution segments BEFORE the canonical normalizer runs. This surface has
 		// its own dedicated LOOSE_SET_RESERVED_KEY error; `normalizeApiPath` now also blocks these
-		// segments, but with a generic INVALID_CONFIG_API_PATH_INVALID, so the check must run first to
+		// segments, but with a generic API_PATH_INVALID, so the check must run first to
 		// keep the loose-set error. `self.__proto__ = obj` would assign onto the API root's prototype
 		// chain; `self.a.__proto__ = obj` (via the dotted form) would do the same on the wrapper at `a`.
 		// Reuses the module-level UNSAFE_PATH_SEGMENTS (same set the add-path guard uses). `String()`
@@ -688,9 +675,8 @@ export class ApiManager extends ComponentBase {
 			const segment = ofList[ofIndex];
 			if (SetMethods.has(UNSAFE_PATH_SEGMENTS, segment)) {
 				throw new this.SlothletError("LOOSE_SET_RESERVED_KEY", {
-					apiPath: coercedPath,
-					segment,
-					validationError: true
+					path: coercedPath,
+					segment
 				});
 			}
 		}
@@ -719,12 +705,11 @@ export class ApiManager extends ComponentBase {
 		// for direct programmatic callers passing "" / null / undefined — defensive.
 		/* v8 ignore next 8 */
 		if (parts.length === 0) {
-			throw new this.SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
-				apiPath: String(apiPath ?? ""),
+			throw new this.SlothletError("API_PATH_INVALID", {
+				path: String(apiPath ?? ""),
 				reason: translate("API_PATH_REASON_EMPTY_SEGMENTS"),
 				index: undefined,
-				segment: undefined,
-				validationError: true
+				segment: undefined
 			});
 		}
 
@@ -809,9 +794,8 @@ export class ApiManager extends ComponentBase {
 		/* v8 ignore next */
 		const callerApiPath = callerWrapper?.____slothletInternal?.apiPath ?? this.#ownedRoot(callerWrapper);
 		throw new this.SlothletError("LOOSE_SET_NOT_OWNED", {
-			apiPath: ArrayMethods.join(parts, "."),
-			callerApiPath,
-			validationError: true
+			path: ArrayMethods.join(parts, "."),
+			caller: callerApiPath
 		});
 	}
 
@@ -969,7 +953,7 @@ export class ApiManager extends ComponentBase {
 	#assertModuleMountWrite(parts, writer, inFlight = null, ceilings = runtime_selfModuleCeilings(this.slothlet, writer)) {
 		if (!this.ownershipEnforced()) return;
 		if (!writer.____slothletInternal) {
-			throw new this.SlothletError("LOOSE_SET_UNATTRIBUTED", { apiPath: ArrayMethods.join(parts, "."), validationError: true });
+			throw new this.SlothletError("LOOSE_SET_UNATTRIBUTED", { path: ArrayMethods.join(parts, ".") });
 		}
 		for (let ofIndex = 0, ofList = ceilings; ofIndex < ofList.length; ofIndex++) {
 			const ceiling = ofList[ofIndex];
@@ -981,9 +965,8 @@ export class ApiManager extends ComponentBase {
 		// so module code is refused there rather than written past it.
 		if (opaque)
 			throw new this.SlothletError("LOOSE_SET_NOT_OWNED", {
-				apiPath: ArrayMethods.join(parts, "."),
-				callerApiPath: writer.____slothletInternal.apiPath,
-				validationError: true
+				path: ArrayMethods.join(parts, "."),
+				caller: writer.____slothletInternal.apiPath
 			});
 		// A node reached through an alias is written where it really is, and held to its owner there.
 		for (let ofIndex = 0, ofList = paths; ofIndex < ofList.length; ofIndex++) {
@@ -1101,7 +1084,7 @@ export class ApiManager extends ComponentBase {
 			const writer = "writer" in options ? options.writer : runtime_selfModuleReader(this.slothlet);
 			if (writer !== null && this.ownershipEnforced()) {
 				if (!writer.____slothletInternal) {
-					throw new this.SlothletError("LOOSE_SET_UNATTRIBUTED", { apiPath: ArrayMethods.join(parts, "."), validationError: true });
+					throw new this.SlothletError("LOOSE_SET_UNATTRIBUTED", { path: ArrayMethods.join(parts, ".") });
 				}
 				this.assertOwnedWrite(parts, writer);
 			}
@@ -2084,12 +2067,11 @@ export class ApiManager extends ComponentBase {
 				return true;
 			}
 			if (collisionMode === "error") {
-				throw new this.SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
-					apiPath: ArrayMethods.join(parts, "."),
+				throw new this.SlothletError("API_PATH_INVALID", {
+					path: ArrayMethods.join(parts, "."),
 					reason: translate("API_PATH_REASON_COLLISION_ERROR"),
 					index: undefined,
-					segment: undefined,
-					validationError: true
+					segment: undefined
 				});
 			}
 
@@ -2104,8 +2086,8 @@ export class ApiManager extends ComponentBase {
 
 			if (collisionMode === "warn") {
 				if (this.slothlet && !this.____config?.silent) {
-					new this.SlothletWarning("WARNING_HOT_RELOAD_PATH_COLLISION", {
-						apiPath: ArrayMethods.join(parts, ".")
+					new this.SlothletWarning("WARNING_COLLISION_PATH_KEPT", {
+						path: ArrayMethods.join(parts, ".")
 					});
 				}
 				return false;
@@ -2206,15 +2188,15 @@ export class ApiManager extends ComponentBase {
 					// programmatic observers can react to the rejected mutation (#148).
 					const apiPath = ArrayMethods.join(parts, ".");
 					if (this.slothlet && !this.____config?.silent) {
-						new this.SlothletWarning("WARNING_HOT_RELOAD_MERGE_PRIMITIVES", { apiPath });
+						new this.SlothletWarning("WARNING_COLLISION_MERGE_PRIMITIVES", { path: apiPath });
 					}
 					await this.emitImplDiagnostic("error", {
 						apiPath,
-						code: "WARNING_HOT_RELOAD_MERGE_PRIMITIVES",
-						context: { apiPath },
+						code: "WARNING_COLLISION_MERGE_PRIMITIVES",
+						context: { path: apiPath },
 						source: "addApi",
 						moduleID,
-						error: new this.SlothletError("WARNING_HOT_RELOAD_MERGE_PRIMITIVES", { apiPath })
+						error: new this.SlothletError("WARNING_COLLISION_MERGE_PRIMITIVES", { path: apiPath })
 					});
 					return false;
 				}
@@ -2834,7 +2816,7 @@ export class ApiManager extends ComponentBase {
 	 *
 	 * @param {object} permissions - The option.
 	 * @returns {object} The frozen copy.
-	 * @throws {SlothletError} `INVALID_PERMISSION_RULE` when `deny` / `allow` or an entry's field is an accessor.
+	 * @throws {SlothletError} `PERMISSION_RULE_INVALID` when `deny` / `allow` or an entry's field is an accessor.
 	 * @private
 	 */
 	#snapshotPermissionsOption(permissions) {
@@ -2845,10 +2827,9 @@ export class ApiManager extends ComponentBase {
 			const descriptor = Reflect.getOwnPropertyDescriptor(permissions, effect);
 			if (descriptor === undefined) continue;
 			if (!("value" in descriptor)) {
-				throw new this.SlothletError("INVALID_PERMISSION_RULE", {
-					reason: translate("PERM_RULE_FIELD_ACCESSOR"),
-					received: effect,
-					validationError: true
+				throw new this.SlothletError("PERMISSION_RULE_INVALID", {
+					reason: translate("PERMISSION_RULE_REASON_FIELD_ACCESSOR"),
+					received: effect
 				});
 			}
 			copy[effect] = Arrays.isArray(descriptor.value)
@@ -2864,7 +2845,7 @@ export class ApiManager extends ComponentBase {
 	 *
 	 * @param {string|object} entry - One shorthand allow/deny entry.
 	 * @returns {{ target: string, condition: unknown }} Normalized target/condition pair.
-	 * @throws {SlothletError} INVALID_PERMISSION_RULE when the shorthand entry shape is invalid.
+	 * @throws {SlothletError} PERMISSION_RULE_INVALID when the shorthand entry shape is invalid.
 	 * @private
 	 *
 	 * @example
@@ -2883,18 +2864,16 @@ export class ApiManager extends ComponentBase {
 		}
 
 		if (!entry || typeof entry !== "object" || Arrays.isArray(entry)) {
-			throw new this.SlothletError("INVALID_PERMISSION_RULE", {
-				reason: translate("PERM_RULE_NOT_OBJECT"),
-				received: getValueType(entry),
-				validationError: true
+			throw new this.SlothletError("PERMISSION_RULE_INVALID", {
+				reason: translate("PERMISSION_RULE_REASON_NOT_OBJECT"),
+				received: getValueType(entry)
 			});
 		}
 
 		if (typeof entry.target !== "string" || !entry.target) {
-			throw new this.SlothletError("INVALID_PERMISSION_RULE", {
-				reason: translate("PERM_RULE_TARGET_REQUIRED"),
-				received: typeof entry.target,
-				validationError: true
+			throw new this.SlothletError("PERMISSION_RULE_INVALID", {
+				reason: translate("PERMISSION_RULE_REASON_TARGET_REQUIRED"),
+				received: typeof entry.target
 			});
 		}
 
@@ -3000,9 +2979,8 @@ export class ApiManager extends ComponentBase {
 
 		const { metadata = {}, ...restOptions } = effectiveOptions;
 		if (!this.slothlet || !this.slothlet.isLoaded) {
-			throw new this.SlothletError("INVALID_CONFIG_NOT_LOADED", {
-				operation: "addApi",
-				validationError: true
+			throw new this.SlothletError("INSTANCE_NOT_LOADED", {
+				operation: ["slothlet", "api", "add"]
 			});
 		}
 
@@ -3011,9 +2989,8 @@ export class ApiManager extends ComponentBase {
 		// it would corrupt that key and make the mount unresolvable. Refuse it up front with a named error.
 		if (restOptions.moduleID && StringMethods.includes(String(restOptions.moduleID), MODULE_ID_SEPARATOR)) {
 			throw new this.SlothletError("MODULE_ID_RESERVED_SEPARATOR", {
-				moduleID: String(restOptions.moduleID),
-				separator: MODULE_ID_SEPARATOR,
-				validationError: true
+				module: String(restOptions.moduleID),
+				separator: MODULE_ID_SEPARATOR
 			});
 		}
 
@@ -3035,7 +3012,7 @@ export class ApiManager extends ComponentBase {
 				const requested = String(restOptions.moduleID);
 				const own = splitText(String(writer.____slothletInternal.moduleID ?? ""), MODULE_ID_SEPARATOR)[0];
 				if (requested !== own && this.slothlet.handlers.ownership.getModuleEndpoint(requested) !== undefined) {
-					throw new this.SlothletError("MODULE_ID_IN_USE", { moduleID: requested, validationError: true });
+					throw new this.SlothletError("MODULE_ID_IN_USE", { module: requested });
 				}
 			}
 			this.#assertModuleReplace(mountParts, writer, restOptions, callerCeilings);
@@ -3047,7 +3024,7 @@ export class ApiManager extends ComponentBase {
 		// not hold, is refused before anything is mounted.
 		const root = this.slothlet.boundApi;
 		if (root && !Reflect.isExtensible(root) && (parts.length === 0 || !ArrayMethods.includes(Reflect.ownKeys(root), parts[0]))) {
-			throw new this.SlothletError("API_ROOT_CLOSED", { operation: "api.add", validationError: true });
+			throw new this.SlothletError("API_ROOT_CLOSED", { operation: ["slothlet", "api", "add"] });
 		}
 
 		// A rule module code mounts with is held to the module's own subtree unless an explicit allow lifts the
@@ -3082,12 +3059,11 @@ export class ApiManager extends ComponentBase {
 		// through to that guard instead, where the offending token surfaces as the auto-generated moduleID.
 		if (restOptions.moduleID && StringMethods.includes(normalizedPath, MODULE_ID_SEPARATOR)) {
 			const segIndex = ArrayMethods.findIndex(parts, (p) => StringMethods.includes(p, MODULE_ID_SEPARATOR));
-			throw new this.SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
-				apiPath: normalizedPath,
+			throw new this.SlothletError("API_PATH_INVALID", {
+				path: normalizedPath,
 				segment: parts[segIndex],
 				index: segIndex,
-				reason: translate("API_PATH_REASON_RESERVED_SEPARATOR"),
-				validationError: true
+				reason: translate("API_PATH_REASON_RESERVED_SEPARATOR")
 			});
 		}
 
@@ -3099,18 +3075,16 @@ export class ApiManager extends ComponentBase {
 			// VersionManager would build versionedPath as "v1." (trailing dot) and mount the
 			// dispatcher at api[""] — both of which produce broken tree entries.
 			if (normalizedPath === "") {
-				throw new this.SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
-					apiPath,
+				throw new this.SlothletError("API_PATH_INVALID", {
+					path: apiPath,
 					reason: translate("API_PATH_REASON_VERSIONED_ROOT"),
 					index: undefined,
-					segment: undefined,
-					validationError: true
+					segment: undefined
 				});
 			}
 			if (typeof versionConfig.version !== "string" || !StringMethods.trim(String(versionConfig.version))) {
-				throw new this.SlothletError("INVALID_CONFIG_VERSION_TAG", {
-					received: versionConfig.version,
-					validationError: true
+				throw new this.SlothletError("VERSION_TAG_INVALID", {
+					received: versionConfig.version
 				});
 			}
 			const versionTag = StringMethods.trim(String(versionConfig.version));
@@ -3128,12 +3102,11 @@ export class ApiManager extends ComponentBase {
 			this.normalizeApiPath(effectiveParts);
 			this.#assertSafeSegments(effectivePath, effectiveParts, true);
 			if (StringMethods.includes(versionTag, MODULE_ID_SEPARATOR)) {
-				throw new this.SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
-					apiPath: effectivePath,
+				throw new this.SlothletError("API_PATH_INVALID", {
+					path: effectivePath,
 					segment: versionTag,
 					index: 0,
-					reason: translate("API_PATH_REASON_RESERVED_SEPARATOR"),
-					validationError: true
+					reason: translate("API_PATH_REASON_RESERVED_SEPARATOR")
 				});
 			}
 		}
@@ -3186,9 +3159,8 @@ export class ApiManager extends ComponentBase {
 				// silently mounts a leaf named "exports".
 				const inner = folderPath.exports;
 				if (!isPlainObject(inner)) {
-					throw new this.SlothletError("INVALID_CONFIG_SYNTHETIC_EXPORTS_SHAPE", {
-						received: describeNonPlain(inner),
-						validationError: true
+					throw new this.SlothletError("INLINE_EXPORTS_INVALID", {
+						received: describeNonPlain(inner)
 					});
 				}
 				syntheticExports = inner;
@@ -3203,9 +3175,8 @@ export class ApiManager extends ComponentBase {
 			} else {
 				// A non-plain object (Map/Date/Buffer/TypedArray/class instance) is not a valid export
 				// map; reject with a structured error rather than flowing into the flatten pipeline.
-				throw new this.SlothletError("INVALID_CONFIG_SYNTHETIC_INPUT", {
-					received: describeNonPlain(folderPath),
-					validationError: true
+				throw new this.SlothletError("INLINE_CONTENT_INVALID", {
+					received: describeNonPlain(folderPath)
 				});
 			}
 			// At root there is no mount-path segment for a `default` export to land on, and slothlet
@@ -3227,11 +3198,11 @@ export class ApiManager extends ComponentBase {
 					// The console warning stays silent-gated; the impl:warning event fires regardless of
 					// `silent` so programmatic observers see the dropped default even under silent (#148).
 					if (this.slothlet && !this.____config?.silent) {
-						new this.SlothletWarning("WARN_SYNTHETIC_ROOT_UNNAMED", {});
+						new this.SlothletWarning("WARNING_INLINE_ROOT_UNNAMED", {});
 					}
 					await this.emitImplDiagnostic("warning", {
 						apiPath: normalizedPath,
-						code: "WARN_SYNTHETIC_ROOT_UNNAMED",
+						code: "WARNING_INLINE_ROOT_UNNAMED",
 						context: {},
 						source: "addApi",
 						moduleID: restOptions.moduleID
@@ -3243,11 +3214,11 @@ export class ApiManager extends ComponentBase {
 					// warning stays silent-gated; impl:warning fires regardless of `silent` (#148).
 					if (FunctionMethods.call(Objects.prototype.hasOwnProperty, named, def.name)) {
 						if (this.slothlet && !this.____config?.silent) {
-							new this.SlothletWarning("WARN_SYNTHETIC_ROOT_COLLISION", { name: def.name });
+							new this.SlothletWarning("WARNING_INLINE_ROOT_COLLISION", { name: def.name });
 						}
 						await this.emitImplDiagnostic("warning", {
 							apiPath: normalizedPath,
-							code: "WARN_SYNTHETIC_ROOT_COLLISION",
+							code: "WARNING_INLINE_ROOT_COLLISION",
 							context: { name: def.name },
 							source: "addApi",
 							moduleID: restOptions.moduleID
@@ -3266,9 +3237,8 @@ export class ApiManager extends ComponentBase {
 
 			// Validate that the path is either a directory or a supported file type
 			if (!isDirectory && !isFile) {
-				throw new this.SlothletError("INVALID_CONFIG_PATH_TYPE", {
-					path: resolvedPath,
-					validationError: true
+				throw new this.SlothletError("PATH_TYPE_UNSUPPORTED", {
+					path: resolvedPath
 				});
 			}
 
@@ -3276,10 +3246,9 @@ export class ApiManager extends ComponentBase {
 				// Validate file extension for files
 				const { ext } = fileParts(resolvedPath);
 				if (!ArrayMethods.includes([".mjs", ".cjs", ".js"], ext)) {
-					throw new this.SlothletError("INVALID_CONFIG_FILE_TYPE", {
+					throw new this.SlothletError("FILE_TYPE_UNSUPPORTED", {
 						path: resolvedPath,
-						extension: ext,
-						validationError: true
+						extension: ext
 					});
 				}
 			}
@@ -3313,13 +3282,12 @@ export class ApiManager extends ComponentBase {
 		// No moduleID was supplied, so the id is derived from the apiPath; if that apiPath carries the reserved
 		// separator the auto-generated id inherits it, breaking the "no moduleID contains the separator"
 		// invariant that composite splitting (remove/metadata) relies on. A user-supplied id is refused above,
-		// and a supplied id with a separator-bearing apiPath is refused as an INVALID_CONFIG_API_PATH_INVALID
+		// and a supplied id with a separator-bearing apiPath is refused as an API_PATH_INVALID
 		// after normalizeApiPath; this catches the remaining auto-generated case at the point the id is finalized.
 		if (StringMethods.includes(moduleID, MODULE_ID_SEPARATOR)) {
 			throw new this.SlothletError("MODULE_ID_RESERVED_SEPARATOR", {
-				moduleID,
-				separator: MODULE_ID_SEPARATOR,
-				validationError: true
+				module: moduleID,
+				separator: MODULE_ID_SEPARATOR
 			});
 		}
 		// Re-arm this moduleID before any registration below: a prior removal (unregister()/
@@ -3331,9 +3299,8 @@ export class ApiManager extends ComponentBase {
 		// So !moduleID is never true — this guard is a defensive belt-and-suspenders check.
 		/* v8 ignore start */
 		if (restOptions.forceOverwrite && !moduleID) {
-			throw new this.SlothletError("INVALID_CONFIG_FORCE_OVERWRITE_REQUIRES_MODULE_ID", {
-				apiPath: normalizedPath,
-				validationError: true
+			throw new this.SlothletError("MODULE_ID_REQUIRED", {
+				path: normalizedPath
 			});
 		}
 		/* v8 ignore stop */
@@ -3626,21 +3593,21 @@ export class ApiManager extends ComponentBase {
 				// default with no named exports flattens to a value with no enumerable keys, so the merge
 				// loop below assigns nothing. A root add is allowed — this is a no-op, not a hard error
 				// (#136 review r3360502555): it follows the same warn-on-empty rule a normal directory add
-				// does. A directory source is already warned by the Loader (WARN_DIRECTORY_EMPTY); a
+				// does. A directory source is already warned by the Loader (WARNING_FOLDER_EMPTY); a
 				// synthetic source has no scan, so surface the equivalent warning here, then fall through
 				// (the merge loop iterates nothing and the add completes having mounted nothing).
 				if (rootKeys.length === 0 && isSynthetic) {
 					// Console warning stays silent-gated; the impl:warning event fires regardless of `silent`
 					// so a no-op root add is still observable programmatically (#148).
 					if (this.slothlet && !this.____config?.silent) {
-						new this.SlothletWarning("WARN_SYNTHETIC_ROOT_EMPTY", {
-							apiPath: normalizedPath || "(root)"
+						new this.SlothletWarning("WARNING_INLINE_ROOT_EMPTY", {
+							path: normalizedPath || "(root)"
 						});
 					}
 					await this.emitImplDiagnostic("warning", {
 						apiPath: normalizedPath,
-						code: "WARN_SYNTHETIC_ROOT_EMPTY",
-						context: { apiPath: normalizedPath || "(root)" },
+						code: "WARNING_INLINE_ROOT_EMPTY",
+						context: { path: normalizedPath || "(root)" },
 						source: "addApi",
 						moduleID
 					});
@@ -4269,7 +4236,7 @@ export class ApiManager extends ComponentBase {
 	 * The function is resolved the way the adds resolved it: in ownership order, the first contributor
 	 * that supplies a function takes the slot, and a later one replaces it only when it was placed under
 	 * `merge-replace` / `replace`; a merge loser never does. With no function left, the namespace keeps
-	 * the impl the restore gave it (a call then throws `INVALID_CONFIG_NOT_A_FUNCTION`).
+	 * the impl the restore gave it (a call then throws `API_PATH_NOT_CALLABLE`).
 	 */
 	#restoreNamespaceFunction(live, apiPath) {
 		// Only a namespace: a rolled-back leaf already holds the value its current owner resolves to.
@@ -4432,8 +4399,7 @@ export class ApiManager extends ComponentBase {
 			throw new this.SlothletError("INVALID_ARGUMENT", {
 				argument: "pathOrModuleId",
 				expected: "non-empty string",
-				received: typeof pathOrModuleId,
-				validationError: true
+				received: typeof pathOrModuleId
 			});
 		}
 
@@ -4504,9 +4470,8 @@ export class ApiManager extends ComponentBase {
 			moduleID = isModuleId ? splitText(pathOrModuleId, MODULE_ID_SEPARATOR)[0] : null;
 		}
 		if (!this.slothlet || !this.slothlet.isLoaded) {
-			throw new this.SlothletError("INVALID_CONFIG_NOT_LOADED", {
-				operation: "removeApi",
-				validationError: true
+			throw new this.SlothletError("INSTANCE_NOT_LOADED", {
+				operation: ["slothlet", "api", "remove"]
 			});
 		}
 
@@ -5012,12 +4977,11 @@ export class ApiManager extends ComponentBase {
 		// remove() is always called with a valid apiPath in tests; the guard throw is unreachable.
 		/* v8 ignore next */
 		if (!apiPath) {
-			throw new this.SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
-				apiPath,
+			throw new this.SlothletError("API_PATH_INVALID", {
+				path: apiPath,
 				reason: translate("API_PATH_REASON_REQUIRED"),
 				index: undefined,
-				segment: undefined,
-				validationError: true
+				segment: undefined
 			});
 		}
 
@@ -5137,9 +5101,8 @@ export class ApiManager extends ComponentBase {
 	async reloadApiComponent(params) {
 		const { apiPath, moduleID, options } = params || {};
 		if (!this.slothlet || !this.slothlet.isLoaded) {
-			throw new this.SlothletError("INVALID_CONFIG_NOT_LOADED", {
-				operation: "reloadApi",
-				validationError: true
+			throw new this.SlothletError("INSTANCE_NOT_LOADED", {
+				operation: ["slothlet", "api", "reload"]
 			});
 		}
 
@@ -5164,8 +5127,7 @@ export class ApiManager extends ComponentBase {
 		throw new this.SlothletError("INVALID_ARGUMENT", {
 			argument: "params",
 			expected: "{ moduleID } or { apiPath }",
-			received: params,
-			validationError: true
+			received: params
 		});
 	}
 
@@ -5187,17 +5149,15 @@ export class ApiManager extends ComponentBase {
 		const cacheManager = this.slothlet.handlers.apiCacheManager;
 		if (!cacheManager) {
 			throw new this.SlothletError("CACHE_MANAGER_NOT_AVAILABLE", {
-				operation: "reload",
-				validationError: true
+				operation: ["slothlet", "api", "reload"]
 			});
 		}
 
 		// Check if cache exists
 		if (!cacheManager.has(moduleID)) {
 			throw new this.SlothletError("CACHE_NOT_FOUND", {
-				moduleID,
-				operation: "reload",
-				validationError: true
+				module: moduleID,
+				operation: ["slothlet", "api", "reload"]
 			});
 		}
 

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T22:52:35-08:00 (1794811955)
+ *	@Last modified time: 2026-11-16T18:29:35-08:00 (1794882575)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -305,37 +305,37 @@ describe("api_builder – run() and scope() validation throws", () => {
 		}
 	});
 
-	it("run() with non-object contextData throws SCOPE_INVALID_CONTEXT (line 1156)", async () => {
+	it("run() with non-object contextData throws SCOPE_CONTEXT_INVALID (line 1156)", async () => {
 		api = await makeApi();
 		await expect(api.slothlet.run("not-an-object", () => {})).rejects.toThrow();
 	});
 
-	it("run() with non-function callback throws SCOPE_INVALID_CALLBACK (line 1183)", async () => {
+	it("run() with non-function callback throws SCOPE_CALLBACK_INVALID (line 1183)", async () => {
 		api = await makeApi();
 		await expect(api.slothlet.run({ userId: 1 }, "not-a-function")).rejects.toThrow();
 	});
 
-	it("scope() with non-object options throws SCOPE_INVALID_OPTIONS (line 1214)", async () => {
+	it("scope() with non-object options throws SCOPE_OPTIONS_INVALID (line 1214)", async () => {
 		api = await makeApi();
 		await expect(api.slothlet.scope("not-options")).rejects.toThrow();
 	});
 
-	it("scope() with missing fn throws SCOPE_INVALID_FN (line 1219)", async () => {
+	it("scope() with missing fn throws SCOPE_FUNCTION_INVALID (line 1219)", async () => {
 		api = await makeApi();
 		await expect(api.slothlet.scope({ context: {}, fn: "not-a-function" })).rejects.toThrow();
 	});
 
-	it("scope() with missing context throws SCOPE_INVALID_CONTEXT_OBJECT (line 1234)", async () => {
+	it("scope() with missing context throws SCOPE_CONTEXT_OBJECT_INVALID (line 1234)", async () => {
 		api = await makeApi();
 		await expect(api.slothlet.scope({ fn: () => {}, context: "not-object" })).rejects.toThrow();
 	});
 
-	it("scope() with invalid merge strategy throws SCOPE_INVALID_MERGE_STRATEGY (line 1242)", async () => {
+	it("scope() with invalid merge strategy throws SCOPE_MERGE_STRATEGY_INVALID (line 1242)", async () => {
 		api = await makeApi();
 		await expect(api.slothlet.scope({ fn: () => {}, context: { x: 1 }, merge: "invalid-strategy" })).rejects.toThrow();
 	});
 
-	it("scope() with invalid isolation mode throws SCOPE_INVALID_ISOLATION_MODE (line 1248)", async () => {
+	it("scope() with invalid isolation mode throws SCOPE_ISOLATION_MODE_INVALID (line 1248)", async () => {
 		api = await makeApi();
 		await expect(api.slothlet.scope({ fn: () => {}, context: { x: 1 }, merge: "shallow", isolation: "not-valid" })).rejects.toThrow();
 	});

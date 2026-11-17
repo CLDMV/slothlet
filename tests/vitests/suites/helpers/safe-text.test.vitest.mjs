@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:52-08:00 (1794874612)
+ *	@Last modified time: 2026-11-16T18:29:55-08:00 (1794882595)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -77,7 +77,7 @@ describe("safe text of values", () => {
 
 	it("an error made with a thrown value renders it without running its code", () => {
 		const ran = [];
-		const error = new SlothletError("INVALID_CONFIG", {}, carrier(ran));
+		const error = new SlothletError("INVALID_CONFIG", {}, { cause: carrier(ran) });
 		expect(ran).toEqual([]);
 		expect(error.message).not.toContain("steered");
 	});

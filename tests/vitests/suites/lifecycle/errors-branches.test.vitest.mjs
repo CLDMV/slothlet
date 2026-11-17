@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T22:54:02-08:00 (1794812042)
+ *	@Last modified time: 2026-11-16T18:30:06-08:00 (1794882606)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -21,13 +21,12 @@
  *
  * **Line 62 — static HINT lookup: `translatedHint = staticHint`**
  *
- *   Fires inside the `SlothletError` constructor when:
- *   1. `validationError: true` is passed as a constructor option, AND
- *   2. `HINT_<CODE>` is a real, non-fallback string in the i18n translations.
+ *   Fires inside the `SlothletError` constructor when no `{ cause }` is passed and
+ *   `HINT_<CODE>` is a real, non-fallback string in the i18n translations.
  *
  *   Trigger path through slothlet:
- *   `slothlet({ base: "" })` → config validation throws `INVALID_CONFIG_DIR_MISSING`
- *   with `{ validationError: true }`.  `HINT_INVALID_CONFIG_DIR_MISSING` exists in
+ *   `slothlet({ base: "" })` → config validation throws `INVALID_CONFIG_BASE_MISSING`
+ *   with no cause.  `HINT_INVALID_CONFIG_BASE_MISSING` exists in
  *   en-us.json as a genuine hint string, so the constructor takes line 62.
  *
  * **Line 184 — `SlothletWarning.captured.push(this)`**
@@ -54,15 +53,15 @@ import { TEST_DIRS } from "../../setup/vitest-helper.mjs";
 // ─── SlothletError static-hint path (line 62) ─────────────────────────────────
 
 describe("SlothletError — static HINT_<CODE> lookup via slothlet config validation (line 62)", () => {
-	it("slothlet with a present-but-empty base throws INVALID_CONFIG_DIR_MISSING and the error carries a hint (line 62)", async () => {
-		// Config validation checks the base before loading; an empty string triggers INVALID_CONFIG_DIR_MISSING
+	it("slothlet with a present-but-empty base throws INVALID_CONFIG_BASE_MISSING and the error carries a hint (line 62)", async () => {
+		// Config validation checks the base before loading; an empty string triggers INVALID_CONFIG_BASE_MISSING
 		// (an absent or null base is a valid no-base instance since #471)
-		// with { validationError: true }.  SlothletError constructor retrieves
-		// HINT_INVALID_CONFIG_DIR_MISSING from i18n → real string → line 62 fires:
+		// with no cause.  SlothletError constructor retrieves
+		// HINT_INVALID_CONFIG_BASE_MISSING from i18n → real string → line 62 fires:
 		//   translatedHint = staticHint
 		const err = await slothlet({ base: "" }).catch((e) => e);
 		expect(err).toBeInstanceOf(Error);
-		expect(err.code).toBe("INVALID_CONFIG_DIR_MISSING");
+		expect(err.code).toBe("INVALID_CONFIG_BASE_MISSING");
 		expect(err.hint).toBeDefined();
 		expect(typeof err.hint).toBe("string");
 		expect(err.hint.length).toBeGreaterThan(0);
@@ -73,9 +72,9 @@ describe("SlothletError — static HINT_<CODE> lookup via slothlet config valida
 		expect(err.hint).not.toMatch(/^Error:/);
 	});
 
-	it("slothlet with empty-string dir also throws INVALID_CONFIG_DIR_MISSING with a hint (line 62)", async () => {
+	it("slothlet with empty-string dir also throws INVALID_CONFIG_BASE_MISSING with a hint (line 62)", async () => {
 		const err = await slothlet({ base: "" }).catch((e) => e);
-		expect(err.code).toBe("INVALID_CONFIG_DIR_MISSING");
+		expect(err.code).toBe("INVALID_CONFIG_BASE_MISSING");
 		expect(err.hint).toBeDefined();
 		expect(err.hint).not.toMatch(/^Error:/);
 	});

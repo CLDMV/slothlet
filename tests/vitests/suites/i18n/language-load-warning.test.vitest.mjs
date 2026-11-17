@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T12:00:00-08:00 (1794772800)
+ *	@Last modified time: 2026-11-16T18:30:01-08:00 (1794882601)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -56,7 +56,7 @@ describe("a failed locale load is a coded SlothletWarning (#820)", () => {
 		api = await slothlet({ base: TEST_DIRS.API_TEST, diagnostics: true, i18n: { language: "zz-zz" } });
 		const [warning] = failed(api);
 		expect(warning).toBeInstanceOf(SlothletWarning);
-		expect(warning.context).toEqual({ lang: "zz-zz" });
+		expect(warning.details).toEqual({ lang: "zz-zz" });
 		expect(warning.message).toBe("Failed to load language 'zz-zz', falling back to English.");
 		expect(getLanguage()).toBe("en-us");
 	});
@@ -77,7 +77,7 @@ describe("a failed locale load is a coded SlothletWarning (#820)", () => {
 		api = await slothlet({ base: TEST_DIRS.API_TEST, diagnostics: true });
 		api.slothlet.i18n.setLanguage("zz-zz");
 		await api.slothlet.i18n.setLanguageAsync("yy-yy");
-		expect(failed(api).map((w) => w.context.lang)).toEqual(["zz-zz", "yy-yy"]);
+		expect(failed(api).map((w) => w.details.lang)).toEqual(["zz-zz", "yy-yy"]);
 	});
 
 	it("api.slothlet.i18n.setLanguage honours silent", async () => {
@@ -90,7 +90,7 @@ describe("a failed locale load is a coded SlothletWarning (#820)", () => {
 	it("outside any instance the warning lands on the process-level class", async () => {
 		setLanguage("zz-zz");
 		await setLanguageAsync("yy-yy");
-		expect(SlothletWarning.captured.filter((w) => w.code === CODE).map((w) => w.context.lang)).toEqual(["zz-zz", "yy-yy"]);
+		expect(SlothletWarning.captured.filter((w) => w.code === CODE).map((w) => w.details.lang)).toEqual(["zz-zz", "yy-yy"]);
 	});
 
 	it("prints no bare console.warn line of its own", async () => {

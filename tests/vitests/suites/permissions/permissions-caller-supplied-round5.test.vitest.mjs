@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:17:09-08:00 (1794874629)
+ *	@Last modified time: 2026-11-16T18:30:24-08:00 (1794882624)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -58,7 +58,7 @@ const DENIED = "PERMISSION_DENIED";
  * How a module's code is refused while it is built as no module's: refused as unattributable, or — in the live
  * runtime, whose `self` names no instance outside a call — refused any context at all.
  */
-const BUILD_REFUSALS = new Set([DENIED, "RUNTIME_NO_ACTIVE_CONTEXT_SELF"]);
+const BUILD_REFUSALS = new Set([DENIED, "CONTEXT_NOT_ACTIVE_SELF"]);
 
 /**
  * Whether this engine gives a stack frame the hash of the script it runs in, which is what tells a file's own code

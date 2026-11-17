@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:14-08:00 (1794874574)
+ *	@Last modified time: 2026-11-16T18:28:52-08:00 (1794882532)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -231,7 +231,7 @@ export function warnIfCoverageWithoutSourcemap(config, overrides) {
 	if (config?.typescript?.sourcemap !== false) return false;
 	if (config?.silent) return false;
 	if (!isCoverageRun(overrides)) return false;
-	new SlothletWarning("WARNING_COVERAGE_TS_SOURCEMAP_OFF", {});
+	new SlothletWarning("WARNING_COVERAGE_TYPESCRIPT_SOURCEMAP_OFF", {});
 	return true;
 }
 
@@ -413,10 +413,7 @@ function runtime_sortedQuery(query) {
 function ensureInstanceImportHooks() {
 	if (instanceImportHooksInstalled) return;
 	// A module's import of one of slothlet's own files is refused with slothlet's own error.
-	setImportRefusal(
-		({ specifier, file, allowed }) =>
-			new SlothletError("MODULE_INTERNAL_NOT_IMPORTABLE", { specifier, file, allowed }, null, { validationError: true })
-	);
+	setImportRefusal(({ specifier, file, allowed }) => new SlothletError("MODULE_INTERNAL_NOT_IMPORTABLE", { specifier, file, allowed }));
 	instanceImportHooksInstalled = installInstanceImportHooks(createRequire(import.meta.url)("node:module"));
 }
 
@@ -625,10 +622,10 @@ export class Loader extends ComponentBase {
 				if (mode === "strict") {
 					// Validate strict mode config
 					if (!typescriptConfig.types?.output) {
-						throw new this.SlothletError("TS_STRICT_REQUIRES_OUTPUT", {}, null, { validationError: true });
+						throw new this.SlothletError("TYPESCRIPT_TYPES_OUTPUT_MISSING", {});
 					}
 					if (!typescriptConfig.types?.interfaceName) {
-						throw new this.SlothletError("TS_STRICT_REQUIRES_INTERFACE_NAME", {}, null, { validationError: true });
+						throw new this.SlothletError("TYPESCRIPT_TYPES_NAME_MISSING", {});
 					}
 
 					// Generate types if not already generated for this instance
@@ -675,24 +672,20 @@ export class Loader extends ComponentBase {
 									/* v8 ignore start */
 								} else if (msg.type === "error") {
 									// msg.error is a string (serialized over IPC). Wrap in a message-object so
-									// SlothletError auto-enriches {error} from originalError.message without
+									// SlothletError renders the cause into {error} without
 									// needing a bare new Error() construction.
-									reject(new this.SlothletError("TS_TYPE_GENERATION_FAILED", {}, { message: msg.error }));
+									reject(new this.SlothletError("TYPESCRIPT_TYPE_GENERATION_FAILED", {}, { cause: { message: msg.error } }));
 								}
 								/* v8 ignore stop */
 							});
 
 							child.on("error", (error) => {
-								reject(new this.SlothletError("TS_TYPE_GENERATION_FORK_FAILED", {}, error));
+								reject(new this.SlothletError("TYPESCRIPT_TYPE_GENERATION_FORK_FAILED", {}, { cause: error }));
 							});
 
 							child.on("exit", (code) => {
 								if (code !== 0 && !this.slothlet._typesGenerated) {
-									reject(
-										new this.SlothletError("TS_TYPE_GENERATION_PROCESS_EXITED", { code, output: errorOutput }, null, {
-											validationError: true
-										})
-									);
+									reject(new this.SlothletError("TYPESCRIPT_TYPE_GENERATION_PROCESS_EXITED", { code, output: errorOutput }));
 								}
 							});
 						});
@@ -723,14 +716,10 @@ export class Loader extends ComponentBase {
 							const errors = formatDiagnostics(result.diagnostics, ts);
 
 							// Throw error with formatted diagnostics
-							const error = new this.SlothletError(
-								"TS_TYPE_CHECK_ERRORS",
-								{ filePath: tsPath, errors: ArrayMethods.join(errors, "\n") },
-								null,
-								{
-									validationError: true
-								}
-							);
+							const error = new this.SlothletError("TYPESCRIPT_TYPE_CHECK_ERRORS", {
+								file: tsPath,
+								errors: ArrayMethods.join(errors, "\n")
+							});
 							error.diagnostics = result.diagnostics;
 							throw error;
 						}
@@ -815,9 +804,9 @@ export class Loader extends ComponentBase {
 			throw new this.SlothletError(
 				"MODULE_IMPORT_FAILED",
 				{
-					modulePath: filePath
+					file: filePath
 				},
-				error
+				{ cause: error }
 			);
 		}
 	}
@@ -847,7 +836,7 @@ export class Loader extends ComponentBase {
 	 */
 	#assertNotThenable(name, entry, dir) {
 		if (this.slothlet.helpers.sanitize.sanitizePropertyName(name) === "then") {
-			throw new this.SlothletError("MODULE_THENABLE_NAME", { entry, dir }, null, { validationError: true });
+			throw new this.SlothletError("MODULE_THENABLE_NAME", { entry, folder: dir });
 		}
 	}
 
@@ -858,12 +847,12 @@ export class Loader extends ComponentBase {
 	 * @param {string} folder - Folder name.
 	 * @param {string} dir - Containing directory, for the error.
 	 * @returns {void}
-	 * @throws {SlothletError} MODULE_RESERVED_DIRNAME or MODULE_THENABLE_NAME.
+	 * @throws {SlothletError} MODULE_RESERVED_FOLDER or MODULE_THENABLE_NAME.
 	 * @private
 	 */
 	#assertLoadableFolderName(folder, dir) {
 		if (this.#isReservedEntryName(folder)) {
-			throw new this.SlothletError("MODULE_RESERVED_DIRNAME", { folder, dir }, null, { validationError: true });
+			throw new this.SlothletError("MODULE_RESERVED_FOLDER", { name: folder, folder: dir });
 		}
 		this.#assertNotThenable(folder, folder, dir);
 	}
@@ -1100,11 +1089,11 @@ export class Loader extends ComponentBase {
 			await fsp.stat(dir);
 		} catch (error) {
 			throw new this.SlothletError(
-				"INVALID_DIRECTORY",
+				"FOLDER_UNREADABLE",
 				{
-					dir
+					folder: dir
 				},
-				error
+				{ cause: error }
 			);
 		}
 
@@ -1191,7 +1180,7 @@ export class Loader extends ComponentBase {
 					// surface, so neither is this mount's problem. Each fails on its own the moment
 					// something does try to compose it.
 					if (this.#isReservedEntryName(nameWithoutExt)) {
-						throw new this.SlothletError("MODULE_RESERVED_FILENAME", { file: entry.name, dir }, null, { validationError: true });
+						throw new this.SlothletError("MODULE_RESERVED_FILE", { file: entry.name, folder: dir });
 					}
 					this.#assertNotThenable(nameWithoutExt, entry.name, dir);
 
@@ -1208,9 +1197,9 @@ export class Loader extends ComponentBase {
 		// Warn if directory is empty or has no loadable modules (only for root scans or add-api workflows).
 		// Console warning honors `silent`, consistent with every other SlothletWarning site.
 		if (isRootScan && structure.files.length === 0 && structure.directories.length === 0 && !this.____config?.silent) {
-			new this.SlothletWarning("WARN_DIRECTORY_EMPTY", {
-				dir,
-				resolvedPath: path.resolve(dir)
+			new this.SlothletWarning("WARNING_FOLDER_EMPTY", {
+				folder: dir,
+				resolved: path.resolve(dir)
 			});
 		}
 
@@ -1244,7 +1233,7 @@ export class Loader extends ComponentBase {
 		// accidental calls before config is fully applied.
 		/* v8 ignore next 3 */
 		if (!manifest) {
-			throw new this.SlothletError("INVALID_CONFIG_BROWSER_REQUIRES_MANIFEST", {}, null, { validationError: true });
+			throw new this.SlothletError("INVALID_CONFIG_FILES_REQUIRED", {});
 		}
 
 		// Compute the relative path by stripping the base URL/path prefix.
@@ -1265,7 +1254,7 @@ export class Loader extends ComponentBase {
 		const isRoot = !relativePath || relativePath === "/" || relativePath === ".";
 		const node = isRoot ? manifest : this.#findManifestNode(manifest, relativePath);
 		if (!node) {
-			throw new this.SlothletError("INVALID_DIRECTORY", { dir }, null);
+			throw new this.SlothletError("FOLDER_UNREADABLE", { folder: dir });
 		}
 
 		return this.#manifestNodeToStructure(node, dir, options);
@@ -1370,7 +1359,7 @@ export class Loader extends ComponentBase {
 			// composed wrapper shape, not the platform: a manifest carrying `_impl.mjs` would empty
 			// the lazy surface in a browser exactly as it does under Node.
 			if (this.#isReservedEntryName(name)) {
-				throw new this.SlothletError("MODULE_RESERVED_FILENAME", { file: fullName, dir: rootPath }, null, { validationError: true });
+				throw new this.SlothletError("MODULE_RESERVED_FILE", { file: fullName, folder: rootPath });
 			}
 			this.#assertNotThenable(name, fullName, rootPath);
 
@@ -1597,17 +1586,16 @@ export class Loader extends ComponentBase {
 				// wrapper contract. Refuse it loudly at load instead of silently coexisting, so the
 				// module author learns at the file, not from a distant behavioral surprise.
 				if (isFrameworkReservedKey(key)) {
-					throw new this.SlothletError("MODULE_RESERVED_EXPORT", { name: key }, null, { validationError: true });
+					throw new this.SlothletError("MODULE_RESERVED_EXPORT", { name: key });
 				}
 				// No api path can hold `__proto__`: composing it would set the node's prototype rather than add a
 				// member. It is refused as a mount path, a `self` write or a routine name is (#585 review).
 				if (key === "__proto__") {
-					throw new this.SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
-						apiPath: filePath ? `${filePath} (export '__proto__')` : "export '__proto__'",
+					throw new this.SlothletError("API_PATH_INVALID", {
+						path: filePath ? `${filePath} (export '__proto__')` : "export '__proto__'",
 						reason: translate("API_PATH_REASON_UNSAFE_SEGMENT"),
 						index: 0,
-						segment: key,
-						validationError: true
+						segment: key
 					});
 				}
 				// A `then` export that is a function would make the module's namespace awaitable (#571); one

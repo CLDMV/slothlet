@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-23T23:14:10-07:00 (1792822450)
+ *	@Last modified time: 2026-11-16T18:30:49-08:00 (1794882649)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -169,7 +169,7 @@ describe.each(CONFIGS)("module write rules (#625) — $mode / $runtime", ({ mode
 			async (target) => {
 				await load();
 				expect(withSuppressedSlothletErrorOutputSync(() => api.victim.v.grant({ caller: "guest.**", target, effect: "allow" }))).toBe(
-					"INVALID_PERMISSION_RULE"
+					"PERMISSION_RULE_INVALID"
 				);
 			}
 		);
@@ -178,14 +178,14 @@ describe.each(CONFIGS)("module write rules (#625) — $mode / $runtime", ({ mode
 			await load({ permissions: { rules: [{ caller: "**", target: "victim.**", effect: "deny" }] } });
 			expect(
 				withSuppressedSlothletErrorOutputSync(() => api.guest.x.addRuleFor({ caller: "guest.**", target: "victim.**", effect: "allow" }))
-			).toBe("INVALID_PERMISSION_RULE");
+			).toBe("PERMISSION_RULE_INVALID");
 			expect(withSuppressedSlothletErrorOutputSync(() => api.guest.x.callVictim())).toBe("PERMISSION_DENIED");
 		});
 
 		it("lets the module remove its own rule, and refuses another module removing it", async () => {
 			await load();
 			const ruleId = await api.victim.v.grant(GUEST_ALLOW_VICTIM);
-			expect(withSuppressedSlothletErrorOutputSync(() => api.guest.x.removeRuleFor(ruleId))).toBe("INVALID_PERMISSION_RULE");
+			expect(withSuppressedSlothletErrorOutputSync(() => api.guest.x.removeRuleFor(ruleId))).toBe("PERMISSION_RULE_INVALID");
 			expect(await api.victim.v.revoke(ruleId)).toBe(true);
 			const refused = withSuppressedSlothletErrorOutputSync(() => api.guest.x.writeAt("victim.v"));
 			expect(refused).toEqual(every(refused, "LOOSE_SET_NOT_OWNED"));
@@ -227,7 +227,7 @@ describe.each(CONFIGS)("module write rules (#625) — $mode / $runtime", ({ mode
 			await load();
 			expect(
 				await withSuppressedSlothletErrorOutput(() => api.victim.v.mountHelper(path.join(FIXTURE, "guest"), { allow: [target] }))
-			).toBe("INVALID_PERMISSION_RULE");
+			).toBe("PERMISSION_RULE_INVALID");
 			expect(api.victim.helper).toBeUndefined();
 		});
 
@@ -262,12 +262,12 @@ describe.each(CONFIGS)("module write rules (#625) — $mode / $runtime", ({ mode
 
 		it("refuses the same rule from a module the host did not delegate to", async () => {
 			await load({ permissions: { rules: [DELEGATE] } });
-			expect(withSuppressedSlothletErrorOutputSync(() => api.other.x.addRuleFor(GUEST_ALLOW_VICTIM))).toBe("INVALID_PERMISSION_RULE");
+			expect(withSuppressedSlothletErrorOutputSync(() => api.other.x.addRuleFor(GUEST_ALLOW_VICTIM))).toBe("PERMISSION_RULE_INVALID");
 		});
 
 		it("refuses a manager under defaultPolicy allow with no explicit host rule", async () => {
 			await load({ permissions: { defaultPolicy: "allow" } });
-			expect(withSuppressedSlothletErrorOutputSync(() => api.mgr.x.addRuleFor(GUEST_ALLOW_VICTIM))).toBe("INVALID_PERMISSION_RULE");
+			expect(withSuppressedSlothletErrorOutputSync(() => api.mgr.x.addRuleFor(GUEST_ALLOW_VICTIM))).toBe("PERMISSION_RULE_INVALID");
 		});
 
 		it("lets the manager add a write rule on the framework namespace, as the host may", async () => {
@@ -297,7 +297,7 @@ describe.each(CONFIGS)("module write rules (#625) — $mode / $runtime", ({ mode
 		it("lets the manager remove another module's rule, and refuses a module that is no manager", async () => {
 			await load({ permissions: { rules: [DELEGATE] } });
 			const ruleId = await api.victim.v.grant(GUEST_ALLOW_VICTIM);
-			expect(withSuppressedSlothletErrorOutputSync(() => api.other.x.removeRuleFor(ruleId))).toBe("INVALID_PERMISSION_RULE");
+			expect(withSuppressedSlothletErrorOutputSync(() => api.other.x.removeRuleFor(ruleId))).toBe("PERMISSION_RULE_INVALID");
 			expect(await api.mgr.x.removeRuleFor(ruleId)).toBe(true);
 		});
 

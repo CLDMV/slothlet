@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:10-08:00 (1794874570)
+ *	@Last modified time: 2026-11-16T18:28:46-08:00 (1794882526)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -303,12 +303,12 @@ export class Lifecycle extends ComponentBase {
 		if (data.apiPath) {
 			new this.SlothletWarning(
 				"WARNING_LIFECYCLE_HANDLER_ERROR",
-				{ key: "WARNING_LIFECYCLE_HANDLER_ERROR_AT_PATH", event, apiPath: data.apiPath, moduleID: data.moduleID },
-				error
+				{ key: "WARNING_LIFECYCLE_HANDLER_ERROR_AT_PATH", event, path: data.apiPath, module: data.moduleID },
+				{ cause: error }
 			);
 			return;
 		}
-		new this.SlothletWarning("WARNING_LIFECYCLE_HANDLER_ERROR", { event }, error);
+		new this.SlothletWarning("WARNING_LIFECYCLE_HANDLER_ERROR", { event }, { cause: error });
 	}
 
 	/**

@@ -82,7 +82,7 @@ const api = await slothlet({ base: "./api" });
 const api = await slothlet({ base: "/absolute/path/to/api" });
 ```
 
-**No base directory.** Omit `base` (or pass `base: null`) to start from an empty root and build the whole tree at runtime with [`api.slothlet.api.add()`](./RELOAD.md#apislothletapiadd) — directories, in-memory `{ exports }` objects, at a path or at the root (`""`). Nothing is scanned, so there is no `WARN_DIRECTORY_EMPTY`; permissions, lifecycle, `remove()`, and both reload forms work as usual, and a full `reload()` replays what was added.
+**No base directory.** Omit `base` (or pass `base: null`) to start from an empty root and build the whole tree at runtime with [`api.slothlet.api.add()`](./RELOAD.md#apislothletapiadd) — directories, in-memory `{ exports }` objects, at a path or at the root (`""`). Nothing is scanned, so there is no `WARNING_FOLDER_EMPTY`; permissions, lifecycle, `remove()`, and both reload forms work as usual, and a full `reload()` replays what was added.
 
 ```javascript
 const api = await slothlet({ mode: "eager" }); // no base
@@ -90,7 +90,7 @@ await api.slothlet.api.add("services", { exports: { now: () => Date.now() } });
 await api.slothlet.api.add("plugins", "./plugins");
 ```
 
-A base that is given but unusable still fails loudly: an empty string throws `INVALID_CONFIG_DIR_MISSING`, a path that does not exist throws, and an existing but empty directory still warns `WARN_DIRECTORY_EMPTY`. In browser mode the same applies, and a `manifest` is only needed with a base — a manifest that lists files without a base throws `INVALID_CONFIG_DIR_MISSING`, since those files cannot be resolved.
+A base that is given but unusable still fails loudly: an empty string throws `INVALID_CONFIG_BASE_MISSING`, a path that does not exist throws, and an existing but empty directory still warns `WARNING_FOLDER_EMPTY`. In browser mode the same applies, and a `manifest` is only needed with a base — a manifest that lists files without a base throws `INVALID_CONFIG_BASE_MISSING`, since those files cannot be resolved.
 
 ---
 
@@ -382,7 +382,7 @@ Sets the defaults for `api.slothlet.scope()` runs. Both can be overridden per ca
 - **`isolation`**
   - **`"partial"`** (default) - The scope shares `self` with the rest of the api, so a write through `self` inside the scope is visible outside it.
   - **`"full"`** - The scope gets a copy-on-write `self`: writes made inside the scope stay inside it.
-  - Any other value throws `SCOPE_INVALID_ISOLATION_MODE`.
+  - Any other value throws `SCOPE_ISOLATION_MODE_INVALID`.
 
 ```javascript
 const api = await slothlet({

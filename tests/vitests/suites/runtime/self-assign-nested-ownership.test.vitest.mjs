@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-10T21:30:06-08:00 (1794375006)
+ *	@Last modified time: 2026-11-16T18:31:00-08:00 (1794882660)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -217,7 +217,7 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 		it("refuses a module that is no manager adding the grant", async () => {
 			await mountAll();
 			expect(withSuppressedSlothletErrorOutputSync(() => api.front.relay.addRuleFor(SUPPLIER_WRITES_CALLEE))).toBe(
-				"INVALID_PERMISSION_RULE"
+				"PERMISSION_RULE_INVALID"
 			);
 		});
 
@@ -484,7 +484,7 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 		withSuppressedSlothletErrorOutputSync(() => {
 			expect(() => {
 				node.useSecret = () => "pwned-through-host";
-			}).toThrow(/RUNTIME_NO_ACTIVE_CONTEXT_SELF/);
+			}).toThrow(/CONTEXT_NOT_ACTIVE_SELF/);
 		});
 		expect(await api.callee.ops.useSecret()).toBe("callee-original");
 	});
@@ -618,7 +618,7 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 			// `later` came back inside plain data, so it is the supplier's own function, run here by the host outside any
 			// call: the write goes through the view the supplier kept, which has no standing to write another module's
 			// node (#726). Still refused.
-			expect(() => outcome.later()).toThrow(/RUNTIME_NO_ACTIVE_CONTEXT_SELF/);
+			expect(() => outcome.later()).toThrow(/CONTEXT_NOT_ACTIVE_SELF/);
 		});
 		expect(await api.svc[name].read()).toBe(`${name}-secret`);
 	});
@@ -760,12 +760,12 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 				for (const node of targets) {
 					expect(() => {
 						node.useSecret = () => "pwned-by-hook";
-					}).toThrow(/RUNTIME_NO_ACTIVE_CONTEXT_SELF/);
+					}).toThrow(/CONTEXT_NOT_ACTIVE_SELF/);
 				}
 				// The test's own code writing through the api a hook kept: host code with no standing over the view.
 				expect(() => {
 					kept.api.callee = { pwned: true };
-				}).toThrow(/RUNTIME_NO_ACTIVE_CONTEXT_SELF/);
+				}).toThrow(/CONTEXT_NOT_ACTIVE_SELF/);
 			});
 			expect(await api.callee.ops.useSecret()).toBe("callee-original");
 			// What the hook handed back unchanged is what the call returned: the host may still write through it.
@@ -809,7 +809,7 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 					if (impl === null) continue;
 					expect(() => {
 						impl.useSecret = () => "pwned-by-lifecycle";
-					}).toThrow(/RUNTIME_NO_ACTIVE_CONTEXT_SELF/);
+					}).toThrow(/CONTEXT_NOT_ACTIVE_SELF/);
 				}
 			});
 			expect(await api.vault2.ops.useSecret()).toBe("callee-original");
@@ -863,7 +863,7 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 		withSuppressedSlothletErrorOutputSync(() => {
 			// `later` is a function in returned data, run by the host outside any call (#726): refused through the kept
 			// view, which has no standing.
-			expect(() => kept.later()).toThrow(/RUNTIME_NO_ACTIVE_CONTEXT_SELF/);
+			expect(() => kept.later()).toThrow(/CONTEXT_NOT_ACTIVE_SELF/);
 		});
 		expect(await api.callee.ops.useSecret()).toBe("callee-original");
 	});
@@ -937,7 +937,7 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 		withSuppressedSlothletErrorOutputSync(() => {
 			expect(() => {
 				kept.useSecret = () => "pwned-by-error-hook";
-			}).toThrow(/RUNTIME_NO_ACTIVE_CONTEXT_SELF/);
+			}).toThrow(/CONTEXT_NOT_ACTIVE_SELF/);
 		});
 		expect(await api.callee.ops.useSecret()).toBe("callee-original");
 	});

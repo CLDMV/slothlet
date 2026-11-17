@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-08T12:30:00-08:00 (1794169800)
+ *	@Last modified time: 2026-11-16T18:26:00-08:00 (1794882360)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -37,7 +37,7 @@ function tryPartition(getApi) {
 	try {
 		return getApi().store.partition();
 	} catch (error) {
-		return `${error?.code}:${error?.context?.caller ?? null}`;
+		return `${error?.code}:${error?.details?.caller ?? null}`;
 	}
 }
 

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:09-08:00 (1794874569)
+ *	@Last modified time: 2026-11-16T18:28:45-08:00 (1794882525)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -187,7 +187,7 @@ export class AsyncContextManager {
 	 */
 	initialize(instanceID, config = {}, clock = DEFAULT_CLOCK) {
 		if (MapMethods.has(this.instances, instanceID)) {
-			throw new SlothletError("CONTEXT_ALREADY_EXISTS", { instanceID }, null, { validationError: true });
+			throw new SlothletError("CONTEXT_ALREADY_EXISTS", { instance: instanceID });
 		}
 
 		const store = {
@@ -257,8 +257,8 @@ export class AsyncContextManager {
 			baseStore = MapMethods.get(this.instances, instanceID);
 			if (!baseStore) {
 				throw new SlothletError("CONTEXT_NOT_FOUND", {
-					instanceID,
-					availableInstances: mapKeysToArray(this.instances)
+					instance: instanceID,
+					instances: mapKeysToArray(this.instances)
 				});
 			}
 		}
@@ -344,9 +344,9 @@ export class AsyncContextManager {
 					throw new SlothletError(
 						"CONTEXT_EXECUTION_FAILED",
 						{
-							instanceID
+							instance: instanceID
 						},
-						error
+						{ cause: error }
 					);
 				}
 			});
@@ -376,9 +376,9 @@ export class AsyncContextManager {
 				throw new SlothletError(
 					"CONTEXT_EXECUTION_FAILED",
 					{
-						instanceID
+						instance: instanceID
 					},
-					error
+					{ cause: error }
 				);
 			}
 		});
@@ -474,7 +474,7 @@ export class AsyncContextManager {
 				? active
 				: MapMethods.get(this.instances, instanceID);
 		if (!base) {
-			throw new SlothletError("CONTEXT_NOT_FOUND", { instanceID, availableInstances: mapKeysToArray(this.instances) });
+			throw new SlothletError("CONTEXT_NOT_FOUND", { instance: instanceID, instances: mapKeysToArray(this.instances) });
 		}
 		const ceiling = identity.ceiling ?? null;
 		const parent =
@@ -601,7 +601,7 @@ export class AsyncContextManager {
 	getContext() {
 		const store = this.als.getStore();
 		if (!store) {
-			throw new SlothletError("NO_ACTIVE_CONTEXT_ASYNC", {}, null, { validationError: true });
+			throw new SlothletError("CONTEXT_NOT_ACTIVE_ASYNC", {});
 		}
 		return store;
 	}
@@ -786,12 +786,10 @@ export class AsyncContextManager {
 	cleanup(instanceID) {
 		const store = MapMethods.get(this.instances, instanceID);
 		if (!store) {
-			throw new SlothletError(
-				"CONTEXT_NOT_FOUND",
-				{ instanceID, availableInstances: ArrayMethods.join(mapKeysToArray(this.instances), ", ") || "none" },
-				null,
-				{ validationError: true }
-			);
+			throw new SlothletError("CONTEXT_NOT_FOUND", {
+				instance: instanceID,
+				instances: ArrayMethods.join(mapKeysToArray(this.instances), ", ") || "none"
+			});
 		}
 
 		// Clear the store data

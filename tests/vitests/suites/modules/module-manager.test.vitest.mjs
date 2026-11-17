@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:12-07:00 (1791090912)
+ *	@Last modified time: 2026-11-16T18:30:12-08:00 (1794882612)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -312,10 +312,10 @@ describe("ModuleManager — malformed manifest propagation", () => {
 		});
 	});
 
-	it("MODULE_RESERVED_MOUNTPATH from validator surfaces through discover()", async () => {
+	it("MODULE_RESERVED_MOUNT from validator surfaces through discover()", async () => {
 		const mm = await newSlothletWithModules();
 		await withSuppressedSlothletErrorOutput(async () => {
-			await expect(mm.discover({ scanRoot: FIX_MALFORMED, prefix: "reserved-mount" })).rejects.toThrow(/MODULE_RESERVED_MOUNTPATH/);
+			await expect(mm.discover({ scanRoot: FIX_MALFORMED, prefix: "reserved-mount" })).rejects.toThrow(/MODULE_RESERVED_MOUNT/);
 		});
 	});
 });

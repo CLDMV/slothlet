@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:14-08:00 (1794874574)
+ *	@Last modified time: 2026-11-16T18:28:52-08:00 (1794882532)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -177,14 +177,14 @@ export class Flatten extends ComponentBase {
 				return {
 					flattenToCategory: true,
 					flattenType: "addapi-metadata-default",
-					reason: await t("FLATTEN_REASON_ADDAPI_METADATA_DEFAULT")
+					reason: await t("FLATTEN_REASON_MOUNT_METADATA_DEFAULT")
 				};
 			}
 			// Even without metadata pattern, addapi files should always flatten
 			return {
 				flattenToCategory: true,
 				flattenType: "addapi-special-file",
-				reason: await t("FLATTEN_REASON_ADDAPI_SPECIAL_FILE")
+				reason: await t("FLATTEN_REASON_MOUNT_SPECIAL_FILE")
 			};
 		}
 
@@ -415,10 +415,10 @@ export class Flatten extends ComponentBase {
 	namedExportWinsOverDefault(key, collisionMode, apiPath) {
 		if (collisionMode === "merge" || collisionMode === "skip") return false;
 		if (collisionMode === "error") {
-			throw new this.slothlet.SlothletError("COLLISION_DEFAULT_EXPORT_ERROR", { key, apiPath }, null, { validationError: true });
+			throw new this.slothlet.SlothletError("COLLISION_DEFAULT_EXPORT_ERROR", { key, path: apiPath });
 		}
 		if (collisionMode === "warn") {
-			new this.slothlet.SlothletWarning("WARNING_COLLISION_DEFAULT_EXPORT_OVERWRITE", { key, apiPath });
+			new this.slothlet.SlothletWarning("WARNING_COLLISION_DEFAULT_EXPORT_OVERWRITE", { key, path: apiPath });
 		}
 		return true;
 	}
@@ -702,14 +702,14 @@ export class Flatten extends ComponentBase {
 				return {
 					shouldFlatten: true,
 					flattenType: "addapi-metadata-default",
-					reason: await t("FLATTEN_REASON_ADDAPI_SPECIAL_FILE_PARENT")
+					reason: await t("FLATTEN_REASON_MOUNT_SPECIAL_FILE_PARENT")
 				};
 			}
 			// Even without metadata pattern, addapi files should always flatten
 			return {
 				shouldFlatten: true,
 				flattenType: "addapi-special-file",
-				reason: await t("FLATTEN_REASON_ADDAPI_SPECIAL_FILE")
+				reason: await t("FLATTEN_REASON_MOUNT_SPECIAL_FILE")
 			};
 		}
 

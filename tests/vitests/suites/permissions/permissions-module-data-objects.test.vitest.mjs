@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-31T20:52:51-07:00 (1793505171)
+ *	@Last modified time: 2026-11-16T18:30:37-08:00 (1794882637)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -169,7 +169,7 @@ describe.each(CONFIGS)("a module's data objects (#625) — $mode / $runtime", ({
 		const report = await withSuppressedSlothletErrorOutput(() => api.guest.x.runWithSelf("slothlet.test.i625.probe"));
 		delete globalThis[Symbol.for("slothlet.test.i625.probe")];
 		// Refused for not owning the path, or, under the live runtime, for having no module caller after an await.
-		for (const outcome of Object.values(report)) expect(["LOOSE_SET_NOT_OWNED", "RUNTIME_NO_ACTIVE_CONTEXT_SELF"]).toContain(outcome);
+		for (const outcome of Object.values(report)) expect(["LOOSE_SET_NOT_OWNED", "CONTEXT_NOT_ACTIVE_SELF"]).toContain(outcome);
 		expect(value.n).toBe(0);
 	});
 

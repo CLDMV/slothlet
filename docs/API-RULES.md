@@ -619,7 +619,7 @@ await api.slothlet.api.remove("module-b");
 
 ### Collision Modes
 
-Collision mode is fixed at instance initialization (the `collision` config option — see [CONFIGURATION.md](CONFIGURATION.md)). Passing `collisionMode` to an individual `api.add()` call is locked by default — it emits a `WARNING_API_ADD_OPTION_LOCKED` warning and is ignored (the add still succeeds), unless `api.mutations.allowCollisionOverride: true` is set, which makes a per-call `collisionMode` take effect. `forceOverwrite` (below) is the always-available per-call escape hatch regardless of that flag.
+Collision mode is fixed at instance initialization (the `collision` config option — see [CONFIGURATION.md](CONFIGURATION.md)). Passing `collisionMode` to an individual `api.add()` call is locked by default — it emits a `WARNING_COLLISION_OPTION_LOCKED` warning and is ignored (the add still succeeds), unless `api.mutations.allowCollisionOverride: true` is set, which makes a per-call `collisionMode` take effect. `forceOverwrite` (below) is the always-available per-call escape hatch regardless of that flag.
 
 | Mode                | Behavior                                   |
 | ------------------- | ------------------------------------------ |

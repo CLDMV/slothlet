@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:09-08:00 (1794874569)
+ *	@Last modified time: 2026-11-16T18:28:44-08:00 (1794882524)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -205,7 +205,7 @@ export class ComponentBase {
 	 * Emit a non-throwing diagnostic lifecycle event (`impl:warning` or `impl:error`).
 	 * @param {"warning"|"error"} level - Diagnostic level → `impl:warning` or `impl:error`.
 	 * @param {object} data - Diagnostic payload.
-	 * @param {string} data.code - i18n code (e.g. "WARN_SYNTHETIC_ROOT_COLLISION") used to translate `message`.
+	 * @param {string} data.code - i18n code (e.g. "WARNING_INLINE_ROOT_COLLISION") used to translate `message`.
 	 * @param {object} data.context - Structured context object passed to the diagnostic (also the i18n interpolation params).
 	 * @param {string} [data.apiPath] - API path where the mutation was attempted ("" / "(root)" for root).
 	 * @param {string} [data.source] - Command family that produced the diagnostic (addApi | reload | buildAPI | module-mount).
@@ -229,7 +229,7 @@ export class ComponentBase {
 	 *
 	 * @example
 	 * await this.emitImplDiagnostic("warning", {
-	 *   apiPath: "", code: "WARN_SYNTHETIC_ROOT_EMPTY", context: { apiPath: "(root)" }, source: "addApi"
+	 *   apiPath: "", code: "WARNING_INLINE_ROOT_EMPTY", context: { apiPath: "(root)" }, source: "addApi"
 	 * });
 	 */
 	async emitImplDiagnostic(level, data) {

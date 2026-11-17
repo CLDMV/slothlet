@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:10-08:00 (1794874570)
+ *	@Last modified time: 2026-11-16T18:28:47-08:00 (1794882527)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -222,7 +222,7 @@ export class VersionManager extends ComponentBase {
 		if (MapMethods.has(entry.versions, versionTag)) {
 			throw new this.SlothletError("VERSION_REGISTER_DUPLICATE", {
 				version: versionTag,
-				apiPath: logicalPath
+				path: logicalPath
 			});
 		}
 
@@ -384,7 +384,7 @@ export class VersionManager extends ComponentBase {
 		if (!entry || !MapMethods.has(entry.versions, versionTag)) {
 			throw new this.SlothletError("VERSION_NOT_FOUND", {
 				version: versionTag,
-				apiPath: logicalPath
+				path: logicalPath
 			});
 		}
 		const ve = MapMethods.get(entry.versions, versionTag);
@@ -458,13 +458,13 @@ export class VersionManager extends ComponentBase {
 		if (!entry) {
 			throw new this.SlothletError("VERSION_NOT_FOUND", {
 				version: versionTag,
-				apiPath: logicalPath
+				path: logicalPath
 			});
 		}
 		if (!MapMethods.has(entry.versions, versionTag)) {
 			throw new this.SlothletError("VERSION_NOT_FOUND", {
 				version: versionTag,
-				apiPath: logicalPath
+				path: logicalPath
 			});
 		}
 		// Clear all explicit defaults, then set the requested one
@@ -958,7 +958,7 @@ export class VersionManager extends ComponentBase {
 				/* v8 ignore next 4 */
 				if (!versionTag) {
 					throw new manager.SlothletError("VERSION_NO_DEFAULT", {
-						apiPath: logicalPath
+						path: logicalPath
 					});
 				}
 
@@ -984,7 +984,7 @@ export class VersionManager extends ComponentBase {
 			/* v8 ignore next 5 */
 			apply() {
 				throw new manager.SlothletError("VERSION_DISPATCH_NOT_CALLABLE", {
-					apiPath: logicalPath
+					path: logicalPath
 				});
 			},
 

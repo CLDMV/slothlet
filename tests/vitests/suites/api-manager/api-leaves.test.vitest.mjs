@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T20:12:17-08:00 (1794802337)
+ *	@Last modified time: 2026-11-16T18:29:23-08:00 (1794882563)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -137,7 +137,7 @@ describe.each(["eager", "lazy"])("ApiManager > api.leaves (#247) > %s", (mode) =
 	it("throws a named error for an unknown key", async () => {
 		api = await slothlet({ mode, base: BASE });
 
-		await expect(api.slothlet.api.leaves("no.such.module")).rejects.toThrow(/API_LEAVES_UNKNOWN_MODULE/);
+		await expect(api.slothlet.api.leaves("no.such.module")).rejects.toThrow(/MODULE_UNKNOWN/);
 	});
 
 	it("rejects a non-string key with INVALID_ARGUMENT", async () => {
@@ -270,7 +270,7 @@ describe("ApiManager > api.leaves lazy completeness and host exemption (#247)", 
 		// that must surface as this method's own error, not a TypeError from inside the framework.
 		const pending = api.slothlet.api.leaves(moduleID);
 		await api.slothlet.api.remove(moduleID);
-		await expect(pending).rejects.toThrow(/API_LEAVES_UNKNOWN_MODULE/);
+		await expect(pending).rejects.toThrow(/MODULE_UNKNOWN/);
 	});
 
 	it("terminates on a cycle introduced at runtime", async () => {

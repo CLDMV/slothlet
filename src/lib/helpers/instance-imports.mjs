@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:12-08:00 (1794874572)
+ *	@Last modified time: 2026-11-16T18:28:50-08:00 (1794882530)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -2013,7 +2013,7 @@ async function viteImportRefusal(specifier, file) {
 		try {
 			const { SlothletError } = await import("#errors");
 			IMPORT_REFUSAL = ({ specifier: named, file: target, allowed }) =>
-				new SlothletError("MODULE_INTERNAL_NOT_IMPORTABLE", { specifier: named, file: target, allowed }, null, { validationError: true });
+				new SlothletError("MODULE_INTERNAL_NOT_IMPORTABLE", { specifier: named, file: target, allowed });
 		} catch {
 			// Without slothlet's errors loadable here the refusal carries its code alone (see importRefusal).
 		}
@@ -2023,7 +2023,7 @@ async function viteImportRefusal(specifier, file) {
 
 /**
  * The error the vite plugin throws for an `import` statement of a `data:` or `blob:` URL in an instance file:
- * `CAPABILITY_REFUSED`, slothlet's own error loaded where the plugin runs.
+ * `PERMISSION_CAPABILITY_REFUSED`, slothlet's own error loaded where the plugin runs.
  * @param {string} importer - The importing file.
  * @returns {Promise<Error>} The error.
  * @private
@@ -2033,18 +2033,18 @@ async function viteCapabilityRefusal(importer) {
 		const { SlothletError } = await import("#errors");
 		const { translate } = await import("#i18n");
 		// The vite server holds none of the instance's rules: the import is no leaf's it could decide for.
-		const refusal = new SlothletError(
-			"CAPABILITY_REFUSED",
-			{ caller: importer, capability: "imports", route: "import", reason: translate("CAPABILITY_REASON_UNATTRIBUTED") },
-			null,
-			{ validationError: true }
-		);
+		const refusal = new SlothletError("PERMISSION_CAPABILITY_REFUSED", {
+			caller: importer,
+			capability: "imports",
+			route: "import",
+			reason: translate("PERMISSION_CAPABILITY_REASON_UNATTRIBUTED")
+		});
 		refusal.context.reasonCode = "unattributed";
 		return refusal;
 	} catch {
 		/* v8 ignore next 4 -- slothlet's errors are loadable wherever the plugin runs; the code alone otherwise. */
-		const error = new PristineError(`CAPABILITY_REFUSED: imports (import) ${importer}`);
-		error.code = "CAPABILITY_REFUSED";
+		const error = new PristineError(`PERMISSION_CAPABILITY_REFUSED: imports (import) ${importer}`);
+		error.code = "PERMISSION_CAPABILITY_REFUSED";
 		return error;
 	}
 }
@@ -2103,7 +2103,7 @@ function setCapabilityCheck(check) {
  * @param {string|null} parentURL - The importer.
  * @param {Array<string>|undefined} conditions - The resolution's conditions.
  * @returns {void}
- * @throws {SlothletError} `CAPABILITY_REFUSED`.
+ * @throws {SlothletError} `PERMISSION_CAPABILITY_REFUSED`.
  * @private
  */
 function refuseCodeImport(specifier, parentURL, conditions) {

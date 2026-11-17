@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:21-07:00 (1791090921)
+ *	@Last modified time: 2026-11-16T18:30:59-08:00 (1794882659)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -84,7 +84,7 @@ describe("runtime dispatcher — getCurrentRuntime default return (line 48)", ()
 
 	it("throws when self.prop is accessed outside all runtime contexts (line 48)", async () => {
 		// No async or live context active → getCurrentRuntime() hits line 48 →
-		// delegates to asyncRuntimeModule which throws RUNTIME_NO_ACTIVE_CONTEXT_SELF.
+		// delegates to asyncRuntimeModule which throws CONTEXT_NOT_ACTIVE_SELF.
 		await withSuppressedSlothletErrorOutput(async () => {
 			expect(() => self.ping).toThrow();
 		});

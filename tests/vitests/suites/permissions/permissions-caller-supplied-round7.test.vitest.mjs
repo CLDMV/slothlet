@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-31T09:04:32-07:00 (1793462672)
+ *	@Last modified time: 2026-11-16T18:30:24-08:00 (1794882624)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -55,7 +55,7 @@ const RULES = [
  * How a module's code is refused while it is built as no module's: refused as unattributable, or — in the live
  * runtime, whose `self` names no instance outside a call — refused any context at all.
  */
-const BUILD_REFUSALS = new Set(["PERMISSION_DENIED", "RUNTIME_NO_ACTIVE_CONTEXT_SELF"]);
+const BUILD_REFUSALS = new Set(["PERMISSION_DENIED", "CONTEXT_NOT_ACTIVE_SELF"]);
 
 /** The callee's rules, and the same for the module that adds by a relative folder. */
 const REL_RULES = [

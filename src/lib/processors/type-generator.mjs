@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:14-08:00 (1794874574)
+ *	@Last modified time: 2026-11-16T18:28:52-08:00 (1794882532)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -92,9 +92,7 @@ export async function generateTypes(api, options) {
 		throw new SlothletError("INVALID_CONFIG", {
 			option: "types.output",
 			expected: "a string output path",
-			value: options.output,
-			hint: "Provide a string output path for the generated .d.ts file, e.g. './types/api.d.ts'.",
-			validationError: true
+			value: options.output
 		});
 	}
 
@@ -102,9 +100,7 @@ export async function generateTypes(api, options) {
 		throw new SlothletError("INVALID_CONFIG", {
 			option: "types.interfaceName",
 			expected: "a string interface name",
-			value: options.interfaceName,
-			hint: "Provide a string interface name for the generated TypeScript interface, e.g. 'SlothletAPI'.",
-			validationError: true
+			value: options.interfaceName
 		});
 	}
 

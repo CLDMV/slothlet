@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T22:52:20-08:00 (1794811940)
+ *	@Last modified time: 2026-11-16T18:29:32-08:00 (1794882572)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -99,17 +99,15 @@ describe.each(MATRIX_CONFIGS)("API mutations control - $name", ({ config }) => {
 
 		// But mutations should be blocked
 		await withSuppressedSlothletErrorOutput(async () => {
-			await expect(api.slothlet.api.add("test", TEST_DIRS.API_TEST_MIXED, { moduleID: "test" })).rejects.toThrow(
-				"INVALID_CONFIG_MUTATIONS_DISABLED"
-			);
+			await expect(api.slothlet.api.add("test", TEST_DIRS.API_TEST_MIXED, { moduleID: "test" })).rejects.toThrow("API_MUTATION_DISABLED");
 		});
 
 		await withSuppressedSlothletErrorOutput(async () => {
-			await expect(api.slothlet.api.remove("math")).rejects.toThrow("INVALID_CONFIG_MUTATIONS_DISABLED");
+			await expect(api.slothlet.api.remove("math")).rejects.toThrow("API_MUTATION_DISABLED");
 		});
 
 		await withSuppressedSlothletErrorOutput(async () => {
-			await expect(api.slothlet.reload()).rejects.toThrow("INVALID_CONFIG_MUTATIONS_DISABLED");
+			await expect(api.slothlet.reload()).rejects.toThrow("API_MUTATION_DISABLED");
 		});
 	});
 
@@ -150,17 +148,15 @@ describe.each(MATRIX_CONFIGS)("API mutations control - $name", ({ config }) => {
 
 		// All mutations should be blocked
 		await withSuppressedSlothletErrorOutput(async () => {
-			await expect(api.slothlet.api.add("test", TEST_DIRS.API_TEST_MIXED, { moduleID: "test" })).rejects.toThrow(
-				"INVALID_CONFIG_MUTATIONS_DISABLED"
-			);
+			await expect(api.slothlet.api.add("test", TEST_DIRS.API_TEST_MIXED, { moduleID: "test" })).rejects.toThrow("API_MUTATION_DISABLED");
 		});
 
 		await withSuppressedSlothletErrorOutput(async () => {
-			await expect(api.slothlet.api.remove("math")).rejects.toThrow("INVALID_CONFIG_MUTATIONS_DISABLED");
+			await expect(api.slothlet.api.remove("math")).rejects.toThrow("API_MUTATION_DISABLED");
 		});
 
 		await withSuppressedSlothletErrorOutput(async () => {
-			await expect(api.slothlet.reload()).rejects.toThrow("INVALID_CONFIG_MUTATIONS_DISABLED");
+			await expect(api.slothlet.reload()).rejects.toThrow("API_MUTATION_DISABLED");
 		});
 	});
 
@@ -181,10 +177,10 @@ describe.each(MATRIX_CONFIGS)("API mutations control - $name", ({ config }) => {
 
 		// Remove and reload should be blocked
 		await withSuppressedSlothletErrorOutput(async () => {
-			await expect(api.slothlet.api.remove("extra")).rejects.toThrow("INVALID_CONFIG_MUTATIONS_DISABLED");
+			await expect(api.slothlet.api.remove("extra")).rejects.toThrow("API_MUTATION_DISABLED");
 		});
 		await withSuppressedSlothletErrorOutput(async () => {
-			await expect(api.slothlet.reload()).rejects.toThrow("INVALID_CONFIG_MUTATIONS_DISABLED");
+			await expect(api.slothlet.reload()).rejects.toThrow("API_MUTATION_DISABLED");
 		});
 	});
 
@@ -201,12 +197,10 @@ describe.each(MATRIX_CONFIGS)("API mutations control - $name", ({ config }) => {
 
 		// Add and reload should be blocked
 		await withSuppressedSlothletErrorOutput(async () => {
-			await expect(api.slothlet.api.add("test", TEST_DIRS.API_TEST_MIXED, { moduleID: "test" })).rejects.toThrow(
-				"INVALID_CONFIG_MUTATIONS_DISABLED"
-			);
+			await expect(api.slothlet.api.add("test", TEST_DIRS.API_TEST_MIXED, { moduleID: "test" })).rejects.toThrow("API_MUTATION_DISABLED");
 		});
 		await withSuppressedSlothletErrorOutput(async () => {
-			await expect(api.slothlet.reload()).rejects.toThrow("INVALID_CONFIG_MUTATIONS_DISABLED");
+			await expect(api.slothlet.reload()).rejects.toThrow("API_MUTATION_DISABLED");
 		});
 
 		// Remove should work - returns false when path not found
@@ -229,7 +223,7 @@ describe.each(MATRIX_CONFIGS)("API mutations control - $name", ({ config }) => {
 		await withSuppressedSlothletErrorOutput(async () => {
 			await expect(
 				api.slothlet.api.add("test", TEST_DIRS.API_TEST_MIXED, { moduleID: "test-forced", forceOverwrite: true })
-			).rejects.toThrow("INVALID_CONFIG_MUTATIONS_DISABLED");
+			).rejects.toThrow("API_MUTATION_DISABLED");
 		});
 	});
 
@@ -253,7 +247,7 @@ describe.each(MATRIX_CONFIGS)("API mutations control - $name", ({ config }) => {
 		await withSuppressedSlothletErrorOutput(async () => {
 			await expect(
 				api.slothlet.api.add("thing", TEST_DIRS.API_TEST_ADD_DEDUP_LEAF_OVERRIDE, { moduleID: "different-module" })
-			).rejects.toThrow("INVALID_CONFIG_API_PATH_INVALID");
+			).rejects.toThrow("API_PATH_INVALID");
 		});
 	});
 
@@ -414,12 +408,10 @@ describe.each(MATRIX_CONFIGS)("API mutations control - $name", ({ config }) => {
 
 		// Add and remove should be blocked
 		await withSuppressedSlothletErrorOutput(async () => {
-			await expect(api.slothlet.api.add("test", TEST_DIRS.API_TEST_MIXED, { moduleID: "test" })).rejects.toThrow(
-				"INVALID_CONFIG_MUTATIONS_DISABLED"
-			);
+			await expect(api.slothlet.api.add("test", TEST_DIRS.API_TEST_MIXED, { moduleID: "test" })).rejects.toThrow("API_MUTATION_DISABLED");
 		});
 		await withSuppressedSlothletErrorOutput(async () => {
-			await expect(api.slothlet.api.remove("math")).rejects.toThrow("INVALID_CONFIG_MUTATIONS_DISABLED");
+			await expect(api.slothlet.api.remove("math")).rejects.toThrow("API_MUTATION_DISABLED");
 		});
 
 		// Reload should work
@@ -507,8 +499,8 @@ describe.each(MATRIX_CONFIGS)("API mutations control - $name", ({ config }) => {
 		try {
 			await api.slothlet.api.add("test", TEST_DIRS.API_TEST_MIXED);
 		} catch (error) {
-			expect(error.message).toContain("INVALID_CONFIG_MUTATIONS_DISABLED");
-			expect(error.context?.operation).toBe("api.add");
+			expect(error.message).toContain("API_MUTATION_DISABLED");
+			expect(error.details?.operation).toEqual(["slothlet", "api", "add"]);
 			expect(error.hint).toBeTruthy();
 		}
 
@@ -516,8 +508,8 @@ describe.each(MATRIX_CONFIGS)("API mutations control - $name", ({ config }) => {
 		try {
 			await api.slothlet.api.remove("math");
 		} catch (error) {
-			expect(error.message).toContain("INVALID_CONFIG_MUTATIONS_DISABLED");
-			expect(error.context?.operation).toBe("api.remove");
+			expect(error.message).toContain("API_MUTATION_DISABLED");
+			expect(error.details?.operation).toEqual(["slothlet", "api", "remove"]);
 			expect(error.hint).toBeTruthy();
 		}
 
@@ -525,8 +517,8 @@ describe.each(MATRIX_CONFIGS)("API mutations control - $name", ({ config }) => {
 		try {
 			await api.slothlet.reload();
 		} catch (error) {
-			expect(error.message).toContain("INVALID_CONFIG_MUTATIONS_DISABLED");
-			expect(error.context?.operation).toBe("reload");
+			expect(error.message).toContain("API_MUTATION_DISABLED");
+			expect(error.details?.operation).toEqual(["slothlet", "reload"]);
 			expect(error.hint).toBeTruthy();
 		}
 	});

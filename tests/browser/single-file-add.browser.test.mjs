@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T17:10:33-08:00 (1794791433)
+ *	@Last modified time: 2026-11-16T18:29:02-08:00 (1794882542)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -141,9 +141,9 @@ describe("single-file api.add in a real browser (#805)", () => {
 		it("refuses a file whose extension is not a module's, as Node does", async () => {
 			const api = await build({ mode, runtime });
 			try {
-				expect(await codeOf(api.slothlet.api.add("notes", baseUrl() + "notes.txt"))).toBe("INVALID_CONFIG_FILE_TYPE");
+				expect(await codeOf(api.slothlet.api.add("notes", baseUrl() + "notes.txt"))).toBe("FILE_TYPE_UNSUPPORTED");
 				// A name that only starts with a dot has no extension (as `path.extname(".mjs")` answers "").
-				expect(await codeOf(api.slothlet.api.add("dot", baseUrl() + ".mjs"))).toBe("INVALID_CONFIG_FILE_TYPE");
+				expect(await codeOf(api.slothlet.api.add("dot", baseUrl() + ".mjs"))).toBe("FILE_TYPE_UNSUPPORTED");
 				expect(api.notes).toBeUndefined();
 				expect(api.dot).toBeUndefined();
 			} finally {

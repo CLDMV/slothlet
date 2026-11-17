@@ -2,12 +2,12 @@
  *
  *	@Project: @cldmv/slothlet
  *	@Filename: /tests/browser/serialize-tojson.browser.test.mjs
- *	@Date: 2026-11-16T01:10:00-08:00 (1795338600)
+ *	@Date: 2026-11-16T00:02:33-08:00 (1794816153)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T01:10:00-08:00 (1795338600)
+ *	@Last modified time: 2026-11-16T18:29:02-08:00 (1794882542)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

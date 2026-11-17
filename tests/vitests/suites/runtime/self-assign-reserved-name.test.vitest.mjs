@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:22-07:00 (1791090922)
+ *	@Last modified time: 2026-11-16T18:31:01-08:00 (1794882661)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -44,7 +44,7 @@ describe("self.<reservedName> = ... (normalizeApiPath gate)", () => {
 			withSuppressedSlothletErrorOutputSync(() => {
 				expect(() => {
 					self.slothlet = "evil";
-				}).toThrow(/INVALID_CONFIG_API_PATH_INVALID|RESERVED_NAME/);
+				}).toThrow(/API_PATH_INVALID|RESERVED_NAME/);
 			});
 		});
 
@@ -59,7 +59,7 @@ describe("self.<reservedName> = ... (normalizeApiPath gate)", () => {
 			withSuppressedSlothletErrorOutputSync(() => {
 				expect(() => {
 					self.shutdown = "evil";
-				}).toThrow(/INVALID_CONFIG_API_PATH_INVALID|RESERVED_NAME/);
+				}).toThrow(/API_PATH_INVALID|RESERVED_NAME/);
 			});
 		});
 	});
@@ -71,7 +71,7 @@ describe("self.<reservedName> = ... (normalizeApiPath gate)", () => {
 			withSuppressedSlothletErrorOutputSync(() => {
 				expect(() => {
 					self.destroy = "evil";
-				}).toThrow(/INVALID_CONFIG_API_PATH_INVALID|RESERVED_NAME/);
+				}).toThrow(/API_PATH_INVALID|RESERVED_NAME/);
 			});
 		});
 	});
@@ -83,7 +83,7 @@ describe("self.<reservedName> = ... (normalizeApiPath gate)", () => {
 			withSuppressedSlothletErrorOutputSync(() => {
 				expect(() => {
 					self["a..b"] = "v";
-				}).toThrow(/INVALID_CONFIG_API_PATH_INVALID|EMPTY_SEGMENTS/);
+				}).toThrow(/API_PATH_INVALID|EMPTY_SEGMENTS/);
 			});
 		});
 	});

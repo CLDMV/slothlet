@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:10-08:00 (1794874570)
+ *	@Last modified time: 2026-11-16T18:28:47-08:00 (1794882527)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -469,7 +469,7 @@ function runtime_selfModuleReader(slothlet) {
  * @param {*} [filename=null] - The file name the code is compiled under, when one is given: a real file outside the
  *   caller's own folder is refused even where a rule opens the capability.
  * @returns {void}
- * @throws {SlothletError} `CAPABILITY_REFUSED`.
+ * @throws {SlothletError} `PERMISSION_CAPABILITY_REFUSED`.
  * @internal
  * @example
  * runtime_assertCapability(slothlet, "code", "new Function");
@@ -566,7 +566,7 @@ function runtime_selfWriteHasStanding(slothlet) {
  * @param {object} reader - The reader the view belongs to.
  * @param {string|symbol|null} prop - Member being changed, or null for a change to the node itself.
  * @returns {void}
- * @throws {SlothletError} `RUNTIME_NO_ACTIVE_CONTEXT_SELF` for a change outside what the reader owns, and what
+ * @throws {SlothletError} `CONTEXT_NOT_ACTIVE_SELF` for a change outside what the reader owns, and what
  *   the reader's write rules throw.
  * @private
  */
@@ -580,7 +580,7 @@ function runtime_refuseWriteWithoutStanding(slothlet, owner, reader, prop) {
 		// Held to the reader, the write meets the reader's write rules as well as its ownership (#625).
 		if (slothlet.handlers.apiManager.mayWrite(parts, reader)) return slothlet.handlers.apiManager.assertOwnedWrite(parts, reader);
 	}
-	throw new slothlet.SlothletError("RUNTIME_NO_ACTIVE_CONTEXT_SELF", {}, null, { validationError: true });
+	throw new slothlet.SlothletError("CONTEXT_NOT_ACTIVE_SELF", {});
 }
 
 /**
@@ -1872,7 +1872,7 @@ function runtime_selfHasInstance(prototype, instance) {
 /**
  * Hand out a node of the api reached through `self` as a view that keeps who read it (#625).
  *
- * `self.X = …` with no module executing is refused (`RUNTIME_NO_ACTIVE_CONTEXT_SELF`): nobody is there to
+ * `self.X = …` with no module executing is refused (`CONTEXT_NOT_ACTIVE_SELF`): nobody is there to
  * own the write. A node a module took through `self` and wrote into later from outside any call would
  * otherwise reach the node with no caller, which is the host's standing. So a write through the view made
  * with no module executing (outside a `run()` / `scope()` the host opened) is held to the module that read
@@ -2331,7 +2331,7 @@ function runtime_selfFrameworkView(member, reader, slothlet = WeakMapMethods.get
  * @returns {void}
  * @throws {SlothletError} `PERMISSION_DENIED` when module code changes a framework root member the write
  *   rules protect, `LOOSE_SET_UNATTRIBUTED` when the live runtime cannot tell which call is executing, and
- *   `INVALID_CONFIG_API_PATH_INVALID` for the reserved name otherwise.
+ *   `API_PATH_INVALID` for the reserved name otherwise.
  * @internal
  *
  * @example
@@ -2342,7 +2342,7 @@ function runtime_assertFrameworkRootChange(slothlet, prop) {
 	if (slothlet.handlers.apiManager.frameworkProtected()) {
 		const identity = slothlet.contextManager?.getCallerIdentity?.(slothlet.instanceID);
 		if (identity?.unresolved) {
-			throw new slothlet.SlothletError("LOOSE_SET_UNATTRIBUTED", { apiPath: prop, validationError: true });
+			throw new slothlet.SlothletError("LOOSE_SET_UNATTRIBUTED", { path: prop });
 		}
 		// Code a caller supplied to another module's call changes it only where every module it acts for may (#597).
 		if (identity?.currentWrapper) {
@@ -2395,7 +2395,7 @@ function runtime_selfChangeTarget(ctx, prop) {
 		// caller that did reach it would fail closed rather than write with the host's standing.
 		/* v8 ignore next 3 */
 		if (identity?.unresolved) {
-			throw new slothlet.SlothletError("LOOSE_SET_UNATTRIBUTED", { apiPath: ArrayMethods.join(parts, "."), validationError: true });
+			throw new slothlet.SlothletError("LOOSE_SET_UNATTRIBUTED", { path: ArrayMethods.join(parts, ".") });
 		}
 		if (identity?.currentWrapper) {
 			for (
@@ -2466,7 +2466,7 @@ function runtime_frameworkViewOf(member, slothlet, reader, path) {
 	const asReader = (use) => {
 		if (runtime_selfWriteHasStanding(slothlet)) return use();
 		if (reader === UNATTRIBUTED_READER) {
-			throw new slothlet.SlothletError("RUNTIME_NO_ACTIVE_CONTEXT_SELF", {}, null, { validationError: true });
+			throw new slothlet.SlothletError("CONTEXT_NOT_ACTIVE_SELF", {});
 		}
 		return slothlet.contextManager.runInContext(slothlet.instanceID, () => runtime_asViewReader(reader, use), undefined, [], reader, true);
 	};
@@ -2482,12 +2482,12 @@ function runtime_frameworkViewOf(member, slothlet, reader, path) {
 	const changeWriter = (parts) => {
 		const identity = slothlet.contextManager?.getCallerIdentity?.(slothlet.instanceID);
 		if (identity?.unresolved) {
-			throw new slothlet.SlothletError("LOOSE_SET_UNATTRIBUTED", { apiPath: ArrayMethods.join(parts, "."), validationError: true });
+			throw new slothlet.SlothletError("LOOSE_SET_UNATTRIBUTED", { path: ArrayMethods.join(parts, ".") });
 		}
 		if (identity?.currentWrapper) return identity.currentWrapper;
 		if (runtime_selfWriteHasStanding(slothlet)) return null;
 		if (reader === UNATTRIBUTED_READER) {
-			throw new slothlet.SlothletError("RUNTIME_NO_ACTIVE_CONTEXT_SELF", {}, null, { validationError: true });
+			throw new slothlet.SlothletError("CONTEXT_NOT_ACTIVE_SELF", {});
 		}
 		return reader;
 	};
@@ -2645,7 +2645,7 @@ const SELF_ROOT_VIEWS = new WeakMap();
  * @param {string[]} parts - Segments of the api path changed.
  * @returns {object|null} The writer, null for the host.
  * @throws {SlothletError} `LOOSE_SET_UNATTRIBUTED` for code the live runtime cannot attribute, and
- *   `RUNTIME_NO_ACTIVE_CONTEXT_SELF` for a change made with no standing outside what the reader owns.
+ *   `CONTEXT_NOT_ACTIVE_SELF` for a change made with no standing outside what the reader owns.
  * @private
  */
 function runtime_selfRootWriter(slothlet, reader, parts) {
@@ -2657,7 +2657,7 @@ function runtime_selfRootWriter(slothlet, reader, parts) {
 		// Code the live runtime cannot attribute is refused here as through `self.X = …`: recorded as anyone's, the
 		// change would run with standing it was never given once the system is on.
 		if (identity?.unresolved) {
-			throw new slothlet.SlothletError("LOOSE_SET_UNATTRIBUTED", { apiPath: ArrayMethods.join(parts, "."), validationError: true });
+			throw new slothlet.SlothletError("LOOSE_SET_UNATTRIBUTED", { path: ArrayMethods.join(parts, ".") });
 		}
 		if (identity?.currentWrapper) return identity.currentWrapper;
 		if (
@@ -2670,12 +2670,12 @@ function runtime_selfRootWriter(slothlet, reader, parts) {
 		return reader;
 	}
 	if (identity?.unresolved) {
-		throw new slothlet.SlothletError("LOOSE_SET_UNATTRIBUTED", { apiPath: ArrayMethods.join(parts, "."), validationError: true });
+		throw new slothlet.SlothletError("LOOSE_SET_UNATTRIBUTED", { path: ArrayMethods.join(parts, ".") });
 	}
 	if (identity?.currentWrapper) return identity.currentWrapper;
 	if (runtime_selfWriteHasStanding(slothlet) || reader === HOST_READER || reader === SEALED_SHELL_READER) return null;
 	if (reader !== UNATTRIBUTED_READER && slothlet.handlers.apiManager.mayWrite(parts, reader)) return reader;
-	throw new slothlet.SlothletError("RUNTIME_NO_ACTIVE_CONTEXT_SELF", {}, null, { validationError: true });
+	throw new slothlet.SlothletError("CONTEXT_NOT_ACTIVE_SELF", {});
 }
 
 /**
@@ -2961,7 +2961,7 @@ function runtime_assertOwnedWriteAt(wrapper, parts) {
 	// Code the live runtime cannot attribute to one of several suspended calls is module code with no
 	// owner to check against: refused, rather than handed the host's standing.
 	if (identity?.unresolved) {
-		throw new wrapper.SlothletError("LOOSE_SET_UNATTRIBUTED", { apiPath: ArrayMethods.join(parts, "."), validationError: true });
+		throw new wrapper.SlothletError("LOOSE_SET_UNATTRIBUTED", { path: ArrayMethods.join(parts, ".") });
 	}
 	const caller = identity?.currentWrapper;
 	if (!caller) return;
@@ -3258,8 +3258,9 @@ function runtime_makeQueuedChange(wrapper, change, generation) {
 	} catch (error) {
 		const apiPath = runtime_standInPath(wrapper, change.chain);
 		const operation = change.op === "lock" ? "preventExtensions" : change.op;
-		if (!wrapper.____config?.silent) new wrapper.SlothletWarning("WARNING_LAZY_WRITE_REFUSED", { apiPath, operation }, error);
-		const refused = new wrapper.SlothletError("LAZY_WRITE_REFUSED", { apiPath, operation }, error);
+		if (!wrapper.____config?.silent)
+			new wrapper.SlothletWarning("WARNING_LAZY_WRITE_REFUSED", { path: apiPath, operation }, { cause: error });
+		const refused = new wrapper.SlothletError("LAZY_WRITE_REFUSED", { path: apiPath, operation }, { cause: error });
 		if (!WeakMapMethods.has(REFUSED_CHANGES, wrapper.slothlet)) WeakMapMethods.set(REFUSED_CHANGES, wrapper.slothlet, []);
 		// Recorded for the nodes the loads were for: one replaced while it loaded (reloaded, or rebuilt away) does not
 		// hand the refusal to the node that took its place.
@@ -6209,7 +6210,7 @@ function runtime_selfReadAsDefiner(selfProxy, prop, loadingInstanceID = null, ho
 		if (!owner || owner.instanceID === loadingInstanceID) return null;
 	}
 	const target = typeof prop === "symbol" ? String(SymbolMethods.description(prop) ?? "") : String(prop);
-	if (definer.unplaced) throw new SlothletError("PERMISSION_DENIED", { caller: null, target }, null, { validationError: true });
+	if (definer.unplaced) throw new SlothletError("PERMISSION_DENIED", { caller: null, target });
 	// Several leaves and none the file's own node: the file's module path is the identity, and no node answers for it.
 	// With the permission system off nothing is checked: any of them gives the code its context (#726).
 	if (definer.leaves && !definer.leaves[0].slothlet?.handlers?.permissionManager?.isEnabled?.()) definer.wrapper = definer.leaves[0];
@@ -6218,9 +6219,7 @@ function runtime_selfReadAsDefiner(selfProxy, prop, loadingInstanceID = null, ho
 		const common = [];
 		for (let i = 0; ArrayMethods.every(paths, (parts) => i < parts.length - 1 && parts[i] === paths[0][i]); i++)
 			listPush(common, paths[0][i]);
-		throw new SlothletError("PERMISSION_DENIED", { caller: ArrayMethods.join(common, ".") || null, target }, null, {
-			validationError: true
-		});
+		throw new SlothletError("PERMISSION_DENIED", { caller: ArrayMethods.join(common, ".") || null, target });
 	}
 	const leaf = definer.wrapper;
 	const checks = Boolean(leaf.slothlet?.handlers?.permissionManager?.isEnabled?.());
@@ -6235,8 +6234,7 @@ function runtime_selfReadAsDefiner(selfProxy, prop, loadingInstanceID = null, ho
 	// definer is not read as the caller, and nor is the host. Only code no call accounts for is read by its frames.
 	if (checks) {
 		const identity = contextManager?.getCallerIdentity?.(leaf.slothlet.instanceID);
-		if (identity?.unresolved && !identity.unaccounted)
-			throw new SlothletError("PERMISSION_DENIED", { caller: null, target }, null, { validationError: true });
+		if (identity?.unresolved && !identity.unaccounted) throw new SlothletError("PERMISSION_DENIED", { caller: null, target });
 	}
 	const instanceID = contextManager?.runInContext ? runtime_makerInstanceID(leaf.slothlet) : null;
 	if (instanceID === null) return null;
@@ -6397,7 +6395,7 @@ function runtime_hostRunDefiner(slothlet, unaccounted = false, resolved = null, 
 	const definer = frameDefiner(contextManager.runningInstanceID?.() ?? null);
 	// Code of a file several running instances hold, with nothing naming which of them is running: it is some
 	// module's, so it is not run as the host's.
-	if (definer?.shared) throw new SlothletError("PERMISSION_DENIED", { caller: null, target: "self" }, null, { validationError: true });
+	if (definer?.shared) throw new SlothletError("PERMISSION_DENIED", { caller: null, target: "self" });
 	const leaf = definer?.wrapper;
 	if (!leaf || leaf.slothlet !== slothlet) return null;
 	// The others the code is held to as well: the leaves further out on the stack, and, for a helper file's own code,
@@ -10090,7 +10088,7 @@ function runtime_crossAssertWrite(state, prop, change) {
 	if (typeof prop === "string") listPush(parts, prop);
 	const identity = slothlet.contextManager?.getCallerIdentity?.(slothlet.instanceID);
 	if (identity?.unresolved) {
-		throw new slothlet.SlothletError("LOOSE_SET_UNATTRIBUTED", { apiPath: ArrayMethods.join(parts, "."), validationError: true });
+		throw new slothlet.SlothletError("LOOSE_SET_UNATTRIBUTED", { path: ArrayMethods.join(parts, ".") });
 	}
 	const writers = new Set();
 	if (state.reader?.____slothletInternal) SetMethods.add(writers, state.reader);
@@ -13105,7 +13103,7 @@ function runtime_bindCapturedIdentity(wrapper, prop, value, access = null) {
  */
 function runtime_guardPromotedResult(promise, path, SlothletErrorCtor) {
 	const refuse = () => {
-		throw new SlothletErrorCtor("HOOK_PROMOTED_RESULT_NOT_AWAITED", { path }, null, { validationError: true });
+		throw new SlothletErrorCtor("HOOK_PROMOTED_RESULT_NOT_AWAITED", { path });
 	};
 	const guarded = new NativeProxy(promise, {
 		get(target, prop, receiver) {
@@ -13206,9 +13204,7 @@ function runtime_runAroundPipeline(wrapper, hookManager, arounds, strategy, this
 				true
 			);
 		}
-		throw new wrapper.SlothletError("INVALID_CONFIG_NOT_A_FUNCTION", { apiPath: path, actualType: typeof impl }, null, {
-			validationError: true
-		});
+		throw new wrapper.SlothletError("API_PATH_NOT_CALLABLE", { path, received: typeof impl });
 	};
 
 	// Observers, run once per call on the way out.
@@ -13548,7 +13544,7 @@ export function hasThenMember(value) {
  * throw thenableExportError(this.SlothletError, "session");
  */
 export function thenableExportError(SlothletError, location) {
-	return new SlothletError("MODULE_THENABLE_EXPORT", { location }, null, { validationError: true });
+	return new SlothletError("MODULE_THENABLE_EXPORT", { location });
 }
 
 /**
@@ -13605,9 +13601,7 @@ function runtime_resolveRestartTarget(wrapper, propChain = []) {
 	const apiPath = wrapper.____slothletInternal.apiPath;
 	const segments = concatLists(apiPath ? splitText(String(apiPath), ".") : [], mapList(propChain, String));
 	const fail = () => {
-		throw new wrapper.SlothletError("RESTART_REFERENCE_UNRESOLVED", { apiPath: ArrayMethods.join(segments, ".") }, null, {
-			validationError: true
-		});
+		throw new wrapper.SlothletError("RESTART_REFERENCE_UNRESOLVED", { path: ArrayMethods.join(segments, ".") });
 	};
 	let node = wrapper.____slothlet.api;
 	for (let ofIndex = 0, ofList = segments; ofIndex < ofList.length; ofIndex++) {
@@ -14051,13 +14045,13 @@ function runtime_definitionFixes(wrapper, target, prop, descriptor) {
 
 /**
  * A slothlet refusal the language itself would raise as a `TypeError` (a definition an object cannot take): an
- * instance of `TypeError` carrying a {@link SlothletError}'s `code`, `context`, `hint` and translated message, shown and
+ * instance of `TypeError` carrying a {@link SlothletError}'s `code`, `details`, `hint` and translated message, shown and
  * serialized as one. Made from the SlothletError with {@link SlothletTypeError.from}, so its code is declared and
  * translated as any other. Internal to this file: it is not part of the errors module's exports.
  * @private
  *
  * @example
- * throw SlothletTypeError.from(new SlothletError("API_MEMBER_FIXED_OBJECT", { apiPath: "box.late" }, null, { validationError: true }));
+ * throw SlothletTypeError.from(new SlothletError("PERMISSION_MEMBER_FIXED_OBJECT", { apiPath: "box.late" }));
  */
 class SlothletTypeError extends TypeError {
 	/**
@@ -14066,10 +14060,10 @@ class SlothletTypeError extends TypeError {
 	 * @returns {SlothletTypeError} The error to throw.
 	 */
 	static from(error) {
-		const hasOriginal = error.originalError !== null && error.originalError !== undefined;
-		const typed = new SlothletTypeError(error.message, hasOriginal ? { __proto__: null, cause: error.originalError } : undefined);
+		const hasCause = error.cause !== null && error.cause !== undefined;
+		const typed = new SlothletTypeError(error.message, hasCause ? { __proto__: null, cause: error.cause } : undefined);
 		typed.name = "SlothletTypeError";
-		const keys = ["code", "context", "originalError", "hint"];
+		const keys = ["code", "details", "hint"];
 		for (let index = 0; index < keys.length; index++) {
 			Objects.defineProperty(typed, keys[index], { __proto__: null, value: error[keys[index]], enumerable: false, writable: false });
 		}
@@ -14103,7 +14097,7 @@ class SlothletTypeError extends TypeError {
  * @param {string|symbol} prop - The member.
  * @param {*} value - The value defined.
  * @returns {void}
- * @throws {SlothletTypeError} `API_MEMBER_FIXED_OBJECT` (a `TypeError`) when the definition is refused.
+ * @throws {SlothletTypeError} `PERMISSION_MEMBER_FIXED_OBJECT` (a `TypeError`) when the definition is refused.
  * @private
  *
  * @example
@@ -14117,14 +14111,9 @@ function runtime_refuseFixedObjectDefinition(slothlet, apiPath, prop, value) {
 	if (value === null || (typeof value !== "object" && typeof value !== "function")) return;
 	if (resolveWrapper(value) !== null || UnifiedWrapper._staysValue(value)) return;
 	// A definition the object cannot take: thrown as the language's `TypeError`, coded and translated.
-	const refusal = new slothlet.SlothletError(
-		"API_MEMBER_FIXED_OBJECT",
-		{ apiPath: apiPath ? `${apiPath}.${String(prop)}` : String(prop) },
-		null,
-		{
-			validationError: true
-		}
-	);
+	const refusal = new slothlet.SlothletError("PERMISSION_MEMBER_FIXED_OBJECT", {
+		path: apiPath ? `${apiPath}.${String(prop)}` : String(prop)
+	});
 	throw SlothletTypeError.from(refusal);
 }
 
@@ -15646,7 +15635,7 @@ class UnifiedWrapper extends ComponentBase {
 	 * to the live namespace — but stays non-callable itself and keeps `typeof` "object".
 	 *
 	 * The upgrade is one-way: when the function later goes away (a remove or a reload), the callable
-	 * proxy stays and a call throws `INVALID_CONFIG_NOT_A_FUNCTION`, the same as for a namespace that
+	 * proxy stays and a call throws `API_PATH_NOT_CALLABLE`, the same as for a namespace that
 	 * was callable from the start.
 	 *
 	 * @returns {void}
@@ -17416,7 +17405,7 @@ class UnifiedWrapper extends ComponentBase {
 				if (Objects.isFrozen(target)) return false;
 				// A callable `then` would make the node awaitable (#571): refused at once, as a loaded node refuses it.
 				if (prop === "then" && isAwaitableThen({ value })) {
-					throw new wrapper.SlothletError("API_MEMBER_THEN_RESERVED", { apiPath: nodePath() }, null, { validationError: true });
+					throw new wrapper.SlothletError("API_MEMBER_THEN_RESERVED", { path: nodePath() });
 				}
 				// A member defined fixed through the stand-in (below) takes no write, on the stand-in or the node.
 				if (runtime_isFixedReadOnly(target, prop)) {
@@ -17428,7 +17417,7 @@ class UnifiedWrapper extends ComponentBase {
 			defineProperty(target, prop, descriptor) {
 				// A callable `then` would make the node awaitable (#571): refused at once and first, as a loaded node refuses it.
 				if (prop === "then" && isAwaitableThen(descriptor)) {
-					throw new wrapper.SlothletError("API_MEMBER_THEN_RESERVED", { apiPath: nodePath() }, null, { validationError: true });
+					throw new wrapper.SlothletError("API_MEMBER_THEN_RESERVED", { path: nodePath() });
 				}
 				if (!Reflect.isExtensible(target)) {
 					// Freezing or sealing the stand-in fixes the members its target holds (its own `name` and `length`) once it
@@ -18168,10 +18157,8 @@ class UnifiedWrapper extends ComponentBase {
 					// toString / Symbol.toPrimitive before the leaf sees it, and throws for a Symbol.
 					argCount: args.length
 				});
-				const chainLabel = ArrayMethods.join(
-					mapList(propChain, (prop) => String(prop)),
-					"."
-				);
+				const chain = mapList(propChain, (prop) => String(prop));
+				const chainPath = wrapper.____slothletInternal.apiPath ? splitText(wrapper.____slothletInternal.apiPath, ".") : [];
 
 				if (
 					wrapper.____slothletInternal.mode === "lazy" &&
@@ -18260,16 +18247,11 @@ class UnifiedWrapper extends ComponentBase {
 						) {
 							return undefined;
 						}
-						throw new wrapper.slothlet.SlothletError(
-							"CHAIN_ACCESS_UNDEFINED",
-							{
-								apiPath: wrapper.____slothletInternal.apiPath,
-								chainLabel,
-								prop: String(prop)
-							},
-							null,
-							{ validationError: true }
-						);
+						throw new wrapper.slothlet.SlothletError("CHAIN_ACCESS_UNDEFINED", {
+							path: chainPath,
+							chain,
+							prop: String(prop)
+						});
 					}
 
 					const currentWrapper = resolveWrapper(current);
@@ -18289,16 +18271,11 @@ class UnifiedWrapper extends ComponentBase {
 							while (!currentWrapper.____slothletInternal.state.materialized) {
 								const nextState = currentWrapper.____slothletInternal.state;
 								if (!nextState.inFlight && !nextState.materialized) {
-									throw new wrapper.slothlet.SlothletError(
-										"CHAIN_MATERIALIZE_FAILED",
-										{
-											apiPath: wrapper.____slothletInternal.apiPath,
-											chainLabel,
-											prop: String(prop)
-										},
-										null,
-										{ validationError: true }
-									);
+									throw new wrapper.slothlet.SlothletError("CHAIN_MATERIALIZE_FAILED", {
+										path: chainPath,
+										chain,
+										prop: String(prop)
+									});
 								}
 								await new Promise((resolve) => scheduleMacrotask(resolve, undefined, wrapper.clock));
 							}
@@ -18477,26 +18454,16 @@ class UnifiedWrapper extends ComponentBase {
 				// If current is undefined/null after traversing the chain, throw an error
 				// The property doesn't exist after materialization
 				if (current === undefined || current === null) {
-					throw new wrapper.slothlet.SlothletError(
-						"CHAIN_NOT_CALLABLE",
-						{
-							apiPath: wrapper.____slothletInternal.apiPath,
-							chainLabel
-						},
-						null,
-						{ validationError: true }
-					);
+					throw new wrapper.slothlet.SlothletError("CHAIN_NOT_CALLABLE", {
+						path: chainPath,
+						chain
+					});
 				}
 
-				throw new wrapper.slothlet.SlothletError(
-					"CHAIN_NOT_CALLABLE",
-					{
-						apiPath: wrapper.____slothletInternal.apiPath,
-						chainLabel
-					},
-					null,
-					{ validationError: true }
-				);
+				throw new wrapper.slothlet.SlothletError("CHAIN_NOT_CALLABLE", {
+					path: chainPath,
+					chain
+				});
 			},
 			// `new` before the chain loads: an instance of what it stands for, once loaded, as a lazy node's own construction
 			// in flight answers (#685). The engine's default would read `prototype` through the stand-in.
@@ -18507,7 +18474,7 @@ class UnifiedWrapper extends ComponentBase {
 						filterList(concatLists([wrapper.____slothletInternal.apiPath], mapList(propChain, String)), Boolean),
 						"."
 					);
-					throw new wrapper.SlothletError("LAZY_SUBCLASS_BEFORE_LOAD", { apiPath }, null, { validationError: true });
+					throw new wrapper.SlothletError("LAZY_SUBCLASS_BEFORE_LOAD", { path: apiPath });
 				}
 				return waitingHandler.apply(target, undefined, args, (fn) => Reflect.construct(fn, args, fn));
 			},
@@ -19747,9 +19714,7 @@ class UnifiedWrapper extends ComponentBase {
 										)
 									: FunctionMethods.apply(impl.default, impl, args);
 							} else {
-								throw new wrapper.SlothletError("INVALID_CONFIG_NOT_A_FUNCTION", { apiPath: ___path, actualType: typeof impl }, null, {
-									validationError: true
-								});
+								throw new wrapper.SlothletError("API_PATH_NOT_CALLABLE", { path: ___path, received: typeof impl });
 							}
 							settled = raw && typeof raw === "object" && typeof raw.then === "function" ? await raw : raw;
 						} catch (error) {
@@ -19890,15 +19855,10 @@ class UnifiedWrapper extends ComponentBase {
 										}
 									} else {
 										reject(
-											new wrapper.slothlet.SlothletError(
-												"INVALID_CONFIG_NOT_A_FUNCTION",
-												{
-													apiPath: wrapper.____slothletInternal.apiPath,
-													actualType: typeof impl
-												},
-												null,
-												{ validationError: true }
-											)
+											new wrapper.slothlet.SlothletError("API_PATH_NOT_CALLABLE", {
+												path: wrapper.____slothletInternal.apiPath,
+												received: typeof impl
+											})
 										);
 									}
 								} catch (err) {
@@ -19913,16 +19873,7 @@ class UnifiedWrapper extends ComponentBase {
 							// a defensive guard against corrupted internal state; unreachable in practice.
 							/* v8 ignore start */
 							if (!wrapper.____slothletInternal.state.inFlight) {
-								reject(
-									new wrapper.slothlet.SlothletError(
-										"INVALID_CONFIG_LAZY_MATERIALIZATION_FAILED",
-										{ apiPath: wrapper.____slothletInternal.apiPath },
-										null,
-										{
-											validationError: true
-										}
-									)
-								);
+								reject(new wrapper.slothlet.SlothletError("LAZY_MATERIALIZATION_FAILED", { path: wrapper.____slothletInternal.apiPath }));
 								return;
 								/* v8 ignore stop */
 							}
@@ -19972,15 +19923,10 @@ class UnifiedWrapper extends ComponentBase {
 						result = FunctionMethods.apply(impl.default, impl, args);
 					}
 				} else {
-					throw new wrapper.SlothletError(
-						"INVALID_CONFIG_NOT_A_FUNCTION",
-						{
-							apiPath: wrapper.____slothletInternal.apiPath,
-							actualType: typeof impl
-						},
-						null,
-						{ validationError: true }
-					);
+					throw new wrapper.SlothletError("API_PATH_NOT_CALLABLE", {
+						path: wrapper.____slothletInternal.apiPath,
+						received: typeof impl
+					});
 				}
 
 				// Check if result is a Promise (async function)
@@ -20558,9 +20504,7 @@ class UnifiedWrapper extends ComponentBase {
 			// A callable `then` would make the node awaitable (#571), so assigning one is refused; a `then`
 			// holding data is an ordinary member and reads back.
 			if (prop === "then" && isAwaitableThen({ value })) {
-				throw new wrapper.SlothletError("API_MEMBER_THEN_RESERVED", { apiPath: wrapper.____slothletInternal.apiPath }, null, {
-					validationError: true
-				});
+				throw new wrapper.SlothletError("API_MEMBER_THEN_RESERVED", { path: wrapper.____slothletInternal.apiPath });
 			}
 			// A module writes only under the subtree it owns, below the top level of `self` as at it (#625). A
 			// framework-reserved key is the framework's own state: the built-in write rules keep modules off it.
@@ -21047,9 +20991,7 @@ class UnifiedWrapper extends ComponentBase {
 			if (wrapper.____slothletInternal.mode === "lazy" && wrapper.____slothletInternal.state.inFlight) {
 				// A subclass's `super()` has to finish now, which nothing still loading can (#685).
 				if (newTarget !== wrapper.____slothletInternal.proxy) {
-					throw new wrapper.SlothletError("LAZY_SUBCLASS_BEFORE_LOAD", { apiPath: wrapper.____slothletInternal.apiPath }, null, {
-						validationError: true
-					});
+					throw new wrapper.SlothletError("LAZY_SUBCLASS_BEFORE_LOAD", { path: wrapper.____slothletInternal.apiPath });
 				}
 				// materializationPromise is always set when inFlight=true; Promise.resolve() guards
 				// the unreachable case where it is somehow absent due to corrupted internal state.
@@ -21059,12 +21001,7 @@ class UnifiedWrapper extends ComponentBase {
 						// Materialization resolved without marking the wrapper as materialized —
 						// a defensive guard against corrupted internal state; unreachable in practice.
 						/* v8 ignore next */
-						throw new wrapper.slothlet.SlothletError(
-							"INVALID_CONFIG_LAZY_MATERIALIZATION_FAILED",
-							{ apiPath: wrapper.____slothletInternal.apiPath },
-							null,
-							{ validationError: true }
-						);
+						throw new wrapper.slothlet.SlothletError("LAZY_MATERIALIZATION_FAILED", { path: wrapper.____slothletInternal.apiPath });
 					}
 					const impl = wrapper.____slothletInternal.impl;
 					// newTarget is the proxy itself here (a subclass was refused above): impl stands in for it, so
@@ -21074,15 +21011,10 @@ class UnifiedWrapper extends ComponentBase {
 					if (impl && typeof impl === "object" && typeof impl.default === "function") {
 						return Reflect.construct(impl.default, args, impl.default);
 					}
-					throw new wrapper.slothlet.SlothletError(
-						"INVALID_CONFIG_NOT_A_FUNCTION",
-						{
-							apiPath: wrapper.____slothletInternal.apiPath,
-							actualType: typeof impl
-						},
-						null,
-						{ validationError: true }
-					);
+					throw new wrapper.slothlet.SlothletError("API_PATH_NOT_CALLABLE", {
+						path: wrapper.____slothletInternal.apiPath,
+						received: typeof impl
+					});
 				});
 			}
 
@@ -21106,15 +21038,10 @@ class UnifiedWrapper extends ComponentBase {
 				return runtime_constructAsNode(wrapper, impl.default, args, effectiveNewTarget);
 			}
 
-			throw new wrapper.SlothletError(
-				"INVALID_CONFIG_NOT_A_FUNCTION",
-				{
-					apiPath: wrapper.____slothletInternal.apiPath,
-					actualType: typeof impl
-				},
-				null,
-				{ validationError: true }
-			);
+			throw new wrapper.SlothletError("API_PATH_NOT_CALLABLE", {
+				path: wrapper.____slothletInternal.apiPath,
+				received: typeof impl
+			});
 		};
 
 		/**
@@ -21349,9 +21276,7 @@ class UnifiedWrapper extends ComponentBase {
 			// framework-reserved key, is defined on the target as before.
 			defineProperty: (target, prop, descriptor) => {
 				if (prop === "then" && isAwaitableThen(descriptor)) {
-					throw new wrapper.SlothletError("API_MEMBER_THEN_RESERVED", { apiPath: wrapper.____slothletInternal.apiPath }, null, {
-						validationError: true
-					});
+					throw new wrapper.SlothletError("API_MEMBER_THEN_RESERVED", { path: wrapper.____slothletInternal.apiPath });
 				}
 				// A definition that changes nothing (freezing an already frozen node) is no write (#667).
 				if (!Reflect.isExtensible(target) && runtime_isUnchangingDefinition(target, prop, descriptor)) return true;

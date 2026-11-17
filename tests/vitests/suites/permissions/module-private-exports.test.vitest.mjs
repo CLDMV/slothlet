@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T20:14:02-08:00 (1794802442)
+ *	@Last modified time: 2026-11-16T18:30:19-08:00 (1794882619)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -181,14 +181,14 @@ describe.each(["eager", "lazy"])("Permissions > module-private exports (#260) > 
 
 	it("refuses a module FILE named for a framework-reserved key", async () => {
 		if (mode === "eager") {
-			await expect(slothlet({ mode, base: REJECT_FILE })).rejects.toThrow(/MODULE_RESERVED_FILENAME/);
+			await expect(slothlet({ mode, base: REJECT_FILE })).rejects.toThrow(/MODULE_RESERVED_FILE/);
 		} else {
 			// Lazy defers the scan of subdirectory contents, but the root scan still walks the
 			// directory listing — the rejection fires wherever the listing is first read.
 			await expect(async () => {
 				api = await slothlet({ mode, base: REJECT_FILE });
 				await api.ok?.fine;
-			}).rejects.toThrow(/MODULE_RESERVED_FILENAME/);
+			}).rejects.toThrow(/MODULE_RESERVED_FILE/);
 		}
 	});
 
@@ -247,7 +247,7 @@ describe("Permissions > reserved-name refusal is platform-symmetric (#260)", () 
 					directories: []
 				}
 			})
-		).rejects.toThrow(/MODULE_RESERVED_FILENAME/);
+		).rejects.toThrow(/MODULE_RESERVED_FILE/);
 	});
 
 	it("still mounts a manifest with no reserved names", async () => {

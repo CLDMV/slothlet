@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T22:53:59-08:00 (1794812039)
+ *	@Last modified time: 2026-11-16T18:30:05-08:00 (1794882605)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -367,7 +367,7 @@ describe.each([{ runtime: "async" }, { runtime: "live" }])("writes through an un
 			const node = api.holder.deep.inner;
 			expect([node.leaf, node.added, Object.isExtensible(node)]).toEqual([5, undefined, false]);
 			const warnings = api.slothlet.diag.SlothletWarning.captured.filter((warning) => warning.code === "WARNING_LAZY_WRITE_REFUSED");
-			expect(warnings.map((warning) => warning.context.apiPath)).toEqual(["holder.deep.inner"]);
+			expect(warnings.map((warning) => warning.details.path)).toEqual(["holder.deep.inner"]);
 			expect(warnings[0].cause).toBeInstanceOf(TypeError);
 		} finally {
 			SlothletWarning.suppressConsole = false;
@@ -383,9 +383,7 @@ describe.each([{ runtime: "async" }, { runtime: "live" }])("writes through an un
 			// Loaded through another member, not through a stand-in the refused change was made on.
 			await api.holder.deep.cfg.plain;
 			const warnings = api.slothlet.diag.SlothletWarning.captured.filter((warning) => warning.code === "WARNING_LAZY_WRITE_REFUSED");
-			expect(warnings.map((warning) => [warning.context.apiPath, warning.context.operation])).toEqual([
-				["holder.deep.cfg.getterOnly", "set"]
-			]);
+			expect(warnings.map((warning) => [warning.details.path, warning.details.operation])).toEqual([["holder.deep.cfg.getterOnly", "set"]]);
 		} finally {
 			SlothletWarning.suppressConsole = false;
 		}
@@ -537,7 +535,7 @@ describe.each([{ runtime: "async" }, { runtime: "live" }])("writes through an un
 			api.holder.deep.cfg.getterOnly.g = 2;
 			await api.slothlet.api.reload("holder");
 			const warnings = api.slothlet.diag.SlothletWarning.captured.filter((warning) => warning.code === "WARNING_LAZY_WRITE_REFUSED");
-			expect(warnings.map((warning) => warning.context.apiPath)).toEqual(["holder.deep.cfg.getterOnly"]);
+			expect(warnings.map((warning) => warning.details.path)).toEqual(["holder.deep.cfg.getterOnly"]);
 		} finally {
 			SlothletWarning.suppressConsole = false;
 		}

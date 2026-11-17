@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:57-07:00 (1791090897)
+ *	@Last modified time: 2026-11-16T18:29:28-08:00 (1794882568)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -193,7 +193,7 @@ describe.each(EAGER_CONFIGS)("_findAffectedCaches — child caches ($name)", ({ 
 });
 
 // ---------------------------------------------------------------------------
-// 5. _reloadByApiPath: validation — unknown paths throw INVALID_API_PATH
+// 5. _reloadByApiPath: validation — unknown paths throw API_PATH_NOT_FOUND
 // ---------------------------------------------------------------------------
 describe("_reloadByApiPath — invalid path validation", () => {
 	let api;
@@ -204,10 +204,10 @@ describe("_reloadByApiPath — invalid path validation", () => {
 		await new Promise((r) => setTimeout(r, 30));
 	});
 
-	it("throws INVALID_API_PATH when trying to reload a path that does not exist in the live API", async () => {
+	it("throws API_PATH_NOT_FOUND when trying to reload a path that does not exist in the live API", async () => {
 		api = await makeApi(EAGER_CONFIGS[0].config, { base: TEST_DIRS.API_TEST });
 		// "nonexistent" is not registered in the live API — reload validates path presence first
-		await expect(api.slothlet.api.reload("nonexistent")).rejects.toThrow("INVALID_API_PATH");
+		await expect(api.slothlet.api.reload("nonexistent")).rejects.toThrow("API_PATH_NOT_FOUND");
 	});
 });
 

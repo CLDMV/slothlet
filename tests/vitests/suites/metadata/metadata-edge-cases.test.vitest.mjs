@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:11-07:00 (1791090911)
+ *	@Last modified time: 2026-11-16T18:30:09-08:00 (1794882609)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -312,23 +312,23 @@ describe.each(getMatrixConfigs())("Metadata Edge Cases > Config: '$name'", ({ co
 
 	describe("Validation Errors", () => {
 		it("should throw when set() is called with a plain function that has no system metadata", async () => {
-			// Line coverage: setUserMetadata throws METADATA_NO_MODULE_ID when target has no moduleID
+			// Line coverage: setUserMetadata throws METADATA_NO_MODULE when target has no moduleID
 			const plainFn = () => {};
 			expect(() => api.slothlet.metadata.set(plainFn, "key", "value")).toThrow();
 		});
 
 		it("should throw when set() is called with a non-function, non-object target", async () => {
-			// Line coverage: setUserMetadata throws INVALID_METADATA_TARGET when target is a primitive
+			// Line coverage: setUserMetadata throws METADATA_TARGET_INVALID when target is a primitive
 			expect(() => api.slothlet.metadata.set("notAFunction", "key", "value")).toThrow();
 		});
 
 		it("should throw when remove() is called with a non-function, non-object target", async () => {
-			// Line coverage: removeUserMetadata throws INVALID_METADATA_TARGET when target is a primitive
+			// Line coverage: removeUserMetadata throws METADATA_TARGET_INVALID when target is a primitive
 			expect(() => api.slothlet.metadata.remove("notAFunction", "key")).toThrow();
 		});
 
 		it("should throw when remove() is called with an invalid key type", async () => {
-			// Line coverage: removeUserMetadata throws INVALID_METADATA_KEY when key is not string/array/object
+			// Line coverage: removeUserMetadata throws METADATA_KEY_INVALID when key is not string/array/object
 			// First set a value so a storeEntry exists, then remove with a bad key type
 			await materialize(api, "rootMath.add", 1, 2);
 			api.slothlet.metadata.set(api.rootMath.add, "tempKey", "tempVal");

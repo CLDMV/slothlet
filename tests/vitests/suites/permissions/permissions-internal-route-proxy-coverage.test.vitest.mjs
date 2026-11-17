@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T19:52:13-07:00 (1792378333)
+ *	@Last modified time: 2026-11-16T18:30:34-08:00 (1794882634)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -252,7 +252,7 @@ describe.each(getMatrixConfigs())("Permissions > Internal Route Proxy Coverage >
 		});
 	});
 
-	it("throws INVALID_METADATA_KEY for empty key from module-internal setGlobal", async () => {
+	it("throws METADATA_KEY_INVALID for empty key from module-internal setGlobal", async () => {
 		api = await slothlet({
 			...config,
 			base: `${BASE}/callers`,
@@ -265,9 +265,9 @@ describe.each(getMatrixConfigs())("Permissions > Internal Route Proxy Coverage >
 		await withSuppressedSlothletErrorOutput(async () => {
 			try {
 				await api.internalProxyHelper.callSetGlobalWithEmptyKey();
-				expect.unreachable("Should have thrown INVALID_METADATA_KEY");
+				expect.unreachable("Should have thrown METADATA_KEY_INVALID");
 			} catch (err) {
-				expect(err.message).toContain("INVALID_METADATA_KEY");
+				expect(err.message).toContain("METADATA_KEY_INVALID");
 			}
 		});
 	});

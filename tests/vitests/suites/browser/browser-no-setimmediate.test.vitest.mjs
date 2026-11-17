@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:37-08:00 (1794874597)
+ *	@Last modified time: 2026-11-16T18:29:34-08:00 (1794882574)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -166,7 +166,7 @@ describe("WARNING_LIFECYCLE_HANDLER_ERROR carries the handler's error (#578)", (
 	 */
 	const makeMock = () => ({ config: { debug: {} }, debug: vi.fn(), SlothletWarning });
 
-	it("attaches a synchronous handler's error as the cause, with apiPath and moduleID", async () => {
+	it("attaches a synchronous handler's error as the cause, with path and module", async () => {
 		SlothletWarning.clearCaptured();
 		const lc = new Lifecycle(makeMock());
 		const boom = new ReferenceError("setImmediate is not defined");
@@ -177,7 +177,7 @@ describe("WARNING_LIFECYCLE_HANDLER_ERROR carries the handler's error (#578)", (
 
 		const [warning] = handlerWarnings();
 		expect(warning.cause).toBe(boom);
-		expect(warning.context).toMatchObject({ event: "impl:created", apiPath: "math.add", moduleID: "base" });
+		expect(warning.details).toMatchObject({ event: "impl:created", path: "math.add", module: "base" });
 		expect(warning.message).toContain("math.add");
 		expect(warning.message).toContain("base");
 	});
@@ -193,7 +193,7 @@ describe("WARNING_LIFECYCLE_HANDLER_ERROR carries the handler's error (#578)", (
 
 		const [warning] = handlerWarnings();
 		expect(warning.cause).toBe(boom);
-		expect(warning.context).toEqual({ event: "init" });
+		expect(warning.details).toEqual({ event: "init" });
 		expect(warning.message).toContain("'init'");
 	});
 
@@ -218,7 +218,7 @@ describe("WARNING_LIFECYCLE_HANDLER_ERROR carries the handler's error (#578)", (
 
 		const [warning] = handlerWarnings();
 		expect(warning.cause).toBe(boom);
-		expect(warning.context).toMatchObject({ event: "impl:created", apiPath: "math.add", moduleID: "base" });
+		expect(warning.details).toMatchObject({ event: "impl:created", path: "math.add", module: "base" });
 	});
 
 	it("prints the cause's stack when the warning reaches the console", () => {
@@ -226,7 +226,7 @@ describe("WARNING_LIFECYCLE_HANDLER_ERROR carries the handler's error (#578)", (
 		SlothletWarning.suppressConsole = false;
 		try {
 			const boom = new Error("printed failure");
-			const warning = new SlothletWarning("WARNING_LIFECYCLE_HANDLER_ERROR", { event: "impl:created" }, boom);
+			const warning = new SlothletWarning("WARNING_LIFECYCLE_HANDLER_ERROR", { event: "impl:created" }, { cause: boom });
 			expect(warning.cause).toBe(boom);
 			const printed = warnSpy.mock.calls.flat().map(String).join("\n");
 			expect(printed).toContain("printed failure");
@@ -241,7 +241,7 @@ describe("WARNING_LIFECYCLE_HANDLER_ERROR carries the handler's error (#578)", (
 		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
 		SlothletWarning.suppressConsole = false;
 		try {
-			const warning = new SlothletWarning("WARNING_LIFECYCLE_HANDLER_ERROR", { event: "impl:created" }, "plain string throw");
+			const warning = new SlothletWarning("WARNING_LIFECYCLE_HANDLER_ERROR", { event: "impl:created" }, { cause: "plain string throw" });
 			expect(warning.cause).toBe("plain string throw");
 			expect(warnSpy).toHaveBeenCalledWith("Cause:", "plain string throw");
 		} finally {

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:12-08:00 (1794874572)
+ *	@Last modified time: 2026-11-16T18:28:49-08:00 (1794882529)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -267,9 +267,9 @@ async function scanDir(absDir, rootDir) {
  * @returns {Promise<{ files: Array<{path:string,name:string,fullName:string}>, directories: Array }>}
  *   Manifest object ready to pass to `slothlet()`.
  *
- * @throws {SlothletError} `GENERATE_MANIFEST_DIR_INVALID` if `dir` is not a non-empty string.
- * @throws {SlothletError} `GENERATE_MANIFEST_DIR_UNREADABLE` if `dir` cannot be read (missing path, permission denied); the underlying reason is surfaced in the message.
- * @throws {SlothletError} `GENERATE_MANIFEST_NOT_DIRECTORY` if `dir` exists but is not a directory.
+ * @throws {SlothletError} `FILES_FOLDER_INVALID` if `dir` is not a non-empty string.
+ * @throws {SlothletError} `FILES_FOLDER_UNREADABLE` if `dir` cannot be read (missing path, permission denied); the underlying reason is surfaced in the message.
+ * @throws {SlothletError} `FILES_NOT_A_FOLDER` if `dir` exists but is not a directory.
  *
  * @example
  * // Build script — produces a manifest and writes it to disk
@@ -304,7 +304,7 @@ async function generateManifest(dir) {
 		// reports "object" for both null and arrays, so distinguish those explicitly for an actionable
 		// message — matching the syntheticName validation (#136 review).
 		const received = typeof dir === "string" ? "<empty>" : dir === null ? "null" : Arrays.isArray(dir) ? "array" : typeof dir;
-		throw new SlothletError("GENERATE_MANIFEST_DIR_INVALID", { received }, null, { validationError: true });
+		throw new SlothletError("FILES_FOLDER_INVALID", { received });
 	}
 
 	const absDir = path.resolve(dir);
@@ -315,13 +315,11 @@ async function generateManifest(dir) {
 		stat = await fs.stat(absDir);
 	} catch (err) {
 		// Surface the underlying fs failure (ENOENT/EACCES/…) via {reason}: it is the key diagnostic.
-		// Kept a validationError (this validates the `dir` argument), so the cause is passed as a
-		// context string rather than an originalError 3rd-arg, which would contradict validationError.
-		throw new SlothletError("GENERATE_MANIFEST_DIR_UNREADABLE", { dir: absDir, reason: err.message }, null, { validationError: true });
+		throw new SlothletError("FILES_FOLDER_UNREADABLE", { folder: absDir, reason: err.message });
 	}
 
 	if (!stat.isDirectory()) {
-		throw new SlothletError("GENERATE_MANIFEST_NOT_DIRECTORY", { dir: absDir }, null, { validationError: true });
+		throw new SlothletError("FILES_NOT_A_FOLDER", { folder: absDir });
 	}
 
 	return scanDir(absDir, absDir);
@@ -896,7 +894,7 @@ function derivePackagesBase(base) {
  * @returns {Promise<{ manifest: { files: Array, directories: Array }, importmap: { imports: Object<string,string>, scopes: Object<string, Object<string,string>> } }>}
  *   The API manifest and slothlet's own browser importmap (see {@link generateImportMap} for its `scopes`).
  *
- * @throws {SlothletError} `GENERATE_BROWSER_ASSETS_SLOTHLET_BASE_INVALID` if `options.base` is provided but is not a string.
+ * @throws {SlothletError} `FILES_BASE_INVALID` if `options.base` is provided but is not a string.
  *
  * @example
  * // Build step — slothlet installed in node_modules (default base), ship both to the renderer.
@@ -914,9 +912,7 @@ function derivePackagesBase(base) {
 async function generateBrowserAssets(apiDir, options = {}) {
 	const { base = DEFAULT_SLOTHLET_BASE } = options;
 	if (typeof base !== "string") {
-		throw new SlothletError("GENERATE_BROWSER_ASSETS_SLOTHLET_BASE_INVALID", { received: typeof base }, null, {
-			validationError: true
-		});
+		throw new SlothletError("FILES_BASE_INVALID", { received: typeof base });
 	}
 	// Sibling packages sit next to @cldmv/slothlet under a shared served root, derived from base.
 	const prefix = StringMethods.endsWith(base, "/") ? base : `${base}/`;

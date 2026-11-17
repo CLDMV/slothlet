@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T23:18:14-08:00 (1794813494)
+ *	@Last modified time: 2026-11-16T18:30:01-08:00 (1794882601)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -72,7 +72,7 @@ describe("translations.mjs edge cases", () => {
 	it("should still produce valid translations after recovering from a failed setLanguage call", () => {
 		setLanguage("totally-invalid-lang-code");
 		// After recovery, translate() should still work normally with English defaults
-		const msg = translate("MODULE_NOT_FOUND", { modulePath: "./api.mjs" });
+		const msg = translate("MODULE_IMPORT_FAILED", { modulePath: "./api.mjs" });
 		expect(typeof msg).toBe("string");
 		expect(msg.length).toBeGreaterThan(0);
 	});
@@ -108,7 +108,7 @@ describe("translations.mjs edge cases", () => {
 	it("should remain functional (language = 'en-us') after initI18n catches an error", () => {
 		initI18n(null);
 		// Translations should still produce valid output after the fallback
-		const msg = translate("MODULE_NOT_FOUND", { modulePath: "./x.mjs" });
+		const msg = translate("MODULE_IMPORT_FAILED", { modulePath: "./x.mjs" });
 		expect(typeof msg).toBe("string");
 		expect(msg.length).toBeGreaterThan(0);
 		expect(getLanguage()).toBe("en-us");

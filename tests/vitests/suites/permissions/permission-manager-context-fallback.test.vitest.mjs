@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:14-07:00 (1791090914)
+ *	@Last modified time: 2026-11-16T18:30:19-08:00 (1794882619)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -98,7 +98,7 @@ describe("PermissionManager > condition runtimeContext fallback", () => {
 				effect: "allow",
 				condition: new Date()
 			})
-		).toThrow("INVALID_PERMISSION_RULE");
+		).toThrow("PERMISSION_RULE_INVALID");
 	});
 
 	it("rejects RegExp as condition — non-plain objects must not validate", () => {
@@ -116,7 +116,7 @@ describe("PermissionManager > condition runtimeContext fallback", () => {
 				effect: "allow",
 				condition: /tenant-a/
 			})
-		).toThrow("INVALID_PERMISSION_RULE");
+		).toThrow("PERMISSION_RULE_INVALID");
 	});
 
 	it("rejects null entries inside condition arrays", () => {
@@ -134,7 +134,7 @@ describe("PermissionManager > condition runtimeContext fallback", () => {
 				effect: "allow",
 				condition: [null]
 			})
-		).toThrow("INVALID_PERMISSION_RULE");
+		).toThrow("PERMISSION_RULE_INVALID");
 	});
 
 	it("matchesCondition rejects primitive payloads on the public helper", () => {

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-11T17:44:47-07:00 (1791765887)
+ *	@Last modified time: 2026-11-16T18:31:16-08:00 (1794882676)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -17,7 +17,7 @@
  * @fileoverview Version conflict — registering the same version tag twice
  * should throw VERSION_REGISTER_DUPLICATE. Also covers the empty-root guard
  * (api-manager L~1400-1401): a versioned add with an empty-string path must
- * throw INVALID_CONFIG_API_PATH_INVALID.
+ * throw API_PATH_INVALID.
  *
  * @module tests/vitests/suites/versioning/versioning-conflict
  */
@@ -48,7 +48,7 @@ describe.each(getMatrixConfigs())("Versioning > Conflict > $name", ({ config }) 
 		});
 	});
 
-	it("throws INVALID_CONFIG_VERSION_TAG for non-string version", async () => {
+	it("throws VERSION_TAG_INVALID for non-string version", async () => {
 		api = await slothlet({ ...config, base: `${BASE}/callers` });
 
 		await withSuppressedSlothletErrorOutput(async () => {
@@ -63,7 +63,7 @@ describe.each(getMatrixConfigs())("Versioning > Conflict > $name", ({ config }) 
 			const keysBefore = Object.keys(api);
 
 			await withSuppressedSlothletErrorOutput(async () => {
-				await expect(api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version })).rejects.toThrow("INVALID_CONFIG_API_PATH_INVALID");
+				await expect(api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version })).rejects.toThrow("API_PATH_INVALID");
 			});
 			expect(Object.keys(api)).toEqual(keysBefore);
 			expect(api.then).toBeUndefined();
@@ -78,21 +78,21 @@ describe.each(getMatrixConfigs())("Versioning > Conflict > $name", ({ config }) 
 
 			await withSuppressedSlothletErrorOutput(async () => {
 				await expect(api.slothlet.api.add("auth", `${BASE}/v1`, options, { version: `v${MODULE_ID_SEPARATOR}x` })).rejects.toThrow(
-					"INVALID_CONFIG_API_PATH_INVALID"
+					"API_PATH_INVALID"
 				);
 			});
 			expect(Object.keys(api)).toEqual(keysBefore);
 		}
 	);
 
-	it("throws INVALID_CONFIG_VERSION_DISPATCHER for non-string non-function versionDispatcher", async () => {
+	it("throws VERSION_DISPATCHER_INVALID for non-string non-function versionDispatcher", async () => {
 		// api is intentionally not assigned; slothlet rejects before creating an instance
 		await withSuppressedSlothletErrorOutput(async () => {
 			await expect(slothlet({ ...config, base: `${BASE}/callers`, versionDispatcher: 42 })).rejects.toThrow();
 		});
 	});
 
-	it("throws INVALID_CONFIG_API_PATH_INVALID when versioned add uses empty-string root path", async () => {
+	it("throws API_PATH_INVALID when versioned add uses empty-string root path", async () => {
 		// Covers api-manager L~1400-1401: the empty-root guard fires when versionConfig.version
 		// is set but normalizedPath is "" — VersionManager would otherwise build a broken
 		// "v1." versionedPath and mount the dispatcher at api[""].
@@ -100,7 +100,7 @@ describe.each(getMatrixConfigs())("Versioning > Conflict > $name", ({ config }) 
 
 		await withSuppressedSlothletErrorOutput(async () => {
 			await expect(api.slothlet.api.add("", `${BASE}/v1`, {}, { version: "v1" })).rejects.toMatchObject({
-				code: "INVALID_CONFIG_API_PATH_INVALID"
+				code: "API_PATH_INVALID"
 			});
 		});
 	});

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:11-08:00 (1794874571)
+ *	@Last modified time: 2026-11-16T18:28:48-08:00 (1794882528)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -66,7 +66,7 @@ const { setCapabilityCheck } = instanceImportsInternals("lib/helpers/capability-
 
 /**
  * The checks of the instances that are up with the permission system configured, by instance id: each throws
- * `CAPABILITY_REFUSED` for module code of its own that no rule opens a capability for.
+ * `PERMISSION_CAPABILITY_REFUSED` for module code of its own that no rule opens a capability for.
  * @type {Map<string, function(string, string, ?string): void>}
  * @private
  */
@@ -78,7 +78,7 @@ const CHECKS = new Map();
  * @param {string} route - What the code used.
  * @param {string|null} [importer=null] - The importing file's URL, for an import being linked.
  * @returns {void}
- * @throws {SlothletError} `CAPABILITY_REFUSED`.
+ * @throws {SlothletError} `PERMISSION_CAPABILITY_REFUSED`.
  * @internal
  * @example
  * checkCapability("code", "setTimeout");

@@ -51,20 +51,20 @@ Every slothlet module ships a `slothlet.module.json` at the package root:
 }
 ```
 
-| Field           | Required | Description                                                                                                                                                                                |
-| --------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `schemaVersion` | yes      | `1` — forward-compat marker.                                                                                                                                                               |
-| `mountPath`     | yes      | Where in the api tree the module mounts. `string` (dot-notation) or `string[]` (segments). Reserved roots `slothlet`, `shutdown`, `destroy` are rejected with `MODULE_RESERVED_MOUNTPATH`. |
-| `apiDir`        | yes      | Path inside the package to the slothlet folder. Resolved relative to the package root; path-traversal is rejected with `MODULE_PATH_TRAVERSAL`.                                            |
-| `name`          | no       | Documentation only. Source of truth is `package.json`'s `name`. If present in manifest, MUST match — mismatch throws `MODULE_MANIFEST_NAME_MISMATCH`.                                      |
-| `version`       | no       | Same rule as `name`. Source of truth is `package.json`'s `version`; mismatch throws `MODULE_MANIFEST_VERSION_MISMATCH`.                                                                    |
-| `description`   | no       | Falls back to `package.json` description; manifest value silently overrides if present.                                                                                                    |
-| `kind`          | no       | Free-form category (e.g. `"driver"`, `"extension"`, `"reranker"`). Slothlet stores but does not interpret; the host filters on it via `discover()`'s `filter` callback.                    |
-| `priority`      | no       | Default-comparator key for `sort()`. Higher first. Defaults to `0`.                                                                                                                        |
-| `dependencies`  | no       | Module-level dependencies for host-side topological-sort comparators. Slothlet does not enforce semver here.                                                                               |
-| `permissions`   | no       | Array of `{caller, target, effect}` rules per slothlet's existing permission grammar. Applied at mount, at the `manifest` layer (#407); see [PERMISSIONS.md](PERMISSIONS.md).              |
-| `events`        | no       | Array of `{caller, event, effect}` event-delivery rules (the manifest layer of the event-rule pool; see [EVENTS.md](EVENTS.md)).                                                           |
-| `metadata`      | no       | Dedicated block for arbitrary developer extras. The only place unknown-field data goes — unknown top-level fields are rejected with `MODULE_MANIFEST_UNKNOWN_FIELD`.                       |
+| Field           | Required | Description                                                                                                                                                                            |
+| --------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `schemaVersion` | yes      | `1` — forward-compat marker.                                                                                                                                                           |
+| `mountPath`     | yes      | Where in the api tree the module mounts. `string` (dot-notation) or `string[]` (segments). Reserved roots `slothlet`, `shutdown`, `destroy` are rejected with `MODULE_RESERVED_MOUNT`. |
+| `apiDir`        | yes      | Path inside the package to the slothlet folder. Resolved relative to the package root; path-traversal is rejected with `MODULE_PATH_TRAVERSAL`.                                        |
+| `name`          | no       | Documentation only. Source of truth is `package.json`'s `name`. If present in manifest, MUST match — mismatch throws `MODULE_MANIFEST_NAME_MISMATCH`.                                  |
+| `version`       | no       | Same rule as `name`. Source of truth is `package.json`'s `version`; mismatch throws `MODULE_MANIFEST_VERSION_MISMATCH`.                                                                |
+| `description`   | no       | Falls back to `package.json` description; manifest value silently overrides if present.                                                                                                |
+| `kind`          | no       | Free-form category (e.g. `"driver"`, `"extension"`, `"reranker"`). Slothlet stores but does not interpret; the host filters on it via `discover()`'s `filter` callback.                |
+| `priority`      | no       | Default-comparator key for `sort()`. Higher first. Defaults to `0`.                                                                                                                    |
+| `dependencies`  | no       | Module-level dependencies for host-side topological-sort comparators. Slothlet does not enforce semver here.                                                                           |
+| `permissions`   | no       | Array of `{caller, target, effect}` rules per slothlet's existing permission grammar. Applied at mount, at the `manifest` layer (#407); see [PERMISSIONS.md](PERMISSIONS.md).          |
+| `events`        | no       | Array of `{caller, event, effect}` event-delivery rules (the manifest layer of the event-rule pool; see [EVENTS.md](EVENTS.md)).                                                       |
+| `metadata`      | no       | Dedicated block for arbitrary developer extras. The only place unknown-field data goes — unknown top-level fields are rejected with `MODULE_MANIFEST_UNKNOWN_FIELD`.                   |
 
 The canonical JSON Schema is shipped at `schemas/slothlet.module.schema.json` via the package's `exports` map, so editors / CI tooling can `$ref` it:
 
@@ -264,9 +264,9 @@ All errors throw `SlothletError` with typed codes. See `src/lib/i18n/languages/e
 | `MODULE_MANIFEST_NAME_MISMATCH`          | Manifest `name` disagrees with `package.json`                                  |
 | `MODULE_MANIFEST_VERSION_MISMATCH`       | Manifest `version` disagrees with `package.json`                               |
 | `MODULE_PATH_TRAVERSAL`                  | `apiDir` resolves outside the package root                                     |
-| `MODULE_VERSION_UNSUPPORTED`             | `schemaVersion` present but not equal to `1`                                   |
+| `MODULE_MANIFEST_FORMAT_UNSUPPORTED`     | `schemaVersion` present but not equal to `1`                                   |
 | `MODULE_PACKAGE_NOT_FOUND`               | `addModule(name)` and name isn't in the cache after discovery                  |
-| `MODULE_RESERVED_MOUNTPATH`              | Manifest claims a reserved root (`slothlet`, `shutdown`, `destroy`)            |
+| `MODULE_RESERVED_MOUNT`                  | Manifest claims a reserved root (`slothlet`, `shutdown`, `destroy`)            |
 | `MODULE_DUPLICATE_NAME_VERSION_MISMATCH` | Same package name + version at multiple real paths (G7 case 3)                 |
 | `MODULE_MOUNT_COLLISION`                 | Pre-flight detects exact-mountPath collision and `collisionMode: "error"`      |
 | `MODULE_DISCOVERY_REQUIRES_NODE`         | Discovery was asked for in a browser, which has no filesystem to walk          |

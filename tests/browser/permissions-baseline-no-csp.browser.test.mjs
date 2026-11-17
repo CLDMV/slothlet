@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:19-08:00 (1794874579)
+ *	@Last modified time: 2026-11-16T18:29:01-08:00 (1794882541)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -68,7 +68,7 @@ describe("permission baseline in a browser with no Content Security Policy", () 
 		SlothletWarning.suppressConsole = true;
 		api = await boot("on");
 		const warned = SlothletWarning.captured.filter((warning) => warning.code === "WARNING_PERMISSION_BASELINE_UNMET");
-		expect(warned.map((warning) => warning.context.check)).toEqual(MET ? [] : IDS);
+		expect(warned.map((warning) => warning.details.check)).toEqual(MET ? [] : IDS);
 		const report = api.slothlet.permissions.control.report();
 		expect(report.mode).toBe("on");
 		expect(report.baseline.met).toBe(MET);

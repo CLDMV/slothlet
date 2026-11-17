@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:17:01-08:00 (1794874621)
+ *	@Last modified time: 2026-11-16T18:30:12-08:00 (1794882612)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -108,8 +108,8 @@ describe("module-manifest-validator coverage gaps", () => {
 			validateModuleManifest(null, {});
 		} catch (err) {
 			expect(err.code).toBe("MODULE_MANIFEST_INVALID");
-			expect(err.context.packageName).toBe("<unknown>");
-			expect(err.context.manifestPath).toBe("<unknown>");
+			expect(err.details.package).toBe("<unknown>");
+			expect(err.details.manifest).toBe("<unknown>");
 		}
 	});
 

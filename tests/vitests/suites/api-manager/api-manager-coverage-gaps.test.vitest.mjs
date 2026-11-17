@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:57-07:00 (1791090897)
+ *	@Last modified time: 2026-11-16T18:29:26-08:00 (1794882566)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -20,7 +20,7 @@
  * Targets these uncovered code clusters:
  *
  *   lines 215, 230-234   resolvePath: null/empty input + non-existent path
- *   lines 1082, 1095     addApiComponent: INVALID_CONFIG_NOT_LOADED + INVALID_CONFIG_PATH_TYPE
+ *   lines 1082, 1095     addApiComponent: INSTANCE_NOT_LOADED + PATH_TYPE_UNSUPPORTED
  *   lines 1543           removeApiComponent: early return-false for unknown path
  *   lines 1597-1610      removeApiComponent: action=restore with restoredValue+setValueAtPath
  *   lines 1683           removeApiComponent: rollback loop (pathsToRollback iteration)
@@ -77,19 +77,19 @@ describe("resolvePath — invalid inputs (lines 215, 230-234)", () => {
 		api = null;
 	});
 
-	it("throws INVALID_CONFIG_DIR_INVALID when folderPath is null (line 215)", async () => {
+	it("throws FOLDER_INVALID when folderPath is null (line 215)", async () => {
 		api = await makeApi();
 		// null folderPath → resolvePath receives null → !inputPath check fires
 		await expect(api.slothlet.api.add("test", null)).rejects.toThrow();
 	});
 
-	it("throws INVALID_CONFIG_DIR_INVALID when folderPath is empty string (line 215)", async () => {
+	it("throws FOLDER_INVALID when folderPath is empty string (line 215)", async () => {
 		api = await makeApi();
 		// empty string → !inputPath is true → throws
 		await expect(api.slothlet.api.add("test", "")).rejects.toThrow();
 	});
 
-	it("throws INVALID_CONFIG_DIR_INVALID for a non-existent path (lines 230-234)", async () => {
+	it("throws FOLDER_INVALID for a non-existent path (lines 230-234)", async () => {
 		api = await makeApi();
 		// completely nonexistent path → fs.stat throws ENOENT → catch block fires
 		await expect(api.slothlet.api.add("test", "/absolutely/does/not/exist/xyz_never_abc")).rejects.toThrow();
@@ -97,12 +97,12 @@ describe("resolvePath — invalid inputs (lines 215, 230-234)", () => {
 });
 
 // ---------------------------------------------------------------------------
-// 2. addApiComponent INVALID_CONFIG_PATH_TYPE  (line 1095)
+// 2. addApiComponent PATH_TYPE_UNSUPPORTED  (line 1095)
 //    Requires a path that exists but is neither a regular file nor a directory.
 //    /dev/null is a character device on Linux — isFile=false, isDirectory=false.
 // ---------------------------------------------------------------------------
 
-describe("addApiComponent — INVALID_CONFIG_PATH_TYPE (line 1095)", () => {
+describe("addApiComponent — PATH_TYPE_UNSUPPORTED (line 1095)", () => {
 	let api;
 
 	afterEach(async () => {
@@ -110,7 +110,7 @@ describe("addApiComponent — INVALID_CONFIG_PATH_TYPE (line 1095)", () => {
 		api = null;
 	});
 
-	it("throws INVALID_CONFIG_PATH_TYPE for /dev/null (character device)", async () => {
+	it("throws PATH_TYPE_UNSUPPORTED for /dev/null (character device)", async () => {
 		api = await makeApi();
 		// /dev/null exists but is neither a directory nor a regular file
 		await expect(api.slothlet.api.add("test", "/dev/null")).rejects.toThrow();

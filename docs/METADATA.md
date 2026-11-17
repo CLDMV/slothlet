@@ -643,7 +643,7 @@ Get metadata of the currently executing function (synchronous).
 
 **Returns:** `Object | null`
 
-**Throws:** `SlothletError("RUNTIME_NO_ACTIVE_CONTEXT")` if called outside an active function execution context.
+**Throws:** `SlothletError("CONTEXT_NOT_ACTIVE")` if called outside an active function execution context.
 
 ### self.slothlet.metadata.caller()
 

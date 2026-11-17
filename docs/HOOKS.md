@@ -805,7 +805,7 @@ self.slothlet.hook.on("math.*:before", ({ args }) => {
 });
 ```
 
-Pass `{ lockCaller: false }` to opt a hook out — the handler then runs without a pinned identity (and, like any un-pinned callback, may have no slothlet context to resolve `self` against). Opt out only for handlers that do not touch `self`. **Note:** while pin enforcement is on (the default), a `lockCaller: false` on a hook registered _from inside a module_ is ignored — it is forced back to pinned and a `HOOK_UNPINNED_IGNORED` warning fires; the opt-out takes effect only once pin enforcement is disabled via `hook: { pin: false }` at init or `api.slothlet.hook.pin.disable()`:
+Pass `{ lockCaller: false }` to opt a hook out — the handler then runs without a pinned identity (and, like any un-pinned callback, may have no slothlet context to resolve `self` against). Opt out only for handlers that do not touch `self`. **Note:** while pin enforcement is on (the default), a `lockCaller: false` on a hook registered _from inside a module_ is ignored — it is forced back to pinned and a `WARNING_HOOK_UNPINNED_IGNORED` warning fires; the opt-out takes effect only once pin enforcement is disabled via `hook: { pin: false }` at init or `api.slothlet.hook.pin.disable()`:
 
 ```javascript
 self.slothlet.hook.on("math.*:before", logArgs, { lockCaller: false });

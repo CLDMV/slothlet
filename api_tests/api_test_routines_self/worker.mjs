@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:04-07:00 (1791091684)
+ *	@Last modified time: 2026-11-16T18:27:32-08:00 (1794882452)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -16,7 +16,7 @@
 /**
  * @fileoverview A routine contributor whose `initialize`/`activate` bodies reach the coordinator
  * through AMBIENT `self.coord.register(...)`. Dereferencing `self` throws
- * RUNTIME_NO_ACTIVE_CONTEXT_SELF unless an instance extent is active when the routine runs — so this
+ * CONTEXT_NOT_ACTIVE_SELF unless an instance extent is active when the routine runs — so this
  * exercises whether the ROOT CASCADE establishes that extent (#393).
  * @module api_test_routines_self.worker
  * @memberof module:api_test_routines_self

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T22:54:54-08:00 (1794812094)
+ *	@Last modified time: 2026-11-16T18:30:31-08:00 (1794882631)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -133,7 +133,7 @@ describe.each(getMatrixConfigs())("Permissions > hook gating (#118) > $name", ({
 		const id = await api.auditor.armOpts("db.read:before", { lockCaller: false });
 		const { registeredHooks } = api.slothlet.hook.list({ id });
 		expect(registeredHooks[0].lockCaller).toBe(true); // forced back on
-		expect(api.slothlet.diag.SlothletWarning.captured.some((w) => w.code === "HOOK_UNPINNED_IGNORED")).toBe(true);
+		expect(api.slothlet.diag.SlothletWarning.captured.some((w) => w.code === "WARNING_HOOK_UNPINNED_IGNORED")).toBe(true);
 	});
 
 	it("the pin runtime switch is host-only when permissions are enabled", async () => {
@@ -155,7 +155,7 @@ describe.each(getMatrixConfigs())("Permissions > hook gating (#118) > $name", ({
 		const id = await api.auditor.armOpts("db.read:before", { lockCaller: false });
 		const { registeredHooks } = api.slothlet.hook.list({ id });
 		expect(registeredHooks[0].lockCaller).toBe(false); // honored, not forced
-		expect(api.slothlet.diag.SlothletWarning.captured.some((w) => w.code === "HOOK_UNPINNED_IGNORED")).toBe(false);
+		expect(api.slothlet.diag.SlothletWarning.captured.some((w) => w.code === "WARNING_HOOK_UNPINNED_IGNORED")).toBe(false);
 	});
 
 	it("host-registered hooks fire regardless of permissions (no owner identity to gate)", async () => {
@@ -201,7 +201,7 @@ describe.each(getMatrixConfigs())("Permissions > hook gating (#118) > $name", ({
 		const id = await api.auditor.armOpts("db.read:before", { lockCaller: false });
 		const { registeredHooks } = api.slothlet.hook.list({ id });
 		expect(registeredHooks[0].lockCaller).toBe(false); // config disabled pin enforcement
-		expect(api.slothlet.diag.SlothletWarning.captured.some((w) => w.code === "HOOK_UNPINNED_IGNORED")).toBe(false);
+		expect(api.slothlet.diag.SlothletWarning.captured.some((w) => w.code === "WARNING_HOOK_UNPINNED_IGNORED")).toBe(false);
 	});
 
 	it("force-pin under silent ignores lockCaller:false without warning", async () => {
@@ -210,7 +210,7 @@ describe.each(getMatrixConfigs())("Permissions > hook gating (#118) > $name", ({
 		const id = await api.auditor.armOpts("db.read:before", { lockCaller: false });
 		const { registeredHooks } = api.slothlet.hook.list({ id });
 		expect(registeredHooks[0].lockCaller).toBe(true); // still force-pinned
-		expect(api.slothlet.diag.SlothletWarning.captured.some((w) => w.code === "HOOK_UNPINNED_IGNORED")).toBe(false); // silent suppresses the warn
+		expect(api.slothlet.diag.SlothletWarning.captured.some((w) => w.code === "WARNING_HOOK_UNPINNED_IGNORED")).toBe(false); // silent suppresses the warn
 	});
 
 	it("a before-only hook rule denies an after-hook on the same path (per-type)", async () => {

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T19:50:55-07:00 (1792378255)
+ *	@Last modified time: 2026-11-16T18:26:59-08:00 (1794882419)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -69,7 +69,7 @@ export const constructWarningThroughDiag = () => {
 };
 
 /**
- * Trigger INVALID_METADATA_KEY by passing an empty metadata key.
+ * Trigger METADATA_KEY_INVALID by passing an empty metadata key.
  * Exercises global metadata key validation.
  *
  * @returns {void}

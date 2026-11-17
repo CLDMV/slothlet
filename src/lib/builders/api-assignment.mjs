@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:08-08:00 (1794874568)
+ *	@Last modified time: 2026-11-16T18:28:44-08:00 (1794882524)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -297,8 +297,8 @@ export class ApiAssignment extends ComponentBase {
 				const SlothletError = this.slothlet?.SlothletError || Error;
 				throw new SlothletError("COLLISION_ERROR", {
 					key: String(key),
-					collisionMode,
-					collisionContext
+					collision: collisionMode,
+					phase: collisionContext
 				});
 			}
 
@@ -627,9 +627,9 @@ export class ApiAssignment extends ComponentBase {
 									new this.slothlet.SlothletWarning(
 										"WARNING_COLLISION_TRIGGER_MATERIALIZE_ERROR",
 										{
-											apiPath: valueWrapper.____slothletInternal.apiPath
+											path: valueWrapper.____slothletInternal.apiPath
 										},
-										err
+										{ cause: err }
 									);
 								});
 							}

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:34-07:00 (1791091714)
+ *	@Last modified time: 2026-11-16T18:30:07-08:00 (1794882607)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -516,7 +516,7 @@ describe("RoutineManager coverage — runPathFor / contributorsAt selector-and-e
 		});
 		await expect(rm.runPathFor("initialize", "rpf-fail-mod")).rejects.toMatchObject({
 			code: "ROUTINE_FAILED",
-			context: expect.objectContaining({ moduleID: "rpf-fail-mod" })
+			details: expect.objectContaining({ module: "rpf-fail-mod" })
 		});
 	});
 
@@ -527,7 +527,7 @@ describe("RoutineManager coverage — runPathFor / contributorsAt selector-and-e
 		// contributors at this path)", 1121; contributorsAt's own null-routine arm, 1149).
 		await expect(rm.runPathFor("nowhere.at.all", "no-such-key")).rejects.toMatchObject({
 			code: "INVALID_ARGUMENT",
-			context: expect.objectContaining({
+			details: expect.objectContaining({
 				argument: "key",
 				expected: 'a moduleID contributing "the routine" at "nowhere.at.all" (no contributors at this path)',
 				received: "no-such-key"

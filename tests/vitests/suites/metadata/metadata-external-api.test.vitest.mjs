@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:11-07:00 (1791090911)
+ *	@Last modified time: 2026-11-16T18:30:09-08:00 (1794882609)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -250,13 +250,13 @@ describe.each(getMatrixConfigs())("External Metadata API > Config: '$name'", ({ 
 			withSuppressedSlothletErrorOutputSync(() => {
 				expect(() => {
 					api.slothlet.metadata.remove(api.rootMath.add, ["version", 123]);
-				}).toThrow(/INVALID_METADATA_KEY/);
+				}).toThrow(/METADATA_KEY_INVALID/);
 				expect(() => {
 					api.slothlet.metadata.remove(api.rootMath.add, ["version", null]);
-				}).toThrow(/INVALID_METADATA_KEY/);
+				}).toThrow(/METADATA_KEY_INVALID/);
 				expect(() => {
 					api.slothlet.metadata.remove(api.rootMath.add, ["version", undefined]);
-				}).toThrow(/INVALID_METADATA_KEY/);
+				}).toThrow(/METADATA_KEY_INVALID/);
 			});
 		});
 
@@ -306,10 +306,10 @@ describe.each(getMatrixConfigs())("External Metadata API > Config: '$name'", ({ 
 			withSuppressedSlothletErrorOutputSync(() => {
 				expect(() => {
 					api.slothlet.metadata.remove(api.rootMath.add, { config: "timeout" });
-				}).toThrow(/INVALID_METADATA_KEY/);
+				}).toThrow(/METADATA_KEY_INVALID/);
 				expect(() => {
 					api.slothlet.metadata.remove(api.rootMath.add, { config: 123 });
-				}).toThrow(/INVALID_METADATA_KEY/);
+				}).toThrow(/METADATA_KEY_INVALID/);
 			});
 		});
 
@@ -322,7 +322,7 @@ describe.each(getMatrixConfigs())("External Metadata API > Config: '$name'", ({ 
 			withSuppressedSlothletErrorOutputSync(() => {
 				expect(() => {
 					api.slothlet.metadata.remove(api.rootMath.add, { config: ["timeout", 123] });
-				}).toThrow(/INVALID_METADATA_KEY/);
+				}).toThrow(/METADATA_KEY_INVALID/);
 			});
 		});
 
@@ -416,7 +416,7 @@ describe.each(getMatrixConfigs())("External Metadata API > Config: '$name'", ({ 
 				expect.unreachable("Should have thrown INVALID_ARGUMENT");
 			} catch (error) {
 				expect(error.message).toContain("INVALID_ARGUMENT");
-				expect(error.context?.argument).toBe("metadata.build");
+				expect(error.details?.argument).toBe("metadata.build");
 			}
 
 			await materialize(api, "rootMath.add", 1, 2);
@@ -424,9 +424,9 @@ describe.each(getMatrixConfigs())("External Metadata API > Config: '$name'", ({ 
 		});
 
 		it("should reject prototype-pollution global metadata keys in string mode", async () => {
-			expect(() => api.slothlet.metadata.setGlobal("__proto__", "polluted")).toThrow(/INVALID_METADATA_KEY/);
-			expect(() => api.slothlet.metadata.setGlobal("constructor", "polluted")).toThrow(/INVALID_METADATA_KEY/);
-			expect(() => api.slothlet.metadata.setGlobal("prototype", "polluted")).toThrow(/INVALID_METADATA_KEY/);
+			expect(() => api.slothlet.metadata.setGlobal("__proto__", "polluted")).toThrow(/METADATA_KEY_INVALID/);
+			expect(() => api.slothlet.metadata.setGlobal("constructor", "polluted")).toThrow(/METADATA_KEY_INVALID/);
+			expect(() => api.slothlet.metadata.setGlobal("prototype", "polluted")).toThrow(/METADATA_KEY_INVALID/);
 		});
 
 		it("should reject prototype-pollution keys when deep-merging setGlobal string-mode objects", async () => {
@@ -440,7 +440,7 @@ describe.each(getMatrixConfigs())("External Metadata API > Config: '$name'", ({ 
 				writable: true
 			});
 
-			expect(() => api.slothlet.metadata.setGlobal("build", mergePayload)).toThrow(/INVALID_METADATA_KEY/);
+			expect(() => api.slothlet.metadata.setGlobal("build", mergePayload)).toThrow(/METADATA_KEY_INVALID/);
 		});
 
 		it("should reject prototype-pollution segments in nested object mode", async () => {
@@ -457,14 +457,14 @@ describe.each(getMatrixConfigs())("External Metadata API > Config: '$name'", ({ 
 					safe: "ok",
 					build: buildWithProtoKey
 				})
-			).toThrow(/INVALID_METADATA_KEY/);
+			).toThrow(/METADATA_KEY_INVALID/);
 
 			expect(() =>
 				api.slothlet.metadata.setGlobal({
 					safe: "ok",
 					constructor: { nested: true }
 				})
-			).toThrow(/INVALID_METADATA_KEY/);
+			).toThrow(/METADATA_KEY_INVALID/);
 		});
 
 		it("should override global metadata on specific function", async () => {
@@ -616,7 +616,7 @@ describe.each(getMatrixConfigs())("External Metadata API > Config: '$name'", ({ 
 				api.slothlet.metadata.setFor("rootMath", {
 					config: pollutedConfig
 				})
-			).toThrow(/INVALID_METADATA_KEY/);
+			).toThrow(/METADATA_KEY_INVALID/);
 		});
 
 		it("should target a specific subpath without affecting siblings", async () => {
@@ -711,7 +711,7 @@ describe.each(getMatrixConfigs())("External Metadata API > Config: '$name'", ({ 
 			expect(api.rootMath.add.__metadata.tag).toBe("function");
 		});
 
-		it("should throw INVALID_METADATA_KEY when key in array is not a string", async () => {
+		it("should throw METADATA_KEY_INVALID when key in array is not a string", async () => {
 			// Populate the path entry first so removeFor reaches the array-key loop
 			api.slothlet.metadata.setFor("rootMath", { category: "math" });
 
@@ -721,7 +721,7 @@ describe.each(getMatrixConfigs())("External Metadata API > Config: '$name'", ({ 
 			});
 		});
 
-		it("should throw INVALID_METADATA_KEY when key is a non-string, non-array value", async () => {
+		it("should throw METADATA_KEY_INVALID when key is a non-string, non-array value", async () => {
 			// Populate the path entry first so removeFor reaches the else throw
 			api.slothlet.metadata.setFor("rootMath", { category: "math" });
 

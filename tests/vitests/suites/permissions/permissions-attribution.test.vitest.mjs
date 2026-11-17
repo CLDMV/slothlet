@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-08T22:59:44-08:00 (1794207584)
+ *	@Last modified time: 2026-11-16T18:30:21-08:00 (1794882621)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -45,7 +45,7 @@ import slothlet from "@cldmv/slothlet";
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const DIR = path.resolve(HERE, "../../../../api_tests/api_test_definer_rule");
 const DENIED = "PERMISSION_DENIED";
-const NO_SELF = "RUNTIME_NO_ACTIVE_CONTEXT_SELF";
+const NO_SELF = "CONTEXT_NOT_ACTIVE_SELF";
 const RULES = [
 	// Code from strings is a built-in capability (D4 ruling part 1); this suite is about where such code is placed.
 	{ caller: "**", target: "capability:code", effect: "allow" },

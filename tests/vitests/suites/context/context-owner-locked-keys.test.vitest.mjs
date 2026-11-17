@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:01-07:00 (1791090901)
+ *	@Last modified time: 2026-11-16T18:29:43-08:00 (1794882583)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -266,10 +266,10 @@ describe.each(getMatrixConfigs())("Context > Owner-locked keys (H5) > $name", ({
 		expect(Object.prototype.constructor).toBe(Object);
 	});
 
-	// PR #195 review (C2, DX): SCOPE_INVALID_PROTECT / SCOPE_INVALID_OWNERS used to report a bare
+	// PR #195 review (C2, DX): SCOPE_PROTECTED_KEYS_INVALID / SCOPE_KEY_OWNERS_INVALID used to report a bare
 	// `typeof`, which is "object" for both an array and an array holding a non-string entry — useless
 	// for the two most common mistakes. `received` is now a descriptive string instead.
-	it('SCOPE_INVALID_OWNERS reports a descriptive `received` for an array, not the bare "object"', async () => {
+	it('SCOPE_KEY_OWNERS_INVALID reports a descriptive `received` for an array, not the bare "object"', async () => {
 		api = await slothlet({ ...config, base: BASE });
 
 		let message = "";
@@ -280,12 +280,12 @@ describe.each(getMatrixConfigs())("Context > Owner-locked keys (H5) > $name", ({
 				message = err.message;
 			}
 		});
-		expect(message).toMatch(/SCOPE_INVALID_OWNERS/);
+		expect(message).toMatch(/SCOPE_KEY_OWNERS_INVALID/);
 		expect(message).toContain("Received: array.");
 		expect(message).not.toContain("Received: object.");
 	});
 
-	it('SCOPE_INVALID_PROTECT reports a descriptive `received` for an array with a non-string entry, not the bare "object"', async () => {
+	it('SCOPE_PROTECTED_KEYS_INVALID reports a descriptive `received` for an array with a non-string entry, not the bare "object"', async () => {
 		api = await slothlet({ ...config, base: BASE });
 
 		let message = "";
@@ -296,12 +296,12 @@ describe.each(getMatrixConfigs())("Context > Owner-locked keys (H5) > $name", ({
 				message = err.message;
 			}
 		});
-		expect(message).toMatch(/SCOPE_INVALID_PROTECT/);
+		expect(message).toMatch(/SCOPE_PROTECTED_KEYS_INVALID/);
 		expect(message).toContain("Received: array with non-string entry (number at index 1).");
 	});
 
 	// describeScopeReceived's non-array branch: a bare (non-array) value falls through to `typeof value`.
-	it("SCOPE_INVALID_PROTECT reports the bare `typeof` for a non-array value (e.g. a string)", async () => {
+	it("SCOPE_PROTECTED_KEYS_INVALID reports the bare `typeof` for a non-array value (e.g. a string)", async () => {
 		api = await slothlet({ ...config, base: BASE });
 
 		let message = "";
@@ -312,11 +312,11 @@ describe.each(getMatrixConfigs())("Context > Owner-locked keys (H5) > $name", ({
 				message = err.message;
 			}
 		});
-		expect(message).toMatch(/SCOPE_INVALID_PROTECT/);
+		expect(message).toMatch(/SCOPE_PROTECTED_KEYS_INVALID/);
 		expect(message).toContain("Received: string.");
 	});
 
-	it("SCOPE_INVALID_OWNERS reports the bare `typeof` for a non-array, non-object value (e.g. a number)", async () => {
+	it("SCOPE_KEY_OWNERS_INVALID reports the bare `typeof` for a non-array, non-object value (e.g. a number)", async () => {
 		api = await slothlet({ ...config, base: BASE });
 
 		let message = "";
@@ -327,7 +327,7 @@ describe.each(getMatrixConfigs())("Context > Owner-locked keys (H5) > $name", ({
 				message = err.message;
 			}
 		});
-		expect(message).toMatch(/SCOPE_INVALID_OWNERS/);
+		expect(message).toMatch(/SCOPE_KEY_OWNERS_INVALID/);
 		expect(message).toContain("Received: number.");
 	});
 

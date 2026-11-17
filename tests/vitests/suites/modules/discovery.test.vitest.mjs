@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:17:01-08:00 (1794874621)
+ *	@Last modified time: 2026-11-16T18:30:12-08:00 (1794882612)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -224,12 +224,12 @@ describe("discoverModules — malformed manifests", () => {
 		}
 		expect(caught).toBeDefined();
 		expect(caught.code).toBe("MODULE_MANIFEST_INVALID");
-		expect(caught.context.packageName).toBe("@bad-scope/bad-json-scoped");
-		expect(caught.context.reason).toMatch(/JSON parse error/);
+		expect(caught.details.package).toBe("@bad-scope/bad-json-scoped");
+		expect(caught.details.reason).toMatch(/JSON parse error/);
 	});
 
-	it("throws MODULE_RESERVED_MOUNTPATH when mountPath uses a reserved root", async () => {
-		await expect(discoverModules({ scanRoot: FIX_MALFORMED, prefix: "reserved-mount" })).rejects.toThrow(/MODULE_RESERVED_MOUNTPATH/);
+	it("throws MODULE_RESERVED_MOUNT when mountPath uses a reserved root", async () => {
+		await expect(discoverModules({ scanRoot: FIX_MALFORMED, prefix: "reserved-mount" })).rejects.toThrow(/MODULE_RESERVED_MOUNT/);
 	});
 
 	it("throws MODULE_MANIFEST_UNKNOWN_FIELD on an unrecognized top-level field", async () => {

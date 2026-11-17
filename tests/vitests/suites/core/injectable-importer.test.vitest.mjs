@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:46-08:00 (1794874606)
+ *	@Last modified time: 2026-11-16T18:29:46-08:00 (1794882586)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -123,7 +123,7 @@ describe("Core > injectable leaf importer (#235)", () => {
 	});
 
 	it("rejects a non-function importer with a named config error", async () => {
-		await expect(slothlet({ mode: "eager", base: BASE, import: "not-a-function" })).rejects.toThrow(/INVALID_CONFIG_IMPORT/);
+		await expect(slothlet({ mode: "eager", base: BASE, import: "not-a-function" })).rejects.toThrow(/INVALID_CONFIG_IMPORTER_INVALID/);
 	});
 });
 

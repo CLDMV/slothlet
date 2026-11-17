@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:09-08:00 (1794874569)
+ *	@Last modified time: 2026-11-16T18:28:45-08:00 (1794882525)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -810,7 +810,7 @@ export class EventManager extends ComponentBase {
 	 */
 	#warnListener(event, error) {
 		if (this.____config?.silent) return;
-		new this.SlothletWarning("WARNING_EVENT_HANDLER_ERROR", { event }, error);
+		new this.SlothletWarning("WARNING_EVENT_HANDLER_ERROR", { event }, { cause: error });
 	}
 
 	/**

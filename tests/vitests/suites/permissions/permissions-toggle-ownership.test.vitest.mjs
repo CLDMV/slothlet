@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-31T20:52:53-07:00 (1793505173)
+ *	@Last modified time: 2026-11-16T18:30:47-08:00 (1794882647)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -305,7 +305,7 @@ describe.each(CONFIGS)("ownership across a permission toggle (#625) — $mode / 
 			};
 			const report = await withSuppressedSlothletErrorOutput(() => api.guest.x.runWithSelf(PROBE));
 			// The built-in write rules refuse a module first; disabled, the reserved name still does.
-			const code = framework === "done" ? "INVALID_CONFIG_API_PATH_INVALID" : "PERMISSION_DENIED";
+			const code = framework === "done" ? "API_PATH_INVALID" : "PERMISSION_DENIED";
 			expect(report).toEqual(Object.fromEntries(Object.keys(report).map((key) => [key, code])));
 			expect(typeof api.shutdown).toBe("function");
 			expect(typeof api.destroy).toBe("function");
@@ -342,7 +342,7 @@ describe.each(CONFIGS)("ownership across a permission toggle (#625) — $mode / 
 			expect(report).toEqual(Object.fromEntries(Object.keys(report).map((key) => [key, "PERMISSION_DENIED"])));
 			expect(viewed).toBe(true);
 			// Kept from the scope and called later, outside any call, it still runs as the module: no host rule goes.
-			expect(withSuppressedSlothletErrorOutputSync(() => outcome(() => removeRule(hostRule)))).toBe("INVALID_PERMISSION_RULE");
+			expect(withSuppressedSlothletErrorOutputSync(() => outcome(() => removeRule(hostRule)))).toBe("PERMISSION_RULE_INVALID");
 			expect(api.slothlet.permissions.removeRule(hostRule)).toBe(true);
 		});
 

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:10-08:00 (1794874570)
+ *	@Last modified time: 2026-11-16T18:28:46-08:00 (1794882526)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -711,11 +711,11 @@ export class OwnershipManager extends ComponentBase {
 	}) {
 		// Validate inputs
 		if (!moduleID || typeof moduleID !== "string") {
-			throw new this.SlothletError("OWNERSHIP_INVALID_MODULE_ID", { moduleID }, null, { validationError: true });
+			throw new this.SlothletError("OWNERSHIP_MODULE_ID_INVALID", { module: moduleID });
 		}
 		// Allow empty string for root-level registrations
 		if (apiPath !== "" && (!apiPath || typeof apiPath !== "string")) {
-			throw new this.SlothletError("OWNERSHIP_INVALID_API_PATH", { apiPath }, null, { validationError: true });
+			throw new this.SlothletError("OWNERSHIP_API_PATH_INVALID", { path: apiPath });
 		}
 
 		// Guard: reject registration for modules that have been explicitly unregistered.
@@ -738,19 +738,18 @@ export class OwnershipManager extends ComponentBase {
 				// Skip registration but emit warning (unless silent)
 				if (!config?.silent) {
 					new this.SlothletWarning("WARNING_OWNERSHIP_CONFLICT", {
-						apiPath,
-						existingModuleId: currentOwner.moduleID,
-						newModuleId: moduleID
+						path: apiPath,
+						owner: currentOwner.moduleID,
+						incoming: moduleID
 					});
 				}
 				return null;
 			} else {
 				// error mode - throw
 				throw new this.SlothletError("OWNERSHIP_CONFLICT", {
-					apiPath,
-					existingModuleId: currentOwner.moduleID,
-					newModuleId: moduleID,
-					validationError: true
+					path: apiPath,
+					owner: currentOwner.moduleID,
+					incoming: moduleID
 				});
 			}
 		}

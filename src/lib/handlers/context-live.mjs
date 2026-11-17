@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:09-08:00 (1794874569)
+ *	@Last modified time: 2026-11-16T18:28:45-08:00 (1794882525)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -1828,7 +1828,7 @@ export class LiveContextManager {
 	 */
 	initialize(instanceID, config = {}, clock = DEFAULT_CLOCK) {
 		if (MapMethods.has(this.instances, instanceID)) {
-			throw new SlothletError("CONTEXT_ALREADY_EXISTS", { instanceID }, null, { validationError: true });
+			throw new SlothletError("CONTEXT_ALREADY_EXISTS", { instance: instanceID });
 		}
 
 		const store = {
@@ -1914,8 +1914,8 @@ export class LiveContextManager {
 		const store = MapMethods.get(this.instances, targetInstanceID);
 		if (!store) {
 			throw new SlothletError("CONTEXT_NOT_FOUND", {
-				instanceID: targetInstanceID,
-				availableInstances: mapKeysToArray(this.instances)
+				instance: targetInstanceID,
+				instances: mapKeysToArray(this.instances)
 			});
 		}
 
@@ -2133,9 +2133,9 @@ export class LiveContextManager {
 			throw new SlothletError(
 				"CONTEXT_EXECUTION_FAILED",
 				{
-					instanceID
+					instance: instanceID
 				},
-				error
+				{ cause: error }
 			);
 		}
 	}
@@ -2253,7 +2253,7 @@ export class LiveContextManager {
 		const targetID = this.#flowBelongsToInstance(currentID, instanceID) ? currentID : instanceID;
 		const store = MapMethods.get(this.instances, targetID);
 		if (!store) {
-			throw new SlothletError("CONTEXT_NOT_FOUND", { instanceID: targetID, availableInstances: mapKeysToArray(this.instances) });
+			throw new SlothletError("CONTEXT_NOT_FOUND", { instance: targetID, instances: mapKeysToArray(this.instances) });
 		}
 		return this.runInFlow(
 			{
@@ -2278,20 +2278,15 @@ export class LiveContextManager {
 	getContext() {
 		const activeID = this.currentInstanceID;
 		if (!activeID) {
-			throw new SlothletError("NO_ACTIVE_CONTEXT_LIVE", {}, null, { validationError: true });
+			throw new SlothletError("CONTEXT_NOT_ACTIVE_LIVE", {});
 		}
 
 		const store = MapMethods.get(this.instances, activeID);
 		if (!store) {
-			throw new SlothletError(
-				"CONTEXT_NOT_FOUND",
-				{
-					instanceID: activeID,
-					availableInstances: ArrayMethods.join(mapKeysToArray(this.instances), ", ") || "none"
-				},
-				null,
-				{ validationError: true }
-			);
+			throw new SlothletError("CONTEXT_NOT_FOUND", {
+				instance: activeID,
+				instances: ArrayMethods.join(mapKeysToArray(this.instances), ", ") || "none"
+			});
 		}
 
 		return store;
@@ -2410,12 +2405,10 @@ export class LiveContextManager {
 	cleanup(instanceID) {
 		const store = MapMethods.get(this.instances, instanceID);
 		if (!store) {
-			throw new SlothletError(
-				"CONTEXT_NOT_FOUND",
-				{ instanceID, availableInstances: ArrayMethods.join(mapKeysToArray(this.instances), ", ") || "none" },
-				null,
-				{ validationError: true }
-			);
+			throw new SlothletError("CONTEXT_NOT_FOUND", {
+				instance: instanceID,
+				instances: ArrayMethods.join(mapKeysToArray(this.instances), ", ") || "none"
+			});
 		}
 
 		// Clear the store data

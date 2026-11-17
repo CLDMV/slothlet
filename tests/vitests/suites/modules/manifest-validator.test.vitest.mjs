@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:17:02-08:00 (1794874622)
+ *	@Last modified time: 2026-11-16T18:30:12-08:00 (1794882612)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -150,9 +150,9 @@ describe("validateModuleManifest — top-level shape", () => {
 			validateModuleManifest({ ...makeMinimalManifest(), bogus: true }, makeContext());
 		} catch (err) {
 			expect(err.code).toBe("MODULE_MANIFEST_UNKNOWN_FIELD");
-			expect(err.context.field).toBe("bogus");
+			expect(err.details.field).toBe("bogus");
 			// manifestPath must stay in context so the error names which manifest file had the bad key.
-			expect(err.context.manifestPath).toBe(path.join(TEST_PACKAGE_ROOT, "slothlet.module.json"));
+			expect(err.details.manifest).toBe(path.join(TEST_PACKAGE_ROOT, "slothlet.module.json"));
 		}
 	});
 });
@@ -165,15 +165,15 @@ describe("validateModuleManifest — schemaVersion", () => {
 		expect(() => validateModuleManifest(rest, makeContext())).toThrowError(/MODULE_MANIFEST_INVALID/);
 	});
 
-	it("throws MODULE_VERSION_UNSUPPORTED when schemaVersion is 2", () => {
+	it("throws MODULE_MANIFEST_FORMAT_UNSUPPORTED when schemaVersion is 2", () => {
 		expect(() => validateModuleManifest(makeMinimalManifest({ schemaVersion: 2 }), makeContext())).toThrowError(
-			/MODULE_VERSION_UNSUPPORTED/
+			/MODULE_MANIFEST_FORMAT_UNSUPPORTED/
 		);
 	});
 
-	it("throws MODULE_VERSION_UNSUPPORTED when schemaVersion is a string '1'", () => {
+	it("throws MODULE_MANIFEST_FORMAT_UNSUPPORTED when schemaVersion is a string '1'", () => {
 		expect(() => validateModuleManifest(makeMinimalManifest({ schemaVersion: "1" }), makeContext())).toThrowError(
-			/MODULE_VERSION_UNSUPPORTED/
+			/MODULE_MANIFEST_FORMAT_UNSUPPORTED/
 		);
 	});
 });
@@ -210,18 +210,18 @@ describe("validateModuleManifest — mountPath", () => {
 		expect(() => validateModuleManifest(makeMinimalManifest({ mountPath: 42 }), makeContext())).toThrowError(/MODULE_MANIFEST_INVALID/);
 	});
 
-	it.each(["slothlet", "shutdown", "destroy"])("throws MODULE_RESERVED_MOUNTPATH when mountPath root is '%s'", (reserved) => {
+	it.each(["slothlet", "shutdown", "destroy"])("throws MODULE_RESERVED_MOUNT when mountPath root is '%s'", (reserved) => {
 		expect(() => validateModuleManifest(makeMinimalManifest({ mountPath: [reserved, "x"] }), makeContext())).toThrowError(
-			/MODULE_RESERVED_MOUNTPATH/
+			/MODULE_RESERVED_MOUNT/
 		);
 	});
 
-	it("MODULE_RESERVED_MOUNTPATH error names the reserved root in context", () => {
+	it("MODULE_RESERVED_MOUNT error names the reserved root in context", () => {
 		try {
 			validateModuleManifest(makeMinimalManifest({ mountPath: "slothlet.x" }), makeContext());
 		} catch (err) {
-			expect(err.code).toBe("MODULE_RESERVED_MOUNTPATH");
-			expect(err.context.mountPathRoot).toBe("slothlet");
+			expect(err.code).toBe("MODULE_RESERVED_MOUNT");
+			expect(err.details.mount[0]).toBe("slothlet");
 		}
 	});
 });
@@ -291,8 +291,8 @@ describe("validateModuleManifest — name / version mismatch", () => {
 			validateModuleManifest(makeMinimalManifest({ name: "@org/forked" }), makeContext());
 		} catch (err) {
 			expect(err.code).toBe("MODULE_MANIFEST_NAME_MISMATCH");
-			expect(err.context.packageName).toBe("@org/sample-driver");
-			expect(err.context.manifestName).toBe("@org/forked");
+			expect(err.details.package).toBe("@org/sample-driver");
+			expect(err.details.received).toBe("@org/forked");
 		}
 	});
 });

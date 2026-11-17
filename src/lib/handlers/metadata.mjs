@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:10-08:00 (1794874570)
+ *	@Last modified time: 2026-11-16T18:28:46-08:00 (1794882526)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -145,8 +145,7 @@ export class Metadata extends ComponentBase {
 				throw new this.SlothletError("INVALID_ARGUMENT", {
 					argument: metadataKey ? `${argumentName}.${metadataKey}` : argumentName,
 					expected: "acyclic object",
-					received: "circular reference",
-					validationError: true
+					received: "circular reference"
 				});
 			}
 
@@ -171,7 +170,7 @@ export class Metadata extends ComponentBase {
 	 *
 	 * @param {string} key - Metadata key segment.
 	 * @returns {void}
-	 * @throws {SlothletError} INVALID_METADATA_KEY for reserved key segments.
+	 * @throws {SlothletError} METADATA_KEY_INVALID for reserved key segments.
 	 * @private
 	 */
 	#assertSafeMetadataKeySegment(key) {
@@ -180,7 +179,7 @@ export class Metadata extends ComponentBase {
 		for (let ofIndex = 0, ofList = splitText(key, "."); ofIndex < ofList.length; ofIndex++) {
 			const segment = ofList[ofIndex];
 			if (SetMethods.has(blocked, segment)) {
-				throw new this.SlothletError("INVALID_METADATA_KEY", {
+				throw new this.SlothletError("METADATA_KEY_INVALID", {
 					key,
 					type: "string",
 					expected: "safe dot-notation key without reserved segments"
@@ -195,7 +194,7 @@ export class Metadata extends ComponentBase {
 	 * @param {object} value - Plain-object metadata payload.
 	 * @param {string|null} [metadataKey=null] - Optional key prefix for error context.
 	 * @returns {void}
-	 * @throws {SlothletError} INVALID_METADATA_KEY for reserved key segments.
+	 * @throws {SlothletError} METADATA_KEY_INVALID for reserved key segments.
 	 * @private
 	 */
 	#assertNoReservedMetadataKeys(value, metadataKey = null) {
@@ -210,7 +209,7 @@ export class Metadata extends ComponentBase {
 				if (SetMethods.has(blocked, key)) {
 					const fullPath = path ? `${path}.${key}` : key;
 					const keyPath = metadataKey ? `${metadataKey}.${fullPath}` : fullPath;
-					throw new this.SlothletError("INVALID_METADATA_KEY", {
+					throw new this.SlothletError("METADATA_KEY_INVALID", {
 						key: keyPath,
 						type: "string",
 						expected: "safe dot-notation key without reserved segments"
@@ -271,7 +270,7 @@ export class Metadata extends ComponentBase {
 		// inside lifecycle-token.mjs — it is never exported as a constant, so no static
 		// file import can yield a usable value.
 		if (!verifyToken(this.slothlet, token)) {
-			throw new this.SlothletError("METADATA_LIFECYCLE_BYPASS", {}, null, { validationError: true });
+			throw new this.SlothletError("METADATA_LIFECYCLE_BYPASS", {});
 		}
 
 		if (!target) return;
@@ -421,7 +420,7 @@ export class Metadata extends ComponentBase {
 	 */
 	setUserMetadata(target, key, value) {
 		if (typeof target !== "function" && typeof target !== "object") {
-			throw new this.SlothletError("INVALID_METADATA_TARGET", {
+			throw new this.SlothletError("METADATA_TARGET_INVALID", {
 				target: typeof target,
 				expected: "function or object"
 			});
@@ -440,7 +439,7 @@ export class Metadata extends ComponentBase {
 		const moduleID = systemData.moduleID;
 
 		if (!moduleID) {
-			throw new this.SlothletError("METADATA_NO_MODULE_ID", {}, null, { validationError: true });
+			throw new this.SlothletError("METADATA_NO_MODULE", {});
 		}
 
 		// Get or create user metadata entry for this moduleID
@@ -479,7 +478,7 @@ export class Metadata extends ComponentBase {
 	 */
 	removeUserMetadata(target, key) {
 		if (typeof target !== "function" && typeof target !== "object") {
-			throw new this.SlothletError("INVALID_METADATA_TARGET", {
+			throw new this.SlothletError("METADATA_TARGET_INVALID", {
 				target: typeof target,
 				expected: "function or object"
 			});
@@ -509,7 +508,7 @@ export class Metadata extends ComponentBase {
 				for (let ofIndex = 0, ofList = key; ofIndex < ofList.length; ofIndex++) {
 					const k = ofList[ofIndex];
 					if (typeof k !== "string") {
-						throw new this.SlothletError("INVALID_METADATA_KEY", {
+						throw new this.SlothletError("METADATA_KEY_INVALID", {
 							key: k,
 							type: typeof k,
 							expected: "string"
@@ -523,7 +522,7 @@ export class Metadata extends ComponentBase {
 						metadataKey = ofEntry[0],
 						nestedKeys = ofEntry[1];
 					if (!Arrays.isArray(nestedKeys)) {
-						throw new this.SlothletError("INVALID_METADATA_KEY", {
+						throw new this.SlothletError("METADATA_KEY_INVALID", {
 							key: metadataKey,
 							type: typeof nestedKeys,
 							expected: "array"
@@ -534,7 +533,7 @@ export class Metadata extends ComponentBase {
 						for (let ofIndex = 0, ofList = nestedKeys; ofIndex < ofList.length; ofIndex++) {
 							const nestedKey = ofList[ofIndex];
 							if (typeof nestedKey !== "string") {
-								throw new this.SlothletError("INVALID_METADATA_KEY", {
+								throw new this.SlothletError("METADATA_KEY_INVALID", {
 									key: nestedKey,
 									type: typeof nestedKey,
 									expected: "string"
@@ -547,7 +546,7 @@ export class Metadata extends ComponentBase {
 			} else if (typeof key === "string") {
 				delete storeEntry.metadata[key];
 			} else {
-				throw new this.SlothletError("INVALID_METADATA_KEY", {
+				throw new this.SlothletError("METADATA_KEY_INVALID", {
 					key: key,
 					type: typeof key,
 					expected: "string, string[], or object"
@@ -583,16 +582,11 @@ export class Metadata extends ComponentBase {
 	 */
 	registerUserMetadata(identifier, metadata) {
 		if (!identifier || typeof identifier !== "string") {
-			throw new this.SlothletError(
-				"INVALID_ARGUMENT",
-				{
-					argument: "identifier",
-					expected: "non-empty string",
-					received: typeof identifier
-				},
-				null,
-				{ validationError: true }
-			);
+			throw new this.SlothletError("INVALID_ARGUMENT", {
+				argument: "identifier",
+				expected: "non-empty string",
+				received: typeof identifier
+			});
 		}
 
 		let entry = MapMethods.get(this.#userMetadataStore, identifier);
@@ -642,23 +636,17 @@ export class Metadata extends ComponentBase {
 	 */
 	setPathMetadata(apiPath, keyOrObj, value) {
 		if (typeof apiPath !== "string" || !apiPath) {
-			throw new this.SlothletError(
-				"INVALID_ARGUMENT",
-				{ argument: "apiPath", expected: "non-empty string", received: typeof apiPath },
-				null,
-				{ validationError: true }
-			);
+			throw new this.SlothletError("INVALID_ARGUMENT", { argument: "apiPath", expected: "non-empty string", received: typeof apiPath });
 		}
 
 		const metadataObj = typeof keyOrObj === "string" ? { [keyOrObj]: value } : keyOrObj;
 
 		if (!metadataObj || typeof metadataObj !== "object" || Arrays.isArray(metadataObj)) {
-			throw new this.SlothletError(
-				"INVALID_ARGUMENT",
-				{ argument: "keyOrObj", expected: "string key or plain object", received: typeof keyOrObj },
-				null,
-				{ validationError: true }
-			);
+			throw new this.SlothletError("INVALID_ARGUMENT", {
+				argument: "keyOrObj",
+				expected: "string key or plain object",
+				received: typeof keyOrObj
+			});
 		}
 
 		this.registerUserMetadata(apiPath, metadataObj);
@@ -719,7 +707,7 @@ export class Metadata extends ComponentBase {
 			for (let ofIndex = 0, ofList = key; ofIndex < ofList.length; ofIndex++) {
 				const k = ofList[ofIndex];
 				if (typeof k !== "string") {
-					throw new this.SlothletError("INVALID_METADATA_KEY", {
+					throw new this.SlothletError("METADATA_KEY_INVALID", {
 						key: k,
 						type: typeof k,
 						expected: "string"
@@ -730,7 +718,7 @@ export class Metadata extends ComponentBase {
 		} else if (typeof key === "string") {
 			delete entry.metadata[key];
 		} else {
-			throw new this.SlothletError("INVALID_METADATA_KEY", {
+			throw new this.SlothletError("METADATA_KEY_INVALID", {
 				key,
 				type: typeof key,
 				expected: "string or string[]"
@@ -870,7 +858,7 @@ export class Metadata extends ComponentBase {
 	 *
 	 * Reads `currentWrapper` from the active context-manager store — the same
 	 * fast synchronous path used by the unified wrapper's `apply` trap.
-	 * Throws `RUNTIME_NO_ACTIVE_CONTEXT` when called outside of a slothlet
+	 * Throws `CONTEXT_NOT_ACTIVE` when called outside of a slothlet
 	 * execution context.
 	 *
 	 * Called by the `api.slothlet.metadata.self()` closure injected in
@@ -889,7 +877,7 @@ export class Metadata extends ComponentBase {
 		// `await` while another is suspended would be handed the *other* module's metadata.
 		const currentWrapper = this.slothlet.contextManager?.getCallerIdentity?.(instanceID)?.currentWrapper;
 		if (!ctx || !currentWrapper) {
-			throw new this.SlothletError("RUNTIME_NO_ACTIVE_CONTEXT", {}, null, { validationError: true });
+			throw new this.SlothletError("CONTEXT_NOT_ACTIVE", {});
 		}
 		return this.getMetadata(currentWrapper);
 	}

@@ -189,7 +189,7 @@ A condition is stored by value with its rule: editing the object after the rule 
 
 ## Validation
 
-`addRule()` validates the `condition` field at registration time. Invalid conditions throw `INVALID_PERMISSION_RULE` immediately — the rule is never stored.
+`addRule()` validates the `condition` field at registration time. Invalid conditions throw `PERMISSION_RULE_INVALID` immediately — the rule is never stored.
 
 **Accepted values for `condition`:**
 

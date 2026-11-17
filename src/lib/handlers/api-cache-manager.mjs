@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:09-08:00 (1794874569)
+ *	@Last modified time: 2026-11-16T18:28:45-08:00 (1794882525)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -132,8 +132,7 @@ export class ApiCacheManager extends ComponentBase {
 			throw new this.SlothletError("INVALID_ARGUMENT", {
 				argument: "moduleID",
 				expected: "non-empty string",
-				received: typeof moduleID,
-				validationError: true
+				received: typeof moduleID
 			});
 		}
 
@@ -141,17 +140,15 @@ export class ApiCacheManager extends ComponentBase {
 			throw new this.SlothletError("INVALID_ARGUMENT", {
 				argument: "entry.api",
 				expected: "API tree object",
-				received: typeof entry?.api,
-				validationError: true
+				received: typeof entry?.api
 			});
 		}
 
 		// Ensure moduleID matches entry
 		if (entry.moduleID && entry.moduleID !== moduleID) {
-			throw new this.SlothletError("CACHE_MODULEID_MISMATCH", {
-				cacheKey: moduleID,
-				entryModuleID: entry.moduleID,
-				validationError: true
+			throw new this.SlothletError("CACHE_MODULE_ID_MISMATCH", {
+				expected: moduleID,
+				received: entry.moduleID
 			});
 		}
 
@@ -354,9 +351,8 @@ export class ApiCacheManager extends ComponentBase {
 
 		if (!entry) {
 			throw new this.SlothletError("CACHE_NOT_FOUND", {
-				moduleID,
-				operation: "rebuild",
-				validationError: true
+				module: moduleID,
+				operation: ["slothlet", "api", "reload"]
 			});
 		}
 

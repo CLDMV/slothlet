@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T00:00:00-08:00 (1794816000)
+ *	@Last modified time: 2026-11-16T18:30:24-08:00 (1794882624)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -70,7 +70,7 @@ const CAPABILITIES = {
 // opened (see permissions-capability-filenames).
 const REFUSED_ONLY = { code: ["binding"], loader: ["register"] };
 
-const REFUSED = { ok: false, code: "CAPABILITY_REFUSED" };
+const REFUSED = { ok: false, code: "PERMISSION_CAPABILITY_REFUSED" };
 const OPEN = { caller: "**", target: "**", effect: "allow" };
 
 /**
@@ -272,7 +272,7 @@ describe.each(getMatrixConfigs())("Permissions > built-in capabilities > $name",
 			const outcome = await withSuppressedSlothletErrorOutput(() =>
 				loading.then(
 					(value) => ({ ok: true, value }),
-					(error) => ({ ok: false, refused: String(error?.message).includes("CAPABILITY_REFUSED") })
+					(error) => ({ ok: false, refused: String(error?.message).includes("PERMISSION_CAPABILITY_REFUSED") })
 				)
 			);
 			expect(outcome).toEqual({ ok: false, refused: true });
@@ -290,7 +290,7 @@ describe.each(getMatrixConfigs())("Permissions > built-in capabilities > $name",
 		it("an unknown capability is not a rule", async () => {
 			await build();
 			expect(() => api.slothlet.permissions.addRule({ caller: "coder.**", target: "capability:nothing", effect: "allow" })).toThrow(
-				expect.objectContaining({ code: "INVALID_PERMISSION_RULE" })
+				expect.objectContaining({ code: "PERMISSION_RULE_INVALID" })
 			);
 		});
 	});
@@ -322,7 +322,7 @@ describe("Permissions > built-in capabilities > a static data: import and a help
 					await api.slothlet.api.add("staticdata", path.join(ROOT, "staticdata"), { moduleID: "staticdata" });
 					outcome = await api.staticdata.inline.value();
 				} catch (error) {
-					outcome = String(error?.message).includes("CAPABILITY_REFUSED") ? "CAPABILITY_REFUSED" : String(error?.code);
+					outcome = String(error?.message).includes("PERMISSION_CAPABILITY_REFUSED") ? "PERMISSION_CAPABILITY_REFUSED" : String(error?.code);
 				}
 				out[mode + "/" + runtime + "/" + attribution + "/" + name] = outcome;
 				await api.shutdown();
@@ -358,12 +358,20 @@ describe("Permissions > built-in capabilities > a static data: import and a help
 			for (const attribution of ["precise", "fast"]) {
 				it(`${mode}/${runtime}/${attribution}: refused by default, opened by a rule on the importing file's module path, not by another module's`, () => {
 					const at = `${mode}/${runtime}/${attribution}`;
-					expect([out[`${at}/none`], out[`${at}/own`], out[`${at}/sibling`]]).toEqual(["CAPABILITY_REFUSED", 7, "CAPABILITY_REFUSED"]);
+					expect([out[`${at}/none`], out[`${at}/own`], out[`${at}/sibling`]]).toEqual([
+						"PERMISSION_CAPABILITY_REFUSED",
+						7,
+						"PERMISSION_CAPABILITY_REFUSED"
+					]);
 				});
 
 				it(`${mode}/${runtime}/${attribution}: a helper's top-level compile runs as its importer's module path`, () => {
 					const at = `${mode}/${runtime}/${attribution}/helper`;
-					expect([out[`${at}/none`], out[`${at}/own`], out[`${at}/sibling`]]).toEqual(["CAPABILITY_REFUSED", 7, "CAPABILITY_REFUSED"]);
+					expect([out[`${at}/none`], out[`${at}/own`], out[`${at}/sibling`]]).toEqual([
+						"PERMISSION_CAPABILITY_REFUSED",
+						7,
+						"PERMISSION_CAPABILITY_REFUSED"
+					]);
 				});
 			}
 });

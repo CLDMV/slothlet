@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-13T07:23:44-08:00 (1794583424)
+ *	@Last modified time: 2026-11-16T18:30:38-08:00 (1794882638)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -77,8 +77,8 @@ describe.each(CONFIGS)(
 			it("refuses a module an event rule beyond its own events", async () => {
 				await load(permissionMode);
 				expect(api.slothlet.permissions.control.mode).toBe("off");
-				expect(api.guest.x.addEventRuleFor({ caller: "**", event: "**", effect: "deny" })).toBe("INVALID_PERMISSION_RULE");
-				expect(api.guest.x.addEventRuleFor({ caller: "**", event: "victim.**", effect: "deny" })).toBe("INVALID_PERMISSION_RULE");
+				expect(api.guest.x.addEventRuleFor({ caller: "**", event: "**", effect: "deny" })).toBe("PERMISSION_RULE_INVALID");
+				expect(api.guest.x.addEventRuleFor({ caller: "**", event: "victim.**", effect: "deny" })).toBe("PERMISSION_RULE_INVALID");
 				// Nothing was registered: switched on, the victim's own event resolves as with no rule at all.
 				api.slothlet.permissions.control.enable();
 				expect(api.slothlet.event.resolveLevel("victim.v", "victim.ping")).toBe("notify");
@@ -88,7 +88,7 @@ describe.each(CONFIGS)(
 				await load(permissionMode);
 				const hostId = api.slothlet.event.rules.add({ caller: "victim.**", event: "guest.*", effect: "deny" });
 				expect(hostId).toMatch(/^evt-/);
-				expect(api.guest.x.removeEventRuleFor(hostId)).toBe("INVALID_PERMISSION_RULE");
+				expect(api.guest.x.removeEventRuleFor(hostId)).toBe("PERMISSION_RULE_INVALID");
 				api.slothlet.permissions.control.enable();
 				expect(api.slothlet.event.resolveLevel("victim.v", "guest.ping")).toBe("deny");
 			});
@@ -102,7 +102,7 @@ describe.each(CONFIGS)(
 				expect(own).toMatch(/^evt-/);
 				expect(api.slothlet.event.rules.add({ caller: "victim.**", event: "guest.contested.**", effect: "deny" })).toMatch(/^evt-/);
 				expect(api.guest.x.addEventRuleFor({ caller: "victim.**", event: "guest.contested.**", effect: "allow" })).toMatch(/^evt-/);
-				expect(api.guest.x.addEventRuleFor({ caller: "**", event: "victim.**", effect: "deny" })).toBe("INVALID_PERMISSION_RULE");
+				expect(api.guest.x.addEventRuleFor({ caller: "**", event: "victim.**", effect: "deny" })).toBe("PERMISSION_RULE_INVALID");
 				expect(api.slothlet.event.resolveLevel("victim.v", "guest.own.a")).toBe("allow");
 				expect(api.slothlet.event.resolveLevel("victim.v", "guest.contested.a")).toBe("allow");
 
@@ -142,7 +142,7 @@ describe.each(CONFIGS)(
 				expect(own).toMatch(/^evt-/);
 				expect(api.slothlet.event.rules.add({ caller: "victim.**", event: "guest.contested.**", effect: "deny" })).toMatch(/^evt-/);
 				expect(api.guest.x.addEventRuleFor({ caller: "victim.**", event: "guest.contested.**", effect: "allow" })).toMatch(/^evt-/);
-				expect(api.guest.x.addEventRuleFor({ caller: "**", event: "victim.**", effect: "deny" })).toBe("INVALID_PERMISSION_RULE");
+				expect(api.guest.x.addEventRuleFor({ caller: "**", event: "victim.**", effect: "deny" })).toBe("PERMISSION_RULE_INVALID");
 				expect(api.slothlet.event.resolveLevel("victim.v", "guest.own.a")).toBe("allow");
 
 				api.slothlet.permissions.control.enable();

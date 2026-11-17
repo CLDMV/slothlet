@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:21-07:00 (1791090921)
+ *	@Last modified time: 2026-11-16T18:30:51-08:00 (1794882651)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -103,18 +103,18 @@ describe("Loader processor (real slothlet integration)", () => {
 		}
 	});
 
-	it("returns INVALID_DIRECTORY when initializing from a non-existent root", async () => {
+	it("returns FOLDER_UNREADABLE when initializing from a non-existent root", async () => {
 		await withSuppressedSlothletErrorOutput(async () => {
 			await expect(
 				slothlet({
 					base: join(fixtureRoot, "missing-root"),
 					mode: "eager"
 				})
-			).rejects.toThrow("INVALID_DIRECTORY");
+			).rejects.toThrow("FOLDER_UNREADABLE");
 		});
 	});
 
-	it("initializes from an empty directory (exercises WARN_DIRECTORY_EMPTY path)", async () => {
+	it("initializes from an empty directory (exercises WARNING_FOLDER_EMPTY path)", async () => {
 		const api = await slothlet({ base: fixtureRoot, mode: "eager" });
 		activeApis.push(api);
 
@@ -282,7 +282,7 @@ describe("Loader processor (real slothlet integration)", () => {
 						}
 					}
 				})
-			).rejects.toThrow("TS_STRICT_REQUIRES_OUTPUT");
+			).rejects.toThrow("TYPESCRIPT_TYPES_OUTPUT_MISSING");
 
 			await expect(
 				slothlet({
@@ -295,7 +295,7 @@ describe("Loader processor (real slothlet integration)", () => {
 						}
 					}
 				})
-			).rejects.toThrow("TS_STRICT_REQUIRES_INTERFACE_NAME");
+			).rejects.toThrow("TYPESCRIPT_TYPES_NAME_MISSING");
 		});
 	});
 
@@ -336,7 +336,7 @@ describe("Loader processor (real slothlet integration)", () => {
 						}
 					}
 				})
-			).rejects.toThrow("TS_TYPE_GENERATION_FAILED");
+			).rejects.toThrow("TYPESCRIPT_TYPE_GENERATION_FAILED");
 		});
 	});
 

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:15-08:00 (1794874575)
+ *	@Last modified time: 2026-11-16T18:28:53-08:00 (1794882533)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -153,7 +153,7 @@ function runtime_refuseUnknownCaller(prop) {
 	const identity = liveRuntime.getCallerIdentity?.();
 	if (!identity?.unresolved || identity.unaccounted) return;
 	const target = typeof prop === "symbol" ? String(SymbolMethods.description(prop) ?? "") : String(prop);
-	throw new SlothletError("PERMISSION_DENIED", { caller: null, target }, null, { validationError: true });
+	throw new SlothletError("PERMISSION_DENIED", { caller: null, target });
 }
 
 /**
@@ -212,7 +212,7 @@ const selfTraps = {
 		}
 		if (!ctx) {
 			runtime_refuseUnknownCaller(prop);
-			throw new SlothletError("RUNTIME_NO_ACTIVE_CONTEXT_SELF", {}, null, { validationError: true });
+			throw new SlothletError("CONTEXT_NOT_ACTIVE_SELF", {});
 		}
 		// A flow the host opened (`run()` / `scope()`) names no module. A module's code running in it (a function it
 		// handed out, run by the host there) still reads `self` as its definer; the host's own code reads it as the host.
@@ -258,14 +258,14 @@ const selfTraps = {
 	deleteProperty(_, prop) {
 		const ctx = runtime_resolveExecutingContext();
 		if (!ctx || !ctx.self) {
-			throw new SlothletError("RUNTIME_NO_ACTIVE_CONTEXT_SELF", {}, null, { validationError: true });
+			throw new SlothletError("CONTEXT_NOT_ACTIVE_SELF", {});
 		}
 		return Reflect.deleteProperty(runtime_selfChangeTarget(ctx, prop), prop);
 	},
 	defineProperty(_, prop, descriptor) {
 		const ctx = runtime_resolveExecutingContext();
 		if (!ctx || !ctx.self) {
-			throw new SlothletError("RUNTIME_NO_ACTIVE_CONTEXT_SELF", {}, null, { validationError: true });
+			throw new SlothletError("CONTEXT_NOT_ACTIVE_SELF", {});
 		}
 		const target = runtime_selfChangeTarget(ctx, prop);
 		// A member `self` reported fixed would have to be fixed on that shared object: such a definition is refused.
@@ -298,7 +298,7 @@ const selfTraps = {
 		// reshape the api tree of a running instance.
 		const ctx = runtime_resolveExecutingContext();
 		if (!ctx) {
-			throw new SlothletError("RUNTIME_NO_ACTIVE_CONTEXT_SELF", {}, null, { validationError: true });
+			throw new SlothletError("CONTEXT_NOT_ACTIVE_SELF", {});
 		}
 		// Symbol-keyed writes (`self[sym] = …`) are never apiPaths — apiPaths
 		// are dotted strings and ownership is path-based. Routing a symbol
@@ -348,7 +348,7 @@ const selfTraps = {
  * code a module handed out run while no call runs, as its definer.
  * @param {function(object): *} use - What is done with it.
  * @returns {*} What `use` returned.
- * @throws {SlothletError} RUNTIME_NO_ACTIVE_CONTEXT_SELF outside any context, with no definer to run as.
+ * @throws {SlothletError} CONTEXT_NOT_ACTIVE_SELF outside any context, with no definer to run as.
  * @private
  */
 function runtime_selfUse(use) {
@@ -360,7 +360,7 @@ function runtime_selfUse(use) {
 	}
 	if (!ctx) {
 		runtime_refuseUnknownCaller("");
-		throw new SlothletError("RUNTIME_NO_ACTIVE_CONTEXT_SELF", {}, null, { validationError: true });
+		throw new SlothletError("CONTEXT_NOT_ACTIVE_SELF", {});
 	}
 	if (resolved.identity && !resolved.identity.currentWrapper && !resolved.identity.unresolved && ctx.parentInstanceID) {
 		const read = runtime_selfReadAsDefiner(objectSelf, "", null, ctx.parentInstanceID, use);
@@ -459,7 +459,7 @@ export const context = new NativeProxy(
 		set(_, prop, value) {
 			const ctx = liveRuntime.getContext();
 			if (!ctx || !ctx.context) {
-				throw new SlothletError("RUNTIME_NO_ACTIVE_CONTEXT_CONTEXT", {}, null, { validationError: true });
+				throw new SlothletError("CONTEXT_NOT_ACTIVE_WRITE", {});
 			}
 			// Owner-locked context keys (opt-in via scope({ protect, owners })): reject a write the
 			// current caller doesn't own before mutating the context.

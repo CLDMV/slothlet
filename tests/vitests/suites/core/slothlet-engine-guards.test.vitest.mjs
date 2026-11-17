@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:03-07:00 (1791090903)
+ *	@Last modified time: 2026-11-16T18:29:47-08:00 (1794882587)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -22,10 +22,10 @@
  *   line  138  – `_setupLifecycleSubscribers` returns early when handlers.lifecycle is null
  *   lines 347-348 – `setApiContextChecker` callback body: tryGetContext() + return value
  *                   (invoked when EventEmitter.on() is called within an async API context)
- *   line  497  – `reload()` throws INVALID_CONFIG_NOT_LOADED when config.dir is falsy
+ *   line  497  – `reload()` throws INSTANCE_NOT_LOADED when config.dir is falsy
  *   line  592  – `_clearModuleCaches()` deletes CJS entries from require.cache on reload
  *   line  608  – `injectRuntimeMetadataFunctions()` returns early when api has no metadata key
- *   line  677  – `getAPI()` throws INVALID_CONFIG_NOT_LOADED when isLoaded is false
+ *   line  677  – `getAPI()` throws INSTANCE_NOT_LOADED when isLoaded is false
  *   line  711  – `getOwnership()` returns null when no ownership handler is registered
  *
  * @module tests/vitests/suites/core/slothlet-engine-guards
@@ -161,13 +161,13 @@ describe("slothlet setApiContextChecker callback (lines 347-348)", () => {
 // ---------------------------------------------------------------------------
 
 describe("slothlet.reload() — missing config.dir guard (line 497)", () => {
-	it("throws INVALID_CONFIG_NOT_LOADED when config has no dir", async () => {
+	it("throws INSTANCE_NOT_LOADED when config has no dir", async () => {
 		// Arrange: wipe config.dir to simulate a never-configured instance
 		const savedConfig = engine.config;
 		engine.config = { base: null };
 
 		// Act + Assert
-		await expect(engine.reload()).rejects.toThrow(/INVALID_CONFIG_NOT_LOADED|not.*loaded/i);
+		await expect(engine.reload()).rejects.toThrow(/INSTANCE_NOT_LOADED|not.*loaded/i);
 
 		// Restore
 		engine.config = savedConfig;
@@ -241,11 +241,11 @@ describe("slothlet.injectRuntimeMetadataFunctions — early return guard (line 6
 // ---------------------------------------------------------------------------
 
 describe("slothlet.getAPI() — not-loaded guard (line 677)", () => {
-	it("throws INVALID_CONFIG_NOT_LOADED when isLoaded is false", () => {
+	it("throws INSTANCE_NOT_LOADED when isLoaded is false", () => {
 		// Simulate an instance that was never loaded (or was fully shut down)
 		engine.isLoaded = false;
 
-		expect(() => engine.getAPI()).toThrow(/INVALID_CONFIG_NOT_LOADED|not.*loaded/i);
+		expect(() => engine.getAPI()).toThrow(/INSTANCE_NOT_LOADED|not.*loaded/i);
 
 		// Restore so afterEach shutdown works
 		engine.isLoaded = true;

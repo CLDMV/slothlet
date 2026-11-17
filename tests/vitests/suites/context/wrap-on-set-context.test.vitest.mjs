@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-31T20:52:28-07:00 (1793505148)
+ *	@Last modified time: 2026-11-16T18:29:45-08:00 (1794882585)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -22,7 +22,7 @@
  * path applies "the same wrapper construction `api.slothlet.api.add()` uses." Previously the set
  * trap stored the assigned value RAW (a bare `defineProperty`), so an assigned object's methods
  * ran outside any context-preserving wrapper and a later `self.*` access threw
- * `RUNTIME_NO_ACTIVE_CONTEXT_SELF` — while the identical object mounted via `add()` worked. This
+ * `CONTEXT_NOT_ACTIVE_SELF` — while the identical object mounted via `add()` worked. This
  * suite pins that both mounting mechanisms give the object's methods working cross-module `self`.
  */
 
@@ -109,7 +109,7 @@ describe.each(getMatrixConfigs({ runtime: "async" }))("Context > writable self.X
 		expect(await api.registry.b.ping()).toBe("pong");
 
 		// #329: the wrap-on-set path must now behave identically (previously threw
-		// RUNTIME_NO_ACTIVE_CONTEXT_SELF because the assigned object was stored unwrapped).
+		// CONTEXT_NOT_ACTIVE_SELF because the assigned object was stored unwrapped).
 		await api.registry.viaAssignment("a");
 		expect(await api.registry.a.ping()).toBe("pong");
 	});

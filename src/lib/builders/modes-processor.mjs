@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:09-08:00 (1794874569)
+ *	@Last modified time: 2026-11-16T18:28:44-08:00 (1794882524)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -926,7 +926,7 @@ export class ModesProcessor extends ComponentBase {
 				// SlothletError("MODULE_IMPORT_FAILED"), so the only errors arriving here are
 				// already SlothletErrors (caught and re-thrown above). Guard kept for safety.
 				/* v8 ignore next */
-				throw new this.SlothletError("MODULE_LOAD_FAILED", { modulePath: file.path, moduleID: moduleID || file.moduleID }, error);
+				throw new this.SlothletError("MODULE_LOAD_FAILED", { file: file.path, module: moduleID || file.moduleID }, { cause: error });
 			}
 		}
 		// Rule 11 (F06 / C24): an `addapi` file is flattened into the level it sits in, with no `addapi`
@@ -2784,11 +2784,7 @@ export class ModesProcessor extends ComponentBase {
 				// impl:warning event below is additive and fires regardless of `silent` (#148).
 				if (!this.____config?.silent) {
 					new this.SlothletWarning("WARNING_MULTIPLE_ROOT_CONTRIBUTORS", {
-						rootContributors: ArrayMethods.join(
-							mapList(rootContributors, (rc) => rc.moduleName),
-							", "
-						),
-						firstContributor: rootContributors[0].moduleName
+						contributors: mapList(rootContributors, (rc) => rc.moduleName)
 					});
 				}
 				// Also surface as an init-time impl:warning so construction-time `lifecycle` subscribers
@@ -2797,11 +2793,7 @@ export class ModesProcessor extends ComponentBase {
 					apiPath: "",
 					code: "WARNING_MULTIPLE_ROOT_CONTRIBUTORS",
 					context: {
-						rootContributors: ArrayMethods.join(
-							mapList(rootContributors, (rc) => rc.moduleName),
-							", "
-						),
-						firstContributor: rootContributors[0].moduleName
+						contributors: mapList(rootContributors, (rc) => rc.moduleName)
 					},
 					source: "buildAPI",
 					moduleID

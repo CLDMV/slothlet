@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:50-08:00 (1794874610)
+ *	@Last modified time: 2026-11-16T18:29:52-08:00 (1794882592)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -95,7 +95,7 @@ describe("generateBrowserAssets (#123)", () => {
 	});
 
 	it("throws when base is provided but not a string", async () => {
-		await expect(generateBrowserAssets(API_DIR, { base: 42 })).rejects.toThrow(/slothletBase must be a string/);
+		await expect(generateBrowserAssets(API_DIR, { base: 42 })).rejects.toThrow(/options\.base must be a string/);
 	});
 });
 

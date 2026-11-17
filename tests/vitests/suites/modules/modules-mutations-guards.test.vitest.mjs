@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:12-07:00 (1791090912)
+ *	@Last modified time: 2026-11-16T18:30:13-08:00 (1794882613)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -19,7 +19,7 @@
  *
  * The `api.slothlet.api.{add, remove, reload}` mutating methods enforce
  * `config.api.mutations.{add, remove, reload}` and throw
- * `INVALID_CONFIG_MUTATIONS_DISABLED` when the corresponding flag is `false`.
+ * `API_MUTATION_DISABLED` when the corresponding flag is `false`.
  *
  * The newer `api.slothlet.api.modules.{addModule, addModules, addDiscovered,
  * removeModule}` methods are mounts/unmounts too — they call through to the
@@ -33,7 +33,7 @@
  * Pre-fix expected failure: addModule / addModules / addDiscovered /
  * removeModule resolve successfully (or throw an unrelated error) when the
  * corresponding mutation flag is disabled. Post-fix: each rejects with a
- * SlothletError whose code is `INVALID_CONFIG_MUTATIONS_DISABLED`.
+ * SlothletError whose code is `API_MUTATION_DISABLED`.
  *
  * Read-only methods (`discover`, `sort`, `getDiscoveryCache`,
  * `clearDiscoveryCache`, `getStaleMounts`) are NOT mutations and must NOT
@@ -84,37 +84,37 @@ async function bootWithMutations(flags) {
 describe("api.slothlet.api.modules.* — mutation guards", () => {
 	// ─── addModule / addModules / addDiscovered → gated by mutations.add ────
 
-	it("addModule(name) throws INVALID_CONFIG_MUTATIONS_DISABLED when mutations.add is false", async () => {
+	it("addModule(name) throws API_MUTATION_DISABLED when mutations.add is false", async () => {
 		const mm = await bootWithMutations({ add: false });
 		const [first] = await mm.discover({ scanRoot: FIX_FOLDER });
 		expect(first?.packageName).toBeTypeOf("string");
 
 		await withSuppressedSlothletErrorOutput(async () => {
-			await expect(mm.addModule(first)).rejects.toThrow("INVALID_CONFIG_MUTATIONS_DISABLED");
+			await expect(mm.addModule(first)).rejects.toThrow("API_MUTATION_DISABLED");
 		});
 	});
 
-	it("addModules([...]) throws INVALID_CONFIG_MUTATIONS_DISABLED when mutations.add is false", async () => {
+	it("addModules([...]) throws API_MUTATION_DISABLED when mutations.add is false", async () => {
 		const mm = await bootWithMutations({ add: false });
 		const found = await mm.discover({ scanRoot: FIX_FOLDER });
 		expect(found.length).toBeGreaterThan(0);
 
 		await withSuppressedSlothletErrorOutput(async () => {
-			await expect(mm.addModules(found)).rejects.toThrow("INVALID_CONFIG_MUTATIONS_DISABLED");
+			await expect(mm.addModules(found)).rejects.toThrow("API_MUTATION_DISABLED");
 		});
 	});
 
-	it("addDiscovered() throws INVALID_CONFIG_MUTATIONS_DISABLED when mutations.add is false (transitive via addModules)", async () => {
+	it("addDiscovered() throws API_MUTATION_DISABLED when mutations.add is false (transitive via addModules)", async () => {
 		const mm = await bootWithMutations({ add: false });
 
 		await withSuppressedSlothletErrorOutput(async () => {
-			await expect(mm.addDiscovered({ scanRoot: FIX_FOLDER })).rejects.toThrow("INVALID_CONFIG_MUTATIONS_DISABLED");
+			await expect(mm.addDiscovered({ scanRoot: FIX_FOLDER })).rejects.toThrow("API_MUTATION_DISABLED");
 		});
 	});
 
 	// ─── removeModule → gated by mutations.remove ──────────────────────────
 
-	it("removeModule(name) throws INVALID_CONFIG_MUTATIONS_DISABLED when mutations.remove is false", async () => {
+	it("removeModule(name) throws API_MUTATION_DISABLED when mutations.remove is false", async () => {
 		// Mount the module first while mutations.add is allowed so removeModule
 		// has something to operate on. Bring up a separate instance because the
 		// mutations config is locked at init.
@@ -144,7 +144,7 @@ describe("api.slothlet.api.modules.* — mutation guards", () => {
 		await mm.addModule(first);
 
 		await withSuppressedSlothletErrorOutput(async () => {
-			await expect(mm.removeModule(first.packageName)).rejects.toThrow("INVALID_CONFIG_MUTATIONS_DISABLED");
+			await expect(mm.removeModule(first.packageName)).rejects.toThrow("API_MUTATION_DISABLED");
 		});
 	});
 

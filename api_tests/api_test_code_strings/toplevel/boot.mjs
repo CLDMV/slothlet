@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T00:00:00-08:00 (1794729600)
+ *	@Last modified time: 2026-11-16T18:25:29-08:00 (1794882329)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -47,7 +47,7 @@ const outcomes = {
  * @returns {Record<string, {ok: boolean, value?: *, code?: string}>} Each route's outcome.
  * @public
  * @example
- * api.toplevel.boot.result(); // { ok: false, code: "CAPABILITY_REFUSED" }
+ * api.toplevel.boot.result(); // { ok: false, code: "PERMISSION_CAPABILITY_REFUSED" }
  */
 export function result() {
 	return outcomes;

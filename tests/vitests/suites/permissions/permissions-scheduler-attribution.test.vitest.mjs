@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:19-07:00 (1791090919)
+ *	@Last modified time: 2026-11-16T18:30:45-08:00 (1794882645)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -108,7 +108,7 @@ describe.each(getMatrixConfigs())("Permissions > scheduler attribution > $name",
 		const outcome = await armAndPoll(api.callers.dataReader.armTimerRead, api.callers.dataReader.readTimerOutcome);
 
 		expect(outcome).not.toBeNull();
-		// Denied by the rules is the correct outcome. RUNTIME_NO_ACTIVE_CONTEXT_SELF would mean the
+		// Denied by the rules is the correct outcome. CONTEXT_NOT_ACTIVE_SELF would mean the
 		// callback lost its identity entirely, which is the regression this guards.
 		expect(outcome.code).toMatch(/PERMISSION_DENIED/);
 	});

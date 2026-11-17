@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:14-08:00 (1794874574)
+ *	@Last modified time: 2026-11-16T18:28:52-08:00 (1794882532)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -70,7 +70,7 @@ export async function runTypeGeneration(configJson, send) {
 	let api = null;
 	try {
 		if (!configJson) {
-			throw new SlothletError("TS_TYPE_GENERATION_WORKER_NO_CONFIG", {}, null, { validationError: true });
+			throw new SlothletError("TYPESCRIPT_TYPE_GENERATION_WORKER_NO_CONFIG", {});
 		}
 		const config = JSON.parse(configJson);
 		api = await slothlet(config);

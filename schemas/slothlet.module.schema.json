@@ -27,7 +27,7 @@
 			"type": "string"
 		},
 		"mountPath": {
-			"description": "Where the module mounts in the api tree. Same shape `api.add()` accepts. Reserved roots (`slothlet`, `shutdown`, `destroy`) are rejected with MODULE_RESERVED_MOUNTPATH.",
+			"description": "Where the module mounts in the api tree. Same shape `api.add()` accepts. Reserved roots (`slothlet`, `shutdown`, `destroy`) are rejected with MODULE_RESERVED_MOUNT.",
 			"oneOf": [
 				{
 					"type": "string",

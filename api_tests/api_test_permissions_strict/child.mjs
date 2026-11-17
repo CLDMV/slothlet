@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T03:00:00-08:00 (1794826800)
+ *	@Last modified time: 2026-11-16T18:27:01-08:00 (1794882421)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -60,7 +60,7 @@ await record("start", async () => {
 	});
 	return "started";
 });
-out.warnings = SlothletWarning.captured.map((warning) => ({ code: warning.code, check: warning.context?.check ?? null }));
+out.warnings = SlothletWarning.captured.map((warning) => ({ code: warning.code, check: warning.details?.check ?? null }));
 if (api) {
 	await record("report", () => api.slothlet.permissions.control.report());
 	await record("mode", () => api.slothlet.permissions.control.mode);

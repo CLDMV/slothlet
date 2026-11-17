@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:58-07:00 (1791090898)
+ *	@Last modified time: 2026-11-16T18:29:31-08:00 (1794882571)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -87,14 +87,14 @@ describe.each([["eager"], ["lazy"]])("synthetic leaf via api.add (#117) — %s m
 		// A wrapper whose `exports` is not a { default?, ...named } map (null, a bare function, or an
 		// array) is malformed. Previously these fell through to treating the OUTER object as the map
 		// and silently mounted a leaf literally named "exports"; now they throw INVALID_CONFIG.
-		await expect(api.slothlet.api.add("bad1", { exports: null })).rejects.toMatchObject({ code: "INVALID_CONFIG_SYNTHETIC_EXPORTS_SHAPE" });
+		await expect(api.slothlet.api.add("bad1", { exports: null })).rejects.toMatchObject({ code: "INLINE_EXPORTS_INVALID" });
 		await expect(api.slothlet.api.add("bad2", { exports: () => "x" })).rejects.toMatchObject({
-			code: "INVALID_CONFIG_SYNTHETIC_EXPORTS_SHAPE"
+			code: "INLINE_EXPORTS_INVALID"
 		});
-		await expect(api.slothlet.api.add("bad3", { exports: [] })).rejects.toMatchObject({ code: "INVALID_CONFIG_SYNTHETIC_EXPORTS_SHAPE" });
+		await expect(api.slothlet.api.add("bad3", { exports: [] })).rejects.toMatchObject({ code: "INLINE_EXPORTS_INVALID" });
 		// A class instance (Map/Date/…) is not a plain { default?, ...named } map either (#136).
 		await expect(api.slothlet.api.add("bad4", { exports: new Map() })).rejects.toMatchObject({
-			code: "INVALID_CONFIG_SYNTHETIC_EXPORTS_SHAPE"
+			code: "INLINE_EXPORTS_INVALID"
 		});
 		// Nothing was mounted for the rejected paths (no stray "exports" leaf, no partial mount).
 		expect(api.bad1).toBeUndefined();
@@ -108,8 +108,8 @@ describe.each([["eager"], ["lazy"]])("synthetic leaf via api.add (#117) — %s m
 		// A non-array, non-null object that is NOT a plain object (Date/Map/Buffer/TypedArray/class
 		// instance) is not a valid { default?, ...named } export map; it previously flowed into the
 		// flatten pipeline and produced an empty/odd mount. Now it throws INVALID_CONFIG.
-		await expect(api.slothlet.api.add("d", new Date())).rejects.toMatchObject({ code: "INVALID_CONFIG_SYNTHETIC_INPUT" });
-		await expect(api.slothlet.api.add("m", new Map([["a", 1]]))).rejects.toMatchObject({ code: "INVALID_CONFIG_SYNTHETIC_INPUT" });
+		await expect(api.slothlet.api.add("d", new Date())).rejects.toMatchObject({ code: "INLINE_CONTENT_INVALID" });
+		await expect(api.slothlet.api.add("m", new Map([["a", 1]]))).rejects.toMatchObject({ code: "INLINE_CONTENT_INVALID" });
 		expect(api.d).toBeUndefined();
 		expect(api.m).toBeUndefined();
 	});
@@ -254,7 +254,7 @@ describe.each([["eager"], ["lazy"]])("synthetic leaf via api.add (#117) — %s m
 	it("allows a root mount that contributes no keys — warns and mounts nothing, not a hard error (#136 review)", async () => {
 		api = await makeApi();
 		// An empty export map flattens to no enumerable keys: a root no-op. Root adds are allowed, so
-		// this warns (WARN_SYNTHETIC_ROOT_EMPTY) and mounts nothing rather than throwing, following the
+		// this warns (WARNING_INLINE_ROOT_EMPTY) and mounts nothing rather than throwing, following the
 		// same warn-on-empty rule a normal directory add does (#136 review r3360502555).
 		await expect(api.slothlet.api.add("", { exports: {} })).resolves.toBeDefined();
 		await expect(api.slothlet.api.add("", {})).resolves.toBeDefined();
@@ -265,7 +265,7 @@ describe.each([["eager"], ["lazy"]])("synthetic leaf via api.add (#117) — %s m
 	it("warns (does not throw) when a root default's name collides with a named export — named export wins (#136 review)", async () => {
 		api = await makeApi();
 		// At root the default re-keys to its function name; if a named export already claims that key,
-		// this is a runtime add so it warns (WARN_SYNTHETIC_ROOT_COLLISION) and the named export wins,
+		// this is a runtime add so it warns (WARNING_INLINE_ROOT_COLLISION) and the named export wins,
 		// rather than throwing (#136 review).
 		await expect(
 			api.slothlet.api.add("", {
@@ -284,7 +284,7 @@ describe.each([["eager"], ["lazy"]])("synthetic leaf via api.add (#117) — %s m
 		api = await makeApi();
 		// A *function* default has no key at root, so its own name is the mount key. An anonymous one
 		// (incl. an arrow whose name is only the inferred "default") can't be keyed: this is a runtime
-		// add, so it warns (WARN_SYNTHETIC_ROOT_UNNAMED) and is dropped rather than throwing (#136 review).
+		// add, so it warns (WARNING_INLINE_ROOT_UNNAMED) and is dropped rather than throwing (#136 review).
 		await expect(api.slothlet.api.add("", (n) => `Hi ${n}`)).resolves.toBeDefined(); // anonymous fn → warn + drop
 		await expect(api.slothlet.api.add("", { exports: { default: () => "x" } })).resolves.toBeDefined(); // arrow name "default" → warn + drop
 		// Root is unchanged — nothing new mounted (the base leaf is still the only top-level mount).
@@ -308,7 +308,7 @@ describe.each([["eager"], ["lazy"]])("synthetic leaf via api.add (#117) — %s m
 		//   isPlainObject(value) checks proto === Object.prototype || proto === null.
 		//   Here proto is a custom object (its own proto is Object.prototype), so
 		//   isPlainObject returns false → folderPath is not plain → falls to the else
-		//   branch that throws INVALID_CONFIG_SYNTHETIC_INPUT, calling describeNonPlain(folderPath).
+		//   branch that throws INLINE_CONTENT_INVALID, calling describeNonPlain(folderPath).
 		//
 		// Why `??` fires:
 		//   proto.constructor is explicitly `undefined`, so value.constructor === undefined.
@@ -317,10 +317,10 @@ describe.each([["eager"], ["lazy"]])("synthetic leaf via api.add (#117) — %s m
 		//   (The previous test used "": "" ?? "non-plain object" === "" — ?? only coalesces null/undefined.)
 		const proto = { constructor: undefined };
 		const weird = Object.create(proto);
-		await expect(api.slothlet.api.add("x", weird)).rejects.toMatchObject({ code: "INVALID_CONFIG_SYNTHETIC_INPUT" });
+		await expect(api.slothlet.api.add("x", weird)).rejects.toMatchObject({ code: "INLINE_CONTENT_INVALID" });
 	});
 
-	it("WARN_SYNTHETIC_ROOT_UNNAMED guard takes the false-arm (warning suppressed) when silent:true", async () => {
+	it("WARNING_INLINE_ROOT_UNNAMED guard takes the false-arm (warning suppressed) when silent:true", async () => {
 		mkdirSync(DIR, { recursive: true });
 		writeFileSync(join(DIR, "base.mjs"), `export function base() { return "base"; }\n`);
 		api = await slothlet({ base: DIR, mode, silent: true, api: { mutations: { add: true, remove: true, reload: true } } });

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:57-07:00 (1791090897)
+ *	@Last modified time: 2026-11-16T18:29:27-08:00 (1794882567)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -18,7 +18,7 @@
  * from the public API but must be exercised to verify correct error handling.
  *
  * Covers:
- *   - Line 1851/1854: reloadApiComponent while isLoaded=false → INVALID_CONFIG_NOT_LOADED
+ *   - Line 1851/1854: reloadApiComponent while isLoaded=false → INSTANCE_NOT_LOADED
  *   - Line 1869:      reloadApiComponent({}) with no moduleID/apiPath → INVALID_ARGUMENT
  *   - Line 1891/1894: _reloadByModuleID when cacheManager is null → CACHE_MANAGER_NOT_AVAILABLE
  *   - Line 1899/1902: _reloadByModuleID with non-existent moduleID → CACHE_NOT_FOUND
@@ -67,28 +67,28 @@ describe("reloadApiComponent — isLoaded=false guard", () => {
 		api = null;
 	});
 
-	it("throws INVALID_CONFIG_NOT_LOADED when isLoaded is false before reload (apiPath variant)", async () => {
+	it("throws INSTANCE_NOT_LOADED when isLoaded is false before reload (apiPath variant)", async () => {
 		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", silent: true });
 		const sl = getSlInstance(api);
 		const orig = sl.isLoaded;
 		sl.isLoaded = false;
 		try {
 			await expect(sl.handlers.apiManager.reloadApiComponent({ apiPath: "math" })).rejects.toMatchObject({
-				code: "INVALID_CONFIG_NOT_LOADED"
+				code: "INSTANCE_NOT_LOADED"
 			});
 		} finally {
 			sl.isLoaded = orig;
 		}
 	});
 
-	it("throws INVALID_CONFIG_NOT_LOADED when isLoaded is false before reload (moduleID variant)", async () => {
+	it("throws INSTANCE_NOT_LOADED when isLoaded is false before reload (moduleID variant)", async () => {
 		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", silent: true });
 		const sl = getSlInstance(api);
 		const orig = sl.isLoaded;
 		sl.isLoaded = false;
 		try {
 			await expect(sl.handlers.apiManager.reloadApiComponent({ moduleID: "some-module" })).rejects.toMatchObject({
-				code: "INVALID_CONFIG_NOT_LOADED"
+				code: "INSTANCE_NOT_LOADED"
 			});
 		} finally {
 			sl.isLoaded = orig;

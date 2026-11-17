@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:57-07:00 (1791090897)
+ *	@Last modified time: 2026-11-16T18:29:29-08:00 (1794882569)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -258,7 +258,7 @@ describe("not-loaded guards via internal state mutation", () => {
 		await new Promise((r) => setTimeout(r, 30));
 	});
 
-	it("addApiComponent throws INVALID_CONFIG_NOT_LOADED when isLoaded=false (line 1082)", async () => {
+	it("addApiComponent throws INSTANCE_NOT_LOADED when isLoaded=false (line 1082)", async () => {
 		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager" });
 		const sl = getSlInstance(api);
 		const savedLoaded = sl.isLoaded;
@@ -280,7 +280,7 @@ describe("not-loaded guards via internal state mutation", () => {
 		}
 	});
 
-	it("removeApiComponent throws INVALID_CONFIG_NOT_LOADED when isLoaded=false and ownership null (line 1543)", async () => {
+	it("removeApiComponent throws INSTANCE_NOT_LOADED when isLoaded=false and ownership null (line 1543)", async () => {
 		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager" });
 		const sl = getSlInstance(api);
 		const savedLoaded = sl.isLoaded;
@@ -290,7 +290,7 @@ describe("not-loaded guards via internal state mutation", () => {
 		sl.handlers.ownership = null; // nulled so heuristic path runs; "noDots" → moduleID → line 1542-1543
 		try {
 			// With ownership=null, heuristic: "noDots" (no dot) → moduleID path
-			// Line 1542: !isLoaded → true → throw INVALID_CONFIG_NOT_LOADED (line 1543)
+			// Line 1542: !isLoaded → true → throw INSTANCE_NOT_LOADED (line 1543)
 			await expect(sl.handlers.apiManager.removeApiComponent("noDots")).rejects.toThrow();
 		} finally {
 			sl.isLoaded = savedLoaded;
