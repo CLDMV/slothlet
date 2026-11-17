@@ -32,7 +32,7 @@ import { ObjModel, detectIndentUnit } from "./lib/object-model.mjs";
 import { rewriteOptions } from "./lib/options.mjs";
 import { visitResidual } from "./lib/residual.mjs";
 import { FileResult } from "./lib/result.mjs";
-import { Editor, isStringLiteral, parseJson, parseProgram, staticName, stringValue, walk } from "./lib/source.mjs";
+import { Editor, escapeRegExp, isStringLiteral, parseJson, parseProgram, staticName, stringValue, walk } from "./lib/source.mjs";
 import { slothletTail } from "./lib/chains.mjs";
 
 export { unifiedDiff } from "./lib/diff.mjs";
@@ -350,7 +350,7 @@ export function rewriteTypegenCommand(command) {
 	const text = command.replace(/(\bslothlet\s+typegen\b)([^&|;]*)/g, (all, head, args) => {
 		let next = args;
 		for (const [from, to, id] of TYPEGEN_FLAGS) {
-			const re = new RegExp(`(^|\\s)${from.replace(/-/g, "\\-")}(?=\\s|=|$)`, "g");
+			const re = new RegExp(`(^|\\s)${escapeRegExp(from)}(?=\\s|=|$)`, "g");
 			if (re.test(next)) {
 				next = next.replace(re, `$1${to}`);
 				ids.push(id);

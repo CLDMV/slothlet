@@ -148,6 +148,15 @@ export function quoteLike(code, node, value) {
 }
 
 /**
+ * Escape text for use inside a RegExp.
+ * @param {string} text - Literal text.
+ * @returns {string} Pattern source matching it exactly.
+ */
+export function escapeRegExp(text) {
+	return text.replace(/[\\^$.*+?()[\]{}|-]/g, "\\$&");
+}
+
+/**
  * Line/column of an offset (both 1-based).
  * @param {string} code - Source text.
  * @param {number} offset - Character offset.

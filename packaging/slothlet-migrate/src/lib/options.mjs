@@ -24,6 +24,7 @@ import { ENTRIES } from "./data.mjs";
 import { followFragments, markProcessed, q, HIDDEN_REINCLUDE, addHiddenPatterns } from "./config.mjs";
 import { locate, moveKey } from "./keys.mjs";
 import { ObjModel } from "./object-model.mjs";
+import { quoteLike } from "./source.mjs";
 
 const OPTION_RE = /^(.+?)\((\w+)\)(?:\.(.+))?$/;
 
@@ -328,8 +329,7 @@ export function rewriteHookPattern(node, ctx) {
 		const trailing = value.slice(last + 1);
 		if (HOOK_TYPES.has(trailing) || !HOOK_TYPES.has(leading)) return;
 		const next = `${value.slice(first + 1)}:${leading}`;
-		const quote = ctx.code[node.start] === "'" ? "'" : '"';
-		const text = quote === "'" ? `'${next.replace(/'/g, "\\'")}'` : JSON.stringify(next);
+		const text = quoteLike(ctx.code, node, next);
 		if (ctx.editor.replace(node.start, node.end, text)) ctx.result.rewrite(id, node.start, `"${value}" → "${next}"`);
 		return;
 	}

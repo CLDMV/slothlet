@@ -24,7 +24,7 @@
 import { ENTRIES, EXPORTS, METHODS } from "./data.mjs";
 import { flattenChain } from "./chains.mjs";
 import { parseOption } from "./options.mjs";
-import { isStringLiteral, staticName, stringValue } from "./source.mjs";
+import { escapeRegExp, isStringLiteral, staticName, stringValue } from "./source.mjs";
 
 /** Key and member names too common to report on their own (they need their parent keys to match). */
 const GENERIC = new Set([
@@ -275,7 +275,7 @@ export function visitResidual(node, ancestors, ctx, state) {
 		}
 		if (/\bslothlet\s+typegen\b/.test(value)) {
 			for (const { flag, e } of CLI_FLAGS) {
-				if (new RegExp(`(^|\\s)${flag.replace(/[-]/g, "\\-")}(?=\\s|=|$)`).test(value))
+				if (new RegExp(`(^|\\s)${escapeRegExp(flag)}(?=\\s|=|$)`).test(value))
 					ctx.result.manual(e.id, node.start, `CLI flag ${flag} → ${e.new.slice("slothlet typegen ".length)}`);
 			}
 			return;
