@@ -20,7 +20,7 @@
  */
 import { translate, registerWarningClass } from "#i18n";
 import { detectHint } from "#helpers/hint-detector";
-import { ArrayMethods, Error, Errors, filterList, jsonOf, listPush, Objects, Reflect, stringOf, Symbols } from "#helpers/intrinsics";
+import { ArrayMethods, describeThrown, Error, Errors, filterList, listPush, Objects, stringOf, Symbols } from "#helpers/intrinsics";
 
 /**
  * Custom error class for Slothlet-specific errors with details and i18n
@@ -35,14 +35,7 @@ export class SlothletError extends Error {
 	 *   any other value's own data JSON-serialized (falling back to its `String()` text).
 	 */
 	static #describeThrown(thrown) {
-		// Read without running code the thrown value carries (a `toJSON`, a getter, a `toString`): see helpers/intrinsics
-		// `jsonOf` and `stringOf`.
-		if (thrown instanceof Error) {
-			const message = Reflect.getOwnPropertyDescriptor(thrown, "message");
-			return message && typeof message.value === "string" ? message.value : stringOf(thrown);
-		}
-		if (typeof thrown === "string") return thrown;
-		return jsonOf(thrown) ?? stringOf(thrown);
+		return describeThrown(thrown);
 	}
 
 	/**
