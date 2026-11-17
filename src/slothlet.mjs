@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:15-08:00 (1794874575)
+ *	@Last modified time: 2026-11-16T17:11:45-08:00 (1794877905)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -343,6 +343,13 @@ class Slothlet {
 	 * @type {import("#helpers/clock").Clock}
 	 */
 	#clock = DEFAULT_CLOCK;
+
+	/**
+	 * The context a reload carries into the instance it rebuilds, so values `context.set()` made survive it.
+	 * @type {object|null}
+	 * @private
+	 */
+	#carriedContext = null;
 
 	/**
 	 * The instance's clock: the functions the host gave in the `clock` option, or the ones slothlet loaded with.
@@ -1184,7 +1191,10 @@ class Slothlet {
 
 		// Store reference and context from config
 		this.reference = this.config.reference;
-		this.context = this.config.context;
+		// The instance's own copy of the context passed in: `context.set()` changes it, the caller's object stays as it
+		// was. Top-level keys are copied; their values are the ones given. A reload keeps what `context.set()` made.
+		this.context = this.#carriedContext ?? { ...(this.config.context ?? {}) };
+		this.#carriedContext = null;
 
 		// Get appropriate context manager based on runtime
 		// Browser has no AsyncLocalStorage; force the live-binding context there.
@@ -1683,6 +1693,7 @@ class Slothlet {
 		const savedMode = this.handlers.permissionManager?.mode?.() ?? null;
 
 		// 4. Do a FRESH load() with the new permanent instanceID
+		this.#carriedContext = this.context;
 		await this.load(this.config, this.instanceID);
 
 		// 4b. Restore saved metadata state into the new Metadata instance, BEFORE
@@ -2566,7 +2577,7 @@ export default slothlet;
  * @property {Function} slothlet.context.get - Get a value from the current per-request context store. %%sig: ([key]: string): *%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api' });|await api.slothlet.context.run({ userId: 42 }, async () => {|  const userId = api.slothlet.context.get('userId'); // 42|});%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ base: './api' });|  await api.slothlet.context.run({ userId: 42 }, async () => {|    const userId = api.slothlet.context.get('userId'); // 42|  });|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ base: './api' });|  await api.slothlet.context.run({ userId: 42 }, async () => {|    const userId = api.slothlet.context.get('userId'); // 42|  });|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ base: './api' });|await api.slothlet.context.run({ userId: 42 }, async () => {|  const userId = api.slothlet.context.get('userId'); // 42|});%%
  * @property {Function} slothlet.context.run - Execute a callback with isolated context data merged in. %%sig: (contextData: Object, callback: function, args: *): *%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api' });|const result = await api.slothlet.context.run({ userId: 42 }, async () => {|  return api.myModule.getUser(); // sees context.userId = 42|});%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ base: './api' });|  const result = await api.slothlet.context.run({ userId: 42 }, async () => {|    return api.myModule.getUser(); // sees context.userId = 42|  });|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ base: './api' });|  const result = await api.slothlet.context.run({ userId: 42 }, async () => {|    return api.myModule.getUser(); // sees context.userId = 42|  });|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ base: './api' });|const result = await api.slothlet.context.run({ userId: 42 }, async () => {|  return api.myModule.getUser(); // sees context.userId = 42|});%%
  * @property {Function} slothlet.context.scope - Execute a function with structured context options (`context`, `fn`, `args`, `merge`, `isolation`). %%sig: (options: Object): *%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api' });|const result = await api.slothlet.context.scope({|  context: { userId: 42 },|  fn: async () => api.myModule.getUser()|});%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ base: './api' });|  const result = await api.slothlet.context.scope({|    context: { userId: 42 },|    fn: async () => api.myModule.getUser()|  });|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ base: './api' });|  const result = await api.slothlet.context.scope({|    context: { userId: 42 },|    fn: async () => api.myModule.getUser()|  });|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ base: './api' });|const result = await api.slothlet.context.scope({|  context: { userId: 42 },|  fn: async () => api.myModule.getUser()|});%%
- * @property {Function} slothlet.context.set - Set a value in the current per-request context store. %%sig: (key: string, value: *): void%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api' });|await api.slothlet.context.run({}, async () => {|  api.slothlet.context.set('traceId', 'abc-123');|});%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ base: './api' });|  await api.slothlet.context.run({}, async () => {|    api.slothlet.context.set('traceId', 'abc-123');|  });|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ base: './api' });|  await api.slothlet.context.run({}, async () => {|    api.slothlet.context.set('traceId', 'abc-123');|  });|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ base: './api' });|await api.slothlet.context.run({}, async () => {|  api.slothlet.context.set('traceId', 'abc-123');|});%%
+ * @property {Function} slothlet.context.set - Change the instance-level context every leaf reads, one key or several; a `run()` / `scope()`'s own keys still win inside it. Host only unless a rule allows `slothlet.context.set`. %%sig: (keyOrValues: string|Object, value: *): void%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', context: { tenant: 'acme' } });|api.slothlet.context.set('region', 'eu');|api.slothlet.context.set({ tenant: 'globex', region: 'us' });%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ base: './api' });|  api.slothlet.context.set('region', 'eu');|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ base: './api' });|  api.slothlet.context.set('region', 'eu');|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ base: './api' });|api.slothlet.context.set('region', 'eu');%%
  * @property {object} [slothlet.diag] - Diagnostics namespace — only present when `diagnostics: true`. Do not enable in production.
  * @property {object} [slothlet.diag.caches] - Cache diagnostics sub-namespace.
  * @property {function(): Object} [slothlet.diag.caches.get] - Get full cache diagnostic data (`{ totalCaches, caches[] }`). Only available when `diagnostics: true`. %%sig: (): Object%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', diagnostics: true });|const cacheData = api.slothlet.diag.caches.get();|// { totalCaches: 2, caches: [...] }%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ base: './api', diagnostics: true });|  const cacheData = api.slothlet.diag.caches.get();|  // { totalCaches: 2, caches: [...] }|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ base: './api', diagnostics: true });|  const cacheData = api.slothlet.diag.caches.get();|  // { totalCaches: 2, caches: [...] }|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ base: './api', diagnostics: true });|const cacheData = api.slothlet.diag.caches.get();|// { totalCaches: 2, caches: [...] }%%

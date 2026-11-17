@@ -1599,6 +1599,21 @@ Like every built-in call rule, it is enforced only while the permission system i
 { caller: "admin.**", target: "slothlet.restart", effect: "allow" }
 ```
 
+### `context.set` — Host-Only by Default
+
+[`api.slothlet.context.set()`](CONTEXT-PROPAGATION.md#apislothletcontextsetkey-value--setobject) changes the context every leaf of the instance reads, so a module that could call it could change what every other module sees. A built-in rule denies it to every module:
+
+```javascript
+// Built-in rule registered for every instance:
+{ caller: "**", target: "slothlet.context.set", effect: "deny" }
+```
+
+Like every built-in call rule, it is enforced only while the permission system is on. To let a module set context, add an instance rule on the same exact target:
+
+```javascript
+{ caller: "session.**", target: "slothlet.context.set", effect: "allow" }
+```
+
 ### Lifecycle methods and default routines — Host-Only
 
 Reloading or shutting the instance down is a host decision, so built-in rules deny it to modules.

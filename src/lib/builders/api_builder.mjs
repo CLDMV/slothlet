@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:08-08:00 (1794874568)
+ *	@Last modified time: 2026-11-16T17:11:34-08:00 (1794877894)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -53,6 +53,7 @@ import {
 	mapKeys,
 	mapKeysToArray,
 	mapList,
+	mapValues,
 	MapMethods,
 	Math,
 	NativeProxy,
@@ -2506,6 +2507,87 @@ export class ApiBuilder extends ComponentBase {
 				},
 
 				/**
+				 * Change the instance-level context every leaf reads: `set(key, value)` for one key, `set(object)` for
+				 * several. A `run()` / `scope()` in progress sees the new value too, except for the keys it supplied
+				 * itself (or protected / owned), which still win inside it. Host only by default: module code needs a rule
+				 * allowing `slothlet.context.set`. A key owned or protected by the active `scope()` is enforced as a
+				 * runtime `context` write is (`CONTEXT_KEY_PROTECTED`).
+				 * @param {string|object} keyOrValues - The key to set, or an object of keys and values.
+				 * @param {*} [value] - The value, when a key is given.
+				 * @returns {void}
+				 * @throws {SlothletError} INVALID_ARGUMENT for anything but a key string or a plain object, or a key such
+				 *   as `__proto__`; CONTEXT_KEY_PROTECTED for a key the active scope protects or another owner owns.
+				 * @public
+				 * @example
+				 * api.slothlet.context.set("tenant", "acme");
+				 * api.slothlet.context.set({ tenant: "acme", region: "eu" });
+				 */
+				set: (...args) => {
+					const keyOrValues = args[0];
+					let entries;
+					if (typeof keyOrValues === "string" && args.length >= 2) {
+						entries = [[keyOrValues, args[1]]];
+					} else if (args.length === 1 && keyOrValues !== null && typeof keyOrValues === "object" && !Arrays.isArray(keyOrValues)) {
+						entries = Objects.entries(keyOrValues);
+					} else {
+						throw new slothlet.SlothletError("INVALID_ARGUMENT", {
+							argument: "keyOrValues",
+							expected: "a key and a value, or an object",
+							received: describeScopeReceived(keyOrValues),
+							validationError: true
+						});
+					}
+					for (let i = 0; i < entries.length; i++) {
+						const key = entries[i][0];
+						if (key === "__proto__" || key === "constructor" || key === "prototype") {
+							throw new slothlet.SlothletError("INVALID_ARGUMENT", {
+								argument: "key",
+								expected: "a context key other than __proto__, constructor or prototype",
+								received: key,
+								validationError: true
+							});
+						}
+					}
+					const contextManager = slothlet.contextManager;
+					const instances = contextManager.instances;
+					const instanceID = slothlet.instanceID;
+					const ours = (store) =>
+						!!store &&
+						(store.instanceID === instanceID ||
+							store.parentInstanceID === instanceID ||
+							StringMethods.startsWith(store.instanceID, instanceID + "__run_"));
+					// The active store, when the call runs inside this instance's base or one of its run()/scope() stores:
+					// a key that store protects, or that another owner owns there, is refused as a runtime write is.
+					const active =
+						contextManager.constructor.name === "LiveContextManager"
+							? contextManager.currentInstanceID
+								? MapMethods.get(instances, contextManager.currentInstanceID)
+								: null
+							: contextManager.tryGetContext();
+					if (ours(active)) {
+						for (let i = 0; i < entries.length; i++) trustedRootOwn.enforceContextKeyWrite(active, entries[i][0]);
+					}
+					const base = MapMethods.get(instances, instanceID);
+					// The base context is the instance's own: plain assignment, as on any object.
+					/* v8 ignore next -- the base store exists from load() until shutdown(). */
+					const baseContext = base ? base.context : slothlet.context;
+					for (let i = 0; i < entries.length; i++) baseContext[entries[i][0]] = entries[i][1];
+					if (slothlet.context !== baseContext && slothlet.context) {
+						for (let i = 0; i < entries.length; i++) slothlet.context[entries[i][0]] = entries[i][1];
+					}
+					// Every run()/scope() in progress took a copy of the context when it started: give it the new value for
+					// each key it did not supply itself.
+					for (const store of mapValues(instances)) {
+						if (store === base || !ours(store) || store.context === baseContext) continue;
+						for (let i = 0; i < entries.length; i++) {
+							const key = entries[i][0];
+							if (store.__ownKeys && SetMethods.has(store.__ownKeys, key)) continue;
+							store.context[key] = entries[i][1];
+						}
+					}
+				},
+
+				/**
 				 * Get diagnostics about context retrieval (for testing/debugging).
 				 * Shows how context is retrieved by instance ID in both async and live modes.
 				 * @returns {object} Diagnostic information
@@ -4899,6 +4981,17 @@ export class ApiBuilder extends ComponentBase {
 					return child;
 				};
 
+				// The keys this scope supplies itself (with those of the scopes it runs inside): `context.set()` while the
+				// scope runs leaves them as the scope has them.
+				const buildOwnKeys = (parentOwnKeys) => {
+					const own = parentOwnKeys ? setFrom(setToArray(parentOwnKeys)) : new Set();
+					for (let i = 0, keys = Objects.keys(contextData); i < keys.length; i++) SetMethods.add(own, keys[i]);
+					if (Arrays.isArray(protect)) for (let i = 0; i < protect.length; i++) SetMethods.add(own, protect[i]);
+					if (owners && typeof owners === "object")
+						for (let i = 0, keys = Objects.keys(owners); i < keys.length; i++) SetMethods.add(own, keys[i]);
+					return own;
+				};
+
 				// Get current context manager
 				const contextManager = slothlet.contextManager;
 				if (!contextManager) {
@@ -4983,7 +5076,9 @@ export class ApiBuilder extends ComponentBase {
 						// from inside `api.slothlet.run()` / `.scope()` callbacks.
 						slothlet: currentStore.slothlet,
 						// Inherit + extend owner-locked context keys (opt-in); null when no key is owned.
-						__contextOwners: buildContextOwners(currentStore.__contextOwners)
+						__contextOwners: buildContextOwners(currentStore.__contextOwners),
+						// The keys this scope supplied itself, which `context.set()` leaves alone while it runs.
+						__ownKeys: buildOwnKeys(currentStore.__ownKeys)
 					};
 					// Propagate the trusted-root marker so a host-level `run()`/`scope()` (whose parent
 					// is the trusted base store and which carries no module caller) stays trusted. A
@@ -5085,7 +5180,9 @@ export class ApiBuilder extends ComponentBase {
 						// from inside `api.slothlet.run()` / `.scope()` callbacks.
 						slothlet: currentStore.slothlet,
 						// Inherit + extend owner-locked context keys (opt-in); null when no key is owned.
-						__contextOwners: buildContextOwners(currentStore.__contextOwners)
+						__contextOwners: buildContextOwners(currentStore.__contextOwners),
+						// The keys this scope supplied itself, which `context.set()` leaves alone while it runs.
+						__ownKeys: buildOwnKeys(currentStore.__ownKeys)
 					};
 					// Propagate the trusted-root marker so a host-level `run()`/`scope()` (whose parent
 					// is the trusted base store and which carries no module caller) stays trusted. A
