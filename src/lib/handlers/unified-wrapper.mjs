@@ -681,8 +681,8 @@ function runtime_refuseWriteWithoutStanding(slothlet, owner, reader, prop) {
 	const parts = owner ? filterList(splitText(String(owner.____slothletInternal.apiPath), "."), Boolean) : [];
 	if (owner && typeof prop === "string") listPush(parts, prop);
 	// With the system off only a change to the framework's own is checked (its keys on the node); disabled, none.
-	if (!slothlet.handlers.apiManager.writeChecked(parts) || runtime_selfWriteHasStanding(slothlet)) return;
-	if (reader === HOST_READER) return;
+	// The host's reader goes through either way, so its write skips the frame read standing may make.
+	if (!slothlet.handlers.apiManager.writeChecked(parts) || reader === HOST_READER || runtime_selfWriteHasStanding(slothlet)) return;
 	if (reader !== UNATTRIBUTED_READER && owner) {
 		// Held to the reader, the write meets the reader's write rules as well as its ownership (#625).
 		if (slothlet.handlers.apiManager.mayWrite(parts, reader)) return slothlet.handlers.apiManager.assertOwnedWrite(parts, reader);
@@ -2768,11 +2768,12 @@ function runtime_selfRootWriter(slothlet, reader, parts) {
 			throw new slothlet.SlothletError("LOOSE_SET_UNATTRIBUTED", { path: segmentsOf(ArrayMethods.join(parts, ".")) });
 		}
 		if (identity?.currentWrapper) return identity.currentWrapper;
+		// The readers' own checks first: each answers as standing would, without the frame read standing may make.
 		if (
-			runtime_selfWriteHasStanding(slothlet) ||
 			reader === HOST_READER ||
 			reader === UNATTRIBUTED_READER ||
-			reader === SEALED_SHELL_READER
+			reader === SEALED_SHELL_READER ||
+			runtime_selfWriteHasStanding(slothlet)
 		)
 			return null;
 		return reader;
@@ -2781,7 +2782,7 @@ function runtime_selfRootWriter(slothlet, reader, parts) {
 		throw new slothlet.SlothletError("LOOSE_SET_UNATTRIBUTED", { path: segmentsOf(ArrayMethods.join(parts, ".")) });
 	}
 	if (identity?.currentWrapper) return identity.currentWrapper;
-	if (runtime_selfWriteHasStanding(slothlet) || reader === HOST_READER || reader === SEALED_SHELL_READER) return null;
+	if (reader === HOST_READER || reader === SEALED_SHELL_READER || runtime_selfWriteHasStanding(slothlet)) return null;
 	if (reader !== UNATTRIBUTED_READER && slothlet.handlers.apiManager.mayWrite(parts, reader)) return reader;
 	throw new slothlet.SlothletError("CONTEXT_NOT_ACTIVE_SELF", {});
 }

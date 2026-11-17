@@ -47,8 +47,7 @@ import {
 	Objects,
 	Promise,
 	Reflect,
-	WeakMap,
-	WeakMapMethods
+	WeakMap
 } from "#helpers/intrinsics";
 import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "#helpers/instance-imports";
 const { runtime_wrapClassInstance } = classInstanceWrapperInternals("lib/handlers/context-async");
@@ -87,44 +86,56 @@ function storageMethodsOf(Storage) {
 }
 
 /**
- * The token slothlet's storage holds for each store, and the store each token stands for. Node keeps what a storage
- * holds where module code can read it: on async resources while `AsyncContextFrame` is off (Node 22, or a later Node
- * run with `--no-async-context-frame`), under a symbol `async_hooks.executionAsyncResource()`, a promise, or an
- * `AsyncResource` lists. A store carries the instance, its handlers and the running node's wrapper, so the storage
- * holds an empty frozen token instead, and the store stays here.
+ * The token slothlet's storage holds for a store. Node keeps what a storage holds where module code can read it: on
+ * async resources while `AsyncContextFrame` is off (Node 22, or a later Node run with `--no-async-context-frame`), under
+ * a symbol `async_hooks.executionAsyncResource()`, a promise, or an `AsyncResource` lists; and, with frames on, in the
+ * frame a new `AsyncResource` carries, which `Map.prototype.forEach` walks. A store carries the instance, its handlers
+ * and the running node's wrapper, so the storage holds a token instead, with the store in a private field only this
+ * class reads. One allocation per store run, and nothing for the collector to trace beyond the token itself.
+ *
+ * The prototype tokens inherit has no prototype and no `constructor`, and is frozen: code holding a token reaches
+ * neither this class nor a way to make a token for a store of its own.
  * @private
  */
-const tokenOfStore = new WeakMap();
-const storeOfToken = new WeakMap();
+class StoreToken {
+	#store;
+
+	/**
+	 * @param {object} store - The store the token stands for.
+	 */
+	constructor(store) {
+		this.#store = store;
+	}
+
+	/**
+	 * The store a token stands for. Anything else found in Node's storage (code that wrote the resource's slot itself)
+	 * stands for no store.
+	 * @param {*} token - What the storage holds.
+	 * @returns {object|undefined} The store, or undefined.
+	 */
+	static storeOf(token) {
+		return token !== null && typeof token === "object" && #store in token ? token.#store : undefined;
+	}
+}
+Objects.setPrototypeOf(StoreToken.prototype, null);
+Reflect.deleteProperty(StoreToken.prototype, "constructor");
+Objects.freeze(StoreToken.prototype);
 
 /**
- * The token that stands for `store` in Node's storage, made on first use.
+ * The token that stands for `store` in Node's storage.
  * @param {*} store - The store.
  * @returns {*} Its token; `store` itself when it is not an object (no store).
  * @private
  */
 function sealStore(store) {
-	if (store === null || typeof store !== "object") return store;
-	let token = WeakMapMethods.get(tokenOfStore, store);
-	if (token === undefined) {
-		token = Objects.freeze(Objects.create(null));
-		WeakMapMethods.set(tokenOfStore, store, token);
-		WeakMapMethods.set(storeOfToken, token, store);
-	}
-	return token;
+	return store === null || typeof store !== "object" ? store : new StoreToken(store);
 }
 
 /**
- * The store a token Node's storage holds stands for. Anything else found there (code that wrote the resource's slot
- * itself) stands for no store.
- * @param {*} token - What the storage holds.
- * @returns {object|undefined} The store, or undefined.
+ * The store a token Node's storage holds stands for (see {@link StoreToken.storeOf}).
  * @private
  */
-function unsealStore(token) {
-	if (token === null || typeof token !== "object") return undefined;
-	return WeakMapMethods.get(storeOfToken, token);
-}
+const unsealStore = StoreToken.storeOf;
 
 /**
  * Slothlet's `AsyncLocalStorage`, as {@link AsyncContextManager#als} hands it out: it takes and gives the stores
@@ -160,6 +171,7 @@ class SealedStorage {
 	 * @returns {*} What it returned.
 	 */
 	run(store, fn, ...args) {
+		if (args.length === 0) return this.#storage.run(sealStore(store), fn);
 		return Reflect.apply(this.#storage.run, this.#storage, concatLists([sealStore(store), fn], args));
 	}
 
