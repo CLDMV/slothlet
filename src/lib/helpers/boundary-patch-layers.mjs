@@ -105,7 +105,7 @@ function runtime_layerOf(marker) {
  * What the registry holds for one of this copy's layers: a frozen view that reads the layer, so code outside slothlet
  * that reaches the registry cannot switch the layer off or point it elsewhere.
  * @param {{active: boolean, below: *}} layer - The layer.
- * @returns {{readonly active: boolean, readonly below: *}} The view.
+ * @returns {{active: boolean, below: *}} The view (both members read-only).
  * @private
  */
 function runtime_layerView(layer) {

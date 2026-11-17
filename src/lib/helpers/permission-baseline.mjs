@@ -293,7 +293,7 @@ function asyncContextFrameReason() {
  * @property {function(string): Promise<boolean>} importRefused - Whether a script from a `blob:` or `data:` URL is refused.
  * @property {object|null} vitestWorker - vitest's worker global, or null outside vitest.
  * @property {function(): (number|null)} viteRecords - How many vite plugin records slothlet accepted, or null.
- * @property {(function(): boolean)|null} [asyncContextFrameOn] - Whether Node's `AsyncContextFrame` is on; null (or
+ * @property {?function(): boolean} [asyncContextFrameOn] - Whether Node's `AsyncContextFrame` is on; null (or
  *   absent) where there is no `node:async_hooks` to test, and then the check does not apply.
  * @private
  */

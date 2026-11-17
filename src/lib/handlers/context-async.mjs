@@ -400,7 +400,7 @@ class SealedStorage {
 	 * be one its owner runs again later (an `AsyncResource`, an interval's timer); with frames on, the scope Node opened
 	 * for the code ends where the code does, and nothing is left to take back.
 	 * @param {object} store - The store.
-	 * @returns {(function(): void)|null} Puts back what the resource held, unless something has entered another store on
+	 * @returns {?function(): void} Puts back what the resource held, unless something has entered another store on
 	 *   it since; null when nothing has to.
 	 */
 	enterAdopted(store) {
@@ -679,6 +679,7 @@ export class AsyncContextManager {
 	 * @param {object|undefined} resource - The async resource running now.
 	 * @param {object} store - The flow running now.
 	 * @returns {boolean} Whether it is.
+	 * @private
 	 */
 	#ownContinuation(resource, store) {
 		if (resource === null || typeof resource !== "object") return false;
@@ -696,6 +697,7 @@ export class AsyncContextManager {
 	 * @param {object} view - The stand-in store the job was made in.
 	 * @param {object} store - The flow running now.
 	 * @returns {object|undefined} The store.
+	 * @private
 	 */
 	#inOutsideJob(view, store) {
 		if (view[FLOW_OF] === store) return this.#stillOutside(view, store);
@@ -778,6 +780,7 @@ export class AsyncContextManager {
 	 * @param {object} resource - The resource.
 	 * @param {string} type - Its type, as Node names it.
 	 * @returns {void}
+	 * @private
 	 */
 	#jobMade(resource, type) {
 		try {
@@ -833,6 +836,7 @@ export class AsyncContextManager {
 	/**
 	 * A resource's callback starts: kept on {@link AsyncContextManager#jobStack} until it ends.
 	 * @returns {void}
+	 * @private
 	 */
 	#jobBegins() {
 		try {
@@ -849,6 +853,7 @@ export class AsyncContextManager {
 	/**
 	 * A resource's callback ends. Node calls `after` for every `before`, so the innermost entry is its own.
 	 * @returns {void}
+	 * @private
 	 */
 	#jobFinishes() {
 		const stack = this.#jobStack;
@@ -865,6 +870,7 @@ export class AsyncContextManager {
 	 * @param {object} resource - The async resource whose scope is running.
 	 * @param {object} store - The flow running now.
 	 * @returns {boolean} Whether the flow handed the job to Node.
+	 * @private
 	 */
 	#flowJobBelow(resource, store) {
 		const stack = this.#jobStack;
@@ -880,6 +886,7 @@ export class AsyncContextManager {
 	/**
 	 * A resource's callback starts: a marked one runs as the code that made it (see {@link AsyncContextManager#activeStore}).
 	 * @returns {void}
+	 * @private
 	 */
 	#jobStarts() {
 		try {
@@ -895,6 +902,7 @@ export class AsyncContextManager {
 	 * A resource's callback ends. Node calls `after` for every `before`, also when the callback threw and the error was
 	 * handled, so the innermost marked job ends with its own `after`.
 	 * @returns {void}
+	 * @private
 	 */
 	#jobEnds() {
 		try {
@@ -913,6 +921,7 @@ export class AsyncContextManager {
 	 * stretch of synchronous code ends, so the resource's owner running it again later runs in its own flow.
 	 * @param {object} view - The stand-in store (see {@link AsyncContextManager#outsideView}).
 	 * @returns {void}
+	 * @private
 	 */
 	#adopt(view) {
 		const restore = this.store.enterAdopted(view);
@@ -928,6 +937,7 @@ export class AsyncContextManager {
 	 * @param {object} view - The stand-in store.
 	 * @param {object} flow - The flow it stands outside of.
 	 * @returns {object|undefined} The store.
+	 * @private
 	 */
 	#stillOutside(view, flow) {
 		const instanceID = flow.parentInstanceID ?? flow.instanceID;
