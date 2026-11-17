@@ -35,6 +35,8 @@ The name might suggest we're taking it easy, but don't be fooled. **Slothlet del
 
 v4 gives every name one meaning and every option group the same shape: config keys, method options, `api.slothlet` methods, error codes and details, event, hook and diagnostics payloads, manifest fields and package entry points. Reported api paths are segments arrays, one `caller` object appears everywhere, and `api.slothlet.node()` replaces the `__` fields on nodes. Routines run and stack by default, `_` / `__` privacy follows the owning module, and the init context is copied, with `context.set` to change it at runtime. With permissions on, built-in capabilities stay closed to module code until a rule opens them, and `permissions.mode: "strict"` refuses to start when the host's baseline is not met.
 
+Every feature is covered by a comprehensive test suite: over **75,000 tests** in more than 730 test files, run across eager and lazy mode, the async and live runtimes, CJS, ESM, TypeScript and mixed module trees, and the permission system's modes.
+
 📋 **[See the full v4.0.0 changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v4/v4.0.0.md)** · [v3.0 changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v3.0.md) for the v3 architecture rewrite.
 
 ---
