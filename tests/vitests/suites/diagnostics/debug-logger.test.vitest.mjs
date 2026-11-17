@@ -25,7 +25,8 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { SlothletDebug, SlothletError, SlothletWarning } from "@cldmv/slothlet/errors";
+import { SlothletError, SlothletWarning } from "@cldmv/slothlet/errors";
+import { SlothletDebug } from "#helpers/debug";
 
 describe("SlothletDebug", () => {
 	let consoleSpy;
