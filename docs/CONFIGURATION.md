@@ -524,7 +524,7 @@ See [Code a module hands out runs as its definer](./PERMISSIONS.md#code-a-module
 
 How [module-private members](./PERMISSIONS.md#module-private-exports) (exports named with a leading `_` or `__`) are held while the permission system is on.
 
-- `scope` decides what a private member is private to. Under `"module"` it is the module ID that owns the member's path: every leaf of the base folder belongs to the base module, and everything an `api.slothlet.api.add()` composes belongs to that add's moduleID, given or generated. Under `"folder"` it is the folder of files that exports the member, as before 3.25.0, and a subfolder is a module of its own.
+- `scope` decides what a private member is private to. Under `"module"` it is the module ID that owns the member's path: every leaf of the base folder belongs to the base module, and everything an `api.slothlet.api.add()` composes belongs to that add's moduleID, given or generated. Under `"folder"` it is the folder of files that exports the member, as in 3.x, and a subfolder is a module of its own.
 - `host` decides whether the host's own reads and calls of a private member are allowed (`"allow"`) or refused (`"deny"`).
 
 ```text

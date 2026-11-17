@@ -36,6 +36,7 @@ import { self } from "@cldmv/slothlet/runtime";
 const BASE = resolve("api_tests/api_test_private_scope");
 const EXT = resolve("api_tests/api_test_private_scope_ext");
 const LAYER = resolve("api_tests/api_test_private_scope_layer");
+const TWIN = resolve("api_tests/api_test_private_scope_twin");
 
 const DENIED = { value: undefined, error: "PERMISSION_DENIED" };
 
@@ -254,6 +255,30 @@ describe.each(configs)("module-private members > $mode / $runtime / $attribution
 			expect(await api.billing.reader.read("obj._secret")).toEqual(DENIED);
 			expect(await settled(() => api.obj._secret)).toEqual(DENIED);
 		});
+	});
+
+	describe("under either scope: a folder's name says nothing about its module", () => {
+		it.each([
+			["the default", undefined],
+			['"module"', { scope: "module" }],
+			['"folder"', { scope: "folder" }]
+		])(
+			"%s: another module's folder named like the base's billing folder and the base's billing folder do not read each other's members",
+			async (_label, privateConfig) => {
+				const own = await plain(`${BASE}/billing/internals.mjs`);
+				const twin = await plain(`${TWIN}/billing/internals.mjs`);
+				api = await build(privateConfig);
+				await api.slothlet.api.add("twin", TWIN, { moduleID: "twin-mod" });
+				await api.slothlet.api.add("twin2", TWIN);
+				// Each folder still reads its own module's member, so the refusals below are about the module, not the read.
+				expect(await api.billing.reader.read("billing.internals.__rate")).toEqual({ value: own.__rate, error: null });
+				for (const at of ["twin", "twin2"]) {
+					expect(await api[at].billing.reader.read(`${at}.billing.internals.__rate`)).toEqual({ value: twin.__rate, error: null });
+					expect(await api[at].billing.reader.read("billing.internals.__rate")).toEqual(DENIED);
+					expect(await api.billing.reader.read(`${at}.billing.internals.__rate`)).toEqual(DENIED);
+				}
+			}
+		);
 	});
 });
 
