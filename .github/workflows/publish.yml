@@ -115,9 +115,10 @@ jobs:
             # Satellite packages — see docs/conventions/satellite-packages.md (CLDMV/.github).
             # build:subpackages carves dist-packages/<name>/; build-and-test ships them in the artifact
             # and reusable-publishing publishes each. Core ships only type stubs that re-export from
-            # @cldmv/slothlet-types, so both satellites publish in lockstep with core.
+            # @cldmv/slothlet-types, so the satellites publish in lockstep with core. slothlet-migrate
+            # is the v3 → v4 migration CLI; it carries its own code (packaging/slothlet-migrate).
             build_subpackages_command: "npm run build:subpackages"
-            extra_packages: '[{ "name": "@cldmv/slothlet-i18n", "dir": "dist-packages/slothlet-i18n" }, { "name": "@cldmv/slothlet-types", "dir": "dist-packages/slothlet-types" }]'
+            extra_packages: '[{ "name": "@cldmv/slothlet-i18n", "dir": "dist-packages/slothlet-i18n" }, { "name": "@cldmv/slothlet-migrate", "dir": "dist-packages/slothlet-migrate" }, { "name": "@cldmv/slothlet-types", "dir": "dist-packages/slothlet-types" }]'
             is_prerelease: false
             release_source_only: false
             create_documentation: true

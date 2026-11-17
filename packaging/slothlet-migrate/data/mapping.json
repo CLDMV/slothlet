@@ -1,0 +1,1840 @@
+{
+	"source": "slothlet v4.0.0 public-surface decisions (2026-11-16)",
+	"base": "v3 (3.x) public surface",
+	"notation": {
+		"config": "dotted path inside the slothlet({...}) options object",
+		"option": "<method path>(<argument>).<key path>; method paths start at api. (self. is the same tree)",
+		"manifest": "slothlet.module.json:<field>",
+		"export": "<specifier>#<export name>; a bare specifier is the whole entry point; #name specifiers are package-private imports",
+		"cli": "slothlet typegen <flag> | package.json:slothlet.typegen.<key>",
+		"method": "api.slothlet.<path>; its permission-rule target is the same path without the leading 'api.', so each method row renames that rule target too",
+		"node-field": "<node>.<field> → api.slothlet.node(<node>).<field>",
+		"internal": "framework-private name (not public); listed for test/doc sweeps",
+		"actions": "rename (same parent) · move (new parent) · remove · new · fold (several old names → one) · behaviour (same name, new behaviour/default)"
+	},
+	"counts": {
+		"config": 47,
+		"option": 35,
+		"manifest": 3,
+		"export": 68,
+		"cli": 6,
+		"method": 68,
+		"node-field": 19,
+		"internal": 13
+	},
+	"entries": [
+		{
+			"kind": "config",
+			"old": "allowMutation",
+			"new": null,
+			"note": "v2 mutation lock (warned V3_CONFIG_DEPRECATED). Use api.mutations.{add,remove,reload}: false.",
+			"action": "remove"
+		},
+		{
+			"kind": "config",
+			"old": "api.collision",
+			"new": "api.collision.mode",
+			"note": "The value (string, or the per-phase { initial, api } form) moves one level down; api.collision becomes a group.",
+			"action": "move"
+		},
+		{
+			"kind": "config",
+			"old": "api.mutations.allowCollisionOverride",
+			"new": "api.collision.override",
+			"note": "Still gates the per-call collision options of api.add / modules.add.",
+			"action": "move"
+		},
+		{
+			"kind": "config",
+			"old": "clock.clearTimeout",
+			"new": "clock.clear",
+			"note": "clock was added after v3.24.0 and never shipped under the old names; no migration needed for released code.",
+			"action": "rename"
+		},
+		{
+			"kind": "config",
+			"old": "clock.setTimeout",
+			"new": "clock.set",
+			"note": "clock was added after v3.24.0 and never shipped under the old names; no migration needed for released code.",
+			"action": "rename"
+		},
+		{
+			"kind": "config",
+			"old": "collectLifecycleHooks",
+			"new": null,
+			"note": "Deprecated alias of autoRoutines. Use routines.auto (default true in v4).",
+			"action": "remove"
+		},
+		{
+			"kind": "config",
+			"old": "collision",
+			"new": null,
+			"note": "Root-level alias of api.collision (warned V3_CONFIG_DEPRECATED). Use api.collision.mode.",
+			"action": "remove"
+		},
+		{
+			"kind": "config",
+			"old": "apiDepth",
+			"new": "depth",
+			"note": "",
+			"action": "rename"
+		},
+		{
+			"kind": "config",
+			"old": "dir",
+			"new": null,
+			"note": "Alias of base (warned V3_CONFIG_DEPRECATED). Use base.",
+			"action": "remove"
+		},
+		{
+			"kind": "config",
+			"old": "hidden",
+			"new": "hidden",
+			"note": "A '!pattern' now re-includes entries hidden by the built-in ./__ rule too (gitignore order: built-in hiding is the bottom layer, last match wins, files and folders alike; reserved names stay refused). Replaces scanHiddenFolders: its old effect is [\"!**/.*/\", \"!**/__*/\"]. Same on api.add options.hidden.",
+			"action": "behaviour"
+		},
+		{
+			"kind": "config",
+			"old": "hook.suppressErrors",
+			"new": "hook.errors",
+			"note": "Value changes too: true → \"suppress\"; false stays false.",
+			"action": "rename"
+		},
+		{
+			"kind": "config",
+			"old": null,
+			"new": "loader",
+			"note": "New group: how leaf files are found and loaded (import, manifest, materialize, platform, resolve).",
+			"action": "new"
+		},
+		{
+			"kind": "config",
+			"old": "import",
+			"new": "loader.import",
+			"note": "",
+			"action": "move"
+		},
+		{
+			"kind": "config",
+			"old": "manifest",
+			"new": "loader.files",
+			"note": "The browser file list is called `files` in v4. Giving one still selects browser mode.",
+			"action": "move"
+		},
+		{
+			"kind": "config",
+			"old": "manifest.files[].fullName",
+			"new": "loader.files.files[].full",
+			"note": "Written by files.generate() (was generateManifest()); generator, resolver and validator change together.",
+			"action": "move"
+		},
+		{
+			"kind": "config",
+			"old": "backgroundMaterialize",
+			"new": "loader.materialize",
+			"note": "Also accepts a function in v4: true | false | fn. A function turns it on and is called on materialized:complete (at once if already complete).",
+			"action": "move"
+		},
+		{
+			"kind": "config",
+			"old": "platform",
+			"new": "loader.platform",
+			"note": "\"node\" | \"browser\"; auto-detected when omitted.",
+			"action": "move"
+		},
+		{
+			"kind": "config",
+			"old": "resolveModuleSpecifier",
+			"new": "loader.resolve",
+			"note": "",
+			"action": "move"
+		},
+		{
+			"kind": "config",
+			"old": null,
+			"new": "permissions.caller",
+			"note": "New group: how the caller of a call or read is identified (anonymous, attribution, capture, ceiling, provenance).",
+			"action": "new"
+		},
+		{
+			"kind": "config",
+			"old": "permissions.failOpenOnAbsentCaller",
+			"new": "permissions.caller.anonymous",
+			"note": "true = a call with no resolvable caller is let through.",
+			"action": "move"
+		},
+		{
+			"kind": "config",
+			"old": "permissions.attribution",
+			"new": "permissions.caller.attribution",
+			"note": "\"precise\" | \"fast\".",
+			"action": "move"
+		},
+		{
+			"kind": "config",
+			"old": "permissions.references.capture",
+			"new": "permissions.caller.capture",
+			"note": "",
+			"action": "move"
+		},
+		{
+			"kind": "config",
+			"old": "permissions.references",
+			"new": null,
+			"note": "Group dissolved; its only member, capture, moved to permissions.caller.capture.",
+			"action": "remove"
+		},
+		{
+			"kind": "config",
+			"old": "permissions.ceiling",
+			"new": "permissions.caller.ceiling",
+			"note": "\"leaf\" | \"chain\".",
+			"action": "move"
+		},
+		{
+			"kind": "config",
+			"old": "permissions.provenance",
+			"new": "permissions.caller.provenance",
+			"note": "",
+			"action": "move"
+		},
+		{
+			"kind": "config",
+			"old": "permissions.enabled",
+			"new": null,
+			"note": "Legacy boolean twin of mode. Use permissions.mode (true/false are now aliases of \"on\"/\"off\").",
+			"action": "remove"
+		},
+		{
+			"kind": "config",
+			"old": "permissions.events.default",
+			"new": "permissions.events.policy",
+			"note": "Same values: \"deny\" | \"notify\" | \"allow\".",
+			"action": "rename"
+		},
+		{
+			"kind": "config",
+			"old": null,
+			"new": "permissions.gating",
+			"note": "New group: every gating option (buffers, read).",
+			"action": "new"
+		},
+		{
+			"kind": "config",
+			"old": "permissions.typedArrayMembers",
+			"new": "permissions.gating.buffers",
+			"note": "Added after v3.24.0; never shipped under the old name.",
+			"action": "move"
+		},
+		{
+			"kind": "config",
+			"old": "permissions.readGating",
+			"new": "permissions.gating.read",
+			"note": "",
+			"action": "move"
+		},
+		{
+			"kind": "config",
+			"old": "permissions.mode",
+			"new": "permissions.mode",
+			"note": "Accepts true / false as aliases of \"on\" / \"off\" (enabled removed).",
+			"action": "behaviour"
+		},
+		{
+			"kind": "config",
+			"old": "permissions.defaultPolicy",
+			"new": "permissions.policy",
+			"note": "",
+			"action": "rename"
+		},
+		{
+			"kind": "config",
+			"old": null,
+			"new": "permissions.private.scope",
+			"note": "\"module\" (default) | \"folder\": what a module-private _ / __ export is private to. The default is \"module\": privacy follows the owning module id, not the file's folder.",
+			"action": "new"
+		},
+		{
+			"kind": "config",
+			"old": "routines",
+			"new": "routines.entries",
+			"note": "routines becomes a group. The array moves to routines.entries; the bare-array form is no longer accepted.",
+			"action": "move"
+		},
+		{
+			"kind": "config",
+			"old": "autoRoutines",
+			"new": "routines.auto",
+			"note": "Default changes false → true: startup / shutdown / destroy cascades fire by themselves.",
+			"action": "move"
+		},
+		{
+			"kind": "config",
+			"old": "stackRoutines",
+			"new": "routines.stack",
+			"note": "Default changes false → true: every module contributing the same routine name at one path runs, in mount order; false = only the collision winner.",
+			"action": "move"
+		},
+		{
+			"kind": "config",
+			"old": "sanitize.lowerFirst",
+			"new": "sanitize.first",
+			"note": "Same option object is taken by @cldmv/slothlet/sanitize#sanitize.",
+			"action": "rename"
+		},
+		{
+			"kind": "config",
+			"old": "sanitize.preserveAllLower",
+			"new": "sanitize.preserve.lower",
+			"note": "",
+			"action": "move"
+		},
+		{
+			"kind": "config",
+			"old": "sanitize.preserveAllUpper",
+			"new": "sanitize.preserve.upper",
+			"note": "",
+			"action": "move"
+		},
+		{
+			"kind": "config",
+			"old": "sanitize.rules.leaveInsensitive",
+			"new": "sanitize.rules.nocase",
+			"note": "",
+			"action": "rename"
+		},
+		{
+			"kind": "config",
+			"old": "scanHiddenFolders",
+			"new": null,
+			"note": "Deprecated escape hatch (warned CONFIG_SCAN_HIDDEN_FOLDERS_DEPRECATED). Use hidden: [\"!**/.*/\", \"!**/__*/\"].",
+			"action": "remove"
+		},
+		{
+			"kind": "config",
+			"old": "suppressFixes",
+			"new": null,
+			"note": "Temporary v3 escape hatch for bug-fix behaviours (entries like \"C03_116\"). No replacement.",
+			"action": "remove"
+		},
+		{
+			"kind": "config",
+			"old": "typescript.compilerOptions",
+			"new": "typescript.compiler",
+			"note": "tsconfig compilerOptions passthrough.",
+			"action": "rename"
+		},
+		{
+			"kind": "config",
+			"old": "typescript.types.interfaceName",
+			"new": "typescript.types.name",
+			"note": "",
+			"action": "rename"
+		},
+		{
+			"kind": "config",
+			"old": null,
+			"new": "versioning",
+			"note": "New group (dispatcher).",
+			"action": "new"
+		},
+		{
+			"kind": "config",
+			"old": "versionDispatcher",
+			"new": "versioning.dispatcher",
+			"note": "",
+			"action": "move"
+		},
+		{
+			"kind": "config",
+			"old": "context",
+			"new": "context",
+			"note": "The init context is copied: mutating the object passed to slothlet() no longer changes the live context. Use api.slothlet.context.set().",
+			"action": "behaviour"
+		},
+		{
+			"kind": "option",
+			"old": "api.slothlet.api.add(options).collisionMode",
+			"new": "api.slothlet.api.add(options).collision.mode",
+			"note": "Locked unless config api.collision.override is true.",
+			"action": "move"
+		},
+		{
+			"kind": "option",
+			"old": "api.slothlet.api.add(options).forceOverwrite",
+			"new": "api.slothlet.api.add(options).collision.force",
+			"note": "Not locked; a module id is generated when none is given.",
+			"action": "move"
+		},
+		{
+			"kind": "option",
+			"old": "api.slothlet.api.add(options).mutateExisting",
+			"new": "api.slothlet.api.add(options).collision.mutate",
+			"note": "Locked like collision.mode.",
+			"action": "move"
+		},
+		{
+			"kind": "option",
+			"old": "api.slothlet.api.add(options).hidden",
+			"new": "api.slothlet.api.add(options).hidden",
+			"note": "'!pattern' re-includes built-in hidden ./__ entries (see config hidden).",
+			"action": "behaviour"
+		},
+		{
+			"kind": "option",
+			"old": "api.slothlet.api.add(options).moduleID",
+			"new": "api.slothlet.api.add(options).id",
+			"note": "Same word as reload(id) / remove(target, id).",
+			"action": "rename"
+		},
+		{
+			"kind": "option",
+			"old": "api.slothlet.api.add(options).recordHistory",
+			"new": "api.slothlet.api.add(options).replay",
+			"note": "true = reload() replays this add. Locked like collision.mode.",
+			"action": "rename"
+		},
+		{
+			"kind": "option",
+			"old": "api.slothlet.api.add(options).scanHiddenFolders",
+			"new": null,
+			"note": "Per-call form of the removed config option. Use options.hidden with '!' patterns.",
+			"action": "remove"
+		},
+		{
+			"kind": "option",
+			"old": "api.slothlet.api.add(versionConfig)",
+			"new": "api.slothlet.api.add(options).version",
+			"note": "The 4th positional argument folds into options. api.add(path, source, options, { version: \"v1\" }) → api.add(path, source, { ...options, version: { tag: \"v1\" } }).",
+			"action": "fold"
+		},
+		{
+			"kind": "option",
+			"old": "api.slothlet.api.add(versionConfig).version",
+			"new": "api.slothlet.api.add(options).version.tag",
+			"note": "The tag (\"v1\", \"2.3.0\").",
+			"action": "move"
+		},
+		{
+			"kind": "option",
+			"old": "api.slothlet.api.add(versionConfig).default",
+			"new": "api.slothlet.api.add(options).version.default",
+			"note": "",
+			"action": "move"
+		},
+		{
+			"kind": "option",
+			"old": "api.slothlet.api.add(versionConfig).metadata",
+			"new": "api.slothlet.api.add(options).version.metadata",
+			"note": "Stored in the version manager only.",
+			"action": "move"
+		},
+		{
+			"kind": "option",
+			"old": "api.slothlet.api.leaves(options).includePrivate",
+			"new": "api.slothlet.api.leaves(options).private",
+			"note": "Host only.",
+			"action": "rename"
+		},
+		{
+			"kind": "option",
+			"old": "api.slothlet.api.modules.addDiscovered(options).collisionMode",
+			"new": "api.slothlet.api.modules.add(options).collision.mode",
+			"note": "Method folds into modules.add() (no target).",
+			"action": "move"
+		},
+		{
+			"kind": "option",
+			"old": "api.slothlet.api.modules.addDiscovered(options).filter",
+			"new": "api.slothlet.api.modules.add(options).discover.filter",
+			"note": "Discover options nest under discover, the same object addModule took.",
+			"action": "move"
+		},
+		{
+			"kind": "option",
+			"old": "api.slothlet.api.modules.addDiscovered(options).manifest",
+			"new": "api.slothlet.api.modules.add(options).discover.manifest",
+			"note": "",
+			"action": "move"
+		},
+		{
+			"kind": "option",
+			"old": "api.slothlet.api.modules.addDiscovered(options).prefix",
+			"new": "api.slothlet.api.modules.add(options).discover.prefix",
+			"note": "",
+			"action": "move"
+		},
+		{
+			"kind": "option",
+			"old": "api.slothlet.api.modules.addDiscovered(options).scanRoot",
+			"new": "api.slothlet.api.modules.add(options).discover.root",
+			"note": "",
+			"action": "move"
+		},
+		{
+			"kind": "option",
+			"old": "api.slothlet.api.modules.addDiscovered(options).schema",
+			"new": "api.slothlet.api.modules.add(options).discover.schema",
+			"note": "",
+			"action": "move"
+		},
+		{
+			"kind": "option",
+			"old": "api.slothlet.api.modules.addDiscovered(options).onFailure",
+			"new": "api.slothlet.api.modules.add(options).failure",
+			"note": "\"throw\" | \"rollback\" | \"best-effort\".",
+			"action": "rename"
+		},
+		{
+			"kind": "option",
+			"old": "api.slothlet.api.modules.addModule(options).collisionMode",
+			"new": "api.slothlet.api.modules.add(options).collision.mode",
+			"note": "Method folds into modules.add(name | result).",
+			"action": "move"
+		},
+		{
+			"kind": "option",
+			"old": "api.slothlet.api.modules.addModules(options).collisionMode",
+			"new": "api.slothlet.api.modules.add(options).collision.mode",
+			"note": "Method folds into modules.add([...]).",
+			"action": "move"
+		},
+		{
+			"kind": "option",
+			"old": "api.slothlet.api.modules.addModules(options).onFailure",
+			"new": "api.slothlet.api.modules.add(options).failure",
+			"note": "",
+			"action": "rename"
+		},
+		{
+			"kind": "option",
+			"old": "api.slothlet.api.modules.discover(options).scanRoot",
+			"new": "api.slothlet.api.modules.discover(options).root",
+			"note": "",
+			"action": "rename"
+		},
+		{
+			"kind": "option",
+			"old": "api.slothlet.api.remove(pathOrModuleId, apiPath)",
+			"new": "api.slothlet.api.remove(target, id)",
+			"note": "The scoped form swaps its arguments: v3 remove(moduleID, apiPath) → v4 remove(apiPath, moduleID). The one-argument form is unchanged (path or module id).",
+			"action": "behaviour"
+		},
+		{
+			"kind": "option",
+			"old": "api.slothlet.hook.on(pattern)",
+			"new": "api.slothlet.hook.on(pattern)",
+			"note": "The \"type:pattern\" prefix form (\"before:math.*\", warned HOOK_TYPEPATTERN_PREFIX_DEPRECATED) is removed. Write \"math.*:before\".",
+			"action": "remove"
+		},
+		{
+			"kind": "option",
+			"old": "api.slothlet.hook.on(options).lockCaller",
+			"new": "api.slothlet.hook.on(options).pin",
+			"note": "Same word as config hook.pin.",
+			"action": "rename"
+		},
+		{
+			"kind": "option",
+			"old": "api.slothlet.hook.on(options).versionDispatcher",
+			"new": "api.slothlet.hook.on(options).versioning.dispatcher",
+			"note": "",
+			"action": "move"
+		},
+		{
+			"kind": "option",
+			"old": "api.slothlet.hook.on(options).versioned",
+			"new": "api.slothlet.hook.on(options).versioning.enabled",
+			"note": "",
+			"action": "move"
+		},
+		{
+			"kind": "option",
+			"old": "api.slothlet.permissions.addRule(rule)",
+			"new": "api.slothlet.permissions.rules.add(rule)",
+			"note": "Rule fields unchanged; the method moved (see method rows).",
+			"action": "move"
+		},
+		{
+			"kind": "option",
+			"old": "api.slothlet.permissions.principal.register(definition).maxAge",
+			"new": "api.slothlet.permissions.principal.register(definition).ttl",
+			"note": "Milliseconds until the value is resolved again.",
+			"action": "rename"
+		},
+		{
+			"kind": "option",
+			"old": "api.slothlet.reload(options).keepInstanceID",
+			"new": "api.slothlet.reload(options).instance",
+			"note": "Value changes: true → \"keep\", false → \"new\" (default \"new\").",
+			"action": "rename"
+		},
+		{
+			"kind": "option",
+			"old": "@cldmv/slothlet/typegen#generateTypes(options).augmentRuntime",
+			"new": "@cldmv/slothlet/typegen#generate(options).augment",
+			"note": "CLI --no-augment-runtime → --no-augment.",
+			"action": "rename"
+		},
+		{
+			"kind": "option",
+			"old": "@cldmv/slothlet/typegen#generateTypes(options).dir",
+			"new": "@cldmv/slothlet/typegen#generate(options).base",
+			"note": "Matches config base. CLI --dir → --base.",
+			"action": "rename"
+		},
+		{
+			"kind": "option",
+			"old": "@cldmv/slothlet/typegen#generateTypes(options).includeDocumentation",
+			"new": "@cldmv/slothlet/typegen#generate(options).docs",
+			"note": "",
+			"action": "rename"
+		},
+		{
+			"kind": "option",
+			"old": "@cldmv/slothlet/typegen#generateTypes(options).interfaceName",
+			"new": "@cldmv/slothlet/typegen#generate(options).name",
+			"note": "Matches config typescript.types.name. CLI --interface-name → --name.",
+			"action": "rename"
+		},
+		{
+			"kind": "manifest",
+			"old": "slothlet.module.json:apiDir",
+			"new": "slothlet.module.json:base",
+			"note": "Format 1 files are still read (mapped, with a deprecation warning).",
+			"action": "rename"
+		},
+		{
+			"kind": "manifest",
+			"old": "slothlet.module.json:mountPath",
+			"new": "slothlet.module.json:mount",
+			"note": "string | string[]. Format 1 still read with a warning.",
+			"action": "rename"
+		},
+		{
+			"kind": "manifest",
+			"old": "slothlet.module.json:schemaVersion",
+			"new": "slothlet.module.json:schema",
+			"note": "Value 1 → 2. v4 writes and validates format 2; format 1 (schemaVersion / mountPath / apiDir) is read, mapped to the v2 names, and warns (translated).",
+			"action": "rename"
+		},
+		{
+			"kind": "export",
+			"old": "@cldmv/slothlet/builders/api-assignment",
+			"new": "#builders/api-assignment",
+			"note": "Leaves package.json exports; a package-private import (#…) usable only by slothlet's own files. No public replacement.",
+			"action": "move"
+		},
+		{
+			"kind": "export",
+			"old": "@cldmv/slothlet/builders/api_builder",
+			"new": "#builders/api_builder",
+			"note": "Leaves package.json exports; a package-private import (#…) usable only by slothlet's own files. No public replacement.",
+			"action": "move"
+		},
+		{
+			"kind": "export",
+			"old": "@cldmv/slothlet/builders/builder",
+			"new": "#builders/builder",
+			"note": "Leaves package.json exports; a package-private import (#…) usable only by slothlet's own files. No public replacement.",
+			"action": "move"
+		},
+		{
+			"kind": "export",
+			"old": "@cldmv/slothlet/builders/modes-processor",
+			"new": "#builders/modes-processor",
+			"note": "Leaves package.json exports; a package-private import (#…) usable only by slothlet's own files. No public replacement.",
+			"action": "move"
+		},
+		{
+			"kind": "export",
+			"old": "@cldmv/slothlet/helpers/async-resource-context",
+			"new": "#helpers/async-resource-context",
+			"note": "Leaves package.json exports; a package-private import (#…) usable only by slothlet's own files. No public replacement.",
+			"action": "move"
+		},
+		{
+			"kind": "export",
+			"old": "@cldmv/slothlet/helpers/boundary-patch-layers",
+			"new": "#helpers/boundary-patch-layers",
+			"note": "Leaves package.json exports; a package-private import (#…) usable only by slothlet's own files. No public replacement.",
+			"action": "move"
+		},
+		{
+			"kind": "export",
+			"old": "@cldmv/slothlet/helpers/caller-pinning",
+			"new": "#helpers/caller-pinning",
+			"note": "Leaves package.json exports; a package-private import (#…) usable only by slothlet's own files. No public replacement.",
+			"action": "move"
+		},
+		{
+			"kind": "export",
+			"old": "@cldmv/slothlet/helpers/cjs-export-names",
+			"new": "#helpers/cjs-export-names",
+			"note": "Leaves package.json exports; a package-private import (#…) usable only by slothlet's own files. No public replacement.",
+			"action": "move"
+		},
+		{
+			"kind": "export",
+			"old": "@cldmv/slothlet/helpers/class-instance-wrapper",
+			"new": "#helpers/class-instance-wrapper",
+			"note": "Leaves package.json exports; a package-private import (#…) usable only by slothlet's own files. No public replacement.",
+			"action": "move"
+		},
+		{
+			"kind": "export",
+			"old": "@cldmv/slothlet/helpers/clock",
+			"new": "#helpers/clock",
+			"note": "Leaves package.json exports; a package-private import (#…) usable only by slothlet's own files. No public replacement.",
+			"action": "move"
+		},
+		{
+			"kind": "export",
+			"old": "@cldmv/slothlet/helpers/clone-context",
+			"new": "#helpers/clone-context",
+			"note": "Leaves package.json exports; a package-private import (#…) usable only by slothlet's own files. No public replacement.",
+			"action": "move"
+		},
+		{
+			"kind": "export",
+			"old": "@cldmv/slothlet/helpers/composition",
+			"new": "#helpers/composition",
+			"note": "Leaves package.json exports; a package-private import (#…) usable only by slothlet's own files. No public replacement.",
+			"action": "move"
+		},
+		{
+			"kind": "export",
+			"old": "@cldmv/slothlet/helpers/config",
+			"new": "#helpers/config",
+			"note": "Leaves package.json exports; a package-private import (#…) usable only by slothlet's own files. No public replacement.",
+			"action": "move"
+		},
+		{
+			"kind": "export",
+			"old": "@cldmv/slothlet/helpers/defaults",
+			"new": "#helpers/defaults",
+			"note": "Leaves package.json exports; a package-private import (#…) usable only by slothlet's own files. No public replacement.",
+			"action": "move"
+		},
+		{
+			"kind": "export",
+			"old": "@cldmv/slothlet/helpers/eventemitter-context",
+			"new": "#helpers/eventemitter-context",
+			"note": "Leaves package.json exports; a package-private import (#…) usable only by slothlet's own files. No public replacement.",
+			"action": "move"
+		},
+		{
+			"kind": "export",
+			"old": "@cldmv/slothlet/helpers/eventtarget-context",
+			"new": "#helpers/eventtarget-context",
+			"note": "Leaves package.json exports; a package-private import (#…) usable only by slothlet's own files. No public replacement.",
+			"action": "move"
+		},
+		{
+			"kind": "export",
+			"old": "@cldmv/slothlet/helpers/eventtarget-property-context",
+			"new": "#helpers/eventtarget-property-context",
+			"note": "Leaves package.json exports; a package-private import (#…) usable only by slothlet's own files. No public replacement.",
+			"action": "move"
+		},
+		{
+			"kind": "export",
+			"old": "@cldmv/slothlet/helpers/function-source-context",
+			"new": "#helpers/function-source-context",
+			"note": "Leaves package.json exports; a package-private import (#…) usable only by slothlet's own files. No public replacement.",
+			"action": "move"
+		},
+		{
+			"kind": "export",
+			"old": "@cldmv/slothlet/helpers/hint-detector",
+			"new": "#helpers/hint-detector",
+			"note": "Leaves package.json exports; a package-private import (#…) usable only by slothlet's own files. No public replacement.",
+			"action": "move"
+		},
+		{
+			"kind": "export",
+			"old": "@cldmv/slothlet/helpers/intrinsics",
+			"new": "#helpers/intrinsics",
+			"note": "Leaves package.json exports; a package-private import (#…) usable only by slothlet's own files. No public replacement.",
+			"action": "move"
+		},
+		{
+			"kind": "export",
+			"old": "@cldmv/slothlet/helpers/modes-utils",
+			"new": "#helpers/modes-utils",
+			"note": "Leaves package.json exports; a package-private import (#…) usable only by slothlet's own files. No public replacement.",
+			"action": "move"
+		},
+		{
+			"kind": "export",
+			"old": "@cldmv/slothlet/helpers/module-discovery",
+			"new": "#helpers/module-discovery",
+			"note": "Leaves package.json exports; a package-private import (#…) usable only by slothlet's own files. No public replacement.",
+			"action": "move"
+		},
+		{
+			"kind": "export",
+			"old": "@cldmv/slothlet/helpers/module-manifest-validator",
+			"new": "#helpers/module-manifest-validator",
+			"note": "Leaves package.json exports; a package-private import (#…) usable only by slothlet's own files. No public replacement.",
+			"action": "move"
+		},
+		{
+			"kind": "export",
+			"old": "@cldmv/slothlet/helpers/module-sort",
+			"new": "#helpers/module-sort",
+			"note": "Leaves package.json exports; a package-private import (#…) usable only by slothlet's own files. No public replacement.",
+			"action": "move"
+		},
+		{
+			"kind": "export",
+			"old": "@cldmv/slothlet/helpers/observer-context",
+			"new": "#helpers/observer-context",
+			"note": "Leaves package.json exports; a package-private import (#…) usable only by slothlet's own files. No public replacement.",
+			"action": "move"
+		},
+		{
+			"kind": "export",
+			"old": "@cldmv/slothlet/helpers/pattern-matcher",
+			"new": "#helpers/pattern-matcher",
+			"note": "Leaves package.json exports; a package-private import (#…) usable only by slothlet's own files. No public replacement.",
+			"action": "move"
+		},
+		{
+			"kind": "export",
+			"old": "@cldmv/slothlet/helpers/platform",
+			"new": "#helpers/platform",
+			"note": "Leaves package.json exports; a package-private import (#…) usable only by slothlet's own files. No public replacement.",
+			"action": "move"
+		},
+		{
+			"kind": "export",
+			"old": "@cldmv/slothlet/helpers/promise-context",
+			"new": "#helpers/promise-context",
+			"note": "Leaves package.json exports; a package-private import (#…) usable only by slothlet's own files. No public replacement.",
+			"action": "move"
+		},
+		{
+			"kind": "export",
+			"old": "@cldmv/slothlet/helpers/reserved-keys",
+			"new": "#helpers/reserved-keys",
+			"note": "Leaves package.json exports; a package-private import (#…) usable only by slothlet's own files. No public replacement.",
+			"action": "move"
+		},
+		{
+			"kind": "export",
+			"old": "@cldmv/slothlet/helpers/resolve-from-caller",
+			"new": "#helpers/resolve-from-caller",
+			"note": "Leaves package.json exports; a package-private import (#…) usable only by slothlet's own files. No public replacement.",
+			"action": "move"
+		},
+		{
+			"kind": "export",
+			"old": "@cldmv/slothlet/helpers/scheduler-context",
+			"new": "#helpers/scheduler-context",
+			"note": "Leaves package.json exports; a package-private import (#…) usable only by slothlet's own files. No public replacement.",
+			"action": "move"
+		},
+		{
+			"kind": "export",
+			"old": "@cldmv/slothlet/helpers/stack-read",
+			"new": "#helpers/stack-read",
+			"note": "Leaves package.json exports; a package-private import (#…) usable only by slothlet's own files. No public replacement.",
+			"action": "move"
+		},
+		{
+			"kind": "export",
+			"old": "@cldmv/slothlet/helpers/utilities",
+			"new": "#helpers/utilities",
+			"note": "Leaves package.json exports; a package-private import (#…) usable only by slothlet's own files. No public replacement.",
+			"action": "move"
+		},
+		{
+			"kind": "export",
+			"old": "@cldmv/slothlet/modes/eager",
+			"new": "#modes/eager",
+			"note": "Leaves package.json exports; a package-private import (#…) usable only by slothlet's own files. No public replacement.",
+			"action": "move"
+		},
+		{
+			"kind": "export",
+			"old": "@cldmv/slothlet/modes/lazy",
+			"new": "#modes/lazy",
+			"note": "Leaves package.json exports; a package-private import (#…) usable only by slothlet's own files. No public replacement.",
+			"action": "move"
+		},
+		{
+			"kind": "export",
+			"old": "@cldmv/slothlet/processors/flatten",
+			"new": "#processors/flatten",
+			"note": "Leaves package.json exports; a package-private import (#…) usable only by slothlet's own files. No public replacement.",
+			"action": "move"
+		},
+		{
+			"kind": "export",
+			"old": "@cldmv/slothlet/processors/loader",
+			"new": "#processors/loader",
+			"note": "Leaves package.json exports; a package-private import (#…) usable only by slothlet's own files. No public replacement.",
+			"action": "move"
+		},
+		{
+			"kind": "export",
+			"old": "@cldmv/slothlet/processors/type-generation-worker",
+			"new": "#processors/type-generation-worker",
+			"note": "Leaves package.json exports; a package-private import (#…) usable only by slothlet's own files. No public replacement.",
+			"action": "move"
+		},
+		{
+			"kind": "export",
+			"old": "@cldmv/slothlet/processors/type-generator",
+			"new": "#processors/type-generator",
+			"note": "Leaves package.json exports; a package-private import (#…) usable only by slothlet's own files. No public replacement.",
+			"action": "move"
+		},
+		{
+			"kind": "export",
+			"old": "@cldmv/slothlet/processors/typescript",
+			"new": "#processors/typescript",
+			"note": "Leaves package.json exports; a package-private import (#…) usable only by slothlet's own files. No public replacement.",
+			"action": "move"
+		},
+		{
+			"kind": "export",
+			"old": "@cldmv/slothlet/slothlet",
+			"new": "#slothlet",
+			"note": "Leaves package.json exports; a package-private import (#…) usable only by slothlet's own files. No public replacement.",
+			"action": "move"
+		},
+		{
+			"kind": "export",
+			"old": "@cldmv/slothlet/helpers/instance-imports",
+			"new": "#helpers/instance-imports",
+			"note": "Package-private. Its public piece, the vite/vitest plugin, moves to @cldmv/slothlet/vite.",
+			"action": "move"
+		},
+		{
+			"kind": "export",
+			"old": "@cldmv/slothlet/helpers/instance-imports#slothletInstanceImports",
+			"new": "@cldmv/slothlet/vite#plugin",
+			"note": "import { plugin } from \"@cldmv/slothlet/vite\"; plugins: [plugin()].",
+			"action": "move"
+		},
+		{
+			"kind": "export",
+			"old": null,
+			"new": "@cldmv/slothlet/vite",
+			"note": "New entry point: the vite / vitest plugin.",
+			"action": "new"
+		},
+		{
+			"kind": "export",
+			"old": "@cldmv/slothlet/helpers/generate-manifest",
+			"new": "@cldmv/slothlet/files",
+			"note": "One module usable in Node and the page; Node-only functions refuse in a browser with a named error. File becomes #helpers/generate-manifest behind it.",
+			"action": "move"
+		},
+		{
+			"kind": "export",
+			"old": "@cldmv/slothlet/helpers/manifest-resolver",
+			"new": "@cldmv/slothlet/files",
+			"note": "Folded into the files entry point.",
+			"action": "move"
+		},
+		{
+			"kind": "export",
+			"old": null,
+			"new": "@cldmv/slothlet/files#files",
+			"note": "One namespace object: import { files } from \"@cldmv/slothlet/files\".",
+			"action": "new"
+		},
+		{
+			"kind": "export",
+			"old": "@cldmv/slothlet/helpers/generate-manifest#generateBrowserAssets",
+			"new": "@cldmv/slothlet/files#files.assets",
+			"note": "Node. Returns the manifest and the importmap together.",
+			"action": "move"
+		},
+		{
+			"kind": "export",
+			"old": "@cldmv/slothlet/helpers/generate-manifest#generateBrowserAssets(options).slothletBase",
+			"new": "@cldmv/slothlet/files#files.assets(options).base",
+			"note": "URL / path prefix where slothlet is served.",
+			"action": "rename"
+		},
+		{
+			"kind": "export",
+			"old": "@cldmv/slothlet/helpers/generate-manifest#generateManifest",
+			"new": "@cldmv/slothlet/files#files.generate",
+			"note": "Node.",
+			"action": "move"
+		},
+		{
+			"kind": "export",
+			"old": "@cldmv/slothlet/helpers/generate-manifest#generateImportMap",
+			"new": "@cldmv/slothlet/files#files.importmap",
+			"note": "Node.",
+			"action": "move"
+		},
+		{
+			"kind": "export",
+			"old": "@cldmv/slothlet/helpers/manifest-resolver#createManifestResolver",
+			"new": "@cldmv/slothlet/files#files.resolver",
+			"note": "Page and Node.",
+			"action": "move"
+		},
+		{
+			"kind": "export",
+			"old": "@cldmv/slothlet/helpers/generate-manifest#collectPackageSpecifiers",
+			"new": "@cldmv/slothlet/files#files.specifiers.packages",
+			"note": "",
+			"action": "move"
+		},
+		{
+			"kind": "export",
+			"old": "@cldmv/slothlet/helpers/generate-manifest#collectSlothletSpecifiers",
+			"new": "@cldmv/slothlet/files#files.specifiers.slothlet",
+			"note": "",
+			"action": "move"
+		},
+		{
+			"kind": "export",
+			"old": "@cldmv/slothlet/helpers/sanitize",
+			"new": "@cldmv/slothlet/sanitize",
+			"note": "File becomes #helpers/sanitize behind it.",
+			"action": "move"
+		},
+		{
+			"kind": "export",
+			"old": "@cldmv/slothlet/helpers/sanitize#sanitizePropertyName",
+			"new": "@cldmv/slothlet/sanitize#sanitize",
+			"note": "Same options as config sanitize (renamed together).",
+			"action": "move"
+		},
+		{
+			"kind": "export",
+			"old": "@cldmv/slothlet/helpers/sanitize#Sanitize",
+			"new": null,
+			"note": "Internal component class; not exported in v4.",
+			"action": "remove"
+		},
+		{
+			"kind": "export",
+			"old": "@cldmv/slothlet/errors#SlothletDebug",
+			"new": null,
+			"note": "Internal debug logger; moves to a private path.",
+			"action": "remove"
+		},
+		{
+			"kind": "export",
+			"old": "@cldmv/slothlet/i18n#initI18n",
+			"new": "@cldmv/slothlet/i18n#init",
+			"note": "",
+			"action": "rename"
+		},
+		{
+			"kind": "export",
+			"old": "@cldmv/slothlet/i18n#internals",
+			"new": null,
+			"note": "Internal guard accessor; not exported in v4.",
+			"action": "remove"
+		},
+		{
+			"kind": "export",
+			"old": null,
+			"new": "@cldmv/slothlet/i18n#language",
+			"note": "Namespace object: import { language } from \"@cldmv/slothlet/i18n\".",
+			"action": "new"
+		},
+		{
+			"kind": "export",
+			"old": "@cldmv/slothlet/i18n#getLanguage",
+			"new": "@cldmv/slothlet/i18n#language.get",
+			"note": "",
+			"action": "move"
+		},
+		{
+			"kind": "export",
+			"old": "@cldmv/slothlet/i18n#setLanguage",
+			"new": "@cldmv/slothlet/i18n#language.set",
+			"note": "One function with setLanguageAsync: switches synchronously where it can (Node) and returns a promise where the load is async (browser); `await language.set(x)` works everywhere.",
+			"action": "fold"
+		},
+		{
+			"kind": "export",
+			"old": "@cldmv/slothlet/i18n#setLanguageAsync",
+			"new": "@cldmv/slothlet/i18n#language.set",
+			"note": "See setLanguage.",
+			"action": "fold"
+		},
+		{
+			"kind": "export",
+			"old": "@cldmv/slothlet/runtime#instanceID",
+			"new": "@cldmv/slothlet/runtime#instance.id",
+			"note": "instance is a namespace of read-only facts; instance.id is a real string read at access (v3 exported a Proxy that converted to the id), so `instance.id === \"abc\"` holds.",
+			"action": "move"
+		},
+		{
+			"kind": "export",
+			"old": "@cldmv/slothlet/runtime/async#instanceID",
+			"new": "@cldmv/slothlet/runtime/async#instance.id",
+			"note": "instance is a namespace of read-only facts; instance.id is a real string read at access (v3 exported a Proxy that converted to the id), so `instance.id === \"abc\"` holds.",
+			"action": "move"
+		},
+		{
+			"kind": "export",
+			"old": "@cldmv/slothlet/runtime/live#instanceID",
+			"new": "@cldmv/slothlet/runtime/live#instance.id",
+			"note": "instance is a namespace of read-only facts; instance.id is a real string read at access (v3 exported a Proxy that converted to the id), so `instance.id === \"abc\"` holds.",
+			"action": "move"
+		},
+		{
+			"kind": "export",
+			"old": "@cldmv/slothlet/typegen#generateTypes",
+			"new": "@cldmv/slothlet/typegen#generate",
+			"note": "",
+			"action": "rename"
+		},
+		{
+			"kind": "cli",
+			"old": "slothlet typegen --dir",
+			"new": "slothlet typegen --base",
+			"note": "Matches config base.",
+			"action": "rename"
+		},
+		{
+			"kind": "cli",
+			"old": "slothlet typegen -d",
+			"new": "slothlet typegen -b",
+			"note": "Short flag follows the long one.",
+			"action": "rename"
+		},
+		{
+			"kind": "cli",
+			"old": "slothlet typegen --interface-name",
+			"new": "slothlet typegen --name",
+			"note": "Short flag -n unchanged.",
+			"action": "rename"
+		},
+		{
+			"kind": "cli",
+			"old": "slothlet typegen --no-augment-runtime",
+			"new": "slothlet typegen --no-augment",
+			"note": "",
+			"action": "rename"
+		},
+		{
+			"kind": "cli",
+			"old": "package.json:slothlet.typegen.dir",
+			"new": "package.json:slothlet.typegen.base",
+			"note": "The CLI's package.json fallback takes the generate() option names.",
+			"action": "rename"
+		},
+		{
+			"kind": "cli",
+			"old": "package.json:slothlet.typegen.interfaceName",
+			"new": "package.json:slothlet.typegen.name",
+			"note": "The CLI's package.json fallback takes the generate() option names.",
+			"action": "rename"
+		},
+		{
+			"kind": "method",
+			"old": "api.slothlet.api.modules.addModule",
+			"new": "api.slothlet.api.modules.add",
+			"note": "add(name | discoverResult) mounts one.",
+			"action": "fold"
+		},
+		{
+			"kind": "method",
+			"old": "api.slothlet.api.modules.addModules",
+			"new": "api.slothlet.api.modules.add",
+			"note": "add([...]) mounts a batch.",
+			"action": "fold"
+		},
+		{
+			"kind": "method",
+			"old": "api.slothlet.api.modules.addDiscovered",
+			"new": "api.slothlet.api.modules.add",
+			"note": "add() with no target (or only options) runs discover, sort and mount.",
+			"action": "fold"
+		},
+		{
+			"kind": "method",
+			"old": null,
+			"new": "api.slothlet.api.modules.cache",
+			"note": "Group for the discovery cache.",
+			"action": "new"
+		},
+		{
+			"kind": "method",
+			"old": "api.slothlet.api.modules.clearDiscoveryCache",
+			"new": "api.slothlet.api.modules.cache.clear",
+			"note": "Empties the cache; unmounts nothing.",
+			"action": "move"
+		},
+		{
+			"kind": "method",
+			"old": "api.slothlet.api.modules.getDiscoveryCache",
+			"new": "api.slothlet.api.modules.cache.get",
+			"note": "",
+			"action": "move"
+		},
+		{
+			"kind": "method",
+			"old": "api.slothlet.api.modules.removeModule",
+			"new": "api.slothlet.api.modules.remove",
+			"note": "",
+			"action": "rename"
+		},
+		{
+			"kind": "method",
+			"old": "api.slothlet.api.modules.getStaleMounts",
+			"new": "api.slothlet.api.modules.stale",
+			"note": "",
+			"action": "rename"
+		},
+		{
+			"kind": "method",
+			"old": "api.slothlet.api.remove",
+			"new": "api.slothlet.api.remove",
+			"note": "Signature (target, id?): the scoped form swaps its arguments (see the option row).",
+			"action": "behaviour"
+		},
+		{
+			"kind": "method",
+			"old": "api.slothlet.context.inspect",
+			"new": null,
+			"note": "Typedef-only since 3.0.0, never built. context.get() returns the whole context.",
+			"action": "remove"
+		},
+		{
+			"kind": "method",
+			"old": null,
+			"new": "api.slothlet.context.set",
+			"note": "(key, value) | (object): changes the instance-level context every leaf reads; a run()/scope()'s own keys still win; host only unless a rule allows slothlet.context.set; protected keys enforced.",
+			"action": "new"
+		},
+		{
+			"kind": "method",
+			"old": "api.slothlet.diag.getAPI",
+			"new": "api.slothlet.diag.api",
+			"note": "",
+			"action": "rename"
+		},
+		{
+			"kind": "method",
+			"old": "api.slothlet.diag.caches.getAllModuleIDs",
+			"new": "api.slothlet.diag.caches.ids",
+			"note": "",
+			"action": "rename"
+		},
+		{
+			"kind": "method",
+			"old": "api.slothlet.diag.hook.compilePattern",
+			"new": "api.slothlet.diag.hook.compile",
+			"note": "",
+			"action": "rename"
+		},
+		{
+			"kind": "method",
+			"old": "api.slothlet.diag.owner",
+			"new": "api.slothlet.diag.owner.get",
+			"note": "diag.owner becomes a group; the path lookup is owner.get(path).",
+			"action": "move"
+		},
+		{
+			"kind": "method",
+			"old": "api.slothlet.diag.getOwnership",
+			"new": "api.slothlet.diag.owner.list",
+			"note": "",
+			"action": "move"
+		},
+		{
+			"kind": "method",
+			"old": "api.slothlet.diag.SlothletWarning",
+			"new": null,
+			"note": "The class is exported from @cldmv/slothlet/errors. Captured warnings: api.slothlet.warnings.get().",
+			"action": "remove"
+		},
+		{
+			"kind": "method",
+			"old": null,
+			"new": "api.slothlet.warnings",
+			"note": "This instance's captured warnings (capture is per instance).",
+			"action": "new"
+		},
+		{
+			"kind": "method",
+			"old": "@cldmv/slothlet/errors#SlothletWarning.captured",
+			"new": "api.slothlet.warnings.get",
+			"note": "The static is removed; capture is per instance and always present.",
+			"action": "move"
+		},
+		{
+			"kind": "method",
+			"old": "@cldmv/slothlet/errors#SlothletWarning.clearCaptured",
+			"new": "api.slothlet.warnings.clear",
+			"note": "Per instance.",
+			"action": "move"
+		},
+		{
+			"kind": "method",
+			"old": "api.slothlet.event.resolveLevel",
+			"new": "api.slothlet.event.level",
+			"note": "Host only (built-in deny on slothlet.event.**).",
+			"action": "rename"
+		},
+		{
+			"kind": "method",
+			"old": null,
+			"new": "api.slothlet.hook.pattern",
+			"note": "Group for the runtime path filter.",
+			"action": "new"
+		},
+		{
+			"kind": "method",
+			"old": "api.slothlet.hook.disablePattern",
+			"new": "api.slothlet.hook.pattern.disable",
+			"note": "",
+			"action": "move"
+		},
+		{
+			"kind": "method",
+			"old": "api.slothlet.hook.enablePattern",
+			"new": "api.slothlet.hook.pattern.enable",
+			"note": "",
+			"action": "move"
+		},
+		{
+			"kind": "method",
+			"old": "api.slothlet.hook.resetPatternFilter",
+			"new": "api.slothlet.hook.pattern.reset",
+			"note": "",
+			"action": "move"
+		},
+		{
+			"kind": "method",
+			"old": "api.slothlet.i18n.initI18n",
+			"new": "api.slothlet.i18n.init",
+			"note": "",
+			"action": "rename"
+		},
+		{
+			"kind": "method",
+			"old": "api.slothlet.i18n.getLanguage",
+			"new": "api.slothlet.i18n.language.get",
+			"note": "",
+			"action": "move"
+		},
+		{
+			"kind": "method",
+			"old": "api.slothlet.i18n.setLanguage",
+			"new": "api.slothlet.i18n.language.set",
+			"note": "Returns a promise where the load is async.",
+			"action": "fold"
+		},
+		{
+			"kind": "method",
+			"old": "api.slothlet.i18n.setLanguageAsync",
+			"new": "api.slothlet.i18n.language.set",
+			"note": "",
+			"action": "fold"
+		},
+		{
+			"kind": "method",
+			"old": "api.slothlet.instanceID",
+			"new": "api.slothlet.instance.id",
+			"note": "Same namespace shape as the runtime export.",
+			"action": "move"
+		},
+		{
+			"kind": "method",
+			"old": "api.slothlet.materialize.materialized",
+			"new": "api.slothlet.materialize.complete",
+			"note": "Accessor, true once every lazy folder is loaded.",
+			"action": "rename"
+		},
+		{
+			"kind": "method",
+			"old": "api.slothlet.metadata.get",
+			"new": "api.slothlet.metadata.get",
+			"note": "Sync (v3 was async), user metadata only (global < path chain < function); target = path | module id | function | versioned path (\"v1.auth\"). System facts (file, folder, path, module, …) move to slothlet.node(target).",
+			"action": "behaviour"
+		},
+		{
+			"kind": "method",
+			"old": "api.slothlet.metadata.getFor",
+			"new": "api.slothlet.metadata.get",
+			"note": "",
+			"action": "fold"
+		},
+		{
+			"kind": "method",
+			"old": "api.slothlet.metadata.getForVersion",
+			"new": "api.slothlet.metadata.get",
+			"note": "getForVersion(\"auth\", \"v1\") → get(\"v1.auth\").",
+			"action": "fold"
+		},
+		{
+			"kind": "method",
+			"old": "api.slothlet.metadata.setGlobal",
+			"new": "api.slothlet.metadata.global",
+			"note": "Rule target slothlet.metadata.setGlobal (built-in deny) → slothlet.metadata.global.",
+			"action": "rename"
+		},
+		{
+			"kind": "method",
+			"old": "api.slothlet.metadata.removeFor",
+			"new": "api.slothlet.metadata.remove",
+			"note": "remove(target, key?): target = function | path | module id.",
+			"action": "fold"
+		},
+		{
+			"kind": "method",
+			"old": "api.slothlet.metadata.remove",
+			"new": "api.slothlet.metadata.remove",
+			"note": "Now also takes a path or module id as its target (fold of removeFor).",
+			"action": "behaviour"
+		},
+		{
+			"kind": "method",
+			"old": "api.slothlet.metadata.setFor",
+			"new": "api.slothlet.metadata.set",
+			"note": "set(target, key | object, value?).",
+			"action": "fold"
+		},
+		{
+			"kind": "method",
+			"old": "api.slothlet.metadata.setForVersion",
+			"new": "api.slothlet.metadata.set",
+			"note": "setForVersion(\"auth\", \"v1\", k, v) → set(\"v1.auth\", k, v).",
+			"action": "fold"
+		},
+		{
+			"kind": "method",
+			"old": "api.slothlet.metadata.set",
+			"new": "api.slothlet.metadata.set",
+			"note": "Now also takes a path, module id or versioned path as its target (fold of setFor / setForVersion).",
+			"action": "behaviour"
+		},
+		{
+			"kind": "method",
+			"old": null,
+			"new": "api.slothlet.node",
+			"note": "(target) → one frozen self-report of a node (see node-field rows). Gated only by whether the caller may reach the target.",
+			"action": "new"
+		},
+		{
+			"kind": "method",
+			"old": "api.slothlet.ownership",
+			"new": null,
+			"note": "Typedef-only (slothlet.ownership.get / unregister), never built. Use slothlet.owner.get(path).",
+			"action": "remove"
+		},
+		{
+			"kind": "method",
+			"old": null,
+			"new": "api.slothlet.permissions.control.report",
+			"note": "() → { mode, baseline }: the level the instance runs at.",
+			"action": "new"
+		},
+		{
+			"kind": "method",
+			"old": null,
+			"new": "api.slothlet.permissions.control.gating",
+			"note": "Group matching config permissions.gating.",
+			"action": "new"
+		},
+		{
+			"kind": "method",
+			"old": "api.slothlet.permissions.control.readGating",
+			"new": "api.slothlet.permissions.control.gating.read",
+			"note": "read(value?): with a boolean sets read gating; without an argument returns the current state (was the readGatingEnabled accessor).",
+			"action": "fold"
+		},
+		{
+			"kind": "method",
+			"old": "api.slothlet.permissions.control.readGatingEnabled",
+			"new": "api.slothlet.permissions.control.gating.read",
+			"note": "Accessor becomes the no-argument call.",
+			"action": "fold"
+		},
+		{
+			"kind": "method",
+			"old": "api.slothlet.permissions.control.enable",
+			"new": "api.slothlet.permissions.control.mode",
+			"note": "enable() → mode(\"on\").",
+			"action": "fold"
+		},
+		{
+			"kind": "method",
+			"old": "api.slothlet.permissions.control.disable",
+			"new": "api.slothlet.permissions.control.mode",
+			"note": "disable() → mode(\"off\").",
+			"action": "fold"
+		},
+		{
+			"kind": "method",
+			"old": "api.slothlet.permissions.control.enabled",
+			"new": "api.slothlet.permissions.control.mode",
+			"note": "enabled → mode() === \"on\".",
+			"action": "fold"
+		},
+		{
+			"kind": "method",
+			"old": "api.slothlet.permissions.control.mode",
+			"new": "api.slothlet.permissions.control.mode",
+			"note": "Accessor becomes mode(value?): no argument returns \"on\" | \"off\" | \"disabled\"; \"on\"|true / \"off\"|false switches; \"disabled\" can be left but not entered at runtime; locked by seal().",
+			"action": "behaviour"
+		},
+		{
+			"kind": "method",
+			"old": null,
+			"new": "api.slothlet.permissions.global.check",
+			"note": "Group of the two queries.",
+			"action": "new"
+		},
+		{
+			"kind": "method",
+			"old": "api.slothlet.permissions.global.checkAccess",
+			"new": "api.slothlet.permissions.global.check.access",
+			"note": "Silent query, no audit.",
+			"action": "move"
+		},
+		{
+			"kind": "method",
+			"old": "api.slothlet.permissions.global.checkCall",
+			"new": "api.slothlet.permissions.global.check.call",
+			"note": "Rule target slothlet.permissions.global.checkCall (built-in deny) → slothlet.permissions.global.check.call.",
+			"action": "move"
+		},
+		{
+			"kind": "method",
+			"old": null,
+			"new": "api.slothlet.permissions.global.rules",
+			"note": "Group: the same list, two ways to name the target.",
+			"action": "new"
+		},
+		{
+			"kind": "method",
+			"old": "api.slothlet.permissions.global.rulesByModule",
+			"new": "api.slothlet.permissions.global.rules.module",
+			"note": "",
+			"action": "move"
+		},
+		{
+			"kind": "method",
+			"old": "api.slothlet.permissions.global.rulesForPath",
+			"new": "api.slothlet.permissions.global.rules.path",
+			"note": "",
+			"action": "move"
+		},
+		{
+			"kind": "method",
+			"old": null,
+			"new": "api.slothlet.permissions.rules",
+			"note": "Group, same word as config permissions.rules and event.rules. self.rules() stays under permissions.self.",
+			"action": "new"
+		},
+		{
+			"kind": "method",
+			"old": "api.slothlet.permissions.addRule",
+			"new": "api.slothlet.permissions.rules.add",
+			"note": "Rule target slothlet.permissions.addRule (built-in reach deny, #625) → slothlet.permissions.rules.add.",
+			"action": "move"
+		},
+		{
+			"kind": "method",
+			"old": "api.slothlet.permissions.removeRule",
+			"new": "api.slothlet.permissions.rules.remove",
+			"note": "",
+			"action": "move"
+		},
+		{
+			"kind": "method",
+			"old": "api.slothlet.lockCaller",
+			"new": "api.slothlet.pin",
+			"note": "Rule target slothlet.lockCaller (built-in allow) → slothlet.pin.",
+			"action": "rename"
+		},
+		{
+			"kind": "method",
+			"old": "api.slothlet.lockCaller.caller",
+			"new": "api.slothlet.pin.caller",
+			"note": "Follows lockCaller → pin. Rule target slothlet.lockCaller.caller → slothlet.pin.caller.",
+			"action": "rename"
+		},
+		{
+			"kind": "method",
+			"old": "api.slothlet.run",
+			"new": "api.slothlet.context.run",
+			"note": "Alias removed; use context.run.",
+			"action": "remove"
+		},
+		{
+			"kind": "method",
+			"old": "api.slothlet.scope",
+			"new": "api.slothlet.context.scope",
+			"note": "Alias removed; use context.scope.",
+			"action": "remove"
+		},
+		{
+			"kind": "method",
+			"old": "api.slothlet.versioning.setDefault",
+			"new": "api.slothlet.versioning.default",
+			"note": "(path, tag).",
+			"action": "rename"
+		},
+		{
+			"kind": "method",
+			"old": null,
+			"new": "api.slothlet.versioning.metadata",
+			"note": "Group: version-manager-only metadata (not the store metadata.set(\"v1.auth\", …) writes).",
+			"action": "new"
+		},
+		{
+			"kind": "method",
+			"old": "api.slothlet.versioning.getVersionMetadata",
+			"new": "api.slothlet.versioning.metadata.get",
+			"note": "(path, tag).",
+			"action": "move"
+		},
+		{
+			"kind": "method",
+			"old": "api.slothlet.versioning.setVersionMetadata",
+			"new": "api.slothlet.versioning.metadata.set",
+			"note": "(path, tag, patch); merges.",
+			"action": "move"
+		},
+		{
+			"kind": "method",
+			"old": "api.slothlet.versioning.unregister",
+			"new": "api.slothlet.versioning.remove",
+			"note": "(path, tag).",
+			"action": "rename"
+		},
+		{
+			"kind": "node-field",
+			"old": "<node>.__isCallable",
+			"new": "api.slothlet.node(<node>).callable",
+			"note": "Nodes carry no framework keys in v4.",
+			"action": "move"
+		},
+		{
+			"kind": "node-field",
+			"old": "<node>.__filePath",
+			"new": "api.slothlet.node(<node>).file",
+			"note": "Nodes carry no framework keys in v4.",
+			"action": "move"
+		},
+		{
+			"kind": "node-field",
+			"old": "<node>.__sourceFolder",
+			"new": "api.slothlet.node(<node>).folder",
+			"note": "Nodes carry no framework keys in v4.",
+			"action": "move"
+		},
+		{
+			"kind": "node-field",
+			"old": "<node>.__inFlight",
+			"new": "api.slothlet.node(<node>).loading",
+			"note": "Nodes carry no framework keys in v4. Lazy materialization in progress.",
+			"action": "move"
+		},
+		{
+			"kind": "node-field",
+			"old": "<node>.__materialized",
+			"new": "api.slothlet.node(<node>).materialized",
+			"note": "Nodes carry no framework keys in v4.",
+			"action": "move"
+		},
+		{
+			"kind": "node-field",
+			"old": "<node>.__mode",
+			"new": "api.slothlet.node(<node>).mode",
+			"note": "Nodes carry no framework keys in v4. \"eager\" | \"lazy\".",
+			"action": "move"
+		},
+		{
+			"kind": "node-field",
+			"old": "<node>.__moduleID",
+			"new": "api.slothlet.node(<node>).module",
+			"note": "Nodes carry no framework keys in v4. Reports the module id used with api.add / remove (e.g. \"base\"), not v3's internal composite.",
+			"action": "move"
+		},
+		{
+			"kind": "node-field",
+			"old": "<node>.__apiPath",
+			"new": "api.slothlet.node(<node>).path",
+			"note": "Nodes carry no framework keys in v4. The real path, e.g. \"v1.auth\".",
+			"action": "move"
+		},
+		{
+			"kind": "node-field",
+			"old": "<node>.__type",
+			"new": "api.slothlet.node(<node>).type",
+			"note": "Nodes carry no framework keys in v4. Compare against slothlet.types.*.",
+			"action": "move"
+		},
+		{
+			"kind": "node-field",
+			"old": "<node>.__slothletPath",
+			"new": "api.slothlet.node(<node>).path",
+			"note": "On a version dispatcher the logical path (\"auth\") is node().logical; everywhere else path.",
+			"action": "move"
+		},
+		{
+			"kind": "node-field",
+			"old": "<versionDispatcher>.__slothletPath",
+			"new": "api.slothlet.node(<node>).logical",
+			"note": "Only present on versioned nodes.",
+			"action": "move"
+		},
+		{
+			"kind": "node-field",
+			"old": "<node>.__metadata",
+			"new": "api.slothlet.metadata.get(<node>)",
+			"note": "User metadata via metadata.get(target); system facts via node(target).",
+			"action": "remove"
+		},
+		{
+			"kind": "node-field",
+			"old": "metadata._module.manifest",
+			"new": "api.slothlet.node(<node>).manifest",
+			"note": "Parsed slothlet.module.json of a package mount; user metadata no longer carries _module.",
+			"action": "move"
+		},
+		{
+			"kind": "node-field",
+			"old": "metadata.filePath",
+			"new": "api.slothlet.node(<node>).file",
+			"note": "System field of v3 metadata.get() output.",
+			"action": "move"
+		},
+		{
+			"kind": "node-field",
+			"old": "metadata.sourceFolder",
+			"new": "api.slothlet.node(<node>).folder",
+			"note": "System field of v3 metadata.get() output.",
+			"action": "move"
+		},
+		{
+			"kind": "node-field",
+			"old": "metadata.apiPath",
+			"new": "api.slothlet.node(<node>).path",
+			"note": "System field of v3 metadata.get() output.",
+			"action": "move"
+		},
+		{
+			"kind": "node-field",
+			"old": "metadata.baseModuleID",
+			"new": "api.slothlet.node(<node>).module",
+			"note": "The raw owning-module id (v3 metadata.moduleID was the internal composite).",
+			"action": "move"
+		},
+		{
+			"kind": "node-field",
+			"old": "metadata.moduleID",
+			"new": null,
+			"note": "Internal composite id; stays private. Use node(target).module for the public id.",
+			"action": "remove"
+		},
+		{
+			"kind": "node-field",
+			"old": "metadata.taggedAt",
+			"new": null,
+			"note": "Removed; node() does not report it.",
+			"action": "remove"
+		},
+		{
+			"kind": "internal",
+			"old": "__displayName",
+			"new": "____displayName",
+			"note": "Framework-private (____ private / ___ callables; _ and __ belong to consumers). Debug-only; not reported by node().",
+			"action": "rename"
+		},
+		{
+			"kind": "internal",
+			"old": "__materializeOnCreate",
+			"new": "____materializeOnCreate",
+			"note": "Framework-private (____ private / ___ callables; _ and __ belong to consumers). Not reported by node().",
+			"action": "rename"
+		},
+		{
+			"kind": "internal",
+			"old": "__state",
+			"new": "____state",
+			"note": "Framework-private (____ private / ___ callables; _ and __ belong to consumers).",
+			"action": "rename"
+		},
+		{
+			"kind": "internal",
+			"old": "__invalid",
+			"new": "____invalid",
+			"note": "Framework-private (____ private / ___ callables; _ and __ belong to consumers).",
+			"action": "rename"
+		},
+		{
+			"kind": "internal",
+			"old": "__impl",
+			"new": "____impl",
+			"note": "Framework-private (____ private / ___ callables; _ and __ belong to consumers). Raw impl alias; one name for _impl and __impl.",
+			"action": "rename"
+		},
+		{
+			"kind": "internal",
+			"old": "_impl",
+			"new": "____impl",
+			"note": "Framework-private (____ private / ___ callables; _ and __ belong to consumers). Raw impl alias; folds with __impl.",
+			"action": "rename"
+		},
+		{
+			"kind": "internal",
+			"old": "_materialize",
+			"new": "___materialize",
+			"note": "Framework-private (____ private / ___ callables; _ and __ belong to consumers). A callable, so three underscores.",
+			"action": "rename"
+		},
+		{
+			"kind": "internal",
+			"old": "__childFilePaths",
+			"new": "____childFilePaths",
+			"note": "Framework-private (____ private / ___ callables; _ and __ belong to consumers). Impl-riding marker.",
+			"action": "rename"
+		},
+		{
+			"kind": "internal",
+			"old": "__filePath (impl marker)",
+			"new": "____filePath",
+			"note": "Framework-private (____ private / ___ callables; _ and __ belong to consumers). Impl-riding marker; distinct from the node self-report field of the same name.",
+			"action": "rename"
+		},
+		{
+			"kind": "internal",
+			"old": "__childFilePathsPreMaterialize",
+			"new": "____childFilePathsPreMaterialize",
+			"note": "Framework-private (____ private / ___ callables; _ and __ belong to consumers). Impl-riding marker.",
+			"action": "rename"
+		},
+		{
+			"kind": "internal",
+			"old": "__isVersionDispatcher",
+			"new": "____isVersionDispatcher",
+			"note": "Framework-private (____ private / ___ callables; _ and __ belong to consumers).",
+			"action": "rename"
+		},
+		{
+			"kind": "internal",
+			"old": "__logicalPath",
+			"new": "____logicalPath",
+			"note": "Framework-private (____ private / ___ callables; _ and __ belong to consumers).",
+			"action": "rename"
+		},
+		{
+			"kind": "internal",
+			"old": "_module (metadata key)",
+			"new": null,
+			"note": "Framework-private (____ private / ___ callables; _ and __ belong to consumers). Removed from user metadata; served by node(target).manifest.",
+			"action": "remove"
+		}
+	]
+}
