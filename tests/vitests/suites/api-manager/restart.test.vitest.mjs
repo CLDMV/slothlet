@@ -603,29 +603,68 @@ describe.each(getMatrixConfigs({}))("api.slothlet.restart() (#504) > held refere
 
 	it("retains an immutable snapshot of the original config", async () => {
 		const context = { user: "u" };
-		const map = new Map([["k", 1]]);
-		const extra = { list: [1, { deep: true }], map, bare: Object.create(null) };
-		extra.self = extra;
-		Object.defineProperty(extra, "hidden", { value: 1, enumerable: false });
-		extra.bare.flag = true;
-		await create({ context, extra });
+		const shared = { tag: "s" };
+		const when = new Date(0);
+		const bare = Object.create(null);
+		bare.flag = true;
+		const metadata = { list: [1, { deep: true }], shared, again: shared, when, bare };
+		await create({ context, metadata });
 		const snapshot = resolveWrapper(api.counter).slothlet._originalConfig;
 
+		// The snapshot and every nested container are frozen copies, never the caller's objects.
 		expect(Object.isFrozen(snapshot)).toBe(true);
+		expect(snapshot.metadata).not.toBe(metadata);
+		expect(snapshot.metadata).toEqual(metadata);
+		expect(Object.isFrozen(snapshot.metadata)).toBe(true);
+		expect(snapshot.metadata.list).not.toBe(metadata.list);
+		expect(Object.isFrozen(snapshot.metadata.list)).toBe(true);
+		expect(snapshot.metadata.list[1]).not.toBe(metadata.list[1]);
+		expect(Object.isFrozen(snapshot.metadata.list[1])).toBe(true);
+		// A reference shared inside the config stays shared in the copy.
+		expect(snapshot.metadata.shared).not.toBe(shared);
+		expect(snapshot.metadata.again).toBe(snapshot.metadata.shared);
+		// A null-prototype object is copied as a null-prototype object.
+		expect(snapshot.metadata.bare).not.toBe(bare);
+		expect(Object.getPrototypeOf(snapshot.metadata.bare)).toBe(null);
+		expect(Object.isFrozen(snapshot.metadata.bare)).toBe(true);
+		// A value that is not a plain object or array (here a Date) is kept as passed.
+		expect(snapshot.metadata.when).toBe(when);
+		// `context` is kept by identity.
 		expect(snapshot.context).toBe(context);
-		expect(snapshot.extra).not.toBe(extra);
-		expect(Object.isFrozen(snapshot.extra)).toBe(true);
-		expect(Object.isFrozen(snapshot.extra.list[1])).toBe(true);
-		expect(snapshot.extra.self).toBe(snapshot.extra);
-		expect(snapshot.extra.map).toBe(map);
-		expect(Object.getPrototypeOf(snapshot.extra.bare)).toBe(null);
-		expect(snapshot.extra.bare.flag).toBe(true);
-		expect("hidden" in snapshot.extra).toBe(false);
+
+		// A later mutation of the caller's object reaches neither the snapshot nor the restarted instance.
+		metadata.list[1].deep = false;
+		metadata.list.push(2);
+		shared.tag = "changed";
+		bare.flag = false;
+		expect(snapshot.metadata.list).toEqual([1, { deep: true }]);
+		expect(snapshot.metadata.shared.tag).toBe("s");
+		expect(snapshot.metadata.bare.flag).toBe(true);
 
 		await api.slothlet.restart();
+		const restarted = api.slothlet.metadata.get("counter");
+		expect(restarted.list).toEqual([1, { deep: true }]);
+		expect(restarted.shared.tag).toBe("s");
+		expect(restarted.again.tag).toBe("s");
+		expect(restarted.bare.flag).toBe(true);
+		expect(restarted.when).toEqual(when);
 		// The instance takes its own copy of the context passed in (v4): equal to it, never the object itself.
 		expect(resolveWrapper(api.counter).slothlet.context).toEqual(context);
 		expect(resolveWrapper(api.counter).slothlet.context).not.toBe(context);
+	});
+
+	it("carries a cycle through an array in metadata into the snapshot and the restarted instance", async () => {
+		const list = [1];
+		list.push(list);
+		await create({ metadata: { list } });
+		const snapshot = resolveWrapper(api.counter).slothlet._originalConfig;
+		expect(snapshot.metadata.list).not.toBe(list);
+		expect(snapshot.metadata.list[1]).toBe(snapshot.metadata.list);
+
+		await api.slothlet.restart();
+		const restarted = api.slothlet.metadata.get("counter").list;
+		expect(restarted).not.toBe(list);
+		expect(restarted[1]).toBe(restarted);
 	});
 
 	if (config.mode === "lazy") {

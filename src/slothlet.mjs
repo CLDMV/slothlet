@@ -239,16 +239,24 @@ const INTERNAL_CONFIG_KEYS = setFrom(["dir", "envTarget"]);
  * Copy a config value for the retained original-config snapshot (#504).
  *
  * @description
- * Plain objects and arrays are copied recursively so a later mutation of the caller's own options
- * object (or of anything config normalization touches) cannot change what `restart()` rebuilds from.
- * Everything else — functions, class instances, `Map`/`Set`, `Date`, `RegExp`, `URL` — is kept by
- * identity, as the original call passed it. With `freeze`, every copied container is frozen so the
- * retained snapshot itself is immutable; `restart()` takes an unfrozen copy of it for each rebuild,
- * because normalization receives a config it is free to read into new objects.
+ * Plain objects (`Object.prototype` or null prototype, the two shapes the config schema walks) and
+ * arrays are copied recursively so a later mutation of the caller's own options object (or of
+ * anything config normalization touches) cannot change what `restart()` rebuilds from. A plain
+ * object's copy carries its own enumerable string keys — the keys the schema and every option read —
+ * and keeps its prototype (`metadata` accepts null-prototype objects). Everything else — functions,
+ * class instances, `Map`/`Set`, `Date`, `RegExp`, `URL` — is kept by identity, as the original call
+ * passed it (`metadata` values may be any of these). With `freeze`, every copied container is frozen
+ * so the retained snapshot itself is immutable; `restart()` takes an unfrozen copy of it for each
+ * rebuild, because normalization receives a config it is free to read into new objects.
+ *
+ * `seen` maps each source container to its copy, so a container referenced twice is copied once and
+ * stays shared in the copy. It also ends cycles: the snapshot is taken before the config is
+ * validated, so a cyclic value that validation later refuses is copied without recursing forever,
+ * and a cycle through an array (which `metadata`'s cycle check does not walk) is carried as a cycle.
  *
  * @param {unknown} value - Value to copy.
  * @param {boolean} freeze - Freeze each copied container.
- * @param {Map<object, object>} [seen=new Map()] - Cycle guard: source container → its copy.
+ * @param {Map<object, object>} [seen=new Map()] - Source container → its copy (shared references, cycles).
  * @returns {unknown} The copy (or the value itself for anything that is not a plain container).
  * @private
  *
@@ -271,10 +279,8 @@ function copyConfigValue(value, freeze, seen = new Map()) {
 	if (proto !== Objects.prototype && proto !== null) return value;
 	const out = proto === null ? Objects.create(null) : {};
 	MapMethods.set(seen, value, out);
-	for (let ofIndex = 0, ofList = Reflect.ownKeys(value); ofIndex < ofList.length; ofIndex++) {
+	for (let ofIndex = 0, ofList = Objects.keys(value); ofIndex < ofList.length; ofIndex++) {
 		const key = ofList[ofIndex];
-		const descriptor = Objects.getOwnPropertyDescriptor(value, key);
-		if (!descriptor.enumerable) continue;
 		out[key] = copyConfigValue(value[key], freeze, seen);
 	}
 	return freeze ? Objects.freeze(out) : out;
