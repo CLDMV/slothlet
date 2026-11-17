@@ -822,6 +822,11 @@ export class PermissionManager extends ComponentBase {
 		// target grants it to a module.
 		this.addRule({ caller: "**", target: "slothlet.warnings.**", effect: "deny" }, "__builtin__");
 
+		// Built-in deny rule: `slothlet.context.set` changes the context every leaf of the instance reads, so a module
+		// that could call it could change what every other module sees. Host-only by default; an instance rule on the
+		// same exact target outranks this one (`{ caller: "session.**", target: "slothlet.context.set", effect: "allow" }`).
+		this.addRule({ caller: "**", target: "slothlet.context.set", effect: "deny" }, "__builtin__");
+
 		// Built-in allow rules: the caller-identity utilities `slothlet.pin` and
 		// `slothlet.bind` grant no security-sensitive access — they only pin a callback's
 		// caller identity, which strengthens enforcement. Allowing them by default means a

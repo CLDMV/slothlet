@@ -247,6 +247,26 @@ const result = await api.slothlet.context.run(
 // After callback: context reverts to { app: "myApp", version: "1.0" }
 ```
 
+#### api.slothlet.context.set(key, value) / set(object)
+
+Changes the instance-level context every leaf reads. Pass one key and its value, or an object of keys and values.
+
+```javascript
+const api = await slothlet({ base: "./api", context: { tenant: "acme" } });
+
+api.slothlet.context.set("region", "eu");
+api.slothlet.context.set({ tenant: "globex", region: "us" });
+
+api.slothlet.context.get(); // { tenant: "globex", region: "us" }
+```
+
+- **The context passed to `slothlet()` is copied.** Its top-level keys are copied when the instance loads, so changing that object later changes nothing, and `set()` never writes to it. The values themselves are the ones given (an object in it is shared, not cloned).
+- **A `run()` / `scope()` keeps its own keys.** A run in progress sees the new value of every key it did not supply itself; the keys it supplied (and those it `protect`s or `owners`) still win inside it. A run started after `set()` starts from the new values.
+- **Protected and owned keys are enforced.** Inside a `scope()` that protects a key, or where another owner owns it, `set()` on that key throws `CONTEXT_KEY_PROTECTED`, as a write through the runtime `context` does.
+- **Reload keeps it.** `api.slothlet.reload()` carries what `set()` made into the rebuilt instance; [`restart()`](RELOAD.md#apislothletrestart) starts again from the config's context.
+- **Host only by default.** A built-in rule denies `slothlet.context.set` to module code while the permission system is on; grant it with a rule on that exact target (see [PERMISSIONS.md](PERMISSIONS.md#contextset--host-only-by-default)).
+- A key named `__proto__`, `constructor` or `prototype`, or anything but a key with a value or one plain object, throws `INVALID_ARGUMENT`.
+
 #### api.slothlet.context.scope({ context, fn, args, merge, isolation, protect, owners })
 
 Executes a function with isolated context using structured options.

@@ -623,7 +623,9 @@ describe.each(getMatrixConfigs({}))("api.slothlet.restart() (#504) > held refere
 		expect("hidden" in snapshot.extra).toBe(false);
 
 		await api.slothlet.restart();
-		expect(resolveWrapper(api.counter).slothlet.context).toBe(context);
+		// The instance takes its own copy of the context passed in (v4): equal to it, never the object itself.
+		expect(resolveWrapper(api.counter).slothlet.context).toEqual(context);
+		expect(resolveWrapper(api.counter).slothlet.context).not.toBe(context);
 	});
 
 	if (config.mode === "lazy") {

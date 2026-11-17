@@ -51,6 +51,7 @@ export const SLOTHLET_TREE = Objects.freeze([
 	"slothlet.context.get",
 	"slothlet.context.run",
 	"slothlet.context.scope",
+	"slothlet.context.set",
 	"slothlet.diag",
 	"slothlet.diag.api",
 	"slothlet.diag.caches",
