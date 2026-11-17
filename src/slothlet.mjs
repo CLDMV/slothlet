@@ -728,13 +728,9 @@ class Slothlet {
 			});
 
 			this.handlers.lifecycle.subscribe("impl:removed", (data) => {
-				// Clean up user metadata for removed impl (use root segment only)
-				// impl:removed always provides data.apiPath; false arm is defensive dead code.
-				/* v8 ignore next */
-				if (data.apiPath) {
-					const rootSegment = splitText(data.apiPath, ".")[0];
-					this.handlers.metadata.removeUserMetadataByApiPath(rootSegment);
-				}
+				// Clean up user metadata for the removed impl, keyed by its root segment. The payload's `path` is the
+				// removed member's api path as segments.
+				this.handlers.metadata.removeUserMetadataByApiPath(data.path[0]);
 			});
 		}
 
@@ -756,7 +752,12 @@ class Slothlet {
 				this.handlers.routineManager.onImplCreated(data);
 			});
 			this.handlers.lifecycle.subscribe("impl:removed", (data) => {
-				this.handlers.routineManager.onImplRemoved(data);
+				// The public payload names the removed member by `path` (segments) and `module`; the routine manager prunes by
+				// dotted api path and module ID.
+				this.handlers.routineManager.onImplRemoved({
+					apiPath: ArrayMethods.join(data.path, "."),
+					moduleID: data.module
+				});
 			});
 		}
 
