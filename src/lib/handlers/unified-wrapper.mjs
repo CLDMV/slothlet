@@ -3037,7 +3037,7 @@ function runtime_selfHookHandler(handler, slothlet, reader) {
  *
  * @param {object} wrapper - The node whose trap it is.
  * @param {function(...*): boolean} trap - The `set`, `defineProperty` or `deleteProperty` trap.
- * @param {(function(Array<*>): *)|null} valueOf - The value the trap's arguments store; null for a deletion.
+ * @param {?function(Array<*>): *} valueOf - The value the trap's arguments store; null for a deletion.
  * @returns {function(...*): boolean} The wrapped trap.
  * @private
  *

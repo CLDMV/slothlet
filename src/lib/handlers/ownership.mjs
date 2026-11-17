@@ -1121,7 +1121,7 @@ export class OwnershipManager extends ComponentBase {
 	 * @param {string} apiPath - API path to modify.
 	 * @param {string|null} [moduleID=null] - Module to remove (defaults to current owner).
 	 * @returns {{ action: "delete"|"none"|"restore", removedModuleId: string|null,
-	 * restoreModuleId: string|null, wasCurrent?: boolean }} Action taken for the path; `wasCurrent` says whether the
+	 * restoreModuleId: string|null, wasCurrent: (boolean|undefined) }} Action taken for the path; `wasCurrent` says whether the
 	 * removed entry was the path's current one.
 	 * @public
 	 *
