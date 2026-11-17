@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-07T21:25:24-08:00 (1794115524)
+ *	@Last modified time: 2026-11-16T16:30:02-08:00 (1794875402)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -20,8 +20,9 @@
  * @internal
  * @description
  * The main build emits `dist/` and `types/dist/`. This step slices that output into standalone
- * packages (`@cldmv/slothlet-i18n`, `@cldmv/slothlet-types`), each with a generated `package.json`
- * assembled from three layers:
+ * packages (`@cldmv/slothlet-i18n`, `@cldmv/slothlet-types`), and stages the code-carrying
+ * `@cldmv/slothlet-migrate` tool from its own source under `packaging/slothlet-migrate/`. Each gets a
+ * generated `package.json` assembled from three layers:
  *
  *   1. inherited — org / legal / marketing fields copied verbatim from the root package.json.
  *   2. authored  — description + keywords (and any explicit overrides) from packaging/<name>/package.json.
@@ -87,6 +88,30 @@ function emptyDir(dir) {
 
 function copyIfExists(src, dst) {
 	if (fs.existsSync(src)) fs.copyFileSync(src, dst);
+}
+
+/**
+ * Recursively copy a source tree (used for the code-carrying migrate package).
+ * @internal
+ */
+function copyTree(srcDir, dstDir) {
+	ensureDir(dstDir);
+	let files = 0;
+	let bytes = 0;
+	for (const entry of fs.readdirSync(srcDir, { withFileTypes: true })) {
+		const src = path.join(srcDir, entry.name);
+		const dst = path.join(dstDir, entry.name);
+		if (entry.isDirectory()) {
+			const sub = copyTree(src, dst);
+			files += sub.files;
+			bytes += sub.bytes;
+			continue;
+		}
+		fs.copyFileSync(src, dst);
+		files++;
+		bytes += fs.statSync(dst).size;
+	}
+	return { files, bytes };
 }
 
 /**
@@ -283,6 +308,40 @@ const RULES = {
 		}
 	},
 
+	"slothlet-migrate": {
+		// A standalone CLI with its own code (not carved from the core build): it does not import
+		// @cldmv/slothlet at all, so core declares no peer on it and it declares none on core.
+		corePeer: false,
+		stage(_core, { outDir }) {
+			const srcRoot = path.join(packagingDir, "slothlet-migrate");
+			let files = 0;
+			let bytes = 0;
+			for (const dir of ["bin", "src", "data"]) {
+				const from = path.join(srcRoot, dir);
+				if (!fs.existsSync(from)) continue;
+				const copied = copyTree(from, path.join(outDir, dir));
+				files += copied.files;
+				bytes += copied.bytes;
+			}
+			const bin = path.join(outDir, "bin", "slothlet-migrate.mjs");
+			if (fs.existsSync(bin)) fs.chmodSync(bin, 0o755);
+			return { files, bytes };
+		},
+		compute(core) {
+			// The rewrite engine parses with acorn; pin the range core's own build and tests use.
+			const acorn = core.devDependencies && core.devDependencies.acorn;
+			if (!acorn) throw new Error("core package.json has no acorn devDependency to take the migrate package's range from");
+			return {
+				exports: {
+					".": "./src/index.mjs",
+					"./package.json": "./package.json"
+				},
+				files: ["bin/", "src/", "data/", "README.md", "LICENSE"],
+				dependencies: { acorn }
+			};
+		}
+	},
+
 	"slothlet-types": {
 		stage(_core, { outDir }) {
 			// Carve from types/src, NOT types/dist: both trees mirror the identical file list and
@@ -415,7 +474,7 @@ function main() {
 		const staged = rule.stage(core, { outDir });
 		const computed = rule.compute(core);
 		const manifest = buildManifest(folder, core, authored, computed);
-		assertCorePeerRange(core, manifest.name); // lockstep guard — fails loudly on peer-range drift
+		if (rule.corePeer !== false) assertCorePeerRange(core, manifest.name); // lockstep guard — fails loudly on peer-range drift
 
 		writeJson(path.join(outDir, "package.json"), manifest);
 		copyIfExists(path.join(packagingDir, folder, "README.md"), path.join(outDir, "README.md"));
