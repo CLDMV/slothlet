@@ -37,6 +37,7 @@ import { slothletTail } from "./lib/chains.mjs";
 
 export { unifiedDiff } from "./lib/diff.mjs";
 export { ENTRIES, SOURCES } from "./lib/data.mjs";
+export { audit, auditJson, auditSource } from "./audit.mjs";
 
 /** Specifiers whose default (or `slothlet`) export is the slothlet() factory. */
 const FACTORY_SPECIFIERS = new Set(["@cldmv/slothlet", "@cldmv/slothlet/slothlet"]);

@@ -21,9 +21,11 @@
  */
 
 import { resolve } from "node:path";
+import { audit } from "../src/audit.mjs";
 import { collectFiles, migrateFile } from "../src/index.mjs";
 
 const HELP = `Usage: slothlet-migrate [options] [paths...]
+       slothlet-migrate audit [options] [paths...]
 
 Rewrites slothlet v3 code, configs and slothlet.module.json files to v4.
 Without --write nothing is changed: the diff and the findings are printed.
@@ -41,6 +43,12 @@ Options:
   --no-diff          do not print diffs
   --no-info          hide behaviour notes (findings that need no edit)
   -h, --help         show this help
+
+audit lists every v3 surface still in use (file:line -> v4 replacement), including
+what this tool rewrites and the data keys it can only report. Nothing is changed.
+It exits 1 when there are findings, 0 when there are none, 2 on a usage error or a
+file that could not be parsed. Options: --config, --callee, --json, --info (also
+list behaviour notes, which never affect the exit code).
 
 Findings:
   rewrite   changed in place (or would be, in a dry run)
@@ -75,11 +83,64 @@ function parseArgs(argv) {
 }
 
 /**
+ * Run `slothlet-migrate audit`.
+ * @param {string[]} argv - Arguments after `audit`.
+ * @returns {number} Exit code.
+ */
+function runAudit(argv) {
+	let opts;
+	try {
+		const rest = argv.filter((a) => a !== "--info");
+		opts = parseArgs(rest);
+		opts.info = argv.includes("--info");
+		if (opts.write) throw new Error("audit never writes; run without --write (use slothlet-migrate --write to apply rewrites)");
+	} catch (error) {
+		process.stderr.write(`slothlet-migrate: ${error.message}\n\n${HELP}`);
+		return 2;
+	}
+	if (opts.help) {
+		process.stdout.write(HELP);
+		return 0;
+	}
+	const cwd = process.cwd();
+	const configs = new Set(opts.configs.map((c) => resolve(cwd, c)));
+	const inputs = (opts.paths.length ? opts.paths : opts.configs.length ? [] : ["."]).map((p) => resolve(cwd, p));
+	let report;
+	try {
+		report = audit(inputs, { cwd, callees: opts.callees, configs, info: opts.info });
+	} catch (error) {
+		process.stderr.write(`slothlet-migrate: ${error.message}\n`);
+		return 2;
+	}
+	const actionable = report.findings.filter((f) => f.level !== "info").length;
+	if (opts.json) {
+		process.stdout.write(`${JSON.stringify({ ...report, clean: actionable === 0 && !report.errors.length }, null, "\t")}\n`);
+	} else {
+		for (const f of report.findings) {
+			const names = f.old || f.new ? ` ${f.old ?? "(new)"} → ${f.new ?? "removed"}` : "";
+			process.stdout.write(`${f.file}:${f.line}:${f.column}  ${f.level.padEnd(7)}${names}\n    ${f.message}\n`);
+		}
+		for (const e of report.errors) process.stdout.write(`${e.file}: could not parse (${e.error}); not audited\n`);
+		const files = new Set(report.findings.filter((f) => f.level !== "info").map((f) => f.file)).size;
+		process.stdout.write(
+			actionable
+				? `\n${actionable} v3 use(s) in ${files} file(s): ${report.counts.fixable} fixable with slothlet-migrate --write, ${report.counts.manual} needing a hand edit.\n`
+				: `\nNo v3 surface found in ${report.files} file(s).\n`
+		);
+		if (report.skipped.length)
+			process.stdout.write(`${report.skipped.length} TypeScript file(s) not audited (run the audit on compiled output).\n`);
+	}
+	if (report.errors.length) return 2;
+	return actionable ? 1 : 0;
+}
+
+/**
  * Run the CLI.
  * @param {string[]} argv - Arguments.
  * @returns {number} Exit code.
  */
 function main(argv) {
+	if (argv[0] === "audit") return runAudit(argv.slice(1));
 	let opts;
 	try {
 		opts = parseArgs(argv);
