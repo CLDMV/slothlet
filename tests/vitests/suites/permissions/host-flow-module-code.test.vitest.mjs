@@ -157,7 +157,8 @@ describe("Permissions > module code in a flow the host opened", () => {
 			}
 		});
 		const result = await api.planter.adopt();
-		expect(result).toEqual(REFUSED);
+		// The planter's code now counts as its own module, so the write is refused as not owned.
+		expect(result).toEqual({ control: "PERMISSION_DENIED", write: "LOOSE_SET_NOT_OWNED" });
 		expect(api.slothlet.permissions.control.mode()).toBe("on");
 		expect(api.secret.planted_timer).toBeUndefined();
 	});
