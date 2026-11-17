@@ -1608,7 +1608,7 @@ export function listPush(list, ...values) {
 export function listUnshift(list, ...values) {
 	const count = values.length;
 	for (let i = list.length - 1; i >= 0; i--) put(list, i + count, list[i]);
-	for (let i = 0; i < count; i++) list[i] = values[i];
+	for (let i = 0; i < count; i++) put(list, i, values[i]);
 	return list.length;
 }
 
@@ -1632,7 +1632,7 @@ export function listSplice(list, start, ...rest) {
 	for (let i = 0; i < removeCount; i++) put(removed, i, list[from + i]);
 	const insertCount = rest.length > 1 ? rest.length - 1 : 0;
 	if (insertCount < removeCount) {
-		for (let k = from; k < length - removeCount; k++) list[k + insertCount] = list[k + removeCount];
+		for (let k = from; k < length - removeCount; k++) put(list, k + insertCount, list[k + removeCount]);
 		list.length = length - removeCount + insertCount;
 	} else if (insertCount > removeCount) {
 		for (let k = length - removeCount; k > from; k--) put(list, k + insertCount - 1, list[k + removeCount - 1]);

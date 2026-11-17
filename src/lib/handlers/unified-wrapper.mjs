@@ -2994,8 +2994,10 @@ function runtime_selfHookHandler(handler, slothlet, reader) {
 		const writeBack = () => {
 			if (!handedArgs) return;
 			if (handedArgs.length === snapshot.length && ArrayMethods.every(handedArgs, (value, i) => value === snapshot[i])) return;
-			callArgs.length = handedArgs.length;
-			for (let i = 0; i < handedArgs.length; i++) callArgs[i] = fromView(handedArgs[i]);
+			// Refilled through listPush, never `callArgs[i] =`: an index past the old length would run a setter module code put
+			// on the shared prototypes.
+			callArgs.length = 0;
+			for (let i = 0; i < handedArgs.length; i++) listPush(callArgs, fromView(handedArgs[i]));
 			snapshot = copyList(handedArgs);
 		};
 		if (typeof payload.next === "function") {

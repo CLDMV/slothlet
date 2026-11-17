@@ -763,7 +763,7 @@ export class ModuleManager extends ComponentBase {
 		};
 
 		const workers = [];
-		for (let i = 0, count = Math.min(concurrency, resolved.length); i < count; i++) workers[i] = worker();
+		for (let i = 0, count = Math.min(concurrency, resolved.length); i < count; i++) listPush(workers, worker());
 		await promiseAll(workers);
 
 		if (firstError) {

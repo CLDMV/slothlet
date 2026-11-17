@@ -2951,7 +2951,7 @@ function installViteHostRegistry(target) {
 		for (let i = 0; i < current.value.length; i++) {
 			const entry = Objects.getOwnPropertyDescriptor(current.value, i)?.value;
 			if (entry !== null && typeof entry === "object") WeakMapMethods.set(EARLY_READS, entry, runtime_registrationFrames(entry));
-			queue[queue.length] = entry;
+			listPush(queue, entry);
 		}
 	}
 	/** @type {Map<string, Set<string>>} */
@@ -2984,7 +2984,7 @@ function installViteHostRegistry(target) {
 			const captured = unreadError(REGISTRATION_FRAMES);
 			if (captured !== null) {
 				WeakSetMethods.add(OWN_CAPTURES, captured);
-				queue[queue.length] = captured;
+				listPush(queue, captured);
 			}
 			return queue.length;
 		}),
