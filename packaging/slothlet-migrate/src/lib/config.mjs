@@ -259,7 +259,7 @@ export function applyConfigRules(model, prefix, ctx, isRoot) {
 		}
 	}
 
-	move("config|collectLifecycleHooks", "collectLifecycleHooks", "routines.auto");
+	rewriteCollectLifecycleHooks(at, model, prefix, ctx);
 	move("config|dir", "dir", "base");
 
 	// permissions.enabled → permissions.mode (true / false are aliases of "on" / "off")
@@ -393,6 +393,140 @@ export function applyConfigRules(model, prefix, ctx, isRoot) {
 	}
 }
 
+/** Routine modes v3's `collectLifecycleHooks: true` replaced with its two root-anchored routines. */
+const TEARDOWN_MODES = new Set(["shutdown", "destroy"]);
+
+/**
+ * `collectLifecycleHooks: true` is the explicit routines v3 built from it: every shutdown / destroy
+ * routine dropped, then `^**.shutdown` and `^**.destroy` added, and auto firing on unless set.
+ * @param {(path: string) => ({ obj: ObjModel, prop: import("./object-model.mjs").PropModel }|null)} at - Locate by absolute path.
+ * @param {ObjModel} model - Literal model.
+ * @param {string[]} prefix - Where it sits.
+ * @param {RewriteContext} ctx - Context.
+ * @returns {void}
+ */
+function rewriteCollectLifecycleHooks(at, model, prefix, ctx) {
+	const found = at("collectLifecycleHooks");
+	if (!found) return;
+	const { prop, obj } = found;
+	const { result } = ctx;
+	const id = "config|collectLifecycleHooks";
+	const offset = prop.node?.start ?? 0;
+	const v = prop.valueNode;
+	const manual = (why) =>
+		result.manual(
+			id,
+			offset,
+			`collectLifecycleHooks: true → routines.entries with the root-anchored ^**.shutdown and ^**.destroy routines (and routines.auto: true); ${why}`
+		);
+	if (!v || prop.valueText !== null || v.type !== "Literal" || typeof v.value !== "boolean") {
+		manual("its value is not a plain true / false, so write it by hand.");
+		return;
+	}
+	if (v.value === false) {
+		obj.drop(prop);
+		result.rewrite(id, offset, "collectLifecycleHooks: false removed (the default)");
+		return;
+	}
+	const routinesRel = relative(["routines"], prefix);
+	if (!routinesRel) {
+		manual("routines does not sit inside this object literal.");
+		return;
+	}
+	const key = (k) => (ctx.json ? JSON.stringify(k) : k);
+	const entry = (name, mode, order) =>
+		`{ ${key("name")}: ${q(ctx, name)}, ${key("mode")}: ${q(ctx, mode)}${order ? `, ${key("order")}: ${q(ctx, order)}` : ""} }`;
+	const added = [entry("^**.shutdown", "shutdown", "depth"), entry("^**.destroy", "destroy", "depth")];
+
+	// Entries after the drop: v3's defaults, or the configured list, minus every shutdown / destroy routine.
+	const existing = at("routines.entries");
+	const routines = at("routines");
+	let list;
+	let arr = null;
+	if (existing) {
+		arr = existing.prop.valueNode;
+		if (existing.prop.valueText !== null || !arr || arr.type !== "ArrayExpression") {
+			manual("routines.entries is not an array literal, so the shutdown / destroy routines cannot be dropped from it automatically.");
+			return;
+		}
+		if (ctx.comments.some((c) => c.start > arr.start && c.end < arr.end)) {
+			manual("routines.entries holds comments, so it is left for you to edit.");
+			return;
+		}
+		list = [];
+		for (const el of arr.elements) {
+			const mode = routineMode(el);
+			if (mode === undefined) {
+				manual("routines.entries has an element whose mode cannot be read statically.");
+				return;
+			}
+			if (!TEARDOWN_MODES.has(mode)) list.push(ctx.editor.slice(el.start, el.end));
+		}
+	} else if (routines && !routines.prop.value) {
+		manual("routines is not an object literal here.");
+		return;
+	} else {
+		list = [entry("initialize", "startup")];
+	}
+	list.push(...added);
+
+	const explicitAuto = at("autoRoutines") || at("routines.auto");
+	const index = obj.drop(prop);
+	const group = ensureGroup(model, routinesRel, { hintObj: obj, hintIndex: index });
+	if (!group) {
+		obj.insert(prop, index);
+		manual("routines is not an object literal here.");
+		return;
+	}
+	if (!explicitAuto) group.addRaw("auto", "true");
+	let text;
+	if (arr && ctx.code.slice(arr.start, arr.end).includes("\n")) {
+		const lineStart = ctx.code.lastIndexOf("\n", arr.start - 1) + 1;
+		const arrIndent = /^[ \t]*/.exec(ctx.code.slice(lineStart))[0];
+		const inner = arrIndent + ctx.unit;
+		text = `[\n${list.map((t) => inner + t).join(",\n")}\n${arrIndent}]`;
+	} else {
+		text = `[${list.join(", ")}]`;
+	}
+	if (existing) {
+		existing.prop.valueText = text;
+		existing.prop.dirty = true;
+		existing.obj.touch();
+	} else {
+		group.addRaw("entries", text);
+	}
+	result.rewrite(
+		id,
+		offset,
+		"collectLifecycleHooks: true → routines.entries with the root-anchored ^**.shutdown and ^**.destroy routines" +
+			(explicitAuto ? "" : " and routines.auto: true")
+	);
+}
+
+/**
+ * The mode of one routines.entries element.
+ * @param {object|null} el - Array element.
+ * @returns {string|null|undefined} The mode ("manual" when none is written), or undefined when it cannot be read statically.
+ */
+function routineMode(el) {
+	if (!el) return undefined;
+	if (isStringLiteral(el)) {
+		const value = stringValue(el);
+		const colon = value.indexOf(":");
+		return colon < 0 ? "manual" : value.slice(colon + 1);
+	}
+	if (el.type !== "ObjectExpression") return undefined;
+	let mode = "manual";
+	for (const p of el.properties) {
+		if (p.type !== "Property" || p.computed || p.kind !== "init") return undefined;
+		const name = p.key.type === "Identifier" ? p.key.name : p.key.value;
+		if (name !== "mode") continue;
+		if (!isStringLiteral(p.value)) return undefined;
+		mode = stringValue(p.value);
+	}
+	return mode;
+}
+
 /**
  * Replace `scanHiddenFolders: true` with the equivalent hidden patterns.
  * @param {ObjModel} obj - Literal holding it.
@@ -405,7 +539,10 @@ export function addHiddenPatterns(obj, prop, ctx) {
 	const hidden = obj.get("hidden");
 	if (!hidden) {
 		const index = obj.remove(prop);
-		obj.addRaw("hidden", `[${patterns.join(", ")}]`, index).comments = prop.comments;
+		const created = obj.addRaw("hidden", `[${patterns.join(", ")}]`, index);
+		created.comments = prop.comments;
+		created.home = prop.home;
+		created.raw = prop.raw;
 		return true;
 	}
 	const arr = hidden.valueNode;

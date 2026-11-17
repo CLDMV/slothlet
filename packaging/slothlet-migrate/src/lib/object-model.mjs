@@ -63,6 +63,10 @@ export class PropModel {
 		this.dirty = !!init.dirty;
 		/** Where the property was written (orders the members of a created group like the source). */
 		this.order = init.order ?? (init.node ? init.node.start : Infinity);
+		/** Literal the property was read from (null for created properties). */
+		this.home = init.home ?? null;
+		/** Original source spans around the property: `{ lead: [start, end], after: string, comments: number }`. */
+		this.raw = init.raw ?? null;
 	}
 }
 
@@ -87,28 +91,49 @@ export class ObjModel {
 		if (node) this.#read();
 	}
 
-	/** Read the literal's properties and the comments between them. */
+	/** Read the literal's properties and the source text between them. */
 	#read() {
 		const { node, ctx } = this;
+		const { code } = ctx;
 		const inside = ctx.comments.filter((c) => c.start > node.start && c.end < node.end);
-		let cursor = node.start + 1;
-		for (const p of node.properties) {
-			const leading = inside.filter((c) => c.start >= cursor && c.end <= p.start).map((c) => ctx.code.slice(c.start, c.end));
-			cursor = p.end;
+		const count = node.properties.length;
+		let leadFrom = node.start + 1;
+		for (let i = 0; i < count; i++) {
+			const p = node.properties[i];
+			const limit = i < count - 1 ? node.properties[i + 1].start : node.end - 1;
+			const leading = inside.filter((c) => c.start >= leadFrom && c.end <= p.start).map((c) => code.slice(c.start, c.end));
+			// The separator after the property: its comma, then any comment on the same line.
+			const chars = code.slice(p.end, limit).split("");
+			for (const c of inside) if (c.start >= p.end && c.end <= limit) for (let k = c.start; k < c.end; k++) chars[k - p.end] = " ";
+			const masked = chars.join("");
+			const comma = masked.indexOf(",");
+			const commaEnd = comma >= 0 ? comma + 1 : 0;
+			const nl = masked.indexOf("\n", commaEnd);
+			const afterEnd = nl >= 0 ? (masked[nl - 1] === "\r" && nl - 1 >= commaEnd ? nl - 1 : nl) : commaEnd;
+			const clean = comma < 0 ? true : masked.slice(0, comma).trim() === "";
+			const raw = clean
+				? { lead: [leadFrom, p.start], after: code.slice(p.end + commaEnd, p.end + afterEnd), comments: leading.length }
+				: null;
+			leadFrom = p.end + (clean ? afterEnd : 0);
+			if (!clean) leadFrom = p.end;
 			const plain = p.type === "Property" && p.kind === "init" && !p.method && !p.computed;
 			const key = plain ? staticName(p.key, false) : null;
 			if (!plain || key === null) {
-				this.props.push(new PropModel({ type: "other", node: p, comments: leading }));
+				this.props.push(new PropModel({ type: "other", node: p, comments: leading, home: this, raw }));
 				continue;
 			}
-			const model = new PropModel({ type: "prop", key, originalKey: key, node: p, valueNode: p.value, comments: leading });
+			const model = new PropModel({ type: "prop", key, originalKey: key, node: p, valueNode: p.value, comments: leading, home: this, raw });
 			if (p.value.type === "ObjectExpression") model.value = new ObjModel(ctx, p.value, this);
 			model.shorthand = p.shorthand;
 			this.props.push(model);
 		}
-		this.trailingComments = inside.filter((c) => c.start >= cursor).map((c) => ctx.code.slice(c.start, c.end));
-		const tail = ctx.code.slice(cursor, node.end - 1);
-		this.trailingComma = node.properties.length > 0 && /^\s*,/.test(tail.replace(/\/\*[\s\S]*?\*\/|\/\/[^\n]*/g, ""));
+		const last = node.properties[count - 1];
+		const cursor = last ? last.end : node.start + 1;
+		this.tailFrom = leadFrom;
+		this.trailingComments = inside.filter((c) => c.start >= leadFrom).map((c) => code.slice(c.start, c.end));
+		this.rawTrailing = this.trailingComments.length;
+		const tail = code.slice(cursor, node.end - 1);
+		this.trailingComma = count > 0 && /^\s*,/.test(tail.replace(/\/\*[\s\S]*?\*\/|\/\/[^\n]*/g, ""));
 	}
 
 	/** Mark this model and its ancestors as needing a reprint. */
@@ -154,10 +179,12 @@ export class ObjModel {
 	 */
 	drop(prop) {
 		const index = this.remove(prop);
-		if (prop.comments.length) {
+		const trailing = prop.raw?.after.trim();
+		const kept = [...prop.comments, ...(trailing ? [trailing] : [])];
+		if (kept.length) {
 			const next = this.props[index];
-			if (next) next.comments = [...prop.comments, ...next.comments];
-			else this.trailingComments = [...prop.comments, ...this.trailingComments];
+			if (next) next.comments = [...kept, ...next.comments];
+			else this.trailingComments = [...kept, ...this.trailingComments];
 		}
 		return index;
 	}
@@ -227,23 +254,44 @@ export class ObjModel {
 		const { ctx } = this;
 		if (!this.changed && this.node) return ctx.editor.slice(this.node.start, this.node.end);
 		const props = this.node ? this.props : [...this.props].sort((a, b) => a.order - b.order);
-		const items = props.map((p) => ({ comments: p.comments, text: this.#propText(p) }));
+		const items = props.map((p) => ({ prop: p, comments: p.comments, text: this.#propText(p) }));
 		if (items.length === 0 && this.trailingComments.length === 0) return "{}";
-		const hasLineComment = [...items.flatMap((i) => i.comments), ...this.trailingComments].some((c) => c.startsWith("//"));
-		if (!this.multiline() && !hasLineComment) {
-			const parts = items.map((i) => [...i.comments, i.text].join(" "));
-			return `{ ${[...parts, ...this.trailingComments].join(", ")} }`;
-		}
+		const afterOf = (p) => (p.raw && p.raw.after.trim() ? p.raw.after : "");
+		const hasLineComment = [...items.flatMap((i) => i.comments), ...this.trailingComments, ...props.map(afterOf)].some((c) =>
+			c.trimStart().startsWith("//")
+		);
+		const keepsSource = !!this.node && props.some((p) => p.home === this && p.raw);
+		const multi = this.multiline() || hasLineComment;
 		const base = this.baseIndent();
 		const inner = base + ctx.unit;
-		const lines = [];
+		if (!keepsSource) {
+			if (!multi) {
+				const parts = items.map((i) => [...i.comments, i.text].join(" "));
+				return `{ ${[...parts, ...this.trailingComments].join(", ")} }`;
+			}
+			const lines = [];
+			items.forEach((item, i) => {
+				for (const c of item.comments) lines.push(inner + c);
+				const comma = i < items.length - 1 || this.trailingComma ? "," : "";
+				lines.push(inner + item.text + comma + afterOf(item.prop));
+			});
+			for (const c of this.trailingComments) lines.push(inner + c);
+			return `{\n${lines.join("\n")}\n${base}}`;
+		}
+		// The literal existed: untouched properties keep their original separators, indentation and trailing comments.
+		let out = "{";
 		items.forEach((item, i) => {
-			for (const c of item.comments) lines.push(inner + c);
-			const comma = i < items.length - 1 || this.trailingComma ? "," : "";
-			lines.push(inner + item.text + comma);
+			const p = item.prop;
+			const own = p.home === this && p.raw && p.comments.length === p.raw.comments;
+			if (own) out += ctx.editor.slice(p.raw.lead[0], p.raw.lead[1]);
+			else if (multi) out += [...item.comments.map((c) => `\n${inner}${c}`), `\n${inner}`].join("");
+			else out += ` ${item.comments.map((c) => `${c} `).join("")}`;
+			out += item.text + (i < items.length - 1 || this.trailingComma ? "," : "") + afterOf(p);
 		});
-		for (const c of this.trailingComments) lines.push(inner + c);
-		return `{\n${lines.join("\n")}\n${base}}`;
+		if (this.trailingComments.length === this.rawTrailing) out += ctx.editor.slice(this.tailFrom, this.node.end - 1);
+		else if (multi) out += this.trailingComments.map((c) => `\n${inner}${c}`).join("") + `\n${base}`;
+		else out += ` ${this.trailingComments.map((c) => `${c} `).join("")}`;
+		return `${out}}`;
 	}
 
 	/**

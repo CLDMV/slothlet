@@ -269,3 +269,57 @@ describe("slothlet-migrate: node fields and internals", () => {
 		]);
 	});
 });
+
+describe("slothlet-migrate: places the first pass missed", () => {
+	it("renames discover.scanRoot nested in addModule / addModules options", () => {
+		const r = run(
+			[
+				`await api.slothlet.api.modules.addModule("pkg", { discover: { scanRoot: "/x" }, collisionMode: "skip" });`,
+				`await api.slothlet.api.modules.addModules(list, { discover: { scanRoot: "/y" } });`
+			].join("\n")
+		);
+		expect(r.code).toBe(
+			[
+				`await api.slothlet.api.modules.add("pkg", { discover: { root: "/x" }, collision: { mode: "skip" } });`,
+				`await api.slothlet.api.modules.add(list, { discover: { root: "/y" } });`
+			].join("\n")
+		);
+	});
+
+	it("rewrites option keys that sit beside exports in the inline api.add form", () => {
+		const r = run(
+			`await api.slothlet.api.add("svc", { exports: { collisionMode: "kept" }, collisionMode: "merge", forceOverwrite: true, moduleID: "m" });`
+		);
+		expect(r.code).toBe(
+			`await api.slothlet.api.add("svc", { exports: { collisionMode: "kept" }, collision: { mode: "merge", force: true }, id: "m" });`
+		);
+		expect(r.ids("manual")).toEqual([]);
+	});
+
+	it("follows a provable const alias of a slothlet chain", () => {
+		const r = run(
+			[
+				`const mm = api.slothlet.api.modules;`,
+				`mm.discover({ scanRoot: "/x" });`,
+				`await mm.addModule("pkg", { collisionMode: "skip" });`,
+				`mm.clearDiscoveryCache();`
+			].join("\n")
+		);
+		expect(r.code).toBe(
+			[
+				`const mm = api.slothlet.api.modules;`,
+				`mm.discover({ root: "/x" });`,
+				`await mm.add("pkg", { collision: { mode: "skip" } });`,
+				`mm.cache.clear();`
+			].join("\n")
+		);
+		expect(r.ids("manual")).toEqual([]);
+	});
+
+	it("reports, and does not edit, calls through an alias it cannot prove constant", () => {
+		const r = run([`let mm = api.slothlet.api.modules;`, `mm.discover({ scanRoot: "/x" });`, `mm.removeModule("pkg");`].join("\n"));
+		expect(r.code).toContain(`mm.removeModule("pkg")`);
+		expect(r.code).toContain(`scanRoot`);
+		expect(r.ids("manual")).toContain("method|api.slothlet.api.modules.removeModule");
+	});
+});

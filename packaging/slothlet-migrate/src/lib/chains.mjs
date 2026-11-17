@@ -62,6 +62,24 @@ export function slothletTail(node) {
 }
 
 /**
+ * Like {@link slothletTail}, but also follows a chain rooted at a local alias of a `.slothlet` chain
+ * (`const mm = api.slothlet.api.modules; mm.discover(…)`). The alias's own segments come first and
+ * have no property node of their own; `aliasLen` says how many there are.
+ * @param {object} node - A MemberExpression.
+ * @param {Map<string, { segs: string[], proven: boolean }>|undefined} aliases - Aliases the file declares.
+ * @returns {{ segments: Array<ChainSegment|{ name: string, member: null, property: null, plain: true }>, aliasLen: number, proven: boolean, alias: string }|null} The virtual tail.
+ */
+export function aliasedTail(node, aliases) {
+	if (!aliases || !aliases.size) return null;
+	const { root, segments } = flattenChain(node);
+	if (!root || root.type !== "Identifier" || !segments.length) return null;
+	const alias = aliases.get(root.name);
+	if (!alias) return null;
+	const own = alias.segs.map((name) => ({ name, member: null, property: null, plain: true }));
+	return { segments: [...own, ...segments], aliasLen: own.length, proven: alias.proven, alias: root.name };
+}
+
+/**
  * Whether `node` is the outermost member of its chain (its parent does not continue the chain).
  * @param {object} node - MemberExpression.
  * @param {object|undefined} parent - Parent node.

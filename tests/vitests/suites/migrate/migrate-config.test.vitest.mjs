@@ -91,8 +91,7 @@ describe("slothlet-migrate: config renames and moves", () => {
 				"\t},",
 				"\t/* collisions */",
 				'\tapi: { collision: { mode: "merge", override: true } },',
-				'\thidden: ["!**/.*/", "!**/__*/"],',
-				"\t// dot folders too",
+				'\thidden: ["!**/.*/", "!**/__*/"], // dot folders too',
 				'\thook: { errors: true, pattern: "x" }',
 				"});"
 			].join("\n")
@@ -226,5 +225,80 @@ describe("slothlet-migrate: config JSON files", () => {
 	it("reports a parse error instead of throwing", () => {
 		expect(migrateJson(`{ nope`, { filename: "c.json", kind: "config" }).error).toBeTruthy();
 		expect(migrateSource(`const = ;`, { filename: "x.mjs" }).error).toBeTruthy();
+	});
+});
+
+describe("slothlet-migrate: collectLifecycleHooks", () => {
+	const SHUTDOWN = '{ name: "^**.shutdown", mode: "shutdown", order: "depth" }';
+	const DESTROY = '{ name: "^**.destroy", mode: "destroy", order: "depth" }';
+	const INIT = '{ name: "initialize", mode: "startup" }';
+
+	it("true becomes the explicit routines v3 built: defaults minus shutdown, plus the two root-anchored ones", () => {
+		const r = run(`await slothlet({ dir: "a", collectLifecycleHooks: true });`);
+		expect(r.code).toBe(`await slothlet({ base: "a", routines: { auto: true, entries: [${INIT}, ${SHUTDOWN}, ${DESTROY}] } });`);
+		expect(r.ids("manual")).toEqual([]);
+	});
+
+	it("drops configured shutdown / destroy routines, keeps the rest, and leaves an explicit auto alone", () => {
+		const r = run(
+			`await slothlet({ collectLifecycleHooks: true, autoRoutines: false, routines: ["launch", "stop:shutdown", { name: "bye", mode: "destroy" }, { name: "boot", mode: "startup" }] });`
+		);
+		expect(r.code).toBe(
+			`await slothlet({ routines: { auto: false, entries: ["launch", { name: "boot", mode: "startup" }, ${SHUTDOWN}, ${DESTROY}] } });`
+		);
+	});
+
+	it("false is dropped; anything it cannot analyse is reported manual and left in place", () => {
+		expect(run(`await slothlet({ collectLifecycleHooks: false });`).code).toBe("await slothlet({});");
+		for (const body of [
+			`await slothlet({ collectLifecycleHooks: flag });`,
+			`await slothlet({ collectLifecycleHooks: true, routines: { entries: list } });`,
+			`await slothlet({ collectLifecycleHooks: true, routines: { entries: ["a", name] } });`
+		]) {
+			const r = run(body);
+			expect(r.ids("manual")).toContain("config|collectLifecycleHooks");
+			expect(r.code).toContain("collectLifecycleHooks");
+		}
+	});
+});
+
+describe("slothlet-migrate: untouched source stays byte-identical", () => {
+	it("keeps trailing comments, blank lines, odd spacing and unrelated code verbatim", () => {
+		const before = [
+			"const keep = {   a:1,b :  2 }; // not a config",
+			"",
+			"await slothlet({",
+			'\tdir: "./api", // where the api lives',
+			"",
+			'\tmode:   "lazy",   // stays put',
+			"\tdebug: true, /* block */",
+			"\tapiDepth: 3 // last",
+			"});",
+			"function f( x ,y ){ return x+y }",
+			""
+		].join("\n");
+		const res = migrateSource(IMPORT + before, { filename: "config.mjs" });
+		expect(res.error).toBeNull();
+		expect(res.code.slice(IMPORT.length)).toBe(
+			[
+				"const keep = {   a:1,b :  2 }; // not a config",
+				"",
+				"await slothlet({",
+				'\tbase: "./api", // where the api lives',
+				"",
+				'\tmode:   "lazy",   // stays put',
+				"\tdebug: true, /* block */",
+				"\tdepth: 3 // last",
+				"});",
+				"function f( x ,y ){ return x+y }",
+				""
+			].join("\n")
+		);
+	});
+
+	it("keeps a trailing comment on a property that moves into a group", () => {
+		const r = run(`await slothlet({\n\tplatform: "node", // where\n\tbase: "a"\n});\n`);
+		expect(r.code).toContain("// where");
+		expect(r.code).toContain('base: "a"');
 	});
 });

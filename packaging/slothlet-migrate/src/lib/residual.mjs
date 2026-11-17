@@ -220,7 +220,8 @@ export function visitResidual(node, ancestors, ctx, state) {
 		if (name === null) return;
 		const flat = flattenChain(node);
 		const chain = [...(flat.root && flat.root.type === "Identifier" ? [flat.root.name] : []), ...flat.segments.map((s) => s.name)];
-		const underSlothlet = chain.indexOf("slothlet") >= 0 && chain.indexOf("slothlet") < chain.length - 1;
+		const alias = flat.root && flat.root.type === "Identifier" ? ctx.aliases?.get(flat.root.name) : null;
+		const underSlothlet = (chain.indexOf("slothlet") >= 0 && chain.indexOf("slothlet") < chain.length - 1) || !!alias?.proven;
 		if (
 			!underSlothlet &&
 			METHOD_NAMES.has(name) &&

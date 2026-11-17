@@ -21,7 +21,7 @@
  */
 
 import { METHODS } from "./data.mjs";
-import { isChainTop, slothletTail } from "./chains.mjs";
+import { aliasedTail, isChainTop, slothletTail } from "./chains.mjs";
 import { q } from "./config.mjs";
 import { ARG_INDEX, reloadExtra, rewriteApiAdd, rewriteHookPattern, rewriteOptions } from "./options.mjs";
 import { isStringLiteral, quoteLike, stringValue } from "./source.mjs";
@@ -84,10 +84,15 @@ function isWriteTarget(node, parent) {
 export function rewriteChain(node, ancestors, ctx) {
 	const parent = ancestors[ancestors.length - 1];
 	if (!isChainTop(node, parent)) return;
-	const found = slothletTail(node);
+	const found = slothletTail(node) ?? aliasedTail(node, ctx.aliases);
 	if (!found || !found.segments.length) return;
 	const tail = found.segments;
+	const aliasLen = found.aliasLen ?? 0;
 	const match = matchMethod(tail);
+	if (aliasLen) {
+		rewriteAliased(node, parent, found, match, ctx);
+		return;
+	}
 	if (!match) {
 		const path = tail.map((t) => t.name).join(".");
 		if (parent && parent.type === "CallExpression" && parent.callee === node && tail.every((t) => t.plain) && CALL_PATHS.has(path))
@@ -199,6 +204,68 @@ export function rewriteChain(node, ancestors, ctx) {
 			);
 	} else ctx.result.manual(e.id, offset);
 	if (call) defer(ctx, call, () => rewriteCallArgs(match.path, call, ctx));
+}
+
+/**
+ * A chain rooted at a local alias of a `.slothlet` chain. A plain rename whose changed segments all
+ * sit after the alias is applied there; anything else is reported (the alias's own declaration is
+ * not touched), and so is every use of an alias the tool cannot prove constant.
+ * @param {object} node - MemberExpression at the top of its chain.
+ * @param {object|undefined} parent - Parent.
+ * @param {{ segments: object[], aliasLen: number, proven: boolean, alias: string }} found - The virtual tail.
+ * @param {{ path: string, length: number }|null} match - Method path match over the virtual tail.
+ * @param {import("./config.mjs").RewriteContext} ctx - Context.
+ * @returns {void}
+ */
+function rewriteAliased(node, parent, found, match, ctx) {
+	const { segments: tail, aliasLen } = found;
+	const real = tail.slice(aliasLen);
+	const call = parent && parent.type === "CallExpression" && parent.callee === node ? parent : null;
+	if (!match) {
+		const path = tail.map((t) => t.name).join(".");
+		if (found.proven && call && tail.every((t) => t.plain) && CALL_PATHS.has(path))
+			defer(ctx, call, () => rewriteCallArgs(path, call, ctx));
+		return;
+	}
+	const e = METHODS.get(match.path);
+	if (e.action === "new") return;
+	const offset = (real[0] ?? tail[tail.length - 1]).property?.start ?? node.start;
+	const special = SPECIAL[match.path];
+	if (special === "none") {
+		if (found.proven && call) defer(ctx, call, () => rewriteCallArgs(match.path, call, ctx));
+		return;
+	}
+	if (special === "info") return;
+	const newPath = e.new ? e.new.slice("api.slothlet.".length) : null;
+	const oldSegs = match.path.split(".");
+	const newSegs = newPath ? newPath.split(".") : [];
+	const rest = tail.slice(match.length);
+	const sameHead = newPath !== null && oldSegs.slice(0, aliasLen).join(".") === newSegs.slice(0, aliasLen).join(".");
+	const noop = newPath === match.path && !special;
+	if (noop) {
+		if (found.proven && call && rest.length === 0) defer(ctx, call, () => rewriteCallArgs(match.path, call, ctx));
+		return;
+	}
+	const hand = `${match.path} is called through \`${found.alias}\`, an alias of a slothlet chain; ${
+		newPath ? `in v4 it is slothlet.${newPath}` : "it is removed in v4"
+	}. Edit the call by hand.`;
+	const swappable =
+		found.proven &&
+		!special &&
+		newPath &&
+		match.length > aliasLen &&
+		sameHead &&
+		real.slice(0, match.length - aliasLen).every((s) => s.plain);
+	if (!swappable) {
+		ctx.result.manual(e.id, offset, hand);
+		return;
+	}
+	const matched = real.slice(0, match.length - aliasLen);
+	const text = newSegs.slice(aliasLen).join(".");
+	if (ctx.editor.replace(matched[0].property.start, matched[matched.length - 1].property.end, text)) {
+		ctx.result.rewrite(e.id, offset, `slothlet.${match.path} → slothlet.${newPath}`);
+		if (call && rest.length === 0) defer(ctx, call, () => rewriteCallArgs(match.path, call, ctx));
+	} else ctx.result.manual(e.id, offset, hand);
 }
 
 /**
