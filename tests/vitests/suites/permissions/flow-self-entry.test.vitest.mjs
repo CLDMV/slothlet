@@ -1,4 +1,19 @@
 /**
+ *
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /tests/vitests/suites/permissions/flow-self-entry.test.vitest.mjs
+ *	@Date: 2026-11-17T08:04:12-08:00 (1794931452)
+ *	@Author: Nate Corcoran <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-11-17T08:41:56-08:00 (1794933716)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ *
+ */
+
+/**
  * @fileoverview Module code that enters another flow by itself keeps its own context and identity.
  *
  * @description
@@ -41,6 +56,21 @@ function write(file, lines) {
 beforeAll(() => {
 	rmSync(ROOT, { recursive: true, force: true });
 	write("api/secret/secret.mjs", ["export function read() {", '\treturn "secret";', "}"]);
+	// A module whose call hands out a function that reads the context it runs in.
+	write("api/mod/mod.mjs", [
+		'import { context } from "@cldmv/slothlet/runtime";',
+		"const reader = function reader(tag) {",
+		"\tconst seen = [context.user ?? null, this?.mark ?? null];",
+		"\tglobalThis.__flowSelfEntry.seen[tag] = seen;",
+		"\treturn seen;",
+		"};",
+		"export function getReader() {",
+		"\treturn reader;",
+		"}",
+		"export function isOwn(fn) {",
+		"\treturn fn === reader;",
+		"}"
+	]);
 	// A module whose call, made in the first request, leaves async resources of its flow where others can reach them.
 	write("api/admin/admin.mjs", [
 		'import { context } from "@cldmv/slothlet/runtime";',
@@ -146,6 +176,18 @@ beforeAll(() => {
 		"}",
 		"export function hostTimer() {",
 		"\treturn adopt(shared().hostTimer, attempt);",
+		"}",
+		"// The reader another module hands out, read by its own code inside a run() it entered by itself, handed to Node.",
+		"function handReader(tag) {",
+		"\treturn new Promise((resolve) => {",
+		"\t\tPromise.resolve(tag).then(self.mod.getReader()).then(resolve);",
+		"\t});",
+		"}",
+		"export function hostResourceReader() {",
+		'\treturn shared().hostResource.runInAsyncScope(() => handReader("evilResource"));',
+		"}",
+		"export function hostTimerReader() {",
+		'\treturn adopt(shared().hostTimer, () => handReader("evilTimer"));',
 		"}"
 	]);
 	write("probe.mjs", [
@@ -232,6 +274,47 @@ beforeAll(() => {
 		"\tclearTimeout(shared.hostTimer);",
 		'\tout[route + ":mode"] = mode === "none" ? null : api.slothlet.permissions.control.mode();',
 		'\tout[route + ":planted"] = typeof api.secret.planted;',
+		"\tawait api.slothlet.shutdown();",
+		"}",
+		"// A function a call hands the run's own code, handed to Node to call later.",
+		"{",
+		"\tconst api = await make();",
+		"\tconst shared = globalThis.__flowSelfEntry;",
+		"\tshared.seen = {};",
+		"\tconst outside = api.mod.getReader();",
+		"\tout.readerOutsideSame = outside === api.mod.getReader();",
+		'\tawait api.slothlet.context.run({ user: "root" }, async () => {',
+		"\t\tconst reader = api.mod.getReader();",
+		"\t\tout.readerInRunSame = reader === api.mod.getReader();",
+		"\t\tout.readerInRunShape = [typeof reader, reader.name, reader.length];",
+		"\t\tout.readerHandedBackIsOwn = api.mod.isOwn(reader);",
+		'\t\tawait Promise.resolve("then").then(reader);',
+		'\t\tsetTimeout(reader, 0, "timeout");',
+		"\t\tawait tick();",
+		"\t\tawait null;",
+		'\t\tawait Promise.resolve("thenAfterAwait").then(reader);',
+		'\t\tawait Promise.resolve("thenThis").then(reader.bind({ mark: "bound" }));',
+		'\t\tReflect.apply(reader, { mark: "this" }, ["direct"]);',
+		"\t});",
+		'\toutside("outside");',
+		"\tout.readerSeen = shared.seen;",
+		"\tawait api.slothlet.shutdown();",
+		"}",
+		"// The same function read by a module's own code that entered a run() the host opened by itself.",
+		'for (const route of ["hostResourceReader", "hostTimerReader"]) {',
+		"\tconst api = await make();",
+		"\tconst shared = globalThis.__flowSelfEntry;",
+		"\tshared.seen = {};",
+		'\tawait api.slothlet.context.run({ user: "root" }, () => {',
+		'\t\tshared.hostResource = new AsyncResource("host");',
+		"\t\tshared.hostTimer = setTimeout(() => {}, 60000);",
+		"\t});",
+		"\ttry {",
+		'\t\tout[route] = await api.slothlet.context.run({ user: "mallory" }, () => api.evil[route]());',
+		"\t} catch (error) {",
+		"\t\tout[route] = codeOf(error);",
+		"\t}",
+		"\tclearTimeout(shared.hostTimer);",
 		"\tawait api.slothlet.shutdown();",
 		"}",
 		"console.log(JSON.stringify(out));"
@@ -341,5 +424,32 @@ describe.each(FRAMES)("Permissions > a flow entered by module code itself > %s",
 				}
 			}
 		);
+
+		it("a function a call hands the run's own code keeps the run when Node calls it later", () => {
+			expect(result.readerSeen.then).toEqual(["root", null]);
+			expect(result.readerSeen.timeout).toEqual(["root", null]);
+			expect(result.readerSeen.thenAfterAwait).toEqual(["root", null]);
+			expect(result.readerSeen.thenThis).toEqual(["root", "bound"]);
+			expect(result.readerSeen.direct).toEqual(["root", "this"]);
+			expect(result.readerInRunShape).toEqual(["function", "reader", 1]);
+		});
+
+		it("the same function read twice in one run is the same value, and outside every run it is the function itself", () => {
+			expect(result.readerInRunSame).toBe(true);
+			expect(result.readerOutsideSame).toBe(true);
+			expect(result.readerHandedBackIsOwn).toBe(true);
+			expect(result.readerSeen.outside).toEqual([null, null]);
+		});
+
+		// Where functions are bound to the run they are read in (every setting but "precise" with the permission system on,
+		// whose stand-ins are its module's calls), code that entered the run by itself is not handed one.
+		if (!(checks && attribution === "precise")) {
+			it.each(["hostResourceReader", "hostTimerReader"])(
+				"the function read by a module's own code that entered a run() by itself through the host's %s is not bound to the run",
+				(route) => {
+					expect(result[route][0]).toBeNull();
+				}
+			);
+		}
 	});
 });

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:28:45-08:00 (1794882525)
+ *	@Last modified time: 2026-11-17T08:39:51-08:00 (1794933591)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -1685,6 +1685,35 @@ function setHostPrototypeCheck(check) {
  */
 export function isHostPrototype(wrapper, value) {
 	return hostPrototypeCheck(wrapper, value);
+}
+
+/**
+ * Whether a function a call hands back inside a `run()` / `scope()` is code of a module's, which the async runtime hands
+ * out bound to the run (see `AsyncContextManager#bindToRun`): not one of slothlet's own values and not the language's.
+ * Set by the wrapper module; until then nothing is.
+ * @type {function(*): boolean}
+ * @private
+ */
+let runBindableCheck = () => false;
+
+/**
+ * Register how a function handed out bound to a run is recognised (see {@link isRunBindable}).
+ * @param {function(*): boolean} check - True for such a function.
+ * @returns {void}
+ * @internal
+ */
+function setRunBindableCheck(check) {
+	runBindableCheck = check;
+}
+
+/**
+ * Whether a function a call hands back inside a run is handed out bound to the run (see {@link setRunBindableCheck}).
+ * @param {*} value - The value.
+ * @returns {boolean} True for such a function.
+ * @internal
+ */
+function isRunBindable(value) {
+	return runBindableCheck(value);
 }
 
 /**
@@ -5461,6 +5490,7 @@ export function internals(consumer) {
 		frameDefiner,
 		handedLeafFunctions,
 		isLeafFileFunction,
+		isRunBindable,
 		loadOnStack,
 		outerCallerCeiling,
 		ownReceiver,
@@ -5478,6 +5508,7 @@ export function internals(consumer) {
 		setInboundOriginal,
 		setModuleNodeResolver,
 		setResultAttributor,
+		setRunBindableCheck,
 		stackHoldsInstanceCode,
 		supplierChainCeiling
 	};

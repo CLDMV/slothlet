@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:28:45-08:00 (1794882525)
+ *	@Last modified time: 2026-11-17T08:39:51-08:00 (1794933591)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -44,6 +44,7 @@ import {
 	mapEntriesToArray,
 	mapKeysToArray,
 	MapMethods,
+	NativeProxy,
 	Objects,
 	Promise,
 	queueMicrotask,
@@ -58,7 +59,7 @@ const { runtime_wrapClassInstance } = classInstanceWrapperInternals("lib/handler
 const { setApiContextChecker } = eventemitterContextInternals("lib/handlers/context-async");
 const trustedRootOwn = trustedRootInternals("lib/handlers/context-async");
 const { buildCapturedFlowStore } = trustedRootOwn;
-const { attributeResult, enterCall, ownReceiver, resolveSupplier, runningOutsideFlow, sampleStoreScripts } =
+const { attributeResult, enterCall, isRunBindable, ownReceiver, resolveSupplier, runningOutsideFlow, sampleStoreScripts } =
 	framePlacementInternals("lib/handlers/context-async");
 
 /**
@@ -68,6 +69,56 @@ const { attributeResult, enterCall, ownReceiver, resolveSupplier, runningOutside
  * @private
  */
 const OUTSIDE_FLOW = Symbol("slothlet.outsideFlow");
+
+/**
+ * The run-bound stand-ins {@link AsyncContextManager} hands out (see {@link AsyncContextManager#bindToRun}), each with
+ * the function it stands for and the leaf whose call handed it out.
+ * @type {WeakMap<Function, {original: Function, hander: object}>}
+ * @private
+ */
+const RUN_BOUND = new WeakMap();
+
+/**
+ * How many run-bound stand-ins were made: until one is, no call's arguments are looked through for one.
+ * @type {number}
+ * @private
+ */
+let runBoundMade = 0;
+
+/**
+ * The function a run-bound stand-in stands for, when it is handed to a call of a leaf of the file whose call handed it
+ * out: that file gets its own function back, as in plain JavaScript. Anything else is handed on as it is.
+ * @param {*} value - A value handed to the call.
+ * @param {object} wrapper - The wrapper of the leaf called.
+ * @returns {*} What the leaf gets.
+ * @private
+ */
+function unbindForLeaf(value, wrapper) {
+	if (typeof value !== "function") return value;
+	const record = WeakMapMethods.get(RUN_BOUND, value);
+	if (record === undefined) return value;
+	const file = wrapper?.____slothletInternal?.filePath;
+	return file !== undefined && file === record.hander?.____slothletInternal?.filePath ? record.original : value;
+}
+
+/**
+ * The arguments of a call of a leaf, with each run-bound stand-in of the leaf's own file's function replaced by the
+ * function itself (see {@link unbindForLeaf}).
+ * @param {Array<*>} args - The arguments.
+ * @param {object} wrapper - The wrapper of the leaf called.
+ * @returns {Array<*>} The arguments, the same list when none is replaced.
+ * @private
+ */
+function unbindArgsForLeaf(args, wrapper) {
+	let out = args;
+	for (let i = 0; i < args.length; i++) {
+		const value = unbindForLeaf(args[i], wrapper);
+		if (value === args[i]) continue;
+		if (out === args) out = concatLists([], args);
+		out[i] = value;
+	}
+	return out;
+}
 
 /**
  * What {@link SealedStorage} records for a callback run outside every store (`exit()`).
@@ -339,6 +390,72 @@ export class AsyncContextManager {
 	 * @type {WeakMap<object, Map<object|null, object>>}
 	 */
 	#outsideViews = new WeakMap();
+
+	/**
+	 * The run-bound stand-ins handed out in each run, by the run's store and the function each stands for (see
+	 * {@link AsyncContextManager#bindToRun}).
+	 * @type {WeakMap<object, WeakMap<Function, Function>>}
+	 */
+	#runBound = new WeakMap();
+
+	/**
+	 * What a call made inside a `run()` / `scope()` by the run's own code hands back, as that code gets it: a module's
+	 * function comes back as a stand-in that keeps the run when Node calls it later. Code the flow hands Node to call
+	 * later (passed straight to `promise.then()`, `setTimeout()`, an event) runs with nothing of the flow's on the stack,
+	 * the shape of code that entered the flow by itself (see {@link AsyncContextManager#activeStore}); the stand-in is
+	 * slothlet's code, so the code it runs is told as code the flow called. Run by a module's own code that entered
+	 * another flow by itself, it runs outside that flow as any of the module's code there does. The same function read
+	 * in the same run is the same stand-in; outside every run nothing is bound.
+	 * @param {*} value - What the call returned.
+	 * @param {object} store - The store of the code that made the call.
+	 * @param {object} hander - The wrapper of the leaf whose call returned it.
+	 * @returns {*} What the code gets.
+	 * @internal
+	 */
+	bindToRun(value, store, hander) {
+		if (typeof value !== "function" || WeakMapMethods.has(RUN_BOUND, value)) return value;
+		const run = MapMethods.get(this.instances, store.instanceID) ?? store.context;
+		if (run === null || typeof run !== "object") return value;
+		let bound = WeakMapMethods.get(this.#runBound, run);
+		if (bound === undefined) {
+			bound = new WeakMap();
+			WeakMapMethods.set(this.#runBound, run, bound);
+		}
+		let standIn = WeakMapMethods.get(bound, value);
+		if (standIn !== undefined) return standIn;
+		standIn = isRunBindable(value) ? this.#runBoundStandIn(value, hander) : value;
+		WeakMapMethods.set(bound, value, standIn);
+		return standIn;
+	}
+
+	/**
+	 * A stand-in of a module's function that runs it in the flow it is called in, entered by slothlet (see
+	 * {@link AsyncContextManager#bindToRun}). Everything else (its name, length, properties, prototype, `this`, `new`,
+	 * what it returns and throws) is the function's own.
+	 * @param {Function} fn - The function.
+	 * @param {object} hander - The wrapper of the leaf whose call handed it out.
+	 * @returns {Function} The stand-in.
+	 * @private
+	 */
+	#runBoundStandIn(fn, hander) {
+		const manager = this;
+		const standIn = new NativeProxy(fn, {
+			__proto__: null,
+			apply(target, thisArg, args) {
+				const store = manager.activeStore();
+				if (store === undefined) return Reflect.apply(target, thisArg, args);
+				return manager.store.run(store, Reflect.apply, target, thisArg, args);
+			},
+			construct(target, args, newTarget) {
+				const store = manager.activeStore();
+				if (store === undefined) return Reflect.construct(target, args, newTarget);
+				return manager.store.run(store, Reflect.construct, target, args, newTarget);
+			}
+		});
+		WeakMapMethods.set(RUN_BOUND, standIn, { original: fn, hander });
+		runBoundMade++;
+		return standIn;
+	}
 
 	/**
 	 * The store the code running now acts in. Node's async context gives a flow's store to any code holding an async
@@ -620,10 +737,29 @@ export class AsyncContextManager {
 		// A leaf's own call hands back what its module made as that module's (#597), to a caller known to be the host
 		// or a module (#667).
 		const callerIsHost = !executionStore.callerWrapper;
-		const attributed =
-			attribute && currentWrapper && !asHost && attributesResults(currentWrapper)
-				? (value) => attributeResult(currentWrapper, value, callerIsHost, executionStore.callerWrapper ?? null, receiver)
+		const attributes = attribute && currentWrapper && !asHost && attributesResults(currentWrapper);
+		// Inside a run, a function handed back to the run's own code is bound to the run, unless it already comes as a
+		// stand-in of its module (`"precise"` with the permission system on). Code that entered the flow by itself acts
+		// in the instance's own store, which belongs to no run.
+		const bindsToRun =
+			currentWrapper && !asHost && isActiveOurInstance && activeStore.parentInstanceID !== undefined && !handsOutAsModule(currentWrapper);
+		const attributed = attributes
+			? bindsToRun
+				? (value) =>
+						this.bindToRun(
+							attributeResult(currentWrapper, value, callerIsHost, executionStore.callerWrapper ?? null, receiver),
+							activeStore,
+							currentWrapper
+						)
+				: (value) => attributeResult(currentWrapper, value, callerIsHost, executionStore.callerWrapper ?? null, receiver)
+			: bindsToRun
+				? (value) => this.bindToRun(value, activeStore, currentWrapper)
 				: (value) => value;
+		// A run-bound stand-in handed back to the file that handed it out is its own function again.
+		if (runBoundMade > 0 && currentWrapper && !asHost) {
+			args = unbindArgsForLeaf(args, currentWrapper);
+			thisArg = unbindForLeaf(thisArg, currentWrapper);
+		}
 
 		// Only wrap in als.run() if we're not already in the right context
 		if (isActiveOurInstance) {

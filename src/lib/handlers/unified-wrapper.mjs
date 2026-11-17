@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:28:47-08:00 (1794882527)
+ *	@Last modified time: 2026-11-17T08:39:54-08:00 (1794933594)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -181,7 +181,8 @@ const {
 	setApiValueCheck,
 	setHandedOutCheck,
 	setInboundOriginal,
-	setResultAttributor
+	setResultAttributor,
+	setRunBindableCheck
 } = framePlacementInternals("lib/handlers/unified-wrapper");
 const { markFrameworkInternal, versionDispatcherRecord } = frameworkInternalsInternals("lib/handlers/unified-wrapper");
 const { recordSharedExports } = sharedValuesInternals("lib/handlers/unified-wrapper");
@@ -7666,6 +7667,16 @@ setHandedOutCheck(
 		value !== null &&
 		(typeof value === "object" || typeof value === "function") &&
 		(WeakMapMethods.has(STAND_IN_RECORDS, value) || WeakMapMethods.has(CROSSINGS, value))
+);
+// A function a call hands back inside a run is a module's code to bind to the run unless it is slothlet's own value or
+// the language's: those read no flow of a module's.
+setRunBindableCheck(
+	(value) =>
+		typeof value === "function" &&
+		!WeakSetMethods.has(INTRINSICS, value) &&
+		!isFrameworkInternal(value) &&
+		!runtime_isSlothletValue(value) &&
+		!isLazyStandIn(value)
 );
 // A crossing view of the class prototype guard stands for the value too: what the caller handed is what is looked into.
 setInboundOriginal((value) => {
