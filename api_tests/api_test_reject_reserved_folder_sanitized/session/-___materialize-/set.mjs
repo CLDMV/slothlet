@@ -1,7 +1,7 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /api_tests/api_test_reject_reserved_folder_sanitized/session/_materialize-/set.mjs
+ *	@Filename: /api_tests/api_test_reject_reserved_folder_sanitized/session/___materialize-/set.mjs
  *	@Date: 2026-10-08T00:00:00-07:00 (1791442800)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
@@ -15,12 +15,12 @@
 
 /**
  * @fileoverview Fixture (#571 review): a folder whose name sanitizes to a framework-reserved key.
- * @module api_test_reject_reserved_folder_sanitized.session._materialize.set
+ * @module api_test_reject_reserved_folder_sanitized.session.___materialize.set
  */
 
 /**
  * @returns {string} Marker naming this leaf.
  */
 export function set() {
-	return "session._materialize.set";
+	return "session.___materialize.set";
 }

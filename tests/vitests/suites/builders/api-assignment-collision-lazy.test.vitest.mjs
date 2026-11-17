@@ -22,7 +22,7 @@
  * - Lines 217-228: DEBUG_MODE_COLLISION_SET_MODE_EXISTING_WRAPPER when existingIsLazyUnmaterialized
  * - Lines 223-228: Update existingWrapper.state.collisionMode
  * - Lines 229-243: DEBUG_MODE_COLLISION_SET_MODE_VALUE_WRAPPER when valueIsLazyUnmaterialized
- * - Lines 243-248: _materialize() fire-and-forget in replace mode
+ * - Lines 243-248: ___materialize() fire-and-forget in replace mode
  * - Lines 318-348: replace mode with lazy folder vs non-lazy existing
  * - Lines 416-422: DEBUG_MODE_COLLISION_REPLACE_NO_COPY slow path
  * - Lines 451-454: assignToApiPath syncWrapper both-wrappers path (mutateExisting)
@@ -102,7 +102,7 @@ describe("api-assignment collision: lazy+lazy merge (lines 217-248)", () => {
 			silent: true
 		});
 		// Trigger materialization
-		await api.math._materialize();
+		await api.math.___materialize();
 		// After materialization, math functions should be accessible
 		expect(api.math).toBeDefined();
 	});
@@ -134,7 +134,7 @@ describe("api-assignment collision: lazy+lazy replace (lines 318-348, 243-248)",
 	});
 
 	it("loads with debug:api enabled in replace mode", async () => {
-		// Covers lines 243-248: _materialize() fire-and-forget in replace mode for lazy value wrapper
+		// Covers lines 243-248: ___materialize() fire-and-forget in replace mode for lazy value wrapper
 		// Also covers lines 318-348: DEBUG_MODE_COLLISION_REPLACE_NO_COPY debug logs
 		const { default: slothlet } = await import("@cldmv/slothlet");
 		api = await slothlet({

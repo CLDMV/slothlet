@@ -573,13 +573,13 @@ async function materializeLazyWrappers(root) {
 		visited.add(current);
 
 		const currentWrapper = resolveWrapper(current);
-		if (currentWrapper && typeof current._materialize === "function") {
+		if (currentWrapper && typeof current.___materialize === "function") {
 			const state = currentWrapper.____slothletInternal.state;
-			// Await an in-flight materialization too (`_materialize()` returns the pending promise).
+			// Await an in-flight materialization too (`___materialize()` returns the pending promise).
 			// Skipping it read the wrapper's children before they existed, so the parity passes
 			// compared a half-built tree whenever something else had already started loading it (#462).
 			if (state && !state.materialized) {
-				await current._materialize();
+				await current.___materialize();
 			}
 		}
 
@@ -1384,8 +1384,8 @@ async function runDebug(config, modeLabel, awaitCalls = false) {
 	// Filter out expected nested differences (mode configs naturally differ between eager and lazy)
 	const significantNestedDifferences = compared.nestedDifferences.filter(
 		(diff) =>
-			// __childFilePaths is lazy-mode only metadata for file path tracking (expected difference)
-			!diff.path.includes("__childFilePaths")
+			// ____childFilePaths is lazy-mode only metadata for file path tracking (expected difference)
+			!diff.path.includes("____childFilePaths")
 	);
 
 	if (significantNestedDifferences.length > 0) {

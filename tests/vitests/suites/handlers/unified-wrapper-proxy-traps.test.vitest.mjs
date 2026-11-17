@@ -20,10 +20,10 @@
  * @description
  * Covers rarely-exercised proxy trap code paths in unified-wrapper.mjs:
  *
- * - Line 2772: getOwnPropertyDescriptorTrap triggers _materialize() in lazy mode
+ * - Line 2772: getOwnPropertyDescriptorTrap triggers ___materialize() in lazy mode
  *              before the wrapper has been materialized.
  * - Line 2942: setTrap else-branch writes directly to target when the key is in
- *              `internalKeys` (currently only "_materialize").
+ *              `internalKeys` (currently only "___materialize").
  * - Line 3017: deletePropertyTrap removes the property from impl when it is
  *              found there.
  */
@@ -31,10 +31,10 @@
 import { describe, test, expect, beforeEach, afterEach } from "vitest";
 import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
-// ─── getOwnPropertyDescriptorTrap → _materialize() in lazy mode ───────────────
+// ─── getOwnPropertyDescriptorTrap → ___materialize() in lazy mode ───────────────
 
 describe.each(getMatrixConfigs({ mode: "lazy" }))(
-	"UnifiedWrapper > getOwnPropertyDescriptorTrap > triggers _materialize (line 2772) > Config: '$name'",
+	"UnifiedWrapper > getOwnPropertyDescriptorTrap > triggers ___materialize (line 2772) > Config: '$name'",
 	({ config }) => {
 		let api;
 
@@ -51,7 +51,7 @@ describe.each(getMatrixConfigs({ mode: "lazy" }))(
 		test("Object.getOwnPropertyDescriptor on lazy proxy materialises it first (line 2772)", () => {
 			// api.math is lazily loaded; in lazy mode the wrapper starts unmaterialized.
 			// Calling Object.getOwnPropertyDescriptor before any regular prop-access
-			// is the first trap invocation and must trigger _materialize() (line 2772).
+			// is the first trap invocation and must trigger ___materialize() (line 2772).
 			// Materialization is async so the descriptor may be undefined at this point
 			// but the call must not throw.
 			expect(() => Object.getOwnPropertyDescriptor(api.math, "add")).not.toThrow();
@@ -69,7 +69,7 @@ describe.each(getMatrixConfigs({ mode: "lazy" }))(
 	}
 );
 
-// ─── setTrap else-branch for internalKeys ("_materialize") ────────────────────
+// ─── setTrap else-branch for internalKeys ("___materialize") ────────────────────
 
 describe.each(getMatrixConfigs({ mode: "eager" }))(
 	"UnifiedWrapper > setTrap internal key assignment (line 2942) > Config: '$name'",
@@ -86,12 +86,12 @@ describe.each(getMatrixConfigs({ mode: "eager" }))(
 			api = null;
 		});
 
-		test("assigning to proxy._materialize writes directly to target (line 2942)", () => {
-			// "_materialize" is in internalKeys: the set trap writes directly to target
+		test("assigning to proxy.___materialize writes directly to target (line 2942)", () => {
+			// "___materialize" is in internalKeys: the set trap writes directly to target
 			// (proxy target) instead of going through Object.defineProperty.
-			// This should not throw; the original _materialize function remains callable.
+			// This should not throw; the original ___materialize function remains callable.
 			expect(() => {
-				api.math._materialize = "test-value";
+				api.math.___materialize = "test-value";
 			}).not.toThrow();
 		});
 	}

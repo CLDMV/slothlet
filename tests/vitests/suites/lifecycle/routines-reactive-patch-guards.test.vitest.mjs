@@ -22,8 +22,8 @@
  * `onImplCreated`, so each guard is driven by calling `routineManager.onImplCreated(...)` (the same
  * public seam the existing #362 tests use) with the surrounding state arranged so a specific guard
  * is the one that fires. The mid-`await` races (a build starting, the api tree being swapped, the
- * contributor count dropping — all DURING `#resolveContainer`'s own `await wrapper._materialize()`)
- * are driven deterministically by overriding that one lazy node's `_materialize` to mutate state
+ * contributor count dropping — all DURING `#resolveContainer`'s own `await wrapper.___materialize()`)
+ * are driven deterministically by overriding that one lazy node's `___materialize` to mutate state
  * inside the resolve window, then restoring it.
  * @module tests/vitests/suites/lifecycle/routines-reactive-patch-guards
  */
@@ -35,7 +35,7 @@ import { TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
 /**
  * Deterministically drain the event loop until the setImmediate-deferred reactive patch — and the
- * `#resolveContainer` → `await _materialize` chain it awaits — has fully run. Each turn advances a
+ * `#resolveContainer` → `await ___materialize` chain it awaits — has fully run. Each turn advances a
  * whole loop cycle (the poll phase settles any pending materialization I/O before the check-phase
  * `setImmediate` fires) and microtasks drain between turns, so completion is bounded by the patch's
  * own async work, NOT by wall-clock. A fixed `setTimeout` here was load-fragile: under full-suite CPU
@@ -78,8 +78,8 @@ describe("routine reactive-patch post-await guards (#362)", () => {
 		// Two distinct contributors at a composed path whose parent ("ghost") never existed on the
 		// tree: the winner group is >= 2 so the patch proceeds past the pre-await early-out, then
 		// #resolveContainer(api, "ghost") returns undefined and line 478 bails.
-		rm.onImplCreated({ apiPath: "ghost.leaf", moduleID: "ghostA", wrapper: { __impl: function leaf() {} } });
-		rm.onImplCreated({ apiPath: "ghost.leaf", moduleID: "ghostB", wrapper: { __impl: function leaf() {} } });
+		rm.onImplCreated({ apiPath: "ghost.leaf", moduleID: "ghostA", wrapper: { ____impl: function leaf() {} } });
+		rm.onImplCreated({ apiPath: "ghost.leaf", moduleID: "ghostB", wrapper: { ____impl: function leaf() {} } });
 		await settle();
 
 		// No stack was installed anywhere for the bogus path, and nothing threw.
@@ -103,8 +103,8 @@ describe("routine reactive-patch post-await guards (#362)", () => {
 		const authWrapper = resolveWrapper(api.auth);
 		authWrapper.____slothletInternal.invalid = true;
 		try {
-			rm.onImplCreated({ apiPath: "auth.someleaf", moduleID: "s1", wrapper: { __impl: function someleaf() {} } });
-			rm.onImplCreated({ apiPath: "auth.someleaf", moduleID: "s2", wrapper: { __impl: function someleaf() {} } });
+			rm.onImplCreated({ apiPath: "auth.someleaf", moduleID: "s1", wrapper: { ____impl: function someleaf() {} } });
+			rm.onImplCreated({ apiPath: "auth.someleaf", moduleID: "s2", wrapper: { ____impl: function someleaf() {} } });
 			await settle();
 			// Guard bailed — no stacked callable installed on the invalidated node's child slot.
 			// (Reading through the invalidated wrapper returns undefined, which is the whole point.)
@@ -132,7 +132,7 @@ describe("routine reactive-patch post-await guards (#362)", () => {
 		expect(api.initialize.____slothletRoutineCascade).toBeFalsy();
 		expect(api.slothlet.initialize).toBeUndefined();
 
-		rm.onImplCreated({ apiPath: "initialize", moduleID: rootEntry.moduleID, wrapper: { __impl: rootEntry.fn } });
+		rm.onImplCreated({ apiPath: "initialize", moduleID: rootEntry.moduleID, wrapper: { ____impl: rootEntry.fn } });
 		await settle();
 
 		// Root cascade reinstalled...
@@ -143,11 +143,11 @@ describe("routine reactive-patch post-await guards (#362)", () => {
 	});
 
 	// The mid-await race guards need state to change DURING #resolveContainer's own
-	// `await wrapper._materialize()`. That await only happens for a lazy, not-yet-materialized node
+	// `await wrapper.___materialize()`. That await only happens for a lazy, not-yet-materialized node
 	// in the resolve path, so these use the nested fixture's `admin` subfolder (lazy + untouched in
 	// lazy mode — a mounted `auth` is already materialized and never awaits) as the parent, a
 	// synthetic `admin.ghostleaf` key (no real file, so the fixture's own admin/* contributions
-	// never collide with the injected raw entries), and override that one wrapper's `_materialize`
+	// never collide with the injected raw entries), and override that one wrapper's `___materialize`
 	// to mutate state inside the resolve window, then restore it.
 	async function withLazyAdminResolveHook(routineName, hook) {
 		api = await slothlet({
@@ -160,9 +160,9 @@ describe("routine reactive-patch post-await guards (#362)", () => {
 		const rm = resolveWrapper(api.other).slothlet.handlers.routineManager;
 		const adminWrapper = resolveWrapper(api.admin);
 		expect(adminWrapper.____slothletInternal.state.materialized).toBe(false);
-		const orig = adminWrapper._materialize.bind(adminWrapper);
+		const orig = adminWrapper.___materialize.bind(adminWrapper);
 		let fired = false;
-		adminWrapper._materialize = async () => {
+		adminWrapper.___materialize = async () => {
 			fired = true;
 			// Run the REAL materialization first, THEN mutate — still inside `#resolveContainer`'s own
 			// `await`, so the post-await gates observe the mutation, but AFTER `orig()`'s build has
@@ -174,7 +174,7 @@ describe("routine reactive-patch post-await guards (#362)", () => {
 			hook(rm);
 			return result;
 		};
-		return { rm, adminWrapper, orig, fired: () => fired, restore: () => (adminWrapper._materialize = orig) };
+		return { rm, adminWrapper, orig, fired: () => fired, restore: () => (adminWrapper.___materialize = orig) };
 	}
 
 	it("494 — bails when a build starts during the resolve await (post-await ____buildDepth re-check)", async () => {
@@ -191,15 +191,15 @@ describe("routine reactive-patch post-await guards (#362)", () => {
 			// still flipped varied run-to-run — covered in isolation, missed under full-suite scheduling).
 			// The first contributor ALONE has winnerGroup === 1 (< 2, uncontested, non-cascade), so its
 			// patch bails at the pre-resolve gate WITHOUT calling #resolveContainer — it never touches
-			// admin._materialize (fired stays false, admin stays unmaterialized).
-			ctx.rm.onImplCreated({ apiPath: "admin.ghostleaf", moduleID: "b1", wrapper: { __impl: function ghostleaf() {} } });
+			// admin.___materialize (fired stays false, admin stays unmaterialized).
+			ctx.rm.onImplCreated({ apiPath: "admin.ghostleaf", moduleID: "b1", wrapper: { ____impl: function ghostleaf() {} } });
 			await settle();
 			expect(ctx.fired()).toBe(false);
 
 			// Adding the second contributor makes winnerGroup === 2, so THIS one patch is the only one
 			// that reaches the L502 resolve → awaits the still-unmaterialized admin → the hook flips
 			// ____buildDepth exactly once, and the post-await gate deterministically sees it > 0 and bails.
-			ctx.rm.onImplCreated({ apiPath: "admin.ghostleaf", moduleID: "b2", wrapper: { __impl: function ghostleaf() {} } });
+			ctx.rm.onImplCreated({ apiPath: "admin.ghostleaf", moduleID: "b2", wrapper: { ____impl: function ghostleaf() {} } });
 			await settle();
 			expect(ctx.fired()).toBe(true);
 			expectNoStackInstalled(api.admin.ghostleaf); // guard bailed — nothing installed at the synthetic slot
@@ -216,8 +216,8 @@ describe("routine reactive-patch post-await guards (#362)", () => {
 			rm.slothlet.api = Object.create(savedApi); // different reference → captured `api` is now stale
 		});
 		try {
-			ctx.rm.onImplCreated({ apiPath: "admin.ghostleaf", moduleID: "c1", wrapper: { __impl: function ghostleaf() {} } });
-			ctx.rm.onImplCreated({ apiPath: "admin.ghostleaf", moduleID: "c2", wrapper: { __impl: function ghostleaf() {} } });
+			ctx.rm.onImplCreated({ apiPath: "admin.ghostleaf", moduleID: "c1", wrapper: { ____impl: function ghostleaf() {} } });
+			ctx.rm.onImplCreated({ apiPath: "admin.ghostleaf", moduleID: "c2", wrapper: { ____impl: function ghostleaf() {} } });
 			await settle();
 			expect(ctx.fired()).toBe(true);
 		} finally {
@@ -232,8 +232,8 @@ describe("routine reactive-patch post-await guards (#362)", () => {
 			rm.raw = rm.raw.filter((e) => e.apiPath !== "admin.ghostleaf");
 		});
 		try {
-			ctx.rm.onImplCreated({ apiPath: "admin.ghostleaf", moduleID: "d1", wrapper: { __impl: function ghostleaf() {} } });
-			ctx.rm.onImplCreated({ apiPath: "admin.ghostleaf", moduleID: "d2", wrapper: { __impl: function ghostleaf() {} } });
+			ctx.rm.onImplCreated({ apiPath: "admin.ghostleaf", moduleID: "d1", wrapper: { ____impl: function ghostleaf() {} } });
+			ctx.rm.onImplCreated({ apiPath: "admin.ghostleaf", moduleID: "d2", wrapper: { ____impl: function ghostleaf() {} } });
 			await settle();
 			expect(ctx.fired()).toBe(true);
 			expectNoStackInstalled(api.admin.ghostleaf);
@@ -251,8 +251,8 @@ describe("routine reactive-patch post-await guards (#362)", () => {
 			if (first) rm.raw.push(first);
 		});
 		try {
-			ctx.rm.onImplCreated({ apiPath: "admin.ghostleaf", moduleID: "e1", wrapper: { __impl: function ghostleaf() {} } });
-			ctx.rm.onImplCreated({ apiPath: "admin.ghostleaf", moduleID: "e2", wrapper: { __impl: function ghostleaf() {} } });
+			ctx.rm.onImplCreated({ apiPath: "admin.ghostleaf", moduleID: "e1", wrapper: { ____impl: function ghostleaf() {} } });
+			ctx.rm.onImplCreated({ apiPath: "admin.ghostleaf", moduleID: "e2", wrapper: { ____impl: function ghostleaf() {} } });
 			await settle();
 			expect(ctx.fired()).toBe(true);
 			expectNoStackInstalled(api.admin.ghostleaf);

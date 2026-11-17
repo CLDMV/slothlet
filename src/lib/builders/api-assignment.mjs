@@ -114,8 +114,8 @@ export class ApiAssignment extends ComponentBase {
 			// api member, and skipping it here would merge the extracted snapshot instead of the live
 			// child wrapper, stripping its apiPath and gating.
 			// Reaching the skip needs a reserved name among the folder wrapper's own enumerable keys.
-			// That CAN occur — adoption places a module's reserved-name export (`_materialize`) onto the wrapper,
-			// and a file named `_materialize.mjs` / `_impl.mjs` does the same before breaking the load —
+			// That CAN occur — adoption places a module's reserved-name export (`___materialize`) onto the wrapper,
+			// and a file named `___materialize.mjs` / `____impl.mjs` does the same before breaking the load —
 			// but every such module is exporting a name whose surface contract is the #260 hazard, so the
 			// suite deliberately composes none and the skip stays guarded rather than pinned.
 			/* v8 ignore next */
@@ -133,7 +133,7 @@ export class ApiAssignment extends ComponentBase {
 			const folderKey = ofList[ofIndex];
 			// The full reserved set, not just the metadata names: when the folder's impl is a CALLABLE,
 			// extraction returns the function itself with every own key unfiltered, so a module export
-			// named for a reserved key (`_materialize`, `__state`, …) can appear here — and merging it
+			// named for a reserved key (`___materialize`, `____state`, …) can appear here — and merging it
 			// would plant a framework name as an own member of the surviving wrapper. Reachable only by
 			// a module exporting a reserved name, whose surface contract is the #260 hazard — the suite
 			// deliberately composes no such module, so the skip is guarded rather than pinned.
@@ -375,13 +375,13 @@ export class ApiAssignment extends ComponentBase {
 					});
 
 					// CRITICAL: In replace mode, trigger immediate materialization
-					// This ensures _impl is populated as soon as possible
+					// This ensures ____impl is populated as soon as possible
 					if (effectiveMode === "replace") {
 						this.slothlet.debug("api", {
 							key: "DEBUG_MODE_COLLISION_REPLACE_MATERIALIZE",
 							apiPath: valueWrapper.____slothletInternal.apiPath
 						});
-						valueWrapper._materialize(); // Fire-and-forget - will populate _impl asynchronously
+						valueWrapper.___materialize(); // Fire-and-forget - will populate ____impl asynchronously
 					}
 				}
 			}
@@ -488,7 +488,7 @@ export class ApiAssignment extends ComponentBase {
 						const valueMetadata = this.slothlet.handlers?.metadata?.getSystemMetadata(value);
 						const valueFilePath = valueMetadata?.filePath;
 
-						// Create temporary object to hold __childFilePaths if _impl doesn't exist yet
+						// Create temporary object to hold ____childFilePaths if ____impl doesn't exist yet
 						// When lazy materializes, it will merge with this or we can store it on the wrapper directly
 						// Map is created fresh with each lazy-folder wrapper; the false branch
 						// (map already present) is never triggered in tests.
@@ -550,7 +550,7 @@ export class ApiAssignment extends ComponentBase {
 								!valueWrapper.____slothletInternal.state?.materialized &&
 								!valueWrapper.____slothletInternal.state?.inFlight
 							) {
-								PromiseMethods.catch(valueWrapper._materialize(), () => {});
+								PromiseMethods.catch(valueWrapper.___materialize(), () => {});
 							}
 							// Keep the existing callable on the slot; the merge above finishes the composition.
 							runtime_frameworkWrite(targetApi, () => {
@@ -566,7 +566,7 @@ export class ApiAssignment extends ComponentBase {
 							const existingMetadata = this.slothlet.handlers?.metadata?.getSystemMetadata(existing);
 							const existingFilePath = existingMetadata?.filePath;
 
-							// Create temporary object to hold __childFilePaths if _impl doesn't exist yet
+							// Create temporary object to hold ____childFilePaths if ____impl doesn't exist yet
 							if (!valueWrapper.____slothletInternal.childFilePathsPreMaterialize) {
 								valueWrapper.____slothletInternal.childFilePathsPreMaterialize = {};
 							}
@@ -623,7 +623,7 @@ export class ApiAssignment extends ComponentBase {
 								!valueWrapper.____slothletInternal.state?.materialized &&
 								!valueWrapper.____slothletInternal.state?.inFlight
 							) {
-								PromiseMethods.catch(valueWrapper._materialize(), (err) => {
+								PromiseMethods.catch(valueWrapper.___materialize(), (err) => {
 									new this.slothlet.SlothletWarning(
 										"WARNING_COLLISION_TRIGGER_MATERIALIZE_ERROR",
 										{
@@ -657,7 +657,7 @@ export class ApiAssignment extends ComponentBase {
 					}
 
 					// CRITICAL: For materialized lazy wrappers, we need child caches populated
-					// In lazy mode, _impl is already set but ___adoptImplChildren hasn't run yet
+					// In lazy mode, ____impl is already set but ___adoptImplChildren hasn't run yet
 					const existingChildCount = filterList(Objects.keys(existingWrapper), (k) => !isFrameworkReservedKey(k)).length;
 					const valueChildCount = filterList(Objects.keys(valueWrapper), (k) => !isFrameworkReservedKey(k)).length;
 					if (existingWrapper.____slothletInternal.impl && existingChildCount === 0) {
@@ -781,7 +781,7 @@ export class ApiAssignment extends ComponentBase {
 				} else if (existingIsWrapper && !valueIsWrapper) {
 					// Existing is wrapper, new value is plain - merge into impl
 					const existingWrapper = resolveWrapper(existing);
-					const existingImpl = existingWrapper.__impl;
+					const existingImpl = existingWrapper.____impl;
 					// existingImpl is always an object when the wrapper has impl set (null guard dead code).
 					/* v8 ignore next */
 					const mergedImpl = { ...(existingImpl || {}), ...value };
@@ -865,7 +865,7 @@ export class ApiAssignment extends ComponentBase {
 		const { removeMissing = false, moduleID = null, ...assignOptions } = options;
 
 		// #283: a version dispatcher is a branded framework-internal object that carries slothlet's OWN
-		// reserved marker keys (__isVersionDispatcher/__logicalPath). Merging it here copies those keys
+		// reserved marker keys (____isVersionDispatcher/____logicalPath). Merging it here copies those keys
 		// onto the colliding wrapper, which the framework then reads back as the host (caller null).
 		// Brand that wrapper by OBJECT IDENTITY so those specific marker reads are exempt from the
 		// module-private host gate — never by name, so a consumer member of the same name (on a

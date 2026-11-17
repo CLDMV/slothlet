@@ -2365,7 +2365,7 @@ export class ModesProcessor extends ComponentBase {
 											modes_existingWrapper.____slothletInternal?.materializeFunc &&
 											!modes_existingWrapper.____slothletInternal?.state?.materialized
 										) {
-											await modes_existingWrapper._materialize();
+											await modes_existingWrapper.___materialize();
 										}
 										/* v8 ignore stop */
 										// Ensure children are adopted from impl
@@ -2377,7 +2377,7 @@ export class ModesProcessor extends ComponentBase {
 										) {
 											modes_existingWrapper.___adoptImplChildren();
 										}
-										const modes_existingImpl = modes_existingWrapper.__impl;
+										const modes_existingImpl = modes_existingWrapper.____impl;
 										// modes_existingImpl is always a non-null, non-array object here; IF FALSE unreachable.
 										/* v8 ignore next */
 										if (modes_existingImpl && typeof modes_existingImpl === "object" && !Arrays.isArray(modes_existingImpl)) {
@@ -2618,7 +2618,7 @@ export class ModesProcessor extends ComponentBase {
 					if (modes_initialCollisionMode !== "replace" && resolveWrapper(modes_lazyExisting)) {
 						const modes_lazyExistingW = resolveWrapper(modes_lazyExisting);
 						// Root files are processed eagerly even in lazy mode, so impl should exist
-						const existImpl = modes_lazyExistingW.__impl;
+						const existImpl = modes_lazyExistingW.____impl;
 						// existImpl is always a non-null, non-array object at this point; IF FALSE unreachable.
 						/* v8 ignore next */
 						if (existImpl && typeof existImpl === "object" && !Arrays.isArray(existImpl)) {
@@ -2640,7 +2640,7 @@ export class ModesProcessor extends ComponentBase {
 							const ck = ofList[ofIndex];
 							// Unreachable in practice: modes_fileFolderImpl is always initialised from
 							// existImpl in the block above because root files are processed eagerly
-							// (even in lazy mode), so __impl is always a non-null object by the time
+							// (even in lazy mode), so ____impl is always a non-null object by the time
 							// we reach this loop. The null-init guard is a defensive belt-and-suspenders
 							// safety net for future edge cases where impl may not yet exist.
 							/* v8 ignore next */
@@ -2699,7 +2699,7 @@ export class ModesProcessor extends ComponentBase {
 					// keep their laziness untouched.
 					const modes_assignedCollision = resolveWrapper(targetApi[subDirName]);
 					if (modes_assignedCollision?.____slothletInternal.needsImmediateChildAdoption) {
-						await modes_assignedCollision._materialize();
+						await modes_assignedCollision.___materialize();
 					}
 					// Callable-vs-callable under merge: the slot kept the first-loaded callable and the folder
 					// composed off-slot. The assignment chains this same merge onto the folder's materialization
@@ -2708,7 +2708,7 @@ export class ModesProcessor extends ComponentBase {
 					const modes_keptCallable = resolveWrapper(targetApi[subDirName]);
 					const modes_offSlotFolder = modes_keptCallable?.____slothletInternal.offSlotCollisionFolder;
 					if (modes_offSlotFolder) {
-						await modes_offSlotFolder._materialize();
+						await modes_offSlotFolder.___materialize();
 						this.slothlet.builders.apiAssignment.mergeOffSlotCollisionFolder(modes_keptCallable);
 					}
 				}
@@ -2755,7 +2755,7 @@ export class ModesProcessor extends ComponentBase {
 							const key = ofList[ofIndex];
 							modes_rootChildPaths[key] = file.path;
 						}
-						defaultFunc.__childFilePaths = modes_rootChildPaths;
+						defaultFunc.____childFilePaths = modes_rootChildPaths;
 					}
 				}
 				if (this.slothlet.config.debug?.modes) {
@@ -2865,7 +2865,7 @@ export class ModesProcessor extends ComponentBase {
 					const modes_rootKept = resolveWrapper(targetApi[moduleName]);
 					const modes_rootOffSlot = modes_rootKept?.____slothletInternal.offSlotCollisionFolder;
 					if (modes_rootOffSlot) {
-						await modes_rootOffSlot._materialize();
+						await modes_rootOffSlot.___materialize();
 						this.slothlet.builders.apiAssignment.mergeOffSlotCollisionFolder(modes_rootKept);
 					}
 					// Under merge a lazy folder kept the slot; once it has loaded, it takes this root file's
@@ -2873,7 +2873,7 @@ export class ModesProcessor extends ComponentBase {
 					const modes_rootPendingCallable = modes_rootKept?.____slothletInternal.pendingCollisionCallable;
 					if (modes_rootPendingCallable) {
 						delete modes_rootKept.____slothletInternal.pendingCollisionCallable;
-						await modes_rootKept._materialize();
+						await modes_rootKept.___materialize();
 						modes_rootKept.___adoptCallableImpl(modes_rootPendingCallable, false);
 					}
 				}
@@ -3074,16 +3074,16 @@ export class ModesProcessor extends ComponentBase {
 								if (typeof value === "function") {
 									// INTERNAL impl:created contribution event (#398) — delivered to the
 									// framework's metadata/routine/ownership systems only. RoutineManager#onImplCreated
-									// reads data.wrapper.__impl (not a raw `impl` field); the minimal wrapper shape below
+									// reads data.wrapper.____impl (not a raw `impl` field); the minimal wrapper shape below
 									// carries it. Without it, a lazily-materialized single-file subdirectory's exported
 									// functions were read as `undefined` (typeof !== "function"), so RoutineManager
 									// treated them as non-functions and never captured them — routines matching this
 									// shape silently missed their contribution under lazy mode (#372 review). No raw
-									// `impl` field and no __wrapperRef here: `value` is the exported function itself, not
+									// `impl` field and no ____wrapperRef here: `value` is the exported function itself, not
 									// a UnifiedWrapper, so there is no wrapper instance to capture for invalidation.
 									this.slothlet.handlers.lifecycle.emitInternal("impl:created", {
 										apiPath: `${apiPath}.${key}`,
-										wrapper: Objects.freeze({ __impl: value }),
+										wrapper: Objects.freeze({ ____impl: value }),
 										source: "lazy-materialization",
 										moduleID: moduleID,
 										filePath: file.path,
@@ -3096,7 +3096,7 @@ export class ModesProcessor extends ComponentBase {
 							}
 						}
 
-						// CRITICAL: Create __childFilePaths for ALL children in this folder
+						// CRITICAL: Create ____childFilePaths for ALL children in this folder
 						// Map each child to the file.path they came from. An array has no children: it is data, and the
 						// key would be listed among its elements. A default-export function with named exports beside it
 						// is slothlet's own callable layer (composeFunctionDefault), never the module's export, so its
@@ -3107,22 +3107,22 @@ export class ModesProcessor extends ComponentBase {
 							implToWrap !== exports.default &&
 							!ArrayMethods.some(moduleKeys, (key) => exports[key] === implToWrap);
 						if (implToWrap && ((typeof implToWrap === "object" && !Arrays.isArray(implToWrap)) || modes_composedFunction)) {
-							// Initialize __childFilePaths with all children mapped to file.path
+							// Initialize ____childFilePaths with all children mapped to file.path
 							const childPaths = {};
 							for (let ofIndex = 0, ofList = Objects.keys(implToWrap); ofIndex < ofList.length; ofIndex++) {
 								const key = ofList[ofIndex];
-								if (typeof key !== "symbol" && key !== "__childFilePaths" && key !== "__filePath") {
+								if (typeof key !== "symbol" && key !== "____childFilePaths" && key !== "____filePath") {
 									childPaths[key] = file.path;
 								}
 							}
 
 							// May or may not be needed... so far removing it hasn't caused an issue.
 							// Merge with collision-merged children paths if they exist
-							// if (this.__childFilePathsPreMaterialize) {
-							// 	Object.assign(childPaths, this.__childFilePathsPreMaterialize);
+							// if (this.____childFilePathsPreMaterialize) {
+							// 	Object.assign(childPaths, this.____childFilePathsPreMaterialize);
 							// }
 
-							implToWrap.__childFilePaths = childPaths;
+							implToWrap.____childFilePaths = childPaths;
 						}
 
 						// Merge file-folder collision exports (from same-name file, e.g., math.mjs + math/)
@@ -3248,7 +3248,7 @@ export class ModesProcessor extends ComponentBase {
 				// this wrapper's impl would nest wrapper-in-wrapper — enumeration then synthesizes keys the
 				// plain callable never had (an own `apply`, answered by the inner proxy's descriptor trap)
 				// and every read pays two trap hops. Unwrap to the composed implementation instead; the
-				// single-key path below already does the same through `__impl`.
+				// single-key path below already does the same through `____impl`.
 				const mainValueW = resolveWrapper(mainValue);
 				// processFiles wraps every composed module, so a non-wrapper category value would need a
 				// raw-content path none of this materializer's call-sites produce; degrade to no-unwrap
@@ -3408,7 +3408,7 @@ export class ModesProcessor extends ComponentBase {
 						return nestedValue;
 					}
 					/* v8 ignore stop */
-					return nestedValue.__impl ?? nestedValue;
+					return nestedValue.____impl ?? nestedValue;
 					// nestedValue is always a valid lazy wrapper here; the else branch (null/undefined)
 					// is a defensive fallback never produced by processFiles.
 					/* v8 ignore start */

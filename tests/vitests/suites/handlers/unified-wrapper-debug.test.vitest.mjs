@@ -27,7 +27,7 @@
  *
  *  Lines 518-519 – `_applyNewImpl` sets filePath from api.slothlet.node(impl).file
  *    Triggered during lazy materialization when the loaded module object carries a
- *    `__filePath` property (set by modes-processor) and the wrapper has no filePath yet.
+ *    `____filePath` property (set by modes-processor) and the wrapper has no filePath yet.
  *
  *  Line 543-544 – `___setImpl` debug guard for apiPath === "string"
  *    Triggered when `___setImpl` is called on the "string" wrapper (after a reload) with
@@ -255,12 +255,12 @@ describe("lazy materialization debug paths for apiPath=string (lines 670, 683, 7
 		expect(result).toBe("[LOG] hello");
 	});
 
-	it("materialises string module without debug (lines 518-519 via _applyNewImpl __filePath)", async () => {
+	it("materialises string module without debug (lines 518-519 via _applyNewImpl ____filePath)", async () => {
 		const api = await make({
 			base: API_TEST_MODES_DEBUG,
 			mode: "lazy"
 		});
-		// During materialization, modes-processor sets __filePath on the impl.
+		// During materialization, modes-processor sets ____filePath on the impl.
 		// _applyNewImpl at line 517 checks `!filePath && api.slothlet.node(impl).file` and promotes it.
 		// This covers lines 518-519.
 		const result = await api.string.trim("  hello  ");

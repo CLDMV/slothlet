@@ -280,7 +280,7 @@ describe("Proxy hasTrap — impl function property check (unified-wrapper.mjs li
 	});
 });
 
-// ─── getOwnPropertyDescriptorTrap line 2772: lazy _materialize trigger ────
+// ─── getOwnPropertyDescriptorTrap line 2772: lazy ___materialize trigger ────
 
 describe("Proxy getOwnPropertyDescriptorTrap — lazy materialize trigger (unified-wrapper.mjs line 2772)", () => {
 	let api;
@@ -296,19 +296,19 @@ describe("Proxy getOwnPropertyDescriptorTrap — lazy materialize trigger (unifi
 		}
 	});
 
-	it("Object.getOwnPropertyDescriptor on a lazy wrapper triggers _materialize (line 2772)", async () => {
+	it("Object.getOwnPropertyDescriptor on a lazy wrapper triggers ___materialize (line 2772)", async () => {
 		// In lazy mode, api.math is unmaterialized. Calling getOwnPropertyDescriptor
 		// invokes getOwnPropertyDescriptorTrap, which checks materialized/inFlight at
-		// line 2768 and calls wrapper._materialize() at line 2772.
+		// line 2768 and calls wrapper.___materialize() at line 2772.
 		const desc = Object.getOwnPropertyDescriptor(api.math, "add");
-		// After _materialize fires, the descriptor should now be available
+		// After ___materialize fires, the descriptor should now be available
 		expect(desc).toBeDefined();
 	});
 
 	it("getOwnPropertyDescriptor on an already-materialized lazy wrapper does not double-materialize", async () => {
 		// Force eager materialization first
-		await api.math._materialize();
-		// Now calling getOwnPropertyDescriptor should NOT trigger _materialize again
+		await api.math.___materialize();
+		// Now calling getOwnPropertyDescriptor should NOT trigger ___materialize again
 		const desc = Object.getOwnPropertyDescriptor(api.math, "add");
 		expect(desc).toBeDefined();
 	});

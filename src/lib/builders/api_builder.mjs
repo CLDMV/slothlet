@@ -545,7 +545,7 @@ export class ApiBuilder extends ComponentBase {
 		});
 
 		// No clone needed - all exports are already instance-specific UnifiedWrapper proxies
-		// Mode builders return wrapped APIs where each wrapper has its own _impl storage
+		// Mode builders return wrapped APIs where each wrapper has its own ____impl storage
 		// Mutating userApi in place to add builtins is safe and eliminates unnecessary object allocation
 
 		// Strip any previously-attached slothlet builtins from userApi before checking for user hooks.
@@ -1957,7 +1957,7 @@ export class ApiBuilder extends ComponentBase {
 							// caller's view, where a `__`-named marker would be held to the caller's rules (#816).
 							const raw = resolveWrapper(runtime_nodeBehind(runtime_unwrapSelfView(node)));
 							if (raw && raw.____slothletInternal.state.materialized === false) {
-								await raw._materialize();
+								await raw.___materialize();
 							}
 							const childKeys = setFrom(Objects.keys(node));
 							// Read after the materialize await: that is what registers this node's children,
@@ -2418,7 +2418,7 @@ export class ApiBuilder extends ComponentBase {
 					return slothlet.contextManager.runInContext(slothlet.instanceID, fn, this, args, capturedWrapper, true, false, capturedCeiling);
 				};
 				// Parity with the EventEmitter patch metadata.
-				locked._slothletOriginal = fn;
+				locked.____slothletOriginal = fn;
 				return runtime_markCallerLocked(locked);
 			},
 
@@ -4554,7 +4554,7 @@ export class ApiBuilder extends ComponentBase {
 		 *
 		 * Otherwise identical to `lockCaller`: captured once at call time and immutable after;
 		 * `this` and arguments are forwarded; errors from `fn` propagate unchanged; the returned
-		 * wrapper exposes `_slothletOriginal`; instanceID/contextManager are resolved live so a
+		 * wrapper exposes `____slothletOriginal`; instanceID/contextManager are resolved live so a
 		 * callback held across `reload()` targets the current instance. Runtime-mode behaviour is
 		 * the same as `lockCaller`'s — in **async** mode the identity propagates through
 		 * `AsyncLocalStorage` across every `await`; in **live** mode there is one identity slot per
@@ -4601,7 +4601,7 @@ export class ApiBuilder extends ComponentBase {
 					: slothlet.contextManager.runInContext(slothlet.instanceID, fn, this, args, null, true, true);
 			};
 			// Parity with lockCaller / the EventEmitter patch metadata.
-			locked._slothletOriginal = fn;
+			locked.____slothletOriginal = fn;
 			return runtime_markCallerLocked(locked);
 		};
 		// `lockCaller.caller` is its own api path (`slothlet.lockCaller.caller`), so the permission

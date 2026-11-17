@@ -15,8 +15,8 @@
 
 /**
  * @fileoverview Companion module for the reserved-name contract. Its reserved-name exports were
- * removed when scan-time rejection landed (#260): a module can no longer export `_materialize` /
- * `__impl` at all — the loader refuses the file with MODULE_RESERVED_EXPORT. What remains pins
+ * removed when scan-time rejection landed (#260): a module can no longer export `___materialize` /
+ * `____impl` at all — the loader refuses the file with MODULE_RESERVED_EXPORT. What remains pins
  * that the framework's own reserved handles stay served on an ordinary module's wrapper.
  * @module api_test_underscore.clash
  * @memberof module:api_test_underscore

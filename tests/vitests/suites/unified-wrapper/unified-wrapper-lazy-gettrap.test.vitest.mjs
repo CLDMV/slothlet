@@ -18,7 +18,7 @@
  *
  * @description
  * The lazyGetTrap (lines 1995–2640) contains special handlers for internal read-only properties
- * (`__type`, `__metadata`, `__filePath`, `__sourceFolder`, `__moduleID`, `_materialize`, `then`,
+ * (`__type`, `__metadata`, `____filePath`, `__sourceFolder`, `__moduleID`, `___materialize`, `then`,
  * `Symbol.toStringTag`, `length`, `name`, `toString`, `valueOf`) that are accessible through the
  * proxy for informational or framework purposes.
  *
@@ -31,14 +31,14 @@
  * result of a two-step access (e.g., `(api.task.someChild).__type`).
  *
  * Lines covered by this file:
- *   2085–2089  __type → IN_FLIGHT (wrapper just triggered _materialize())
+ *   2085–2089  __type → IN_FLIGHT (wrapper just triggered ___materialize())
  *   2104–2105  __type → "function" (direct function impl)
  *   2106–2107  __type → "function" (impl.default is a function — CJS { default: fn } pattern)
  *   2109–2110  __type → "object"
- *   2122       _materialize binding returned
+ *   2122       ___materialize binding returned
  *   2133–2141  __metadata (handler exists)
  *   2143       __metadata fallback {}
- *   2146       __filePath returned
+ *   2146       ____filePath returned
  *   2149       __sourceFolder returned
  *   2154       __moduleID returned
  *   2163       then → undefined
@@ -165,7 +165,7 @@ describe("lazyGetTrap — __type special property (lines 2082–2117)", () => {
 		// This covers lines 2104–2105: `if (typeof impl === "function") return "function"`.
 		const { api, teardown } = await makeLazy();
 		try {
-			await api.math.add._materialize();
+			await api.math.add.___materialize();
 			await new Promise((r) => setImmediate(r));
 			expect(api.slothlet.node(api.math.add).type).toBe("function");
 		} finally {
@@ -179,7 +179,7 @@ describe("lazyGetTrap — __type special property (lines 2082–2117)", () => {
 		// Lines 2106–2107: `if (impl && typeof impl === "object" && typeof impl.default === "function")`
 		const { api, teardown } = await makeLazyCjsDefaultFn();
 		try {
-			await api.defaultFn._materialize();
+			await api.defaultFn.___materialize();
 			await new Promise((r) => setImmediate(r));
 			expect(api.slothlet.node(api.defaultFn).type).toBe("function");
 		} finally {
@@ -192,7 +192,7 @@ describe("lazyGetTrap — __type special property (lines 2082–2117)", () => {
 		// Lines 2109–2110: `if (impl && typeof impl === "object") return "object"`.
 		const { api, teardown } = await makeLazy();
 		try {
-			await api.task._materialize();
+			await api.task.___materialize();
 			await new Promise((r) => setImmediate(r));
 			expect(api.slothlet.node(api.task).type).toBe("namespace");
 		} finally {
@@ -239,15 +239,15 @@ describe("lazyGetTrap — __type special property (lines 2082–2117)", () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 2. _materialize binding (line 2122)
+// 2. ___materialize binding (line 2122)
 // ─────────────────────────────────────────────────────────────────────────────
-describe("lazyGetTrap — _materialize binding (line 2122)", () => {
-	it("accessing _materialize on lazy wrapper returns a bound function (line 2122)", async () => {
-		// Prop === "_materialize" → `return wrapper._materialize.bind(wrapper)`
+describe("lazyGetTrap — ___materialize binding (line 2122)", () => {
+	it("accessing ___materialize on lazy wrapper returns a bound function (line 2122)", async () => {
+		// Prop === "___materialize" → `return wrapper.___materialize.bind(wrapper)`
 		// This goes through the lazy getTrap (not the waiting-proxy).
 		const { api, teardown } = await makeLazy();
 		try {
-			const materializeFn = api.task._materialize;
+			const materializeFn = api.task.___materialize;
 			expect(typeof materializeFn).toBe("function");
 			// Calling it should resolve
 			await expect(materializeFn()).resolves.not.toThrow();
@@ -294,10 +294,10 @@ describe("lazyGetTrap — __metadata property (lines 2133–2143)", () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 4. __filePath, __sourceFolder, __moduleID (lines 2146, 2149, 2154)
+// 4. ____filePath, __sourceFolder, __moduleID (lines 2146, 2149, 2154)
 // ─────────────────────────────────────────────────────────────────────────────
 describe("lazyGetTrap — file info properties (lines 2146, 2149, 2154)", () => {
-	it("__filePath returns the file path string (line 2146)", async () => {
+	it("____filePath returns the file path string (line 2146)", async () => {
 		const { api, teardown } = await makeLazy();
 		try {
 			const fp = api.slothlet.node(api.task).file;
@@ -327,10 +327,10 @@ describe("lazyGetTrap — file info properties (lines 2146, 2149, 2154)", () => 
 		}
 	});
 
-	it("__filePath is truthy after materialization", async () => {
+	it("____filePath is truthy after materialization", async () => {
 		const { api, teardown } = await makeLazy();
 		try {
-			await api.task._materialize();
+			await api.task.___materialize();
 			await new Promise((r) => setImmediate(r));
 			const fp = api.slothlet.node(api.task).file;
 			expect(typeof fp).toBe("string");
@@ -343,7 +343,7 @@ describe("lazyGetTrap — file info properties (lines 2146, 2149, 2154)", () => 
 	it("__sourceFolder is truthy after materialization", async () => {
 		const { api, teardown } = await makeLazy();
 		try {
-			await api.task._materialize();
+			await api.task.___materialize();
 			await new Promise((r) => setImmediate(r));
 			const sf = api.slothlet.node(api.task).folder;
 			expect(typeof sf).toBe("string");
@@ -355,7 +355,7 @@ describe("lazyGetTrap — file info properties (lines 2146, 2149, 2154)", () => 
 	it("__moduleID is truthy after materialization", async () => {
 		const { api, teardown } = await makeLazy();
 		try {
-			await api.task._materialize();
+			await api.task.___materialize();
 			await new Promise((r) => setImmediate(r));
 			const mid = api.slothlet.node(api.task).module;
 			expect(typeof mid).toBe("string");
@@ -390,7 +390,7 @@ describe("lazyGetTrap — then is state-dependent", () => {
 	it("accessing .then on a materialized lazy wrapper returns undefined", async () => {
 		const { api, teardown } = await makeLazy();
 		try {
-			await api.task._materialize();
+			await api.task.___materialize();
 			await new Promise((r) => setImmediate(r));
 			expect(api.task.then).toBeUndefined();
 		} finally {
@@ -407,7 +407,7 @@ describe("lazyGetTrap — Symbol.toStringTag (lines 2173, 2176–2179)", () => {
 		// api.math.add has a direct function impl.
 		const { api, teardown } = await makeLazy();
 		try {
-			await api.math.add._materialize();
+			await api.math.add.___materialize();
 			await new Promise((r) => setImmediate(r));
 			expect(api.math.add[Symbol.toStringTag]).toBe("Function");
 		} finally {
@@ -419,7 +419,7 @@ describe("lazyGetTrap — Symbol.toStringTag (lines 2173, 2176–2179)", () => {
 		// impl.default is a function → `"Function"` is returned.
 		const { api, teardown } = await makeLazyCjsDefaultFn();
 		try {
-			await api.defaultFn._materialize();
+			await api.defaultFn.___materialize();
 			await new Promise((r) => setImmediate(r));
 			expect(api.defaultFn[Symbol.toStringTag]).toBe("Function");
 		} finally {
@@ -430,7 +430,7 @@ describe("lazyGetTrap — Symbol.toStringTag (lines 2173, 2176–2179)", () => {
 	it("Symbol.toStringTag for object wrapper returns 'Object' (line 2179)", async () => {
 		const { api, teardown } = await makeLazy();
 		try {
-			await api.task._materialize();
+			await api.task.___materialize();
 			await new Promise((r) => setImmediate(r));
 			expect(api.task[Symbol.toStringTag]).toBe("Object");
 		} finally {
@@ -446,7 +446,7 @@ describe("lazyGetTrap — length property (lines 2185, 2186, 2188–2190)", () =
 	it("length for function wrapper returns function.length (line 2185)", async () => {
 		const { api, teardown } = await makeLazy();
 		try {
-			await api.math.add._materialize();
+			await api.math.add.___materialize();
 			await new Promise((r) => setImmediate(r));
 			const len = api.math.add.length;
 			expect(typeof len).toBe("number");
@@ -459,7 +459,7 @@ describe("lazyGetTrap — length property (lines 2185, 2186, 2188–2190)", () =
 		// multiply(a, b) has length 2.
 		const { api, teardown } = await makeLazyCjsDefaultFn();
 		try {
-			await api.defaultFn._materialize();
+			await api.defaultFn.___materialize();
 			await new Promise((r) => setImmediate(r));
 			expect(api.defaultFn.length).toBe(2);
 		} finally {
@@ -470,7 +470,7 @@ describe("lazyGetTrap — length property (lines 2185, 2186, 2188–2190)", () =
 	it("length for object wrapper returns 0 (lines 2188–2190)", async () => {
 		const { api, teardown } = await makeLazy();
 		try {
-			await api.task._materialize();
+			await api.task.___materialize();
 			await new Promise((r) => setImmediate(r));
 			expect(api.task.length).toBe(0);
 		} finally {
@@ -510,7 +510,7 @@ describe("lazyGetTrap — name property (lines 2194–2198)", () => {
 		const { api, teardown } = await makeLazy();
 		try {
 			// math.add has apiPath 'math.add' → name 'add'
-			await api.math.add._materialize();
+			await api.math.add.___materialize();
 			await new Promise((r) => setImmediate(r));
 			expect(api.math.add.name).toBe("add");
 		} finally {
@@ -526,7 +526,7 @@ describe("lazyGetTrap — toString property (lines 2201–2215)", () => {
 	it("toString for function wrapper returns impl.toString.bind(impl) (lines 2201–2204)", async () => {
 		const { api, teardown } = await makeLazy();
 		try {
-			await api.math.add._materialize();
+			await api.math.add.___materialize();
 			await new Promise((r) => setImmediate(r));
 			const toString = api.math.add.toString;
 			expect(typeof toString).toBe("function");
@@ -540,7 +540,7 @@ describe("lazyGetTrap — toString property (lines 2201–2215)", () => {
 	it("toString for CJS { default: fn } returns impl.default.toString.bind(impl.default) (lines 2205–2208)", async () => {
 		const { api, teardown } = await makeLazyCjsDefaultFn();
 		try {
-			await api.defaultFn._materialize();
+			await api.defaultFn.___materialize();
 			await new Promise((r) => setImmediate(r));
 			const toString = api.defaultFn.toString;
 			expect(typeof toString).toBe("function");
@@ -553,7 +553,7 @@ describe("lazyGetTrap — toString property (lines 2201–2215)", () => {
 	it("toString for object wrapper returns a descriptive string function (lines 2209–2215)", async () => {
 		const { api, teardown } = await makeLazy();
 		try {
-			await api.task._materialize();
+			await api.task.___materialize();
 			await new Promise((r) => setImmediate(r));
 			const toString = api.task.toString;
 			expect(typeof toString).toBe("function");
@@ -570,7 +570,7 @@ describe("lazyGetTrap — valueOf property (lines 2217–2225)", () => {
 	it("valueOf for function wrapper returns impl.valueOf.bind(impl) (lines 2217–2220)", async () => {
 		const { api, teardown } = await makeLazy();
 		try {
-			await api.math.add._materialize();
+			await api.math.add.___materialize();
 			await new Promise((r) => setImmediate(r));
 			const valueOf = api.math.add.valueOf;
 			expect(typeof valueOf).toBe("function");
@@ -582,7 +582,7 @@ describe("lazyGetTrap — valueOf property (lines 2217–2225)", () => {
 	it("valueOf for CJS { default: fn } returns impl.default.valueOf.bind(impl.default) (lines 2222–2223)", async () => {
 		const { api, teardown } = await makeLazyCjsDefaultFn();
 		try {
-			await api.defaultFn._materialize();
+			await api.defaultFn.___materialize();
 			await new Promise((r) => setImmediate(r));
 			const valueOf = api.defaultFn.valueOf;
 			expect(typeof valueOf).toBe("function");
@@ -594,7 +594,7 @@ describe("lazyGetTrap — valueOf property (lines 2217–2225)", () => {
 	it("valueOf for object wrapper returns Function.prototype.valueOf.bind(target) (line 2225)", async () => {
 		const { api, teardown } = await makeLazy();
 		try {
-			await api.task._materialize();
+			await api.task.___materialize();
 			await new Promise((r) => setImmediate(r));
 			const valueOf = api.task.valueOf;
 			expect(typeof valueOf).toBe("function");
@@ -693,7 +693,7 @@ describe("lazyGetTrap — impl property access and undefined return (lines 2397�
 		// e.g., access `api.task.parseJSON` which is exported as a method
 		const { api, teardown } = await makeLazy();
 		try {
-			await api.task._materialize();
+			await api.task.___materialize();
 			await new Promise((r) => setImmediate(r));
 			// task.parseJSON should be accessible via impl
 			const parseJSON = api.task.parseJSON;
@@ -708,7 +708,7 @@ describe("lazyGetTrap — impl property access and undefined return (lines 2397�
 		// When prop doesn't exist on wrapper OR impl, getTrap returns undefined.
 		const { api, teardown } = await makeLazy();
 		try {
-			await api.task._materialize();
+			await api.task.___materialize();
 			await new Promise((r) => setImmediate(r));
 			const nonExistent = api.task.__nonExistentPropertyXYZ123;
 			expect(nonExistent).toBeUndefined();

@@ -295,7 +295,7 @@ describe("Modes > documented collision table (merge: first loaded wins, both sou
 
 		try {
 			// Surface parity is enumeration parity too: the same slot lists the same members in both
-			// modes, and framework metadata (`__childFilePaths` and friends, carried on lazy impls)
+			// modes, and framework metadata (`____childFilePaths` and friends, carried on lazy impls)
 			// never leaks into the public key set.
 			for (const slot of ["tool", "clog", "math"]) {
 				const eagerKeys = Object.keys(eager[slot]).sort();

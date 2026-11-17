@@ -14,7 +14,7 @@
  */
 
 /**
- * @fileoverview Unified wrapper - combines __impl pattern, lazy/eager modes, materialization, and context binding
+ * @fileoverview Unified wrapper - combines ____impl pattern, lazy/eager modes, materialization, and context binding
  * @module @cldmv/slothlet/handlers/unified-wrapper
  * @internal
  */
@@ -2762,7 +2762,7 @@ function runtime_selfRootView(slothlet, reader) {
 /**
  * Functions the framework itself pinned to a caller: a `lockCaller` / `lockCaller.caller` wrapper, a hook
  * handler the hook manager pinned to its module, and the handler {@link runtime_selfHookHandler} built over
- * one. Recognised by membership only, never by a property such as `_slothletOriginal`: module code can put
+ * one. Recognised by membership only, never by a property such as `____slothletOriginal`: module code can put
  * any property on its own function, and a handler that passed for pinned would run unpinned, as whichever
  * caller triggered it (#625).
  * @type {WeakSet<Function>}
@@ -2783,10 +2783,10 @@ const CALLER_LOCKED = new WeakSet();
 function runtime_markCallerLocked(fn) {
 	WeakSetMethods.add(CALLER_LOCKED, fn);
 	// The framework reads the original back (async detection for a pinned hook), so it is fixed once pinned (#625).
-	if (hasOwn(fn, "_slothletOriginal")) {
-		Objects.defineProperty(fn, "_slothletOriginal", {
+	if (hasOwn(fn, "____slothletOriginal")) {
+		Objects.defineProperty(fn, "____slothletOriginal", {
 			__proto__: null,
-			value: fn._slothletOriginal,
+			value: fn.____slothletOriginal,
 			writable: false,
 			enumerable: true,
 			configurable: false
@@ -2910,7 +2910,7 @@ function runtime_selfHookHandler(handler, slothlet, reader) {
 	WeakSetMethods.add(SELF_HOOK_VIEWED, viewed);
 	// A pinned handler stays recognised as pinned (the around pipeline, reload replay), and keeps its original visible.
 	if (runtime_isCallerLocked(handler)) {
-		viewed._slothletOriginal = handler._slothletOriginal;
+		viewed.____slothletOriginal = handler.____slothletOriginal;
 		runtime_markCallerLocked(viewed);
 	}
 	return viewed;
@@ -3061,7 +3061,7 @@ async function settleStandInChanges(slothlet, scope = null) {
 			const holder = ofList[ofIndex];
 			SetMethods.add(tried, holder);
 		}
-		await promiseAll(mapList(holders, (holder) => PromiseMethods.catch(holder._materialize(), () => {})));
+		await promiseAll(mapList(holders, (holder) => PromiseMethods.catch(holder.___materialize(), () => {})));
 	}
 }
 
@@ -3147,7 +3147,7 @@ function runtime_makeStandInChange(wrapper, change, replayed, holders) {
 		} finally {
 			replayHolders = null;
 		}
-		if (!nodeWrapper.____slothletInternal.state.inFlight) PromiseMethods.catch(nodeWrapper._materialize(), () => {});
+		if (!nodeWrapper.____slothletInternal.state.inFlight) PromiseMethods.catch(nodeWrapper.___materialize(), () => {});
 		return true;
 	}
 	// Handed to a stand-in, the change is queued, or made at once through runtime_applyStandInChange if its node loaded
@@ -4068,7 +4068,7 @@ function runtime_isTerminalData(value) {
  * @private
  */
 function runtime_readGateDecision(wrapper, targetPath, callerOverride, kept = null, access = null, pinned = null) {
-	// #283: slothlet's OWN reserved marker keys (__isVersionDispatcher/__logicalPath) are framework
+	// #283: slothlet's OWN reserved marker keys (____isVersionDispatcher/____logicalPath) are framework
 	// machinery, not a consumer's module-private member. When they are carried by a branded
 	// framework-internal wrapper (a version dispatcher, or a wrapper it merged into), exempt reads of
 	// exactly those keys — by OBJECT IDENTITY, never by name. A consumer member of the same name lives
@@ -13450,7 +13450,7 @@ function runtime_runAroundPipeline(wrapper, hookManager, arounds, strategy, this
 			let settled;
 			try {
 				if (internal.mode === "lazy" && !internal.state.materialized) {
-					await wrapper._materialize();
+					await wrapper.___materialize();
 				}
 				const raw = invokeTarget(coreArgs);
 				settled = raw && typeof raw === "object" && typeof raw.then === "function" ? await raw : raw;
@@ -14930,7 +14930,7 @@ function runtime_rootMemberShown(value, args) {
 
 /**
  * Unified wrapper class that handles all proxy concerns in one place:
- * - __impl pattern for reload support
+ * - ____impl pattern for reload support
  * - Lazy/eager mode materialization
  * - Recursive waiting proxy for deep lazy loading
  * - Context binding through contextManager
@@ -15208,8 +15208,8 @@ class UnifiedWrapper extends ComponentBase {
 		// decides placement, so the routine manager and ownership see every contribution (merge-losers
 		// included). The public, post-placement impl:created (with the wrapped callable, no raw impl) is
 		// emitted separately once ownership knows the winner — see slothlet.mjs's ownership subscriber.
-		// A single emit now carries everything the internal systems need: `wrapper.__impl` (the leaf's
-		// impl) plus `__wrapperRef` (the real UnifiedWrapper, for the routine manager's invalidation
+		// A single emit now carries everything the internal systems need: `wrapper.____impl` (the leaf's
+		// impl) plus `____wrapperRef` (the real UnifiedWrapper, for the routine manager's invalidation
 		// capture — safe here because this event never leaves the internal tier). The former second,
 		// raw-`impl` emit is gone: it existed only to hand out the unwrapped callable, which is exactly
 		// the leak #398 removes.
@@ -15218,10 +15218,10 @@ class UnifiedWrapper extends ComponentBase {
 				apiPath,
 				// wrapper is a frozen minimal object to avoid leaking the raw UnifiedWrapper
 				// (and therefore .slothlet) into any payload a subscriber might retain.
-				wrapper: Objects.freeze({ __impl: this.____slothletInternal.impl }),
+				wrapper: Objects.freeze({ ____impl: this.____slothletInternal.impl }),
 				// The real wrapper instance, INTERNAL-only, for RoutineManager#onImplCreated's
-				// invalidation-capture (resolveWrapper(__wrapperRef)). Never present on a public event.
-				__wrapperRef: this,
+				// invalidation-capture (resolveWrapper(____wrapperRef)). Never present on a public event.
+				____wrapperRef: this,
 				source: "initial",
 				moduleID,
 				filePath,
@@ -15286,7 +15286,7 @@ class UnifiedWrapper extends ComponentBase {
 				// Fire-and-forget: don't await, let it materialize in background
 				scheduleMacrotask(
 					() => {
-						PromiseMethods.catch(this._materialize(), (err) => {
+						PromiseMethods.catch(this.___materialize(), (err) => {
 							// Silently catch errors - background materialization is best-effort
 							// The FALSE branch (debug off, error silently dropped) requires inducing a background
 							// materialization failure without debug.materialize enabled — not testable deterministically.
@@ -15336,7 +15336,7 @@ class UnifiedWrapper extends ComponentBase {
 			return inspectObj;
 		}
 
-		// For callables or leaf nodes - return actual _impl value if materialized
+		// For callables or leaf nodes - return actual ____impl value if materialized
 		// For unmaterialized lazy wrappers, return the proxy to show it's a function
 		if (
 			w.____slothletInternal?.mode === "lazy" &&
@@ -15351,10 +15351,10 @@ class UnifiedWrapper extends ComponentBase {
 
 	/**
 	 * Get current implementation
-	 * @returns {Function|Object|null} Current __impl value
+	 * @returns {Function|Object|null} Current ____impl value
 	 * @public
 	 */
-	get __impl() {
+	get ____impl() {
 		return this.____slothletInternal.impl;
 	}
 
@@ -15535,16 +15535,16 @@ class UnifiedWrapper extends ComponentBase {
 	}
 
 	/**
-	 * Reconstruct a full implementation object from a wrapper whose _impl may have
+	 * Reconstruct a full implementation object from a wrapper whose ____impl may have
 	 * been depleted by ___adoptImplChildren.
 	 *
 	 * @description
-	 * After ___adoptImplChildren runs, children are moved from _impl onto the wrapper as
-	 * own properties and deleted from _impl. This helper reconstructs the original
-	 * impl by merging the remaining _impl keys with the adopted children extracted
+	 * After ___adoptImplChildren runs, children are moved from ____impl onto the wrapper as
+	 * own properties and deleted from ____impl. This helper reconstructs the original
+	 * impl by merging the remaining ____impl keys with the adopted children extracted
 	 * from the wrapper.
 	 *
-	 * Recursively walks the wrapper tree so nested objects whose _impl was also
+	 * Recursively walks the wrapper tree so nested objects whose ____impl was also
 	 * depleted are properly reconstructed. For callable (function) impls, returns
 	 * the function directly since keepImplProperties prevents depletion.
 	 *
@@ -15565,7 +15565,7 @@ class UnifiedWrapper extends ComponentBase {
 		if (impl === null || impl === undefined) return impl;
 		if (typeof impl !== "object" && typeof impl !== "function") return impl;
 
-		// For functions, keepImplProperties=true means _impl is intact - return as-is
+		// For functions, keepImplProperties=true means ____impl is intact - return as-is
 		if (typeof impl === "function") return impl;
 
 		// A class instance is not adopted (#589), so it is intact too. Rebuilding it as a plain object
@@ -15635,18 +15635,18 @@ class UnifiedWrapper extends ComponentBase {
 			return serialized;
 		}
 
-		// For objects, reconstruct by merging remaining _impl keys with adopted children
+		// For objects, reconstruct by merging remaining ____impl keys with adopted children
 		const extractFullImpl_result = {};
 		// A node rebuilt from the reconstruction fronts the module's object this one does (#746).
 		if (wrapper.____slothletInternal.moduleObject)
 			WeakMapMethods.set(RECONSTRUCTED_FROM, extractFullImpl_result, wrapper.____slothletInternal.moduleObject);
 
-		// Copy remaining _impl keys (not adopted or metadata-protected)
+		// Copy remaining ____impl keys (not adopted or metadata-protected)
 		for (let ofIndex = 0, ofList = Objects.keys(impl); ofIndex < ofList.length; ofIndex++) {
 			const key = ofList[ofIndex];
 			// The same exact reserved set every other trap gates on — not an `__` prefix (a module's own
 			// `__x` export must survive extraction, or a chained lazy read of it resolves to undefined),
-			// and not just the metadata names (a module export NAMED `_materialize`/`__impl` sits on the
+			// and not just the metadata names (a module export NAMED `___materialize`/`____impl` sits on the
 			// impl because adoption skips it; copying it here would hand it to `toJSON` while `ownKeys`
 			// and `get` both withhold it).
 			if (isFrameworkReservedKey(key)) continue;
@@ -15661,19 +15661,19 @@ class UnifiedWrapper extends ComponentBase {
 		}
 
 		// Preserve metadata keys needed by ___createChildWrapper for file path resolution
-		// Unreachable in practice: __childFilePaths is set only when ___createChildWrapper
+		// Unreachable in practice: ____childFilePaths is set only when ___createChildWrapper
 		// is called with a parent that was built from a multi-file folder scan. No test
 		// fixture exercises that code path, so this key is never present on tested impls.
 		/* v8 ignore next */
-		if (impl.__childFilePaths) {
-			extractFullImpl_result.__childFilePaths = impl.__childFilePaths;
+		if (impl.____childFilePaths) {
+			extractFullImpl_result.____childFilePaths = impl.____childFilePaths;
 		}
-		// Unreachable in practice: __childFilePathsPreMaterialize is set only during the
+		// Unreachable in practice: ____childFilePathsPreMaterialize is set only during the
 		// pre-materialization phase of folder wrappers with deferred children. The same
-		// test-coverage gap as __childFilePaths above.
+		// test-coverage gap as ____childFilePaths above.
 		/* v8 ignore next */
-		if (impl.__childFilePathsPreMaterialize) {
-			extractFullImpl_result.__childFilePathsPreMaterialize = impl.__childFilePathsPreMaterialize;
+		if (impl.____childFilePathsPreMaterialize) {
+			extractFullImpl_result.____childFilePathsPreMaterialize = impl.____childFilePathsPreMaterialize;
 		}
 
 		// Add adopted children from wrapper's own enumerable keys.
@@ -15683,7 +15683,7 @@ class UnifiedWrapper extends ComponentBase {
 			// Wrapper own keys are user-facing API names; INTERNAL_KEYS never appear as own enumerable keys.
 			/* v8 ignore next */
 			if (SetMethods.has(UnifiedWrapper.INTERNAL_KEYS, key)) continue;
-			if (key in extractFullImpl_result) continue; // Already from _impl (not depleted for this key)
+			if (key in extractFullImpl_result) continue; // Already from ____impl (not depleted for this key)
 
 			const extractFullImpl_child = wrapper[key];
 			const _extractChildW = resolveWrapper(extractFullImpl_child);
@@ -15702,7 +15702,7 @@ class UnifiedWrapper extends ComponentBase {
 	 * Core implementation-application logic shared by ___setImpl and lazy materialization.
 	 * Clones the implementation (protecting the API cache from ___adoptImplChildren's
 	 * delete operations), clears the invalid flag, upgrades callability when a
-	 * callable impl arrives on a configurable wrapper, updates __filePath for lazy
+	 * callable impl arrives on a configurable wrapper, updates ____filePath for lazy
 	 * folder wrappers, and adopts children.
 	 *
 	 * @param {*} newImpl - The new implementation value.
@@ -15771,10 +15771,10 @@ class UnifiedWrapper extends ComponentBase {
 		// Update wrapper's filePath if not yet set.
 		// This handles lazy folder wrappers that import a file - the file path is
 		// stored on the impl by modes-processor and needs to be promoted to the wrapper.
-		// impl.__filePath is never set by any internal code path; this branch is structurally unreachable.
+		// impl.____filePath is never set by any internal code path; this branch is structurally unreachable.
 		/* v8 ignore next */
-		if (!this.____slothletInternal.filePath && this.____slothletInternal.impl && this.____slothletInternal.impl.__filePath) {
-			this.____slothletInternal.filePath = this.____slothletInternal.impl.__filePath;
+		if (!this.____slothletInternal.filePath && this.____slothletInternal.impl && this.____slothletInternal.impl.____filePath) {
+			this.____slothletInternal.filePath = this.____slothletInternal.impl.____filePath;
 			this.slothlet.debug("wrapper", {
 				key: "DEBUG_MODE_APPLY_IMPL_UPDATE_PATH",
 				apiPath: this.____slothletInternal.apiPath,
@@ -16057,8 +16057,8 @@ class UnifiedWrapper extends ComponentBase {
 			// (wrapped callable, no raw impl) once the reassignment is placed. No raw `impl` here.
 			this.slothlet.handlers.lifecycle.emitInternal("impl:changed", {
 				apiPath: this.____slothletInternal.apiPath,
-				wrapper: Objects.freeze({ __impl: this.____slothletInternal.impl }),
-				__wrapperRef: this,
+				wrapper: Objects.freeze({ ____impl: this.____slothletInternal.impl }),
+				____wrapperRef: this,
 				source: "hot-reload",
 				moduleID: extractedModuleId,
 				filePath: wrapperMetadata?.filePath,
@@ -16235,7 +16235,7 @@ class UnifiedWrapper extends ComponentBase {
 						return;
 					}
 
-					// If materializeFunc didn't call setter, set _impl from return value
+					// If materializeFunc didn't call setter, set ____impl from return value
 					if (!this.____slothletInternal.impl) {
 						this._applyNewImpl(result);
 					}
@@ -16300,20 +16300,6 @@ class UnifiedWrapper extends ComponentBase {
 	}
 
 	/**
-	 * @private
-	 * @returns {Promise<void>}
-	 *
-	 * @description
-	 * Exposes lazy materialization for waiting proxies and nested wrappers.
-	 *
-	 * @example
-	 * await wrapper._materialize();
-	 */
-	_materialize() {
-		return this.___materialize();
-	}
-
-	/**
 	 * Hand the value a lazy node just loaded to the routine manager as its module's contribution at this
 	 * path (#754). An eager node's value reaches it through the construction's internal `impl:created`;
 	 * a lazy node is built with no value, so its own function (a callable folder's `default`) would never
@@ -16331,8 +16317,8 @@ class UnifiedWrapper extends ComponentBase {
 		if (!internal.filePath || !routineManager) return;
 		routineManager.onImplCreated({
 			apiPath: internal.apiPath,
-			wrapper: Objects.freeze({ __impl: internal.impl }),
-			__wrapperRef: this,
+			wrapper: Objects.freeze({ ____impl: internal.impl }),
+			____wrapperRef: this,
 			source: "lazy-materialization",
 			moduleID: internal.moduleID,
 			filePath: internal.filePath,
@@ -16649,13 +16635,12 @@ class UnifiedWrapper extends ComponentBase {
 		const ownKeys = uw_isLayer ? layerHeldKeys(this.____slothletInternal.impl) : Reflect.ownKeys(this.____slothletInternal.impl);
 
 		const internalKeys = setFrom([
-			"__impl",
+			"____impl",
 			"___setImpl",
 			"___resetLazy",
-			"_materialize",
-			"_impl",
-			"_state",
-			"_invalid",
+			"___materialize",
+			"____state",
+			"____invalid",
 			"____slothlet",
 			"____slothletInternal"
 		]);
@@ -16730,7 +16715,7 @@ class UnifiedWrapper extends ComponentBase {
 		}
 
 		// Define metadata/helper keys that should never be adopted as children
-		const metadataKeys = setFrom(["__childFilePaths", "__filePath", "__childFilePathsPreMaterialize"]);
+		const metadataKeys = setFrom(["____childFilePaths", "____filePath", "____childFilePathsPreMaterialize"]);
 		const skipKeys = typeof this.____slothletInternal.impl === "function" ? setFrom(["length", "name", "prototype"]) : null;
 
 		for (let ofIndex = 0, ofList = ownKeys; ofIndex < ofList.length; ofIndex++) {
@@ -16745,7 +16730,7 @@ class UnifiedWrapper extends ComponentBase {
 			if (skipKeys && typeof key === "string" && SetMethods.has(skipKeys, key)) {
 				continue;
 			}
-			// DEFENSIVE: _impl might have changed during iteration (shouldn't happen, but safety first)
+			// DEFENSIVE: ____impl might have changed during iteration (shouldn't happen, but safety first)
 			// `impl` does not change during iteration; this guard is structurally unreachable.
 			/* v8 ignore start */
 			if (
@@ -16902,7 +16887,7 @@ class UnifiedWrapper extends ComponentBase {
 				wrapped = existingChild;
 			} else if (!skipChildReuse && existingChild && resolveWrapper(existingChild) !== null) {
 				// Reuse existing wrapper - update its implementation to maintain live binding
-				// CRITICAL: If value is one of our wrapper proxies, extract its raw _impl instead
+				// CRITICAL: If value is one of our wrapper proxies, extract its raw ____impl instead
 				// of passing the proxy to ___setImpl - doing so causes infinite recursion in getTrap.
 				if (resolveWrapper(value) !== null) {
 					// Extract the raw impl from the new wrapper proxy or raw wrapper instance.
@@ -16911,9 +16896,9 @@ class UnifiedWrapper extends ComponentBase {
 					/* v8 ignore next */
 					let rawImpl = newWrapper ? newWrapper.____slothletInternal.impl : null;
 
-					// CRITICAL: _impl may be depleted - ___adoptImplChildren moves children from
-					// _impl onto the wrapper as own properties and deletes them from _impl.
-					// When _impl is an empty object but the wrapper has own enumerable keys,
+					// CRITICAL: ____impl may be depleted - ___adoptImplChildren moves children from
+					// ____impl onto the wrapper as own properties and deletes them from ____impl.
+					// When ____impl is an empty object but the wrapper has own enumerable keys,
 					// use _extractFullImpl to reconstruct the complete impl from the wrapper tree.
 					if (
 						rawImpl &&
@@ -16947,7 +16932,7 @@ class UnifiedWrapper extends ComponentBase {
 						resolveWrapper(existingChild).____slothletInternal.moduleObject = newWrapper.____slothletInternal.moduleObject ?? null;
 					} else if (newWrapper && newWrapper.____slothletInternal.materializeFunc) {
 						// Lazy wrapper not yet materialized - fully reset existing child to lazy
-						// state using ___resetLazy for proper cleanup (clears stale _impl,
+						// state using ___resetLazy for proper cleanup (clears stale ____impl,
 						// children, caches, and inFlight flag before swapping materializeFunc).
 						const existingChildWrapper = resolveWrapper(existingChild);
 						// `existingChild` is always a valid wrapper proxy here, so `resolveWrapper` is always non-null.
@@ -17302,7 +17287,7 @@ class UnifiedWrapper extends ComponentBase {
 		let childModuleId = null;
 
 		if (!childFilePath) {
-			// No existing metadata on child - try __childFilePaths map from lazy materialization
+			// No existing metadata on child - try ____childFilePaths map from lazy materialization
 			// Symbol keys are not used as API module names; this guard is unreachable in practice.
 			/* v8 ignore next */
 			const keyStr = typeof key === "symbol" ? String(key) : key;
@@ -17311,26 +17296,26 @@ class UnifiedWrapper extends ComponentBase {
 				apiPath: this.apiPath,
 				propKey: keyStr,
 				has_impl: !!this.____slothletInternal.impl,
-				has__childFilePaths: !!(this.____slothletInternal.impl && this.____slothletInternal.impl.__childFilePaths),
+				has__childFilePaths: !!(this.____slothletInternal.impl && this.____slothletInternal.impl.____childFilePaths),
 				has__childFilePathsPreMaterialize: !!this.____slothletInternal.childFilePathsPreMaterialize,
 				parentFilePath: parentMetadata?.filePath
 			});
-			if (this.____slothletInternal.impl && this.____slothletInternal.impl.__childFilePaths) {
+			if (this.____slothletInternal.impl && this.____slothletInternal.impl.____childFilePaths) {
 				this.slothlet.debug("wrapper", {
 					key: "DEBUG_MODE_WRAP_CHILD_PATH_AVAILABLE",
-					keys: ArrayMethods.join(Objects.keys(this.____slothletInternal.impl.__childFilePaths), ","),
+					keys: ArrayMethods.join(Objects.keys(this.____slothletInternal.impl.____childFilePaths), ","),
 					propKey: keyStr,
-					found: !!this.____slothletInternal.impl.__childFilePaths[key]
+					found: !!this.____slothletInternal.impl.____childFilePaths[key]
 				});
 			}
-			// __childFilePaths[key] is only populated when impl has child path data; the false arm is unreachable in tests.
+			// ____childFilePaths[key] is only populated when impl has child path data; the false arm is unreachable in tests.
 			/* v8 ignore next */
 			if (
 				this.____slothletInternal.impl &&
-				this.____slothletInternal.impl.__childFilePaths &&
-				this.____slothletInternal.impl.__childFilePaths[key]
+				this.____slothletInternal.impl.____childFilePaths &&
+				this.____slothletInternal.impl.____childFilePaths[key]
 			) {
-				childFilePath = this.____slothletInternal.impl.__childFilePaths[key];
+				childFilePath = this.____slothletInternal.impl.____childFilePaths[key];
 				this.slothlet.debug("wrapper", {
 					key: "DEBUG_MODE_WRAP_CHILD_PATH_USING",
 					childFilePath
@@ -17714,12 +17699,12 @@ class UnifiedWrapper extends ComponentBase {
 				if (prop === "then") {
 					// Make waiting proxies thenable so `await lg[0]` resolves after materialization
 					// This enables seamless consumer access to custom proxy properties (e.g., array indices)
-					// without requiring manual _materialize() calls or setTimeout hacks
+					// without requiring manual ___materialize() calls or setTimeout hacks
 					return (onFulfilled, onRejected) => {
 						const waitingProxy_thenResolve = async () => {
 							// Ensure materialization completes
 							if (!wrapper.____slothletInternal.state.materialized) {
-								await wrapper._materialize();
+								await wrapper.___materialize();
 							}
 
 							// Walk propChain through wrapper/impl to resolve the value
@@ -17748,7 +17733,7 @@ class UnifiedWrapper extends ComponentBase {
 								/* v8 ignore next */
 								if (!current) return undefined;
 
-								// If current wrapper's _impl is a custom proxy, delegate remaining chain
+								// If current wrapper's ____impl is a custom proxy, delegate remaining chain
 								if (
 									current.____slothletInternal.impl &&
 									typeof current.____slothletInternal.impl === "object" &&
@@ -17780,7 +17765,7 @@ class UnifiedWrapper extends ComponentBase {
 										current = _childW;
 										// Ensure child is materialized too
 										if (current.____slothletInternal.mode === "lazy" && !current.____slothletInternal.state.materialized) {
-											await current._materialize();
+											await current.___materialize();
 										}
 										continue;
 									}
@@ -17805,7 +17790,7 @@ class UnifiedWrapper extends ComponentBase {
 									return child;
 								}
 
-								// Check _impl properties
+								// Check ____impl properties
 								const implValue = current.____slothletInternal.impl
 									? runtime_readOnBehalf(__readGateCaller ?? null, () => current.____slothletInternal.impl[chainProp])
 									: undefined;
@@ -17861,7 +17846,7 @@ class UnifiedWrapper extends ComponentBase {
 							}
 							const finalImpl = current.____slothletInternal.impl;
 							// A chain ending on a namespace or plain-object node must NOT resolve to the impl:
-							// materialization adopts its members onto the wrapper and deletes them from `_impl`, so the
+							// materialization adopts its members onto the wrapper and deletes them from `____impl`, so the
 							// impl here is the depleted leftover and every first await of such a chain read as a
 							// permanently-empty object (#255). Resolve to the wrapper's live proxy instead — the same
 							// object eager hands back and later lazy accesses return — so members, read gating, and
@@ -17925,8 +17910,8 @@ class UnifiedWrapper extends ComponentBase {
 					};
 				}
 				if (prop === "____slothletInternal") return undefined; // blocked: do not expose internal state through waiting proxy
-				if (prop === "_materialize") return FunctionMethods.bind(wrapper._materialize, wrapper);
-				// Note: __impl / _impl are NOT exposed through the waiting proxy - use resolveWrapper(proxy).__impl internally.
+				if (prop === "___materialize") return FunctionMethods.bind(wrapper.___materialize, wrapper);
+				// Note: ____impl is NOT exposed through the waiting proxy - use resolveWrapper(proxy).____impl internally.
 
 				// Once the node has loaded, a stand-in kept from before answers as what it stands for answers a read of its
 				// path now: a default-export Map's methods, an object's members, a string's characters.
@@ -17948,12 +17933,12 @@ class UnifiedWrapper extends ComponentBase {
 					!wrapper.____slothletInternal.state.materialized &&
 					!wrapper.____slothletInternal.state.inFlight
 				) {
-					// Silently catch errors — callers that explicitly await _materialize() will
+					// Silently catch errors — callers that explicitly await ___materialize() will
 					// observe the rejection; this fire-and-forget path must never produce an
 					// unhandled rejection (e.g. collision mode "error" during background trigger).
 					// Rejection handler is intentionally empty — errors are surfaced via the explicit-await path.
 					/* v8 ignore next */
-					PromiseMethods.catch(wrapper._materialize(), () => {});
+					PromiseMethods.catch(wrapper.___materialize(), () => {});
 				}
 
 				if (prop === util.inspect.custom) {
@@ -18013,7 +17998,7 @@ class UnifiedWrapper extends ComponentBase {
 				}
 				/* v8 ignore stop */
 				// CRITICAL: Check if wrapper.____slothletInternal.impl is already set
-				// This allows property access once _impl is populated (matches v2 behavior)
+				// This allows property access once ____impl is populated (matches v2 behavior)
 				// Lifecycle events, metadata, and ownership may still be in progress
 				// This handles custom proxy behavior like array access on devices proxy
 				// Custom proxies return plain objects/values that should NOT be wrapped
@@ -18034,10 +18019,10 @@ class UnifiedWrapper extends ComponentBase {
 					return result[prop];
 				}
 
-				// CRITICAL: After materialization OR if _impl is set, resolve through property chain
-				// Check _impl FIRST (not just _state.materialized) to match v2 behavior where
+				// CRITICAL: After materialization OR if ____impl is set, resolve through property chain
+				// Check ____impl FIRST (not just _state.materialized) to match v2 behavior where
 				// once state.materialized variable was set, values were returned synchronously
-				// This allows waiting proxies to resolve immediately once _impl is available,
+				// This allows waiting proxies to resolve immediately once ____impl is available,
 				// even if _state.inFlight is still true (materialization finishing up)
 				if (wrapper.____slothletInternal.impl !== null && wrapper.____slothletInternal.impl !== undefined) {
 					// Start from the parent wrapper and traverse using wrapper properties
@@ -18093,7 +18078,7 @@ class UnifiedWrapper extends ComponentBase {
 						}
 					}
 
-					// CRITICAL: If current wrapper's _impl is a custom proxy, delegate property access to it
+					// CRITICAL: If current wrapper's ____impl is a custom proxy, delegate property access to it
 					// Custom proxies handle their own property access (array indices, computed properties, etc.)
 					if (
 						current &&
@@ -18159,7 +18144,7 @@ class UnifiedWrapper extends ComponentBase {
 						prop
 					});
 					// Trigger materialization NOW (async but we'll check after)
-					PromiseMethods.catch(wrapper._materialize(), (err) => {
+					PromiseMethods.catch(wrapper.___materialize(), (err) => {
 						wrapper.slothlet.debug("wrapper", {
 							key: "DEBUG_MODE_WAITING_GET_IMMEDIATE_MAT_ERROR",
 							apiPath: wrapper.apiPath,
@@ -18167,7 +18152,7 @@ class UnifiedWrapper extends ComponentBase {
 						});
 					});
 					// Now check if prop is in wrapper after materialization started
-					// ___adoptImplChildren runs synchronously within _materialize before any awaits
+					// ___adoptImplChildren runs synchronously within ___materialize before any awaits
 					const isInternal = isFrameworkReservedKey(prop);
 					if (!isInternal && hasOwn(wrapper, prop)) {
 						wrapper.slothlet.debug("wrapper", {
@@ -18281,7 +18266,7 @@ class UnifiedWrapper extends ComponentBase {
 						key: "DEBUG_MODE_WAITING_APPLY_MATERIALIZE",
 						apiPath: wrapper.____slothletInternal.apiPath
 					});
-					await wrapper._materialize();
+					await wrapper.___materialize();
 					wrapper.slothlet.debug("wrapper", {
 						key: "DEBUG_MODE_WAITING_APPLY_MATERIALIZED",
 						apiPath: wrapper.____slothletInternal.apiPath
@@ -18301,7 +18286,7 @@ class UnifiedWrapper extends ComponentBase {
 						/* v8 ignore start */
 					} else {
 						// No promise but inFlight - spin until materialized or error
-						await wrapper._materialize();
+						await wrapper.___materialize();
 					}
 					/* v8 ignore stop */
 				}
@@ -18340,7 +18325,7 @@ class UnifiedWrapper extends ComponentBase {
 						if (
 							wrapper.____slothletInternal.invalid ||
 							wrapper.____slothletInternal.impl === null ||
-							(lastWrapper && (lastWrapper.__invalid || lastWrapper._impl === null))
+							(lastWrapper && (lastWrapper.____invalid || lastWrapper.____impl === null))
 						) {
 							return undefined;
 						}
@@ -18377,12 +18362,12 @@ class UnifiedWrapper extends ComponentBase {
 					if (currentWrapper) {
 						const state = currentWrapper.____slothletInternal.state;
 						if (!state.materialized) {
-							// _materialize() is always callable and inFlight is always false here; the else path is dead.
+							// ___materialize() is always callable and inFlight is always false here; the else path is dead.
 							/* v8 ignore next 3 */
-							if (!state.inFlight && typeof current._materialize === "function") {
-								await current._materialize();
+							if (!state.inFlight && typeof current.___materialize === "function") {
+								await current.___materialize();
 							}
-							// While body only runs if _materialize() doesn't synchronously set materialized;
+							// While body only runs if ___materialize() doesn't synchronously set materialized;
 							// in all tests it completes before the while condition re-evaluates.
 							/* v8 ignore start */
 							while (!currentWrapper.____slothletInternal.state.materialized) {
@@ -18417,7 +18402,7 @@ class UnifiedWrapper extends ComponentBase {
 							current = currentWrapper[prop];
 							continue;
 						}
-						// Check if _impl is an object before using 'in' operator
+						// Check if ____impl is an object before using 'in' operator
 						if (
 							currentWrapper.____slothletInternal.impl &&
 							typeof currentWrapper.____slothletInternal.impl === "object" &&
@@ -18655,7 +18640,7 @@ class UnifiedWrapper extends ComponentBase {
 		) {
 			// Fire-and-forget background materialization — rejection suppressed to avoid unhandled-rejection event.
 			/* v8 ignore next */
-			PromiseMethods.catch(wrapper._materialize(), () => {});
+			PromiseMethods.catch(wrapper.___materialize(), () => {});
 		}
 
 		// Proxy target depends on whether this is callable
@@ -18770,7 +18755,7 @@ class UnifiedWrapper extends ComponentBase {
 
 			// Filter internal properties from external access (but allow access from within).
 			// Only framework-reserved keys are hidden — user properties with any prefix are visible.
-			// Impl-metadata names count as reserved here too: `__childFilePaths` rides on a lazy impl and is
+			// Impl-metadata names count as reserved here too: `____childFilePaths` rides on a lazy impl and is
 			// absent from `INTERNAL_KEYS`, so without this it fell through to the impl read below and handed
 			// absolute host paths to any caller — while eager, having no such impl, returned undefined.
 			const isInternalProp = isFrameworkReservedKey(prop);
@@ -18778,7 +18763,7 @@ class UnifiedWrapper extends ComponentBase {
 			// Allow access to specific internal APIs that have explicit handlers below
 			// CRITICAL: Every prop with an explicit handler in the getTrap MUST be listed here,
 			// otherwise the filter short-circuits before the handler runs.
-			const allowedInternals = setFrom(["_materialize", "__materializeOnCreate", "__displayName"]);
+			const allowedInternals = setFrom(["___materialize", "____materializeOnCreate", "____displayName"]);
 			if (isInternalProp && !SetMethods.has(allowedInternals, prop)) {
 				return undefined; // Hide internal properties from external access
 			}
@@ -18799,14 +18784,14 @@ class UnifiedWrapper extends ComponentBase {
 				});
 			}
 
-			if (prop === "__materializeOnCreate") return wrapper.____slothletInternal.materializeOnCreate;
-			if (prop === "__displayName") return wrapper.____slothletInternal.displayName;
-			if (prop === "_materialize") return FunctionMethods.bind(wrapper._materialize, wrapper);
-			// Note: "__state", "_impl", "__impl" are intentionally NOT handled here - blocked from proxy.
+			if (prop === "____materializeOnCreate") return wrapper.____slothletInternal.materializeOnCreate;
+			if (prop === "____displayName") return wrapper.____slothletInternal.displayName;
+			if (prop === "___materialize") return FunctionMethods.bind(wrapper.___materialize, wrapper);
+			// Note: "____state", "____impl" are intentionally NOT handled here - blocked from proxy.
 			// A node reports what slothlet knows about it through `slothlet.node(target)`, never through keys of its own.
-			// "__invalid" is not in allowedInternals so the filter above always short-circuits before this line.
+			// "____invalid" is not in allowedInternals so the filter above always short-circuits before this line.
 			/* v8 ignore next */
-			if (prop === "__invalid") return wrapper.____slothletInternal.invalid;
+			if (prop === "____invalid") return wrapper.____slothletInternal.invalid;
 			// A loaded node holding a primitive (kept from before its folder loaded as one) answers as the value: its
 			// members are the value's, run on the value, and it serializes as the value (#797). Gated above.
 			const heldPrimitive = runtime_nodePrimitive(wrapper);
@@ -18882,7 +18867,7 @@ class UnifiedWrapper extends ComponentBase {
 					const pinned = runtime_pinReader(wrapper, access);
 					return (onFulfilled, onRejected) =>
 						PromiseMethods.catch(
-							PromiseMethods.then(wrapper._materialize(), () => {
+							PromiseMethods.then(wrapper.___materialize(), () => {
 								const held = runtime_nodePrimitive(wrapper);
 								if (held === NO_NODE_PRIMITIVE) return onFulfilled(wrapper.____slothletInternal.proxy);
 								if (pinned) runtime_gateNodeValue(wrapper, kept, null, pinned);
@@ -19158,11 +19143,11 @@ class UnifiedWrapper extends ComponentBase {
 						}
 					};
 					const data = UnifiedWrapper._extractFullImpl(wrapper, readMember);
-					// _extractFullImpl re-adds reload-only metadata (__childFilePaths — absolute file
+					// _extractFullImpl re-adds reload-only metadata (____childFilePaths — absolute file
 					// paths — for lazy folder leaves) that must never leak into serialization output.
 					if (data && typeof data === "object") {
-						delete data.__childFilePaths;
-						delete data.__childFilePathsPreMaterialize;
+						delete data.____childFilePaths;
+						delete data.____childFilePathsPreMaterialize;
 					}
 					// The snapshot is rebuilt straight from the impl tree, so it bypasses the read
 					// gate on getTrap. Strip leaves this caller may not read before handing it over.
@@ -19199,10 +19184,10 @@ class UnifiedWrapper extends ComponentBase {
 				!wrapper.____slothletInternal.state.materialized &&
 				!wrapper.____slothletInternal.state.inFlight
 			) {
-				PromiseMethods.catch(wrapper._materialize(), () => {});
+				PromiseMethods.catch(wrapper.___materialize(), () => {});
 			}
 
-			// If lazy mode is materialized and property doesn't exist in _impl, return undefined
+			// If lazy mode is materialized and property doesn't exist in ____impl, return undefined
 			// CRITICAL: Check wrapper children BEFORE creating waiting proxy
 			// In lazy mode with collisions, children may already be on wrapper (from file/folder merge)
 			// Return these children directly instead of creating waiting proxy.
@@ -19269,7 +19254,7 @@ class UnifiedWrapper extends ComponentBase {
 					) {
 						// Fire-and-forget — rejection suppressed to avoid unhandled-rejection event.
 						/* v8 ignore next */
-						PromiseMethods.catch(cachedWrapper._materialize(), () => {});
+						PromiseMethods.catch(cachedWrapper.___materialize(), () => {});
 					}
 				}
 				// For objects and functions, return the proxy as-is.
@@ -19278,12 +19263,12 @@ class UnifiedWrapper extends ComponentBase {
 				return cached;
 			}
 
-			// CRITICAL: Check if _impl is already set (matches v2's state.materialized check)
+			// CRITICAL: Check if ____impl is already set (matches v2's state.materialized check)
 			// This allows synchronous property access even during materialization
 			// Must check BEFORE inFlight to handle synchronous setter pattern
-			// Note: _impl is initialized to null, so check for non-null explicitly
+			// Note: ____impl is initialized to null, so check for non-null explicitly
 			if (wrapper.____slothletInternal.impl !== null && wrapper.____slothletInternal.impl !== undefined) {
-				// If _impl is a custom Proxy, delegate property access directly to it
+				// If ____impl is a custom Proxy, delegate property access directly to it
 				// Custom proxies handle their own property access logic (array indices, computed properties, etc.)
 				if (
 					!arrayElement &&
@@ -19300,7 +19285,7 @@ class UnifiedWrapper extends ComponentBase {
 					return proxied;
 				}
 
-				// For regular objects/functions, check wrapper children or _impl properties
+				// For regular objects/functions, check wrapper children or ____impl properties
 				// (reserved names never reach here — see `isInternalProp` above)
 				// In tests, wrapper never holds a prop directly via hasOwn; the true-branch body is never entered.
 				/* v8 ignore start */
@@ -19331,7 +19316,7 @@ class UnifiedWrapper extends ComponentBase {
 							!cachedWrapper.____slothletInternal.state.materialized &&
 							!cachedWrapper.____slothletInternal.state.inFlight
 						) {
-							PromiseMethods.catch(cachedWrapper._materialize(), () => {});
+							PromiseMethods.catch(cachedWrapper.___materialize(), () => {});
 						}
 					}
 					enforceReadGate(cached);
@@ -19340,7 +19325,7 @@ class UnifiedWrapper extends ComponentBase {
 				/* v8 ignore stop */
 			}
 
-			// If lazy mode is materialized and property doesn't exist in wrapper or _impl, return undefined
+			// If lazy mode is materialized and property doesn't exist in wrapper or ____impl, return undefined
 			// This prevents creating waiting proxies for properties that were deleted.
 			// Only framework-reserved keys bypass this check (they're handled elsewhere in getTrap).
 			const isInternalProp2 = typeof prop === "string" && SetMethods.has(UnifiedWrapper.INTERNAL_KEYS, prop);
@@ -19369,10 +19354,10 @@ class UnifiedWrapper extends ComponentBase {
 				// Trigger materialization if not started yet
 				// This ensures lazy wrappers start loading when their properties are accessed.
 				// Tests always reach this block via inFlight=true; the !inFlight sub-condition is
-				// never simultaneously true here, so _materialize() is never called from this path.
+				// never simultaneously true here, so ___materialize() is never called from this path.
 				/* v8 ignore next */
 				if (!wrapper.____slothletInternal.state.materialized && !wrapper.____slothletInternal.state.inFlight) {
-					PromiseMethods.catch(wrapper._materialize(), () => {});
+					PromiseMethods.catch(wrapper.___materialize(), () => {});
 				}
 
 				this.slothlet.debug("wrapper", {
@@ -19384,7 +19369,7 @@ class UnifiedWrapper extends ComponentBase {
 					apiPath: wrapper.____slothletInternal.apiPath
 				});
 
-				// If _impl is already set and is a custom proxy, delegate even during inFlight.
+				// If ____impl is already set and is a custom proxy, delegate even during inFlight.
 				// No test has a native Proxy set as the impl while inFlight; body is unreachable.
 				/* v8 ignore start */
 				if (
@@ -19398,7 +19383,7 @@ class UnifiedWrapper extends ComponentBase {
 				return wrapper.___createWaitingProxy([prop]);
 			}
 
-			// If _impl is a custom Proxy, delegate property access directly to it. A proxy over an array is
+			// If ____impl is a custom Proxy, delegate property access directly to it. A proxy over an array is
 			// an array member, whose member was read above and is wrapped and gated like any other.
 			// No test passes a native non-array Proxy as the impl; entire block is unreachable.
 			/* v8 ignore start */
@@ -19718,7 +19703,7 @@ class UnifiedWrapper extends ComponentBase {
 						// Materialize if needed (lazy mode) — awaiting here replaces the sync path's
 						// polling promise, since this pipeline may await freely.
 						if (wrapper.____slothletInternal.mode === "lazy" && !wrapper.____slothletInternal.state.materialized) {
-							await wrapper._materialize();
+							await wrapper.___materialize();
 						}
 
 						const impl = wrapper.____slothletInternal.impl;
@@ -19849,7 +19834,7 @@ class UnifiedWrapper extends ComponentBase {
 				) {
 					// Fire-and-forget — rejection suppressed to avoid unhandled-rejection event.
 					/* v8 ignore next */
-					PromiseMethods.catch(wrapper._materialize(), () => {});
+					PromiseMethods.catch(wrapper.___materialize(), () => {});
 				}
 
 				// Wait for materialization if in flight (returns Promise)
@@ -20127,7 +20112,7 @@ class UnifiedWrapper extends ComponentBase {
 			// (a Proxy among the impl's prototypes) could take it (#661).
 			runtime_takeCapturedAccess(wrapper);
 			runtime_followModuleObject(wrapper, target, prop);
-			if (prop === "_materialize") {
+			if (prop === "___materialize") {
 				return true;
 			}
 
@@ -20138,7 +20123,7 @@ class UnifiedWrapper extends ComponentBase {
 			) {
 				// Fire-and-forget — rejection suppressed to avoid unhandled-rejection event.
 				/* v8 ignore next */
-				PromiseMethods.catch(wrapper._materialize(), () => {});
+				PromiseMethods.catch(wrapper.___materialize(), () => {});
 			}
 
 			// An array-backed wrapper holds the elements it cached, but the array decides which indices
@@ -20204,7 +20189,7 @@ class UnifiedWrapper extends ComponentBase {
 			) {
 				// Fire-and-forget — rejection suppressed to avoid unhandled-rejection event.
 				/* v8 ignore next */
-				PromiseMethods.catch(wrapper._materialize(), () => {});
+				PromiseMethods.catch(wrapper.___materialize(), () => {});
 			}
 
 			if (prop === "____slothletInternal") return undefined;
@@ -20406,7 +20391,7 @@ class UnifiedWrapper extends ComponentBase {
 			) {
 				// Fire-and-forget — rejection suppressed to avoid unhandled-rejection event.
 				/* v8 ignore next */
-				PromiseMethods.catch(wrapper._materialize(), () => {});
+				PromiseMethods.catch(wrapper.___materialize(), () => {});
 			}
 
 			// A sealed node holds its members on its shell (see preventExtensions), and a non-extensible target
@@ -20542,14 +20527,14 @@ class UnifiedWrapper extends ComponentBase {
 				!wrapper.____slothletInternal.state.materialized &&
 				!wrapper.____slothletInternal.state.inFlight
 			) {
-				wrapper._materialize();
+				wrapper.___materialize();
 			}
 			// Keys that must not be settable from outside — they shadow private state or are
 			// read-only informational accessors whose values come from ____slothletInternal.
 			// Silently absorb the write so no TypeError leaks key existence.
-			// _materialize is exempted: the framework writes it directly on the target.
+			// ___materialize is exempted: the framework writes it directly on the target.
 			// Module code meets the write rules first, so an assignment is refused as a definition is (#625).
-			if (SetMethods.has(UnifiedWrapper.INTERNAL_KEYS, prop) && prop !== "_materialize") {
+			if (SetMethods.has(UnifiedWrapper.INTERNAL_KEYS, prop) && prop !== "___materialize") {
 				runtime_assertOwnedWrite(wrapper, prop);
 				return true;
 			}
@@ -20623,7 +20608,7 @@ class UnifiedWrapper extends ComponentBase {
 				return true;
 			}
 
-			const internalKeys = setFrom(["_materialize"]);
+			const internalKeys = setFrom(["___materialize"]);
 			// An array node reads and lists its members through its array target. A member beside the elements
 			// (a sibling file of a self-named array) is held by the array's composition layer, where those reads
 			// find it; the module's own array is never written to (#585 review).
@@ -20864,7 +20849,7 @@ class UnifiedWrapper extends ComponentBase {
 			// Don't materialize when deleting - just delete directly
 			// If lazy wrapper hasn't materialized yet, that's fine - we're deleting it anyway
 			// if (wrapper.mode === "lazy" && !wrapper.____slothletInternal.state.materialized && !wrapper.____slothletInternal.state.inFlight) {
-			// 	wrapper._materialize();
+			// 	wrapper.___materialize();
 			// }
 
 			// Don't allow deletion of internal or read-only properties.
@@ -20873,18 +20858,17 @@ class UnifiedWrapper extends ComponentBase {
 			const internalKeys = setFrom([
 				// Framework mutation APIs
 				"____slothletInternal",
-				"__impl",
+				"____impl",
 				"___setImpl",
 				"___resetLazy",
-				"_materialize",
+				"___materialize",
 				"___invalidate",
-				"_impl",
 				"___getState",
-				"__state",
+				"____state",
 				// Read-only internal props
-				"__materializeOnCreate",
-				"__displayName",
-				"__invalid"
+				"____materializeOnCreate",
+				"____displayName",
+				"____invalid"
 			]);
 			if (SetMethods.has(internalKeys, prop)) {
 				// Module code meets the write rules first, so a deletion is refused as a definition is (#625).
@@ -20941,7 +20925,7 @@ class UnifiedWrapper extends ComponentBase {
 			// The framework's own removals (a mount taken off the node) change only the node.
 			const moduleObject = isInternal || MapMethods.has(FRAMEWORK_WRITES, wrapper) ? null : runtime_moduleObjectOf(wrapper, prop);
 			if (moduleObject !== null && hasOwn(moduleObject, prop) && !Reflect.deleteProperty(moduleObject, prop)) return false;
-			// Remove from _impl if it's an object, before anything is retired: the backing value may refuse (its own
+			// Remove from ____impl if it's an object, before anything is retired: the backing value may refuse (its own
 			// proxy, a frozen/sealed export #485), and the node then reports it the way the object itself would —
 			// `false`, which a strict-mode `delete` turns into the same TypeError — with its child wrapper still live.
 			// A composed array node's own elements are the module's array's: deleting them from its layer only hides them.
@@ -21036,7 +21020,7 @@ class UnifiedWrapper extends ComponentBase {
 				!wrapper.____slothletInternal.state.inFlight
 			) {
 				/* v8 ignore next */
-				PromiseMethods.catch(wrapper._materialize(), () => {});
+				PromiseMethods.catch(wrapper.___materialize(), () => {});
 			}
 
 			// Lazy mode, in-flight: chain off the existing materializationPromise instead of polling.
@@ -21392,7 +21376,7 @@ class UnifiedWrapper extends ComponentBase {
 				if (Arrays.isArray(target)) return runtime_isPastFixedLength(target, prop) ? false : definePropertyTrap(target, prop, descriptor);
 				const internal = wrapper.____slothletInternal;
 				// As the set trap does: a lazy node loads first, so loading does not overwrite the definition.
-				if (internal.mode === "lazy" && !internal.state.materialized && !internal.state.inFlight) wrapper._materialize();
+				if (internal.mode === "lazy" && !internal.state.materialized && !internal.state.inFlight) wrapper.___materialize();
 				const bindsTarget = runtime_bindsTarget(target, wrapper, prop, descriptor);
 				// A partial definition binding the shell (`{ configurable: false }`) keeps the member as it is: the shell
 				// takes the rest of its descriptor from the member, its value as the node holds it (#603 review).
@@ -21720,7 +21704,7 @@ export async function loadApiMember(container, key) {
 		if (container === null || (typeof container !== "object" && typeof container !== "function")) return { value: undefined };
 		const wrapper = resolveWrapper(container);
 		const { mode, state } = wrapper?.____slothletInternal ?? {};
-		if (mode === "lazy" && !state.materialized) await wrapper._materialize();
+		if (mode === "lazy" && !state.materialized) await wrapper.___materialize();
 	}
 	return { value: readApiMember(container, key) };
 }
@@ -21743,7 +21727,7 @@ export async function isCallableValue(value) {
 	const wrapper = resolveWrapper(value);
 	if (!wrapper) return true;
 	const internal = wrapper.____slothletInternal;
-	if (internal.mode === "lazy" && !internal.state.materialized) await wrapper._materialize();
+	if (internal.mode === "lazy" && !internal.state.materialized) await wrapper.___materialize();
 	return internal.isCallable === true;
 }
 

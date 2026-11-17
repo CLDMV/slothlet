@@ -66,7 +66,7 @@ describe("RoutineManager coverage — revert helpers, guards, materialization (#
 		Object.defineProperty(branded, "____slothletRoutineStack", { value: true, enumerable: false });
 		// A later, unrelated write of the already-installed stacked callable re-fires impl:created;
 		// it must NOT be captured as a fresh contributor (would recurse to OOM on invoke — #372).
-		rm.onImplCreated({ apiPath: "auth.x", moduleID: "self-ref-mod", wrapper: { __impl: branded } });
+		rm.onImplCreated({ apiPath: "auth.x", moduleID: "self-ref-mod", wrapper: { ____impl: branded } });
 		expect(rm.raw.length).toBe(before);
 		expect(rm.raw.some((e) => e.moduleID === "self-ref-mod")).toBe(false);
 	});
@@ -79,7 +79,7 @@ describe("RoutineManager coverage — revert helpers, guards, materialization (#
 			stackRoutines: true
 		});
 		// A candidate captured a raw entry (no genuine prior), then its assignment was rejected.
-		rm.onImplCreated({ apiPath: "spec.leaf", moduleID: "spec-mod", wrapper: { __impl: function leaf() {} } });
+		rm.onImplCreated({ apiPath: "spec.leaf", moduleID: "spec-mod", wrapper: { ____impl: function leaf() {} } });
 		expect(rm.raw.some((e) => e.apiPath === "spec.leaf" && e.moduleID === "spec-mod")).toBe(true);
 		rm.revertRawEntry("spec.leaf", "spec-mod", undefined); // priorEntry undefined → drop branch (787-789)
 		expect(rm.raw.some((e) => e.apiPath === "spec.leaf" && e.moduleID === "spec-mod")).toBe(false);
@@ -100,7 +100,7 @@ describe("RoutineManager coverage — revert helpers, guards, materialization (#
 		const visited = new WeakSet([node]);
 		expect(() => rm.revertSpeculativeSubtree(node, "m", "", new Map(), visited)).not.toThrow();
 		// 864-865: framework/meta keys are skipped during the walk.
-		expect(() => rm.revertSpeculativeSubtree({ _impl: {}, _materialize() {}, real: () => {} }, "m", "", new Map())).not.toThrow();
+		expect(() => rm.revertSpeculativeSubtree({ ____impl: {}, ___materialize() {}, real: () => {} }, "m", "", new Map())).not.toThrow();
 	});
 
 	it("revertSpeculativeState restores a prior contribution's tracked wrapper (934)", async () => {
@@ -118,7 +118,7 @@ describe("RoutineManager coverage — revert helpers, guards, materialization (#
 		// invalidate the candidate wrapper and restore the prior one (934). Seed the rawWrappers
 		// tracking map for this module so the `moduleWrappers?.set(path, prior.wrapper)` at 934
 		// actually writes (rather than short-circuiting on a missing map).
-		rm.onImplCreated({ apiPath: "rs.leaf", moduleID: "rs-mod", wrapper: { __impl: function candidateLeaf() {} } });
+		rm.onImplCreated({ apiPath: "rs.leaf", moduleID: "rs-mod", wrapper: { ____impl: function candidateLeaf() {} } });
 		rm.rawWrappers.set("rs-mod", new Map([["rs.leaf", { ___invalidate() {} }]]));
 		rm.revertSpeculativeState("rs-mod", prior);
 		expect(rm.raw.find((e) => e.apiPath === "rs.leaf" && e.moduleID === "rs-mod")?.fn).toBe(priorFn);
@@ -156,7 +156,7 @@ describe("RoutineManager coverage — revert helpers, guards, materialization (#
 		globalThis.__rmCovLog = [];
 		// A real root contributor exists at "initialize"; runPath(path) with NO routine argument
 		// exercises the `: pathEntries` arm and runs it.
-		rm.onImplCreated({ apiPath: "initialize", moduleID: "rp-mod", wrapper: { __impl: () => globalThis.__rmCovLog.push("ran") } });
+		rm.onImplCreated({ apiPath: "initialize", moduleID: "rp-mod", wrapper: { ____impl: () => globalThis.__rmCovLog.push("ran") } });
 		await rm.runPath("initialize");
 		expect(globalThis.__rmCovLog).toContain("ran");
 		// A contributor whose parent path ("ghostparent") is not on the tree → #runEntries can't
@@ -164,7 +164,7 @@ describe("RoutineManager coverage — revert helpers, guards, materialization (#
 		rm.onImplCreated({
 			apiPath: "ghostparent.leaf",
 			moduleID: "gp-mod",
-			wrapper: { __impl: () => globalThis.__rmCovLog.push("should-not-run") }
+			wrapper: { ____impl: () => globalThis.__rmCovLog.push("should-not-run") }
 		});
 		const out = await rm.runPath("ghostparent.leaf");
 		expect(out).toEqual([]);
@@ -178,8 +178,8 @@ describe("RoutineManager coverage — revert helpers, guards, materialization (#
 			routines: [{ name: "^ghostp.deep.leaf", mode: "manual" }],
 			stackRoutines: true
 		});
-		rm.onImplCreated({ apiPath: "ghostp.deep.leaf", moduleID: "gd1", wrapper: { __impl: function leaf() {} } });
-		rm.onImplCreated({ apiPath: "ghostp.deep.leaf", moduleID: "gd2", wrapper: { __impl: function leaf() {} } });
+		rm.onImplCreated({ apiPath: "ghostp.deep.leaf", moduleID: "gd1", wrapper: { ____impl: function leaf() {} } });
+		rm.onImplCreated({ apiPath: "ghostp.deep.leaf", moduleID: "gd2", wrapper: { ____impl: function leaf() {} } });
 		// "ghostp.deep" doesn't exist → #resolveContainer returns undefined → the per-path target
 		// guard (1585) continues without installing, and #resolveContainer's own missing-intermediate
 		// guard (1466) fires for the multi-segment parent.
@@ -218,8 +218,8 @@ describe("RoutineManager coverage — revert helpers, guards, materialization (#
 			},
 			slothlet: {}
 		};
-		rm.onImplCreated({ apiPath: "mid.child.leaf", moduleID: "ms1", wrapper: { __impl: function leaf() {} } });
-		rm.onImplCreated({ apiPath: "mid.child.leaf", moduleID: "ms2", wrapper: { __impl: function leaf() {} } });
+		rm.onImplCreated({ apiPath: "mid.child.leaf", moduleID: "ms1", wrapper: { ____impl: function leaf() {} } });
+		rm.onImplCreated({ apiPath: "mid.child.leaf", moduleID: "ms2", wrapper: { ____impl: function leaf() {} } });
 		await expect(rm.rebuildStacks(plainApi)).resolves.toBeUndefined();
 	});
 
@@ -231,21 +231,21 @@ describe("RoutineManager coverage — revert helpers, guards, materialization (#
 			routines: [{ name: "^admin.deep.leaf", mode: "manual" }],
 			stackRoutines: true
 		});
-		// `admin` is a lazy, not-yet-materialized segment. Force its _materialize to reject; resolving
-		// the parent path "admin.deep" awaits admin._materialize inside #resolveContainer, which
+		// `admin` is a lazy, not-yet-materialized segment. Force its ___materialize to reject; resolving
+		// the parent path "admin.deep" awaits admin.___materialize inside #resolveContainer, which
 		// catches the rejection and returns undefined (1479).
 		const adminWrapper = resolveWrapper(a.admin);
 		expect(adminWrapper.____slothletInternal.state.materialized).toBe(false);
-		const orig = adminWrapper._materialize.bind(adminWrapper);
-		adminWrapper._materialize = async () => {
+		const orig = adminWrapper.___materialize.bind(adminWrapper);
+		adminWrapper.___materialize = async () => {
 			throw new Error("materialization failed mid-resolve");
 		};
 		try {
-			rm.onImplCreated({ apiPath: "admin.deep.leaf", moduleID: "ad1", wrapper: { __impl: function leaf() {} } });
-			rm.onImplCreated({ apiPath: "admin.deep.leaf", moduleID: "ad2", wrapper: { __impl: function leaf() {} } });
+			rm.onImplCreated({ apiPath: "admin.deep.leaf", moduleID: "ad1", wrapper: { ____impl: function leaf() {} } });
+			rm.onImplCreated({ apiPath: "admin.deep.leaf", moduleID: "ad2", wrapper: { ____impl: function leaf() {} } });
 			await expect(rm.rebuildStacks(a)).resolves.toBeUndefined();
 		} finally {
-			adminWrapper._materialize = orig;
+			adminWrapper.___materialize = orig;
 		}
 	});
 
@@ -408,19 +408,19 @@ describe("RoutineManager coverage — lazy materialization walkers (#341)", () =
 			routines: [{ name: "admin.initialize", mode: "manual" }],
 			stackRoutines: true
 		});
-		// `admin` is a lazy, not-yet-materialized subfolder. Force its _materialize to reject; the
+		// `admin` is a lazy, not-yet-materialized subfolder. Force its ___materialize to reject; the
 		// dotted routine's #materializeFor → #materializeGlobPath (and #resolveContainer) must catch
 		// it and bail down that branch (1171 / 1479) rather than throw out of the cascade.
 		const adminWrapper = resolveWrapper(a.admin);
 		expect(adminWrapper.____slothletInternal.state.materialized).toBe(false);
-		const orig = adminWrapper._materialize.bind(adminWrapper);
-		adminWrapper._materialize = async () => {
+		const orig = adminWrapper.___materialize.bind(adminWrapper);
+		adminWrapper.___materialize = async () => {
 			throw new Error("materialization failed");
 		};
 		try {
 			await expect(rm.runCascade("admin.initialize")).resolves.toBeDefined();
 		} finally {
-			adminWrapper._materialize = orig;
+			adminWrapper.___materialize = orig;
 		}
 	});
 });
@@ -438,7 +438,7 @@ describe("RoutineManager coverage — runPathFor / contributorsAt selector-and-e
 			apiPath: "initialize",
 			moduleID: "no-extent-mod",
 			wrapper: {
-				__impl: () => {
+				____impl: () => {
 					globalThis.__rmCovLog.push("ran-no-extent");
 				}
 			}
@@ -483,7 +483,7 @@ describe("RoutineManager coverage — runPathFor / contributorsAt selector-and-e
 			apiPath: "initialize",
 			moduleID: "rpf-mod",
 			wrapper: {
-				__impl: () => {
+				____impl: () => {
 					globalThis.__rmCovLog.push("ran-for");
 					return "rpf-result";
 				}
@@ -507,7 +507,7 @@ describe("RoutineManager coverage — runPathFor / contributorsAt selector-and-e
 			apiPath: "initialize",
 			moduleID: "rpf-fail-mod",
 			wrapper: {
-				__impl: () => {
+				____impl: () => {
 					throw new Error("rpf-boom");
 				}
 			}

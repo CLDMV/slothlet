@@ -268,7 +268,7 @@ describe("modes-processor: lazy function-default file+folder collision (lines 11
 		// api.services is a lazy wrapper (not yet materialized)
 		expect(_api.services).toBeDefined();
 		// Trigger materialization — this runs lazy_materializeFunc which covers lines 1313-1314 + 1414-1416
-		await _api.services._materialize();
+		await _api.services.___materialize();
 		// After materialization, services should be callable (function default from services/services.mjs)
 		expect(typeof _api.services === "function" || _api.services !== undefined).toBe(true);
 	});
@@ -285,7 +285,7 @@ describe("modes-processor: lazy function-default file+folder collision (lines 11
 
 		expect(_api).toBeDefined();
 		expect(_api.services).toBeDefined();
-		await _api.services._materialize();
+		await _api.services.___materialize();
 	});
 });
 
@@ -316,7 +316,7 @@ describe("modes-processor: lazy single-file folder fn with prop collision — me
 		expect(_api.worker).toBeDefined();
 		// Materialize — covers lines 1313-1316 (implToWrap = fn, hybrid block entered)
 		// and line 1330 (continue on merge collision for "status" conflict)
-		await _api.worker._materialize();
+		await _api.worker.___materialize();
 		// In merge mode: existing property worker.status is kept → no override
 		// version should be attached (no conflict)
 		expect(_api.worker !== undefined).toBe(true);
@@ -332,7 +332,7 @@ describe("modes-processor: lazy single-file folder fn with prop collision — me
 			base: DIRS.LAZY_FN_COLLISION
 		});
 
-		await _api.worker._materialize();
+		await _api.worker.___materialize();
 		expect(_api.worker !== undefined).toBe(true);
 	});
 });
@@ -355,7 +355,7 @@ describe("modes-processor: lazy single-file folder fn with prop collision — er
 		expect(_api).toBeDefined();
 		expect(_api.worker).toBeDefined();
 		// Materialize — the collision on "status" causes a COLLISION_DEFAULT_EXPORT_ERROR
-		await expect(_api.worker._materialize()).rejects.toThrow();
+		await expect(_api.worker.___materialize()).rejects.toThrow();
 	});
 });
 
@@ -377,7 +377,7 @@ describe("modes-processor: lazy single-file folder fn with prop collision — wa
 		expect(_api.worker).toBeDefined();
 		// Materialize — the "status" conflict causes a SlothletWarning (line 1349) but doesn't throw
 		// The warn + replace path falls through to assignment
-		await _api.worker._materialize();
+		await _api.worker.___materialize();
 		// Should succeed (warn mode doesn't throw)
 		expect(_api.worker !== undefined).toBe(true);
 	});
@@ -391,13 +391,13 @@ describe("modes-processor: lazy single-file folder fn with prop collision — wa
 // Line 1316: implToWrap[key] = exports[key] inside the key-merge loop is also covered.
 // ---------------------------------------------------------------------------
 describe("modes-processor: addapi-metadata-default path in lazy subfolder materializeFunc (lines 1311, 1316)", () => {
-	it("lazy load + _materialize() — addapi/addapi.mjs (object default + named exports) covers lines 1311, 1316", async () => {
+	it("lazy load + ___materialize() — addapi/addapi.mjs (object default + named exports) covers lines 1311, 1316", async () => {
 		// addapi_subfolder/addapi/addapi.mjs:
 		//   export default { name: "test-plugin", version: "1.0.0" }  (object → addapi-metadata-default)
 		//   export function init() { ... }
 		//   export function run() { ... }
 		// In lazy mode the addapi wrapper starts unmaterialized.
-		// Calling _materialize() triggers lazy_materializeFunc which processes addapi/addapi.mjs:
+		// Calling ___materialize() triggers lazy_materializeFunc which processes addapi/addapi.mjs:
 		//   line 1311: if (flattenType === "addapi-metadata-default") → true
 		//   line 1312-1313: implToWrap = exports.default
 		//   line 1314-1316: merge named keys onto implToWrap
@@ -412,7 +412,7 @@ describe("modes-processor: addapi-metadata-default path in lazy subfolder materi
 		// The addapi subdirectory is accessible as _api.addapi in lazy mode
 		expect(_api.addapi).toBeDefined();
 		// Trigger the lazy materializeFunc — covers lines 1311 + 1316
-		await _api.addapi._materialize();
+		await _api.addapi.___materialize();
 		// After materialization, named exports (init, run) should be attached
 		const hasInit = typeof _api.addapi?.init === "function" || typeof _api.init === "function";
 		const hasRun = typeof _api.addapi?.run === "function" || typeof _api.run === "function";
@@ -429,8 +429,8 @@ describe("modes-processor: addapi-metadata-default path in lazy subfolder materi
 		});
 
 		expect(_api).toBeDefined();
-		if (_api.addapi?._materialize) {
-			await _api.addapi._materialize();
+		if (_api.addapi?.___materialize) {
+			await _api.addapi.___materialize();
 		}
 	});
 });
@@ -448,7 +448,7 @@ describe("modes-processor: addapi-metadata-default path in lazy subfolder materi
 //     !false = true → line 1330: continue
 // ---------------------------------------------------------------------------
 describe("modes-processor: lazy calc/calc.mjs shouldAttachNamedExport=false continue (line 1330)", () => {
-	it("lazy load calc/calc.mjs + _materialize() — calc named export === default skips attachment (line 1330)", async () => {
+	it("lazy load calc/calc.mjs + ___materialize() — calc named export === default skips attachment (line 1330)", async () => {
 		// api_smart_flatten_fn_fn_folder has:
 		//   calc.mjs (root file, function default)  → root-level wrapper
 		//   calc/ (subfolder with calc/calc.mjs)      → lazy subdirectory wrapper
@@ -465,7 +465,7 @@ describe("modes-processor: lazy calc/calc.mjs shouldAttachNamedExport=false cont
 		expect(_api.calc).toBeDefined();
 		// Trigger the lazy materializeFunc for calc/ — line 1330 fires when
 		// shouldAttachNamedExport returns false for the self-named "calc" export
-		await _api.calc._materialize();
+		await _api.calc.___materialize();
 		expect(_api.calc !== undefined).toBe(true);
 	});
 });

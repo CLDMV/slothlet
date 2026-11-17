@@ -296,10 +296,10 @@ describe("Browser loader > #manifestNodeToStructure gating branches (#423)", () 
 	});
 
 	it("throws MODULE_RESERVED_FILENAME for a manifest file named a framework-reserved key", async () => {
-		// "_impl" is a single-underscore INTERNAL_KEY, so it passes the "__"-prefix skip and reaches the
+		// "____impl" is a single-underscore INTERNAL_KEY, so it passes the "__"-prefix skip and reaches the
 		// reserved-name guard — same hazard as the disk scan (#260), platform-independent.
 		const manifest = {
-			files: [{ path: "_impl.mjs", name: "_impl", fullName: "_impl.mjs" }],
+			files: [{ path: "____impl.mjs", name: "____impl", fullName: "____impl.mjs" }],
 			directories: []
 		};
 		await expect(slothlet(syntheticBrowserConfig(manifest))).rejects.toThrow(/MODULE_RESERVED_FILENAME/);

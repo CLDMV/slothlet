@@ -15,8 +15,8 @@
 
 /**
  * @fileoverview Changes a module tries to make to the framework's internal keys on an api node (#625):
- * wrapper state (`____slothletInternal`, `_materialize`, …), node information (`__metadata`, `__type`, …),
- * and impl metadata (`__childFilePaths`, …). Shared by `victim` (its own node) and `intruder` (another
+ * wrapper state (`____slothletInternal`, `___materialize`, …), node information (`__metadata`, `__type`, …),
+ * and impl metadata (`____childFilePaths`, …). Shared by `victim` (its own node) and `intruder` (another
  * module's node). Each change reports what happened instead of throwing.
  */
 import { self } from "@cldmv/slothlet/runtime";
@@ -32,16 +32,15 @@ export const INTERNAL_KEYS = [
 	"___getState",
 	"___resetLazy",
 	"___invalidate",
-	"__state",
-	"__invalid",
-	"__materializeOnCreate",
-	"__displayName",
-	"__filePath",
-	"__impl",
-	"_impl",
-	"_materialize",
-	"__childFilePaths",
-	"__childFilePathsPreMaterialize"
+	"____state",
+	"____invalid",
+	"____materializeOnCreate",
+	"____displayName",
+	"____filePath",
+	"____impl",
+	"___materialize",
+	"____childFilePaths",
+	"____childFilePathsPreMaterialize"
 ];
 
 /**
@@ -49,7 +48,7 @@ export const INTERNAL_KEYS = [
  * @param {function(): *} change - The change.
  * @returns {string} `"done"`, or the error code it was refused with.
  * @example
- * attempt(() => { node.__state = "x"; });
+ * attempt(() => { node.____state = "x"; });
  */
 function attempt(change) {
 	try {

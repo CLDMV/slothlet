@@ -215,14 +215,14 @@ function runtime_wrapEventListener(listener) {
 	};
 
 	// Attach metadata for cleanup and identification
-	runtime_wrappedListener._slothletOriginal = listener;
-	runtime_wrappedListener._slothletResource = resource;
+	runtime_wrappedListener.____slothletOriginal = listener;
+	runtime_wrappedListener.____slothletResource = resource;
 	// Drops the captured context at the last shutdown (#605 review), whether or not the wrapper can be
 	// taken off its emitter: a released wrapper calls its listener directly and needs neither capture.
-	runtime_wrappedListener._slothletRelease = () => {
+	runtime_wrappedListener.____slothletRelease = () => {
 		resource = null;
 		bound = null;
-		runtime_wrappedListener._slothletResource = null;
+		runtime_wrappedListener.____slothletResource = null;
 	};
 
 	return runtime_wrappedListener;
@@ -333,8 +333,8 @@ function runtime_untrackListener(emitter, event, originalListener) {
 	if (!wrappers || wrappers.length === 0) return;
 
 	const wrappedListener = ArrayMethods.pop(wrappers);
-	// Cleanup AsyncResource reference (_slothletResource is always set by runtime_wrapEventListener)
-	wrappedListener._slothletResource = null;
+	// Cleanup AsyncResource reference (____slothletResource is always set by runtime_wrapEventListener)
+	wrappedListener.____slothletResource = null;
 
 	if (wrappers.length === 0) {
 		MapMethods.delete(eventTracking, originalListener);
@@ -393,7 +393,7 @@ function runtime_untrackSpecificWrapper(emitter, event, originalListener, wrappe
 	if (idx === -1) return;
 
 	listSplice(wrappers, idx, 1);
-	wrappedListener._slothletResource = null;
+	wrappedListener.____slothletResource = null;
 
 	if (wrappers.length === 0) {
 		MapMethods.delete(eventTracking, originalListener);
@@ -417,7 +417,7 @@ function runtime_shouldWrapListener(listener) {
 	if (typeof listener !== "function") return false;
 
 	// Don't double-wrap
-	if (listener._slothletOriginal) return false;
+	if (listener.____slothletOriginal) return false;
 
 	return true;
 }
@@ -473,7 +473,7 @@ function runtime_patchOn() {
  * We do NOT delegate to native `EventEmitter.prototype.once` here. Native
  * `once` internally calls `this.on(event, _onceWrap(...))`, and `this.on`
  * routes through the PATCHED prototype `on` — which sees the fresh
- * `_onceWrap_output` (no `_slothletOriginal` marker), wraps it AGAIN as a
+ * `_onceWrap_output` (no `____slothletOriginal` marker), wraps it AGAIN as a
  * second listener (call it `L2`), and attaches `L2` to the listener array.
  * The tracking map ends up with `userFn → runtime_onceWrapper` (from this
  * patch) but the listener array holds `L2`, so a subsequent
@@ -500,7 +500,7 @@ function runtime_patchOn() {
  * Calling the base `EventEmitter.prototype.on` directly attached the
  * listener but skipped `resume()`, so `socket.once("data")` never fired.
  * Dispatching through `this.on` is safe from the double-wrap above because
- * `runtime_onceWrapper` carries `_slothletOriginal`: the patched `on` and
+ * `runtime_onceWrapper` carries `____slothletOriginal`: the patched `on` and
  * `removeListener` see the marker and pass it straight to the original
  * without wrapping or tracking it again.
  *
@@ -539,17 +539,17 @@ function runtime_patchOnce() {
 		};
 
 		// Metadata for slothlet tracking + Node's introspection contract.
-		runtime_onceWrapper._slothletOriginal = listener;
-		runtime_onceWrapper._slothletResource = wrapped._slothletResource;
-		runtime_onceWrapper._slothletRelease = () => {
-			wrapped._slothletRelease();
-			runtime_onceWrapper._slothletResource = null;
+		runtime_onceWrapper.____slothletOriginal = listener;
+		runtime_onceWrapper.____slothletResource = wrapped.____slothletResource;
+		runtime_onceWrapper.____slothletRelease = () => {
+			wrapped.____slothletRelease();
+			runtime_onceWrapper.____slothletResource = null;
 		};
 		runtime_onceWrapper.listener = listener;
 
 		runtime_trackListener(this, event, listener, runtime_onceWrapper);
 		// Attach through the emitter's own `on` so subclass overrides run (#503);
-		// the `_slothletOriginal` marker stops the patched `on` from re-wrapping.
+		// the `____slothletOriginal` marker stops the patched `on` from re-wrapping.
 		return this.on(event, runtime_onceWrapper);
 	};
 	runtime_installPatch("once", layer, patch);
@@ -588,7 +588,7 @@ function runtime_patchPrependListener() {
  * `prependOnceListener` internally calls `this.prependListener(...)` which
  * routes through the patched prototype and double-wraps. Same fix shape:
  * attach through `this.prependListener`, auto-cleanup through
- * `this.removeListener` (both see the `_slothletOriginal` marker and pass the
+ * `this.removeListener` (both see the `____slothletOriginal` marker and pass the
  * wrapper through unwrapped), set `.listener = userFn`.
  *
  * @private
@@ -621,11 +621,11 @@ function runtime_patchPrependOnceListener() {
 			return FunctionMethods.apply(wrapped, this, args);
 		};
 
-		runtime_onceWrapper._slothletOriginal = listener;
-		runtime_onceWrapper._slothletResource = wrapped._slothletResource;
-		runtime_onceWrapper._slothletRelease = () => {
-			wrapped._slothletRelease();
-			runtime_onceWrapper._slothletResource = null;
+		runtime_onceWrapper.____slothletOriginal = listener;
+		runtime_onceWrapper.____slothletResource = wrapped.____slothletResource;
+		runtime_onceWrapper.____slothletRelease = () => {
+			wrapped.____slothletRelease();
+			runtime_onceWrapper.____slothletResource = null;
 		};
 		runtime_onceWrapper.listener = listener;
 
@@ -694,8 +694,8 @@ function runtime_patchRemoveAllListeners() {
 					for (const wrappers of mapValues(eventTracking)) {
 						for (let ofIndex = 0, ofList = wrappers; ofIndex < ofList.length; ofIndex++) {
 							const wrappedListener = ofList[ofIndex];
-							// _slothletResource is always set by runtime_wrapEventListener
-							wrappedListener._slothletResource = null;
+							// ____slothletResource is always set by runtime_wrapEventListener
+							wrappedListener.____slothletResource = null;
 						}
 					}
 				}
@@ -707,8 +707,8 @@ function runtime_patchRemoveAllListeners() {
 					for (const wrappers of mapValues(eventTracking)) {
 						for (let ofIndex = 0, ofList = wrappers; ofIndex < ofList.length; ofIndex++) {
 							const wrappedListener = ofList[ofIndex];
-							// _slothletResource is always set by runtime_wrapEventListener
-							wrappedListener._slothletResource = null;
+							// ____slothletResource is always set by runtime_wrapEventListener
+							wrappedListener.____slothletResource = null;
 						}
 					}
 					MapMethods.delete(emitterTracking, event);
@@ -842,7 +842,7 @@ function cleanupEventEmitterResources() {
 				for (const wrappers of mapValues(byOriginal)) {
 					for (let ofIndex = 0, ofList = wrappers; ofIndex < ofList.length; ofIndex++) {
 						const wrapper = ofList[ofIndex];
-						wrapper._slothletRelease();
+						wrapper.____slothletRelease();
 					}
 				}
 			}

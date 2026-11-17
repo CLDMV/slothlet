@@ -17,8 +17,8 @@
  * @fileoverview The first await of a lazy chain resolves to the same thing every later access does.
  *
  * @description
- * Materialization adopts a module's members out of `_impl` onto the wrapper, so the waiting-proxy
- * resolver handing back `_impl` for a chain ending on an object-valued node resolved every FIRST
+ * Materialization adopts a module's members out of `____impl` onto the wrapper, so the waiting-proxy
+ * resolver handing back `____impl` for a chain ending on an object-valued node resolved every FIRST
  * await of such a chain to a permanently-empty object — while the second access, served by the
  * getTrap against the materialized tree, was correct (#255). The contract pinned here is eager
  * parity: an awaited namespace or plain-object leaf resolves to the same live object later accesses

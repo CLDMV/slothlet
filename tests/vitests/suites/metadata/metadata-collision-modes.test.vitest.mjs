@@ -148,8 +148,8 @@ describe.each(getMatrixConfigs())("Metadata Collision Modes > Config: '$name'", 
 			expect(api.math).toBeDefined();
 
 			// Trigger materialization for lazy mode
-			if (api.math._materialize) {
-				await api.math._materialize();
+			if (api.math.___materialize) {
+				await api.math.___materialize();
 			}
 
 			// Either file OR folder won, not both (last one replaces first)

@@ -127,7 +127,7 @@ function runtime_wrapListener(listener) {
 		return resource.runInAsyncScope(() => FunctionMethods.call(invoke, this, event), this);
 	};
 
-	runtime_wrappedListener._slothletOriginal = listener;
+	runtime_wrappedListener.____slothletOriginal = listener;
 	return runtime_wrappedListener;
 }
 
@@ -141,7 +141,7 @@ function runtime_wrapListener(listener) {
 function runtime_shouldWrap(listener) {
 	// `null` is legal and ignored by the DOM; anything else non-listener-shaped is the host's problem
 	// to reject, and passing it through unchanged keeps that error identical to the unpatched one.
-	if (typeof listener === "function") return !listener._slothletOriginal;
+	if (typeof listener === "function") return !listener.____slothletOriginal;
 	if (listener && typeof listener.handleEvent === "function") return true;
 	return false;
 }

@@ -270,10 +270,10 @@ In eager mode, every API namespace is a fully-materialized `UnifiedWrapper` whos
 
 ```text
 Before reload:      api.math        ← wrapper proxy (unchanged ref)
-                        └── _impl = { add: fn_v1, subtract: fn_v1 }
+                        └── ____impl = { add: fn_v1, subtract: fn_v1 }
 
 After reload:       api.math        ← same proxy ref
-                        └── _impl = { add: fn_v2, subtract: fn_v2 }
+                        └── ____impl = { add: fn_v2, subtract: fn_v2 }
 ```
 
 The transition is synchronous and immediate. Any call to `api.math.add` after `await reload()` returns will invoke the new implementation.
@@ -534,7 +534,7 @@ unsubscribe(); // clean up
 Each event handler receives an object with:
 
 - `apiPath` - dot-path of the affected API member
-- `wrapper` - the wrapped leaf; read its implementation via `wrapper.__impl` (the raw `impl` field was removed in v3.16.x, #398)
+- `wrapper` - the wrapped leaf; read its implementation via `wrapper.____impl` (the raw `impl` field was removed in v3.16.x, #398)
 - `source` - e.g. `"initial"`, `"hot-reload"`, `"lazy-materialization"` (see [LIFECYCLE.md](LIFECYCLE.md) for the full set)
 - `moduleID` - the module identifier that triggered the event
 - `filePath` - source file path (when available)

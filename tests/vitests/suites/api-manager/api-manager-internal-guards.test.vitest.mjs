@@ -526,7 +526,7 @@ describe("deletePath — permanently invalidates a removed wrapper's still-in-fl
 		});
 		const root = { thing: wrapper.createProxy() };
 
-		const matPromise = wrapper._materialize();
+		const matPromise = wrapper.___materialize();
 		expect(wrapper.____slothletInternal.state.inFlight).toBe(true);
 
 		const deleted = await apiManager.deletePath(root, ["thing"]);

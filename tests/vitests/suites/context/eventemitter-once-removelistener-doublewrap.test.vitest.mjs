@@ -22,7 +22,7 @@
  * Native `once` internally calls `this.on(event, _onceWrap(...))`. Because
  * `this.on` has been replaced on the prototype, that internal call routes
  * through the PATCHED `on` — which sees the `_onceWrap_output` (a fresh
- * function with no `_slothletOriginal` marker), wraps it AGAIN as L2, and
+ * function with no `____slothletOriginal` marker), wraps it AGAIN as L2, and
  * attaches L2 to the listener array via the saved-original `on`.
  *
  * The tracking map then has:

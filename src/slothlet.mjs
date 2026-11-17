@@ -300,7 +300,7 @@ class Slothlet {
 	static RESERVED_ROOT_KEYS = ["slothlet", "shutdown", "destroy"];
 
 	// Properties to skip during recursive operations (at any depth)
-	static SKIP_PROPS = ["_materialize", "_impl", "____slothletInternal"];
+	static SKIP_PROPS = ["___materialize", "____impl", "____slothletInternal"];
 
 	/**
 	 * The handle this instance claimed for its instance ID (see claimInstanceScope in helpers/instance-imports): how
@@ -652,15 +652,15 @@ class Slothlet {
 		if (this.handlers.metadata) {
 			// #398: the metadata system rides the INTERNAL contribution stream (pre-placement, every
 			// contribution). It tags the same target the pre-#398 `data.impl` field carried on this
-			// event: the real wrapper (`__wrapperRef`) — which under LAZY is present at construction even
-			// though `wrapper.__impl` is still null — falling back to the leaf impl when there is no
-			// wrapper (the lazy-materialization emit carries a raw function value, no `__wrapperRef`).
+			// event: the real wrapper (`____wrapperRef`) — which under LAZY is present at construction even
+			// though `wrapper.____impl` is still null — falling back to the leaf impl when there is no
+			// wrapper (the lazy-materialization emit carries a raw function value, no `____wrapperRef`).
 			// Tagging the wrapper here is load-bearing: adoption propagates a parent wrapper's baseModuleID
 			// to its children, so tagging null instead left lazily-materialized children with no moduleID.
 			// subscribeInternal, not subscribe, so this never fires from the public post-placement re-emit.
 			this.handlers.lifecycle.subscribeInternal("impl:created", (data, token) => {
 				this.handlers.metadata.tagSystemMetadata(
-					data.__wrapperRef ?? data.wrapper?.__impl,
+					data.____wrapperRef ?? data.wrapper?.____impl,
 					{
 						filePath: data.filePath,
 						apiPath: data.apiPath,
@@ -673,7 +673,7 @@ class Slothlet {
 
 			this.handlers.lifecycle.subscribeInternal("impl:changed", (data, token) => {
 				this.handlers.metadata.tagSystemMetadata(
-					data.wrapper?.__impl,
+					data.wrapper?.____impl,
 					{
 						filePath: data.filePath,
 						apiPath: data.apiPath,
@@ -723,7 +723,7 @@ class Slothlet {
 		if (this.handlers.ownership) {
 			// The api node a public impl:created / impl:changed is about. A subscriber a module subscribed is
 			// handed its module's view of it instead of the implementation (#625).
-			const nodeOf = (data) => ({ impl: data.__wrapperRef?.____slothletInternal?.proxy ?? null });
+			const nodeOf = (data) => ({ impl: data.____wrapperRef?.____slothletInternal?.proxy ?? null });
 			// What ownership records for a contribution that is an object: the node itself, as the load's subtree
 			// confirmation records it in eager mode. The node adopts the object's members as its own, which leaves
 			// the object empty, so a record of the object would hold nothing to restore once another module's add
@@ -732,7 +732,7 @@ class Slothlet {
 			// in until then; ownership resolves either to the node.
 			const recordedValue = (data, implValue) =>
 				implValue !== null && typeof implValue === "object"
-					? (data.__wrapperRef?.____slothletInternal?.proxy ?? data.__wrapperRef ?? implValue)
+					? (data.____wrapperRef?.____slothletInternal?.proxy ?? data.____wrapperRef ?? implValue)
 					: implValue;
 			// #398: rides the INTERNAL contribution stream (every contribution, pre-placement) so it can
 			// see and register merge-losers too, then decides placement and surfaces the PUBLIC event.
@@ -762,12 +762,12 @@ class Slothlet {
 				const collisionMode =
 					this.handlers.ownership.getPlacementMode(data.moduleID, data.apiPath) ??
 					(configCollisionMode === "replace" || configCollisionMode === "merge-replace" ? configCollisionMode : "merge");
-				// The leaf's impl. On a LAZY construction event `wrapper.__impl` is still null (the leaf
-				// hasn't materialized), so fall back to the real wrapper (`__wrapperRef`) exactly as the
+				// The leaf's impl. On a LAZY construction event `wrapper.____impl` is still null (the leaf
+				// hasn't materialized), so fall back to the real wrapper (`____wrapperRef`) exactly as the
 				// former `?? data.impl` did — `data.impl` used to be `this` on the construction emit, and
-				// `__wrapperRef` now carries that same reference (#398). Ownership's kind detection needs a
+				// `____wrapperRef` now carries that same reference (#398). Ownership's kind detection needs a
 				// non-null value here, or a lazy leaf registers with no recorded kind.
-				const implValue = data.wrapper?.__impl ?? data.__wrapperRef;
+				const implValue = data.wrapper?.____impl ?? data.____wrapperRef;
 				// RoutineManager#rebuildStacks() installs a stacked callable directly onto the live
 				// tree (`target[key] = ...`), guarding only ITS OWN raw capture via `recording = false`
 				// — this subscriber has no equivalent guard, so without this check the write is
@@ -802,14 +802,14 @@ class Slothlet {
 						{
 							apiPath: data.apiPath,
 							// #433: the public tier carries the WRAPPED callable on a stable `impl` field — never the
-							// raw impl (#398), and no longer the reserved internal `wrapper.__impl` handle, which is
+							// raw impl (#398), and no longer the reserved internal `wrapper.____impl` handle, which is
 							// dropped from the PUBLIC event entirely: it was redundant with `impl` and re-exposed an
 							// internal name (the very coupling #433 removes). `null` before a lazy wrapper materializes.
 							// The INTERNAL event still carries `wrapper` — ownership/metadata/routine subscribers read
-							// it via subscribeInternal — and `__wrapperRef` is never surfaced (it would leak the instance).
+							// it via subscribeInternal — and `____wrapperRef` is never surfaced (it would leak the instance).
 							// `impl` is the implementation the wrapper holds, handed to host subscribers only: a
 							// subscriber a module subscribed gets its module's view of the node (`nodeOf`) instead (#625).
-							impl: data.wrapper?.__impl ?? null,
+							impl: data.wrapper?.____impl ?? null,
 							source: data.source,
 							moduleID: data.moduleID,
 							filePath: data.filePath,
@@ -832,10 +832,10 @@ class Slothlet {
 				const collisionMode =
 					this.handlers.ownership.getPlacementMode(data.moduleID, data.apiPath) ??
 					(configCollisionMode === "replace" || configCollisionMode === "merge-replace" ? configCollisionMode : "merge");
-				// The leaf's impl. data.wrapper.__impl is normally set for impl:changed events; the
-				// `?? data.__wrapperRef` fallback mirrors the impl:created subscriber (see its note) — the
-				// former `?? data.impl` referenced the wrapper `this`, now carried on `__wrapperRef` (#398).
-				const implValue = data.wrapper?.__impl ?? data.__wrapperRef;
+				// The leaf's impl. data.wrapper.____impl is normally set for impl:changed events; the
+				// `?? data.____wrapperRef` fallback mirrors the impl:created subscriber (see its note) — the
+				// former `?? data.impl` referenced the wrapper `this`, now carried on `____wrapperRef` (#398).
+				const implValue = data.wrapper?.____impl ?? data.____wrapperRef;
 				// See the identical guard in the impl:created subscriber above — rebuildStacks()'s own
 				// property write reaches THIS subscriber too (#372/#373 review, suppressed finding).
 				if (typeof implValue === "function" && implValue.____slothletRoutineStack === true) {
@@ -876,7 +876,7 @@ class Slothlet {
 							apiPath: data.apiPath,
 							// #433: stable public callable field, no public `wrapper` — see the impl:created re-emit above,
 							// also for what a subscriber a module subscribed gets instead (#625).
-							impl: data.wrapper?.__impl ?? null,
+							impl: data.wrapper?.____impl ?? null,
 							source: data.source,
 							moduleID: data.moduleID,
 							filePath: data.filePath,
@@ -931,7 +931,7 @@ class Slothlet {
 
 	/**
 	 * Notify that a lazy wrapper has materialized
-	 * Called by UnifiedWrapper._materialize() after materialization completes
+	 * Called by UnifiedWrapper.___materialize() after materialization completes
 	 * @private
 	 */
 	_onWrapperMaterialized() {
@@ -2110,7 +2110,7 @@ class Slothlet {
 
 			try {
 				// Skip version dispatcher proxies — they have no materialization promises. Detect by the
-				// module-private brand, never by reading `.__isVersionDispatcher`: that `__`-private read
+				// module-private brand, never by reading `.____isVersionDispatcher`: that `__`-private read
 				// is denied by the permission gate on any gated data node under `private.host: deny` (#287).
 				if (isFrameworkInternal(obj)) return;
 
@@ -2124,7 +2124,7 @@ class Slothlet {
 					if (mat) listPush(pending, mat);
 
 					// Walk child keys on the raw wrapper (not the proxy) to avoid triggering
-					// ownKeysTrap, which calls _materialize() on lazy+unmaterialized wrappers
+					// ownKeysTrap, which calls ___materialize() on lazy+unmaterialized wrappers
 					// during shutdown. Children are stored as own enumerable properties on the
 					// raw wrapper; accessing wrapper[key] returns the child proxy, which collect
 					// then resolves via resolveWrapper() on the next recursion.

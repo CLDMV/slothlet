@@ -821,9 +821,9 @@ export class VersionManager extends ComponentBase {
 	 */
 	createDispatcher(logicalPath) {
 		const manager = this;
-		// Brand the target so slothlet's OWN reserved marker keys (__isVersionDispatcher/__logicalPath)
+		// Brand the target so slothlet's OWN reserved marker keys (____isVersionDispatcher/____logicalPath)
 		// are exempt from the module-private host gate by OBJECT IDENTITY, never by name (#283).
-		const target = markFrameworkInternal({ __isVersionDispatcher: true, __logicalPath: logicalPath });
+		const target = markFrameworkInternal({ ____isVersionDispatcher: true, ____logicalPath: logicalPath });
 		const displayName = ArrayMethods.pop(splitText(logicalPath, "."));
 
 		/** Resolve forced version or run discriminator; return tag or null. */
@@ -922,18 +922,18 @@ export class VersionManager extends ComponentBase {
 			get(t, prop) {
 				// ── 1. Framework internal keys → undefined ────────────────────────
 				if (typeof prop === "string") {
-					if (prop === "____slothletInternal" || prop === "_impl" || prop === "__impl" || prop === "__state" || prop === "__invalid") {
+					if (prop === "____slothletInternal" || prop === "____impl" || prop === "____state" || prop === "____invalid") {
 						return undefined;
 					}
 				}
 
 				// ── 2. Stable framework accessors → fixed values ─────────────────
-				if (prop === "__isVersionDispatcher") return true;
+				if (prop === "____isVersionDispatcher") return true;
 				// UnifiedWrapper intercepts these at its own handlers before delegating to impl[prop].
 				/* v8 ignore start */
-				if (prop === "__materializeOnCreate") return false;
-				if (prop === "__displayName") return displayName;
-				if (prop === "_materialize") return () => {};
+				if (prop === "____materializeOnCreate") return false;
+				if (prop === "____displayName") return displayName;
+				if (prop === "___materialize") return () => {};
 				if (prop === "length") return 0;
 				if (prop === "name") return displayName;
 				/* v8 ignore stop */
@@ -1109,7 +1109,7 @@ export class VersionManager extends ComponentBase {
 						// non-configurable+non-writable property) are both satisfied.
 						return targetDesc;
 					}
-					// Configurable target properties (e.g. __isVersionDispatcher, __logicalPath):
+					// Configurable target properties (e.g. ____isVersionDispatcher, ____logicalPath):
 					// always report as configurable so version resolution retains maximum freedom.
 					return { __proto__: null, configurable: true, enumerable: true, writable: false, value: t[prop] };
 				}
@@ -1255,15 +1255,14 @@ export class VersionManager extends ComponentBase {
 				if (typeof prop === "symbol") return true;
 
 				// Framework internal string keys — get returns undefined (case 1).
-				if (prop === "____slothletInternal" || prop === "_impl" || prop === "__impl" || prop === "__state" || prop === "__invalid")
-					return true;
+				if (prop === "____slothletInternal" || prop === "____impl" || prop === "____state" || prop === "____invalid") return true;
 
 				// Stable framework accessors — get returns fixed non-vw values (case 2).
 				if (
-					prop === "__isVersionDispatcher" ||
-					prop === "__materializeOnCreate" ||
-					prop === "__displayName" ||
-					prop === "_materialize" ||
+					prop === "____isVersionDispatcher" ||
+					prop === "____materializeOnCreate" ||
+					prop === "____displayName" ||
+					prop === "___materialize" ||
 					prop === "length" ||
 					prop === "name"
 				)

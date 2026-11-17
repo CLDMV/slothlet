@@ -832,7 +832,7 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 		}
 	);
 
-	it.each([["before"], ["around"]])("pins a module's %s hook whose handler carries a forged _slothletOriginal", async (type) => {
+	it.each([["before"], ["around"]])("pins a module's %s hook whose handler carries a forged ____slothletOriginal", async (type) => {
 		await mountSideChannels({ hook: true });
 		const hook = await api.evil.x.forgedHook("callee.ops.writeOwnNested", type);
 		await withSuppressedSlothletErrorOutput(async () => {

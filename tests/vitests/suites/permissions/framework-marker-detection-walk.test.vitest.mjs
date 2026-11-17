@@ -18,11 +18,11 @@
  *
  * @description
  * The framework's tree walks (e.g. `collectPendingMaterializations` during `api.add`) skip version
- * dispatchers. They used to detect one by reading `obj.__isVersionDispatcher` — but that is a
+ * dispatchers. They used to detect one by reading `obj.____isVersionDispatcher` — but that is a
  * `__`-private read, and under a `permissions` block the secure-default `private.host: deny` denies
  * a host read of a `__`-prefixed member on ANY gated data node. So walking an extension whose
  * `manifest.activationEvents` is an ordinary array threw `PERMISSION_DENIED` at
- * `…manifest.activationEvents.__isVersionDispatcher` and aborted the mount — the ext-host boot
+ * `…manifest.activationEvents.____isVersionDispatcher` and aborted the mount — the ext-host boot
  * regression #283/#287. The fix detects dispatchers by their module-private brand (object identity),
  * never by a gated marker read, so the walk never touches the gate for ordinary data.
  *
@@ -52,7 +52,7 @@ describe.each(["eager", "lazy"])("Permissions > framework marker-detection walk 
 
 	it("mounting an ext whose manifest.activationEvents is a plain array does not deny the detection walk", async () => {
 		api = await slothlet({ mode, base: `${BASE}/base`, permissions: { defaultPolicy: "deny", rules: RULES } });
-		// Before the fix, the walk read `exts.costcode.manifest.activationEvents.__isVersionDispatcher`
+		// Before the fix, the walk read `exts.costcode.manifest.activationEvents.____isVersionDispatcher`
 		// as the host and threw PERMISSION_DENIED here, aborting the mount.
 		await expect(api.slothlet.api.add(["exts"], `${BASE}/ext`)).resolves.toBeDefined();
 	});

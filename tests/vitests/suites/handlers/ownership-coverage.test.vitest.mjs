@@ -132,7 +132,7 @@ describe("OwnershipManager — revertSpeculativeSubtree (#372/#373)", () => {
 		expect(own.getCurrentOwner("root.dropped")).not.toBeNull();
 
 		// Walk a candidate tree that has both children plus an internal key that must be skipped.
-		const tree = { kept: () => {}, dropped: () => {}, _impl: { anything: true } };
+		const tree = { kept: () => {}, dropped: () => {}, ____impl: { anything: true } };
 		own.revertSpeculativeSubtree(tree, "mod", "root", prior);
 
 		expect(own.getCurrentValue("root.kept")).toBe("orig"); // restored from prior

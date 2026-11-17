@@ -209,11 +209,11 @@ export async function materialize(api, path, ...args) {
 	// 	`[MATERIALIZE] path="${path}" typeof value="${typeof value}" value.name="${value?.name}" value.constructor.name="${value?.constructor?.name}"`
 	// );
 
-	// Trigger materialization if _materialize exists (for lazy mode)
-	if (typeof value?._materialize === "function") {
-		// console.log(`[MATERIALIZE] Calling value._materialize()`);
-		await value._materialize();
-		// console.log(`[MATERIALIZE] _materialize() completed`);
+	// Trigger materialization if ___materialize exists (for lazy mode)
+	if (typeof value?.___materialize === "function") {
+		// console.log(`[MATERIALIZE] Calling value.___materialize()`);
+		await value.___materialize();
+		// console.log(`[MATERIALIZE] ___materialize() completed`);
 	}
 
 	// Check actual type using __type property (for lazy mode compatibility)

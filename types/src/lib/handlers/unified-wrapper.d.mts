@@ -660,7 +660,7 @@ declare function runtime_contextRead(ctx: object, value: any): any;
 declare function runtime_eventPayloadFor(payload: any, listener: object | null, emitter: object | null, slothlet: object): any;
 /**
  * Unified wrapper class that handles all proxy concerns in one place:
- * - __impl pattern for reload support
+ * - ____impl pattern for reload support
  * - Lazy/eager mode materialization
  * - Recursive waiting proxy for deep lazy loading
  * - Context binding through contextManager
@@ -773,16 +773,16 @@ declare class UnifiedWrapper extends ComponentBase {
         sourceFolder: string | null;
     }): object | Function | null;
     /**
-     * Reconstruct a full implementation object from a wrapper whose _impl may have
+     * Reconstruct a full implementation object from a wrapper whose ____impl may have
      * been depleted by ___adoptImplChildren.
      *
      * @description
-     * After ___adoptImplChildren runs, children are moved from _impl onto the wrapper as
-     * own properties and deleted from _impl. This helper reconstructs the original
-     * impl by merging the remaining _impl keys with the adopted children extracted
+     * After ___adoptImplChildren runs, children are moved from ____impl onto the wrapper as
+     * own properties and deleted from ____impl. This helper reconstructs the original
+     * impl by merging the remaining ____impl keys with the adopted children extracted
      * from the wrapper.
      *
-     * Recursively walks the wrapper tree so nested objects whose _impl was also
+     * Recursively walks the wrapper tree so nested objects whose ____impl was also
      * depleted are properly reconstructed. For callable (function) impls, returns
      * the function directly since keepImplProperties prevents depletion.
      *
@@ -927,15 +927,15 @@ declare class UnifiedWrapper extends ComponentBase {
     ____inspectCustom(____depth: any, ____options: any, ____inspect: any): any;
     /**
      * Get current implementation
-     * @returns {Function|Object|null} Current __impl value
+     * @returns {Function|Object|null} Current ____impl value
      * @public
      */
-    public get __impl(): Function | Object | null;
+    public get ____impl(): Function | Object | null;
     /**
      * Core implementation-application logic shared by ___setImpl and lazy materialization.
      * Clones the implementation (protecting the API cache from ___adoptImplChildren's
      * delete operations), clears the invalid flag, upgrades callability when a
-     * callable impl arrives on a configurable wrapper, updates __filePath for lazy
+     * callable impl arrives on a configurable wrapper, updates ____filePath for lazy
      * folder wrappers, and adopts children.
      *
      * @param {*} newImpl - The new implementation value.
@@ -1082,17 +1082,6 @@ declare class UnifiedWrapper extends ComponentBase {
      * @private
      */
     private ___materialize;
-    /**
-     * @private
-     * @returns {Promise<void>}
-     *
-     * @description
-     * Exposes lazy materialization for waiting proxies and nested wrappers.
-     *
-     * @example
-     * await wrapper._materialize();
-     */
-    private _materialize;
     /**
      * Hand the value a lazy node just loaded to the routine manager as its module's contribution at this
      * path (#754). An eager node's value reaches it through the construction's internal `impl:created`;

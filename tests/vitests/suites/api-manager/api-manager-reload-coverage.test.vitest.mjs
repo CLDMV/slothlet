@@ -117,7 +117,7 @@ describe.each(RELOAD_MATRIX)("_reloadByModuleID — $name", ({ config }) => {
 	it("reloads the base module using its auto-assigned moduleID from addHistory", async () => {
 		api = await makeApi(config, { base: TEST_DIRS.API_TEST });
 		// The base module always has an entry in addHistory — find its moduleID
-		const baseModuleID = api.slothlet.__state?.apiManager?.state?.addHistory?.[0]?.moduleID;
+		const baseModuleID = api.slothlet.____state?.apiManager?.state?.addHistory?.[0]?.moduleID;
 		if (!baseModuleID) return; // skip if internals inaccessible
 
 		// Should not throw

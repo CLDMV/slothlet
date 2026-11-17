@@ -83,8 +83,8 @@ describe.each(getMatrixConfigs())("Versioning > Dispatcher Internals > $name", (
 	it("dispatcher.valueOf returns the dispatcher proxy itself", async () => {
 		api = await makeApi(config);
 		const val = api.auth.valueOf();
-		// The returned value should itself have __isVersionDispatcher = true
-		expect(val.__isVersionDispatcher).toBe(true);
+		// The returned value should itself have ____isVersionDispatcher = true
+		expect(val.____isVersionDispatcher).toBe(true);
 	});
 
 	// ── Case 9 — toJSON ──────────────────────────────────────────────────────
@@ -129,9 +129,9 @@ describe.each(getMatrixConfigs())("Versioning > Dispatcher Internals > $name", (
 		expect(meta === undefined || typeof meta === "object").toBe(true);
 	});
 
-	it("__filePath on the dispatcher delegates to the resolved versioned wrapper", async () => {
+	it("____filePath on the dispatcher delegates to the resolved versioned wrapper", async () => {
 		api = await makeApi(config);
-		// __filePath should be a string pointing to the resolved version's source file
+		// ____filePath should be a string pointing to the resolved version's source file
 		const fp = api.slothlet.node(api.auth).file;
 		expect(fp === undefined || typeof fp === "string").toBe(true);
 	});

@@ -120,7 +120,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks Internal Pro
 		expect(hookExecuted).toBe(false);
 	});
 
-	it("should not trigger hooks when accessing api._impl", () => {
+	it("should not trigger hooks when accessing api.____impl", () => {
 		let hookExecuted = false;
 
 		api.slothlet.hook.on(
@@ -132,10 +132,10 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks Internal Pro
 			{ id: "catch-all" }
 		);
 
-		// Access _impl if it exists - should NOT trigger hooks
-		const _ = api._impl;
+		// Access ____impl if it exists - should NOT trigger hooks
+		const _ = api.____impl;
 
-		// _impl might not exist in all configurations, but accessing it shouldn't trigger hooks
+		// ____impl might not exist in all configurations, but accessing it shouldn't trigger hooks
 		expect(hookExecuted).toBe(false);
 	});
 
@@ -205,7 +205,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks Internal Pro
 		const ___unused1 = api.slothlet.hook;
 		const ___unused2 = api.slothlet;
 		const ___unused3 = api.shutdown;
-		const ___unused4 = api._impl;
+		const ___unused4 = api.____impl;
 
 		// Now register hook after accessing properties
 		api.slothlet.hook.on(

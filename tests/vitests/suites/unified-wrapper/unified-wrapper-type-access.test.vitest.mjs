@@ -25,7 +25,7 @@
  *   - Line 2094:       `__type` → object impl → "object"
  *   - Lines 2096-2113: `__type` → primitive impl branches (string/number/boolean/symbol/bigint)
  *   - Line 2116:       `__type` → null/undefined impl → "undefined"
- *   - Line 2149:       `__filePath` → returns wrapper filePath
+ *   - Line 2149:       `____filePath` → returns wrapper filePath
  *   - Line 2152:       `__sourceFolder` → returns wrapper sourceFolder
  *   - Line 2153:       `__moduleID` → returns wrapper moduleID
  *
@@ -36,7 +36,7 @@
  *   - IN_FLIGHT test accesses `__type` on a fresh lazy wrapper whose `materializeFunc`
  *     is async, so `inFlight` is set to true synchronously by the IIFE then suspended.
  *   - UNMATERIALIZED test sets `wrapper.____slothletInternal.invalid = true` before
- *     accessing `__type`, causing `_materialize()` to return early (invalid guard) without
+ *     accessing `__type`, causing `___materialize()` to return early (invalid guard) without
  *     ever setting `inFlight = true`.
  *
  * @module tests/vitests/suites/unified-wrapper/unified-wrapper-type-access
@@ -224,7 +224,7 @@ describe("node().type — lazy in-flight → TYPE_STATES.IN_FLIGHT (line 2079)",
 		_api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "lazy", runtime: "async", silent: true });
 
 		// Directly set inFlight=true on the wrapper to simulate mid-materialization state.
-		// The prior approach (relying on _materialize()'s async IIFE timing) is inherently racy
+		// The prior approach (relying on ___materialize()'s async IIFE timing) is inherently racy
 		// under V8 coverage instrumentation, where microtask scheduling differs enough that
 		// materializeFunc can complete before line 2078 is checked. Direct state manipulation
 		// guarantees we test the exact `if (lazy && inFlight) → TYPE_STATES.IN_FLIGHT` branch.
@@ -257,7 +257,7 @@ describe("node().type — lazy unmaterialized → TYPE_STATES.UNMATERIALIZED (li
 		if (!wrapper) throw new Error("Could not resolve wrapper for api.math");
 
 		// Set invalid=true — causes ___materialize() to return early before setting inFlight=true.
-		// This means after _materialize() returns: materialized=false, inFlight=false.
+		// This means after ___materialize() returns: materialized=false, inFlight=false.
 		// The __type handler will then hit the "lazy && !materialized" check → UNMATERIALIZED.
 		const origInvalid = wrapper.____slothletInternal.invalid;
 		const origInFlight = wrapper.____slothletInternal.state.inFlight;
@@ -277,11 +277,11 @@ describe("node().type — lazy unmaterialized → TYPE_STATES.UNMATERIALIZED (li
 });
 
 // ---------------------------------------------------------------------------
-// 7. __filePath, __sourceFolder, __moduleID (lines 2149-2153)
+// 7. ____filePath, __sourceFolder, __moduleID (lines 2149-2153)
 // ---------------------------------------------------------------------------
 
 describe("node() file / folder / module (lines 2149-2153)", () => {
-	it("__filePath returns a non-empty string path to the source file (line 2149)", async () => {
+	it("____filePath returns a non-empty string path to the source file (line 2149)", async () => {
 		_api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", silent: true });
 		const filePath = _api.slothlet.node(_api.math).file;
 		// filePath may be undefined if the wrapper aggregates nested implementations,
@@ -308,9 +308,9 @@ describe("node() file / folder / module (lines 2149-2153)", () => {
 		}
 	});
 
-	it("__filePath is a string for a leaf eager wrapper (api.task)", async () => {
+	it("____filePath is a string for a leaf eager wrapper (api.task)", async () => {
 		_api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", silent: true });
-		// task is a directory module — __filePath may point to the directory or a file
+		// task is a directory module — ____filePath may point to the directory or a file
 		const filePath = _api.slothlet.node(_api.task).file;
 		if (filePath !== undefined) {
 			expect(typeof filePath).toBe("string");

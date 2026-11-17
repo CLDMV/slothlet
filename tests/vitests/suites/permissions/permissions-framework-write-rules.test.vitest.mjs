@@ -16,7 +16,7 @@
 /**
  * @fileoverview Who lifts the built-in write rules (#625).
  *
- * The built-in write rules (`slothlet.**:write`, `**.__state:write`, …) keep every module off the framework's
+ * The built-in write rules (`slothlet.**:write`, `**.____state:write`, …) keep every module off the framework's
  * namespace and the framework's own keys on api nodes while the permission system is on. They are defaults:
  * the host lifts one with a rule of its own, and so does a module's manifest — mounting it is the consumer's
  * choice. Module code may not lift one through `addRule` or the options of an `api.add` it makes, even the base
@@ -26,7 +26,7 @@
  * registration keeps its limits.
  *
  * Fixture: `api_tests/api_test_self_write_reach` — `base/` (owns the whole tree), `victim/`, and the module
- * `modules/lifter`, whose manifest allows writes to `slothlet.**` and `**.__state`.
+ * `modules/lifter`, whose manifest allows writes to `slothlet.**` and `**.____state`.
  */
 import { describe, it, expect, afterEach } from "vitest";
 import path from "node:path";

@@ -19,7 +19,7 @@
  * Purpose: in LAZY mode with merge collision, when processSubdirectories encounters
  * the calc/ subfolder it captures the existing wrapper at targetApi["calc"]:
  *
- *   existImpl = wrapper.__impl = function calc   (typeof "function", not "object")
+ *   existImpl = wrapper.____impl = function calc   (typeof "function", not "object")
  *   → modes_fileFolderImpl stays null (line 1133–1134 is skipped)
  *
  *   existChildKeys = Object.keys(wrapper) = ["add"]  (add was adopted as child wrapper)

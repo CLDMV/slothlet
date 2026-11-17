@@ -19,7 +19,7 @@
  */
 
 /** @type {string} Reserved-name export the loader refuses. */
-export const _materialize = "HIJACK";
+export const ___materialize = "HIJACK";
 
 /** @type {string} Ordinary sibling export; the file is refused as a whole. */
 export const fine = "fine";

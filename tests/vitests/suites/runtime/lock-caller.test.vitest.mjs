@@ -132,10 +132,10 @@ describe.each(getMatrixConfigs())("Runtime > lockCaller/bind > $name", ({ config
 		expect(result).toBe(thisArg);
 	});
 
-	it("exposes the original function via `_slothletOriginal`", async () => {
+	it("exposes the original function via `____slothletOriginal`", async () => {
 		await makeApi();
 		const lockedProbe = await api.consumer.probe.makeLockedIdentityProbe();
-		expect(typeof lockedProbe._slothletOriginal).toBe("function");
+		expect(typeof lockedProbe.____slothletOriginal).toBe("function");
 	});
 
 	it("lockCaller with no active context performs no override and does not throw", async () => {

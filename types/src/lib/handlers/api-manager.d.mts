@@ -235,7 +235,7 @@ export class ApiManager extends ComponentBase {
      * @public
      *
      * @example
-     * apiManager.writeChecked(["victim", "v", "__state"]); // true unless permissions are disabled
+     * apiManager.writeChecked(["victim", "v", "____state"]); // true unless permissions are disabled
      */
     public writeChecked(parts: string[]): boolean;
     /**
@@ -388,7 +388,7 @@ export class ApiManager extends ComponentBase {
      * @private
      *
      * @description
-     * `createProxy()` can kick off a wrapper's `_materialize()` in the background before
+     * `createProxy()` can kick off a wrapper's `___materialize()` in the background before
      * `setValueAtPath()`'s collision decision is even known. When that decision rejects the
      * candidate, `revertSpeculativeSubtree()` correctly undoes ownership/raw-capture state
      * immediately — but the in-flight materialization is a separate, already-running async

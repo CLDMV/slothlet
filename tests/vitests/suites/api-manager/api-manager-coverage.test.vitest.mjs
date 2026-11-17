@@ -35,8 +35,8 @@ describe("ApiManager guard coverage", () => {
 	it("invalidateSpeculativeWrappers skips reserved meta keys during its walk (api-manager.mjs:1011)", async () => {
 		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", silent: true });
 		const apiManager = resolveWrapper(api.math).slothlet.handlers.apiManager;
-		// The walk enumerates own keys and `continue`s on reserved keys (_impl/_materialize/…).
-		expect(() => apiManager.invalidateSpeculativeWrappers({ _impl: { a: 1 }, _materialize: "x", real: () => {} })).not.toThrow();
+		// The walk enumerates own keys and `continue`s on reserved keys (____impl/___materialize/…).
+		expect(() => apiManager.invalidateSpeculativeWrappers({ ____impl: { a: 1 }, ___materialize: "x", real: () => {} })).not.toThrow();
 	});
 
 	it("mutateApiValue returns early when existing === next (api-manager.mjs:1061-1062)", async () => {

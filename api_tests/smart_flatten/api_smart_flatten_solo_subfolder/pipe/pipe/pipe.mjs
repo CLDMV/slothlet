@@ -15,7 +15,7 @@
 
 /**
  * Test fixture: same-name file inside the inner pipe/pipe/ subfolder.
- * Purpose: triggers the `return nestedValue.__impl ?? nestedValue` branch
+ * Purpose: triggers the `return nestedValue.____impl ?? nestedValue` branch
  * (modes-processor.mjs line 1514).
  *
  * Outer pipe/ folder has NO pipe.mjs (no file at outer level), so the ONLY

@@ -156,7 +156,7 @@ describe.each(getMatrixConfigs())("Permissions > captured namespace > $name", ({
 
 		// Two hops down from the captured parent, each yielding a namespace rather than a value. Holds
 		// identically in lazy since #255: the waiting-proxy resolver hands back the wrapper's live proxy
-		// instead of the adoption-depleted `_impl`, so a namespace held across calls stays walkable.
+		// instead of the adoption-depleted `____impl`, so a namespace held across calls stays walkable.
 		expect(outcome.kind).toBe("object");
 		expect(outcome.keys).toBeGreaterThan(0);
 	});

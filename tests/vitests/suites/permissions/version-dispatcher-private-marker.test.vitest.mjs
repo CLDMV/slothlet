@@ -18,8 +18,8 @@
  *
  * @description
  * #269 made an `_`/`__`-prefixed member module-private — denied to an unidentified (host) caller
- * by default. A version dispatcher stamps slothlet's OWN reserved marker keys (`__isVersionDispatcher`,
- * `__logicalPath`) on its target; when that dispatcher collides with an existing module the framework
+ * by default. A version dispatcher stamps slothlet's OWN reserved marker keys (`____isVersionDispatcher`,
+ * `____logicalPath`) on its target; when that dispatcher collides with an existing module the framework
  * merges those keys onto the module's wrapper and then reads them back as the host (caller `null`).
  * Before the fix that read was denied — aborting composition of every version-dispatched field and
  * regressing 3.12.3 → 3.13.x. The fix exempts slothlet's OWN marker keys by OBJECT IDENTITY (a
@@ -48,7 +48,7 @@ describe.each(["eager", "lazy"])("Permissions > version-dispatcher marker (#283)
 		api = await slothlet({ mode, base: TEST_DIRS.API_TEST, permissions: { defaultPolicy: "allow", rules: [] } });
 
 		// A module already exists at advanced.activationEvents; version-dispatching the SAME path makes
-		// slothlet merge the dispatcher (which carries __isVersionDispatcher/__logicalPath) into that
+		// slothlet merge the dispatcher (which carries ____isVersionDispatcher/____logicalPath) into that
 		// module's wrapper, then read the marker back as the host. Before the fix this threw
 		// PERMISSION_DENIED at api.add time.
 		await expect(api.slothlet.api.add(["advanced", "activationEvents"], FIELD_BASE, {}, {})).resolves.toBeDefined();
@@ -68,7 +68,7 @@ describe.each(["eager", "lazy"])("Permissions > version-dispatcher marker (#283)
 		const field = mode === "lazy" ? await advanced.activationEvents : advanced.activationEvents;
 		// The consumer relies on this read returning true to detect a version-dispatched field — the
 		// same behavior 3.12.3 had. It must NOT throw and must report the dispatcher.
-		expect(field.__isVersionDispatcher).toBe(true);
+		expect(field.____isVersionDispatcher).toBe(true);
 		// The exemption is scoped to the marker keys, not the whole branded wrapper: a public terminal
 		// member on that same branded wrapper is read through the normal gate (allowed because public).
 		expect(field.label).toBe("base-field");

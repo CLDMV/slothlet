@@ -94,7 +94,7 @@ describe("syncWrapper — lazy collision against an untouched existing wrapper",
 		// payload carried the raw unwrapped callable (the enforcement-bypassing leak). Now the PUBLIC
 		// event fires once, for the leaf that actually holds the path (the current owner). #433: it exposes
 		// the WRAPPED callable on a stable `impl` field (a function here) and no longer re-exposes the
-		// reserved internal `wrapper.__impl` handle. (Which module owns a merge-collided leaf is ownership's
+		// reserved internal `wrapper.____impl` handle. (Which module owns a merge-collided leaf is ownership's
 		// own concern, unchanged here — this asserts consistency with it, not a fixed id.)
 		expect(events).toHaveLength(1);
 		expect(typeof events[0].impl).toBe("function"); // the wrapped callable, on the stable public field
@@ -122,7 +122,7 @@ describe("syncWrapper — lazy collision against an untouched existing wrapper",
 
 		// A wrapper that materializes exactly once must decrement the global unmaterialized count
 		// exactly once — not twice (which would happen if state.materialized bounced back to false
-		// and something re-triggered _materialize() on it later).
+		// and something re-triggered ___materialize() on it later).
 		const statsAfter = api.slothlet.materialize.get();
 		expect(statsAfter.remaining).toBe(statsBefore.remaining - 1);
 		expect(statsAfter.remaining).toBeGreaterThanOrEqual(0);

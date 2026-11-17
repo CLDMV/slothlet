@@ -23,7 +23,7 @@ import { markFrameworkInternal, isFrameworkInternal, isFrameworkMarkerKey } from
 
 describe("handlers > framework-internals brand (#283)", () => {
 	it("brands an object and reports it as framework-internal", () => {
-		const obj = { __isVersionDispatcher: true };
+		const obj = { ____isVersionDispatcher: true };
 		expect(markFrameworkInternal(obj)).toBe(obj); // returns the same reference for chaining
 		expect(isFrameworkInternal(obj)).toBe(true);
 	});
@@ -49,8 +49,8 @@ describe("handlers > framework-internals brand (#283)", () => {
 	});
 
 	it("recognizes exactly slothlet's reserved dispatcher marker keys via the immutable predicate", () => {
-		expect(isFrameworkMarkerKey("__isVersionDispatcher")).toBe(true);
-		expect(isFrameworkMarkerKey("__logicalPath")).toBe(true);
+		expect(isFrameworkMarkerKey("____isVersionDispatcher")).toBe(true);
+		expect(isFrameworkMarkerKey("____logicalPath")).toBe(true);
 		expect(isFrameworkMarkerKey("__metadata")).toBe(false);
 	});
 });

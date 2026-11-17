@@ -208,7 +208,7 @@ async function build(fixture, place, options) {
 		await api.slothlet.api.add("zz.s", fixture.mount);
 		node = api.zz.s;
 	} else if (place !== "api root") node = api.e;
-	if (typeof node._materialize === "function") await node._materialize();
+	if (typeof node.___materialize === "function") await node.___materialize();
 	return { api, node };
 }
 

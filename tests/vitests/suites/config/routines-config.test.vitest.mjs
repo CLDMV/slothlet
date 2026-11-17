@@ -53,7 +53,7 @@ describe("slothlet.defaults", () => {
 	it("reservedExports is a non-empty Set of framework-internal names", () => {
 		expect(slothlet.defaults.reservedExports).toBeInstanceOf(Set);
 		expect(slothlet.defaults.reservedExports.size).toBeGreaterThan(0);
-		expect(slothlet.defaults.reservedExports.has("__childFilePaths")).toBe(true);
+		expect(slothlet.defaults.reservedExports.has("____childFilePaths")).toBe(true);
 	});
 
 	it("reservedExports genuinely rejects mutation — Object.freeze() alone does not stop Set.add/delete/clear", () => {
@@ -61,10 +61,10 @@ describe("slothlet.defaults", () => {
 		// own properties, never a Set's internal slots) — this is what actually guards it.
 		const sizeBefore = slothlet.defaults.reservedExports.size;
 		expect(() => slothlet.defaults.reservedExports.add("__not_real")).toThrow(TypeError);
-		expect(() => slothlet.defaults.reservedExports.delete("__childFilePaths")).toThrow(TypeError);
+		expect(() => slothlet.defaults.reservedExports.delete("____childFilePaths")).toThrow(TypeError);
 		expect(() => slothlet.defaults.reservedExports.clear()).toThrow(TypeError);
 		expect(slothlet.defaults.reservedExports.size).toBe(sizeBefore);
-		expect(slothlet.defaults.reservedExports.has("__childFilePaths")).toBe(true);
+		expect(slothlet.defaults.reservedExports.has("____childFilePaths")).toBe(true);
 	});
 });
 
