@@ -50,6 +50,7 @@
     * [.testCaller()](#api_test_dot_metadataTestHelper_dot_testCaller) ⇒ <code>Promise.&lt;object&gt;</code>
     * [.verifyMetadata(path)](#api_test_dot_metadataTestHelper_dot_verifyMetadata) ⇒ <code>Promise.&lt;object&gt;</code>
     * [.invokeCallerTest()](#api_test_dot_metadataTestHelper_dot_invokeCallerTest) ⇒ <code>Promise.&lt;(object|null)&gt;</code>
+    * [.getNode(path)](#api_test_dot_metadataTestHelper_dot_getNode) ⇒ <code>object | undefined</code>
   * [.mixed(message)](#api_test_mixed) ⇒ <code>string</code>
     * [.mixedNamed(value)](#api_test_dot_mixed_dot_mixedNamed) ⇒ <code>string</code>
     * [.mixedAnother(num)](#api_test_dot_mixed_dot_mixedAnother) ⇒ <code>number</code>
@@ -1966,6 +1967,33 @@ api_test.metadata-test-await helper.invokeCallerTest();
 
 * * *
 
+<a id="api_test_dot_metadataTestHelper_dot_getNode"></a>
+
+### api_test.metadataTestHelper.getNode(path) ⇒ <code>object | undefined</code>
+> <p><strong style="font-size: 1.1em;"><p>Test helper that calls self.slothlet.node() from within slothlet context.</p></strong></p>
+> 
+**Kind**: inner method of [<code>api_test.metadataTestHelper</code>](#api_test_dot_metadataTestHelper)
+
+
+| Param | Type | Default | Description |
+| --- | --- | --- | --- |
+| [path] | <code>string</code> |  | <p>Dot-notation path to a node; omitted for the helper's own node.</p> |
+
+
+**Returns**:
+
+- <code>object \| undefined</code> <p>The node report, or undefined when nothing is at the path.</p>
+
+
+**Example**
+```js
+const report = api.metadataTestHelper.getNode("rootMath.add");
+```
+
+
+
+* * *
+
 <a id="api_test_mixed"></a>
 
 ### api_test.mixed(message) ⇒ <code>string</code>
@@ -3620,21 +3648,20 @@ api_test.runtime-test.testSelfAndReference();
 <a id="api_test_dot_runtimeTest_dot_getAsyncInstanceID"></a>
 
 ### api_test.runtimeTest.getAsyncInstanceID() ⇒ <code>Object</code>
-> <p><strong style="font-size: 1.1em;"><p>Exercise all proxy traps on the <code>instanceID</code> export from the async runtime.
-> Must be called within an active slothlet async-runtime context so the in-context
-> branches of the get/has traps are reached.</p></strong></p>
+> <p><strong style="font-size: 1.1em;"><p>Read <code>instance.id</code> from the runtime inside a call: a real string, the running instance's id.
+> Must be called within an active slothlet call.</p></strong></p>
 > 
 **Kind**: inner method of [<code>api_test.runtimeTest</code>](#api_test_dot_runtimeTest)
 
 **Returns**:
 
-- <code>Object</code> <p>Proxy trap results</p>
+- <code>Object</code> <p>The id, its type, and whether <code>instance</code> is frozen</p>
 
 
 **Example**
 ```js
 const result = api.runtimeTest.getAsyncInstanceID();
-// result.id === api.slothlet.instanceID
+// result.id === api.slothlet.instance.id
 ```
 **Example**
 ```js
@@ -3735,15 +3762,14 @@ api_test.runtime-test.exerciseContextDispatcherTraps();
 <a id="api_test_dot_runtimeTest_dot_exerciseInstanceIDDispatcherTraps"></a>
 
 ### api_test.runtimeTest.exerciseInstanceIDDispatcherTraps() ⇒ <code>Object</code>
-> <p><strong style="font-size: 1.1em;"><p>Exercise the instanceID proxy traps on the dispatcher (runtime.mjs).
-> Must be called while a live-runtime context is active so getCurrentRuntime()
-> resolves to liveRuntimeModule and instanceID is a non-null string.</p></strong></p>
+> <p><strong style="font-size: 1.1em;"><p>Read <code>instance.id</code> through the dispatcher (runtime.mjs) while a live-runtime call runs, so getCurrentRuntime()
+> resolves to the live runtime.</p></strong></p>
 > 
 **Kind**: inner method of [<code>api_test.runtimeTest</code>](#api_test_dot_runtimeTest)
 
 **Returns**:
 
-- <code>Object</code> <p>Trap results</p>
+- <code>Object</code> <p>The id and its type</p>
 
 
 **Example**
@@ -3795,7 +3821,7 @@ api_test.runtime-test.exerciseInstanceIDDispatcherTraps();
 > <p><strong style="font-size: 1.1em;"><p>Exercise the async runtime context proxy traps that require an active ALS context:
 > <code>set</code> (write to context) and <code>getOwnPropertyDescriptor</code>.
 > MUST be called within <code>api.slothlet.context.run()</code> so ALS is active — otherwise
-> the set trap throws RUNTIME_NO_ACTIVE_CONTEXT_CONTEXT.</p></strong></p>
+> the set trap throws CONTEXT_NOT_ACTIVE_WRITE.</p></strong></p>
 > 
 **Kind**: inner method of [<code>api_test.runtimeTest</code>](#api_test_dot_runtimeTest)
 
