@@ -159,7 +159,7 @@ export class Utilities extends ComponentBase {
 /**
  * The platform's cryptographic random generator (`crypto.getRandomValues`), taken when slothlet loads, before any api
  * file runs; null where there is none.
- * @type {(function(Uint32Array): Uint32Array)|null}
+ * @type {?Function}
  * @private
  */
 const RANDOM_VALUES = (() => {
