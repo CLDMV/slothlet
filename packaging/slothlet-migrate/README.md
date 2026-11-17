@@ -25,6 +25,15 @@ Folders are searched for `.js` / `.mjs` / `.cjs` files, `slothlet.module.json` a
 
 The exit code is `0`, `1` when a file could not be parsed, and `2` for a usage error.
 
+## Audit what is left
+
+```sh
+npx @cldmv/slothlet-migrate audit        # every v3 surface still in use, file:line → v4 replacement
+npx @cldmv/slothlet-migrate audit src --json
+```
+
+`audit` changes nothing. It lists everything the rewrite engine would rewrite (`fixable`) or can only report (`manual`), plus the data keys a program reads off slothlet objects, which cannot be rewritten safely: event and lifecycle payload keys (`moduleID` → `module`, `conditionMatched` dropped), hook context keys (`hasError` dropped, `errorType` → `class`), error details read through `err.context` / `err.details`, and the `diag.inspect()`, `context.diagnostics()`, `diag.caches.get()` and `diag.owner.list()` shapes. Add `--info` to include behaviour notes. The exit code is `0` when nothing is found, `1` when there are findings and `2` for a usage error or a file that could not be parsed, so it works as a CI gate once the migration is finished. `--config`, `--callee` and `--json` work as above; the JSON has `findings`, `counts`, `files`, `errors`, `skipped` and `clean`.
+
 ## What you get back
 
 Every finding has a level:

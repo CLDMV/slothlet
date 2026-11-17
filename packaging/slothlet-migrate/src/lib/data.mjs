@@ -46,6 +46,9 @@ const mapping = load("mapping.json");
 const extras = load("extras.json");
 const codes = load("codes.json");
 
+/** Data-shape rulings the audit reports (read-only; see data/audit.json). */
+export const AUDIT = load("audit.json");
+
 /** @type {MappingEntry[]} */
 export const ENTRIES = [...mapping.entries, ...extras.entries].map((e) => ({ ...e, id: `${e.kind}|${e.old ?? e.new}` }));
 
