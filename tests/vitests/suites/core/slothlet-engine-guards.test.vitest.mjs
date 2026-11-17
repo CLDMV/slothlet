@@ -162,9 +162,9 @@ describe("slothlet setApiContextChecker callback (lines 347-348)", () => {
 
 describe("slothlet.reload() — missing config.dir guard (line 497)", () => {
 	it("throws INSTANCE_NOT_LOADED when config has no dir", async () => {
-		// Arrange: wipe config.dir to simulate a never-configured instance
+		// Arrange: a config with no `base` at all simulates a never-configured instance (a loaded one carries a path or null)
 		const savedConfig = engine.config;
-		engine.config = { base: null };
+		engine.config = {};
 
 		// Act + Assert
 		await expect(engine.reload()).rejects.toThrow(/INSTANCE_NOT_LOADED|not.*loaded/i);

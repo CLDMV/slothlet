@@ -140,7 +140,7 @@ describe.each(getMatrixConfigs())("Permissions > Read Gating > Enumeration > $na
 		await api.callers.dataReader.keysOfConfig();
 
 		expect(denied.length).toBeGreaterThan(0);
-		expect(denied.some((d) => String(d.target).endsWith("db.secrets.config.apiKey"))).toBe(true);
+		expect(denied.some((d) => (d.target ?? []).join(".").endsWith("db.secrets.config.apiKey"))).toBe(true);
 		expect(denied[0]).toHaveProperty("caller");
 	});
 

@@ -441,7 +441,7 @@ describe.each(getBrowserMatrixConfigs())("Browser Mode > permissions > $name", (
 
 		expect(deniedEvents.length).toBeGreaterThan(0);
 		// The denied event must include a target that touches the math namespace.
-		const evt = deniedEvents.find((e) => String(e?.target ?? "").startsWith("math."));
+		const evt = deniedEvents.find((e) => (e?.target ?? []).join(".").startsWith("math."));
 		expect(evt).toBeDefined();
 	});
 

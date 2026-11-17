@@ -160,8 +160,15 @@ describe("warnIfCoverageWithoutSourcemap", () => {
 		expect((await probe(unset, { worker: COVERAGE_WORKER, env: {} })).fired).toBe(false);
 	});
 
-	it("respects silent instances", async () => {
-		expect(await probe({ ...OFF, silent: true }, { worker: COVERAGE_WORKER, env: {} })).toEqual({ fired: false, captured: 0 });
+	it("respects silent instances: raised through the instance's class, recorded there and not printed (#838)", async () => {
+		const { SlothletWarning } = await import("@cldmv/slothlet/errors");
+		const recorded = [];
+		const Warning = SlothletWarning.forInstance(
+			() => true,
+			(warning) => recorded.push(warning)
+		);
+		expect(await probe(OFF, { worker: COVERAGE_WORKER, env: {}, Warning })).toEqual({ fired: true, captured: 0 });
+		expect(recorded.filter((w) => w.code === WARNING_CODE)).toHaveLength(1);
 	});
 });
 

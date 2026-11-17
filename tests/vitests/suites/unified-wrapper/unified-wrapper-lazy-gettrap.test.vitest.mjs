@@ -175,15 +175,16 @@ describe("lazyGetTrap — __type special property (lines 2082–2117)", () => {
 		}
 	});
 
-	it("__type for CJS { default: fn } wrapper returns 'function' (impl.default is function — lines 2106–2107)", async () => {
+	it("node().type for a CJS { default: fn } wrapper is 'namespace': an object holding a `default` member", async () => {
 		// api_test_cjs/default-fn/default-fn.cjs exports {default: multiply} with NO named exports.
-		// After extractExports, impl stays as { default: multiply } (CJS unwrap does not fire).
-		// Lines 2106–2107: `if (impl && typeof impl === "object" && typeof impl.default === "function")`
+		// After extractExports, impl stays as { default: multiply } (CJS unwrap does not fire), so the node is not
+		// callable and has a member of its own: a namespace (D-4), as the same object reads in plain JavaScript.
 		const { api, teardown } = await makeLazyCjsDefaultFn();
 		try {
 			await api.defaultFn.___materialize();
 			await new Promise((r) => setImmediate(r));
-			expect(api.slothlet.node(api.defaultFn).type).toBe("function");
+			expect(api.slothlet.node(api.defaultFn).type).toBe("namespace");
+			expect(api.slothlet.node(api.defaultFn).callable).toBe(false);
 		} finally {
 			await teardown();
 		}

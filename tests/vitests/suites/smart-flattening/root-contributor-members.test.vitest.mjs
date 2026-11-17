@@ -212,7 +212,7 @@ describe.each(MODES)("a root file's members of every kind answer as plain JavaSc
 					true
 				]);
 				expect([root.arr.length, root.arr[0], root.arr[1], Array.isArray(root.arr)]).toEqual([2, 1, 2, true]);
-				expect([root.map instanceof Map, root.map.get("a"), api.slothlet.metadata.get(root.map)]).toEqual([true, 1, undefined]);
+				expect([root.map instanceof Map, root.map.get("a"), api.slothlet.metadata.get(root.map)]).toEqual([true, 1, {}]);
 				expect([root.date instanceof Date, root.date.getTime()]).toEqual([true, 0]);
 				expect([root.err instanceof Error, root.err.message]).toEqual([true, "boom"]);
 				expect(root.num).toBe(3);

@@ -76,7 +76,7 @@ describe("ModuleManager.discover()", () => {
 		await mm.discover({ root: FIX_FOLDER });
 		const warnings = api.slothlet.warnings.get().filter((w) => w.code === "WARNING_MODULE_MANIFEST_FORMAT_1");
 		expect(warnings.length).toBe(1);
-		expect(warnings[0].context.package).toBe("@local/driver-beta");
+		expect(warnings[0].details.package).toBe("@local/driver-beta");
 	});
 
 	it("replaces the cache on each discover() call", async () => {

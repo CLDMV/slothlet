@@ -68,7 +68,7 @@ describe.each(["eager", "lazy"])("loader.materialize callback - %s", (mode) => {
 	it("turns background materialization on", async () => {
 		api = await slothlet({ base: TEST_DIRS.API_TEST, mode, silent: true, loader: { materialize: () => {} } });
 		await until(() => api.slothlet.materialize.complete === true);
-		expect(api.deep.folder.config.__materialized).toBe(true);
+		expect(api.slothlet.node(api.deep.folder.config).materialized).toBe(true);
 	});
 
 	it("reports what the callback throws or rejects with as a warning", async () => {

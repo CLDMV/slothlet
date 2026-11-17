@@ -149,7 +149,8 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])("Hidden entries + empty-fol
 
 	it("a framework-reserved name a `!` glob brings back is still refused", async () => {
 		await writeModule(join(root, "math", "add.mjs"), "export function add(a, b) { return a + b; }");
-		await writeModule(join(root, "__metadata.mjs"), "export function m() { return 1; }");
+		// `__metadata` is an ordinary member name in v4 (nodes carry no framework keys); `____impl` is still reserved.
+		await writeModule(join(root, "____impl.mjs"), "export function m() { return 1; }");
 		await expect(boot({ hidden: "!**/__*" })).rejects.toMatchObject({ code: "MODULE_RESERVED_FILE" });
 	});
 

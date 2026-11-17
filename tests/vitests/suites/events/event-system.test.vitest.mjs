@@ -164,7 +164,7 @@ describe.each(getMatrixConfigs())("Events > event system (#407) > $name", ({ con
 	// ── Runtime mutation gating ──────────────────────────────────────────────────
 	it("runtime rule mutation is refused when config.api.mutations.events is false", async () => {
 		api = await slothlet({ ...config, base: BASE, api: { mutations: { events: false } } });
-		expect(() => api.slothlet.event.rules.add({ caller: "**", event: "x", effect: "allow" })).toThrow(/MUTATIONS_DISABLED/);
+		expect(() => api.slothlet.event.rules.add({ caller: "**", event: "x", effect: "allow" })).toThrow(/API_MUTATION_DISABLED/);
 	});
 
 	// ── Reload replay ────────────────────────────────────────────────────────────

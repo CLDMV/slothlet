@@ -410,8 +410,9 @@ describe("generateTypes – direct unit tests", () => {
 		});
 
 		it("should emit unknown when __metadata.filePath does not exist", async () => {
-			// Points to a file that doesn't exist — the path in __metadata is not a module origin, so the
-			// function is typed unknown rather than from any file, and generation does not throw.
+			// Points to a file that doesn't exist — the path in __metadata is not a module origin, so nothing is typed from
+			// any file, and generation does not throw. `__metadata` is the function's own member like any other (v4 keeps
+			// no framework keys on nodes), so the function is typed by its members, each with no module origin.
 			function ghostFn() {}
 			ghostFn.__metadata = { filePath: "/nonexistent/path/that/does/not/exist.ts" };
 
@@ -426,7 +427,8 @@ describe("generateTypes – direct unit tests", () => {
 			);
 
 			expect(output).toContain("export interface TestAPI");
-			expect(output).toMatch(/\/\*\* No module origin: [^\n]*\*\/\n\tghostFn: unknown;/);
+			expect(output).toMatch(/\/\*\* Callable with no module origin: [^\n]*\*\/\n\tghostFn: \{/);
+			expect(output).toMatch(/\/\*\* No module origin: [^\n]*\*\/\n\t+filePath: unknown;/);
 			expect(output).not.toContain("does/not/exist");
 		});
 

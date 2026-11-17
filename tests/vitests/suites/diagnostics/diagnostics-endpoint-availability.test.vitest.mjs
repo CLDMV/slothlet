@@ -31,7 +31,7 @@
  *   pin           - pin the registering module's caller identity onto a callback
  *   bind          - freeze the whole async context onto a callback (AsyncResource.bind)
  *   context       - per-request context: { get, diagnostics, run, scope }
- *   metadata      - metadata API: { global, set, remove, setFor, removeFor }
+ *   metadata      - metadata API: { global, set, remove }
  *   reload        - reload entire instance
  *   shutdown      - shutdown instance
  *   owner         - ownership query: { get }
@@ -124,7 +124,7 @@ const DIAG_ONLY_KEYS = ["diag"];
 const EXPECTED_API_SUBKEYS = ["add", "remove", "reload"];
 const EXPECTED_CONTEXT_SUBKEYS = ["get", "diagnostics", "run", "scope"];
 const EXPECTED_HOOK_SUBKEYS = ["on", "remove", "clear", "off", "enable", "disable", "list"];
-const EXPECTED_METADATA_SUBKEYS = ["global", "set", "remove", "setFor", "removeFor"];
+const EXPECTED_METADATA_SUBKEYS = ["global", "set", "remove"];
 const EXPECTED_OWNER_SUBKEYS = ["get"];
 const EXPECTED_MATERIALIZE_SUBKEYS = ["complete", "get", "wait"];
 const EXPECTED_LIFECYCLE_SUBKEYS = ["on", "off"];
@@ -265,7 +265,7 @@ describe("api.slothlet - diagnostics endpoint availability", () => {
 				});
 			}
 
-			it("api.slothlet.metadata should have global, set, remove, setFor, removeFor", () => {
+			it("api.slothlet.metadata should have global, set, remove", () => {
 				expectKeysPresent(api.slothlet.metadata, EXPECTED_METADATA_SUBKEYS, "api.slothlet.metadata");
 				for (const key of EXPECTED_METADATA_SUBKEYS) {
 					expect(typeof api.slothlet.metadata[key], `api.slothlet.metadata.${key} should be a function`).toBe("function");

@@ -184,7 +184,7 @@ describe("metadata importUserState null guard (line 565)", () => {
 		// by performing a reload (which calls importUserState with actual exported state).
 		// The null-guard itself is triggered in extreme edge-cases; we exercise it
 		// by accessing the handler reference indirectly.
-		expect(snapshot.isLoaded).toBe(true);
+		expect(snapshot.loaded).toBe(true);
 
 		// Reload triggers importUserState → verifies the live path is exercised
 		// (the null guard on a null state is a dead-path in normal reload, but

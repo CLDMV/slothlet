@@ -55,7 +55,7 @@ describe("PermissionManager event rules (#407) — runtime removal + validation"
 			api: { mutations: { events: false } },
 			permissions: { policy: "allow", events: { policy: "notify" } }
 		});
-		expect(() => api.slothlet.event.rules.remove("anything")).toThrow(/MUTATIONS_DISABLED/);
+		expect(() => api.slothlet.event.rules.remove("anything")).toThrow(/API_MUTATION_DISABLED/);
 	});
 
 	it("rules.add rejects malformed event rules (#validateEventRule)", async () => {

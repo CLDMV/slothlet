@@ -289,14 +289,14 @@ describe.each(CONFIGS)("module-code entry points (#625) — $mode / $runtime", (
 
 		it("refuses module code removing every match when one of them is not its own, and removes none", async () => {
 			await mounted();
-			expect(await withSuppressedSlothletErrorOutput(() => api.guest.x.removeModuleNamed("@local/goodgrant"))).toBe("LOOSE_SET_NOT_OWNED");
+			expect(await withSuppressedSlothletErrorOutput(() => api.guest.x.removeModuleNamed("good"))).toBe("LOOSE_SET_NOT_OWNED");
 			expect(api.guest.good.info.name()).toBe("info");
 			expect(api.victim.good.info.name()).toBe("info");
 		});
 
 		it("lets module code remove the mount it made", async () => {
 			await mounted();
-			expect(await api.guest.x.removeModuleNamed("@local/goodgrant", { version: "0.1.0" })).toBe(true);
+			expect(await api.guest.x.removeModuleNamed("good", { version: "1.0.0" })).toBe(true);
 			expect(api.guest.good).toBeUndefined();
 			expect(api.victim.good.info.name()).toBe("info");
 		});

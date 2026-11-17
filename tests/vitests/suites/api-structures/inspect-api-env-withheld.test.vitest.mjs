@@ -58,6 +58,6 @@ describe.each(["--eager", "--lazy"])("inspect-api-structure withholds slothlet.e
 		const { shape } = runTool(modeFlag);
 		expect(shape.members.slothlet.members.env).toEqual({ type: "object", withheld: true });
 		// Other members of api.slothlet are still described in full.
-		expect(shape.members.slothlet.members.instanceID.type).toBe("string");
+		expect(shape.members.slothlet.members.instance.members.id.type).toBe("string");
 	});
 });

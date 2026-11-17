@@ -217,7 +217,3 @@ describe("metadata removeUserMetadata — no moduleID early-return guard (line 3
 		expect(() => sl.handlers.metadata.removeUserMetadata(plainFn)).not.toThrow();
 	});
 });
-
-// ─── metadata.get — null apiRoot guard (line 619) ───────────────────────────
-
-describe("metadata.get — null apiRoot early-return guard (line 619)", () => {});

@@ -197,13 +197,14 @@ describe.each(getMatrixConfigs())("Permissions > hook gating (#118) > $name", ({
 		expect(api.slothlet.warnings.get().some((w) => w.code === "WARNING_HOOK_UNPINNED_IGNORED")).toBe(false);
 	});
 
-	it("force-pin under silent ignores pin: false without warning", async () => {
+	it("force-pin under silent ignores pin: false, recording the warning without printing it", async () => {
 		api = await slothlet({ ...config, base: DIR, hook: true, silent: true, diagnostics: true });
 		api.slothlet.warnings.clear();
 		const id = await api.auditor.armOpts("db.read:before", { pin: false });
 		const { registeredHooks } = api.slothlet.hook.list({ id });
 		expect(registeredHooks[0].lockCaller).toBe(true); // still force-pinned
-		expect(api.slothlet.warnings.get().some((w) => w.code === "WARNING_HOOK_UNPINNED_IGNORED")).toBe(false); // silent suppresses the warn
+		// silent only keeps the warning off the console; it is still raised and recorded on the instance (#838)
+		expect(api.slothlet.warnings.get().some((w) => w.code === "WARNING_HOOK_UNPINNED_IGNORED")).toBe(true);
 	});
 
 	it("a before-only hook rule denies an after-hook on the same path (per-type)", async () => {

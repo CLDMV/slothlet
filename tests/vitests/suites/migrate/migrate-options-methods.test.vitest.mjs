@@ -103,7 +103,7 @@ describe("slothlet-migrate: other method options", () => {
 				`await api.slothlet.api.modules.addDiscovered({ scanRoot: "/x", prefix: "@a/", filter: f, manifest: "m.json", schema: s, collisionMode: "merge", onFailure: "rollback" });`,
 				`await api.slothlet.api.modules.addModule("pkg", { collisionMode: "skip" });`,
 				`await api.slothlet.api.modules.addModules(list, { onFailure: "best-effort" });`,
-				`api.slothlet.api.modules.discover({ root: "/x" });`,
+				`api.slothlet.api.modules.discover({ scanRoot: "/x" });`,
 				`api.slothlet.api.modules.clearDiscoveryCache();`,
 				`api.slothlet.api.modules.removeModule("pkg");`
 			].join("\n")
@@ -300,7 +300,7 @@ describe("slothlet-migrate: places the first pass missed", () => {
 		const r = run(
 			[
 				`const mm = api.slothlet.api.modules;`,
-				`mm.discover({ root: "/x" });`,
+				`mm.discover({ scanRoot: "/x" });`,
 				`await mm.addModule("pkg", { collisionMode: "skip" });`,
 				`mm.clearDiscoveryCache();`
 			].join("\n")
@@ -317,7 +317,7 @@ describe("slothlet-migrate: places the first pass missed", () => {
 	});
 
 	it("reports, and does not edit, calls through an alias it cannot prove constant", () => {
-		const r = run([`let mm = api.slothlet.api.modules;`, `mm.discover({ root: "/x" });`, `mm.removeModule("pkg");`].join("\n"));
+		const r = run([`let mm = api.slothlet.api.modules;`, `mm.discover({ scanRoot: "/x" });`, `mm.removeModule("pkg");`].join("\n"));
 		expect(r.code).toContain(`mm.removeModule("pkg")`);
 		expect(r.code).toContain(`scanRoot`);
 		expect(r.ids("manual")).toContain("method|api.slothlet.api.modules.removeModule");

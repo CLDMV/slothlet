@@ -336,8 +336,8 @@ describe("silent gates init-time console warnings, not events", () => {
 			diagnostics: true,
 			lifecycle: { "impl:warning": (payload) => events.push(payload) }
 		});
-		// Console warning is silent-gated → never constructed → not captured (on this instance, #819).
-		expect(api.slothlet.warnings.get().some((w) => w.code === "WARNING_RESERVED_PROPERTY_CONFLICT")).toBe(false);
+		// `silent` only keeps the warning off the console: it is still raised and recorded on this instance (#819, #838).
+		expect(api.slothlet.warnings.get().some((w) => w.code === "WARNING_RESERVED_PROPERTY_CONFLICT")).toBe(true);
 		// The event is additive → fires even under silent.
 		expect(events.some((p) => p.code === "WARNING_RESERVED_PROPERTY_CONFLICT")).toBe(true);
 		await api.shutdown().catch(() => {});

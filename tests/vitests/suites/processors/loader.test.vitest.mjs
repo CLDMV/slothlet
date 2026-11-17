@@ -347,12 +347,12 @@ describe("Loader processor (real slothlet integration)", () => {
 				}
 			});
 
-			// The loader reports the import of worker-root-fail.ts; the worker's own error is its originalError.
+			// The loader reports the import of worker-root-fail.ts; the worker's own error is its cause.
 			expect(caught).not.toBeNull();
 			expect(caught.code).not.toBe("INVALID_CONFIG_UNKNOWN_KEY");
 			expect(caught.code).toBe("MODULE_IMPORT_FAILED");
-			expect(caught.originalError?.code).toBe("TYPESCRIPT_TYPE_GENERATION_FAILED");
-			expect(caught.originalError.message).toMatch(/ENOTDIR/);
+			expect(caught.cause?.code).toBe("TYPESCRIPT_TYPE_GENERATION_FAILED");
+			expect(caught.cause.message).toMatch(/ENOTDIR/);
 		} finally {
 			await rm(blocker, { force: true });
 		}

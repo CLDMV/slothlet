@@ -378,7 +378,7 @@ describe.each(getMatrixConfigs())("Permissions > Read-Level Gating > $name", ({ 
 		}
 
 		expect(deniedEvents.length).toBeGreaterThan(0);
-		expect(deniedEvents[0]).toHaveProperty("target", "db.secrets.token");
+		expect(deniedEvents[0]).toHaveProperty("target", ["db", "secrets", "token"]);
 	});
 
 	it("flag on but permissions disabled: reads succeed (isEnabled short-circuit)", async () => {

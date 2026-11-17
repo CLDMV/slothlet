@@ -63,9 +63,9 @@ describe("SlothletDebug", () => {
 	});
 
 	it("log() outputs a translated message when a valid key is provided (hasTranslation path)", () => {
-		// MODULE_NOT_FOUND is a real key in en-us.json with {modulePath} and {hint} placeholders
+		// MODULE_PACKAGE_NOT_FOUND is a real key in en-us.json with a {package} placeholder
 		const debug = new SlothletDebug({ debug: { modes: true } });
-		debug.log("modes", { key: "MODULE_NOT_FOUND", modulePath: "./math.mjs", hint: "Check path" });
+		debug.log("modes", { key: "MODULE_PACKAGE_NOT_FOUND", package: "./math.mjs" });
 		expect(consoleSpy).toHaveBeenCalled();
 		const firstCall = consoleSpy.mock.calls[0][0];
 		expect(firstCall).toContain("[DEBUG:MODES]");
@@ -76,7 +76,7 @@ describe("SlothletDebug", () => {
 	it("log() outputs extra Context: line when hasTranslation is true and contextParams is non-empty", () => {
 		const debug = new SlothletDebug({ debug: { modes: true } });
 		// Provide a valid key plus an extra contextParam beyond what the template needs
-		debug.log("modes", { key: "MODULE_NOT_FOUND", modulePath: "./math.mjs", hint: "Check path", extraField: "yes" });
+		debug.log("modes", { key: "MODULE_PACKAGE_NOT_FOUND", package: "./math.mjs", extraField: "yes" });
 		const calls = consoleSpy.mock.calls;
 		// At least 2 console.log calls: one for the message, one for Context:
 		expect(calls.length).toBeGreaterThanOrEqual(2);

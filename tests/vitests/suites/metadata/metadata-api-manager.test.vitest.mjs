@@ -223,7 +223,12 @@ describe.each(getMatrixConfigs())("Metadata API Manager > Config: '$name'", ({ c
 			expect(metadata).toBeDefined();
 			expect(metadata.addedViaInternal).toBe(true);
 			expect(metadata.timestamp).toBeDefined();
-			expect(metadata.apiPath).toBe("internalAdd.config.settings.getPluginConfig");
+			expect(api.slothlet.node(api.internalAdd.config.settings.getPluginConfig).path).toEqual([
+				"internalAdd",
+				"config",
+				"settings",
+				"getPluginConfig"
+			]);
 		});
 
 		it("should reflect user metadata set via external API in internal API", async () => {
@@ -257,7 +262,7 @@ describe.each(getMatrixConfigs())("Metadata API Manager > Config: '$name'", ({ c
 
 			// Should be undefined via internal API
 			metadata = await api.metadataTestHelper.getMetadata("removableInternal.config.settings.getPluginConfig");
-			expect(metadata).toBeUndefined();
+			expect(metadata).toEqual({}); // metadata.get reads user metadata only and answers {} when there is none
 		});
 
 		it("should handle multiple add/remove cycles via internal API", async () => {
@@ -282,7 +287,7 @@ describe.each(getMatrixConfigs())("Metadata API Manager > Config: '$name'", ({ c
 
 				// Verify removed via internal API
 				const afterRemove = await api.metadataTestHelper.getMetadata("cycleInternal.config.settings.getPluginConfig");
-				expect(afterRemove).toBeUndefined();
+				expect(afterRemove).toEqual({}); // metadata.get reads user metadata only and answers {} when there is none
 			}
 		});
 
@@ -304,7 +309,7 @@ describe.each(getMatrixConfigs())("Metadata API Manager > Config: '$name'", ({ c
 
 			// Child should be gone
 			const afterRemove = await api.metadataTestHelper.getMetadata("partialInternal.config.settings.getPluginConfig");
-			expect(afterRemove).toBeUndefined();
+			expect(afterRemove).toEqual({}); // metadata.get reads user metadata only and answers {} when there is none
 		});
 	});
 });

@@ -184,8 +184,9 @@ const rows = (mount) => [
 const AUTHORED = { ok: false, code: "PERMISSION_DENIED", caller: expect.stringMatching(/^ext\.b\./) };
 
 const MODULE_NODE_ROWS = [
-	["madeOwn", "made's own body", REFUSED, { ok: true, value: "p:null" }],
-	["madeInvoke", "a package function ext.b assigned as made.invoke", REFUSED, { ok: true, value: "p:null" }],
+	// metadata.caller() answers the caller object (its path) for any caller, not only one with metadata of its own.
+	["madeOwn", "made's own body", REFUSED, { ok: true, value: "p:made.open" }],
+	["madeInvoke", "a package function ext.b assigned as made.invoke", REFUSED, { ok: true, value: "p:made.invoke" }],
 	["madeRun", "a package function ext.b passes to made.run", REFUSED, REFUSED],
 	["addedOwn", "added's own body", REFUSED, AUTHORED],
 	["addedInvoke", "a package function ext.b added as added.invoke", REFUSED, AUTHORED],

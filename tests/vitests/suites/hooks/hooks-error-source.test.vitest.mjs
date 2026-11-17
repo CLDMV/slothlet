@@ -79,7 +79,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Error Hook Source 
 				errorContext = {
 					path,
 					error,
-					source
+					origin: source
 				};
 			},
 			{ id: "error-monitor" }
@@ -140,7 +140,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Error Hook Source 
 				errorContext = {
 					path,
 					error,
-					source
+					origin: source
 				};
 			},
 			{ id: "error-monitor" }
@@ -198,7 +198,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Error Hook Source 
 				errorContext = {
 					path,
 					error,
-					source
+					origin: source
 				};
 			},
 			{ id: "error-monitor" }
@@ -258,7 +258,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Error Hook Source 
 				errorContext = {
 					path,
 					error,
-					source
+					origin: source
 				};
 			},
 			{ id: "error-monitor" }
@@ -313,7 +313,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Error Hook Source 
 				errorContexts.push({
 					path,
 					error,
-					source
+					origin: source
 				});
 			},
 			{ id: "error-collector" }
@@ -395,7 +395,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Error Hook Source 
 				errorContext = {
 					path,
 					error,
-					source
+					origin: source
 				};
 			},
 			{ id: "error-monitor" }

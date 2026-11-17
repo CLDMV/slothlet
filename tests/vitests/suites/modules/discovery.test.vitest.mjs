@@ -317,7 +317,7 @@ describe("discoverModules — manifest source override", () => {
 describe("discoverModules — manifest format 1", () => {
 	it("maps a format 1 manifest to the format 2 names and reports it once to the warn hook", async () => {
 		const warnings = [];
-		const results = await discoverModules({ scanRoot: FIX_FOLDER }, { warn: (details) => warnings.push(details) });
+		const results = await discoverModules({ root: FIX_FOLDER }, { warn: (details) => warnings.push(details) });
 		const beta = results.find((r) => r.package === "@local/driver-beta");
 		expect(beta.mount).toEqual(["drivers", "beta"]);
 		expect(path.isAbsolute(beta.base)).toBe(true);
@@ -331,12 +331,12 @@ describe("discoverModules — manifest format 1", () => {
 
 	it("does not warn for format 2 manifests", async () => {
 		const warnings = [];
-		await discoverModules({ scanRoot: FIX_FOLDER, prefix: "@local/driver-alpha" }, { warn: (details) => warnings.push(details) });
+		await discoverModules({ root: FIX_FOLDER, prefix: "@local/driver-alpha" }, { warn: (details) => warnings.push(details) });
 		expect(warnings).toEqual([]);
 	});
 
 	it("reads format 1 without a warn hook", async () => {
-		const results = await discoverModules({ scanRoot: FIX_FOLDER });
+		const results = await discoverModules({ root: FIX_FOLDER });
 		expect(results.some((r) => r.package === "@local/driver-beta")).toBe(true);
 	});
 });

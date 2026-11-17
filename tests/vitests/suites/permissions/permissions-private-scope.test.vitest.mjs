@@ -178,7 +178,7 @@ describe.each(configs)("module-private members > $mode / $runtime / $attribution
 			const denials = [];
 			api.slothlet.lifecycle.on("permission:denied", (payload) => denials.push(payload));
 			expect(await api.ext.reader.read("billing.internals.__rate")).toEqual(DENIED);
-			expect(denials.some((d) => d.target === "billing.internals.__rate")).toBe(true);
+			expect(denials.some((d) => d.target?.join(".") === "billing.internals.__rate")).toBe(true);
 		});
 
 		it("a supplied caller of another module is refused even under private.host allow", async () => {

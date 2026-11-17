@@ -318,7 +318,7 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 			})
 		).rejects.toThrow("PERMISSION_DENIED");
 
-		expect(deniedEvents.some((evt) => String(evt?.target || "").includes(".__probe__"))).toBe(false);
+		expect(deniedEvents.some((evt) => (evt?.target ?? []).join(".").includes(".__probe__"))).toBe(false);
 	});
 
 	// ── Invalid condition type ───────────────────────────────────────────────────
@@ -583,7 +583,7 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 		});
 
 		expect(events.length).toBeGreaterThan(0);
-		const evt = events.find((e) => e.caller === "callers.paymentsCaller.callCharge" && e.target === "payments.charge.process");
+		const evt = events.find((e) => e.caller === "callers.paymentsCaller.callCharge" && e.target?.join(".") === "payments.charge.process");
 		expect(evt).toBeDefined();
 		expect(evt.rule.condition != null).toBe(true);
 		expect("conditionMatched" in evt).toBe(false);
@@ -608,7 +608,7 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 		await api.callers.paymentsCaller.callCharge(100);
 
 		expect(events.length).toBeGreaterThan(0);
-		const evt = events.find((e) => e.caller === "callers.paymentsCaller.callCharge" && e.target === "payments.charge.process");
+		const evt = events.find((e) => e.caller === "callers.paymentsCaller.callCharge" && e.target?.join(".") === "payments.charge.process");
 		expect(evt).toBeDefined();
 		expect(evt.rule.condition != null).toBe(false);
 		expect("conditionMatched" in evt).toBe(false);

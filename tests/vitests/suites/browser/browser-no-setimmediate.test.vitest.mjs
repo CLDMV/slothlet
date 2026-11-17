@@ -173,7 +173,14 @@ describe("WARNING_LIFECYCLE_HANDLER_ERROR carries the handler's error (#578)", (
 	 */
 	const makeMock = () => {
 		recorded = [];
-		return { config: { debug: {} }, debug: vi.fn(), SlothletWarning: SlothletWarning.forInstance((warning) => recorded.push(warning)) };
+		return {
+			config: { debug: {} },
+			debug: vi.fn(),
+			SlothletWarning: SlothletWarning.forInstance(
+				() => false,
+				(warning) => recorded.push(warning)
+			)
+		};
 	};
 
 	it("attaches a synchronous handler's error as the cause, with path and module", async () => {
