@@ -19,10 +19,11 @@
  * ID's context and the one it ran in before goes. A reload that fails before the new context exists keeps the instance
  * in the old one until a reload succeeds or the instance shuts down. Either way, `run()` stores made before the failure
  * follow the instance, and after any number of failed reloads, a good reload and `shutdown()` the context managers hold
- * what they held before the instance was made.
+ * what they held before the instance was made. A reload asked for inside a `run()` rebuilds only the run's copy: when
+ * it fails, the run keeps the copy and context it had, as the instance does, and the instance keeps its ID and context.
  *
  * Fixture (written at run time): `ok/ok.mjs` (`ok.who()` → the run's `user`) and `bad/bad.mjs`, which throws on load
- * while `globalThis[FAIL]` is set.
+ * while `globalThis[FAIL]` is set; {@link writeCopyFixture} adds `ok.copy()`, the copy number held when the file loaded.
  */
 import path from "node:path";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
@@ -34,6 +35,38 @@ import { liveContextManager } from "#handlers/context-live";
 
 const ROOT = path.join(process.cwd(), "tmp", "reload-failed-context");
 const FAIL = Symbol.for("slothlet.test.reload-failed-context.fail");
+const COPY = Symbol.for("slothlet.test.reload-failed-context.copy");
+
+/**
+ * Write a fixture folder whose `ok/ok.mjs` answers the run's `user` (`who()`) and the copy number `globalThis[COPY]`
+ * held when the file loaded (`copy()`), and whose `bad/bad.mjs` throws on load while `globalThis[FAIL]` is set.
+ * @param {string} base - The folder.
+ * @returns {void}
+ */
+function writeCopyFixture(base) {
+	mkdirSync(path.join(base, "ok"), { recursive: true });
+	mkdirSync(path.join(base, "bad"), { recursive: true });
+	writeFileSync(
+		path.join(base, "ok", "ok.mjs"),
+		[
+			'import { context } from "@cldmv/slothlet/runtime";',
+			'const loaded = globalThis[Symbol.for("slothlet.test.reload-failed-context.copy")];',
+			"export const who = () => context.user ?? null;",
+			"export const copy = () => loaded;",
+			""
+		].join("\n")
+	);
+	writeFileSync(
+		path.join(base, "bad", "bad.mjs"),
+		[
+			'if (globalThis[Symbol.for("slothlet.test.reload-failed-context.fail")]) throw new Error("bad.mjs refuses to load");',
+			"export function ping() {",
+			'\treturn "pong";',
+			"}",
+			""
+		].join("\n")
+	);
+}
 
 beforeAll(() => {
 	rmSync(ROOT, { recursive: true, force: true });
@@ -61,6 +94,7 @@ afterAll(() => {
 
 afterEach(() => {
 	delete globalThis[FAIL];
+	delete globalThis[COPY];
 });
 
 describe.each([
@@ -141,17 +175,56 @@ describe.each([
 		expect(manager.instances.size).toBe(storesBefore + 1);
 	});
 
-	it("a reload failing before the new context exists keeps the old one until a good reload replaces it", async () => {
+	it("a reload failing before the new context exists keeps the old one until a good reload replaces it (outside any run)", async () => {
 		await make();
-		const seen = await api.slothlet.context.run({ user: "alice" }, async () => {
-			const first = api.slothlet.instance.id;
-			await failingInitialize(() => expect(api.slothlet.reload()).rejects.toThrow("initialize refused"));
-			const kept = manager.instances.has(first);
-			await api.slothlet.reload();
-			return { kept, after: api.ok.who(), gone: !manager.instances.has(first) };
-		});
+		const first = api.slothlet.instance.id;
+		await failingInitialize(() => expect(api.slothlet.reload()).rejects.toThrow("initialize refused"));
+		const kept = manager.instances.has(first);
+		await api.slothlet.reload();
+		const seen = await api.slothlet.context.run({ user: "alice" }, async () => ({
+			kept,
+			after: api.ok.who(),
+			gone: !manager.instances.has(first)
+		}));
 		expect(seen).toEqual({ kept: true, after: "alice", gone: true });
 		expect(manager.instances.size).toBe(storesBefore + 1);
+	});
+
+	it("a reload failing inside a run keeps the run's copy until a good reload replaces it, and the instance's ID and context as they are", async () => {
+		// A reload inside a run rebuilds the run's own copy: it claims no ID and sets up no context, so the failure it can
+		// meet is its own build's. Here a module of the run's copy refuses to load as it is read again.
+		const base = path.join(ROOT, `run-replace-${runtime}`, "api");
+		writeCopyFixture(base);
+		globalThis[COPY] = 1;
+		storesBefore = manager.instances.size;
+		hooksBefore = jobHookCount();
+		api = await slothlet({ base, runtime, silent: true });
+		const first = api.slothlet.instance.id;
+		const seen = await api.slothlet.context.run({ user: "alice" }, async () => {
+			globalThis[COPY] = 2;
+			globalThis[FAIL] = true;
+			await expect(api.slothlet.reload()).rejects.toThrow("bad.mjs refuses to load");
+			delete globalThis[FAIL];
+			const kept = { copy: api.ok.copy(), who: api.ok.who(), id: api.slothlet.instance.id, store: manager.instances.has(first) };
+			globalThis[COPY] = 3;
+			await api.slothlet.reload();
+			const after = { copy: api.ok.copy(), who: api.ok.who(), id: api.slothlet.instance.id, store: manager.instances.has(first) };
+			return { kept, after };
+		});
+		expect(seen).toEqual({
+			kept: { copy: 1, who: "alice", id: first, store: true },
+			after: { copy: 3, who: "alice", id: first, store: true }
+		});
+		// The instance never saw either reload: same ID, same context, the copy it had.
+		expect(api.slothlet.instance.id).toBe(first);
+		expect(manager.instances.has(first)).toBe(true);
+		expect(manager.instances.size).toBe(storesBefore + 1);
+		expect(api.ok.copy()).toBe(1);
+		expect(await api.slothlet.context.run({ user: "bob" }, async () => api.ok.who())).toBe("bob");
+		await api.slothlet.shutdown();
+		api = null;
+		expect(manager.instances.size).toBe(storesBefore);
+		expect(jobHookCount()).toBe(hooksBefore);
 	});
 
 	it("a reload failing before the new context exists, then one failing while loading: the first context goes", async () => {
@@ -173,7 +246,7 @@ describe.each([
 		expect(jobHookCount()).toBe(hooksBefore);
 	});
 
-	it("a reload failing before it switches IDs keeps the instance on its ID and context", async () => {
+	it("a reload failing before it switches IDs keeps the instance on its ID and context (outside any run)", async () => {
 		// Its own fixture folder: the entry below can never be deleted, so a reload of any instance on this folder fails
 		// as it clears the CommonJS cache, before it switches IDs.
 		const base = path.join(ROOT, `early-${runtime}`, "api");
@@ -187,13 +260,41 @@ describe.each([
 		api = await slothlet({ base, runtime, silent: true });
 		const require = createRequire(import.meta.url);
 		Object.defineProperty(require.cache, path.join(base, "stuck.cjs"), { value: {}, enumerable: true, configurable: false });
-		const seen = await api.slothlet.context.run({ user: "alice" }, async () => {
-			const first = api.slothlet.instance.id;
-			await expect(api.slothlet.reload()).rejects.toThrow(TypeError);
-			return { same: api.slothlet.instance.id === first, who: api.ok.who() };
-		});
+		const first = api.slothlet.instance.id;
+		await expect(api.slothlet.reload()).rejects.toThrow(TypeError);
+		const seen = await api.slothlet.context.run({ user: "alice" }, async () => ({
+			same: api.slothlet.instance.id === first,
+			who: api.ok.who()
+		}));
 		expect(seen).toEqual({ same: true, who: "alice" });
 		expect(manager.instances.size).toBe(storesBefore + 1);
+		await api.slothlet.shutdown();
+		api = null;
+		expect(manager.instances.size).toBe(storesBefore);
+		expect(jobHookCount()).toBe(hooksBefore);
+	});
+
+	it("a reload failing inside a run keeps the run on its copy and context, and the instance on its ID and context", async () => {
+		// A reload inside a run rebuilds the run's own copy and switches no ID; the failure it can meet is its own build's:
+		// here a module of the run's copy refuses to load as it is read again.
+		const base = path.join(ROOT, `run-early-${runtime}`, "api");
+		writeCopyFixture(base);
+		globalThis[COPY] = 1;
+		storesBefore = manager.instances.size;
+		hooksBefore = jobHookCount();
+		api = await slothlet({ base, runtime, silent: true });
+		const first = api.slothlet.instance.id;
+		const seen = await api.slothlet.context.run({ user: "alice" }, async () => {
+			globalThis[COPY] = 2;
+			globalThis[FAIL] = true;
+			await expect(api.slothlet.reload()).rejects.toThrow("bad.mjs refuses to load");
+			return { same: api.slothlet.instance.id === first, who: api.ok.who(), copy: api.ok.copy(), bad: api.bad.ping() };
+		});
+		expect(seen).toEqual({ same: true, who: "alice", copy: 1, bad: "pong" });
+		expect(api.slothlet.instance.id).toBe(first);
+		expect(manager.instances.has(first)).toBe(true);
+		expect(manager.instances.size).toBe(storesBefore + 1);
+		expect(api.ok.copy()).toBe(1);
 		await api.slothlet.shutdown();
 		api = null;
 		expect(manager.instances.size).toBe(storesBefore);
@@ -209,7 +310,6 @@ describe.each([
  * Fixture (written at run time): `calls/calls.mjs`, whose leaves answer the copy number `globalThis[COPY]` held when the
  * file loaded, and `bad/bad.mjs`, which throws on load while `globalThis[FAIL]` is set.
  */
-const COPY = Symbol.for("slothlet.test.reload-failed-context.copy");
 const HOLD = Symbol.for("slothlet.test.reload-failed-context.hold");
 const CALLS_ROOT = path.join(ROOT, "calls-api");
 
