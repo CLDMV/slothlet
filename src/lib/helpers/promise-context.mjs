@@ -40,7 +40,7 @@
  */
 
 import { pinManyForResult, pinManyToCurrentCaller } from "#helpers/caller-pinning";
-import { inheritsFrom } from "#helpers/platform";
+import { inheritsFrom, util } from "#helpers/platform";
 import { openLayer, closeLayer, holdsValue, markLayer } from "#helpers/boundary-patch-layers";
 import {
 	FunctionMethods,
@@ -49,6 +49,7 @@ import {
 	Promises,
 	PrototypeFunctions,
 	Reflect,
+	Symbol,
 	Symbols,
 	TypeError,
 	WeakSet,
@@ -100,6 +101,10 @@ const NATIVE_THEN = runtime_unwrapThen(PrototypeFunctions.Promise.then);
  * @private
  */
 function runtime_derive(then, promise, onFulfilled, onRejected, pin) {
+	if (runtime_derivesPromise(promise)) {
+		const reactions = pin ? pin([onFulfilled, onRejected]) : [onFulfilled, onRejected];
+		return FunctionMethods.call(then, promise, reactions[0], reactions[1]);
+	}
 	let resolve;
 	let reject;
 	// The reactions run as jobs, never during `then`, so the promise they settle is made once `then` has accepted the
@@ -146,6 +151,39 @@ function runtime_derive(then, promise, onFulfilled, onRejected, pin) {
 	} finally {
 		DERIVED_TARGET.prototype = null;
 	}
+}
+
+/**
+ * Node's brand check of a promise, taken at load: false for a Proxy, whose traps it never runs.
+ * @type {function(*): boolean}
+ * @private
+ */
+const IS_PROMISE = util.types.isPromise;
+
+/**
+ * The getter `Promise[Symbol.species]` had at load.
+ * @type {Function|undefined}
+ * @private
+ */
+const SPECIES_GETTER = Reflect.getOwnPropertyDescriptor(Promise, Symbol.species)?.get;
+
+/**
+ * Whether the engine's `then` on `promise` makes a promise of the `Promise` taken at load and runs no code but the
+ * engine's: a genuine promise of `Promise.prototype` with no `constructor` of its own, while `Promise.prototype.constructor`
+ * and `Promise[Symbol.species]` are as they were at load. The promise `then` makes is then handed back as it is, as the
+ * engine's `then` hands it back. Read through descriptors, so no getter or trap runs.
+ * @param {*} promise - The receiver.
+ * @returns {boolean} True when the engine's own promise can be handed back.
+ * @private
+ */
+function runtime_derivesPromise(promise) {
+	if (typeof IS_PROMISE !== "function" || !IS_PROMISE(promise)) return false;
+	if (Reflect.getPrototypeOf(promise) !== Promise.prototype) return false;
+	if (Reflect.getOwnPropertyDescriptor(promise, "constructor") !== undefined) return false;
+	const constructor = Objects.getOwnPropertyDescriptor(Promise.prototype, "constructor");
+	if (constructor === undefined || constructor.value !== Promise) return false;
+	const species = Reflect.getOwnPropertyDescriptor(Promise, Symbol.species);
+	return species !== undefined && species.get === SPECIES_GETTER;
 }
 
 /**

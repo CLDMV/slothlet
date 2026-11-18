@@ -268,11 +268,12 @@ const KEPT_PROTOTYPE_MEMBERS = {
 
 /**
  * Descriptors read off a captured constructor's `prototype` on purpose, as they are when read: the promise patch layers
- * its `then` over whatever descriptor is installed when it is turned on, and restores it.
+ * its `then` over whatever descriptor is installed when it is turned on, and restores it; settling a promise checks that
+ * `constructor` is still the one taken at load before handing back the promise the engine's `then` made.
  * @type {Record<string, Set<string>>}
  */
 const KEPT_DESCRIPTOR_READS = {
-	Promise: new Set(["then"])
+	Promise: new Set(["then", "constructor"])
 };
 
 /**
