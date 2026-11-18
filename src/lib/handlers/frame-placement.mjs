@@ -2239,7 +2239,7 @@ function resolveSupplier(record, capture = null) {
 	// in runs as the caller (see runtime_isFilelessLeafCode).
 	const fileless = runtime_isHostObjectLeaf(leaf, leafDescription.filePath);
 	if (!fileless && leafDescription.filePath)
-		listPush(chain, { ...leafDescription, currentWrapper: leaf, family: leaf.slothlet.instanceID, distance: 0, record });
+		listPush(chain, { ...leafDescription, currentWrapper: leaf, family: runtime_builtUnder(leaf), distance: 0, record });
 	let current = record.parent;
 	for (let depth = 1; current && depth < MAX_CHAIN; depth++, current = current.parent) {
 		const wrapper = current.wrapper;
@@ -2252,7 +2252,7 @@ function resolveSupplier(record, capture = null) {
 		listPush(chain, {
 			...description,
 			currentWrapper: wrapper,
-			family: wrapper.slothlet.instanceID,
+			family: runtime_builtUnder(wrapper),
 			distance: chain.length,
 			record: current
 		});
@@ -4041,15 +4041,12 @@ function createModuleLoad(slothlet, filePath, moduleID) {
 		slothlet,
 		filePath,
 		moduleID: moduleID ?? null,
-		// The context the instance runs in now: a reload moves it to a new ID.
+		// The context the instance runs in now: a reload moves it to a new ID once that ID's context is set up.
 		instanceID() {
 			const instances = slothlet?.contextManager?.instances;
 			if (!instances?.has) return null;
 			const current = slothlet.instanceID;
-			if (current && MapMethods.has(instances, current)) return current;
-			// While a reload has moved the instance to an ID whose context is not set up yet, the one it is reloading from.
-			const from = slothlet.reloadingFrom;
-			return from && MapMethods.has(instances, from) ? from : null;
+			return current && MapMethods.has(instances, current) ? current : null;
 		},
 		wrapper() {
 			if (typeof filePath !== "string" || !runtime_instanceRuns(slothlet)) return null;
@@ -4145,6 +4142,18 @@ function loadOnStack(loads) {
 function runtime_isGone(wrapper) {
 	const internal = wrapper.____slothletInternal;
 	return Boolean(internal.invalid || internal.removed === true || internal.filePath === null);
+}
+
+/**
+ * The instance ID a node was built under: the tag the code of its file carries in a stack frame, and the ID its
+ * instance's import graph for that copy is kept under. A full reload gives the instance a new ID; the code of the copy
+ * it replaced (a call still in flight, a timer it set) still carries the ID the instance had then.
+ * @param {object} wrapper - A genuine wrapper.
+ * @returns {string|null} The ID.
+ * @private
+ */
+function runtime_builtUnder(wrapper) {
+	return wrapper.____slothletInternal.builtUnder ?? wrapper.slothlet.instanceID;
 }
 
 /**
@@ -4245,8 +4254,8 @@ export function attributesResults(wrapper) {
 const LIVE_INSTANCES = new Map();
 
 /**
- * Whether an instance still has a context its code can run in: it is not shut down. While a reload has moved it to an
- * ID whose context is not set up yet, the one it is reloading from counts.
+ * Whether an instance still has a context its code can run in: it is not shut down. A reload switches the instance to
+ * its new ID only once that ID's context is set up.
  * @param {object} slothlet - The instance.
  * @returns {boolean} True while it runs.
  * @private
@@ -4255,11 +4264,7 @@ function runtime_instanceRuns(slothlet) {
 	const instances = slothlet?.contextManager?.instances;
 	if (!instances?.has) return false;
 	const current = slothlet.instanceID;
-	if (current && MapMethods.has(instances, current)) return true;
-	// While a reload has moved the instance to an ID whose context is not set up yet, the one it is reloading from.
-	const from = slothlet.reloadingFrom;
-	if (from && MapMethods.has(instances, from)) return true;
-	return false;
+	return Boolean(current && MapMethods.has(instances, current));
 }
 
 /**
@@ -5309,7 +5314,8 @@ function runtime_leavesAtFile(slothlet, path, instance, mount) {
 			continue;
 		}
 		if (runtime_isGone(wrapper) && !keepGone) continue;
-		if (instance && wrapper.slothlet.instanceID !== instance) continue;
+		// The tag is the ID the node was built under: code of a copy a reload replaced carries the ID the instance had then.
+		if (instance && runtime_builtUnder(wrapper) !== instance) continue;
 		if (mount && wrapper.____slothletInternal.moduleID !== mount) continue;
 		// Code carrying the instance's tag but no mount's runs in the copy a raw `import` of the leaf's file loads (#691):
 		// a module of its own, which slothlet loaded for no leaf, as frame placement reads it inside a call.
@@ -5393,7 +5399,7 @@ function runtime_foreignCodeRunning(record, capture = null) {
 	const entryOf = (wrapper, call) => ({
 		...describeCall(wrapper),
 		currentWrapper: wrapper,
-		family: wrapper.slothlet.instanceID,
+		family: runtime_builtUnder(wrapper),
 		distance: 0,
 		record: call
 	});
@@ -5506,7 +5512,7 @@ function runtime_unaccountedInside(record) {
 	const leaf = record.wrapper;
 	const description = describeCall(leaf);
 	if (!description.filePath) return null;
-	const { place } = createFramePlacer([{ ...description, currentWrapper: leaf, family: leaf.slothlet.instanceID, distance: 0, record }]);
+	const { place } = createFramePlacer([{ ...description, currentWrapper: leaf, family: runtime_builtUnder(leaf), distance: 0, record }]);
 	// The frames that decide sit near the top of the stack: the capture is widened only when it was cut short first.
 	const decide = (frames) => {
 		for (const frame of framesOf(frames)) {

@@ -6918,20 +6918,15 @@ function runtime_runAsMakerRaw(owner, fn, thisArg = undefined, args = [], attrib
 }
 
 /**
- * The context a module's code runs in as its maker: the instance's, or — while a reload has moved the instance to an
- * ID whose context is not set up yet — the one it is reloading from, which is the context its code still runs in (#597).
+ * The context a module's code runs in as its maker: the instance's (#597). A reload switches the instance to its new
+ * ID only once that ID's context is set up, so the instance's ID always names a context while it runs.
  * @param {object} slothlet - The instance.
  * @returns {string|null} The context's ID, or null when the instance has none.
  * @private
  */
 function runtime_makerInstanceID(slothlet) {
-	const instances = slothlet.contextManager.instances;
 	const current = slothlet.instanceID;
-	if (current && MapMethods.has(instances, current)) return current;
-	// While a reload has moved the instance to an ID whose context is not set up yet, the one it is reloading from.
-	const from = slothlet.reloadingFrom;
-	if (from && MapMethods.has(instances, from)) return from;
-	return null;
+	return current && MapMethods.has(slothlet.contextManager.instances, current) ? current : null;
 }
 
 /**
@@ -15316,6 +15311,9 @@ class UnifiedWrapper extends ComponentBase {
 		// Restart epoch (#504): the tree this wrapper belongs to. Once a restart() swaps in a newer tree,
 		// the proxy traps forward to the node at this wrapper's path in the live tree instead.
 		internal.epoch = slothlet._buildEpoch ?? 0;
+		// The instance ID the node was built under: the tag its file's code carries in a stack frame. A full reload gives
+		// the instance a new ID, and code of the copy it replaced still carries this one.
+		internal.builtUnder = slothlet.instanceID ?? null;
 		internal.state = {
 			materialized: initialImpl !== null,
 			inFlight: false,

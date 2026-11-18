@@ -383,25 +383,13 @@ class Slothlet {
 	#clock = DEFAULT_CLOCK;
 
 	/**
-	 * The ID whose context the instance's code still runs in while a reload has moved it to an ID whose context is not
-	 * set up yet; null once a reload has finished. A reload that failed after switching IDs leaves it set, as the
-	 * instance's code keeps running in that context.
-	 * @type {string|null}
+	 * The fresh scope a normal reload has claimed and switches the instance to once the new ID's context is set up (see
+	 * {@link Slothlet#load}); null when no reload is under way. Until then the instance stays on its ID and context, so a
+	 * reload that fails before that context exists leaves it as it was.
+	 * @type {{instanceID: string, require: Function, release: Function}|null}
 	 * @private
 	 */
-	#reloadingFrom = null;
-
-	/**
-	 * The ID whose context the instance's code still runs in while a reload is moving it to a new ID (see
-	 * {@link Slothlet#reload}); null when no reload is under way.
-	 * @returns {string|null} The ID, or null.
-	 * @internal
-	 * @example
-	 * slothlet.reloadingFrom; // null
-	 */
-	get reloadingFrom() {
-		return this.#reloadingFrom;
-	}
+	#pendingScope = null;
 
 	/**
 	 * The context a reload carries into the instance it rebuilds, so values `context.set()` made survive it.
@@ -1328,7 +1316,11 @@ class Slothlet {
 
 		// Use preserved instance ID (from reload) or generate new one. The ID is claimed for this instance's files
 		// before any of them load.
-		if (preservedInstanceID) {
+		// A normal reload's fresh ID is taken only once its context is set up, below.
+		const pendingScope = this.#pendingScope?.instanceID === preservedInstanceID ? this.#pendingScope : null;
+		if (pendingScope) {
+			// Taken below.
+		} else if (preservedInstanceID) {
 			this.instanceID = preservedInstanceID;
 			this.#claimImportScope();
 		} else {
@@ -1364,7 +1356,12 @@ class Slothlet {
 
 		// Initialize context (or reuse existing if preservedInstanceID provided)
 		let store;
-		if (preservedInstanceID && MapMethods.has(this.contextManager.instances, preservedInstanceID)) {
+		if (pendingScope) {
+			// A normal reload: the new ID's context first, then the switch to it, so a reload that cannot set the context up
+			// leaves the instance on the ID and context it has.
+			store = this.contextManager.initialize(pendingScope.instanceID, this.config, this.#clock);
+			await this.#switchToPendingScope(pendingScope);
+		} else if (preservedInstanceID && MapMethods.has(this.contextManager.instances, preservedInstanceID)) {
 			// Reload: DONT reuse store, delete old and create fresh. The instance keeps its ID, so its run() / scope()
 			// stores stay where they are.
 			this.contextManager.cleanup(preservedInstanceID, { keepFlows: true });
@@ -1372,6 +1369,13 @@ class Slothlet {
 		} else {
 			// Fresh load: initialize new store
 			store = this.contextManager.initialize(this.instanceID, this.config, this.#clock);
+		}
+		// A reload: until the new copy is built, the context answers calls with the api the instance has (the root proxy,
+		// which reads the tree in place), not an empty one.
+		if (this.boundApi) {
+			store.self = this.boundApi;
+			store.context = this.context || {};
+			store.slothlet = this;
 		}
 		// Mark this base store as the trusted root immediately, before any internal tree walk
 		// (ownership registration, materialization) reads through the permission read-gate. A
@@ -1463,6 +1467,11 @@ class Slothlet {
 
 		// Generate base moduleID for ownership tracking
 		const baseModuleId = `base_${StringMethods.substring(this.helpers.utilities.generateId(), 0, 8)}`;
+
+		// A reload: the copy the instance has keeps answering calls while the new one builds, and its code is the same base
+		// module's. The fresh ownership records the base module's mount now, so that code is not taken for a removed
+		// module's until the build records it again.
+		if (preservedInstanceID && this.boundApi) this.handlers.ownership?.setModuleEndpoint(baseModuleId, ".");
 
 		// Build raw API (with context manager and instance ID for unified wrapper)
 		// UnifiedWrapper handles context binding internally - no separate wrapper needed!
@@ -1801,42 +1810,131 @@ class Slothlet {
 		// Every reload's ID is the first ID plus one fresh `_reload_<time>_<random>` part, never the previous ID plus
 		// another: an ID that grew on each reload would soon be too long for the folders named after it.
 		const nextScope = keepInstanceID ? null : this.#claimFreshScope(`${splitText(`${oldInstanceID}`, "_reload_")[0]}_reload`);
-		// The context the instance's code runs in until the new one is set up: the current ID's, or, after a reload that
-		// failed before it set up the context of the ID it had switched to, the one that reload came from.
-		if (nextScope !== null && this.#reloadingFrom === null) this.#reloadingFrom = oldInstanceID;
+		// What the instance answers calls with now, put back if the reload fails.
+		const kept = this.#keepForFailedReload();
+		this.#pendingScope = nextScope;
 		try {
-			const result = await this.#reloadOnto(nextScope, oldInstanceID);
-			if (nextScope !== null) this.#reloadingFrom = null;
-			return result;
+			return await this.#reloadOnto(nextScope, oldInstanceID);
 		} catch (error) {
+			this.#pendingScope = null;
+			this.#restoreFailedReload(kept);
 			// The fresh scope was claimed but never taken: let the ID go again.
 			if (nextScope !== null && this.#importScope !== nextScope) nextScope.release();
 			if (nextScope !== null) this.#settleFailedReload(oldInstanceID);
 			throw error;
+		} finally {
+			this.#pendingScope = null;
 		}
 	}
 
 	/**
-	 * After a normal reload failed: once the context of the ID the instance is on now is set up (load() sets it up before
-	 * any module loads), the instance's code runs there, so the contexts it ran in before go and the `run()` / `scope()`
-	 * stores made in them follow it. A reload that failed before that context was set up leaves the instance's code
-	 * running in the one it came from ({@link Slothlet#reloadingFrom}) until a reload succeeds or the instance shuts down.
+	 * Switch the instance to the fresh scope a normal reload claimed, once the new ID's context is set up: the instance's
+	 * code runs there from now on, and what was kept under the ID it leaves goes.
+	 * @param {{instanceID: string, require: Function, release: Function}} scope - The claimed scope.
+	 * @returns {Promise<void>}
+	 * @private
+	 */
+	async #switchToPendingScope(scope) {
+		const oldInstanceID = this.instanceID;
+		this.#pendingScope = null;
+		// The previous instanceID's private CommonJS helper copies (#518, #534) can no longer be served.
+		forgetInstanceScripts(oldInstanceID);
+		this.#adoptImportScope(scope);
+		// The global patches are held under the new ID once load() goes on; the old ID's share goes now, or the patches
+		// could never be released. Nothing is unpatched here: the new ID takes the share straight back.
+		SetMethods.delete(boundaryPatchHolders, oldInstanceID);
+		SetMethods.delete(promisePatchHolders, oldInstanceID);
+		SetMethods.delete(asyncCallbackHolders, oldInstanceID);
+
+		// The TS transform cache dirs from the previous instanceID are stale: the startup sweep only removes dirs whose
+		// owning PID is dead (same-PID dirs from prior rotations are kept), so without this they'd accumulate one dir per
+		// reload until shutdown — an unbounded leak in long-lived dev processes that reload frequently.
+		if (isNode && this._typescriptCacheDirs?.size) {
+			await promiseAllSettled(mapList(setToArray(this._typescriptCacheDirs), (dir) => fsp.rm(dir, { recursive: true, force: true })));
+			SetMethods.clear(this._typescriptCacheDirs);
+		}
+	}
+
+	/**
+	 * What the instance answers calls with, taken before a reload: load() replaces the components, the config and the
+	 * api tree before it knows whether the new copy loads.
+	 * @returns {object} The kept state, for {@link Slothlet#restoreFailedReload}.
+	 * @private
+	 */
+	#keepForFailedReload() {
+		const components = {};
+		for (let ofIndex = 0, ofList = this.componentCategories; ofIndex < ofList.length; ofIndex++) {
+			const category = ofList[ofIndex];
+			components[category] = { ...this[category] };
+		}
+		return {
+			components,
+			config: this.config,
+			api: this.api,
+			debugLogger: this.debugLogger,
+			envTarget: this.envTarget,
+			reference: this.reference,
+			context: this.context,
+			isLoaded: this.isLoaded
+		};
+	}
+
+	/**
+	 * Put back what the instance answered calls with before a reload that failed: a failed reload leaves the instance as it
+	 * was, answering from the copy it had (docs/RELOAD.md), on whichever ID it is on now.
+	 * @param {object} kept - What {@link Slothlet#keepForFailedReload} took.
+	 * @returns {void}
+	 * @private
+	 */
+	#restoreFailedReload(kept) {
+		for (let ofIndex = 0, ofList = this.componentCategories; ofIndex < ofList.length; ofIndex++) {
+			const category = ofList[ofIndex];
+			const now = this[category];
+			for (let keyIndex = 0, keys = Objects.keys(now); keyIndex < keys.length; keyIndex++) {
+				if (!Objects.hasOwn(kept.components[category], keys[keyIndex])) delete now[keys[keyIndex]];
+			}
+			Objects.assign(now, kept.components[category]);
+		}
+		this.config = kept.config;
+		this.api = kept.api;
+		this.debugLogger = kept.debugLogger;
+		this.envTarget = kept.envTarget;
+		this.reference = kept.reference;
+		this.context = kept.context;
+		this.isLoaded = kept.isLoaded;
+		this.#carriedContext = null;
+		// The context the instance's code runs in now answers with that copy: a reload that switched IDs set the new ID's
+		// context up for the copy it did not finish. A reload that keeps the ID (`instance: "keep"`) drops the ID's context
+		// before setting it up again: when that failed, it is set up once more here, as the trusted root load() makes.
+		let store = MapMethods.get(this.contextManager.instances, this.instanceID);
+		if (store === undefined) {
+			store = this.contextManager.initialize(this.instanceID, this.config, this.#clock);
+			Objects.defineProperty(store, trustedRootOwn.TRUSTED_ROOT, { __proto__: null, value: true, configurable: true });
+		}
+		store.self = this.boundApi;
+		store.context = this.context || {};
+		store.slothlet = this;
+	}
+
+	/**
+	 * After a normal reload failed: a reload that switched to its new ID (load() switches once that ID's context is set up,
+	 * before any module loads) leaves the instance's code running there, so the context it ran in before goes and the
+	 * `run()` / `scope()` stores made in it follow it. A reload that failed before the switch left the instance on its ID
+	 * and context, and there is nothing to do.
 	 * @param {string} oldInstanceID - The instance's ID when the reload started.
 	 * @returns {void}
 	 * @private
 	 */
 	#settleFailedReload(oldInstanceID) {
-		const instances = this.contextManager.instances;
 		const current = this.instanceID;
-		if (!MapMethods.has(instances, current)) return;
-		const from = this.#reloadingFrom;
+		if (current === oldInstanceID) return;
+		const instances = this.contextManager.instances;
 		for (const ofEntry of mapEntries(instances)) {
 			const store = ofEntry[1];
-			if (store.parentInstanceID === oldInstanceID || store.parentInstanceID === from) store.parentInstanceID = current;
+			if (store.parentInstanceID === oldInstanceID) store.parentInstanceID = current;
 		}
-		if (oldInstanceID !== current && MapMethods.has(instances, oldInstanceID)) this.contextManager.cleanup(oldInstanceID);
-		if (from !== oldInstanceID && from !== current && MapMethods.has(instances, from)) this.contextManager.cleanup(from);
-		this.#reloadingFrom = null;
+		reparentFlowStores(this, [oldInstanceID], current);
+		if (MapMethods.has(instances, oldInstanceID)) this.contextManager.cleanup(oldInstanceID);
 	}
 
 	/**
@@ -1867,30 +1965,12 @@ class Slothlet {
 		// 2. Clear CommonJS module caches to force re-import
 		await this._clearModuleCaches();
 
-		// 3. Determine the instanceID to pass to load().
-		//    Normal reload: create a fresh ID (busts internal caches; old ID cleaned up below).
+		// 3. The instanceID load() runs under.
+		//    Normal reload: the fresh ID claimed in reload() (busts internal caches; old ID cleaned up below). load() sets
+		//    its context up and only then switches the instance to it (#pendingScope).
 		//    instance "keep": reuse the current ID so instances.has() is TRUE inside load(),
 		//    which triggers the cleanup-then-reinitialise branch of the context store.
-		if (!keepInstanceID) {
-			// The previous instanceID's private CommonJS helper copies (#518, #534) can no longer be served.
-			forgetInstanceScripts(oldInstanceID);
-			this.#adoptImportScope(nextScope);
-			// The global patches are held under the new ID once load() runs; the old ID's share goes now, or the
-			// patches could never be released. Nothing is unpatched here: the new ID takes the share straight back.
-			SetMethods.delete(boundaryPatchHolders, oldInstanceID);
-			SetMethods.delete(promisePatchHolders, oldInstanceID);
-			SetMethods.delete(asyncCallbackHolders, oldInstanceID);
-
-			// The TS transform cache dirs from the previous instanceID are stale: the
-			// startup sweep only removes dirs whose owning PID is dead (same-PID dirs
-			// from prior rotations are kept), so without this they'd accumulate one
-			// dir per reload until shutdown — an unbounded leak in long-lived dev
-			// processes that reload frequently.
-			if (isNode && this._typescriptCacheDirs?.size) {
-				await promiseAllSettled(mapList(setToArray(this._typescriptCacheDirs), (dir) => fsp.rm(dir, { recursive: true, force: true })));
-				SetMethods.clear(this._typescriptCacheDirs);
-			}
-		}
+		const loadInstanceID = keepInstanceID ? this.instanceID : nextScope.instanceID;
 
 		// 3b. Save user-managed metadata state before load() destroys the current
 		//     Metadata instance. This preserves metadata.global() and metadata.set() values across reload.
@@ -1915,7 +1995,7 @@ class Slothlet {
 
 		// 4. Do a FRESH load() with the new permanent instanceID
 		this.#carriedContext = this.context;
-		await this.load(this.config, this.instanceID);
+		await this.load(this.config, loadInstanceID);
 
 		// 4b. Restore saved metadata state into the new Metadata instance, BEFORE
 		//     replay so that registerUserMetadata() from replay merges over it correctly.
@@ -1940,16 +2020,15 @@ class Slothlet {
 		// 5. Reparent any child __run_ context stores that were created before reload.
 		//    Their parentInstanceID points to the old base instanceID; updating it lets
 		//    context.get() still find them for callers that call reload() inside a .run() scope.
-		const reloadedFrom = keepInstanceID ? null : this.#reloadingFrom;
 		for (const ofEntry of mapEntries(this.contextManager.instances)) {
 			const store = ofEntry[1];
-			if (store.parentInstanceID === oldInstanceID || (reloadedFrom !== null && store.parentInstanceID === reloadedFrom)) {
+			if (store.parentInstanceID === oldInstanceID) {
 				store.parentInstanceID = this.instanceID;
 			}
 		}
 		// The stores of runs that have returned are no longer among the instances, but work they left behind (a timer, a
 		// listener, a promise chain) still holds them and runs in them: they move to the new ID too.
-		reparentFlowStores(this, [oldInstanceID, reloadedFrom], this.instanceID);
+		reparentFlowStores(this, [oldInstanceID], this.instanceID);
 
 		// 6. Clean up the old base context store now that the new one is active.
 		//    Guard with .has() because shutdown() may have already removed the store.
@@ -1959,16 +2038,6 @@ class Slothlet {
 			(this.contextManager.instances == null ? undefined : MapMethods.has(this.contextManager.instances, oldInstanceID))
 		) {
 			this.contextManager.cleanup(oldInstanceID);
-		}
-		// The context a failed reload left the instance running in goes too, now that a reload has replaced it.
-		if (
-			reloadedFrom !== null &&
-			reloadedFrom !== oldInstanceID &&
-			reloadedFrom !== this.instanceID &&
-			this.contextManager.instances != null &&
-			MapMethods.has(this.contextManager.instances, reloadedFrom)
-		) {
-			this.contextManager.cleanup(reloadedFrom);
 		}
 
 		// 6. Replay operation history in chronological order
@@ -2453,14 +2522,9 @@ class Slothlet {
 			cleanupEventEmitterResources();
 		}
 
-		// Cleanup context: the instance's own, and the one a reload that failed before setting up the new ID's context left
-		// its code running in (the current ID has none then).
+		// Cleanup context
 		if (this.instanceID && this.contextManager) {
-			const instances = this.contextManager.instances;
-			if (MapMethods.has(instances, this.instanceID)) this.contextManager.cleanup(this.instanceID);
-			const from = this.#reloadingFrom;
-			if (from !== null && from !== this.instanceID && MapMethods.has(instances, from)) this.contextManager.cleanup(from);
-			this.#reloadingFrom = null;
+			if (MapMethods.has(this.contextManager.instances, this.instanceID)) this.contextManager.cleanup(this.instanceID);
 			forgetFlowStores(this);
 		}
 

@@ -556,6 +556,22 @@ function isFlow(store) {
 }
 
 /**
+ * The ID of the instance a store belongs to, as the instance is now. A store names its instance by ID
+ * (`parentInstanceID` for a `run()` / `scope()` store, `instanceID` for the instance's own), and a call's store is a copy
+ * of the store it was made in. A full reload gives the instance a new ID, so a store made before it (a call in flight, a
+ * finished run's late work, a copy of either) still names the old one: it belongs to the instance it was made for, which
+ * it holds as `slothlet`, under the ID that instance has now.
+ * @param {object} store - The store.
+ * @returns {string|null|undefined} The instance's ID.
+ * @private
+ */
+function storeInstanceID(store) {
+	const owner = store.slothlet;
+	if (owner !== null && typeof owner === "object" && typeof owner.instanceID === "string") return owner.instanceID;
+	return store.parentInstanceID ?? store.instanceID;
+}
+
+/**
  * AsyncLocalStorage-based context manager for async runtime
  * Uses ALS for full context isolation across async operations
  * @public
@@ -685,7 +701,7 @@ export class AsyncContextManager {
 		if (this.#jobHook !== null && this.#ownContinuation(resource, store) && this.#begunByNode(resource)) return store;
 		const told = this.#told;
 		if (!scoped && told !== null && told.store === store && this.#witness.getStore() === told.mark) return store;
-		const instanceID = store.parentInstanceID ?? store.instanceID;
+		const instanceID = storeInstanceID(store);
 		this.#telling = true;
 		let answer;
 		try {
@@ -852,8 +868,8 @@ export class AsyncContextManager {
 	 */
 	#inOutsideJob(view, store) {
 		if (view[FLOW_OF] === store) return this.#stillOutside(view, store);
-		const instanceID = store.parentInstanceID ?? store.instanceID;
-		const sameInstance = (view.parentInstanceID ?? view.instanceID) === instanceID;
+		const instanceID = storeInstanceID(store);
+		const sameInstance = storeInstanceID(view) === instanceID;
 		const other = this.outsideView(store, instanceID, sameInstance ? view.currentWrapper : null);
 		return other === undefined ? store : this.#stillOutside(other, store);
 	}
@@ -954,7 +970,7 @@ export class AsyncContextManager {
 			}
 			if (this.#telling) return;
 			if (store === undefined || store[FLOW_OF] !== undefined || !isFlow(store)) return;
-			if (!MapMethods.has(this.instances, store.parentInstanceID ?? store.instanceID)) return;
+			if (!MapMethods.has(this.instances, storeInstanceID(store))) return;
 			// Recorded for the resource's own callback: the store it is made in, or a scope anyone can enter.
 			if (type === "PROMISE") new PromiseFlow(resource, store);
 			else {
@@ -1116,7 +1132,7 @@ export class AsyncContextManager {
 	 * @private
 	 */
 	#stillOutside(view, flow) {
-		const instanceID = flow.parentInstanceID ?? flow.instanceID;
+		const instanceID = storeInstanceID(flow);
 		this.#telling = true;
 		let answer;
 		try {
@@ -1318,7 +1334,7 @@ export class AsyncContextManager {
 		let baseStore;
 
 		// CHILD INSTANCE APPROACH: Check if active store is this instance OR a child of this instance
-		const isActiveOurInstance = activeStore && (activeStore.instanceID === instanceID || activeStore.parentInstanceID === instanceID);
+		const isActiveOurInstance = activeStore && storeInstanceID(activeStore) === instanceID;
 
 		if (isActiveOurInstance) {
 			// Already in context for this instance (base or child) - use active store to preserve modifications
@@ -1540,10 +1556,7 @@ export class AsyncContextManager {
 	 */
 	runAsIdentity(instanceID, identity, fn) {
 		const active = this.activeStore();
-		const base =
-			active && (active.instanceID === instanceID || active.parentInstanceID === instanceID)
-				? active
-				: MapMethods.get(this.instances, instanceID);
+		const base = active && storeInstanceID(active) === instanceID ? active : MapMethods.get(this.instances, instanceID);
 		if (!base) {
 			throw new SlothletError("CONTEXT_NOT_FOUND", { instance: instanceID, instances: mapKeysToArray(this.instances) });
 		}
@@ -1575,7 +1588,7 @@ export class AsyncContextManager {
 	 */
 	runUnattributed(instanceID, fn) {
 		const active = this.activeStore();
-		if (!active || (active.instanceID !== instanceID && active.parentInstanceID !== instanceID)) return fn();
+		if (!active || storeInstanceID(active) !== instanceID) return fn();
 		if (!active.currentWrapper && !active.record) return fn();
 		const store = {
 			...active,
@@ -1633,7 +1646,7 @@ export class AsyncContextManager {
 	 */
 	isAmbient(instanceID) {
 		const store = this.als?.getStore();
-		return !store || (store.instanceID !== instanceID && store.parentInstanceID !== instanceID);
+		return !store || storeInstanceID(store) !== instanceID;
 	}
 
 	/**
@@ -1647,7 +1660,7 @@ export class AsyncContextManager {
 	 */
 	runningInstanceID() {
 		const store = this.als?.getStore();
-		return store ? (store.parentInstanceID ?? store.instanceID ?? null) : null;
+		return store ? (storeInstanceID(store) ?? null) : null;
 	}
 
 	/**
@@ -1698,7 +1711,7 @@ export class AsyncContextManager {
 		if (!this.als) return undefined;
 		const store = this.activeStore();
 		if (instanceID === undefined) return store;
-		if (store && (store.instanceID === instanceID || store.parentInstanceID === instanceID)) {
+		if (store && storeInstanceID(store) === instanceID) {
 			return store;
 		}
 		return MapMethods.get(this.instances, instanceID);
@@ -1888,7 +1901,7 @@ export class AsyncContextManager {
 		const store = MapMethods.get(this.instances, instanceID) ?? null;
 		const active = this.als.getStore();
 		// A `run()` / `scope()` store is a child of the instance's: its code, and a call made inside it, is the instance's.
-		const running = active !== undefined && (active.instanceID === instanceID || active.parentInstanceID === instanceID);
+		const running = active !== undefined && storeInstanceID(active) === instanceID;
 		return {
 			type: "async",
 			running,

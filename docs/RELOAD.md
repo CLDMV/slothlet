@@ -16,6 +16,7 @@ Slothlet supports three runtime mutation operations - `add`, `remove`, and `relo
 - [ESM / CJS Cache Busting](#esm--cjs-cache-busting)
 - [Operation History and Replay](#operation-history-and-replay)
 - [Module Ownership (moduleID)](#module-ownership-moduleid)
+- [Calls During a Full Reload, and After One Fails](#calls-during-a-full-reload-and-after-one-fails)
 - [api.slothlet.restart()](#apislothletrestart)
 - [Lifecycle Events](#lifecycle-events)
 
@@ -418,6 +419,14 @@ api.slothlet.diag.owner.get("plugins.auth");
 ```
 
 See [CONFIGURATION.md](CONFIGURATION.md#the-apislothletdiag-namespace) for the full `diag.owner` API.
+
+---
+
+## Calls During a Full Reload, and After One Fails
+
+A full reload (`api.slothlet.reload()`) sets up the context of its new instance ID first and only then moves the instance to that ID, before any module of the new copy loads. Until the new copy is built, calls answer from the copy the instance has: a call made while the reload is still loading modules, a call already in flight when it started, and work a module left behind (a timer, a listener, a promise chain) all keep running, with the `context` of the `run()` / `scope()` they were made in. That code is still its module's: `metadata.self()` names its leaf, and the permission system checks it as that leaf, on both runtimes. A call through `self` from the replaced copy after the reload reaches the api as it is now.
+
+A full reload that fails leaves the instance as it was. Whether it fails before the new ID's context exists (the ID cannot be claimed, the context cannot be set up) or while the new copy loads (a module throws), every call keeps answering from the copy the instance had, with the hooks, metadata, permission rules and `add()` / `remove()` history it had, and the error propagates from `reload()`. A later reload that succeeds switches to the new copy, and `shutdown()` cleans up either way.
 
 ---
 
