@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T15:07:35-08:00 (1794956855)
+ *	@Last modified time: 2026-11-17T17:16:26-08:00 (1794964586)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -1413,7 +1413,7 @@ function runtime_candidateIndex(candidates) {
 		if (entry.realComparablePath != null) file(byLocation, entry.realComparablePath);
 		if (entry.locations != null) SetMethods.forEach(entry.locations, (location) => file(byLocation, location));
 		file(byModule, entry.moduleID);
-		if (entry.family) SetMethods.add(families, entry.family);
+		if (frameFamilyOf(entry)) SetMethods.add(families, frameFamilyOf(entry));
 		// The calls of one function share its wrapper: its instance's cache and loader are read once.
 		const wrapper = entry.currentWrapper;
 		if (SetMethods.has(wrappers, wrapper)) continue;
@@ -1479,7 +1479,7 @@ function runtime_candidateIndex(candidates) {
 		found = keepAll(
 			entriesAt(location),
 			(entry) =>
-				(!frameInstance || !entry.family || entry.family === frameInstance) &&
+				(!frameInstance || !frameFamilyOf(entry) || frameFamilyOf(entry) === frameInstance) &&
 				(frameModule ? entry.moduleID === frameModule : !frameInstance || !entry.moduleID)
 		);
 		MapMethods.set(inFile, key, found);
@@ -1595,7 +1595,7 @@ function createFramePlacer(candidates) {
 				owners = keepAll(
 					entriesAt(loadedFor.path),
 					(entry) =>
-						SetMethods.has(frameFamilies, entry.family) &&
+						SetMethods.has(frameFamilies, frameFamilyOf(entry)) &&
 						// A leaf's own copy names its mount: only that mount's calls can be running it.
 						(!frameModule || entry.moduleID === frameModule) &&
 						(!loadedFor.mount || entry.moduleID === loadedFor.mount)
@@ -1608,7 +1608,7 @@ function createFramePlacer(candidates) {
 					for (const importer of setValues(importersOf(family, frame.path))) {
 						const list = keepAll(
 							entriesAt(importer),
-							(entry) => entry.family === family && (!frameModule || entry.moduleID === frameModule)
+							(entry) => frameFamilyOf(entry) === family && (!frameModule || entry.moduleID === frameModule)
 						);
 						if (list.length) lists[lists.length] = list;
 					}
@@ -1628,7 +1628,7 @@ function createFramePlacer(candidates) {
 					const importer = importers[i];
 					const list = keepAll(
 						entriesAt(importer.location),
-						(entry) => importer.family === entry.family && (!importer.mount || importer.mount === entry.moduleID)
+						(entry) => importer.family === frameFamilyOf(entry) && (!importer.mount || importer.mount === entry.moduleID)
 					);
 					if (list.length) lists[lists.length] = list;
 				}
@@ -4142,6 +4142,18 @@ function loadOnStack(loads) {
 function runtime_isGone(wrapper) {
 	const internal = wrapper.____slothletInternal;
 	return Boolean(internal.invalid || internal.removed === true || internal.filePath === null);
+}
+
+/**
+ * The instance ID the frames of a call's code carry, which a frame's tag is matched against: the ID the called node was
+ * built under (see runtime_builtUnder) when the call says so, else the instance the call belongs to. They differ for a
+ * call of a node a full reload is replacing, made while the reload builds its new copy or still in flight after it.
+ * @param {{family?: string|null, builtUnder?: string|null}} entry - A call.
+ * @returns {string|null|undefined} The ID.
+ * @private
+ */
+function frameFamilyOf(entry) {
+	return entry.builtUnder ?? entry.family;
 }
 
 /**

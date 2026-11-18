@@ -21,6 +21,8 @@
 		"HINT_INVALID_CONFIG_MODE_INVALID": "Der Modus muss entweder 'eager' oder 'lazy' sein.",
 		"INSTANCE_NOT_LOADED": "Die Operation '{operation}' kann nicht ausgeführt werden - Instanz nicht geladen. Rufen Sie zuerst load() auf.",
 		"HINT_INSTANCE_NOT_LOADED": "Die Instanz muss geladen sein, bevor diese Operation ausgeführt werden kann. Rufen Sie zuerst load() auf.",
+		"RELOAD_IN_PROGRESS": "Die Operation '{operation}' kann nicht ausgeführt werden - ein vollständiger Reload dieser Instanz wird noch aufgebaut, und dieser Aufruf ist Teil davon.",
+		"HINT_RELOAD_IN_PROGRESS": "Ein Reload kann nicht innerhalb des Aufbaus eines anderen Reloads starten (eine Startup-Routine oder der Code eines Moduls während des Ladens). Rufen Sie reload() erneut auf, sobald der laufende Reload abgeschlossen ist.",
 		"LAZY_MATERIALIZATION_FAILED": "Materialisierung des Lazy-Proxys für '{path}' fehlgeschlagen. Überprüfen Sie, ob das Modul korrekt geladen wird.",
 		"API_PATH_NOT_CALLABLE": "Der Aufruf von '{path}' ist nicht möglich - keine Funktion (erhalten: {received}). Überprüfen Sie, ob das Modul eine aufrufbare Funktion exportiert.",
 		"API_PATH_INVALID": "Ungültiger API-Pfad '{path}': {reason}. API-Pfade müssen nicht leere, korrekt formatierte Dot-Notation-Strings sein, die nicht mit reservierten Namen im Konflikt stehen. Segment bei Index {index}: '{segment}'.",

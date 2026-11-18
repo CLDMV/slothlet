@@ -21,6 +21,8 @@
 		"HINT_INVALID_CONFIG_MODE_INVALID": "模式必须是 'eager' 或 'lazy' 之一。",
 		"INSTANCE_NOT_LOADED": "无法执行操作 '{operation}' - 实例未加载。请先调用 load()。",
 		"HINT_INSTANCE_NOT_LOADED": "在执行此操作前必须加载实例。请先调用 load()。",
+		"RELOAD_IN_PROGRESS": "无法执行操作 '{operation}' - 此实例的完整重新加载仍在构建中，而此调用属于其中。",
+		"HINT_RELOAD_IN_PROGRESS": "重新加载不能在另一次重新加载的构建过程中开始（启动例程，或模块加载时的代码）。请在当前重新加载完成后再次调用 reload()。",
 		"LAZY_MATERIALIZATION_FAILED": "无法实例化 '{path}' 的延迟代理。请检查模块是否正确加载。",
 		"API_PATH_NOT_CALLABLE": "无法调用 '{path}' - 不是函数（得到 {received}）。请检查模块是否导出了可调用的函数。",
 		"API_PATH_INVALID": "无效的 API 路径 '{path}'：{reason}。API 路径必须是非空、格式正确的点分写法字符串，且不能与保留名称冲突。索引 {index} 处的片段：'{segment}'。",

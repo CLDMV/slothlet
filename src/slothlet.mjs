@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T16:26:46-08:00 (1794961606)
+ *	@Last modified time: 2026-11-17T17:16:35-08:00 (1794964595)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -87,7 +87,7 @@
 // enters the static-import graph a browser must parse (#123). Only the Node
 // component-init path (_initializeComponents) touches fs/path/url; browser mode uses
 // _initializeComponentsBrowser.
-import { isNode, fs, fsp, path, url, createRequire } from "#helpers/platform";
+import { isNode, fs, fsp, path, url, createRequire, AsyncLocalStorage } from "#helpers/platform";
 import { internals as contextInternals } from "#factories/context";
 import { warnIfCoverageWithoutImporter } from "#processors/loader";
 import { SlothletError, SlothletWarning } from "#errors";
@@ -119,6 +119,7 @@ import { internals as framePlacementInternals } from "#handlers/frame-placement"
 import {
 	ArrayMethods,
 	Arrays,
+	concatLists,
 	copyList,
 	filterList,
 	FunctionMethods,
@@ -131,6 +132,7 @@ import {
 	NativeProcess,
 	NativeProxy,
 	Objects,
+	Promise,
 	promiseAllSettled,
 	PromiseMethods,
 	Reflect,
@@ -196,6 +198,22 @@ const { getContextManager } = contextInternals("slothlet");
  * @private
  */
 let typescriptInternals = null;
+
+/**
+ * The async flow a full reload builds its new copy in (see {@link Slothlet#reload}): while a reload runs, the build reads
+ * and writes the new copy's components, config and api tree, and every other caller reads the copy the instance has.
+ * Null where the host has no AsyncLocalStorage (a browser), where a reload cannot keep the two apart.
+ * @type {AsyncLocalStorage|null}
+ * @private
+ */
+const reloadBuildStorage = AsyncLocalStorage ? new AsyncLocalStorage() : null;
+
+/**
+ * The instance's own fields, besides its component namespaces, that a full reload builds anew and swaps in at its end.
+ * @type {string[]}
+ * @private
+ */
+const RELOAD_COPY_FIELDS = ["config", "api", "debugLogger", "envTarget", "reference", "isLoaded"];
 
 /**
  * Instances currently relying on the globally-patched boundaries.
@@ -390,6 +408,21 @@ class Slothlet {
 	 * @private
 	 */
 	#pendingScope = null;
+
+	/**
+	 * The full reload under way, while it builds its new copy (see {@link Slothlet#openReloadWindow}); null otherwise.
+	 * @type {{mark: object, served: object, next: object, settled: Promise<void>, finish: Function, closed: boolean}|null}
+	 * @private
+	 */
+	#reloadWindow = null;
+
+	/**
+	 * Set by a reload with no window (see {@link Slothlet#carryIntoBuild}) for load() to call once the new copy's components
+	 * exist, before any of its modules load; null otherwise.
+	 * @type {Function|null}
+	 * @private
+	 */
+	#carryOnLoad = null;
 
 	/**
 	 * The context a reload carries into the instance it rebuilds, so values `context.set()` made survive it.
@@ -1281,6 +1314,10 @@ class Slothlet {
 		// (#529) — decided here, per load, once the effective list is known.
 		this.handlers.permissionManager?.applyDefaultRoutineRules(this.config.routines.entries);
 
+		// A reload in a host with no AsyncLocalStorage: the new components take the instance's permission state, hooks and
+		// metadata now, as calls made while the reload runs reach them.
+		if (this.#carryOnLoad !== null) this.#carryOnLoad();
+
 		// Pin the original base as resolved against the creating call's caller, so restart() rebuilds
 		// from the same directory rather than re-resolving a relative base from its own call site (#504).
 		if (this._originalConfig && this._originalBase === undefined) {
@@ -1793,6 +1830,15 @@ class Slothlet {
 		}
 		const keepInstanceID = instance === "keep";
 
+		// One full reload at a time: a reload asked for while another builds starts once that one has finished. One asked
+		// for by the build itself (a startup routine's) could never start, so it is refused.
+		while (this.#reloadWindow !== null) {
+			if (reloadBuildStorage.getStore() === this.#reloadWindow.mark) {
+				throw new SlothletError("RELOAD_IN_PROGRESS", { operation: ["slothlet", "reload"] });
+			}
+			await this.#reloadWindow.settled;
+		}
+
 		// Allow reload from shutdown state as long as config was previously loaded.
 		// Reject only if the instance was never loaded at all. A loaded config always carries `dir` —
 		// a path, or null for an instance with no base directory (#471) — so `undefined` means "never
@@ -1810,20 +1856,111 @@ class Slothlet {
 		// Every reload's ID is the first ID plus one fresh `_reload_<time>_<random>` part, never the previous ID plus
 		// another: an ID that grew on each reload would soon be too long for the folders named after it.
 		const nextScope = keepInstanceID ? null : this.#claimFreshScope(`${splitText(`${oldInstanceID}`, "_reload_")[0]}_reload`);
-		// What the instance answers calls with now, put back if the reload fails.
-		const kept = this.#keepForFailedReload();
+		// Until the new copy is built and swapped in, every call is answered by the copy the instance has, with its
+		// components (permission rules and mode, hooks, metadata, ownership), config and api tree: the build works on a
+		// set of its own (see openReloadWindow). A host with no AsyncLocalStorage cannot keep the two apart: there the
+		// build replaces the instance's own, and what it had is kept to put back if the reload fails.
+		const window = reloadBuildStorage === null ? null : this.#openReloadWindow();
+		const kept = window === null ? this.#keepForFailedReload() : null;
 		this.#pendingScope = nextScope;
 		try {
-			return await this.#reloadOnto(nextScope, oldInstanceID);
+			if (window === null) return await this.#reloadOnto(nextScope, oldInstanceID, null);
+			return await reloadBuildStorage.run(window.mark, () => this.#reloadOnto(nextScope, oldInstanceID, window));
 		} catch (error) {
 			this.#pendingScope = null;
+			if (window !== null) this.#closeReloadWindow(window, false);
 			this.#restoreFailedReload(kept);
 			// The fresh scope was claimed but never taken: let the ID go again.
 			if (nextScope !== null && this.#importScope !== nextScope) nextScope.release();
 			if (nextScope !== null) this.#settleFailedReload(oldInstanceID);
+			if (window !== null) await this.#retireReplacedScope(window);
 			throw error;
 		} finally {
 			this.#pendingScope = null;
+			if (window !== null) {
+				// A reload that ended any other way (it cannot, but nothing is left half-split) answers from the copy it had.
+				this.#closeReloadWindow(window, false);
+				this.#reloadWindow = null;
+				window.finish();
+			}
+		}
+	}
+
+	/**
+	 * Wait for a full reload under way to settle, unless the reload's own build is the caller.
+	 * @returns {Promise<void>}
+	 * @private
+	 */
+	async #reloadSettled() {
+		while (this.#reloadWindow !== null && reloadBuildStorage.getStore() !== this.#reloadWindow.mark) {
+			await this.#reloadWindow.settled;
+		}
+	}
+
+	/**
+	 * Start a full reload's window: from now until {@link Slothlet#closeReloadWindow}, the instance's component namespaces
+	 * and {@link RELOAD_COPY_FIELDS} answer the reload's build (code running in its {@link reloadBuildStorage} flow) from
+	 * a set of its own, and everyone else from the set the instance has. The build's set starts as a copy of the current
+	 * one (each namespace a shallow copy), which load() then replaces piece by piece, as it replaced the instance's own
+	 * before. Outside a reload these are plain fields, read at no extra cost.
+	 * @returns {object} The window.
+	 * @private
+	 */
+	#openReloadWindow() {
+		let finish;
+		const settled = new Promise((resolve) => {
+			finish = resolve;
+		});
+		const window = { mark: {}, served: { __proto__: null }, next: { __proto__: null }, settled, finish, closed: false };
+		const fields = concatLists(this.componentCategories, RELOAD_COPY_FIELDS);
+		for (let ofIndex = 0; ofIndex < fields.length; ofIndex++) {
+			const field = fields[ofIndex];
+			const value = this[field];
+			window.served[field] = value;
+			window.next[field] = ArrayMethods.includes(this.componentCategories, field) ? { ...value } : value;
+			const set = () => (reloadBuildStorage.getStore() === window.mark ? window.next : window.served);
+			Objects.defineProperty(this, field, {
+				__proto__: null,
+				configurable: true,
+				enumerable: true,
+				get: () => set()[field],
+				set: (next) => {
+					set()[field] = next;
+				}
+			});
+		}
+		this.#reloadWindow = window;
+		return window;
+	}
+
+	/**
+	 * End a full reload's window: the instance's fields become plain fields again, holding the build's set when the reload
+	 * succeeded (`swap`) and the set the instance had otherwise. The swap moves everything at once. The component
+	 * namespace objects stay the instance's own: on a swap they take the build's components.
+	 * @param {object} window - The window {@link Slothlet#openReloadWindow} opened.
+	 * @param {boolean} swap - Whether the new copy takes over.
+	 * @returns {void}
+	 * @private
+	 */
+	#closeReloadWindow(window, swap) {
+		if (window.closed) return;
+		window.closed = true;
+		const fields = concatLists(this.componentCategories, RELOAD_COPY_FIELDS);
+		for (let ofIndex = 0; ofIndex < fields.length; ofIndex++) {
+			const field = fields[ofIndex];
+			let value = window.served[field];
+			if (swap) {
+				const next = window.next[field];
+				if (ArrayMethods.includes(this.componentCategories, field)) {
+					for (let keyIndex = 0, keys = Objects.keys(value); keyIndex < keys.length; keyIndex++) {
+						if (!Objects.hasOwn(next, keys[keyIndex])) delete value[keys[keyIndex]];
+					}
+					Objects.assign(value, next);
+				} else {
+					value = next;
+				}
+			}
+			Objects.defineProperty(this, field, { __proto__: null, configurable: true, enumerable: true, writable: true, value });
 		}
 	}
 
@@ -1836,7 +1973,22 @@ class Slothlet {
 	 */
 	async #switchToPendingScope(scope) {
 		const oldInstanceID = this.instanceID;
+		const oldScope = this.#importScope;
 		this.#pendingScope = null;
+		const window = this.#reloadWindow;
+		if (window !== null) {
+			// The copy the instance has keeps answering calls until the swap: what slothlet keeps about its files (its
+			// import graph, its CommonJS copies, its share of the global patches, its TS transform cache) stays until then.
+			window.replaced = {
+				instanceID: oldInstanceID,
+				scope: oldScope,
+				typescriptCacheDirs: this._typescriptCacheDirs?.size ? setToArray(this._typescriptCacheDirs) : []
+			};
+			if (this._typescriptCacheDirs?.size) SetMethods.clear(this._typescriptCacheDirs);
+			this.#importScope = null;
+			this.#adoptImportScope(scope);
+			return;
+		}
 		// The previous instanceID's private CommonJS helper copies (#518, #534) can no longer be served.
 		forgetInstanceScripts(oldInstanceID);
 		this.#adoptImportScope(scope);
@@ -1852,6 +2004,36 @@ class Slothlet {
 		if (isNode && this._typescriptCacheDirs?.size) {
 			await promiseAllSettled(mapList(setToArray(this._typescriptCacheDirs), (dir) => fsp.rm(dir, { recursive: true, force: true })));
 			SetMethods.clear(this._typescriptCacheDirs);
+		}
+	}
+
+	/**
+	 * Let go of what slothlet kept about the files of the ID a reload switched the instance away from (see
+	 * {@link Slothlet#switchToPendingScope}), once that copy no longer answers calls: when the reload has swapped its new
+	 * copy in, or has failed after switching (the instance stays on the new ID, answering from the copy it had).
+	 * @param {object} window - The reload's window.
+	 * @returns {Promise<void>}
+	 * @private
+	 */
+	async #retireReplacedScope(window) {
+		const replaced = window.replaced;
+		if (!replaced) return;
+		window.replaced = null;
+		const { instanceID } = replaced;
+		// The previous instanceID's private CommonJS helper copies (#518, #534) can no longer be served.
+		forgetInstanceScripts(instanceID);
+		if (replaced.scope) {
+			setInstanceSelfKind(replaced.scope.instanceID, null);
+			replaced.scope.release();
+		}
+		// The global patches are held under the new ID; the old ID's share goes, or the patches could never be released.
+		// Nothing is unpatched here: the new ID holds its share.
+		SetMethods.delete(boundaryPatchHolders, instanceID);
+		SetMethods.delete(promisePatchHolders, instanceID);
+		SetMethods.delete(asyncCallbackHolders, instanceID);
+		// The TS transform cache dirs of the previous instanceID are stale (see switchToPendingScope).
+		if (isNode && replaced.typescriptCacheDirs.length) {
+			await promiseAllSettled(mapList(replaced.typescriptCacheDirs, (dir) => fsp.rm(dir, { recursive: true, force: true })));
 		}
 	}
 
@@ -1887,21 +2069,23 @@ class Slothlet {
 	 * @private
 	 */
 	#restoreFailedReload(kept) {
-		for (let ofIndex = 0, ofList = this.componentCategories; ofIndex < ofList.length; ofIndex++) {
-			const category = ofList[ofIndex];
-			const now = this[category];
-			for (let keyIndex = 0, keys = Objects.keys(now); keyIndex < keys.length; keyIndex++) {
-				if (!Objects.hasOwn(kept.components[category], keys[keyIndex])) delete now[keys[keyIndex]];
+		if (kept !== null) {
+			for (let ofIndex = 0, ofList = this.componentCategories; ofIndex < ofList.length; ofIndex++) {
+				const category = ofList[ofIndex];
+				const now = this[category];
+				for (let keyIndex = 0, keys = Objects.keys(now); keyIndex < keys.length; keyIndex++) {
+					if (!Objects.hasOwn(kept.components[category], keys[keyIndex])) delete now[keys[keyIndex]];
+				}
+				Objects.assign(now, kept.components[category]);
 			}
-			Objects.assign(now, kept.components[category]);
+			this.config = kept.config;
+			this.api = kept.api;
+			this.debugLogger = kept.debugLogger;
+			this.envTarget = kept.envTarget;
+			this.reference = kept.reference;
+			this.context = kept.context;
+			this.isLoaded = kept.isLoaded;
 		}
-		this.config = kept.config;
-		this.api = kept.api;
-		this.debugLogger = kept.debugLogger;
-		this.envTarget = kept.envTarget;
-		this.reference = kept.reference;
-		this.context = kept.context;
-		this.isLoaded = kept.isLoaded;
 		this.#carriedContext = null;
 		// The context the instance's code runs in now answers with that copy: a reload that switched IDs set the new ID's
 		// context up for the copy it did not finish. A reload that keeps the ID (`instance: "keep"`) drops the ID's context
@@ -1938,29 +2122,29 @@ class Slothlet {
 	}
 
 	/**
-	 * The body of {@link Slothlet#reload}, run once the reload's fresh scope (if any) is claimed.
+	 * The body of {@link Slothlet#reload}, run once the reload's fresh scope (if any) is claimed: in the reload's build
+	 * flow when the instance has a window open (see {@link Slothlet#openReloadWindow}), where `this` answers with the new
+	 * copy's set while every other caller is answered by the set the instance has.
 	 * @param {{instanceID: string, require: Function, release: Function}|null} nextScope - The claimed scope a normal
 	 *   reload switches to, or null for `instance: "keep"`.
 	 * @param {string} oldInstanceID - The instance's ID when the reload started.
+	 * @param {object|null} window - The reload's window, or null where the host has no AsyncLocalStorage.
 	 * @returns {Promise<Object>} The bound API.
 	 * @private
 	 */
-	async #reloadOnto(nextScope, oldInstanceID) {
+	async #reloadOnto(nextScope, oldInstanceID, window) {
 		const keepInstanceID = nextScope === null;
 
 		// Changes queued through lazy stand-ins, and refusals of those made, belong to the nodes this reload replaces;
 		// eager mode's changes go with those nodes too (#653).
 		releaseStandInChanges(this);
 
-		// 1. Save operation history from api-manager for replay
-		// apiManager.state.operationHistory is always a defined array; [] fallback is dead code.
+		// 1. The components the instance has. With a window open they keep answering every call until the swap, so what
+		//    the new copy takes from them (history, hooks, metadata, the permission state) is read as late as it can be,
+		//    and takes in changes calls made while the reload ran. Without one, load() replaces them on the instance.
+		const oldHandlers = { ...this.handlers };
 		/* v8 ignore next */
-		const operationHistory = this.handlers.apiManager?.state?.operationHistory
-			? copyList(this.handlers.apiManager.state.operationHistory)
-			: [];
-		// The mounts that history describes, as the api manager tracks them (moduleID lookups, restore).
-		/* v8 ignore next */
-		const addHistory = this.handlers.apiManager?.state?.addHistory ? copyList(this.handlers.apiManager.state.addHistory) : [];
+		const oldApiState = oldHandlers.apiManager?.state ?? null;
 
 		// 2. Clear CommonJS module caches to force re-import
 		await this._clearModuleCaches();
@@ -1972,49 +2156,34 @@ class Slothlet {
 		//    which triggers the cleanup-then-reinitialise branch of the context store.
 		const loadInstanceID = keepInstanceID ? this.instanceID : nextScope.instanceID;
 
-		// 3b. Save user-managed metadata state before load() destroys the current
-		//     Metadata instance. This preserves metadata.global() and metadata.set() values across reload.
-		const savedMetadataState = this.handlers.metadata?.exportUserState?.();
-
-		// 3c. Save hook registrations before load() destroys the current HookManager.
-		//     This preserves hook.on() registrations across full reload.
-		const savedHooks = this.handlers.hookManager?.exportHooks?.();
-
-		// 3c'. Save the host's event-delivery strategy (#497) — host configuration, like hooks — before
-		//      load() replaces the EventManager. Subscriptions themselves are not carried: modules
-		//      re-register theirs, and listener ids are stable across that re-registration.
-		const savedEventStrategy = this.handlers.eventManager?.exportStrategy?.() ?? null;
-
-		// 3d. Save the permission-control seal state before load() constructs a fresh
-		//     PermissionManager (whose #sealed resets to false). seal() is a one-way lock,
-		//     so a reload must not silently unseal it; it is re-applied after rule replay below.
-		const wasSealed = this.handlers.permissionManager?.isSealed?.() === true;
-		// The mode the host moved the system to (`control.mode(value)`) holds across the reload too, so a
-		// system the host turned on from "disabled" does not fall back to it (#625).
-		const savedMode = this.handlers.permissionManager?.mode?.() ?? null;
+		// Without a window, calls made while the new copy builds reach its components: they take the permission state,
+		// hooks, metadata and event-delivery strategy the instance has before any module of the new copy loads (see
+		// Slothlet#carryIntoBuild), never a fresh set.
+		const carried = window === null ? { history: null } : null;
+		if (carried !== null) this.#carryOnLoad = () => this.#carryIntoBuild(oldHandlers, oldApiState, carried);
 
 		// 4. Do a FRESH load() with the new permanent instanceID
 		this.#carriedContext = this.context;
-		await this.load(this.config, loadInstanceID);
+		try {
+			await this.load(this.config, loadInstanceID);
+		} finally {
+			this.#carryOnLoad = null;
+		}
 
-		// 4b. Restore saved metadata state into the new Metadata instance, BEFORE
-		//     replay so that registerUserMetadata() from replay merges over it correctly.
+		// 4b. Restore the user-managed metadata (metadata.global() and metadata.set() values) into the new Metadata
+		//     instance, BEFORE replay so that registerUserMetadata() from replay merges over it correctly.
 		// savedMetadataState is always truthy (metadata always exports state); metadata handler always present.
+		const savedMetadataState = oldHandlers.metadata?.exportUserState?.();
 		/* v8 ignore next */
 		if (savedMetadataState && this.handlers.metadata) {
 			this.handlers.metadata.importUserState(savedMetadataState);
 		}
 
-		// 4c. Restore hook registrations into the new HookManager instance.
-		// savedHooks always has entries when exported after hooks are registered; hookManager always present.
-		/* v8 ignore next */
-		if (savedHooks?.length && this.handlers.hookManager) {
-			this.handlers.hookManager.importHooks(savedHooks);
-		}
-
-		// 4d. Restore the event-delivery strategy into the new EventManager.
-		if (savedEventStrategy) {
-			this.handlers.eventManager.strategy(savedEventStrategy);
+		// 4c. The host's event-delivery strategy (#497) — host configuration, like hooks. Subscriptions themselves are not
+		//     carried: modules re-register theirs, and listener ids are stable across that re-registration.
+		if (carried === null) {
+			const savedEventStrategy = oldHandlers.eventManager?.exportStrategy?.() ?? null;
+			if (savedEventStrategy) this.handlers.eventManager.strategy(savedEventStrategy);
 		}
 
 		// 5. Reparent any child __run_ context stores that were created before reload.
@@ -2040,90 +2209,25 @@ class Slothlet {
 			this.contextManager.cleanup(oldInstanceID);
 		}
 
-		// 6. Replay operation history in chronological order
-		for (let ofIndex = 0, ofList = operationHistory; ofIndex < ofList.length; ofIndex++) {
-			const operation = ofList[ofIndex];
-			if (operation.type === "add") {
-				await this.handlers.apiManager.addApiComponent({
-					apiPath: operation.apiPath,
-					folderPath: operation.folderPath,
-					// operation.options carries the ORIGINAL moduleID recorded at add time; addApiComponent
-					// reuses it (there is no top-level moduleID param), so a module keeps the same id across a
-					// reload — for user-supplied ids and auto-generated `<path>_<hash>` ids alike. That stable
-					// id is what lets a scoped remove op below resolve on replay.
-					// operation.options is always provided during api.add() replay; {} fallback is dead code.
-					/* v8 ignore next */
-					options: { ...(operation.options || {}), recordHistory: false },
-					versionConfig: operation.versionConfig || null
-				});
-			} else if (operation.type === "remove") {
-				// Route the replayed remove through the full removeApiComponent path so
-				// it performs the SAME cleanup a live remove does — api + boundApi tree,
-				// apiCacheManager entry, ownership records, metadata, version registration.
-				// A bare deletePath would prune only `this.api` and leave boundApi / cache /
-				// ownership remnants, so the rebuilt tree would not match a clean
-				// build-up-to-this-point. recordHistory:false avoids re-appending the op.
-				if (operation.scopedModuleID) {
-					// Scoped removal (remove(moduleID, apiPath)): replay the two-argument form so only this
-					// module's nodes go. The module's id survives the add replay above, so it resolves; a
-					// plain apiPath removal here would over-delete other modules sharing the path.
-					await this.handlers.apiManager.removeApiComponent(operation.scopedModuleID, {
-						scopedApiPath: operation.apiPath,
-						recordHistory: false
-					});
-				} else {
-					await this.handlers.apiManager.removeApiComponent(operation.apiPath, { recordHistory: false });
-				}
-			} else if (operation.type === "addPermissionRule") {
-				// permissionManager is always re-registered by load() before replay (slothletProperty); the absent-manager arm is unreachable.
-				/* v8 ignore else */
-				if (this.handlers.permissionManager) {
-					// A module's write rule keeps the module layer it was added at (#625).
-					this.handlers.permissionManager.addRule(operation.rule, operation.ownerModuleID, operation.ruleId, operation.layer);
-				}
-			} else if (operation.type === "removePermissionRule") {
-				// permissionManager is always re-registered by load() before replay (slothletProperty); the absent-manager arm is unreachable.
-				/* v8 ignore else */
-				if (this.handlers.permissionManager) {
-					this.handlers.permissionManager.removeRule(operation.ruleId, operation.callerModuleID);
-				}
-			} else if (operation.type === "addEventRule") {
-				// Event rules (#407) replay through the same permissionManager; absent-manager arm unreachable.
-				/* v8 ignore else */
-				if (this.handlers.permissionManager) {
-					// An event rule keeps the layer it was added at (#625).
-					this.handlers.permissionManager.addEventRule(operation.rule, operation.ownerModuleID, operation.ruleId, operation.layer ?? null);
-				}
-			} else if (operation.type === "registerPrincipal") {
-				// Principals (#459). A host registration replays as-is — host code is not reloaded. A module's
-				// recorded resolver is a closure over the module as it was BEFORE the reload, so replaying it
-				// would answer from stale module state; the name is reserved for its owner instead (dormant,
-				// fail-closed) until the reloaded module registers again.
-				/* v8 ignore else */
-				if (this.handlers.permissionManager) {
-					if (operation.ownerModuleID === null) {
-						this.handlers.permissionManager.registerPrincipal(operation.name, operation.definition, null, null);
-					} else {
-						this.handlers.permissionManager.reservePrincipal(operation.name, operation.ownerModuleID);
-					}
-				}
-			} else if (operation.type === "unregisterPrincipal") {
-				/* v8 ignore else */
-				if (this.handlers.permissionManager) {
-					this.handlers.permissionManager.unregisterPrincipal(operation.name, operation.callerModuleID);
-				}
-			} else {
-				// The op type is necessarily removeEventRule here — the replay records only
-				// add/remove/add|removePermissionRule/add|removeEventRule/register|unregisterPrincipal —
-				// so this final else is that.
-				/* v8 ignore else */
-				if (operation.type === "removeEventRule") {
-					// permissionManager is always re-registered by load() before replay (slothletProperty); the absent-manager arm is unreachable.
-					/* v8 ignore else */
-					if (this.handlers.permissionManager) {
-						this.handlers.permissionManager.removeEventRule(operation.ruleId, operation.callerModuleID);
-					}
-				}
+		// 7. Replay operation history in chronological order. With a window, that is everything the instance's api manager
+		//    recorded, read until nothing new is left, so an add(), remove() or rule change a call made while this reload
+		//    ran (which reached that api manager) comes along. Without one, the build carried the history's permission
+		//    operations already, and its add() / remove() operations replay here.
+		let operationHistory;
+		if (carried === null) {
+			operationHistory = [];
+			/* v8 ignore next */
+			const recorded = () => oldApiState?.operationHistory ?? [];
+			while (operationHistory.length < recorded().length) {
+				const operation = recorded()[operationHistory.length];
+				listPush(operationHistory, operation);
+				await this.#replayOperation(operation);
+			}
+		} else {
+			operationHistory = carried.history;
+			for (let ofIndex = 0, ofList = operationHistory; ofIndex < ofList.length; ofIndex++) {
+				const operation = ofList[ofIndex];
+				if (operation.type === "add" || operation.type === "remove") await this.#replayOperation(operation);
 			}
 		}
 
@@ -2133,7 +2237,8 @@ class Slothlet {
 		/* v8 ignore else */
 		if (this.handlers.apiManager?.state) {
 			this.handlers.apiManager.state.operationHistory = operationHistory;
-			this.handlers.apiManager.state.addHistory = addHistory;
+			/* v8 ignore next */
+			this.handlers.apiManager.state.addHistory = oldApiState?.addHistory ? copyList(oldApiState.addHistory) : [];
 		}
 
 		// Runtime `self.X = …` writes are intentionally NOT replayed: a reload
@@ -2141,16 +2246,176 @@ class Slothlet {
 		// of that history. Module-init writes reappear naturally because the
 		// module body re-executes during the rebuild.
 
-		// Re-apply the permission-control seal AFTER rule replay (replay re-adds rules via
-		// addRule, which a sealed manager would reject). This preserves seal()'s documented
-		// one-way lock across a reload — the fresh PermissionManager starts unsealed, so
-		// without this a reload would silently unseal the control surface.
+		// 8. Hook registrations (hook.on()) carry into the new HookManager, read last so hooks registered while the
+		//    reload ran come along.
+		if (carried === null) {
+			const savedHooks = oldHandlers.hookManager?.exportHooks?.();
+			// savedHooks always has entries when exported after hooks are registered; hookManager always present.
+			/* v8 ignore next */
+			if (savedHooks?.length && this.handlers.hookManager) {
+				this.handlers.hookManager.importHooks(savedHooks);
+			}
+		}
+
+		// 9. The mode the host moved the system to (`control.mode(value)`) holds across the reload, so a system the host
+		//    turned on from "disabled" does not fall back to it (#625). The seal goes back on AFTER rule replay (replay
+		//    re-adds rules via addRule, which a sealed manager would reject): seal() is a one-way lock, and the fresh
+		//    PermissionManager starts unsealed, so without this a reload would silently unseal the control surface.
+		const wasSealed = oldHandlers.permissionManager?.isSealed?.() === true;
+		const savedMode = oldHandlers.permissionManager?.mode?.() ?? null;
 		const permissionManager = this.handlers.permissionManager;
 		if (savedMode === "on" && permissionManager?.mode?.() !== "on") permissionManager.enable();
 		else if (savedMode === "off" && permissionManager?.mode?.() !== "off") permissionManager.disable();
 		if (wasSealed) this.handlers.permissionManager?.seal?.();
 
+		// 10. The swap: from here every call, whoever makes it, is answered by the new copy.
+		if (window !== null) {
+			this.#closeReloadWindow(window, true);
+			await this.#retireReplacedScope(window);
+		} else {
+			this.handlers.metadata?.readThrough?.(null);
+		}
+
 		return this.boundApi;
+	}
+
+	/**
+	 * Replay one recorded operation onto the new copy's components (see {@link Slothlet#reloadOnto}).
+	 * @param {object} operation - The recorded operation.
+	 * @returns {Promise<void>}
+	 * @private
+	 */
+	async #replayOperation(operation) {
+		if (operation.type === "add") {
+			await this.handlers.apiManager.addApiComponent({
+				apiPath: operation.apiPath,
+				folderPath: operation.folderPath,
+				// operation.options carries the ORIGINAL moduleID recorded at add time; addApiComponent
+				// reuses it (there is no top-level moduleID param), so a module keeps the same id across a
+				// reload — for user-supplied ids and auto-generated `<path>_<hash>` ids alike. That stable
+				// id is what lets a scoped remove op below resolve on replay.
+				// operation.options is always provided during api.add() replay; {} fallback is dead code.
+				/* v8 ignore next */
+				options: { ...(operation.options || {}), recordHistory: false },
+				versionConfig: operation.versionConfig || null
+			});
+		} else if (operation.type === "remove") {
+			// Route the replayed remove through the full removeApiComponent path so
+			// it performs the SAME cleanup a live remove does — api + boundApi tree,
+			// apiCacheManager entry, ownership records, metadata, version registration.
+			// A bare deletePath would prune only `this.api` and leave boundApi / cache /
+			// ownership remnants, so the rebuilt tree would not match a clean
+			// build-up-to-this-point. recordHistory:false avoids re-appending the op.
+			if (operation.scopedModuleID) {
+				// Scoped removal (remove(moduleID, apiPath)): replay the two-argument form so only this
+				// module's nodes go. The module's id survives the add replay above, so it resolves; a
+				// plain apiPath removal here would over-delete other modules sharing the path.
+				await this.handlers.apiManager.removeApiComponent(operation.scopedModuleID, {
+					scopedApiPath: operation.apiPath,
+					recordHistory: false
+				});
+			} else {
+				await this.handlers.apiManager.removeApiComponent(operation.apiPath, { recordHistory: false });
+			}
+		} else {
+			this.#replayPermissionOperation(operation);
+		}
+	}
+
+	/**
+	 * Replay one recorded permission operation (a rule, an event rule or a principal) onto the new copy's permission
+	 * manager (see {@link Slothlet#reloadOnto}).
+	 * @param {object} operation - The recorded operation, anything but an `add` / `remove`.
+	 * @returns {void}
+	 * @private
+	 */
+	#replayPermissionOperation(operation) {
+		if (operation.type === "addPermissionRule") {
+			// permissionManager is always re-registered by load() before replay (slothletProperty); the absent-manager arm is unreachable.
+			/* v8 ignore else */
+			if (this.handlers.permissionManager) {
+				// A module's write rule keeps the module layer it was added at (#625).
+				this.handlers.permissionManager.addRule(operation.rule, operation.ownerModuleID, operation.ruleId, operation.layer);
+			}
+		} else if (operation.type === "removePermissionRule") {
+			// permissionManager is always re-registered by load() before replay (slothletProperty); the absent-manager arm is unreachable.
+			/* v8 ignore else */
+			if (this.handlers.permissionManager) {
+				this.handlers.permissionManager.removeRule(operation.ruleId, operation.callerModuleID);
+			}
+		} else if (operation.type === "addEventRule") {
+			// Event rules (#407) replay through the same permissionManager; absent-manager arm unreachable.
+			/* v8 ignore else */
+			if (this.handlers.permissionManager) {
+				// An event rule keeps the layer it was added at (#625).
+				this.handlers.permissionManager.addEventRule(operation.rule, operation.ownerModuleID, operation.ruleId, operation.layer ?? null);
+			}
+		} else if (operation.type === "registerPrincipal") {
+			// Principals (#459). A host registration replays as-is — host code is not reloaded. A module's
+			// recorded resolver is a closure over the module as it was BEFORE the reload, so replaying it
+			// would answer from stale module state; the name is reserved for its owner instead (dormant,
+			// fail-closed) until the reloaded module registers again.
+			/* v8 ignore else */
+			if (this.handlers.permissionManager) {
+				if (operation.ownerModuleID === null) {
+					this.handlers.permissionManager.registerPrincipal(operation.name, operation.definition, null, null);
+				} else {
+					this.handlers.permissionManager.reservePrincipal(operation.name, operation.ownerModuleID);
+				}
+			}
+		} else if (operation.type === "unregisterPrincipal") {
+			/* v8 ignore else */
+			if (this.handlers.permissionManager) {
+				this.handlers.permissionManager.unregisterPrincipal(operation.name, operation.callerModuleID);
+			}
+		} else {
+			// The op type is necessarily removeEventRule here — the replay records only
+			// add/remove/add|removePermissionRule/add|removeEventRule/register|unregisterPrincipal —
+			// so this final else is that.
+			/* v8 ignore else */
+			if (operation.type === "removeEventRule") {
+				// permissionManager is always re-registered by load() before replay (slothletProperty); the absent-manager arm is unreachable.
+				/* v8 ignore else */
+				if (this.handlers.permissionManager) {
+					this.handlers.permissionManager.removeEventRule(operation.ruleId, operation.callerModuleID);
+				}
+			}
+		}
+	}
+
+	/**
+	 * Without a window (a host with no AsyncLocalStorage), the new copy's freshly made components take, before any of its
+	 * modules load, the permission state (rules, event rules, principals, mode), hooks, metadata and event-delivery
+	 * strategy the instance has, so a call made while the reload runs, which reaches them, is held to the same rules and
+	 * hooks as before it. Called from load() once the components exist. The seal goes on at the end of the reload, as the
+	 * replayed `add()` history registers rules of its own.
+	 * @param {object} oldHandlers - The handlers the instance had.
+	 * @param {object|null} oldApiState - Their api manager's state.
+	 * @param {{history: Array<object>|null}} carried - Receives the operations carried.
+	 * @returns {void}
+	 * @private
+	 */
+	#carryIntoBuild(oldHandlers, oldApiState, carried) {
+		/* v8 ignore next */
+		carried.history = oldApiState?.operationHistory ? copyList(oldApiState.operationHistory) : [];
+		const savedMetadataState = oldHandlers.metadata?.exportUserState?.();
+		/* v8 ignore next */
+		if (savedMetadataState && this.handlers.metadata) this.handlers.metadata.importUserState(savedMetadataState);
+		// The nodes calls run until the reload ends are the copy the instance has, tagged in its handler.
+		this.handlers.metadata?.readThrough?.(oldHandlers.metadata ?? null);
+		const savedHooks = oldHandlers.hookManager?.exportHooks?.();
+		/* v8 ignore next */
+		if (savedHooks?.length && this.handlers.hookManager) this.handlers.hookManager.importHooks(savedHooks);
+		const savedEventStrategy = oldHandlers.eventManager?.exportStrategy?.() ?? null;
+		if (savedEventStrategy) this.handlers.eventManager.strategy(savedEventStrategy);
+		for (let ofIndex = 0, ofList = carried.history; ofIndex < ofList.length; ofIndex++) {
+			const operation = ofList[ofIndex];
+			if (operation.type !== "add" && operation.type !== "remove") this.#replayPermissionOperation(operation);
+		}
+		const savedMode = oldHandlers.permissionManager?.mode?.() ?? null;
+		const permissionManager = this.handlers.permissionManager;
+		if (savedMode === "on" && permissionManager?.mode?.() !== "on") permissionManager.enable();
+		else if (savedMode === "off" && permissionManager?.mode?.() !== "off") permissionManager.disable();
 	}
 
 	/**
@@ -2237,6 +2502,7 @@ class Slothlet {
 	 * await this._restart();
 	 */
 	async _restart() {
+		if (this.#reloadWindow !== null) await this.#reloadSettled();
 		if (!this._originalConfig) {
 			throw new SlothletError("INSTANCE_NOT_LOADED", { operation: ["slothlet", "restart"] });
 		}
@@ -2475,6 +2741,9 @@ class Slothlet {
 	 * @public
 	 */
 	async shutdown() {
+		// A full reload under way finishes first: its new copy is swapped in, or it fails and the instance keeps its copy,
+		// and then what the instance has is shut down.
+		if (this.#reloadWindow !== null) await this.#reloadSettled();
 		if (!this.isLoaded) {
 			return;
 		}

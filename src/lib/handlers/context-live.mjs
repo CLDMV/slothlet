@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T15:23:43-08:00 (1794957823)
+ *	@Last modified time: 2026-11-17T17:16:26-08:00 (1794964586)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -2914,6 +2914,9 @@ export class LiveContextManager {
 					// instance can be told apart when resolving which one is executing.
 					store,
 					family: store.parentInstanceID ?? store.instanceID,
+					// The ID the node was built under, which the frames of its file carry: a node a full reload is replacing
+					// was built under the ID the instance had before (see frameFamilyOf in frame-placement).
+					builtUnder: currentWrapper?.____slothletInternal?.builtUnder ?? null,
 					currentWrapper,
 					// The call's record, so code it was handed can be told from its own while it is suspended (#597).
 					record,

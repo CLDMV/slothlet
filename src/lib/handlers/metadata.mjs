@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T07:39:14-08:00 (1794929954)
+ *	@Last modified time: 2026-11-17T17:16:27-08:00 (1794964587)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -93,6 +93,13 @@ export class Metadata extends ComponentBase {
 
 	// Secure WeakMap storage for immutable system metadata
 	#secureMetadata = new WeakMap(); // target → system metadata (IMMUTABLE)
+
+	/**
+	 * The Metadata handler of the copy a full reload is replacing, asked for the system facts of a node this one never
+	 * tagged, while the reload builds in a host with no AsyncLocalStorage (see readThrough); null otherwise.
+	 * @type {Metadata|null}
+	 */
+	#readThrough = null;
 
 	// Centralized user metadata storage - keyed by moduleID
 	/** @type {Map<string, {metadata: object, apiPaths: Set<string>}>} */
@@ -349,8 +356,23 @@ export class Metadata extends ComponentBase {
 		return (
 			WeakMapMethods.get(this.#secureMetadata, actualTarget) ||
 			(impl && (typeof impl === "object" || typeof impl === "function") ? WeakMapMethods.get(this.#secureMetadata, impl) : undefined) ||
+			(this.#readThrough !== null ? this.#readThrough.getSystemMetadata(target) : null) ||
 			null
 		);
+	}
+
+	/**
+	 * While a full reload builds its new copy in a host with no AsyncLocalStorage, calls reach the new copy's handler,
+	 * and the nodes they run are the copy the instance has: this handler answers the system facts of those nodes from
+	 * that copy's handler until the reload ends.
+	 * @param {Metadata|null} handler - The handler of the copy being replaced, or null to stop.
+	 * @returns {void}
+	 * @package
+	 * @example
+	 * metadata.readThrough(previous.metadata);
+	 */
+	readThrough(handler) {
+		this.#readThrough = handler === this ? null : (handler ?? null);
 	}
 
 	/**

@@ -21,6 +21,8 @@
 		"HINT_INVALID_CONFIG_MODE_INVALID": "El modo debe ser 'eager' o 'lazy'.",
 		"INSTANCE_NOT_LOADED": "No se puede realizar la operación '{operation}': la instancia no está cargada. Llame a load() primero.",
 		"HINT_INSTANCE_NOT_LOADED": "La instancia debe estar cargada antes de realizar esta operación. Llame a load() primero.",
+		"RELOAD_IN_PROGRESS": "No se puede realizar la operación '{operation}': una recarga completa de esta instancia aún se está construyendo y esta llamada forma parte de ella.",
+		"HINT_RELOAD_IN_PROGRESS": "Una recarga no puede iniciar dentro de la construcción de otra (una rutina de arranque o el código de un módulo mientras se carga). Llame a reload() de nuevo cuando termine la recarga en curso.",
 		"LAZY_MATERIALIZATION_FAILED": "Error al materializar el proxy diferido para '{path}'. Compruebe que el módulo se carga correctamente.",
 		"API_PATH_NOT_CALLABLE": "No se puede llamar a '{path}': no es una función (se obtuvo {received}). Compruebe que el módulo exporta una función llamable.",
 		"API_PATH_INVALID": "Ruta de API inválida '{path}': {reason}. Las rutas de API deben ser cadenas de puntos no vacías y bien formadas, y no pueden entrar en conflicto con nombres reservados. Fragmento en el índice {index}: '{segment}'.",

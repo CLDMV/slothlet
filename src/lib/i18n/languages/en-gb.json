@@ -21,6 +21,8 @@
 		"HINT_INVALID_CONFIG_MODE_INVALID": "Mode must be either 'eager' or 'lazy'.",
 		"INSTANCE_NOT_LOADED": "Cannot perform operation '{operation}' - instance not loaded. Call load() first.",
 		"HINT_INSTANCE_NOT_LOADED": "The instance must be loaded before performing this operation. Call load() first.",
+		"RELOAD_IN_PROGRESS": "Cannot perform operation '{operation}' - a full reload of this instance is still building, and this call is part of it.",
+		"HINT_RELOAD_IN_PROGRESS": "A reload cannot start from inside another reload's build (a startup routine, or a module's code while it loads). Call reload() again once the reload under way has finished.",
 		"LAZY_MATERIALIZATION_FAILED": "Failed to materialize lazy proxy for '{path}'. Check that the module loads correctly.",
 		"API_PATH_NOT_CALLABLE": "Cannot call '{path}' - not a function (got {received}). Check that the module exports a callable function.",
 		"API_PATH_INVALID": "Invalid API path '{path}': {reason}. API paths must be non-empty, properly formatted dot-notation strings that don't conflict with reserved names. Segment at index {index}: '{segment}'.",

@@ -21,6 +21,8 @@
 		"HINT_INVALID_CONFIG_MODE_INVALID": "モードは 'eager' または 'lazy' である必要があります。",
 		"INSTANCE_NOT_LOADED": "操作 '{operation}' を実行できません - インスタンスが読み込まれていません。先に load() を呼び出してください。",
 		"HINT_INSTANCE_NOT_LOADED": "この操作を実行する前にインスタンスを読み込む必要があります。先に load() を呼び出してください。",
+		"RELOAD_IN_PROGRESS": "操作 '{operation}' を実行できません - このインスタンスの完全なリロードはまだ構築中で、この呼び出しはその一部です。",
+		"HINT_RELOAD_IN_PROGRESS": "リロードは別のリロードの構築中（起動ルーチン、または読み込み中のモジュールのコード）からは開始できません。実行中のリロードが終わってから reload() を再度呼び出してください。",
 		"LAZY_MATERIALIZATION_FAILED": "'{path}' の遅延プロキシの実体化に失敗しました。モジュールが正しく読み込まれているか確認してください。",
 		"API_PATH_NOT_CALLABLE": "'{path}' を呼び出せません - 関数ではありません ({received} を受信)。モジュールが呼び出し可能な関数をエクスポートしているか確認してください。",
 		"API_PATH_INVALID": "無効な API パス '{path}' です: {reason}。API パスは、予約名と衝突しない、正しくフォーマットされたドット記法の文字列である必要があります。インデックス {index} のセグメント: '{segment}'。",
