@@ -1118,7 +1118,12 @@ export class AsyncContextManager {
 				return;
 			}
 			if (this.#telling) return;
-			if (store === undefined || store[FLOW_OF] !== undefined || !isFlow(store)) return;
+			if (store === undefined || store[FLOW_OF] !== undefined) return;
+			// A file's load whose module is not known yet is no flow to tell code in, but what its code makes there is the
+			// load's own: recorded, so its callback is the load's continuation once the module is known (a lazy node's file
+			// loads before its node takes it).
+			const flow = isFlow(store);
+			if (!flow && !store.moduleLoad) return;
 			if (!MapMethods.has(this.instances, storeInstanceID(store))) return;
 			// Recorded for the resource's own callback: the store it is made in, or a scope anyone can enter.
 			if (type === "PROMISE") new PromiseFlow(resource, store);
@@ -1130,7 +1135,7 @@ export class AsyncContextManager {
 					WeakMapMethods.set(JOB_CALLBACK, resource, { slot, fn: slot === null ? null : resource[slot], entries: 0 });
 				}
 			}
-			if (this.store.entered() === store) return;
+			if (!flow || this.store.entered() === store) return;
 			// The code running now runs in the store its callback was made in: the flow's own continuation (an await, a
 			// timer, a reaction). Anything else (a scope entered, a snapshot, a timer given another's context) is told.
 			const current = executionAsyncResource();
