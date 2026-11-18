@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T17:16:26-08:00 (1794964586)
+ *	@Last modified time: 2026-11-17T18:55:55-08:00 (1794970555)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -24,6 +24,7 @@ import { internals as eventemitterContextInternals } from "#helpers/eventemitter
 import { pinToCurrentCaller, internals as callerPinningInternals } from "#helpers/caller-pinning";
 import { internals as schedulerContextInternals } from "#helpers/scheduler-context";
 import { combineCeilings, internals as trustedRootInternals } from "#handlers/trusted-root";
+import { RUN_COPY } from "#helpers/flow-stores";
 import { nativeThen } from "#helpers/promise-context";
 import { util, inheritsFrom } from "#helpers/platform";
 import { runtime_isClassInstance, internals as classInstanceWrapperInternals } from "#helpers/class-instance-wrapper";
@@ -3195,6 +3196,7 @@ export class LiveContextManager {
 			ceiling: identity.ceiling ?? null,
 			callerCeiling: identity.callerCeiling ?? null,
 			contextOwners: store.__contextOwners ?? null,
+			copy: store[RUN_COPY] ?? null,
 			trusted: store[trustedRootOwn.TRUSTED_ROOT] === true
 		};
 	}

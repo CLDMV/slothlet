@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T16:28:04-08:00 (1794961684)
+ *	@Last modified time: 2026-11-17T18:55:59-08:00 (1794970559)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -25,6 +25,9 @@
  * context, as it would without the reload. A store is recorded only while something holds it: once its work is gone it
  * is collected and drops out.
  *
+ * A store also records which copy of the instance its run started with (see {@link RUN_COPY}): the components, config
+ * and api tree the run's calls are answered from, which a reload does not change for it.
+ *
  * @module @cldmv/slothlet/helpers/flow-stores
  * @internal
  */
@@ -34,11 +37,48 @@ import {
 	Set,
 	SetMethods,
 	setValues,
+	Symbol,
 	WeakMap,
 	WeakMapMethods,
 	WeakRef,
 	WeakRefMethods
 } from "#helpers/intrinsics";
+
+/**
+ * The key a `run()` / `scope()` store records its copy of the instance under. Every run gets a record of its own (see
+ * {@link copyForRun}): `from` is the token of the copy that was current when the run started, shared with every run
+ * that started on that copy, and `parent` is the record of the run it was opened in (null for a run opened outside
+ * any). The stores of the run's calls and of work it left behind carry the run's record with the rest of the store.
+ * While the instance still has the copy, the token's `values` is null and the instance's own fields answer; once a
+ * reload has swapped another copy in, `values` holds the copy the run keeps (see `Slothlet#readField`). The record is
+ * where a run's own changes go once it forks on its first write; until then it reads through to `from`.
+ * @type {symbol}
+ * @internal
+ */
+export const RUN_COPY = Symbol("slothlet.runCopy");
+
+/**
+ * The key of the instance's method that hands out the token of the copy it has now (see {@link RUN_COPY}).
+ * @type {symbol}
+ * @internal
+ */
+export const CURRENT_COPY = Symbol("slothlet.currentCopy");
+
+/**
+ * The copy record for a new `run()` / `scope()` store: an object of its own, never shared with another run. It reads
+ * through to the copy its parent run reads (a nested run), else to the copy the instance has now.
+ * @param {object|null|undefined} slothlet - The instance object.
+ * @param {object|null|undefined} parentStore - The store the run is opened in.
+ * @returns {{from: {values: object|null}, parent: object|null}|null} The record, or null when the instance hands out no
+ *   copy token.
+ * @internal
+ */
+export function copyForRun(slothlet, parentStore) {
+	const parent = parentStore?.[RUN_COPY] ?? null;
+	if (parent !== null) return { __proto__: null, from: parent.from, parent };
+	if (typeof slothlet?.[CURRENT_COPY] !== "function") return null;
+	return { __proto__: null, from: slothlet[CURRENT_COPY](), parent: null };
+}
 
 /**
  * Each instance object's recorded stores.

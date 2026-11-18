@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T16:27:24-08:00 (1794961644)
+ *	@Last modified time: 2026-11-17T18:56:50-08:00 (1794970610)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -438,8 +438,10 @@ describe.each([["async"], ["live"]])("calls while a reload runs, and late work a
 				globalThis[COPY] = 2;
 				await api.slothlet.reload();
 				hold.release();
-				// The old copy's own code answers its own copy; its call through `self` reaches the instance's api as it is now.
-				expect(await pending).toEqual({ own: 1, viaSelf: 2, user: "alice" });
+				// The call runs in a run() opened before the reload, which keeps the copy it started with: its own code and its
+				// call through `self` both answer from that copy, while the instance has moved on.
+				expect(await pending).toEqual({ own: 1, viaSelf: 1, user: "alice" });
+				expect(api.calls.viaSelf()).toBe(2);
 			} finally {
 				await api.slothlet.shutdown();
 			}

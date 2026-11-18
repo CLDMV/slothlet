@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T17:16:35-08:00 (1794964595)
+ *	@Last modified time: 2026-11-17T18:56:04-08:00 (1794970564)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -92,7 +92,7 @@ import { internals as contextInternals } from "#factories/context";
 import { warnIfCoverageWithoutImporter } from "#processors/loader";
 import { SlothletError, SlothletWarning } from "#errors";
 import { SlothletDebug } from "#helpers/debug";
-import { forgetFlowStores, reparentFlowStores } from "#helpers/flow-stores";
+import { CURRENT_COPY, forgetFlowStores, reparentFlowStores, RUN_COPY } from "#helpers/flow-stores";
 import { registerInstance } from "#handlers/lifecycle-token";
 import { isCallableValue, internals as unifiedWrapperInternals } from "#handlers/unified-wrapper";
 import { isFrameworkInternal, internals as frameworkInternalsInternals } from "#handlers/framework-internals";
@@ -122,6 +122,8 @@ import {
 	concatLists,
 	copyList,
 	filterList,
+	FinalizationRegistry,
+	FinalizationRegistryMethods,
 	FunctionMethods,
 	listPush,
 	listSplice,
@@ -214,6 +216,14 @@ const reloadBuildStorage = AsyncLocalStorage ? new AsyncLocalStorage() : null;
  * @private
  */
 const RELOAD_COPY_FIELDS = ["config", "api", "debugLogger", "envTarget", "reference", "isLoaded"];
+
+/**
+ * Tells an instance when a copy token a reload swapped out is gone, which no `run()` / `scope()` can then still keep
+ * (see {@link Slothlet#swapCopy}). Null where the host has no FinalizationRegistry: such a token is counted for good.
+ * @type {FinalizationRegistry<Function>|null}
+ * @private
+ */
+const staleCopies = typeof FinalizationRegistry === "function" ? new FinalizationRegistry((gone) => gone()) : null;
 
 /**
  * Instances currently relying on the globally-patched boundaries.
@@ -411,10 +421,50 @@ class Slothlet {
 
 	/**
 	 * The full reload under way, while it builds its new copy (see {@link Slothlet#openReloadWindow}); null otherwise.
-	 * @type {{mark: object, served: object, next: object, settled: Promise<void>, finish: Function, closed: boolean}|null}
+	 * @type {{mark: object, next: object, nextCopy: object|null, settled: Promise<void>, finish: Function, closed: boolean}|null}
 	 * @private
 	 */
 	#reloadWindow = null;
+
+	/**
+	 * The instance's own values of the copy fields (its component namespaces and {@link RELOAD_COPY_FIELDS}) while those
+	 * are accessors (see {@link Slothlet#installCopyFields}); null while they are plain fields.
+	 * @type {object|null}
+	 * @private
+	 */
+	#fields = null;
+
+	/**
+	 * The token of the copy the instance has, once a `run()` / `scope()` recorded it (see {@link CURRENT_COPY}); null
+	 * until one does.
+	 * @type {{values: object|null}|null}
+	 * @private
+	 */
+	#copy = null;
+
+	/**
+	 * How many tokens of copies a reload swapped out may still be held by a `run()` / `scope()`.
+	 * @type {number}
+	 * @private
+	 */
+	#staleCopies = 0;
+
+	/**
+	 * Set while {@link Slothlet#runCopyValues} tells which store is running.
+	 * @type {boolean}
+	 * @private
+	 */
+	#resolvingCopy = false;
+
+	/**
+	 * Called when a swapped-out copy token is gone (see {@link staleCopies}).
+	 * @type {Function}
+	 * @private
+	 */
+	#staleCopyGone = () => {
+		this.#staleCopies--;
+		this.#settleCopyFields();
+	};
 
 	/**
 	 * Set by a reload with no window (see {@link Slothlet#carryIntoBuild}) for load() to call once the new copy's components
@@ -1866,7 +1916,11 @@ class Slothlet {
 		try {
 			// The build is framework work, run as the host even when a module's call asked for the reload (as restart()'s is,
 			// #903): the module's call belongs to the copy being replaced.
-			if (window === null) return await this._runAsHost(() => this.#reloadOnto(nextScope, oldInstanceID, null));
+			if (window === null) {
+				const built = await this._runAsHost(() => this.#reloadOnto(nextScope, oldInstanceID, null));
+				this.#keepCopyForRuns(kept);
+				return built;
+			}
 			return await reloadBuildStorage.run(window.mark, () => this._runAsHost(() => this.#reloadOnto(nextScope, oldInstanceID, window)));
 		} catch (error) {
 			this.#pendingScope = null;
@@ -1889,6 +1943,27 @@ class Slothlet {
 	}
 
 	/**
+	 * After a reload with no window (a host with no AsyncLocalStorage, where the build replaced the instance's own set),
+	 * the runs that recorded the instance's copy token keep the set the instance had before the reload: the token takes
+	 * it, and the fields answer through {@link Slothlet#readField} until no such token is left.
+	 * @param {object} kept - What {@link Slothlet#keepForFailedReload} took before the build.
+	 * @returns {void}
+	 * @private
+	 */
+	#keepCopyForRuns(kept) {
+		const old = this.#copy;
+		if (old === null) return;
+		const values = { __proto__: null, ...kept.components };
+		for (let ofIndex = 0; ofIndex < RELOAD_COPY_FIELDS.length; ofIndex++)
+			values[RELOAD_COPY_FIELDS[ofIndex]] = kept[RELOAD_COPY_FIELDS[ofIndex]];
+		old.values = values;
+		this.#copy = null;
+		this.#staleCopies++;
+		if (staleCopies !== null) FinalizationRegistryMethods.register(staleCopies, old, this.#staleCopyGone);
+		this.#installCopyFields();
+	}
+
+	/**
 	 * Wait for a full reload under way to settle, unless the reload's own build is the caller.
 	 * @returns {Promise<void>}
 	 * @private
@@ -1902,9 +1977,9 @@ class Slothlet {
 	/**
 	 * Start a full reload's window: from now until {@link Slothlet#closeReloadWindow}, the instance's component namespaces
 	 * and {@link RELOAD_COPY_FIELDS} answer the reload's build (code running in its {@link reloadBuildStorage} flow) from
-	 * a set of its own, and everyone else from the set the instance has. The build's set starts as a copy of the current
-	 * one (each namespace a shallow copy), which load() then replaces piece by piece, as it replaced the instance's own
-	 * before. Outside a reload these are plain fields, read at no extra cost.
+	 * a set of its own, and everyone else as {@link Slothlet#readField} says. The build's set starts as a copy of the
+	 * current one (each namespace a shallow copy), which load() then replaces piece by piece, as it replaced the
+	 * instance's own before.
 	 * @returns {object} The window.
 	 * @private
 	 */
@@ -1913,32 +1988,18 @@ class Slothlet {
 		const settled = new Promise((resolve) => {
 			finish = resolve;
 		});
-		const window = { mark: {}, served: { __proto__: null }, next: { __proto__: null }, settled, finish, closed: false };
-		const fields = concatLists(this.componentCategories, RELOAD_COPY_FIELDS);
-		for (let ofIndex = 0; ofIndex < fields.length; ofIndex++) {
-			const field = fields[ofIndex];
-			const value = this[field];
-			window.served[field] = value;
-			window.next[field] = ArrayMethods.includes(this.componentCategories, field) ? { ...value } : value;
-			const set = () => (reloadBuildStorage.getStore() === window.mark ? window.next : window.served);
-			Objects.defineProperty(this, field, {
-				__proto__: null,
-				configurable: true,
-				enumerable: true,
-				get: () => set()[field],
-				set: (next) => {
-					set()[field] = next;
-				}
-			});
-		}
+		this.#installCopyFields();
+		const window = { mark: {}, next: this.#copyOfFields(this.#fields), nextCopy: null, settled, finish, closed: false };
 		this.#reloadWindow = window;
 		return window;
 	}
 
 	/**
-	 * End a full reload's window: the instance's fields become plain fields again, holding the build's set when the reload
-	 * succeeded (`swap`) and the set the instance had otherwise. The swap moves everything at once. The component
-	 * namespace objects stay the instance's own: on a swap they take the build's components.
+	 * End a full reload's window. On a swap (`swap`, the reload succeeded) the instance's set becomes the build's, all at
+	 * once: the component namespace objects stay the instance's own and take the build's components. A run opened before
+	 * the swap keeps the copy it started with: when one may still hold the instance's copy token, the token takes the set
+	 * the instance had, and the fields keep answering through {@link Slothlet#readField} until no such token is left.
+	 * Otherwise the fields become plain fields again.
 	 * @param {object} window - The window {@link Slothlet#openReloadWindow} opened.
 	 * @param {boolean} swap - Whether the new copy takes over.
 	 * @returns {void}
@@ -1947,23 +2008,176 @@ class Slothlet {
 	#closeReloadWindow(window, swap) {
 		if (window.closed) return;
 		window.closed = true;
-		const fields = concatLists(this.componentCategories, RELOAD_COPY_FIELDS);
-		for (let ofIndex = 0; ofIndex < fields.length; ofIndex++) {
-			const field = fields[ofIndex];
-			let value = window.served[field];
-			if (swap) {
-				const next = window.next[field];
-				if (ArrayMethods.includes(this.componentCategories, field)) {
-					for (let keyIndex = 0, keys = Objects.keys(value); keyIndex < keys.length; keyIndex++) {
-						if (!Objects.hasOwn(next, keys[keyIndex])) delete value[keys[keyIndex]];
-					}
-					Objects.assign(value, next);
-				} else {
-					value = next;
-				}
-			}
-			Objects.defineProperty(this, field, { __proto__: null, configurable: true, enumerable: true, writable: true, value });
+		if (swap) this.#swapCopy(window.next, window.nextCopy);
+		this.#settleCopyFields();
+	}
+
+	/**
+	 * Swap a new set in for the one the instance has (see {@link Slothlet#closeReloadWindow}). The instance's copy token,
+	 * when it handed one out, keeps the set the instance had, for the runs that recorded it.
+	 * @param {object} next - The new set, one value per field.
+	 * @param {object|null} nextCopy - The token the build handed out for the new set, if any.
+	 * @returns {void}
+	 * @private
+	 */
+	#swapCopy(next, nextCopy) {
+		const fields = this.#fields;
+		const old = this.#copy;
+		if (old !== null) {
+			old.values = this.#copyOfFields(fields);
+			this.#staleCopies++;
+			if (staleCopies !== null) FinalizationRegistryMethods.register(staleCopies, old, this.#staleCopyGone);
 		}
+		this.#copy = nextCopy;
+		for (let ofIndex = 0, ofList = this.#copyFieldNames(); ofIndex < ofList.length; ofIndex++) {
+			const field = ofList[ofIndex];
+			if (ArrayMethods.includes(this.componentCategories, field)) {
+				const value = fields[field];
+				const taken = next[field];
+				for (let keyIndex = 0, keys = Objects.keys(value); keyIndex < keys.length; keyIndex++) {
+					if (!Objects.hasOwn(taken, keys[keyIndex])) delete value[keys[keyIndex]];
+				}
+				Objects.assign(value, taken);
+			} else {
+				fields[field] = next[field];
+			}
+		}
+	}
+
+	/**
+	 * The fields a copy of the instance is made of: its component namespaces and {@link RELOAD_COPY_FIELDS}.
+	 * @returns {string[]} The field names.
+	 * @private
+	 */
+	#copyFieldNames() {
+		return concatLists(this.componentCategories, RELOAD_COPY_FIELDS);
+	}
+
+	/**
+	 * A copy of a set of fields, each component namespace a shallow copy of its own, so later changes to the namespace
+	 * objects leave it as it is.
+	 * @param {object} fields - The set, one value per field.
+	 * @returns {object} The copy.
+	 * @private
+	 */
+	#copyOfFields(fields) {
+		const copy = { __proto__: null };
+		for (let ofIndex = 0, ofList = this.#copyFieldNames(); ofIndex < ofList.length; ofIndex++) {
+			const field = ofList[ofIndex];
+			copy[field] = ArrayMethods.includes(this.componentCategories, field) ? { ...fields[field] } : fields[field];
+		}
+		return copy;
+	}
+
+	/**
+	 * Make the copy fields accessors that read through {@link Slothlet#readField}, holding the instance's own values in
+	 * {@link Slothlet#fields}. Done only while a reload builds or a run keeps a copy the instance no longer has; otherwise
+	 * they are plain fields, read at no extra cost.
+	 * @returns {void}
+	 * @private
+	 */
+	#installCopyFields() {
+		if (this.#fields !== null) return;
+		const fields = { __proto__: null };
+		for (let ofIndex = 0, ofList = this.#copyFieldNames(); ofIndex < ofList.length; ofIndex++) {
+			const field = ofList[ofIndex];
+			fields[field] = this[field];
+			Objects.defineProperty(this, field, {
+				__proto__: null,
+				configurable: true,
+				enumerable: true,
+				get: () => this.#readField(field),
+				set: (value) => {
+					this.#writeField(field, value);
+				}
+			});
+		}
+		this.#fields = fields;
+	}
+
+	/**
+	 * Make the copy fields plain fields again once nothing needs them read through {@link Slothlet#readField}: no reload
+	 * window open and no run keeping a copy the instance no longer has.
+	 * @returns {void}
+	 * @private
+	 */
+	#settleCopyFields() {
+		const fields = this.#fields;
+		if (fields === null || this.#staleCopies !== 0) return;
+		if (this.#reloadWindow !== null && !this.#reloadWindow.closed) return;
+		this.#fields = null;
+		for (let ofIndex = 0, ofList = this.#copyFieldNames(); ofIndex < ofList.length; ofIndex++) {
+			const field = ofList[ofIndex];
+			Objects.defineProperty(this, field, { __proto__: null, configurable: true, enumerable: true, writable: true, value: fields[field] });
+		}
+	}
+
+	/**
+	 * Read one of the copy fields while they are accessors. The value comes from, in order:
+	 * 1. the reload's build set, when the reading code runs in the build of a reload under way;
+	 * 2. the copy a `run()` / `scope()` recorded when it started, when the reading code runs in that run (its calls, and
+	 *    work it left behind, which holds its store) and a reload has swapped another copy in since;
+	 * 3. the instance's own set.
+	 * @param {string} field - The field.
+	 * @returns {*} The value.
+	 * @private
+	 */
+	#readField(field) {
+		const window = this.#reloadWindow;
+		if (window !== null && !window.closed && reloadBuildStorage.getStore() === window.mark) return window.next[field];
+		if (this.#staleCopies !== 0) {
+			const values = this.#runCopyValues();
+			if (values !== null) return values[field];
+		}
+		return this.#fields[field];
+	}
+
+	/**
+	 * Write one of the copy fields while they are accessors: into the reload's build set from its build, else into the
+	 * instance's own set.
+	 * @param {string} field - The field.
+	 * @param {*} value - The value.
+	 * @returns {void}
+	 * @private
+	 */
+	#writeField(field, value) {
+		const window = this.#reloadWindow;
+		if (window !== null && !window.closed && reloadBuildStorage?.getStore() === window.mark) window.next[field] = value;
+		else this.#fields[field] = value;
+	}
+
+	/**
+	 * The set of the copy the running code's `run()` / `scope()` keeps, when that is a copy the instance no longer has.
+	 * @returns {object|null} The set, or null when the code runs in no such run.
+	 * @private
+	 */
+	#runCopyValues() {
+		// Telling the running store apart can read the instance's fields itself: those reads answer from its own set.
+		if (this.#resolvingCopy) return null;
+		this.#resolvingCopy = true;
+		try {
+			const record = this.contextManager?.tryGetContext?.(this.instanceID)?.[RUN_COPY];
+			return record === undefined || record === null ? null : record.from.values;
+		} finally {
+			this.#resolvingCopy = false;
+		}
+	}
+
+	/**
+	 * The token of the copy the instance has now, which the copy record each `run()` / `scope()` gets when it starts
+	 * reads through to (see `RUN_COPY` and `copyForRun` in `helpers/flow-stores`). Made the first time a run asks for it after a swap, so a reload with no run open swaps
+	 * nothing out for runs to keep. A run opened by the build of a reload under way records the build's copy.
+	 * @returns {{values: object|null}} The token.
+	 * @internal
+	 */
+	[CURRENT_COPY]() {
+		const window = this.#reloadWindow;
+		if (window !== null && !window.closed && reloadBuildStorage.getStore() === window.mark) {
+			window.nextCopy ??= { values: null };
+			return window.nextCopy;
+		}
+		this.#copy ??= { values: null };
+		return this.#copy;
 	}
 
 	/**

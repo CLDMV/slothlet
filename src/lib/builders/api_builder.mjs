@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T16:28:00-08:00 (1794961680)
+ *	@Last modified time: 2026-11-17T18:55:54-08:00 (1794970554)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -40,7 +40,7 @@ import { internals as frameworkInternalsInternals } from "#handlers/framework-in
 import { ceilingMembers, combineCeilings, identityCeilings, internals as trustedRootInternals } from "#handlers/trusted-root";
 import { getLanguage, t, translate, internals as translationsInternals } from "#i18n";
 import { assertOptionKeys } from "#helpers/config-schema";
-import { trackFlowStore } from "#helpers/flow-stores";
+import { copyForRun, RUN_COPY, trackFlowStore } from "#helpers/flow-stores";
 import {
 	ArrayMethods,
 	Arrays,
@@ -4983,7 +4983,10 @@ export class ApiBuilder extends ComponentBase {
 						// Inherit + extend owner-locked context keys (opt-in); null when no key is owned.
 						__contextOwners: buildContextOwners(currentStore.__contextOwners),
 						// The keys this scope supplied itself, which `context.set()` leaves alone while it runs.
-						__ownKeys: buildOwnKeys(currentStore.__ownKeys)
+						__ownKeys: buildOwnKeys(currentStore.__ownKeys),
+						// The copy of the instance the run's calls are answered from: its parent run's, else the one the instance
+						// has now. A reload swapping another copy in does not change it.
+						[RUN_COPY]: copyForRun(slothlet, currentStore)
 					};
 					// Propagate the trusted-root marker so a host-level `run()`/`scope()` (whose parent
 					// is the trusted base store and which carries no module caller) stays trusted. A
@@ -5083,7 +5086,10 @@ export class ApiBuilder extends ComponentBase {
 						// Inherit + extend owner-locked context keys (opt-in); null when no key is owned.
 						__contextOwners: buildContextOwners(currentStore.__contextOwners),
 						// The keys this scope supplied itself, which `context.set()` leaves alone while it runs.
-						__ownKeys: buildOwnKeys(currentStore.__ownKeys)
+						__ownKeys: buildOwnKeys(currentStore.__ownKeys),
+						// The copy of the instance the run's calls are answered from: its parent run's, else the one the instance
+						// has now. A reload swapping another copy in does not change it.
+						[RUN_COPY]: copyForRun(slothlet, currentStore)
 					};
 					// Propagate the trusted-root marker so a host-level `run()`/`scope()` (whose parent
 					// is the trusted base store and which carries no module caller) stays trusted. A

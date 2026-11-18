@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T16:28:02-08:00 (1794961682)
+ *	@Last modified time: 2026-11-17T18:55:56-08:00 (1794970556)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -64,7 +64,7 @@ import {
 	WeakSetMethods
 } from "#helpers/intrinsics";
 import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "#helpers/instance-imports";
-import { trackFlowStore } from "#helpers/flow-stores";
+import { RUN_COPY, trackFlowStore } from "#helpers/flow-stores";
 const { markSlothletProxy } = frameworkInternalsInternals("lib/handlers/trusted-root");
 
 /**
@@ -479,7 +479,9 @@ function buildCapturedFlowStore(instances, instanceID, captured) {
 		currentCeiling: captured.ceiling ?? null,
 		callerCeiling: captured.callerCeiling ?? null,
 		slothlet: baseStore.slothlet,
-		__contextOwners: captured.contextOwners
+		__contextOwners: captured.contextOwners,
+		// The copy of the instance the snapshotted flow ran on, if it ran in a run() / scope(): its calls keep it.
+		[RUN_COPY]: captured.copy ?? null
 	};
 	if (captured.trusted) {
 		Objects.defineProperty(childStore, TRUSTED_ROOT, { __proto__: null, value: true, configurable: true });

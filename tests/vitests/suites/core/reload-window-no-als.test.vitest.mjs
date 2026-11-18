@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T17:17:19-08:00 (1794964639)
+ *	@Last modified time: 2026-11-17T18:56:50-08:00 (1794970610)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -23,6 +23,9 @@
  * and its own `a.inner()`; `vault/secret.mjs`, mounted at `b` with `api.add()` (a module of its own), holds `secret()`;
  * `api/slow/slow.mjs` waits on `globalThis[HOLD]` while it loads, when that is set, so a test holds a reload in the
  * middle of building its new copy.
+ *
+ * A `run()` opened before the reload keeps the copy the instance had before it once the reload is done; while the
+ * reload builds, its calls reach the new components as everyone's do.
  */
 import path from "node:path";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
@@ -228,6 +231,32 @@ describe("calls while a reload builds its new copy — no AsyncLocalStorage", ()
 		} finally {
 			hold?.release();
 			await hold?.reloading.catch(() => {});
+			await api.slothlet.shutdown();
+		}
+	});
+
+	it("a run opened before the reload keeps the copy it had once the reload is done, while the instance moves on", async () => {
+		const api = await make({ permissions: { mode: "on" } });
+		try {
+			const ruleId = api.slothlet.permissions.rules.add({ caller: "a.**", target: "b.secret", effect: "deny" });
+			const entered = gate();
+			const step = gate();
+			const run = api.slothlet.context.run({ user: "alice" }, async () => {
+				const before = await outcome(() => api.a.secretVia());
+				entered.release();
+				await step.promise;
+				const after = await outcome(() => api.a.secretVia());
+				await null;
+				return { before, after, afterAwait: await outcome(() => api.a.secretLater()) };
+			});
+			await entered.promise;
+			await api.slothlet.reload();
+			api.slothlet.permissions.rules.remove(ruleId);
+			expect(await outcome(() => api.a.secretVia())).toBe("secret");
+			step.release();
+			expect(await run).toEqual({ before: "PERMISSION_DENIED", after: "PERMISSION_DENIED", afterAwait: "PERMISSION_DENIED" });
+			expect(await outcome(() => api.a.secretVia())).toBe("secret");
+		} finally {
 			await api.slothlet.shutdown();
 		}
 	});

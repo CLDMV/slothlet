@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T15:07:35-08:00 (1794956855)
+ *	@Last modified time: 2026-11-17T18:55:55-08:00 (1794970555)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -27,6 +27,7 @@ import { DEFAULT_CLOCK } from "#helpers/clock";
 import { runtime_isClassInstance, internals as classInstanceWrapperInternals } from "#helpers/class-instance-wrapper";
 import { internals as eventemitterContextInternals } from "#helpers/eventemitter-context";
 import { internals as trustedRootInternals } from "#handlers/trusted-root";
+import { RUN_COPY } from "#helpers/flow-stores";
 import {
 	carriesCallerCode,
 	handsOutAsModule,
@@ -1816,6 +1817,7 @@ export class AsyncContextManager {
 			ceiling: identity.ceiling ?? null,
 			callerCeiling: identity.callerCeiling ?? null,
 			contextOwners: store.__contextOwners ?? null,
+			copy: store[RUN_COPY] ?? null,
 			trusted: store[trustedRootOwn.TRUSTED_ROOT] === true
 		};
 	}
