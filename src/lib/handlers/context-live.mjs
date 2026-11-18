@@ -918,6 +918,10 @@ export class LiveContextManager {
 		const stop = this.#stopFlowHooks;
 		this.#stopFlowHooks = null;
 		this.#runningStarter = null;
+		// Released from inside a promise job: that job's `after` no longer runs, so nothing is left counted for it.
+		this.#jobDepth = 0;
+		this.#jobOuter.length = 0;
+		this.#jobReopened.length = 0;
 		stop();
 	}
 
@@ -3262,9 +3266,11 @@ export class LiveContextManager {
 	/**
 	 * Cleanup instance context
 	 * @param {string} instanceID - Instance to cleanup
+	 * @param {{keepFlows?: boolean}} [options] - `keepFlows`: leave the instance's run() / scope() stores in place (a
+	 *   reload that keeps the instance's ID makes a new base store under the same ID).
 	 * @public
 	 */
-	cleanup(instanceID) {
+	cleanup(instanceID, { keepFlows = false } = {}) {
 		const store = MapMethods.get(this.instances, instanceID);
 		if (!store) {
 			throw new SlothletError("CONTEXT_NOT_FOUND", {
@@ -3279,6 +3285,20 @@ export class LiveContextManager {
 
 		// Remove from instances map
 		MapMethods.delete(this.instances, instanceID);
+		// Its run() / scope() stores go too, including one put back for work a finished run left behind that is running
+		// now (see reopenFlowStore): the shutdown can come from that work, and when it releases the last instance the
+		// promise hooks are gone before the job's `after` would have taken the store out again.
+		let activeRemoved = this.#activeID === instanceID;
+		for (let ofIndex = 0, ofList = keepFlows ? [] : mapValuesToArray(this.instances); ofIndex < ofList.length; ofIndex++) {
+			const child = ofList[ofIndex];
+			if (child.parentInstanceID !== instanceID) continue;
+			MapMethods.delete(this.instances, child.instanceID);
+			if (this.#activeID === child.instanceID) activeRemoved = true;
+		}
+		for (let index = 0; index < this.#jobReopened.length; index++) {
+			const reopened = this.#jobReopened[index];
+			if (reopened && (reopened === store || (!keepFlows && reopened.parentInstanceID === instanceID))) this.#jobReopened[index] = null;
+		}
 		if (store.__recordsFlowStarters) {
 			store.__recordsFlowStarters = false;
 			this.#releaseFlowStarters();
@@ -3296,8 +3316,8 @@ export class LiveContextManager {
 			if (busy === store || busy.parentInstanceID === instanceID) SetMethods.delete(this.#busyStores, busy);
 		}
 
-		// Clear current instance if it was this one
-		if (this.#activeID === instanceID) {
+		// Clear current instance if it was this one or one of its run() / scope() stores
+		if (activeRemoved) {
 			this.#activeID = null;
 		}
 	}

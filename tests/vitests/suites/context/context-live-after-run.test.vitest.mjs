@@ -391,3 +391,52 @@ describe.each(PERMISSIONS)("live runtime: a finished run's store is released onc
 		]);
 	});
 });
+
+describe.each(PERMISSIONS)("live runtime: shutdown from work a run left behind leaves no store > %s", (_name, permissions) => {
+	/**
+	 * Open a live instance, run a `run()` whose callback schedules `shutdown()` through a route, wait for it, and return
+	 * the manager's instance ids from before the instance was made and after it has shut down.
+	 * @param {function(object, function(): void): void} schedule - Schedules `done(api.shutdown())` from the run.
+	 * @returns {Promise<{before: string[], after: string[]}>} The instance ids.
+	 */
+	async function shutdownFromLateWork(schedule) {
+		const probe = await slothlet({ base: path.join(ROOT, "api"), runtime: "live", mode: "eager", silent: true });
+		const manager = resolveWrapper(probe.who.tag).slothlet.contextManager;
+		await probe.shutdown();
+		const before = [...manager.instances.keys()];
+		const api = await slothlet({
+			base: path.join(ROOT, "api"),
+			runtime: "live",
+			mode: "eager",
+			silent: true,
+			context: { tag: "base" },
+			...(permissions ? { permissions } : {})
+		});
+		const done = gate();
+		await api.slothlet.context.run({ tag: "alice" }, () => schedule(api, (shutdown) => done.release(shutdown)));
+		await await done.promise;
+		await wait(5);
+		return { before, after: [...manager.instances.keys()] };
+	}
+
+	it("a timer", async () => {
+		const { before, after } = await shutdownFromLateWork((api, done) => setTimeout(() => done(api.slothlet.shutdown()), 10));
+		expect(after).toEqual(before);
+	});
+
+	it("a promise chain", async () => {
+		const { before, after } = await shutdownFromLateWork((api, done) => {
+			wait(10).then(() => done(api.slothlet.shutdown()));
+		});
+		expect(after).toEqual(before);
+	});
+
+	it("an EventEmitter listener", async () => {
+		const bus = new EventEmitter();
+		const { before, after } = await shutdownFromLateWork((api, done) => {
+			bus.once("stop", () => done(api.slothlet.shutdown()));
+			setTimeout(() => bus.emit("stop"), 10);
+		});
+		expect(after).toEqual(before);
+	});
+});

@@ -1364,8 +1364,9 @@ class Slothlet {
 		// Initialize context (or reuse existing if preservedInstanceID provided)
 		let store;
 		if (preservedInstanceID && MapMethods.has(this.contextManager.instances, preservedInstanceID)) {
-			// Reload: DONT reuse store, delete old and create fresh
-			this.contextManager.cleanup(preservedInstanceID);
+			// Reload: DONT reuse store, delete old and create fresh. The instance keeps its ID, so its run() / scope()
+			// stores stay where they are.
+			this.contextManager.cleanup(preservedInstanceID, { keepFlows: true });
 			store = this.contextManager.initialize(this.instanceID, this.config, this.#clock);
 		} else {
 			// Fresh load: initialize new store
