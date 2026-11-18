@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T13:35:17-08:00 (1794951317)
+ *	@Last modified time: 2026-11-17T16:28:02-08:00 (1794961682)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -64,6 +64,7 @@ import {
 	WeakSetMethods
 } from "#helpers/intrinsics";
 import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "#helpers/instance-imports";
+import { trackFlowStore } from "#helpers/flow-stores";
 const { markSlothletProxy } = frameworkInternalsInternals("lib/handlers/trusted-root");
 
 /**
@@ -483,6 +484,8 @@ function buildCapturedFlowStore(instances, instanceID, captured) {
 	if (captured.trusted) {
 		Objects.defineProperty(childStore, TRUSTED_ROOT, { __proto__: null, value: true, configurable: true });
 	}
+	// Work the flow leaves behind can outlive it and a reload: the reload moves the store to the new ID.
+	trackFlowStore(childStore.slothlet, childStore);
 	return childStore;
 }
 

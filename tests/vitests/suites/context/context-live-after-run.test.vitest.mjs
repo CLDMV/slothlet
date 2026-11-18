@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T15:03:57-08:00 (1794956637)
+ *	@Last modified time: 2026-11-17T16:28:41-08:00 (1794961721)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -29,7 +29,10 @@
  * finished run. On the live runtime a finished run's store is released once nothing tied to it remains: thousands of
  * short runs with completed timers leave no store behind.
  *
- * Fixture (written to tmp/): `who.tag()` reports `context.tag`; `late.read(hold)` waits for `hold`, then reports the tag.
+ * Work a run leaves behind keeps the run's context across a `reload()` of the instance too, on both runtimes.
+ *
+ * Fixture (written to tmp/): `who.tag()` reports `context.tag`; `late.read(hold)` waits for `hold`, then reports the tag;
+ * `late.tagWhen(ready, done)` reports the tag from an interval of the module's own once `ready()` is true.
  */
 
 import path from "node:path";
@@ -71,6 +74,13 @@ beforeAll(() => {
 		"}",
 		"export function timer(ms, done) {",
 		"\tsetTimeout(() => done({ own: context.tag ?? null, viaSelf: self.who.tag() }), ms);",
+		"}",
+		"export function tagWhen(ready, done) {",
+		"\tconst handle = setInterval(() => {",
+		"\t\tif (!ready()) return;",
+		"\t\tclearInterval(handle);",
+		"\t\tdone(context.tag ?? null);",
+		"\t}, 5);",
 		"}"
 	]);
 });
@@ -438,5 +448,97 @@ describe.each(PERMISSIONS)("live runtime: shutdown from work a run left behind l
 			setTimeout(() => bus.emit("stop"), 10);
 		});
 		expect(after).toEqual(before);
+	});
+});
+
+describe.each(MATRIX)("work a run() leaves behind keeps its context across a reload > $runtime / $name", ({ runtime, permissions }) => {
+	let api;
+
+	beforeAll(async () => {
+		api = await slothlet({
+			base: path.join(ROOT, "api"),
+			runtime,
+			mode: "eager",
+			silent: true,
+			context: { tag: "base" },
+			...(permissions ? { permissions } : {})
+		});
+	});
+
+	afterAll(async () => {
+		await api?.shutdown();
+		api = null;
+	});
+
+	afterEach(() => {
+		expect(api.slothlet.context.get().tag).toBe("base");
+		expect(api.who.tag()).toBe("base");
+	});
+
+	// The intervals report only once the reload has finished: the api is not called while it reloads.
+	it("a module's own interval set in the run reports after a reload", async () => {
+		const seen = gate();
+		let reloaded = false;
+		await api.slothlet.context.run({ tag: "alice" }, () => api.late.tagWhen(() => reloaded, seen.release));
+		await api.slothlet.reload();
+		reloaded = true;
+		expect(await seen.promise).toBe("alice");
+	});
+
+	it("an interval set in the run reports after a reload", async () => {
+		const seen = gate();
+		let reloaded = false;
+		await api.slothlet.context.run({ tag: "alice" }, () => {
+			const handle = setInterval(() => {
+				if (!reloaded) return;
+				clearInterval(handle);
+				seen.release({ host: api.slothlet.context.get().tag, module: api.who.tag() });
+			}, 5);
+		});
+		await api.slothlet.reload();
+		reloaded = true;
+		expect(await seen.promise).toEqual({ host: "alice", module: "alice" });
+	});
+
+	it("a promise chain started in the run picks up after a reload", async () => {
+		const seen = gate();
+		const hold = gate();
+		await api.slothlet.context.run({ tag: "alice" }, () => {
+			hold.promise.then(() => seen.release({ host: api.slothlet.context.get().tag, module: api.who.tag() }));
+		});
+		await api.slothlet.reload();
+		hold.release();
+		expect(await seen.promise).toEqual({ host: "alice", module: "alice" });
+	});
+
+	it("a run open across a reload that keeps the instance ID keeps its context, and so does its late work", async () => {
+		const seen = gate();
+		let reloaded = false;
+		const inside = await api.slothlet.context.run({ tag: "alice" }, async () => {
+			const handle = setInterval(() => {
+				if (!reloaded) return;
+				clearInterval(handle);
+				seen.release(api.who.tag());
+			}, 5);
+			await api.slothlet.reload({ instance: "keep" });
+			return { host: api.slothlet.context.get().tag, module: api.who.tag() };
+		});
+		reloaded = true;
+		expect(inside).toEqual({ host: "alice", module: "alice" });
+		expect(await seen.promise).toBe("alice");
+	});
+
+	it("an EventEmitter listener added in the run fires after two reloads", async () => {
+		const bus = new EventEmitter();
+		const seen = [];
+		await api.slothlet.context.run({ tag: "alice" }, () => {
+			bus.on("ping", () => seen.push(api.who.tag()));
+		});
+		await api.slothlet.reload();
+		bus.emit("ping");
+		await api.slothlet.reload();
+		bus.emit("ping");
+		bus.removeAllListeners();
+		expect(seen).toEqual(["alice", "alice"]);
 	});
 });

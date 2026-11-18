@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T15:07:34-08:00 (1794956854)
+ *	@Last modified time: 2026-11-17T16:28:00-08:00 (1794961680)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -40,6 +40,7 @@ import { internals as frameworkInternalsInternals } from "#handlers/framework-in
 import { ceilingMembers, combineCeilings, identityCeilings, internals as trustedRootInternals } from "#handlers/trusted-root";
 import { getLanguage, t, translate, internals as translationsInternals } from "#i18n";
 import { assertOptionKeys } from "#helpers/config-schema";
+import { trackFlowStore } from "#helpers/flow-stores";
 import {
 	ArrayMethods,
 	Arrays,
@@ -4994,6 +4995,8 @@ export class ApiBuilder extends ComponentBase {
 
 					// Register child instance
 					MapMethods.set(contextManager.instances, childInstanceID, childStore);
+					// Work the run leaves behind can outlive it and a reload: the reload moves the store to the new ID.
+					trackFlowStore(childStore.slothlet, childStore);
 
 					try {
 						// Execute callback in the child store, marked on the stack as a run()/scope() callback (see runParent).
@@ -5092,6 +5095,8 @@ export class ApiBuilder extends ComponentBase {
 
 					// Register child instance
 					MapMethods.set(contextManager.instances, childInstanceID, childStore);
+					// Work the run leaves behind can outlive it and a reload: the reload moves the store to the new ID.
+					trackFlowStore(childStore.slothlet, childStore);
 
 					try {
 						// Run the callback in the run's store. Its result is taken up there too: a thenable that is no native

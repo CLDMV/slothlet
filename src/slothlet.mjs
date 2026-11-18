@@ -92,6 +92,7 @@ import { internals as contextInternals } from "#factories/context";
 import { warnIfCoverageWithoutImporter } from "#processors/loader";
 import { SlothletError, SlothletWarning } from "#errors";
 import { SlothletDebug } from "#helpers/debug";
+import { forgetFlowStores, reparentFlowStores } from "#helpers/flow-stores";
 import { registerInstance } from "#handlers/lifecycle-token";
 import { isCallableValue, internals as unifiedWrapperInternals } from "#handlers/unified-wrapper";
 import { isFrameworkInternal, internals as frameworkInternalsInternals } from "#handlers/framework-internals";
@@ -1946,6 +1947,9 @@ class Slothlet {
 				store.parentInstanceID = this.instanceID;
 			}
 		}
+		// The stores of runs that have returned are no longer among the instances, but work they left behind (a timer, a
+		// listener, a promise chain) still holds them and runs in them: they move to the new ID too.
+		reparentFlowStores(this, [oldInstanceID, reloadedFrom], this.instanceID);
 
 		// 6. Clean up the old base context store now that the new one is active.
 		//    Guard with .has() because shutdown() may have already removed the store.
@@ -2457,6 +2461,7 @@ class Slothlet {
 			const from = this.#reloadingFrom;
 			if (from !== null && from !== this.instanceID && MapMethods.has(instances, from)) this.contextManager.cleanup(from);
 			this.#reloadingFrom = null;
+			forgetFlowStores(this);
 		}
 
 		// Clear ownership
