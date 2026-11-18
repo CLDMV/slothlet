@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T20:34:14-08:00 (1794976454)
+ *	@Last modified time: 2026-11-17T20:43:14-08:00 (1794976994)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -941,13 +941,13 @@ export class LiveContextManager {
 						return;
 					}
 					if (record !== null && typeof record === "object") {
-						manager.#activeID = record.flow;
-						manager.#runningStarter = record.starter;
 						// The run() / scope() the promise was made in has returned: its store is back for this job.
 						if (record.store !== undefined && manager.#reopenFlowStore(record.store))
 							manager.#jobReopened[manager.#jobDepth - 1] = record.store;
+						manager.#activeID = manager.#flowIfOpen(record.flow);
+						manager.#runningStarter = record.starter;
 					} else {
-						manager.#activeID = record;
+						manager.#activeID = manager.#flowIfOpen(record);
 						manager.#runningStarter = null;
 					}
 				},
@@ -1097,6 +1097,20 @@ export class LiveContextManager {
 		if (cut <= 0) return id;
 		const base = StringMethods.slice(id, 0, cut);
 		return MapMethods.has(this.instances, base) ? base : id;
+	}
+
+	/**
+	 * The flow a promise job or a carried callback runs in, when the store it was made in is still open: its own, or for a
+	 * removed `run()` / `scope()` store, its live instance's (see removedRunBase). Work that outlives its instance runs with
+	 * no store, as any callback that outlives its instance; naming the removed store would leave the active-instance field
+	 * pointing at a store that is gone.
+	 * @param {string|null} id - The flow the work was made in.
+	 * @returns {string|null} The id, or null when its instance has shut down.
+	 * @private
+	 */
+	#flowIfOpen(id) {
+		if (id === null || MapMethods.has(this.instances, id)) return id;
+		return this.#removedRunBase(id) === id ? null : id;
 	}
 
 	/**
@@ -1905,7 +1919,7 @@ export class LiveContextManager {
 				const manager = liveContextManagerRef;
 				const previous = manager.#activeID;
 				const reopened = ofRun && manager.#reopenFlowStore(flowStore);
-				manager.#activeID = flowID;
+				manager.#activeID = manager.#flowIfOpen(flowID);
 				try {
 					return FunctionMethods.apply(listener, this, args);
 				} finally {
