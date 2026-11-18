@@ -39,12 +39,12 @@
 import path from "node:path";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
-import { AsyncResource, executionAsyncResource } from "node:async_hooks";
+import { AsyncResource, createHook, executionAsyncId, executionAsyncResource } from "node:async_hooks";
 import v8 from "node:v8";
 import vm from "node:vm";
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import slothlet from "@cldmv/slothlet";
-import { answerPromiseProbe } from "#handlers/context-async";
+import { answerPromiseProbe, promiseProbeResult } from "#handlers/context-async";
 import { stackReadCount } from "#helpers/stack-read";
 
 const ROOT = path.join(process.cwd(), "tmp", "flow-self-reentry");
@@ -343,5 +343,49 @@ describe("Permissions > a flow's own promise or tick job re-entered by module co
 		} finally {
 			answerPromiseProbe(false);
 		}
+	});
+});
+
+/**
+ * Whether the Node running the suite leaves an async hook made with `trackPromises: false` (or the `kNoPromiseHook`
+ * marker on a Node whose `createHook()` takes no such option) out of a promise's job: told by a hook of the test's own,
+ * whose `before` would see the job's async id. Call it while slothlet's job hook is installed, so promises get ids.
+ * @returns {Promise<boolean>} Whether promise jobs are left out.
+ */
+function nodeLeavesPromiseJobsOut() {
+	return new Promise((resolve) => {
+		let seen = -1;
+		const hook = createHook({
+			before(asyncId) {
+				seen = asyncId;
+			},
+			trackPromises: false
+		});
+		const marker = Object.getOwnPropertySymbols(hook).find((symbol) => symbol.description === "kNoPromiseHook");
+		if (marker !== undefined) hook[marker] = true;
+		hook.enable();
+		Promise.resolve().then(() => {
+			const job = executionAsyncId();
+			hook.disable();
+			resolve(seen !== job);
+		});
+	});
+}
+
+describe("Permissions > the install-time probe of promise jobs", () => {
+	let api;
+
+	beforeAll(async () => {
+		answerPromiseProbe(null);
+		api = await slothlet({ base: path.join(ROOT, "api"), silent: true, runtime: "async" });
+		await new Promise((resolve) => setImmediate(resolve));
+	});
+
+	afterAll(async () => {
+		await api?.slothlet.shutdown();
+	});
+
+	it("answers whether Node leaves the second async hook out of a promise's job, as a hook of the test's own finds", async () => {
+		expect(promiseProbeResult()).toBe(await nodeLeavesPromiseJobsOut());
 	});
 });

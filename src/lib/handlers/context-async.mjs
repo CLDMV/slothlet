@@ -20,7 +20,7 @@
  */
 // Node-only ALS resolved in the platform module so node:async_hooks stays out of the browser
 // static graph (#123). Browser uses the live context manager, so this manager never runs there.
-import { AsyncLocalStorage, AsyncResource, createHook, executionAsyncResource, inheritsFrom } from "#helpers/platform";
+import { AsyncLocalStorage, AsyncResource, createHook, executionAsyncId, executionAsyncResource, inheritsFrom } from "#helpers/platform";
 import { nativeThen } from "#helpers/promise-context";
 import { SlothletError } from "#errors";
 import { DEFAULT_CLOCK } from "#helpers/clock";
@@ -266,6 +266,25 @@ let promiseProbeAnswer = null;
  */
 export function answerPromiseProbe(answer) {
 	promiseProbeAnswer = answer === false ? false : null;
+}
+
+/**
+ * What the install-time probe last found (see {@link AsyncContextManager#holdScopeHook}): whether Node leaves the
+ * second async hook out of a promise's job, or null before any probe's job has run.
+ * @type {boolean|null}
+ * @private
+ */
+let promiseProbeFound = null;
+
+/**
+ * What the install-time probe last found: whether the Node running leaves the second async hook out of a promise's job
+ * (`true`), runs it there (`false`), or null before any probe's job has run. For the suite, which checks the probe's own
+ * answer against the Node it runs on.
+ * @returns {boolean|null} The answer.
+ * @internal
+ */
+export function promiseProbeResult() {
+	return promiseProbeFound;
 }
 
 /**
@@ -737,16 +756,11 @@ export class AsyncContextManager {
 	#promiseJobsLeftOut = null;
 
 	/**
-	 * The promise whose job tells whether Node leaves the second hook out of promise jobs, until that job has run.
-	 * @type {object|null}
+	 * The async id of the callback the second hook last saw begin (see {@link AsyncContextManager#holdScopeHook}): the
+	 * probe promise's job compares it with its own.
+	 * @type {number}
 	 */
-	#promiseProbe = null;
-
-	/**
-	 * Whether the second hook ran for the probe promise's job.
-	 * @type {boolean}
-	 */
-	#promiseProbeSeen = false;
+	#scopeHookSaw = -1;
 
 	/**
 	 * The promise of the flow's whose scope code put in place through `runInAsyncScope()` while no other callback ran
@@ -805,7 +819,8 @@ export class AsyncContextManager {
 	#holdScopeHook() {
 		const manager = this;
 		const hook = createHook({
-			before() {
+			before(asyncId) {
+				manager.#scopeHookSaw = asyncId;
 				manager.#scriptBegins();
 			},
 			trackPromises: false
@@ -818,10 +833,11 @@ export class AsyncContextManager {
 		Reflect.apply(hookMethods.enable, hook, []);
 		this.#scopeHook = hook;
 		this.#promiseJobsLeftOut = null;
-		this.#promiseProbeSeen = false;
-		this.#promiseProbe = nativeThen(Promises.resolve(), () => {
-			this.#promiseJobsLeftOut = !this.#promiseProbeSeen;
-			this.#promiseProbe = null;
+		this.#scopeHookSaw = -1;
+		// The reaction runs as the job of the promise the engine's `then` makes (not the one `nativeThen()` hands back):
+		// the second hook saw that job begin exactly when its async id is the one running the reaction.
+		nativeThen(Promises.resolve(), () => {
+			promiseProbeFound = this.#promiseJobsLeftOut = this.#scopeHookSaw !== executionAsyncId();
 		});
 	}
 
@@ -907,7 +923,6 @@ export class AsyncContextManager {
 		this.#lastTold = null;
 		this.#entry = { stretch: -1, resource: null, byNode: false };
 		this.#scriptBegun = null;
-		this.#promiseProbe = null;
 		this.#promiseJobsLeftOut = null;
 		const scopeHook = this.#scopeHook;
 		this.#scopeHook = null;
@@ -1015,7 +1030,6 @@ export class AsyncContextManager {
 	 */
 	#scriptBegins() {
 		const resource = executionAsyncResource();
-		if (resource === this.#promiseProbe) this.#promiseProbeSeen = true;
 		// Kept only for the outermost callback (the async hook that keeps the stack runs first): a scope entered inside it
 		// is not taken for a job Node began anyway.
 		if (this.#jobStack.length === 1 && this.#jobStack[0] === resource && PromiseFlow.of(resource) !== undefined)
