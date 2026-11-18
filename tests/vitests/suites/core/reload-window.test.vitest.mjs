@@ -51,6 +51,9 @@ beforeAll(() => {
 			"export function inner() {",
 			'\treturn "inner";',
 			"}",
+			"export function reloadIt() {",
+			"\treturn self.slothlet.reload();",
+			"}",
 			"export function innerVia() {",
 			"\treturn self.a.inner();",
 			"}",
@@ -285,5 +288,25 @@ describe.each([["async"], ["live"]])("calls while a reload builds its new copy â
 			await hold?.reloading.catch(() => {});
 			await api.slothlet.shutdown();
 		}
+	});
+});
+
+describe.each([["async"], ["live"]])("a reload a module asks for â€” %s runtime", (runtime) => {
+	describe.each([["none"], ["off"], ["disabled"], ["on"]])("permissions %s", (mode) => {
+		it("builds the new copy as the host, and the new copy answers", async () => {
+			const permissions =
+				mode === "none" ? {} : { permissions: { mode, rules: [{ caller: "a.**", target: "slothlet.reload", effect: "allow" }] } };
+			const api = await slothlet({ base: BASE, runtime, silent: true, ...permissions });
+			try {
+				await api.slothlet.api.add("b", VAULT, { id: "vault" });
+				const id = api.slothlet.instance.id;
+				await api.a.reloadIt();
+				expect(api.slothlet.instance.id).not.toBe(id);
+				expect(api.a.innerVia()).toBe("inner");
+				expect(api.b.secret()).toBe("secret");
+			} finally {
+				await api.slothlet.shutdown();
+			}
+		});
 	});
 });

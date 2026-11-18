@@ -1864,8 +1864,10 @@ class Slothlet {
 		const kept = window === null ? this.#keepForFailedReload() : null;
 		this.#pendingScope = nextScope;
 		try {
-			if (window === null) return await this.#reloadOnto(nextScope, oldInstanceID, null);
-			return await reloadBuildStorage.run(window.mark, () => this.#reloadOnto(nextScope, oldInstanceID, window));
+			// The build is framework work, run as the host even when a module's call asked for the reload (as restart()'s is,
+			// #903): the module's call belongs to the copy being replaced.
+			if (window === null) return await this._runAsHost(() => this.#reloadOnto(nextScope, oldInstanceID, null));
+			return await reloadBuildStorage.run(window.mark, () => this._runAsHost(() => this.#reloadOnto(nextScope, oldInstanceID, window)));
 		} catch (error) {
 			this.#pendingScope = null;
 			if (window !== null) this.#closeReloadWindow(window, false);
