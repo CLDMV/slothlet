@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T21:15:37-08:00 (1794978937)
+ *	@Last modified time: 2026-11-18T06:11:45-08:00 (1795011105)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -883,7 +883,10 @@ export class ApiManager extends ComponentBase {
 		// A deny naming an object member of a module's data exactly covers what the member holds, for reads (see
 		// {@link PermissionManager#enforceAccess}'s `dataMember`): a write beneath it is held to the same extension.
 		const options = { moduleCaller: true, newMember: false, dataMember: runtime_dataReadOptions(this.slothlet).dataMember };
-		const check = (path, targetFile, newMember = false) => {
+		// With read gating off no rule gates a read of data, so a data member is held to no read rule either.
+		const readGated = permissionManager.isReadGatingEnabled();
+		const check = (path, targetFile, newMember = false, data = false) => {
+			if (data && !readGated) return;
 			options.newMember = newMember;
 			if (!permissionManager.enforceAccess(callerPath, path, callerFilePath, targetFile, runtimeContext, null, options)) {
 				throw new this.SlothletError("PERMISSION_DENIED", { caller: callerPath, target: segmentsOf(path) });
@@ -898,7 +901,7 @@ export class ApiManager extends ComponentBase {
 		if (!exists && holder !== undefined && this.#isHeldValue(holder, parts)) {
 			check(ArrayMethods.join(copyList(parts, 0, parts.length - 1), "."), filePath);
 		}
-		check(targetPath, filePath, !exists);
+		check(targetPath, filePath, !exists, exists && typeof value !== "function");
 		// Replacing, redefining or deleting a node takes over every member it holds: each is held to its own access.
 		if (exists) this.#assertMembersBeneath(targetPath, value, filePath, check, inFlight);
 	}
@@ -913,7 +916,8 @@ export class ApiManager extends ComponentBase {
 	 * @param {string} targetPath - The node's api path.
 	 * @param {*} node - The node, as the live tree holds it.
 	 * @param {string|null} filePath - The node's source file.
-	 * @param {function(string, ?string): void} check - Refuses one member, by its path and source file.
+	 * @param {function(string, ?string, boolean=, boolean=): void} check - Refuses one member, by its path, source file, whether
+	 *   it is new, and whether it is data (held to the read rules only while read gating is on).
 	 * @param {{moduleID: string, prior: Map<string, *>}|null} [inFlight=null] - An add in flight: what it registered for
 	 *   itself is new, not a member the write takes over (see {@link ApiManager#ownsPath}).
 	 * @returns {void}
@@ -922,6 +926,12 @@ export class ApiManager extends ComponentBase {
 	 */
 	#assertMembersBeneath(targetPath, node, filePath, check, inFlight = null) {
 		if (node === null || (typeof node !== "object" && typeof node !== "function")) return;
+		// A data value (a Buffer, a typed array, a Date, a Map, an instance) is read whole, as the read gate reads it: what
+		// it holds (a typed array's indices) is no member of the api, and the check of the value itself covered it.
+		if (typeof node !== "function") {
+			const nodeWrapper = resolveWrapper(node);
+			if (nodeWrapper !== null ? this.#holdsDataValue(nodeWrapper) : !Arrays.isArray(node) && !this.#isPlainObject(node)) return;
+		}
 		const seen = new Set();
 		const visited = new WeakSet();
 		const walk = (path, current, currentFile) => {
@@ -961,14 +971,14 @@ export class ApiManager extends ComponentBase {
 					check(childPath, childFile);
 					walk(childPath, child, childFile);
 				} else if (child === null || typeof child !== "object") {
-					check(childPath, childFile);
+					check(childPath, childFile, false, true);
 				} else if (childWrapper !== null && this.#holdsDataValue(childWrapper)) {
 					// A node holding a data value (a primitive, a Date, a Map, an instance) is read, not traversed.
-					check(childPath, childFile);
+					check(childPath, childFile, false, true);
 				} else if (childWrapper !== null || Arrays.isArray(child) || this.#isPlainObject(child)) {
 					walk(childPath, child, childFile);
 				} else {
-					check(childPath, childFile);
+					check(childPath, childFile, false, true);
 				}
 			}
 		};
@@ -987,7 +997,7 @@ export class ApiManager extends ComponentBase {
 					? wrapper.____slothletInternal.isCallable || this.#holdsDataValue(wrapper)
 					: recorded === null || typeof recorded !== "object"
 			)
-				check(path, wrapper?.____slothletInternal.filePath ?? entry.filePath ?? null);
+				check(path, wrapper?.____slothletInternal.filePath ?? entry.filePath ?? null, false, !wrapper?.____slothletInternal.isCallable);
 		}
 	}
 
