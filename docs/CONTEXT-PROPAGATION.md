@@ -400,7 +400,7 @@ Owner-locked keys protect **who the caller is** (an authenticated `userId`, a ve
 
 #### Partial Isolation (Default)
 
-Child `self` is the shared base `self`. Mutations to API state inside `.run()` / `.scope()` **persist** afterward — by design. The API surface is shared; context is isolated.
+Child `self` is the base `self`. Changes to the api tree made inside `.run()` / `.scope()` through `api.slothlet.api.add()`, `remove()` and `reload()` (and `reload()`, `restart()` and `shutdown()` themselves) are the run's own: the run gets a copy of the tree on its first such change, and every later write into the tree from the run lands in that copy, never in the instance (see [RELOAD.md](RELOAD.md#calls-during-a-full-reload-and-after-one-fails)). A synchronous write through `self` from a run that has not changed its tree yet still reaches the instance's tree and persists afterward.
 
 ```javascript
 const api = await slothlet({ base: "./api" }); // default: partial isolation

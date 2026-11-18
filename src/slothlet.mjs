@@ -106,6 +106,10 @@ import {
 	RUN_COPY,
 	RUN_DONE,
 	RUN_OPENED,
+	COPY_SOURCE_URL,
+	RECORD_OPERATION,
+	SILENT_BUILD,
+	TREE_WRITE,
 	whenIdle,
 	WRITE_TARGET
 } from "#helpers/flow-stores";
@@ -267,7 +271,29 @@ function runLoadAs(id, fn) {
  * @type {string[]}
  * @private
  */
-const RELOAD_COPY_FIELDS = ["config", "api", "debugLogger", "envTarget", "reference", "isLoaded"];
+const RELOAD_COPY_FIELDS = [
+	"config",
+	"api",
+	"debugLogger",
+	"envTarget",
+	"reference",
+	"isLoaded",
+	// What goes with one api tree: its base module's ID, the user hooks and builtins its root holds, the incarnations of
+	// the modules mounted in it, its lazy-load counts, and the epoch its nodes carry (see unified-wrapper.mjs).
+	"baseModuleID",
+	"userHooks",
+	"_ownBuiltins",
+	"_moduleIncarnations",
+	"_retiredIncarnations",
+	"_totalLazyCount",
+	"_unmaterializedLazyCount",
+	"_materializationComplete",
+	"_materializationWaiters",
+	"_materializationCompleteEmitted",
+	"_materializeCallbackCalled",
+	"_buildEpoch",
+	"_treeEpoch"
+];
 
 /**
  * The handlers a `run()` / `scope()` keeps a copy of its own of once it writes them (see {@link FORK}): permission rules,
@@ -522,6 +548,37 @@ class Slothlet {
 	#resolvingCopy = false;
 
 	/**
+	 * The epochs of the trees built for copies (see {@link Slothlet#buildCopy}): each one lower than the last, so no tree
+	 * a restart builds ever has one.
+	 * @type {number}
+	 * @private
+	 */
+	#copyEpochs = 0;
+
+	/**
+	 * The copy that owns each api tree built for one (see {@link Slothlet#ownTree}).
+	 * @type {WeakMap<object, object>}
+	 * @private
+	 */
+	#treeOwners = new WeakMap();
+
+	/**
+	 * The set each tree built for a copy belongs to, by the tree's epoch (see {@link Slothlet#buildCopy}): a lazy node of
+	 * that tree loads into it, whichever code asked for the load.
+	 * @type {Map<number, {values: object, bust: number|null}>}
+	 * @private
+	 */
+	#treeSets = new Map();
+
+	/**
+	 * Set by a restart whose runs keep trees loaded under the ID it leaves (see {@link Slothlet#keepScopeForCopies}):
+	 * the teardown leaves what slothlet keeps about that ID's files to the kept scope.
+	 * @type {boolean}
+	 * @private
+	 */
+	#scopeKeptForCopies = false;
+
+	/**
 	 * For each forkable handler (see {@link FORKABLE_HANDLERS}), the handlers namespaces of the copies that hold it
 	 * without owning it: kept tokens' and runs'. Before the handler's owner writes it, each of them gets a fork of its
 	 * own (see {@link Slothlet#keepSharers}). A copy torn down leaves every set it is in (see
@@ -747,6 +804,13 @@ class Slothlet {
 		// node at the same path in the live tree (see unified-wrapper.mjs).
 		this._buildEpoch = 0;
 		this._liveEpoch = 0;
+		// The epoch of the tree this set answers from: the live one for the instance, a copy's own for a run's tree.
+		this._treeEpoch = 0;
+		// How many api trees copies hold apart from the instance's own (a run that changed its tree, a copy kept for runs
+		// across a change of the instance's tree): while any is, a node answers for the tree of the code reading it.
+		this._treeCopies = 0;
+		// The ID of the base module of the api tree, set by load().
+		this.baseModuleID = null;
 		// Module incarnations (#625): for each moduleID mounted with api.add, a token that stands for that mount for
 		// as long as the module is there. Every wrapper records its module's token at construction; code whose token
 		// is not the module's current one belongs to a removed module, and has no standing, even once another module
@@ -1691,6 +1755,7 @@ class Slothlet {
 
 		// Generate base moduleID for ownership tracking
 		const baseModuleId = `base_${StringMethods.substring(this.helpers.utilities.generateId(), 0, 8)}`;
+		this.baseModuleID = baseModuleId;
 
 		// A reload: the copy the instance has keeps answering calls while the new one builds, and its code is the same base
 		// module's. The fresh ownership records the base module's mount now, so that code is not taken for a removed
@@ -2017,6 +2082,10 @@ class Slothlet {
 		}
 		const keepInstanceID = instance === "keep";
 
+		// A reload asked for in a run() / scope() rebuilds the run's own tree, and leaves the instance as it is.
+		const runWriter = this.#treeWriter();
+		if (runWriter !== null && runWriter !== undefined) return this.#reloadRun(runWriter);
+
 		// One full reload at a time: a reload asked for while another builds starts once that one has finished. One asked
 		// for by the build itself (a startup routine's) could never start, so it is refused.
 		while (this.#reloadWindow !== null) {
@@ -2178,7 +2247,9 @@ class Slothlet {
 		let users = 0;
 		for (let heldIndex = 0, held = setToArray(this.#held); heldIndex < held.length; heldIndex++) {
 			const holder = held[heldIndex];
-			if (holder.ns !== undefined || holder.values === null || holder.loadID !== undefined) continue;
+			if (holder.values === null || holder.values === undefined || holder.loadID !== undefined) continue;
+			// A run reads through its token unless it has a tree of its own.
+			if (holder.ns !== undefined && holder.ownsTree !== true) continue;
 			holder.loadID = replaced.instanceID;
 			holder.replaced = replaced;
 			users++;
@@ -2191,12 +2262,25 @@ class Slothlet {
 
 	/**
 	 * Run a lazy node's load (which runs apart from the flow that asked for it) under the ID the asking code's copy loads
-	 * under (see {@link Slothlet#loadID}).
+	 * under (see {@link Slothlet#loadID}). A node of a tree a copy owns (see {@link Slothlet#ownTree}) loads into that
+	 * tree's set, whichever code asked for it.
 	 * @param {Function} load - The load.
+	 * @param {object} [wrapper] - The node's wrapper.
 	 * @returns {*} What it returns.
 	 * @package
 	 */
-	loadAsCaller(load) {
+	loadAsCaller(load, wrapper) {
+		// A node of a tree a copy owns loads into that tree's set: its new nodes, ownership and metadata are the copy's.
+		const entry =
+			wrapper !== undefined && this._treeCopies !== 0 ? MapMethods.get(this.#treeSets, wrapper.____slothletInternal?.epoch) : undefined;
+		if (entry !== undefined) {
+			const mark = { copyOf: this, next: entry.values, kind: "materialize", bust: entry.bust, silent: this[SILENT_BUILD]() };
+			const owner = WeakMapMethods.get(this.#treeOwners, entry.values.api);
+			const id = this.#loadIDOf(owner);
+			const inSet = () => runInReloadBuild(mark, load);
+			if (id === undefined || id === this.instanceID) return inSet();
+			return runLoadAs(id, inSet);
+		}
 		const id = this.#heldCopies === 0 ? this.instanceID : this.loadID;
 		if (id === this.instanceID || !AsyncLocalStorage) return load();
 		return runLoadAs(id, load);
@@ -2228,7 +2312,7 @@ class Slothlet {
 			if (carried !== undefined && MapMethods.has(this.#keptScopes, carried)) return carried;
 			const mark = reloadBuildStorage?.getStore();
 			if (mark === undefined || mark !== this.#reloadWindow?.mark) {
-				const id = this.#runRecord()?.from.loadID;
+				const id = this.#loadIDOf(this.#runRecord());
 				if (id !== undefined && MapMethods.has(this.#keptScopes, id)) return id;
 			}
 		}
@@ -2357,12 +2441,14 @@ class Slothlet {
 		const mark = reloadBuildStorage?.getStore();
 		if (mark !== undefined) {
 			if (mark === this.#instanceWork) return this.#fields[field];
-			const window = this.#reloadWindow;
-			if (window !== null && !window.closed && mark === window.mark) return window.next[field];
+			const next = this.#buildNext(mark);
+			if (next !== null) return next[field];
 		}
 		if (this.#heldCopies !== 0) {
 			const record = this.#runRecord();
 			if (record !== null) {
+				// A run with a tree of its own answers from its own set.
+				if (record.values !== null) return record.values[field];
 				if (record.ns !== null && field === "handlers") return record.ns;
 				const values = record.from.values;
 				if (values !== null) return values[field];
@@ -2380,9 +2466,29 @@ class Slothlet {
 	 * @private
 	 */
 	#writeField(field, value) {
+		const mark = reloadBuildStorage?.getStore();
+		const next = mark === undefined || mark === this.#instanceWork ? null : this.#buildNext(mark);
+		if (next !== null) next[field] = value;
+		else if (mark !== this.#instanceWork && this.#heldCopies !== 0) {
+			// A run with a tree of its own writes its own set (a lazy node's count as it loads).
+			const record = this.#runRecord();
+			if (record !== null && record.values !== null) record.values[field] = value;
+			else this.#fields[field] = value;
+		} else this.#fields[field] = value;
+	}
+
+	/**
+	 * The set a build writes and reads: the reload's under way, or a run's copy (see {@link Slothlet#buildCopy}), when
+	 * `mark` is that build's; null otherwise.
+	 * @param {*} mark - What {@link reloadBuildStorage} holds for the running code.
+	 * @returns {object|null} The build's set.
+	 * @private
+	 */
+	#buildNext(mark) {
 		const window = this.#reloadWindow;
-		if (window !== null && !window.closed && reloadBuildStorage?.getStore() === window.mark) window.next[field] = value;
-		else this.#fields[field] = value;
+		if (window !== null && !window.closed && mark === window.mark) return window.next;
+		if (mark !== null && typeof mark === "object" && mark.copyOf === this) return mark.next;
+		return null;
 	}
 
 	/**
@@ -2440,6 +2546,11 @@ class Slothlet {
 		countHeldCopy(-1);
 		const ns = holder.ns !== undefined ? holder.ns : holder.values?.handlers;
 		if (ns !== null && ns !== undefined) this.#unshareHandlers(ns);
+		if (holder.ownsTree === true) {
+			holder.ownsTree = false;
+			this._treeCopies--;
+			this.#retireTree(holder.values);
+		}
 		const replaced = holder.replaced;
 		if (replaced !== undefined && replaced !== null) {
 			holder.replaced = null;
@@ -2512,6 +2623,8 @@ class Slothlet {
 		record.torn = true;
 		this.#releaseCopy(record);
 		record.ns = null;
+		record.values = null;
+		record.history = null;
 		record.parent = null;
 		const token = record.from;
 		record.from = TORN_DOWN;
@@ -2557,31 +2670,6 @@ class Slothlet {
 	}
 
 	/**
-	 * After a restart rebuilt the instance: in every copy held apart from it, everything but the forkable handlers
-	 * becomes the rebuilt instance's (the api tree is still shared, and what answers for it goes with it). A kept
-	 * metadata handler reads the system facts of the rebuilt tree's nodes from the instance's.
-	 * @returns {void}
-	 * @private
-	 */
-	#copiesFollowTree() {
-		const own = this.#fields ?? this;
-		for (let heldIndex = 0, held = setToArray(this.#held); heldIndex < held.length; heldIndex++) {
-			const holder = held[heldIndex];
-			if (holder.ns !== undefined) {
-				if (holder.ns !== null) this.#followTree(holder.ns, own.handlers);
-				continue;
-			}
-			const values = holder.values;
-			if (values === null) continue;
-			for (let ofIndex = 0, ofList = this.#copyFieldNames(); ofIndex < ofList.length; ofIndex++) {
-				const field = ofList[ofIndex];
-				if (field === "handlers") this.#followTree(values.handlers, own.handlers);
-				else values[field] = ArrayMethods.includes(this.componentCategories, field) ? { ...own[field] } : own[field];
-			}
-		}
-	}
-
-	/**
 	 * Point a copy's handlers namespace at the instance's handlers, except the forkable ones the copy keeps.
 	 * @param {object} ns - The copy's handlers namespace.
 	 * @param {object} handlers - The instance's.
@@ -2616,6 +2704,9 @@ class Slothlet {
 		}
 		this.#installCopyFields();
 		token.values = this.#copyOfFields(this.#fields);
+		// The history the runs on it replay, as it is now: what the instance records from here on is not theirs.
+		/* v8 ignore next */
+		token.history = copyList(token.values.handlers.apiManager?.state?.operationHistory ?? []);
 		this.#shareHandlers(token.values.handlers);
 		this.#copy = null;
 		this.#holdCopy(token);
@@ -2685,8 +2776,7 @@ class Slothlet {
 		if (this.#copy === null && this.#fields === null) return handler;
 		const slot = handler.constructor.slothletProperty;
 		const mark = reloadBuildStorage?.getStore();
-		const window = this.#reloadWindow;
-		if (mark !== undefined && window !== null && !window.closed && mark === window.mark) return handler;
+		if (mark !== undefined && mark !== this.#instanceWork && this.#buildNext(mark) !== null) return handler;
 		const own = (this.#fields ?? this).handlers;
 		const known = own?.[slot] === handler || WeakMapMethods.has(this.#owners, handler);
 		if (!known) return handler;
@@ -2752,9 +2842,566 @@ class Slothlet {
 	 */
 	[INHERIT_COPY](parent) {
 		const record = newRecord(parent.from, parent, { ...parent.ns }, this);
+		// A parent with a tree of its own: the nested run reads that tree until either one changes it (see
+		// Slothlet#copyForSharers), with its own handlers namespace.
+		if (parent.values !== null) record.values = { ...parent.values, handlers: record.ns };
 		this.#shareHandlers(record.ns);
 		this.#holdCopy(record);
 		return record;
+	}
+
+	/**
+	 * Which copy a change to the api tree made now is made in: null for the instance's own (code outside any run, and
+	 * the instance's own work), the run's record for code in a `run()` / `scope()`, and `undefined` for a build, which
+	 * changes the set it builds, or a host with no AsyncLocalStorage, which cannot tell runs apart from the instance.
+	 * @returns {object|null|undefined} The writer.
+	 * @private
+	 */
+	#treeWriter() {
+		if (!AsyncLocalStorage) return undefined;
+		const mark = reloadBuildStorage?.getStore();
+		if (mark !== undefined) {
+			if (mark === this.#instanceWork) return null;
+			if (this.#buildNext(mark) !== null) return undefined;
+		}
+		return this.#runRecord();
+	}
+
+	/**
+	 * [TREE_WRITE] - Ready the api tree for a change the calling code is about to make (see `treeWrite` in
+	 * `helpers/flow-stores`).
+	 *
+	 * - Code in a `run()` / `scope()` changes a tree of its own: on the run's first change, the run gets a copy of the
+	 *   tree it reads (see {@link Slothlet#ownTree}), and the change is made there. A nested run still reading the
+	 *   run's tree gets a copy of its own first.
+	 * - Code outside any run changes the instance's tree: every copy still reading it (the runs that started on it)
+	 *   gets a copy of its own first.
+	 *
+	 * A run that changes nothing pays nothing here; an instance with no run open checks two fields.
+	 * @returns {Promise<void>|undefined} Settles once the tree may be changed.
+	 * @internal
+	 */
+	[TREE_WRITE]() {
+		if (this.#copy === null && this.#fields === null) return undefined;
+		const writer = this.#treeWriter();
+		if (writer === undefined) return undefined;
+		return writer === null ? this.#instanceTreeWrite() : this.#runTreeWrite(writer);
+	}
+
+	/**
+	 * Ready a run's tree for a change it makes (see {@link Slothlet#[TREE_WRITE]}).
+	 * @param {object} record - The run's record.
+	 * @returns {Promise<void>}
+	 * @private
+	 */
+	async #runTreeWrite(record) {
+		while (record.treeBusy) await record.treeBusy;
+		if (record.torn) return;
+		if (record.values === null || WeakMapMethods.get(this.#treeOwners, record.values.api) !== record) await this.#ownTree(record, "copy");
+		await this.#copyForSharers(record.values.api, record);
+	}
+
+	/**
+	 * Ready the instance's tree for a change made outside any run: the runs that started on it keep the tree as it is.
+	 * @returns {Promise<void>}
+	 * @private
+	 */
+	async #instanceTreeWrite() {
+		this.#keepCurrentCopy();
+		await this.#copyForSharers((this.#fields ?? this).api, null);
+	}
+
+	/**
+	 * Give every copy that reads a tree without owning it a copy of its own, before the tree's owner changes it.
+	 * @param {object} tree - The api tree about to change.
+	 * @param {object|null} writer - Its owner (null for the instance), which gets none.
+	 * @returns {Promise<void>}
+	 * @private
+	 */
+	async #copyForSharers(tree, writer) {
+		for (let index = 0, held = setToArray(this.#held); index < held.length; index++) {
+			const holder = held[index];
+			if (holder === writer || holder.torn === true) continue;
+			while (holder.treeBusy) await holder.treeBusy;
+			const values = holder.values;
+			if (values === null || values === undefined || values.api !== tree) continue;
+			if (WeakMapMethods.get(this.#treeOwners, tree) === holder) continue;
+			await this.#ownTree(holder, "copy");
+		}
+	}
+
+	/**
+	 * The set a copy answers from now: a run's own set, or the copy its record reads through to (the token's kept set or
+	 * the instance's own) with the run's handlers namespace; a kept token's set. Each component namespace is a shallow
+	 * copy, so building on it leaves the copy as it is.
+	 * @param {object} holder - A run's record or a kept token.
+	 * @returns {object} The set.
+	 * @private
+	 */
+	#viewOf(holder) {
+		if (holder.values !== null && holder.values !== undefined) return holder.values;
+		const base = holder.from?.values ?? this.#copyOfFields(this.#fields ?? this);
+		return { ...base, handlers: holder.ns ?? base.handlers };
+	}
+
+	/**
+	 * The operation history a copy replays (its `add()` / `remove()` mounts and rule changes): its own, once it recorded
+	 * one, else the history of the copy it reads.
+	 * @param {object} holder - A run's record or a kept token.
+	 * @param {object} view - Its set (see {@link Slothlet#viewOf}).
+	 * @returns {Array<object>} The history.
+	 * @private
+	 */
+	#historyOf(holder, view) {
+		/* v8 ignore next */
+		return holder.history ?? holder.from?.history ?? view.handlers?.apiManager?.state?.operationHistory ?? [];
+	}
+
+	/**
+	 * Give a copy a tree of its own (see {@link Slothlet#buildCopy}), one build at a time per copy.
+	 * @param {object} holder - A run's record or a kept token.
+	 * @param {"copy"|"reload"|"restart"} kind - What the build is.
+	 * @returns {Promise<void>}
+	 * @private
+	 */
+	async #ownTree(holder, kind) {
+		let release;
+		holder.treeBusy = new Promise((resolve) => {
+			release = resolve;
+		});
+		try {
+			// Held first, so the copy fields read through and the build reads and writes its own set.
+			this.#holdCopy(holder);
+			const view = this.#viewOf(holder);
+			const history = this.#historyOf(holder, view);
+			// A copy of a tree loaded under an ID the instance has left loads under that ID too (see Slothlet#loadID).
+			const kept = kind === "copy" ? this.#keptScopeOf(holder) : null;
+			const next = await this.#buildCopy(view, history, kind, kept?.instanceID);
+			if (holder.torn === true) {
+				this.#retireTree(next);
+				return;
+			}
+			this.#adoptTree(holder, next);
+			if (kept !== null && holder.replaced !== kept) {
+				if (holder.replaced) {
+					const left = holder.replaced;
+					if (--left.users === 0) this.#retireKeptScope(left);
+				}
+				holder.loadID = kept.instanceID;
+				holder.replaced = kept;
+				kept.users++;
+			}
+		} finally {
+			holder.treeBusy = null;
+			release();
+		}
+	}
+
+	/**
+	 * Make a built set a copy's own: its handlers namespace owns its forks, the copy's earlier namespace stops sharing
+	 * the handlers it held, and the runs reading through a kept token that took a tree read their non-forkable handlers
+	 * from it.
+	 * @param {object} holder - A run's record or a kept token.
+	 * @param {object} next - The built set.
+	 * @returns {void}
+	 * @private
+	 */
+	#adoptTree(holder, next) {
+		const ns = next.handlers;
+		for (let ofIndex = 0; ofIndex < FORKABLE_HANDLERS.length; ofIndex++) {
+			const handler = ns[FORKABLE_HANDLERS[ofIndex]];
+			if (handler !== null && typeof handler === "object") WeakMapMethods.set(this.#owners, handler, ns);
+		}
+		const previous = holder.ns !== undefined ? holder.ns : holder.values?.handlers;
+		if (previous !== null && previous !== undefined) this.#unshareHandlers(previous);
+		const replacedTree = holder.ownsTree === true ? holder.values : null;
+		holder.values = next;
+		if (holder.ns !== undefined) holder.ns = ns;
+		holder.history = null;
+		WeakMapMethods.set(this.#treeOwners, next.api, holder);
+		if (replacedTree !== null) this.#retireTree(replacedTree);
+		else {
+			holder.ownsTree = true;
+			this._treeCopies++;
+		}
+		if (holder.ns === undefined) {
+			// A kept token: the runs reading through it with handlers of their own take its other handlers.
+			for (let index = 0, held = setToArray(this.#held); index < held.length; index++) {
+				const record = held[index];
+				if (record.from === holder && record.ns !== null && record.ns !== undefined && record.values === null)
+					this.#followTree(record.ns, ns);
+			}
+		}
+	}
+
+	/**
+	 * Let go of a tree a copy owned: what its own handlers hold (ownership, versions, event subscriptions) is cleared, as
+	 * a shutdown clears the instance's. The clearing is the copy's own, never the instance's, whoever's code triggered it.
+	 * @param {object|null} values - The set.
+	 * @returns {void}
+	 * @private
+	 */
+	#retireTree(values) {
+		if (values === null || values === undefined) return;
+		WeakMapMethods.delete(this.#treeOwners, values.api);
+		MapMethods.delete(this.#treeSets, values._treeEpoch);
+		const handlers = values.handlers;
+		/* v8 ignore next */
+		if (!AsyncLocalStorage || !handlers) return;
+		runInReloadBuild({ copyOf: this, next: values }, () => {
+			handlers.ownership?.clear?.();
+			handlers.versionManager?.shutdown?.();
+			handlers.eventManager?.shutdown?.();
+		});
+	}
+
+	/**
+	 * Build a set of the instance's fields to the side for a copy (see {@link Slothlet#ownTree}): a new api tree and
+	 * the handlers that go with it, made as load() makes the instance's, while the code that runs as the build reads and
+	 * writes only the new set (see {@link Slothlet#buildNext}).
+	 *
+	 * - `"copy"`: the tree as the copy has it, from the very modules it uses (each file from the URL the copied tree
+	 *   imported it from, so no module runs again): the base, then the `add()` / `remove()` history replayed, then what
+	 *   was written into the tree at runtime. The copy's permission rules, hooks, metadata, event and lifecycle
+	 *   subscriptions are forks of its own, and the build announces nothing to lifecycle subscribers.
+	 * - `"reload"`: as a reload rebuilds the instance, for the copy alone: every file read again from disk, the history
+	 *   replayed, and the rules, hooks, metadata and event strategy carried over; runtime writes are not.
+	 * - `"restart"`: as a restart rebuilds the instance, for the copy alone: from the original config, nothing carried.
+	 * @param {object} view - The set copied.
+	 * @param {Array<object>} history - Its operation history.
+	 * @param {"copy"|"reload"|"restart"} kind - What the build is.
+	 * @param {string} [loadID] - The ID the copied tree's files were loaded under, when the instance has left it.
+	 * @returns {Promise<object>} The new set.
+	 * @private
+	 */
+	async #buildCopy(view, history, kind, loadID) {
+		const next = this.#copyOfFields(view);
+		const epoch = --this.#copyEpochs;
+		next._buildEpoch = epoch;
+		next._treeEpoch = epoch;
+		next._totalLazyCount = 0;
+		next._unmaterializedLazyCount = 0;
+		next._materializationComplete = false;
+		next._materializationWaiters = [];
+		// The copy is no new instance: what announces a loaded instance (`materialized:complete`, the `loader.materialize`
+		// callback) is not announced again for it.
+		next._materializationCompleteEmitted = kind === "copy";
+		next._materializeCallbackCalled = true;
+		next._moduleIncarnations = kind === "restart" ? new Map() : this.#copyMap(view._moduleIncarnations);
+		next._retiredIncarnations = kind === "restart" ? new Map() : this.#copyMap(view._retiredIncarnations);
+		const mark = { copyOf: this, next, view, kind, silent: kind === "copy", bust: kind === "copy" ? null : this.#clock.now() };
+		MapMethods.set(this.#treeSets, epoch, { values: next, bust: mark.bust });
+		const build = () => this._runAsHost(() => this.#buildCopyOnto(mark, history));
+		// The tree being built is one apart from the instance's from its first node on.
+		this._treeCopies++;
+		try {
+			await runInReloadBuild(mark, loadID === undefined ? build : () => runLoadAs(loadID, build));
+		} catch (error) {
+			this.#retireTree(next);
+			throw error;
+		} finally {
+			this._treeCopies--;
+		}
+		return next;
+	}
+
+	/**
+	 * The kept import scope of the ID the tree a copy reads was loaded under, when the instance has left that ID (see
+	 * {@link Slothlet#keepReplacedScope}); null when it loads under the instance's own.
+	 * @param {object} holder - A run's record or a kept token.
+	 * @returns {object|null} The kept scope's entry.
+	 * @private
+	 */
+	#keptScopeOf(holder) {
+		const id = this.#loadIDOf(holder);
+		if (id === undefined) return null;
+		return MapMethods.get(this.#keptScopes, id) ?? null;
+	}
+
+	/**
+	 * The ID a copy's lazy nodes load under, when it is not the instance's own: the one recorded on the copy that owns
+	 * the tree it reads, or on the token it reads through.
+	 * @param {object|null} holder - A run's record or a kept token.
+	 * @returns {string|undefined} The ID.
+	 * @private
+	 */
+	#loadIDOf(holder) {
+		if (holder === null || holder === undefined) return undefined;
+		if (holder.loadID !== undefined) return holder.loadID;
+		const values = holder.values;
+		if (values !== null && values !== undefined) {
+			const owner = WeakMapMethods.get(this.#treeOwners, values.api);
+			if (owner !== undefined && owner !== holder && owner.loadID !== undefined) return owner.loadID;
+		}
+		return holder.from?.loadID;
+	}
+
+	/**
+	 * At a restart with runs open: the trees built for them keep loading under the ID the instance leaves (their lazy
+	 * nodes load the files as their other files were loaded), so its import scope is kept until the last of them is torn
+	 * down, instead of being released by the teardown.
+	 * @returns {void}
+	 * @private
+	 */
+	#keepScopeForCopies() {
+		const replaced = { instanceID: this.instanceID, scope: null, typescriptCacheDirs: [], users: 0 };
+		for (let index = 0, held = setToArray(this.#held); index < held.length; index++) {
+			const holder = held[index];
+			if (holder.ownsTree !== true || this.#loadIDOf(holder) !== undefined) continue;
+			holder.loadID = replaced.instanceID;
+			holder.replaced = replaced;
+			replaced.users++;
+		}
+		if (replaced.users === 0) return;
+		replaced.scope = this.#importScope;
+		this.#importScope = null;
+		this.#scopeKeptForCopies = true;
+		MapMethods.set(this.#keptScopes, replaced.instanceID, replaced);
+	}
+
+	/**
+	 * A shallow copy of a Map, or a new empty one.
+	 * @param {Map|null|undefined} map - The map.
+	 * @returns {Map} The copy.
+	 * @private
+	 */
+	#copyMap(map) {
+		const copy = new Map();
+		if (map) for (const entry of mapEntries(map)) MapMethods.set(copy, entry[0], entry[1]);
+		return copy;
+	}
+
+	/**
+	 * The body of {@link Slothlet#buildCopy}, run as the build: `this` reads and writes the new set.
+	 * @param {object} mark - The build's mark.
+	 * @param {Array<object>} history - The operation history the copied set has.
+	 * @returns {Promise<void>}
+	 * @private
+	 */
+	async #buildCopyOnto(mark, history) {
+		const { view, kind } = mark;
+		let restartConfig = null;
+		if (kind === "restart") {
+			const { clock: _, ...config } = copyTopLevelConfig(this._originalConfig, false);
+			if (this._originalBase !== undefined) config.base = this._originalBase;
+			restartConfig = config;
+			if (config.permissions !== undefined) {
+				try {
+					restartConfig = { ...config, permissions: normalizePermissionsConfig(config.permissions) };
+				} catch {
+					restartConfig = config;
+				}
+			}
+			this.config = restartConfig;
+		}
+		await this._initializeComponents();
+		if (restartConfig !== null) this.config = this.helpers.config.transformConfig(restartConfig);
+		const handlers = this.handlers;
+		const oldHandlers = view.handlers;
+		if (kind === "copy") {
+			// The copy's rules, hooks, metadata and subscriptions are what the copied set has, in forks of its own. The
+			// lifecycle fork carries the framework's own subscribers too.
+			for (let ofIndex = 0; ofIndex < FORKABLE_HANDLERS.length; ofIndex++) {
+				const slot = FORKABLE_HANDLERS[ofIndex];
+				const from = oldHandlers[slot];
+				if (from !== null && typeof from === "object" && typeof from[FORK] === "function") handlers[slot] = from[FORK]();
+			}
+		} else {
+			this._setupLifecycleSubscribers();
+			handlers.permissionManager?.applyDefaultRoutineRules(this.config.routines.entries);
+			this._setupConfigLifecycleSubscribers();
+		}
+		const baseModuleId =
+			kind === "copy" && view.baseModuleID
+				? view.baseModuleID
+				: `base_${StringMethods.substring(this.helpers.utilities.generateId(), 0, 8)}`;
+		this.baseModuleID = baseModuleId;
+		const baseApi = await this.builders.builder.buildAPI({
+			dir: this.config.base,
+			noBase: this.config.base === null,
+			mode: this.config.mode,
+			moduleID: baseModuleId,
+			hidden: this.config.hidden ?? null,
+			cacheBust: mark.bust
+		});
+		this.api = baseApi;
+		const apiWithBuiltins = await this.buildFinalAPI(this.api);
+		/* v8 ignore next */
+		if (handlers.apiCacheManager) {
+			handlers.apiCacheManager.set(baseModuleId, {
+				endpoint: ".",
+				moduleID: baseModuleId,
+				api: this.api,
+				folderPath: this.config.base,
+				mode: this.config.mode,
+				sanitizeOptions: this.config.sanitize || {},
+				/* v8 ignore next */
+				collisionMode: this.config.api.collision.mode.initial || "merge",
+				config: { ...this.config },
+				timestamp: this.#clock.now()
+			});
+		}
+		this.injectRuntimeMetadataFunctions(apiWithBuiltins);
+		if (kind !== "copy" && this.config.metadata && typeof this.config.metadata === "object") {
+			for (let ofIndex = 0, ofList = Objects.entries(this.config.metadata); ofIndex < ofList.length; ofIndex++) {
+				handlers.metadata.setGlobalMetadata(ofList[ofIndex][0], ofList[ofIndex][1]);
+			}
+			handlers.metadata.registerUserMetadata(baseModuleId, this.config.metadata);
+		}
+		/* v8 ignore next */
+		if (handlers.ownership) {
+			handlers.ownership.registerSubtree(apiWithBuiltins, baseModuleId, "");
+			handlers.ownership.setModuleEndpoint(baseModuleId, ".");
+		}
+		this.reference = kind === "restart" ? this.config.reference : view.reference;
+		if (this.reference && typeof this.reference === "object") {
+			runtime_frameworkWrite(this.boundApi, () => Objects.assign(this.boundApi, this.reference));
+		}
+		if (kind === "reload") {
+			const savedMetadataState = oldHandlers.metadata?.exportUserState?.();
+			if (savedMetadataState && handlers.metadata) handlers.metadata.importUserState(savedMetadataState);
+			const savedEventStrategy = oldHandlers.eventManager?.exportStrategy?.() ?? null;
+			if (savedEventStrategy) handlers.eventManager.strategy(savedEventStrategy);
+		}
+		if (kind !== "restart") {
+			for (let ofIndex = 0; ofIndex < history.length; ofIndex++) {
+				const operation = history[ofIndex];
+				// A copy's rules are in its permission manager's fork already; a reload registers them again.
+				if (kind === "reload" || operation.type === "add" || operation.type === "remove") await this.#replayOperation(operation);
+			}
+			/* v8 ignore else */
+			if (handlers.apiManager?.state) {
+				handlers.apiManager.state.operationHistory = copyList(history);
+				/* v8 ignore next */
+				const addHistory = oldHandlers.apiManager?.state?.addHistory;
+				handlers.apiManager.state.addHistory = addHistory ? copyList(addHistory) : [];
+			}
+		}
+		if (kind === "reload") {
+			const savedHooks = oldHandlers.hookManager?.exportHooks?.();
+			if (savedHooks?.length && handlers.hookManager) handlers.hookManager.importHooks(savedHooks);
+			const wasSealed = oldHandlers.permissionManager?.isSealed?.() === true;
+			const savedMode = oldHandlers.permissionManager?.mode?.() ?? null;
+			const permissionManager = handlers.permissionManager;
+			if (savedMode === "on" && permissionManager?.mode?.() !== "on") permissionManager.enable();
+			else if (savedMode === "off" && permissionManager?.mode?.() !== "off") permissionManager.disable();
+			if (wasSealed) permissionManager?.seal?.();
+		}
+		if (kind === "copy") {
+			// What code wrote into the copied tree at runtime (`self.x = …`, a member the host set) is in the copy too.
+			await handlers.apiManager?.carryRuntimeMembers?.(view.api, apiWithBuiltins, oldHandlers.ownership);
+		}
+		/* v8 ignore next */
+		if (handlers.routineManager) {
+			await handlers.routineManager.rebuildStacks(this.boundApi);
+			// Fresh modules start as they do in a load; a copy's modules are the ones already started.
+			if (kind !== "copy") await handlers.routineManager.runStartupModeRoutines();
+		}
+		this.isLoaded = kind === "copy" ? view.isLoaded : true;
+		if (kind === "restart") await handlers.lifecycle.emit("init", { instance: this.instanceID, restart: true });
+	}
+
+	/**
+	 * `reload()` in a `run()` / `scope()`: the run's tree is rebuilt as a reload rebuilds the instance's (every file read
+	 * again, the `add()` / `remove()` history replayed, rules, hooks, metadata and the event strategy carried), for the
+	 * run alone. The instance, sibling runs and a nested run still reading the run's tree keep what they have.
+	 * @param {object} record - The run's record.
+	 * @returns {Promise<object>} The api.
+	 * @private
+	 */
+	async #reloadRun(record) {
+		while (record.treeBusy) await record.treeBusy;
+		if (record.ownsTree === true) await this.#copyForSharers(record.values.api, record);
+		await this.#ownTree(record, "reload");
+		return this.boundApi;
+	}
+
+	/**
+	 * `restart()` in a `run()` / `scope()`: the run's copy starts over from the original config, as a restart starts the
+	 * instance over, for the run alone. `restart` and `shutdown` are announced to the run's lifecycle subscribers, and
+	 * `init` and `restarted` to those of its new copy. The instance and the other runs keep what they have.
+	 * @param {object} record - The run's record.
+	 * @returns {Promise<object>} The api.
+	 * @private
+	 */
+	async #restartRun(record) {
+		while (record.treeBusy) await record.treeBusy;
+		const lifecycle = this.handlers.lifecycle;
+		await lifecycle.emit("restart", { instance: this.instanceID });
+		await lifecycle.emit("shutdown", { instance: this.instanceID, restart: true });
+		if (record.ownsTree === true) await this.#copyForSharers(record.values.api, record);
+		await this.#ownTree(record, "restart");
+		await this.handlers.lifecycle.emit("restarted", { instance: this.instanceID, previous: this.instanceID });
+		return this.boundApi;
+	}
+
+	/**
+	 * `shutdown()` in a `run()` / `scope()`: the run's copy is shut down (announced to its lifecycle subscribers; its
+	 * ownership, versions, permission rules and event subscriptions cleared; it stops being loaded), for the run alone.
+	 * The instance and the other runs keep what they have.
+	 * @param {object} record - The run's record.
+	 * @returns {Promise<void>}
+	 * @private
+	 */
+	async #shutdownRun(record) {
+		if (!this.isLoaded) return;
+		await this.handlers.lifecycle.emit("shutdown", { instance: this.instanceID, restart: false });
+		while (record.treeBusy) await record.treeBusy;
+		if (record.ownsTree === true) await this.#copyForSharers(record.values.api, record);
+		else await this.#ownTree(record, "copy");
+		const values = record.values;
+		values.isLoaded = false;
+		const handlers = values.handlers;
+		await runInReloadBuild({ copyOf: this, next: values }, async () => {
+			handlers.ownership?.clear?.();
+			handlers.versionManager?.shutdown?.();
+			await handlers.permissionManager?.shutdown?.();
+			handlers.eventManager?.shutdown?.();
+		});
+	}
+
+	/**
+	 * [SILENT_BUILD] - Whether the calling code builds a copy of a tree for a run (see {@link Slothlet#buildCopy}),
+	 * which announces nothing to lifecycle subscribers: nothing is loaded that was not loaded before.
+	 * @returns {boolean} True in such a build.
+	 * @internal
+	 */
+	[SILENT_BUILD]() {
+		const mark = reloadBuildStorage?.getStore();
+		return mark !== undefined && mark !== null && typeof mark === "object" && mark.copyOf === this && mark.silent === true;
+	}
+
+	/**
+	 * [COPY_SOURCE_URL] - What a build for a run tells the loader (see {@link Slothlet#buildCopy}): for a copy, the
+	 * loader of the copied tree, whose URLs and CommonJS namespaces the copy takes so it uses the very modules the copied
+	 * tree uses; for a run's own reload or restart, the stamp that has every file read again; null otherwise.
+	 * @returns {object|number|null} The loader, the stamp, or null.
+	 * @internal
+	 */
+	[COPY_SOURCE_URL]() {
+		const mark = reloadBuildStorage?.getStore();
+		if (mark === undefined || mark === null || typeof mark !== "object" || mark.copyOf !== this) return null;
+		if (mark.kind !== "copy") return mark.bust ?? null;
+		return mark.view.processors?.loader ?? null;
+	}
+
+	/**
+	 * [RECORD_OPERATION] - Record an operation in the history of the copy the calling code changes (see
+	 * `recordOperation` in `helpers/flow-stores`): a run with no tree of its own keeps a history of its own, starting from
+	 * the one it reads, so what it changes is not replayed into the instance on a reload.
+	 * @param {object} operation - The operation.
+	 * @returns {void}
+	 * @internal
+	 */
+	[RECORD_OPERATION](operation) {
+		const writer = this.#copy === null && this.#fields === null ? null : this.#treeWriter();
+		if (writer !== null && writer !== undefined && writer.values === null) {
+			writer.history ??= copyList(this.#historyOf(writer, this.#viewOf(writer)));
+			listPush(writer.history, operation);
+			return;
+		}
+		const history = this.handlers?.apiManager?.state?.operationHistory;
+		if (history) listPush(history, operation);
 	}
 
 	/**
@@ -3289,6 +3936,9 @@ class Slothlet {
 	 * await api.slothlet.restart();
 	 */
 	restart() {
+		// A restart asked for in a run() / scope() starts the run's own copy over, and leaves the instance as it is.
+		const runWriter = this.#treeWriter();
+		if (runWriter !== null && runWriter !== undefined) return this.#restartRun(runWriter);
 		if (this._restartPromise) return this._restartPromise;
 		this._restartPromise = PromiseMethods.finally(this._restart(), () => {
 			this._restartPromise = null;
@@ -3333,7 +3983,12 @@ class Slothlet {
 		// The teardown and rebuild below are the instance's own work, also when a run's code asked for them: they read
 		// and write the instance's own set, never the calling run's copy.
 		this.#keepCurrentCopy();
-		return AsyncLocalStorage ? runInReloadBuild(this.#instanceWork, () => this.#restartOnto()) : this.#restartOnto();
+		if (!AsyncLocalStorage) return this.#restartOnto();
+		// Each run open now keeps a tree of its own, built before the teardown below: it keeps the api tree, the handlers
+		// and the modules it started with, and nothing of the rebuilt instance reaches it.
+		await runInReloadBuild(this.#instanceWork, () => this.#copyForSharers((this.#fields ?? this).api, null));
+		this.#keepScopeForCopies();
+		return runInReloadBuild(this.#instanceWork, () => this.#restartOnto());
 	}
 
 	/**
@@ -3409,6 +4064,7 @@ class Slothlet {
 			// 5. Swap complete: every wrapper from an earlier epoch now forwards to the node at its path
 			//    in the new tree (or throws RESTART_REFERENCE_UNRESOLVED if the path is gone).
 			this._liveEpoch = this._buildEpoch;
+			this._treeEpoch = this._liveEpoch;
 			// The runs open across the restart, kept by the teardown, run on under the new ID.
 			const flows = this.contextManager?.instances;
 			if (flows) {
@@ -3417,10 +4073,6 @@ class Slothlet {
 				}
 			}
 			reparentFlowStores(this, [previousInstanceID], this.instanceID);
-			// The api tree is shared with every run until phase 4 gives a run its own: what goes with the tree (its
-			// managers, the config, the tree itself) is the rebuilt one for every copy too. The forkable handlers stay
-			// each copy's own.
-			this.#copiesFollowTree();
 		} finally {
 			this._restarting = false;
 		}
@@ -3589,6 +4241,9 @@ class Slothlet {
 	 * @public
 	 */
 	async shutdown() {
+		// A shutdown asked for in a run() / scope() shuts down the run's own copy, and leaves the instance as it is.
+		const runWriter = this.#treeWriter();
+		if (runWriter !== null && runWriter !== undefined) return this.#shutdownRun(runWriter);
 		// A full reload under way finishes first: its new copy is swapped in, or it fails and the instance keeps its copy,
 		// and then what the instance has is shut down.
 		if (this.#reloadWindow !== null) await this.#reloadSettled();
@@ -3673,7 +4328,9 @@ class Slothlet {
 
 		// Drop this instance's private CommonJS helper copies (#518, #534), the scripts recorded and learned for its
 		// files, and the records of what its modules made (#597).
-		forgetInstanceScripts(this.instanceID);
+		// Runs that kept trees loaded under this ID across a restart keep its files' records until the last is torn down.
+		if (this.#scopeKeptForCopies) this.#scopeKeptForCopies = false;
+		else forgetInstanceScripts(this.instanceID);
 		this.#releaseImportScope();
 		releaseModuleMakers(this);
 

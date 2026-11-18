@@ -6228,6 +6228,90 @@ export class ApiManager extends ComponentBase {
 	}
 
 	/**
+	 * Carry what code wrote into an api tree at runtime (`self.x = …`, a member the host set on the api, a value written
+	 * over a module's member) into a copy of the tree built from the same modules for a run (see `Slothlet#buildCopy`),
+	 * which has only what loads and the replayed `add()` / `remove()` history. Walks the nodes both trees have; a lazy
+	 * node the copied tree loaded is loaded in the copy first. A member a module created stays that module's in the copy.
+	 * A plain object or array written at runtime is the same object in both trees, as a shallow copy shares it.
+	 *
+	 * @param {object|Function} fromRoot - The copied tree's root.
+	 * @param {object|Function} toRoot - The copy's root (this api manager's tree).
+	 * @param {object|null} fromOwnership - The copied tree's ownership records.
+	 * @returns {Promise<void>}
+	 * @internal
+	 */
+	async carryRuntimeMembers(fromRoot, toRoot, fromOwnership) {
+		const visited = new WeakSet();
+		const carryValue = (value) => {
+			const wrapper = value !== null && (typeof value === "object" || typeof value === "function") ? resolveWrapper(value) : null;
+			// A node written at runtime is carried as what was written, for the copy to make its own node of.
+			return wrapper !== null ? (wrapper.____impl ?? value) : value;
+		};
+		const createdBy = (path) => {
+			/* v8 ignore next */
+			const history = fromOwnership?.getPathHistory?.(path) ?? [];
+			for (let index = history.length - 1; index >= 0; index--)
+				if (history[index].source === CREATED_SOURCE) return history[index].moduleID;
+			return null;
+		};
+		const write = (target, key, value, path) => {
+			try {
+				runtime_frameworkWrite(target, () => {
+					target[key] = value;
+				});
+			} catch {
+				return;
+			}
+			const creator = createdBy(path);
+			if (creator !== null) this.recordCreated(splitText(path, "."), creator, value);
+		};
+		const isTreeNode = (value) => {
+			if (value === null || (typeof value !== "object" && typeof value !== "function")) return false;
+			const wrapper = resolveWrapper(value);
+			return wrapper !== null && !wrapper.____slothletInternal?.userAssigned;
+		};
+		const walk = async (fromWrapper, toWrapper, path) => {
+			if (WeakSetMethods.has(visited, fromWrapper)) return;
+			WeakSetMethods.add(visited, fromWrapper);
+			if (fromWrapper.____slothletInternal?.state?.materialized && !toWrapper.____slothletInternal?.state?.materialized) {
+				await toWrapper.___materialize?.();
+			}
+			const toProxy = toWrapper.____slothletInternal.proxy;
+			for (let ofIndex = 0, keys = Objects.keys(fromWrapper); ofIndex < keys.length; ofIndex++) {
+				const key = keys[ofIndex];
+				if (SetMethods.has(ComponentBase.INTERNAL_KEYS, key)) continue;
+				let fromValue;
+				try {
+					fromValue = fromWrapper[key];
+				} catch {
+					continue;
+				}
+				const memberPath = path ? `${path}.${key}` : key;
+				if (isTreeNode(fromValue)) {
+					const toValue = toWrapper[key];
+					if (isTreeNode(toValue)) await walk(resolveWrapper(fromValue), resolveWrapper(toValue), memberPath);
+					continue;
+				}
+				if (Objects.hasOwn(toWrapper, key) && Objects.is(toWrapper[key], fromValue)) continue;
+				write(toProxy, key, carryValue(fromValue), memberPath);
+			}
+		};
+		const toTarget = this.slothlet.boundApi ?? toRoot;
+		for (let ofIndex = 0, keys = Objects.keys(fromRoot); ofIndex < keys.length; ofIndex++) {
+			const key = keys[ofIndex];
+			if (isFrameworkReservedKey(key) || key === "slothlet" || key === "shutdown" || key === "destroy") continue;
+			const fromValue = fromRoot[key];
+			if (isTreeNode(fromValue)) {
+				const toValue = toRoot[key];
+				if (isTreeNode(toValue)) await walk(resolveWrapper(fromValue), resolveWrapper(toValue), key);
+				continue;
+			}
+			if (Objects.hasOwn(toRoot, key) && Objects.is(toRoot[key], fromValue)) continue;
+			write(toTarget, key, carryValue(fromValue), key);
+		}
+	}
+
+	/**
 	 * Collect user-set custom properties from a proxy/wrapper that are NOT in the fresh API.
 	 * Custom properties are those set by the user at runtime (e.g., api.custom.testFlag = true)
 	 * that should survive a selective reload.

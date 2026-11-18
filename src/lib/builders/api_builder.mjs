@@ -40,7 +40,7 @@ import { internals as frameworkInternalsInternals } from "#handlers/framework-in
 import { ceilingMembers, combineCeilings, identityCeilings, internals as trustedRootInternals } from "#handlers/trusted-root";
 import { getLanguage, t, translate, internals as translationsInternals } from "#i18n";
 import { assertOptionKeys } from "#helpers/config-schema";
-import { copyForRun, releaseRunWork, RUN_COPY, trackFlowStore } from "#helpers/flow-stores";
+import { copyForRun, recordOperation, releaseRunWork, RUN_COPY, trackFlowStore, treeWrite } from "#helpers/flow-stores";
 import {
 	ArrayMethods,
 	Arrays,
@@ -1849,6 +1849,8 @@ export class ApiBuilder extends ComponentBase {
 					// collision.force / id / metadata pass through in every case.
 					// Building the module runs its code — its top level, and its exports' getters and Proxy traps as the
 					// build reads them — which is the module's, never the code of a module that asked for the add (#597).
+					// A run() / scope() changes a tree of its own, and a copy still reading this tree gets one before it changes.
+					await treeWrite(slothlet);
 					const resolvedFolder = runtime_resolveAddFolder(slothlet, folderPath);
 					// The module asking for the add is read here, before the build runs as no module: the add's ownership
 					// checks are that module's (#625).
@@ -1871,7 +1873,7 @@ export class ApiBuilder extends ComponentBase {
 					// routineManager is always auto-registered (slothletProperty); the false arm is unreachable.
 					/* v8 ignore next */
 					if (slothlet.handlers.routineManager) {
-						await slothlet.handlers.routineManager.rebuildStacks(userApi);
+						await slothlet.handlers.routineManager.rebuildStacks(slothlet.api);
 					}
 					return addResult;
 				},
@@ -1917,6 +1919,8 @@ export class ApiBuilder extends ComponentBase {
 							received: typeof id
 						});
 					}
+					// A run() / scope() changes a tree of its own, and a copy still reading this tree gets one before it changes.
+					await treeWrite(slothlet);
 					// Scoped: module `id`'s node at the path `target`. Unscoped: `target` is a path or a module id.
 					const removeResult =
 						id === undefined
@@ -1932,7 +1936,7 @@ export class ApiBuilder extends ComponentBase {
 					// routineManager is always auto-registered (slothletProperty); the false arm is unreachable.
 					/* v8 ignore next */
 					if (slothlet.handlers.routineManager) {
-						await slothlet.handlers.routineManager.rebuildStacks(userApi);
+						await slothlet.handlers.routineManager.rebuildStacks(slothlet.api);
 					}
 					return removeResult;
 				},
@@ -2299,6 +2303,8 @@ export class ApiBuilder extends ComponentBase {
 						throw new slothlet.SlothletError("API_MUTATION_DISABLED", { operation: ["slothlet", "api", "reload"] });
 					}
 					assertOptionKeys(options, "slothlet.api.reload");
+					// A run() / scope() changes a tree of its own, and a copy still reading this tree gets one before it changes.
+					await treeWrite(slothlet);
 
 					// Normalize base module identifiers: null, undefined, "", "." all mean base module
 					if (pathOrModuleId == null || pathOrModuleId === "" || pathOrModuleId === ".") {
@@ -2407,6 +2413,8 @@ export class ApiBuilder extends ComponentBase {
 						}
 						// The calling module, read before any await (#625): see ModuleManager#addModule.
 						const writer = runtime_selfModuleReader(slothlet);
+						// A run() / scope() changes a tree of its own, and a copy still reading this tree gets one before it changes.
+						await treeWrite(slothlet);
 						const manager = slothlet.handlers.moduleManager;
 						// One argument that is a plain object this instance's discovery did not return is the options of a discover run.
 						if (target !== null && typeof target === "object" && !Arrays.isArray(target) && !manager.issued(target)) {
@@ -2443,7 +2451,10 @@ export class ApiBuilder extends ComponentBase {
 							throw new slothlet.SlothletError("API_MUTATION_DISABLED", { operation: ["slothlet", "api", "modules", "remove"] });
 						}
 						// The calling module, read before any await (#625): see ModuleManager#removeModule.
-						return slothlet.handlers.moduleManager.removeModule(name, opts, runtime_selfModuleReader(slothlet));
+						const writer = runtime_selfModuleReader(slothlet);
+						// A run() / scope() changes a tree of its own, and a copy still reading this tree gets one before it changes.
+						await treeWrite(slothlet);
+						return slothlet.handlers.moduleManager.removeModule(name, opts, writer);
 					},
 
 					/**
@@ -3715,16 +3726,14 @@ export class ApiBuilder extends ComponentBase {
 							if (writer) rule = { ...rule, condition: permissionManager.pinConditions(rule.condition, writer) };
 							const ruleLayer = layer ?? "runtime";
 							const ruleId = permissionManager.addEventRule(rule, ownerModuleID, null, ruleLayer);
-							if (slothlet.handlers?.apiManager?.state?.operationHistory) {
-								listPush(slothlet.handlers.apiManager.state.operationHistory, {
-									type: "addEventRule",
-									rule,
-									ownerModuleID,
-									ruleId,
-									layer: ruleLayer,
-									timestamp: slothlet.clock.now()
-								});
-							}
+							recordOperation(slothlet, {
+								type: "addEventRule",
+								rule,
+								ownerModuleID,
+								ruleId,
+								layer: ruleLayer,
+								timestamp: slothlet.clock.now()
+							});
 							return ruleId;
 						},
 
@@ -3748,14 +3757,13 @@ export class ApiBuilder extends ComponentBase {
 							const callerModuleID = runtime_ownerModuleIDs(slothlet.contextManager?.getCallerIdentity?.());
 							permissionManager.assertModuleEventRuleRemoval(ruleId);
 							const result = slothlet.handlers.permissionManager.removeEventRule(ruleId, callerModuleID);
-							if (result && slothlet.handlers?.apiManager?.state?.operationHistory) {
-								listPush(slothlet.handlers.apiManager.state.operationHistory, {
+							if (result)
+								recordOperation(slothlet, {
 									type: "removeEventRule",
 									ruleId,
 									callerModuleID,
 									timestamp: slothlet.clock.now()
 								});
-							}
 							return result;
 						}
 					}
@@ -3851,6 +3859,8 @@ export class ApiBuilder extends ComponentBase {
 					// versionManager is always registered when versioning is used; guard for completeness
 					/* v8 ignore next */
 					if (!slothlet.handlers?.versionManager) return false;
+					// A run() / scope() changes a tree of its own, and a copy still reading this tree gets one before it changes.
+					await treeWrite(slothlet);
 					// Check version exists before attempting removal
 					const info = slothlet.handlers.versionManager.list(logicalPath);
 					if (!info || !info.versions?.[versionTag]) return false;
@@ -3961,16 +3971,14 @@ export class ApiBuilder extends ComponentBase {
 						const ruleId = permissionManager.addRule(rule, ownerModuleID, null, layer);
 
 						// Record in operationHistory for replay on reload
-						if (slothlet.handlers?.apiManager?.state?.operationHistory) {
-							listPush(slothlet.handlers.apiManager.state.operationHistory, {
-								type: "addPermissionRule",
-								rule,
-								ownerModuleID,
-								ruleId,
-								layer,
-								timestamp: slothlet.clock.now()
-							});
-						}
+						recordOperation(slothlet, {
+							type: "addPermissionRule",
+							rule,
+							ownerModuleID,
+							ruleId,
+							layer,
+							timestamp: slothlet.clock.now()
+						});
 
 						return ruleId;
 					},
@@ -4009,14 +4017,13 @@ export class ApiBuilder extends ComponentBase {
 						const result = slothlet.handlers.permissionManager.removeRule(ruleId, callerModuleID);
 
 						// Record in operationHistory for replay on reload
-						if (result && slothlet.handlers?.apiManager?.state?.operationHistory) {
-							listPush(slothlet.handlers.apiManager.state.operationHistory, {
+						if (result)
+							recordOperation(slothlet, {
 								type: "removePermissionRule",
 								ruleId,
 								callerModuleID,
 								timestamp: slothlet.clock.now()
 							});
-						}
 
 						return result;
 					}
@@ -4081,15 +4088,13 @@ export class ApiBuilder extends ComponentBase {
 							: null;
 						permissionManager.registerPrincipal(name, definition, claimants, invoke);
 
-						if (slothlet.handlers?.apiManager?.state?.operationHistory) {
-							listPush(slothlet.handlers.apiManager.state.operationHistory, {
-								type: "registerPrincipal",
-								name,
-								definition,
-								ownerModuleID,
-								timestamp: slothlet.clock.now()
-							});
-						}
+						recordOperation(slothlet, {
+							type: "registerPrincipal",
+							name,
+							definition,
+							ownerModuleID,
+							timestamp: slothlet.clock.now()
+						});
 					},
 
 					/**
@@ -4118,14 +4123,13 @@ export class ApiBuilder extends ComponentBase {
 						const callerModuleID = runtime_ownerModuleIDs(slothlet.contextManager?.getCallerIdentity?.());
 						const result = permissionManager.unregisterPrincipal(name, callerModuleID);
 
-						if (result && slothlet.handlers?.apiManager?.state?.operationHistory) {
-							listPush(slothlet.handlers.apiManager.state.operationHistory, {
+						if (result)
+							recordOperation(slothlet, {
 								type: "unregisterPrincipal",
 								name,
 								callerModuleID,
 								timestamp: slothlet.clock.now()
 							});
-						}
 						return result;
 					},
 

@@ -24,7 +24,6 @@
 // Proxy-detection API, so isProxy returns false — slothlet's OWN wrappers are detected via
 // resolveWrapper(), so only arbitrary USER proxies (rare in browser) lose detection.
 import { segmentsOf } from "#helpers/segments";
-import { INSTANCE_FIELD } from "#helpers/flow-stores";
 import { isNode, util, EventEmitter, scheduleMacrotask, inheritsFrom } from "#helpers/platform";
 import {
 	copyForComposition,
@@ -6869,11 +6868,12 @@ function runtime_callAsDefiner(target, call) {
  * @returns {Promise<*>} What it resolves to.
  * @private
  */
-function runtime_loadApart(slothlet, load) {
+function runtime_loadApart(slothlet, load, wrapper) {
 	const contextManager = slothlet?.contextManager;
 	const apart = () => (typeof contextManager?.runDetached === "function" ? contextManager.runDetached(load, undefined, []) : load());
-	// A node of a copy a run keeps across a reload loads as that copy did (see Slothlet#loadID).
-	return typeof slothlet?.loadAsCaller === "function" ? slothlet.loadAsCaller(apart) : apart();
+	// A node of a copy a run keeps across a reload loads as that copy did (see Slothlet#loadID), and a node of a tree a
+	// run owns loads into that tree's own handlers.
+	return typeof slothlet?.loadAsCaller === "function" ? slothlet.loadAsCaller(apart, wrapper) : apart();
 }
 
 /**
@@ -14037,7 +14037,15 @@ export function isThenableModuleValue(value) {
  * if (runtime_isRestartStale(wrapper)) return forwardToLiveTree();
  */
 function runtime_isRestartStale(wrapper) {
-	return wrapper.____slothletInternal.epoch < wrapper.____slothlet._liveEpoch;
+	const slothlet = wrapper.____slothlet;
+	// While copies hold trees of their own (#876), a node answers for the tree of the code reading it: the reading
+	// code's tree is the one whose epoch it reads, so a node of any other tree forwards to the node at its path there.
+	if (slothlet._treeCopies !== 0) {
+		const epoch = wrapper.____slothletInternal.epoch;
+		// The tree being built for the reader's set (a restart's, while it builds) answers as itself too.
+		return epoch !== slothlet._treeEpoch && epoch !== slothlet._buildEpoch;
+	}
+	return wrapper.____slothletInternal.epoch < slothlet._liveEpoch;
 }
 
 /**
@@ -14065,16 +14073,19 @@ function runtime_resolveRestartTarget(wrapper, propChain = []) {
 	const fail = () => {
 		throw new wrapper.SlothletError("RESTART_REFERENCE_UNRESOLVED", { path: segmentsOf(ArrayMethods.join(segments, ".")) });
 	};
-	// The instance's own tree, also for a call in a run() / scope() that keeps the copy it had before the restart: that
-	// copy's tree is the one being forwarded from (phase 4 gives a run its own tree).
+	// The tree of the code reading the node: the instance's, or the run's own (#876).
 	const slothlet = wrapper.____slothlet;
-	let node = typeof slothlet[INSTANCE_FIELD] === "function" ? slothlet[INSTANCE_FIELD]("api") : slothlet.api;
+	let node = slothlet.api;
 	for (let ofIndex = 0, ofList = segments; ofIndex < ofList.length; ofIndex++) {
 		const segment = ofList[ofIndex];
 		if (node === null || node === undefined) fail();
 		node = node[segment];
 	}
 	if (node === null || node === undefined) fail();
+	// What the reader's tree holds at the path is a node of yet another tree (an alias stored across trees): it has no
+	// node of its own there to forward to.
+	const found = WeakMapMethods.get(_proxyRegistry, node);
+	if (found !== undefined && runtime_isRestartStale(found)) fail();
 	return node;
 }
 
@@ -16448,105 +16459,109 @@ class UnifiedWrapper extends ComponentBase {
 		// The load runs apart from the flow of whichever call asked for it, as an eager tree's build runs before any call:
 		// the module's top level, and its exports' getters and Proxy traps as slothlet reads them, are the module's own code,
 		// never run inside that call (#726). Under the async runtime the caller's flow would otherwise carry into the load.
-		this.____slothletInternal.materializationPromise = runtime_loadApart(this.slothlet, async () => {
-			this.____slothletInternal.state.inFlight = true;
-			// The node this load is for: a reload that replaces it while it loads moves the generation on (#653).
-			const changeGeneration = this.____slothletInternal.changeGeneration;
+		this.____slothletInternal.materializationPromise = runtime_loadApart(
+			this.slothlet,
+			async () => {
+				this.____slothletInternal.state.inFlight = true;
+				// The node this load is for: a reload that replaces it while it loads moves the generation on (#653).
+				const changeGeneration = this.____slothletInternal.changeGeneration;
 
-			try {
-				if (this.____slothletInternal.materializeFunc) {
-					if ((wrapperDebugEnabled || this.____config?.debug?.wrapper) && this.____slothletInternal.apiPath === "string") {
-						this.slothlet.debug("wrapper", {
-							key: "DEBUG_MODE_MATERIALIZE_CALLING_FUNC",
-							apiPath: this.____slothletInternal.apiPath
-						});
-					}
-					// POC pattern: materializeFunc can set implementation synchronously via setter
-					// This matches v2 behavior where 'materialized' variable is set immediately
-					const lazy_setImpl = (value) => {
-						// A caller can ___invalidate() this wrapper AFTER materialization already
-						// started (e.g. loader.materialize: true kicked it off before a collision
-						// decision rejected the candidate) — the guard at this method's own top only
-						// catches invalidation BEFORE materialization starts, not while it's in flight.
-						// Re-checking here stops a rejected candidate's materializeFunc from applying
-						// its result at all, even when it calls this setter synchronously (#372 review).
-						if (this.____slothletInternal.invalid) {
-							UnifiedWrapper._uncountUnappliedImpl(value);
-							return false;
+				try {
+					if (this.____slothletInternal.materializeFunc) {
+						if ((wrapperDebugEnabled || this.____config?.debug?.wrapper) && this.____slothletInternal.apiPath === "string") {
+							this.slothlet.debug("wrapper", {
+								key: "DEBUG_MODE_MATERIALIZE_CALLING_FUNC",
+								apiPath: this.____slothletInternal.apiPath
+							});
 						}
-						this._applyNewImpl(value);
-						return true;
-					};
-					// The wrapper itself goes along: a reload hands this materializer to an existing wrapper, so the
-					// one that runs it is not always the one it was built for.
-					const result = await this.____slothletInternal.materializeFunc(lazy_setImpl, this);
+						// POC pattern: materializeFunc can set implementation synchronously via setter
+						// This matches v2 behavior where 'materialized' variable is set immediately
+						const lazy_setImpl = (value) => {
+							// A caller can ___invalidate() this wrapper AFTER materialization already
+							// started (e.g. loader.materialize: true kicked it off before a collision
+							// decision rejected the candidate) — the guard at this method's own top only
+							// catches invalidation BEFORE materialization starts, not while it's in flight.
+							// Re-checking here stops a rejected candidate's materializeFunc from applying
+							// its result at all, even when it calls this setter synchronously (#372 review).
+							if (this.____slothletInternal.invalid) {
+								UnifiedWrapper._uncountUnappliedImpl(value);
+								return false;
+							}
+							this._applyNewImpl(value);
+							return true;
+						};
+						// The wrapper itself goes along: a reload hands this materializer to an existing wrapper, so the
+						// one that runs it is not always the one it was built for.
+						const result = await this.____slothletInternal.materializeFunc(lazy_setImpl, this);
 
-					// Same in-flight invalidation as lazy_setImpl above — re-check after the await in
-					// case invalidation happened while materializeFunc was running (#372 review).
-					if (this.____slothletInternal.invalid) {
-						UnifiedWrapper._uncountUnappliedImpl(result);
-						return;
+						// Same in-flight invalidation as lazy_setImpl above — re-check after the await in
+						// case invalidation happened while materializeFunc was running (#372 review).
+						if (this.____slothletInternal.invalid) {
+							UnifiedWrapper._uncountUnappliedImpl(result);
+							return;
+						}
+
+						// If materializeFunc didn't call setter, set ____impl from return value
+						if (!this.____slothletInternal.impl) {
+							this._applyNewImpl(result);
+						}
+
+						this.____slothletInternal.state.materialized = true;
+						// The value a lazy node loads is its module's contribution at this path, as the value an eager node is
+						// built with is (#754): a callable folder's own function joins the routines that name it. Eager reports
+						// it through the construction's impl:created; a lazy construction had no value yet.
+						this.___reportLoadedContribution();
+						// A module whose value is null loads as null; _applyNewImpl() leaves null alone because a node
+						// being cleared passes through it too.
+						// So does one whose value is undefined, and its read answers that null or undefined, as the plain
+						// module's `default` does (#792).
+						if ((result === null || result === undefined) && (this.____slothletInternal.impl ?? null) === null) {
+							if (this.____slothletInternal.lazyProxyTraps) this.___settleLazyProxy();
+							this.____slothletInternal.nullish = { value: result };
+						}
+
+						// Notify Slothlet that this lazy wrapper has materialized (counted once, #588).
+						this.___trackLazyLoad("loaded");
+						// Changes made through stand-ins for it while it loaded, now that it has (#653).
+						runtime_replayStandInChanges(this, changeGeneration);
+
+						if ((wrapperDebugEnabled || this.____config?.debug?.wrapper) && this.____slothletInternal.apiPath === "string") {
+							this.slothlet.debug("wrapper", {
+								key: "DEBUG_MODE_MATERIALIZE_COMPLETE",
+								apiPath: this.____slothletInternal.apiPath,
+								resultType: typeof result,
+								// result is always a resolved module object here; {} fallback is unreachable.
+								/* v8 ignore next */
+								resultKeys: Objects.keys(result || {})
+							});
+						}
 					}
-
-					// If materializeFunc didn't call setter, set ____impl from return value
-					if (!this.____slothletInternal.impl) {
-						this._applyNewImpl(result);
-					}
-
-					this.____slothletInternal.state.materialized = true;
-					// The value a lazy node loads is its module's contribution at this path, as the value an eager node is
-					// built with is (#754): a callable folder's own function joins the routines that name it. Eager reports
-					// it through the construction's impl:created; a lazy construction had no value yet.
-					this.___reportLoadedContribution();
-					// A module whose value is null loads as null; _applyNewImpl() leaves null alone because a node
-					// being cleared passes through it too.
-					// So does one whose value is undefined, and its read answers that null or undefined, as the plain
-					// module's `default` does (#792).
-					if ((result === null || result === undefined) && (this.____slothletInternal.impl ?? null) === null) {
-						if (this.____slothletInternal.lazyProxyTraps) this.___settleLazyProxy();
-						this.____slothletInternal.nullish = { value: result };
-					}
-
-					// Notify Slothlet that this lazy wrapper has materialized (counted once, #588).
-					this.___trackLazyLoad("loaded");
-					// Changes made through stand-ins for it while it loaded, now that it has (#653).
-					runtime_replayStandInChanges(this, changeGeneration);
-
+				} catch (error) {
+					// Debug block only fires when apiPath === "string" (literal), which never occurs in test environments.
+					/* v8 ignore next */
 					if ((wrapperDebugEnabled || this.____config?.debug?.wrapper) && this.____slothletInternal.apiPath === "string") {
 						this.slothlet.debug("wrapper", {
-							key: "DEBUG_MODE_MATERIALIZE_COMPLETE",
+							key: "DEBUG_MODE_MATERIALIZE_ERROR",
 							apiPath: this.____slothletInternal.apiPath,
-							resultType: typeof result,
-							// result is always a resolved module object here; {} fallback is unreachable.
-							/* v8 ignore next */
-							resultKeys: Objects.keys(result || {})
+							error: error.message
 						});
 					}
+					throw error;
+				} finally {
+					// Changes queued for a node that did not load are dropped with it: what failed the load fails the awaits (#653).
+					if (!this.____slothletInternal.state.materialized) {
+						this.____slothletInternal.pendingChanges = null;
+						WeakMapMethods.get(PENDING_CHANGES, this.slothlet) == null
+							? undefined
+							: SetMethods.delete(WeakMapMethods.get(PENDING_CHANGES, this.slothlet), this);
+					}
+					// CRITICAL: Always clear inFlight flag and promise reference
+					this.____slothletInternal.state.inFlight = false;
+					this.____slothletInternal.materializationPromise = null;
 				}
-			} catch (error) {
-				// Debug block only fires when apiPath === "string" (literal), which never occurs in test environments.
-				/* v8 ignore next */
-				if ((wrapperDebugEnabled || this.____config?.debug?.wrapper) && this.____slothletInternal.apiPath === "string") {
-					this.slothlet.debug("wrapper", {
-						key: "DEBUG_MODE_MATERIALIZE_ERROR",
-						apiPath: this.____slothletInternal.apiPath,
-						error: error.message
-					});
-				}
-				throw error;
-			} finally {
-				// Changes queued for a node that did not load are dropped with it: what failed the load fails the awaits (#653).
-				if (!this.____slothletInternal.state.materialized) {
-					this.____slothletInternal.pendingChanges = null;
-					WeakMapMethods.get(PENDING_CHANGES, this.slothlet) == null
-						? undefined
-						: SetMethods.delete(WeakMapMethods.get(PENDING_CHANGES, this.slothlet), this);
-				}
-				// CRITICAL: Always clear inFlight flag and promise reference
-				this.____slothletInternal.state.inFlight = false;
-				this.____slothletInternal.materializationPromise = null;
-			}
-		});
+			},
+			this
+		);
 
 		// Return the promise so the caller can await it
 		return this.____slothletInternal.materializationPromise;

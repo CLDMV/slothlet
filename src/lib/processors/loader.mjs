@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T20:34:23-08:00 (1794976463)
+ *	@Last modified time: 2026-11-17T21:24:22-08:00 (1794979462)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -42,6 +42,7 @@ import { isFrameworkReservedKey, isAwaitableThen, thenableExportError } from "#h
 import { SlothletError, SlothletWarning } from "#errors";
 import { translate } from "#i18n";
 import { HELPERS_PARAM, HELPERS_PER_MODULE, internals as instanceImportsInternals } from "#helpers/instance-imports";
+import { COPY_SOURCE_URL } from "#helpers/flow-stores";
 import { internals as framePlacementInternals, toComparablePath } from "#handlers/frame-placement";
 import {
 	ArrayMethods,
@@ -72,6 +73,7 @@ import {
 	Set,
 	setFrom,
 	SetMethods,
+	setToArray,
 	setValues,
 	splitText,
 	String,
@@ -648,6 +650,15 @@ export class Loader extends ComponentBase {
 	 * @private
 	 */
 	async #loadModuleTracked(filePath, instanceID, moduleID, cacheBust = null) {
+		// A copy of a run's tree imports each file from the URL the copied tree did, so it uses the very module; a run's
+		// own reload or restart reads every file again (see Slothlet#buildCopy).
+		let copyFrom = null;
+		const copySource = this.slothlet?.[COPY_SOURCE_URL];
+		if (typeof copySource === "function") {
+			const source = Reflect.apply(copySource, this.slothlet, []);
+			if (typeof source === "number") cacheBust ??= source;
+			else if (source !== null && source !== this) copyFrom = source;
+		}
 		// Slothlet's runtime is loaded before any api file is, from outside every file's load (see ensureRuntimeLoaded).
 		if (!runtimeLoaded) {
 			// The hooks first, under Node: they see whether Node itself loads the runtime (#760).
@@ -656,9 +667,10 @@ export class Loader extends ComponentBase {
 		}
 		// The file's top level runs as the file's module (#726): what it starts while it loads carries that identity.
 		const contextManager = this.slothlet.contextManager;
-		if (typeof contextManager?.runModuleLoad !== "function") return this.#loadModuleFile(filePath, instanceID, moduleID, cacheBust);
+		if (typeof contextManager?.runModuleLoad !== "function")
+			return this.#loadModuleFile(filePath, instanceID, moduleID, cacheBust, copyFrom);
 		return contextManager.runModuleLoad(createModuleLoad(this.slothlet, filePath, moduleID), () =>
-			this.#loadModuleFile(filePath, instanceID, moduleID, cacheBust)
+			this.#loadModuleFile(filePath, instanceID, moduleID, cacheBust, copyFrom)
 		);
 	}
 
@@ -671,7 +683,7 @@ export class Loader extends ComponentBase {
 	 * @returns {Promise<Object>} Loaded module
 	 * @private
 	 */
-	async #loadModuleFile(filePath, instanceID, moduleID, cacheBust = null) {
+	async #loadModuleFile(filePath, instanceID, moduleID, cacheBust = null, copyFrom = null) {
 		try {
 			// Browser mode: filesystem paths and pathToFileURL are not available.
 			// Delegate to the callback the user supplied via config.loader.resolve.
@@ -686,6 +698,12 @@ export class Loader extends ComponentBase {
 			// The hooks serve its require() of an ES module the instance's copy (#534).
 			if (StringMethods.endsWith(filePath, ".cjs") || (StringMethods.endsWith(filePath, ".js") && (await this.#isCommonJSFile(filePath)))) {
 				ensureInstanceImportHooks();
+				// A copy's CommonJS leaf is the copied tree's, not evaluated again.
+				const copied = copyFrom?.loadedCommonJS?.(filePath, moduleID) ?? null;
+				if (copied !== null) {
+					MapMethods.set(this.#commonJSLoaded, `${filePath}\u0000${moduleID ?? ""}`, copied);
+					return copied;
+				}
 				return this.#loadCJSIsolated(filePath, instanceID, moduleID);
 			}
 
@@ -849,19 +867,23 @@ export class Loader extends ComponentBase {
 			} else {
 				// Regular JavaScript file
 				const fileUrl = url.pathToFileURL(filePath).href;
+				// A copy's file is imported from the URL the copied tree imported it from: the very module (#876).
+				const copiedUrls = copyFrom?.importedLocationsFor?.(filePath, moduleID ?? null);
+				const copiedUrl = copiedUrls && SetMethods.size(copiedUrls) === 1 ? setToArray(copiedUrls)[0] : null;
 				// Cache bust using instanceID to prevent cross-instance pollution
 				// Add moduleID for api.slothlet.api.add calls to prevent cache reuse between different API paths
 				moduleUrl = `${fileUrl}?slothlet_instance=${instanceID}`;
 				if (moduleID) {
 					moduleUrl += `&module=${runtime_encodeQueryValue(moduleID)}`;
 				}
+				if (copiedUrl !== null) moduleUrl = copiedUrl;
 				// `helpers: "module"`: the resolve hook loads each helper this file imports as this file's own copy.
 				if (this.slothlet.config?.helpers === "module") moduleUrl += `&${HELPERS_PARAM}=${HELPERS_PER_MODULE}`;
 				// Append reload timestamp to force fresh imports during rebuildCache.
 				// This prevents the Node.js module cache from returning the same function
 				// reference used by the live API (which would cause applyRootContributor's
 				// Object.assign to overwrite the live API's properties).
-				if (cacheBust) {
+				if (cacheBust && copiedUrl === null) {
 					moduleUrl += `&_reload=${cacheBust}`;
 				}
 			}
@@ -1007,8 +1029,28 @@ export class Loader extends ComponentBase {
 		// recognises a CommonJS namespace whose file is not named `.cjs` (a CommonJS `.js`, #521). It is
 		// non-enumerable so every key walk over the namespace sees exactly the exports listed above.
 		Objects.defineProperty(namespace, "module.exports", { __proto__: null, value: exports, enumerable: false });
+		MapMethods.set(this.#commonJSLoaded, `${filePath}\u0000${moduleID ?? ""}`, namespace);
 		return namespace;
 	}
+
+	/**
+	 * The namespace of the CommonJS leaf this loader last loaded for a mount, which a copy of the tree uses instead of
+	 * evaluating the leaf again (see `Slothlet#buildCopy`).
+	 * @param {string} filePath - The file.
+	 * @param {string|null} moduleID - The mount.
+	 * @returns {object|null} The namespace, or null when it was not loaded.
+	 * @internal
+	 */
+	loadedCommonJS(filePath, moduleID) {
+		return MapMethods.get(this.#commonJSLoaded, `${filePath}\u0000${moduleID ?? ""}`) ?? null;
+	}
+
+	/**
+	 * The namespace of each CommonJS leaf loaded, by file and mount (see {@link Loader#loadedCommonJS}).
+	 * @type {Map<string, object>}
+	 * @private
+	 */
+	#commonJSLoaded = new Map();
 
 	/**
 	 * Per-directory cache of the nearest package.json `type` scope, so a tree of `.js` leaves reads each

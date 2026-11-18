@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T19:49:35-08:00 (1794973775)
+ *	@Last modified time: 2026-11-17T21:24:11-08:00 (1794979451)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -24,7 +24,7 @@
 import { ComponentBase } from "#factories/component-base";
 import { segmentsOf } from "#helpers/segments";
 import { getInstanceToken } from "#handlers/lifecycle-token";
-import { FORK, writeTarget } from "#helpers/flow-stores";
+import { FORK, SILENT_BUILD, writeTarget } from "#helpers/flow-stores";
 import { internals as unifiedWrapperInternals } from "#handlers/unified-wrapper";
 import {
 	ArrayMethods,
@@ -292,6 +292,8 @@ export class Lifecycle extends ComponentBase {
 		// Not an async function: the promise handed back is slothlet's own (helpers/intrinsics `SafePromise`), so awaiting
 		// it reads nothing module code can put on `Promise.prototype`.
 		try {
+			// A copy of a tree built for a run loads nothing new: its subscribers hear nothing of the build.
+			if (this.slothlet?.[SILENT_BUILD]?.() === true) return new SafePromise((resolve) => resolve());
 			if (data && typeof data.source === "string" && PUBLIC_SOURCE[data.source] !== undefined)
 				data = { ...data, source: PUBLIC_SOURCE[data.source] };
 			this.#logEvent(event, data);

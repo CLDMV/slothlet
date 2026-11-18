@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:28:46-08:00 (1794882526)
+ *	@Last modified time: 2026-11-17T21:24:11-08:00 (1794979451)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -41,6 +41,7 @@ import { internals as unifiedWrapperInternals } from "#handlers/unified-wrapper"
 import { MODULE_MANIFEST } from "#handlers/metadata";
 import { SlothletError } from "#errors";
 import { assertOptionKeys } from "#helpers/config-schema";
+import { recordOperation } from "#helpers/flow-stores";
 import { sortModules } from "#helpers/module-sort";
 import { segmentsOf } from "#helpers/segments";
 import {
@@ -552,23 +553,20 @@ export class ModuleManager extends ComponentBase {
 		// A function condition among them runs as the module code that mounted it, as its addRule's do.
 		// Each is recorded as the module's rule, so a reload, which replays the mount as a plain add, registers it again
 		// after it, at the same layer and with the same id; the module's removal drops the record (#625).
-		const history = this.slothlet.handlers.apiManager.state?.operationHistory;
 		ArrayMethods.forEach(manifestRules, (rule, i) => {
 			const placed = rulePlacements[i].writer
 				? { ...rule, condition: permissionManager.pinConditions(rule.condition, rulePlacements[i].writer) }
 				: rule;
 			const layer = rulePlacements[i].layer ?? "manifest";
 			const ruleId = permissionManager.addRule(placed, moduleID, null, layer);
-			history == null
-				? undefined
-				: listPush(history, {
-						type: "addPermissionRule",
-						rule: placed,
-						ownerModuleID: moduleID,
-						ruleId,
-						layer,
-						timestamp: this.clock.now()
-					});
+			recordOperation(this.slothlet, {
+				type: "addPermissionRule",
+				rule: placed,
+				ownerModuleID: moduleID,
+				ruleId,
+				layer,
+				timestamp: this.clock.now()
+			});
 		});
 		ArrayMethods.forEach(manifestEvents, (rule, i) => {
 			const placed = eventPlacements[i].writer
@@ -576,16 +574,14 @@ export class ModuleManager extends ComponentBase {
 				: rule;
 			const layer = eventPlacements[i].layer ?? "manifest";
 			const ruleId = permissionManager.addEventRule(placed, moduleID, null, layer);
-			history == null
-				? undefined
-				: listPush(history, {
-						type: "addEventRule",
-						rule: placed,
-						ownerModuleID: moduleID,
-						ruleId,
-						layer,
-						timestamp: this.clock.now()
-					});
+			recordOperation(this.slothlet, {
+				type: "addEventRule",
+				rule: placed,
+				ownerModuleID: moduleID,
+				ruleId,
+				layer,
+				timestamp: this.clock.now()
+			});
 		});
 
 		const result = {

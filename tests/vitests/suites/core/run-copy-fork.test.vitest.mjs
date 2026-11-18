@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T19:50:25-08:00 (1794973825)
+ *	@Last modified time: 2026-11-17T21:25:20-08:00 (1794979520)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -20,7 +20,7 @@
  * copy and neither one's later writes reach the other, and the instance's own changes after a run started (a restart
  * among them) never reach that run. A full-isolation scope's `self` keeps what it first read of each member.
  *
- * In this phase the api tree itself is still shared: a module a run adds is on the instance too (see the last test).
+ * The api tree is copied too: a module a run adds is the run's alone (see the last test, and run-copy-tree).
  *
  * Fixture (written at run time): `calls/calls.mjs` (leaves answering 1, reading through `self`), `data/data.mjs` (a
  * data member `n`), `vault/secret.mjs` mounted at `vault` with `api.add()`, and `extra/extra.mjs` to add in a run.
@@ -336,8 +336,7 @@ describe.each([["async"], ["live"]])("a run's writes fork its own copy — %s ru
 				const run = api.slothlet.context.run({ user: "r" }, async () => {
 					entered.release();
 					await go.promise;
-					// The api tree is not the run's own yet (phase 4): a call forwards to the rebuilt tree, and runs with the
-					// hooks and rules the run kept.
+					// The run keeps its own tree across the restart, with the hooks and rules it had.
 					return {
 						hooked: api.calls.viaSelf(),
 						rules: api.slothlet.permissions.global.rules.path("vault.secret").filter((rule) => rule.caller === "calls.**").length
@@ -354,7 +353,7 @@ describe.each([["async"], ["live"]])("a run's writes fork its own copy — %s ru
 			}
 		});
 
-		it("lifecycle subscriptions made in a run hear the run's events only; the api tree is still shared", async () => {
+		it("lifecycle subscriptions made in a run hear the run's events only; the api tree is the run's own", async () => {
 			const api = await make();
 			const heard = { run: 0, host: 0 };
 			try {
@@ -366,8 +365,8 @@ describe.each([["async"], ["live"]])("a run's writes fork its own copy — %s ru
 				expect(heard.run).toBeGreaterThan(0);
 				// The run's copy started with the instance's subscriber.
 				expect(heard.host).toBe(heard.run);
-				// Phase 2 shares the api tree: the module the run added is on the instance too.
-				expect(api.extra.hello()).toBe("hello");
+				// The run changed a tree of its own: the module it added is not on the instance.
+				expect(api.extra).toBeUndefined();
 				const before = { ...heard };
 				await api.slothlet.api.add("again", EXTRA, { id: "again" });
 				expect(heard.run).toBe(before.run);

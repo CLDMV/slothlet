@@ -65,7 +65,9 @@ import {
  * own fields answer. The first change after that, a reload's swap or a write to one of the forkable handlers (see
  * {@link FORK}) from outside any run, makes the token keep what the instance had: `values` then holds that copy. A
  * write from code in a run forks the written handler into the run's `ns` (see `Slothlet#writeTarget`), which the run
- * then reads first. A nested run starts with its own copy of its parent's `ns`.
+ * then reads first. A nested run starts with its own copy of its parent's `ns`. A run that changes its api tree holds a
+ * whole set of its own in `values` (its tree and the handlers that go with it, see `Slothlet#ownTree`), which it reads
+ * before anything else; a nested run opened in it reads that tree until either one changes it.
  * @type {symbol}
  * @internal
  */
@@ -125,6 +127,39 @@ export const RUN_DONE = Symbol("slothlet.runDone");
  * @internal
  */
 export const RUN_OPENED = Symbol("slothlet.runOpened");
+
+/**
+ * The key of the instance's method that readies the api tree for a change the calling code is about to make (see
+ * {@link treeWrite}): a run that changes its tree first gets a tree of its own, and every other copy that still reads
+ * the tree being changed gets one before it changes.
+ * @type {symbol}
+ * @internal
+ */
+export const TREE_WRITE = Symbol("slothlet.treeWrite");
+
+/**
+ * The key of the instance's method that records an operation in the history the calling code's copy replays (see
+ * {@link recordOperation}).
+ * @type {symbol}
+ * @internal
+ */
+export const RECORD_OPERATION = Symbol("slothlet.recordOperation");
+
+/**
+ * The key of the instance's method that says whether the calling code is building a copy of an api tree for a run
+ * (see `Slothlet#buildCopy`): such a build announces nothing to lifecycle subscribers, as nothing new is loaded.
+ * @type {symbol}
+ * @internal
+ */
+export const SILENT_BUILD = Symbol("slothlet.silentBuild");
+
+/**
+ * The key of the instance's method that hands a copy build the URL the copied tree imported a file from, so the copy
+ * uses the very module the tree it copies uses.
+ * @type {symbol}
+ * @internal
+ */
+export const COPY_SOURCE_URL = Symbol("slothlet.copySourceURL");
 
 /**
  * How many run records are not yet `done`, across every instance.
@@ -388,7 +423,7 @@ export function runCopyCounts() {
  * stay apart.
  * @param {object|null|undefined} slothlet - The instance object.
  * @param {object|null|undefined} parentStore - The store the run is opened in.
- * @returns {{from: {values: object|null}, parent: object|null, ns: object|null, work: number, done: boolean}|null} The
+ * @returns {{from: {values: object|null}, parent: object|null, ns: object|null, values: object|null, work: number, done: boolean}|null} The
  *   record, or null when the instance hands out no copy token.
  * @internal
  */
@@ -418,7 +453,7 @@ export function copyForRun(slothlet, parentStore) {
  */
 export function newRecord(from, parent, ns, owner) {
 	from.users = (from.users ?? 0) + 1;
-	return { __proto__: null, from, parent, ns, work: 1, done: false, torn: false, owner: owner ?? null };
+	return { __proto__: null, from, parent, ns, values: null, work: 1, done: false, torn: false, owner: owner ?? null };
 }
 
 /**
@@ -436,6 +471,38 @@ export function writeTarget(component, instanceOnly = false) {
 	const slothlet = component.slothlet;
 	const choose = slothlet?.[WRITE_TARGET];
 	return typeof choose === "function" ? Reflect.apply(choose, slothlet, [component, instanceOnly]) : component;
+}
+
+/**
+ * Ready the api tree for a change the calling code is about to make (`api.slothlet.api.add()` / `remove()` /
+ * `reload()`, a module mount): code in a `run()` / `scope()` changes a tree of its own, which the run gets on its first
+ * change, and a copy that still reads the tree being changed (a run that started on it) gets one of its own first.
+ * Resolves at once for an instance that keeps no copies.
+ * @param {object|null|undefined} slothlet - The instance.
+ * @returns {Promise<void>|undefined} Settles once the tree may be changed.
+ * @internal
+ */
+export function treeWrite(slothlet) {
+	const ready = slothlet?.[TREE_WRITE];
+	return typeof ready === "function" ? Reflect.apply(ready, slothlet, []) : undefined;
+}
+
+/**
+ * Record an operation (an add, a removal, a rule change) in the history the calling code's copy of the api tree
+ * replays on a reload: the instance's, or the run's own.
+ * @param {object} slothlet - The instance.
+ * @param {object} operation - The operation.
+ * @returns {void}
+ * @internal
+ */
+export function recordOperation(slothlet, operation) {
+	const record = slothlet?.[RECORD_OPERATION];
+	if (typeof record === "function") {
+		Reflect.apply(record, slothlet, [operation]);
+		return;
+	}
+	const history = slothlet?.handlers?.apiManager?.state?.operationHistory;
+	if (history) listPush(history, operation);
 }
 
 /**
