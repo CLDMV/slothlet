@@ -46,7 +46,7 @@ const api = await slothlet({
 	// Context
 	context: null,
 	reference: null,
-	scope: { merge: "shallow", isolation: "partial" }, // merge: "shallow" | "deep"; isolation: "partial" | "full"
+	scope: { merge: "shallow", isolation: "full" }, // merge: "shallow" | "deep"; isolation: "full" | "partial"
 	metadata: null, // init metadata applied to every function
 	sanitize: {}, // file-name to api-key rules, see SANITIZATION.md
 
@@ -390,7 +390,7 @@ api.config; // ✅
 ### `scope`
 
 **Type**: `{ merge?: "shallow" | "deep", isolation?: "partial" | "full" }`
-**Default**: `undefined` (`merge` behaves as `"shallow"`, `isolation` as `"partial"`)
+**Default**: `undefined` (`merge` behaves as `"shallow"`, `isolation` as `"full"`)
 
 Sets the defaults for `api.slothlet.context.scope()` runs. Both can be overridden per call.
 
@@ -399,18 +399,18 @@ Sets the defaults for `api.slothlet.context.scope()` runs. Both can be overridde
   - **`"deep"`** - Deep recursive merge of all nested keys
   - Any other value throws `INVALID_CONFIG`.
 - **`isolation`**
-  - **`"partial"`** (default) - The scope shares `self` with the rest of the api, so a write through `self` inside the scope is visible outside it.
-  - **`"full"`** - The scope gets a copy-on-write `self`: writes made inside the scope stay inside it.
+  - **`"full"`** (default) - The scope gets a copy-on-write `self`, taken as the scope starts: writes made through `self` inside the scope stay inside it, including synchronous ones made before the scope has an api tree of its own.
+  - **`"partial"`** - The scope shares `self` with the rest of the api, so a write through `self` inside the scope reaches the instance and is visible outside it. Everything else a scope changes (permission rules, hooks, metadata, event and lifecycle subscriptions, the api tree) stays in the scope in both modes.
   - Any other value throws `SCOPE_ISOLATION_MODE_INVALID`.
 
 ```javascript
 const api = await slothlet({
 	base: "./api",
-	scope: { merge: "deep", isolation: "full" }
+	scope: { merge: "deep", isolation: "partial" }
 });
 ```
 
-See [CONTEXT-PROPAGATION.md](CONTEXT-PROPAGATION.md) for how scopes work.
+See [CONTEXT-PROPAGATION.md](CONTEXT-PROPAGATION.md) for how scopes work. Before v4 the default was `"partial"`; see [MIGRATION.md](MIGRATION.md#scope-isolation-defaults-to-full).
 
 ---
 

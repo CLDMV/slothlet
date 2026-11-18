@@ -113,7 +113,10 @@
 		"versioning-metadata": {
 			"label": "versioning.metadata.get() result",
 			"keys": {
-				"logicalPath": { "to": "path", "note": "A segments array in v4 (`[\"auth\"]`)." }
+				"logicalPath": {
+					"to": "path",
+					"note": "A segments array in v4 (`[\"auth\"]`). `version` and `path` are reserved in version metadata: a key of either name you supply is replaced by the injected value (v3 reserved only `logicalPath`)."
+				}
 			}
 		},
 		"diag-inspect": {

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:22-07:00 (1791090922)
+ *	@Last modified time: 2026-11-18T05:37:10-08:00 (1795009030)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -55,7 +55,7 @@ describe("self.X = ... under scope({ isolation: 'full' })", () => {
 		expect(api.bootstrapIsolated).toBeUndefined();
 	});
 
-	it("partial isolation (default) still routes through apiManager and persists", async () => {
+	it("partial isolation (opt-in) still routes through apiManager and persists", async () => {
 		// Counter-test: with partial isolation, writes DO persist (existing behavior).
 		// This exercises the false arm of the new isolation check.
 		api = await slothlet({

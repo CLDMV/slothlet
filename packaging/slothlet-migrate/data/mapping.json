@@ -353,6 +353,13 @@
 			"action": "behaviour"
 		},
 		{
+			"kind": "config",
+			"old": "scope.isolation",
+			"new": "scope.isolation",
+			"note": "Defaults to \"full\" (was \"partial\"): a self write made in run() / scope() stays in the run. Set scope: { isolation: \"partial\" } (or isolation: \"partial\" per call) to let it reach the instance again.",
+			"action": "behaviour"
+		},
+		{
 			"kind": "option",
 			"old": "api.slothlet.api.add(options).collisionMode",
 			"new": "api.slothlet.api.add(options).collision.mode",

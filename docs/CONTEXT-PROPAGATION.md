@@ -239,14 +239,14 @@ Slothlet provides dedicated methods for executing functions with isolated contex
 - Does **not** affect the global instance context after the callback returns
 - **Inherits** from and merges with the current context
 - Supports **shallow** and **deep** merge strategies
-- Supports **partial** and **full** isolation modes
+- Supports **full** (default) and **partial** isolation modes
 - **Automatically propagates** through all async boundaries inside the callback
 
 ### API Reference
 
 #### api.slothlet.context.run(contextData, callback, ...args)
 
-Executes a callback function with isolated context data. `.run()` is shorthand for `.scope()` with shallow merge and partial isolation.
+Executes a callback function with isolated context data. `.run()` is shorthand for `.scope()` with the instance's `scope` defaults: shallow merge and full isolation unless the config says otherwise.
 
 **Parameters:**
 
@@ -306,7 +306,7 @@ Executes a function with isolated context using structured options.
 - `fn` (Function) - Function to execute
 - `args` (Array, optional) - Arguments array for the function
 - `merge` (String, optional) - Merge strategy: `"shallow"` (default) or `"deep"`
-- `isolation` (String, optional) - Isolation mode: `"partial"` (default) or `"full"` - overrides instance default
+- `isolation` (String, optional) - Isolation mode: `"full"` (default) or `"partial"` - overrides instance default
 - `protect` (String[], optional) - Context keys locked write-once/unowned for this scope — see [Owner-Locked & Write-Protected Keys](#owner-locked--write-protected-keys)
 - `owners` (Object, optional) - Map of `{ key: ownerApiPath }` binding a context key to the module allowed to write it — see [Owner-Locked & Write-Protected Keys](#owner-locked--write-protected-keys)
 
@@ -398,22 +398,24 @@ Owner-locked keys protect **who the caller is** (an authenticated `userId`, a ve
 
 `isolation` governs **`self`** only — context is isolated in both modes (the per-request context store is discarded on scope exit regardless).
 
-#### Partial Isolation (Default)
+In both modes everything else a run changes is the run's own: permission rules, hooks, metadata, event and lifecycle subscriptions, and the api tree. Changes to the tree made inside `.run()` / `.scope()` through `api.slothlet.api.add()`, `remove()` and `reload()` (and `reload()`, `restart()` and `shutdown()` themselves) give the run a copy of the tree on its first such change, and every later write into the tree from the run lands in that copy, never in the instance (see [RELOAD.md](RELOAD.md#calls-during-a-full-reload-and-after-one-fails)).
 
-Child `self` is the base `self`. Changes to the api tree made inside `.run()` / `.scope()` through `api.slothlet.api.add()`, `remove()` and `reload()` (and `reload()`, `restart()` and `shutdown()` themselves) are the run's own: the run gets a copy of the tree on its first such change, and every later write into the tree from the run lands in that copy, never in the instance (see [RELOAD.md](RELOAD.md#calls-during-a-full-reload-and-after-one-fails)). A synchronous write through `self` from a run that has not changed its tree yet still reaches the instance's tree and persists afterward.
+#### Full Isolation (Default)
+
+Child `self` is a **copy-on-write view** over the base `self`, taken when the run starts: reads pass through to the live API, writes (top-level and deep-path) land on a per-scope overlay that is discarded on exit. Mutations made through `self` do **not** persist outside `.run()`, including a synchronous write made before the run has a tree of its own. Both context AND the API surface are isolated. Two limits apply: a function member (a callable node, a class) is shared with the live API rather than copied, so a write to its own properties or its `prototype` persists ([#674](https://github.com/CLDMV/slothlet/issues/674)); and the scope's views cannot be closed, so `Object.preventExtensions`, `Object.seal`, and `Object.freeze` on `self` or a node read from it inside the scope throw a `TypeError`.
 
 ```javascript
-const api = await slothlet({ base: "./api" }); // default: partial isolation
+const api = await slothlet({ base: "./api" }); // default: full isolation
 ```
 
-#### Full Isolation
+#### Partial Isolation
 
-Child `self` is a **copy-on-write view** over the base `self`: reads pass through to the live API, writes (top-level and deep-path) land on a per-scope overlay that is discarded on exit. Mutations to API state do **not** persist outside `.run()`. Both context AND the API surface are isolated. Two limits apply: a function member (a callable node, a class) is shared with the live API rather than copied, so a write to its own properties or its `prototype` persists ([#674](https://github.com/CLDMV/slothlet/issues/674)); and the scope's views cannot be closed, so `Object.preventExtensions`, `Object.seal`, and `Object.freeze` on `self` or a node read from it inside the scope throw a `TypeError`.
+Opt-in. Child `self` is the base `self`, so a write through `self` from the run reaches the instance and persists after the run ends, by design. Only `self` is shared: the rest of what the run changes stays in the run as described above. A synchronous write through `self` from a run that has not changed its tree yet lands in the instance's tree; once the run has a tree of its own, its writes land there.
 
 ```javascript
 const api = await slothlet({
 	base: "./api",
-	scope: { isolation: "full" }
+	scope: { isolation: "partial" }
 });
 ```
 
@@ -422,15 +424,15 @@ const api = await slothlet({
 The isolation mode can be overridden on a per-call basis regardless of the instance default:
 
 ```javascript
-// Instance default: partial
+// Instance default: full
 const api = await slothlet({ base: "./api" });
 
-// Override to full isolation for this specific call
+// Override to partial isolation for this specific call
 await api.slothlet.context.scope({
 	context: { requestId: "123" },
-	isolation: "full",
+	isolation: "partial",
 	fn: async () => {
-		// Self is a copy-on-write view; mutations don't escape this scope
+		// Self is the instance's own; writes through it persist after this scope
 	}
 });
 ```

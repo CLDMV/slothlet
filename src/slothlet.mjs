@@ -4564,7 +4564,7 @@ export default slothlet;
  * @property {object|null} [reference=null] - Object whose properties are merged directly onto the root API and, with `diagnostics: true`, readable as `api.slothlet.diag.reference`.
  * @property {{merge?: "shallow"|"deep", isolation?: "partial"|"full"}} [scope] - Defaults for `api.slothlet.context.scope()` runs.
  *   `merge`: `"shallow"` merges top-level keys; `"deep"` recurses into nested objects (any other value throws `INVALID_CONFIG`).
- *   `isolation`: `"partial"` (default) lets a scope's `self` writes reach the shared api; `"full"` gives the scope a copy-on-write `self`. A per-call `isolation` option overrides it; any other value throws `SCOPE_ISOLATION_MODE_INVALID`.
+ *   `isolation`: `"full"` (default) gives the scope a copy-on-write `self`, so its `self` writes stay in the scope; `"partial"` lets a scope's `self` writes reach the shared api. A per-call `isolation` option overrides it; any other value throws `SCOPE_ISOLATION_MODE_INVALID`.
  * @property {object|null} [metadata] - Init metadata. Each key is set as global metadata (inherited by every later `api.slothlet.api.add()`) and registered as user metadata for the base module. See [METADATA.md](docs/METADATA.md#init-metadata).
  * @property {object} [sanitize] - Options for turning file and folder names into api property names, the same options `sanitizePropertyName()` takes:
  *   `first` (default `true`), `preserve` (`{ upper?, lower? }`, each default `false`) and `rules` (`{ leave?, nocase?, upper?, lower? }`, each a `string[]` of exact names, globs or `**boundary**` patterns).

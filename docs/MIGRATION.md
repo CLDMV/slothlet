@@ -114,6 +114,36 @@ On the live runtime, the callbacks of `fs`, `dns` and `crypto`'s callback APIs (
 
 Work a `run()` / `scope()` leaves running after its callback returns (a timer, an interval, a listener, a promise chain or module call nobody awaited) now keeps the run's context on the live runtime, as on the async runtime; in v3 it saw the instance's own context once the run had returned.
 
+### Scope isolation defaults to full
+
+`run()` and `scope()` now default to `isolation: "full"`. In v3 the default was `"partial"`: `self` inside a run was the instance's own, so a module writing `self.x = …` during a request changed the api for every later caller. Under `"full"` the run gets a copy-on-write `self`, taken as it starts, and its `self` writes (top-level or deep, synchronous or after an `await`) stay in the run and are dropped when it ends. Everything else a run changes (permission rules, hooks, metadata, event and lifecycle subscriptions, the api tree) is the run's own in both modes.
+
+```javascript
+// api/counter.mjs
+import { self } from "@cldmv/slothlet/runtime";
+export function remember(value) {
+	self.last = value;
+}
+
+// v3 (default "partial"): the write outlives the run
+await api.slothlet.context.run({}, () => api.counter.remember(1));
+api.last; // 1
+
+// v4 (default "full"): the write stays in the run
+await api.slothlet.context.run({}, () => api.counter.remember(1));
+api.last; // undefined
+```
+
+To keep the v3 behaviour, opt back in for the instance or per call:
+
+```javascript
+const api = await slothlet({ base: "./api", scope: { isolation: "partial" } });
+
+await api.slothlet.context.scope({ context: {}, isolation: "partial", fn: () => api.counter.remember(1) });
+```
+
+State a run needs to hand back belongs in its return value, not in `self`.
+
 ### Lazy mode under vitest needs the plugin
 
 Under vitest, api files are loaded by vite, not by Node. Add the plugin from `@cldmv/slothlet/vite` to the vitest config so each instance gets its own copy of every api file and slothlet can tell which module loaded which file. Without it a test using lazy mode, or a module's helper outside its api folder, is refused, and `permissions.mode: "strict"` reports the `vitest-plugin` baseline check as unmet. The plugin is supported with the forks pool; the threads pool is refused. The setup is in [TESTING.md](./TESTING.md#per-instance-helpers-under-vitest-the-cldmvslothletvite-plugin).
@@ -211,6 +241,7 @@ Keys of the object passed to `slothlet()`, as dotted paths.
 | —                                      | `versioning`                     | new       | New group (dispatcher).                                                                                                                                                                                                                                                                                                   |
 | `versionDispatcher`                    | `versioning.dispatcher`          | moved     |                                                                                                                                                                                                                                                                                                                           |
 | `context`                              | `context`                        | behaviour | The init context is copied: mutating the object passed to slothlet() no longer changes the live context. Use api.slothlet.context.set().                                                                                                                                                                                  |
+| `scope.isolation`                      | `scope.isolation`                | behaviour | Defaults to "full" (was "partial"): a self write made in run() / scope() stays in the run. Set scope: { isolation: "partial" } (or isolation: "partial" per call) to let it reach the instance again.                                                                                                                     |
 
 <!-- migration-table:config:end -->
 

@@ -4824,13 +4824,13 @@ export class ApiBuilder extends ComponentBase {
 				}
 
 				// Delegate to scope with structured options
-				// Use defaults from config for merge and isolation
+				// Use defaults from config for merge and isolation (isolation defaults to "full")
 				return scopeFunc({
 					context: contextData,
 					fn: callback,
 					args: args,
 					merge: slothlet.config.scope?.merge || "shallow",
-					isolation: slothlet.config.scope?.isolation || "partial"
+					isolation: slothlet.config.scope?.isolation || "full"
 				});
 			}
 		}.run;
@@ -4870,8 +4870,8 @@ export class ApiBuilder extends ComponentBase {
 					throw new slothlet.SlothletError("SCOPE_MERGE_STRATEGY_INVALID", { merge });
 				}
 
-				// Get isolation mode (from options or config)
-				const isolationMode = isolation || slothlet.config.scope?.isolation || "partial";
+				// Get isolation mode (from options or config; "full" when neither names one)
+				const isolationMode = isolation || slothlet.config.scope?.isolation || "full";
 
 				// Validate isolation mode
 				if (isolationMode !== "partial" && isolationMode !== "full") {
@@ -4999,12 +4999,13 @@ export class ApiBuilder extends ComponentBase {
 					const childStore = {
 						instanceID: childInstanceID,
 						context: mergedContext,
-						// Isolation mode governs `self` only:
-						//  - `partial` (default): `self` is the SHARED live reference —
-						//    mutations inside the callback persist (by design).
-						//  - `full`: `self` is a copy-on-write view — reads pass through
-						//    to the live `self`, writes (incl. deep-path) land on a
-						//    per-scope overlay discarded on exit, so nothing leaks.
+						// Isolation mode governs `self` only, and is chosen as the run opens:
+						//  - `full` (default): `self` is a copy-on-write view taken now —
+						//    reads pass through to the live `self`, writes (incl. deep-path,
+						//    and synchronous ones made before the run has a tree of its own)
+						//    land on a per-scope overlay discarded on exit, so nothing leaks.
+						//  - `partial` (opt-in): `self` is the SHARED live reference —
+						//    mutations inside the callback reach the instance (by design).
 						// Context is isolated in both modes (child store discarded).
 						self: isolationMode === "full" ? makeCopyOnWriteSelf(currentStore.self) : currentStore.self,
 						config: currentStore.config,
@@ -5106,12 +5107,13 @@ export class ApiBuilder extends ComponentBase {
 					const childStore = {
 						instanceID: childInstanceID,
 						context: mergedContext,
-						// Isolation mode governs `self` only:
-						//  - `partial` (default): `self` is the SHARED live reference —
-						//    mutations inside the callback persist (by design).
-						//  - `full`: `self` is a copy-on-write view — reads pass through
-						//    to the live `self`, writes (incl. deep-path) land on a
-						//    per-scope overlay discarded on exit, so nothing leaks.
+						// Isolation mode governs `self` only, and is chosen as the run opens:
+						//  - `full` (default): `self` is a copy-on-write view taken now —
+						//    reads pass through to the live `self`, writes (incl. deep-path,
+						//    and synchronous ones made before the run has a tree of its own)
+						//    land on a per-scope overlay discarded on exit, so nothing leaks.
+						//  - `partial` (opt-in): `self` is the SHARED live reference —
+						//    mutations inside the callback reach the instance (by design).
 						// Context is isolated in both modes (child store discarded).
 						self: isolationMode === "full" ? makeCopyOnWriteSelf(currentStore.self) : currentStore.self,
 						config: currentStore.config,

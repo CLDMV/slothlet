@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:21-07:00 (1791090921)
+ *	@Last modified time: 2026-11-18T05:37:10-08:00 (1795009030)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -77,9 +77,9 @@ describe(".run()/.scope() self sandbox (full isolation)", () => {
 		expect(api.probeKey).toBeUndefined();
 	});
 
-	it("partial isolation (default) does NOT sandbox — self writes persist", async () => {
+	it("partial isolation (opt-in) does NOT sandbox — self writes persist", async () => {
 		// Counterpart: confirms the COW view is full-isolation-only.
-		api = await slothlet({ base: DIR, mode: "eager" });
+		api = await slothlet({ base: DIR, mode: "eager", scope: { isolation: "partial" } });
 
 		await api.slothlet.context.run({}, async () => {
 			await api.owner.writeOutside("persisted");

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:29:44-08:00 (1794882584)
+ *	@Last modified time: 2026-11-18T05:36:06-08:00 (1795008966)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -433,11 +433,12 @@ describe.each(ALL_CONFIGS)("Per-Request Context Multi-Instance > Config: '$name'
 		});
 	});
 
-	it("should support partial isolation mode (default - shared self)", async () => {
+	it("should support partial isolation mode (opt-in - shared self)", async () => {
 		api1 = await slothlet({
 			...config,
 			base: TEST_DIRS.API_TEST,
-			context: { counter: 0 }
+			context: { counter: 0 },
+			scope: { isolation: "partial" }
 		});
 
 		// Initialize state on the API
