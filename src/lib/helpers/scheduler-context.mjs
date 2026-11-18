@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T21:05:06-08:00 (1794978306)
+ *	@Last modified time: 2026-11-17T21:25:53-08:00 (1794979553)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -128,8 +128,10 @@ const FAMILY = Objects.freeze({
 /**
  * For each family (see {@link FAMILY}), what releases the run's count of the work behind a handle a scheduler handed
  * out in a `run()` / `scope()` (see `holdForCurrentFlow` in `helpers/caller-pinning`): kept until the work runs (a
- * one-shot) or is cleared. Object handles (Node's) are kept weakly, number handles (a browser's) until released.
- * @type {Record<string, {objects: WeakMap<object, Function>, numbers: Map<number, Function>}>}
+ * one-shot) or is cleared. Object handles (Node's) are kept weakly, number handles (a browser's) until released. `ids`
+ * holds the id a held object handle answered when code turned it into a primitive (Node's timers, which a clearing
+ * function then takes by that id, see {@link runtime_patchHandleId}), and `idOf` the other way, until it is released.
+ * @type {Record<string, {objects: WeakMap<object, Function>, numbers: Map<number, Function>, ids: Map<string, object>|null, idOf: WeakMap<object, string>|null}>}
  * @private
  */
 const HELD = { __proto__: null };
@@ -143,7 +145,7 @@ const HELD = { __proto__: null };
  * @private
  */
 function runtime_holdHandle(family, handle, release) {
-	const held = (HELD[family] ??= { objects: new WeakMap(), numbers: new Map() });
+	const held = (HELD[family] ??= { objects: new WeakMap(), numbers: new Map(), ids: null, idOf: null });
 	if (typeof handle === "number") MapMethods.set(held.numbers, handle, release);
 	else if (handle !== null && (typeof handle === "object" || typeof handle === "function"))
 		WeakMapMethods.set(held.objects, handle, release);
@@ -160,12 +162,26 @@ function runtime_takeHandle(family, handle) {
 	const held = HELD[family];
 	if (held === undefined) return undefined;
 	let release;
-	if (typeof handle === "number") {
-		release = MapMethods.get(held.numbers, handle);
-		MapMethods.delete(held.numbers, handle);
+	if (typeof handle === "number" || typeof handle === "string") {
+		if (typeof handle === "number") {
+			release = MapMethods.get(held.numbers, handle);
+			MapMethods.delete(held.numbers, handle);
+		}
+		// Node takes a timer by the id its handle answered as a primitive (`clearTimeout(+timer)`), as a number or a string.
+		if (release === undefined && held.ids !== null) {
+			const object = MapMethods.get(held.ids, "" + handle);
+			if (object !== undefined) return runtime_takeHandle(family, object);
+		}
 	} else if (handle !== null && (typeof handle === "object" || typeof handle === "function")) {
 		release = WeakMapMethods.get(held.objects, handle);
 		WeakMapMethods.delete(held.objects, handle);
+		if (held.idOf !== null) {
+			const id = WeakMapMethods.get(held.idOf, handle);
+			if (id !== undefined) {
+				WeakMapMethods.delete(held.idOf, handle);
+				MapMethods.delete(held.ids, id);
+			}
+		}
 	}
 	return release;
 }
@@ -349,6 +365,47 @@ function runtime_patchHandleMethod(proto, key, family) {
 }
 
 /**
+ * Replace a handle prototype's `[Symbol.toPrimitive]()` (Node's `Timeout`: it answers the timer's id, and registers the
+ * timer under it for the clearing functions to take by that id) with a wrapper that, when the handle is held as a run's
+ * work, also keeps the id it answered, so a clearing function handed that id releases the work as one handed the handle
+ * does (see {@link runtime_takeHandle}). Only code that asks for the number pays for it: no handle is turned into one up
+ * front. Everything else is the original's.
+ *
+ * @param {object} proto - The prototype.
+ * @param {string} family - The family of its handles.
+ * @returns {void}
+ * @private
+ */
+function runtime_patchHandleId(proto, family) {
+	const key = Symbol.toPrimitive;
+	const descriptor = Objects.getOwnPropertyDescriptor(proto, key);
+	if (typeof descriptor?.value !== "function" || descriptor.writable !== true) return;
+	const layer = openLayer(descriptor.value);
+	const original = layer.below;
+	const wrapper = {
+		[key](...args) {
+			const id = Reflect.apply(original, this, args);
+			const held = HELD[family];
+			if (
+				held !== undefined &&
+				(typeof id === "number" || typeof id === "string") &&
+				WeakMapMethods.has(held.objects, this) &&
+				(held.idOf === null || !WeakMapMethods.has(held.idOf, this))
+			) {
+				const name = "" + id;
+				MapMethods.set((held.ids ??= new Map()), name, this);
+				WeakMapMethods.set((held.idOf ??= new WeakMap()), this, name);
+			}
+			return id;
+		}
+	}[key];
+	runtime_carryOwnExtras(wrapper, original);
+	markLayer(wrapper, layer);
+	proto[key] = wrapper;
+	listPush(patched, { host: proto, name: key, layer, wrapper });
+}
+
+/**
  * The handle prototypes whose clearing methods are patched (see {@link runtime_patchHandleType}), while the patch is on.
  * @type {Set<object>}
  * @private
@@ -379,6 +436,7 @@ function runtime_patchHandleType(family, handle) {
 	const keys = HANDLE_METHODS[family];
 	if (keys === undefined) return;
 	for (let index = 0; index < keys.length; index++) runtime_patchHandleMethod(proto, keys[index], family);
+	if (family === "timer") runtime_patchHandleId(proto, family);
 }
 
 /**
@@ -470,6 +528,13 @@ function disableSchedulerPatching() {
 
 	patched.length = 0;
 	SetMethods.clear(patchedHandleTypes);
+	// The ids of handles still held: the unpatched clearing functions release nothing by them any more.
+	for (const family in HELD) {
+		const held = HELD[family];
+		if (held.ids !== null) MapMethods.clear(held.ids);
+		held.ids = null;
+		held.idOf = null;
+	}
 	if (TIMERS !== null) SYNC_BUILTIN_ESM_EXPORTS?.();
 	isPatchingEnabled = false;
 }

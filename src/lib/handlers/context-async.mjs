@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T20:34:14-08:00 (1794976454)
+ *	@Last modified time: 2026-11-17T21:25:47-08:00 (1794979547)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -27,7 +27,16 @@ import { DEFAULT_CLOCK } from "#helpers/clock";
 import { runtime_isClassInstance, internals as classInstanceWrapperInternals } from "#helpers/class-instance-wrapper";
 import { internals as eventemitterContextInternals } from "#helpers/eventemitter-context";
 import { internals as trustedRootInternals } from "#handlers/trusted-root";
-import { holdRunWork, releaseRunWork, RUN_COPY, runCopyCounts, watchRuns, whenIdle } from "#helpers/flow-stores";
+import {
+	countAsyncInstance,
+	holdRunWork,
+	releaseRunWork,
+	RUN_COPY,
+	runCopyCounts,
+	UNCOUNTED_RESOURCE,
+	watchRuns,
+	whenIdle
+} from "#helpers/flow-stores";
 import {
 	carriesCallerCode,
 	handsOutAsModule,
@@ -934,6 +943,7 @@ export class AsyncContextManager {
 	 */
 	holdJobHook() {
 		this.#jobHookInstances++;
+		countAsyncInstance(1);
 		if (this.#jobHook !== null || hookMethods === null) return;
 		const manager = this;
 		let hook;
@@ -1023,10 +1033,13 @@ export class AsyncContextManager {
 	 * Count a resource made in a `run()` / `scope()` store as work of that run (see `holdRunWork` in
 	 * `helpers/flow-stores`).
 	 * @param {number} asyncId - The resource's async id.
+	 * @param {string} type - The resource's type.
 	 * @returns {void}
 	 * @private
 	 */
 	#countWork(asyncId, type) {
+		// A resource that only carries a store into a callback is no one's work (an observer counts from its observe()).
+		if (type === UNCOUNTED_RESOURCE) return;
 		const record = this.store?.getStore()?.[RUN_COPY];
 		if (record === undefined || !holdRunWork(record)) return;
 		const promise = type === "PROMISE";
@@ -1073,6 +1086,7 @@ export class AsyncContextManager {
 	 * @internal
 	 */
 	releaseJobHook() {
+		countAsyncInstance(-1);
 		if (--this.#jobHookInstances > 0 || this.#jobHook === null) return;
 		const hook = this.#jobHook;
 		this.#jobHook = null;

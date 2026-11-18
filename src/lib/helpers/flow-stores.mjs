@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T20:34:19-08:00 (1794976459)
+ *	@Last modified time: 2026-11-17T21:25:51-08:00 (1794979551)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -221,6 +221,43 @@ function openRun(record) {
 	const owner = record.owner;
 	if (owner !== null && typeof owner[RUN_OPENED] === "function") owner[RUN_OPENED](record);
 	return record;
+}
+
+/**
+ * The type of an `AsyncResource` slothlet makes only to carry the store active where it is made into a callback that
+ * runs later (an observer's), which is no run's work by itself: the async runtime does not count it (see `#countWork` in
+ * `handlers/context-async`). The work it stands for is counted some other way (an observer from its first `observe()`).
+ * @type {string}
+ * @internal
+ */
+export const UNCOUNTED_RESOURCE = "slothlet-observer";
+
+/**
+ * How many instances on the async runtime are up (see {@link countAsyncInstance}).
+ * @type {number}
+ * @private
+ */
+let asyncInstances = 0;
+
+/**
+ * Count an instance on the async runtime in or out, so a boundary that carries the AsyncLocalStorage store with an
+ * `AsyncResource` of its own (an observer's callback) makes one only while there is a store to carry: a process whose
+ * instances all use the live runtime makes none.
+ * @param {number} delta - +1 or -1.
+ * @returns {void}
+ * @internal
+ */
+export function countAsyncInstance(delta) {
+	asyncInstances += delta;
+}
+
+/**
+ * Whether any instance on the async runtime is up (see {@link countAsyncInstance}).
+ * @returns {boolean} True while one is.
+ * @internal
+ */
+export function anyAsyncInstance() {
+	return asyncInstances > 0;
 }
 
 /**
