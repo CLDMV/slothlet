@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-18T12:35:34-08:00 (1795034134)
+ *	@Last modified time: 2026-11-18T12:46:42-08:00 (1795034802)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -461,18 +461,12 @@ function handlerMethod(slothlet, key, method) {
 const RUN_PATH_SEPARATOR = "\u0001";
 
 /**
- * The framework's own members of `self`, which a run's `self` hands out as the instance's `self` does.
+ * The framework's own members of `self`, which a run's `self` hands out as the run's views of them (see `frameworkViewAt`
+ * in {@link makeRunSelf}).
  * @type {Set<string>}
  * @private
  */
 const RUN_FRAMEWORK_ROOTS = setFrom(["slothlet", "shutdown", "destroy"]);
-
-/**
- * The framework's namespace on the api root, which a run's `self` hands out as the run's own view of it.
- * @type {string}
- * @private
- */
-const RUN_FRAMEWORK_NAMESPACE = "slothlet";
 
 /**
  * The fields of a property descriptor, in the order a definition through a run's view of the framework's namespace
@@ -721,9 +715,11 @@ function makeRunSelf(slothlet, parentSelf, record) {
 		 * @returns {*} The value handed out.
 		 */
 		const handOut = (prop, value, childLocal) => {
-			// The framework's namespace is handed out as the run's view of it, so a change made through it stays in the run.
-			if (atRoot && prop === RUN_FRAMEWORK_NAMESPACE && value !== null && typeof value === "object") {
-				return runtime_registerFrameworkMemberCopy(frameworkViewAt([RUN_FRAMEWORK_NAMESPACE], value), value);
+			const member = value !== null && (typeof value === "object" || typeof value === "function");
+			// The framework's own root members (the namespace, `shutdown`, `destroy`) are handed out as the run's views of
+			// them, so a change made to one, or below one, stays in the run.
+			if (atRoot && member && typeof prop === "string" && SetMethods.has(RUN_FRAMEWORK_ROOTS, prop)) {
+				return runtime_registerFrameworkMemberCopy(frameworkViewAt([prop], value), value);
 			}
 			if (typeof prop === "symbol" || (atRoot && SetMethods.has(RUN_FRAMEWORK_ROOTS, prop))) return value;
 			if (WeakMapMethods.has(RUN_OF_VIEW, value) || runtime_isApiNode(value)) {
@@ -733,6 +729,12 @@ function makeRunSelf(slothlet, parentSelf, record) {
 			// view as on the node and is handed out as it is; any other runs on the node when the view is its receiver.
 			if (typeof value !== "function" || typeof prop !== "string") return value;
 			if (value === Reflect.get(Objects.prototype, prop) || value === Reflect.get(Functions.prototype, prop)) return value;
+			// Any other function the root holds as its own (a routine's root cascade) is no node, so no node trap keeps a
+			// change made to it in the run: it is handed out as the run's view of it, as the framework's members are. Called
+			// through the root, it runs on what the root's view reads through, as before.
+			if (atRoot && !WeakSetMethods.has(run.local, value) && Reflect.getOwnPropertyDescriptor(real, prop) !== undefined) {
+				return frameworkViewAt([prop], value, true);
+			}
 			return runViewFunction(value);
 		};
 		/**
@@ -966,11 +968,17 @@ function makeRunSelf(slothlet, parentSelf, record) {
 	 * framework's view of it, which holds the change to the write rules first. Once the run has a tree of its own, the view
 	 * reads and writes that tree's namespace, and what the run kept is written there (see `carryFrameworkWrites`).
 	 *
-	 * @param {string[]} parts - The member's api path (`["slothlet"]`, `["slothlet", "metadata"]`).
+	 * The same view keeps a run's changes to the framework's other root members (`self.shutdown`, `self.destroy`), to a
+	 * function held by the namespace (`self.slothlet.shutdown`), and to any other root member that is no node of the
+	 * api (a routine's root cascade).
+	 *
+	 * @param {string[]} parts - The member's api path (`["slothlet"]`, `["slothlet", "metadata"]`, `["shutdown"]`).
 	 * @param {object|Function} real - What the view reads through: the member, or an outer run's view of it.
+	 * @param {boolean} [receivers=false] - Whether a call through the view with another of the run's views as its
+	 *   receiver runs on what that view reads through (as a function read through a node's view does).
 	 * @returns {object|Function} The view.
 	 */
-	const frameworkViewAt = (parts, real) => {
+	const frameworkViewAt = (parts, real, receivers = false) => {
 		const key = keyOf(parts);
 		let byReal = MapMethods.get(run.nsViews, key);
 		if (byReal === undefined) {
@@ -979,7 +987,7 @@ function makeRunSelf(slothlet, parentSelf, record) {
 		}
 		let made = WeakMapMethods.get(byReal, real);
 		if (made === undefined) {
-			made = makeFrameworkView(parts, real);
+			made = makeFrameworkView(parts, real, receivers);
 			WeakMapMethods.set(byReal, real, made);
 		}
 		return made;
@@ -989,9 +997,10 @@ function makeRunSelf(slothlet, parentSelf, record) {
 	 * Make a view of a member of the framework's namespace (see {@link frameworkViewAt}).
 	 * @param {string[]} parts - The member's api path.
 	 * @param {object|Function} real - What it reads through.
+	 * @param {boolean} receivers - See {@link frameworkViewAt}.
 	 * @returns {object|Function} The view.
 	 */
-	const makeFrameworkView = (parts, real) => {
+	const makeFrameworkView = (parts, real, receivers) => {
 		const key = keyOf(parts);
 		const shell = runViewShell(typeof real === "function" ? FunctionMethods.bind(function () {}) : {}, real);
 		const closed = () => !Reflect.isExtensible(shell);
@@ -1027,23 +1036,29 @@ function makeRunSelf(slothlet, parentSelf, record) {
 			return Reflect.getOwnPropertyDescriptor(real, prop);
 		};
 		/**
-		 * A value read at `prop`, as the view hands it out: an object member of the namespace as the run's view of it.
+		 * A value read at `prop`, as the view hands it out: an object or function member of the namespace as the run's view
+		 * of it.
 		 * @param {string|symbol} prop - The member.
 		 * @param {*} value - What was read.
 		 * @returns {*} The value handed out.
 		 */
 		const handOutMember = (prop, value) => {
-			if (typeof prop !== "string" || value === null || typeof value !== "object") return value;
+			if (typeof prop !== "string" || value === null || (typeof value !== "object" && typeof value !== "function")) return value;
 			const described = Reflect.getOwnPropertyDescriptor(real, prop);
 			// A member fixed on the namespace is handed out as it is: a proxy must report a fixed member as the object
 			// holds it.
 			if (!described || !("value" in described) || (!described.configurable && !described.writable)) return value;
 			return frameworkViewAt(concatLists(parts, [prop]), value);
 		};
+		// What the member's prototype holds at `prop`: what a member the run deleted reads as, as on an ordinary object.
+		const inherited = (prop, receiver) => {
+			const proto = Reflect.getPrototypeOf(real);
+			return proto === null ? undefined : Reflect.get(proto, prop, receiver);
+		};
 		const read = (prop, receiver) => {
 			const entry = own(prop);
 			if (entry !== undefined) {
-				if (entry.op === "delete") return undefined;
+				if (entry.op === "delete") return inherited(prop, receiver);
 				if (!("value" in entry.descriptor)) {
 					return typeof entry.descriptor.get === "function" ? Reflect.apply(entry.descriptor.get, receiver, []) : undefined;
 				}
@@ -1112,7 +1127,16 @@ function makeRunSelf(slothlet, parentSelf, record) {
 			__proto__: null,
 			...(typeof real === "function"
 				? {
-						apply: (_t, thisArg, args) => Reflect.apply(forked() ? current() : real, thisArg === view ? real : thisArg, args),
+						apply: (_t, thisArg, args) =>
+							Reflect.apply(
+								forked() ? current() : real,
+								thisArg === view
+									? real
+									: receivers && WeakMapMethods.has(RUN_VIEW_REALS, thisArg)
+										? WeakMapMethods.get(RUN_VIEW_REALS, thisArg)
+										: thisArg,
+								args
+							),
 						construct: (_t, args) => Reflect.construct(forked() ? current() : real, args)
 					}
 				: {}),
@@ -1167,7 +1191,11 @@ function makeRunSelf(slothlet, parentSelf, record) {
 				if (closed()) return Reflect.has(shell, prop);
 				if (forked()) return prop in current();
 				const entry = own(prop);
-				if (entry !== undefined) return entry.op !== "delete";
+				if (entry !== undefined) {
+					if (entry.op !== "delete") return true;
+					const proto = Reflect.getPrototypeOf(real);
+					return proto !== null && prop in proto;
+				}
 				return prop in real;
 			},
 			ownKeys() {
