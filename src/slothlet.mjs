@@ -2568,7 +2568,10 @@ class Slothlet {
 			// A restart mounts none of the modules added before it: a module added later under one of their ids is new.
 			this._moduleIncarnations = new Map();
 			this._retiredIncarnations = new Map();
-			await this.load(config);
+			// As the host too: the rebuild is framework work. A module's call that triggered the restart belongs to the
+			// instance it was made in, which is still this one, so without this the new copy would be built as that module
+			// — removed by the teardown above, and refused every read of the framework's own surface.
+			await this._runAsHost(() => this.load(config));
 
 			// 5. Swap complete: every wrapper from an earlier epoch now forwards to the node at its path
 			//    in the new tree (or throws RESTART_REFERENCE_UNRESOLVED if the path is gone).
