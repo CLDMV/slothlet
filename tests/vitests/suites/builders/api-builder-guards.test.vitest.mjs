@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:29:35-08:00 (1794882575)
+ *	@Last modified time: 2026-11-18T08:12:34-08:00 (1795018354)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -532,7 +532,10 @@ describe("api_builder – context.get and scope() fallback paths for edge-case m
 		sl.contextManager = {
 			constructor: { name: "LiveContextManager" },
 			currentInstanceID: null,
-			instances: new Map()
+			instances: new Map(),
+			runParent(id) {
+				return this.instances.get(id);
+			}
 		};
 		try {
 			await expect(api.slothlet.context.scope({ context: { x: 1 }, fn: () => {} })).rejects.toThrow(/CONTEXT_NOT_FOUND/);

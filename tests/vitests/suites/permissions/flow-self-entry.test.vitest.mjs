@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T09:15:53-08:00 (1794935753)
+ *	@Last modified time: 2026-11-18T08:13:10-08:00 (1795018390)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -530,7 +530,10 @@ beforeAll(() => {
 		"\ttry {",
 		'\t\tout[route] = await api.slothlet.context.run({ user: "root" }, async () => {',
 		'\t\t\tif (route === "hostCallsAfterAwait") await null;',
-		"\t\t\treturn attempt();",
+		"\t\t\tconst seen = attempt();",
+		"\t\t\t// A run's mode change applies to that run only: read inside it, and again once it has ended.",
+		'\t\t\tout[route + ":modeInRun"] = mode === "none" ? null : api.slothlet.permissions.control.mode();',
+		"\t\t\treturn seen;",
 		"\t\t});",
 		"\t} catch (error) {",
 		"\t\tout[route] = codeOf(error);",
@@ -812,9 +815,11 @@ describe.each(FRAMES)("Permissions > a flow entered by module code itself > %s",
 			it("with provenance off, a module's function the host runs inside run() still has the host's rights (as documented)", () => {
 				// The documented trade-off of `provenance: false`: code a host flow runs runs with the host's permissions.
 				expect(result.hostCalls).toMatchObject({ control: "ok", write: "ok" });
-				expect(result["hostCalls:mode"]).toBe("off");
+				expect(result["hostCalls:modeInRun"]).toBe("off");
+				expect(result["hostCalls:mode"]).toBe("on");
 				expect(result.hostCallsAfterAwait).toMatchObject({ control: "ok", write: "ok" });
-				expect(result["hostCallsAfterAwait:mode"]).toBe("off");
+				expect(result["hostCallsAfterAwait:modeInRun"]).toBe("off");
+				expect(result["hostCallsAfterAwait:mode"]).toBe("on");
 			});
 		}
 
