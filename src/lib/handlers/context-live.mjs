@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T21:15:37-08:00 (1794978937)
+ *	@Last modified time: 2026-11-17T21:34:05-08:00 (1794980045)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -217,7 +217,7 @@ const UNATTRIBUTED_ENTRY = Symbol("slothlet.callerIdentity.unattributed");
 
 /**
  * A class whose constructor hands back the object it is given, so a subclass can put a private field on an object it did
- * not make (see {@link PromiseFlow}).
+ * not make (see {@link promiseFlowStamp}).
  * @private
  */
 class Adopt {
@@ -230,38 +230,59 @@ class Adopt {
 }
 
 /**
- * The flow each promise was made in (the store id the active-instance field named), and with permissions on the call it
- * was created in, while it ran synchronously or in a flow such a promise's reaction ran: the flow's starter. A promise
- * made in a `run()` / `scope()` flow also holds that flow's store, so its jobs run in the flow after the `run()` has
- * returned, for as long as the promise lives (see {@link LiveContextManager#reopenFlowStore}). Kept in a
- * private field slothlet puts on the promise as the engine makes it: no code but this class's can read or change it, and
- * putting it there costs a promise far less than an entry in a weak map would.
+ * A promise's record of the flow it was made in: the store id the active-instance field named, and with permissions on
+ * the call it was created in, while it ran synchronously or in a flow such a promise's reaction ran: the flow's starter.
+ * A promise made in a `run()` / `scope()` flow also holds that flow's store, so its jobs run in the flow after the
+ * `run()` has returned, for as long as the promise lives (see {@link LiveContextManager#reopenFlowStore}).
+ * @typedef {string|null|{flow: string|null, starter: object|null, store?: object}} PromiseFlowRecord
  * @private
  */
-class PromiseFlow extends Adopt {
-	/** @type {string|null|{flow: string|null, starter: object|null, store?: object}} */
-	#record;
 
-	/**
-	 * Record a promise's flow.
-	 * @param {Promise<*>} promise - The promise, as the engine makes it.
-	 * @param {string|null|{flow: string|null, starter: object|null, store?: object}} record - Its flow, or its flow
-	 *   with its starter and, for a `run()` / `scope()` flow, its store.
-	 */
-	constructor(promise, record) {
-		super(promise);
-		this.#record = record;
-	}
+/**
+ * The stamp one manager puts on the promises the engine makes while its hooks are installed (see
+ * {@link LiveContextManager#holdFlowHooks}). The record is kept in a private field slothlet puts on the promise as the
+ * engine makes it: no code but this class's can read or change it, and putting it there costs a promise far less than
+ * an entry in a weak map would.
+ *
+ * Each manager makes its own class, so each has its own private field. Every manager with a live instance installs its
+ * own promise hooks, and the engine runs each of them for every promise: with one field shared by all managers, the
+ * second manager's stamp on a promise the first had already stamped threw ("Cannot initialize #record twice on the same
+ * object") out of the engine's init hook, and a manager would have read flow ids another manager recorded.
+ * @returns {Readonly<{stamp: function(Promise<*>, PromiseFlowRecord): void, of: function(Promise<*>): (PromiseFlowRecord|undefined)}>}
+ *   Puts a record on a promise, and reads it back (undefined when the promise has none).
+ * @private
+ */
+function promiseFlowStamp() {
+	class PromiseFlow extends Adopt {
+		/** @type {PromiseFlowRecord} */
+		#record;
 
-	/**
-	 * A promise's recorded flow.
-	 * @param {Promise<*>} promise - The promise.
-	 * @returns {string|null|{flow: string|null, starter: object|null, store?: object}|undefined} The record; undefined
-	 *   when it has none.
-	 */
-	static of(promise) {
-		return #record in promise ? promise.#record : undefined;
+		/**
+		 * Record a promise's flow.
+		 * @param {Promise<*>} promise - The promise, as the engine makes it.
+		 * @param {PromiseFlowRecord} record - Its flow, or its flow with its starter and, for a `run()` / `scope()`
+		 *   flow, its store.
+		 */
+		constructor(promise, record) {
+			super(promise);
+			this.#record = record;
+		}
+
+		/**
+		 * A promise's recorded flow.
+		 * @param {Promise<*>} promise - The promise.
+		 * @returns {PromiseFlowRecord|undefined} The record; undefined when it has none.
+		 */
+		static of(promise) {
+			return #record in promise ? promise.#record : undefined;
+		}
 	}
+	return Objects.freeze({
+		stamp: (promise, record) => {
+			new PromiseFlow(promise, record);
+		},
+		of: (promise) => PromiseFlow.of(promise)
+	});
 }
 
 /**
@@ -792,6 +813,12 @@ export class LiveContextManager {
 	#stopFlowHooks = null;
 
 	/**
+	 * The stamp this manager's promise hooks put on promises, its own so another manager's hooks never meet it.
+	 * @type {ReturnType<typeof promiseFlowStamp>}
+	 */
+	#promiseFlow = promiseFlowStamp();
+
+	/**
 	 * The starter of the flow whose promise reaction is running.
 	 * @type {object|null}
 	 */
@@ -891,6 +918,7 @@ export class LiveContextManager {
 			watchRuns((live) => this.#countRunWork(live));
 		}
 		const manager = this;
+		const promiseFlow = this.#promiseFlow;
 		this.#stopFlowHooks = Reflect.apply(CREATE_PROMISE_HOOK, PROMISE_HOOKS, [
 			{
 				// The flow the promise is made in. With permissions on, a promise made while a module's call runs
@@ -917,7 +945,7 @@ export class LiveContextManager {
 					if (held !== undefined && manager.#countingWork) countPromise(promise, held[RUN_COPY]);
 					if (manager.#flowStarterInstances === 0) {
 						// One record per store, shared by its promises: it never changes.
-						new PromiseFlow(promise, held === undefined ? flow : (held.__promiseRecord ??= { flow, starter: null, store: held }));
+						promiseFlow.stamp(promise, held === undefined ? flow : (held.__promiseRecord ??= { flow, starter: null, store: held }));
 						return;
 					}
 					let starter = manager.#runningStarter;
@@ -927,14 +955,14 @@ export class LiveContextManager {
 						if (top === HOST_ENTRY || top === UNATTRIBUTED_ENTRY) starter = null;
 						else if (top?.wrapper) starter = top;
 					}
-					if (starter) new PromiseFlow(promise, { flow, starter, store: held });
-					else new PromiseFlow(promise, held === undefined ? flow : (held.__promiseRecord ??= { flow, starter: null, store: held }));
+					if (starter) promiseFlow.stamp(promise, { flow, starter, store: held });
+					else promiseFlow.stamp(promise, held === undefined ? flow : (held.__promiseRecord ??= { flow, starter: null, store: held }));
 				},
 				// Reactions run one at a time from the microtask queue, never inside one another.
 				before(promise) {
 					manager.#jobReopened[manager.#jobDepth] = null;
 					manager.#jobOuter[manager.#jobDepth++] = manager.#activeID;
-					const record = PromiseFlow.of(promise);
+					const record = promiseFlow.of(promise);
 					// A promise made before the hooks were installed carries no flow: the field is left as it is.
 					if (record === undefined) {
 						manager.#runningStarter = null;
