@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T20:34:24-08:00 (1794976464)
+ *	@Last modified time: 2026-11-18T06:11:55-08:00 (1795011115)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -220,20 +220,47 @@ let typescriptInternals = null;
 /**
  * The async flow a full reload builds its new copy in (see {@link Slothlet#reload}): while a reload runs, the build reads
  * and writes the new copy's components, config and api tree, and every other caller reads the copy the instance has.
- * Null where the host has no AsyncLocalStorage (a browser), where a reload cannot keep the two apart.
+ * Made on the first reload or restart (see {@link runInReloadBuild}), so a process that never reloads makes none; it
+ * stays null where the host has no AsyncLocalStorage (a browser), where a reload cannot keep the two apart.
  * @type {AsyncLocalStorage|null}
  * @private
  */
-const reloadBuildStorage = AsyncLocalStorage ? new AsyncLocalStorage() : null;
+let reloadBuildStorage = null;
 
 /**
  * The instance ID a lazy node's load runs under when it was asked for by code in a run that keeps a copy a reload
  * swapped out (see {@link Slothlet#loadAsCaller}): a load runs apart from the flow that asked for it, so the ID is
- * carried to it here. Null where the host has no AsyncLocalStorage.
+ * carried to it here. Made on its first use (see {@link runLoadAs}); null until then and where the host has no
+ * AsyncLocalStorage.
  * @type {import("node:async_hooks").AsyncLocalStorage<string>|null}
  * @private
  */
-const loadAsStorage = AsyncLocalStorage ? new AsyncLocalStorage() : null;
+let loadAsStorage = null;
+
+/**
+ * Run `fn` in a new flow of {@link reloadBuildStorage}, making the storage on its first use: a process whose instances
+ * never reload makes no AsyncLocalStorage for it (a live-only process makes none at all).
+ * @param {*} mark - The store the flow carries.
+ * @param {function(): *} fn - What runs in the flow.
+ * @returns {*} What `fn` returns.
+ * @private
+ */
+function runInReloadBuild(mark, fn) {
+	reloadBuildStorage ??= new AsyncLocalStorage();
+	return reloadBuildStorage.run(mark, fn);
+}
+
+/**
+ * Run `fn` in a new flow of {@link loadAsStorage}, making the storage on its first use.
+ * @param {string} id - The instance ID the load runs under.
+ * @param {function(): *} fn - The load.
+ * @returns {*} What `fn` returns.
+ * @private
+ */
+function runLoadAs(id, fn) {
+	loadAsStorage ??= new AsyncLocalStorage();
+	return loadAsStorage.run(id, fn);
+}
 
 /**
  * The instance's own fields, besides its component namespaces, that a full reload builds anew and swaps in at its end.
@@ -1993,7 +2020,7 @@ class Slothlet {
 		// One full reload at a time: a reload asked for while another builds starts once that one has finished. One asked
 		// for by the build itself (a startup routine's) could never start, so it is refused.
 		while (this.#reloadWindow !== null) {
-			if (reloadBuildStorage.getStore() === this.#reloadWindow.mark) {
+			if (reloadBuildStorage?.getStore() === this.#reloadWindow.mark) {
 				throw new SlothletError("RELOAD_IN_PROGRESS", { operation: ["slothlet", "reload"] });
 			}
 			await this.#reloadWindow.settled;
@@ -2020,7 +2047,7 @@ class Slothlet {
 		// components (permission rules and mode, hooks, metadata, ownership), config and api tree: the build works on a
 		// set of its own (see openReloadWindow). A host with no AsyncLocalStorage cannot keep the two apart: there the
 		// build replaces the instance's own, and what it had is kept to put back if the reload fails.
-		const window = reloadBuildStorage === null ? null : this.#openReloadWindow();
+		const window = AsyncLocalStorage ? this.#openReloadWindow() : null;
 		const kept = window === null ? this.#keepForFailedReload() : null;
 		this.#pendingScope = nextScope;
 		try {
@@ -2041,7 +2068,7 @@ class Slothlet {
 				this.#keepCopyForRuns(kept, token);
 				return built;
 			}
-			return await reloadBuildStorage.run(window.mark, () => this._runAsHost(() => this.#reloadOnto(nextScope, oldInstanceID, window)));
+			return await runInReloadBuild(window.mark, () => this._runAsHost(() => this.#reloadOnto(nextScope, oldInstanceID, window)));
 		} catch (error) {
 			this.#pendingScope = null;
 			if (window !== null) this.#closeReloadWindow(window, false);
@@ -2091,7 +2118,7 @@ class Slothlet {
 	 * @private
 	 */
 	async #reloadSettled() {
-		while (this.#reloadWindow !== null && reloadBuildStorage.getStore() !== this.#reloadWindow.mark) {
+		while (this.#reloadWindow !== null && reloadBuildStorage?.getStore() !== this.#reloadWindow.mark) {
 			await this.#reloadWindow.settled;
 		}
 	}
@@ -2171,8 +2198,8 @@ class Slothlet {
 	 */
 	loadAsCaller(load) {
 		const id = this.#heldCopies === 0 ? this.instanceID : this.loadID;
-		if (id === this.instanceID || loadAsStorage === null) return load();
-		return loadAsStorage.run(id, load);
+		if (id === this.instanceID || !AsyncLocalStorage) return load();
+		return runLoadAs(id, load);
 	}
 
 	/**
@@ -2739,7 +2766,7 @@ class Slothlet {
 	 */
 	[CURRENT_COPY]() {
 		const window = this.#reloadWindow;
-		if (window !== null && !window.closed && reloadBuildStorage.getStore() === window.mark) {
+		if (window !== null && !window.closed && reloadBuildStorage?.getStore() === window.mark) {
 			window.nextCopy ??= { values: null };
 			return window.nextCopy;
 		}
@@ -3306,7 +3333,7 @@ class Slothlet {
 		// The teardown and rebuild below are the instance's own work, also when a run's code asked for them: they read
 		// and write the instance's own set, never the calling run's copy.
 		this.#keepCurrentCopy();
-		return reloadBuildStorage === null ? this.#restartOnto() : reloadBuildStorage.run(this.#instanceWork, () => this.#restartOnto());
+		return AsyncLocalStorage ? runInReloadBuild(this.#instanceWork, () => this.#restartOnto()) : this.#restartOnto();
 	}
 
 	/**
