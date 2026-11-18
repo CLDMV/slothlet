@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-18T06:11:45-08:00 (1795011105)
+ *	@Last modified time: 2026-11-18T08:11:58-08:00 (1795018318)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -22,6 +22,7 @@
 // static graph (#123). Browser uses the live context manager, so this manager never runs there.
 import { AsyncLocalStorage, AsyncResource, createHook, executionAsyncId, executionAsyncResource, inheritsFrom } from "#helpers/platform";
 import { nativeThen } from "#helpers/promise-context";
+import { resourceStoreHolder, resourceStoreKnown } from "#helpers/async-store-slot";
 import { SlothletError } from "#errors";
 import { DEFAULT_CLOCK } from "#helpers/clock";
 import { runtime_isClassInstance, internals as classInstanceWrapperInternals } from "#helpers/class-instance-wrapper";
@@ -460,15 +461,22 @@ class SealedStorage {
 		const storage = this.#storage;
 		const token = sealStore(store);
 		const key = storage.kResourceStore;
-		const resource = typeof key === "symbol" && executionAsyncResource !== null ? executionAsyncResource() : null;
+		const resource = typeof key === "symbol" && executionAsyncResource !== null && resourceStoreKnown() ? executionAsyncResource() : null;
 		if (resource === null || (typeof resource !== "object" && typeof resource !== "function")) {
 			storage.enterWith(token);
 			return null;
 		}
-		const previous = resource[key];
+		// Where Node keeps the storage's value for this resource depends on the Node (see `helpers/async-store-slot`):
+		// on the resource itself, or in an object Node puts on it the first time a storage writes there.
+		const before = resourceStoreHolder(resource);
+		const had = before !== null && Objects.hasOwn(before, key);
+		const previous = had ? before[key] : undefined;
 		storage.enterWith(token);
 		return () => {
-			if (resource[key] === token) resource[key] = previous;
+			const holder = resourceStoreHolder(resource);
+			if (holder === null || holder[key] !== token) return;
+			if (had) holder[key] = previous;
+			else delete holder[key];
 		};
 	}
 

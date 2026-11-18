@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:28:51-08:00 (1794882531)
+ *	@Last modified time: 2026-11-18T08:12:03-08:00 (1795018323)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -46,21 +46,16 @@
  */
 
 import { translate } from "#i18n";
+import { asyncStoreExposed, asyncStoreProbeAvailable } from "#helpers/async-store-slot";
 import {
 	ArrayMethods,
 	Blob,
 	EvalError,
 	listPush,
-	mapEntriesToArray,
 	NativeFunction,
 	NativeProcess,
-	Objects,
 	parseInt,
-	Processes,
-	Promises,
 	Reflect,
-	Set,
-	SetMethods,
 	Symbols,
 	URL,
 	URLs
@@ -136,43 +131,6 @@ function viteRecords() {
 }
 
 /**
- * `node:async_hooks`, as slothlet loaded, or null where the platform has none (a browser).
- * @type {object|null}
- * @private
- */
-const ASYNC_HOOKS = (() => {
-	try {
-		return Processes.getBuiltinModule?.("node:async_hooks") ?? null;
-	} catch {
-		// A platform that refuses the lookup has no async hooks to check.
-		/* v8 ignore next */
-		return null;
-	}
-})();
-
-/**
- * What the `async-context-frame` probe uses, taken as slothlet loads: `AsyncLocalStorage` with its `run` and `disable`,
- * and `executionAsyncResource`. Null where any is missing.
- * @type {{Storage: Function, run: Function, disable: Function, executionAsyncResource: Function}|null}
- * @private
- */
-const FRAME_PROBE_BUILTINS = (() => {
-	const Storage = ASYNC_HOOKS?.AsyncLocalStorage;
-	const run = Storage?.prototype?.run;
-	const disable = Storage?.prototype?.disable;
-	const executionAsyncResource = ASYNC_HOOKS?.executionAsyncResource;
-	if (
-		typeof Storage !== "function" ||
-		typeof run !== "function" ||
-		typeof disable !== "function" ||
-		typeof executionAsyncResource !== "function"
-	) {
-		return null;
-	}
-	return Objects.freeze({ Storage, run, disable, executionAsyncResource });
-})();
-
-/**
  * Node's major version, as slothlet loaded, or 0 where it is not Node.
  * @type {number}
  * @private
@@ -180,94 +138,16 @@ const FRAME_PROBE_BUILTINS = (() => {
 const NODE_MAJOR = parseInt(NativeProcess?.versions?.node ?? "0", 10) || 0;
 
 /**
- * How many steps from an async resource the probe looks for its marker. Node keeps the value at one step
- * (`Symbol(kResourceStore)`) or two (a map under `Symbol(kAsyncLocalStorageContext)`, Node 24.22); the rest is margin.
- * @type {number}
- * @private
- */
-const FRAME_PROBE_DEPTH = 4;
-
-/**
- * Whether `marker` is found within a few steps of `value`, through own keys (symbols too, data properties only, so no
- * getter runs) and map entries.
- * @param {*} value - Where to look.
- * @param {object} marker - What to look for.
- * @param {number} depth - Steps taken so far.
- * @param {Set<object>} seen - What has been looked at.
- * @returns {boolean} True when the marker is there.
- * @private
- */
-function holdsMarker(value, marker, depth, seen) {
-	if (value === marker) return true;
-	if (value === null || (typeof value !== "object" && typeof value !== "function")) return false;
-	if (depth > FRAME_PROBE_DEPTH || SetMethods.has(seen, value)) return false;
-	SetMethods.add(seen, value);
-	let entries;
-	try {
-		// Throws for anything that is not a map.
-		entries = mapEntriesToArray(value);
-	} catch {
-		entries = null;
-	}
-	if (entries) {
-		for (let index = 0; index < entries.length; index++) {
-			const entry = entries[index];
-			if (holdsMarker(entry[0], marker, depth + 1, seen) || holdsMarker(entry[1], marker, depth + 1, seen)) return true;
-		}
-	}
-	let keys;
-	try {
-		keys = Reflect.ownKeys(value);
-	} catch {
-		return false;
-	}
-	for (let index = 0; index < keys.length; index++) {
-		let descriptor;
-		try {
-			descriptor = Reflect.getOwnPropertyDescriptor(value, keys[index]);
-		} catch {
-			continue;
-		}
-		if (descriptor && "value" in descriptor && holdsMarker(descriptor.value, marker, depth + 1, seen)) return true;
-	}
-	return false;
-}
-
-/**
- * The probe's answer, once it has run in this process; undefined before.
- * @type {boolean|undefined}
- * @private
- */
-let frameOnFound;
-
-/**
- * Whether Node's `AsyncContextFrame` is on: inside a storage of the probe's own, run with a fresh marker, the marker is
- * not found on the running async resource or a fresh promise. Tested once per process.
+ * Whether Node's `AsyncContextFrame` is on: what a storage holds is out of reach of the running async resource and a
+ * fresh promise (see `helpers/async-store-slot`, whose probe this shares). Tested once per process.
  *
  * Where the frame is off, Node puts what every storage holds on each async resource as it is made, promises included,
- * so the running resource and a fresh promise both hold the marker. Where it is on, neither does. The check reads only
- * those two; no other kind of resource is made or looked at.
+ * so the running resource and a fresh promise both hold the probe's marker. Where it is on, neither does.
  * @returns {boolean} True when the marker is out of reach.
  * @private
  */
 function asyncContextFrameOn() {
-	if (frameOnFound !== undefined) return frameOnFound;
-	const { Storage, run, disable, executionAsyncResource } = FRAME_PROBE_BUILTINS;
-	const marker = Objects.freeze(Objects.create(null));
-	const storage = new Storage();
-	let exposed = false;
-	try {
-		Reflect.apply(run, storage, [
-			marker,
-			() => {
-				exposed = holdsMarker(executionAsyncResource(), marker, 0, new Set()) || holdsMarker(Promises.resolve(), marker, 0, new Set());
-			}
-		]);
-	} finally {
-		Reflect.apply(disable, storage, []);
-	}
-	frameOnFound = !exposed;
-	return frameOnFound;
+	return !asyncStoreExposed();
 }
 
 /**
@@ -308,7 +188,7 @@ const PROBES = {
 	importRefused,
 	vitestWorker: VITEST_WORKER,
 	viteRecords,
-	asyncContextFrameOn: FRAME_PROBE_BUILTINS ? asyncContextFrameOn : null
+	asyncContextFrameOn: asyncStoreProbeAvailable() ? asyncContextFrameOn : null
 };
 
 /**
