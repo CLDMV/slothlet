@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T21:04:56-08:00 (1794978296)
+ *	@Last modified time: 2026-11-17T21:15:37-08:00 (1794978937)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -954,7 +954,9 @@ export class LiveContextManager {
 				after() {
 					manager.#runningStarter = null;
 					if (manager.#jobDepth > 0) {
-						manager.#activeID = manager.#jobOuter[--manager.#jobDepth];
+						// The flow the job ran inside may have been an instance that shut down while the job ran: what the job
+						// returns to then has no store, as on the async runtime.
+						manager.#activeID = manager.#flowIfOpen(manager.#jobOuter[--manager.#jobDepth]);
 						const reopened = manager.#jobReopened[manager.#jobDepth];
 						if (reopened !== null && reopened !== undefined) {
 							manager.#jobReopened[manager.#jobDepth] = null;

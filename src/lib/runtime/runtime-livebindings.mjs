@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:28:53-08:00 (1794882533)
+ *	@Last modified time: 2026-11-17T21:15:45-08:00 (1794978945)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -72,9 +72,25 @@ const { enforceContextKeyWrite, readProtectedContextValue, writersOf } = trusted
 const { markSlothletProxy } = frameworkInternalsInternals("lib/runtime/runtime-livebindings");
 const { liveRuntime } = contextInternals("lib/runtime/runtime-livebindings");
 
+/**
+ * The active store, or `null` while no instance is active. With no active instance there is no call running, which is
+ * what each trap below reports, as the async runtime does for a flow with no store; a store that cannot be found for an
+ * active instance still throws.
+ * @returns {object|null} The active store, or null.
+ * @private
+ */
+function activeContext() {
+	try {
+		return liveRuntime.getContext();
+	} catch (error) {
+		if (error?.code === "CONTEXT_NOT_ACTIVE_LIVE") return null;
+		throw error;
+	}
+}
+
 // Active-store resolver threaded into protected context views (see readProtectedContextValue):
 // hoisted so the hot get-trap path passes one stable function instead of allocating an arrow per read.
-const resolveActiveContext = () => liveRuntime.getContext();
+const resolveActiveContext = activeContext;
 
 /**
  * Resolve the active store, but only while a module is actually executing.
@@ -101,7 +117,7 @@ const resolveActiveContext = () => liveRuntime.getContext();
  * @private
  */
 function runtime_resolveExecutingContext(resolved = null) {
-	const ctx = liveRuntime.getContext();
+	const ctx = activeContext();
 	if (!ctx || !ctx.self) return null;
 	// `getCallerIdentity` reports no caller when the ambient field is stale, so its answer replaces the
 	// raw field rather than falling back to it — a fallback would reinstate exactly what it rejected.
@@ -139,7 +155,7 @@ function runtime_resolveExecutingContext(resolved = null) {
  * @private
  */
 function runtime_refuseUnknownCaller(prop) {
-	const store = liveRuntime.getContext();
+	const store = activeContext();
 	if (!store?.slothlet?.handlers?.permissionManager?.isEnabled?.()) return;
 	const identity = liveRuntime.getCallerIdentity?.();
 	if (!identity?.unresolved || identity.unaccounted) return;
@@ -435,7 +451,7 @@ export const context = new NativeProxy(
 	{},
 	{
 		get(_, prop) {
-			const ctx = liveRuntime.getContext();
+			const ctx = activeContext();
 			if (!ctx || !ctx.context) {
 				// Code a module handed out, run while no call runs, reads the context of its definer's instance (#726).
 				return runtime_contextReadAsDefiner(context, prop);
@@ -448,7 +464,7 @@ export const context = new NativeProxy(
 			return runtime_contextRead(ctx, readProtectedContextValue(ctx, prop, resolveActiveContext));
 		},
 		set(_, prop, value) {
-			const ctx = liveRuntime.getContext();
+			const ctx = activeContext();
 			if (!ctx || !ctx.context) {
 				throw new SlothletError("CONTEXT_NOT_ACTIVE_WRITE", {});
 			}
@@ -460,17 +476,17 @@ export const context = new NativeProxy(
 			return true;
 		},
 		ownKeys() {
-			const ctx = liveRuntime.getContext();
+			const ctx = activeContext();
 			if (!ctx || !ctx.context) return [];
 			return Reflect.ownKeys(ctx.context);
 		},
 		has(_, prop) {
-			const ctx = liveRuntime.getContext();
+			const ctx = activeContext();
 			if (!ctx || !ctx.context) return false;
 			return prop in ctx.context;
 		},
 		getOwnPropertyDescriptor(_, prop) {
-			const ctx = liveRuntime.getContext();
+			const ctx = activeContext();
 			if (!ctx || !ctx.context) return undefined;
 			const descriptor = Reflect.getOwnPropertyDescriptor(ctx.context, prop);
 			if (!descriptor || !("value" in descriptor)) return descriptor;
