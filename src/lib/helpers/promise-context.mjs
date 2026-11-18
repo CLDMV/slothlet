@@ -48,6 +48,7 @@ import {
 	Promise,
 	Promises,
 	PrototypeFunctions,
+	Reflect,
 	Symbols,
 	TypeError,
 	WeakSet,
@@ -88,7 +89,8 @@ const NATIVE_THEN = runtime_unwrapThen(PrototypeFunctions.Promise.then);
  * returns from the receiver's `constructor` and that constructor's `Symbol.species`, both of which module code can
  * replace on `Promise.prototype` and `Promise`; the promise handed back here is made with the `Promise` taken at load
  * and settled by the reactions themselves, so what the caller receives and what it settles with are never steered by
- * them. The one `then` makes is left unused.
+ * them. A receiver of a `Promise` subclass gets a derived promise of that subclass, as the engine's `then` gives it, made
+ * with the receiver's prototype and no code of the subclass run. The one `then` makes is left unused.
  * @param {Function} then - The `then` to call: the engine's, or this copy's wrapper of it.
  * @param {Promise<*>} promise - The receiver.
  * @param {Function} [onFulfilled] - Fulfillment reaction.
@@ -100,10 +102,8 @@ const NATIVE_THEN = runtime_unwrapThen(PrototypeFunctions.Promise.then);
 function runtime_derive(then, promise, onFulfilled, onRejected, pin) {
 	let resolve;
 	let reject;
-	const derived = new Promise((settleValue, settleError) => {
-		resolve = settleValue;
-		reject = settleError;
-	});
+	// The reactions run as jobs, never during `then`, so the promise they settle is made once `then` has accepted the
+	// receiver (below).
 	let fulfilled =
 		typeof onFulfilled === "function"
 			? (value) => {
@@ -113,7 +113,7 @@ function runtime_derive(then, promise, onFulfilled, onRejected, pin) {
 						reject(error);
 					}
 				}
-			: resolve;
+			: (value) => resolve(value);
 	let rejected =
 		typeof onRejected === "function"
 			? (error) => {
@@ -123,7 +123,7 @@ function runtime_derive(then, promise, onFulfilled, onRejected, pin) {
 						reject(thrown);
 					}
 				}
-			: reject;
+			: (error) => reject(error);
 	if (pin) {
 		const pinned = pin([fulfilled, rejected]);
 		fulfilled = pinned[0];
@@ -131,8 +131,30 @@ function runtime_derive(then, promise, onFulfilled, onRejected, pin) {
 	}
 	// A receiver `then` refuses, or a species constructor that throws, throws here as `then` itself would.
 	FunctionMethods.call(then, promise, fulfilled, rejected);
-	return derived;
+	const executor = (settleValue, settleError) => {
+		resolve = settleValue;
+		reject = settleError;
+	};
+	// `then` accepted the receiver, so it is a genuine promise and reading its prototype runs no trap. A promise of a
+	// module's `Promise` subclass derives one of that subclass, as the engine's `then` would, made with the receiver's
+	// own prototype: no `constructor`, `Symbol.species` or constructor body of the module's runs.
+	const proto = Reflect.getPrototypeOf(promise);
+	if (proto === Promise.prototype || proto === null) return new Promise(executor);
+	DERIVED_TARGET.prototype = proto;
+	try {
+		return Reflect.construct(Promise, [executor], DERIVED_TARGET);
+	} finally {
+		DERIVED_TARGET.prototype = null;
+	}
 }
+
+/**
+ * The `new.target` {@link runtime_derive} constructs a subclass's derived promise through, its `prototype` set to the
+ * receiver's for that one construction.
+ * @type {Function}
+ * @private
+ */
+const DERIVED_TARGET = function () {};
 
 /**
  * Register reactions on a promise without pinning them to the current caller.
