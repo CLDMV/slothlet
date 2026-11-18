@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T20:34:14-08:00 (1794976454)
+ *	@Last modified time: 2026-11-18T06:09:38-08:00 (1795010978)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -2378,6 +2378,12 @@ export class ModesProcessor extends ComponentBase {
 										) {
 											modes_existingWrapper.___adoptImplChildren();
 										}
+										// The file's members are merged into a copy, not into the module's own export: the export
+										// would keep the nodes of this tree, and a later tree built from the same module (a run's
+										// copy, #876) would read them as its own.
+										if (implToWrap === exports[subDirName] || implToWrap === exports.default || implToWrap === modContent) {
+											implToWrap = this.slothlet.processors.flatten.cloneDefault(implToWrap);
+										}
 										const modes_existingImpl = modes_existingWrapper.____impl;
 										// modes_existingImpl is always a non-null, non-array object here; IF FALSE unreachable.
 										/* v8 ignore next */
@@ -3118,6 +3124,14 @@ export class ModesProcessor extends ComponentBase {
 
 						// Merge file-folder collision exports (from same-name file, e.g., math.mjs + math/)
 						// Each member is copied as described, not read, so a getter stays a getter (#585 review).
+						// They go onto a copy, not onto the module's own export: the export would keep the nodes of this
+						// tree, and a later tree built from the same module (a run's copy, #876) would read them as its own.
+						if (
+							fileFolderCollisionImpl &&
+							(implToWrap === exports[categoryName] || implToWrap === exports.default || implToWrap === modContent)
+						) {
+							implToWrap = this.slothlet.processors.flatten.cloneDefault(implToWrap);
+						}
 						if (fileFolderCollisionImpl && typeof implToWrap === "object" && implToWrap !== null) {
 							for (let ofIndex = 0, ofList = Objects.keys(fileFolderCollisionImpl); ofIndex < ofList.length; ofIndex++) {
 								const k = ofList[ofIndex];
