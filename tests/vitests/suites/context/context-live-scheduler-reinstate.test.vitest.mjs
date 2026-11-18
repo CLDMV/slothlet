@@ -94,6 +94,45 @@ describe("live runtime: a scheduler written back over the patch", () => {
 		]);
 	});
 
+	it("a write-back the host made read-only is left as it is, and the call still runs", async () => {
+		await api.probe.noop();
+		const wrapper = globalThis.setImmediate;
+		const below = globalThis[LAYERS].get(wrapper)?.below;
+		expect(typeof below).toBe("function");
+		const descriptor = Object.getOwnPropertyDescriptor(globalThis, "setImmediate");
+		Object.defineProperty(globalThis, "setImmediate", { value: below, writable: false, enumerable: true, configurable: true });
+		try {
+			const seen = await api.slothlet.context.run({ tag: "one" }, () => api.probe.who());
+			expect(seen).toEqual({ tag: "one", caller: null });
+			expect(globalThis.setImmediate).toBe(below);
+		} finally {
+			Object.defineProperty(globalThis, "setImmediate", descriptor);
+		}
+	});
+
+	it("a write-back behind a getter is not read through the getter, and the call still runs", async () => {
+		await api.probe.noop();
+		const wrapper = globalThis.setImmediate;
+		const below = globalThis[LAYERS].get(wrapper)?.below;
+		const descriptor = Object.getOwnPropertyDescriptor(globalThis, "setImmediate");
+		let reads = 0;
+		Object.defineProperty(globalThis, "setImmediate", {
+			get() {
+				reads++;
+				return below;
+			},
+			enumerable: true,
+			configurable: true
+		});
+		try {
+			const seen = await api.slothlet.context.run({ tag: "one" }, () => api.probe.who());
+			expect(seen).toEqual({ tag: "one", caller: null });
+			expect(reads).toBe(0);
+		} finally {
+			Object.defineProperty(globalThis, "setImmediate", descriptor);
+		}
+	});
+
 	it("a function of someone else's is left in place", async () => {
 		const { wrapper } = await patchedNextTick();
 		const own = function nextTick(...args) {

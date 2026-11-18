@@ -169,7 +169,11 @@ function enableSchedulerPatching() {
 function reinstateSchedulerPatching() {
 	for (let i = 0; i < patched.length; i++) {
 		const { host, name, layer, wrapper } = patched[i];
-		if (layer.active && host[name] === layer.below && holdsValue(host, name, layer.below)) host[name] = wrapper;
+		if (!layer.active) continue;
+		// Read from the own descriptor, never through a getter, and only a writable data property is written: a host that
+		// wrote the function back read-only (or behind an accessor) keeps it, and the call starting here is not made to throw.
+		const descriptor = Reflect.getOwnPropertyDescriptor(host, name);
+		if (descriptor !== undefined && descriptor.writable === true && descriptor.value === layer.below) host[name] = wrapper;
 	}
 }
 
