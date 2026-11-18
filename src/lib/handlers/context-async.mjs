@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T18:55:55-08:00 (1794970555)
+ *	@Last modified time: 2026-11-17T20:34:14-08:00 (1794976454)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -27,7 +27,7 @@ import { DEFAULT_CLOCK } from "#helpers/clock";
 import { runtime_isClassInstance, internals as classInstanceWrapperInternals } from "#helpers/class-instance-wrapper";
 import { internals as eventemitterContextInternals } from "#helpers/eventemitter-context";
 import { internals as trustedRootInternals } from "#handlers/trusted-root";
-import { RUN_COPY } from "#helpers/flow-stores";
+import { holdRunWork, releaseRunWork, RUN_COPY, runCopyCounts, watchRuns, whenIdle } from "#helpers/flow-stores";
 import {
 	carriesCallerCode,
 	handsOutAsModule,
@@ -628,6 +628,54 @@ export class AsyncContextManager {
 	#jobHook = null;
 
 	/**
+	 * The async hook that tells when a promise a `run()` / `scope()` made is resolved. Enabled only while a run's work is
+	 * counted (see `watchRuns` in `helpers/flow-stores`). Null until first needed.
+	 * @type {object|null}
+	 */
+	#workHook = null;
+
+	/**
+	 * The async hook that tells when any other resource a run made is destroyed (a timer fired or cleared, an immediate,
+	 * a `nextTick`, a microtask or a Node callback run, a listener's resource taken off its emitter). Enabled only while
+	 * such a resource is counted: while any destroy hook exists, Node also tracks every promise for collection, which
+	 * would cost every promise in the process. Null until first needed.
+	 * @type {object|null}
+	 */
+	#destroyHook = null;
+
+	/**
+	 * How many counted resources that are not promises are pending: {@link AsyncContextManager#destroyHook} is enabled
+	 * while any is.
+	 * @type {number}
+	 */
+	#pendingResources = 0;
+
+	/**
+	 * Whether {@link AsyncContextManager#destroyHook} is enabled.
+	 * @type {boolean}
+	 */
+	#watchingDestroy = false;
+
+	/**
+	 * Whether {@link AsyncContextManager#workHook} is enabled.
+	 * @type {boolean}
+	 */
+	#countingWork = false;
+
+	/**
+	 * Each counted resource's async id, with the record of the run it was made in (see
+	 * {@link AsyncContextManager#countWork}).
+	 * @type {Map<number, object>}
+	 */
+	#work = new Map();
+
+	/**
+	 * Whether the manager watches runs (see `watchRuns` in `helpers/flow-stores`).
+	 * @type {boolean}
+	 */
+	#watchingRuns = false;
+
+	/**
 	 * Whether any resource has been marked in {@link OUTSIDE_JOBS} since the hook was installed: until one is, a callback
 	 * Node runs looks nothing up.
 	 * @type {boolean}
@@ -892,6 +940,7 @@ export class AsyncContextManager {
 		try {
 			hook = createHook({
 				init(asyncId, type, triggerAsyncId, resource) {
+					if (manager.#countingWork) manager.#countWork(asyncId, type);
 					manager.#jobMade(resource, type);
 				},
 				before() {
@@ -923,6 +972,99 @@ export class AsyncContextManager {
 		this.#jobHook = hook;
 		jobHooks++;
 		this.#holdScopeHook();
+		if (!this.#watchingRuns) {
+			this.#watchingRuns = true;
+			watchRuns((live) => this.#countRunWork(live));
+		} else if (runCopyCounts().runs !== 0) this.#countRunWork(true);
+	}
+
+	/**
+	 * Start counting the work runs begin, while any run is live, and stop once none is (see `watchRuns` in
+	 * `helpers/flow-stores`): every resource made in a run's store is counted until it is destroyed, and every promise
+	 * until it is resolved.
+	 * @param {boolean} live - Whether a run is live.
+	 * @returns {void}
+	 * @private
+	 */
+	#countRunWork(live) {
+		if (!live) {
+			this.#stopCounting();
+			return;
+		}
+		if (this.#countingWork || this.#jobHook === null) return;
+		const manager = this;
+		this.#workHook ??= createHook({
+			promiseResolve(asyncId) {
+				manager.#workDone(asyncId);
+			}
+		});
+		Reflect.apply(hookMethods.enable, this.#workHook, []);
+		this.#countingWork = true;
+	}
+
+	/**
+	 * Stop counting runs' work: no run is live, or the async hooks go.
+	 * @returns {void}
+	 * @private
+	 */
+	#stopCounting() {
+		if (!this.#countingWork) return;
+		this.#countingWork = false;
+		MapMethods.clear(this.#work);
+		this.#pendingResources = 0;
+		Reflect.apply(hookMethods.disable, this.#workHook, []);
+		if (this.#watchingDestroy) {
+			this.#watchingDestroy = false;
+			Reflect.apply(hookMethods.disable, this.#destroyHook, []);
+		}
+	}
+
+	/**
+	 * Count a resource made in a `run()` / `scope()` store as work of that run (see `holdRunWork` in
+	 * `helpers/flow-stores`).
+	 * @param {number} asyncId - The resource's async id.
+	 * @returns {void}
+	 * @private
+	 */
+	#countWork(asyncId, type) {
+		const record = this.store?.getStore()?.[RUN_COPY];
+		if (record === undefined || !holdRunWork(record)) return;
+		const promise = type === "PROMISE";
+		MapMethods.set(this.#work, asyncId, promise ? record : { record });
+		if (promise || this.#pendingResources++ !== 0 || this.#watchingDestroy) return;
+		const manager = this;
+		this.#destroyHook ??= createHook({
+			destroy(id) {
+				manager.#workDone(id);
+			}
+		});
+		Reflect.apply(hookMethods.enable, this.#destroyHook, []);
+		this.#watchingDestroy = true;
+	}
+
+	/**
+	 * A counted resource is done: destroyed, or a promise resolved.
+	 * @param {number} asyncId - Its async id.
+	 * @returns {void}
+	 * @private
+	 */
+	#workDone(asyncId) {
+		const entry = MapMethods.get(this.#work, asyncId);
+		if (entry === undefined) return;
+		MapMethods.delete(this.#work, asyncId);
+		if (entry.record === undefined) {
+			releaseRunWork(entry);
+			return;
+		}
+		// The last pending resource that is no promise: the destroy hook goes once nothing more is made meanwhile.
+		if (--this.#pendingResources === 0) {
+			whenIdle(() => {
+				if (this.#pendingResources !== 0 || !this.#watchingDestroy) return;
+				this.#watchingDestroy = false;
+				Reflect.apply(hookMethods.disable, this.#destroyHook, []);
+			});
+		}
+		releaseRunWork(entry.record);
 	}
 
 	/**
@@ -943,6 +1085,7 @@ export class AsyncContextManager {
 		this.#promiseJobsLeftOut = null;
 		const scopeHook = this.#scopeHook;
 		this.#scopeHook = null;
+		this.#stopCounting();
 		jobHooks--;
 		Reflect.apply(hookMethods.disable, hook, []);
 		if (scopeHook !== null) Reflect.apply(hookMethods.disable, scopeHook, []);

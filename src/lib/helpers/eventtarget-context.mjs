@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:28:49-08:00 (1794882529)
+ *	@Last modified time: 2026-11-17T20:34:19-08:00 (1794976459)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -43,7 +43,7 @@
  */
 
 import { AsyncResource } from "#helpers/platform";
-import { pinToCurrentCaller } from "#helpers/caller-pinning";
+import { holdForCurrentFlow, pinToCurrentCaller } from "#helpers/caller-pinning";
 import { openLayer, closeLayer, holdsValue, markLayer } from "#helpers/boundary-patch-layers";
 import { Boolean, EventTarget, FunctionMethods, Map, mapEntries, MapMethods, String, WeakMap, WeakMapMethods } from "#helpers/intrinsics";
 import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "#helpers/instance-imports";
@@ -121,13 +121,35 @@ function runtime_wrapListener(listener) {
 					return listener.handleEvent(event);
 				});
 
+	// Registered in a run() / scope(), the listener is the run's work until it is removed (or, registered `once`, has
+	// run): counted here on the live runtime, and through its resource on the async runtime.
+	let release = holdForCurrentFlow();
+	let destroyable = resource;
+
 	const runtime_wrappedListener = function (event) {
-		/* v8 ignore next — the no-AsyncResource (browser) path; see the capture above. */
-		if (!resource) return FunctionMethods.call(invoke, this, event);
-		return resource.runInAsyncScope(() => FunctionMethods.call(invoke, this, event), this);
+		try {
+			/* v8 ignore next — the no-AsyncResource (browser) path; see the capture above. */
+			if (!resource) return FunctionMethods.call(invoke, this, event);
+			return resource.runInAsyncScope(() => FunctionMethods.call(invoke, this, event), this);
+		} finally {
+			if (runtime_wrappedListener.____slothletOnce) runtime_wrappedListener.____slothletDone();
+		}
 	};
 
 	runtime_wrappedListener.____slothletOriginal = listener;
+	runtime_wrappedListener.____slothletOnce = false;
+	runtime_wrappedListener.____slothletDone = () => {
+		if (release !== null) {
+			const held = release;
+			release = null;
+			held();
+		}
+		if (destroyable !== null) {
+			const own = destroyable;
+			destroyable = null;
+			own.emitDestroy();
+		}
+	};
 	return runtime_wrappedListener;
 }
 
@@ -178,6 +200,17 @@ function runtime_patchAdd() {
 		let wrapper = MapMethods.get(byListener, listener);
 		if (!wrapper) {
 			wrapper = runtime_wrapListener(listener);
+			// A `once` listener the target drops after it runs: the work it was for a run ends then, and a later
+			// registration makes a fresh wrapper.
+			if (typeof options === "object" && options !== null && options.once) {
+				wrapper.____slothletOnce = true;
+				const own = wrapper;
+				const done = own.____slothletDone;
+				own.____slothletDone = () => {
+					if (MapMethods.get(byListener, listener) === own) MapMethods.delete(byListener, listener);
+					done();
+				};
+			}
 			MapMethods.set(byListener, listener, wrapper);
 		}
 
@@ -207,7 +240,9 @@ function runtime_patchRemove() {
 		if (!wrapper) return FunctionMethods.call(original, this, type, listener, options);
 
 		MapMethods.delete(byListener, listener);
-		return FunctionMethods.call(original, this, type, wrapper, options);
+		const result = FunctionMethods.call(original, this, type, wrapper, options);
+		wrapper.____slothletDone?.();
+		return result;
 	};
 
 	markLayer(patch, layer);

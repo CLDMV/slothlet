@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T13:32:41-08:00 (1794951161)
+ *	@Last modified time: 2026-11-17T20:34:21-08:00 (1794976461)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -52,7 +52,7 @@
  * cache already holds. No other covered function mixes flows this way.
  */
 
-import { pinToCurrentFlow } from "#helpers/caller-pinning";
+import { holdForCurrentFlow, pinToCurrentFlow, releaseAfterCall } from "#helpers/caller-pinning";
 import { openLayer, closeLayer, holdsValue, markLayer } from "#helpers/boundary-patch-layers";
 import { copyList, listPush, listSplice, Objects, Processes, Reflect } from "#helpers/intrinsics";
 import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "#helpers/instance-imports";
@@ -318,7 +318,10 @@ function runtime_patch(host, name, pin, serve) {
 		// A call with no callback, or a wrapper switched off under another copy's, is Node's own call; outside every flow
 		// and module call the callback is handed on as it is (see pinToCurrentFlow).
 		if (last < 0 || typeof args[last] !== "function" || !layer.active) return Reflect.apply(below, this, args);
-		const callback = entry.pin ? pinToCurrentFlow(args[last]) : args[last];
+		let callback = entry.pin ? pinToCurrentFlow(args[last]) : args[last];
+		// Called once: in a run() / scope() it is the run's work until then (see holdForCurrentFlow).
+		const release = entry.pin ? holdForCurrentFlow() : null;
+		if (release !== null) callback = releaseAfterCall(callback, release);
 		// A call with nothing before its callback is malformed: Node's own call reports it.
 		if (entry.serve && last > 0) {
 			// The same checks and the same value as Node's own call; only the delivery differs, as Node's own does for a
@@ -328,7 +331,14 @@ function runtime_patch(host, name, pin, serve) {
 			return undefined;
 		}
 		args[last] = callback;
-		return Reflect.apply(below, this, args);
+		if (release === null) return Reflect.apply(below, this, args);
+		try {
+			return Reflect.apply(below, this, args);
+		} catch (error) {
+			// Refused before it began: the callback is never called.
+			release();
+			throw error;
+		}
 	};
 	entry.wrapper = wrapper;
 	runtime_carryOwn(wrapper, below);

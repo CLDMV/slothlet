@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T19:49:36-08:00 (1794973776)
+ *	@Last modified time: 2026-11-17T20:34:16-08:00 (1794976456)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -6862,7 +6862,9 @@ function runtime_callAsDefiner(target, call) {
  */
 function runtime_loadApart(slothlet, load) {
 	const contextManager = slothlet?.contextManager;
-	return typeof contextManager?.runDetached === "function" ? contextManager.runDetached(load, undefined, []) : load();
+	const apart = () => (typeof contextManager?.runDetached === "function" ? contextManager.runDetached(load, undefined, []) : load());
+	// A node of a copy a run keeps across a reload loads as that copy did (see Slothlet#loadID).
+	return typeof slothlet?.loadAsCaller === "function" ? slothlet.loadAsCaller(apart) : apart();
 }
 
 /**

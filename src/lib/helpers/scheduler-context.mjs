@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T15:23:50-08:00 (1794957830)
+ *	@Last modified time: 2026-11-17T20:34:22-08:00 (1794976462)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -36,10 +36,10 @@
  * on what the live runtime does and does not bound.
  */
 
-import { pinToCurrentCaller } from "#helpers/caller-pinning";
+import { holdForCurrentFlow, pinToCurrentCaller, releaseAfterCall } from "#helpers/caller-pinning";
 import { checkCapability } from "#helpers/capability-context";
 import { openLayer, closeLayer, holdsValue, markLayer } from "#helpers/boundary-patch-layers";
-import { concatLists, listPush, Objects, Reflect } from "#helpers/intrinsics";
+import { concatLists, listPush, Map, MapMethods, Objects, Reflect, WeakMap, WeakMapMethods } from "#helpers/intrinsics";
 import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "#helpers/instance-imports";
 
 /**
@@ -60,6 +60,71 @@ const patched = [];
  * @private
  */
 let isPatchingEnabled = false;
+
+/**
+ * Which handles' work each clearing function ends, by the family of schedulers that hand those handles out: a timer's
+ * handle is cleared by either `clearTimeout` or `clearInterval`, an immediate's by `clearImmediate`, and so on.
+ * @type {Readonly<Record<string, string>>}
+ * @private
+ */
+const FAMILY = Objects.freeze({
+	__proto__: null,
+	setTimeout: "timer",
+	setInterval: "timer",
+	clearTimeout: "timer",
+	clearInterval: "timer",
+	setImmediate: "immediate",
+	clearImmediate: "immediate",
+	requestAnimationFrame: "frame",
+	cancelAnimationFrame: "frame",
+	requestIdleCallback: "idle",
+	cancelIdleCallback: "idle"
+});
+
+/**
+ * For each family (see {@link FAMILY}), what releases the run's count of the work behind a handle a scheduler handed
+ * out in a `run()` / `scope()` (see `holdForCurrentFlow` in `helpers/caller-pinning`): kept until the work runs (a
+ * one-shot) or is cleared. Object handles (Node's) are kept weakly, number handles (a browser's) until released.
+ * @type {Record<string, {objects: WeakMap<object, Function>, numbers: Map<number, Function>}>}
+ * @private
+ */
+const HELD = { __proto__: null };
+
+/**
+ * Remember what releases the work behind a handle.
+ * @param {string} family - The handle's family.
+ * @param {*} handle - The handle.
+ * @param {Function} release - The release.
+ * @returns {void}
+ * @private
+ */
+function runtime_holdHandle(family, handle, release) {
+	const held = (HELD[family] ??= { objects: new WeakMap(), numbers: new Map() });
+	if (typeof handle === "number") MapMethods.set(held.numbers, handle, release);
+	else if (handle !== null && (typeof handle === "object" || typeof handle === "function"))
+		WeakMapMethods.set(held.objects, handle, release);
+}
+
+/**
+ * Forget a handle's release, handing it back.
+ * @param {string} family - The handle's family.
+ * @param {*} handle - The handle.
+ * @returns {Function|undefined} The release, if one was kept.
+ * @private
+ */
+function runtime_takeHandle(family, handle) {
+	const held = HELD[family];
+	if (held === undefined) return undefined;
+	let release;
+	if (typeof handle === "number") {
+		release = MapMethods.get(held.numbers, handle);
+		MapMethods.delete(held.numbers, handle);
+	} else if (handle !== null && (typeof handle === "object" || typeof handle === "function")) {
+		release = WeakMapMethods.get(held.objects, handle);
+		WeakMapMethods.delete(held.objects, handle);
+	}
+	return release;
+}
 
 /**
  * Copy a scheduler's own extras onto its wrapper.
@@ -110,14 +175,63 @@ function runtime_patchScheduler(host, name) {
 	// A string a timer runs as code (a browser's `setTimeout("…")`) is code from a string: module code needs
 	// `capability:code` for it (see helpers/capability-context).
 	const runsStrings = host === globalThis && (name === "setTimeout" || name === "setInterval");
+	// A callback scheduled in a run() / scope() is the run's work until it has run (an interval: until it is cleared).
+	const family = FAMILY[name];
+	const repeats = name === "setInterval";
 	const wrapper = function (callback, ...rest) {
 		if (runsStrings && layer.active && callback != null && typeof callback !== "function") checkCapability("code", name);
 		// Non-function callbacks (legacy string-of-code timers) have no identity to carry, and a wrapper
 		// disabled under another copy's passes everything through.
 		if (typeof callback !== "function" || !layer.active) return Reflect.apply(original.call, original, concatLists([host, callback], rest));
-		return Reflect.apply(original.call, original, concatLists([host, pinToCurrentCaller(callback)], rest));
+		const release = holdForCurrentFlow();
+		if (release === null) return Reflect.apply(original.call, original, concatLists([host, pinToCurrentCaller(callback)], rest));
+		let handle;
+		let pinned = pinToCurrentCaller(callback);
+		if (!repeats) {
+			pinned = releaseAfterCall(pinned, () => {
+				if (family !== undefined) runtime_takeHandle(family, handle);
+				release();
+			});
+		}
+		try {
+			handle = Reflect.apply(original.call, original, concatLists([host, pinned], rest));
+		} catch (error) {
+			release();
+			throw error;
+		}
+		if (family !== undefined) runtime_holdHandle(family, handle, release);
+		return handle;
 	};
 
+	runtime_carryOwnExtras(wrapper, original);
+	markLayer(wrapper, layer);
+	host[name] = wrapper;
+	listPush(patched, { host, name, layer, wrapper });
+}
+
+/**
+ * Replace one clearing function (`clearTimeout`, `cancelAnimationFrame`, ...) with a wrapper that, after clearing,
+ * releases the run's count of the work behind the handle (see {@link runtime_patchScheduler}). Everything else is the
+ * original's: the arguments, the receiver, the result and any throw.
+ *
+ * @param {object} host - Object carrying the entry point.
+ * @param {string} name - Property name to patch.
+ * @returns {void}
+ * @private
+ */
+function runtime_patchClear(host, name) {
+	const installed = host?.[name];
+	if (typeof installed !== "function") return;
+	const layer = openLayer(installed);
+	const original = layer.below;
+	const family = FAMILY[name];
+	// Not gated on the layer: work a run held while this copy was active is still released when it is cleared.
+	const wrapper = function (handle, ...rest) {
+		const result = Reflect.apply(original.call, original, concatLists([host, handle], rest));
+		const release = runtime_takeHandle(family, handle);
+		if (release !== undefined) release();
+		return result;
+	};
 	runtime_carryOwnExtras(wrapper, original);
 	markLayer(wrapper, layer);
 	host[name] = wrapper;
@@ -147,6 +261,11 @@ function enableSchedulerPatching() {
 	runtime_patchScheduler(globalThis, "requestIdleCallback");
 	// The Prioritized Task Scheduling API: `scheduler.postTask(callback, options)`.
 	runtime_patchScheduler(globalThis.scheduler, "postTask");
+	runtime_patchClear(globalThis, "clearTimeout");
+	runtime_patchClear(globalThis, "clearInterval");
+	runtime_patchClear(globalThis, "clearImmediate");
+	runtime_patchClear(globalThis, "cancelAnimationFrame");
+	runtime_patchClear(globalThis, "cancelIdleCallback");
 
 	isPatchingEnabled = true;
 }

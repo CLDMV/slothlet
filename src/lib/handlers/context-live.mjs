@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T18:55:55-08:00 (1794970555)
+ *	@Last modified time: 2026-11-17T20:34:14-08:00 (1794976454)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -24,7 +24,7 @@ import { internals as eventemitterContextInternals } from "#helpers/eventemitter
 import { pinToCurrentCaller, internals as callerPinningInternals } from "#helpers/caller-pinning";
 import { internals as schedulerContextInternals } from "#helpers/scheduler-context";
 import { combineCeilings, internals as trustedRootInternals } from "#handlers/trusted-root";
-import { RUN_COPY } from "#helpers/flow-stores";
+import { holdRunWork, holdRunWorkOnce, releaseRunWork, RUN_COPY, runCopyCounts, watchRuns } from "#helpers/flow-stores";
 import { nativeThen } from "#helpers/promise-context";
 import { util, inheritsFrom } from "#helpers/platform";
 import { runtime_isClassInstance, internals as classInstanceWrapperInternals } from "#helpers/class-instance-wrapper";
@@ -665,6 +665,38 @@ const SCOPE_RESULT = Symbol("slothlet.resourceScope.result");
  */
 const RUN_BODY_FRAMES = 200;
 
+/**
+ * The run record each counted promise is work of, until it settles (see {@link countPromise}).
+ * @type {WeakMap<Promise<unknown>, object>}
+ * @private
+ */
+const COUNTED_PROMISES = new WeakMap();
+
+/**
+ * Count a promise made in a `run()` / `scope()` flow as the run's work until it settles.
+ * @param {Promise<unknown>} promise - The promise.
+ * @param {object|null|undefined} record - The run's record.
+ * @returns {void}
+ * @private
+ */
+function countPromise(promise, record) {
+	if (!holdRunWork(record)) return;
+	WeakMapMethods.set(COUNTED_PROMISES, promise, record);
+}
+
+/**
+ * A promise settled: when it was counted, its run's count goes down.
+ * @param {Promise<unknown>} promise - The promise.
+ * @returns {void}
+ * @private
+ */
+function promiseSettled(promise) {
+	const record = WeakMapMethods.get(COUNTED_PROMISES, promise);
+	if (record === undefined) return;
+	WeakMapMethods.delete(COUNTED_PROMISES, promise);
+	releaseRunWork(record);
+}
+
 export class LiveContextManager {
 	/**
 	 * The active-instance field as last written. Calls restore it in settle order, not entry order, so
@@ -784,6 +816,25 @@ export class LiveContextManager {
 	 */
 	#jobReopened = [];
 
+	/**
+	 * Whether the promises a `run()` / `scope()` makes are counted as its work (see `watchRuns` in
+	 * `helpers/flow-stores`): while any run is live and the promise hooks are installed.
+	 * @type {boolean}
+	 */
+	#countingWork = false;
+
+	/**
+	 * What stops the promise hook that tells when a counted promise settles, while {@link LiveContextManager#countingWork}.
+	 * @type {Function|null}
+	 */
+	#stopSettledHook = null;
+
+	/**
+	 * Whether the manager watches runs (see `watchRuns` in `helpers/flow-stores`).
+	 * @type {boolean}
+	 */
+	#watchingRuns = false;
+
 	constructor() {
 		this.instances = new Map(); // instanceID → context data
 	}
@@ -835,6 +886,10 @@ export class LiveContextManager {
 	#holdFlowHooks() {
 		this.#flowHookInstances++;
 		if (this.#stopFlowHooks || !CREATE_PROMISE_HOOK) return;
+		if (!this.#watchingRuns) {
+			this.#watchingRuns = true;
+			watchRuns((live) => this.#countRunWork(live));
+		}
 		const manager = this;
 		this.#stopFlowHooks = Reflect.apply(CREATE_PROMISE_HOOK, PROMISE_HOOKS, [
 			{
@@ -858,6 +913,8 @@ export class LiveContextManager {
 					// run() has returned and its store has left the instances (see reopenFlowStore).
 					const flowStore = flow === null ? undefined : MapMethods.get(manager.instances, flow);
 					const held = flowStore !== undefined && flowStore.parentInstanceID ? flowStore : undefined;
+					// Until it settles, the promise is work of the run it was made in (see holdRunWork).
+					if (held !== undefined && manager.#countingWork) countPromise(promise, held[RUN_COPY]);
 					if (manager.#flowStarterInstances === 0) {
 						// One record per store, shared by its promises: it never changes.
 						new PromiseFlow(promise, held === undefined ? flow : (held.__promiseRecord ??= { flow, starter: null, store: held }));
@@ -907,6 +964,7 @@ export class LiveContextManager {
 				}
 			}
 		]);
+		if (runCopyCounts().runs !== 0) this.#countRunWork(true);
 	}
 
 	/**
@@ -918,12 +976,35 @@ export class LiveContextManager {
 		if (--this.#flowHookInstances > 0 || !this.#stopFlowHooks) return;
 		const stop = this.#stopFlowHooks;
 		this.#stopFlowHooks = null;
+		this.#countRunWork(false);
 		this.#runningStarter = null;
 		// Released from inside a promise job: that job's `after` no longer runs, so nothing is left counted for it.
 		this.#jobDepth = 0;
 		this.#jobOuter.length = 0;
 		this.#jobReopened.length = 0;
 		stop();
+	}
+
+	/**
+	 * Start counting the promises runs make as their work while any run is live, and stop once none is (see
+	 * `watchRuns` in `helpers/flow-stores`): a promise made in a run's flow counts until it settles. Only
+	 * while the promise hooks are installed (Node).
+	 * @param {boolean} live - Whether a run is live.
+	 * @returns {void}
+	 * @private
+	 */
+	#countRunWork(live) {
+		if (!live || this.#stopFlowHooks === null) {
+			if (!this.#countingWork) return;
+			this.#countingWork = false;
+			const stop = this.#stopSettledHook;
+			this.#stopSettledHook = null;
+			stop();
+			return;
+		}
+		if (this.#countingWork) return;
+		this.#countingWork = true;
+		this.#stopSettledHook = Reflect.apply(CREATE_PROMISE_HOOK, PROMISE_HOOKS, [{ settled: promiseSettled }]);
 	}
 
 	/**
@@ -1950,6 +2031,14 @@ export class LiveContextManager {
 			);
 		};
 		const pinOne = (listener) => pinMany([listener])[0];
+		// A callback deferred in a run() / scope() is the run's work until it has run, been cleared or been removed (see
+		// holdForCurrentFlow in helpers/caller-pinning).
+		pinOne.hold = () => {
+			if (this.#nothingToPin()) return null;
+			const active = this.tryGetContext();
+			const store = active ? this.#flowStoreOf(active) : active;
+			return store ? holdRunWorkOnce(store[RUN_COPY]) : null;
+		};
 		pinOne.many = pinMany;
 		pinOne.forResult = forResult;
 		pinOne.idle = () => this.#nothingToPin();

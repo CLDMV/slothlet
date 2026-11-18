@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T19:49:44-08:00 (1794973784)
+ *	@Last modified time: 2026-11-17T20:34:24-08:00 (1794976464)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -93,13 +93,20 @@ import { warnIfCoverageWithoutImporter } from "#processors/loader";
 import { SlothletError, SlothletWarning } from "#errors";
 import { SlothletDebug } from "#helpers/debug";
 import {
+	countHeldCopy,
+	countReadThrough,
 	CURRENT_COPY,
+	endRun,
 	FORK,
 	forgetFlowStores,
 	INHERIT_COPY,
 	INSTANCE_FIELD,
+	newRecord,
 	reparentFlowStores,
 	RUN_COPY,
+	RUN_DONE,
+	RUN_OPENED,
+	whenIdle,
 	WRITE_TARGET
 } from "#helpers/flow-stores";
 import { registerInstance } from "#handlers/lifecycle-token";
@@ -131,8 +138,6 @@ import {
 	concatLists,
 	copyList,
 	filterList,
-	FinalizationRegistry,
-	FinalizationRegistryMethods,
 	FunctionMethods,
 	listPush,
 	listSplice,
@@ -157,9 +162,7 @@ import {
 	URLSearchParams,
 	URLSearchParamsMethods,
 	WeakMap,
-	WeakMapMethods,
-	WeakRef,
-	WeakRefMethods
+	WeakMapMethods
 } from "#helpers/intrinsics";
 import { segmentsOf } from "#helpers/segments";
 const {
@@ -224,6 +227,15 @@ let typescriptInternals = null;
 const reloadBuildStorage = AsyncLocalStorage ? new AsyncLocalStorage() : null;
 
 /**
+ * The instance ID a lazy node's load runs under when it was asked for by code in a run that keeps a copy a reload
+ * swapped out (see {@link Slothlet#loadAsCaller}): a load runs apart from the flow that asked for it, so the ID is
+ * carried to it here. Null where the host has no AsyncLocalStorage.
+ * @type {import("node:async_hooks").AsyncLocalStorage<string>|null}
+ * @private
+ */
+const loadAsStorage = AsyncLocalStorage ? new AsyncLocalStorage() : null;
+
+/**
  * The instance's own fields, besides its component namespaces, that a full reload builds anew and swaps in at its end.
  * @type {string[]}
  * @private
@@ -240,13 +252,12 @@ const RELOAD_COPY_FIELDS = ["config", "api", "debugLogger", "envTarget", "refere
 const FORKABLE_HANDLERS = ["permissionManager", "hookManager", "metadata", "eventManager", "lifecycle"];
 
 /**
- * Tells an instance when something that may still hold a copy is gone: a copy token that kept what the instance had
- * (see {@link Slothlet#holdCopy}), or the record of a run that holds a fork. Null where the host has no
- * FinalizationRegistry: such a holder is counted for good.
- * @type {FinalizationRegistry<Function>|null}
+ * The copy a run record reads through to once its copy is torn down: none, so what still runs in its store (code
+ * reached through the runtime `context` export) answers from the instance's own.
+ * @type {{values: null, users: number}}
  * @private
  */
-const staleCopies = typeof FinalizationRegistry === "function" ? new FinalizationRegistry((gone) => gone()) : null;
+const TORN_DOWN = Objects.freeze({ __proto__: null, values: null, users: 0 });
 
 /**
  * Instances currently relying on the globally-patched boundaries.
@@ -466,10 +477,11 @@ class Slothlet {
 	#copy = null;
 
 	/**
-	 * How many copies may still be held apart from what the instance has: tokens that kept what the instance had (a
-	 * reload swapped another copy in, or the instance changed a forkable handler after runs recorded the token), and
-	 * records of runs that hold a fork of their own. While any is, the copy fields answer through
-	 * {@link Slothlet#readField}. Counted down as each is collected (phase 3 replaces this with the runs' pending work).
+	 * How many copies are held apart from what the instance has: tokens that kept what the instance had (a reload
+	 * swapped another copy in, or the instance changed a forkable handler after runs recorded the token) while a run
+	 * still reads through one, and records of runs that hold a fork of their own. While any is, the copy fields answer
+	 * through {@link Slothlet#readField}. Each is let go when the last run reading it is torn down (see
+	 * {@link Slothlet#teardownRun}).
 	 * @type {number}
 	 * @private
 	 */
@@ -483,20 +495,11 @@ class Slothlet {
 	#resolvingCopy = false;
 
 	/**
-	 * Called when a held copy is gone (see {@link staleCopies}).
-	 * @type {Function}
-	 * @private
-	 */
-	#heldCopyGone = () => {
-		this.#heldCopies--;
-		this.#settleCopyFields();
-	};
-
-	/**
 	 * For each forkable handler (see {@link FORKABLE_HANDLERS}), the handlers namespaces of the copies that hold it
 	 * without owning it: kept tokens' and runs'. Before the handler's owner writes it, each of them gets a fork of its
-	 * own (see {@link Slothlet#keepSharers}).
-	 * @type {WeakMap<object, Array<WeakRef<object>>>}
+	 * own (see {@link Slothlet#keepSharers}). A copy torn down leaves every set it is in (see
+	 * {@link Slothlet#unshareHandlers}).
+	 * @type {WeakMap<object, Set<object>>}
 	 * @private
 	 */
 	#sharers = new WeakMap();
@@ -511,11 +514,42 @@ class Slothlet {
 
 	/**
 	 * Every copy held apart from the instance's (see {@link Slothlet#holdCopy}), for a restart to update what goes with
-	 * the shared api tree in each (see {@link Slothlet#copiesFollowTree}).
-	 * @type {Array<WeakRef<object>>}
+	 * the shared api tree in each (see {@link Slothlet#copiesFollowTree}). A copy leaves it when it is torn down.
+	 * @type {Set<object>}
 	 * @private
 	 */
-	#held = [];
+	#held = new Set();
+
+	/**
+	 * The records of the runs whose work is not done yet (see `holdRunWork` in `helpers/flow-stores`), for
+	 * `shutdown()` to tear down what they still hold.
+	 * @type {Set<object>}
+	 * @private
+	 */
+	#runs = new Set();
+
+	/**
+	 * Records of runs whose work is done, waiting for the instance to be idle to have their copies torn down (see
+	 * {@link Slothlet#teardownWhenIdle}).
+	 * @type {Array<object>}
+	 * @private
+	 */
+	#retiring = [];
+
+	/**
+	 * Whether a teardown of {@link Slothlet#retiring} is scheduled.
+	 * @type {boolean}
+	 * @private
+	 */
+	#teardownScheduled = false;
+
+	/**
+	 * The import scopes of IDs a reload left that kept copies still load from, by ID (see
+	 * {@link Slothlet#keepReplacedScope}).
+	 * @type {Map<string, object>}
+	 * @private
+	 */
+	#keptScopes = new Map();
 
 	/**
 	 * The ALS mark of instance work that must read and write the instance's own fields even when called from a run: a
@@ -621,14 +655,31 @@ class Slothlet {
 	 * helpers/instance-imports).
 	 * @param {string} filePath - Absolute path of the CommonJS file.
 	 * @param {object} [options] - `fresh`, `importer` and `mount`, as scopeRequire takes them.
+	 * @param {string} [instanceID] - The ID to load under: the instance's own, or one a kept copy loads from.
 	 * @returns {*} The file's `module.exports`.
 	 * @package
 	 * @example
 	 * slothlet.requireInScope("/app/api/counter.cjs", { fresh: true });
 	 */
-	requireInScope(filePath, options) {
+	requireInScope(filePath, options, instanceID = this.instanceID) {
+		// A kept copy's lazy node loads through the scope of the ID it was loaded under (see Slothlet#loadID).
+		if (instanceID !== this.instanceID) {
+			const kept = MapMethods.get(this.#keptScopes, instanceID);
+			if (kept !== undefined) return kept.scope.require(filePath, options);
+		}
 		this.#claimImportScope();
 		return this.#importScope.require(filePath, options);
+	}
+
+	/**
+	 * Whether the instance holds the import scope of an ID: its own, or one a kept copy still loads from (see
+	 * {@link Slothlet#keepReplacedScope}).
+	 * @param {string} instanceID - The ID.
+	 * @returns {boolean} True when it does.
+	 * @package
+	 */
+	holdsScope(instanceID) {
+		return instanceID === this.instanceID || MapMethods.has(this.#keptScopes, instanceID);
 	}
 
 	constructor() {
@@ -1976,8 +2027,18 @@ class Slothlet {
 			// The build is framework work, run as the host even when a module's call asked for the reload (as restart()'s is,
 			// #903): the module's call belongs to the copy being replaced.
 			if (window === null) {
-				const built = await this._runAsHost(() => this.#reloadOnto(nextScope, oldInstanceID, null));
-				this.#keepCopyForRuns(kept);
+				// The build writes the instance's own handlers as it goes: the token runs recorded is set aside first, so
+				// those writes keep nothing half built for them, and takes the set from before the build once it is done.
+				const token = this.#copy;
+				this.#copy = null;
+				let built;
+				try {
+					built = await this._runAsHost(() => this.#reloadOnto(nextScope, oldInstanceID, null));
+				} catch (error) {
+					this.#copy ??= token;
+					throw error;
+				}
+				this.#keepCopyForRuns(kept, token);
 				return built;
 			}
 			return await reloadBuildStorage.run(window.mark, () => this._runAsHost(() => this.#reloadOnto(nextScope, oldInstanceID, window)));
@@ -2006,12 +2067,14 @@ class Slothlet {
 	 * the runs that recorded the instance's copy token keep the set the instance had before the reload: the token takes
 	 * it, and the fields answer through {@link Slothlet#readField} until no such token is left.
 	 * @param {object} kept - What {@link Slothlet#keepForFailedReload} took before the build.
+	 * @param {object|null} old - The token runs recorded before the build, if any.
 	 * @returns {void}
 	 * @private
 	 */
-	#keepCopyForRuns(kept) {
-		const old = this.#copy;
+	#keepCopyForRuns(kept, old) {
 		if (old === null) return;
+		// No run reads through the token any more: there is nothing to keep it for.
+		if (!old.users) return;
 		const values = { __proto__: null, ...kept.components };
 		for (let ofIndex = 0; ofIndex < RELOAD_COPY_FIELDS.length; ofIndex++)
 			values[RELOAD_COPY_FIELDS[ofIndex]] = kept[RELOAD_COPY_FIELDS[ofIndex]];
@@ -2067,8 +2130,82 @@ class Slothlet {
 	#closeReloadWindow(window, swap) {
 		if (window.closed) return;
 		window.closed = true;
-		if (swap) this.#swapCopy(window.next, window.nextCopy);
+		if (swap) {
+			this.#swapCopy(window.next, window.nextCopy);
+			this.#keepReplacedScope(window);
+		}
 		this.#settleCopyFields();
+	}
+
+	/**
+	 * At a reload's swap: every copy kept for runs that was loaded under the ID the reload left keeps that ID's import
+	 * scope, so a lazy node of it that loads later loads as that copy (see {@link Slothlet#loadID}). The scope is
+	 * retired when the last of those copies is torn down (see {@link Slothlet#releaseCopy}), instead of at the swap.
+	 * @param {object} window - The reload's window.
+	 * @returns {void}
+	 * @private
+	 */
+	#keepReplacedScope(window) {
+		const replaced = window.replaced;
+		if (!replaced) return;
+		let users = 0;
+		for (let heldIndex = 0, held = setToArray(this.#held); heldIndex < held.length; heldIndex++) {
+			const holder = held[heldIndex];
+			if (holder.ns !== undefined || holder.values === null || holder.loadID !== undefined) continue;
+			holder.loadID = replaced.instanceID;
+			holder.replaced = replaced;
+			users++;
+		}
+		if (users === 0) return;
+		replaced.users = users;
+		window.replaced = null;
+		if (replaced.scope) MapMethods.set(this.#keptScopes, replaced.scope.instanceID, replaced);
+	}
+
+	/**
+	 * Run a lazy node's load (which runs apart from the flow that asked for it) under the ID the asking code's copy loads
+	 * under (see {@link Slothlet#loadID}).
+	 * @param {Function} load - The load.
+	 * @returns {*} What it returns.
+	 * @package
+	 */
+	loadAsCaller(load) {
+		const id = this.#heldCopies === 0 ? this.instanceID : this.loadID;
+		if (id === this.instanceID || loadAsStorage === null) return load();
+		return loadAsStorage.run(id, load);
+	}
+
+	/**
+	 * Retire the import scope a kept copy held, once the last such copy is torn down (see
+	 * {@link Slothlet#keepReplacedScope}).
+	 * @param {object} replaced - What the reload left (see {@link Slothlet#switchToPendingScope}).
+	 * @returns {void}
+	 * @private
+	 */
+	#retireKeptScope(replaced) {
+		if (replaced.scope && MapMethods.get(this.#keptScopes, replaced.scope.instanceID) !== replaced) return;
+		if (replaced.scope) MapMethods.delete(this.#keptScopes, replaced.scope.instanceID);
+		// Nothing awaits it: what it removes from disk is stale either way, and a failure there is not the caller's.
+		PromiseMethods.catch(this.#retireScope(replaced), () => {});
+	}
+
+	/**
+	 * The instance ID a lazy node that loads now loads under: the ID a kept copy was loaded under, for code running in a
+	 * run that keeps a copy a reload swapped out (see {@link Slothlet#keepReplacedScope}); the instance's own otherwise.
+	 * @type {string}
+	 * @package
+	 */
+	get loadID() {
+		if (this.#heldCopies !== 0) {
+			const carried = loadAsStorage?.getStore();
+			if (carried !== undefined && MapMethods.has(this.#keptScopes, carried)) return carried;
+			const mark = reloadBuildStorage?.getStore();
+			if (mark === undefined || mark !== this.#reloadWindow?.mark) {
+				const id = this.#runRecord()?.from.loadID;
+				if (id !== undefined && MapMethods.has(this.#keptScopes, id)) return id;
+			}
+		}
+		return this.instanceID;
 	}
 
 	/**
@@ -2081,7 +2218,8 @@ class Slothlet {
 	 */
 	#swapCopy(next, nextCopy) {
 		const fields = this.#fields;
-		const old = this.#copy;
+		// A token no run reads through any more keeps nothing.
+		const old = this.#copy !== null && this.#copy.users ? this.#copy : null;
 		if (old !== null) {
 			old.values = this.#copyOfFields(fields);
 			// A handler the new copy carries over unchanged is still the instance's: the kept copy holds it as a sharer.
@@ -2155,6 +2293,7 @@ class Slothlet {
 			});
 		}
 		this.#fields = fields;
+		countReadThrough(1);
 	}
 
 	/**
@@ -2168,6 +2307,7 @@ class Slothlet {
 		if (fields === null || this.#heldCopies !== 0) return;
 		if (this.#reloadWindow !== null && !this.#reloadWindow.closed) return;
 		this.#fields = null;
+		countReadThrough(-1);
 		for (let ofIndex = 0, ofList = this.#copyFieldNames(); ofIndex < ofList.length; ofIndex++) {
 			const field = ofList[ofIndex];
 			Objects.defineProperty(this, field, { __proto__: null, configurable: true, enumerable: true, writable: true, value: fields[field] });
@@ -2229,12 +2369,16 @@ class Slothlet {
 		this.#resolvingCopy = true;
 		try {
 			const contextManager = this.contextManager;
-			const record = contextManager?.tryGetContext?.(this.instanceID)?.[RUN_COPY];
-			if (record !== undefined && record !== null) return record;
-			// A run opened under an ID the instance has since left (a restart starts a new one) still runs this instance's
-			// code: its store, when active, is found by the instance object it records.
-			const active = contextManager?.tryGetContext?.();
-			return active?.slothlet === this ? (active[RUN_COPY] ?? null) : null;
+			let record = contextManager?.tryGetContext?.(this.instanceID)?.[RUN_COPY];
+			if (record === undefined || record === null) {
+				// A run opened under an ID the instance has since left (a restart starts a new one) still runs this
+				// instance's code: its store, when active, is found by the instance object it records.
+				const active = contextManager?.tryGetContext?.();
+				record = active?.slothlet === this ? (active[RUN_COPY] ?? null) : null;
+			}
+			// A run whose copy is torn down keeps none: what still runs in its store (code reached through the runtime
+			// `context` export) answers as the instance.
+			return record === null || record.torn ? null : record;
 		} finally {
 			this.#resolvingCopy = false;
 		}
@@ -2249,11 +2393,140 @@ class Slothlet {
 	 */
 	#holdCopy(holder) {
 		this.#installCopyFields();
-		if (this.#held.length > 2 * this.#heldCopies + 16)
-			this.#held = filterList(this.#held, (ref) => WeakRefMethods.deref(ref) !== undefined);
-		listPush(this.#held, new WeakRef(holder));
+		if (SetMethods.has(this.#held, holder)) return;
+		SetMethods.add(this.#held, holder);
 		this.#heldCopies++;
-		if (staleCopies !== null) FinalizationRegistryMethods.register(staleCopies, holder, this.#heldCopyGone);
+		countHeldCopy(1);
+	}
+
+	/**
+	 * Let go of a copy {@link Slothlet#holdCopy} held, once no run reads it any more: it leaves the sets of the handlers
+	 * it shared, a kept token lets go of the import scope of the ID it was loaded under when it is the last to use it,
+	 * and the copy fields become plain fields again once nothing else is held.
+	 * @param {object} holder - The token or record.
+	 * @returns {void}
+	 * @private
+	 */
+	#releaseCopy(holder) {
+		if (!SetMethods.delete(this.#held, holder)) return;
+		this.#heldCopies--;
+		countHeldCopy(-1);
+		const ns = holder.ns !== undefined ? holder.ns : holder.values?.handlers;
+		if (ns !== null && ns !== undefined) this.#unshareHandlers(ns);
+		const replaced = holder.replaced;
+		if (replaced !== undefined && replaced !== null) {
+			holder.replaced = null;
+			if (--replaced.users === 0) this.#retireKeptScope(replaced);
+		}
+		this.#settleCopyFields();
+	}
+
+	/**
+	 * [RUN_OPENED] - Note a new run record, so `shutdown()` can tear down what it holds (see `copyForRun` in
+	 * `helpers/flow-stores`).
+	 * @param {object} record - The record.
+	 * @returns {void}
+	 * @internal
+	 */
+	[RUN_OPENED](record) {
+		SetMethods.add(this.#runs, record);
+	}
+
+	/**
+	 * [RUN_DONE] - A run's work is done (see `releaseRunWork` in `helpers/flow-stores`): its copy is torn down once the
+	 * instance is idle, never in the middle of the work that finished it.
+	 * @param {object} record - The record.
+	 * @returns {void}
+	 * @internal
+	 */
+	[RUN_DONE](record) {
+		SetMethods.delete(this.#runs, record);
+		listPush(this.#retiring, record);
+		this.#teardownWhenIdle();
+	}
+
+	/**
+	 * Tear down the copies of the runs whose work is done (see {@link Slothlet#retiring}) on a later macrotask, in one
+	 * batch: after the work that finished them, and every microtask it queued, has run.
+	 * @returns {void}
+	 * @private
+	 */
+	#teardownWhenIdle() {
+		if (this.#teardownScheduled) return;
+		this.#teardownScheduled = true;
+		whenIdle(() => {
+			this.#teardownScheduled = false;
+			this.#teardownRetiring();
+		});
+	}
+
+	/**
+	 * Tear down the copies of every run waiting in {@link Slothlet#retiring}.
+	 * @returns {void}
+	 * @private
+	 */
+	#teardownRetiring() {
+		const retiring = this.#retiring;
+		this.#retiring = [];
+		// A run that took on new work since (its last piece of work began more) is live again, and stays.
+		for (let index = 0; index < retiring.length; index++) if (retiring[index].done) this.#teardownRun(retiring[index]);
+	}
+
+	/**
+	 * Tear down a done run's copy: its forked handlers go, and the copy it read through to is let go when it was the last
+	 * run to read it. The record then reads through to nothing, so code still running in its store (reached through the
+	 * runtime `context` export) answers from the instance.
+	 * @param {object} record - The record.
+	 * @returns {void}
+	 * @private
+	 */
+	#teardownRun(record) {
+		if (record.torn) return;
+		record.torn = true;
+		this.#releaseCopy(record);
+		record.ns = null;
+		record.parent = null;
+		const token = record.from;
+		record.from = TORN_DOWN;
+		if (--token.users === 0 && SetMethods.has(this.#held, token)) {
+			this.#releaseCopy(token);
+			token.values = null;
+		}
+	}
+
+	/**
+	 * At `shutdown()`: end every run still holding work and tear down every copy at once (the stop gap for work that
+	 * never finishes, such as a listener left on an emitter), then let go of the import scopes kept copies held.
+	 * @returns {Promise<void>}
+	 * @private
+	 */
+	async #teardownAllRuns() {
+		for (let index = 0, runs = setToArray(this.#runs); index < runs.length; index++) endRun(runs[index]);
+		this.#teardownRetiring();
+		for (let index = 0, held = setToArray(this.#held); index < held.length; index++) this.#releaseCopy(held[index]);
+		if (this.#copy !== null) this.#copy = null;
+		const kept = [];
+		for (const entry of mapEntries(this.#keptScopes)) listPush(kept, entry[1]);
+		MapMethods.clear(this.#keptScopes);
+		for (let index = 0; index < kept.length; index++) await this.#retireScope(kept[index]);
+	}
+
+	/**
+	 * Remove a copy's handlers namespace from the sharer sets of the forkable handlers in it (see
+	 * {@link Slothlet#shareHandlers}).
+	 * @param {object} ns - The namespace.
+	 * @returns {void}
+	 * @private
+	 */
+	#unshareHandlers(ns) {
+		for (let ofIndex = 0; ofIndex < FORKABLE_HANDLERS.length; ofIndex++) {
+			const handler = ns[FORKABLE_HANDLERS[ofIndex]];
+			if (handler === null || typeof handler !== "object") continue;
+			const sharers = WeakMapMethods.get(this.#sharers, handler);
+			if (sharers === undefined) continue;
+			SetMethods.delete(sharers, ns);
+			if (SetMethods.size(sharers) === 0) WeakMapMethods.delete(this.#sharers, handler);
+		}
 	}
 
 	/**
@@ -2265,11 +2538,8 @@ class Slothlet {
 	 */
 	#copiesFollowTree() {
 		const own = this.#fields ?? this;
-		const live = [];
-		for (let index = 0; index < this.#held.length; index++) {
-			const holder = WeakRefMethods.deref(this.#held[index]);
-			if (holder === undefined) continue;
-			listPush(live, this.#held[index]);
+		for (let heldIndex = 0, held = setToArray(this.#held); heldIndex < held.length; heldIndex++) {
+			const holder = held[heldIndex];
 			if (holder.ns !== undefined) {
 				if (holder.ns !== null) this.#followTree(holder.ns, own.handlers);
 				continue;
@@ -2282,7 +2552,6 @@ class Slothlet {
 				else values[field] = ArrayMethods.includes(this.componentCategories, field) ? { ...own[field] } : own[field];
 			}
 		}
-		this.#held = live;
 	}
 
 	/**
@@ -2313,6 +2582,11 @@ class Slothlet {
 	#keepCurrentCopy() {
 		const token = this.#copy;
 		if (token === null) return;
+		// No run reads through the token any more: there is nothing to keep it for.
+		if (!token.users) {
+			this.#copy = null;
+			return;
+		}
 		this.#installCopyFields();
 		token.values = this.#copyOfFields(this.#fields);
 		this.#shareHandlers(token.values.handlers);
@@ -2331,12 +2605,12 @@ class Slothlet {
 		for (let ofIndex = 0; ofIndex < FORKABLE_HANDLERS.length; ofIndex++) {
 			const handler = ns[FORKABLE_HANDLERS[ofIndex]];
 			if (handler === null || typeof handler !== "object") continue;
-			let list = WeakMapMethods.get(this.#sharers, handler);
-			if (list === undefined) {
-				list = [];
-				WeakMapMethods.set(this.#sharers, handler, list);
+			let sharers = WeakMapMethods.get(this.#sharers, handler);
+			if (sharers === undefined) {
+				sharers = new Set();
+				WeakMapMethods.set(this.#sharers, handler, sharers);
 			}
-			listPush(list, new WeakRef(ns));
+			SetMethods.add(sharers, ns);
 		}
 	}
 
@@ -2349,12 +2623,12 @@ class Slothlet {
 	 * @private
 	 */
 	#keepSharers(handler, slot) {
-		const list = WeakMapMethods.get(this.#sharers, handler);
-		if (list === undefined) return;
+		const sharers = WeakMapMethods.get(this.#sharers, handler);
+		if (sharers === undefined) return;
 		WeakMapMethods.delete(this.#sharers, handler);
-		for (let index = 0; index < list.length; index++) {
-			const ns = WeakRefMethods.deref(list[index]);
-			if (ns === undefined || ns[slot] !== handler) continue;
+		for (let sharerIndex = 0, list = setToArray(sharers); sharerIndex < list.length; sharerIndex++) {
+			const ns = list[sharerIndex];
+			if (ns[slot] !== handler) continue;
 			const fork = handler[FORK]();
 			ns[slot] = fork;
 			WeakMapMethods.set(this.#owners, fork, ns);
@@ -2450,7 +2724,7 @@ class Slothlet {
 	 * @internal
 	 */
 	[INHERIT_COPY](parent) {
-		const record = { __proto__: null, from: parent.from, parent, ns: { ...parent.ns } };
+		const record = newRecord(parent.from, parent, { ...parent.ns }, this);
 		this.#shareHandlers(record.ns);
 		this.#holdCopy(record);
 		return record;
@@ -2528,6 +2802,16 @@ class Slothlet {
 		const replaced = window.replaced;
 		if (!replaced) return;
 		window.replaced = null;
+		await this.#retireScope(replaced);
+	}
+
+	/**
+	 * Let go of what slothlet kept about the files of an ID the instance left (see {@link Slothlet#retireReplacedScope}).
+	 * @param {{instanceID: string, scope: object|null, typescriptCacheDirs: string[]}} replaced - What was left.
+	 * @returns {Promise<void>}
+	 * @private
+	 */
+	async #retireScope(replaced) {
 		const { instanceID } = replaced;
 		// The previous instanceID's private CommonJS helper copies (#518, #534) can no longer be served.
 		forgetInstanceScripts(instanceID);
@@ -3294,6 +3578,10 @@ class Slothlet {
 		// background import() calls can complete and won't cause "Closing rpc while
 		// fetch was pending" errors in Vitest workers.
 		await this._drainInFlightLoads();
+
+		// The stop gap: what runs still hold (work that never finishes, such as a listener left on an emitter) is torn
+		// down now, and the scopes of IDs kept copies loaded from are retired. A restart keeps open runs' copies.
+		if (!this._restarting) await this.#teardownAllRuns();
 
 		// Release this instance's share of the global boundary patches, and unpatch only once nothing holds
 		// them. Unpatching while another instance is live would leave its deferred work unattributed —

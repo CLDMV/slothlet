@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T19:49:33-08:00 (1794973773)
+ *	@Last modified time: 2026-11-17T20:34:14-08:00 (1794976454)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -40,7 +40,7 @@ import { internals as frameworkInternalsInternals } from "#handlers/framework-in
 import { ceilingMembers, combineCeilings, identityCeilings, internals as trustedRootInternals } from "#handlers/trusted-root";
 import { getLanguage, t, translate, internals as translationsInternals } from "#i18n";
 import { assertOptionKeys } from "#helpers/config-schema";
-import { copyForRun, RUN_COPY, trackFlowStore } from "#helpers/flow-stores";
+import { copyForRun, releaseRunWork, RUN_COPY, trackFlowStore } from "#helpers/flow-stores";
 import {
 	ArrayMethods,
 	Arrays,
@@ -5044,6 +5044,8 @@ export class ApiBuilder extends ComponentBase {
 					} finally {
 						// Cleanup child
 						MapMethods.delete(contextManager.instances, childInstanceID);
+						// The callback has settled; the run's copy lives on while work it began is still to finish.
+						if (childStore[RUN_COPY] !== null) releaseRunWork(childStore[RUN_COPY]);
 					}
 				}
 
@@ -5148,6 +5150,8 @@ export class ApiBuilder extends ComponentBase {
 					} finally {
 						// Cleanup: Remove temporary child instance
 						MapMethods.delete(contextManager.instances, childInstanceID);
+						// The callback has settled; the run's copy lives on while work it began is still to finish.
+						if (childStore[RUN_COPY] !== null) releaseRunWork(childStore[RUN_COPY]);
 					}
 				}
 

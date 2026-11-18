@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:28:52-08:00 (1794882532)
+ *	@Last modified time: 2026-11-17T20:34:23-08:00 (1794976463)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -970,9 +970,12 @@ export class Loader extends ComponentBase {
 		const options = { fresh: true, importer: perModule ? filePath : null, mount: perModule ? (moduleID ?? null) : null };
 		// The instance's own files load through the handle the instance holds for its ID; a load under another ID (a
 		// caller driving the loader directly) goes through the cache of an ID no instance holds.
+		// A kept copy's lazy node loads under the ID that copy was loaded under, which the instance still holds.
+		const held =
+			typeof this.slothlet.holdsScope === "function" ? this.slothlet.holdsScope(scopeKey) : scopeKey === this.slothlet.instanceID;
 		const exports =
-			scopeKey === this.slothlet.instanceID && typeof this.slothlet.requireInScope === "function"
-				? this.slothlet.requireInScope(filePath, options)
+			held && typeof this.slothlet.requireInScope === "function"
+				? this.slothlet.requireInScope(filePath, options, scopeKey)
 				: requireInInstance(filePath, scopeKey, options);
 
 		// A callable `then` export (#571): copied onto the namespace below, it makes the namespace thenable,

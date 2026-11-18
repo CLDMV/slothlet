@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:12-08:00 (1794874572)
+ *	@Last modified time: 2026-11-17T20:34:19-08:00 (1794976459)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -31,7 +31,7 @@
 // meaningless in a browser. Gated so node:events/node:async_hooks stay out of the browser static
 // graph (#123); the exported patching entry points no-op when EventEmitter is null.
 import { EventEmitter, AsyncResource } from "#helpers/platform";
-import { pinToCurrentCaller } from "#helpers/caller-pinning";
+import { holdForCurrentFlow, pinToCurrentCaller } from "#helpers/caller-pinning";
 import { openLayer, closeLayer, holdsValue, markLayer } from "#helpers/boundary-patch-layers";
 import { internals as sharedValuesInternals } from "../handlers/shared-values.mjs";
 import {
@@ -224,6 +224,10 @@ function runtime_wrapEventListener(listener) {
 	// emits, whoever wrote the listener, as a function the run calls itself does; one a module's code registers from a
 	// flow it entered by itself runs outside that flow, as that code did.
 	let flow = listenerFlow !== null ? listenerFlow.capture() : undefined;
+	// Registered in a run() / scope(), the listener is the run's work until it is taken off its emitter: counted here on
+	// the live runtime, and through its resource on the async runtime (see runtime_listenerDone).
+	let release = holdForCurrentFlow();
+	let destroyable = resource;
 
 	const epoch = releaseEpoch;
 	// Create wrapped listener that executes within captured context
@@ -246,10 +250,24 @@ function runtime_wrapEventListener(listener) {
 	// Drops the captured context at the last shutdown (#605 review), whether or not the wrapper can be
 	// taken off its emitter: a released wrapper calls its listener directly and needs neither capture.
 	runtime_wrappedListener.____slothletRelease = () => {
+		runtime_wrappedListener.____slothletDone?.();
 		resource = null;
 		bound = null;
 		flow = undefined;
 		runtime_wrappedListener.____slothletResource = null;
+	};
+	// The listener is off its emitter: the work it was for a run is done, once.
+	runtime_wrappedListener.____slothletDone = () => {
+		if (release !== null) {
+			const held = release;
+			release = null;
+			held();
+		}
+		if (destroyable !== null) {
+			const own = destroyable;
+			destroyable = null;
+			own.emitDestroy();
+		}
 	};
 
 	return runtime_wrappedListener;
@@ -362,6 +380,7 @@ function runtime_untrackListener(emitter, event, originalListener) {
 	const wrappedListener = ArrayMethods.pop(wrappers);
 	// Cleanup AsyncResource reference (____slothletResource is always set by runtime_wrapEventListener)
 	wrappedListener.____slothletResource = null;
+	wrappedListener.____slothletDone?.();
 
 	if (wrappers.length === 0) {
 		MapMethods.delete(eventTracking, originalListener);
@@ -421,6 +440,7 @@ function runtime_untrackSpecificWrapper(emitter, event, originalListener, wrappe
 
 	listSplice(wrappers, idx, 1);
 	wrappedListener.____slothletResource = null;
+	wrappedListener.____slothletDone?.();
 
 	if (wrappers.length === 0) {
 		MapMethods.delete(eventTracking, originalListener);
@@ -572,6 +592,7 @@ function runtime_patchOnce() {
 			wrapped.____slothletRelease();
 			runtime_onceWrapper.____slothletResource = null;
 		};
+		runtime_onceWrapper.____slothletDone = wrapped.____slothletDone;
 		runtime_onceWrapper.listener = listener;
 
 		runtime_trackListener(this, event, listener, runtime_onceWrapper);
@@ -654,6 +675,7 @@ function runtime_patchPrependOnceListener() {
 			wrapped.____slothletRelease();
 			runtime_onceWrapper.____slothletResource = null;
 		};
+		runtime_onceWrapper.____slothletDone = wrapped.____slothletDone;
 		runtime_onceWrapper.listener = listener;
 
 		runtime_trackListener(this, event, listener, runtime_onceWrapper);
@@ -723,6 +745,7 @@ function runtime_patchRemoveAllListeners() {
 							const wrappedListener = ofList[ofIndex];
 							// ____slothletResource is always set by runtime_wrapEventListener
 							wrappedListener.____slothletResource = null;
+							wrappedListener.____slothletDone?.();
 						}
 					}
 				}
@@ -736,6 +759,7 @@ function runtime_patchRemoveAllListeners() {
 							const wrappedListener = ofList[ofIndex];
 							// ____slothletResource is always set by runtime_wrapEventListener
 							wrappedListener.____slothletResource = null;
+							wrappedListener.____slothletDone?.();
 						}
 					}
 					MapMethods.delete(emitterTracking, event);

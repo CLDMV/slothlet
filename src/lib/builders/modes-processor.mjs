@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T13:35:15-08:00 (1794951315)
+ *	@Last modified time: 2026-11-17T20:34:14-08:00 (1794976454)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -859,7 +859,7 @@ export class ModesProcessor extends ComponentBase {
 			if (file.synthetic) return { exports: file.exports };
 			const loadedNamespace = await this.slothlet.processors.loader.loadModule(
 				file.path,
-				this.slothlet.instanceID,
+				this.slothlet.loadID ?? this.slothlet.instanceID,
 				moduleID,
 				cacheBust,
 				modes_moduleLoadPaths(file)
@@ -2171,7 +2171,7 @@ export class ModesProcessor extends ComponentBase {
 							const folderPath = levelPath ? `${levelPath}.${subDirName}` : subDirName;
 							const mod = await this.slothlet.processors.loader.loadModule(
 								file.path,
-								this.slothlet.instanceID,
+								this.slothlet.loadID ?? this.slothlet.instanceID,
 								moduleID,
 								cacheBust,
 								filenameMatchesFolder ? [folderPath] : [`${folderPath}.${moduleName}`, folderPath]
@@ -2943,7 +2943,7 @@ export class ModesProcessor extends ComponentBase {
 				if (isGeneric || filenameMatchesFolder) {
 					const mod = await this.slothlet.processors.loader.loadModule(
 						file.path,
-						this.slothlet.instanceID,
+						this.slothlet.loadID ?? this.slothlet.instanceID,
 						moduleID,
 						cacheBust,
 						filenameMatchesFolder ? [apiPath] : [`${apiPath}.${moduleName}`, apiPath]

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T13:32:38-08:00 (1794951158)
+ *	@Last modified time: 2026-11-17T20:34:17-08:00 (1794976457)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -35,7 +35,7 @@
  * pinner; the async manager leaves it unset and its boundaries pass callbacks through untouched.
  */
 import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "#helpers/instance-imports";
-import { ArrayMethods, mapList } from "#helpers/intrinsics";
+import { ArrayMethods, FunctionMethods, mapList } from "#helpers/intrinsics";
 
 /**
  * Binds a callback to the caller active at registration, or `null` when the runtime does not need it.
@@ -138,6 +138,39 @@ export function pinManyForResult(result, callbacks) {
 		if (pinned) return pinned;
 	}
 	return pinManyToCurrentCaller(callbacks);
+}
+
+/**
+ * Count a callback about to be deferred as work of the `run()` / `scope()` the registering code runs in, where the
+ * runtime counts it this way (the live runtime; the async runtime counts it through its async hooks). The run's copy of
+ * the instance lives until all such work has finished (see `holdRunWork` in `helpers/flow-stores`).
+ *
+ * @returns {Function|null} What releases the count, once (a second call does nothing), or null when nothing was
+ *   counted: no run, or a runtime that counts some other way.
+ * @internal
+ */
+export function holdForCurrentFlow() {
+	if (!pinner || typeof pinner.hold !== "function") return null;
+	return pinner.hold();
+}
+
+/**
+ * A callback that releases a count {@link holdForCurrentFlow} took once it has run, for a boundary that calls its
+ * callback once (a timer, a microtask, a Node callback).
+ *
+ * @param {Function} callback - The callback, pinned already.
+ * @param {Function} release - The release.
+ * @returns {Function} The callback, releasing the count after it runs, whether it returns or throws.
+ * @internal
+ */
+export function releaseAfterCall(callback, release) {
+	return function slothlet_releasedAfterCall(...args) {
+		try {
+			return FunctionMethods.apply(callback, this, args);
+		} finally {
+			release();
+		}
+	};
 }
 
 /**
