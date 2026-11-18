@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:28:50-08:00 (1794882530)
+ *	@Last modified time: 2026-11-17T21:05:04-08:00 (1794978304)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -39,9 +39,10 @@
  * and does not bound.
  */
 
-import { pinToCurrentCaller } from "#helpers/caller-pinning";
+import { pinToCurrentCaller, recordOfCurrentFlow } from "#helpers/caller-pinning";
 import { openLayer, closeLayer, holdsValue, markLayer } from "#helpers/boundary-patch-layers";
-import { concatLists, listPush, Objects, Reflect, TypeError } from "#helpers/intrinsics";
+import { holdRunWorkOnce } from "#helpers/flow-stores";
+import { concatLists, listPush, Objects, Reflect, Set, SetMethods, TypeError, WeakMap, WeakMapMethods } from "#helpers/intrinsics";
 import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "#helpers/instance-imports";
 
 /**
@@ -52,12 +53,28 @@ import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "#helpers/ins
 const PATCHED_CONSTRUCTORS = ["MutationObserver", "ResizeObserver", "IntersectionObserver", "PerformanceObserver", "ReportingObserver"];
 
 /**
+ * The observer methods that start and stop an observer's work (see {@link runtime_countObserving}).
+ * @type {string[]}
+ * @private
+ */
+const OBSERVER_METHODS = ["observe", "unobserve", "disconnect"];
+
+/**
  * Patched entry points, holding what {@link disableObserverPatching} needs to restore only the
  * global it actually replaced.
  * @type {Array<{name: string, layer: {active: boolean, below: Function}, wrapper: Function}>}
  * @private
  */
 const patched = [];
+
+/**
+ * Observers constructed in a `run()` / `scope()`, and the run's count of them: an observer is the run's work from its
+ * first `observe()` until it is disconnected (or, where it has `unobserve()`, has nothing left to observe), so the run's
+ * copy of the instance stays while its callback can still be called (see `holdRunWork` in `helpers/flow-stores`).
+ * @type {WeakMap<object, {record: object, release: Function|null, targets: Set<object>|null}>}
+ * @private
+ */
+const observing = new WeakMap();
 
 /**
  * Whether the observer constructors are currently patched.
@@ -97,6 +114,75 @@ function runtime_carryOwnExtras(wrapper, original) {
 }
 
 /**
+ * Give a wrapper's prototype its own `observe()`, `unobserve()` and `disconnect()`, each calling the method the
+ * original prototype has when it is called, then counting an observer constructed in a run as the run's work while it
+ * observes anything (see {@link observing}). The original prototype is untouched; an observer constructed outside every
+ * run is only passed through.
+ *
+ * @param {object} proto - The wrapper's prototype.
+ * @param {object} originalProto - The original constructor's prototype.
+ * @returns {void}
+ * @private
+ */
+function runtime_countObserving(proto, originalProto) {
+	if (!originalProto || typeof originalProto.observe !== "function") return;
+	const tracksTargets = typeof originalProto.unobserve === "function";
+	const methods = {
+		observe(target, ...rest) {
+			const result = Reflect.apply(originalProto.observe, this, concatLists([target], rest));
+			const state = WeakMapMethods.get(observing, this);
+			if (state !== undefined) {
+				if (state.release === null) state.release = holdRunWorkOnce(state.record);
+				if (tracksTargets) SetMethods.add((state.targets ??= new Set()), target);
+			}
+			return result;
+		},
+		unobserve(target, ...rest) {
+			const result = Reflect.apply(originalProto.unobserve, this, concatLists([target], rest));
+			const state = WeakMapMethods.get(observing, this);
+			if (state !== undefined && state.targets !== null) {
+				SetMethods.delete(state.targets, target);
+				if (SetMethods.size(state.targets) === 0) runtime_stopObserving(state);
+			}
+			return result;
+		},
+		disconnect(...args) {
+			const result = Reflect.apply(originalProto.disconnect, this, args);
+			const state = WeakMapMethods.get(observing, this);
+			if (state !== undefined) runtime_stopObserving(state);
+			return result;
+		}
+	};
+	for (let ofIndex = 0, ofList = OBSERVER_METHODS; ofIndex < ofList.length; ofIndex++) {
+		const key = ofList[ofIndex];
+		const below = Objects.getOwnPropertyDescriptor(originalProto, key);
+		if (typeof below?.value !== "function") continue;
+		const method = methods[key];
+		Objects.defineProperty(method, "length", { __proto__: null, value: below.value.length, configurable: true });
+		Objects.defineProperty(proto, key, {
+			__proto__: null,
+			value: method,
+			writable: below.writable,
+			enumerable: below.enumerable,
+			configurable: true
+		});
+	}
+}
+
+/**
+ * An observer stopped observing: release the run's count of it, once.
+ * @param {{release: Function|null, targets: Set<object>|null}} state - The observer's state.
+ * @returns {void}
+ * @private
+ */
+function runtime_stopObserving(state) {
+	state.targets = null;
+	const release = state.release;
+	state.release = null;
+	if (release !== null) release();
+}
+
+/**
  * Replace one observer constructor with a wrapper that pins its callback argument.
  *
  * @param {string} name - Global constructor name (e.g. `"MutationObserver"`).
@@ -121,8 +207,12 @@ function runtime_patchObserverConstructor(name) {
 		// A non-function callback is the platform's problem to reject, and it should see the exact error
 		// it would unpatched — hand it through untouched rather than pinning nothing.
 		// A wrapper disabled under another copy's passes the callback through as well.
-		const pinned = typeof callback === "function" && layer.active ? pinToCurrentCaller(callback) : callback;
-		return Reflect.construct(original, concatLists([pinned], rest), new.target);
+		const pins = typeof callback === "function" && layer.active;
+		const pinned = pins ? pinToCurrentCaller(callback) : callback;
+		const record = pins ? recordOfCurrentFlow() : null;
+		const observer = Reflect.construct(original, concatLists([pinned], rest), new.target);
+		if (record !== null) WeakMapMethods.set(observing, observer, { record, release: null, targets: null });
+		return observer;
 	};
 
 	// A prototype shared verbatim with `original` would leave `instance.constructor` pointing at the
@@ -132,6 +222,7 @@ function runtime_patchObserverConstructor(name) {
 	wrapper.prototype = Objects.create(original.prototype, {
 		constructor: { __proto__: null, value: wrapper, writable: true, configurable: true }
 	});
+	runtime_countObserving(wrapper.prototype, original.prototype);
 	runtime_carryOwnExtras(wrapper, original);
 	markLayer(wrapper, layer);
 	globalThis[name] = wrapper;

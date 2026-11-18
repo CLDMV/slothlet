@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T20:43:14-08:00 (1794976994)
+ *	@Last modified time: 2026-11-17T21:04:56-08:00 (1794978296)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -2052,6 +2052,14 @@ export class LiveContextManager {
 			const active = this.tryGetContext();
 			const store = active ? this.#flowStoreOf(active) : active;
 			return store ? holdRunWorkOnce(store[RUN_COPY]) : null;
+		};
+		// The run record of the run() / scope() running now, for work that starts later than it is registered (an
+		// observer counts from its first observe(), see holdForCurrentFlow in helpers/caller-pinning).
+		pinOne.record = () => {
+			if (this.#nothingToPin()) return null;
+			const active = this.tryGetContext();
+			const store = active ? this.#flowStoreOf(active) : active;
+			return store ? (store[RUN_COPY] ?? null) : null;
 		};
 		pinOne.many = pinMany;
 		pinOne.forResult = forResult;

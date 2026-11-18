@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T20:34:17-08:00 (1794976457)
+ *	@Last modified time: 2026-11-17T21:04:59-08:00 (1794978299)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -152,6 +152,19 @@ export function pinManyForResult(result, callbacks) {
 export function holdForCurrentFlow() {
 	if (!pinner || typeof pinner.hold !== "function") return null;
 	return pinner.hold();
+}
+
+/**
+ * The run record of the `run()` / `scope()` the registering code runs in, for work that begins later than its callback
+ * is registered (an observer is work from its first `observe()` until it is disconnected): count it with `holdRunWork`
+ * in `helpers/flow-stores` once it begins. Only where the runtime counts work this way (the live runtime).
+ *
+ * @returns {object|null} The record, or null: no run, or a runtime that counts some other way.
+ * @internal
+ */
+export function recordOfCurrentFlow() {
+	if (!pinner || typeof pinner.record !== "function") return null;
+	return pinner.record();
 }
 
 /**

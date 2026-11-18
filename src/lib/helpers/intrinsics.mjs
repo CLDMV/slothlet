@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T13:35:20-08:00 (1794951320)
+ *	@Last modified time: 2026-11-17T21:05:03-08:00 (1794978303)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -1116,6 +1116,17 @@ export const WeakMapMethods = methodsOf(globalThis.WeakMap.prototype);
  * WeakSetMethods.has(seen, value);
  */
 export const WeakSetMethods = methodsOf(globalThis.WeakSet.prototype);
+
+/**
+ * The methods of `EventTarget.prototype`, as they were when slothlet loaded, each taking the target first: below
+ * slothlet's own listener patch. Empty where the host has no `EventTarget`.
+ * @type {object}
+ * @internal
+ * @example
+ * import { EventTargetMethods } from "#helpers/intrinsics";
+ * EventTargetMethods.addEventListener(signal, "abort", onAbort, { once: true });
+ */
+export const EventTargetMethods = methodsOf(globalThis.EventTarget?.prototype);
 
 /**
  * The methods of `WeakRef.prototype` (`deref`), as they were when slothlet loaded, each taking the reference first.

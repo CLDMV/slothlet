@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T20:34:22-08:00 (1794976462)
+ *	@Last modified time: 2026-11-17T21:05:06-08:00 (1794978306)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -39,7 +39,21 @@
 import { holdForCurrentFlow, pinToCurrentCaller, releaseAfterCall } from "#helpers/caller-pinning";
 import { checkCapability } from "#helpers/capability-context";
 import { openLayer, closeLayer, holdsValue, markLayer } from "#helpers/boundary-patch-layers";
-import { concatLists, listPush, Map, MapMethods, Objects, Reflect, WeakMap, WeakMapMethods } from "#helpers/intrinsics";
+import {
+	concatLists,
+	EventTargetMethods,
+	listPush,
+	Map,
+	MapMethods,
+	Objects,
+	Processes,
+	Reflect,
+	Set,
+	SetMethods,
+	Symbol,
+	WeakMap,
+	WeakMapMethods
+} from "#helpers/intrinsics";
 import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "#helpers/instance-imports";
 
 /**
@@ -60,6 +74,36 @@ const patched = [];
  * @private
  */
 let isPatchingEnabled = false;
+
+/**
+ * A Node builtin, when the platform has it.
+ * @param {string} id - The builtin's id.
+ * @returns {object|null} Its exports, or null.
+ * @private
+ */
+function runtime_builtin(id) {
+	try {
+		return Processes.getBuiltinModule?.(id) ?? null;
+	} catch {
+		// A platform that refuses the lookup has no such builtin to patch.
+		/* v8 ignore next */
+		return null;
+	}
+}
+
+/**
+ * The builtin `node:timers`, taken as slothlet loads; null where the platform has none (a browser).
+ * @type {object|null}
+ * @private
+ */
+const TIMERS = runtime_builtin("node:timers");
+
+/**
+ * `module.syncBuiltinESMExports`, taken as slothlet loads. Undefined where the platform has no such builtin.
+ * @type {Function|undefined}
+ * @private
+ */
+const SYNC_BUILTIN_ESM_EXPORTS = runtime_builtin("node:module")?.syncBuiltinESMExports;
 
 /**
  * Which handles' work each clearing function ends, by the family of schedulers that hand those handles out: a timer's
@@ -127,6 +171,33 @@ function runtime_takeHandle(family, handle) {
 }
 
 /**
+ * Release a `scheduler.postTask()` callback's work when its signal aborts the task, which then never runs. Reads the
+ * signal after the platform accepted the call, and listens with `EventTarget`'s own method, below slothlet's patch.
+ * @param {*} options - The options the task was posted with.
+ * @param {Function} release - The release.
+ * @returns {Function|null} What stops listening, once the task has run; null when there is nothing to listen to.
+ * @private
+ */
+function runtime_releaseOnAbort(options, release) {
+	if (options === null || typeof options !== "object" || typeof EventTargetMethods.addEventListener !== "function") return null;
+	try {
+		const signal = options.signal;
+		if (signal === null || typeof signal !== "object") return null;
+		// Aborted already: the platform refused the task, and its callback never runs.
+		if (signal.aborted === true) {
+			release();
+			return null;
+		}
+		const onAbort = () => release();
+		EventTargetMethods.addEventListener(signal, "abort", onAbort, { __proto__: null, once: true });
+		return () => EventTargetMethods.removeEventListener(signal, "abort", onAbort);
+	} catch {
+		// Not an EventTarget: the platform took it for something else, and the task runs.
+		return null;
+	}
+}
+
+/**
  * Copy a scheduler's own extras onto its wrapper.
  *
  * Node hangs promisify support off `setTimeout`/`setImmediate` as a well-known symbol, and callers
@@ -178,6 +249,8 @@ function runtime_patchScheduler(host, name) {
 	// A callback scheduled in a run() / scope() is the run's work until it has run (an interval: until it is cleared).
 	const family = FAMILY[name];
 	const repeats = name === "setInterval";
+	// A task posted with a signal that aborts it never runs: its work ends at the abort.
+	const abortable = name === "postTask";
 	const wrapper = function (callback, ...rest) {
 		if (runsStrings && layer.active && callback != null && typeof callback !== "function") checkCapability("code", name);
 		// Non-function callbacks (legacy string-of-code timers) have no identity to carry, and a wrapper
@@ -186,10 +259,12 @@ function runtime_patchScheduler(host, name) {
 		const release = holdForCurrentFlow();
 		if (release === null) return Reflect.apply(original.call, original, concatLists([host, pinToCurrentCaller(callback)], rest));
 		let handle;
+		let stopListening = null;
 		let pinned = pinToCurrentCaller(callback);
 		if (!repeats) {
 			pinned = releaseAfterCall(pinned, () => {
 				if (family !== undefined) runtime_takeHandle(family, handle);
+				if (stopListening !== null) stopListening();
 				release();
 			});
 		}
@@ -199,7 +274,10 @@ function runtime_patchScheduler(host, name) {
 			release();
 			throw error;
 		}
-		if (family !== undefined) runtime_holdHandle(family, handle, release);
+		if (family !== undefined) {
+			runtime_holdHandle(family, handle, release);
+			runtime_patchHandleType(family, handle);
+		} else if (abortable) stopListening = runtime_releaseOnAbort(rest[0], release);
 		return handle;
 	};
 
@@ -225,6 +303,7 @@ function runtime_patchClear(host, name) {
 	const layer = openLayer(installed);
 	const original = layer.below;
 	const family = FAMILY[name];
+	// The same function on the builtin `node:timers` as on the global (Node): one wrapper of its own on each.
 	// Not gated on the layer: work a run held while this copy was active is still released when it is cleared.
 	const wrapper = function (handle, ...rest) {
 		const result = Reflect.apply(original.call, original, concatLists([host, handle], rest));
@@ -236,6 +315,70 @@ function runtime_patchClear(host, name) {
 	markLayer(wrapper, layer);
 	host[name] = wrapper;
 	listPush(patched, { host, name, layer, wrapper });
+}
+
+/**
+ * Replace one method of a handle's prototype that clears the handle (Node's `Timeout.prototype.close()` and
+ * `[Symbol.dispose]()`, `Immediate.prototype[Symbol.dispose]()`) with a wrapper that, after clearing, releases the run's
+ * count of the work behind the handle. Node clears through its own `clearTimeout` / `clearImmediate` there, which no
+ * patch of the exported functions reaches. Everything else is the original's.
+ *
+ * @param {object} proto - The prototype.
+ * @param {string|symbol} key - The method's key.
+ * @param {string} family - The family of the handles it clears.
+ * @returns {void}
+ * @private
+ */
+function runtime_patchHandleMethod(proto, key, family) {
+	const descriptor = Objects.getOwnPropertyDescriptor(proto, key);
+	if (typeof descriptor?.value !== "function" || descriptor.writable !== true) return;
+	const layer = openLayer(descriptor.value);
+	const original = layer.below;
+	const wrapper = {
+		[key](...args) {
+			const result = Reflect.apply(original, this, args);
+			const release = runtime_takeHandle(family, this);
+			if (release !== undefined) release();
+			return result;
+		}
+	}[key];
+	runtime_carryOwnExtras(wrapper, original);
+	markLayer(wrapper, layer);
+	proto[key] = wrapper;
+	listPush(patched, { host: proto, name: key, layer, wrapper });
+}
+
+/**
+ * The handle prototypes whose clearing methods are patched (see {@link runtime_patchHandleType}), while the patch is on.
+ * @type {Set<object>}
+ * @private
+ */
+const patchedHandleTypes = new Set();
+
+/**
+ * The clearing methods of each family's handle prototype (see {@link runtime_patchHandleMethod}).
+ * @type {Readonly<Record<string, ReadonlyArray<string|symbol>>>}
+ * @private
+ */
+const HANDLE_METHODS = Objects.freeze({ __proto__: null, timer: ["close", Symbol.dispose], immediate: [Symbol.dispose] });
+
+/**
+ * Patch the clearing methods of a handle's prototype the first time a handle of that type is counted as a run's work:
+ * the prototype is only known from a handle (Node does not export `Timeout` or `Immediate`). A handle that is a number
+ * or a plain object (a browser's, a fake timer's) has no such methods, and nothing is patched.
+ * @param {string} family - The handle's family.
+ * @param {*} handle - The handle.
+ * @returns {void}
+ * @private
+ */
+function runtime_patchHandleType(family, handle) {
+	if (handle === null || typeof handle !== "object") return;
+	const proto = Objects.getPrototypeOf(handle);
+	if (proto === null || SetMethods.has(patchedHandleTypes, proto)) return;
+	SetMethods.add(patchedHandleTypes, proto);
+	const keys = HANDLE_METHODS[family];
+	if (keys === undefined) return;
+	for (let index = 0; index < keys.length; index++) runtime_patchHandleMethod(proto, keys[index], family);
 }
 
 /**
@@ -266,6 +409,14 @@ function enableSchedulerPatching() {
 	runtime_patchClear(globalThis, "clearImmediate");
 	runtime_patchClear(globalThis, "cancelAnimationFrame");
 	runtime_patchClear(globalThis, "cancelIdleCallback");
+	// A timer cleared through the functions `node:timers` exports ends the work as the global ones do. ES modules read a
+	// builtin's exports through bindings Node refreshes on request.
+	if (TIMERS !== null) {
+		runtime_patchClear(TIMERS, "clearTimeout");
+		runtime_patchClear(TIMERS, "clearInterval");
+		runtime_patchClear(TIMERS, "clearImmediate");
+		SYNC_BUILTIN_ESM_EXPORTS?.();
+	}
 
 	isPatchingEnabled = true;
 }
@@ -318,6 +469,8 @@ function disableSchedulerPatching() {
 	}
 
 	patched.length = 0;
+	SetMethods.clear(patchedHandleTypes);
+	if (TIMERS !== null) SYNC_BUILTIN_ESM_EXPORTS?.();
 	isPatchingEnabled = false;
 }
 
