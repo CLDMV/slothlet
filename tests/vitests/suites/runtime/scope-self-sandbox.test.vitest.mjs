@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-18T05:37:10-08:00 (1795009030)
+ *	@Last modified time: 2026-11-18T06:51:44-08:00 (1795013504)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -107,7 +107,7 @@ describe(".run()/.scope() self sandbox (full isolation)", () => {
 		// Counterpart of the full-isolation live test: in partial (default) isolation `ctx.self` IS the
 		// global boundApi, so the copy-on-write guard is false and the set trap falls through to the
 		// apiManager path — the write persists to the live instance.
-		api = await slothlet({ base: DIR, mode: "eager", runtime: "live" });
+		api = await slothlet({ base: DIR, mode: "eager", runtime: "live", scope: { isolation: "partial" } });
 
 		await api.slothlet.context.run({}, async () => {
 			await api.owner.writeOutside("persisted-live");

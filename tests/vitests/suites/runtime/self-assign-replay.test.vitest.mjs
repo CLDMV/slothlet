@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:22-07:00 (1791090922)
+ *	@Last modified time: 2026-11-18T06:51:45-08:00 (1795013505)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -37,7 +37,7 @@ describe("self.X = ... does not survive a reload", () => {
 	});
 
 	it("a runtime self.X = … primitive write is gone after api.slothlet.reload()", async () => {
-		api = await slothlet({ base: "./api_tests/api_test", mode: "eager" });
+		api = await slothlet({ base: "./api_tests/api_test", mode: "eager", scope: { isolation: "partial" } });
 
 		await api.slothlet.context.run({}, () => {
 			self.runtimeKey = "written-at-runtime";
@@ -52,7 +52,7 @@ describe("self.X = ... does not survive a reload", () => {
 	});
 
 	it("a runtime self.X = … object write is gone after api.slothlet.reload()", async () => {
-		api = await slothlet({ base: "./api_tests/api_test", mode: "eager" });
+		api = await slothlet({ base: "./api_tests/api_test", mode: "eager", scope: { isolation: "partial" } });
 
 		await api.slothlet.context.run({}, () => {
 			self.runtimeObj = { count: 42 };
@@ -65,7 +65,7 @@ describe("self.X = ... does not survive a reload", () => {
 	});
 
 	it("multiple runtime self.X = … writes are all gone after a full reload", async () => {
-		api = await slothlet({ base: "./api_tests/api_test", mode: "eager" });
+		api = await slothlet({ base: "./api_tests/api_test", mode: "eager", scope: { isolation: "partial" } });
 
 		await api.slothlet.context.run({}, () => {
 			self.first = 1;

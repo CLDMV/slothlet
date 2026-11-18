@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:22-07:00 (1791090922)
+ *	@Last modified time: 2026-11-18T06:51:45-08:00 (1795013505)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -59,7 +59,7 @@ describe("self.X = ... (Stage 1: persistence)", () => {
 	});
 
 	it("makes assigned values visible from the outside via `api.*` too", async () => {
-		api = await slothlet({ base: "./api_tests/api_test", mode: "eager" });
+		api = await slothlet({ base: "./api_tests/api_test", mode: "eager", scope: { isolation: "partial" } });
 
 		await api.slothlet.context.run({}, () => {
 			self.outerView = 42;
@@ -69,7 +69,7 @@ describe("self.X = ... (Stage 1: persistence)", () => {
 	});
 
 	it("persists self.X = … in live runtime mode (covers runtime-livebindings)", async () => {
-		api = await slothlet({ base: "./api_tests/api_test", mode: "eager", runtime: "live" });
+		api = await slothlet({ base: "./api_tests/api_test", mode: "eager", runtime: "live", scope: { isolation: "partial" } });
 
 		await api.slothlet.context.run({}, () => {
 			self.liveModeValue = "from-live";

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:31:00-08:00 (1794882660)
+ *	@Last modified time: 2026-11-18T06:51:45-08:00 (1795013505)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -629,7 +629,7 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 		["run()", (callback) => api.slothlet.context.run({ request: "r1" }, callback)],
 		["scope()", (callback) => api.slothlet.context.scope({ context: { request: "r1" }, fn: callback })]
 	])("lets the host write a nested node through self inside %s", async (_name, enter) => {
-		await mountModules();
+		await mountModules({ scope: { isolation: "partial" } });
 		await enter(() => {
 			self.hostTop = "top";
 			self.callee.ops.hostNested = "nested";
