@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-18T06:11:44-08:00 (1795011104)
+ *	@Last modified time: 2026-11-18T06:49:54-08:00 (1795013394)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -40,7 +40,7 @@ import { internals as frameworkInternalsInternals } from "#handlers/framework-in
 import { ceilingMembers, combineCeilings, identityCeilings, internals as trustedRootInternals } from "#handlers/trusted-root";
 import { getLanguage, t, translate, internals as translationsInternals } from "#i18n";
 import { assertOptionKeys } from "#helpers/config-schema";
-import { copyForRun, recordOperation, releaseRunWork, RUN_COPY, trackFlowStore, treeWrite } from "#helpers/flow-stores";
+import { copyForRun, recordOperation, releaseRunWork, RUN_COPY, RUN_SELF, trackFlowStore, treeWrite } from "#helpers/flow-stores";
 import {
 	ArrayMethods,
 	Arrays,
@@ -48,11 +48,11 @@ import {
 	copyList,
 	filterList,
 	FunctionMethods,
+	Functions,
 	listPush,
 	listUnshift,
 	Map,
 	mapEntriesToArray,
-	mapKeys,
 	mapKeysToArray,
 	mapList,
 	MapMethods,
@@ -88,8 +88,13 @@ const {
 	runtime_selfView,
 	runtime_markCallerLocked,
 	runtime_registerFrameworkMember,
-	runtime_registerFrameworkMemberCopy,
 	runtime_selfFrameworkView,
+	runtime_runWrite,
+	runtime_isApiNode,
+	runtime_nodeWrapperOf,
+	runtime_rootGate,
+	runtime_enforceReadGate,
+	runtime_registerRunView,
 	runtime_frameworkViewCaller,
 	runtime_codeLabel,
 	runtime_inheritsBuiltin,
@@ -448,153 +453,79 @@ function handlerMethod(slothlet, key, method) {
 }
 
 /**
- * Build a recursive copy-on-write `self` view for a `.run()` / `.scope()`
- * child store.
- *
- * @description
- * `.run()`/`.scope()` are a sandbox: any mutation of `self` inside the callback
- * must not leak to the live instance, and changes the instance makes while the
- * scope runs must not reach it. This proxy reads **through** to the parent
- * `self` once per member: the first read of a member (and the first `in` /
- * key listing) is kept for the scope's lifetime, so a later change to the live
- * tree at that member does not show in the scope. **Writes** go to a per-scope
- * overlay `Map`. Object-valued children are wrapped in their own COW view on
- * **first** access and **memoized**: repeated `self.X` reads return the same
- * view, so an in-scope deep-path write (`self.X.Y.Z = …`) is read back
- * consistently — and top-level `self.X = …` is captured too. The whole COW tree
- * is discarded when the child store is discarded on scope exit, so `.run()` /
- * `.scope()` hold no `self` mutations. No tree clone — only the accessed subtree
- * is wrapped, lazily. A member the scope has not read yet is read from the live
- * tree when it first is: the api tree itself is not copied at the scope's start.
- *
- * Functions and primitives pass through unwrapped; identity of a COW-wrapped
- * object differs from the underlying object (acceptable — slothlet API calls
- * go through property access, not identity comparison).
- *
- * @param {object} parentSelf - Parent scope's `self` (the `boundApi`, or an outer COW view for nested scopes).
- * @returns {Proxy} A copy-on-write proxy over `parentSelf`.
+ * Separates the segments of an api path in the keys a run's `self` keeps its writes under (a segment may hold a dot).
+ * @type {string}
+ * @private
  */
-function makeCopyOnWriteSelf(parentSelf) {
-	const overlay = new Map(); // prop → value written inside this scope
-	const childViews = new Map(); // prop → memoized child COW view (read-through objects)
-	const taken = new Map(); // prop → the live value the scope first read there
-	const present = new Map(); // prop → whether the live `self` had it when the scope first asked
-	let liveKeys = null; // the live `self`'s own keys when the scope first listed them
-	/**
-	 * What the live `self` holds at `prop` as the scope first read it.
-	 * @param {string|symbol} prop - Member read.
-	 * @returns {*} The value.
-	 */
-	const first = (prop) => {
-		if (MapMethods.has(taken, prop)) return MapMethods.get(taken, prop);
-		const real = parentSelf[prop];
-		MapMethods.set(taken, prop, real);
-		return real;
-	};
-	/**
-	 * What the scope reads at `prop`: its own write, or the live value as it first read it, an object child as its
-	 * memoized COW view.
-	 * @param {string|symbol} prop - Member read.
-	 * @returns {*} The value.
-	 */
-	const read = (prop) => {
-		if (MapMethods.has(overlay, prop)) return MapMethods.get(overlay, prop);
-		const real = first(prop);
-		// Wrap object children in their own COW so deep-path writes are
-		// captured. Memoized so `self.X` returns the same view each time
-		// and in-scope writes to it are read back consistently.
-		if (real !== null && typeof real === "object") {
-			let view = MapMethods.get(childViews, prop);
-			if (view === undefined) {
-				// The framework's namespace read in the scope is still the framework's: module code is handed its
-				// view of it, with the limits that view keeps, over the scope's copy (#625).
-				view = runtime_registerFrameworkMemberCopy(makeCopyOnWriteSelf(real), real);
-				MapMethods.set(childViews, prop, view);
-			}
-			return view;
-		}
-		return real;
-	};
-	// A function root's view is a function too (#803): called or constructed, it calls the root as `self` does outside
-	// the scope, and it reports the root's prototype. The target is a bound function, as the api root's own is.
-	const callable = typeof parentSelf === "function";
-	const callTraps = callable
-		? {
-				apply: (_t, thisArg, args) => Reflect.apply(parentSelf, thisArg, args),
-				construct: (_t, args) => Reflect.construct(parentSelf, args),
-				getPrototypeOf: () => Reflect.getPrototypeOf(parentSelf)
-			}
-		: {};
-	return markSlothletProxy(
-		new NativeProxy(copyOnWriteShell(callable ? FunctionMethods.bind(function () {}) : {}, parentSelf), {
+const RUN_PATH_SEPARATOR = "\u0001";
+
+/**
+ * The framework's own members of `self`, which a run's `self` hands out as the instance's `self` does.
+ * @type {Set<string>}
+ * @private
+ */
+const RUN_FRAMEWORK_ROOTS = setFrom(["slothlet", "shutdown", "destroy"]);
+
+/**
+ * The record of the run whose view of a node is passing a change on to the view it reads through (an outer run's view),
+ * while it does: the change is kept by the inner run (see {@link makeRunSelf}).
+ * @type {function(object): boolean|null}
+ * @private
+ */
+let delegatedRunSink = null;
+
+/**
+ * What each view a run's `self` hands out reads through: a function read through a view and called with the view as
+ * its receiver runs on that node, as it would on the node itself.
+ * @type {WeakMap<object, *>}
+ * @private
+ */
+const RUN_VIEW_REALS = new WeakMap();
+
+/**
+ * The run behind each view a run's `self` hands out.
+ * @type {WeakMap<object, object>}
+ * @private
+ */
+const RUN_OF_VIEW = new WeakMap();
+
+/**
+ * Functions read through a run's views, as handed out (see {@link runViewFunction}).
+ * @type {WeakMap<Function, Function>}
+ * @private
+ */
+const RUN_VIEW_FUNCTIONS = new WeakMap();
+
+/**
+ * A function read through a run's view, as handed out: called with one of the run's views as its receiver, it runs on
+ * the node the view reads through, as it would when read off that node.
+ * @param {Function} fn - The function.
+ * @returns {Function} The function as handed out.
+ * @private
+ */
+function runViewFunction(fn) {
+	let handed = WeakMapMethods.get(RUN_VIEW_FUNCTIONS, fn);
+	if (handed === undefined) {
+		handed = new NativeProxy(fn, {
 			__proto__: null,
-			...callTraps,
-			get(_t, prop) {
-				return read(prop);
-			},
-			set(_t, prop, value) {
-				MapMethods.set(overlay, prop, value);
-				MapMethods.delete(childViews, prop);
-				return true;
-			},
-			has(_t, prop) {
-				if (MapMethods.has(overlay, prop)) return true;
-				if (!MapMethods.has(present, prop)) MapMethods.set(present, prop, prop in parentSelf);
-				return MapMethods.get(present, prop);
-			},
-			// `delete self.X` / `Object.defineProperty(self, …)` inside the scope reach here through the runtime
-			// `self` (#625): the overlay takes them as it takes a write. A deletion hides nothing of the live tree
-			// (reads still go through to it), as before. An accessor is no value the overlay can hold: it is refused.
-			deleteProperty(_t, prop) {
-				MapMethods.delete(overlay, prop);
-				MapMethods.delete(childViews, prop);
-				return true;
-			},
-			defineProperty(_t, prop, descriptor) {
-				if (!("value" in descriptor)) return false;
-				MapMethods.set(overlay, prop, descriptor.value);
-				MapMethods.delete(childViews, prop);
-				return true;
-			},
-			ownKeys() {
-				liveKeys ??= Reflect.ownKeys(parentSelf);
-				const keys = setFrom(liveKeys);
-				for (const k of mapKeys(overlay)) SetMethods.add(keys, k);
-				return setToArray(keys);
-			},
-			getOwnPropertyDescriptor(_t, prop) {
-				if (MapMethods.has(overlay, prop)) {
-					return { __proto__: null, value: MapMethods.get(overlay, prop), writable: true, enumerable: true, configurable: true };
-				}
-				const desc = Reflect.getOwnPropertyDescriptor(parentSelf, prop);
-				// Always configurable — the proxy target is an empty object, so a
-				// non-configurable descriptor would violate proxy invariants. A data member's value is what the scope
-				// reads there, its COW view for an object, so a write through the descriptor stays in the scope.
-				if (!desc) return undefined;
-				return "value" in desc
-					? { __proto__: null, ...desc, value: read(prop), configurable: true }
-					: { __proto__: null, ...desc, configurable: true };
-			},
-			// The proxy target is an empty object that holds none of what the view lists: closed, it could no longer
-			// answer for any member, so the scope's view of `self` and of each node in it stays open (#625).
-			preventExtensions() {
-				return false;
-			}
-		})
-	);
+			apply: (target, thisArg, args) =>
+				Reflect.apply(target, WeakMapMethods.has(RUN_VIEW_REALS, thisArg) ? WeakMapMethods.get(RUN_VIEW_REALS, thisArg) : thisArg, args)
+		});
+		WeakMapMethods.set(RUN_VIEW_FUNCTIONS, fn, handed);
+	}
+	return handed;
 }
 
 /**
- * The target of a scope's copy-on-write view of `self` (#803), holding the hook Node's `util.inspect` reads: Node shows a
- * Proxy's target rather than what its traps report, so the hook hands it the `self` the view reads through, which shows
- * what the reading code may read, as `self` shows outside the scope. What the scope wrote to its own overlay is not
- * shown.
+ * The target of a view a full-isolation run's `self` hands out (#803), holding the hook Node's `util.inspect` reads:
+ * Node shows a Proxy's target rather than what its traps report, so the hook hands it what the view reads through, which
+ * shows what the reading code may read, as `self` shows outside the run. What the run wrote is not shown.
  * @param {object|Function} shell - The empty target.
- * @param {object} parentSelf - The `self` the view reads through.
+ * @param {object} parentSelf - What the view reads through.
  * @returns {object|Function} The target.
  * @private
  */
-function copyOnWriteShell(shell, parentSelf) {
+function runViewShell(shell, parentSelf) {
 	Objects.defineProperty(shell, INSPECT_KEY, {
 		__proto__: null,
 		value: function inspectScopeSelf() {
@@ -605,6 +536,420 @@ function copyOnWriteShell(shell, parentSelf) {
 		configurable: true
 	});
 	return shell;
+}
+
+/**
+ * Build a full-isolation run's `self` (`run()` / `scope()` with `isolation: "full"`): the run's own api, as the run sees
+ * it, before and after the run has a tree of its own.
+ *
+ * @description
+ * Phase 4 gives a run a tree of its own on its first change to the tree (`api.slothlet.api.add()` and the like). Until
+ * then the run reads the tree it started on, which it shares, and a write through `self` must not reach that tree. This
+ * `self` reads and writes through the ordinary path, with one difference:
+ *
+ * - **Reads** go to the node the reader is handed, every time, through the reader's own view of it and its read gate.
+ *   Nothing is kept from one read to the next, so no reader is answered from another reader's read. What the run wrote
+ *   at a member is read in place of the member, after the read rules for the member it stands in for have passed.
+ *   Every node read is handed out as a view of this `self`, a lazy node's function included, so a write made below it is
+ *   the run's too. Data, built-in objects (a `Map`, a `Buffer`, a `Date`) and other values are handed out as read.
+ * - **Writes**, definitions and deletions are made through the node they reach, whose own checks (key validation,
+ *   ownership, permission write rules, the writer as the runtime attributes it) decide them as they do any write. A
+ *   change the node lets through is kept in the run's record (see `runtime_runWrite` in `handlers/unified-wrapper`)
+ *   instead of being made on the node.
+ * - Once the run has a tree of its own, what it kept is written into that tree (see {@link Slothlet#ownTree} and
+ *   `ApiManager#carryRunWrites`), and from then on this `self` reads and writes the run's tree as the instance's `self`
+ *   does: `api` and `self` agree in the run.
+ *
+ * Closing a view (`Object.preventExtensions`, `seal`, `freeze`) closes the run's view of the node: its members as the
+ * run reads them then are fixed on it. The node itself stays open, and a run that later gets a tree of its own does
+ * not close that tree's node. A prototype change through the view is refused until the run has a tree of its own.
+ *
+ * @param {object} slothlet - The instance.
+ * @param {object} parentSelf - The `self` the run starts from: the instance's bound api, or an outer run's `self`.
+ * @param {object|null} record - The run's copy record (see `copyForRun` in `helpers/flow-stores`), or null.
+ * @returns {object|Function} The run's `self`.
+ * @private
+ */
+function makeRunSelf(slothlet, parentSelf, record) {
+	const run = {
+		// parent path key → (member → the change the run made there)
+		entries: new Map(),
+		// the changes, in the order made
+		log: [],
+		// path key → names below it that the run's changes reach (namespaces only the run wrote)
+		below: new Map(),
+		// path key → (what a view reads through → the view)
+		views: new Map(),
+		// path key → the view of a namespace only the run wrote
+		synthetic: new Map(),
+		// nodes the run wrote: a change below one is the run's own
+		local: new WeakSet(),
+		forked: false,
+		parent: WeakMapMethods.get(RUN_OF_VIEW, parentSelf) ?? null
+	};
+	const keyOf = (parts) => ArrayMethods.join(parts, RUN_PATH_SEPARATOR);
+	/**
+	 * Keep a change the run made.
+	 * @param {string[]} parts - The path of the node changed.
+	 * @param {string|symbol} prop - The member.
+	 * @param {object} change - The change as the node's trap handed it.
+	 * @returns {boolean} True.
+	 */
+	const keep = (parts, prop, change) => {
+		if (change.parts) {
+			parts = copyList(change.parts, 0, change.parts.length - 1);
+			prop = change.parts[change.parts.length - 1];
+		}
+		const key = keyOf(parts);
+		let members = MapMethods.get(run.entries, key);
+		if (members === undefined) {
+			members = new Map();
+			MapMethods.set(run.entries, key, members);
+		}
+		const entry = { __proto__: null, ...change, parts, prop };
+		MapMethods.set(members, prop, entry);
+		listPush(run.log, entry);
+		for (let index = 0; index < parts.length; index++) {
+			const above = keyOf(copyList(parts, 0, index));
+			let names = MapMethods.get(run.below, above);
+			if (names === undefined) {
+				names = new Set();
+				MapMethods.set(run.below, above, names);
+			}
+			SetMethods.add(names, parts[index]);
+		}
+		const value = change.op === "define" ? change.descriptor.value : change.value;
+		if (value !== null && (typeof value === "object" || typeof value === "function")) WeakSetMethods.add(run.local, value);
+		return true;
+	};
+	/**
+	 * The store of the code running now, for the writers a write through the root is made as.
+	 * @returns {object|null} The store.
+	 */
+	const runningStore = () =>
+		slothlet.contextManager?.tryGetContext?.(slothlet.instanceID) ?? slothlet.contextManager?.tryGetContext?.() ?? null;
+
+	/**
+	 * The view of the node at `parts` that reads through `real`.
+	 * @param {string[]} parts - The node's path.
+	 * @param {*} real - What the view reads through: the reader's node, an outer run's view, or undefined for a
+	 *   namespace only the run wrote.
+	 * @param {boolean} local - Whether the node is one the run wrote (or lies below one).
+	 * @returns {object|Function} The view.
+	 */
+	const viewAt = (parts, real, local) => {
+		const key = keyOf(parts);
+		if (real === undefined) {
+			const made = MapMethods.get(run.synthetic, key);
+			if (made !== undefined) return made;
+		} else {
+			const byReal = MapMethods.get(run.views, key);
+			const made = byReal === undefined ? undefined : WeakMapMethods.get(byReal, real);
+			if (made !== undefined) return made;
+		}
+		const view = makeView(parts, real, local);
+		if (real === undefined) MapMethods.set(run.synthetic, key, view);
+		else {
+			let byReal = MapMethods.get(run.views, key);
+			if (byReal === undefined) {
+				byReal = new WeakMap();
+				MapMethods.set(run.views, key, byReal);
+			}
+			WeakMapMethods.set(byReal, real, view);
+		}
+		return view;
+	};
+
+	/**
+	 * Make a view (see {@link viewAt}).
+	 * @param {string[]} parts - The node's path.
+	 * @param {*} real - What it reads through.
+	 * @param {boolean} local - Whether the node is the run's own.
+	 * @returns {object|Function} The view.
+	 */
+	const makeView = (parts, real, local) => {
+		const key = keyOf(parts);
+		const atRoot = parts.length === 0 && real === parentSelf;
+		const atInstanceRoot = atRoot && !WeakMapMethods.has(RUN_OF_VIEW, parentSelf);
+		const callable = typeof real === "function";
+		const shell = runViewShell(callable ? FunctionMethods.bind(function () {}) : {}, real ?? {});
+		const own = (prop) => {
+			const members = MapMethods.get(run.entries, key);
+			return members === undefined ? undefined : MapMethods.get(members, prop);
+		};
+		const below = (prop) => {
+			const names = typeof prop === "string" ? MapMethods.get(run.below, key) : undefined;
+			return names !== undefined && SetMethods.has(names, prop);
+		};
+		const closed = () => !Reflect.isExtensible(shell);
+		// What the view reads through once the run has a tree of its own: a node read before still answers for the
+		// run's tree (phase 4 forwards it there); a namespace only the run wrote is found in that tree by its path.
+		const current = () => {
+			if (real !== undefined) return real;
+			let node = slothlet.boundApi;
+			for (let index = 0; index < parts.length && node !== null && node !== undefined; index++) node = node[parts[index]];
+			return node;
+		};
+		const forked = () => run.forked && delegatedRunSink === null;
+		/**
+		 * A value read at `prop`, as the view hands it out.
+		 * @param {string|symbol} prop - The member.
+		 * @param {*} value - What was read.
+		 * @param {boolean} childLocal - Whether it is the run's own.
+		 * @returns {*} The value handed out.
+		 */
+		const handOut = (prop, value, childLocal) => {
+			if (typeof prop === "symbol" || (atRoot && SetMethods.has(RUN_FRAMEWORK_ROOTS, prop))) return value;
+			if (WeakMapMethods.has(RUN_OF_VIEW, value) || runtime_isApiNode(value)) {
+				return viewAt(concatLists(parts, [prop]), value, childLocal || WeakSetMethods.has(run.local, value));
+			}
+			// A function the language gives every object or function (`constructor`, `toString`, `hasOwnProperty`) works on the
+			// view as on the node and is handed out as it is; any other runs on the node when the view is its receiver.
+			if (typeof value !== "function" || typeof prop !== "string") return value;
+			if (value === Reflect.get(Objects.prototype, prop) || value === Reflect.get(Functions.prototype, prop)) return value;
+			return runViewFunction(value);
+		};
+		/**
+		 * Hold a read of what the run wrote at `prop` to the read rules of the member it stands in for: the member read
+		 * as the reader reads it, and the value at the member's path.
+		 * @param {string|symbol} prop - The member.
+		 * @param {*} value - What the run wrote there.
+		 * @returns {void}
+		 */
+		const gateShadow = (prop, value) => {
+			if (real === undefined || real === null || typeof prop !== "string") return;
+			Reflect.get(real, prop);
+			const gate = atInstanceRoot ? runtime_rootGate(slothlet) : runtime_nodeWrapperOf(real);
+			if (gate) runtime_enforceReadGate(gate, prop, runtime_unwrapSelfView(value));
+		};
+		/**
+		 * Read a member before the run has a tree of its own.
+		 * @param {string|symbol} prop - The member.
+		 * @param {*} receiver - The receiver of the read.
+		 * @returns {*} The value.
+		 */
+		const readMember = (prop, receiver) => {
+			const entry = own(prop);
+			if (entry !== undefined) {
+				if (entry.op === "delete") return undefined;
+				if (entry.op === "define" && !("value" in entry.descriptor)) {
+					gateShadow(prop, undefined);
+					return typeof entry.descriptor.get === "function" ? Reflect.apply(entry.descriptor.get, receiver, []) : undefined;
+				}
+				const value = entry.op === "define" ? entry.descriptor.value : entry.value;
+				gateShadow(prop, value);
+				return handOut(prop, value, true);
+			}
+			if (real === undefined || real === null) return below(prop) ? viewAt(concatLists(parts, [prop]), undefined, true) : undefined;
+			let value = Reflect.get(real, prop);
+			// A member of the instance's root is handed to a reader as `self` hands it: a view keeping who read it.
+			if (atInstanceRoot && typeof prop === "string" && !SetMethods.has(RUN_FRAMEWORK_ROOTS, prop)) value = runtime_selfView(value);
+			if (value === undefined && below(prop)) return viewAt(concatLists(parts, [prop]), undefined, true);
+			return handOut(prop, value, local);
+		};
+		/**
+		 * Make a change through the view: on the node, checked by it and kept by the run.
+		 * @param {"set"|"define"|"delete"} op - The change.
+		 * @param {string|symbol} prop - The member.
+		 * @param {*} payload - The value or descriptor.
+		 * @returns {boolean} Whether it was made.
+		 */
+		const change = (op, prop, payload) => {
+			const apply = (target) =>
+				op === "set"
+					? Reflect.set(target, prop, payload)
+					: op === "define"
+						? Reflect.defineProperty(target, prop, payload)
+						: Reflect.deleteProperty(target, prop);
+			if (closed()) return apply(shell);
+			if (forked()) return apply(current());
+			const sink = delegatedRunSink ?? ((made) => keep(parts, prop, made));
+			// A node the run wrote is the run's own: the change is made on it, by its own checks.
+			if (local && real !== undefined) return apply(real);
+			// An outer run's view: the change goes through it, kept by this run.
+			if (WeakMapMethods.has(RUN_OF_VIEW, real)) {
+				const previous = delegatedRunSink;
+				delegatedRunSink = sink;
+				try {
+					return apply(real);
+				} finally {
+					delegatedRunSink = previous;
+				}
+			}
+			const apiManager = slothlet.handlers.apiManager;
+			const writers = () => trustedRootOwn.writersOf(runningStore() ?? {});
+			if (real === undefined) {
+				// A namespace only the run wrote: a write below it is checked as a write at its full path.
+				const path = ArrayMethods.join(concatLists(parts, [String(prop)]), ".");
+				if (op === "set" && typeof prop === "string") {
+					runtime_runWrite(slothlet.boundApi, path, sink, () => apiManager.setOwnedProperty(path, payload, writers()));
+					return true;
+				}
+				const writing = writers();
+				for (let index = 0; index < writing.length; index++)
+					if (writing[index]) apiManager.assertOwnedWrite(concatLists(parts, [String(prop)]), writing[index]);
+				return sink(op === "delete" ? { op } : { op, descriptor: payload });
+			}
+			if (atInstanceRoot && op === "set" && typeof prop === "string") {
+				// A write at the root is the one a top-level `self.X = …` makes: through `setOwnedProperty`.
+				runtime_runWrite(slothlet.boundApi, String(prop), sink, () =>
+					apiManager.setOwnedProperty(String(prop), runtime_unwrapSelfView(payload), writers())
+				);
+				return true;
+			}
+			const node = atInstanceRoot ? slothlet.boundApi : runtime_nodeWrapperOf(real);
+			return runtime_runWrite(node, prop, sink, () => apply(real));
+		};
+
+		const callTraps = callable
+			? {
+					apply: (_t, thisArg, args) =>
+						Reflect.apply(
+							forked() ? current() : real,
+							WeakMapMethods.has(RUN_VIEW_REALS, thisArg) ? WeakMapMethods.get(RUN_VIEW_REALS, thisArg) : thisArg,
+							args
+						),
+					construct: (_t, args) => Reflect.construct(forked() ? current() : real, args)
+				}
+			: {};
+		const view = markSlothletProxy(
+			new NativeProxy(shell, {
+				__proto__: null,
+				...callTraps,
+				get(_t, prop, receiver) {
+					if (closed()) return Reflect.get(shell, prop, receiver);
+					if (forked()) {
+						const node = current();
+						return node === null || node === undefined ? undefined : Reflect.get(node, prop);
+					}
+					return readMember(prop, receiver);
+				},
+				set(_t, prop, value) {
+					return change("set", prop, value);
+				},
+				defineProperty(_t, prop, descriptor) {
+					return change("define", prop, descriptor);
+				},
+				deleteProperty(_t, prop) {
+					return change("delete", prop, undefined);
+				},
+				has(_t, prop) {
+					if (closed()) return Reflect.has(shell, prop);
+					if (forked()) {
+						const node = current();
+						return node !== null && node !== undefined && prop in node;
+					}
+					const entry = own(prop);
+					if (entry !== undefined) return entry.op !== "delete";
+					if (below(prop)) return true;
+					return real !== undefined && real !== null && prop in real;
+				},
+				ownKeys() {
+					if (closed()) return Reflect.ownKeys(shell);
+					const node = forked() ? current() : real;
+					const keys = setFrom(node === undefined || node === null ? [] : Reflect.ownKeys(node));
+					if (!forked()) {
+						const members = MapMethods.get(run.entries, key);
+						if (members !== undefined) {
+							for (const entry of mapValues(members)) {
+								if (entry.op === "delete") SetMethods.delete(keys, entry.prop);
+								else SetMethods.add(keys, entry.prop);
+							}
+						}
+						const names = MapMethods.get(run.below, key);
+						if (names !== undefined) for (const name of setValues(names)) SetMethods.add(keys, name);
+					}
+					// The shell's own fixed keys stay listed (proxy invariant).
+					for (let index = 0, held = Reflect.ownKeys(shell); index < held.length; index++) {
+						const fixed = Reflect.getOwnPropertyDescriptor(shell, held[index]);
+						if (fixed && !fixed.configurable) SetMethods.add(keys, held[index]);
+					}
+					return setToArray(keys);
+				},
+				getOwnPropertyDescriptor(_t, prop) {
+					if (closed()) return Reflect.getOwnPropertyDescriptor(shell, prop);
+					const fixed = Reflect.getOwnPropertyDescriptor(shell, prop);
+					if (fixed && !fixed.configurable) return fixed;
+					if (!forked()) {
+						const entry = own(prop);
+						if (entry !== undefined) {
+							if (entry.op === "delete") return undefined;
+							if (entry.op === "define") {
+								const described = { __proto__: null, ...entry.descriptor, configurable: true };
+								if ("value" in described) described.value = readMember(prop, view);
+								return described;
+							}
+							return { __proto__: null, value: readMember(prop, view), writable: true, enumerable: true, configurable: true };
+						}
+						if ((real === undefined || real === null) && below(prop))
+							return { __proto__: null, value: readMember(prop, view), writable: true, enumerable: true, configurable: true };
+					}
+					const node = forked() ? current() : real;
+					if (node === undefined || node === null) return undefined;
+					const desc = Reflect.getOwnPropertyDescriptor(node, prop);
+					if (!desc) return undefined;
+					if (!("value" in desc)) return { __proto__: null, ...desc, configurable: true };
+					return { __proto__: null, ...desc, value: forked() ? desc.value : readMember(prop, view), configurable: true };
+				},
+				getPrototypeOf() {
+					if (closed()) return Reflect.getPrototypeOf(shell);
+					const node = forked() ? current() : real;
+					return node === undefined || node === null ? Objects.prototype : Reflect.getPrototypeOf(node);
+				},
+				setPrototypeOf(_t, prototype) {
+					if (closed()) return Reflect.setPrototypeOf(shell, prototype);
+					return forked() ? Reflect.setPrototypeOf(current(), prototype) : false;
+				},
+				isExtensible() {
+					return Reflect.isExtensible(shell);
+				},
+				// Closing the view fixes the members the run reads now on the view itself, as closing an object fixes
+				// what it holds, so the view then answers as a closed object does. The node stays as it is.
+				preventExtensions() {
+					if (closed()) return true;
+					const keys = Reflect.ownKeys(view);
+					for (let index = 0; index < keys.length; index++) {
+						let described;
+						try {
+							described = Reflect.getOwnPropertyDescriptor(view, keys[index]);
+						} catch {
+							continue;
+						}
+						if (described) Reflect.defineProperty(shell, keys[index], { __proto__: null, ...described, configurable: true });
+					}
+					Reflect.setPrototypeOf(shell, Reflect.getPrototypeOf(view));
+					return Reflect.preventExtensions(shell);
+				}
+			})
+		);
+		WeakMapMethods.set(RUN_VIEW_REALS, view, real);
+		WeakMapMethods.set(RUN_OF_VIEW, view, run);
+		runtime_registerRunView(view, real);
+		return view;
+	};
+
+	const root = viewAt([], parentSelf, false);
+	/**
+	 * The run's tree has been built: what the run kept before is written into it (a copy of the tree it read), and from
+	 * now on its `self` reads and writes that tree. A rebuild from disk or the original config (a reload or restart in
+	 * the run) carries no runtime write, and none of these either.
+	 * @param {"copy"|"reload"|"restart"} kind - What built the tree.
+	 * @param {function(function(): void): void} asBuild - Runs code as the build of the run's tree.
+	 * @returns {void}
+	 */
+	run.adopted = (kind, asBuild) => {
+		if (run.forked) return;
+		if (kind === "copy") {
+			const logs = [];
+			for (let outer = run; outer !== null; outer = outer.parent) if (!outer.forked) listUnshift(logs, outer.log);
+			asBuild(() => {
+				for (let index = 0; index < logs.length; index++) slothlet.handlers.apiManager.carryRunWrites(logs[index]);
+			});
+		}
+		run.forked = true;
+	};
+	if (record !== null && record !== undefined) record[RUN_SELF] = run;
+	return root;
 }
 
 /**
@@ -4995,19 +5340,21 @@ export class ApiBuilder extends ComponentBase {
 
 					// Create temporary child instance
 					const childInstanceID = `${slothlet.instanceID}__run_${slothlet.clock.now()}_${StringMethods.slice(NumberMethods.toString(Math.random(), 36), 2, 9)}`;
+					// The copy of the instance the run's calls are answered from: its parent run's, else the one the instance
+					// has now. A reload swapping another copy in does not change it.
+					const runCopy = copyForRun(slothlet, currentStore);
 
 					const childStore = {
 						instanceID: childInstanceID,
 						context: mergedContext,
 						// Isolation mode governs `self` only, and is chosen as the run opens:
-						//  - `full` (default): `self` is a copy-on-write view taken now —
-						//    reads pass through to the live `self`, writes (incl. deep-path,
-						//    and synchronous ones made before the run has a tree of its own)
-						//    land on a per-scope overlay discarded on exit, so nothing leaks.
+						//  - `full` (default): `self` is the run's own api (see makeRunSelf), taken now, so a write
+						//    through it (deep ones, and synchronous ones made before the run has a tree of its own,
+						//    included) is checked as any write and stays in the run.
 						//  - `partial` (opt-in): `self` is the SHARED live reference —
 						//    mutations inside the callback reach the instance (by design).
 						// Context is isolated in both modes (child store discarded).
-						self: isolationMode === "full" ? makeCopyOnWriteSelf(currentStore.self) : currentStore.self,
+						self: isolationMode === "full" ? makeRunSelf(slothlet, currentStore.self, runCopy) : currentStore.self,
 						config: currentStore.config,
 						createdAt: currentStore.createdAt,
 						parentInstanceID: slothlet.instanceID,
@@ -5026,9 +5373,7 @@ export class ApiBuilder extends ComponentBase {
 						__contextOwners: buildContextOwners(currentStore.__contextOwners),
 						// The keys this scope supplied itself, which `context.set()` leaves alone while it runs.
 						__ownKeys: buildOwnKeys(currentStore.__ownKeys),
-						// The copy of the instance the run's calls are answered from: its parent run's, else the one the instance
-						// has now. A reload swapping another copy in does not change it.
-						[RUN_COPY]: copyForRun(slothlet, currentStore)
+						[RUN_COPY]: runCopy
 					};
 					// Propagate the trusted-root marker so a host-level `run()`/`scope()` (whose parent
 					// is the trusted base store and which carries no module caller) stays trusted. A
@@ -5103,19 +5448,21 @@ export class ApiBuilder extends ComponentBase {
 
 					// Create temporary child instance
 					const childInstanceID = `${slothlet.instanceID}__run_${slothlet.clock.now()}_${StringMethods.slice(NumberMethods.toString(Math.random(), 36), 2, 9)}`;
+					// The copy of the instance the run's calls are answered from: its parent run's, else the one the instance
+					// has now. A reload swapping another copy in does not change it.
+					const runCopy = copyForRun(slothlet, currentStore);
 
 					const childStore = {
 						instanceID: childInstanceID,
 						context: mergedContext,
 						// Isolation mode governs `self` only, and is chosen as the run opens:
-						//  - `full` (default): `self` is a copy-on-write view taken now —
-						//    reads pass through to the live `self`, writes (incl. deep-path,
-						//    and synchronous ones made before the run has a tree of its own)
-						//    land on a per-scope overlay discarded on exit, so nothing leaks.
+						//  - `full` (default): `self` is the run's own api (see makeRunSelf), taken now, so a write
+						//    through it (deep ones, and synchronous ones made before the run has a tree of its own,
+						//    included) is checked as any write and stays in the run.
 						//  - `partial` (opt-in): `self` is the SHARED live reference —
 						//    mutations inside the callback reach the instance (by design).
 						// Context is isolated in both modes (child store discarded).
-						self: isolationMode === "full" ? makeCopyOnWriteSelf(currentStore.self) : currentStore.self,
+						self: isolationMode === "full" ? makeRunSelf(slothlet, currentStore.self, runCopy) : currentStore.self,
 						config: currentStore.config,
 						createdAt: currentStore.createdAt,
 						parentInstanceID: slothlet.instanceID,
@@ -5134,9 +5481,7 @@ export class ApiBuilder extends ComponentBase {
 						__contextOwners: buildContextOwners(currentStore.__contextOwners),
 						// The keys this scope supplied itself, which `context.set()` leaves alone while it runs.
 						__ownKeys: buildOwnKeys(currentStore.__ownKeys),
-						// The copy of the instance the run's calls are answered from: its parent run's, else the one the instance
-						// has now. A reload swapping another copy in does not change it.
-						[RUN_COPY]: copyForRun(slothlet, currentStore)
+						[RUN_COPY]: runCopy
 					};
 					// Propagate the trusted-root marker so a host-level `run()`/`scope()` (whose parent
 					// is the trusted base store and which carries no module caller) stays trusted. A

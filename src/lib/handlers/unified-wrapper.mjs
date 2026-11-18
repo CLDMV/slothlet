@@ -407,6 +407,27 @@ const UNATTRIBUTED_READER = Objects.freeze({ reader: "unattributed" });
 const SEALED_SHELL_READER = Objects.freeze({ reader: "sealed shell" });
 
 /**
+ * The views a full-isolation run's `self` hands out (see `makeRunSelf` in `builders/api_builder`), each with what it reads
+ * through: the node as its reader was handed it, or an outer run's view. Undefined for a namespace only the run wrote.
+ * @type {WeakMap<object, *>}
+ * @private
+ */
+const RUN_VIEWS = new WeakMap();
+
+/**
+ * Record a full-isolation run's view of a node with what it reads through, so a view written into the api is stored as
+ * that node, as a view `self` hands out outside a run is ({@link runtime_unwrapSelfView}).
+ * @param {object} view - The run's view.
+ * @param {*} real - What it reads through.
+ * @returns {object} `view`.
+ * @internal
+ */
+function runtime_registerRunView(view, real) {
+	WeakMapMethods.set(RUN_VIEWS, view, real);
+	return view;
+}
+
+/**
  * The node behind a value: a view `self` handed out ({@link runtime_selfView}), or a member it handed out as the node
  * holds it fixed, stands for its node, which is what is stored when the view is written into the api. Anything
  * else is returned as is.
@@ -419,6 +440,9 @@ const SEALED_SHELL_READER = Objects.freeze({ reader: "sealed shell" });
  * runtime_unwrapSelfView(self.callee.ops) === api.callee.ops; // true
  */
 function runtime_unwrapSelfView(value) {
+	if (value === null || (typeof value !== "object" && typeof value !== "function")) return value;
+	// A full-isolation run's view of a node stands for what it reads through (see runtime_registerRunView).
+	while (WeakMapMethods.has(RUN_VIEWS, value)) value = WeakMapMethods.get(RUN_VIEWS, value);
 	if (value === null || (typeof value !== "object" && typeof value !== "function")) return value;
 	if (WeakSetMethods.has(GUARD_VIEWS, value)) return WeakMapMethods.get(capturedViewTargets, value);
 	return WeakMapMethods.get(SELF_VIEW_NODES, value) ?? WeakMapMethods.get(SELF_MEMBER_VIEWS, value)?.value ?? value;
@@ -2375,7 +2399,7 @@ const FRAMEWORK_VIEWS = new WeakMap();
 const FRAMEWORK_VIEW_TARGETS = new WeakMap();
 
 /**
- * Record a stand-in for one of the framework's root members (an isolated scope's copy-on-write view of the
+ * Record a stand-in for one of the framework's root members (a view of the
  * `slothlet` namespace) as that member, so module code reading it through the scope's `self` is handed the same
  * view of it as outside the scope ({@link runtime_selfFrameworkView}). Anything else is left unrecorded.
  *
@@ -2385,7 +2409,7 @@ const FRAMEWORK_VIEW_TARGETS = new WeakMap();
  * @internal
  *
  * @example
- * runtime_registerFrameworkMemberCopy(makeCopyOnWriteSelf(api.slothlet), api.slothlet);
+ * runtime_registerFrameworkMemberCopy(viewOf(api.slothlet), api.slothlet);
  */
 function runtime_registerFrameworkMemberCopy(copy, member) {
 	const slothlet = WeakMapMethods.get(FRAMEWORK_MEMBERS, member);
@@ -3187,6 +3211,113 @@ let capturedAccess = null;
  * @private
  */
 let VOUCHED_CHANGE = null;
+
+/**
+ * The change a full-isolation run's `self` is making to a node of the tree the run reads but does not own yet, while it
+ * makes it: the node (a wrapper, or the instance's bound api for the root), the member, and where the change goes
+ * instead of the node. The node's own trap checks the change as it checks any change, and stores it there in place of
+ * the node only once every check has passed (see {@link runtime_takeRunWrite}).
+ * @type {{node: object, prop: string|symbol, sink: function(object): boolean}|null}
+ * @private
+ */
+let RUN_WRITE = null;
+
+/**
+ * Make a change through a node of the api for a full-isolation run's `self`: the node's own trap decides it, and a
+ * change it lets through is handed to `sink` instead of being made on the node.
+ * @param {object} node - The wrapper (or bound api) whose trap the change reaches.
+ * @param {string|symbol} prop - The member changed.
+ * @param {function(object): boolean} sink - Takes the change (`{op, value}` or `{op, descriptor}`); returns its answer.
+ * @param {function(): *} change - Makes the change on the node.
+ * @returns {*} What `change` returned.
+ * @internal
+ */
+function runtime_runWrite(node, prop, sink, change) {
+	const previous = RUN_WRITE;
+	RUN_WRITE = { node, prop, sink };
+	try {
+		return change();
+	} finally {
+		RUN_WRITE = previous;
+	}
+}
+
+/**
+ * The sink a change a trap is about to make goes to instead of the node (see {@link runtime_runWrite}): only for the
+ * change the run's `self` is making on this very node and member, once. Null for every other change.
+ * @param {object} node - The wrapper (or bound api) making the change.
+ * @param {string|symbol} prop - The member.
+ * @returns {function(object): boolean|null} The sink, or null.
+ * @internal
+ */
+function runtime_takeRunWrite(node, prop) {
+	const pending = RUN_WRITE;
+	if (pending === null || pending.node !== node || pending.prop !== prop) return null;
+	RUN_WRITE = null;
+	return pending.sink;
+}
+
+/**
+ * What a node stores for a value assigned to it outside a build (wrap-on-set, #329): an object or function becomes a
+ * node of its own, wrapped as `api.slothlet.api.add()` wraps one and marked as user-assigned; a primitive, a proxy, a
+ * node, and a value the node cannot wrap are stored as they are.
+ * @param {object} wrapper - The node written.
+ * @param {string|symbol} prop - The member.
+ * @param {*} value - The value assigned.
+ * @returns {*} What the node stores.
+ * @private
+ */
+function runtime_wrapOnSet(wrapper, prop, value) {
+	let stored = value;
+	if (
+		value !== null &&
+		(typeof value === "object" || typeof value === "function") &&
+		!util.types.isProxy(value) &&
+		resolveWrapper(value) === null
+	) {
+		// deferChildAdopt: a user-assigned object is wrapped lazily so an arbitrarily deep
+		// grafted chain is not adopted recursively at assignment (#329 / #247 unbounded depth).
+		const wrapped = wrapper.___createChildWrapper(prop, value, null, true);
+		if (wrapped !== null && wrapped !== undefined) {
+			const wrappedInternal = resolveWrapper(wrapped);
+			// `wrapped` is guarded non-null/undefined above, and `___createChildWrapper` only ever
+			// returns a resolvable UnifiedWrapper here (a nested wrapper proxy, or the value itself
+			// when it was already a wrapper) — its null/undefined/opaque/cycle returns are excluded
+			// by that guard. So `wrappedInternal` is always truthy; the else can't be reached.
+			/* v8 ignore else - wrappedInternal is always a resolved wrapper here (see above); the else is unreachable */
+			if (wrappedInternal) wrappedInternal.____slothletInternal.userAssigned = true;
+			stored = wrapped;
+		}
+	}
+	return stored;
+}
+
+/**
+ * Whether a value read off the api is a node of it as a reader is handed one: a wrapper's proxy, a view `self` handed out
+ * of one, or a lazy node's stand-in. A full-isolation run's `self` hands these out as its own views, so a change made
+ * under them stays in the run; anything else (data, a built-in object, a function a node holds) is handed out as read.
+ * @param {*} value - The value.
+ * @returns {boolean} True for a node.
+ * @internal
+ */
+function runtime_isApiNode(value) {
+	if (value === null || (typeof value !== "object" && typeof value !== "function")) return false;
+	if (WeakMapMethods.has(SELF_VIEW_NODES, value)) return true;
+	if (WeakMapMethods.has(capturedViewChildren, value)) return true;
+	return resolveWrapper(value) !== null;
+}
+
+/**
+ * The wrapper behind a node as a reader is handed it (see {@link runtime_isApiNode}), or null.
+ * @param {*} value - The node.
+ * @returns {object|null} The wrapper.
+ * @internal
+ */
+function runtime_nodeWrapperOf(value) {
+	if (value === null || (typeof value !== "object" && typeof value !== "function")) return null;
+	const node = WeakMapMethods.get(SELF_VIEW_NODES, value) ?? value;
+	return resolveWrapper(node) ?? WeakMapMethods.get(capturedViewChildren, node) ?? null;
+}
 
 /**
  * The stand-ins a lazy node hands out for members it has not loaded yet (waiting proxies). A kept node never hands
@@ -11987,7 +12118,11 @@ function runtime_rootAssign(slothlet, target, prop, value) {
 	runtime_assertRootChange(slothlet, prop);
 	if (!runtime_rootTakesKey(target, prop)) return false;
 	value = runtime_unwrapSelfView(value);
-	return Reflect.set(slothlet.api, prop, runtime_rootMemberNode(slothlet, prop, value) ?? value);
+	const stored = runtime_rootMemberNode(slothlet, prop, value) ?? value;
+	// A full-isolation run's `self` keeps what it writes on the root in its own record (see runtime_runWrite).
+	const runSink = runtime_takeRunWrite(slothlet.boundApi, prop);
+	if (runSink !== null) return runSink({ op: "set", value: stored });
+	return Reflect.set(slothlet.api, prop, stored);
 }
 
 /**
@@ -12020,6 +12155,9 @@ function runtime_rootDefine(slothlet, target, prop, descriptor) {
 		const node = configurable || writable ? runtime_rootMemberNode(slothlet, prop, descriptor.value) : null;
 		if (node !== null) descriptor = { __proto__: null, ...descriptor, value: node };
 	}
+	// A full-isolation run's `self` keeps what it defines on the root in its own record (see runtime_runWrite).
+	const runSink = runtime_takeRunWrite(slothlet.boundApi, prop);
+	if (runSink !== null) return runSink({ op: "define", descriptor });
 	if (!Reflect.defineProperty(api, prop, descriptor)) return false;
 	const held = Reflect.getOwnPropertyDescriptor(api, prop);
 	if (held.configurable && Reflect.isExtensible(target)) return true;
@@ -20956,6 +21094,17 @@ class UnifiedWrapper extends ComponentBase {
 					FunctionMethods.call(ownAccessor.set, wrapper.____slothletInternal.proxy ?? wrapper, value);
 					return true;
 				}
+				// A full-isolation run's `self` writing a node of the tree the run reads but does not own yet (see
+				// runtime_runWrite): every check above has passed, so the write is stored as the node would store it, in
+				// the run's own record instead of on the node. A member the node reports read-only, or a new key the
+				// module's object cannot take, refuses it as it would here.
+				const runSink = runtime_takeRunWrite(wrapper, prop);
+				if (runSink !== null) {
+					if (!runtime_reportsWritable(wrapper, prop)) return false;
+					const runModuleObject = runtime_moduleObjectOf(wrapper, prop);
+					if (runModuleObject !== null && !hasOwn(runModuleObject, prop) && !Reflect.isExtensible(runModuleObject)) return false;
+					return runSink({ op: "set", value: runtime_wrapOnSet(wrapper, prop, value) });
+				}
 				const isObjectOrFunctionValue = value !== null && (typeof value === "object" || typeof value === "function");
 
 				// Primitive (or null) write against a LIVE-IDENTITY wrapper's live impl object
@@ -21072,29 +21221,8 @@ class UnifiedWrapper extends ComponentBase {
 				// the reloaded module's content into it. Skipped either way: primitives; opaque built-ins
 				// (___createChildWrapper returns null); native proxies and existing wrappers (never iterate
 				// a version dispatcher's traps — mirrors ___adoptImplChildren's proxy skip).
-				let stored = value;
 				const inBuild = wrapper.slothlet.____buildDepth > 0;
-				if (
-					!inBuild &&
-					value !== null &&
-					(typeof value === "object" || typeof value === "function") &&
-					!util.types.isProxy(value) &&
-					resolveWrapper(value) === null
-				) {
-					// deferChildAdopt: a user-assigned object is wrapped lazily so an arbitrarily deep
-					// grafted chain is not adopted recursively at assignment (#329 / #247 unbounded depth).
-					const wrapped = wrapper.___createChildWrapper(prop, value, null, true);
-					if (wrapped !== null && wrapped !== undefined) {
-						const wrappedInternal = resolveWrapper(wrapped);
-						// `wrapped` is guarded non-null/undefined above, and `___createChildWrapper` only ever
-						// returns a resolvable UnifiedWrapper here (a nested wrapper proxy, or the value itself
-						// when it was already a wrapper) — its null/undefined/opaque/cycle returns are excluded
-						// by that guard. So `wrappedInternal` is always truthy; the else can't be reached.
-						/* v8 ignore else - wrappedInternal is always a resolved wrapper here (see above); the else is unreachable */
-						if (wrappedInternal) wrappedInternal.____slothletInternal.userAssigned = true;
-						stored = wrapped;
-					}
-				}
+				const stored = inBuild ? value : runtime_wrapOnSet(wrapper, prop, value);
 				Objects.defineProperty(wrapper, prop, { __proto__: null, value: stored, writable: false, enumerable: true, configurable: true });
 				// Remember a genuine user assignment by key, so adopting a (re)materialized impl never mistakes
 				// it for a stale module child and clears it (#543). Build-time scaffolding is not recorded.
@@ -21193,6 +21321,10 @@ class UnifiedWrapper extends ComponentBase {
 			// Removing a member is a write to its path: a module removes only under the subtree it owns (#625),
 			// and never a framework-reserved key (the built-in write rules).
 			runtime_assertOwnedWrite(wrapper, prop);
+			// A full-isolation run's `self` removing a member of a node of the tree the run does not own yet (see
+			// runtime_runWrite): the removal is kept in the run's own record, and the node keeps the member.
+			const runSink = runtime_takeRunWrite(wrapper, prop);
+			if (runSink !== null) return runSink({ op: "delete" });
 
 			// An array-backed wrapper's target is the array it was built over: a key fixed there (`length`, a
 			// sealed array's index) stays, as it would on that array, and the current array is left as is. So
@@ -21663,6 +21795,10 @@ class UnifiedWrapper extends ComponentBase {
 					const raw = descriptor;
 					const heldNode = runtime_definedValueNode(wrapper, target, prop, descriptor);
 					if (heldNode !== null) descriptor = { __proto__: null, ...descriptor, value: heldNode };
+					// A full-isolation run's `self` defining a member of a node of the tree the run does not own yet (see
+					// runtime_runWrite): checked as above, and kept in the run's own record instead of on the node.
+					const runSink = runtime_takeRunWrite(wrapper, prop);
+					if (runSink !== null) return runSink({ op: "define", descriptor });
 					if (target === wrapper) {
 						if (!Reflect.defineProperty(target, prop, descriptor)) return false;
 						if (heldNode !== null) SetMethods.add((wrapper.____slothletInternal.userAssignedKeys ??= new Set()), prop);
@@ -22093,6 +22229,13 @@ export function internals(consumer) {
 		runtime_registerFrameworkMember,
 		runtime_registerFrameworkMemberCopy,
 		runtime_resolvedAccess,
+		runtime_runWrite,
+		runtime_takeRunWrite,
+		runtime_isApiNode,
+		runtime_nodeWrapperOf,
+		runtime_rootGate,
+		runtime_registerRunView,
+		runtime_enforceReadGate,
 		runtime_assertRootChange,
 		runtime_registerRoot,
 		runtime_noteRootFile,

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-18T06:11:55-08:00 (1795011115)
+ *	@Last modified time: 2026-11-18T06:50:02-08:00 (1795013402)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -110,6 +110,7 @@ import {
 	RECORD_OPERATION,
 	SILENT_BUILD,
 	TREE_WRITE,
+	RUN_SELF,
 	whenIdle,
 	WRITE_TARGET
 } from "#helpers/flow-stores";
@@ -174,6 +175,7 @@ const {
 	releaseModuleMakers,
 	releaseStandInChanges,
 	runtime_assertRootChange,
+	runtime_takeRunWrite,
 	runtime_defineRootInspect,
 	runtime_frameworkWrite,
 	runtime_registerRoot,
@@ -1932,6 +1934,9 @@ class Slothlet {
 						deleteProperty: (target, prop) => {
 							if (!this.api) return true;
 							runtime_assertRootChange(this, prop);
+							// A full-isolation run's `self` keeps a removal on the root in its own record (see runtime_runWrite).
+							const runSink = runtime_takeRunWrite(this.boundApi, prop);
+							if (runSink !== null) return runSink({ op: "delete" });
 							const held = Objects.hasOwn(this.api, prop);
 							if (!Reflect.deleteProperty(this.api, prop)) return false;
 							if (!held && Reflect.isExtensible(target)) return true;
@@ -2982,6 +2987,10 @@ class Slothlet {
 				return;
 			}
 			this.#adoptTree(holder, next);
+			// A full-isolation run's `self` writes what it kept so far into the run's new tree, as that tree's build, and
+			// from now on reads and writes that tree (see `makeRunSelf` in builders/api_builder).
+			const runSelf = holder[RUN_SELF];
+			if (runSelf !== undefined && runSelf !== null) runSelf.adopted(kind, (write) => runInReloadBuild({ copyOf: this, next }, write));
 			if (kept !== null && holder.replaced !== kept) {
 				if (holder.replaced) {
 					const left = holder.replaced;
@@ -4564,7 +4573,7 @@ export default slothlet;
  * @property {object|null} [reference=null] - Object whose properties are merged directly onto the root API and, with `diagnostics: true`, readable as `api.slothlet.diag.reference`.
  * @property {{merge?: "shallow"|"deep", isolation?: "partial"|"full"}} [scope] - Defaults for `api.slothlet.context.scope()` runs.
  *   `merge`: `"shallow"` merges top-level keys; `"deep"` recurses into nested objects (any other value throws `INVALID_CONFIG`).
- *   `isolation`: `"full"` (default) gives the scope a copy-on-write `self`, so its `self` writes stay in the scope; `"partial"` lets a scope's `self` writes reach the shared api. A per-call `isolation` option overrides it; any other value throws `SCOPE_ISOLATION_MODE_INVALID`.
+ *   `isolation`: `"full"` (default) gives the scope a `self` of its own, so its `self` writes, checked as any write is, stay in the scope; `"partial"` lets a scope's `self` writes reach the shared api. A per-call `isolation` option overrides it; any other value throws `SCOPE_ISOLATION_MODE_INVALID`.
  * @property {object|null} [metadata] - Init metadata. Each key is set as global metadata (inherited by every later `api.slothlet.api.add()`) and registered as user metadata for the base module. See [METADATA.md](docs/METADATA.md#init-metadata).
  * @property {object} [sanitize] - Options for turning file and folder names into api property names, the same options `sanitizePropertyName()` takes:
  *   `first` (default `true`), `preserve` (`{ upper?, lower? }`, each default `false`) and `rules` (`{ leave?, nocase?, upper?, lower? }`, each a `string[]` of exact names, globs or `**boundary**` patterns).

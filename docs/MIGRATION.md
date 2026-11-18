@@ -116,7 +116,7 @@ Work a `run()` / `scope()` leaves running after its callback returns (a timer, a
 
 ### Scope isolation defaults to full
 
-`run()` and `scope()` now default to `isolation: "full"`. In v3 the default was `"partial"`: `self` inside a run was the instance's own, so a module writing `self.x = …` during a request changed the api for every later caller. Under `"full"` the run gets a copy-on-write `self`, taken as it starts, and its `self` writes (top-level or deep, synchronous or after an `await`) stay in the run and are dropped when it ends. Everything else a run changes (permission rules, hooks, metadata, event and lifecycle subscriptions, the api tree) is the run's own in both modes.
+`run()` and `scope()` now default to `isolation: "full"`. In v3 the default was `"partial"`: `self` inside a run was the instance's own, so a module writing `self.x = …` during a request changed the api for every later caller. Under `"full"` the run gets a `self` of its own, taken as it starts, and its `self` writes, checked as any write is, (top-level or deep, synchronous or after an `await`) stay in the run and are dropped when it ends. Everything else a run changes (permission rules, hooks, metadata, event and lifecycle subscriptions, the api tree) is the run's own in both modes.
 
 ```javascript
 // api/counter.mjs

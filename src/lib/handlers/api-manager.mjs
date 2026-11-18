@@ -794,19 +794,14 @@ export class ApiManager extends ComponentBase {
 		// A member the write creates is the writing module's own once written.
 		const placed = this.writeOwnerOf(parts, callerWrapper);
 
-		// Walk to the parent container, creating namespace wrappers as needed.
 		const callerModuleID = callerWrapper?.____slothletInternal?.moduleID ?? null;
 		const callerSourceFolder = callerWrapper?.____slothletInternal?.sourceFolder ?? null;
-		const root = this.slothlet.boundApi;
-		const parent = this.ensureParentPath(root, parts, {
-			moduleID: callerModuleID,
-			sourceFolder: callerSourceFolder
-		});
 		const finalKey = parts[parts.length - 1];
 
 		// Stage 3: wrap callable / object-shaped values via UnifiedWrapper so
 		// they get the same hook / permission / lifecycle treatment that
 		// `api.slothlet.api.add()`-loaded modules get. Primitives stored verbatim.
+		let stored = value;
 		const isWrappable = typeof value === "function" || (value !== null && typeof value === "object");
 		if (isWrappable) {
 			const wrapper = new unifiedWrapperOwn.UnifiedWrapper(this.slothlet, {
@@ -817,10 +812,24 @@ export class ApiManager extends ComponentBase {
 				sourceFolder: callerSourceFolder
 			});
 			wrapper.___setImpl(value, callerModuleID);
-			parent[finalKey] = wrapper.createProxy();
-		} else {
-			parent[finalKey] = value;
+			stored = wrapper.createProxy();
 		}
+
+		// A full-isolation run's `self` keeps the write in the run's own record, once every check above has passed (see
+		// `runtime_runWrite` in unified-wrapper): the tree it reads is left as it is, its parent namespaces included.
+		const runSink = unifiedWrapperOwn.runtime_takeRunWrite(this.slothlet.boundApi, coercedPath);
+		if (runSink !== null) {
+			runSink({ op: "set", parts, value: stored, created: placed?.created ? placed.owner : null });
+			return;
+		}
+
+		// Walk to the parent container, creating namespace wrappers as needed.
+		const root = this.slothlet.boundApi;
+		const parent = this.ensureParentPath(root, parts, {
+			moduleID: callerModuleID,
+			sourceFolder: callerSourceFolder
+		});
+		parent[finalKey] = stored;
 		if (placed?.created) this.recordCreated(parts, placed.owner, value);
 	}
 
@@ -6308,6 +6317,60 @@ export class ApiManager extends ComponentBase {
 			}
 			if (Objects.hasOwn(toRoot, key) && Objects.is(toRoot[key], fromValue)) continue;
 			write(toTarget, key, carryValue(fromValue), key);
+		}
+	}
+
+	/**
+	 * Write what a full-isolation run's `self` kept before the run had a tree of its own (see `makeRunSelf` in
+	 * `builders/api_builder`) into the tree built for the run, in the order the run made the changes, as
+	 * {@link ApiManager#carryRuntimeMembers} carries what was written into a tree at runtime: each change was checked when
+	 * the run made it, so it is made here as the framework's own write, a node written being carried as what was written
+	 * for the copy to make its own node of. A member the run's module created is recorded as that module's.
+	 *
+	 * @param {Array<{parts: string[], prop: string|symbol, op: "set"|"define"|"delete", value?: *, descriptor?: object,
+	 *   created?: string|null}>} log - The changes.
+	 * @returns {void}
+	 * @internal
+	 */
+	carryRunWrites(log) {
+		const root = this.slothlet.boundApi;
+		const carried = (value) => {
+			const wrapper = value !== null && (typeof value === "object" || typeof value === "function") ? resolveWrapper(value) : null;
+			return wrapper !== null ? (wrapper.____impl ?? value) : value;
+		};
+		for (let ofIndex = 0; ofIndex < log.length; ofIndex++) {
+			const entry = log[ofIndex];
+			const parts = concatLists(entry.parts, [entry.prop]);
+			let parent;
+			try {
+				parent =
+					entry.parts.length === 0
+						? root
+						: this.ensureParentPath(root, mapList(parts, String), { moduleID: entry.created ?? null, sourceFolder: null });
+			} catch {
+				continue;
+			}
+			const key = entry.prop;
+			let value;
+			try {
+				runtime_frameworkWrite(parent, () => {
+					if (entry.op === "delete") {
+						delete parent[key];
+						return;
+					}
+					if (entry.op === "define") {
+						const descriptor = { __proto__: null, ...entry.descriptor };
+						if ("value" in descriptor) descriptor.value = value = carried(descriptor.value);
+						Reflect.defineProperty(parent, key, descriptor);
+						return;
+					}
+					value = carried(entry.value);
+					parent[key] = value;
+				});
+			} catch {
+				continue;
+			}
+			if (entry.created && typeof key === "string") this.recordCreated(mapList(parts, String), entry.created, value);
 		}
 	}
 

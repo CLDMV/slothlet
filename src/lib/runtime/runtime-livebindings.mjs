@@ -312,8 +312,8 @@ const selfTraps = {
 		// are dotted strings and ownership is path-based. Routing a symbol
 		// through `setOwnedProperty(String(prop), …)` would stringify it to
 		// "Symbol(…)" and set THAT string key instead of the symbol-keyed
-		// property the assignment targeted. Write straight to `ctx.self` (the
-		// copy-on-write set trap under isolation, or `boundApi`) so ordinary
+		// property the assignment targeted. Write straight to `ctx.self` (a
+		// full-isolation run's own api, or `boundApi`) so ordinary
 		// JS semantics hold. A symbol is no api path of its own: the write is
 		// held to the root of the tree, as a change to `self` as a whole is (#625).
 		if (typeof prop === "symbol") {
@@ -323,13 +323,9 @@ const selfTraps = {
 		}
 		// A module never replaces the framework's namespace or root functions, isolated scope or not (#625).
 		if (ctx.slothlet) runtime_assertFrameworkRootChange(ctx.slothlet, prop);
-		// In full-isolation scopes (`api.slothlet.context.scope({ isolation: "full", ... })`)
-		// `ctx.self` is a copy-on-write view (`makeCopyOnWriteSelf`) — a distinct
-		// object from `slothlet.boundApi` that reads through to the live tree but
-		// captures writes in a per-scope overlay. Routing through apiManager would
-		// persist the write to the GLOBAL boundApi, defeating isolation AND bypassing
-		// the overlay. Detect that case and write to `ctx.self` directly so the
-		// copy-on-write set trap captures it in the scope's overlay.
+		// In a full-isolation run (`run()` / `scope()` with `isolation: "full"`, the default) `ctx.self` is the run's own
+		// api (`makeRunSelf` in builders/api_builder): the write goes to it, which makes it through
+		// `apiManager.setOwnedProperty` with every check the write below meets, and keeps it in the run.
 		if (ctx.slothlet?.boundApi && ctx.self !== ctx.slothlet.boundApi) {
 			ctx.self[prop] = value;
 			return true;

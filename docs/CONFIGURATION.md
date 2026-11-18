@@ -399,7 +399,7 @@ Sets the defaults for `api.slothlet.context.scope()` runs. Both can be overridde
   - **`"deep"`** - Deep recursive merge of all nested keys
   - Any other value throws `INVALID_CONFIG`.
 - **`isolation`**
-  - **`"full"`** (default) - The scope gets a copy-on-write `self`, taken as the scope starts: writes made through `self` inside the scope stay inside it, including synchronous ones made before the scope has an api tree of its own.
+  - **`"full"`** (default) - The scope gets a `self` of its own, taken as the scope starts: writes made through `self` inside the scope are checked as any write is and stay inside it, including synchronous ones made before the scope has an api tree of its own.
   - **`"partial"`** - The scope shares `self` with the rest of the api, so a write through `self` inside the scope reaches the instance and is visible outside it. Everything else a scope changes (permission rules, hooks, metadata, event and lifecycle subscriptions, the api tree) stays in the scope in both modes.
   - Any other value throws `SCOPE_ISOLATION_MODE_INVALID`.
 

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T21:25:51-08:00 (1794979551)
+ *	@Last modified time: 2026-11-18T06:49:58-08:00 (1795013398)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -136,6 +136,14 @@ export const RUN_OPENED = Symbol("slothlet.runOpened");
  * @internal
  */
 export const TREE_WRITE = Symbol("slothlet.treeWrite");
+
+/**
+ * The key a run record holds its full-isolation `self` under (see `makeRunSelf` in `builders/api_builder`): what that
+ * `self` wrote before the run had a tree of its own is written into the tree the run is given, once it has one.
+ * @type {symbol}
+ * @internal
+ */
+export const RUN_SELF = Symbol("slothlet.runSelf");
 
 /**
  * The key of the instance's method that records an operation in the history the calling code's copy replays (see
