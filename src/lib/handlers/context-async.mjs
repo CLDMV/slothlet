@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T21:25:47-08:00 (1794979547)
+ *	@Last modified time: 2026-11-18T06:11:45-08:00 (1795011105)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -637,13 +637,6 @@ export class AsyncContextManager {
 	#jobHook = null;
 
 	/**
-	 * The async hook that tells when a promise a `run()` / `scope()` made is resolved. Enabled only while a run's work is
-	 * counted (see `watchRuns` in `helpers/flow-stores`). Null until first needed.
-	 * @type {object|null}
-	 */
-	#workHook = null;
-
-	/**
 	 * The async hook that tells when any other resource a run made is destroyed (a timer fired or cleared, an immediate,
 	 * a `nextTick`, a microtask or a Node callback run, a listener's resource taken off its emitter). Enabled only while
 	 * such a resource is counted: while any destroy hook exists, Node also tracks every promise for collection, which
@@ -666,7 +659,8 @@ export class AsyncContextManager {
 	#watchingDestroy = false;
 
 	/**
-	 * Whether {@link AsyncContextManager#workHook} is enabled.
+	 * Whether a run's work is counted (see `watchRuns` in `helpers/flow-stores`): the job hook then counts each resource
+	 * a run makes, and tells when a promise it made is resolved.
 	 * @type {boolean}
 	 */
 	#countingWork = false;
@@ -962,6 +956,11 @@ export class AsyncContextManager {
 					manager.#stretch++;
 					if (manager.#runningJobs.length !== 0) manager.#jobEnds();
 					manager.#jobFinishes();
+				},
+				// Part of this hook rather than one enabled while a run is live: Node's `enable()` and `disable()` add the hook
+				// to an array of its own, through any index setter module code has put on `Array.prototype` by then.
+				promiseResolve(asyncId) {
+					if (manager.#countingWork) manager.#workDone(asyncId);
 				}
 			});
 			/* v8 ignore start */
@@ -1002,13 +1001,6 @@ export class AsyncContextManager {
 			return;
 		}
 		if (this.#countingWork || this.#jobHook === null) return;
-		const manager = this;
-		this.#workHook ??= createHook({
-			promiseResolve(asyncId) {
-				manager.#workDone(asyncId);
-			}
-		});
-		Reflect.apply(hookMethods.enable, this.#workHook, []);
 		this.#countingWork = true;
 	}
 
@@ -1022,7 +1014,6 @@ export class AsyncContextManager {
 		this.#countingWork = false;
 		MapMethods.clear(this.#work);
 		this.#pendingResources = 0;
-		Reflect.apply(hookMethods.disable, this.#workHook, []);
 		if (this.#watchingDestroy) {
 			this.#watchingDestroy = false;
 			Reflect.apply(hookMethods.disable, this.#destroyHook, []);
