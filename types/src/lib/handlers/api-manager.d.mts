@@ -189,21 +189,74 @@ export class ApiManager extends ComponentBase {
      * the module owns. The built-in ones keep every module off the framework's namespace and root functions and off
      * the framework's own keys on api nodes, until an allow lifts one for the callers it names. With the system off
      * only those built-in rules (and host rules on what they cover) are checked and ownership refuses nothing, so a
-     * module writes anywhere outside the framework's own; with it disabled nothing is checked.
+     * module writes anywhere outside the framework's own; with it disabled nothing is checked. While it is on, a write
+     * that passes is also held to the access the module would need to call or read the member it changes: writing is
+     * never easier than accessing.
      *
      * @param {string[]} parts - Segments of the api path being written.
      * @param {object|null} callerWrapper - The executing module's wrapper, or null for host code.
      * @param {{moduleID: string, prior: Map<string, *>}|null} [inFlight=null] - An add in flight whose content is
      *   being checked (see {@link ApiManager#ownsPath}).
      * @returns {void}
-     * @throws {SlothletError} `PERMISSION_DENIED` when a write rule denies the write, and
-     *   `LOOSE_SET_NOT_OWNED` when the path is outside the caller's mount point.
+     * @throws {SlothletError} `PERMISSION_DENIED` when a write rule denies the write or the module would be refused a call
+     *   or read of the member it changes, and `LOOSE_SET_NOT_OWNED` when the path is outside the caller's mount point.
      * @public
      */
     public assertOwnedWrite(parts: string[], callerWrapper: object | null, inFlight?: {
         moduleID: string;
         prior: Map<string, any>;
     } | null): void;
+    /**
+     * Who owns what a module's write at `parts` stores: the module that owns the member already there, or, for a member
+     * that does not exist yet where the module writes by its own mount, the writing module, which creates it. Replacing
+     * another module's member transfers nothing, and neither does creating one through a write grant.
+     * A node built for an object or function the write stores is attributed to that owner, and a member it creates is
+     * recorded for it once written ({@link ApiManager#recordCreated}).
+     *
+     * @param {string[]} parts - Segments of the api path written.
+     * @param {object|null} writer - The executing module's wrapper, or null for host code.
+     * @returns {{owner: string, created: boolean}|null} The owning moduleID and whether the write creates the member;
+     *   null for host code, a writer with no recorded owner, the framework's own roots, and an unowned member.
+     * @public
+     *
+     * @example
+     * const placed = apiManager.writeOwnerOf(["p", "counter"], writer); // { owner: "B", created: true }
+     */
+    public writeOwnerOf(parts: string[], writer: object | null): {
+        owner: string;
+        created: boolean;
+    } | null;
+    /**
+     * Record the module that created a member at `parts` as its owner, once the write that created it stood: plain
+     * JavaScript's creator owns what it creates. The entry is an ordinary ownership entry, so removing the module
+     * removes the member with its other paths, and the owner grant, module privacy, and the write rules read it as they
+     * read a loaded member's. A node the write built for an object or function registered it already, for the same
+     * module ({@link ApiManager#writeOwnerOf}); the entry is marked as created either way. A runtime write is not
+     * replayed by a reload, and neither is its entry: the rebuilt api records only what it loads.
+     *
+     * @param {string[]} parts - Segments of the api path created.
+     * @param {string} moduleID - The creating module.
+     * @param {*} value - The value written: recorded for a primitive, which no node stands for.
+     * @returns {void}
+     * @public
+     *
+     * @example
+     * apiManager.recordCreated(["p", "counter"], "B", 1);
+     */
+    public recordCreated(parts: string[], moduleID: string, value: any): void;
+    /**
+     * Drop the record of a member module code created at runtime once it is deleted: nothing is left to own, and a module
+     * that creates the member anew creates it as its own. A member anything else contributed to keeps its record, as a
+     * loaded member deleted at runtime does.
+     *
+     * @param {string[]} parts - Segments of the api path deleted.
+     * @returns {void}
+     * @public
+     *
+     * @example
+     * apiManager.forgetCreated(["p", "counter"]);
+     */
+    public forgetCreated(parts: string[]): void;
     /**
      * Whether module writes are held to the ownership rule at all: only while the permission system is on. With no
      * permissions, nothing restricts where a module writes.
@@ -307,7 +360,7 @@ export class ApiManager extends ComponentBase {
      * @public
      *
      * @example
-     * apiManager.isOwnRetired(reader, data.moduleID);
+     * apiManager.isOwnRetired(reader, data.module);
      */
     public isOwnRetired(callerWrapper: object, moduleID: string | null | undefined): boolean;
     /**

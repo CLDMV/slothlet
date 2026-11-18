@@ -28,6 +28,10 @@ export let AsyncLocalStorage: any;
 /** @type {any} */
 export let AsyncResource: any;
 /** @type {any} */
+export let executionAsyncResource: any;
+/** @type {any} */
+export let createHook: any;
+/** @type {any} */
 export let createRequire: any;
 /**
  * Load and parse JSON, branching on host — this is the single place that knows how each

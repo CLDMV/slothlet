@@ -65,7 +65,7 @@ export class VersionManager extends ComponentBase {
      * @param {string} moduleID - Opaque module ID.
      * @returns {object | undefined} Stored version metadata or `undefined`.
      * @example
-     * versionManager.getVersionMetadata("auth_abc123"); // { version: "v1", logicalPath: "auth", stable: true }
+     * versionManager.getVersionMetadata("auth_abc123"); // { version: "v1", path: ["auth"], stable: true }
      */
     getVersionMetadata(moduleID: string): object | undefined;
     /**
@@ -75,12 +75,12 @@ export class VersionManager extends ComponentBase {
      * @param {string} versionTag - Version tag (e.g. `"v1"`, `"2.3.0"`).
      * @returns {object | undefined} Stored version metadata or `undefined` if not registered.
      * @example
-     * versionManager.getVersionMetadataByPath("auth", "v1"); // { version: "v1", logicalPath: "auth", stable: true }
+     * versionManager.getVersionMetadataByPath("auth", "v1"); // { version: "v1", path: ["auth"], stable: true }
      */
     getVersionMetadataByPath(logicalPath: string, versionTag: string): object | undefined;
     /**
      * Patch (merge) the VersionManager-only metadata for a registered logical path and version tag at runtime.
-     * The injected `version` and `logicalPath` keys always win over any user-supplied fields in `patch`.
+     * The injected `version` and `path` keys always win over any user-supplied fields in `patch`.
      *
      * @param {string} logicalPath - Logical API path (e.g. `"auth"`).
      * @param {string} versionTag - Version tag (e.g. `"v1"`, `"2.3.0"`).
@@ -103,16 +103,30 @@ export class VersionManager extends ComponentBase {
      */
     public findLogicalPathFor(path: string): string | null;
     /**
-     * Return a snapshot of all registered versions and the default tag for a logical path.
+     * Return a snapshot of all registered versions and the default tag for a logical path, in the shape consumers read.
+     *
+     * Each entry is `{ at, default, metadata, module, path, tag }`: a number, a boolean, the version-manager metadata, the
+     * mounted module's id, the real mounted path as segments (`["v1", "auth"]`, a dotted tag such as `2.3.0` stays one
+     * segment) and the tag. It is built fresh from the registry; the registry's own entry objects never leave this class.
      *
      * @param {string} logicalPath - Logical API path.
-     * @returns {{ versions: object, default: string | null } | undefined} Snapshot object, or `undefined` if the path is not registered.
+     * @returns {{ versions: Object<string, { at: number, default: boolean, metadata: object, module: string, path: string[], tag: string }>, default: string | null } | undefined} Snapshot object, or `undefined` if the path is not registered.
      * @example
-     * versionManager.list("auth"); // { versions: { v1: {...}, v2: {...} }, default: "v2" }
+     * versionManager.list("auth");
+     * // { versions: { v1: { at: 1731800000000, default: false, metadata: {}, module: "auth_1", path: ["v1", "auth"], tag: "v1" }, v2: {...} }, default: "v2" }
      * versionManager.list("unknown"); // undefined
      */
     list(logicalPath: string): {
-        versions: object;
+        versions: {
+            [x: string]: {
+                at: number;
+                default: boolean;
+                metadata: object;
+                module: string;
+                path: string[];
+                tag: string;
+            };
+        };
         default: string | null;
     } | undefined;
     /**

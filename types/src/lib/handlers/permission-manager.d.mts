@@ -304,7 +304,7 @@ export class PermissionManager extends ComponentBase {
      * @param {PermissionCallMeta|null} [callMeta=null] - Call/construct metadata (#455): `{ args, target }`
      *   from the invocation, forwarded to function conditions as their second argument. Null for reads,
      *   hooks, the internal control surface, and silent queries.
-     * @param {{ principalGrace?: boolean, moduleCaller?: boolean, via?: ReadonlyArray<string> }|null} [options=null] - Enforcement options.
+     * @param {{ principalGrace?: boolean, moduleCaller?: boolean, newMember?: boolean, via?: ReadonlyArray<string> }|null} [options=null] - Enforcement options.
      * @param {boolean} [options.principalGrace=false] - Accept a principal whose epoch is current even if its
      *   `ttl` has elapsed (#459). Set only by a promoted call re-enforcing right after its resolve.
      * @param {boolean} [options.moduleCaller=false] - The caller is a module even though no source file is
@@ -313,6 +313,9 @@ export class PermissionManager extends ComponentBase {
      * @param {ReadonlyArray<string>} [options.via] - Origin marker added to the audit payload: the method path as segments
      *   (`via: ["slothlet", "permissions", "global", "check", "call"]`), so an
      *   audit consumer can tell a query from the gate of a real call.
+     * @param {boolean} [options.newMember=false] - The target is a member a module is about to create, which will be the
+     *   caller's own once written: module privacy answers as for a member the caller's module owns, and the default policy
+     *   alone does not refuse it (a matching rule still decides).
      * @param {function(string): boolean} [options.dataMember] - Given for a read of data: whether a path above the
      *   target is an object member of a module's data. A deny rule naming such a member's path exactly then covers the
      *   target too, as a rule on `path.**` would, so what the member holds is denied with it unless a more specific rule
@@ -326,6 +329,7 @@ export class PermissionManager extends ComponentBase {
     enforceAccess(callerPath: string, targetPath: string, callerFilePath?: string | null, targetFilePath?: string | null, runtimeContext?: object | null, callMeta?: PermissionCallMeta | null, options?: {
         principalGrace?: boolean;
         moduleCaller?: boolean;
+        newMember?: boolean;
         via?: ReadonlyArray<string>;
     } | null): boolean;
     /**
@@ -771,12 +775,13 @@ export class PermissionManager extends ComponentBase {
      * Run the permission baseline as the instance starts (see `helpers/permission-baseline`), when the mode is on or
      * strict. Under on, each check not met is one warning; under strict, any check not met refuses the start.
      * @param {"node"|"browser"} envTarget - Where the instance runs.
+     * @param {"async"|"live"} [runtime="async"] - The instance's runtime (see {@link runBaseline}).
      * @returns {Promise<void>}
      * @throws {SlothletError} PERMISSION_BASELINE_UNMET under strict, naming the checks not met.
      * @example
-     * await pm.checkBaseline("node");
+     * await pm.checkBaseline("node", "async");
      */
-    checkBaseline(envTarget: "node" | "browser"): Promise<void>;
+    checkBaseline(envTarget: "node" | "browser", runtime?: "async" | "live"): Promise<void>;
     /**
      * The mode, what the permission baseline found when the instance started, and the capabilities rules open.
      * @returns {{mode: string, baseline: {met: boolean|null, checks: Array<{id: string, met: boolean, reason: string|null}>}, capabilities: Array<{name: string, allowed: string[]}>}}

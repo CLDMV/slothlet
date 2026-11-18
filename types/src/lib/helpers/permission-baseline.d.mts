@@ -2,13 +2,14 @@
  * Run the baseline checks for where the instance runs.
  * @param {"node"|"browser"} envTarget - Where the instance runs.
  * @param {BaselineProbes} [probes] - Stand-ins for the probes, for a test.
+ * @param {"async"|"live"} [runtime="async"] - The instance's runtime; `async-context-frame` is checked for `"async"` only.
  * @returns {Promise<{met: boolean, checks: Array<{id: string, met: boolean, reason: string|null}>}>} Whether every check
  *   is met, and each check.
  * @internal
  * @example
  * const { met, checks } = await runBaseline("node");
  */
-export function runBaseline(envTarget: "node" | "browser", probes?: BaselineProbes): Promise<{
+export function runBaseline(envTarget: "node" | "browser", probes?: BaselineProbes, runtime?: "async" | "live"): Promise<{
     met: boolean;
     checks: Array<{
         id: string;
@@ -36,5 +37,10 @@ export type BaselineProbes = {
      * - How many vite plugin records slothlet accepted, or null.
      */
     viteRecords: () => (number | null);
+    /**
+     * - Whether Node's `AsyncContextFrame` is on; null (or
+     * absent) where there is no `node:async_hooks` to test, and then the check does not apply.
+     */
+    asyncContextFrameOn?: (() => boolean) | null | undefined;
 };
 //# sourceMappingURL=permission-baseline.d.mts.map

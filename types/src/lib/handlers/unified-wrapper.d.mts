@@ -359,8 +359,9 @@ declare function runtime_registerFrameworkMember(member: object | Function, slot
  * api itself, `hook.on()` / `lifecycle.on()` register for the module calling or for the host. A function a
  * module read and kept, called later from outside any call, would run as the host. Through the view it runs
  * as the module that read it, and so does every other use of the view — a member read, a write — made with
- * no standing of its own. While a module executes, or inside a `run()` / `scope()` the host opened, the view
- * behaves as the member itself. The host is handed the member itself.
+ * no standing of its own. While a module executes, or while the host's own code runs inside a `run()` / `scope()`
+ * it opened, the view behaves as the member itself; a module's code running in such a flow uses it as the reader
+ * (see {@link runtime_selfWriteHasStanding}). The host is handed the member itself.
  *
  * A module never changes them (#625): they are shared by every module and the host, so an assignment,
  * definition, or deletion of a member at any depth, or a change to a member's prototype or extensibility

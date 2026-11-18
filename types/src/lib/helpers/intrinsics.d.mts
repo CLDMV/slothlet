@@ -405,7 +405,7 @@ export function mapFrom(entries: ArrayLike<ArrayLike<unknown>>): Map<unknown, un
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:12-08:00 (1794874572)
+ *	@Last modified time: 2026-11-17T13:35:20-08:00 (1794951320)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -433,6 +433,7 @@ export function mapFrom(entries: ArrayLike<ArrayLike<unknown>>): Map<unknown, un
  * - `Promises` and `Symbols` hold the static functions of `Promise` (bound to it) and `Symbol` on frozen objects with
  *   no prototype, like `Objects` and `Arrays`.
  * - `NativeObject` is the `Object` function itself, for `NativeObject(value)`; its static functions are on `Objects`.
+ *   `NativeArray` is the `Array` function itself; its static functions are on `Arrays`.
  * - `Functions` holds the data members of `Function` (`Functions.prototype`) like `Objects` and `Arrays`.
  * - `URL` and `URLSearchParams` are those constructors themselves, shadowing the globals like `Map`.
  * - The other built-ins slothlet uses, under their own names, shadowing the globals like `Map`: `String`, `Boolean`,
@@ -457,6 +458,9 @@ export function mapFrom(entries: ArrayLike<ArrayLike<unknown>>): Map<unknown, un
  * `Map` or a `Set` goes through `mapEntries`, `mapKeys`, `mapValues` and `setValues`, whose iterators read nothing a
  * module can reach; arrays are walked by index. `copyList`, `concatLists`, `mapList` and `filterList` make arrays
  * without reading `constructor` or `Symbol.species` off the array they start from.
+ * The functions themselves, for code that compares a value against one or hands one to `Reflect.apply`, are on
+ * `PrototypeFunctions`, by built-in (`PrototypeFunctions.Promise.then`, `PrototypeFunctions.Object.valueOf`). The lint
+ * rule reports a member read off a built-in's `prototype` anywhere else in `src/`.
  *
  * @module @cldmv/slothlet/helpers/intrinsics
  * @internal
@@ -1395,6 +1399,51 @@ export const FinalizationRegistryMethods: object;
  * IteratorMethods.mapNext(iterator);
  */
 export const IteratorMethods: object;
+/**
+ * The functions of the built-in prototypes themselves, as they were when slothlet loaded, by prototype and name, for
+ * the code that needs the function rather than a call of it: to compare a value against it, hand it to
+ * `Reflect.apply`, or call it on a value whose kind it checks (`PrototypeFunctions.Map.has`). Under `Function` the
+ * language's `Symbol.hasInstance` is `hasInstance`; under `TypedArray` (the prototype every typed array class inherits
+ * from) the `Symbol.toStringTag` getter is `toStringTag`. An accessor is taken as its getter (`PrototypeFunctions.RegExp.source`,
+ * `PrototypeFunctions.ArrayBuffer.byteLength`). To call one on a value, `ObjectMethods.hasOwnProperty(value, key)`
+ * and the other `…Methods` read the same.
+ * @type {Readonly<Record<string, Readonly<Record<string, Function>>>>}
+ * @internal
+ * @example
+ * import { PrototypeFunctions } from "#helpers/intrinsics";
+ * Reflect.apply(PrototypeFunctions.Promise.then, promise, [onFulfilled, onRejected]);
+ */
+export const PrototypeFunctions: Readonly<Record<string, Readonly<Record<string, Function>>>>;
+/**
+ * `%TypedArray%.prototype`, the prototype every typed array class's `prototype` inherits from, as it was when slothlet
+ * loaded (its functions and getters are `PrototypeFunctions.TypedArray`).
+ * @type {object}
+ * @internal
+ * @example
+ * import { TypedArrayPrototype } from "#helpers/intrinsics";
+ * Reflect.getPrototypeOf(Uint8Array.prototype) === TypedArrayPrototype;
+ */
+export const TypedArrayPrototype: object;
+/**
+ * The language's own setter of `Object.prototype.__proto__`, as it was when slothlet loaded (its getter is
+ * `PrototypeFunctions.Object.__proto__`).
+ * @type {function(this: object, (object|null)): void}
+ * @internal
+ * @example
+ * import { ObjectProtoSetter, Reflect } from "#helpers/intrinsics";
+ * Reflect.apply(ObjectProtoSetter, value, [null]);
+ */
+export const ObjectProtoSetter: (this: object, arg1: (object | null)) => void;
+/**
+ * The `Array` function, as it was when slothlet loaded, for comparing a value's `constructor` against. Its static
+ * functions are on `Arrays`.
+ * @type {ArrayConstructor}
+ * @internal
+ * @example
+ * import { NativeArray } from "#helpers/intrinsics";
+ * value.constructor === NativeArray;
+ */
+export const NativeArray: ArrayConstructor;
 /**
  * The promise slothlet makes for its own waits: a `Promise` whose `constructor`, `then`, `catch` and `finally` are its
  * own frozen members (the language's own functions, taken at load) and whose `Symbol.species` is itself. Awaiting one, or

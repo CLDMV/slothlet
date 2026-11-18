@@ -131,6 +131,30 @@ export function parseStackFrame(line: string): {
     path: string;
 } | null;
 /**
+ * A new empty list with no prototype, for lists of slothlet's own entries kept inside slothlet's own code: an element is
+ * written to it as `list[list.length] = value` without any check, as nothing a module puts on `Array.prototype` or
+ * `Object.prototype` is on its chain. Read by index and length only (it has no iterator).
+ * @returns {Array<object>} The list.
+ * @internal
+ */
+export function bareList(): Array<object>;
+/**
+ * The calls of a list whose entry function a stack frame's text names (see {@link runtime_namesEntry}).
+ *
+ * Calls of one function go by the same names, so the list is grouped by them once and each group's names are tested
+ * once; a list read again (a placement's matches, a caller's candidates) answers for the same frame text by a lookup.
+ * The list is only read, and the answer may be the list itself or shared, so it is only read too.
+ *
+ * @param {ArrayLike<{fnNames?: string[], fnName?: string}>} list - The calls. The list is not changed afterwards.
+ * @param {string} head - The frame's text before its location.
+ * @returns {ArrayLike<object>} The calls the frame names, in the list's order.
+ * @internal
+ */
+export function runtime_namedAmong(list: ArrayLike<{
+    fnNames?: string[];
+    fnName?: string;
+}>, head: string): ArrayLike<object>;
+/**
  * Whether a frame is one the microtask runner puts below a resumed function: a resumed function has
  * nothing of its own below it. Node also drains the microtask queue between the callbacks of one timer list and of
  * the immediate queue, so a function resumed there has the timers' own frames (`listOnTimeout`, `processTimers`,
@@ -410,6 +434,10 @@ declare function describeCall(wrapper: object): {
  * - **a module's folder** — an untagged frame (a browser leaf's own imports carry no tag) in a module's root
  *   folder belongs to that module's calls (#512); the deepest root wins, so a module mounted inside
  *   another's folder owns its files.
+ *
+ * What the calls alone decide is indexed once per list (see runtime_candidateIndex): a caller placing frames among the
+ * same calls again passes the same list, unchanged, and places them by lookups. The `matches` lists placements answer
+ * can be shared between placements, so they are only read.
  *
  * @param {Array<{currentWrapper: object, family: string|null, comparablePath: string, realComparablePath: string|null, locations: Set<string>|null, moduleID: string|null}>} candidates - The calls, each with a file.
  * @returns {{place: function(object): ({matches: Array<object>, byFile: boolean, byModule?: boolean}|null), families: Set<string>}}

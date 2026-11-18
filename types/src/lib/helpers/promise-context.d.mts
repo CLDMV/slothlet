@@ -7,10 +7,40 @@
  * @param {Promise<*>} promise - A promise, or a Proxy around one.
  * @param {Function} [onFulfilled] - Fulfillment reaction.
  * @param {Function} [onRejected] - Rejection reaction.
- * @returns {Promise<*>} The derived promise, as `then` returns it.
+ * @returns {Promise<*>} The derived promise, as `then` returns it, made by slothlet (see {@link runtime_derive}).
  * @internal
  */
 export function nativeThen(promise: Promise<any>, onFulfilled?: Function, onRejected?: Function): Promise<any>;
+/**
+ * Register reactions on a promise of the engine's own as its `then` would while this copy's patch is installed: through
+ * this copy's wrapper, which pins them to the current caller (see {@link enablePromisePatching}), or the engine's `then`
+ * when no patch is installed. Neither is read off the promise or `Promise.prototype`, so a `then` module code put there
+ * is never called, and the promise handed back is slothlet's own, so a `constructor` or `Symbol.species` module code
+ * put on `Promise.prototype` or `Promise` does not decide what it is or what it settles with (see {@link runtime_derive}).
+ *
+ * @param {Promise<*>} promise - A promise of the engine's own (not a Proxy).
+ * @param {Function} [onFulfilled] - Fulfillment reaction.
+ * @param {Function} [onRejected] - Rejection reaction.
+ * @returns {Promise<*>} The derived promise.
+ * @internal
+ * @example
+ * pinnedThen(promise, (value) => value, (error) => { throw error; });
+ */
+export function pinnedThen(promise: Promise<any>, onFulfilled?: Function, onRejected?: Function): Promise<any>;
+/**
+ * Register reactions on the promise a call returned, as {@link pinnedThen} does, pinned to who made the call rather
+ * than to whoever the stack says is registering them: the runtime that ran the call already knows its caller (see
+ * `pinManyForResult` in `helpers/caller-pinning`). A promise the runtime does not know is pinned as `pinnedThen` pins.
+ *
+ * @param {Promise<*>} promise - The promise a call returned, of the engine's own (not a Proxy).
+ * @param {Function} [onFulfilled] - Fulfillment reaction.
+ * @param {Function} [onRejected] - Rejection reaction.
+ * @returns {Promise<*>} The derived promise.
+ * @internal
+ * @example
+ * pinnedResultThen(result, (value) => value, (error) => { throw error; });
+ */
+export function pinnedResultThen(promise: Promise<any>, onFulfilled?: Function, onRejected?: Function): Promise<any>;
 /**
  * The engine's `Promise.prototype.then` a function stands for: the engine's itself, or a wrapper of this copy's
  * installed over it (see {@link enablePromisePatching}). Anything else, a module's own `then` among them, is null.

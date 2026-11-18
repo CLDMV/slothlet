@@ -341,7 +341,8 @@ export type InstanceImportState = {
      */
     own: (url: string) => (object | undefined);
     /**
-     * - Claims an instance ID (see claimInstanceScope).
+     * - Claims an instance ID for another copy of slothlet (see
+     * claimInstanceScope); null when the code calling it is not slothlet's (see claimForCopy).
      */
     claim: (instanceID: string) => (object | null);
     /**
