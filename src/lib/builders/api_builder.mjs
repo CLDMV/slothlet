@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-18T06:49:54-08:00 (1795013394)
+ *	@Last modified time: 2026-11-18T12:35:34-08:00 (1795034134)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -88,6 +88,7 @@ const {
 	runtime_selfView,
 	runtime_markCallerLocked,
 	runtime_registerFrameworkMember,
+	runtime_registerFrameworkMemberCopy,
 	runtime_selfFrameworkView,
 	runtime_runWrite,
 	runtime_isApiNode,
@@ -467,6 +468,21 @@ const RUN_PATH_SEPARATOR = "\u0001";
 const RUN_FRAMEWORK_ROOTS = setFrom(["slothlet", "shutdown", "destroy"]);
 
 /**
+ * The framework's namespace on the api root, which a run's `self` hands out as the run's own view of it.
+ * @type {string}
+ * @private
+ */
+const RUN_FRAMEWORK_NAMESPACE = "slothlet";
+
+/**
+ * The fields of a property descriptor, in the order a definition through a run's view of the framework's namespace
+ * applies them.
+ * @type {string[]}
+ * @private
+ */
+const RUN_DESCRIPTOR_FIELDS = ["value", "writable", "get", "set", "enumerable", "configurable"];
+
+/**
  * The record of the run whose view of a node is passing a change on to the view it reads through (an outer run's view),
  * while it does: the change is kept by the inner run (see {@link makeRunSelf}).
  * @type {function(object): boolean|null}
@@ -584,6 +600,12 @@ function makeRunSelf(slothlet, parentSelf, record) {
 		synthetic: new Map(),
 		// nodes the run wrote: a change below one is the run's own
 		local: new WeakSet(),
+		// the run's changes to the framework's namespace, in the order made (see frameworkViewAt)
+		nsLog: [],
+		// namespace path key → (member → the change the run made there)
+		nsEntries: new Map(),
+		// namespace path key → (what a view reads through → the view)
+		nsViews: new Map(),
 		forked: false,
 		parent: WeakMapMethods.get(RUN_OF_VIEW, parentSelf) ?? null
 	};
@@ -699,6 +721,10 @@ function makeRunSelf(slothlet, parentSelf, record) {
 		 * @returns {*} The value handed out.
 		 */
 		const handOut = (prop, value, childLocal) => {
+			// The framework's namespace is handed out as the run's view of it, so a change made through it stays in the run.
+			if (atRoot && prop === RUN_FRAMEWORK_NAMESPACE && value !== null && typeof value === "object") {
+				return runtime_registerFrameworkMemberCopy(frameworkViewAt([RUN_FRAMEWORK_NAMESPACE], value), value);
+			}
 			if (typeof prop === "symbol" || (atRoot && SetMethods.has(RUN_FRAMEWORK_ROOTS, prop))) return value;
 			if (WeakMapMethods.has(RUN_OF_VIEW, value) || runtime_isApiNode(value)) {
 				return viewAt(concatLists(parts, [prop]), value, childLocal || WeakSetMethods.has(run.local, value));
@@ -928,6 +954,305 @@ function makeRunSelf(slothlet, parentSelf, record) {
 		return view;
 	};
 
+	/**
+	 * The run's view of a member of the framework's namespace (`self.slothlet` and the objects below it).
+	 *
+	 * @description
+	 * The namespace is the framework's own object, not an api node, so no node trap keeps a change made to it in the run.
+	 * This view does: a read goes to the namespace every time (an object member as the run's view of it), and an
+	 * assignment, definition or deletion is decided by the member's own attributes (a read-only member or a closed object
+	 * refuses it, an accessor's setter runs with the view as `this`) and then kept by the run instead of being made on the
+	 * namespace. Who may make a change is decided before it reaches the view: module code reads the namespace through the
+	 * framework's view of it, which holds the change to the write rules first. Once the run has a tree of its own, the view
+	 * reads and writes that tree's namespace, and what the run kept is written there (see `carryFrameworkWrites`).
+	 *
+	 * @param {string[]} parts - The member's api path (`["slothlet"]`, `["slothlet", "metadata"]`).
+	 * @param {object|Function} real - What the view reads through: the member, or an outer run's view of it.
+	 * @returns {object|Function} The view.
+	 */
+	const frameworkViewAt = (parts, real) => {
+		const key = keyOf(parts);
+		let byReal = MapMethods.get(run.nsViews, key);
+		if (byReal === undefined) {
+			byReal = new WeakMap();
+			MapMethods.set(run.nsViews, key, byReal);
+		}
+		let made = WeakMapMethods.get(byReal, real);
+		if (made === undefined) {
+			made = makeFrameworkView(parts, real);
+			WeakMapMethods.set(byReal, real, made);
+		}
+		return made;
+	};
+
+	/**
+	 * Make a view of a member of the framework's namespace (see {@link frameworkViewAt}).
+	 * @param {string[]} parts - The member's api path.
+	 * @param {object|Function} real - What it reads through.
+	 * @returns {object|Function} The view.
+	 */
+	const makeFrameworkView = (parts, real) => {
+		const key = keyOf(parts);
+		const shell = runViewShell(typeof real === "function" ? FunctionMethods.bind(function () {}) : {}, real);
+		const closed = () => !Reflect.isExtensible(shell);
+		const forked = () => run.forked && delegatedRunSink === null;
+		// The member in the run's own tree, once it has one.
+		const current = () => {
+			let node = slothlet.boundApi;
+			for (let index = 0; index < parts.length && node !== null && node !== undefined; index++) node = node[parts[index]];
+			return node;
+		};
+		const own = (prop) => {
+			const members = MapMethods.get(run.nsEntries, key);
+			return members === undefined ? undefined : MapMethods.get(members, prop);
+		};
+		const keepChange = (prop, entry) => {
+			let members = MapMethods.get(run.nsEntries, key);
+			if (members === undefined) {
+				members = new Map();
+				MapMethods.set(run.nsEntries, key, members);
+			}
+			MapMethods.set(members, prop, entry);
+			listPush(run.nsLog, { __proto__: null, parts, prop, ...entry });
+			return true;
+		};
+		/**
+		 * The member's attributes as the run sees them: what the run defined there, else the namespace's own.
+		 * @param {string|symbol} prop - The member.
+		 * @returns {object|undefined} The descriptor, its value as the namespace holds it.
+		 */
+		const attributes = (prop) => {
+			const entry = own(prop);
+			if (entry !== undefined) return entry.op === "delete" ? undefined : entry.descriptor;
+			return Reflect.getOwnPropertyDescriptor(real, prop);
+		};
+		/**
+		 * A value read at `prop`, as the view hands it out: an object member of the namespace as the run's view of it.
+		 * @param {string|symbol} prop - The member.
+		 * @param {*} value - What was read.
+		 * @returns {*} The value handed out.
+		 */
+		const handOutMember = (prop, value) => {
+			if (typeof prop !== "string" || value === null || typeof value !== "object") return value;
+			const described = Reflect.getOwnPropertyDescriptor(real, prop);
+			// A member fixed on the namespace is handed out as it is: a proxy must report a fixed member as the object
+			// holds it.
+			if (!described || !("value" in described) || (!described.configurable && !described.writable)) return value;
+			return frameworkViewAt(concatLists(parts, [prop]), value);
+		};
+		const read = (prop, receiver) => {
+			const entry = own(prop);
+			if (entry !== undefined) {
+				if (entry.op === "delete") return undefined;
+				if (!("value" in entry.descriptor)) {
+					return typeof entry.descriptor.get === "function" ? Reflect.apply(entry.descriptor.get, receiver, []) : undefined;
+				}
+				return entry.descriptor.value;
+			}
+			const described = Reflect.getOwnPropertyDescriptor(real, prop);
+			if (described && !("value" in described)) {
+				return typeof described.get === "function" ? Reflect.apply(described.get, receiver, []) : undefined;
+			}
+			return handOutMember(prop, Reflect.get(real, prop));
+		};
+		/**
+		 * Define `prop` in the run as the language defines it on an ordinary object: refused on a closed object or a fixed
+		 * member it would change, else kept by the run.
+		 * @param {string|symbol} prop - The member.
+		 * @param {object} descriptor - The descriptor.
+		 * @returns {boolean} Whether it was made.
+		 */
+		const define = (prop, descriptor) => {
+			const held = attributes(prop);
+			if (held === undefined) {
+				if (!Reflect.isExtensible(real)) return false;
+				const accessor = "get" in descriptor || "set" in descriptor;
+				const made = accessor
+					? { __proto__: null, get: descriptor.get, set: descriptor.set }
+					: { __proto__: null, value: descriptor.value, writable: descriptor.writable === true };
+				made.enumerable = descriptor.enumerable === true;
+				made.configurable = descriptor.configurable === true;
+				return keepChange(prop, { op: "define", descriptor: made });
+			}
+			const accessor = "get" in descriptor || "set" in descriptor;
+			const heldAccessor = !("value" in held);
+			if (!held.configurable) {
+				if (descriptor.configurable === true) return false;
+				if ("enumerable" in descriptor && descriptor.enumerable !== held.enumerable) return false;
+				if (accessor || heldAccessor) {
+					if (!accessor || !heldAccessor) return !accessor && !("value" in descriptor) && !("writable" in descriptor);
+					if (("get" in descriptor && descriptor.get !== held.get) || ("set" in descriptor && descriptor.set !== held.set)) return false;
+				} else if (!held.writable) {
+					if (descriptor.writable === true) return false;
+					if ("value" in descriptor && !Objects.is(descriptor.value, held.value)) return false;
+				}
+			}
+			let made;
+			if (accessor && !heldAccessor)
+				made = { __proto__: null, get: descriptor.get, set: descriptor.set, enumerable: held.enumerable, configurable: held.configurable };
+			else if (!accessor && heldAccessor && ("value" in descriptor || "writable" in descriptor))
+				made = {
+					__proto__: null,
+					value: descriptor.value,
+					writable: descriptor.writable === true,
+					enumerable: held.enumerable,
+					configurable: held.configurable
+				};
+			else made = { __proto__: null, ...held };
+			for (let index = 0; index < RUN_DESCRIPTOR_FIELDS.length; index++) {
+				const field = RUN_DESCRIPTOR_FIELDS[index];
+				if (field in descriptor) made[field] = descriptor[field];
+			}
+			if ("value" in made && !("value" in descriptor) && !heldAccessor && own(prop) === undefined)
+				made.value = handOutMember(prop, held.value);
+			return keepChange(prop, { op: "define", descriptor: made });
+		};
+
+		const view = new NativeProxy(shell, {
+			__proto__: null,
+			...(typeof real === "function"
+				? {
+						apply: (_t, thisArg, args) => Reflect.apply(forked() ? current() : real, thisArg === view ? real : thisArg, args),
+						construct: (_t, args) => Reflect.construct(forked() ? current() : real, args)
+					}
+				: {}),
+			get(_t, prop, receiver) {
+				if (closed()) return Reflect.get(shell, prop, receiver);
+				if (forked()) return Reflect.get(current(), prop);
+				return read(prop, receiver);
+			},
+			set(_t, prop, value, receiver) {
+				if (closed()) return Reflect.set(shell, prop, value);
+				if (forked()) return Reflect.set(current(), prop, value);
+				// An outer view of the namespace: the change is this view's, as the language sends it to the receiver.
+				if (receiver !== view) return Reflect.set(real, prop, value, receiver);
+				let held = attributes(prop);
+				if (held === undefined) {
+					// Inherited: a setter or a read-only member on the prototype decides it, as on an ordinary object.
+					for (let proto = Reflect.getPrototypeOf(real); proto !== null && held === undefined; proto = Reflect.getPrototypeOf(proto)) {
+						held = Reflect.getOwnPropertyDescriptor(proto, prop);
+					}
+					if (held !== undefined) {
+						if (!("value" in held)) {
+							if (typeof held.set !== "function") return false;
+							Reflect.apply(held.set, view, [value]);
+							return true;
+						}
+						if (!held.writable) return false;
+					}
+					return define(prop, { __proto__: null, value, writable: true, enumerable: true, configurable: true });
+				}
+				if (!("value" in held)) {
+					if (typeof held.set !== "function") return false;
+					Reflect.apply(held.set, view, [value]);
+					return true;
+				}
+				if (!held.writable) return false;
+				return define(prop, { __proto__: null, value });
+			},
+			defineProperty(_t, prop, descriptor) {
+				if (closed()) return Reflect.defineProperty(shell, prop, descriptor);
+				if (forked()) return Reflect.defineProperty(current(), prop, descriptor);
+				return define(prop, descriptor);
+			},
+			deleteProperty(_t, prop) {
+				if (closed()) return Reflect.deleteProperty(shell, prop);
+				if (forked()) return Reflect.deleteProperty(current(), prop);
+				const held = attributes(prop);
+				if (held === undefined) return true;
+				if (!held.configurable) return false;
+				return keepChange(prop, { op: "delete" });
+			},
+			has(_t, prop) {
+				if (closed()) return Reflect.has(shell, prop);
+				if (forked()) return prop in current();
+				const entry = own(prop);
+				if (entry !== undefined) return entry.op !== "delete";
+				return prop in real;
+			},
+			ownKeys() {
+				if (closed()) return Reflect.ownKeys(shell);
+				if (forked()) return setToArray(setFrom(concatLists(Reflect.ownKeys(current()), Reflect.ownKeys(shell))));
+				const keys = setFrom(Reflect.ownKeys(real));
+				const members = MapMethods.get(run.nsEntries, key);
+				if (members !== undefined) {
+					const changed = mapEntriesToArray(members);
+					for (let index = 0; index < changed.length; index++) {
+						if (changed[index][1].op === "delete") SetMethods.delete(keys, changed[index][0]);
+						else SetMethods.add(keys, changed[index][0]);
+					}
+				}
+				for (let index = 0, held = Reflect.ownKeys(shell); index < held.length; index++) SetMethods.add(keys, held[index]);
+				return setToArray(keys);
+			},
+			getOwnPropertyDescriptor(_t, prop) {
+				if (closed()) return Reflect.getOwnPropertyDescriptor(shell, prop);
+				const fixed = Reflect.getOwnPropertyDescriptor(shell, prop);
+				if (fixed && !fixed.configurable) return fixed;
+				const held = forked() ? Reflect.getOwnPropertyDescriptor(current(), prop) : attributes(prop);
+				if (held === undefined) return undefined;
+				// Reported configurable: the shell holds none of the members, so a fixed one could not be reported (proxy
+				// invariant); a change to it is still refused by the view.
+				if (!("value" in held)) return { __proto__: null, ...held, configurable: true };
+				return { __proto__: null, ...held, value: forked() ? held.value : read(prop, view), configurable: true };
+			},
+			getPrototypeOf() {
+				if (closed()) return Reflect.getPrototypeOf(shell);
+				return Reflect.getPrototypeOf(forked() ? current() : real);
+			},
+			setPrototypeOf(_t, prototype) {
+				if (closed()) return Reflect.setPrototypeOf(shell, prototype);
+				if (forked()) return Reflect.setPrototypeOf(current(), prototype);
+				return Reflect.getPrototypeOf(real) === prototype;
+			},
+			isExtensible() {
+				return Reflect.isExtensible(shell);
+			},
+			// Closing the view fixes the members the run reads now on the view itself; the namespace stays as it is.
+			preventExtensions() {
+				if (closed()) return true;
+				if (forked()) Reflect.preventExtensions(current());
+				const keys = Reflect.ownKeys(view);
+				for (let index = 0; index < keys.length; index++) {
+					const described = Reflect.getOwnPropertyDescriptor(view, keys[index]);
+					if (described) Reflect.defineProperty(shell, keys[index], { __proto__: null, ...described, configurable: true });
+				}
+				Reflect.setPrototypeOf(shell, Reflect.getPrototypeOf(view));
+				return Reflect.preventExtensions(shell);
+			}
+		});
+		WeakMapMethods.set(RUN_VIEW_REALS, view, real);
+		return view;
+	};
+
+	/**
+	 * Write what the run kept of its changes to the framework's namespace into the namespace of the run's own tree.
+	 * @param {object[]} log - The changes, in the order made.
+	 * @returns {void}
+	 */
+	const carryFrameworkWrites = (log) => {
+		for (let index = 0; index < log.length; index++) {
+			const entry = log[index];
+			let node = slothlet.boundApi;
+			for (let step = 0; step < entry.parts.length && node !== null && node !== undefined; step++) node = node[entry.parts[step]];
+			if (node === null || (typeof node !== "object" && typeof node !== "function")) continue;
+			try {
+				if (entry.op === "delete") Reflect.deleteProperty(node, entry.prop);
+				else {
+					const descriptor = { __proto__: null, ...entry.descriptor };
+					if ("value" in descriptor) {
+						let value = descriptor.value;
+						while (WeakMapMethods.has(RUN_VIEW_REALS, value)) value = WeakMapMethods.get(RUN_VIEW_REALS, value);
+						descriptor.value = runtime_unwrapSelfView(value);
+					}
+					Reflect.defineProperty(node, entry.prop, descriptor);
+				}
+			} catch {
+				// A member the run's tree holds differently (fixed there) keeps what the tree holds.
+			}
+		}
+	};
+
 	const root = viewAt([], parentSelf, false);
 	/**
 	 * The run's tree has been built: what the run kept before is written into it (a copy of the tree it read), and from
@@ -942,8 +1267,11 @@ function makeRunSelf(slothlet, parentSelf, record) {
 		if (kind === "copy") {
 			const logs = [];
 			for (let outer = run; outer !== null; outer = outer.parent) if (!outer.forked) listUnshift(logs, outer.log);
+			const nsLogs = [];
+			for (let outer = run; outer !== null; outer = outer.parent) if (!outer.forked) listUnshift(nsLogs, outer.nsLog);
 			asBuild(() => {
 				for (let index = 0; index < logs.length; index++) slothlet.handlers.apiManager.carryRunWrites(logs[index]);
+				for (let index = 0; index < nsLogs.length; index++) carryFrameworkWrites(nsLogs[index]);
 			});
 		}
 		run.forked = true;
