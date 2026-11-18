@@ -27,7 +27,8 @@
  * - **Line 142** — `getContext()` throws `CONTEXT_NOT_ACTIVE_LIVE` when no instance is active:
  *   Triggered by importing `@cldmv/slothlet/runtime/live` (public export) and accessing
  *   `self.anything` outside any live slothlet context.  The `self` proxy's `get` trap calls
- *   `liveRuntime.getContext()` directly, which hits line 142.
+ *   `liveRuntime.getContext()` directly, which hits line 142; the trap treats that as no call
+ *   running and refuses with `CONTEXT_NOT_ACTIVE_SELF`, the same code the async runtime gives.
  *
  * - **Line 168** — `tryGetContext()` returns `undefined` when `currentInstanceID` is null:
  *   Triggered by importing `@cldmv/slothlet/runtime` (the dispatcher module, public export)
@@ -69,10 +70,10 @@ describe("LiveContextManager.getContext — throws CONTEXT_NOT_ACTIVE_LIVE via r
 		expect(() => liveself.someMethod).toThrow(SlothletError);
 	});
 
-	it("error code contains CONTEXT_NOT_ACTIVE_LIVE", async () => {
+	it("error code is CONTEXT_NOT_ACTIVE_SELF, the same as the async runtime", async () => {
 		const { self: liveself } = await import("@cldmv/slothlet/runtime/live");
 
-		expect(() => liveself.anything).toThrow(/CONTEXT_NOT_ACTIVE_LIVE/);
+		expect(() => liveself.anything).toThrow(/CONTEXT_NOT_ACTIVE_SELF/);
 	});
 
 	it("multiple properties all throw the same error", async () => {
