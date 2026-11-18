@@ -262,11 +262,9 @@ export class VersionManager extends ComponentBase {
 			// Used by #walkApiPath to avoid re-splitting the concatenated versionedPath string,
 			// which would fragment "2.3.0" into ["2","3","0"] and walk the wrong tree nodes.
 			versionedParts: Objects.freeze(concatLists([versionTag], splitText(logicalPath, "."))),
-			// isDefault and versionMeta are always explicitly passed via registerVersion's callers.
+			// isDefault is always explicitly passed via registerVersion's callers.
 			/* v8 ignore next */
 			isDefault: isDefault ?? false,
-			/* v8 ignore next */
-			versionMeta: versionMeta ?? {},
 			at: this.clock.now()
 		};
 
@@ -469,10 +467,17 @@ export class VersionManager extends ComponentBase {
 		for (const ofEntry of mapEntries(entry.versions)) {
 			const tag = ofEntry[0],
 				ve = ofEntry[1];
+			// The same version metadata versioning.metadata.get() and the dispatcher read, with the injected version and path.
+			// #versionMetadataByModule is always populated at registerVersion time; the ?? fallback is defensive.
+			/* v8 ignore next */
+			const stored = MapMethods.get(this.#versionMetadataByModule, ve.moduleID) ?? {
+				version: ve.versionTag,
+				path: segmentsOf(logicalPath)
+			};
 			versions[tag] = {
 				at: ve.at,
 				default: ve.isDefault,
-				metadata: { ...ve.versionMeta },
+				metadata: { ...stored, path: copyList(stored.path) },
 				module: ve.moduleID,
 				path: copyList(ve.versionedParts),
 				tag: ve.versionTag

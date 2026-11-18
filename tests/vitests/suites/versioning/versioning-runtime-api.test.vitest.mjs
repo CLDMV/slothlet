@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:27-07:00 (1791090927)
+ *	@Last modified time: 2026-11-17T16:29:58-08:00 (1794961798)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -79,6 +79,48 @@ describe.each(getMatrixConfigs())("Versioning > Runtime API > $name", ({ config 
 		const meta = api.slothlet.versioning.metadata.get("auth", "v1");
 		expect(meta.path).toEqual(["auth"]);
 		expect(meta).not.toHaveProperty("logicalPath");
+	});
+
+	it("versioning.list and versioning.metadata.get report the same version metadata, after versioning.metadata.set too", async () => {
+		api = await slothlet({ ...config, base: `${BASE}/callers` });
+
+		await api.slothlet.api.add("auth", `${BASE}/v1`, { version: { tag: "v1", default: true, metadata: { tier: "beta" } } });
+		expect(api.slothlet.versioning.list("auth").versions.v1.metadata).toEqual(api.slothlet.versioning.metadata.get("auth", "v1"));
+		expect(api.slothlet.versioning.list("auth").versions.v1.metadata).toEqual({ tier: "beta", version: "v1", path: ["auth"] });
+
+		api.slothlet.versioning.metadata.set("auth", "v1", { tier: "ga", stable: true });
+		const listed = api.slothlet.versioning.list("auth").versions.v1.metadata;
+		expect(listed).toEqual(api.slothlet.versioning.metadata.get("auth", "v1"));
+		expect(listed).toEqual({ tier: "ga", stable: true, version: "v1", path: ["auth"] });
+
+		// Still a copy: its path array is not the stored one.
+		listed.path.push("x");
+		expect(api.slothlet.versioning.metadata.get("auth", "v1").path).toEqual(["auth"]);
+	});
+
+	it("version and path are reserved in version metadata: the injected values win everywhere it is read", async () => {
+		let seen = null;
+		api = await slothlet({
+			...config,
+			base: `${BASE}/callers`,
+			versioning: {
+				dispatcher: (versions) => {
+					seen = versions.v1.version.metadata;
+					return null;
+				}
+			}
+		});
+
+		await api.slothlet.api.add("auth", `${BASE}/v1`, {
+			version: { tag: "v1", default: true, metadata: { version: "mine", path: "mine", tier: "beta" } }
+		});
+		api.slothlet.versioning.metadata.set("auth", "v1", { path: ["elsewhere"], version: "v9" });
+
+		const expected = { tier: "beta", version: "v1", path: ["auth"] };
+		expect(api.slothlet.versioning.list("auth").versions.v1.metadata).toEqual(expected);
+		expect(api.slothlet.versioning.metadata.get("auth", "v1")).toEqual(expected);
+		api.unversionedCaller.callLogin("testUser");
+		expect(seen).toEqual(expected);
 	});
 
 	it("versioning.default changes the default", async () => {
