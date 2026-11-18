@@ -3548,6 +3548,9 @@ function runtime_authorAnswer(record, frame, outer = []) {
 	// Only a file's own source is its author's: code compiled under its name by someone is no one's (#597). Under vite, the
 	// code its runner evaluated for the file (#714).
 	if (!runtime_runsFileSource(frame) && !runtime_runsRunnerTransform(frame)) return null;
+	// Another copy of a file the instance loaded under its tag, which a package or the host imported itself: no leaf's
+	// code, as frame placement reads it (see createFramePlacer).
+	if (runtime_untaggedInstanceCopy(record.wrapper.slothlet, frame)) return null;
 	// The nearest leaf frame of the file, or the file's module when no frame of it is inside a leaf's range (#726).
 	// Read as far as each reader goes, once: the readers stop at the first frame of another file.
 	const further = Arrays.isArray(outer) ? outer : runtime_replayable(outer);
@@ -3566,6 +3569,27 @@ function runtime_authorAnswer(record, frame, outer = []) {
 			concatLists([record.wrapper, record.ceiling, supplierChainCeiling(record)], copyList(authors, 1))
 		)
 	};
+}
+
+/**
+ * Whether a frame runs in an untagged copy of a file an instance loaded under its tag. In Node slothlet loads every ES
+ * module of an instance under its tag and knows its CommonJS files, so an untagged frame at such a file is another
+ * copy of it, a package's or the host's own import: code no call accounts for, and no leaf's (see
+ * {@link createFramePlacer}, which places such a frame on no call).
+ * @param {object|null|undefined} slothlet - The instance.
+ * @param {{path: string, line: string}} frame - The frame.
+ * @returns {boolean} True when it is such a copy.
+ * @private
+ */
+function runtime_untaggedInstanceCopy(slothlet, frame) {
+	if (!isNode || !slothlet || typeof frame.line !== "string" || runtime_frameInstanceTag(frame.line)) return false;
+	const leaves = runtime_leavesAtFile(slothlet, frame.path, null, null);
+	if (!leaves.length) return false;
+	for (let ofIndex = 0, ofList = leaves; ofIndex < ofList.length; ofIndex++) {
+		if (SetMethods.has(runtime_commonJSLocations(runtime_builtUnder(ofList[ofIndex])), frame.path)) return false;
+	}
+	const loader = slothlet.processors?.loader;
+	return Boolean(loader) && SetMethods.has(runtime_loadedLocations(loader), frame.path);
 }
 
 /**
