@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:28:46-08:00 (1794882526)
+ *	@Last modified time: 2026-11-17T19:49:35-08:00 (1794973775)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -24,6 +24,7 @@ import { util, inheritsFrom } from "#helpers/platform";
 import { ComponentBase } from "#factories/component-base";
 import { compilePattern } from "#helpers/pattern-matcher";
 import { normalizeHookConfig } from "#helpers/config";
+import { FORK, writeTarget } from "#helpers/flow-stores";
 import { internals as unifiedWrapperInternals } from "#handlers/unified-wrapper";
 import { identityCeilings } from "#handlers/trusted-root";
 import { internals as frameworkInternalsInternals } from "#handlers/framework-internals";
@@ -37,6 +38,8 @@ import {
 	listPush,
 	listSplice,
 	Map,
+	mapEntriesToArray,
+	mapFrom,
 	mapList,
 	MapMethods,
 	mapValues,
@@ -397,6 +400,13 @@ const VERSION_BINDING = Symbol("@cldmv/slothlet/hook-version-binding");
  * @class HookManager
  * @extends ComponentBase
  */
+/**
+ * The manager {@link HookManager#[FORK]} is copying, read once by the constructor it calls; null otherwise.
+ * @type {HookManager|null}
+ * @private
+ */
+let forkingFrom = null;
+
 export class HookManager extends ComponentBase {
 	/**
 	 * Property name for auto-discovery
@@ -452,6 +462,12 @@ export class HookManager extends ComponentBase {
 	 */
 	constructor(slothlet) {
 		super(slothlet);
+		const from = forkingFrom;
+		if (from !== null) {
+			forkingFrom = null;
+			this.#copyFrom(from);
+			return;
+		}
 
 		// Read hook configuration from slothlet.config.hook. The HookManager is constructed
 		// during _initializeComponents — BEFORE transformConfig runs — so slothlet.config.hook
@@ -577,6 +593,8 @@ export class HookManager extends ComponentBase {
 	 * }, { priority: 100 });
 	 */
 	on(typePattern, handler, options = {}) {
+		const written = writeTarget(this);
+		if (written !== this) return written.on(typePattern, handler, options);
 		// Parse typePattern (format: "type:pattern")
 		let { type, pattern } = this.#parseTypePattern(typePattern);
 
@@ -888,6 +906,8 @@ export class HookManager extends ComponentBase {
 	 * @public
 	 */
 	remove(filter = {}) {
+		const written = writeTarget(this);
+		if (written !== this) return written.remove(filter);
 		let removed = 0;
 
 		// Filter by ID (fast path)
@@ -961,6 +981,8 @@ export class HookManager extends ComponentBase {
 	 * @public
 	 */
 	enable(filter = {}) {
+		const written = writeTarget(this);
+		if (written !== this) return written.enable(filter);
 		// Support string pattern shorthand
 		if (typeof filter === "string") {
 			filter = { pattern: filter };
@@ -983,6 +1005,8 @@ export class HookManager extends ComponentBase {
 	 * @public
 	 */
 	disable(filter = {}) {
+		const written = writeTarget(this);
+		if (written !== this) return written.disable(filter);
 		// Support string pattern shorthand
 		if (typeof filter === "string") {
 			filter = { pattern: filter };
@@ -1012,6 +1036,8 @@ export class HookManager extends ComponentBase {
 	 * api.slothlet.hook.pattern.enable("database.*"); // only intercept database.* paths
 	 */
 	enablePattern(pattern) {
+		const written = writeTarget(this);
+		if (written !== this) return written.enablePattern(pattern);
 		// Validate by compiling (throws on malformed patterns, consistent with on()).
 		this.#compilePattern(pattern);
 		if (!SetMethods.has(this.enabledPatterns, pattern)) {
@@ -1039,6 +1065,8 @@ export class HookManager extends ComponentBase {
 	 * api.slothlet.hook.pattern.disable("database.*"); // stop restricting to database.*
 	 */
 	disablePattern(pattern) {
+		const written = writeTarget(this);
+		if (written !== this) return written.disablePattern(pattern);
 		const removed = SetMethods.delete(this.enabledPatterns, pattern);
 		MapMethods.delete(this.#globalFilterCache, pattern);
 		if (SetMethods.size(this.enabledPatterns) === 0) {
@@ -1063,6 +1091,8 @@ export class HookManager extends ComponentBase {
 	 * @public
 	 */
 	resetPatternFilter() {
+		const written = writeTarget(this);
+		if (written !== this) return written.resetPatternFilter();
 		SetMethods.clear(this.enabledPatterns);
 		MapMethods.clear(this.#globalFilterCache);
 		this.patternFilterActive = false;
@@ -1084,6 +1114,8 @@ export class HookManager extends ComponentBase {
 	 * @public
 	 */
 	setPinEnforced(value) {
+		const written = writeTarget(this);
+		if (written !== this) return written.setPinEnforced(value);
 		this.pinEnforced = value === true;
 		return this.pinEnforced;
 	}
@@ -2233,6 +2265,8 @@ export class HookManager extends ComponentBase {
 	 * @public
 	 */
 	importHooks(registrations) {
+		const written = writeTarget(this);
+		if (written !== this) return written.importHooks(registrations);
 		if (!Arrays.isArray(registrations)) return;
 		for (let ofIndex = 0, ofList = registrations; ofIndex < ofList.length; ofIndex++) {
 			const reg = ofList[ofIndex];
@@ -2256,10 +2290,60 @@ export class HookManager extends ComponentBase {
 	}
 
 	/**
+	 * A copy of this manager for a `run()` / `scope()` (see `FORK` in `helpers/flow-stores`): its hooks, their enabled
+	 * states, the path filter and the pin switch, which later changes to either leave the other as it is. Each hook
+	 * record is copied (enable / disable change a record); the per-path strategies are worked out again.
+	 * @returns {HookManager} The copy.
+	 * @internal
+	 */
+	[FORK]() {
+		forkingFrom = this;
+		return new HookManager(this.slothlet);
+	}
+
+	/**
+	 * Fill a new manager from the one it is a copy of (see {@link HookManager#[FORK]}).
+	 * @param {HookManager} from - The manager copied.
+	 * @returns {void}
+	 * @private
+	 */
+	#copyFrom(from) {
+		this.enabled = from.enabled;
+		this.defaultPattern = from.defaultPattern;
+		this.suppressErrors = from.suppressErrors;
+		this.pinEnforced = from.pinEnforced;
+		this.enabledPatterns = setFrom(setToArray(from.enabledPatterns));
+		this.patternFilterActive = from.patternFilterActive;
+		this.hooks = mapFrom(mapEntriesToArray(from.hooks));
+		this.registrationOrder = from.registrationOrder;
+		// What was reported is reported once, whichever copy reports it.
+		this.reportedErrors = from.reportedErrors;
+		this.#idCounter = from.#idCounter;
+		for (let typeIndex = 0, types = Objects.keys(from.#hooks); typeIndex < types.length; typeIndex++) {
+			const type = types[typeIndex];
+			for (let subsetIndex = 0, subsets = Objects.keys(from.#hooks[type]); subsetIndex < subsets.length; subsetIndex++) {
+				const subset = subsets[subsetIndex];
+				const source = from.#hooks[type][subset];
+				const copy = this.#hooks[type][subset];
+				for (let patternIndex = 0, patterns = Objects.keys(source); patternIndex < patterns.length; patternIndex++) {
+					const pattern = patterns[patternIndex];
+					copy[pattern] = mapList(source[pattern], (hook) => {
+						const own = { ...hook };
+						MapMethods.set(this.#byId, own.id, own);
+						return own;
+					});
+				}
+			}
+		}
+	}
+
+	/**
 	 * Cleanup hook manager on shutdown.
 	 * @public
 	 */
 	async shutdown() {
+		// The instance's teardown of its own handler: the copies that hold it keep theirs.
+		writeTarget(this, true);
 		// Clear all hooks
 		this.#hooks = {
 			before: { before: {}, primary: {}, after: {} },

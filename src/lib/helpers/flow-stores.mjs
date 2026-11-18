@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T18:55:59-08:00 (1794970559)
+ *	@Last modified time: 2026-11-17T19:49:40-08:00 (1794973780)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -34,6 +34,7 @@
 import {
 	FinalizationRegistry,
 	FinalizationRegistryMethods,
+	Reflect,
 	Set,
 	SetMethods,
 	setValues,
@@ -47,11 +48,15 @@ import {
 /**
  * The key a `run()` / `scope()` store records its copy of the instance under. Every run gets a record of its own (see
  * {@link copyForRun}): `from` is the token of the copy that was current when the run started, shared with every run
- * that started on that copy, and `parent` is the record of the run it was opened in (null for a run opened outside
- * any). The stores of the run's calls and of work it left behind carry the run's record with the rest of the store.
- * While the instance still has the copy, the token's `values` is null and the instance's own fields answer; once a
- * reload has swapped another copy in, `values` holds the copy the run keeps (see `Slothlet#readField`). The record is
- * where a run's own changes go once it forks on its first write; until then it reads through to `from`.
+ * that started on that copy, `parent` is the record of the run it was opened in (null for a run opened outside any),
+ * and `ns` is the run's own handlers namespace once it holds a fork (null until then). The stores of the run's calls
+ * and of work it left behind carry the run's record with the rest of the store.
+ *
+ * While the instance has not changed since the token was handed out, the token's `values` is null and the instance's
+ * own fields answer. The first change after that, a reload's swap or a write to one of the forkable handlers (see
+ * {@link FORK}) from outside any run, makes the token keep what the instance had: `values` then holds that copy. A
+ * write from code in a run forks the written handler into the run's `ns` (see `Slothlet#writeTarget`), which the run
+ * then reads first. A nested run starts with its own copy of its parent's `ns`.
  * @type {symbol}
  * @internal
  */
@@ -65,19 +70,74 @@ export const RUN_COPY = Symbol("slothlet.runCopy");
 export const CURRENT_COPY = Symbol("slothlet.currentCopy");
 
 /**
+ * The key of the instance's method that makes the record of a run opened in a run that holds a fork: the new run
+ * starts with a copy of its parent's handlers namespace (see {@link copyForRun}).
+ * @type {symbol}
+ * @internal
+ */
+export const INHERIT_COPY = Symbol("slothlet.inheritCopy");
+
+/**
+ * The key of the instance's method that says which object a forkable handler's write goes to (see {@link writeTarget}).
+ * @type {symbol}
+ * @internal
+ */
+export const WRITE_TARGET = Symbol("slothlet.writeTarget");
+
+/**
+ * The key of the instance's method that reads one of its own copy fields (`api`, `config`, a component namespace), as
+ * the instance has it, whichever copy the calling code answers from.
+ * @type {symbol}
+ * @internal
+ */
+export const INSTANCE_FIELD = Symbol("slothlet.instanceField");
+
+/**
+ * The key of a forkable handler's method that makes a copy of it: a new handler of the same class holding a copy of
+ * its state (rules, hooks, metadata, principals, subscriptions, mode and seal, as the class keeps them), which later
+ * changes to either leave the other as it is. Caches start empty in the copy.
+ * @type {symbol}
+ * @internal
+ */
+export const FORK = Symbol("slothlet.fork");
+
+/**
  * The copy record for a new `run()` / `scope()` store: an object of its own, never shared with another run. It reads
- * through to the copy its parent run reads (a nested run), else to the copy the instance has now.
+ * through to the copy its parent run reads (a nested run), else to the copy the instance has now. A nested run whose
+ * parent holds a fork starts with a copy of the parent's handlers namespace, so the parent's later writes and its own
+ * stay apart.
  * @param {object|null|undefined} slothlet - The instance object.
  * @param {object|null|undefined} parentStore - The store the run is opened in.
- * @returns {{from: {values: object|null}, parent: object|null}|null} The record, or null when the instance hands out no
- *   copy token.
+ * @returns {{from: {values: object|null}, parent: object|null, ns: object|null}|null} The record, or null when the
+ *   instance hands out no copy token.
  * @internal
  */
 export function copyForRun(slothlet, parentStore) {
 	const parent = parentStore?.[RUN_COPY] ?? null;
-	if (parent !== null) return { __proto__: null, from: parent.from, parent };
+	if (parent !== null) {
+		if (parent.ns === null || typeof slothlet?.[INHERIT_COPY] !== "function")
+			return { __proto__: null, from: parent.from, parent, ns: null };
+		return slothlet[INHERIT_COPY](parent);
+	}
 	if (typeof slothlet?.[CURRENT_COPY] !== "function") return null;
-	return { __proto__: null, from: slothlet[CURRENT_COPY](), parent: null };
+	return { __proto__: null, from: slothlet[CURRENT_COPY](), parent: null, ns: null };
+}
+
+/**
+ * The object a forkable handler's write goes to: the handler itself, or, for a write made by code in a `run()` /
+ * `scope()`, the run's own fork of it (made on the run's first write). A write from outside any run goes to the
+ * instance's handler, after every copy that still shares it got a fork of its own.
+ * @template T
+ * @param {T} component - The handler being written.
+ * @param {boolean} [instanceOnly=false] - True for teardown the instance does to its own handler (`shutdown()`): it
+ *   never forks for a run, it only keeps the copies that share the handler as they are.
+ * @returns {T} The handler to write.
+ * @internal
+ */
+export function writeTarget(component, instanceOnly = false) {
+	const slothlet = component.slothlet;
+	const choose = slothlet?.[WRITE_TARGET];
+	return typeof choose === "function" ? Reflect.apply(choose, slothlet, [component, instanceOnly]) : component;
 }
 
 /**

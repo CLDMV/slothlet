@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T17:16:27-08:00 (1794964587)
+ *	@Last modified time: 2026-11-17T19:49:36-08:00 (1794973776)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -23,6 +23,7 @@
 import { ComponentBase } from "#factories/component-base";
 import { internals as unifiedWrapperInternals } from "#handlers/unified-wrapper";
 import { verifyToken } from "#handlers/lifecycle-token";
+import { FORK, writeTarget } from "#helpers/flow-stores";
 import {
 	ArrayMethods,
 	Arrays,
@@ -76,6 +77,35 @@ export const MODULE_MANIFEST = Symbol("slothlet.moduleManifest");
  * @extends ComponentBase
  * @package
  */
+/**
+ * The handler {@link Metadata#[FORK]} is copying, read once by the constructor it calls; null otherwise.
+ * @type {Metadata|null}
+ * @private
+ */
+let forkingFrom = null;
+
+/**
+ * A copy of user metadata a later change to the original leaves as it is: plain objects (null-prototype ones included)
+ * and arrays are copied all the way down; any other value is the same value.
+ * @param {*} value - The metadata value.
+ * @returns {*} The copy.
+ * @private
+ */
+function copyMetadataValue(value) {
+	if (Arrays.isArray(value)) {
+		const copy = [];
+		for (let index = 0; index < value.length; index++) copy[index] = copyMetadataValue(value[index]);
+		return copy;
+	}
+	if (value === null || typeof value !== "object") return value;
+	const proto = Objects.getPrototypeOf(value);
+	if (proto !== null && proto !== Objects.prototype) return value;
+	const copy = Objects.create(proto);
+	for (let ofIndex = 0, keys = Objects.keys(value); ofIndex < keys.length; ofIndex++)
+		copy[keys[ofIndex]] = copyMetadataValue(value[keys[ofIndex]]);
+	return copy;
+}
+
 export class Metadata extends ComponentBase {
 	static slothletProperty = "metadata";
 
@@ -88,6 +118,13 @@ export class Metadata extends ComponentBase {
 	 */
 	constructor(slothlet) {
 		super(slothlet);
+		const from = forkingFrom;
+		if (from !== null) {
+			forkingFrom = null;
+			this._instanceId = from._instanceId;
+			this.#copyFrom(from);
+			return;
+		}
 		this._instanceId = `metadata_${this.clock.now()}_${StringMethods.substr(NumberMethods.toString(Math.random(), 36), 2, 9)}`;
 	}
 
@@ -107,6 +144,38 @@ export class Metadata extends ComponentBase {
 	#globalUserMetadata = Objects.create(null); // global user metadata (applies to all)
 	/** @type {Map<string, object>} */
 	#manifests = new Map(); // raw moduleID → parsed slothlet.module.json of a package mount
+
+	/**
+	 * A copy of this handler for a `run()` / `scope()` (see `FORK` in `helpers/flow-stores`): its user metadata (by
+	 * module and by path) and global metadata, which later changes to either leave the other as it is. The system
+	 * metadata nodes carry is the api tree's, and stays shared with it, as do the mounted manifests.
+	 * @returns {Metadata} The copy.
+	 * @internal
+	 */
+	[FORK]() {
+		forkingFrom = this;
+		return new Metadata(this.slothlet);
+	}
+
+	/**
+	 * Fill a new handler from the one it is a copy of (see {@link Metadata#[FORK]}).
+	 * @param {Metadata} from - The handler copied.
+	 * @returns {void}
+	 * @private
+	 */
+	#copyFrom(from) {
+		this.#secureMetadata = from.#secureMetadata;
+		this.#readThrough = from.#readThrough;
+		this.#manifests = from.#manifests;
+		this.#globalUserMetadata = copyMetadataValue(from.#globalUserMetadata);
+		for (const ofEntry of mapEntries(from.#userMetadataStore)) {
+			const entry = ofEntry[1];
+			MapMethods.set(this.#userMetadataStore, ofEntry[0], {
+				metadata: copyMetadataValue(entry.metadata),
+				apiPaths: setFrom(setToArray(entry.apiPaths))
+			});
+		}
+	}
 
 	/**
 	 * Merge metadata values while preserving nested plain-object structure.
@@ -475,6 +544,8 @@ export class Metadata extends ComponentBase {
 	 * @public
 	 */
 	setGlobalMetadata(key, value) {
+		const written = writeTarget(this);
+		if (written !== this) return written.setGlobalMetadata(key, value);
 		this.#globalUserMetadata[key] = this.#mergeMetadataValue(this.#globalUserMetadata[key], value, "metadata", key);
 	}
 
@@ -486,6 +557,8 @@ export class Metadata extends ComponentBase {
 	 * @public
 	 */
 	setUserMetadata(target, key, value) {
+		const written = writeTarget(this);
+		if (written !== this) return written.setUserMetadata(target, key, value);
 		if (typeof target !== "function" && typeof target !== "object") {
 			throw new this.SlothletError("METADATA_TARGET_INVALID", {
 				target: typeof target,
@@ -544,6 +617,8 @@ export class Metadata extends ComponentBase {
 	 * @public
 	 */
 	removeUserMetadata(target, key) {
+		const written = writeTarget(this);
+		if (written !== this) return written.removeUserMetadata(target, key);
 		if (typeof target !== "function" && typeof target !== "object") {
 			throw new this.SlothletError("METADATA_TARGET_INVALID", {
 				target: typeof target,
@@ -702,6 +777,8 @@ export class Metadata extends ComponentBase {
 	 * @public
 	 */
 	setPathMetadata(apiPath, keyOrObj, value) {
+		const written = writeTarget(this);
+		if (written !== this) return written.setPathMetadata(apiPath, keyOrObj, value);
 		if (typeof apiPath !== "string" || !apiPath) {
 			throw new this.SlothletError("INVALID_ARGUMENT", { argument: "apiPath", expected: "non-empty string", received: typeof apiPath });
 		}
@@ -754,6 +831,8 @@ export class Metadata extends ComponentBase {
 	 * @public
 	 */
 	removePathMetadata(apiPath, key) {
+		const written = writeTarget(this);
+		if (written !== this) return written.removePathMetadata(apiPath, key);
 		if (!apiPath || typeof apiPath !== "string") return;
 
 		const entry = MapMethods.get(this.#userMetadataStore, apiPath);
@@ -828,6 +907,8 @@ export class Metadata extends ComponentBase {
 	 * @package
 	 */
 	importUserState(state) {
+		const written = writeTarget(this);
+		if (written !== this) return written.importUserState(state);
 		if (!state) return;
 
 		// Restore global metadata (merge, existing keys win)

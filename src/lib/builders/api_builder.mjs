@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T18:55:54-08:00 (1794970554)
+ *	@Last modified time: 2026-11-17T19:49:33-08:00 (1794973773)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -429,27 +429,43 @@ function runtime_buildAsNoModule(slothlet, build, folderPath) {
 }
 
 /**
+ * A function calling one method of one of the instance's handlers, the handler read when it is called: the one the
+ * calling code answers from (a `run()` / `scope()` answers from its own copy of the handlers it changed). Named
+ * `bound <method>`, as a bound method is.
+ * @param {object} slothlet - The instance.
+ * @param {string} key - The handler's name in `slothlet.handlers`.
+ * @param {string} method - The method.
+ * @returns {Function} The function.
+ * @private
+ */
+function handlerMethod(slothlet, key, method) {
+	const call = function (...args) {
+		const handler = slothlet.handlers[key];
+		return Reflect.apply(handler[method], handler, args);
+	};
+	Objects.defineProperty(call, "name", { __proto__: null, value: `bound ${method}`, configurable: true });
+	return call;
+}
+
+/**
  * Build a recursive copy-on-write `self` view for a `.run()` / `.scope()`
  * child store.
  *
  * @description
  * `.run()`/`.scope()` are a sandbox: any mutation of `self` inside the callback
- * must not leak to the live instance. This proxy reads **through** to the
- * parent `self` — primitive and top-level reads re-resolve `parentSelf[prop]`
- * on every access — and captures **writes** in a per-scope overlay `Map`.
- * Object-valued children are wrapped in their own COW view on **first** access
- * and **memoized** for the scope's lifetime: repeated `self.X` reads return the
- * same view, so an in-scope deep-path write (`self.X.Y.Z = …`) is read back
- * consistently — and top-level `self.X = …` is captured too. Memoizing pins
- * each child view to the object `parentSelf[prop]` resolved to at first access;
- * if the live tree swaps that object mid-scope (e.g. an `api.reload()`
- * overlapping an open scope) in-scope reads keep seeing the first-access
- * object. That stability is intentional — dropping the view to follow the swap
- * would also drop any in-scope writes to that subtree, breaking the
- * "writes visible for the scope" contract. The whole COW tree is discarded when
- * the child store is discarded on scope exit, so `.run()` / `.scope()` hold no
- * `self` mutations. No tree clone — only the accessed subtree is wrapped,
- * lazily.
+ * must not leak to the live instance, and changes the instance makes while the
+ * scope runs must not reach it. This proxy reads **through** to the parent
+ * `self` once per member: the first read of a member (and the first `in` /
+ * key listing) is kept for the scope's lifetime, so a later change to the live
+ * tree at that member does not show in the scope. **Writes** go to a per-scope
+ * overlay `Map`. Object-valued children are wrapped in their own COW view on
+ * **first** access and **memoized**: repeated `self.X` reads return the same
+ * view, so an in-scope deep-path write (`self.X.Y.Z = …`) is read back
+ * consistently — and top-level `self.X = …` is captured too. The whole COW tree
+ * is discarded when the child store is discarded on scope exit, so `.run()` /
+ * `.scope()` hold no `self` mutations. No tree clone — only the accessed subtree
+ * is wrapped, lazily. A member the scope has not read yet is read from the live
+ * tree when it first is: the api tree itself is not copied at the scope's start.
  *
  * Functions and primitives pass through unwrapped; identity of a COW-wrapped
  * object differs from the underlying object (acceptable — slothlet API calls
@@ -461,14 +477,29 @@ function runtime_buildAsNoModule(slothlet, build, folderPath) {
 function makeCopyOnWriteSelf(parentSelf) {
 	const overlay = new Map(); // prop → value written inside this scope
 	const childViews = new Map(); // prop → memoized child COW view (read-through objects)
+	const taken = new Map(); // prop → the live value the scope first read there
+	const present = new Map(); // prop → whether the live `self` had it when the scope first asked
+	let liveKeys = null; // the live `self`'s own keys when the scope first listed them
 	/**
-	 * What the scope reads at `prop`: its own write, or the live value, an object child as its memoized COW view.
+	 * What the live `self` holds at `prop` as the scope first read it.
+	 * @param {string|symbol} prop - Member read.
+	 * @returns {*} The value.
+	 */
+	const first = (prop) => {
+		if (MapMethods.has(taken, prop)) return MapMethods.get(taken, prop);
+		const real = parentSelf[prop];
+		MapMethods.set(taken, prop, real);
+		return real;
+	};
+	/**
+	 * What the scope reads at `prop`: its own write, or the live value as it first read it, an object child as its
+	 * memoized COW view.
 	 * @param {string|symbol} prop - Member read.
 	 * @returns {*} The value.
 	 */
 	const read = (prop) => {
 		if (MapMethods.has(overlay, prop)) return MapMethods.get(overlay, prop);
-		const real = parentSelf[prop];
+		const real = first(prop);
 		// Wrap object children in their own COW so deep-path writes are
 		// captured. Memoized so `self.X` returns the same view each time
 		// and in-scope writes to it are read back consistently.
@@ -507,7 +538,9 @@ function makeCopyOnWriteSelf(parentSelf) {
 				return true;
 			},
 			has(_t, prop) {
-				return MapMethods.has(overlay, prop) || prop in parentSelf;
+				if (MapMethods.has(overlay, prop)) return true;
+				if (!MapMethods.has(present, prop)) MapMethods.set(present, prop, prop in parentSelf);
+				return MapMethods.get(present, prop);
 			},
 			// `delete self.X` / `Object.defineProperty(self, …)` inside the scope reach here through the runtime
 			// `self` (#625): the overlay takes them as it takes a write. A deletion hides nothing of the live tree
@@ -524,7 +557,8 @@ function makeCopyOnWriteSelf(parentSelf) {
 				return true;
 			},
 			ownKeys() {
-				const keys = setFrom(Reflect.ownKeys(parentSelf));
+				liveKeys ??= Reflect.ownKeys(parentSelf);
+				const keys = setFrom(liveKeys);
 				for (const k of mapKeys(overlay)) SetMethods.add(keys, k);
 				return setToArray(keys);
 			},
@@ -3600,9 +3634,10 @@ export class ApiBuilder extends ComponentBase {
 				const handler = slothlet.handlers?.lifecycle;
 				const noop = () => {};
 				if (!handler) return { on: noop, off: noop };
+				// Each call goes to the handler the calling code answers from: a run() / scope() subscribes in its own copy.
 				return {
-					on: FunctionMethods.bind(handler.on, handler),
-					off: FunctionMethods.bind(handler.off, handler)
+					on: handlerMethod(slothlet, "lifecycle", "on"),
+					off: handlerMethod(slothlet, "lifecycle", "off")
 				};
 			})(),
 
@@ -3644,14 +3679,16 @@ export class ApiBuilder extends ComponentBase {
 					};
 				}
 				/* v8 ignore stop */
+				// Each call goes to the handler the calling code answers from: a run() / scope() subscribes, emits to and
+				// delivers from its own copy.
 				return {
-					on: FunctionMethods.bind(handler.on, handler),
-					once: FunctionMethods.bind(handler.once, handler),
-					off: FunctionMethods.bind(handler.off, handler),
-					emit: FunctionMethods.bind(handler.emit, handler),
-					level: FunctionMethods.bind(handler.resolveLevel, handler),
-					strategy: FunctionMethods.bind(handler.strategy, handler),
-					deliver: FunctionMethods.bind(handler.deliver, handler),
+					on: handlerMethod(slothlet, "eventManager", "on"),
+					once: handlerMethod(slothlet, "eventManager", "once"),
+					off: handlerMethod(slothlet, "eventManager", "off"),
+					emit: handlerMethod(slothlet, "eventManager", "emit"),
+					level: handlerMethod(slothlet, "eventManager", "resolveLevel"),
+					strategy: handlerMethod(slothlet, "eventManager", "strategy"),
+					deliver: handlerMethod(slothlet, "eventManager", "deliver"),
 					rules: {
 						/**
 						 * Add an event rule at runtime (gated by `config.api.mutations.events`). The host's rule enters the
@@ -4340,9 +4377,9 @@ export class ApiBuilder extends ComponentBase {
 					 * api.slothlet.permissions.control.mode("on");
 					 */
 					mode: function slothlet_permissions_control_mode(...args) {
-						const permissionManager = slothlet.handlers.permissionManager;
-						if (args.length > 0) permissionManager.setMode(args[0]);
-						return permissionManager.mode();
+						// Read again after the switch: in a run() / scope() the switch lands in the run's own copy.
+						if (args.length > 0) slothlet.handlers.permissionManager.setMode(args[0]);
+						return slothlet.handlers.permissionManager.mode();
 					},
 
 					/**
@@ -4363,9 +4400,9 @@ export class ApiBuilder extends ComponentBase {
 						 * api.slothlet.permissions.control.gating.read(false);
 						 */
 						read: function slothlet_permissions_control_gating_read(...args) {
-							const permissionManager = slothlet.handlers.permissionManager;
-							if (args.length > 0) permissionManager.setReadGating(args[0]);
-							return permissionManager.isReadGatingEnabled();
+							// Read again after the switch: in a run() / scope() the switch lands in the run's own copy.
+							if (args.length > 0) slothlet.handlers.permissionManager.setReadGating(args[0]);
+							return slothlet.handlers.permissionManager.isReadGatingEnabled();
 						}
 					},
 

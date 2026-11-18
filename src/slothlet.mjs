@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T18:56:04-08:00 (1794970564)
+ *	@Last modified time: 2026-11-17T19:49:44-08:00 (1794973784)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -92,7 +92,16 @@ import { internals as contextInternals } from "#factories/context";
 import { warnIfCoverageWithoutImporter } from "#processors/loader";
 import { SlothletError, SlothletWarning } from "#errors";
 import { SlothletDebug } from "#helpers/debug";
-import { CURRENT_COPY, forgetFlowStores, reparentFlowStores, RUN_COPY } from "#helpers/flow-stores";
+import {
+	CURRENT_COPY,
+	FORK,
+	forgetFlowStores,
+	INHERIT_COPY,
+	INSTANCE_FIELD,
+	reparentFlowStores,
+	RUN_COPY,
+	WRITE_TARGET
+} from "#helpers/flow-stores";
 import { registerInstance } from "#handlers/lifecycle-token";
 import { isCallableValue, internals as unifiedWrapperInternals } from "#handlers/unified-wrapper";
 import { isFrameworkInternal, internals as frameworkInternalsInternals } from "#handlers/framework-internals";
@@ -146,7 +155,11 @@ import {
 	splitText,
 	StringMethods,
 	URLSearchParams,
-	URLSearchParamsMethods
+	URLSearchParamsMethods,
+	WeakMap,
+	WeakMapMethods,
+	WeakRef,
+	WeakRefMethods
 } from "#helpers/intrinsics";
 import { segmentsOf } from "#helpers/segments";
 const {
@@ -218,8 +231,18 @@ const reloadBuildStorage = AsyncLocalStorage ? new AsyncLocalStorage() : null;
 const RELOAD_COPY_FIELDS = ["config", "api", "debugLogger", "envTarget", "reference", "isLoaded"];
 
 /**
- * Tells an instance when a copy token a reload swapped out is gone, which no `run()` / `scope()` can then still keep
- * (see {@link Slothlet#swapCopy}). Null where the host has no FinalizationRegistry: such a token is counted for good.
+ * The handlers a `run()` / `scope()` keeps a copy of its own of once it writes them (see {@link FORK}): permission rules,
+ * event rules, mode, read gating, seal and principals; hooks; user and global metadata; event subscriptions; lifecycle
+ * subscriptions. Each is a handler in the `handlers` namespace, by its property name there.
+ * @type {string[]}
+ * @private
+ */
+const FORKABLE_HANDLERS = ["permissionManager", "hookManager", "metadata", "eventManager", "lifecycle"];
+
+/**
+ * Tells an instance when something that may still hold a copy is gone: a copy token that kept what the instance had
+ * (see {@link Slothlet#holdCopy}), or the record of a run that holds a fork. Null where the host has no
+ * FinalizationRegistry: such a holder is counted for good.
  * @type {FinalizationRegistry<Function>|null}
  * @private
  */
@@ -443,28 +466,64 @@ class Slothlet {
 	#copy = null;
 
 	/**
-	 * How many tokens of copies a reload swapped out may still be held by a `run()` / `scope()`.
+	 * How many copies may still be held apart from what the instance has: tokens that kept what the instance had (a
+	 * reload swapped another copy in, or the instance changed a forkable handler after runs recorded the token), and
+	 * records of runs that hold a fork of their own. While any is, the copy fields answer through
+	 * {@link Slothlet#readField}. Counted down as each is collected (phase 3 replaces this with the runs' pending work).
 	 * @type {number}
 	 * @private
 	 */
-	#staleCopies = 0;
+	#heldCopies = 0;
 
 	/**
-	 * Set while {@link Slothlet#runCopyValues} tells which store is running.
+	 * Set while {@link Slothlet#runRecord} tells which store is running.
 	 * @type {boolean}
 	 * @private
 	 */
 	#resolvingCopy = false;
 
 	/**
-	 * Called when a swapped-out copy token is gone (see {@link staleCopies}).
+	 * Called when a held copy is gone (see {@link staleCopies}).
 	 * @type {Function}
 	 * @private
 	 */
-	#staleCopyGone = () => {
-		this.#staleCopies--;
+	#heldCopyGone = () => {
+		this.#heldCopies--;
 		this.#settleCopyFields();
 	};
+
+	/**
+	 * For each forkable handler (see {@link FORKABLE_HANDLERS}), the handlers namespaces of the copies that hold it
+	 * without owning it: kept tokens' and runs'. Before the handler's owner writes it, each of them gets a fork of its
+	 * own (see {@link Slothlet#keepSharers}).
+	 * @type {WeakMap<object, Array<WeakRef<object>>>}
+	 * @private
+	 */
+	#sharers = new WeakMap();
+
+	/**
+	 * The handlers namespace that owns each fork: the run's (or the kept token's) that the fork was made for. The
+	 * instance owns the handlers in its own namespace, which are not recorded here.
+	 * @type {WeakMap<object, object>}
+	 * @private
+	 */
+	#owners = new WeakMap();
+
+	/**
+	 * Every copy held apart from the instance's (see {@link Slothlet#holdCopy}), for a restart to update what goes with
+	 * the shared api tree in each (see {@link Slothlet#copiesFollowTree}).
+	 * @type {Array<WeakRef<object>>}
+	 * @private
+	 */
+	#held = [];
+
+	/**
+	 * The ALS mark of instance work that must read and write the instance's own fields even when called from a run: a
+	 * restart's teardown and rebuild.
+	 * @type {object}
+	 * @private
+	 */
+	#instanceWork = {};
 
 	/**
 	 * Set by a reload with no window (see {@link Slothlet#carryIntoBuild}) for load() to call once the new copy's components
@@ -1958,9 +2017,9 @@ class Slothlet {
 			values[RELOAD_COPY_FIELDS[ofIndex]] = kept[RELOAD_COPY_FIELDS[ofIndex]];
 		old.values = values;
 		this.#copy = null;
-		this.#staleCopies++;
-		if (staleCopies !== null) FinalizationRegistryMethods.register(staleCopies, old, this.#staleCopyGone);
-		this.#installCopyFields();
+		this.#shareHandlers(values.handlers);
+		this.#ownReplacedHandlers(values.handlers);
+		this.#holdCopy(old);
 	}
 
 	/**
@@ -2025,10 +2084,12 @@ class Slothlet {
 		const old = this.#copy;
 		if (old !== null) {
 			old.values = this.#copyOfFields(fields);
-			this.#staleCopies++;
-			if (staleCopies !== null) FinalizationRegistryMethods.register(staleCopies, old, this.#staleCopyGone);
+			// A handler the new copy carries over unchanged is still the instance's: the kept copy holds it as a sharer.
+			this.#shareHandlers(old.values.handlers);
+			this.#holdCopy(old);
 		}
 		this.#copy = nextCopy;
+		const swappedOut = old?.values?.handlers;
 		for (let ofIndex = 0, ofList = this.#copyFieldNames(); ofIndex < ofList.length; ofIndex++) {
 			const field = ofList[ofIndex];
 			if (ArrayMethods.includes(this.componentCategories, field)) {
@@ -2042,6 +2103,7 @@ class Slothlet {
 				fields[field] = next[field];
 			}
 		}
+		if (swappedOut !== undefined) this.#ownReplacedHandlers(swappedOut);
 	}
 
 	/**
@@ -2103,7 +2165,7 @@ class Slothlet {
 	 */
 	#settleCopyFields() {
 		const fields = this.#fields;
-		if (fields === null || this.#staleCopies !== 0) return;
+		if (fields === null || this.#heldCopies !== 0) return;
 		if (this.#reloadWindow !== null && !this.#reloadWindow.closed) return;
 		this.#fields = null;
 		for (let ofIndex = 0, ofList = this.#copyFieldNames(); ofIndex < ofList.length; ofIndex++) {
@@ -2114,20 +2176,30 @@ class Slothlet {
 
 	/**
 	 * Read one of the copy fields while they are accessors. The value comes from, in order:
-	 * 1. the reload's build set, when the reading code runs in the build of a reload under way;
-	 * 2. the copy a `run()` / `scope()` recorded when it started, when the reading code runs in that run (its calls, and
-	 *    work it left behind, which holds its store) and a reload has swapped another copy in since;
+	 * 1. the reload's build set, when the reading code runs in the build of a reload under way; the instance's own set,
+	 *    when it runs in instance work (a restart's teardown and rebuild);
+	 * 2. for the reading code's `run()` / `scope()` (its calls, and work it left behind, which holds its store): the
+	 *    run's own handlers namespace once it holds a fork (for `handlers`), else the copy the run recorded when it
+	 *    started, once the instance no longer has that copy;
 	 * 3. the instance's own set.
 	 * @param {string} field - The field.
 	 * @returns {*} The value.
 	 * @private
 	 */
 	#readField(field) {
-		const window = this.#reloadWindow;
-		if (window !== null && !window.closed && reloadBuildStorage.getStore() === window.mark) return window.next[field];
-		if (this.#staleCopies !== 0) {
-			const values = this.#runCopyValues();
-			if (values !== null) return values[field];
+		const mark = reloadBuildStorage?.getStore();
+		if (mark !== undefined) {
+			if (mark === this.#instanceWork) return this.#fields[field];
+			const window = this.#reloadWindow;
+			if (window !== null && !window.closed && mark === window.mark) return window.next[field];
+		}
+		if (this.#heldCopies !== 0) {
+			const record = this.#runRecord();
+			if (record !== null) {
+				if (record.ns !== null && field === "handlers") return record.ns;
+				const values = record.from.values;
+				if (values !== null) return values[field];
+			}
 		}
 		return this.#fields[field];
 	}
@@ -2147,20 +2219,241 @@ class Slothlet {
 	}
 
 	/**
-	 * The set of the copy the running code's `run()` / `scope()` keeps, when that is a copy the instance no longer has.
-	 * @returns {object|null} The set, or null when the code runs in no such run.
+	 * The copy record of the running code's `run()` / `scope()`, if it runs in one.
+	 * @returns {object|null} The record, or null when the code runs in no run.
 	 * @private
 	 */
-	#runCopyValues() {
+	#runRecord() {
 		// Telling the running store apart can read the instance's fields itself: those reads answer from its own set.
 		if (this.#resolvingCopy) return null;
 		this.#resolvingCopy = true;
 		try {
-			const record = this.contextManager?.tryGetContext?.(this.instanceID)?.[RUN_COPY];
-			return record === undefined || record === null ? null : record.from.values;
+			const contextManager = this.contextManager;
+			const record = contextManager?.tryGetContext?.(this.instanceID)?.[RUN_COPY];
+			if (record !== undefined && record !== null) return record;
+			// A run opened under an ID the instance has since left (a restart starts a new one) still runs this instance's
+			// code: its store, when active, is found by the instance object it records.
+			const active = contextManager?.tryGetContext?.();
+			return active?.slothlet === this ? (active[RUN_COPY] ?? null) : null;
 		} finally {
 			this.#resolvingCopy = false;
 		}
+	}
+
+	/**
+	 * Count a copy held apart from what the instance has (a kept token, or a run's record holding a fork) until it is
+	 * collected, and make the copy fields read through {@link Slothlet#readField} meanwhile.
+	 * @param {object} holder - The token or record.
+	 * @returns {void}
+	 * @private
+	 */
+	#holdCopy(holder) {
+		this.#installCopyFields();
+		if (this.#held.length > 2 * this.#heldCopies + 16)
+			this.#held = filterList(this.#held, (ref) => WeakRefMethods.deref(ref) !== undefined);
+		listPush(this.#held, new WeakRef(holder));
+		this.#heldCopies++;
+		if (staleCopies !== null) FinalizationRegistryMethods.register(staleCopies, holder, this.#heldCopyGone);
+	}
+
+	/**
+	 * After a restart rebuilt the instance: in every copy held apart from it, everything but the forkable handlers
+	 * becomes the rebuilt instance's (the api tree is still shared, and what answers for it goes with it). A kept
+	 * metadata handler reads the system facts of the rebuilt tree's nodes from the instance's.
+	 * @returns {void}
+	 * @private
+	 */
+	#copiesFollowTree() {
+		const own = this.#fields ?? this;
+		const live = [];
+		for (let index = 0; index < this.#held.length; index++) {
+			const holder = WeakRefMethods.deref(this.#held[index]);
+			if (holder === undefined) continue;
+			listPush(live, this.#held[index]);
+			if (holder.ns !== undefined) {
+				if (holder.ns !== null) this.#followTree(holder.ns, own.handlers);
+				continue;
+			}
+			const values = holder.values;
+			if (values === null) continue;
+			for (let ofIndex = 0, ofList = this.#copyFieldNames(); ofIndex < ofList.length; ofIndex++) {
+				const field = ofList[ofIndex];
+				if (field === "handlers") this.#followTree(values.handlers, own.handlers);
+				else values[field] = ArrayMethods.includes(this.componentCategories, field) ? { ...own[field] } : own[field];
+			}
+		}
+		this.#held = live;
+	}
+
+	/**
+	 * Point a copy's handlers namespace at the instance's handlers, except the forkable ones the copy keeps.
+	 * @param {object} ns - The copy's handlers namespace.
+	 * @param {object} handlers - The instance's.
+	 * @returns {void}
+	 * @private
+	 */
+	#followTree(ns, handlers) {
+		for (let ofIndex = 0, keys = Objects.keys(ns); ofIndex < keys.length; ofIndex++) {
+			if (!ArrayMethods.includes(FORKABLE_HANDLERS, keys[ofIndex]) && !Objects.hasOwn(handlers, keys[ofIndex])) delete ns[keys[ofIndex]];
+		}
+		for (let ofIndex = 0, keys = Objects.keys(handlers); ofIndex < keys.length; ofIndex++) {
+			const key = keys[ofIndex];
+			if (!ArrayMethods.includes(FORKABLE_HANDLERS, key) || ns[key] === undefined) ns[key] = handlers[key];
+		}
+		const metadata = ns.metadata;
+		if (metadata !== handlers.metadata && typeof metadata?.readThrough === "function") metadata.readThrough(handlers.metadata);
+	}
+
+	/**
+	 * Before the instance first changes after runs recorded its copy token, make the token keep what the instance has
+	 * now: those runs started on it, and the change must not reach them.
+	 * @returns {void}
+	 * @private
+	 */
+	#keepCurrentCopy() {
+		const token = this.#copy;
+		if (token === null) return;
+		this.#installCopyFields();
+		token.values = this.#copyOfFields(this.#fields);
+		this.#shareHandlers(token.values.handlers);
+		this.#copy = null;
+		this.#holdCopy(token);
+	}
+
+	/**
+	 * Record a handlers namespace as holding each forkable handler in it, so the handler's owner forks it for the
+	 * namespace before writing (see {@link Slothlet#keepSharers}).
+	 * @param {object} ns - The namespace (a kept token's or a run's).
+	 * @returns {void}
+	 * @private
+	 */
+	#shareHandlers(ns) {
+		for (let ofIndex = 0; ofIndex < FORKABLE_HANDLERS.length; ofIndex++) {
+			const handler = ns[FORKABLE_HANDLERS[ofIndex]];
+			if (handler === null || typeof handler !== "object") continue;
+			let list = WeakMapMethods.get(this.#sharers, handler);
+			if (list === undefined) {
+				list = [];
+				WeakMapMethods.set(this.#sharers, handler, list);
+			}
+			listPush(list, new WeakRef(ns));
+		}
+	}
+
+	/**
+	 * Give every copy that holds a forkable handler without owning it a fork of its own, before the handler is written.
+	 * Each fork is a copy of the handler as it is now, which is what each of those copies started with.
+	 * @param {object} handler - The handler about to be written.
+	 * @param {string} slot - Its property name in the handlers namespace.
+	 * @returns {void}
+	 * @private
+	 */
+	#keepSharers(handler, slot) {
+		const list = WeakMapMethods.get(this.#sharers, handler);
+		if (list === undefined) return;
+		WeakMapMethods.delete(this.#sharers, handler);
+		for (let index = 0; index < list.length; index++) {
+			const ns = WeakRefMethods.deref(list[index]);
+			if (ns === undefined || ns[slot] !== handler) continue;
+			const fork = handler[FORK]();
+			ns[slot] = fork;
+			WeakMapMethods.set(this.#owners, fork, ns);
+		}
+	}
+
+	/**
+	 * Which object a write to a forkable handler goes to (see `writeTarget` in `helpers/flow-stores`).
+	 *
+	 * - Code in a `run()` / `scope()` writes the run's own fork. The run's first write to the handler makes the fork, a
+	 *   copy of the handler as the run sees it (its parent's, or the copy it started on); its handlers namespace becomes
+	 *   one of its own then. Nested runs that hold the run's fork get forks of their own before it changes.
+	 * - Code outside any run writes the instance's own handler: first, the token runs recorded keeps what the instance
+	 *   has (see {@link Slothlet#keepCurrentCopy}), and every copy that holds the handler gets a fork of its own.
+	 *
+	 * A write reaching another copy of the same handler (an unsubscribe function handed out by the instance's handler,
+	 * called in a run; one a run handed out, called outside it) goes where a write from that code goes. A handler that
+	 * is no copy's (a reload's build, one being constructed) is written as it is.
+	 *
+	 * A run() costs nothing here until something writes; a fork costs a copy of the one handler written.
+	 * @param {object} handler - The handler about to be written.
+	 * @param {boolean} instanceOnly - True for the instance's teardown of its own handler, which never forks for a run.
+	 * @returns {object} The handler to write.
+	 * @internal
+	 */
+	[WRITE_TARGET](handler, instanceOnly) {
+		if (this.#copy === null && this.#fields === null) return handler;
+		const slot = handler.constructor.slothletProperty;
+		const mark = reloadBuildStorage?.getStore();
+		const window = this.#reloadWindow;
+		if (mark !== undefined && window !== null && !window.closed && mark === window.mark) return handler;
+		const own = (this.#fields ?? this).handlers;
+		const known = own?.[slot] === handler || WeakMapMethods.has(this.#owners, handler);
+		if (!known) return handler;
+		const record = instanceOnly || (mark !== undefined && mark === this.#instanceWork) ? null : this.#runRecord();
+		if (record === null) {
+			if (instanceOnly && own[slot] !== handler) return handler;
+			const target = own[slot];
+			this.#keepCurrentCopy();
+			this.#keepSharers(target, slot);
+			return target;
+		}
+		const view = record.ns ?? record.from.values?.handlers ?? own;
+		const current = view[slot];
+		if (record.ns !== null && WeakMapMethods.get(this.#owners, current) === record.ns) {
+			this.#keepSharers(current, slot);
+			return current;
+		}
+		const fork = current[FORK]();
+		if (record.ns === null) {
+			record.ns = { ...view };
+			this.#shareHandlers(record.ns);
+			this.#holdCopy(record);
+		}
+		record.ns[slot] = fork;
+		WeakMapMethods.set(this.#owners, fork, record.ns);
+		return fork;
+	}
+
+	/**
+	 * Mark the forkable handlers a kept copy holds that the instance no longer has as that copy's: a write reaching one
+	 * of them (through something it handed out) goes where the writing code's writes go (see
+	 * {@link Slothlet#[WRITE_TARGET]}).
+	 * @param {object} ns - The kept copy's handlers namespace.
+	 * @returns {void}
+	 * @private
+	 */
+	#ownReplacedHandlers(ns) {
+		const own = (this.#fields ?? this).handlers;
+		for (let ofIndex = 0; ofIndex < FORKABLE_HANDLERS.length; ofIndex++) {
+			const handler = ns[FORKABLE_HANDLERS[ofIndex]];
+			if (handler !== null && typeof handler === "object" && own?.[FORKABLE_HANDLERS[ofIndex]] !== handler) {
+				if (!WeakMapMethods.has(this.#owners, handler)) WeakMapMethods.set(this.#owners, handler, ns);
+			}
+		}
+	}
+
+	/**
+	 * One of the copy fields as the instance has it, whichever copy the calling code answers from.
+	 * @param {string} field - The field.
+	 * @returns {*} The value.
+	 * @internal
+	 */
+	[INSTANCE_FIELD](field) {
+		return (this.#fields ?? this)[field];
+	}
+
+	/**
+	 * The copy record of a run opened in a run that holds a fork (see `copyForRun` in `helpers/flow-stores`): it starts
+	 * with a copy of the parent's handlers namespace, so neither run's later writes reach the other.
+	 * @param {object} parent - The parent run's record.
+	 * @returns {object} The new run's record.
+	 * @internal
+	 */
+	[INHERIT_COPY](parent) {
+		const record = { __proto__: null, from: parent.from, parent, ns: { ...parent.ns } };
+		this.#shareHandlers(record.ns);
+		this.#holdCopy(record);
+		return record;
 	}
 
 	/**
@@ -2725,6 +3018,19 @@ class Slothlet {
 
 		this._assertRootOpen(["slothlet", "restart"]);
 
+		// A run() / scope() open now keeps the copy it started with: the restart replaces the instance's, not the runs'.
+		// The teardown and rebuild below are the instance's own work, also when a run's code asked for them: they read
+		// and write the instance's own set, never the calling run's copy.
+		this.#keepCurrentCopy();
+		return reloadBuildStorage === null ? this.#restartOnto() : reloadBuildStorage.run(this.#instanceWork, () => this.#restartOnto());
+	}
+
+	/**
+	 * restart()'s teardown and rebuild (see {@link Slothlet#_restart}).
+	 * @returns {Promise<Object>} The same bound API reference.
+	 * @private
+	 */
+	async #restartOnto() {
 		const previousInstanceID = this.instanceID;
 		let teardownError = null;
 		this._restarting = true;
@@ -2792,6 +3098,18 @@ class Slothlet {
 			// 5. Swap complete: every wrapper from an earlier epoch now forwards to the node at its path
 			//    in the new tree (or throws RESTART_REFERENCE_UNRESOLVED if the path is gone).
 			this._liveEpoch = this._buildEpoch;
+			// The runs open across the restart, kept by the teardown, run on under the new ID.
+			const flows = this.contextManager?.instances;
+			if (flows) {
+				for (const ofEntry of mapEntries(flows)) {
+					if (ofEntry[1].parentInstanceID === previousInstanceID) ofEntry[1].parentInstanceID = this.instanceID;
+				}
+			}
+			reparentFlowStores(this, [previousInstanceID], this.instanceID);
+			// The api tree is shared with every run until phase 4 gives a run its own: what goes with the tree (its
+			// managers, the config, the tree itself) is the rebuilt one for every copy too. The forkable handlers stay
+			// each copy's own.
+			this.#copiesFollowTree();
 		} finally {
 			this._restarting = false;
 		}
@@ -3012,8 +3330,11 @@ class Slothlet {
 
 		// Cleanup context
 		if (this.instanceID && this.contextManager) {
-			if (MapMethods.has(this.contextManager.instances, this.instanceID)) this.contextManager.cleanup(this.instanceID);
-			forgetFlowStores(this);
+			// A restart keeps the run() / scope() stores open across it: they keep their copies, and move to the new ID once
+			// the rebuild has one (see Slothlet#restartOnto).
+			if (MapMethods.has(this.contextManager.instances, this.instanceID))
+				this.contextManager.cleanup(this.instanceID, this._restarting ? { keepFlows: true } : undefined);
+			if (!this._restarting) forgetFlowStores(this);
 		}
 
 		// Clear ownership
@@ -3023,14 +3344,17 @@ class Slothlet {
 			this.handlers.ownership.clear();
 		}
 
+		// The instance's own handlers, also when the shutdown was asked for from a run(): a run's forks are the run's.
+		const ownHandlers = (this.#fields ?? this).handlers;
+
 		// Shutdown versioning manager — clears all dispatcher/registry/metadata state.
-		this.handlers.versionManager?.shutdown();
+		ownHandlers.versionManager?.shutdown();
 
 		// Shutdown permission manager — clears rules, cache, and resets enabled state.
-		await this.handlers.permissionManager?.shutdown();
+		await ownHandlers.permissionManager?.shutdown();
 
 		// Shutdown event manager (#407) — clears all subscriptions.
-		this.handlers.eventManager?.shutdown();
+		ownHandlers.eventManager?.shutdown();
 
 		// Drop this instance's private CommonJS helper copies (#518, #534), the scripts recorded and learned for its
 		// files, and the records of what its modules made (#597).

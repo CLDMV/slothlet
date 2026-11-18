@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T13:35:17-08:00 (1794951317)
+ *	@Last modified time: 2026-11-17T19:49:36-08:00 (1794973776)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -32,6 +32,7 @@ import { DEFAULT_ROUTINES } from "#helpers/defaults";
 import { segmentsOf } from "#helpers/segments";
 import { runBaseline } from "#helpers/permission-baseline";
 import { assertOptionKeys } from "#helpers/config-schema";
+import { FORK, writeTarget } from "#helpers/flow-stores";
 import { isFrameworkWriteTarget, writeTargetLiteralPrefix, internals as reservedKeysInternals } from "#helpers/reserved-keys";
 import { internals as unifiedWrapperInternals } from "#handlers/unified-wrapper";
 import { internals as frameworkInternalsInternals } from "#handlers/framework-internals";
@@ -45,6 +46,8 @@ import {
 	listPush,
 	Map,
 	mapEntries,
+	mapEntriesToArray,
+	mapFrom,
 	mapList,
 	MapMethods,
 	mapValues,
@@ -428,6 +431,31 @@ function runtime_patternCovers(pattern, target, compiled) {
  * @class PermissionManager
  * @extends ComponentBase
  */
+/**
+ * The last epoch handed out to any permission manager (see {@link nextEpoch}).
+ * @type {number}
+ * @private
+ */
+let lastEpoch = 0;
+
+/**
+ * A rule or event-rule epoch no permission manager has had: what is cached against an epoch elsewhere (a wrapper's
+ * view decisions, a subscription's level) can then never be taken for the same rules by another manager, a run's
+ * fork (see {@link FORK}) and the handler it was forked from among them.
+ * @returns {number} The epoch.
+ * @private
+ */
+function nextEpoch() {
+	return ++lastEpoch;
+}
+
+/**
+ * The manager {@link PermissionManager#[FORK]} is copying, read once by the constructor it calls; null otherwise.
+ * @type {PermissionManager|null}
+ * @private
+ */
+let forkingFrom = null;
+
 export class PermissionManager extends ComponentBase {
 	/**
 	 * Property name for auto-discovery by _initializeComponents.
@@ -616,14 +644,14 @@ export class PermissionManager extends ComponentBase {
 	 * @type {number}
 	 * @private
 	 */
-	#eventRulesEpoch = 0;
+	#eventRulesEpoch = nextEpoch();
 
 	/**
 	 * Monotonic epoch that changes whenever a call, read or write rule's outcome may have changed (see
 	 * {@link ruleEpoch}).
 	 * @type {number}
 	 */
-	#ruleEpoch = 0;
+	#ruleEpoch = nextEpoch();
 
 	/**
 	 * Whether the control surface is sealed. When true, policy-mutating methods (`enable`,
@@ -755,6 +783,12 @@ export class PermissionManager extends ComponentBase {
 	 */
 	constructor(slothlet) {
 		super(slothlet);
+		const from = forkingFrom;
+		if (from !== null) {
+			forkingFrom = null;
+			this.#copyFrom(from);
+			return;
+		}
 
 		// `slothlet.config.permissions` is the normalised section (load() normalises it before the components are built), so
 		// every field below is present and valid.
@@ -959,6 +993,8 @@ export class PermissionManager extends ComponentBase {
 	 * pm.addRule({ caller: "payments.**", target: "db.write", effect: "allow" }, "mod_abc123");
 	 */
 	addRule(rule, ownerModuleID = null, ruleId = null, layer = null) {
+		const written = writeTarget(this);
+		if (written !== this) return written.addRule(rule, ownerModuleID, ruleId, layer);
 		this.#assertNotSealed();
 		// The rule is read once: the copy is what is validated and kept (#625).
 		rule = this.snapshotRule(rule);
@@ -1024,6 +1060,8 @@ export class PermissionManager extends ComponentBase {
 	 * pm.removeRule("perm-3", "mod_other");
 	 */
 	removeRule(ruleId, callerModuleID = null) {
+		const written = writeTarget(this);
+		if (written !== this) return written.removeRule(ruleId, callerModuleID);
 		this.#assertNotSealed();
 		const entry = MapMethods.get(this.#rules, ruleId);
 		if (!entry) return false;
@@ -1080,6 +1118,8 @@ export class PermissionManager extends ComponentBase {
 	 * pm.addEventRule({ caller: "orders.**", event: "orders.*", effect: "allow" }, "mod_orders", null, "manifest");
 	 */
 	addEventRule(rule, ownerModuleID = null, ruleId = null, layer = null) {
+		const written = writeTarget(this);
+		if (written !== this) return written.addEventRule(rule, ownerModuleID, ruleId, layer);
 		this.#assertNotSealed();
 		this.#validateEventRule(rule);
 		this.#trackConditionPins(rule.condition);
@@ -1100,7 +1140,7 @@ export class PermissionManager extends ComponentBase {
 		};
 
 		MapMethods.set(this.#eventRules, id, entry);
-		this.#eventRulesEpoch++;
+		this.#eventRulesEpoch = nextEpoch();
 
 		this.debug("permissions", {
 			key: "DEBUG_PERMISSION_RULE_ADDED",
@@ -1125,6 +1165,8 @@ export class PermissionManager extends ComponentBase {
 	 * @throws {SlothletError} PERMISSION_SELF_MODIFY if the caller owns the rule.
 	 */
 	removeEventRule(ruleId, callerModuleID = null) {
+		const written = writeTarget(this);
+		if (written !== this) return written.removeEventRule(ruleId, callerModuleID);
 		this.#assertNotSealed();
 		const entry = MapMethods.get(this.#eventRules, ruleId);
 		if (!entry) return false;
@@ -1142,7 +1184,7 @@ export class PermissionManager extends ComponentBase {
 		}
 		/* v8 ignore stop */
 		MapMethods.delete(this.#eventRules, ruleId);
-		this.#eventRulesEpoch++;
+		this.#eventRulesEpoch = nextEpoch();
 		return true;
 	}
 
@@ -1278,6 +1320,8 @@ export class PermissionManager extends ComponentBase {
 	 * pm.registerPrincipal("roles", { key: (ctx) => ctx.user?.id, resolve: (id) => loadRoles(id), ttl: 30_000 }, "roles_mod");
 	 */
 	registerPrincipal(name, definition, ownerModuleID = null, invoke = null) {
+		const written = writeTarget(this);
+		if (written !== this) return written.registerPrincipal(name, definition, ownerModuleID, invoke);
 		this.#assertNotSealed();
 		this.#validatePrincipal(name, definition);
 
@@ -1330,6 +1374,8 @@ export class PermissionManager extends ComponentBase {
 	 * pm.unregisterPrincipal("roles");
 	 */
 	unregisterPrincipal(name, callerModuleID = null) {
+		const written = writeTarget(this);
+		if (written !== this) return written.unregisterPrincipal(name, callerModuleID);
 		this.#assertNotSealed();
 		const record = MapMethods.get(this.#principals, name);
 		if (!record) return false;
@@ -1356,6 +1402,8 @@ export class PermissionManager extends ComponentBase {
 	 * pm.invalidatePrincipal("roles", "user-42");
 	 */
 	invalidatePrincipal(name, identityKey = undefined, callerModuleID = null) {
+		// Not a change a run keeps to itself (see `FORK` in `helpers/flow-stores`): it drops cached facts in the copy the
+		// caller answers from, and a copy forked later starts with none cached.
 		const record = MapMethods.get(this.#principals, name);
 		if (!record) return false;
 		this.#assertPrincipalOwner(record, callerModuleID, ["slothlet", "permissions", "principal", "invalidate"]);
@@ -1420,7 +1468,7 @@ export class PermissionManager extends ComponentBase {
 				entry = ofEntry[1];
 			if (entry.ownerModuleID === null || entry.layer === "builtin" || !this.#sameOwner(entry.ownerModuleID, moduleID)) continue;
 			MapMethods.delete(this.#eventRules, id);
-			this.#eventRulesEpoch++;
+			this.#eventRulesEpoch = nextEpoch();
 		}
 		this.#clearCache();
 	}
@@ -1458,6 +1506,8 @@ export class PermissionManager extends ComponentBase {
 	 * pm.reservePrincipal("roles", "roles_mod");
 	 */
 	reservePrincipal(name, ownerModuleID) {
+		const written = writeTarget(this);
+		if (written !== this) return written.reservePrincipal(name, ownerModuleID);
 		if (MapMethods.has(this.#principals, name)) return;
 		const record = this.#newPrincipalRecord(name, ownerModuleID, null, null, null, 0);
 		this.#makeDormant(record);
@@ -2852,13 +2902,15 @@ export class PermissionManager extends ComponentBase {
 	 * pm.enable();
 	 */
 	enable() {
+		const written = writeTarget(this);
+		if (written !== this) return written.enable();
 		this.#assertNotStrict("enable");
 		this.#assertNotSealed();
 		this.#enabled = true;
 		this.#endedOn = false;
 		this.#disabled = false;
 		// The event pool follows the mode: levels resolved under the old one are resolved again.
-		this.#eventRulesEpoch++;
+		this.#eventRulesEpoch = nextEpoch();
 		this.#clearCache();
 	}
 
@@ -2895,6 +2947,8 @@ export class PermissionManager extends ComponentBase {
 	 * pm.seal();
 	 */
 	seal() {
+		const written = writeTarget(this);
+		if (written !== this) return written.seal();
 		this.#sealed = true;
 	}
 
@@ -2919,6 +2973,8 @@ export class PermissionManager extends ComponentBase {
 	 * pm.applyDefaultRoutineRules(config.routines);
 	 */
 	applyDefaultRoutineRules(routines) {
+		const written = writeTarget(this);
+		if (written !== this) return written.applyDefaultRoutineRules(routines);
 		if (!Arrays.isArray(routines)) return;
 		for (let ofIndex = 0, ofList = DEFAULT_ROUTINES; ofIndex < ofList.length; ofIndex++) {
 			const fallback = ofList[ofIndex];
@@ -2945,13 +3001,15 @@ export class PermissionManager extends ComponentBase {
 	 * pm.disable();
 	 */
 	disable() {
+		const written = writeTarget(this);
+		if (written !== this) return written.disable();
 		this.#assertNotStrict("disable");
 		this.#assertNotSealed();
 		this.#enabled = false;
 		this.#endedOn = false;
 		this.#disabled = false;
 		// The event pool follows the mode: levels resolved under the old one are resolved again.
-		this.#eventRulesEpoch++;
+		this.#eventRulesEpoch = nextEpoch();
 		this.#clearCache();
 	}
 
@@ -2970,6 +3028,8 @@ export class PermissionManager extends ComponentBase {
 	 * pm.setMode(false);
 	 */
 	setMode(value) {
+		const written = writeTarget(this);
+		if (written !== this) return written.setMode(value);
 		const mode = value === true ? "on" : value === false ? "off" : value;
 		if (mode !== "on" && mode !== "off" && mode !== "strict" && mode !== "disabled") {
 			throw new this.SlothletError("INVALID_ARGUMENT", {
@@ -3155,6 +3215,8 @@ export class PermissionManager extends ComponentBase {
 	 * pm.setReadGating(true);
 	 */
 	setReadGating(value) {
+		const written = writeTarget(this);
+		if (written !== this) return written.setReadGating(value);
 		this.#assertNotSealed();
 		if (typeof value !== "boolean") {
 			throw new this.SlothletError("INVALID_ARGUMENT", {
@@ -3197,6 +3259,8 @@ export class PermissionManager extends ComponentBase {
 	 * pm.importRules(snapshot);
 	 */
 	importRules(registrations) {
+		const written = writeTarget(this);
+		if (written !== this) return written.importRules(registrations);
 		if (!Arrays.isArray(registrations)) return;
 		for (let ofIndex = 0, ofList = registrations; ofIndex < ofList.length; ofIndex++) {
 			const reg = ofList[ofIndex];
@@ -3214,6 +3278,8 @@ export class PermissionManager extends ComponentBase {
 	 * await pm.shutdown();
 	 */
 	async shutdown() {
+		// The instance's teardown of its own handler: the copies that hold it keep theirs.
+		writeTarget(this, true);
 		MapMethods.clear(this.#rules);
 		MapMethods.clear(this.#callRules);
 		MapMethods.clear(this.#writeRules);
@@ -3225,11 +3291,72 @@ export class PermissionManager extends ComponentBase {
 		this.#enabled = false;
 		this.#disabled = false;
 		this.#strict = false;
-		this.#eventRulesEpoch++;
+		this.#eventRulesEpoch = nextEpoch();
 		this.#defaultPolicy = "allow";
 		this.#audit = "default";
 		this.#readGating = false;
 		this.#owner = false;
+	}
+
+	/**
+	 * A copy of this manager for a `run()` / `scope()` (see `FORK` in `helpers/flow-stores`): its rules, event rules,
+	 * mode, read gating, seal and principals, which later changes to either leave the other as it is. The rule entries
+	 * are shared (neither copy changes an entry once it is registered); each principal gets a record of its own, with
+	 * nothing cached. Caches start empty, and the rule epochs are new ones.
+	 * @returns {PermissionManager} The copy.
+	 * @internal
+	 */
+	[FORK]() {
+		forkingFrom = this;
+		return new PermissionManager(this.slothlet);
+	}
+
+	/**
+	 * Fill a new manager from the one it is a copy of (see {@link PermissionManager#[FORK]}).
+	 * @param {PermissionManager} from - The manager copied.
+	 * @returns {void}
+	 * @private
+	 */
+	#copyFrom(from) {
+		this.#rules = mapFrom(mapEntriesToArray(from.#rules));
+		this.#callRules = mapFrom(mapEntriesToArray(from.#callRules));
+		this.#writeRules = mapFrom(mapEntriesToArray(from.#writeRules));
+		this.#eventRules = mapFrom(mapEntriesToArray(from.#eventRules));
+		this.#ruleIdCounter = from.#ruleIdCounter;
+		this.#ruleRegistrationSeq = from.#ruleRegistrationSeq;
+		this.#reachRuleId = from.#reachRuleId;
+		this.#globalMetadataRuleId = from.#globalMetadataRuleId;
+		this.#defaultPolicy = from.#defaultPolicy;
+		this.#enabled = from.#enabled;
+		this.#endedOn = from.#endedOn;
+		this.#disabled = from.#disabled;
+		this.#strict = from.#strict;
+		this.#baseline = from.#baseline;
+		this.#audit = from.#audit;
+		this.#readGating = from.#readGating;
+		this.#capture = from.#capture;
+		this.#privateHost = from.#privateHost;
+		this.#privateScope = from.#privateScope;
+		this.#owner = from.#owner;
+		this.#eventDefault = from.#eventDefault;
+		this.#sealed = from.#sealed;
+		this.#nodeKeyRuleIds = setFrom(setToArray(from.#nodeKeyRuleIds));
+		this.#compiledCache = mapFrom(mapEntriesToArray(from.#compiledCache));
+		this.#requiresRuleCount = from.#requiresRuleCount;
+		// A condition's pin is the condition's own: the copies share it, so a module's removal revokes it in both.
+		for (const ofEntry of mapEntries(from.#conditionPins)) MapMethods.set(this.#conditionPins, ofEntry[0], setFrom(setToArray(ofEntry[1])));
+		for (const ofEntry of mapEntries(from.#principals)) {
+			const record = ofEntry[1];
+			MapMethods.set(this.#principals, ofEntry[0], {
+				...record,
+				// Resolved again in the copy when needed: a revocation made in either copy then never leaves the other
+				// holding the facts it revoked from before the fork.
+				cache: new Map(),
+				inflight: new Map(),
+				keyInvalidations: new Map(),
+				views: new WeakMap()
+			});
+		}
 	}
 
 	// ──────────────────── Private methods ────────────────────
@@ -4049,7 +4176,7 @@ export class PermissionManager extends ComponentBase {
 		MapMethods.clear(this.#subtreeCache);
 		MapMethods.clear(this.#readSubtreeCache);
 		MapMethods.clear(this.#writeRulesForCache);
-		this.#ruleEpoch++;
+		this.#ruleEpoch = nextEpoch();
 	}
 
 	/**

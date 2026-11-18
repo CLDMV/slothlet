@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T13:35:16-08:00 (1794951316)
+ *	@Last modified time: 2026-11-17T19:49:35-08:00 (1794973775)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -54,12 +54,15 @@ import { MODULE_ID_SEPARATOR } from "#handlers/metadata";
 import { identityCeilings } from "#handlers/trusted-root";
 import { internals as unifiedWrapperInternals } from "#handlers/unified-wrapper";
 import { segmentsOf } from "#helpers/segments";
+import { FORK, writeTarget } from "#helpers/flow-stores";
 import {
 	ArrayMethods,
 	filterList,
 	listPush,
 	Map,
+	mapEntries,
 	mapEntriesToArray,
+	mapFrom,
 	mapList,
 	MapMethods,
 	Numbers,
@@ -144,6 +147,13 @@ const EVENT_LEVEL_RANK = Objects.freeze({ deny: 0, notify: 1, allow: 2 });
  * @extends ComponentBase
  * @public
  */
+/**
+ * The manager {@link EventManager#[FORK]} is copying, read once by the constructor it calls; null otherwise.
+ * @type {EventManager|null}
+ * @private
+ */
+let forkingFrom = null;
+
 export class EventManager extends ComponentBase {
 	/**
 	 * Where this component mounts on the Slothlet instance (`slothlet.handlers.eventManager`).
@@ -190,6 +200,40 @@ export class EventManager extends ComponentBase {
 		this.#subscribers = new Map();
 		this.#ordinals = new Map();
 		this.#strategy = null;
+		const from = forkingFrom;
+		if (from !== null) {
+			forkingFrom = null;
+			this.#copyFrom(from);
+		}
+	}
+
+	/**
+	 * A copy of this manager for a `run()` / `scope()` (see `FORK` in `helpers/flow-stores`): its subscriptions, the
+	 * listener ordinals and the delivery strategy, which later changes to either leave the other as it is. Each
+	 * subscription record is copied with its cached level dropped.
+	 * @returns {EventManager} The copy.
+	 * @internal
+	 */
+	[FORK]() {
+		forkingFrom = this;
+		return new EventManager(this.slothlet);
+	}
+
+	/**
+	 * Fill a new manager from the one it is a copy of (see {@link EventManager#[FORK]}).
+	 * @param {EventManager} from - The manager copied.
+	 * @returns {void}
+	 * @private
+	 */
+	#copyFrom(from) {
+		for (const ofEntry of mapEntries(from.#subscribers)) {
+			const set = new Set();
+			for (const sub of setValues(ofEntry[1])) SetMethods.add(set, { ...sub, level: null, levelEpoch: -1 });
+			MapMethods.set(this.#subscribers, ofEntry[0], set);
+		}
+		for (const ofEntry of mapEntries(from.#ordinals)) MapMethods.set(this.#ordinals, ofEntry[0], mapFrom(mapEntriesToArray(ofEntry[1])));
+		this.#strategy = from.#strategy;
+		this.#strategyOwner = from.#strategyOwner;
 	}
 
 	/**
@@ -221,6 +265,8 @@ export class EventManager extends ComponentBase {
 	 * @public
 	 */
 	on(event, listener, options = {}) {
+		const written = writeTarget(this);
+		if (written !== this) return written.on(event, listener, options);
 		if (typeof event !== "string" || !event) {
 			throw new this.SlothletError("INVALID_ARGUMENT", { argument: "event", expected: "a non-empty string", received: typeof event });
 		}
@@ -332,6 +378,8 @@ export class EventManager extends ComponentBase {
 	 * @public
 	 */
 	off(event, listener) {
+		const written = writeTarget(this);
+		if (written !== this) return written.off(event, listener);
 		const set = MapMethods.get(this.#subscribers, event);
 		if (!set) return false;
 		for (const sub of setValues(set)) {
@@ -547,6 +595,8 @@ export class EventManager extends ComponentBase {
 	 * @public
 	 */
 	strategy(fn) {
+		const written = writeTarget(this);
+		if (written !== this) return written.strategy(fn);
 		if (fn !== null && typeof fn !== "function") {
 			throw new this.SlothletError("INVALID_ARGUMENT", { argument: "fn", expected: "a function or null", received: typeof fn });
 		}
@@ -801,9 +851,20 @@ export class EventManager extends ComponentBase {
 	 * @private
 	 */
 	#removeSub(event, sub) {
+		const written = writeTarget(this);
+		if (written !== this) return written.#removeSub(event, sub);
 		const set = MapMethods.get(this.#subscribers, event);
 		if (!set) return;
-		SetMethods.delete(set, sub);
+		// A record from another copy of this manager (an `off` handed out before a run forked) is found by its id and
+		// listener: the copy of that subscription.
+		if (!SetMethods.delete(set, sub)) {
+			for (const own of setValues(set)) {
+				if (own.id === sub.id && own.listener === sub.listener) {
+					SetMethods.delete(set, own);
+					break;
+				}
+			}
+		}
 		if (SetMethods.size(set) === 0) MapMethods.delete(this.#subscribers, event);
 	}
 
@@ -824,6 +885,8 @@ export class EventManager extends ComponentBase {
 	 * @public
 	 */
 	shutdown() {
+		// The instance's teardown of its own handler: the copies that hold it keep theirs.
+		writeTarget(this, true);
 		MapMethods.clear(this.#subscribers);
 		MapMethods.clear(this.#ordinals);
 		this.#strategy = null;

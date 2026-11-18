@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T14:44:07-08:00 (1794955447)
+ *	@Last modified time: 2026-11-17T19:49:36-08:00 (1794973776)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -24,6 +24,7 @@
 // Proxy-detection API, so isProxy returns false — slothlet's OWN wrappers are detected via
 // resolveWrapper(), so only arbitrary USER proxies (rare in browser) lose detection.
 import { segmentsOf } from "#helpers/segments";
+import { INSTANCE_FIELD } from "#helpers/flow-stores";
 import { isNode, util, EventEmitter, scheduleMacrotask, inheritsFrom } from "#helpers/platform";
 import {
 	copyForComposition,
@@ -14013,7 +14014,10 @@ function runtime_resolveRestartTarget(wrapper, propChain = []) {
 	const fail = () => {
 		throw new wrapper.SlothletError("RESTART_REFERENCE_UNRESOLVED", { path: segmentsOf(ArrayMethods.join(segments, ".")) });
 	};
-	let node = wrapper.____slothlet.api;
+	// The instance's own tree, also for a call in a run() / scope() that keeps the copy it had before the restart: that
+	// copy's tree is the one being forwarded from (phase 4 gives a run its own tree).
+	const slothlet = wrapper.____slothlet;
+	let node = typeof slothlet[INSTANCE_FIELD] === "function" ? slothlet[INSTANCE_FIELD]("api") : slothlet.api;
 	for (let ofIndex = 0, ofList = segments; ofIndex < ofList.length; ofIndex++) {
 		const segment = ofList[ofIndex];
 		if (node === null || node === undefined) fail();

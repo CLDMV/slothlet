@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:28:46-08:00 (1794882526)
+ *	@Last modified time: 2026-11-17T19:49:35-08:00 (1794973775)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -24,11 +24,16 @@
 import { ComponentBase } from "#factories/component-base";
 import { segmentsOf } from "#helpers/segments";
 import { getInstanceToken } from "#handlers/lifecycle-token";
+import { FORK, writeTarget } from "#helpers/flow-stores";
 import { internals as unifiedWrapperInternals } from "#handlers/unified-wrapper";
 import {
 	ArrayMethods,
+	copyList,
 	listPush,
 	Map,
+	mapEntries,
+	mapEntriesToArray,
+	mapFrom,
 	MapMethods,
 	Objects,
 	promiseAll,
@@ -36,8 +41,10 @@ import {
 	Reflect,
 	SafePromise,
 	Set,
+	setFrom,
 	SetMethods,
 	settledWith,
+	setToArray,
 	setValues
 } from "#helpers/intrinsics";
 const { runtime_selfModuleReader, runtime_selfView } = unifiedWrapperInternals("lib/handlers/lifecycle");
@@ -85,6 +92,13 @@ function runAndSettle(handler, args) {
 	return new SafePromise((resolve, reject) => Reflect.apply(then, result, [() => resolve(), reject]));
 }
 
+/**
+ * The handler {@link Lifecycle#[FORK]} is copying, read once by the constructor it calls; null otherwise.
+ * @type {Lifecycle|null}
+ * @private
+ */
+let forkingFrom = null;
+
 export class Lifecycle extends ComponentBase {
 	/**
 	 * Where this component should be mounted on the Slothlet instance
@@ -113,6 +127,28 @@ export class Lifecycle extends ComponentBase {
 		this.subscriberReaders = new Map();
 		this.eventLog = [];
 		this.maxLogSize = 1000;
+		const from = forkingFrom;
+		if (from !== null) {
+			forkingFrom = null;
+			for (const ofEntry of mapEntries(from.subscribers)) MapMethods.set(this.subscribers, ofEntry[0], setFrom(setToArray(ofEntry[1])));
+			for (const ofEntry of mapEntries(from.internalSubscribers))
+				MapMethods.set(this.internalSubscribers, ofEntry[0], setFrom(setToArray(ofEntry[1])));
+			for (const ofEntry of mapEntries(from.subscriberReaders))
+				MapMethods.set(this.subscriberReaders, ofEntry[0], mapFrom(mapEntriesToArray(ofEntry[1])));
+			this.eventLog = copyList(from.eventLog);
+			this.maxLogSize = from.maxLogSize;
+		}
+	}
+
+	/**
+	 * A copy of this handler for a `run()` / `scope()` (see `FORK` in `helpers/flow-stores`): its subscribers (public
+	 * and the framework's own) and the event log, which later changes to either leave the other as it is.
+	 * @returns {Lifecycle} The copy.
+	 * @internal
+	 */
+	[FORK]() {
+		forkingFrom = this;
+		return new Lifecycle(this.slothlet);
 	}
 
 	/**
@@ -131,6 +167,8 @@ export class Lifecycle extends ComponentBase {
 	 * });
 	 */
 	subscribe(event, handler) {
+		const written = writeTarget(this);
+		if (written !== this) return written.subscribe(event, handler);
 		if (!MapMethods.has(this.subscribers, event)) {
 			MapMethods.set(this.subscribers, event, new Set());
 			MapMethods.set(this.subscriberReaders, event, new Map());
@@ -202,6 +240,8 @@ export class Lifecycle extends ComponentBase {
 	 * lifecycle.off('impl:changed', handler);
 	 */
 	off(event, handler) {
+		const written = writeTarget(this);
+		if (written !== this) return written.off(event, handler);
 		const handlers = MapMethods.get(this.subscribers, event);
 		if (handlers) {
 			SetMethods.delete(handlers, handler);

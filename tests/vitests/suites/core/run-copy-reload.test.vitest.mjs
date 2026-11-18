@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T18:56:50-08:00 (1794970610)
+ *	@Last modified time: 2026-11-17T19:50:25-08:00 (1794973825)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -455,7 +455,7 @@ describe.each([["async"], ["live"]])("concurrent runs each see their own state â
 		return { a: seenA, b: seenB, instance: read() };
 	}
 
-	it.fails("a hook one run registers fires in that run only", async () => {
+	it("a hook one run registers fires in that run only", async () => {
 		globalThis[COPY] = 1;
 		const api = await slothlet({ base: BASE, runtime, mode: "eager", silent: true, hook: { enabled: true } });
 		try {
@@ -470,7 +470,7 @@ describe.each([["async"], ["live"]])("concurrent runs each see their own state â
 		}
 	});
 
-	it.fails("metadata one run sets reads in that run only", async () => {
+	it("metadata one run sets reads in that run only", async () => {
 		globalThis[COPY] = 1;
 		const api = await slothlet({ base: BASE, runtime, mode: "eager", silent: true });
 		try {
