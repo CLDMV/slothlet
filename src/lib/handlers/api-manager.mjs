@@ -557,6 +557,28 @@ export class ApiManager extends ComponentBase {
 	}
 
 	/**
+	 * Whether the member at `parts` is a plain member of the value a node above it holds (not a node of its own), and
+	 * that node is among the paths a removal deletes: it leaves the api with that node.
+	 * @param {string[]} parts - Segments of the member's api path.
+	 * @param {Set<string>} removed - The api paths the removal deletes.
+	 * @returns {boolean} True when deleting the node above takes the member off the api.
+	 * @private
+	 */
+	#heldByRemovedNode(parts, removed) {
+		if (parts.length < 2) return false;
+		let removedAbove = false;
+		for (let length = parts.length - 1; length > 0 && !removedAbove; length--) {
+			removedAbove = SetMethods.has(removed, ArrayMethods.join(copyList(parts, 0, length), "."));
+		}
+		if (!removedAbove) return false;
+		const parent = resolveWrapper(this.#memberAtPath(this.slothlet.api, copyList(parts, 0, parts.length - 1)));
+		const holder = parent?.____slothletInternal.impl;
+		if (holder === null || holder === undefined || (typeof holder !== "object" && typeof holder !== "function")) return false;
+		const descriptor = Reflect.getOwnPropertyDescriptor(holder, parts[parts.length - 1]);
+		return descriptor !== undefined && (!("value" in descriptor) || resolveWrapper(descriptor.value) === null);
+	}
+
+	/**
 	 * Read the member at an api path as slothlet's own bookkeeping: through each node's wrapper, never through the api's
 	 * proxies, so no reader's rules (a module-private member's host policy among them) apply to it (#815).
 	 * @param {function|object} root - API root object.
@@ -5477,6 +5499,7 @@ export class ApiManager extends ComponentBase {
 			}
 
 			// Delete paths with no owners
+			const removedSet = setFrom(pathsToDelete);
 			for (let ofIndex = 0, ofList = pathsToDelete; ofIndex < ofList.length; ofIndex++) {
 				const removedPath = ofList[ofIndex];
 				// What of it another module's replace holds off the api goes too: the detached node it sits on is what
@@ -5484,6 +5507,10 @@ export class ApiManager extends ComponentBase {
 				this.#forgetHiddenMember(removedPath, moduleIDKey);
 				if (ArrayMethods.some(restoredRoots, (prefix) => StringMethods.startsWith(removedPath, prefix))) continue;
 				const { parts } = this.normalizeApiPath(removedPath);
+				// A member of a value the module holds (what an object it created holds) leaves the api with the node above
+				// it, which is deleted too: deleting the member itself would change the module's own object, which code
+				// outside the api may still hold.
+				if (this.#heldByRemovedNode(parts, removedSet)) continue;
 				await this.deletePath(this.slothlet.api, parts);
 				await this.deletePath(this.slothlet.boundApi, parts);
 				// A mount of another module inside a removed container (an empty one: nothing of it was left there) is gone
