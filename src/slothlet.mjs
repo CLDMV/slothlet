@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T14:44:14-08:00 (1794955454)
+ *	@Last modified time: 2026-11-17T16:26:46-08:00 (1794961606)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -1799,12 +1799,9 @@ class Slothlet {
 		// Every reload's ID is the first ID plus one fresh `_reload_<time>_<random>` part, never the previous ID plus
 		// another: an ID that grew on each reload would soon be too long for the folders named after it.
 		const nextScope = keepInstanceID ? null : this.#claimFreshScope(`${splitText(`${oldInstanceID}`, "_reload_")[0]}_reload`);
-		if (nextScope !== null) {
-			const instances = this.contextManager?.instances;
-			// The context the instance's code runs in until the new one is set up: the current ID's, or, after a reload
-			// that failed once it had switched IDs, the one that reload came from.
-			if (!this.#reloadingFrom || (instances && MapMethods.has(instances, oldInstanceID))) this.#reloadingFrom = oldInstanceID;
-		}
+		// The context the instance's code runs in until the new one is set up: the current ID's, or, after a reload that
+		// failed before it set up the context of the ID it had switched to, the one that reload came from.
+		if (nextScope !== null && this.#reloadingFrom === null) this.#reloadingFrom = oldInstanceID;
 		try {
 			const result = await this.#reloadOnto(nextScope, oldInstanceID);
 			if (nextScope !== null) this.#reloadingFrom = null;
@@ -1812,8 +1809,32 @@ class Slothlet {
 		} catch (error) {
 			// The fresh scope was claimed but never taken: let the ID go again.
 			if (nextScope !== null && this.#importScope !== nextScope) nextScope.release();
+			if (nextScope !== null) this.#settleFailedReload(oldInstanceID);
 			throw error;
 		}
+	}
+
+	/**
+	 * After a normal reload failed: once the context of the ID the instance is on now is set up (load() sets it up before
+	 * any module loads), the instance's code runs there, so the contexts it ran in before go and the `run()` / `scope()`
+	 * stores made in them follow it. A reload that failed before that context was set up leaves the instance's code
+	 * running in the one it came from ({@link Slothlet#reloadingFrom}) until a reload succeeds or the instance shuts down.
+	 * @param {string} oldInstanceID - The instance's ID when the reload started.
+	 * @returns {void}
+	 * @private
+	 */
+	#settleFailedReload(oldInstanceID) {
+		const instances = this.contextManager.instances;
+		const current = this.instanceID;
+		if (!MapMethods.has(instances, current)) return;
+		const from = this.#reloadingFrom;
+		for (const ofEntry of mapEntries(instances)) {
+			const store = ofEntry[1];
+			if (store.parentInstanceID === oldInstanceID || store.parentInstanceID === from) store.parentInstanceID = current;
+		}
+		if (oldInstanceID !== current && MapMethods.has(instances, oldInstanceID)) this.contextManager.cleanup(oldInstanceID);
+		if (from !== oldInstanceID && from !== current && MapMethods.has(instances, from)) this.contextManager.cleanup(from);
+		this.#reloadingFrom = null;
 	}
 
 	/**
@@ -2427,9 +2448,14 @@ class Slothlet {
 			cleanupEventEmitterResources();
 		}
 
-		// Cleanup context
+		// Cleanup context: the instance's own, and the one a reload that failed before setting up the new ID's context left
+		// its code running in (the current ID has none then).
 		if (this.instanceID && this.contextManager) {
-			this.contextManager.cleanup(this.instanceID);
+			const instances = this.contextManager.instances;
+			if (MapMethods.has(instances, this.instanceID)) this.contextManager.cleanup(this.instanceID);
+			const from = this.#reloadingFrom;
+			if (from !== null && from !== this.instanceID && MapMethods.has(instances, from)) this.contextManager.cleanup(from);
+			this.#reloadingFrom = null;
 		}
 
 		// Clear ownership
