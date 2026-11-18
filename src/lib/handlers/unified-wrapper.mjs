@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T20:34:16-08:00 (1794976456)
+ *	@Last modified time: 2026-11-18T07:07:21-08:00 (1795014441)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -641,7 +641,9 @@ function runtime_selfWriteHasStanding(slothlet) {
 	const identity = contextManager?.getCallerIdentity?.(slothlet.instanceID);
 	if (identity?.currentWrapper || identity?.unresolved) return true;
 	const store = contextManager?.tryGetContext?.(slothlet.instanceID);
-	if (!store?.parentInstanceID || store[trustedRootOwn.TRUSTED_ROOT] !== true) return false;
+	// A run's store put back for work the run left behind (see `reopenFlowStore` in context-live) is no flow the host
+	// has open: the work keeps the run's context, never its standing.
+	if (!store?.parentInstanceID || store[trustedRootOwn.TRUSTED_ROOT] !== true || store[trustedRootOwn.REOPENED_FLOW] === true) return false;
 	return !runtime_hostFlowRunsModuleCode(slothlet, store.parentInstanceID);
 }
 
@@ -3904,8 +3906,15 @@ function resolveEnforcedCaller(wrapper, ctxOverride, kept = null, preResolved = 
 		// onto a module's execution store — so a stripped/forged context with no caller fails closed.
 		// `ctx` is the live/scope store in live mode or inside a run(); when there is no active context
 		// (async mode outside a call, `ctx` null) fall back to the instance's base store.
+		// A run's store put back for work the run left behind stands for the instance's own: the work keeps the run's
+		// context, never the run's standing (see `reopenFlowStore` in context-live).
 		const instances = wrapper.slothlet.contextManager?.instances;
-		const store = ctx ?? (instances ? MapMethods.get(instances, wrapper.slothlet.instanceID) : undefined);
+		const store =
+			ctx && ctx[trustedRootOwn.REOPENED_FLOW] !== true
+				? ctx
+				: instances
+					? MapMethods.get(instances, wrapper.slothlet.instanceID)
+					: undefined;
 		if (store && store[trustedRootOwn.TRUSTED_ROOT] === true) return { verdict: "allow", identity, ctx };
 		if (wrapper.slothlet.config?.permissions?.caller?.anonymous) return { verdict: "allow", identity, ctx };
 		return { verdict: "deny", identity, ctx };

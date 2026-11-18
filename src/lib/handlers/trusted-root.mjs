@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T18:55:56-08:00 (1794970556)
+ *	@Last modified time: 2026-11-18T07:07:21-08:00 (1795014441)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -73,6 +73,16 @@ const { markSlothletProxy } = frameworkInternalsInternals("lib/handlers/trusted-
  * @internal
  */
 const TRUSTED_ROOT = Symbol("slothlet.trustedRoot");
+
+/**
+ * Marker on a `run()` / `scope()` store the live runtime has put back among the instances while work the run left
+ * behind runs after the run has returned. Such work keeps the run's context, never the run's standing: who runs it is
+ * decided as for code running in the instance's own store, so a store marked {@link TRUSTED_ROOT} that carries this
+ * marker is no flow the host has open.
+ * @type {symbol}
+ * @internal
+ */
+const REOPENED_FLOW = Symbol("slothlet.reopenedFlow");
 
 /**
  * Registry of every genuine `UnifiedWrapper` instance. A caller identity absent from this set is a
@@ -518,6 +528,9 @@ export function internals(consumer) {
 		},
 		get TRUSTED_ROOT() {
 			return TRUSTED_ROOT;
+		},
+		get REOPENED_FLOW() {
+			return REOPENED_FLOW;
 		},
 		buildCapturedFlowStore,
 		enforceContextKeyWrite,

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T21:34:05-08:00 (1794980045)
+ *	@Last modified time: 2026-11-18T07:07:19-08:00 (1795014439)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -86,7 +86,7 @@ const { setApiContextChecker } = eventemitterContextInternals("lib/handlers/cont
 const { setApiCallerPinner } = callerPinningInternals("lib/handlers/context-live");
 const { reinstateSchedulerPatching } = schedulerContextInternals("lib/handlers/context-live");
 const trustedRootOwn = trustedRootInternals("lib/handlers/context-live");
-const { buildCapturedFlowStore } = trustedRootOwn;
+const { buildCapturedFlowStore, REOPENED_FLOW } = trustedRootOwn;
 const { runtime_wrapClassInstance } = classInstanceWrapperInternals("lib/handlers/context-live");
 const {
 	attributeResult,
@@ -1152,6 +1152,11 @@ export class LiveContextManager {
 	 * can still run: once the timers have fired, the listeners are removed and the promises are gone, nothing holds it.
 	 * The store is in the instances only while such work runs synchronously, so no other flow and no host code outside
 	 * every flow ever sees it; the caller removes it again with {@link LiveContextManager#closeFlowStore}.
+	 *
+	 * The work keeps the run's context, not the run's standing. While the store is back it carries the
+	 * `REOPENED_FLOW` marker: who runs the work is decided on the instance's own store and from the stack, as it is for
+	 * any code running there (see {@link LiveContextManager#identityFor}), and a store the host opened gives the work none
+	 * of the host's trust.
 	 * @param {object} store - The `run()` / `scope()` store.
 	 * @returns {boolean} True when the store was put back (and must be closed after); false when it is still open, or
 	 *   the instance it was opened on has shut down.
@@ -1162,6 +1167,7 @@ export class LiveContextManager {
 		if (MapMethods.has(this.instances, id)) return false;
 		// The instance has shut down: the work runs with no store, as any callback that outlives its instance.
 		if (!MapMethods.has(this.instances, store.parentInstanceID)) return false;
+		Objects.defineProperty(store, REOPENED_FLOW, { __proto__: null, value: true, configurable: true });
 		MapMethods.set(this.instances, id, store);
 		return true;
 	}
@@ -1174,6 +1180,7 @@ export class LiveContextManager {
 	 */
 	#closeFlowStore(store) {
 		MapMethods.delete(this.instances, store.instanceID);
+		delete store[REOPENED_FLOW];
 	}
 
 	/**
@@ -1327,6 +1334,19 @@ export class LiveContextManager {
 	 * @private
 	 */
 	#identityFor(store) {
+		// Work a finished run() / scope() left behind runs in the run's store, put back for it, with the run's context but
+		// not the run's standing (see reopenFlowStore): while nothing of the work's own is entered or suspended there, who
+		// runs it is decided on the instance's own store, as for any code running there.
+		if (store[REOPENED_FLOW] === true) {
+			const base = MapMethods.get(this.instances, store.parentInstanceID);
+			if (
+				base !== undefined &&
+				!store.__authoritativeWrapper &&
+				this.#enteredFor(store).length === 0 &&
+				SetMethods.size(this.#suspendedFor(store)) === 0
+			)
+				return this.#identityFor(base);
+		}
 		// An identity captured at a moment when it was known to be reliable wins outright. The lazy
 		// waiting-proxy path resolves the caller synchronously, inside that caller's own frame, and
 		// then defers the actual invocation to a later turn — by which point the caller's frame has
@@ -1447,6 +1467,11 @@ export class LiveContextManager {
 	 * @private
 	 */
 	#baselineIdentity(store) {
+		// A store put back for work its run left behind rests as the instance's own store does (see reopenFlowStore).
+		if (store[REOPENED_FLOW] === true) {
+			const base = MapMethods.get(this.instances, store.parentInstanceID);
+			if (base !== undefined) return this.#baselineIdentity(base);
+		}
 		// A `run()` / `scope()` opened inside a module call that was handed code keeps that call's record: code it was
 		// handed and runs inside the scope is told apart from the call's own (#597).
 		const record = store.record;

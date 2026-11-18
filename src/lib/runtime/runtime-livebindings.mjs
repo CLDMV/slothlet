@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T21:15:45-08:00 (1794978945)
+ *	@Last modified time: 2026-11-18T07:07:26-08:00 (1795014446)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -137,8 +137,9 @@ function runtime_resolveExecutingContext(resolved = null) {
 	// A scope store is recognisable by the parent it descends from, and the trusted marker distinguishes
 	// one the host opened from one a module opened (a module's scope inherits the module as the caller
 	// and is admitted above). This grants nothing extra: reaching `run()` at all means already holding
-	// the `api` object, which carries the host's standing anyway.
-	if (ctx.parentInstanceID && ctx[trustedRootOwn.TRUSTED_ROOT] === true) return ctx;
+	// the `api` object, which carries the host's standing anyway. A run's store put back for work the run left behind
+	// after it returned is not that flow: the work keeps the run's context, never its standing.
+	if (ctx.parentInstanceID && ctx[trustedRootOwn.TRUSTED_ROOT] === true && ctx[trustedRootOwn.REOPENED_FLOW] !== true) return ctx;
 
 	return null;
 }
