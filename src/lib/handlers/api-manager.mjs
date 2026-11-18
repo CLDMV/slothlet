@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T13:35:16-08:00 (1794951316)
+ *	@Last modified time: 2026-11-17T21:15:37-08:00 (1794978937)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -47,7 +47,7 @@ import {
 	isFrameworkReservedKey,
 	internals as unifiedWrapperInternals
 } from "#handlers/unified-wrapper";
-import { isFrameworkInternal, internals as frameworkInternalsInternals } from "#handlers/framework-internals";
+import { isFrameworkInternal, isFrameworkRoutineMarker, internals as frameworkInternalsInternals } from "#handlers/framework-internals";
 import { dataMemberOf } from "#helpers/reserved-keys";
 import { MODULE_ID_SEPARATOR, MODULE_MANIFEST } from "#handlers/metadata";
 
@@ -939,6 +939,9 @@ export class ApiManager extends ComponentBase {
 				for (let ofIndex = 0, ofList = Reflect.ownKeys(own); ofIndex < ofList.length; ofIndex++) {
 					const key = ofList[ofIndex];
 					if (typeof key !== "string" || isFrameworkReservedKey(key)) continue;
+					// A marker the framework stamped on a callable it built (a routine stack) is the framework's, installed by
+					// the framework whoever's write the stack takes in, never a member that write takes over.
+					if (isFrameworkRoutineMarker(own, key)) continue;
 					if (isFunction && SetMethods.has(FUNCTION_OWN_KEYS, key)) continue;
 					if (Arrays.isArray(own) && key === "length") continue;
 					SetMethods.add(keys, key);

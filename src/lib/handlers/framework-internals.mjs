@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T13:35:16-08:00 (1794951316)
+ *	@Last modified time: 2026-11-17T21:15:37-08:00 (1794978937)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -113,6 +113,45 @@ export function isFrameworkInternal(obj) {
 }
 
 /**
+ * Routine callables slothlet built (a per-path routine stack or a routine's root cascade). Weak, like the brand.
+ * @type {WeakSet<Function>}
+ * @private
+ */
+const FRAMEWORK_ROUTINES = new WeakSet();
+
+/**
+ * The marker keys slothlet stamps as own properties on the routine callables it builds.
+ * @type {Set<string>}
+ * @private
+ */
+const ROUTINE_MARKER_KEYS = setFrom(["____slothletRoutineStack", "____slothletRoutineCascade", "____slothletRoutineName"]);
+
+/**
+ * Record a routine callable slothlet built, by identity.
+ * @param {Function} fn - The callable.
+ * @returns {Function} The same `fn`.
+ * @internal
+ */
+function markFrameworkRoutine(fn) {
+	WeakSetMethods.add(FRAMEWORK_ROUTINES, fn);
+	return fn;
+}
+
+/**
+ * Whether `key` on `holder` is a marker slothlet stamped on a routine callable it built: the framework's own member,
+ * which nothing written by a module installs or takes over. Decided by the holder's identity, never by the name alone.
+ * @param {*} holder - The object or function carrying the key.
+ * @param {string} key - The key.
+ * @returns {boolean} True for a routine marker on a routine callable slothlet built.
+ * @internal
+ * @example
+ * if (isFrameworkRoutineMarker(fn, "____slothletRoutineStack")) continue;
+ */
+export function isFrameworkRoutineMarker(holder, key) {
+	return typeof holder === "function" && SetMethods.has(ROUTINE_MARKER_KEYS, key) && weakSetHas(FRAMEWORK_ROUTINES, holder);
+}
+
+/**
  * Version dispatchers slothlet mounted, each with the instance it serves and how it resolves the versioned
  * node it currently routes to. Weak, like the brand.
  * @type {WeakMap<object, {slothlet: object, resolve: function(): (object|null)}>}
@@ -201,6 +240,7 @@ export function internals(consumer) {
 			"lib/handlers/api-manager",
 			"lib/handlers/hook-manager",
 			"lib/handlers/permission-manager",
+			"lib/handlers/routine-manager",
 			"lib/handlers/trusted-root",
 			"lib/handlers/unified-wrapper",
 			"lib/handlers/version-manager",
@@ -212,7 +252,7 @@ export function internals(consumer) {
 		])
 	)
 		throw ownBindingsRefusal("lib/handlers/framework-internals", import.meta.url);
-	return { markFrameworkInternal, markSlothletProxy, registerVersionDispatcher, versionDispatcherRecord };
+	return { markFrameworkInternal, markFrameworkRoutine, markSlothletProxy, registerVersionDispatcher, versionDispatcherRecord };
 }
 
 /**

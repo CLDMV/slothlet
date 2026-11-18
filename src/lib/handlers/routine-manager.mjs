@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:28:47-08:00 (1794882527)
+ *	@Last modified time: 2026-11-17T21:15:38-08:00 (1794978938)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -29,7 +29,7 @@ import { ComponentBase } from "#factories/component-base";
 import { SlothletError } from "#errors";
 import { internals as unifiedWrapperInternals } from "#handlers/unified-wrapper";
 import { isFrameworkReservedKey } from "#helpers/reserved-keys";
-import { isFrameworkInternal } from "#handlers/framework-internals";
+import { isFrameworkInternal, internals as frameworkInternalsInternals } from "#handlers/framework-internals";
 import { compilePattern, expandBraces } from "#helpers/pattern-matcher";
 import { scheduleMacrotask } from "#helpers/platform";
 import {
@@ -64,6 +64,7 @@ import {
 	WeakSetMethods
 } from "#helpers/intrinsics";
 const { resolveWrapper, runtime_frameworkWrite } = unifiedWrapperInternals("lib/handlers/routine-manager");
+const { markFrameworkRoutine } = frameworkInternalsInternals("lib/handlers/routine-manager");
 
 /**
  * Root-level api keys whose routine cascade is integrated into the framework's own existing
@@ -1811,7 +1812,8 @@ export class RoutineManager extends ComponentBase {
 			enumerable: false,
 			configurable: true
 		});
-		return stacked;
+		// The framework built this callable and its markers: a module's api.add that the stack takes in installs none of them.
+		return markFrameworkRoutine(stacked);
 	}
 
 	/**
@@ -1842,7 +1844,7 @@ export class RoutineManager extends ComponentBase {
 		Objects.defineProperty(cascade, "____slothletRoutineStack", { __proto__: null, value: true, enumerable: false, configurable: true });
 		Objects.defineProperty(cascade, "____slothletRoutineCascade", { __proto__: null, value: true, enumerable: false, configurable: true });
 		Objects.defineProperty(cascade, "____slothletRoutineName", { __proto__: null, value: name, enumerable: false, configurable: true });
-		return cascade;
+		return markFrameworkRoutine(cascade);
 	}
 
 	/**
