@@ -370,10 +370,11 @@ describe.each(CONFIGS)("ownership across a permission toggle (#625) — $mode / 
 			expect(report.read).toBe("done");
 			expect(report.descriptor).toBe("done");
 			expect(report.seen).toEqual([1, 1]);
-			// The scope's views stay open: one closed could no longer answer for what it lists.
-			expect(report.close).toMatch(/^TypeError/);
+			// Closing works as in plain JS: it closes only the scope's view, never the instance's node.
+			expect(report.close).toBe("done");
 			expect(report.afterClose).toBe("object");
 			expect([api.victim.v.inScope, api.victim.v.viaDescriptor]).toEqual([undefined, undefined]);
+			expect(Object.isExtensible(api.guest)).toBe(true);
 		});
 	});
 

@@ -379,7 +379,7 @@ beforeAll(() => {
 		"const tick = () => new Promise((resolve) => setTimeout(resolve, 5));",
 		"const codeOf = (error) => error?.code ?? String(error);",
 		"async function make() {",
-		'\tconst config = { base: root + "api", silent: true, context: { app: "demo" } };',
+		'\tconst config = { base: root + "api", silent: true, context: { app: "demo" }, scope: { isolation: "partial" } };',
 		'\tif (mode !== "none") {',
 		"\t\tconfig.permissions = { mode };",
 		'\t\tif (mode === "on") {',

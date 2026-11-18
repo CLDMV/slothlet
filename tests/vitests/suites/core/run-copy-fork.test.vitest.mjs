@@ -376,7 +376,7 @@ describe.each([["async"], ["live"]])("a run's writes fork its own copy — %s ru
 			}
 		});
 
-		it("a full-isolation scope's self keeps what it first read; its own writes stay in the scope", async () => {
+		it("a full-isolation scope's self sees the instance's later values for what it hasn't written; its own writes stay in the scope", async () => {
 			const api = await make();
 			try {
 				const entered = gate();
@@ -396,7 +396,7 @@ describe.each([["async"], ["live"]])("a run's writes fork its own copy — %s ru
 				await entered.promise;
 				api.data.n = 2;
 				go.release();
-				expect(await scope).toEqual({ first: 1, later: 1, written: 3, after: 3 });
+				expect(await scope).toEqual({ first: 1, later: 2, written: 3, after: 3 });
 				expect(api.calls.selfN()).toBe(2);
 			} finally {
 				await api.slothlet.shutdown();
