@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-18T07:07:21-08:00 (1795014441)
+ *	@Last modified time: 2026-11-18T07:40:04-08:00 (1795016404)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -12696,6 +12696,46 @@ function runtime_registerLeafFunction(wrapper, impl) {
 }
 
 /**
+ * The node a function member of a node stands for when the function is the node's own or an ancestor's: in plain JS
+ * `fn.me === fn`, so `api.x.me` is `api.x`, and a member referring further up is the node further up, never a new node
+ * below that would open another level on every read. A node's own function is its implementation, or the module's
+ * function under it when the implementation is a composition layer (a callable folder with siblings). A function a
+ * collision merged into the node is the one its leaf function was recorded for at the node's own path (see
+ * {@link runtime_registerLeafFunction}). Further up, a node recorded for the function on the node's path is the one;
+ * walking up, the nodes the api holds on the node's path are looked at as well.
+ * @param {object} wrapper - The node holding the member.
+ * @param {*} member - The member's value.
+ * @param {boolean} [walkUp=true] - Look at the nodes the api holds above the node. A build passes false: the nodes it
+ *   is building are not in the api yet, and only the recorded node can answer there.
+ * @returns {object|null} The node's wrapper, or null when the value is no function of the node or an ancestor.
+ * @private
+ */
+function runtime_cycleNode(wrapper, member, walkUp = true) {
+	if (typeof member !== "function") return null;
+	// A layer hands a function of the value under it out bound to that value: the function it stands for is the member.
+	const value = layerMethodOriginal(member) ?? member;
+	const ownFunction = (node) => {
+		const impl = node.____slothletInternal.impl;
+		return impl === value || (typeof impl === "function" && layerUnderlying(impl) === value);
+	};
+	if (ownFunction(wrapper)) return wrapper;
+	const path = String(wrapper.____slothletInternal.apiPath ?? "");
+	const owner = WeakMapMethods.get(trustedRootOwn.implWrappers, value);
+	if (owner !== undefined && owner.slothlet === wrapper.slothlet && !owner.____slothletInternal.invalid) {
+		const at = String(owner.____slothletInternal.apiPath ?? "");
+		if (at === path) return wrapper;
+		if (!walkUp && at !== "" && StringMethods.startsWith(path, `${at}.`)) return owner;
+	}
+	if (!walkUp) return null;
+	const segments = splitText(path, ".");
+	for (let depth = segments.length - 1; depth > 0; depth--) {
+		const node = runtime_nodeAtPath(wrapper.slothlet, ArrayMethods.join(copyList(segments, 0, depth), "."));
+		if (node !== null && (ownFunction(node) || (owner !== undefined && node === owner))) return node;
+	}
+	return null;
+}
+
+/**
  * Per-reader views over shared child wrappers.
  *
  * Shape: `WeakMap<capturingModule, WeakMap<ceiling, WeakMap<childWrapper, view>>>` — the ceiling level is the
@@ -17073,6 +17113,20 @@ class UnifiedWrapper extends ComponentBase {
 				}
 			}
 
+			// A function further up the tree is the node there, as in plain JS: never a new node below (its own function
+			// is skipped above, and served by the get trap).
+			const cycleNode = runtime_cycleNode(this, value, false);
+			if (cycleNode !== null) {
+				Objects.defineProperty(this, key, {
+					__proto__: null,
+					value: cycleNode.createProxy(),
+					writable: false,
+					enumerable: true,
+					configurable: true
+				});
+				continue;
+			}
+
 			// CRITICAL: Check if child wrapper already exists to maintain live binding
 			// If it exists, update its implementation instead of creating new wrapper
 			// Also check savedChildren map for wrappers saved before replace-mode deletion.
@@ -17404,7 +17458,11 @@ class UnifiedWrapper extends ComponentBase {
 		}
 		const value = descriptor.value;
 		let stored = value;
-		if (
+		// The losing function's reference to itself, or to a function further up, is the node that holds it now. A layer
+		// over the function hands it out bound to the function under it.
+		const cycle = (layerMethodOriginal(value) ?? value) === layerUnderlying(source) ? this : runtime_cycleNode(this, value);
+		if (cycle !== null) stored = cycle.createProxy();
+		else if (
 			value !== null &&
 			(typeof value === "object" || typeof value === "function") &&
 			!util.types.isProxy(value) &&
@@ -18051,6 +18109,15 @@ class UnifiedWrapper extends ComponentBase {
 								const implValue = current.____slothletInternal.impl
 									? runtime_readOnBehalf(__readGateCaller ?? null, () => current.____slothletInternal.impl[chainProp])
 									: undefined;
+								// A function member that is this node's own function or an ancestor's is that node, as the get
+								// trap reads it: the chain goes on from there.
+								const __cycleNode = runtime_cycleNode(current, implValue);
+								if (__cycleNode !== null) {
+									__gateParent = current;
+									__gateProp = chainProp;
+									current = __cycleNode;
+									continue;
+								}
 								if (implValue !== undefined) {
 									// An impl member holding the module's code — a static method, a function's `prototype` — is
 									// read for the reader the chain was read by as a call of the node, as getTrap reads it (#632).
@@ -19735,6 +19802,11 @@ class UnifiedWrapper extends ComponentBase {
 					return value;
 				}
 			}
+
+			// A function member that is this node's own function, or an ancestor's, is that node, as in plain JS: it closes
+			// the cycle where a new node below would open another level on every read.
+			const cycle = runtime_cycleNode(wrapper, value);
+			if (cycle !== null) return cycle.createProxy();
 
 			// Propagate lazy adoption so a wrap-on-set subtree stays lazy on deep access (#329).
 			const wrapped = wrapper.___createChildWrapper(prop, value, null, wrapper.____slothletInternal.deferChildAdopt);

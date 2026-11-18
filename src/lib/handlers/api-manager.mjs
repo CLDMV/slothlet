@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-18T06:11:45-08:00 (1795011105)
+ *	@Last modified time: 2026-11-18T07:40:02-08:00 (1795016402)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -247,6 +247,13 @@ export class ApiManager extends ComponentBase {
 	 * @private
 	 */
 	#lastReAddStamp = 0;
+
+	/**
+	 * The existing nodes {@link ApiManager#syncWrapper} is merging into right now. A node that holds itself, or a node
+	 * above it, as a member (a function's `fn.me = fn`) is reached again through that member while it is being merged.
+	 * @type {WeakSet<object>}
+	 */
+	#syncing = new WeakSet();
 
 	/**
 	 * The ids of the modules built under the current instance ID.
@@ -1793,6 +1800,31 @@ export class ApiManager extends ComponentBase {
 	 * await this.syncWrapper(existingProxy, nextProxy, this.____config);
 	 */
 	async syncWrapper(existingProxy, nextProxy, config, collisionMode = "replace", moduleID = null, emitCollisions = false) {
+		// A node reached again through a member that refers back to it, or to a node above it, is being merged already:
+		// the member closes the cycle, as it does in plain JS, and has nothing more to merge.
+		const syncing = resolveWrapper(existingProxy);
+		if (syncing === null) return this.#syncWrapperOnce(existingProxy, nextProxy, config, collisionMode, moduleID, emitCollisions);
+		if (WeakSetMethods.has(this.#syncing, syncing)) return false;
+		WeakSetMethods.add(this.#syncing, syncing);
+		try {
+			return await this.#syncWrapperOnce(existingProxy, nextProxy, config, collisionMode, moduleID, emitCollisions);
+		} finally {
+			WeakSetMethods.delete(this.#syncing, syncing);
+		}
+	}
+
+	/**
+	 * The merge {@link ApiManager#syncWrapper} makes, once for each node it merges into.
+	 * @param {function|object} existingProxy - Existing wrapper proxy.
+	 * @param {function|object} nextProxy - New wrapper proxy.
+	 * @param {object} config - Configuration object for debug logging.
+	 * @param {string} [collisionMode="replace"] - Collision mode.
+	 * @param {string|null} [moduleID=null] - Module the new wrapper belongs to.
+	 * @param {boolean} [emitCollisions=false] - Announce collisions.
+	 * @returns {Promise<boolean>} True when a wrapper update occurred.
+	 * @private
+	 */
+	async #syncWrapperOnce(existingProxy, nextProxy, config, collisionMode = "replace", moduleID = null, emitCollisions = false) {
 		if (config?.debug?.api) {
 			this.slothlet.debug("api", {
 				key: "DEBUG_MODE_SYNC_WRAPPER_ENTRY_EXISTING",
