@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T16:28:41-08:00 (1794961721)
+ *	@Last modified time: 2026-11-18T06:10:25-08:00 (1795011025)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -402,14 +402,15 @@ describe.each(PERMISSIONS)("live runtime: a finished run's store is released onc
 	});
 });
 
-describe.each(PERMISSIONS)("live runtime: shutdown from work a run left behind leaves no store > %s", (_name, permissions) => {
+describe.each(PERMISSIONS)("live runtime: shutdown once work a run left behind has run leaves no store > %s", (_name, permissions) => {
 	/**
-	 * Open a live instance, run a `run()` whose callback schedules `shutdown()` through a route, wait for it, and return
-	 * the manager's instance ids from before the instance was made and after it has shut down.
-	 * @param {function(object, function(): void): void} schedule - Schedules `done(api.shutdown())` from the run.
+	 * Open a live instance, run a `run()` whose callback schedules work through a route, wait for that work, then shut the
+	 * instance down from outside any run, and return the manager's instance ids from before the instance was made and
+	 * after it has shut down.
+	 * @param {function(object, function(): void): void} schedule - Schedules `done()` from the run.
 	 * @returns {Promise<{before: string[], after: string[]}>} The instance ids.
 	 */
-	async function shutdownFromLateWork(schedule) {
+	async function shutdownAfterLateWork(schedule) {
 		const probe = await slothlet({ base: path.join(ROOT, "api"), runtime: "live", mode: "eager", silent: true });
 		const manager = resolveWrapper(probe.who.tag).slothlet.contextManager;
 		await probe.shutdown();
@@ -423,33 +424,98 @@ describe.each(PERMISSIONS)("live runtime: shutdown from work a run left behind l
 			...(permissions ? { permissions } : {})
 		});
 		const done = gate();
-		await api.slothlet.context.run({ tag: "alice" }, () => schedule(api, (shutdown) => done.release(shutdown)));
-		await await done.promise;
+		await api.slothlet.context.run({ tag: "alice" }, () => schedule(api, () => done.release()));
+		await done.promise;
+		await api.slothlet.shutdown();
 		await wait(5);
 		return { before, after: [...manager.instances.keys()] };
 	}
 
 	it("a timer", async () => {
-		const { before, after } = await shutdownFromLateWork((api, done) => setTimeout(() => done(api.slothlet.shutdown()), 10));
+		const { before, after } = await shutdownAfterLateWork((api, done) => setTimeout(() => done(), 10));
 		expect(after).toEqual(before);
 	});
 
 	it("a promise chain", async () => {
-		const { before, after } = await shutdownFromLateWork((api, done) => {
-			wait(10).then(() => done(api.slothlet.shutdown()));
+		const { before, after } = await shutdownAfterLateWork((api, done) => {
+			wait(10).then(() => done());
 		});
 		expect(after).toEqual(before);
 	});
 
 	it("an EventEmitter listener", async () => {
 		const bus = new EventEmitter();
-		const { before, after } = await shutdownFromLateWork((api, done) => {
-			bus.once("stop", () => done(api.slothlet.shutdown()));
+		const { before, after } = await shutdownAfterLateWork((api, done) => {
+			bus.once("stop", () => done());
 			setTimeout(() => bus.emit("stop"), 10);
 		});
 		expect(after).toEqual(before);
 	});
 });
+
+describe.each(MATRIX)(
+	"shutdown from work a run left behind shuts down the run's copy only > $runtime / $name",
+	({ runtime, permissions }) => {
+		/**
+		 * Open an instance, run a `run()` whose callback schedules `shutdown()` through a route, wait for it, and report
+		 * what the instance answers afterwards; then shut the instance down from outside any run and return the manager's
+		 * instance ids from before the instance was made and after it has shut down.
+		 * @param {function(object, function(Promise<void>): void): void} schedule - Schedules `done(api.slothlet.shutdown())`
+		 *   from the run.
+		 * @returns {Promise<{tag: unknown, before: string[], after: string[]}>} What the instance answered, and the ids.
+		 */
+		async function shutdownFromLateWork(schedule) {
+			const probe = await slothlet({ base: path.join(ROOT, "api"), runtime, mode: "eager", silent: true });
+			const manager = resolveWrapper(probe.who.tag).slothlet.contextManager;
+			await probe.shutdown();
+			const before = [...manager.instances.keys()];
+			const api = await slothlet({
+				base: path.join(ROOT, "api"),
+				runtime,
+				mode: "eager",
+				silent: true,
+				context: { tag: "base" },
+				...(permissions ? { permissions } : {})
+			});
+			let tag;
+			try {
+				const done = gate();
+				await api.slothlet.context.run({ tag: "alice" }, () => schedule(api, (shutdown) => done.release(shutdown)));
+				await await done.promise;
+				await wait(5);
+				tag = api.who.tag();
+			} finally {
+				await api.slothlet.shutdown();
+			}
+			await wait(5);
+			return { tag, before, after: [...manager.instances.keys()] };
+		}
+
+		it("a timer", async () => {
+			const { tag, before, after } = await shutdownFromLateWork((api, done) => setTimeout(() => done(api.slothlet.shutdown()), 10));
+			expect(tag).toBe("base");
+			expect(after).toEqual(before);
+		});
+
+		it("a promise chain", async () => {
+			const { tag, before, after } = await shutdownFromLateWork((api, done) => {
+				wait(10).then(() => done(api.slothlet.shutdown()));
+			});
+			expect(tag).toBe("base");
+			expect(after).toEqual(before);
+		});
+
+		it("an EventEmitter listener", async () => {
+			const bus = new EventEmitter();
+			const { tag, before, after } = await shutdownFromLateWork((api, done) => {
+				bus.once("stop", () => done(api.slothlet.shutdown()));
+				setTimeout(() => bus.emit("stop"), 10);
+			});
+			expect(tag).toBe("base");
+			expect(after).toEqual(before);
+		});
+	}
+);
 
 describe.each(MATRIX)("work a run() leaves behind keeps its context across a reload > $runtime / $name", ({ runtime, permissions }) => {
 	let api;
