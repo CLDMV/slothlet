@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T20:34:14-08:00 (1794976454)
+ *	@Last modified time: 2026-11-18T06:11:44-08:00 (1795011104)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -5039,8 +5039,10 @@ export class ApiBuilder extends ComponentBase {
 					trackFlowStore(childStore.slothlet, childStore);
 
 					try {
-						// Execute callback in the child store, marked on the stack as a run()/scope() callback (see runParent).
-						return await contextManager.runFlowBody(childInstanceID, fn, args);
+						// Execute callback in the child store, marked on the stack as a run()/scope() callback (see runParent). The
+						// body's promise is slothlet's own, so it is waited for through a promise of slothlet's: `await` on an engine
+						// promise would read `constructor` off `Promise.prototype`, where module code can have put a getter.
+						return await settledWith(contextManager.runFlowBody(childInstanceID, fn, args));
 					} finally {
 						// Cleanup child
 						MapMethods.delete(contextManager.instances, childInstanceID);
