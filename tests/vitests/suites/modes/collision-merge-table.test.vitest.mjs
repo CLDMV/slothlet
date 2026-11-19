@@ -315,14 +315,16 @@ describe("Modes > documented collision table (merge: first loaded wins, both sou
 				["lazy alone", await api.pair.fnsolo, "pair.fnsolo", "folder-fnsolo"],
 				["lazy collision", await api.pair.fnprop, "pair.fnprop", "folder-fnprop"]
 			];
-			for (const [label, slot, path, folderAnswer] of rows) {
+			for (const [label, slot, path] of rows) {
 				const first = slot.live;
 				expect(slot.live, `${label}: the getter runs on every read`).toBe(first + 1);
 				expect(typeof Object.getOwnPropertyDescriptor(slot, "live").get, `${label}: live is an accessor`).toBe("function");
-				expect(pathOf(slot.me), `${label}: me is a node at its own path`).toBe(`${path}.me`);
-				expect(slot.me(), `${label}: me is the folder's callable`).toBe(folderAnswer);
-				expect(pathOf(slot.me.me), `${label}: me.me nests below it`).toBe(`${path}.me.me`);
-				expect(Object.keys(slot.me).sort(), `${label}: me's members`).toEqual(["live", "me", "tag"]);
+				// `fn.me = fn` is the function itself in plain JS, so `me` reads as the slot standing for it.
+				expect(slot.me, `${label}: me is the slot itself`).toBe(slot);
+				expect(pathOf(slot.me), `${label}: me is at the slot's path`).toBe(path);
+				expect(slot.me(), `${label}: me answers as the slot does`).toBe(slot("x"));
+				expect(slot.me.me, `${label}: me.me is the slot too`).toBe(slot);
+				expect(Object.keys(slot.me).sort(), `${label}: me's members are the slot's`).toEqual(Object.keys(slot).sort());
 			}
 		} finally {
 			await eager.shutdown();
