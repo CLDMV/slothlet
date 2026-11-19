@@ -225,9 +225,10 @@ describe("Permissions > rule access levels > the rule manager", () => {
 		}
 	});
 
-	it("leaves an unknown suffix a rule on the literal target, which matches no api path, as before", () => {
-		const manager = build([{ caller: "guest.**", target: "cache.key:bogus", effect: "deny" }]);
-		expect(answers(manager, "cache.key")).toEqual({ call: true, read: true, write: null });
+	it("refuses a rule whose target ends in a suffix that is no level or hook type", () => {
+		expect(() => build([{ caller: "guest.**", target: "cache.key:bogus", effect: "deny" }])).toThrow(
+			expect.objectContaining({ code: "PERMISSION_RULE_INVALID" })
+		);
 	});
 
 	it("refuses an operation it does not know", () => {
