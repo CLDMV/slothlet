@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:30:05-08:00 (1794882605)
+ *	@Last modified time: 2026-11-18T18:40:13-08:00 (1795056013)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -98,7 +98,7 @@ describe.each(getMatrixConfigs({}))("Permissions > Read Gating > a frozen callab
 		expect(Object.keys(api.vault)).toEqual(keys);
 	});
 
-	it("keeps every member for the host when a caller denied some of them freezes the node", async () => {
+	it("refuses a freeze from a caller denied some of the node's members, and keeps every member for the host", async () => {
 		api = await slothlet({
 			...config,
 			base: root,
@@ -110,13 +110,12 @@ describe.each(getMatrixConfigs({}))("Permissions > Read Gating > a frozen callab
 		const keys = Object.keys(api.vault);
 		expect(keys).toContain("key");
 
-		expect(await api.rogue.freeze()).toBe("true");
+		expect(await api.rogue.freeze()).toBe("denied");
 		expect(await api.rogue.direct()).toBe("denied");
-		// A frozen value's descriptor must carry the value itself, so checking the integrity of a node holding one
-		// the caller may not read is refused rather than answered with it.
-		expect(await api.rogue.isFrozen()).toBe("denied");
+		// The refused freeze left the node open, so its integrity check answers without reading any member.
+		expect(await api.rogue.isFrozen()).toBe("false");
 
-		expect(Object.isFrozen(api.vault)).toBe(true);
+		expect(Object.isFrozen(api.vault)).toBe(false);
 		expect(Object.keys(api.vault)).toEqual(keys);
 		expect(await api.vault.key).toBe("SECRET");
 	});

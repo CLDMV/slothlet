@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T07:26:24-08:00 (1794929184)
+ *	@Last modified time: 2026-11-18T18:39:54-08:00 (1795055994)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -148,17 +148,20 @@ describe("Permissions > module code in a flow the host opened", () => {
 
 	it("its own timer, given the async context of a timer the host made inside run(), is refused", async () => {
 		await make();
+		let timer;
 		await api.slothlet.context.run({ user: "root" }, () => {
-			const timer = setTimeout(() => {}, 1000);
-			try {
-				return api.planter.keep(timer);
-			} finally {
-				clearTimeout(timer);
-			}
+			timer = setTimeout(() => {}, 1000);
+			return api.planter.keep(timer);
 		});
-		const result = await api.planter.adopt();
-		// The planter's code now counts as its own module, so the write is refused as not owned.
-		expect(result).toEqual({ control: "PERMISSION_DENIED", write: "LOOSE_SET_NOT_OWNED" });
+		// The host's timer stays live until the module has adopted it: newer Node releases drop a cleared timer's async
+		// context, which would leave the module nothing to adopt.
+		try {
+			const result = await api.planter.adopt();
+			// The planter's code now counts as its own module, so the write is refused as not owned.
+			expect(result).toEqual({ control: "PERMISSION_DENIED", write: "LOOSE_SET_NOT_OWNED" });
+		} finally {
+			clearTimeout(timer);
+		}
 		expect(api.slothlet.permissions.control.mode()).toBe("on");
 		expect(api.secret.planted_timer).toBeUndefined();
 	});

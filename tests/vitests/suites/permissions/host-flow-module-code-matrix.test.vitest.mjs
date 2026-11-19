@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-18T05:59:25-08:00 (1795010365)
+ *	@Last modified time: 2026-11-18T18:39:53-08:00 (1795055993)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -220,21 +220,22 @@ describe.each(CONFIGS)("Permissions > module code in a host flow ($runtime, $mod
 			}
 		};
 
-		it("keeps the host's authority inside run() and a partial scope, and its write persists", async () => {
+		it("keeps the host's authority inside a partial scope, and its write persists", async () => {
 			api = (await make(config)).api;
-			for (const flowName of ["partial", "run"]) {
+			for (const flowName of ["partial"]) {
 				const mark = `host:${flowName}`;
 				const outcome = await FLOWS[flowName](api, () => hostWrite(mark));
 				expect({ flowName, outcome, landed: landed(api, target) }).toEqual({ flowName, outcome: "ok", landed: mark });
 			}
 		});
 
-		it("keeps the host's authority inside a full scope, and its write stays in the scope", async () => {
+		it("keeps the host's authority inside a full scope and run(), and its write stays in the flow", async () => {
 			api = (await make(config)).api;
-			const before = landed(api, target);
-			const inside = await FLOWS.full(api, () => hostWrite("host:full"));
-			expect(inside).toBe("ok");
-			expect(landed(api, target)).toBe(before);
+			for (const flowName of ["full", "run"]) {
+				const before = landed(api, target);
+				const inside = await FLOWS[flowName](api, () => hostWrite(`host:${flowName}`));
+				expect({ flowName, inside, landed: landed(api, target) }).toEqual({ flowName, inside: "ok", landed: before });
+			}
 		});
 	});
 });

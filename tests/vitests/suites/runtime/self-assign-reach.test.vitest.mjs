@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:31:01-08:00 (1794882661)
+ *	@Last modified time: 2026-11-18T18:40:29-08:00 (1795056029)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -77,7 +77,9 @@ const READ_RULES = [
 	{ caller: "**", target: "guest.**", effect: "allow" },
 	{ caller: "**", target: "root.**", effect: "allow" },
 	// The member `root.changeSelf` defines on the api root and reads back is data at the root, read under a rule for that leaf.
-	{ caller: "root.changeSelf", target: "baseDefined", effect: "allow" }
+	{ caller: "root.changeSelf", target: "baseDefined", effect: "allow" },
+	// So is the member `root.changeScopedSelf` defines and reads back inside a fully isolated scope.
+	{ caller: "root.changeScopedSelf", target: "scoped", effect: "allow" }
 ];
 const PERMISSIONS = [
 	{ label: "no permissions config", options: {} },
@@ -381,8 +383,9 @@ describe.each(CONFIGS)("what a module reaches through self (#625) — $mode / $r
 			await isolated.slothlet.context.run({}, async () => {
 				report = await isolated.root.changeScopedSelf();
 			});
-			expect(report).toEqual({ define: "done", read: 3, accessor: "TypeError", remove: "done", gone: true });
+			expect(report).toEqual({ define: "done", read: 3, accessor: "done", remove: "done", gone: true });
 			expect(isolated.scoped).toBeUndefined();
+			expect(isolated.scopedGetter).toBeUndefined();
 		});
 
 		it("hands a module the framework's view of the framework namespace stored on another module's class", async () => {
