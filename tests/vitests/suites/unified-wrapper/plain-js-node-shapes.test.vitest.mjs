@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-18T22:00:52-08:00 (1795068052)
+ *	@Last modified time: 2026-11-19T05:16:54-08:00 (1795094214)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -805,9 +805,17 @@ describe.each(
 
 		it("is the prototype every holder of the node reads through its own root, the host and the owner among them", async () => {
 			await load();
-			expect(prototypeAnswers(heldInstances(api), selfPrototypes(api.owner))).toEqual(answering("object"));
-			expect(await api.owner.heldPrototypeAnswers(heldInstances(api))).toEqual(answering("object"));
-			expect(await api.reader.heldPrototypeAnswers(heldInstances(api))).toEqual(answering("object"));
+			// The node itself, which the host holds, reports one prototype to every holder of it once closed, as JavaScript
+			// requires: the handle, which the host reads `Relay.prototype` as the object itself beside.
+			expect(prototypeAnswers(heldInstances(api), selfPrototypes(api.owner))).toEqual(answering("object", { relay: "view" }));
+			// The owner, and every module while the permission system is off, read the prototypes themselves through `self`,
+			// so the handle a closed node it is handed reports is not that object; a module handed the handle reads that
+			// same handle through `self`.
+			const emitters = { bus: "view", relay: "view" };
+			expect(await api.owner.heldPrototypeAnswers(heldInstances(api))).toEqual(answering("object", emitters));
+			expect(await api.reader.heldPrototypeAnswers(heldInstances(api))).toEqual(
+				permissions === null ? answering("object", emitters) : answering("object")
+			);
 		});
 
 		it("lands a write as plain JS does where the module's writes are allowed, and refuses it otherwise", async () => {

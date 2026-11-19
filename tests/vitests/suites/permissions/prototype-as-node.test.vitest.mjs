@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-18T22:00:35-08:00 (1795068035)
+ *	@Last modified time: 2026-11-19T05:16:36-08:00 (1795094196)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -115,21 +115,21 @@ describe.each(MODES.flatMap((mode) => RUNTIMES.flatMap((runtime) => SETUPS.map((
 
 		it("is one object by every route, as plain JS has it, for the owner, another module and the host", async () => {
 			await mount();
-			// An instance `new` makes through the node is the plain object the class made, whose prototype is the class's own
-			// object rather than its handle: it is compared by what it reads (see the shape case), not by identity.
-			const { freshPrototype: _, ...expected } = identity(await twin());
-			const identityOf = async (answers) => {
-				const { freshPrototype: _, ...rest } = await answers;
-				return rest;
-			};
-			expect(await identityOf(api.owner.identity())).toEqual(expected);
-			expect(await identityOf(api.reader.identity())).toEqual(expected);
-			expect(await identityOf(identity(api.owner))).toEqual(expected);
+			const expected = identity(await twin());
+			// The owner and the host, and every module while the permission system is off or disabled, hold the prototype
+			// itself, whose `constructor` is the class rather than its node (as `self.owner.Box !== Box`); a module handed
+			// the handle reads the node there.
+			const itself = { ...expected, constructor: false };
+			expect(await api.owner.identity()).toEqual(itself);
+			expect(await api.reader.identity()).toEqual(privacyApplies ? expected : itself);
+			expect(identity(api.owner)).toEqual(itself);
 		});
 
-		it("is the same object to every caller", async () => {
+		it("is the same object to every caller holding it as itself, and one handle per name to a module handed the handle", async () => {
 			await mount();
-			expect(await api.reader.sameAsOwner()).toEqual({ Box: true, Alias: true });
+			// The owner hands the prototype itself on; a module handed the handle gets the one deciding each write at every
+			// name the class is exported under, which is neither name's own handle.
+			expect(await api.reader.sameAsOwner()).toEqual(privacyApplies ? { Box: false, Alias: false } : { Box: true, Alias: true });
 			expect(api.owner.Box.prototype).toBe(Object.getPrototypeOf(api.owner.inst));
 			expect(api.owner.Box.prototype).toBe(api.owner.inst.__proto__);
 		});

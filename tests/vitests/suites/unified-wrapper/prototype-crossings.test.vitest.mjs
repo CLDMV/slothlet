@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-18T22:00:52-08:00 (1795068052)
+ *	@Last modified time: 2026-11-19T05:16:55-08:00 (1795094215)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -308,7 +308,7 @@ describe.each(MODES.flatMap((mode) => RUNTIMES.map((runtime) => ({ mode, runtime
 				expect(await api.owner.takeFromPrototype("emitted_aliased")).toBe(false);
 			});
 
-			it("hands the owner and a reader whose writes are allowed the same prototype at each name", async () => {
+			it("hands the owner the prototype itself back, and a reader whose writes are allowed the handle at every name", async () => {
 				api = await mount({ mode, runtime, permissions: { rules: [ALLOW_READER_WRITES] } });
 				const reader = {};
 				const owner = {};
@@ -316,7 +316,9 @@ describe.each(MODES.flatMap((mode) => RUNTIMES.map((runtime) => ({ mode, runtime
 					reader[name] = await api.reader.holdsSelfPrototype(name);
 					owner[name] = await api.owner.holdsSelfPrototype(name);
 				}
-				expect({ reader, owner }).toEqual({ reader: { Foo: true, Alias: true }, owner: { Foo: true, Alias: true } });
+				// The owner holds the prototype itself and hands it on as it is; the reader gets the handle deciding each write
+				// at every name, which is neither name's own handle.
+				expect({ reader, owner }).toEqual({ reader: { Foo: false, Alias: false }, owner: { Foo: true, Alias: true } });
 			});
 		});
 
