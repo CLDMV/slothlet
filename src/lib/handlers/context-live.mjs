@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-18T21:58:44-08:00 (1795067924)
+ *	@Last modified time: 2026-11-19T08:57:40-08:00 (1795107460)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -270,12 +270,13 @@ function promiseFlowStamp() {
 		}
 
 		/**
-		 * A promise's recorded flow.
-		 * @param {Promise<*>} promise - The promise.
+		 * A promise's recorded flow. The record is a private field of the promise object itself (see {@link Adopt}), so
+		 * this checks the object for the field: it reads nothing of what the promise settles with and never waits for it.
+		 * @param {object} target - The promise object the engine made, as an object carrying the field or not.
 		 * @returns {PromiseFlowRecord|undefined} The record; undefined when it has none.
 		 */
-		static of(promise) {
-			return #record in promise ? promise.#record : undefined;
+		static of(target) {
+			return #record in target ? target.#record : undefined;
 		}
 	}
 	return Objects.freeze({

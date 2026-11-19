@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-19T05:14:41-08:00 (1795094081)
+ *	@Last modified time: 2026-11-19T08:57:39-08:00 (1795107459)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -865,7 +865,8 @@ export class AsyncContextManager {
 		if (made !== undefined && made.slot !== "callback") return true;
 		if (this.#jobStack.length !== 1) return false;
 		if (made !== undefined) return made.entries === 1;
-		if ((promiseProbeAnswer ?? this.#promiseJobsLeftOut) === true) return this.#scriptBegun !== resource;
+		// The suite's stand-in answer (`false`, see answerPromiseProbe) turns this check off; otherwise the probe's own.
+		if (promiseProbeAnswer !== false && this.#promiseJobsLeftOut === true) return this.#scriptBegun !== resource;
 		// Node runs every hook for a promise's job (Node 22.15, Node 24.0, or any Node before the probe's job has run):
 		// what put the scope in place is on the stack.
 		const entry = this.#entry;
