@@ -22453,6 +22453,59 @@ function runtime_nodeBehind(value) {
 }
 
 /**
+ * The object a value stands for once every layer slothlet put around it is taken off: a prototype's handle, a view
+ * `self` hands out, a full-isolation run's view, a crossing view, a stand-in, a view of a given prototype, a pinned code
+ * member, the async runtime's context wrapper of a class instance, and a node, which stands for its module's value (the
+ * function of a function node). Anything else is the value itself. Nothing of the module's code runs: only slothlet's own
+ * records are read.
+ * @param {*} value - The value.
+ * @returns {*} What it stands for.
+ * @private
+ */
+function runtime_underlyingValue(value) {
+	for (let depth = 0; depth < 64; depth++) {
+		if (value === null || (typeof value !== "object" && typeof value !== "function")) return value;
+		let next = value;
+		if (WeakMapMethods.has(RUN_VIEWS, next)) next = WeakMapMethods.get(RUN_VIEWS, next);
+		else if (WeakMapMethods.has(CROSSINGS, next)) next = WeakMapMethods.get(CROSSINGS, next).original;
+		else if (WeakMapMethods.has(SELF_MEMBER_VIEWS, next)) next = WeakMapMethods.get(SELF_MEMBER_VIEWS, next).value;
+		else if (WeakMapMethods.has(SELF_VIEW_NODES, next)) next = WeakMapMethods.get(SELF_VIEW_NODES, next);
+		else if (WeakMapMethods.has(capturedViewTargets, next)) next = WeakMapMethods.get(capturedViewTargets, next);
+		else if (WeakMapMethods.has(STAND_IN_RECORDS, next)) next = WeakMapMethods.get(STAND_IN_RECORDS, next).original;
+		else if (WeakMapMethods.has(GIVEN_VIEWS, next)) next = WeakMapMethods.get(GIVEN_VIEWS, next).value;
+		else if (WeakMapMethods.has(PINNED_CODE_MEMBERS, next)) next = WeakMapMethods.get(PINNED_CODE_MEMBERS, next);
+		else {
+			const unwrapped = runtime_unwrapClassInstance(next);
+			if (unwrapped !== next) next = unwrapped;
+			else {
+				const wrapper = resolveWrapper(next);
+				if (wrapper === null) return next;
+				const impl = wrapper.____slothletInternal.impl;
+				next = runtime_functionOf(impl) ?? impl;
+			}
+		}
+		if (next === value) return value;
+		value = next;
+	}
+	return value;
+}
+
+/**
+ * `slothlet.same(a, b)`: whether two values stand for the same object once slothlet's own layers are taken off each
+ * ({@link runtime_underlyingValue}), so a module handed a prototype's handle can tell it is the prototype it imported.
+ * @param {*} a - One value.
+ * @param {*} b - The other.
+ * @returns {boolean} True when both stand for the same object (or are the same primitive, as `Object.is` tells).
+ * @internal
+ *
+ * @example
+ * runtime_sameValue(self.owner.Box.prototype, Box.prototype); // true
+ */
+function runtime_sameValue(a, b) {
+	return Objects.is(runtime_underlyingValue(a), runtime_underlyingValue(b));
+}
+
+/**
  * Read `key` off `container` as an api member: what `container[key]` holds, or `undefined` when there
  * is no member of that name.
  *
@@ -22631,6 +22684,7 @@ export function internals(consumer) {
 		runtime_rootInheritedRead,
 		runtime_behindGivenView,
 		runtime_rootTakesKey,
+		runtime_sameValue,
 		runtime_selfChangeTarget,
 		runtime_selfFrameworkView,
 		runtime_selfHookHandler,

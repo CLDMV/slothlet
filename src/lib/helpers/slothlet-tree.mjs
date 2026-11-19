@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-18T18:52:36-08:00 (1795056756)
+ *	@Last modified time: 2026-11-19T05:14:48-08:00 (1795094088)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -151,6 +151,7 @@ export const SLOTHLET_TREE = Objects.freeze([
 	"slothlet.pin.caller",
 	"slothlet.reload",
 	"slothlet.restart",
+	"slothlet.same",
 	"slothlet.sanitize",
 	"slothlet.shutdown",
 	"slothlet.types",

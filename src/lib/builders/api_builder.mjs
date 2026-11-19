@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-18T19:28:45-08:00 (1795058925)
+ *	@Last modified time: 2026-11-19T05:14:40-08:00 (1795094080)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -83,6 +83,7 @@ import {
 } from "#helpers/intrinsics";
 const {
 	resolveWrapper,
+	runtime_sameValue,
 	runtime_selfModuleCeilings,
 	runtime_selfModuleReader,
 	runtime_selfRootView,
@@ -3414,6 +3415,30 @@ export class ApiBuilder extends ComponentBase {
 					});
 				}
 				return slothlet.helpers.sanitize.sanitizePropertyName(str, slothlet.config.sanitize || {});
+			},
+
+			/**
+			 * Whether two values are the same object once slothlet's own layers are taken off each.
+			 * @param {*} a - One value.
+			 * @param {*} b - The other.
+			 * @returns {boolean} True when `a` and `b` stand for the same object (or are the same primitive, as
+			 *   `Object.is` tells), false otherwise.
+			 * @public
+			 *
+			 * @description
+			 * What `self` hands a module can be a layer over the object a module holds itself: a node over its module's
+			 * value, a class prototype's handle over the prototype, a view over a value handed between modules. `===`
+			 * compares the layers; `same` compares what they stand for. It reads only slothlet's own records, runs none of
+			 * the values' code, and grants nothing: it answers only a boolean.
+			 *
+			 * @example
+			 * // In a module that imported Box itself, under permissions on:
+			 * self.owner.Box.prototype === Box.prototype;              // false: the reader holds the prototype's handle
+			 * self.slothlet.same(self.owner.Box.prototype, Box.prototype); // true
+			 * self.slothlet.same(self.owner.Foo.prototype, self.owner.Alias.prototype); // true: one prototype, two handles
+			 */
+			same: function slothlet_same(a, b) {
+				return runtime_sameValue(a, b);
 			},
 
 			/**

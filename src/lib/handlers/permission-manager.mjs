@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-18T21:58:45-08:00 (1795067925)
+ *	@Last modified time: 2026-11-19T05:14:42-08:00 (1795094082)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -920,6 +920,11 @@ export class PermissionManager extends ComponentBase {
 		// state). The call itself grants nothing: whether the caller may reach the target is decided per call, as a
 		// read of the target's own path. So, like metadata.caller, a `defaultPolicy: "deny"` host need not re-allow it.
 		this.addRule({ caller: "**", target: "slothlet.node", effect: "allow" }, "__builtin__");
+
+		// Built-in allow: `slothlet.same(a, b)` answers whether two values stand for the same object once slothlet's own
+		// layers are taken off. It reads nothing the caller does not already hold and grants nothing, so a
+		// `defaultPolicy: "deny"` host need not re-allow it.
+		this.addRule({ caller: "**", target: "slothlet.same", effect: "allow" }, "__builtin__");
 
 		// Principals (#459): registering, replacing, or invalidating a resolver decides what facts every
 		// `requires` rule sees, so the principal management surface is host-only by default. The host
