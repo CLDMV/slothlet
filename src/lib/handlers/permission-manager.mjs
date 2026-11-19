@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T19:49:36-08:00 (1794973776)
+ *	@Last modified time: 2026-11-18T18:52:31-08:00 (1795056751)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -91,12 +91,42 @@ const PRINCIPAL_PRUNE_THRESHOLD = 1024;
 const HOOK_TARGET_TYPES = setFrom(["before", "after", "always", "error", "around", "hook"]);
 
 /**
- * Suffix that makes a rule target a write target (#625): `pattern:write` gates a module assigning, defining,
- * or deleting a member at a matching api path, or changing the prototype or extensibility of the node there.
+ * Suffix of the built-in write targets (#625): `pattern:write` gates a module assigning, defining, or deleting a member
+ * at a matching api path, or changing the prototype or extensibility of the node there.
  * @type {string}
  * @private
  */
 const WRITE_TARGET_SUFFIX = ":write";
+
+/**
+ * The access levels a rule target's suffix names (`pattern:<level>`), each with the operations it governs. A target
+ * with no level suffix is {@link DEFAULT_RULE_LEVEL}. An allow grants the operations of its level; a deny takes them
+ * away, except that a `:write` deny takes away the write alone. A write needs the read, so a deny taking the read away
+ * refuses the write as well: the write gate holds the read rules on top of the write rules.
+ * @type {Map<string, Readonly<{call: boolean, read: boolean, write: boolean}>>}
+ * @private
+ */
+const RULE_LEVELS = mapFrom([
+	["call", Objects.freeze({ call: true, read: false, write: false })],
+	["read", Objects.freeze({ call: false, read: true, write: false })],
+	["access", Objects.freeze({ call: true, read: true, write: false })],
+	["write", Objects.freeze({ call: false, read: true, write: true })],
+	["full", Objects.freeze({ call: true, read: true, write: true })]
+]);
+
+/**
+ * The level of a rule target with no level suffix: calls and reads, no write.
+ * @type {string}
+ * @private
+ */
+const DEFAULT_RULE_LEVEL = "access";
+
+/**
+ * The operations a call or read gate decides (see {@link PermissionManager#checkAccess}): `"access"` asks for both.
+ * @type {Set<string>}
+ * @private
+ */
+const ACCESS_OPERATIONS = setFrom(["call", "read", "access"]);
 
 /**
  * The prefix of a rule target naming one of the built-in capabilities module code is refused by default while the
@@ -1006,8 +1036,11 @@ export class PermissionManager extends ComponentBase {
 		// registration/execution rather than plain calls; `hookType` is the type or "hook" (any),
 		// `hookPathPattern` is the path-glob portion. Both null for ordinary call-target rules.
 		const hookTarget = this.#parseHookTarget(rule.target);
-		// A write target (`pattern:write`, #625) gates module writes rather than calls; null for any other rule.
-		const writePathPattern = this.#parseWriteTarget(rule.target);
+		// Any other target names an access level (`pattern:<level>`, no suffix being `:access`): which of a call, a read
+		// and a write the rule decides. A rule with the write in its level (`:write`, `:full`, #625) gates module writes.
+		const levelTarget = hookTarget ? null : this.#parseLevelTarget(rule.target);
+		const level = levelTarget ? MapMethods.get(RULE_LEVELS, levelTarget.level) : null;
+		const writePathPattern = level?.write ? levelTarget.pathPattern : null;
 		// Precedence layer (#407): explicit `layer` wins; otherwise "__builtin__" → builtin, else instance.
 		// Used only as the equal-specificity tiebreak (see RULE_LAYER_RANK).
 		const ruleLayer = resolveRuleLayer(layer, ownerModuleID);
@@ -1022,6 +1055,13 @@ export class PermissionManager extends ComponentBase {
 			requires: rule.requires == null ? null : Objects.freeze(copyList(rule.requires)),
 			hookType: hookTarget ? hookTarget.hookType : null,
 			hookPathPattern: hookTarget ? hookTarget.pathPattern : null,
+			// The target's path pattern, its level or hook suffix left off.
+			pathPattern: hookTarget ? hookTarget.pathPattern : levelTarget.pathPattern,
+			level: levelTarget ? levelTarget.level : null,
+			// Which call and read gates the rule takes part in: an allow those of its level, a deny those it takes away
+			// (a `:write` deny takes away the write alone).
+			call: level !== null && level.call,
+			read: level !== null && level.read && !(rule.effect === "deny" && levelTarget.level === "write"),
 			writePathPattern,
 			ownerModuleID: ownerModuleID,
 			layer: ruleLayer,
@@ -1031,7 +1071,10 @@ export class PermissionManager extends ComponentBase {
 		};
 
 		MapMethods.set(this.#rules, id, entry);
-		MapMethods.set(writePathPattern === null ? this.#callRules : this.#writeRules, id, entry);
+		// A rule sits with the call rules when it gates hooks, calls or reads, with the write rules when it gates writes,
+		// and with both for a level that does both (`:write` allows, `:full`).
+		if (hookTarget || entry.call || entry.read) MapMethods.set(this.#callRules, id, entry);
+		if (writePathPattern !== null) MapMethods.set(this.#writeRules, id, entry);
 		if (entry.requires) this.#requiresRuleCount++;
 		this.#clearCache();
 
@@ -1542,8 +1585,8 @@ export class PermissionManager extends ComponentBase {
 		const stale = [];
 		const seen = new Map();
 		for (const entry of mapValues(this.#callRules)) {
-			if (!entry.requires || entry.hookType != null) continue;
-			if (!this.#getCompiledPattern(entry.caller)(callerPath) || !this.#getCompiledPattern(entry.target)(targetPath)) continue;
+			if (!entry.requires || !entry.call) continue;
+			if (!this.#getCompiledPattern(entry.caller)(callerPath) || !this.#getCompiledPattern(entry.pathPattern)(targetPath)) continue;
 			for (let r = 0; r < entry.requires.length; r++) {
 				const name = entry.requires[r];
 				const record = MapMethods.get(this.#principals, name);
@@ -1895,11 +1938,14 @@ export class PermissionManager extends ComponentBase {
 	 * @param {string|null} [callerFilePath=null] - Caller's source file path (for self-call bypass).
 	 * @param {string|null} [targetFilePath=null] - Target's source file path (for self-call bypass).
 	 * @param {object|null} [runtimeContext=null] - Per-request ALS context for condition evaluation.
-	 * @param {{ useCache?: boolean }|null} [options=null] - Query options.
+	 * @param {{ useCache?: boolean, operation?: "call"|"read"|"access" }|null} [options=null] - Query options.
 	 * @param {boolean} [options.useCache=true] - Read/write resolved decision cache.
+	 * @param {"call"|"read"|"access"} [options.operation="call"] - What is asked: a call, a read, or both (`"access"`,
+	 *   allowed only when the call and the read are). Each is decided by the rules whose level covers it.
 	 * @returns {boolean} True if access is allowed.
 	 * @example
 	 * const allowed = pm.checkAccess("payments.charge", "db.write", "/src/pay.mjs", "/src/db.mjs");
+	 * const readable = pm.checkAccess("payments.charge", "db.rows", null, null, null, { operation: "read" });
 	 */
 	checkAccess(callerPath, targetPath, callerFilePath = null, targetFilePath = null, runtimeContext = null, options = null) {
 		const normalizedOptions = options == null ? {} : options;
@@ -1911,7 +1957,7 @@ export class PermissionManager extends ComponentBase {
 			});
 		}
 
-		const { useCache = true } = normalizedOptions;
+		const { useCache = true, operation = "call" } = normalizedOptions;
 		if (typeof useCache !== "boolean") {
 			throw new this.SlothletError("INVALID_ARGUMENT", {
 				argument: "options.useCache",
@@ -1919,9 +1965,20 @@ export class PermissionManager extends ComponentBase {
 				received: typeof useCache
 			});
 		}
+		if (!SetMethods.has(ACCESS_OPERATIONS, operation)) {
+			throw new this.SlothletError("INVALID_ARGUMENT", {
+				argument: "options.operation",
+				expected: '"call", "read" or "access"',
+				received: typeof operation === "string" ? operation : typeof operation
+			});
+		}
 
 		// Silent query — no call/construct site, so no callMeta (function conditions receive null).
-		return this.#resolveAccess(callerPath, targetPath, callerFilePath, targetFilePath, runtimeContext, useCache, null).allowed;
+		const resolve = (op) =>
+			this.#resolveAccess(callerPath, targetPath, callerFilePath, targetFilePath, runtimeContext, useCache, null, false, null, false, op)
+				.allowed;
+		if (operation === "access") return resolve("call") && resolve("read");
+		return resolve(operation);
 	}
 
 	/**
@@ -1977,7 +2034,7 @@ export class PermissionManager extends ComponentBase {
 	 * @param {PermissionCallMeta|null} [callMeta=null] - Call/construct metadata (#455): `{ args, target }`
 	 *   from the invocation, forwarded to function conditions as their second argument. Null for reads,
 	 *   hooks, the internal control surface, and silent queries.
-	 * @param {{ principalGrace?: boolean, moduleCaller?: boolean, newMember?: boolean, via?: ReadonlyArray<string> }|null} [options=null] - Enforcement options.
+	 * @param {{ principalGrace?: boolean, moduleCaller?: boolean, newMember?: boolean, operation?: "call"|"read", via?: ReadonlyArray<string> }|null} [options=null] - Enforcement options.
 	 * @param {boolean} [options.principalGrace=false] - Accept a principal whose epoch is current even if its
 	 *   `ttl` has elapsed (#459). Set only by a promoted call re-enforcing right after its resolve.
 	 * @param {boolean} [options.moduleCaller=false] - The caller is a module even though no source file is
@@ -1989,6 +2046,8 @@ export class PermissionManager extends ComponentBase {
 	 * @param {boolean} [options.newMember=false] - The target is a member a module is about to create, which will be the
 	 *   caller's own once written: module privacy answers as for a member the caller's module owns, and the default policy
 	 *   alone does not refuse it (a matching rule still decides).
+	 * @param {"call"|"read"} [options.operation="call"] - The operation gated: a call (or construct), or a read. Each
+	 *   is decided by the rules whose level covers it; a write is held to the read.
 	 * @param {function(string): boolean} [options.dataMember] - Given for a read of data: whether a path above the
 	 *   target is an object member of a module's data. A deny rule naming such a member's path exactly then covers the
 	 *   target too, as a rule on `path.**` would, so what the member holds is denied with it unless a more specific rule
@@ -2026,7 +2085,8 @@ export class PermissionManager extends ComponentBase {
 				callMeta,
 				options?.moduleCaller === true,
 				options?.dataMember ?? null,
-				options?.newMember === true
+				options?.newMember === true,
+				options?.operation === "read" ? "read" : "call"
 			);
 		} finally {
 			this.#principalGrace = priorGrace;
@@ -2082,7 +2142,7 @@ export class PermissionManager extends ComponentBase {
 		if (!internal) refuse();
 		// A malformed rule is left to the rule validation, which refuses it.
 		if (typeof rule?.target !== "string") return { ownerModuleID: internal.moduleID, layer: "module", writer: module };
-		const pattern = this.#parseWriteTarget(rule.target) ?? this.#parseHookTarget(rule.target)?.pathPattern ?? rule.target;
+		const pattern = this.#parseHookTarget(rule.target)?.pathPattern ?? this.#parseLevelTarget(rule.target).pathPattern;
 		const prefix = writeTargetLiteralPrefix(pattern);
 		const framework = isFrameworkWriteTarget(pattern);
 		// Whether a module may manage the rule within its own subtree; refused when it may not manage it at all.
@@ -2509,14 +2569,14 @@ export class PermissionManager extends ComponentBase {
 		const runtimeContext = this.slothlet.contextManager?.tryGetContext?.(this.slothlet.instanceID)?.context ?? null;
 		const conditioned = [];
 		for (const entry of mapValues(this.#callRules)) {
-			if (entry.hookType != null) continue;
-			if (!this.#getCompiledPattern(entry.caller)(callerPath) || !this.#getCompiledPattern(entry.target)(targetPath)) continue;
+			if (!entry.call) continue;
+			if (!this.#getCompiledPattern(entry.caller)(callerPath) || !this.#getCompiledPattern(entry.pathPattern)(targetPath)) continue;
 			if (this.#conditionMatches(entry, runtimeContext, null)) listPush(conditioned, entry);
 		}
 		this.#sortBySpecificity(
 			conditioned,
 			(entry) => this.#computeSpecificity(entry, callerPath, targetPath),
-			(entry) => this.#literalSegments(entry.caller) + this.#literalSegments(entry.target)
+			(entry) => this.#literalSegments(entry.caller) + this.#literalSegments(entry.pathPattern)
 		);
 		// The built-in default always matches, so there is a winner.
 		return conditioned[0];
@@ -2693,7 +2753,7 @@ export class PermissionManager extends ComponentBase {
 			if (entry.hookType != null || entry.id === this.#reachRuleId || entry.id === this.#globalMetadataRuleId) continue;
 			if (entry.effect !== "deny" && entry.condition == null && entry.requires == null) continue;
 			if (!this.#getCompiledPattern(entry.caller)(callerPath)) continue;
-			if (runtime_patternReaches(entry.target, target)) {
+			if (runtime_patternReaches(entry.pathPattern, target)) {
 				refuses = true;
 				break;
 			}
@@ -3585,6 +3645,7 @@ export class PermissionManager extends ComponentBase {
 	 *   an object member of a module's data (see {@link enforceAccess}).
 	 * @param {boolean} [newMember=false] - The target is a member the caller's module is about to create (see
 	 *   {@link enforceAccess}).
+	 * @param {"call"|"read"} [operation="call"] - The operation decided: only the rules whose level covers it take part.
 	 * @returns {{ allowed: boolean, event: string|null, payload: object|null, hasConditionalRules?: boolean }} Decision record.
 	 * @private
 	 */
@@ -3598,7 +3659,8 @@ export class PermissionManager extends ComponentBase {
 		callMeta,
 		moduleCaller = false,
 		dataMember = null,
-		newMember = false
+		newMember = false,
+		operation = "call"
 	) {
 		// Global toggle: when off, everything is allowed (no event to emit).
 		// Exception: slothlet.permissions.control.** is always subject to rule evaluation while the system is off
@@ -3673,15 +3735,16 @@ export class PermissionManager extends ComponentBase {
 			if (prefixes.length !== 0) inherited = filterList(prefixes, (prefix) => dataMember(prefix));
 		}
 
-		// Check resolved cache
-		const cacheKey =
-			inherited.length === 0 ? `${callerPath}::${targetPath}` : `${callerPath}::${targetPath}::${ArrayMethods.join(inherited, "::")}`;
+		// Check resolved cache. A call and a read of one path are decided by different rules (their levels), so a read's
+		// verdict is kept under its own key.
+		const pairKey = operation === "read" ? `${callerPath}::${targetPath}\u0000read` : `${callerPath}::${targetPath}`;
+		const cacheKey = inherited.length === 0 ? pairKey : `${pairKey}::${ArrayMethods.join(inherited, "::")}`;
 		let entry;
 		if (useCache && MapMethods.has(this.#resolvedCache, cacheKey)) {
 			entry = MapMethods.get(this.#resolvedCache, cacheKey);
 		} else {
 			// Evaluate rules — returns { allowed, event, payload, hasConditionalRules }
-			entry = this.#evaluate(callerPath, targetPath, runtimeContext, callMeta, inherited);
+			entry = this.#evaluate(callerPath, targetPath, runtimeContext, callMeta, inherited, operation);
 			// Do NOT cache when any matching rule has a condition — results vary by runtime context
 			if (useCache && !entry.hasConditionalRules) {
 				MapMethods.set(this.#resolvedCache, cacheKey, entry);
@@ -3796,31 +3859,34 @@ export class PermissionManager extends ComponentBase {
 	 *   conditions; `null` off the call/construct path.
 	 * @param {string[]} [inherited] - Object members above the target whose exact deny rules cover it, each taken as a
 	 *   rule on `member.**`.
+	 * @param {"call"|"read"} [operation="call"] - The operation decided: only the rules whose level covers it take part.
 	 * @returns {{ allowed: boolean, event: string, payload: object, hasConditionalRules: boolean }} Decision record (does not emit; caller must emit).
 	 * @private
 	 */
-	#evaluate(callerPath, targetPath, runtimeContext = null, callMeta, inherited = NO_PREFIXES) {
+	#evaluate(callerPath, targetPath, runtimeContext = null, callMeta, inherited = NO_PREFIXES, operation = "call") {
 		// Collect all path-matching rules
 		const matches = [];
+		const reading = operation === "read";
 
 		for (const entry of mapValues(this.#callRules)) {
-			// Hook-target rules (pattern:type) gate interception, never plain calls — skip them here. So is the built-in
-			// reach default (see placeModuleRule), which decides only what rules module code may add, never the call to
-			// `addRule` itself. Write rules are kept apart and never scanned here.
-			if (entry.hookType != null || entry.id === this.#reachRuleId || entry.id === this.#globalMetadataRuleId) continue;
+			// Only the rules whose level covers the operation decide it: a hook-target rule (pattern:type) gates
+			// interception and covers neither, so it is skipped here. So is the built-in reach default (see
+			// placeModuleRule), which decides only what rules module code may add, never the call to `addRule` itself.
+			// Rules that gate writes alone are kept apart and never scanned here.
+			if (!(reading ? entry.read : entry.call) || entry.id === this.#reachRuleId || entry.id === this.#globalMetadataRuleId) continue;
 			const callerMatcher = this.#getCompiledPattern(entry.caller);
-			const targetMatcher = this.#getCompiledPattern(entry.target);
+			const targetMatcher = this.#getCompiledPattern(entry.pathPattern);
 
 			if (callerMatcher(callerPath) && targetMatcher(targetPath)) {
 				listPush(matches, entry);
 			} else if (
 				inherited.length !== 0 &&
 				entry.effect === "deny" &&
-				ArrayMethods.includes(inherited, entry.target) &&
+				ArrayMethods.includes(inherited, entry.pathPattern) &&
 				callerMatcher(callerPath)
 			) {
 				// A deny naming an object member exactly covers what the member holds, ranked as a rule on `member.**`.
-				listPush(matches, { ...entry, target: `${entry.target}.**`, coveredBy: entry });
+				listPush(matches, { ...entry, pathPattern: `${entry.pathPattern}.**`, coveredBy: entry });
 			}
 		}
 
@@ -3848,7 +3914,7 @@ export class PermissionManager extends ComponentBase {
 		this.#sortBySpecificity(
 			conditioned,
 			(entry) => this.#computeSpecificity(entry, callerPath, targetPath),
-			(entry) => this.#literalSegments(entry.caller) + this.#literalSegments(entry.target)
+			(entry) => this.#literalSegments(entry.caller) + this.#literalSegments(entry.pathPattern)
 		);
 		const winner = conditioned[0];
 		const allowed = winner.effect === "allow";
@@ -3976,16 +4042,24 @@ export class PermissionManager extends ComponentBase {
 	}
 
 	/**
-	 * Parse a permission target into its path pattern when it is a write target (`pattern:write`, #625).
+	 * Parse a permission target that is not a hook target into its path pattern and access level (`pattern:<level>`,
+	 * see {@link RULE_LEVELS}). A target with no level suffix, an empty path before one, or a suffix that names no level
+	 * is the whole target at {@link DEFAULT_RULE_LEVEL}, as a target with a colon always was.
 	 *
 	 * @param {string} target - Rule target string.
-	 * @returns {string|null} The path pattern, or null for any other target.
+	 * @returns {{ pathPattern: string, level: string }} Parsed parts.
 	 * @private
+	 * @example
+	 * this.#parseLevelTarget("cache.**:write"); // { pathPattern: "cache.**", level: "write" }
+	 * this.#parseLevelTarget("cache.key"); // { pathPattern: "cache.key", level: "access" }
 	 */
-	#parseWriteTarget(target) {
-		if (!StringMethods.endsWith(target, WRITE_TARGET_SUFFIX)) return null;
-		const pathPattern = StringMethods.slice(target, 0, -WRITE_TARGET_SUFFIX.length);
-		return pathPattern ? pathPattern : null;
+	#parseLevelTarget(target) {
+		const lastColon = StringMethods.lastIndexOf(target, ":");
+		if (lastColon > 0) {
+			const level = StringMethods.substring(target, lastColon + 1);
+			if (MapMethods.has(RULE_LEVELS, level)) return { pathPattern: StringMethods.substring(target, 0, lastColon), level };
+		}
+		return { pathPattern: target, level: DEFAULT_RULE_LEVEL };
 	}
 
 	/**
@@ -4000,7 +4074,7 @@ export class PermissionManager extends ComponentBase {
 	 * @private
 	 */
 	#computeSpecificity(entry, callerPath, targetPath) {
-		return this.#patternSpecificity(entry.caller, callerPath) + this.#patternSpecificity(entry.target, targetPath);
+		return this.#patternSpecificity(entry.caller, callerPath) + this.#patternSpecificity(entry.pathPattern, targetPath);
 	}
 
 	/**
@@ -4038,7 +4112,7 @@ export class PermissionManager extends ComponentBase {
 	 * @private
 	 *
 	 * @example
-	 * this.#sortBySpecificity(matches, (rule) => this.#computeSpecificity(rule, caller, target), (rule) => this.#literalSegments(rule.target));
+	 * this.#sortBySpecificity(matches, (rule) => this.#computeSpecificity(rule, caller, target), (rule) => this.#literalSegments(rule.pathPattern));
 	 */
 	#sortBySpecificity(rules, kind, literal) {
 		ArrayMethods.sort(rules, (a, b) => {
@@ -4105,8 +4179,10 @@ export class PermissionManager extends ComponentBase {
 		if (targets === null) {
 			targets = new Set();
 			for (const entry of mapValues(this.#callRules)) {
-				if (entry.hookType != null || entry.id === this.#reachRuleId || entry.id === this.#globalMetadataRuleId) continue;
-				if (entry.effect === "deny" && !(RegExpMethods.exec(/[*?{!]/, entry.target) !== null)) SetMethods.add(targets, entry.target);
+				// Only a deny that takes the read away covers what a data member holds.
+				if (!entry.read || entry.id === this.#reachRuleId || entry.id === this.#globalMetadataRuleId) continue;
+				if (entry.effect === "deny" && !(RegExpMethods.exec(/[*?{!]/, entry.pathPattern) !== null))
+					SetMethods.add(targets, entry.pathPattern);
 			}
 			this.#exactDenyTargets = targets;
 		}
@@ -4150,8 +4226,8 @@ export class PermissionManager extends ComponentBase {
 		for (const entry of mapValues(this.#callRules)) {
 			if (entry.hookType != null || entry.id === this.#reachRuleId || entry.id === this.#globalMetadataRuleId) continue;
 			if (entry.effect !== "allow" || !this.#getCompiledPattern(entry.caller)(callerPath)) continue;
-			if (this.#getCompiledPattern(entry.target)(probePath)) continue;
-			if (runtime_patternReaches(entry.target, segments, true)) {
+			if (this.#getCompiledPattern(entry.pathPattern)(probePath)) continue;
+			if (runtime_patternReaches(entry.pathPattern, segments, true)) {
 				allows = true;
 				break;
 			}

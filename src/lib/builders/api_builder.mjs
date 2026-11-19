@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-18T12:46:42-08:00 (1795034802)
+ *	@Last modified time: 2026-11-18T18:52:29-08:00 (1795056749)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -124,6 +124,13 @@ const NAMESPACE_INSPECT_HOOKS = new WeakSet();
  * @private
  */
 const SELF_FRAMEWORK_ROOT_KEYS = setFrom(["slothlet", "shutdown", "destroy"]);
+
+/**
+ * The query options of `self.access` and `global.check.access`: reaching a target is calling and reading it, so both
+ * have to be allowed (see the rule access levels in PermissionManager).
+ * @type {Readonly<{operation: "access"}>}
+ */
+const ACCESS_QUERY = Objects.freeze({ operation: "access" });
 
 /**
  * i18n translation helpers exposed on every Slothlet namespace.
@@ -4891,7 +4898,9 @@ export class ApiBuilder extends ComponentBase {
 						const callerPath = currentWrapper?.____slothletInternal?.apiPath ?? "";
 						const callerFilePath = currentWrapper?.____slothletInternal?.filePath ?? null;
 						const runtimeContext = ctx?.context ?? null;
-						if (!slothlet.handlers.permissionManager.checkAccess(callerPath, target, callerFilePath, null, runtimeContext)) return false;
+						// Reaching a target is calling and reading it: both have to be allowed.
+						if (!slothlet.handlers.permissionManager.checkAccess(callerPath, target, callerFilePath, null, runtimeContext, ACCESS_QUERY))
+							return false;
 						// Code supplied to another module's call may reach only what every call of its ceiling may as well (#597).
 						return ArrayMethods.every(identityCeilings(identity), (ceiling) =>
 							slothlet.handlers.permissionManager.checkAccess(
@@ -4899,7 +4908,8 @@ export class ApiBuilder extends ComponentBase {
 								target,
 								ceiling.____slothletInternal.filePath ?? null,
 								null,
-								runtimeContext
+								runtimeContext,
+								ACCESS_QUERY
 							)
 						);
 					},
@@ -4972,7 +4982,7 @@ export class ApiBuilder extends ComponentBase {
 							/* v8 ignore stop */
 
 							const runtimeContext = slothlet.contextManager?.tryGetContext?.()?.context ?? null;
-							return slothlet.handlers.permissionManager.checkAccess(caller, target, null, null, runtimeContext);
+							return slothlet.handlers.permissionManager.checkAccess(caller, target, null, null, runtimeContext, ACCESS_QUERY);
 						},
 
 						/**
