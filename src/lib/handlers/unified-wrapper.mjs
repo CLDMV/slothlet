@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-18T19:39:43-08:00 (1795059583)
+ *	@Last modified time: 2026-11-18T19:49:47-08:00 (1795060187)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -8262,16 +8262,17 @@ function runtime_membrane(maker, owner, original, asNode = false, made = maker.m
 	 * A prototype as the stand-in reports it: a class's prototype is its own object unless the module handed the class
 	 * itself out — so an instance stays an `instanceof` the class whoever holds the class as it is (one imported from
 	 * its file, one an api node exports) — and any other prototype is handed out as the module's.
+	 * @param {object|null} prototype - The original's prototype.
+	 * @param {object} [reader=SEALED_SHELL_READER] - Who it is reported to: the code asking for it, so it gets what reading
+	 *   the class's `prototype` gives it, or a holder not known yet (the closed shell's prototype).
 	 */
-	const prototypeOut = (prototype) => {
+	const prototypeOut = (prototype, reader = SEALED_SHELL_READER) => {
 		if (prototype === null || typeof prototype !== "object" || util.types.isProxy(prototype)) return out(prototype);
 		const owned = classOf(prototype);
 		// While the permission system is on, it is checked for whoever writes through it (the class prototype guard).
 		if (!owned || WeakMapMethods.has(maker.made, owned)) return out(prototype);
 		// One handed to the module (a subclass's, constructed for) is not the module's.
-		return WeakSetMethods.has(maker.handedIn, prototype)
-			? prototype
-			: runtime_crossTo(prototype, SEALED_SHELL_READER, owner.slothlet, owner);
+		return WeakSetMethods.has(maker.handedIn, prototype) ? prototype : runtime_crossTo(prototype, reader, owner.slothlet, owner);
 	};
 	/** A descriptor of the original's, as the stand-in reports it. */
 	const reported = (descriptor, holderIsMade = true) => {
@@ -8472,7 +8473,11 @@ function runtime_membrane(maker, owner, original, asNode = false, made = maker.m
 		},
 		getPrototypeOf: () => {
 			if (!Reflect.isExtensible(shadow)) return Reflect.getPrototypeOf(shadow);
-			return prototypeOut(exec(() => Reflect.getPrototypeOf(original)));
+			// Reported to the code asking, as reading the class's `prototype` hands it to that code.
+			return prototypeOut(
+				exec(() => Reflect.getPrototypeOf(original)),
+				runtime_selfReader(owner.slothlet)
+			);
 		},
 		setPrototypeOf: (_shadow, prototype) => {
 			if (!Reflect.isExtensible(shadow)) return Reflect.getPrototypeOf(shadow) === prototype;

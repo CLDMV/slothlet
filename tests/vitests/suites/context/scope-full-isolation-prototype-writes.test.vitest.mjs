@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-18T19:29:32-08:00 (1795058972)
+ *	@Last modified time: 2026-11-18T19:50:32-08:00 (1795060232)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -82,15 +82,6 @@ const CLASS_TWIN = classWritesOn(plainAccount());
 const SHAPE_TWIN = shapeChangesOn(plainConf());
 
 /**
- * What the class steps answer, without whether an instance's prototype is the class's `prototype` as read. Outside any
- * run a node hands a reader holding a write grant the class as a wrapper of its own (the wrapper model), and that answer
- * differs there; inside a run the instance inherits through the run's view of the prototype, as in plain JS.
- * @param {Record<string, *>} report - A report of {@link classWritesOn}.
- * @returns {Record<string, *>} The report without `prototypeOfInstance`.
- */
-const classSteps = (report) => Object.fromEntries(Object.entries(report).filter(([step]) => step !== "prototypeOfInstance"));
-
-/**
  * Expect the instance's class and `conf` to be as the victim made them.
  * @param {object} api - The api.
  * @returns {void}
@@ -135,7 +126,7 @@ describe.each(CONFIGS)("full-isolation run: prototype and shape writes — $mode
 			expect(seen).toEqual(CLASS_TWIN);
 			expectHostUnchanged(api);
 			// The instance's class answers the same steps as a fresh copy does: nothing the run wrote is there.
-			expect(classSteps(api.prober.p.classWrites())).toEqual(classSteps(CLASS_TWIN));
+			expect(api.prober.p.classWrites()).toEqual(CLASS_TWIN);
 		});
 
 		it("sets a node's prototype and closes it in the run as on a plain-JS copy, and leaves the instance's node open", async () => {
@@ -174,8 +165,8 @@ describe.each(CONFIGS)("full-isolation run: prototype and shape writes — $mode
 			const outside = withSuppressedSlothletErrorOutputSync(() => api.prober.p.classWrites());
 			expect(outside.write).toBe("LOOSE_SET_NOT_OWNED");
 			const seen = await api.slothlet.context.run({}, () => withSuppressedSlothletErrorOutputSync(() => api.prober.p.classWrites()));
-			expect(classSteps(seen)).toEqual(classSteps(outside));
-			expect(seen.prototypeOfInstance).toBe(CLASS_TWIN.prototypeOfInstance);
+			expect(outside.prototypeOfInstance).toBe(true);
+			expect(seen).toEqual(outside);
 			expectHostUnchanged(api);
 		});
 
