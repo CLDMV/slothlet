@@ -2550,13 +2550,15 @@ export class ApiBuilder extends ComponentBase {
 					// collision.force / id / metadata pass through in every case.
 					// Building the module runs its code — its top level, and its exports' getters and Proxy traps as the
 					// build reads them — which is the module's, never the code of a module that asked for the add (#597).
-					// A run() / scope() changes a tree of its own, and a copy still reading this tree gets one before it changes.
-					await treeWrite(slothlet);
+					// Where the add was asked from and who asked for it are read from the running call, before anything
+					// awaits: past an await the caller's own frames are gone.
 					const resolvedFolder = runtime_resolveAddFolder(slothlet, folderPath);
 					// The module asking for the add is read here, before the build runs as no module: the add's ownership
 					// checks are that module's (#625).
 					const writer = runtime_selfModuleReader(slothlet);
 					const writerCeilings = runtime_selfModuleCeilings(slothlet, writer);
+					// A run() / scope() changes a tree of its own, and a copy still reading this tree gets one before it changes.
+					await treeWrite(slothlet);
 					const build = () =>
 						slothlet.handlers.apiManager.addApiComponent({
 							apiPath,
@@ -2620,13 +2622,15 @@ export class ApiBuilder extends ComponentBase {
 							received: typeof id
 						});
 					}
+					// The module asking for the removal, read before anything awaits (#625).
+					const writer = runtime_selfModuleReader(slothlet);
 					// A run() / scope() changes a tree of its own, and a copy still reading this tree gets one before it changes.
 					await treeWrite(slothlet);
 					// Scoped: module `id`'s node at the path `target`. Unscoped: `target` is a path or a module id.
 					const removeResult =
 						id === undefined
-							? await slothlet.handlers.apiManager.removeApiComponent(target, { scopedApiPath: undefined })
-							: await slothlet.handlers.apiManager.removeApiComponent(id, { scopedApiPath: target });
+							? await slothlet.handlers.apiManager.removeApiComponent(target, { scopedApiPath: undefined, writer })
+							: await slothlet.handlers.apiManager.removeApiComponent(id, { scopedApiPath: target, writer });
 					// Mirror add()'s rebuild above: a removal can leave 2+ contributors still stacked at a
 					// path whose sole remaining live property is a bare function reinstalled by ownership's
 					// "restore" (removeApiComponent never touches RoutineManager's stacked-callable
@@ -3004,13 +3008,15 @@ export class ApiBuilder extends ComponentBase {
 						throw new slothlet.SlothletError("API_MUTATION_DISABLED", { operation: ["slothlet", "api", "reload"] });
 					}
 					assertOptionKeys(options, "slothlet.api.reload");
+					// The module asking for the reload, read before anything awaits (#625).
+					const writer = runtime_selfModuleReader(slothlet);
 					// A run() / scope() changes a tree of its own, and a copy still reading this tree gets one before it changes.
 					await treeWrite(slothlet);
 
 					// Normalize base module identifiers: null, undefined, "", "." all mean base module
 					if (pathOrModuleId == null || pathOrModuleId === "" || pathOrModuleId === ".") {
 						// Module code rebuilds only what it may write (#625): the base reaches the whole tree.
-						slothlet.handlers.apiManager.assertModuleReload(null, "");
+						slothlet.handlers.apiManager.assertModuleReload(null, "", writer);
 						return runtime_buildAsNoModule(slothlet, () => slothlet.handlers.apiManager.reloadApiComponent({ apiPath: ".", options }));
 					}
 
@@ -3027,7 +3033,7 @@ export class ApiBuilder extends ComponentBase {
 
 					if (isModuleId) {
 						// Module code rebuilds only what it may write (#625).
-						slothlet.handlers.apiManager.assertModuleReload(pathOrModuleId, null);
+						slothlet.handlers.apiManager.assertModuleReload(pathOrModuleId, null, writer);
 						return runtime_buildAsNoModule(slothlet, () =>
 							slothlet.handlers.apiManager.reloadApiComponent({ moduleID: pathOrModuleId, options })
 						);
@@ -3060,7 +3066,7 @@ export class ApiBuilder extends ComponentBase {
 					}
 
 					// Module code rebuilds only what it may write (#625).
-					slothlet.handlers.apiManager.assertModuleReload(null, normalizedPath);
+					slothlet.handlers.apiManager.assertModuleReload(null, normalizedPath, writer);
 					// Reload by API path - _findAffectedCaches resolves which caches to rebuild
 					return runtime_buildAsNoModule(slothlet, () =>
 						slothlet.handlers.apiManager.reloadApiComponent({ apiPath: normalizedPath, options })
@@ -4560,6 +4566,8 @@ export class ApiBuilder extends ComponentBase {
 					// versionManager is always registered when versioning is used; guard for completeness
 					/* v8 ignore next */
 					if (!slothlet.handlers?.versionManager) return false;
+					// The module asking for the removal, read before anything awaits (#625).
+					const writer = runtime_selfModuleReader(slothlet);
 					// A run() / scope() changes a tree of its own, and a copy still reading this tree gets one before it changes.
 					await treeWrite(slothlet);
 					// Check version exists before attempting removal
@@ -4572,7 +4580,7 @@ export class ApiBuilder extends ComponentBase {
 					// Remove the versioned module from the API tree.
 					// removeApiComponent internally calls versionManager.unregisterVersion via its
 					// version-lifecycle hook, so we do NOT call unregisterVersion again here.
-					await slothlet.handlers.apiManager.removeApiComponent(versionedModuleID);
+					await slothlet.handlers.apiManager.removeApiComponent(versionedModuleID, { writer });
 					return true;
 				},
 

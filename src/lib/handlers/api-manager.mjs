@@ -3187,6 +3187,8 @@ export class ApiManager extends ComponentBase {
 	 *
 	 * @param {string|null} moduleID - The module reloaded by its moduleID.
 	 * @param {string|null} apiPath - The path reloaded.
+	 * @param {object|null} [writer] - The module asking for the reload, read where it asked; the code running now when
+	 *   omitted.
 	 * @returns {void}
 	 * @throws {SlothletError} What {@link ApiManager#assertOwnedWrite} throws for the first path refused.
 	 * @public
@@ -3194,8 +3196,7 @@ export class ApiManager extends ComponentBase {
 	 * @example
 	 * apiManager.assertModuleReload(null, "victim.v"); // throws inside another module's call
 	 */
-	assertModuleReload(moduleID, apiPath) {
-		const writer = runtime_selfModuleReader(this.slothlet);
+	assertModuleReload(moduleID, apiPath, writer = runtime_selfModuleReader(this.slothlet)) {
 		if (writer === null) return;
 		// The base's reload rebuilds the whole tree: a write at its root.
 		if (moduleID === null && apiPath === "") return this.#assertModuleMountWrite([], writer);
