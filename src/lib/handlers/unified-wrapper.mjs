@@ -3226,8 +3226,10 @@ let RUN_WRITE = null;
  * Make a change through a node of the api for a full-isolation run's `self`: the node's own trap decides it, and a
  * change it lets through is handed to `sink` instead of being made on the node.
  * @param {object} node - The wrapper (or bound api) whose trap the change reaches.
- * @param {string|symbol} prop - The member changed.
- * @param {function(object): boolean} sink - Takes the change (`{op, value}` or `{op, descriptor}`); returns its answer.
+ * @param {string|symbol|null} prop - The member changed; null for a change to the node itself (its prototype, its
+ *   extensibility).
+ * @param {function(object): boolean} sink - Takes the change (`{op, value}`, `{op, descriptor}`, `{op: "prototype",
+ *   prototype}` or `{op: "close"}`); returns its answer.
  * @param {function(): *} change - Makes the change on the node.
  * @returns {*} What `change` returned.
  * @internal
@@ -3246,7 +3248,7 @@ function runtime_runWrite(node, prop, sink, change) {
  * The sink a change a trap is about to make goes to instead of the node (see {@link runtime_runWrite}): only for the
  * change the run's `self` is making on this very node and member, once. Null for every other change.
  * @param {object} node - The wrapper (or bound api) making the change.
- * @param {string|symbol} prop - The member.
+ * @param {string|symbol|null} prop - The member; null for a change to the node itself.
  * @returns {function(object): boolean|null} The sink, or null.
  * @internal
  */
@@ -10923,6 +10925,8 @@ function runtime_constructorReadMayRefuse(slothlet, readerPath, prototype) {
  * @private
  */
 function runtime_behindMemberView(value) {
+	// A full-isolation run's view of a value stands for what it reads through (see runtime_registerRunView).
+	while (WeakMapMethods.has(RUN_VIEWS, value)) value = WeakMapMethods.get(RUN_VIEWS, value);
 	return WeakMapMethods.get(SELF_MEMBER_VIEWS, value)?.value ?? value;
 }
 
@@ -21895,6 +21899,9 @@ class UnifiedWrapper extends ComponentBase {
 				// Sealing or freezing a node changes what its owner may write to it, so a module may do it only to a
 				// node it owns (#625). Checked before anything is sealed: a refused freeze leaves the node as it was.
 				runtime_assertOwnedWrite(wrapper, null);
+				// A full-isolation run's `self` closes its own view of the node once the change is allowed (see runtime_runWrite).
+				const runSink = runtime_takeRunWrite(wrapper, null);
+				if (runSink !== null) return runSink({ op: "close" });
 				// A node fronting a module's own object closes that object too, as closing the object does (#757): the
 				// object refusing it refuses it here, before the node changes. Composing never changes a module's value.
 				const moduleObject =
@@ -21921,6 +21928,12 @@ class UnifiedWrapper extends ComponentBase {
 			setPrototypeOf: (target, proto) => {
 				// A prototype set on a node is set on its module's value: a module may do it only to a node it owns (#625).
 				runtime_assertOwnedWrite(wrapper, null);
+				// A full-isolation run's `self` keeps the prototype in the run once the change is allowed (see runtime_runWrite).
+				const runSink = runtime_takeRunWrite(wrapper, null);
+				if (runSink !== null) {
+					if (!Reflect.isExtensible(target)) return Reflect.getPrototypeOf(target) === runtime_unwrapSelfView(proto);
+					return runSink({ op: "prototype", prototype: proto });
+				}
 				const impl = wrapper.____slothletInternal.impl;
 				// A node fronting a module's own object sets that object's prototype, which the node reports (#757); a
 				// closed node keeps the one its shell holds, as the closed object does.
@@ -22210,6 +22223,7 @@ export function internals(consumer) {
 		releaseStandInChanges,
 		resolveWrapper,
 		runtime_assertCapability,
+		runtime_hasInternalSlots,
 		runtime_nodeReport,
 		runtime_assertFrameworkRootChange,
 		runtime_codeLabel,

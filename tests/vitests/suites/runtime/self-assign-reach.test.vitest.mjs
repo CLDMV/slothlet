@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-18T18:40:29-08:00 (1795056029)
+ *	@Last modified time: 2026-11-18T19:30:38-08:00 (1795059038)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -410,10 +410,17 @@ describe.each(CONFIGS)("what a module reaches through self (#625) — $mode / $r
 			expect(api.slothlet.planted).toBe(1);
 		});
 
-		it("hands the host, inside a run() it opened, a module's class prototype itself", async () => {
+		it("hands the host, inside a run() it opened, the run's own copy of a module's class prototype", async () => {
 			const api = await load();
 			const proto = api.victim.v.Account.prototype;
-			expect(await api.slothlet.context.run({}, () => self.victim.v.Account.prototype === proto)).toBe(true);
+			const seen = await api.slothlet.context.run({}, () => {
+				const inRun = self.victim.v.Account.prototype;
+				inRun.inRunOnly = 1;
+				return { same: inRun === proto, readBack: inRun.inRunOnly };
+			});
+			// A full-isolation run reads a copy: its prototype is not the instance's, and what it writes there stays in the run.
+			expect(seen).toEqual({ same: false, readBack: 1 });
+			expect(Object.hasOwn(api.victim.v.Account.prototype, "inRunOnly")).toBe(false);
 		});
 
 		it.each([
