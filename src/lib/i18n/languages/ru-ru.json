@@ -462,6 +462,7 @@
 		"PERMISSION_RULE_REASON_NOT_OBJECT": "правило должно быть ненулевым объектом",
 		"PERMISSION_RULE_REASON_CALLER_REQUIRED": "rule.caller должно быть непустой строкой",
 		"PERMISSION_RULE_REASON_TARGET_REQUIRED": "rule.target должно быть непустой строкой",
+		"PERMISSION_RULE_REASON_TARGET_SUFFIX_UNKNOWN": "rule.target оканчивается суффиксом, который не называет ни уровень доступа ({levels}), ни тип хука ({hookTypes})",
 		"PERMISSION_RULE_REASON_TARGET_NOT_OWNED": "код модуля управляет правилами только для поддерева своего модуля, но не для пространства имён, корневых функций или внутренних ключей фреймворка, если явное разрешение на \"slothlet.permissions.rules.add\" не снимает это ограничение по умолчанию",
 		"PERMISSION_RULE_REASON_REMOVAL_NOT_OWNED": "код модуля удаляет только правила своего модуля; модуль, которому разрешено управлять правилами, удаляет и правила других модулей, но никогда — правила хоста или фреймворка",
 		"PERMISSION_RULE_REASON_FIELD_ACCESSOR": "поля правила должны быть простыми свойствами данных, а не аксессорами",

@@ -462,6 +462,7 @@
 		"PERMISSION_RULE_REASON_NOT_OBJECT": "a regra deve ser um objeto não nulo",
 		"PERMISSION_RULE_REASON_CALLER_REQUIRED": "rule.caller deve ser uma string não vazia",
 		"PERMISSION_RULE_REASON_TARGET_REQUIRED": "rule.target deve ser uma string não vazia",
+		"PERMISSION_RULE_REASON_TARGET_SUFFIX_UNKNOWN": "rule.target termina com um sufixo que não nomeia nenhum nível de acesso ({levels}) nem tipo de hook ({hookTypes})",
 		"PERMISSION_RULE_REASON_TARGET_NOT_OWNED": "o código de um módulo gerencia regras apenas para a subárvore que pertence ao seu módulo, nunca para o namespace, as funções raiz ou as chaves internas do framework, a menos que uma permissão explícita em \"slothlet.permissions.rules.add\" remova esse padrão",
 		"PERMISSION_RULE_REASON_REMOVAL_NOT_OWNED": "o código de um módulo remove apenas as regras que pertencem ao seu próprio módulo; um módulo autorizado a gerenciar regras também remove as de outros módulos, nunca as do host ou do framework",
 		"PERMISSION_RULE_REASON_FIELD_ACCESSOR": "os campos de uma regra devem ser propriedades de dados simples, não acessores",

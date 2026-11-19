@@ -48,6 +48,7 @@ import {
 	mapEntries,
 	mapEntriesToArray,
 	mapFrom,
+	mapKeysToArray,
 	mapList,
 	MapMethods,
 	mapValues,
@@ -3493,6 +3494,24 @@ export class PermissionManager extends ComponentBase {
 				reason: translate("PERMISSION_RULE_REASON_EFFECT_INVALID"),
 				received: rule.effect
 			});
+		}
+		// A suffix after the target's last `:` names an access level or a hook type. Any other (a misspelt `:wirte`) would
+		// keep the rule on the literal target, which matches no api path, so a rule meant to apply would silently not. A
+		// `capability:` target takes no suffix check: its `:` is part of its form, and its name is checked below.
+		if (!StringMethods.startsWith(rule.target, CAPABILITY_PREFIX)) {
+			const lastColon = StringMethods.lastIndexOf(rule.target, ":");
+			if (lastColon !== -1) {
+				const suffix = StringMethods.substring(rule.target, lastColon + 1);
+				if (!MapMethods.has(RULE_LEVELS, suffix) && !SetMethods.has(HOOK_TARGET_TYPES, suffix)) {
+					throw new this.SlothletError("PERMISSION_RULE_INVALID", {
+						reason: translate("PERMISSION_RULE_REASON_TARGET_SUFFIX_UNKNOWN", {
+							levels: ArrayMethods.join(mapKeysToArray(RULE_LEVELS), ", "),
+							hookTypes: ArrayMethods.join(setToArray(HOOK_TARGET_TYPES), ", ")
+						}),
+						received: suffix
+					});
+				}
+			}
 		}
 		// A target in slothlet's own space names something that exists: a built-in capability, or a member of the fixed
 		// `slothlet.*` tree. One that names nothing would never match, so a rule meant to deny it would silently not apply.

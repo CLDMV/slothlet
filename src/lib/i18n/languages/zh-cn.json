@@ -462,6 +462,7 @@
 		"PERMISSION_RULE_REASON_NOT_OBJECT": "规则必须是非空对象",
 		"PERMISSION_RULE_REASON_CALLER_REQUIRED": "rule.caller 必须是非空字符串",
 		"PERMISSION_RULE_REASON_TARGET_REQUIRED": "rule.target 必须是非空字符串",
+		"PERMISSION_RULE_REASON_TARGET_SUFFIX_UNKNOWN": "rule.target 以一个既不是访问级别（{levels}）也不是钩子类型（{hookTypes}）的后缀结尾",
 		"PERMISSION_RULE_REASON_TARGET_NOT_OWNED": "模块代码只能管理其模块所拥有子树的规则，不能管理框架的命名空间、根函数或内部键的规则，除非对 \"slothlet.permissions.rules.add\" 的显式允许解除了这一默认限制",
 		"PERMISSION_RULE_REASON_REMOVAL_NOT_OWNED": "模块代码只能删除其自身模块拥有的规则；获准管理规则的模块也可以删除其他模块的规则，但绝不能删除宿主或框架的规则",
 		"PERMISSION_RULE_REASON_FIELD_ACCESSOR": "规则字段必须是普通数据属性，而不是访问器",

@@ -462,6 +462,7 @@
 		"PERMISSION_RULE_REASON_NOT_OBJECT": "rule must be a non-null object",
 		"PERMISSION_RULE_REASON_CALLER_REQUIRED": "rule.caller must be a non-empty string",
 		"PERMISSION_RULE_REASON_TARGET_REQUIRED": "rule.target must be a non-empty string",
+		"PERMISSION_RULE_REASON_TARGET_SUFFIX_UNKNOWN": "rule.target ends in a suffix that names no access level ({levels}) or hook type ({hookTypes})",
 		"PERMISSION_RULE_REASON_TARGET_NOT_OWNED": "module code manages rules only for the subtree its module owns, never for the framework's namespace, root functions, or internal keys, unless an explicit allow on \"slothlet.permissions.rules.add\" lifts that default",
 		"PERMISSION_RULE_REASON_REMOVAL_NOT_OWNED": "module code removes only the rules its own module owns; a module allowed to manage rules also removes other modules' rules, never the host's or the framework's",
 		"PERMISSION_RULE_REASON_FIELD_ACCESSOR": "rule fields must be plain data properties, not accessors",

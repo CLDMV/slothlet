@@ -825,7 +825,7 @@ A target with no suffix is `:access`: it decides calls and reads, and grants no 
 { caller: "guest.**", target: "cache.*", effect: "deny" }
 ```
 
-Wherever this page speaks of a write rule or a `:write` target, a `:full` rule counts too: it grants or refuses writes, lifts a [built-in write rule](#write-permissions), grants the writes through a [prototype's handle](#code-a-caller-hands-to-a-leaf-runs-as-the-caller) (`owner.**:full`), and grants `api.add` / `api.remove` from module code. A suffix that names no level (and no hook type) is part of the target as written, as before, so such a rule matches no api path.
+Wherever this page speaks of a write rule or a `:write` target, a `:full` rule counts too: it grants or refuses writes, lifts a [built-in write rule](#write-permissions), grants the writes through a [prototype's handle](#code-a-caller-hands-to-a-leaf-runs-as-the-caller) (`owner.**:full`), and grants `api.add` / `api.remove` from module code. A suffix that names no level and no hook type (`secret.**:wirte`, `db.read:xyz`) is refused with `PERMISSION_RULE_INVALID` wherever the rule comes in (the config's `permissions.rules`, `rules.add`, a manifest, the `permissions` option of `api.add`, and rules module code registers), so a misspelt suffix never leaves a rule that silently matches nothing. A `capability:` target takes no suffix; its name is checked as described below.
 
 ### Targets in slothlet's own space are checked
 

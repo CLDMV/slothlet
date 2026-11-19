@@ -159,15 +159,22 @@ describe.each(getMatrixConfigs())("Permissions > hook gating (#118) > $name", ({
 		expect(sink).toEqual(["db.read"]); // trusted host hook fires even under default-deny
 	});
 
-	it("colon-but-non-hook-type and empty-path targets are treated as plain call rules", async () => {
+	it("refuses a target whose suffix names no level or hook type, and treats an empty-path target as a plain call rule", async () => {
+		// 'xyz' is neither a level nor a hook type: the rule is refused rather than kept on the literal target.
+		let refused;
+		try {
+			await boot({ policy: "allow", rules: [{ caller: "**", target: "db.read:xyz", effect: "deny" }] });
+		} catch (error) {
+			refused = error.code;
+		}
+		expect(refused).toBe("PERMISSION_RULE_INVALID");
 		api = await boot({
 			policy: "allow",
 			rules: [
-				{ caller: "**", target: "db.read:xyz", effect: "deny" }, // 'xyz' is not a hook type → call rule
 				{ caller: "**", target: ":before", effect: "deny" } // empty path before the type → call rule
 			]
 		});
-		// Both are inert call rules (no real path equals them), so hooking db.read still works.
+		// An inert call rule (no real path equals it), so hooking db.read still works.
 		const sink = [];
 		await api.auditor.arm("db.read:before", sink);
 		await api.db.read();
