@@ -24,8 +24,8 @@
  * prototype, an instance's prototype through `Object.getPrototypeOf` and through `__proto__`). Everything else answers
  * as plain JS does, checked against a plain-JS twin of the owning module: a module creating private members on its own
  * node, other names on the other module's node where its writes are allowed, and every creation with the permission
- * system off, where the privacy gate does not apply. Names with three or four leading underscores are left as they
- * were. Checked in eager and lazy mode, async and live runtime.
+ * system off, where the privacy gate does not apply. Names with three or four leading underscores are the framework's: creating one on another module's node is refused as a `__` one is.
+ * Checked in eager and lazy mode, async and live runtime.
  *
  * Fixture: `api_tests/api_test_private_create` — `owned/` mounted at `owned`, `creator/` mounted at `creator`;
  * `api_tests/api_test_private_create_lib/creations.mjs` holds the creations both modules and the twin run.
@@ -80,6 +80,9 @@ const EXISTING = {
 
 /** Module-private name prefixes, which the privacy gate covers. */
 const PRIVATE_PREFIXES = ["__", "_"];
+
+/** The framework's name prefixes, which module code creates on another module's node no more than a `__` one. */
+const FRAMEWORK_PREFIXES = ["___", "____"];
 
 let twinCount = 0;
 
@@ -217,23 +220,44 @@ describe.each(MODES.flatMap((mode) => RUNTIMES.flatMap((runtime) => SETUPS.map((
 			}
 		});
 
-		it("leaves creating a member with three or four leading underscores to the creator, as it was", async () => {
+		it('answers creating a member with three or four leading underscores on another module\'s node as a "__" one', async () => {
 			await mount();
-			for (const prefix of ["___", "____"]) {
+			// What the creator gets reading the owning module's own "__" member, by each route.
+			const existing = Object.fromEntries(
+				HOWS.map((how) => [how, withSuppressedSlothletErrorOutputSync(() => api.creator.read("other", how, `__${EXISTING[how]}`))])
+			);
+			for (const prefix of FRAMEWORK_PREFIXES) {
 				for (const how of HOWS) {
 					const key = keyFor(prefix, how);
 					const outcome = await creatorMakes("other", how, key);
-					const { created, ownerRead } = FRAMEWORK_PREFIX_EXPECTED[other];
-					expect({ prefix, how, created: outcome.created, ownerRead: outcome.ownerRead }).toEqual({ prefix, how, created, ownerRead });
+					const twinAnswer = await plain(how, key);
+					if (other === "plain" || (other === "private" && existing[how] === "1")) {
+						// No privacy gate on the route: plain JS.
+						expect({ prefix, how, ...outcome }).toEqual({ prefix, how, ...twinAnswer, ownerRead: twinAnswer.read });
+						continue;
+					}
+					// Refused, so nothing was created: the creator and the owning module read nothing there.
+					const missing = await absent(how, key);
+					expect({ prefix, how, ...outcome }).toEqual({
+						prefix,
+						how,
+						created: other === "private" ? "PERMISSION_DENIED" : "LOOSE_SET_NOT_OWNED",
+						read: missing,
+						ownerRead: missing
+					});
+				}
+			}
+		});
+
+		it("lets a module create a member with three or four leading underscores on its own node, and read it back, as plain JS does", async () => {
+			await mount();
+			for (const prefix of FRAMEWORK_PREFIXES) {
+				for (const how of HOWS) {
+					const key = keyFor(prefix, how);
+					const creator = await creatorMakes("own", how, key);
+					expect({ prefix, how, ...creator }).toEqual({ prefix, how, ...(await plain(how, key)) });
 				}
 			}
 		});
 	}
 );
-
-/** What creating a `___`/`____` member on another module's node answers, and the owning module reads after, by setup kind. */
-const FRAMEWORK_PREFIX_EXPECTED = {
-	plain: { created: "done", ownerRead: "1" },
-	private: { created: "done", ownerRead: "1" },
-	owner: { created: "LOOSE_SET_NOT_OWNED", ownerRead: "undefined" }
-};

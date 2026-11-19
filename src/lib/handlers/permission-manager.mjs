@@ -223,19 +223,6 @@ function runtime_isPrivateName(targetPath) {
 }
 
 /**
- * Whether a private api path's terminal member name has three or more leading underscores: the framework's naming
- * (`___` callables, `____` framework-private), not a module's `_`/`__` one.
- *
- * @param {string} targetPath - Dotted api path whose terminal segment {@link runtime_isPrivateName} found private.
- * @returns {boolean} True when the terminal segment starts with `___`.
- * @internal
- */
-function runtime_isFrameworkPrivateName(targetPath) {
-	const start = StringMethods.lastIndexOf(targetPath, ".") + 1;
-	return StringMethods.charCodeAt(targetPath, start + 1) === 95 && StringMethods.charCodeAt(targetPath, start + 2) === 95;
-}
-
-/**
  * Framework-reserved api roots (#509). The composed tree registers them to the base module, but they
  * are framework surface rather than module code, so the owner grant never covers them.
  * @type {ReadonlySet<string>}
@@ -2001,8 +1988,9 @@ export class PermissionManager extends ComponentBase {
 	 *   audit consumer can tell a query from the gate of a real call.
 	 * @param {boolean} [options.newMember=false] - The target is a member a module is about to create, which will be the
 	 *   caller's own once written: the default policy alone does not refuse it (a matching rule still decides). A
-	 *   module-private (`_`/`__`) member belongs to the node that holds it, so module privacy refuses creating one on a
-	 *   node of another module's, as it refuses reading one there; `targetFilePath` is then the holding node's source file.
+	 *   private (underscore-prefixed) member belongs to the node that holds it, so module privacy refuses creating one on
+	 *   a node of another module's, as it refuses reading one there; `targetFilePath` is then the holding node's source
+	 *   file.
 	 * @param {function(string): boolean} [options.dataMember] - Given for a read of data: whether a path above the
 	 *   target is an object member of a module's data. A deny rule naming such a member's path exactly then covers the
 	 *   target too, as a rule on `path.**` would, so what the member holds is denied with it unless a more specific rule
@@ -3647,16 +3635,14 @@ export class PermissionManager extends ComponentBase {
 		// synthetic `__`-prefixed children (`slothlet.permissions.__probe__`). Module privacy never
 		// applies there.
 		if (runtime_isPrivateName(targetPath) && targetPath !== "slothlet" && !StringMethods.startsWith(targetPath, "slothlet.")) {
-			// A module-private member of a node belongs to the node's owner, so creating one is answered as reading it there
-			// would be: only the module that owns the node may (`targetFilePath` is the holding node's source file). A name
-			// with three or more leading underscores is the framework's naming, not a module-private one: its creation is
-			// the creator's own once written, as before.
+			// A private member of a node belongs to the node's owner, so creating one is answered as reading it there would
+			// be: only the module that owns the node may (`targetFilePath` is the holding node's source file). A name with
+			// three or more leading underscores is the framework's, which module code creates on another module's node no
+			// more than a `_`/`__` one.
 			const sameModule =
-				newMember && runtime_isFrameworkPrivateName(targetPath)
-					? this.#callerOwner(callerPath) !== null
-					: this.#privateScope === "folder"
-						? Boolean(callerFilePath && targetFilePath && runtime_sameModuleDir(callerFilePath, targetFilePath))
-						: (newMember ? this.#privateHolderOwner(callerPath, targetPath) : this.#privateOwner(callerPath, targetPath)) !== null;
+				this.#privateScope === "folder"
+					? Boolean(callerFilePath && targetFilePath && runtime_sameModuleDir(callerFilePath, targetFilePath))
+					: (newMember ? this.#privateHolderOwner(callerPath, targetPath) : this.#privateOwner(callerPath, targetPath)) !== null;
 			if (sameModule) {
 				return {
 					allowed: true,
