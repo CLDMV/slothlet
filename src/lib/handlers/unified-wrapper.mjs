@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-19T08:57:41-08:00 (1795107461)
+ *	@Last modified time: 2026-11-19T09:14:20-08:00 (1795108460)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -1128,6 +1128,50 @@ function runtime_selfMemberOf(value, reader, slothlet, parts, prop, through) {
 }
 
 /**
+ * The modules a function handed over between modules is running for, innermost last: a function of the engine's own,
+ * a bound built-in among them (`Object.assign.bind(null, target, values)`), runs no code of the module that handed it
+ * over, so a write it makes has no frame of that module's. While one runs through its crossing view, a write it makes
+ * through a prototype's handle has to be that module's to make as well as the executing module's, as a write through a
+ * view the module held would be ({@link runtime_assertReaderWrite}).
+ * @type {object[]}
+ * @private
+ */
+const ACTING_FOR = [];
+
+/**
+ * Run a function handed over from another module through its crossing view: a function of the engine's own runs for
+ * that module ({@link ACTING_FOR}); any other runs its own module's code, whose frames attribute what it does.
+ * @param {object} state - The crossing view's state.
+ * @param {function(): *} run - The call.
+ * @returns {*} What it returned.
+ * @private
+ */
+function runtime_crossRun(state, run) {
+	const from = state.from;
+	if (!from?.____slothletInternal || typeof state.original !== "function" || !runtime_runsNoModuleCode(state.original)) return run();
+	listPush(ACTING_FOR, from);
+	try {
+		return run();
+	} finally {
+		ArrayMethods.pop(ACTING_FOR);
+	}
+}
+
+/**
+ * Whether a function runs none of a module's code of its own: the engine's (`Function.prototype.toString` reports
+ * native code), a bound function among them. A bound function whose target is a module's function runs that function,
+ * whose frames attribute what it does whatever {@link ACTING_FOR} holds. Decided from the source text alone, so nothing
+ * of the function runs.
+ * @param {Function} fn - The function, not a Proxy.
+ * @returns {boolean} True when it reports native code.
+ * @private
+ */
+function runtime_runsNoModuleCode(fn) {
+	if (util.types.isProxy(fn)) return false;
+	return RegExpMethods.exec(/\{\s*\[native code\]\s*\}\s*$/, functionSource(fn)) !== null;
+}
+
+/**
  * A view is its reader's: a write another module's code, or the host's, makes through it has to be the reader's to make
  * as well, so a function the reader hands someone to run (a bound built-in, which has no frame of the reader's) writes
  * nothing the reader could not. A write the reader's own module makes is decided for the leaf executing it alone,
@@ -2034,9 +2078,18 @@ function runtime_selfMemberView(value, reader, slothlet, parts, through) {
 		const accessor = who();
 		for (let ofIndex = 0, ofList = siteParts(); ofIndex < ofList.length; ofIndex++) {
 			const target = typeof prop === "string" ? concatLists(ofList[ofIndex], [prop]) : ofList[ofIndex];
+			// A handle is no one's in particular: a function another module handed over to run (a bound built-in) makes the
+			// write for that module too, which has to be allowed it, as through a view the module held.
+			if (handle)
+				for (let actIndex = 0; actIndex < ACTING_FOR.length; actIndex++) {
+					const actor = ACTING_FOR[actIndex];
+					if (actor !== accessor && actor.slothlet === slothlet) runtime_assertReaderWrite(slothlet, actor, accessor, target);
+				}
 			const writer = runtime_selfRootWriter(slothlet, accessor, target);
-			if (writer !== null) slothlet.handlers.apiManager.assertOwnedWrite(target, writer);
+			// The view's reader first: the write goes through its view, so a refusal of its own is the answer, whatever the
+			// module executing (one it handed a bound built-in to) may write.
 			runtime_assertReaderWrite(slothlet, accessor, writer, target);
+			if (writer !== null) slothlet.handlers.apiManager.assertOwnedWrite(target, writer);
 		}
 		refusePrivate(prop, true);
 	};
@@ -11208,11 +11261,9 @@ const CROSSING_HANDLER = {
 		const state = WeakMapMethods.get(CROSSING_STATES, shadow);
 		let result;
 		try {
-			result = Reflect.apply(
-				state.original,
-				runtime_crossIn(state, thisArg),
-				mapList(args, (arg) => runtime_crossIn(state, arg))
-			);
+			const receiver = runtime_crossIn(state, thisArg);
+			const given = mapList(args, (arg) => runtime_crossIn(state, arg));
+			result = runtime_crossRun(state, () => Reflect.apply(state.original, receiver, given));
 		} catch (error) {
 			throw runtime_crossOut(state, error);
 		}
