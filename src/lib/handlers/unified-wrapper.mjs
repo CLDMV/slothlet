@@ -4402,10 +4402,12 @@ function runtime_isTerminalData(value) {
  * @param {object|null} [access] - The access the read is part of.
  * @param {{store: object|null|undefined, identity: object|undefined}|null} [pinned] - The reader resolved earlier,
  *   when the read is answered after the access that made it has ended (see {@link runtime_pinReader}).
+ * @param {"read"|"call"} [operation="read"] - The operation decided, by the rules whose access level covers it: a
+ *   read, or the call running a getter is.
  * @returns {{allowed: boolean, caller: string|null}} Verdict and the resolved caller path.
  * @private
  */
-function runtime_readGateDecision(wrapper, targetPath, callerOverride, kept = null, access = null, pinned = null) {
+function runtime_readGateDecision(wrapper, targetPath, callerOverride, kept = null, access = null, pinned = null, operation = "read") {
 	// #283: slothlet's OWN reserved marker keys (____isVersionDispatcher/____logicalPath) are framework
 	// machinery, not a consumer's module-private member. When they are carried by a branded
 	// framework-internal wrapper (a version dispatcher, or a wrapper it merged into), exempt reads of
@@ -4442,12 +4444,12 @@ function runtime_readGateDecision(wrapper, targetPath, callerOverride, kept = nu
 	if (wrapper.slothlet.handlers.apiManager.isRemovedCaller(callerWrapper)) {
 		return { allowed: false, caller: String(callerWrapper.____slothletInternal.apiPath ?? "") };
 	}
-	let verdict = runtime_readGateFor(wrapper, targetPath, callerWrapper, ctx);
+	let verdict = runtime_readGateFor(wrapper, targetPath, callerWrapper, ctx, operation);
 	// Both the supplier of the code reading and every call of its ceiling have to be allowed (#597).
 	for (let i = 0; i < ceilings.length; i++) {
 		const ceiling = ceilings[i];
 		if (!verdict.allowed) return verdict;
-		verdict = runtime_readGateFor(wrapper, targetPath, ceiling, ctx);
+		verdict = runtime_readGateFor(wrapper, targetPath, ceiling, ctx, operation);
 	}
 	return verdict;
 }
@@ -4458,10 +4460,11 @@ function runtime_readGateDecision(wrapper, targetPath, callerOverride, kept = nu
  * @param {string} targetPath - Fully-qualified api path of the value being read.
  * @param {object} callerWrapper - The caller to check.
  * @param {object|null} ctx - The caller's context store.
+ * @param {"read"|"call"} [operation="read"] - The operation decided (see {@link runtime_readGateDecision}).
  * @returns {{allowed: boolean, caller: string|null}} Verdict and the caller's path.
  * @private
  */
-function runtime_readGateFor(wrapper, targetPath, callerWrapper, ctx) {
+function runtime_readGateFor(wrapper, targetPath, callerWrapper, ctx, operation = "read") {
 	// The ?./?? fallbacks are defensive — apiPath/filePath are always set on live wrappers.
 	/* v8 ignore start */
 	const callerPath = callerWrapper.____slothletInternal?.apiPath ?? "";
@@ -4480,15 +4483,16 @@ function runtime_readGateFor(wrapper, targetPath, callerWrapper, ctx) {
 		/* v8 ignore next */
 		ctx.context ?? null,
 		null,
-		runtime_dataReadOptions(wrapper.slothlet)
+		operation === "read" ? runtime_dataReadOptions(wrapper.slothlet) : null
 	);
 	return { allowed, caller: callerPath };
 }
 
 /**
- * The enforcement options of a read of data, per instance: they tell the permission manager which paths above the
- * target are object members of a module's data, so a deny naming one of them exactly covers what it holds.
- * @type {WeakMap<object, {dataMember: function(string): boolean}>}
+ * The enforcement options of a read of data, per instance: they ask the permission manager for the read (the rules
+ * whose level covers it), and tell it which paths above the target are object members of a module's data, so a deny
+ * naming one of them exactly covers what it holds.
+ * @type {WeakMap<object, {operation: "read", dataMember: function(string): boolean}>}
  * @private
  */
 const DATA_READ_OPTIONS = new WeakMap();
@@ -4496,13 +4500,16 @@ const DATA_READ_OPTIONS = new WeakMap();
 /**
  * The enforcement options of a read of data for an instance (see {@link DATA_READ_OPTIONS}).
  * @param {object} slothlet - The instance.
- * @returns {{dataMember: function(string): boolean}} The options.
+ * @returns {{operation: "read", dataMember: function(string): boolean}} The options.
  * @private
  */
 function runtime_dataReadOptions(slothlet) {
 	let options = WeakMapMethods.get(DATA_READ_OPTIONS, slothlet);
 	if (options === undefined) {
-		options = Objects.freeze({ dataMember: (apiPath) => runtime_isDataMemberNode(runtime_nodeAtPath(slothlet, apiPath)) });
+		options = Objects.freeze({
+			operation: "read",
+			dataMember: (apiPath) => runtime_isDataMemberNode(runtime_nodeAtPath(slothlet, apiPath))
+		});
 		WeakMapMethods.set(DATA_READ_OPTIONS, slothlet, options);
 	}
 	return options;
@@ -6612,6 +6619,19 @@ function runtime_heldPrototypeOf(node) {
 function runtime_isModuleStandIn(value) {
 	const underlying = isCompositionLayer(value) ? layerUnderlying(value) : value;
 	return util.types.isProxy(underlying) && (WeakMapMethods.has(STAND_IN_RECORDS, underlying) || runtime_isWrappedClassInstance(underlying));
+}
+
+/**
+ * Whether a member value is a module's own Proxy, or the stand-in slothlet hands one out as (#597), directly or as the
+ * value behind its node: reading through it runs the module's traps (#632).
+ * @param {*} value - The member's value.
+ * @returns {boolean} Whether it answers with the module's code.
+ * @private
+ */
+function runtime_answersWithModuleCode(value) {
+	const inner = resolveWrapper(value);
+	const held = inner ? inner.____slothletInternal.impl : value;
+	return util.types.isProxy(held) && (runtime_isModuleProxy(held) || runtime_isModuleStandIn(held));
 }
 
 /**
@@ -11607,11 +11627,22 @@ function runtime_isReadRedacted(wrapper, prop, kept = null, access = null, listi
 	// An object member the rules leave the reader nothing of is listed no more than a value it may not read is.
 	if (listing && "value" in desc && typeof prop === "string") {
 		const member = runtime_unwrapLeafValue(desc.value);
-		if (member !== null && typeof member === "object" && !runtime_isTerminalData(member))
-			return runtime_readsNothingBeneath(wrapper, targetPath, undefined, kept, access, member);
+		if (member !== null && typeof member === "object" && !runtime_isTerminalData(member)) {
+			if (runtime_readsNothingBeneath(wrapper, targetPath, undefined, kept, access, member)) return true;
+			// A module's own Proxy answers with the module's traps, so reading through it is a call of its node (#632): it
+			// is listed only to a caller that may call its path, as a getter is (a rule level with the read and not the
+			// call, such as `:write`, lists neither).
+			return (
+				runtime_answersWithModuleCode(member) &&
+				!runtime_readGateDecision(wrapper, targetPath, undefined, kept, access, null, "call").allowed
+			);
+		}
 	}
 	if (!isAccessor && (!("value" in desc) || !runtime_isTerminalData(runtime_unwrapLeafValue(desc.value)))) return false;
-	return !runtime_readGateDecision(wrapper, targetPath, undefined, kept, access).allowed;
+	if (!runtime_readGateDecision(wrapper, targetPath, undefined, kept, access).allowed) return true;
+	// Reading a getter runs it, which is a call of the module's code: it is listed only to a caller that may also call
+	// its path, as running it is refused otherwise (a rule level with the read and not the call, such as `:write`).
+	return isAccessor && !runtime_readGateDecision(wrapper, targetPath, undefined, kept, access, null, "call").allowed;
 }
 
 /**

@@ -849,16 +849,16 @@ export class ApiManager extends ComponentBase {
 	 * the framework's own keys on api nodes, until an allow lifts one for the callers it names. With the system off
 	 * only those built-in rules (and host rules on what they cover) are checked and ownership refuses nothing, so a
 	 * module writes anywhere outside the framework's own; with it disabled nothing is checked. While it is on, a write
-	 * that passes is also held to the access the module would need to call or read the member it changes: writing is
-	 * never easier than accessing.
+	 * that passes is also held to the read the module would need of the member it changes: there is no write without
+	 * the read.
 	 *
 	 * @param {string[]} parts - Segments of the api path being written.
 	 * @param {object|null} callerWrapper - The executing module's wrapper, or null for host code.
 	 * @param {{moduleID: string, prior: Map<string, *>}|null} [inFlight=null] - An add in flight whose content is
 	 *   being checked (see {@link ApiManager#ownsPath}).
 	 * @returns {void}
-	 * @throws {SlothletError} `PERMISSION_DENIED` when a write rule denies the write or the module would be refused a call
-	 *   or read of the member it changes, and `LOOSE_SET_NOT_OWNED` when the path is outside the caller's mount point.
+	 * @throws {SlothletError} `PERMISSION_DENIED` when a write rule denies the write or the module would be refused a read
+	 *   of the member it changes, and `LOOSE_SET_NOT_OWNED` when the path is outside the caller's mount point.
 	 * @public
 	 */
 	assertOwnedWrite(parts, callerWrapper, inFlight = null) {
@@ -889,11 +889,12 @@ export class ApiManager extends ComponentBase {
 	}
 
 	/**
-	 * Refuse a module a write it would not be allowed to read or call: writing is never easier than accessing.
+	 * Refuse a module a write it would not be allowed to read: there is no write without the read.
 	 *
 	 * Replacing, redefining, or deleting a member takes over every later call or read of it, so a module may do it only
-	 * where it would be allowed to call or read that member, as the call and read gates decide it (rules, `policy`, the
-	 * owner grant, module privacy, the self-call bypass), on top of the ownership and write rules. A member that does not
+	 * where it would be allowed to read that member, as the read gate decides it (the rules whose level covers a read,
+	 * `policy`, the owner grant, module privacy, the self-call bypass), on top of the ownership and write rules. A deny
+	 * that takes the read away (`:read`, `:access`, `:full`, or no suffix) so refuses the write; a `:call` deny does not. A member that does not
 	 * exist yet takes over nothing; it is judged as the read of it would be once written, when it is the writer's own: a
 	 * rule on its path that refuses the writer refuses the write, and the default policy alone does not. Only while the
 	 * permission system is on, and only for module code.
@@ -903,7 +904,7 @@ export class ApiManager extends ComponentBase {
 	 * @param {{moduleID: string, prior: Map<string, *>}|null} [inFlight=null] - An add in flight whose content is being
 	 *   checked: what it registered already is new, not a member it takes over (see {@link ApiManager#ownsPath}).
 	 * @returns {void}
-	 * @throws {SlothletError} `PERMISSION_DENIED` when the module would be refused a call or read of the target.
+	 * @throws {SlothletError} `PERMISSION_DENIED` when the module would be refused a read of the target.
 	 * @private
 	 */
 	#assertWriteAccess(parts, callerWrapper, inFlight = null) {
@@ -920,7 +921,14 @@ export class ApiManager extends ComponentBase {
 		const callerFilePath = internal?.filePath ?? null;
 		// A deny naming an object member of a module's data exactly covers what the member holds, for reads (see
 		// {@link PermissionManager#enforceAccess}'s `dataMember`): a write beneath it is held to the same extension.
-		const options = { moduleCaller: true, newMember: false, dataMember: runtime_dataReadOptions(this.slothlet).dataMember };
+		// A write needs the read: every member it changes is held to the read rules (the rules whose level covers a read,
+		// a `:write` or `:full` allow among them), never the call rules alone.
+		const options = {
+			moduleCaller: true,
+			newMember: false,
+			operation: "read",
+			dataMember: runtime_dataReadOptions(this.slothlet).dataMember
+		};
 		// With read gating off no rule gates a read of data, so a data member is held to no read rule either.
 		const readGated = permissionManager.isReadGatingEnabled();
 		const check = (path, targetFile, newMember = false, data = false) => {
@@ -945,8 +953,8 @@ export class ApiManager extends ComponentBase {
 	}
 
 	/**
-	 * Hold a write over a node to the access of every member the node holds, at any depth: functions to the call gate,
-	 * data values to the read gate, as reading or calling each would be decided. Namespaces and object members of data
+	 * Hold a write over a node to the access of every member the node holds, at any depth: each to the read gate, as
+	 * reading it would be decided (a function's too, which the read rules decide whether or not reads of data are gated). Namespaces and object members of data
 	 * are walked, not checked, as reading one is traversal. A member held as an accessor is not followed, as no read gate
 	 * runs its getter. What the walk cannot see (a lazy node not loaded yet) is taken from the ownership registry: every
 	 * recorded function or data value beneath the path. Costs nothing for a leaf.

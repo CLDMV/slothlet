@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:00:00-08:00 (1794880800)
+ *	@Last modified time: 2026-11-18T18:52:36-08:00 (1795056756)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -22,7 +22,7 @@
  */
 
 import { compilePattern } from "#helpers/pattern-matcher";
-import { ArrayMethods, Objects, RegExpMethods, StringMethods } from "#helpers/intrinsics";
+import { ArrayMethods, Objects, RegExpMethods, setFrom, SetMethods, StringMethods } from "#helpers/intrinsics";
 
 /**
  * Every member of the control namespace, with every optional group present (`diag` with `diagnostics: true`, `hook`
@@ -188,10 +188,16 @@ const SLOTHLET_LEAVES = Objects.freeze(
 export const SLOTHLET_TREE_DATA = Objects.freeze(["slothlet.env", "slothlet.diag.context", "slothlet.diag.reference"]);
 
 /**
- * Whether a rule target pattern under `slothlet.` can match anything in the fixed tree. A write target (`:write`) is
- * accepted as it is: it names a place in the namespace, where a write the host grants can add a member that is not
- * there yet. For any other target only the path part counts (a hook `:type` suffix is left off), and a target below a
- * data member is accepted whatever its key.
+ * The rule access levels that grant the write, whose targets may name a member not there yet.
+ * @type {Set<string>}
+ */
+const WRITE_LEVELS = setFrom(["write", "full"]);
+
+/**
+ * Whether a rule target pattern under `slothlet.` can match anything in the fixed tree. A target whose level grants
+ * the write (`:write`, `:full`) is accepted as it is: it names a place in the namespace, where a write the host grants
+ * can add a member that is not there yet. For any other target only the path part counts (a hook `:type` or a level
+ * `:call`, `:read`, `:access` suffix is left off), and a target below a data member is accepted whatever its key.
  * @param {string} target - A rule target that starts with `slothlet.`.
  * @returns {boolean} True when the pattern matches at least one member.
  * @example
@@ -199,11 +205,13 @@ export const SLOTHLET_TREE_DATA = Objects.freeze(["slothlet.env", "slothlet.diag
  * namesSlothletMember("slothlet.permissions.addRule"); // false
  * namesSlothletMember("slothlet.hook.**"); // true
  * namesSlothletMember("slothlet.planted:write"); // true
+ * namesSlothletMember("slothlet.planted:full"); // true
+ * namesSlothletMember("slothlet.planted:read"); // false
  * namesSlothletMember("slothlet.i18n.translate.name"); // true: a property of the function
  */
 export function namesSlothletMember(target) {
 	const colon = StringMethods.indexOf(target, ":");
-	if (colon >= 0 && StringMethods.slice(target, colon + 1) === "write") return true;
+	if (colon >= 0 && SetMethods.has(WRITE_LEVELS, StringMethods.slice(target, colon + 1))) return true;
 	const path = colon >= 0 ? StringMethods.slice(target, 0, colon) : target;
 	for (let i = 0; i < SLOTHLET_TREE_DATA.length; i++) {
 		if (StringMethods.startsWith(path, `${SLOTHLET_TREE_DATA[i]}.`)) return true;

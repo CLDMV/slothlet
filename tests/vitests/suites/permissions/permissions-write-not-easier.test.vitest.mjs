@@ -148,9 +148,9 @@ describe.each(CONFIGS)("writing is never easier than accessing — $mode / $runt
 			expect((await writeOnce(permissions, "assign")).who).toBe("b");
 		});
 
-		it("holds an explicit write grant to the access the second module would need", async () => {
+		it("lets the writes through on an explicit write grant, which grants the read as well", async () => {
 			const writeOnly = { ...DENY_OWNER, rules: [{ caller: "p.intruder.**", target: "p.shared.**:write", effect: "allow" }] };
-			expect(await outcomes(writeOnly, WHO_WRITES)).toEqual(every(WHO_WRITES, "PERMISSION_DENIED"));
+			expect(await outcomes(writeOnly, WHO_WRITES)).toEqual(every(WHO_WRITES, "done"));
 			const both = { ...DENY_OWNER, rules: [...writeOnly.rules, { caller: "p.intruder.**", target: "p.shared.who", effect: "allow" }] };
 			expect(await outcomes(both, WHO_WRITES)).toEqual(every(WHO_WRITES, "done"));
 		});

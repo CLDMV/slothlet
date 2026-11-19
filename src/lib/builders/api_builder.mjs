@@ -128,6 +128,13 @@ const NAMESPACE_INSPECT_HOOKS = new WeakSet();
 const SELF_FRAMEWORK_ROOT_KEYS = setFrom(["slothlet", "shutdown", "destroy"]);
 
 /**
+ * The query options of `self.access` and `global.check.access`: reaching a target is calling and reading it, so both
+ * have to be allowed (see the rule access levels in PermissionManager).
+ * @type {Readonly<{operation: "access"}>}
+ */
+const ACCESS_QUERY = Objects.freeze({ operation: "access" });
+
+/**
  * i18n translation helpers exposed on every Slothlet namespace.
  * @typedef {Object} I18nNamespace
  * @property {Function} init - Initialise the i18n system with options (the language is detected when none is given).
@@ -5089,7 +5096,9 @@ export class ApiBuilder extends ComponentBase {
 						const callerPath = currentWrapper?.____slothletInternal?.apiPath ?? "";
 						const callerFilePath = currentWrapper?.____slothletInternal?.filePath ?? null;
 						const runtimeContext = ctx?.context ?? null;
-						if (!slothlet.handlers.permissionManager.checkAccess(callerPath, target, callerFilePath, null, runtimeContext)) return false;
+						// Reaching a target is calling and reading it: both have to be allowed.
+						if (!slothlet.handlers.permissionManager.checkAccess(callerPath, target, callerFilePath, null, runtimeContext, ACCESS_QUERY))
+							return false;
 						// Code supplied to another module's call may reach only what every call of its ceiling may as well (#597).
 						return ArrayMethods.every(identityCeilings(identity), (ceiling) =>
 							slothlet.handlers.permissionManager.checkAccess(
@@ -5097,7 +5106,8 @@ export class ApiBuilder extends ComponentBase {
 								target,
 								ceiling.____slothletInternal.filePath ?? null,
 								null,
-								runtimeContext
+								runtimeContext,
+								ACCESS_QUERY
 							)
 						);
 					},
@@ -5170,7 +5180,7 @@ export class ApiBuilder extends ComponentBase {
 							/* v8 ignore stop */
 
 							const runtimeContext = slothlet.contextManager?.tryGetContext?.()?.context ?? null;
-							return slothlet.handlers.permissionManager.checkAccess(caller, target, null, null, runtimeContext);
+							return slothlet.handlers.permissionManager.checkAccess(caller, target, null, null, runtimeContext, ACCESS_QUERY);
 						},
 
 						/**
