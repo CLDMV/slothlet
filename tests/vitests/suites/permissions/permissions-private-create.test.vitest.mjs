@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-18T18:30:03-08:00 (1795055403)
+ *	@Last modified time: 2026-11-18T22:00:26-08:00 (1795068026)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -24,7 +24,10 @@
  * prototype, an instance's prototype through `Object.getPrototypeOf` and through `__proto__`). Everything else answers
  * as plain JS does, checked against a plain-JS twin of the owning module: a module creating private members on its own
  * node, other names on the other module's node where its writes are allowed, and every creation with the permission
- * system off, where the privacy gate does not apply. Names with three or four leading underscores are the framework's: creating one on another module's node is refused as a `__` one is.
+ * system off, where the privacy gate does not apply. A private member a class's prototype holds is the owning module's
+ * as one the node holds is: another module reading it through any of the prototype routes is refused as reading it off
+ * the node is, and the prototype lists and describes it to that module no more than a node does. Names with three or
+ * four leading underscores are the framework's: creating one on another module's node is refused as a `__` one is.
  * Checked in eager and lazy mode, async and live runtime.
  *
  * Fixture: `api_tests/api_test_private_create` — `owned/` mounted at `owned`, `creator/` mounted at `creator`;
@@ -35,7 +38,7 @@ import { describe, it, expect, afterEach } from "vitest";
 import { resolve, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import slothlet from "@cldmv/slothlet";
-import { HOWS, create, read } from "../../../../api_tests/api_test_private_create_lib/creations.mjs";
+import { HOWS, PROTOTYPE_ROUTES, create, read, list } from "../../../../api_tests/api_test_private_create_lib/creations.mjs";
 import { withSuppressedSlothletErrorOutputSync } from "../../setup/vitest-helper.mjs";
 
 const FIXTURE = resolve("api_tests/api_test_private_create");
@@ -171,12 +174,13 @@ describe.each(MODES.flatMap((mode) => RUNTIMES.flatMap((runtime) => SETUPS.map((
 				const existing = Object.fromEntries(
 					HOWS.map((how) => [how, withSuppressedSlothletErrorOutputSync(() => api.creator.read("other", how, `${prefix}${EXISTING[how]}`))])
 				);
-				if (other === "private") expect(existing.set).toBe("PERMISSION_DENIED");
+				// The privacy gate covers every route, the prototype routes among them.
+				if (other !== "plain") for (const how of HOWS) expect({ how, read: existing[how] }).toEqual({ how, read: "PERMISSION_DENIED" });
 				for (const how of HOWS) {
 					const key = keyFor(prefix, how);
 					const outcome = await creatorMakes("other", how, key);
 					const twinAnswer = await plain(how, key);
-					if (other === "plain" || (other === "private" && existing[how] === "1")) {
+					if (other === "plain") {
 						// No privacy gate on the route: plain JS.
 						expect({ how, ...outcome }).toEqual({ how, ...twinAnswer, ownerRead: twinAnswer.read });
 					} else if (other === "private") {
@@ -222,17 +226,12 @@ describe.each(MODES.flatMap((mode) => RUNTIMES.flatMap((runtime) => SETUPS.map((
 
 		it('answers creating a member with three or four leading underscores on another module\'s node as a "__" one', async () => {
 			await mount();
-			// What the creator gets reading the owning module's own "__" member, by each route.
-			const existing = Object.fromEntries(
-				HOWS.map((how) => [how, withSuppressedSlothletErrorOutputSync(() => api.creator.read("other", how, `__${EXISTING[how]}`))])
-			);
 			for (const prefix of FRAMEWORK_PREFIXES) {
 				for (const how of HOWS) {
 					const key = keyFor(prefix, how);
 					const outcome = await creatorMakes("other", how, key);
 					const twinAnswer = await plain(how, key);
-					if (other === "plain" || (other === "private" && existing[how] === "1")) {
-						// No privacy gate on the route: plain JS.
+					if (other === "plain") {
 						expect({ prefix, how, ...outcome }).toEqual({ prefix, how, ...twinAnswer, ownerRead: twinAnswer.read });
 						continue;
 					}
@@ -258,6 +257,39 @@ describe.each(MODES.flatMap((mode) => RUNTIMES.flatMap((runtime) => SETUPS.map((
 					expect({ prefix, how, ...creator }).toEqual({ prefix, how, ...(await plain(how, key)) });
 				}
 			}
+		});
+
+		it("lists and describes a prototype's private members to another module only where it may read them", async () => {
+			await mount();
+			const names = ["__hidden", "_hidden"];
+			const twinNode = await twin();
+			for (const route of PROTOTYPE_ROUTES) {
+				const twinListing = JSON.parse(list(twinNode, route, names));
+				// Where the privacy gate applies, the private members are left out, as a node leaves them out.
+				const expected =
+					other === "plain"
+						? twinListing
+						: {
+								keys: [],
+								spread: [],
+								json: [],
+								names: [],
+								described: { __hidden: "none", _hidden: "none" }
+							};
+				const listing = withSuppressedSlothletErrorOutputSync(() => api.creator.list("other", route, names));
+				expect({ route, listing: JSON.parse(listing) }).toEqual({ route, listing: expected });
+				// The owning module lists its own as plain JS does.
+				const ownerListing = withSuppressedSlothletErrorOutputSync(() => api.owned.list(route, names));
+				expect({ route, listing: JSON.parse(ownerListing) }).toEqual({ route, listing: twinListing });
+			}
+		});
+
+		it("hands the host the prototype's private members as before", async () => {
+			await mount();
+			expect(api.owned.Box.prototype.__hidden).toBe(1);
+			expect(api.owned.Box.prototype._hidden).toBe(1);
+			expect(Object.getPrototypeOf(api.owned.inst).__hidden).toBe(1);
+			expect(Object.keys(api.owned.Box.prototype)).toEqual(expect.arrayContaining(["__hidden", "_hidden"]));
 		});
 	}
 );

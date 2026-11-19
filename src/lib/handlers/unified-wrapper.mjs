@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-18T19:49:47-08:00 (1795060187)
+ *	@Last modified time: 2026-11-18T21:58:46-08:00 (1795067926)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -405,6 +405,29 @@ const UNATTRIBUTED_READER = Objects.freeze({ reader: "unattributed" });
  * @private
  */
 const SEALED_SHELL_READER = Objects.freeze({ reader: "sealed shell" });
+
+/**
+ * Reader of a prototype's handle ({@link runtime_prototypeHandle}): no one in particular. A class's prototype reached
+ * through the api is one handle at its path, the same object to every module and to the host, as a node is, and each
+ * read, call and change made through it is decided for whoever makes it at the time.
+ * @type {Readonly<{reader: string}>}
+ * @private
+ */
+const PROTOTYPE_HANDLE_READER = Objects.freeze({ reader: "prototype handle" });
+
+/**
+ * Whether a value is a prototype's handle ({@link runtime_prototypeHandle}).
+ * @param {*} value - The value.
+ * @returns {boolean} True for one.
+ * @private
+ */
+function runtime_isPrototypeHandle(value) {
+	return (
+		value !== null &&
+		(typeof value === "object" || typeof value === "function") &&
+		WeakMapMethods.get(SELF_MEMBER_VIEWS, value)?.reader === PROTOTYPE_HANDLE_READER
+	);
+}
 
 /**
  * The views a full-isolation run's `self` hands out (see `makeRunSelf` in `builders/api_builder`), each with what it reads
@@ -1083,6 +1106,8 @@ function runtime_selfMemberOf(value, reader, slothlet, parts, prop, through) {
 	// A reader's view of a prototype a node was given, and a stand-in a closed node holds for its code, are handed on
 	// as they are: each checks every read and change itself.
 	if (WeakMapMethods.has(GIVEN_VIEWS, value) || WeakMapMethods.has(PINNED_CODE_MEMBERS, value)) return value;
+	// A prototype's handle is the same object to every reader, as a node is.
+	if (runtime_isPrototypeHandle(value)) return value;
 	// A function of the module's an api node stands for is that node, read under its own rules (a prototype's
 	// `constructor`, say).
 	if (typeof value === "function") {
@@ -1816,12 +1841,35 @@ function runtime_selfMemberView(value, reader, slothlet, parts, through) {
 		byPath = new Map();
 		WeakMapMethods.set(byReader, reader, byPath);
 	}
-	const pathKey = ArrayMethods.join(parts, ".");
+	// A prototype's handle with no path of its own (see runtime_prototypeHandleFor) is kept apart from every path.
+	const pathKey = parts === null ? "\u0000every site" : ArrayMethods.join(parts, ".");
 	const cached = MapMethods.get(byPath, pathKey);
 	if (cached) return cached;
 
 	const raw = value;
-	const record = { value: raw, reader, slothlet, parts, view: null, parent: through === undefined ? null : new WeakRef(through) };
+	// A prototype's handle is no one's in particular: each access through it is decided for whoever makes it.
+	const handle = reader === PROTOTYPE_HANDLE_READER;
+	const who = handle ? () => runtime_selfReader(slothlet) : () => reader;
+	// The paths a change through the view is decided at: its own, or, for a handle with none of its own, every path the
+	// prototype is known at.
+	const siteParts = () => {
+		if (parts !== null) return [parts];
+		const known = runtime_knownPrototype(slothlet, raw);
+		const found = known === undefined ? [] : mapList(known.sites, (site) => site.parts);
+		return found.length === 0 ? [[]] : found;
+	};
+	const baseParts = () => {
+		if (parts !== null) return parts;
+		return runtime_classSiteOf(slothlet, raw)?.parts ?? siteParts()[0];
+	};
+	const record = {
+		value: raw,
+		reader,
+		slothlet,
+		parts: parts ?? [],
+		view: null,
+		parent: through === undefined ? null : new WeakRef(through)
+	};
 	// A shadow of the same kind, so the view calls, constructs, and answers `Array.isArray` as the value does,
 	// and carries no fixed member the value lacks.
 	let shadow;
@@ -1831,8 +1879,49 @@ function runtime_selfMemberView(value, reader, slothlet, parts, through) {
 	else if (hasOwn(raw, "prototype")) shadow = function () {};
 	else shadow = FunctionMethods.bind(function () {}, null);
 
-	const member = (prop, child) =>
-		runtime_selfMemberOf(child, reader, slothlet, typeof prop === "string" ? concatLists(parts, [prop]) : parts, prop, record);
+	const member = (prop, child) => {
+		const childParts = typeof prop === "string" ? concatLists(baseParts(), [prop]) : baseParts();
+		if (!handle) return runtime_selfMemberOf(child, reader, slothlet, childParts, prop, record);
+		const accessor = who();
+		// The prototype's `constructor` is the class's node at the path the handle is reached at (`Alias.prototype` hands
+		// back `Alias`), and the host reads any other function an api node stands for as that node, as it reads the node.
+		if (typeof child === "function") {
+			let fronting;
+			const own = baseParts();
+			if (prop === "constructor" && own.length > 1 && own[own.length - 1] === "prototype") {
+				const classNode = runtime_nodeAtPath(slothlet, ArrayMethods.join(copyList(own, 0, own.length - 1), "."));
+				if (classNode !== null && runtime_functionOf(classNode.____slothletInternal.impl) === child)
+					fronting = classNode.____slothletInternal.proxy;
+			}
+			if (fronting === undefined && accessor === HOST_READER) fronting = runtime_frontingNode(slothlet, child);
+			// A class no node stands for, reached as this prototype's `constructor`, is one view of it shared as the handle
+			// is, whose `prototype` is the handle: `instanceof` against it holds for whatever reports the handle.
+			if (
+				fronting === undefined &&
+				prop === "constructor" &&
+				Reflect.getOwnPropertyDescriptor(child, "prototype")?.value === raw &&
+				runtime_frontingNode(slothlet, child) === undefined
+			)
+				return runtime_selfMemberView(child, PROTOTYPE_HANDLE_READER, slothlet, childParts);
+			if (fronting !== undefined) {
+				if (accessor === HOST_READER || fronting === slothlet.boundApi) return fronting;
+				// Bound to the module reading as a read of that node through `self` is (see runtime_functionNodeFor).
+				const permissionManager = slothlet.handlers?.permissionManager;
+				const identity = slothlet.contextManager?.getCallerIdentity?.(slothlet.instanceID);
+				const bound =
+					permissionManager?.isEnabled() && permissionManager.isCaptureEnabled?.() !== false && identity?.currentWrapper
+						? runtime_capturedView(fronting, identity.currentWrapper, true, identity.ceiling ?? null)
+						: fronting;
+				return runtime_selfView(bound, accessor);
+			}
+		}
+		// A class's own prototype read off a shared view of the class is its handle.
+		if (prop === "prototype" && typeof raw === "function" && child !== null && typeof child === "object") {
+			const prototypeHandle = runtime_prototypeHandleOf(slothlet, child);
+			if (prototypeHandle !== child) return prototypeHandle;
+		}
+		return runtime_selfMemberOf(child, accessor, slothlet, childParts, prop);
+	};
 	const shownDescriptor = (prop, descriptor) =>
 		"value" in descriptor
 			? { __proto__: null, ...descriptor, value: member(prop, descriptor.value) }
@@ -1874,34 +1963,115 @@ function runtime_selfMemberView(value, reader, slothlet, parts, through) {
 			}
 		}
 	};
+	// A private member a prototype holds belongs to the module owning the path the prototype is reached at, as one a node
+	// holds does: privacy attaches to the member's name, not to the route. Module code privacy keeps it from is refused
+	// reading it, describing it, and creating or changing it, with the error a read of it off the node gets, and is
+	// listed none of it. A data value is held to that only while data reads are gated, as on a node. A member found only
+	// on a prototype no module made (`Object.prototype`'s `__lookupGetter__`) is no module's, and the host and the owning
+	// module's code reach every one, as does everyone while the permission system is off.
+	const privateRefused = (prop, audit, writing = false) => {
+		if (!handle || typeof prop !== "string" || StringMethods.charCodeAt(prop, 0) !== 95) return null;
+		const permissionManager = slothlet.handlers?.permissionManager;
+		if (!permissionManager?.isEnabled()) return null;
+		const accessor = who();
+		if (accessor === HOST_READER) return null;
+		if (!accessor?.____slothletInternal) return "";
+		if (!writing) {
+			let holder = raw;
+			for (let depth = 0; holder !== null && depth < 64 && !util.types.isProxy(holder) && !hasOwn(holder, prop); depth++)
+				holder = Reflect.getPrototypeOf(holder);
+			if (holder === null || util.types.isProxy(holder) || WeakSetMethods.has(INTRINSICS, holder) || runtime_isSharedValue(holder))
+				return null;
+			const descriptor = Reflect.getOwnPropertyDescriptor(holder, prop);
+			if (!permissionManager.isReadGatingEnabled() && descriptor && "value" in descriptor && runtime_isTerminalData(descriptor.value))
+				return null;
+		}
+		const internal = accessor.____slothletInternal;
+		const callerPath = String(internal.apiPath ?? "");
+		const callerFile = internal.filePath ?? null;
+		for (let ofIndex = 0, ofList = siteParts(); ofIndex < ofList.length; ofIndex++) {
+			const holderParts = ofList[ofIndex];
+			const holderPath = ArrayMethods.join(holderParts, ".");
+			const holderFile = runtime_holderFilePath(slothlet, holderParts);
+			const allowed = audit
+				? permissionManager.enforceAccess(
+						callerPath,
+						holderPath === "" ? prop : `${holderPath}.${prop}`,
+						callerFile,
+						holderFile,
+						null,
+						null,
+						{
+							moduleCaller: true,
+							heldMember: true
+						}
+					)
+				: permissionManager.mayReachPrivate(callerPath, holderPath, callerFile, holderFile);
+			if (!allowed) return callerPath;
+		}
+		return null;
+	};
+	const refusePrivate = (prop, writing = false) => {
+		const callerPath = privateRefused(prop, true, writing);
+		if (callerPath === null) return;
+		throw new slothlet.SlothletError("PERMISSION_DENIED", {
+			caller: callerPath,
+			target: segmentsOf(`${ArrayMethods.join(baseParts(), ".")}.${prop}`)
+		});
+	};
+	// A private member left out of what the handle lists, describes and reports holding: one the prototype holds open,
+	// so the engine's checks of a proxy's answers against its target allow leaving it out. One it holds fixed, or on a
+	// closed prototype, is described to no one privacy keeps it from: describing it is refused as reading it is.
+	const privateHidden = (prop) => {
+		if (privateRefused(prop, false) === null) return false;
+		const descriptor = Reflect.getOwnPropertyDescriptor(raw, prop);
+		if (!descriptor || (descriptor.configurable && Reflect.isExtensible(raw))) return true;
+		refusePrivate(prop);
+		return false;
+	};
 	const assertWrite = (prop) => {
-		const target = typeof prop === "string" ? concatLists(parts, [prop]) : parts;
-		const writer = runtime_selfRootWriter(slothlet, reader, target);
-		if (writer !== null) slothlet.handlers.apiManager.assertOwnedWrite(target, writer);
-		runtime_assertReaderWrite(slothlet, reader, writer, target);
+		const accessor = who();
+		for (let ofIndex = 0, ofList = siteParts(); ofIndex < ofList.length; ofIndex++) {
+			const target = typeof prop === "string" ? concatLists(ofList[ofIndex], [prop]) : ofList[ofIndex];
+			const writer = runtime_selfRootWriter(slothlet, accessor, target);
+			if (writer !== null) slothlet.handlers.apiManager.assertOwnedWrite(target, writer);
+			runtime_assertReaderWrite(slothlet, accessor, writer, target);
+		}
+		refusePrivate(prop, true);
 	};
 	// The value's prototype as the reader is handed it, by `Object.getPrototypeOf` and through `__proto__` alike (#667):
 	// a class's prototype a node of the instance fronts the class of is read through that node, as reading its
 	// `prototype` is, so each prototype up a subclass's chain is checked against the class that owns it. Unchecked when
-	// the view only mirrors it onto a closed shadow, whose answers are checked when they are asked for.
+	// the view only mirrors it onto a closed shadow, whose answers are checked when they are asked for. Up a handle's
+	// chain each prototype is its handle too.
 	const prototypeOf = (check = true) => {
 		const proto = Reflect.getPrototypeOf(raw);
 		// A prototype made by no module (Node's `EventEmitter.prototype`) is the module's to no one, and is the object
 		// itself, so `instanceof` against Node's own classes still holds.
 		if (runtime_isSharedValue(proto)) return proto;
 		const classNode = runtime_prototypeClassNode(slothlet, proto);
-		if (classNode === undefined) return member(null, proto);
-		if (check) return runtime_selfView(classNode, reader).prototype;
-		return runtime_selfMemberOf(proto, reader, slothlet, concatLists(runtime_apiPathParts(classNode), ["prototype"]), "prototype");
+		if (classNode === undefined) return handle ? runtime_prototypeHandle(slothlet, proto, { parts: baseParts() }) : member(null, proto);
+		if (check) {
+			const accessor = who();
+			return runtime_atClassSite(
+				slothlet,
+				accessor === HOST_READER ? classNode.prototype : runtime_selfView(classNode, accessor).prototype
+			);
+		}
+		const classSite = runtime_prototypeSiteOf(resolveWrapper(classNode), "prototype");
+		if (handle) return runtime_prototypeHandle(slothlet, proto, classSite);
+		return runtime_selfMemberOf(proto, reader, slothlet, classSite.parts, "prototype");
 	};
 	const view = new NativeProxy(shadow, {
 		__proto__: null,
 		get(_, prop, receiver) {
 			mirrorClosed();
+			// An object's `__proto__` is its prototype, the same view `Object.getPrototypeOf` reports (#667).
+			const engineProto = prop === "__proto__" && receiver === view && typeof raw !== "function" && runtime_readsEngineProto(raw);
+			if (!engineProto) refusePrivate(prop);
 			const held = Reflect.getOwnPropertyDescriptor(shadow, prop);
 			if (held && !held.configurable && "value" in held && !held.writable) return held.value;
-			// An object's `__proto__` is its prototype, the same view `Object.getPrototypeOf` reports (#667).
-			if (prop === "__proto__" && receiver === view && typeof raw !== "function" && runtime_readsEngineProto(raw)) {
+			if (engineProto) {
 				if (Reflect.isExtensible(shadow)) return prototypeOf();
 				prototypeOf();
 				return Reflect.getPrototypeOf(shadow);
@@ -1910,15 +2080,18 @@ function runtime_selfMemberView(value, reader, slothlet, parts, through) {
 		},
 		getOwnPropertyDescriptor(_, prop) {
 			mirrorClosed();
+			if (privateHidden(prop)) return undefined;
 			return mirror(prop);
 		},
 		has(_, prop) {
 			mirrorClosed();
+			if (privateHidden(prop)) return false;
 			return Reflect.has(raw, prop);
 		},
 		ownKeys() {
 			mirrorClosed();
-			return Reflect.ownKeys(raw);
+			if (!handle) return Reflect.ownKeys(raw);
+			return filterList(Reflect.ownKeys(raw), (key) => !privateHidden(key));
 		},
 		getPrototypeOf() {
 			mirrorClosed();
@@ -1936,7 +2109,7 @@ function runtime_selfMemberView(value, reader, slothlet, parts, through) {
 			// other value stays the view (#625), so a method cannot be pointed at another value to run on it as is.
 			const record = WeakMapMethods.get(SELF_MEMBER_VIEWS, thisArg);
 			const receiver = record && runtime_holdsMember(record.value, raw) ? record.value : thisArg;
-			return runtime_selfViewResult(Reflect.apply(raw, receiver, args), reader);
+			return runtime_selfViewResult(Reflect.apply(raw, receiver, args), who());
 		},
 		construct(_, args, newTarget) {
 			return Reflect.construct(raw, args, newTarget === view ? raw : newTarget);
@@ -1955,6 +2128,22 @@ function runtime_selfMemberView(value, reader, slothlet, parts, through) {
 	MapMethods.set(byPath, pathKey, view);
 	WeakMapMethods.set(SELF_MEMBER_VIEWS, view, record);
 	return view;
+}
+
+/**
+ * The source file of the node nearest above or at an api path: the file of the node a value at that path (a class's
+ * prototype) is beneath.
+ * @param {object} slothlet - The instance.
+ * @param {string[]} parts - The api path.
+ * @returns {string|null} The file, or null when no node is found.
+ * @private
+ */
+function runtime_holderFilePath(slothlet, parts) {
+	for (let count = parts.length; count > 0; count--) {
+		const node = runtime_nodeAtPath(slothlet, ArrayMethods.join(copyList(parts, 0, count), "."));
+		if (node !== null) return node.____slothletInternal.filePath ?? null;
+	}
+	return null;
 }
 
 /**
@@ -2058,10 +2247,13 @@ function runtime_selfHasInstance(prototype, instance) {
  */
 function runtime_selfView(node, reader, from = null, access = null) {
 	if (node === null || (typeof node !== "object" && typeof node !== "function")) return node;
-	// A prototype of a module's a module held as itself and handed on reaches the reader as reading it at its path would
-	// (#667): itself, or a checked view. One handed out for a holder not known yet (a view deciding each write when it is
-	// made) is decided now for the reader it reaches.
+	// A prototype's handle is the same object to every reader, as a node is: each access through it is decided for whoever
+	// makes it.
 	const memberRecord = WeakMapMethods.get(SELF_MEMBER_VIEWS, node);
+	if (memberRecord?.reader === PROTOTYPE_HANDLE_READER) return node;
+	// A prototype of a module's a module held as itself and handed on reaches the reader as reading it at its path would
+	// (#667): its handle. One handed out for a holder not known yet (a view deciding each write when it is
+	// made) is decided now for the reader it reaches.
 	const handed = memberRecord === undefined ? node : memberRecord.reader === SEALED_SHELL_READER ? memberRecord.value : undefined;
 	// One handed out before anything read it is known by its class's names (see runtime_knownPrototype).
 	const handedPrototype =
@@ -2109,7 +2301,7 @@ function runtime_selfView(node, reader, from = null, access = null) {
 		WeakMapMethods.set(SELF_VIEWS, node, byReader);
 	}
 	const cached = WeakMapMethods.get(byReader, reader);
-	if (cached && !runtime_closedPrototypeStale(WeakMapMethods.get(SELF_VIEW_UNDER, cached))) return cached;
+	if (cached) return cached;
 
 	// A write made with no standing of its own is the reader's: it goes through only under a path the
 	// reader owns. The host owns the whole tree; code that could not be attributed owns none of it.
@@ -2159,17 +2351,15 @@ function runtime_selfView(node, reader, from = null, access = null) {
 		) {
 			return dispatcherFunction(prop, value);
 		}
-		// A prototype of the module's is the object itself to a reader that may hold it so, and a checked view at its path
-		// to any other (#667).
-		// A class's `prototype` is decided at the path it is read at now, whichever name the class was read under first;
-		// an instance's prototype, at every path its class is known at.
+		// A prototype of the module's is its handle, the same to every reader (#667). A class's `prototype` is the handle at
+		// the path it is read at now, whichever name the class was read under first; an instance's prototype, the handle its
+		// class's `prototype` is.
 		const prototype = runtime_behindMemberView(value);
 		if (prop === "prototype" && WeakMapMethods.has(PROTOTYPE_PATHS, prototype)) {
 			const parts = memberParts(prop);
-			if (runtime_mayHoldPrototype(slothlet, reader, parts, prototype)) return prototype;
-			return runtime_selfMemberOf(prototype, reader, slothlet, parts, prop);
+			return runtime_prototypeHandle(slothlet, prototype, { parts });
 		}
-		if (prop === null && WeakMapMethods.has(PROTOTYPE_PATHS, prototype)) return runtime_prototypeHandedTo(prototype, reader, slothlet);
+		if (prop === null && WeakMapMethods.has(PROTOTYPE_PATHS, prototype)) return runtime_prototypeHandleOf(slothlet, prototype);
 		// A plain value the node holds (a class's prototype, a method of it) is held to the node's path (#625).
 		return runtime_selfMemberOf(value, reader, slothlet, memberParts(prop), prop);
 	};
@@ -2205,7 +2395,7 @@ function runtime_selfView(node, reader, from = null, access = null) {
 		// The class was found by descriptors (see runtime_heldInstanceClass): a `constructor` accessor of the module's is
 		// never run to compare it.
 		if (prototype !== Reflect.getPrototypeOf(inner.____slothletInternal.impl)) return null;
-		return runtime_selfView(classNode, reader).prototype;
+		return runtime_atClassSite(slothlet, runtime_selfView(classNode, reader).prototype);
 	};
 	// The prototype the node reports, as the reader is handed it, by `Object.getPrototypeOf` and through `__proto__`
 	// alike (#667): a node (a class's base class) as its view, a class's prototype as its class's node hands it out, and
@@ -2221,7 +2411,7 @@ function runtime_selfView(node, reader, from = null, access = null) {
 		if (heldEmitterPrototype !== undefined) {
 			// A closed node's answer is fixed, per reader, on what this view stands over.
 			if (!Reflect.isExtensible(node) && runtime_behindMemberView(prototype) === heldEmitterPrototype) return Reflect.getPrototypeOf(node);
-			if (prototype === heldEmitterPrototype) return runtime_emitterPrototypeForReader(inner, prototype, reader);
+			if (prototype === heldEmitterPrototype) return runtime_emitterPrototypeHandle(inner, prototype);
 			if (runtime_behindMemberView(prototype) === heldEmitterPrototype) return prototype;
 		}
 		// A closed node holding a class instance fixes its prototype per reader too, on every path (#725).
@@ -2365,7 +2555,6 @@ function runtime_selfView(node, reader, from = null, access = null) {
 		}
 	});
 	WeakMapMethods.set(byReader, reader, view);
-	if (node !== held) WeakMapMethods.set(SELF_VIEW_UNDER, view, node);
 	WeakMapMethods.set(SELF_VIEW_NODES, view, held);
 	WeakMapMethods.set(SELF_VIEW_READERS, view, reader);
 	// The framework treats the view as the node it stands for (metadata, hooks, permissions), and a view of a
@@ -7630,7 +7819,8 @@ function runtime_handOutValue(maker, owner, value) {
 	// reaches.
 	if (WeakMapMethods.has(CROSSINGS, value)) return value;
 	// A view handed out for a holder not known yet is slothlet's, decided for the holder it reaches (#667).
-	if (WeakMapMethods.get(SELF_MEMBER_VIEWS, value)?.reader === SEALED_SHELL_READER) return value;
+	const handedRecord = WeakMapMethods.get(SELF_MEMBER_VIEWS, value);
+	if (handedRecord?.reader === SEALED_SHELL_READER || handedRecord?.reader === PROTOTYPE_HANDLE_READER) return value;
 	// A prototype of a module's class, however the module holds it, is handed out for a holder not known yet: a view
 	// deciding each write when it is made, which a holder reading it through `self` gets as reading it would (#667).
 	const prototype = typeof value === "object" ? runtime_prototypeHandedTo(value, SEALED_SHELL_READER, owner.slothlet) : value;
@@ -7947,7 +8137,7 @@ setHandedOutCheck(
 	(value) =>
 		value !== null &&
 		(typeof value === "object" || typeof value === "function") &&
-		(WeakMapMethods.has(STAND_IN_RECORDS, value) || WeakMapMethods.has(CROSSINGS, value))
+		(WeakMapMethods.has(STAND_IN_RECORDS, value) || WeakMapMethods.has(CROSSINGS, value) || runtime_isPrototypeHandle(value))
 );
 // A crossing view of the class prototype guard stands for the value too: what the caller handed is what is looked into.
 setInboundOriginal((value) => {
@@ -9285,12 +9475,10 @@ function runtime_apiPathParts(node) {
 }
 
 /**
- * A class's prototype, or an instance's, as a node hands it to the module reading it (#667): the object itself to a
- * reader that may hold it so ({@link runtime_mayHoldPrototype}), and otherwise the member view a read through `self`
- * gives ({@link runtime_selfMemberOf}) at the node's path, so a change through it is refused as one at that path and
- * each prototype further up its chain is checked against its own class's node. The path is recorded, so a holder
- * handing the object on hands it as reading it there would ({@link runtime_prototypeHandedTo}). With the permission
- * system off it is the object itself to everyone.
+ * A class's prototype, or an instance's, as a node hands it to whoever reads it (#667): its handle at the node's path
+ * ({@link runtime_prototypeHandle}), the same to every module and to the host, so each read and change through it is
+ * decided at that path for whoever makes it, and each prototype further up its chain is its own class's handle. The path
+ * is recorded, so a holder handing the object on hands it as reading it there would ({@link runtime_prototypeHandedTo}).
  * @param {UnifiedWrapper} wrapper - The node it is read through: the class's, or the instance's.
  * @param {*} prototype - The prototype.
  * @param {string|null} prop - The key it is read under (`"prototype"`), or null for an instance's own prototype.
@@ -9303,11 +9491,85 @@ function runtime_prototypeForReader(wrapper, prototype, prop) {
 	// The site is kept per node, so recording it costs no path built per read, with the permission system on or off.
 	const site = runtime_prototypeSiteOf(wrapper, prop);
 	runtime_recordPrototypePath(slothlet, prototype, site);
-	if (!slothlet?.handlers?.permissionManager?.isEnabled()) return prototype;
-	const reader = runtime_selfModuleReader(slothlet);
-	if (reader === null) return prototype;
-	if (runtime_mayHoldPrototype(slothlet, reader, site.parts, prototype)) return prototype;
-	return runtime_selfMemberOf(prototype, reader, slothlet, site.parts, prop);
+	return runtime_prototypeHandle(slothlet, prototype, site);
+}
+
+/**
+ * The handle of a class's prototype, or an instance's, at the path it is reached at: one object per prototype and path,
+ * handed to every module and to the host alike, as a node is. It reads, lists and calls as the prototype does, and each
+ * access is decided for whoever makes it at the time ({@link PROTOTYPE_HANDLE_READER}): a private member the prototype
+ * holds is the owning module's, read and created by that module's code alone, and a change through the handle is held to
+ * the ownership and write rules at its path. A class exported under two names has a handle at each, each decided at its
+ * own path. A prototype no module made (`Object.prototype`, Node's own) and one that is itself a Proxy are handed out as
+ * they are.
+ * @param {object|null} slothlet - The instance.
+ * @param {*} prototype - The prototype, as the module holds it.
+ * @param {{parts: string[], key: string, prop: string|null}|null} site - The site it is reached at; null for one handed
+ *   on with no path of its own (see {@link runtime_prototypeHandleFor}).
+ * @returns {*} The handle, or the prototype itself.
+ * @private
+ */
+function runtime_prototypeHandle(slothlet, prototype, site) {
+	if (!slothlet || prototype === null || typeof prototype !== "object") return prototype;
+	if (util.types.isProxy(prototype) || WeakSetMethods.has(INTRINSICS, prototype) || runtime_isSharedValue(prototype)) return prototype;
+	// A prototype no class a node exports owns and holding none of a module's code (an object the host gave a node as
+	// its prototype) is data, and is handed out as it is.
+	if (
+		runtime_classPrototypeSites(slothlet, prototype).length === 0 &&
+		!runtime_memberHoldsCode(prototype, CODE_SEARCH.depth + 1, { remaining: CODE_SEARCH.properties })
+	)
+		return prototype;
+	if (site === null) return runtime_selfMemberView(prototype, PROTOTYPE_HANDLE_READER, slothlet, null);
+	return runtime_selfMemberView(prototype, PROTOTYPE_HANDLE_READER, slothlet, site.parts);
+}
+
+/**
+ * The handle a prototype of a module's reaches a holder as when it is handed on with no path of its own (a module
+ * holding the object itself hands it on, an instance reports it): the handle at the one path it is known at, the
+ * `prototype` of its class when the class is exported under one name; for a class exported under several names, a
+ * handle deciding each change at every one of them, as reading it at each would.
+ * @param {object} slothlet - The instance.
+ * @param {object} prototype - The prototype.
+ * @param {Array<{parts: string[], key: string, prop: string|null}>} sites - Where it is known to be read.
+ * @returns {*} The handle.
+ * @private
+ */
+function runtime_prototypeHandleFor(slothlet, prototype, sites) {
+	const classSites = runtime_classPrototypeSites(slothlet, prototype);
+	if (classSites.length === 1) return runtime_prototypeHandle(slothlet, prototype, classSites[0]);
+	if (classSites.length === 0 && sites.length === 1) return runtime_prototypeHandle(slothlet, prototype, sites[0]);
+	return runtime_prototypeHandle(slothlet, prototype, null);
+}
+
+/**
+ * The site of a class's `prototype` an instance's prototype is reported at: of the names the class is exported as, the
+ * one that is the class's own `name`, else the first. A class exported under one name has that one.
+ * @param {object} slothlet - The instance.
+ * @param {object} prototype - The class's prototype.
+ * @returns {{parts: string[], key: string, prop: string|null}|undefined} The site, or `undefined` for no class a node exports.
+ * @private
+ */
+function runtime_classSiteOf(slothlet, prototype) {
+	const sites = runtime_classPrototypeSites(slothlet, prototype);
+	if (sites.length < 2) return sites[0];
+	const name = Reflect.getOwnPropertyDescriptor(Reflect.getOwnPropertyDescriptor(prototype, "constructor").value, "name")?.value;
+	return ArrayMethods.find(sites, (site) => site.parts[site.parts.length - 2] === name) ?? sites[0];
+}
+
+/**
+ * An instance's prototype as the handle at its class's site ({@link runtime_classSiteOf}), whichever of the class's
+ * nodes it was read through: an instance reports one prototype. Anything that is no prototype's handle is returned as is.
+ * @param {object} slothlet - The instance.
+ * @param {*} shown - What reading the class's `prototype` handed out.
+ * @returns {*} The handle at the class's site, or `shown`.
+ * @private
+ */
+function runtime_atClassSite(slothlet, shown) {
+	const record = WeakMapMethods.get(SELF_MEMBER_VIEWS, shown);
+	if (record?.reader !== PROTOTYPE_HANDLE_READER) return shown;
+	const instance = slothlet ?? record.slothlet;
+	const site = runtime_classSiteOf(instance, record.value);
+	return site === undefined ? shown : runtime_prototypeHandle(instance, record.value, site);
 }
 
 /**
@@ -9409,34 +9671,36 @@ function runtime_classInstanceOf(prototype) {
 }
 
 /**
- * A prototype of a module's as it reaches `reader` when a module holding the object itself hands it on (#667): as a
- * return value, an argument, an event, a thrown error, or inside any of them. While the permission system is on, a
- * reader that may not hold the object itself at each path it is known at (see {@link runtime_knownPrototype},
- * {@link runtime_mayHoldPrototype}) gets the checked view reading it at the first such path gives, so its writes are
- * refused as they would be there. Handed to {@link SEALED_SHELL_READER}, for a holder not known yet, it is a view
- * deciding each write when it is made. Anything else, and everything while the system is off, passes as it is.
+ * The handle of a prototype of a module's reached with no path of its own (an instance's prototype, one handed on): see
+ * {@link runtime_prototypeHandleFor}. Anything not known as a prototype of a module's is returned as it is.
+ * @param {object|null} slothlet - The instance, when known.
+ * @param {*} value - The value.
+ * @returns {*} The handle, or the value.
+ * @private
+ */
+function runtime_prototypeHandleOf(slothlet, value) {
+	const known = runtime_knownPrototype(slothlet, value);
+	if (known === undefined || known.sites.length === 0) return value;
+	return runtime_prototypeHandleFor(known.slothlet, value, known.sites);
+}
+
+/**
+ * A prototype of a module's as it reaches a module when a module holding the object itself hands it on (#667): as a
+ * return value, an argument, an event, a thrown error, or inside any of them. While the permission system is on it is
+ * its handle ({@link runtime_prototypeHandleOf}), whoever it reaches, so each access is decided for whoever makes it.
+ * Anything else, and everything while the system is off, passes as it is.
  * @param {*} value - The value handed on.
- * @param {object|null} reader - Who it reaches: a module's wrapper, the host (`null` or {@link HOST_READER}), or a reader
- *   standing for no module.
+ * @param {object|null} reader - Who it reaches.
  * @param {object|null} [slothlet] - The instance it crossed in, when known.
- * @param {object|null} [viewFor] - Who the view is made for when the reader does not hold the object itself: the
- *   reader, or the wrapper standing for the reader's module so every leaf of it gets the same view.
  * @returns {*} What the reader gets.
  * @private
  */
-function runtime_prototypeHandedTo(value, reader, slothlet = null, viewFor = reader) {
+function runtime_prototypeHandedTo(value, reader, slothlet = null) {
 	if (slothlet && !runtime_guardOn(slothlet)) return value;
 	const known = runtime_knownPrototype(slothlet, value);
 	if (known === undefined || known.sites.length === 0) return value;
 	if (!runtime_guardOn(known.slothlet)) return value;
-	const unpacked2 = known.sites,
-		first = unpacked2[0];
-	if (ArrayMethods.every(known.sites, (site) => runtime_mayHoldPrototype(known.slothlet, reader, site.parts, value))) return value;
-	// Read at no path of its own, it is the view at a path where the reader may not hold it, so each write through it is
-	// decided where it would be refused.
-	const refused =
-		ArrayMethods.find(known.sites, (site) => !runtime_mayHoldPrototype(known.slothlet, reader, site.parts, value, false)) ?? first;
-	return runtime_selfMemberOf(value, viewFor, known.slothlet, refused.parts, refused.prop);
+	return runtime_prototypeHandleFor(known.slothlet, value, known.sites);
 }
 
 /**
@@ -9939,7 +10203,7 @@ function runtime_writtenPrototypeFor(prototype, reader, slothlet, from) {
 	// module's code makes (a bound built-in it hands on) is still held to what the file may write.
 	let standing = reader?.____slothletInternal && reader.slothlet ? runtime_viewGroup(reader).owner : reader;
 	if (standing !== reader && !runtime_asOneModule(slothlet, standing, reader)) standing = reader;
-	if (runtime_knownPrototype(slothlet, prototype) !== undefined) return runtime_prototypeHandedTo(prototype, reader, slothlet, standing);
+	if (runtime_knownPrototype(slothlet, prototype) !== undefined) return runtime_prototypeHandedTo(prototype, reader, slothlet);
 	let site = WeakMapMethods.get(CROSSED_PROTOTYPE_PATHS, prototype);
 	if (site === undefined || (!site.known && from?.____slothletInternal)) {
 		site = { parts: runtime_crossFromParts(from), known: Boolean(from?.____slothletInternal) };
@@ -10225,6 +10489,8 @@ function runtime_crossTo(value, reader, slothlet, from = null) {
 		slothlet ??= crossing.slothlet;
 	}
 	if (reader === null || reader === undefined || reader === HOST_READER) return value;
+	// A prototype's handle is the same object to every reader, and decides each access itself.
+	if (runtime_isPrototypeHandle(value)) return value;
 	slothlet ??= reader?.slothlet ?? from?.slothlet ?? null;
 	if (!runtime_guardOn(slothlet)) return value;
 	const isModule = Boolean(reader.____slothletInternal);
@@ -10468,6 +10734,7 @@ function runtime_crossPrototype(state, raw) {
 	// A stand-in's prototype for a holder not known yet, and the context wrapper of one, stand for the prototype.
 	const sealed = WeakMapMethods.get(SELF_MEMBER_VIEWS, raw);
 	const standIn = WeakMapMethods.get(STAND_IN_RECORDS, raw);
+	if (sealed?.reader === PROTOTYPE_HANDLE_READER) return raw;
 	const prototype = sealed?.reader === SEALED_SHELL_READER ? sealed.value : standIn ? standIn.original : runtime_unwrapClassInstance(raw);
 	if (
 		typeof prototype === "object" &&
@@ -10476,7 +10743,7 @@ function runtime_crossPrototype(state, raw) {
 		!runtime_isSharedValue(prototype) &&
 		!runtime_isSlothletValue(prototype)
 	)
-		return runtime_writtenPrototypeFor(prototype, state.reader, state.slothlet, state.from);
+		return runtime_atClassSite(state.slothlet, runtime_writtenPrototypeFor(prototype, state.reader, state.slothlet, state.from));
 	return runtime_crossOut(state, raw);
 }
 
@@ -10893,65 +11160,6 @@ const CROSSING_HANDLER = {
 };
 
 /**
- * Whether a reader is handed a prototype of the module's as the object itself rather than a checked view of it (#667),
- * through `self` or holding a node alike: the host, every reader while the permission system is off, and a module that
- * may make every write at the prototype's path and beneath it (it owns the path, or write rules grant it the whole
- * subtree, and no rule could refuse it one there), as long as the same holds at every name its class is exported as
- * and at the path of each class a node fronts further up the prototype's chain. Any other reader gets a view. What the object holds reaches such a reader unchecked; the framework's namespace stored there refuses
- * module code's changes on its own.
- * @param {object} slothlet - The instance.
- * @param {object|null} reader - Who reads: a module's wrapper, the host (`null` or {@link HOST_READER}), or a reader
- *   standing for no module.
- * @param {string[]} parts - The path the prototype is read at.
- * @param {object} prototype - The prototype, as the module holds it.
- * @param {boolean} [everyName=true] - Whether every other name its class is exported as counts too; false asks about
- *   the path `parts` alone.
- * @returns {boolean} True when the reader is handed the object itself.
- * @private
- */
-function runtime_mayHoldPrototype(slothlet, reader, parts, prototype, everyName = true) {
-	if (!runtime_guardOn(slothlet)) return true;
-	if (reader === null || reader === HOST_READER) return true;
-	if (reader === UNATTRIBUTED_READER || reader === SEALED_SHELL_READER || !reader?.____slothletInternal) return false;
-	const permissionManager = slothlet.handlers.permissionManager;
-	const apiManager = slothlet.handlers.apiManager;
-	const readerPath = String(reader.____slothletInternal.apiPath ?? "");
-	// The reader may make every write at the path and beneath it: no rule could refuse one, and it owns the path or
-	// write rules grant it the whole subtree. The object itself takes no check of its own, so a narrower rule beneath
-	// the path, or a grant of the path alone, leaves the reader the view, which decides each write at its own path.
-	const owned = (path) => {
-		const verdict = permissionManager.writeSubtree(readerPath, ArrayMethods.join(path, "."));
-		if (verdict === "deny") return false;
-		if (verdict === "grant" && !apiManager.isRemovedCaller(reader)) return true;
-		return apiManager.ownsPath(path, reader);
-	};
-	if (!owned(parts)) return false;
-	// The object is the same at every name its class is exported as, so it may be held only where every one of them
-	// would leave it the object (#667).
-	if (everyName) {
-		const readAt = ArrayMethods.join(parts, ".");
-		for (let ofIndex = 0, ofList = runtime_classPrototypeSites(slothlet, prototype); ofIndex < ofList.length; ofIndex++) {
-			const site = ofList[ofIndex];
-			if (site.key !== readAt && !owned(site.parts)) return false;
-		}
-	}
-	// The object's `constructor` is the function itself, whose own members a node reads under its rules: the object is
-	// held as itself only by a reader no read of them could be refused to.
-	if (runtime_constructorReadMayRefuse(slothlet, readerPath, prototype)) return false;
-	for (let link = Reflect.getPrototypeOf(prototype), depth = 0; link !== null && depth < 64; depth++) {
-		// A Proxy on the chain runs code of its own to answer: what lies beyond it cannot be told without running it.
-		if (util.types.isProxy(link)) return false;
-		for (let ofIndex = 0, ofList = runtime_classPrototypeSites(slothlet, link); ofIndex < ofList.length; ofIndex++) {
-			const site = ofList[ofIndex];
-			if (!owned(site.parts)) return false;
-		}
-		if (runtime_constructorReadMayRefuse(slothlet, readerPath, link)) return false;
-		link = Reflect.getPrototypeOf(link);
-	}
-	return true;
-}
-
-/**
  * Whether a prototype's own `constructor` is a function an api node stands for (the api root's function, or one a node
  * fronts) whose members the rules could refuse the reader a read of: held as itself, the prototype would hand the
  * function out with no node's checks around it. Found by descriptors alone, so none of the module's code runs.
@@ -11001,26 +11209,20 @@ function runtime_emitterOwnPrototype(wrapper) {
 }
 
 /**
- * An emitter's own prototype as a node hands it to a reader that may call the node (#667): the object itself to the host,
- * to a module owning the node's path, and to everyone while the permission system is off, and otherwise a member view at
- * the node's path, which reads and calls as the prototype does and holds a change made through it to the path's rules.
- * The cost is identity: a module not owning the emitter never holds the raw prototype, so `Object.getPrototypeOf(bus) ===
- * Bus.prototype` and `bus instanceof Bus` against a class it imported answer `false`. A prototype made by no module is
- * no one's to hold back.
+ * An emitter's own prototype as a node hands it to whoever may call the node (#667): its handle at the node's path, or
+ * at its class's `prototype` when a node exports the class, the same to every reader, which reads and calls as the
+ * prototype does and decides each change made through it for whoever makes it. A prototype made by no module is no
+ * one's to hold back, and is handed out as it is.
  * @param {UnifiedWrapper} wrapper - The emitter's node's wrapper.
  * @param {object} prototype - The emitter's own prototype.
- * @param {object|null} reader - Who reads it; null for the host.
  * @returns {object} What the reader is handed.
  * @private
  */
-function runtime_emitterPrototypeForReader(wrapper, prototype, reader) {
+function runtime_emitterPrototypeHandle(wrapper, prototype) {
 	const slothlet = wrapper.slothlet;
 	const site = runtime_prototypeSiteOf(wrapper, null);
 	runtime_recordPrototypePath(slothlet, prototype, site);
-	if (reader === null || reader === HOST_READER || !slothlet?.handlers?.permissionManager?.isEnabled()) return prototype;
-	if (WeakSetMethods.has(INTRINSICS, prototype) || runtime_isSharedValue(prototype)) return prototype;
-	if (runtime_mayHoldPrototype(slothlet, reader, site.parts, prototype)) return prototype;
-	return runtime_selfMemberOf(prototype, reader, slothlet, site.parts, null);
+	return runtime_prototypeHandleOf(slothlet, prototype);
 }
 
 /**
@@ -11036,7 +11238,8 @@ function runtime_emitterPrototypeForReader(wrapper, prototype, reader) {
  */
 function runtime_sealedShellPrototype(wrapper, prototype) {
 	if (!wrapper.slothlet || WeakSetMethods.has(INTRINSICS, prototype) || runtime_isSharedValue(prototype)) return prototype;
-	return runtime_selfMemberOf(prototype, SEALED_SHELL_READER, wrapper.slothlet, runtime_apiPathParts(wrapper), null);
+	runtime_recordPrototypePath(wrapper.slothlet, prototype, runtime_prototypeSiteOf(wrapper, null));
+	return runtime_prototypeHandleOf(wrapper.slothlet, prototype);
 }
 
 /**
@@ -11108,59 +11311,22 @@ function runtime_instanceShellPrototype(wrapper) {
 	if (prototype === null || WeakSetMethods.has(INTRINSICS, prototype) || runtime_isSharedValue(prototype) || !wrapper.slothlet)
 		return prototype;
 	runtime_recordPrototypePath(wrapper.slothlet, runtime_exposePrototype(checked, prototype), site.site);
-	return runtime_selfMemberOf(prototype, SEALED_SHELL_READER, wrapper.slothlet, site.site.parts, site.site.prop);
+	return runtime_prototypeHandleOf(wrapper.slothlet, prototype);
 }
 
 /**
- * The prototype a closed node's captured view fixes for its reader (#667, #725): an emitter's own prototype as an open
- * emitter's reader is handed it, and a class instance's prototype as reading it at its path hands it, the object itself
- * to a reader that may hold it so and a checked view to any other.
+ * The prototype a closed node's captured view fixes on its shadow (#667, #725): the handle of an emitter's own prototype,
+ * or of a class instance's, the same one every holder of the node is handed.
  * @param {UnifiedWrapper} wrapper - The node's wrapper.
  * @param {object} prototype - The prototype, as the module holds it.
- * @param {object|null} reader - The view's reader.
- * @returns {{shown: object, parts: string[]}} What the view fixes, and the path it is held to.
+ * @returns {object} What the view fixes.
  * @private
  */
-function runtime_closedPrototypeForReader(wrapper, prototype, reader) {
+function runtime_closedPrototypeHandle(wrapper, prototype) {
 	const found = runtime_instancePrototypeSite(wrapper);
-	if (found === undefined || found.prototype !== prototype)
-		return { shown: runtime_emitterPrototypeForReader(wrapper, prototype, reader), parts: runtime_apiPathParts(wrapper) };
-	const { parts, prop } = found.site;
-	const slothlet = wrapper.slothlet;
-	if (reader === null || reader === HOST_READER || runtime_mayHoldPrototype(slothlet, reader, parts, prototype))
-		return { shown: prototype, parts };
-	return { shown: runtime_selfMemberOf(prototype, reader, slothlet, parts, prop), parts };
-}
-
-/**
- * The prototype each closed captured view fixed on its shadow for its reader, with whether it fixed the object itself
- * (see {@link runtime_capturedView}).
- * @type {WeakMap<object, {wrapper: UnifiedWrapper, prototype: object, reader: object, raw: boolean}>}
- * @private
- */
-const CLOSED_PROTOTYPES = new WeakMap();
-
-/**
- * The captured view each self view stands over, where it stands over one ({@link runtime_selfView}).
- * @type {WeakMap<object, object>}
- * @private
- */
-const SELF_VIEW_UNDER = new WeakMap();
-
-/**
- * Whether a closed captured view fixed an emitter's prototype on its shadow as the reader's standing no longer has it
- * (#667): the object itself where the reader would now be handed a view, or the other way round, as when the permission
- * system is turned on or off after the view closed. Such a view is replaced by a new one for the reader's next read;
- * one the reader kept answers as it did.
- * @param {object|undefined} view - A captured view, or `undefined`.
- * @returns {boolean} True when the view is stale.
- * @private
- */
-function runtime_closedPrototypeStale(view) {
-	const fixed = view === undefined ? undefined : WeakMapMethods.get(CLOSED_PROTOTYPES, view);
-	if (fixed === undefined) return false;
-	const { wrapper, prototype, reader, raw, parts } = fixed;
-	return raw !== runtime_mayHoldPrototype(wrapper.slothlet, reader, parts, prototype);
+	if (found === undefined || found.prototype !== prototype) return runtime_emitterPrototypeHandle(wrapper, prototype);
+	runtime_recordPrototypePath(wrapper.slothlet, prototype, found.site);
+	return runtime_prototypeHandleOf(wrapper.slothlet, prototype);
 }
 
 /**
@@ -11331,7 +11497,10 @@ function runtime_instanceClassPrototype(wrapper, kept = null) {
 	const classWrapper = resolveWrapper(classNode);
 	const prototype = Reflect.getPrototypeOf(wrapper.____slothletInternal.impl);
 	runtime_enforceCodeMember(classWrapper, prototype, kept);
-	return runtime_prototypeForReader(classWrapper, runtime_exposePrototype(classWrapper, prototype), "prototype");
+	return runtime_atClassSite(
+		wrapper.slothlet,
+		runtime_prototypeForReader(classWrapper, runtime_exposePrototype(classWrapper, prototype), "prototype")
+	);
 }
 
 /**
@@ -13203,7 +13372,7 @@ function runtime_capturedView(child, capturedCaller, gated = true, ceiling = nul
 		WeakMapMethods.set(byCeiling, ceilingKey, byChild);
 	}
 	const existing = WeakMapMethods.get(byChild, child);
-	if (existing && !runtime_closedPrototypeStale(existing)) return existing;
+	if (existing) return existing;
 
 	// Enforcement reads `slothlet`, `apiPath`, and `filePath` off the internal wrapper. Those are
 	// deliberately invisible through the proxy, so resolve to the object behind it once, here, rather
@@ -13425,16 +13594,7 @@ function runtime_capturedView(child, capturedCaller, gated = true, ceiling = nul
 		const behindProto = runtime_behindMemberView(heldProto);
 		if (behindProto === heldProto) Reflect.setPrototypeOf(shadow, heldProto);
 		else {
-			const { shown: shownProto, parts } = runtime_closedPrototypeForReader(inner, behindProto, capturedCaller);
-			Reflect.setPrototypeOf(shadow, shownProto);
-			// Fixed for as long as the view lives: a view whose answer the reader's standing no longer gives is replaced.
-			WeakMapMethods.set(CLOSED_PROTOTYPES, view, {
-				wrapper: inner,
-				prototype: behindProto,
-				reader: capturedCaller,
-				raw: shownProto === behindProto,
-				parts
-			});
+			Reflect.setPrototypeOf(shadow, runtime_closedPrototypeHandle(inner, behindProto));
 		}
 		Reflect.preventExtensions(shadow);
 	};
@@ -20846,6 +21006,17 @@ class UnifiedWrapper extends ComponentBase {
 				if (prop === "length" && fn !== null && ownDesc.configurable && runtime_isBuiltinFunctionMember(wrapper, prop)) {
 					return { __proto__: null, ...ownDesc, value: fn.length };
 				}
+				// The function's own `prototype` is described as a read answers it: the prototype's handle (#667). The target's
+				// own is writable, so the invariants allow reporting another value.
+				if (prop === "prototype" && fn !== null && "value" in ownDesc && ownDesc.writable && hasOwn(fn, "prototype")) {
+					const prototype = fn.prototype;
+					if (prototype !== null && typeof prototype === "object" && !runtime_isCodeMemberWithheld(wrapper, { value: prototype }, kept))
+						return {
+							__proto__: null,
+							...ownDesc,
+							value: runtime_prototypeForReader(wrapper, runtime_exposePrototype(wrapper, prototype), "prototype")
+						};
+				}
 				return ownDesc;
 			}
 
@@ -20900,6 +21071,18 @@ class UnifiedWrapper extends ComponentBase {
 				// A member holding the module's code is described only to a caller that may call the node, as reading it
 				// is checked (#632).
 				if (implDescriptor !== null && redact && !asHeld && runtime_isCodeMemberWithheld(wrapper, implDescriptor, kept)) return undefined;
+				// A function's own `prototype` is described as a read answers it: the prototype's handle (#667).
+				if (
+					implDescriptor !== null &&
+					prop === "prototype" &&
+					"value" in implDescriptor &&
+					implDescriptor.value !== null &&
+					typeof implDescriptor.value === "object" &&
+					runtime_functionOf(wrapper.____slothletInternal.impl) !== null
+				) {
+					const value = runtime_prototypeForReader(wrapper, runtime_exposePrototype(wrapper, implDescriptor.value), "prototype");
+					return virtualizeDescriptor({ __proto__: null, ...implDescriptor, value });
+				}
 				if (implDescriptor !== null) return virtualizeDescriptor(runtime_describeImplMember(wrapper, implDescriptor));
 			}
 
@@ -21698,7 +21881,7 @@ class UnifiedWrapper extends ComponentBase {
 			if (!runtime_isCodeMemberWithheld(wrapper, { value: prototype }, kept)) {
 				if (!emitter) return prototype;
 				// A module allowed the emitter reads and calls through it, and a change made through it stays the owner's (#667).
-				return runtime_emitterPrototypeForReader(wrapper, prototype, runtime_selfModuleReader(wrapper.slothlet) ?? kept?.reader ?? null);
+				return runtime_emitterPrototypeHandle(wrapper, prototype);
 			}
 			while (runtime_memberHoldsCode(prototype, CODE_SEARCH.depth + 1, { remaining: CODE_SEARCH.properties }))
 				prototype = Objects.getPrototypeOf(prototype);

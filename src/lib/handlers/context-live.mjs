@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-18T07:07:19-08:00 (1795014439)
+ *	@Last modified time: 2026-11-18T21:58:44-08:00 (1795067924)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -36,6 +36,7 @@ import {
 	isForeignScript,
 	isUnverifiedCode,
 	isHandedOut,
+	isHostPrototype,
 	isRunnerFrame,
 	parseStackFrame,
 	resolvesSupplier,
@@ -3169,7 +3170,12 @@ export class LiveContextManager {
 	 * @returns {*} The value as the caller gets it.
 	 */
 	#wrapClassInstanceResult(value, instanceID, currentWrapper, callerIsHost = false) {
-		if (value === null || typeof value !== "object" || isHandedOut(value) || !runtime_isClassInstance(value)) return value;
+		if (value === null || typeof value !== "object") return value;
+		// A prototype of a module's class the host is handed is the object itself (#667): its handle included, which is
+		// otherwise handed on as it is.
+		if (currentWrapper && callerIsHost && isHostPrototype(currentWrapper, value))
+			return attributeResult(currentWrapper, value, callerIsHost);
+		if (isHandedOut(value) || !runtime_isClassInstance(value)) return value;
 		if (currentWrapper && handsOutAsModule(currentWrapper)) return attributeResult(currentWrapper, value, callerIsHost);
 		// Otherwise a module's instance comes back raw in the live runtime: its methods are told by their frames (#726).
 		if (currentWrapper) return value;

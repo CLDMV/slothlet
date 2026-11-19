@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-18T18:27:21-08:00 (1795055241)
+ *	@Last modified time: 2026-11-18T21:57:34-08:00 (1795067854)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -72,6 +72,51 @@ export const READS = {
 
 /** The creations, by name. */
 export const HOWS = Object.keys(CREATIONS);
+
+/**
+ * The routes to the prototype of the node's class, by name: the class's `prototype`, and an instance's prototype
+ * through `Object.getPrototypeOf` and through `__proto__`.
+ * @type {Record<string, function(object): object>}
+ */
+export const PROTOTYPES = {
+	classPrototype: (node) => node.Box.prototype,
+	instancePrototype: (node) => Object.getPrototypeOf(node.inst),
+	protoAccessor: (node) => node.inst.__proto__
+};
+
+/** The prototype routes, by name. */
+export const PROTOTYPE_ROUTES = Object.keys(PROTOTYPES);
+
+/**
+ * What a prototype reached by a route lists and describes of its own members: `Object.keys`, a spread, a
+ * `JSON.stringify`, `Object.getOwnPropertyNames`, and the descriptor of each of the named members, each listing kept to
+ * the named members.
+ * @param {object} node - The node.
+ * @param {string} route - The route, a key of {@link PROTOTYPES}.
+ * @param {string[]} names - The members whose descriptors are described.
+ * @returns {string} The listing, as JSON, or the error code it was refused with.
+ * @example
+ * list(node, "classPrototype", ["__hidden"]);
+ */
+export function list(node, route, names) {
+	return attempt(() => {
+		const prototype = PROTOTYPES[route](node);
+		const described = {};
+		for (const name of names) {
+			const descriptor = Object.getOwnPropertyDescriptor(prototype, name);
+			described[name] = descriptor === undefined ? "none" : { value: descriptor.value, enumerable: descriptor.enumerable };
+		}
+		// Only the named members are compared: a member another case created on the same prototype is left aside.
+		const named = (keys) => keys.filter((key) => names.includes(key));
+		return JSON.stringify({
+			keys: named(Object.keys(prototype)),
+			spread: named(Object.keys({ ...prototype })),
+			json: named(Object.keys(JSON.parse(JSON.stringify(prototype)))),
+			names: named(Object.getOwnPropertyNames(prototype)),
+			described
+		});
+	});
+}
 
 /**
  * Run a step and report its outcome.

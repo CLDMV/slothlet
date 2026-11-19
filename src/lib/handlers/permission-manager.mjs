@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-18T18:28:28-08:00 (1795055308)
+ *	@Last modified time: 2026-11-18T21:58:45-08:00 (1795067925)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -1975,8 +1975,20 @@ export class PermissionManager extends ComponentBase {
 
 		// Silent query — no call/construct site, so no callMeta (function conditions receive null).
 		const resolve = (op) =>
-			this.#resolveAccess(callerPath, targetPath, callerFilePath, targetFilePath, runtimeContext, useCache, null, false, null, false, op)
-				.allowed;
+			this.#resolveAccess(
+				callerPath,
+				targetPath,
+				callerFilePath,
+				targetFilePath,
+				runtimeContext,
+				useCache,
+				null,
+				false,
+				null,
+				false,
+				false,
+				op
+			).allowed;
 		if (operation === "access") return resolve("call") && resolve("read");
 		return resolve(operation);
 	}
@@ -2034,7 +2046,7 @@ export class PermissionManager extends ComponentBase {
 	 * @param {PermissionCallMeta|null} [callMeta=null] - Call/construct metadata (#455): `{ args, target }`
 	 *   from the invocation, forwarded to function conditions as their second argument. Null for reads,
 	 *   hooks, the internal control surface, and silent queries.
-	 * @param {{ principalGrace?: boolean, moduleCaller?: boolean, newMember?: boolean, operation?: "call"|"read", via?: ReadonlyArray<string> }|null} [options=null] - Enforcement options.
+	 * @param {{ principalGrace?: boolean, moduleCaller?: boolean, newMember?: boolean, heldMember?: boolean, operation?: "call"|"read", via?: ReadonlyArray<string> }|null} [options=null] - Enforcement options.
 	 * @param {boolean} [options.principalGrace=false] - Accept a principal whose epoch is current even if its
 	 *   `ttl` has elapsed (#459). Set only by a promoted call re-enforcing right after its resolve.
 	 * @param {boolean} [options.moduleCaller=false] - The caller is a module even though no source file is
@@ -2048,6 +2060,9 @@ export class PermissionManager extends ComponentBase {
 	 *   private (underscore-prefixed) member belongs to the node that holds it, so module privacy refuses creating one on
 	 *   a node of another module's, as it refuses reading one there; `targetFilePath` is then the holding node's source
 	 *   file.
+	 * @param {boolean} [options.heldMember=false] - The target is a member a value beneath a node holds (a class's
+	 *   prototype, an instance's): a private one is the node's, so module privacy decides it by the module owning the
+	 *   nearest path above it that has an owner; `targetFilePath` is then that node's source file.
 	 * @param {"call"|"read"} [options.operation="call"] - The operation gated: a call (or construct), or a read. Each
 	 *   is decided by the rules whose level covers it; a write is held to the read.
 	 * @param {function(string): boolean} [options.dataMember] - Given for a read of data: whether a path above the
@@ -2088,6 +2103,7 @@ export class PermissionManager extends ComponentBase {
 				options?.moduleCaller === true,
 				options?.dataMember ?? null,
 				options?.newMember === true,
+				options?.heldMember === true,
 				options?.operation === "read" ? "read" : "call"
 			);
 		} finally {
@@ -3265,6 +3281,29 @@ export class PermissionManager extends ComponentBase {
 	}
 
 	/**
+	 * Whether module privacy lets a module reach the private members a value beneath a node holds (a class's prototype),
+	 * as reading or creating one there would be decided: always while the permission system is off, and otherwise only
+	 * for the module the members are private to. Silent: nothing is audited.
+	 *
+	 * @param {string|null} callerPath - The module's api path; null for the host, which this never refuses.
+	 * @param {string} holderPath - The api path of the value holding the members.
+	 * @param {string|null} callerFilePath - The module's source file.
+	 * @param {string|null} holderFilePath - The source file of the node the value is beneath.
+	 * @returns {boolean} True when privacy would refuse none of them.
+	 * @public
+	 * @example
+	 * pm.mayReachPrivate("creator.read", "owned.Box.prototype", "/m/creator.mjs", "/m/owned.mjs"); // false
+	 */
+	mayReachPrivate(callerPath, holderPath, callerFilePath, holderFilePath) {
+		if (!this.#enabled || callerPath === null) return true;
+		if (holderPath === "slothlet" || StringMethods.startsWith(holderPath, "slothlet.")) return true;
+		if (callerFilePath && holderFilePath && callerFilePath === holderFilePath) return true;
+		if (this.#privateScope === "folder")
+			return Boolean(callerFilePath && holderFilePath && runtime_sameModuleDir(callerFilePath, holderFilePath));
+		return this.#privateHolderOwner(callerPath, `${holderPath}._`) !== null;
+	}
+
+	/**
 	 * Enable or disable read-level permission gating at runtime.
 	 * Unlike {@link enable}/{@link disable}, this does not clear the resolved cache —
 	 * the flag only controls whether property reads consult the rule set; it never
@@ -3647,6 +3686,7 @@ export class PermissionManager extends ComponentBase {
 	 *   an object member of a module's data (see {@link enforceAccess}).
 	 * @param {boolean} [newMember=false] - The target is a member the caller's module is about to create (see
 	 *   {@link enforceAccess}).
+	 * @param {boolean} [heldMember=false] - The target is a member a value beneath a node holds (see {@link enforceAccess}).
 	 * @param {"call"|"read"} [operation="call"] - The operation decided: only the rules whose level covers it take part.
 	 * @returns {{ allowed: boolean, event: string|null, payload: object|null, hasConditionalRules?: boolean }} Decision record.
 	 * @private
@@ -3662,6 +3702,7 @@ export class PermissionManager extends ComponentBase {
 		moduleCaller = false,
 		dataMember = null,
 		newMember = false,
+		heldMember = false,
 		operation = "call"
 	) {
 		// Global toggle: when off, everything is allowed (no event to emit).
@@ -3700,11 +3741,12 @@ export class PermissionManager extends ComponentBase {
 			// A private member of a node belongs to the node's owner, so creating one is answered as reading it there would
 			// be: only the module that owns the node may (`targetFilePath` is the holding node's source file). A name with
 			// three or more leading underscores is the framework's, which module code creates on another module's node no
-			// more than a `_`/`__` one.
+			// more than a `_`/`__` one. A member a value beneath a node holds (a class's prototype) is the node's the same way.
 			const sameModule =
 				this.#privateScope === "folder"
 					? Boolean(callerFilePath && targetFilePath && runtime_sameModuleDir(callerFilePath, targetFilePath))
-					: (newMember ? this.#privateHolderOwner(callerPath, targetPath) : this.#privateOwner(callerPath, targetPath)) !== null;
+					: (newMember || heldMember ? this.#privateHolderOwner(callerPath, targetPath) : this.#privateOwner(callerPath, targetPath)) !==
+						null;
 			if (sameModule) {
 				return {
 					allowed: true,

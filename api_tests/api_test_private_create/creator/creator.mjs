@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-18T18:27:21-08:00 (1795055241)
+ *	@Last modified time: 2026-11-18T21:57:34-08:00 (1795067854)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -86,4 +86,17 @@ export function create(where, how, key) {
  */
 export function read(where, how, key) {
 	return creations.read(target(where), how, key);
+}
+
+/**
+ * List what the prototype of a node's class lists and describes of its own members.
+ * @param {string} where - `"own"` or `"other"`.
+ * @param {string} route - The route to the prototype.
+ * @param {string[]} names - The members whose descriptors are described.
+ * @returns {string} The listing, or the error code.
+ * @example
+ * list("other", "classPrototype", ["__hidden"]);
+ */
+export function list(where, route, names) {
+	return creations.list(target(where), route, names);
 }

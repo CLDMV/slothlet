@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-08T16:13:44-08:00 (1794183224)
+ *	@Last modified time: 2026-11-18T22:00:52-08:00 (1795068052)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -24,9 +24,9 @@
  * frozen object, returned, handed in nested in plain data or in a frozen object, and carried by the error an
  * `owner.throwWith:error` hook of the reader's is handed. The reader also
  * reads it from the class's `prototype` descriptor. A reader that may not write `owner.Foo.prototype` is refused its
- * write on every route, and one that may (permissions off, or a write rule granting it) writes it. A write grant hands
- * the object itself only when no rule refuses the reader anything beneath the path, at every name the class is exported
- * as; each write through the view is decided at the path read, whichever name was read first. A listener the owner
+ * write on every route, and one that may (permissions off, or a write rule granting it) writes it.
+ * A prototype read through the api is one handle at each name, the same to every module, and each write through it is
+ * decided at the name it was read through, whichever name was read first. A listener the owner
  * registered itself hears what the owner emits as it was emitted. The host is handed the
  * object itself as a module call's return value. A function the reader hands the owner is plain JS the owner calls
  * directly, so nothing here covers what the owner passes it. Checked in eager and lazy mode, async and live runtime,
@@ -114,11 +114,11 @@ async function writeByEveryRoute(api, source, tag) {
 	const outcome = {};
 	const landed = {};
 	for (const [route, write] of Object.entries(ROUTES)) {
-		const key = `__crossing_${tag}_${source}_${route}`;
+		const key = `crossing_${tag}_${source}_${route}`;
 		outcome[route] = await write(api, source, key);
 		landed[route] = await api.owner.takeFromPrototype(key);
 	}
-	const described = `__crossing_${tag}_described`;
+	const described = `crossing_${tag}_described`;
 	outcome.described = await api.reader.writeDescribed(described);
 	landed.described = await api.owner.takeFromPrototype(described);
 	return { outcome, landed };
@@ -168,8 +168,8 @@ describe.each(
 				const settled = await api.owner.returnPrototypeLater(source);
 				expect({ returned: types.isProxy(returned), settled: types.isProxy(settled) }).toEqual({ returned: false, settled: false });
 				expect(settled).toBe(returned);
-				returned[`__host_${tag}`] = 1;
-				expect(await api.owner.takeFromPrototype(`__host_${tag}`)).toBe(true);
+				returned[`host_${tag}`] = 1;
+				expect(await api.owner.takeFromPrototype(`host_${tag}`)).toBe(true);
 			}
 		});
 	});
@@ -199,13 +199,13 @@ describe.each(MODES.flatMap((mode) => RUNTIMES.map((runtime) => ({ mode, runtime
 			});
 			for (const tag of ["first", "reloaded"]) {
 				if (tag === "reloaded") await api.slothlet.reload();
-				expect(await api.reader.writeThrough("Foo", `__grant_${tag}`)).toBe("written");
-				expect(await api.owner.takeFromPrototype(`__grant_${tag}`)).toBe(true);
+				expect(await api.reader.writeThrough("Foo", `grant_${tag}`)).toBe("written");
+				expect(await api.owner.takeFromPrototype(`grant_${tag}`)).toBe(true);
 				expect(await api.reader.writeThrough("Foo", "hi")).toBe(DENIED);
 				expect(await api.reader.writeReturned("self", "hi")).toBe(DENIED);
 				expect(await api.owner.takeFromPrototype("hi")).toBe(false);
-				expect(await api.owner.writeOwn("Foo", `__own_${tag}`)).toBe("written");
-				expect(await api.owner.takeFromPrototype(`__own_${tag}`)).toBe(true);
+				expect(await api.owner.writeOwn("Foo", `own_${tag}`)).toBe("written");
+				expect(await api.owner.takeFromPrototype(`own_${tag}`)).toBe(true);
 				expect(await api.owner.writeOwn("Foo", "hi")).toBe(DENIED);
 				expect(await api.owner.takeFromPrototype("hi")).toBe(false);
 			}
@@ -219,16 +219,16 @@ describe.each(MODES.flatMap((mode) => RUNTIMES.map((runtime) => ({ mode, runtime
 			});
 			for (const tag of ["first", "reloaded"]) {
 				if (tag === "reloaded") await api.slothlet.reload();
-				expect(await api.reader.writeThrough("Foo", `__exact_${tag}`)).toBe(REFUSED);
-				expect(await api.reader.writeReturned("self", `__exact_${tag}`)).toBe(REFUSED);
-				expect(await api.owner.takeFromPrototype(`__exact_${tag}`)).toBe(false);
+				expect(await api.reader.writeThrough("Foo", `exact_${tag}`)).toBe(REFUSED);
+				expect(await api.reader.writeReturned("self", `exact_${tag}`)).toBe(REFUSED);
+				expect(await api.owner.takeFromPrototype(`exact_${tag}`)).toBe(false);
 			}
 		});
 
 		it("decides again once the rules change", async () => {
 			api = await mount({ mode, runtime, permissions: { rules: [ALLOW_READER_WRITES] } });
-			expect(await api.reader.writeThrough("Foo", "__before")).toBe("written");
-			expect(await api.owner.takeFromPrototype("__before")).toBe(true);
+			expect(await api.reader.writeThrough("Foo", "before")).toBe("written");
+			expect(await api.owner.takeFromPrototype("before")).toBe(true);
 			api.slothlet.permissions.rules.add({ caller: "reader.**", target: "owner.Foo.prototype.hi:write", effect: "deny" });
 			expect(await api.reader.writeThrough("Foo", "hi")).toBe(DENIED);
 			expect(await api.owner.takeFromPrototype("hi")).toBe(false);
@@ -245,10 +245,10 @@ describe.each(MODES.flatMap((mode) => RUNTIMES.map((runtime) => ({ mode, runtime
 					permissions: { rules: [ALLOW_READER_WRITES, { caller: "reader.**", target: "owner.Alias.**:write", effect: "deny" }] }
 				});
 				const outcome = {};
-				for (const name of order) outcome[name] = await api.reader.writeThrough(name, `__named_${name}`);
+				for (const name of order) outcome[name] = await api.reader.writeThrough(name, `named_${name}`);
 				expect(outcome).toEqual({ Foo: "written", Alias: DENIED });
-				expect(await api.owner.takeFromPrototype("__named_Foo")).toBe(true);
-				expect(await api.owner.takeFromPrototype("__named_Alias")).toBe(false);
+				expect(await api.owner.takeFromPrototype("named_Foo")).toBe(true);
+				expect(await api.owner.takeFromPrototype("named_Alias")).toBe(false);
 			});
 		});
 
@@ -256,7 +256,7 @@ describe.each(MODES.flatMap((mode) => RUNTIMES.map((runtime) => ({ mode, runtime
 			{ name: "Foo read first", order: ["Foo", "Alias"] },
 			{ name: "Alias read first", order: ["Alias", "Foo"] }
 		])("one class under two names, $name", ({ order }) => {
-			it("hands the object itself only to a reader that may hold it at every name", async () => {
+			it("hands the owner and the reader the same prototype at each name, and decides each write at the name read", async () => {
 				api = await mount({
 					mode,
 					runtime,
@@ -271,14 +271,14 @@ describe.each(MODES.flatMap((mode) => RUNTIMES.map((runtime) => ({ mode, runtime
 				const reader = {};
 				const owner = {};
 				for (const name of order) {
-					reader[name] = await api.reader.holdsItself(name);
-					owner[name] = await api.owner.holdsItself(name);
+					reader[name] = await api.reader.holdsSelfPrototype(name);
+					owner[name] = await api.owner.holdsSelfPrototype(name);
 				}
-				expect({ reader, owner }).toEqual({ reader: { Foo: false, Alias: false }, owner: { Foo: false, Alias: false } });
-				expect(await api.owner.writeOwn("Foo", "__owner_Foo")).toBe("written");
-				expect(await api.owner.writeOwn("Alias", "__owner_Alias")).toBe(DENIED);
-				expect(await api.owner.takeFromPrototype("__owner_Foo")).toBe(true);
-				expect(await api.owner.takeFromPrototype("__owner_Alias")).toBe(false);
+				expect({ reader, owner }).toEqual({ reader: { Foo: true, Alias: true }, owner: { Foo: true, Alias: true } });
+				expect(await api.owner.writeOwn("Foo", "owner_Foo")).toBe("written");
+				expect(await api.owner.writeOwn("Alias", "owner_Alias")).toBe(DENIED);
+				expect(await api.owner.takeFromPrototype("owner_Foo")).toBe(true);
+				expect(await api.owner.takeFromPrototype("owner_Alias")).toBe(false);
 			});
 
 			it("hands a listener the owner registered itself what the owner emits, as it was emitted", async () => {
@@ -304,17 +304,17 @@ describe.each(MODES.flatMap((mode) => RUNTIMES.map((runtime) => ({ mode, runtime
 					permissions: { rules: [ALLOW_READER_WRITES, { caller: "reader.**", target: "owner.Alias.**:write", effect: "deny" }] }
 				});
 				for (const name of order) await api.reader.holdsItself(name);
-				expect(await api.reader.writeEmitted("local", "__emitted_aliased")).toBe(DENIED);
-				expect(await api.owner.takeFromPrototype("__emitted_aliased")).toBe(false);
+				expect(await api.reader.writeEmitted("local", "emitted_aliased")).toBe(DENIED);
+				expect(await api.owner.takeFromPrototype("emitted_aliased")).toBe(false);
 			});
 
-			it("hands the object itself to a reader that may hold it at every name", async () => {
+			it("hands the owner and a reader whose writes are allowed the same prototype at each name", async () => {
 				api = await mount({ mode, runtime, permissions: { rules: [ALLOW_READER_WRITES] } });
 				const reader = {};
 				const owner = {};
 				for (const name of order) {
-					reader[name] = await api.reader.holdsItself(name);
-					owner[name] = await api.owner.holdsItself(name);
+					reader[name] = await api.reader.holdsSelfPrototype(name);
+					owner[name] = await api.owner.holdsSelfPrototype(name);
 				}
 				expect({ reader, owner }).toEqual({ reader: { Foo: true, Alias: true }, owner: { Foo: true, Alias: true } });
 			});
@@ -326,14 +326,14 @@ describe.each(MODES.flatMap((mode) => RUNTIMES.map((runtime) => ({ mode, runtime
 				runtime,
 				permissions: { rules: [ALLOW_READER_WRITES, { caller: "reader.**", target: "owner.Alias.**:write", effect: "deny" }] }
 			});
-			expect(await api.reader.writeReturned("local", "__aliased")).toBe(DENIED);
-			expect(await api.owner.takeFromPrototype("__aliased")).toBe(false);
+			expect(await api.reader.writeReturned("local", "aliased")).toBe(DENIED);
+			expect(await api.owner.takeFromPrototype("aliased")).toBe(false);
 		});
 
 		it("hands the owner's own binding of the prototype, before anything read it, as reading it would", async () => {
 			api = await mount({ mode, runtime, permissions: {} });
-			expect(await api.reader.writeReturned("local", "__unread")).toBe(REFUSED);
-			expect(await api.owner.takeFromPrototype("__unread")).toBe(false);
+			expect(await api.reader.writeReturned("local", "unread")).toBe(REFUSED);
+			expect(await api.owner.takeFromPrototype("unread")).toBe(false);
 		});
 	}
 );

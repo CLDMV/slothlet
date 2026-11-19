@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-18T18:27:21-08:00 (1795055241)
+ *	@Last modified time: 2026-11-18T21:57:34-08:00 (1795067854)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -97,4 +97,16 @@ export function create(how, key) {
  */
 export function read(how, key) {
 	return creations.read(self.owned, how, key);
+}
+
+/**
+ * List what the prototype of the module's class lists and describes of its own members.
+ * @param {string} route - The route to the prototype.
+ * @param {string[]} names - The members whose descriptors are described.
+ * @returns {string} The listing, or the error code.
+ * @example
+ * list("classPrototype", ["__hidden"]);
+ */
+export function list(route, names) {
+	return creations.list(self.owned, route, names);
 }

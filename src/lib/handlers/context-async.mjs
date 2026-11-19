@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-18T08:11:58-08:00 (1795018318)
+ *	@Last modified time: 2026-11-18T21:58:44-08:00 (1795067924)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -1646,14 +1646,15 @@ export class AsyncContextManager {
 	 * @returns {*} A context-preserving proxy for a class instance, otherwise `value` unchanged.
 	 */
 	#wrapClassInstanceResult(value, instanceID, currentWrapper, callerIsHost = false) {
+		// A prototype of a module's class the host is handed is the object itself (#667), as the live runtime hands it: its
+		// handle included, which is otherwise handed on as it is.
+		if (currentWrapper && callerIsHost && value !== null && typeof value === "object" && isHostPrototype(currentWrapper, value))
+			return attributeResult(currentWrapper, value, callerIsHost);
 		if (isHandedOut(value)) return value;
 		if (runtime_isClassInstance(value)) {
 			// A class instance a module made runs as that module, as everything else it hands out does; one handed to
 			// the module comes back as itself (#597).
 			if (currentWrapper && handsOutAsModule(currentWrapper)) return attributeResult(currentWrapper, value, callerIsHost);
-			// A prototype of a module's class the host is handed is the object itself (#667), as the live runtime hands it.
-			if (currentWrapper && callerIsHost && isHostPrototype(currentWrapper, value))
-				return attributeResult(currentWrapper, value, callerIsHost);
 			// Otherwise 3.23.0's context wrapper (#328): each method runs as its creator, under the caller running it as its
 			// ceiling, so it grants nothing (#726).
 			const instanceCache = new WeakMap();
