@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-19T05:14:43-08:00 (1795094083)
+ *	@Last modified time: 2026-11-19T08:57:41-08:00 (1795107461)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -13147,9 +13147,25 @@ function runtime_registerLeafFunction(wrapper, impl) {
 		WeakMapMethods.set(trustedRootOwn.implWrappers, impl, wrapper);
 		return;
 	}
-	if (impl === null || typeof impl !== "object" || !isNode || util.types.isProxy(impl)) return;
-	const fallback = Objects.getOwnPropertyDescriptor(impl, "default")?.value;
+	if (!isNode) return;
+	const fallback = runtime_implDefault(impl);
 	if (typeof fallback === "function") WeakMapMethods.set(trustedRootOwn.implWrappers, fallback, wrapper);
+}
+
+/**
+ * An object implementation's own `default`, read from its descriptor so no getter or Proxy trap (module code) runs.
+ * @param {*} impl - A wrapper's implementation.
+ * @returns {*} Its `default` data value, or undefined for a function, a Proxy, an accessor or no `default`.
+ * @private
+ */
+function runtime_implDefault(impl) {
+	if (impl === null || typeof impl !== "object" || util.types.isProxy(impl)) return undefined;
+	try {
+		return Objects.getOwnPropertyDescriptor(impl, "default")?.value;
+	} catch {
+		// A module namespace whose `default` binding is not initialised yet holds none.
+		return undefined;
+	}
 }
 
 /**
@@ -13177,7 +13193,11 @@ function runtime_cycleNode(wrapper, member, walkUp = true) {
 	};
 	if (ownFunction(wrapper)) return wrapper;
 	const path = String(wrapper.____slothletInternal.apiPath ?? "");
-	const owner = WeakMapMethods.get(trustedRootOwn.implWrappers, value);
+	let owner = WeakMapMethods.get(trustedRootOwn.implWrappers, value);
+	// A node whose implementation is an object recorded the object's `default` as its leaf function (see
+	// runtime_registerLeafFunction), the function a call of the node runs. In plain JS that function is a member of
+	// the object, `obj.default !== obj`: the node stands for the object, so the function is no reference back to it.
+	if (owner !== undefined && runtime_implDefault(owner.____slothletInternal.impl) === value) owner = undefined;
 	if (owner !== undefined && owner.slothlet === wrapper.slothlet && !owner.____slothletInternal.invalid) {
 		const at = String(owner.____slothletInternal.apiPath ?? "");
 		if (at === path) return wrapper;
