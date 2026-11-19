@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-18T20:57:16-08:00 (1795064236)
+ *	@Last modified time: 2026-11-19T08:57:39-08:00 (1795107459)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -179,6 +179,19 @@ const PERMISSION_RULE_LAYERS = Symbol("permissionRuleLayers");
  * @private
  */
 const MOUNTED_BY = Symbol("mountedBy");
+
+/**
+ * One change a full-isolation run's `self` kept before the run had a tree of its own (see `makeRunSelf` in
+ * `builders/api_builder`), replayed by {@link ApiManager#carryRunWrites}.
+ * @typedef {object} RunWrite
+ * @property {string[]} parts - The path of the object changed, from the api root.
+ * @property {string|symbol} prop - The member changed.
+ * @property {string} op - The change: `"set"`, `"define"` or `"delete"`.
+ * @property {*} [value] - The value set, for `"set"`.
+ * @property {object} [descriptor] - The descriptor defined, for `"define"`.
+ * @property {string|null} [created] - The module that created the member, when the run's module created it.
+ * @private
+ */
 
 /**
  * Manages runtime API component lifecycle (add/remove/reload).
@@ -6338,8 +6351,7 @@ export class ApiManager extends ComponentBase {
 	 * the run made it, so it is made here as the framework's own write, a node written being carried as what was written
 	 * for the copy to make its own node of. A member the run's module created is recorded as that module's.
 	 *
-	 * @param {Array<{parts: string[], prop: string|symbol, op: "set"|"define"|"delete", value?: *, descriptor?: object,
-	 *   created?: string|null}>} log - The changes.
+	 * @param {RunWrite[]} log - The changes.
 	 * @returns {void}
 	 * @internal
 	 */
