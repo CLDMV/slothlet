@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T19:49:36-08:00 (1794973776)
+ *	@Last modified time: 2026-11-18T18:28:28-08:00 (1795055308)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -220,6 +220,19 @@ function runtime_isPrivateName(targetPath) {
 	const cut = StringMethods.lastIndexOf(targetPath, ".");
 	if (cut < 0) return false;
 	return StringMethods.charCodeAt(targetPath, cut + 1) === 95; // "_"
+}
+
+/**
+ * Whether a private api path's terminal member name has three or more leading underscores: the framework's naming
+ * (`___` callables, `____` framework-private), not a module's `_`/`__` one.
+ *
+ * @param {string} targetPath - Dotted api path whose terminal segment {@link runtime_isPrivateName} found private.
+ * @returns {boolean} True when the terminal segment starts with `___`.
+ * @internal
+ */
+function runtime_isFrameworkPrivateName(targetPath) {
+	const start = StringMethods.lastIndexOf(targetPath, ".") + 1;
+	return StringMethods.charCodeAt(targetPath, start + 1) === 95 && StringMethods.charCodeAt(targetPath, start + 2) === 95;
 }
 
 /**
@@ -1987,8 +2000,9 @@ export class PermissionManager extends ComponentBase {
 	 *   (`via: ["slothlet", "permissions", "global", "check", "call"]`), so an
 	 *   audit consumer can tell a query from the gate of a real call.
 	 * @param {boolean} [options.newMember=false] - The target is a member a module is about to create, which will be the
-	 *   caller's own once written: module privacy answers as for a member the caller's module owns, and the default policy
-	 *   alone does not refuse it (a matching rule still decides).
+	 *   caller's own once written: the default policy alone does not refuse it (a matching rule still decides). A
+	 *   module-private (`_`/`__`) member belongs to the node that holds it, so module privacy refuses creating one on a
+	 *   node of another module's, as it refuses reading one there; `targetFilePath` is then the holding node's source file.
 	 * @param {function(string): boolean} [options.dataMember] - Given for a read of data: whether a path above the
 	 *   target is an object member of a module's data. A deny rule naming such a member's path exactly then covers the
 	 *   target too, as a rule on `path.**` would, so what the member holds is denied with it unless a more specific rule
@@ -3633,12 +3647,16 @@ export class PermissionManager extends ComponentBase {
 		// synthetic `__`-prefixed children (`slothlet.permissions.__probe__`). Module privacy never
 		// applies there.
 		if (runtime_isPrivateName(targetPath) && targetPath !== "slothlet" && !StringMethods.startsWith(targetPath, "slothlet.")) {
-			// A member the caller's module is about to create is that module's own once written.
-			const sameModule = newMember
-				? this.#callerOwner(callerPath) !== null
-				: this.#privateScope === "folder"
-					? Boolean(callerFilePath && targetFilePath && runtime_sameModuleDir(callerFilePath, targetFilePath))
-					: this.#privateOwner(callerPath, targetPath) !== null;
+			// A module-private member of a node belongs to the node's owner, so creating one is answered as reading it there
+			// would be: only the module that owns the node may (`targetFilePath` is the holding node's source file). A name
+			// with three or more leading underscores is the framework's naming, not a module-private one: its creation is
+			// the creator's own once written, as before.
+			const sameModule =
+				newMember && runtime_isFrameworkPrivateName(targetPath)
+					? this.#callerOwner(callerPath) !== null
+					: this.#privateScope === "folder"
+						? Boolean(callerFilePath && targetFilePath && runtime_sameModuleDir(callerFilePath, targetFilePath))
+						: (newMember ? this.#privateHolderOwner(callerPath, targetPath) : this.#privateOwner(callerPath, targetPath)) !== null;
 			if (sameModule) {
 				return {
 					allowed: true,
@@ -3729,6 +3747,28 @@ export class PermissionManager extends ComponentBase {
 		const targetOwner = ownership.getCurrentOwner(targetPath)?.moduleID ?? null;
 		if (callerOwner === null || targetOwner === null) return null;
 		return this.#sameOwner(callerOwner, targetOwner) ? callerOwner : null;
+	}
+
+	/**
+	 * The module a private member about to be created and its creator both belong to, or null: the member is the holding
+	 * node's, so its owner is the registry's current owner of the nearest path above it that has one.
+	 *
+	 * @param {string|null} callerPath - The creating leaf's api path; null for the host.
+	 * @param {string} targetPath - The api path of the private member to be created.
+	 * @returns {string|null} The shared owner's moduleID, or null when either has no owner or they differ.
+	 * @private
+	 */
+	#privateHolderOwner(callerPath, targetPath) {
+		const ownership = this.slothlet.handlers?.ownership;
+		const callerOwner = this.#callerOwner(callerPath);
+		if (callerOwner === null) return null;
+		let holder = String(targetPath);
+		for (let cut = StringMethods.lastIndexOf(holder, "."); cut > 0; cut = StringMethods.lastIndexOf(holder, ".")) {
+			holder = StringMethods.slice(holder, 0, cut);
+			const holderOwner = ownership.getCurrentOwner(holder)?.moduleID ?? null;
+			if (holderOwner !== null) return this.#sameOwner(callerOwner, holderOwner) ? callerOwner : null;
+		}
+		return null;
 	}
 
 	/**
