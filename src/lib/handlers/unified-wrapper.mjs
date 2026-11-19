@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-18T07:40:04-08:00 (1795016404)
+ *	@Last modified time: 2026-11-18T19:39:43-08:00 (1795059583)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -5421,6 +5421,38 @@ function runtime_prototypeGiven(wrapper) {
 	if (!runtime_ownsPrototype(wrapper)) return false;
 	runtime_recordedPrototype(wrapper);
 	return wrapper.____slothletInternal.prototypeGiven;
+}
+
+/**
+ * Whether a node belongs to a tree a run built of its own (see `Slothlet#ownTree`), which is built from the very module
+ * values the instance's tree uses: a change the node would make to one of those values is the node's own instead.
+ * @param {UnifiedWrapper} wrapper - The node's wrapper.
+ * @returns {boolean} True for a node of a run's tree.
+ * @private
+ */
+function runtime_inRunTree(wrapper) {
+	return (wrapper.____slothletInternal.epoch ?? 0) < 0;
+}
+
+/**
+ * Whether a prototype set on a node would be set on a value the module holds (its own object, its array, a class
+ * instance or emitter it exports) rather than on the node's own record (see the node's setPrototypeOf trap).
+ * @param {UnifiedWrapper} wrapper - The node's wrapper.
+ * @returns {boolean} True when the module's value takes it.
+ * @private
+ */
+function runtime_prototypeOnSharedValue(wrapper) {
+	if (MapMethods.has(FRAMEWORK_WRITES, wrapper)) return false;
+	const internal = wrapper.____slothletInternal;
+	const impl = internal.impl;
+	if (runtime_moduleObjectOf(wrapper) !== null || Arrays.isArray(impl)) return true;
+	return (
+		impl !== null &&
+		typeof impl === "object" &&
+		!util.types.isProxy(impl) &&
+		hasOwn(internal, "sourceValue") &&
+		internal.sourceValue === impl
+	);
 }
 
 /**
@@ -19144,6 +19176,15 @@ class UnifiedWrapper extends ComponentBase {
 		 * Filters internal properties (starting with _ or __) from external access.
 		 */
 		const getTrap = (target, prop, ____receiver, access = null) => {
+			// A node of a run's own tree that took a prototype of its own inherits through it what it does not hold itself.
+			const runPrototype = wrapper.____slothletInternal.runPrototype;
+			if (
+				runPrototype !== undefined &&
+				Reflect.isExtensible(target) &&
+				Reflect.getOwnPropertyDescriptor(wrapper.____slothletInternal.proxy, prop) === undefined
+			) {
+				return runPrototype.prototype === null ? undefined : Reflect.get(runPrototype.prototype, prop, ____receiver);
+			}
 			// A node a module kept, reading through this one, says who it reads for: taken first, before any code this
 			// read runs (a getter, a Proxy's trap) could take it, and handed to this read's own gate (#661) and to a getter
 			// of the node's this read runs (see runtime_runAccessor).
@@ -21551,6 +21592,8 @@ class UnifiedWrapper extends ComponentBase {
 		 */
 		const heldPrototype = () => {
 			const internal = wrapper.____slothletInternal;
+			// A prototype a node of a run's own tree took in place of the module's value (see the setPrototypeOf trap).
+			if (internal.runPrototype !== undefined) return internal.runPrototype.prototype;
 			const impl = internal.impl;
 			if (Arrays.isArray(impl)) return Reflect.getPrototypeOf(impl);
 			// A node of a built-in data object fronts it as data, so `instanceof Map` holds of it as of the object.
@@ -21574,7 +21617,8 @@ class UnifiedWrapper extends ComponentBase {
 		const reportedPrototype = (target, takeKept) => {
 			const impl = wrapper.____slothletInternal.impl;
 			// An array member reports the prototype its array has, which may be one set on it; a sealed shell reports its own.
-			if (Arrays.isArray(impl)) return Reflect.isExtensible(target) ? Reflect.getPrototypeOf(impl) : Reflect.getPrototypeOf(target);
+			if (Arrays.isArray(impl) && wrapper.____slothletInternal.runPrototype === undefined)
+				return Reflect.isExtensible(target) ? Reflect.getPrototypeOf(impl) : Reflect.getPrototypeOf(target);
 			if (!Reflect.isExtensible(target)) {
 				// A sealed node reports its shell's prototype to every reader, as the invariants require: the module's own
 				// when the node is one of its emitters, as the view its shell holds, so reaching it is checked as a call of the
@@ -21642,7 +21686,8 @@ class UnifiedWrapper extends ComponentBase {
 				const array = wrapper.____slothletInternal.impl;
 				if (Arrays.isArray(target) && Arrays.isArray(array)) {
 					// An array that refuses to be sealed (a proxy whose own trap says no) refuses it here, before the shell changes.
-					if (!Reflect.preventExtensions(layerUnderlying(array))) return false;
+					// A node of a run's own tree leaves the module's array, which the instance shares, as it is.
+					if (!runtime_inRunTree(wrapper) && !Reflect.preventExtensions(layerUnderlying(array))) return false;
 					// A shell whose `length` is already read-only (an export with a fixed length) holds the array's.
 					if (Reflect.getOwnPropertyDescriptor(target, "length").writable) target.length = array.length;
 				}
@@ -21903,9 +21948,12 @@ class UnifiedWrapper extends ComponentBase {
 				const runSink = runtime_takeRunWrite(wrapper, null);
 				if (runSink !== null) return runSink({ op: "close" });
 				// A node fronting a module's own object closes that object too, as closing the object does (#757): the
-				// object refusing it refuses it here, before the node changes. Composing never changes a module's value.
+				// object refusing it refuses it here, before the node changes. Composing never changes a module's value, and
+				// neither does a node of a run's own tree, which shares the module's values with the instance: it closes itself.
 				const moduleObject =
-					wrapper.slothlet.____buildDepth > 0 || MapMethods.has(FRAMEWORK_WRITES, wrapper) ? null : runtime_moduleObjectOf(wrapper);
+					wrapper.slothlet.____buildDepth > 0 || MapMethods.has(FRAMEWORK_WRITES, wrapper) || runtime_inRunTree(wrapper)
+						? null
+						: runtime_moduleObjectOf(wrapper);
 				if (moduleObject !== null && !Reflect.preventExtensions(moduleObject)) return false;
 				// Sealing reads the node's own descriptors, which must not start a sync of the half-sealed shell.
 				const internalState = wrapper.____slothletInternal;
@@ -21935,6 +21983,15 @@ class UnifiedWrapper extends ComponentBase {
 					return runSink({ op: "prototype", prototype: proto });
 				}
 				const impl = wrapper.____slothletInternal.impl;
+				// A node of a run's own tree shares the module's values with the instance: a prototype set on it that would be
+				// set on one of them is the node's own instead, which it reports and inherits through.
+				if (runtime_inRunTree(wrapper) && runtime_prototypeOnSharedValue(wrapper)) {
+					if (!Reflect.isExtensible(target)) return Reflect.getPrototypeOf(target) === proto;
+					const internal = wrapper.____slothletInternal;
+					if (internal.mode === "lazy" && !internal.state.materialized) return false;
+					internal.runPrototype = { prototype: runtime_unwrapSelfView(proto) };
+					return true;
+				}
 				// A node fronting a module's own object sets that object's prototype, which the node reports (#757); a
 				// closed node keeps the one its shell holds, as the closed object does.
 				const moduleObject = MapMethods.has(FRAMEWORK_WRITES, wrapper) ? null : runtime_moduleObjectOf(wrapper);

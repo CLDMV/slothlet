@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-18T19:28:00-08:00 (1795058880)
+ *	@Last modified time: 2026-11-18T19:38:56-08:00 (1795059536)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -100,6 +100,42 @@ export function shapeChangesOn(conf) {
 	});
 	out.extra = conf.extra;
 	return out;
+}
+
+/**
+ * Make one change to an object's shape — set its prototype, or close it — and read the object back.
+ * @param {object} conf - The object.
+ * @param {"setPrototypeOf"|"preventExtensions"|"seal"|"freeze"} how - The change.
+ * @returns {Record<string, *>} What was seen.
+ * @example
+ * shapeOpOn({}, "freeze");
+ */
+export function shapeOpOn(conf, how) {
+	const given = { tag: "given" };
+	const out = {};
+	out.change = attempt(() => (how === "setPrototypeOf" ? Object.setPrototypeOf(conf, given) : Object[how](conf)));
+	out.protoIsGiven = Object.getPrototypeOf(conf) === given;
+	out.inherited = conf.tag;
+	out.level = conf.level;
+	out.extensible = Object.isExtensible(conf);
+	out.sealed = Object.isSealed(conf);
+	out.frozen = Object.isFrozen(conf);
+	out.add = attempt(() => {
+		conf.extra = 1;
+	});
+	out.extra = conf.extra;
+	return out;
+}
+
+/**
+ * {@link shapeOpOn} on the victim's `conf` node, read through `self`.
+ * @param {"setPrototypeOf"|"preventExtensions"|"seal"|"freeze"} how - The change.
+ * @returns {Record<string, *>} What was seen.
+ * @example
+ * shapeOp("freeze");
+ */
+export function shapeOp(how) {
+	return shapeOpOn(self.victim.v.conf, how);
 }
 
 /**
