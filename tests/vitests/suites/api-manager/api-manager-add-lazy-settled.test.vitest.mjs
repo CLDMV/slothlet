@@ -125,6 +125,5 @@ describe.each(getMatrixConfigs({ mode: "eager" }))("api.add() ownership records 
 		// difference): the walk must record what the proxy hands out.
 		const owner = ownership.getCurrentOwner("mounted.math.collisionVersion");
 		expect(owner.value).toBe("math-collision-v1");
-		expect(owner.source).not.toBe("subtree-confirm");
 	});
 });

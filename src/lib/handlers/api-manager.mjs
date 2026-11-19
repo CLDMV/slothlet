@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-18T07:40:02-08:00 (1795016402)
+ *	@Last modified time: 2026-11-18T20:57:16-08:00 (1795064236)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -3187,6 +3187,8 @@ export class ApiManager extends ComponentBase {
 	 *
 	 * @param {string|null} moduleID - The module reloaded by its moduleID.
 	 * @param {string|null} apiPath - The path reloaded.
+	 * @param {object|null} [writer] - The module asking for the reload, read where it asked; the code running now when
+	 *   omitted.
 	 * @returns {void}
 	 * @throws {SlothletError} What {@link ApiManager#assertOwnedWrite} throws for the first path refused.
 	 * @public
@@ -3194,8 +3196,7 @@ export class ApiManager extends ComponentBase {
 	 * @example
 	 * apiManager.assertModuleReload(null, "victim.v"); // throws inside another module's call
 	 */
-	assertModuleReload(moduleID, apiPath) {
-		const writer = runtime_selfModuleReader(this.slothlet);
+	assertModuleReload(moduleID, apiPath, writer = runtime_selfModuleReader(this.slothlet)) {
 		if (writer === null) return;
 		// The base's reload rebuilds the whole tree: a write at its root.
 		if (moduleID === null && apiPath === "") return this.#assertModuleMountWrite([], writer);
@@ -6091,11 +6092,13 @@ export class ApiManager extends ComponentBase {
 
 		for (const ofEntry of mapEntries(endpointOrder)) {
 			const moduleIDs = ofEntry[1];
-			// A module added here under "replace" after another swapped the endpoint's surface for its own, and what the
-			// earlier modules had there went off the api. Rebuilding them as one clean slate would put it back, so each
-			// module is reloaded on its own instead, exactly as reloading it by its moduleID does: the earlier ones stay
-			// under the replace, and the replacing one keeps what it holds.
-			const layered = ArrayMethods.some(moduleIDs, (id, i) => i > 0 && cacheManager.get(id)?.collisionMode === "replace");
+			// Rebuilding the modules as one clean slate and layering each later one on top decides their collisions
+			// again, and only a later "merge-replace" add comes out as it did: there the later module wins every
+			// collision, as layering it gives. A "replace" add swapped the endpoint's surface for its own, so the clean
+			// slate would put back what the earlier modules lost (#879); a "merge" add kept what was there, and layering
+			// it lets it win (#904). Otherwise each module is reloaded on its own, exactly as reloading it by its moduleID
+			// does, which keeps every collision's outcome as the adds left it.
+			const layered = ArrayMethods.some(moduleIDs, (id, i) => i > 0 && cacheManager.get(id)?.collisionMode !== "merge-replace");
 			const reloadGroup = setFrom(moduleIDs);
 			for (let i = 0; i < moduleIDs.length; i++) {
 				await this._reloadByModuleID(moduleIDs[i], layered ? undefined : { forceReplace: i === 0, reloadGroup });

@@ -95,14 +95,17 @@ describe.each(HOT_RELOAD_MATRIX)("Hot Reload Advanced - $name", ({ config }) => 
 		expect(api.extra2?.math?.add).toBeTypeOf("function");
 	});
 
-	it("reloads combined modules on the same path", async () => {
+	it("reloads a path a forced add replaced, leaving it as the add left it", async () => {
 		api = await createApiInstance(config);
 		await api.slothlet.api.add("features", TEST_DIRS.API_TEST, { id: "core" });
+		// A forced add replaces everything at the mount, so `core`'s `math` is gone before the reload.
 		await api.slothlet.api.add("features", TEST_DIRS.API_TEST_MIXED, { id: "extra", collision: { force: true } });
+		expect(api.features?.math).toBeUndefined();
 
 		await api.slothlet.api.reload("features");
 
-		expect(api.features?.math?.add).toBeTypeOf("function");
+		expect(api.features?.math).toBeUndefined();
+		expect(await api.features?.mathCjs?.multiply(2, 3)).toBe(6);
 	});
 
 	it("preserves context across reloads", async () => {
