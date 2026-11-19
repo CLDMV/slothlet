@@ -8492,9 +8492,12 @@ function runtime_membrane(maker, owner, original, asNode = false, made = maker.m
 		if (!owned || WeakMapMethods.has(maker.made, owned)) return runtime_atClassSite(owner.slothlet, out(prototype));
 		// One handed to the module (a subclass's, constructed for) is not the module's. An instance reports one prototype:
 		// the handle at its class's own name (#667), as an instance a node holds does.
-		return WeakSetMethods.has(maker.handedIn, prototype)
-			? prototype
-			: runtime_atClassSite(owner.slothlet, runtime_crossTo(prototype, reader, owner.slothlet, owner));
+		if (WeakSetMethods.has(maker.handedIn, prototype)) return prototype;
+		// The prototype of a class a node exports is what reading the class's `prototype` gives the code asking, decided
+		// for that file: another file of the module may be refused what the class holds (a deny on its member).
+		if (runtime_knownPrototype(owner.slothlet, prototype) !== undefined)
+			return runtime_atClassSite(owner.slothlet, runtime_prototypeHandedTo(prototype, reader, owner.slothlet));
+		return runtime_atClassSite(owner.slothlet, runtime_crossTo(prototype, reader, owner.slothlet, owner));
 	};
 	/** A descriptor of the original's, as the stand-in reports it. */
 	const reported = (descriptor, holderIsMade = true) => {
@@ -9570,6 +9573,10 @@ function runtime_readerHoldsPrototype(slothlet, reader, prototype, parts = null)
 	const permissionManager = slothlet.handlers.permissionManager;
 	const apiManager = slothlet.handlers.apiManager;
 	const readerPath = String(reader.____slothletInternal.apiPath ?? "");
+	// Held as itself, the prototype hands its `constructor` out with no node's checks around it: not while the rules could
+	// refuse the reader a read of that function's members (a deny on the class's own member, say).
+	if (prototype !== null && typeof prototype === "object" && runtime_constructorReadMayRefuse(slothlet, readerPath, prototype))
+		return false;
 	return ArrayMethods.every(sites, (site) => {
 		const sitePath = ArrayMethods.join(site.parts, ".");
 		if (!apiManager.ownsPath(site.parts, reader)) return false;
