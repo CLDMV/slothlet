@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-18T06:49:58-08:00 (1795013398)
+ *	@Last modified time: 2026-11-19T08:57:44-08:00 (1795107464)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -304,11 +304,30 @@ export function anyAsyncInstance() {
 }
 
 /**
- * Set while {@link whenIdle} schedules its own macrotask, which is no run's work.
+ * Set while slothlet makes something that is no run's work (see {@link asNoRunWork}).
  * @type {boolean}
  * @private
  */
-let schedulingIdle = false;
+let noRunWork = false;
+
+/**
+ * Run `fn`, slothlet's own code, with nothing it makes counted as a run's work: a resource it makes and is done with
+ * within the call (a synchronous job the platform only reports destroyed once its object is collected) would otherwise
+ * keep the run's copy until then.
+ * @template T
+ * @param {function(): T} fn - What to run.
+ * @returns {T} What it returned.
+ * @internal
+ */
+export function asNoRunWork(fn) {
+	const previous = noRunWork;
+	noRunWork = true;
+	try {
+		return fn();
+	} finally {
+		noRunWork = previous;
+	}
+}
 
 /**
  * Count one more piece of work tied to a run: begun in the run, not finished yet. Work begun by the run's last piece of
@@ -320,7 +339,7 @@ let schedulingIdle = false;
  * @internal
  */
 export function holdRunWork(record) {
-	if (record === null || record === undefined || record.torn || schedulingIdle) return false;
+	if (record === null || record === undefined || record.torn || noRunWork) return false;
 	if (record.done) {
 		record.done = false;
 		openRun(record);
@@ -338,13 +357,7 @@ export function holdRunWork(record) {
  * @internal
  */
 export function whenIdle(fn) {
-	schedulingIdle = true;
-	let handle;
-	try {
-		handle = typeof setImmediate === "function" ? setImmediate(fn) : setTimeout(fn, 0);
-	} finally {
-		schedulingIdle = false;
-	}
+	const handle = asNoRunWork(() => (typeof setImmediate === "function" ? setImmediate(fn) : setTimeout(fn, 0)));
 	if (typeof handle?.unref === "function") handle.unref();
 }
 

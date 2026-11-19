@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T13:35:22-08:00 (1794951322)
+ *	@Last modified time: 2026-11-19T08:57:47-08:00 (1795107467)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -34,6 +34,7 @@ import {
 	Uint32Array
 } from "#helpers/intrinsics";
 import { cloneTakingViews } from "#helpers/clone-context";
+import { asNoRunWork } from "#helpers/flow-stores";
 
 /**
  * General utility functions
@@ -174,6 +175,8 @@ const RANDOM_VALUES = (() => {
  */
 function randomPart() {
 	if (RANDOM_VALUES === null) return StringMethods.substr(NumberMethods.toString(Math.random(), 36), 2, 9);
-	const words = RANDOM_VALUES(new Uint32Array(2));
+	// The platform makes a job for the draw that it reports done only once the job is collected: slothlet's own draw is
+	// no work of a run it happens in (an ID made by reload() inside a run).
+	const words = asNoRunWork(() => RANDOM_VALUES(new Uint32Array(2)));
 	return `${NumberMethods.toString(words[0], 36)}${NumberMethods.toString(words[1], 36)}`;
 }
