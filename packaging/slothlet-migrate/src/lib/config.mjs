@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T07:26:22-08:00 (1794929182)
+ *	@Last modified time: 2026-11-19T08:57:36-08:00 (1795107456)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -42,7 +42,8 @@ const SPECIAL = new Set([
 	"config|suppressFixes",
 	"config|hidden",
 	"config|context",
-	"config|permissions.mode"
+	"config|permissions.mode",
+	"config|scope.isolation"
 ]);
 
 /** Plain key moves, in table order (a parent's own move runs before moves into it). */
@@ -373,6 +374,8 @@ export function applyConfigRules(model, prefix, ctx, isRoot) {
 	}
 	const mode = at("permissions.mode");
 	if (mode && mode.prop.node) result.info("config|permissions.mode", mode.prop.node.start);
+	const isolation = at("scope.isolation");
+	if (isolation && isolation.prop.node) result.info("config|scope.isolation", isolation.prop.node.start);
 
 	// v4 default changes the config does not override
 	if (isRoot && !model.hasOpaque() && model.node) {
