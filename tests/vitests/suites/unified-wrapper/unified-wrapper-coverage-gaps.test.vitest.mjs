@@ -103,7 +103,7 @@ describe("unified-wrapper: background materialize error debug log (lines 310-311
 		const slInstance = resolveWrapper(_api.math).slothlet;
 
 		// Verify the config flags are live.
-		expect(slInstance.config.tracking?.materialization).toBe(true);
+		expect(slInstance.config.loader.materialize).toBe(true);
 		expect(slInstance.config.debug?.materialize).toBe(true);
 
 		// Directly create a new UnifiedWrapper using this slothlet instance.
