@@ -351,25 +351,12 @@ describe.each(getBrowserMatrixConfigs({ mode: "lazy" }))(
 			expect(typeof eventData.at).toBe("number");
 		});
 
-		it("materialized:complete — does NOT fire when tracking.materialization is omitted (backgroundMaterialize path)", async () => {
-			// backgroundMaterialize: true forces all lazy wrappers to materialize immediately on creation,
-			// so materialize.wait() resolves promptly. The emit is still gated by
-			// `this.config?.tracking?.materialization`, which is only set when tracking is explicitly
-			// requested (or when backgroundMaterialize auto-enables it — but here we test that explicit
-			// `tracking: { materialization: false }` prevents the event even when backgroundMaterialize
-			// causes all wrappers to materialize).
-			//
-			// NOTE: backgroundMaterialize: true auto-enables tracking, so we cannot test the
-			// "no tracking + backgroundMaterialize" combination directly — the two flags are mutually
-			// inclusive by design (config.mjs lines 422-425). What we CAN test is that subscribing
-			// to `materialized:complete` on a non-lazy (eager) instance never fires — but that belongs
-			// in a separate suite. Here we verify the API surface (on/off) is available and callable
-			// even when the event won't fire, which is covered by the "off prevents callback" test.
-			//
-			// This test body is intentionally a no-op: the negative assertion ("event did NOT fire after
-			// wait()") is architecturally impossible to express without backgroundMaterialize (which
-			// forces tracking on) or without accessing every single lazy leaf (impractical). The finding
-			// is documented in the @fileoverview instead.
+		it("materialized:complete — does NOT fire when loader.materialize is omitted", async () => {
+			// The emit is gated by `this.config?.loader?.materialize`, and loader.materialize is also
+			// what makes every lazy wrapper materialize in the background, so "everything materialized
+			// without loader.materialize" can only be reached by touching every lazy leaf by hand
+			// (impractical here). This test only checks the lifecycle API is available with the switch
+			// off; the event-not-firing path is covered by the "off prevents callback" test above.
 			api = await slothlet(browserCfg(config));
 			// Just verify the lifecycle API is accessible — the event-not-firing path is covered
 			// by the "off prevents callback" test above, which subscribes then immediately unsubscribes.

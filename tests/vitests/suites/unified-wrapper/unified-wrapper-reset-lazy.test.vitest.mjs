@@ -268,7 +268,7 @@ describe("unified-wrapper: concurrent materialization deduplication (lines 661-6
 		expect(api.math).toBeDefined();
 	});
 
-	it("tracking.materialization=true with concurrent accesses still deduplicates", async () => {
+	it("loader.materialize=true with concurrent accesses still deduplicates", async () => {
 		api = await makeLazyApi({ loader: { materialize: true } });
 
 		// Background materialization starts immediately + we also access it

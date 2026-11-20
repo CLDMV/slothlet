@@ -14,7 +14,7 @@
  */
 
 /**
- * @fileoverview Tests for background materialization with tracking.materialization config
+ * @fileoverview Tests for background materialization with the loader.materialize config
  * @module tests/vitests/suites/lazy/lazy-background-materialization
  */
 
@@ -43,7 +43,7 @@ function backgroundSettles(api) {
 	]).finally(() => clearTimeout(timer));
 }
 
-describe("Background Materialization (config.tracking.materialization)", () => {
+describe("Background Materialization (config.loader.materialize)", () => {
 	describe.each(matrixConfigs)("Config: $name", ({ config }) => {
 		let api;
 
@@ -55,7 +55,7 @@ describe("Background Materialization (config.tracking.materialization)", () => {
 		});
 
 		describe("Config-driven behavior", () => {
-			it("should NOT trigger background materialization when tracking.materialization is false", async () => {
+			it("should NOT trigger background materialization when loader.materialize is false", async () => {
 				api = await slothlet({
 					...config,
 					base: TEST_DIRS.API_TEST,
@@ -67,14 +67,14 @@ describe("Background Materialization (config.tracking.materialization)", () => {
 
 				const stats = api.slothlet.materialize.get();
 
-				// Without tracking, some wrappers should still be unmaterialized
+				// Without loader.materialize, some wrappers should still be unmaterialized
 				// (unless user accessed them, which we haven't in this test)
 				expect(stats.total).toBeGreaterThanOrEqual(0);
 
 				await api.shutdown();
 			});
 
-			it("should trigger background materialization when tracking.materialization is true", async () => {
+			it("should trigger background materialization when loader.materialize is true", async () => {
 				const api = await slothlet({
 					base: TEST_DIRS.API_TEST,
 					mode: "lazy",
@@ -94,11 +94,11 @@ describe("Background Materialization (config.tracking.materialization)", () => {
 				await api.shutdown();
 			});
 
-			it("should accept tracking as boolean shorthand", async () => {
+			it("should accept loader.materialize as a boolean", async () => {
 				const api = await slothlet({
 					base: TEST_DIRS.API_TEST,
 					mode: "lazy",
-					loader: { materialize: true } // Boolean shorthand
+					loader: { materialize: true } // Boolean form
 				});
 
 				expect(await backgroundSettles(api)).toBe(true);
@@ -110,11 +110,11 @@ describe("Background Materialization (config.tracking.materialization)", () => {
 				await api.shutdown();
 			});
 
-			it("should default to disabled when tracking config not provided", async () => {
+			it("should default to disabled when loader.materialize is not provided", async () => {
 				const api = await slothlet({
 					base: TEST_DIRS.API_TEST,
 					mode: "lazy"
-					// No tracking config
+					// No loader.materialize
 				});
 
 				await new Promise((resolve) => setTimeout(resolve, 100));
@@ -156,7 +156,7 @@ describe("Background Materialization (config.tracking.materialization)", () => {
 				await api.shutdown();
 			});
 
-			it("should NOT emit event when tracking.materialization is disabled", async () => {
+			it("should NOT emit event when loader.materialize is disabled", async () => {
 				let eventEmitted = false;
 
 				const api = await slothlet({
@@ -215,7 +215,7 @@ describe("Background Materialization (config.tracking.materialization)", () => {
 		});
 
 		describe("Integration with wait() functionality", () => {
-			it("should materialize all wrappers in background when tracking enabled", async () => {
+			it("should materialize all wrappers in background when loader.materialize is enabled", async () => {
 				const api = await slothlet({
 					base: TEST_DIRS.API_TEST,
 					mode: "lazy",
@@ -257,7 +257,7 @@ describe("Background Materialization (config.tracking.materialization)", () => {
 		});
 
 		describe("Performance and safety", () => {
-			it("should not break with eager mode (tracking should be ignored)", async () => {
+			it("should not break with eager mode (loader.materialize background work should be ignored)", async () => {
 				const api = await slothlet({
 					base: TEST_DIRS.API_TEST,
 					mode: "eager",
@@ -292,7 +292,7 @@ describe("Background Materialization (config.tracking.materialization)", () => {
 				await api.shutdown();
 			});
 
-			it("should not materialize when both tracking=false and manual access", async () => {
+			it("should not materialize when both loader.materialize=false and manual access", async () => {
 				const api = await slothlet({
 					base: TEST_DIRS.API_TEST,
 					mode: "lazy",

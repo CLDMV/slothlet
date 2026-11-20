@@ -78,7 +78,7 @@ afterEach(async () => {
 // ─────────────────────────────────────────────────────────────────────────────
 // 1. Background materialize error with debug.materialize (lines 310-311)
 //
-// When `config.tracking.materialization === true`, the UnifiedWrapper constructor
+// When `config.loader.materialize` is on, the UnifiedWrapper constructor
 // schedules `setImmediate(() => this.___materialize().catch(...))`. If the
 // materialization fails AND `config.debug?.materialize` is truthy, the catch
 // handler logs a debug message — hitting lines 310-311.
@@ -89,7 +89,7 @@ afterEach(async () => {
 // ─────────────────────────────────────────────────────────────────────────────
 describe("unified-wrapper: background materialize error debug log (lines 310-311)", () => {
 	it("setImmediate catch handler fires debug log when ___materialize rejects and debug.materialize is true", async () => {
-		// Create a slothlet instance with BOTH tracking.materialization AND debug.materialize enabled.
+		// Create a slothlet instance with BOTH loader.materialize AND debug.materialize enabled.
 		// We need a real slothlet instance for the UnifiedWrapper constructor (ComponentBase super()).
 		_api = await slothlet({
 			base: API_TEST_IMPL,
@@ -108,7 +108,7 @@ describe("unified-wrapper: background materialize error debug log (lines 310-311
 
 		// Directly create a new UnifiedWrapper using this slothlet instance.
 		// The materializeFunc always rejects, so ___materialize() will fail.
-		// Because tracking.materialization is true, the constructor schedules:
+		// Because loader.materialize is true, the constructor schedules:
 		//   setImmediate(() => this.___materialize().catch((err) => { … debug log … }))
 		// Lines 310-311 fire inside that catch handler.
 		const failWrapper = new UnifiedWrapper(slInstance, {
@@ -147,11 +147,11 @@ describe("unified-wrapper: background materialize error debug log (lines 310-311
 describe("unified-wrapper: getTrap background-materialize rejection is swallowed (line 3417)", () => {
 	it("a property read that kicks off a failing background materialize does not leak an unhandled rejection", async () => {
 		// A real lazy instance is needed for the UnifiedWrapper constructor (ComponentBase super()).
-		// tracking.materialization is OFF, so the constructor does NOT pre-materialize — the getTrap
+		// loader.materialize is OFF, so the constructor does NOT pre-materialize — the getTrap
 		// read below is what triggers materialization, exercising the line-3417 branch specifically.
 		_api = await slothlet({ base: API_TEST_IMPL, mode: "lazy", silent: true });
 		const slInstance = resolveWrapper(_api.math).slothlet;
-		expect(slInstance.config.tracking?.materialization).toBeFalsy();
+		expect(slInstance.config.loader.materialize).toBe(false);
 
 		const failWrapper = new UnifiedWrapper(slInstance, {
 			mode: "lazy",

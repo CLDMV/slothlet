@@ -20,7 +20,7 @@
  * Targets the following uncovered line clusters:
  *
  *  Background materialization (constructor lines 304, 307-308):
- *    Triggered by config.tracking.materialization = true in lazy mode.
+ *    Triggered by config.loader.materialize = true in lazy mode.
  *    The setImmediate callback fires and calls ___materialize() in the background.
  *
  *  util.inspect.custom handler in main proxy get trap (lines 2135-2165):
@@ -64,7 +64,7 @@ afterAll(() => {
 
 // ---------------------------------------------------------------------------
 // 1. Background materialization path (constructor lines 304, 307-308)
-//    tracking.materialization = true → setImmediate fires in lazy wrapper constructor
+//    loader.materialize = true → setImmediate fires in lazy wrapper constructor
 // ---------------------------------------------------------------------------
 describe("unified-wrapper: background materialization (lines 304, 307-308)", () => {
 	let api;
@@ -77,9 +77,9 @@ describe("unified-wrapper: background materialization (lines 304, 307-308)", () 
 		await new Promise((r) => setTimeout(r, 50));
 	});
 
-	it("lazy mode with tracking.materialization=true triggers background setImmediate", async () => {
+	it("lazy mode with loader.materialize=true triggers background setImmediate", async () => {
 		// loader: { materialize: true } → in lazy wrapper constructor:
-		//   if (slothlet.config.tracking?.materialization) {
+		//   if (slothlet.config.loader?.materialize) {
 		//     setImmediate(() => { this.___materialize().catch(...) })  ← lines 304, 307-308
 		api = await slothlet({
 			base: TEST_DIRS.API_TEST,
@@ -97,7 +97,7 @@ describe("unified-wrapper: background materialization (lines 304, 307-308)", () 
 		expect(typeof api.math.add).toBe("function");
 	});
 
-	it("tracking=true (shorthand) also triggers background materialization", async () => {
+	it("loader.materialize=true in async runtime also triggers background materialization", async () => {
 		api = await slothlet({
 			base: TEST_DIRS.API_TEST,
 			mode: "lazy",
