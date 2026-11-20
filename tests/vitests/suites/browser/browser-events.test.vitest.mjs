@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:59-07:00 (1791090899)
+ *	@Last modified time: 2026-11-19T16:09:51-08:00 (1795133391)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -39,7 +39,7 @@
  * - `impl:removed` fires when `api.slothlet.api.remove` removes a mounted path (full matrix —
  *   see the resolved note below; eager+browser previously no-op'd)
  * - `materialized:complete` fires after lazy background materialization completes
- *   (lazy-only; requires `tracking: { materialization: true }`; triggered by calling a leaf)
+ *   (lazy-only; requires `loader: { materialize: true }`; triggered by calling a leaf)
  * - modules:* events — FINDING: node-only; documented below
  *
  * RESOLVED — impl:removed now fires in eager+browser mode:
@@ -311,7 +311,7 @@ describe.each(getBrowserMatrixConfigs())("Browser Mode > lifecycle events > impl
 
 // ─── Lazy-only tests: materialized:complete ───────────────────────────────────
 //
-// materialized:complete only fires in lazy mode with `tracking: { materialization: true }`.
+// materialized:complete only fires in lazy mode with `loader: { materialize: true }`.
 // The trigger is actual leaf materialization — either calling a leaf function or accessing
 // a property, which causes the lazy wrapper to fetch its underlying impl.
 // We call `api.slothlet.materialize.wait()` to await full materialization after manually
@@ -328,7 +328,7 @@ describe.each(getBrowserMatrixConfigs({ mode: "lazy" }))(
 		});
 
 		it("materialized:complete — fires after lazy materialization completes", async () => {
-			api = await slothlet(browserCfg(config, { tracking: { materialization: true } }));
+			api = await slothlet(browserCfg(config, { loader: { files: BROWSER_MANIFEST, materialize: true } }));
 
 			let eventFired = false;
 			let eventData = null;
@@ -378,7 +378,7 @@ describe.each(getBrowserMatrixConfigs({ mode: "lazy" }))(
 		});
 
 		it("materialized:complete — unsubscribing via off() prevents callback", async () => {
-			api = await slothlet(browserCfg(config, { tracking: { materialization: true } }));
+			api = await slothlet(browserCfg(config, { loader: { files: BROWSER_MANIFEST, materialize: true } }));
 
 			let callCount = 0;
 			const handler = () => {
@@ -395,7 +395,7 @@ describe.each(getBrowserMatrixConfigs({ mode: "lazy" }))(
 		});
 
 		it("materialized:complete — fires only once even after multiple leaf accesses", async () => {
-			api = await slothlet(browserCfg(config, { tracking: { materialization: true } }));
+			api = await slothlet(browserCfg(config, { loader: { files: BROWSER_MANIFEST, materialize: true } }));
 
 			let fireCount = 0;
 			api.slothlet.lifecycle.on("materialized:complete", () => {

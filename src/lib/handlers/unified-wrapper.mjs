@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-19T09:14:20-08:00 (1795108460)
+ *	@Last modified time: 2026-11-19T16:09:12-08:00 (1795133352)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -15778,7 +15778,6 @@ class UnifiedWrapper extends ComponentBase {
 	 * @param {Function|Object|null} [options.initialImpl=null] - Initial implementation (null for lazy mode)
 	 * @param {Function} [options.materializeFunc=null] - Async function to materialize lazy modules
 	 * @param {boolean} [options.isCallable=false] - Whether the wrapper should be callable
-	 * @param {boolean} [options.materializeOnCreate=false] - Whether to materialize on creation
 	 * @param {string} [options.filePath=null] - File path of the module source
 	 * @param {string[]|null} [options.exportPath] - Access path within `filePath`'s module namespace
 	 *   that produced `initialImpl` (#484). When omitted it is looked up from the ownership export index
@@ -15823,7 +15822,6 @@ class UnifiedWrapper extends ComponentBase {
 			initialImpl = null,
 			materializeFunc = null,
 			isCallable,
-			materializeOnCreate = false,
 			filePath = null,
 			exportPath = undefined,
 			moduleID = null,
@@ -15869,7 +15867,9 @@ class UnifiedWrapper extends ComponentBase {
 			internal.sourceValue = __position.sourceValue;
 			runtime_followPosition(internal, __position.parent, __position.key, __position.byIndex);
 		}
-		internal.materializeOnCreate = materializeOnCreate;
+		// `loader.materialize` is the one switch for background loading: every lazy wrapper built while it is on
+		// (true, or a callback) loads itself in the background once it is constructed (see the end of this constructor).
+		internal.materializeOnCreate = mode === "lazy" && !!slothlet.config?.loader?.materialize;
 		internal.isCallable = isCallableValue;
 		internal.isCallableLocked = isCallableLocked;
 		internal.moduleID = moduleID;
@@ -16075,10 +16075,10 @@ class UnifiedWrapper extends ComponentBase {
 		if (mode === "lazy") {
 			this.___trackLazyLoad("register");
 
-			// If background materialization is enabled, trigger it (fire-and-forget)
-			if (slothlet.config.tracking?.materialization) {
-				// Defer to next tick to ensure wrapper and proxy are fully constructed
-				// Fire-and-forget: don't await, let it materialize in background
+			// loader.materialize: load in the background (fire-and-forget). This is the only place background loading
+			// starts. It is deferred a macrotask, through the host clock when one is given (`clock.set`), so the wrapper
+			// and its proxy are fully built before the load begins.
+			if (this.____slothletInternal.materializeOnCreate) {
 				scheduleMacrotask(
 					() => {
 						PromiseMethods.catch(this.___materialize(), (err) => {
@@ -19473,19 +19473,6 @@ class UnifiedWrapper extends ComponentBase {
 		const wrapper = this;
 		if (wrapper.____slothletInternal.proxy) {
 			return wrapper.____slothletInternal.proxy;
-		}
-
-		// Optional: materialize on create for lazy mode when materializeOnCreate flag is set
-		// This triggers background loading - typeof will still return "function" but first access is faster
-		if (
-			wrapper.____slothletInternal.materializeOnCreate &&
-			wrapper.____slothletInternal.mode === "lazy" &&
-			!wrapper.____slothletInternal.state.materialized &&
-			wrapper.____slothletInternal.materializeFunc
-		) {
-			// Fire-and-forget background materialization — rejection suppressed to avoid unhandled-rejection event.
-			/* v8 ignore next */
-			PromiseMethods.catch(wrapper.___materialize(), () => {});
 		}
 
 		// Proxy target depends on whether this is callable

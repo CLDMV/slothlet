@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T19:00:38-08:00 (1794884438)
+ *	@Last modified time: 2026-11-19T16:09:55-08:00 (1795133395)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -57,7 +57,7 @@ describe.each(["eager", "lazy"])("config > unknown keys (%s)", (mode) => {
 			permissions: "off",
 			api: { collision: "merge" },
 			typescript: false,
-			tracking: true,
+			loader: { materialize: true },
 			context: { anything: 1 },
 			reference: { anyKey: true },
 			metadata: { team: "x" },

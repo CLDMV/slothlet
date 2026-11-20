@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T13:27:30-08:00 (1794950850)
+ *	@Last modified time: 2026-11-19T16:09:55-08:00 (1795133395)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -200,7 +200,7 @@ describe.each(getMatrixConfigs())("Config > clock > $name", ({ config }) => {
 			base: PLAIN,
 			silent: true,
 			mode: "lazy",
-			tracking: { materialization: true },
+			loader: { materialize: true },
 			clock: { now: Date.now, set: recording, clear: clearTimeout }
 		});
 		// Installed before the instance existed: slothlet's own deferred work waits for the fake clock to move.

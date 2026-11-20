@@ -66,7 +66,6 @@ const api = await slothlet({
 	debug: false,
 	silent: false,
 	diagnostics: false,
-	tracking: false,
 
 	// Time (host only) — see the `clock` section
 	clock: undefined, // { now, set, clear } — each member optional
@@ -759,25 +758,6 @@ See [LIFECYCLE.md](LIFECYCLE.md#routines) for the full contract.
 
 ---
 
-### `tracking`
-
-**Type**: `boolean` | `{ materialization: boolean }`
-**Default**: `false`
-
-Enables internal tracking features.
-
-| Property          | Default | Effect                                                 |
-| ----------------- | ------- | ------------------------------------------------------ |
-| `materialization` | `false` | Track which lazy-mode API paths have been materialized |
-
-```javascript
-const api = await slothlet({ base: "./api", mode: "lazy", tracking: true });
-// or
-const api = await slothlet({ base: "./api", mode: "lazy", tracking: { materialization: true } });
-```
-
----
-
 ## Loader
 
 ### `loader`
@@ -787,13 +767,13 @@ const api = await slothlet({ base: "./api", mode: "lazy", tracking: { materializ
 
 How leaf files are found and loaded.
 
-| Option        | Default         | Effect                                                                                                                                                                                                                                                                                                                 |
-| ------------- | --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `import`      | none            | `(specifier) => Promise<module>`: every leaf load goes through it instead of slothlet's own `import()`, so a coverage run attributes leaf code (see [TESTING.md](TESTING.md)). Anything but a function throws `INVALID_CONFIG_IMPORTER_INVALID`.                                                                       |
-| `files`       | none            | The browser file list `files.generate()` from `@cldmv/slothlet/files` writes; giving one selects browser mode. See [BROWSER.md](BROWSER.md).                                                                                                                                                                           |
-| `materialize` | `false`         | With `mode: "lazy"`, start materializing every api path in the background right after initialization. The api is usable through its proxies before this completes. A function turns it on and is called once when everything has materialized (see [LIFECYCLE.md](LIFECYCLE.md#a-callback-when-everything-is-loaded)). |
-| `platform`    | auto-detected   | `"node"` or `"browser"`: scan the filesystem, or read `files`. Omitted, it is `"browser"` when `files` is given or no Node `process` is present.                                                                                                                                                                       |
-| `resolve`     | resolve on base | Browser: `({ path, name, full }) => string \| URL`, a file list entry to an importable URL. Defaults to resolving against `base` as a `file://` URL.                                                                                                                                                                   |
+| Option        | Default         | Effect                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| ------------- | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `import`      | none            | `(specifier) => Promise<module>`: every leaf load goes through it instead of slothlet's own `import()`, so a coverage run attributes leaf code (see [TESTING.md](TESTING.md)). Anything but a function throws `INVALID_CONFIG_IMPORTER_INVALID`.                                                                                                                                                                                                                                                                                            |
+| `files`       | none            | The browser file list `files.generate()` from `@cldmv/slothlet/files` writes; giving one selects browser mode. See [BROWSER.md](BROWSER.md).                                                                                                                                                                                                                                                                                                                                                                                                |
+| `materialize` | `false`         | With `mode: "lazy"`, start materializing every api path in the background right after initialization, and emit `materialized:complete` once everything has loaded. The api is usable through its proxies before this completes. A function turns it on and is called once when everything has materialized (see [LIFECYCLE.md](LIFECYCLE.md#a-callback-when-everything-is-loaded)). This is the only switch for background loading: v3's `tracking: { materialization: true }` (and `tracking: true`) did the same thing and is gone in v4. |
+| `platform`    | auto-detected   | `"node"` or `"browser"`: scan the filesystem, or read `files`. Omitted, it is `"browser"` when `files` is given or no Node `process` is present.                                                                                                                                                                                                                                                                                                                                                                                            |
+| `resolve`     | resolve on base | Browser: `({ path, name, full }) => string \| URL`, a file list entry to an importable URL. Defaults to resolving against `base` as a `file://` URL.                                                                                                                                                                                                                                                                                                                                                                                        |
 
 ```javascript
 const api = await slothlet({
@@ -817,7 +797,7 @@ The functions an instance reads the time with and starts its deferred work with.
 slothlet takes `Date.now` and the timers when it loads, so a script (or a test runner) that replaces them afterwards does not move an instance. That is deliberate: a principal's `ttl` is measured on that clock, and a module that replaced `Date.now` must not be able to stretch it. `clock` is how a host that wants to control time, a test above all, hands an instance its own:
 
 - **`now`** is the time in milliseconds. It stamps the principal cache behind `ttl` (a value older than `ttl`, or resolved at a time later than `now()` reports, is stale), the ID a `reload()` gives the instance, the ID of a context run, and every time slothlet records: the `timestamp` of lifecycle events and hook failure sources, the `at` of event metadata, the time a rule or an ownership entry was registered.
-- **`set`** and **`clear`** take the place of `setTimeout` and `clearTimeout`: when you give `set`, slothlet's own deferred work (the background step of `loader.materialize` and `tracking.materialization`, and the patch of a stack after an api change) runs through it with a delay of `0` instead of on the host's immediate queue, so a host that fakes timers moves it with its own clock. slothlet never cancels a timer it started, so `clear` is only kept for the host's use of the instance's clock.
+- **`set`** and **`clear`** take the place of `setTimeout` and `clearTimeout`: when you give `set`, slothlet's own deferred work (the background step of `loader.materialize`, and the patch of a stack after an api change) runs through it with a delay of `0` instead of on the host's immediate queue, so a host that fakes timers moves it with its own clock. slothlet never cancels a timer it started, so `clear` is only kept for the host's use of the instance's clock.
 
 The option is read once, when the instance is created, and kept by the instance alone: it is not part of the config the instance reports (`api.slothlet.diag.inspect().config`), a module's manifest, the options of `api.slothlet.api.add()` and `context` cannot supply or replace it, and it carries across `reload()` and `restart()`. Two instances have two clocks.
 

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-18T06:09:38-08:00 (1795010978)
+ *	@Last modified time: 2026-11-19T16:09:10-08:00 (1795133350)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -1140,7 +1140,6 @@ export class ModesProcessor extends ComponentBase {
 										Arrays.isArray(exportedValue) && files.length > 1
 											? copyForComposition(exportedValue, { addsMembers: true })
 											: exportedValue,
-									materializeOnCreate: this.slothlet.config.loader.materialize !== false,
 									filePath: file.path,
 									// moduleID is always provided; || file.moduleID fallback is unreachable.
 									/* v8 ignore next */
@@ -1370,7 +1369,6 @@ export class ModesProcessor extends ComponentBase {
 								initialImpl: this.slothlet.helpers.modesUtils.cloneWrapperImpl(callableModule, mode),
 								// A folder's only file whose module value is null or undefined is the folder's value (#792).
 								nullishDefault: callableModule === null || callableModule === undefined ? { value: callableModule } : null,
-								materializeOnCreate: this.slothlet.config.loader.materialize !== false,
 								filePath: file.path,
 								// moduleID is always provided; || file.moduleID fallback is unreachable.
 								/* v8 ignore next */
@@ -1433,7 +1431,6 @@ export class ModesProcessor extends ComponentBase {
 												mode: effectiveMode,
 												apiPath: modes_namedApiPath,
 												initialImpl: mod[key],
-												materializeOnCreate: this.slothlet.config.loader.materialize !== false,
 												filePath: file.path,
 												moduleID: modes_namedModuleID,
 												sourceFolder
@@ -1529,7 +1526,6 @@ export class ModesProcessor extends ComponentBase {
 												mode: effectiveMode,
 												apiPath: modes_hybridApiPath,
 												initialImpl: this.slothlet.helpers.modesUtils.cloneWrapperImpl(propValue, mode),
-												materializeOnCreate: this.slothlet.config.loader.materialize !== false,
 												filePath: file.path,
 												moduleID: modes_hybridModuleID,
 												sourceFolder
@@ -1583,7 +1579,6 @@ export class ModesProcessor extends ComponentBase {
 													mode: effectiveMode,
 													apiPath: modes_hybridOtherApiPath,
 													initialImpl: this.slothlet.helpers.modesUtils.cloneWrapperImpl(mod[key], mode),
-													materializeOnCreate: this.slothlet.config.loader.materialize !== false,
 													filePath: file.path,
 													moduleID: modes_hybridOtherModuleID,
 													sourceFolder
@@ -1657,7 +1652,6 @@ export class ModesProcessor extends ComponentBase {
 												mode: effectiveMode,
 												apiPath: modes_multiApiPath,
 												initialImpl: this.slothlet.helpers.modesUtils.cloneWrapperImpl(mod[key], mode),
-												materializeOnCreate: this.slothlet.config.loader.materialize !== false,
 												filePath: file.path,
 												moduleID: modes_multiModuleID,
 												sourceFolder
@@ -1745,7 +1739,6 @@ export class ModesProcessor extends ComponentBase {
 											mode: effectiveMode,
 											apiPath: modes_preferredApiPath,
 											initialImpl: this.slothlet.helpers.modesUtils.cloneWrapperImpl(mod[key], mode),
-											materializeOnCreate: this.slothlet.config.loader.materialize !== false,
 											filePath: file.path,
 											moduleID: modes_preferredModuleID,
 											sourceFolder
@@ -1814,7 +1807,6 @@ export class ModesProcessor extends ComponentBase {
 										mode: effectiveMode,
 										apiPath: modes_hoistedApiPath,
 										initialImpl: value,
-										materializeOnCreate: this.slothlet.config.loader.materialize !== false,
 										filePath: file.path,
 										moduleID: modes_hoistedModuleID,
 										sourceFolder
@@ -1910,7 +1902,6 @@ export class ModesProcessor extends ComponentBase {
 											mode: effectiveMode,
 											apiPath: modes_addapiApiPath,
 											initialImpl: value,
-											materializeOnCreate: this.slothlet.config.loader.materialize !== false,
 											filePath: file.path,
 											moduleID: modes_addapiModuleID,
 											sourceFolder
@@ -1973,7 +1964,6 @@ export class ModesProcessor extends ComponentBase {
 										mode: effectiveMode,
 										apiPath: modes_categoryApiPath,
 										initialImpl: moduleContent,
-										materializeOnCreate: this.slothlet.config.loader.materialize !== false,
 										filePath: file.path,
 										moduleID: modes_categoryModuleID,
 										sourceFolder,
@@ -2040,7 +2030,6 @@ export class ModesProcessor extends ComponentBase {
 								initialImpl: moduleContent, // Use moduleContent directly, don't clone (preserves added properties)
 								// A file whose module value is null or undefined reads as that value (#792).
 								nullishDefault: moduleContent === null || moduleContent === undefined ? { value: moduleContent } : null,
-								materializeOnCreate: this.slothlet.config.loader.materialize !== false,
 								filePath: file.path,
 								moduleID: modes_propertyModuleID,
 								sourceFolder
@@ -2460,7 +2449,6 @@ export class ModesProcessor extends ComponentBase {
 											initialImpl: implToWrap, // Use implToWrap directly, don't clone (preserves added properties)
 											// A self-named file whose module value is null or undefined is the folder's value (#792).
 											nullishDefault: implToWrap === null || implToWrap === undefined ? { value: implToWrap } : null,
-											materializeOnCreate: this.slothlet.config.loader.materialize !== false,
 											filePath: file.path,
 											moduleID: modes_subDirModuleID,
 											sourceFolder
@@ -2818,7 +2806,6 @@ export class ModesProcessor extends ComponentBase {
 								mode: effectiveMode,
 								apiPath: modes_rootApiPath,
 								initialImpl: this.slothlet.helpers.modesUtils.cloneWrapperImpl(defaultFunc, mode),
-								materializeOnCreate: this.slothlet.config.loader.materialize !== false,
 								filePath: file.path,
 								moduleID: modes_rootModuleID,
 								sourceFolder
@@ -3430,7 +3417,6 @@ export class ModesProcessor extends ComponentBase {
 			mode: "lazy",
 			apiPath,
 			materializeFunc: lazy_materializeFunc,
-			materializeOnCreate: this.slothlet.config.loader.materialize !== false,
 			filePath: dir.path, // Use directory path so lifecycle events can tag system metadata
 			moduleID: moduleID, // Use parent moduleID
 			sourceFolder,

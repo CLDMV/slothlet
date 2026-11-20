@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:09-07:00 (1791090909)
+ *	@Last modified time: 2026-11-19T16:10:25-08:00 (1795133425)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -59,7 +59,7 @@ describe("Background Materialization (config.tracking.materialization)", () => {
 				api = await slothlet({
 					...config,
 					base: TEST_DIRS.API_TEST,
-					tracking: { materialization: false }
+					loader: { materialize: false }
 				});
 
 				// Give background work time to NOT happen
@@ -78,7 +78,7 @@ describe("Background Materialization (config.tracking.materialization)", () => {
 				const api = await slothlet({
 					base: TEST_DIRS.API_TEST,
 					mode: "lazy",
-					tracking: { materialization: true }
+					loader: { materialize: true }
 				});
 
 				// Wait for background materialization to complete
@@ -98,7 +98,7 @@ describe("Background Materialization (config.tracking.materialization)", () => {
 				const api = await slothlet({
 					base: TEST_DIRS.API_TEST,
 					mode: "lazy",
-					tracking: true // Boolean shorthand
+					loader: { materialize: true } // Boolean shorthand
 				});
 
 				expect(await backgroundSettles(api)).toBe(true);
@@ -135,7 +135,7 @@ describe("Background Materialization (config.tracking.materialization)", () => {
 				const api = await slothlet({
 					base: TEST_DIRS.API_TEST,
 					mode: "lazy",
-					tracking: { materialization: true }
+					loader: { materialize: true }
 				});
 
 				// Subscribe to lifecycle event via public API
@@ -162,7 +162,7 @@ describe("Background Materialization (config.tracking.materialization)", () => {
 				const api = await slothlet({
 					base: TEST_DIRS.API_TEST,
 					mode: "lazy",
-					tracking: { materialization: false }
+					loader: { materialize: false }
 				});
 
 				api.slothlet.lifecycle.on("materialized:complete", () => {
@@ -192,7 +192,7 @@ describe("Background Materialization (config.tracking.materialization)", () => {
 				const api = await slothlet({
 					base: TEST_DIRS.API_TEST,
 					mode: "lazy",
-					tracking: { materialization: true }
+					loader: { materialize: true }
 				});
 
 				api.slothlet.lifecycle.on("materialized:complete", () => {
@@ -219,7 +219,7 @@ describe("Background Materialization (config.tracking.materialization)", () => {
 				const api = await slothlet({
 					base: TEST_DIRS.API_TEST,
 					mode: "lazy",
-					tracking: { materialization: true }
+					loader: { materialize: true }
 				});
 
 				// Wait for background work to complete
@@ -237,7 +237,7 @@ describe("Background Materialization (config.tracking.materialization)", () => {
 				const api = await slothlet({
 					base: TEST_DIRS.API_TEST,
 					mode: "lazy",
-					tracking: { materialization: true }
+					loader: { materialize: true }
 				});
 
 				// Wait for background materialization
@@ -261,7 +261,7 @@ describe("Background Materialization (config.tracking.materialization)", () => {
 				const api = await slothlet({
 					base: TEST_DIRS.API_TEST,
 					mode: "eager",
-					tracking: { materialization: true }
+					loader: { materialize: true }
 				});
 
 				await new Promise((resolve) => setTimeout(resolve, 100));
@@ -279,7 +279,7 @@ describe("Background Materialization (config.tracking.materialization)", () => {
 				const api = await slothlet({
 					base: TEST_DIRS.API_TEST,
 					mode: "lazy",
-					tracking: { materialization: true }
+					loader: { materialize: true }
 				});
 
 				// Wait for background work (should not throw)
@@ -296,7 +296,7 @@ describe("Background Materialization (config.tracking.materialization)", () => {
 				const api = await slothlet({
 					base: TEST_DIRS.API_TEST,
 					mode: "lazy",
-					tracking: false
+					loader: { materialize: false }
 				});
 
 				// Background materialization should NOT happen

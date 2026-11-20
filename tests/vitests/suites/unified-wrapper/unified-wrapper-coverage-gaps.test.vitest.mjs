@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:30:39-08:00 (1794882639)
+ *	@Last modified time: 2026-11-19T16:11:38-08:00 (1795133498)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -94,7 +94,7 @@ describe("unified-wrapper: background materialize error debug log (lines 310-311
 		_api = await slothlet({
 			base: API_TEST_IMPL,
 			mode: "lazy",
-			tracking: { materialization: true },
+			loader: { materialize: true },
 			debug: { materialize: true },
 			silent: true
 		});

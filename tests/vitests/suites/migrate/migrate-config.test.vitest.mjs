@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:29:19-08:00 (1794875359)
+ *	@Last modified time: 2026-11-19T16:10:35-08:00 (1795133435)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -121,6 +121,28 @@ describe("slothlet-migrate: config renames and moves", () => {
 		expect(fixes.code).toBe(`await slothlet({ base: "a" });`);
 		expect(fixes.ids("manual")).toEqual(["config|suppressFixes"]);
 		expect(run(`await slothlet({ permissions: { enabled: false } });`).code).toBe(`await slothlet({ permissions: { mode: false } });`);
+	});
+
+	it("tracking folds into loader.materialize", () => {
+		expect(run(`await slothlet({ base: "a", tracking: true });`).code).toBe(
+			`await slothlet({ base: "a", loader: { materialize: true } });`
+		);
+		const object = run(`await slothlet({ base: "a", tracking: { materialization: true } });`);
+		expect(object.code).toBe(`await slothlet({ base: "a", loader: { materialize: true } });`);
+		expect(object.ids("rewrite")).toEqual(["config|tracking"]);
+		expect(run(`await slothlet({ base: "a", loader: { platform: "node" }, tracking: true });`).code).toBe(
+			`await slothlet({ base: "a", loader: { platform: "node", materialize: true } });`
+		);
+		expect(run(`await slothlet({ base: "a", tracking: false });`).code).toBe(`await slothlet({ base: "a" });`);
+		expect(run(`await slothlet({ base: "a", tracking: { materialization: false } });`).code).toBe(`await slothlet({ base: "a" });`);
+		expect(run(`await slothlet({ backgroundMaterialize: true, tracking: true });`).code).toBe(
+			`await slothlet({ loader: { materialize: true } });`
+		);
+		// tracking turned materialization on whatever backgroundMaterialize said: left for a hand edit.
+		const conflict = run(`await slothlet({ backgroundMaterialize: false, tracking: true });`);
+		expect(conflict.code).toBe(`await slothlet({ loader: { materialize: false }, tracking: true });`);
+		expect(conflict.ids("manual")).toEqual(["config|tracking"]);
+		expect(run(`await slothlet({ tracking: flag });`).ids("manual")).toEqual(["config|tracking"]);
 	});
 
 	it("renames the browser file list and its fullName items", () => {

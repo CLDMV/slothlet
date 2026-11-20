@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:30:41-08:00 (1794882641)
+ *	@Last modified time: 2026-11-19T16:11:39-08:00 (1795133499)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -78,14 +78,14 @@ describe("unified-wrapper: background materialization (lines 304, 307-308)", () 
 	});
 
 	it("lazy mode with tracking.materialization=true triggers background setImmediate", async () => {
-		// tracking: { materialization: true } → in lazy wrapper constructor:
+		// loader: { materialize: true } → in lazy wrapper constructor:
 		//   if (slothlet.config.tracking?.materialization) {
 		//     setImmediate(() => { this.___materialize().catch(...) })  ← lines 304, 307-308
 		api = await slothlet({
 			base: TEST_DIRS.API_TEST,
 			mode: "lazy",
 			runtime: "async",
-			tracking: { materialization: true }
+			loader: { materialize: true }
 		});
 
 		expect(api.math).toBeDefined();
@@ -102,7 +102,7 @@ describe("unified-wrapper: background materialization (lines 304, 307-308)", () 
 			base: TEST_DIRS.API_TEST,
 			mode: "lazy",
 			runtime: "async",
-			tracking: true
+			loader: { materialize: true }
 		});
 
 		expect(api.math).toBeDefined();
@@ -117,7 +117,7 @@ describe("unified-wrapper: background materialization (lines 304, 307-308)", () 
 			base: TEST_DIRS.API_TEST,
 			mode: "lazy",
 			runtime: "async",
-			tracking: { materialization: true },
+			loader: { materialize: true },
 			debug: { materialize: true }
 		});
 
@@ -301,7 +301,7 @@ describe("unified-wrapper: in-flight lazy get trap (lines 2362-2389)", () => {
 			base: TEST_DIRS.API_TEST,
 			mode: "lazy",
 			runtime: "async",
-			tracking: { materialization: true },
+			loader: { materialize: true },
 			debug: { wrapper: true }
 		});
 

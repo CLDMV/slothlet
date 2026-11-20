@@ -212,7 +212,7 @@ api.slothlet.lifecycle.on("impl:error", (data) => {
 
 ### `materialized:complete`
 
-Emitted when all lazy-mode modules have been materialized. Requires `tracking: { materialization: true }` in config. To be told without subscribing, give `loader.materialize` a function (see [A callback when everything is loaded](#a-callback-when-everything-is-loaded)).
+Emitted when all lazy-mode modules have been materialized. Requires `loader.materialize` to be on (`true` or a function); without it nothing loads in the background and the event never fires. To be told without subscribing, give `loader.materialize` a function (see [A callback when everything is loaded](#a-callback-when-everything-is-loaded)).
 
 **Event data:**
 
@@ -369,7 +369,7 @@ Useful as a "module system is ready" signal for hosts that gate downstream work 
 const api = await slothlet({
 	base: "./api",
 	mode: "lazy",
-	tracking: { materialization: true }
+	loader: { materialize: true }
 });
 
 showLoadingSpinner();
@@ -736,19 +736,13 @@ To get the refusal where the change is made, await the node before changing it.
 
 ## Background Materialization
 
-The `tracking.materialization` config option (or the `loader.materialize` shorthand) causes lazy-mode modules to start loading in the background immediately after the API is initialized, rather than waiting for first access.
+The `loader.materialize` config option causes lazy-mode modules to start loading in the background immediately after the API is initialized, rather than waiting for first access. Each lazy node starts its own load one macrotask after it is built, through the instance's `clock.set` when one is given (see [CONFIGURATION.md](CONFIGURATION.md#clock)).
+
+`loader.materialize` is the only switch for this. v3 also had `tracking: { materialization: true }` (and `tracking: true`), which did the same thing; v4 removed it, and passing it throws `INVALID_CONFIG_UNKNOWN_KEY` (see [MIGRATION.md](MIGRATION.md)).
 
 ### Configuration
 
 ```javascript
-// Recommended: use tracking.materialization
-const api = await slothlet({
-	base: "./api",
-	mode: "lazy",
-	tracking: { materialization: true }
-});
-
-// Shorthand: loader.materialize
 const api = await slothlet({
 	base: "./api",
 	mode: "lazy",
@@ -779,7 +773,7 @@ console.log(api.slothlet.node(api.math).type); // "namespace"
 const api = await slothlet({
 	base: "./api",
 	mode: "lazy",
-	tracking: { materialization: true }
+	loader: { materialize: true }
 });
 
 // Modules are loading in background - may already be IN_FLIGHT or loaded
@@ -795,7 +789,7 @@ const result = await api.math.add(2, 3); // Fast - no loading delay
 
 ### A callback when everything is loaded
 
-Give `loader.materialize` a function instead of `true`. It turns background materialization on and is called once, with `{ total, timestamp }` (the `materialized:complete` event data), when every lazy module has loaded. It does not need `tracking.materialization`.
+Give `loader.materialize` a function instead of `true`. It turns background materialization on and is called once, with `{ total, timestamp }` (the `materialized:complete` event data), when every lazy module has loaded. The `materialized:complete` event fires as well.
 
 ```javascript
 const api = await slothlet({
@@ -822,13 +816,13 @@ server.listen(3000);
 
 ### When to use background materialization
 
-| Use case                        | Recommendation                                 |
-| ------------------------------- | ---------------------------------------------- |
-| First-call latency is critical  | Enable (`tracking: { materialization: true }`) |
-| Fast startup is critical        | Disable (default)                              |
-| Large API, not all modules used | Disable                                        |
-| Small API, most modules used    | Enable                                         |
-| Unit/integration tests          | Enable for predictable behavior                |
+| Use case                        | Recommendation                           |
+| ------------------------------- | ---------------------------------------- |
+| First-call latency is critical  | Enable (`loader: { materialize: true }`) |
+| Fast startup is critical        | Disable (default)                        |
+| Large API, not all modules used | Disable                                  |
+| Small API, most modules used    | Enable                                   |
+| Unit/integration tests          | Enable for predictable behavior          |
 
 ---
 

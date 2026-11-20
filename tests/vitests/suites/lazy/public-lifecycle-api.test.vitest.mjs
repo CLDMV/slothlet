@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:09-07:00 (1791090909)
+ *	@Last modified time: 2026-11-19T16:10:28-08:00 (1795133428)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -43,7 +43,7 @@ describe("Public Lifecycle API (api.slothlet.lifecycle)", () => {
 			api = await slothlet({
 				...config,
 				base: TEST_DIRS.API_TEST,
-				tracking: { materialization: true }
+				loader: { materialize: true }
 			});
 
 			// External code subscribing via public API
@@ -82,7 +82,7 @@ describe("Public Lifecycle API (api.slothlet.lifecycle)", () => {
 			api = await slothlet({
 				...config,
 				base: TEST_DIRS.API_TEST,
-				tracking: { materialization: true }
+				loader: { materialize: true }
 			});
 
 			const callback = () => {
@@ -106,7 +106,7 @@ describe("Public Lifecycle API (api.slothlet.lifecycle)", () => {
 			api = await slothlet({
 				...config,
 				base: TEST_DIRS.API_TEST,
-				tracking: { materialization: true }
+				loader: { materialize: true }
 			});
 
 			// This is how external code should subscribe (no internal access)
@@ -124,7 +124,7 @@ describe("Public Lifecycle API (api.slothlet.lifecycle)", () => {
 			api = await slothlet({
 				...config,
 				base: TEST_DIRS.API_TEST,
-				tracking: { materialization: true }
+				loader: { materialize: true }
 			});
 
 			// Register an async handler that rejects — emit() must not propagate the rejection

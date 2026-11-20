@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:28:49-08:00 (1794882529)
+ *	@Last modified time: 2026-11-19T16:09:14-08:00 (1795133354)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -848,21 +848,6 @@ export class Config extends ComponentBase {
 		// Parse hook configuration — shared with the HookManager.
 		const hookConfig = this.normalizeHook(config.hook);
 
-		// Parse tracking configuration
-		let trackingConfig = { materialization: false };
-		if (config.tracking === true || config.tracking === false) {
-			// Boolean: enable/disable materialization tracking
-			trackingConfig.materialization = config.tracking;
-		} else if (config.tracking && typeof config.tracking === "object") {
-			// Object: { materialization: boolean }
-			trackingConfig.materialization = config.tracking.materialization === true;
-		}
-
-		// loader.materialize implies materialization tracking - auto-enable
-		if (loader.materialize) {
-			trackingConfig.materialization = true;
-		}
-
 		// Validate the versioning group's dispatcher: a version metadata key, a function, or nothing.
 		const versioningGroup = configGroup(config.versioning, "versioning");
 		const dispatcher = versioningGroup.dispatcher ?? null;
@@ -906,7 +891,6 @@ export class Config extends ComponentBase {
 				mutations
 			},
 			scope: scopeConfig,
-			tracking: trackingConfig,
 			silent: config.silent === true,
 			typescript: this.normalizeTypeScript(config.typescript),
 			env: this.normalizeEnv(config.env),
