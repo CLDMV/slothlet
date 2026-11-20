@@ -106,7 +106,7 @@ export type SlothletOptions = {
     /**
      * - Defaults for `api.slothlet.context.scope()` runs.
      * `merge`: `"shallow"` merges top-level keys; `"deep"` recurses into nested objects (any other value throws `INVALID_CONFIG`).
-     * `isolation`: `"partial"` (default) lets a scope's `self` writes reach the shared api; `"full"` gives the scope a copy-on-write `self`. A per-call `isolation` option overrides it; any other value throws `SCOPE_ISOLATION_MODE_INVALID`.
+     * `isolation`: `"full"` (default) gives the scope a `self` of its own, so its `self` writes, checked as any write is, stay in the scope; `"partial"` lets a scope's `self` writes reach the shared api. A per-call `isolation` option overrides it; any other value throws `SCOPE_ISOLATION_MODE_INVALID`.
      */
     scope?: {
         merge?: "shallow" | "deep";
@@ -279,10 +279,6 @@ export type SlothletOptions = {
         stack?: boolean | undefined;
     } | undefined;
     /**
-     * - Enable internal tracking. Pass `true` or `{ materialization: true }` to track lazy-mode materialization progress.
-     */
-    tracking?: boolean | object | undefined;
-    /**
      * - Host only: the functions the instance reads the time and starts its deferred work with, instead of the ones slothlet loaded with. Read once when the instance is created and never part of the config the instance reports. See [CONFIGURATION.md](docs/CONFIGURATION.md#clock).
      */
     clock?: {
@@ -340,7 +336,7 @@ export type SlothletOptions = {
             directories: any[];
         } | undefined;
         /**
-         * - When `mode: "lazy"`, immediately begins materializing all paths in the background after init. A function turns it on and is called once with `{ total, timestamp }` when everything has materialized — at once when that is already so when the instance finishes loading (always in eager mode). What it throws or rejects with is reported as a `WARNING_LIFECYCLE_HANDLER_ERROR` warning.
+         * - When `mode: "lazy"`, immediately begins materializing all paths in the background after init and emits `materialized:complete` once everything has loaded (the v3 `tracking: { materialization: true }` option is folded into it). A function turns it on and is called once with `{ total, timestamp }` when everything has materialized — at once when that is already so when the instance finishes loading (always in eager mode). What it throws or rejects with is reported as a `WARNING_LIFECYCLE_HANDLER_ERROR` warning.
          */
         materialize?: boolean | Function | undefined;
         /**

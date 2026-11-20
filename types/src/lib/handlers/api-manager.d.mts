@@ -1,4 +1,16 @@
 /**
+ * One change a full-isolation run's `self` kept before the run had a tree of its own (see `makeRunSelf` in
+ * `builders/api_builder`), replayed by {@link ApiManager#carryRunWrites}.
+ * @typedef {object} RunWrite
+ * @property {string[]} parts - The path of the object changed, from the api root.
+ * @property {string|symbol} prop - The member changed.
+ * @property {string} op - The change: `"set"`, `"define"` or `"delete"`.
+ * @property {*} [value] - The value set, for `"set"`.
+ * @property {object} [descriptor] - The descriptor defined, for `"define"`.
+ * @property {string|null} [created] - The module that created the member, when the run's module created it.
+ * @private
+ */
+/**
  * Manages runtime API component lifecycle (add/remove/reload).
  * @class ApiManager
  * @extends ComponentBase
@@ -190,16 +202,16 @@ export class ApiManager extends ComponentBase {
      * the framework's own keys on api nodes, until an allow lifts one for the callers it names. With the system off
      * only those built-in rules (and host rules on what they cover) are checked and ownership refuses nothing, so a
      * module writes anywhere outside the framework's own; with it disabled nothing is checked. While it is on, a write
-     * that passes is also held to the access the module would need to call or read the member it changes: writing is
-     * never easier than accessing.
+     * that passes is also held to the read the module would need of the member it changes: there is no write without
+     * the read.
      *
      * @param {string[]} parts - Segments of the api path being written.
      * @param {object|null} callerWrapper - The executing module's wrapper, or null for host code.
      * @param {{moduleID: string, prior: Map<string, *>}|null} [inFlight=null] - An add in flight whose content is
      *   being checked (see {@link ApiManager#ownsPath}).
      * @returns {void}
-     * @throws {SlothletError} `PERMISSION_DENIED` when a write rule denies the write or the module would be refused a call
-     *   or read of the member it changes, and `LOOSE_SET_NOT_OWNED` when the path is outside the caller's mount point.
+     * @throws {SlothletError} `PERMISSION_DENIED` when a write rule denies the write or the module would be refused a read
+     *   of the member it changes, and `LOOSE_SET_NOT_OWNED` when the path is outside the caller's mount point.
      * @public
      */
     public assertOwnedWrite(parts: string[], callerWrapper: object | null, inFlight?: {
@@ -578,6 +590,8 @@ export class ApiManager extends ComponentBase {
      *
      * @param {string|null} moduleID - The module reloaded by its moduleID.
      * @param {string|null} apiPath - The path reloaded.
+     * @param {object|null} [writer] - The module asking for the reload, read where it asked; the code running now when
+     *   omitted.
      * @returns {void}
      * @throws {SlothletError} What {@link ApiManager#assertOwnedWrite} throws for the first path refused.
      * @public
@@ -585,7 +599,7 @@ export class ApiManager extends ComponentBase {
      * @example
      * apiManager.assertModuleReload(null, "victim.v"); // throws inside another module's call
      */
-    public assertModuleReload(moduleID: string | null, apiPath: string | null): void;
+    public assertModuleReload(moduleID: string | null, apiPath: string | null, writer?: object | null): void;
     /**
      * Add new API modules at runtime.
      * @param {object} params - Add parameters.
@@ -786,6 +800,32 @@ export class ApiManager extends ComponentBase {
      */
     private _findAffectedCaches;
     /**
+     * Carry what code wrote into an api tree at runtime (`self.x = …`, a member the host set on the api, a value written
+     * over a module's member) into a copy of the tree built from the same modules for a run (see `Slothlet#buildCopy`),
+     * which has only what loads and the replayed `add()` / `remove()` history. Walks the nodes both trees have; a lazy
+     * node the copied tree loaded is loaded in the copy first. A member a module created stays that module's in the copy.
+     * A plain object or array written at runtime is the same object in both trees, as a shallow copy shares it.
+     *
+     * @param {object|Function} fromRoot - The copied tree's root.
+     * @param {object|Function} toRoot - The copy's root (this api manager's tree).
+     * @param {object|null} fromOwnership - The copied tree's ownership records.
+     * @returns {Promise<void>}
+     * @internal
+     */
+    carryRuntimeMembers(fromRoot: object | Function, toRoot: object | Function, fromOwnership: object | null): Promise<void>;
+    /**
+     * Write what a full-isolation run's `self` kept before the run had a tree of its own (see `makeRunSelf` in
+     * `builders/api_builder`) into the tree built for the run, in the order the run made the changes, as
+     * {@link ApiManager#carryRuntimeMembers} carries what was written into a tree at runtime: each change was checked when
+     * the run made it, so it is made here as the framework's own write, a node written being carried as what was written
+     * for the copy to make its own node of. A member the run's module created is recorded as that module's.
+     *
+     * @param {RunWrite[]} log - The changes.
+     * @returns {void}
+     * @internal
+     */
+    carryRunWrites(log: RunWrite[]): void;
+    /**
      * Collect user-set custom properties from a proxy/wrapper that are NOT in the fresh API.
      * Custom properties are those set by the user at runtime (e.g., api.custom.testFlag = true)
      * that should survive a selective reload.
@@ -959,5 +999,35 @@ export class ApiManager extends ComponentBase {
     private _restoreApiTree;
     #private;
 }
+/**
+ * One change a full-isolation run's `self` kept before the run had a tree of its own (see `makeRunSelf` in
+ * `builders/api_builder`), replayed by {@link ApiManager#carryRunWrites}.
+ */
+export type RunWrite = {
+    /**
+     * - The path of the object changed, from the api root.
+     */
+    parts: string[];
+    /**
+     * - The member changed.
+     */
+    prop: string | symbol;
+    /**
+     * - The change: `"set"`, `"define"` or `"delete"`.
+     */
+    op: string;
+    /**
+     * - The value set, for `"set"`.
+     */
+    value?: any;
+    /**
+     * - The descriptor defined, for `"define"`.
+     */
+    descriptor?: object | undefined;
+    /**
+     * - The module that created the member, when the run's module created it.
+     */
+    created?: string | null | undefined;
+};
 import { ComponentBase } from "#factories/component-base";
 //# sourceMappingURL=api-manager.d.mts.map

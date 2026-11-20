@@ -15,6 +15,14 @@ export function jobHookCount(): number;
  */
 export function answerPromiseProbe(answer: false | null): void;
 /**
+ * What the install-time probe last found: whether the Node running leaves the second async hook out of a promise's job
+ * (`true`), runs it there (`false`), or null before any probe's job has run. For the suite, which checks the probe's own
+ * answer against the Node it runs on.
+ * @returns {boolean|null} The answer.
+ * @internal
+ */
+export function promiseProbeResult(): boolean | null;
+/**
  * This file's internal bindings, for the files of slothlet's own that use them: each of those files takes them once, as
  * it loads, and anyone else is refused (see `ownBindingsRefusal` in `helpers/instance-imports`).
  * @param {string} consumer - The file asking: its path in slothlet's code folder, without its extension.

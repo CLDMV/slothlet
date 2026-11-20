@@ -1,12 +1,5 @@
-/**
- * Manages access control rules for API path invocations.
- * Rules are glob-pattern-based (same syntax as hooks: *, **, ?, {a,b}, !negation).
- * Self-calls (same moduleID) always bypass the permission system.
- *
- * @class PermissionManager
- * @extends ComponentBase
- */
 export class PermissionManager extends ComponentBase {
+    [x: symbol]: () => PermissionManager;
     /**
      * Property name for auto-discovery by _initializeComponents.
      * @type {string}
@@ -271,14 +264,18 @@ export class PermissionManager extends ComponentBase {
      * @param {string|null} [callerFilePath=null] - Caller's source file path (for self-call bypass).
      * @param {string|null} [targetFilePath=null] - Target's source file path (for self-call bypass).
      * @param {object|null} [runtimeContext=null] - Per-request ALS context for condition evaluation.
-     * @param {{ useCache?: boolean }|null} [options=null] - Query options.
+     * @param {{ useCache?: boolean, operation?: "call"|"read"|"access" }|null} [options=null] - Query options.
      * @param {boolean} [options.useCache=true] - Read/write resolved decision cache.
+     * @param {"call"|"read"|"access"} [options.operation="call"] - What is asked: a call, a read, or both (`"access"`,
+     *   allowed only when the call and the read are). Each is decided by the rules whose level covers it.
      * @returns {boolean} True if access is allowed.
      * @example
      * const allowed = pm.checkAccess("payments.charge", "db.write", "/src/pay.mjs", "/src/db.mjs");
+     * const readable = pm.checkAccess("payments.charge", "db.rows", null, null, null, { operation: "read" });
      */
     checkAccess(callerPath: string, targetPath: string, callerFilePath?: string | null, targetFilePath?: string | null, runtimeContext?: object | null, options?: {
         useCache?: boolean;
+        operation?: "call" | "read" | "access";
     } | null): boolean;
     /**
      * Check whether a condition payload matches the provided runtime context.
@@ -304,7 +301,7 @@ export class PermissionManager extends ComponentBase {
      * @param {PermissionCallMeta|null} [callMeta=null] - Call/construct metadata (#455): `{ args, target }`
      *   from the invocation, forwarded to function conditions as their second argument. Null for reads,
      *   hooks, the internal control surface, and silent queries.
-     * @param {{ principalGrace?: boolean, moduleCaller?: boolean, newMember?: boolean, via?: ReadonlyArray<string> }|null} [options=null] - Enforcement options.
+     * @param {{ principalGrace?: boolean, moduleCaller?: boolean, newMember?: boolean, heldMember?: boolean, operation?: "call"|"read", via?: ReadonlyArray<string> }|null} [options=null] - Enforcement options.
      * @param {boolean} [options.principalGrace=false] - Accept a principal whose epoch is current even if its
      *   `ttl` has elapsed (#459). Set only by a promoted call re-enforcing right after its resolve.
      * @param {boolean} [options.moduleCaller=false] - The caller is a module even though no source file is
@@ -314,8 +311,15 @@ export class PermissionManager extends ComponentBase {
      *   (`via: ["slothlet", "permissions", "global", "check", "call"]`), so an
      *   audit consumer can tell a query from the gate of a real call.
      * @param {boolean} [options.newMember=false] - The target is a member a module is about to create, which will be the
-     *   caller's own once written: module privacy answers as for a member the caller's module owns, and the default policy
-     *   alone does not refuse it (a matching rule still decides).
+     *   caller's own once written: the default policy alone does not refuse it (a matching rule still decides). A
+     *   private (underscore-prefixed) member belongs to the node that holds it, so module privacy refuses creating one on
+     *   a node of another module's, as it refuses reading one there; `targetFilePath` is then the holding node's source
+     *   file.
+     * @param {boolean} [options.heldMember=false] - The target is a member a value beneath a node holds (a class's
+     *   prototype, an instance's): a private one is the node's, so module privacy decides it by the module owning the
+     *   nearest path above it that has an owner; `targetFilePath` is then that node's source file.
+     * @param {"call"|"read"} [options.operation="call"] - The operation gated: a call (or construct), or a read. Each
+     *   is decided by the rules whose level covers it; a write is held to the read.
      * @param {function(string): boolean} [options.dataMember] - Given for a read of data: whether a path above the
      *   target is an object member of a module's data. A deny rule naming such a member's path exactly then covers the
      *   target too, as a rule on `path.**` would, so what the member holds is denied with it unless a more specific rule
@@ -330,6 +334,8 @@ export class PermissionManager extends ComponentBase {
         principalGrace?: boolean;
         moduleCaller?: boolean;
         newMember?: boolean;
+        heldMember?: boolean;
+        operation?: "call" | "read";
         via?: ReadonlyArray<string>;
     } | null): boolean;
     /**
@@ -859,6 +865,21 @@ export class PermissionManager extends ComponentBase {
      * applies and the denial is audited like any other.
      */
     public isPrivateTarget(targetPath: string | null | undefined): boolean;
+    /**
+     * Whether module privacy lets a module reach the private members a value beneath a node holds (a class's prototype),
+     * as reading or creating one there would be decided: always while the permission system is off, and otherwise only
+     * for the module the members are private to. Silent: nothing is audited.
+     *
+     * @param {string|null} callerPath - The module's api path; null for the host, which this never refuses.
+     * @param {string} holderPath - The api path of the value holding the members.
+     * @param {string|null} callerFilePath - The module's source file.
+     * @param {string|null} holderFilePath - The source file of the node the value is beneath.
+     * @returns {boolean} True when privacy would refuse none of them.
+     * @public
+     * @example
+     * pm.mayReachPrivate("creator.read", "owned.Box.prototype", "/m/creator.mjs", "/m/owned.mjs"); // false
+     */
+    public mayReachPrivate(callerPath: string | null, holderPath: string, callerFilePath: string | null, holderFilePath: string | null): boolean;
     /**
      * Enable or disable read-level permission gating at runtime.
      * Unlike {@link enable}/{@link disable}, this does not clear the resolved cache —

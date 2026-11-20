@@ -30,6 +30,8 @@ export let AsyncResource: any;
 /** @type {any} */
 export let executionAsyncResource: any;
 /** @type {any} */
+export let executionAsyncId: any;
+/** @type {any} */
 export let createHook: any;
 /** @type {any} */
 export let createRequire: any;

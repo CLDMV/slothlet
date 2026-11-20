@@ -56,6 +56,35 @@ export function pinManyToCurrentCaller(callbacks: Array<any>): Array<any>;
  */
 export function pinManyForResult(result: Promise<any>, callbacks: Array<Function | undefined>): Array<Function | undefined>;
 /**
+ * Count a callback about to be deferred as work of the `run()` / `scope()` the registering code runs in, where the
+ * runtime counts it this way (the live runtime; the async runtime counts it through its async hooks). The run's copy of
+ * the instance lives until all such work has finished (see `holdRunWork` in `helpers/flow-stores`).
+ *
+ * @returns {Function|null} What releases the count, once (a second call does nothing), or null when nothing was
+ *   counted: no run, or a runtime that counts some other way.
+ * @internal
+ */
+export function holdForCurrentFlow(): Function | null;
+/**
+ * The run record of the `run()` / `scope()` the registering code runs in, for work that begins later than its callback
+ * is registered (an observer is work from its first `observe()` until it is disconnected): count it with `holdRunWork`
+ * in `helpers/flow-stores` once it begins. Only where the runtime counts work this way (the live runtime).
+ *
+ * @returns {object|null} The record, or null: no run, or a runtime that counts some other way.
+ * @internal
+ */
+export function recordOfCurrentFlow(): object | null;
+/**
+ * A callback that releases a count {@link holdForCurrentFlow} took once it has run, for a boundary that calls its
+ * callback once (a timer, a microtask, a Node callback).
+ *
+ * @param {Function} callback - The callback, pinned already.
+ * @param {Function} release - The release.
+ * @returns {Function} The callback, releasing the count after it runs, whether it returns or throws.
+ * @internal
+ */
+export function releaseAfterCall(callback: Function, release: Function): Function;
+/**
  * This file's internal bindings, for the files of slothlet's own that use them: each of those files takes them once, as
  * it loads, and anyone else is refused (see `ownBindingsRefusal` in `helpers/instance-imports`).
  * @param {string} consumer - The file asking: its path in slothlet's code folder, without its extension.

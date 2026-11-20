@@ -77,14 +77,8 @@ export function failureSource(fields: object, record: FailureRecord): object;
  * @public
  */
 export function isHookProcessed(error: any): boolean;
-/**
- * Manages hooks for API function interception.
- * Supports before/after/always/error/around hooks with pattern matching and priority ordering.
- *
- * @class HookManager
- * @extends ComponentBase
- */
 export class HookManager extends ComponentBase {
+    [x: symbol]: () => HookManager;
     /**
      * Property name for auto-discovery
      * @type {string}
@@ -96,15 +90,15 @@ export class HookManager extends ComponentBase {
      * @param {object} slothlet - Parent slothlet instance
      */
     constructor(slothlet: object);
-    enabled: boolean;
-    defaultPattern: string;
-    suppressErrors: boolean;
-    pinEnforced: boolean;
-    enabledPatterns: Set<any>;
-    patternFilterActive: boolean;
-    hooks: Map<any, any>;
-    registrationOrder: number;
-    reportedErrors: WeakSet<object>;
+    enabled: boolean | undefined;
+    defaultPattern: string | undefined;
+    suppressErrors: boolean | undefined;
+    pinEnforced: boolean | undefined;
+    enabledPatterns: Set<any> | undefined;
+    patternFilterActive: boolean | undefined;
+    hooks: Map<any, any> | undefined;
+    registrationOrder: number | undefined;
+    reportedErrors: WeakSet<object> | undefined;
     /**
      * Register a hook for API functions.
      *

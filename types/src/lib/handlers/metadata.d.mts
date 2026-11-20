@@ -17,13 +17,8 @@ export const MODULE_ID_SEPARATOR: string;
  * @internal
  */
 export const MODULE_MANIFEST: symbol;
-/**
- * Metadata handler for introspection of function metadata
- * @class Metadata
- * @extends ComponentBase
- * @package
- */
 export class Metadata extends ComponentBase {
+    [x: symbol]: () => Metadata;
     static slothletProperty: string;
     /**
      * Create Metadata instance
@@ -73,6 +68,17 @@ export class Metadata extends ComponentBase {
         taggedAt: number;
     } | null;
     /**
+     * While a full reload builds its new copy in a host with no AsyncLocalStorage, calls reach the new copy's handler,
+     * and the nodes they run are the copy the instance has: this handler answers the system facts of those nodes from
+     * that copy's handler until the reload ends.
+     * @param {Metadata|null} handler - The handler of the copy being replaced, or null to stop.
+     * @returns {void}
+     * @package
+     * @example
+     * metadata.readThrough(previous.metadata);
+     */
+    readThrough(handler: Metadata | null): void;
+    /**
      * The user metadata of a node: global < api path chain < the node's own.
      *
      * @description
@@ -111,7 +117,7 @@ export class Metadata extends ComponentBase {
      * @param {unknown} value - Metadata value
      * @public
      */
-    public setGlobalMetadata(key: string, value: unknown): void;
+    public setGlobalMetadata(key: string, value: unknown): any;
     /**
      * Add/update user metadata for specific function
      * @param {Function} target - Function to tag with metadata
@@ -119,7 +125,7 @@ export class Metadata extends ComponentBase {
      * @param {unknown} value - Metadata value
      * @public
      */
-    public setUserMetadata(target: Function, key: string, value: unknown): void;
+    public setUserMetadata(target: Function, key: string, value: unknown): any;
     /**
      * Remove user metadata from specific function
      * @param {Function} target - Function to remove metadata from
@@ -131,7 +137,7 @@ export class Metadata extends ComponentBase {
      */
     public removeUserMetadata(target: Function, key?: string | string[] | {
         [x: string]: string[];
-    }): void;
+    }): any;
     /**
      * Register user metadata keyed by an identifier (moduleID or API path)
      *
@@ -181,7 +187,7 @@ export class Metadata extends ComponentBase {
      * @param {unknown} [value] - Value when `keyOrObj` is a string key
      * @public
      */
-    public setPathMetadata(apiPath: string, keyOrObj: string | Object, value?: unknown): void;
+    public setPathMetadata(apiPath: string, keyOrObj: string | Object, value?: unknown): any;
     /**
      * Get the user metadata collected from the path store for a given API path.
      *
@@ -210,7 +216,7 @@ export class Metadata extends ComponentBase {
      * @param {string|string[]} [key] - Key(s) to remove. Omit to remove all metadata for the path.
      * @public
      */
-    public removePathMetadata(apiPath: string, key?: string | string[]): void;
+    public removePathMetadata(apiPath: string, key?: string | string[]): any;
     /**
      * Export user-managed metadata state for preservation across reload.
      *
@@ -245,7 +251,7 @@ export class Metadata extends ComponentBase {
     importUserState(state: {
         globalMetadata: Object;
         userMetadataStore: Map<any, any>;
-    }): void;
+    }): any;
     /**
      * The currently-executing API function, as a caller object ({ path, module, metadata, version }).
      *

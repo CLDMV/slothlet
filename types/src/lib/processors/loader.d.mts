@@ -183,6 +183,15 @@ export class Loader extends ComponentBase {
         paths: ReadonlyArray<string> | null;
     }>;
     /**
+     * The namespace of the CommonJS leaf this loader last loaded for a mount, which a copy of the tree uses instead of
+     * evaluating the leaf again (see `Slothlet#buildCopy`).
+     * @param {string} filePath - The file.
+     * @param {string|null} moduleID - The mount.
+     * @returns {object|null} The namespace, or null when it was not loaded.
+     * @internal
+     */
+    loadedCommonJS(filePath: string, moduleID: string | null): object | null;
+    /**
      * Scan directory for module files
      * @param {string} dir - Directory to scan
      * @param {Object} [options={}] - Scan options

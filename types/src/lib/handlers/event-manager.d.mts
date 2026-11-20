@@ -8,12 +8,8 @@ export const DELIVERY_REASONS: Readonly<{
     LISTENER_GONE: "listener-gone";
     DENIED: "denied";
 }>;
-/**
- * Instance-wide event manager (#407).
- * @extends ComponentBase
- * @public
- */
 export class EventManager extends ComponentBase {
+    [x: symbol]: () => EventManager;
     /**
      * Where this component mounts on the Slothlet instance (`slothlet.handlers.eventManager`).
      * @type {string}

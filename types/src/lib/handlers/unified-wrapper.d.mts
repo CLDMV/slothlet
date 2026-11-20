@@ -324,7 +324,7 @@ declare function runtime_selfModuleCeilings(slothlet: object, writer?: object | 
  */
 declare function runtime_selfView(node: any, reader?: object, from?: object | null, access?: object | null): any;
 /**
- * Record a stand-in for one of the framework's root members (an isolated scope's copy-on-write view of the
+ * Record a stand-in for one of the framework's root members (a view of the
  * `slothlet` namespace) as that member, so module code reading it through the scope's `self` is handed the same
  * view of it as outside the scope ({@link runtime_selfFrameworkView}). Anything else is left unrecorded.
  *
@@ -334,7 +334,7 @@ declare function runtime_selfView(node: any, reader?: object, from?: object | nu
  * @internal
  *
  * @example
- * runtime_registerFrameworkMemberCopy(makeCopyOnWriteSelf(api.slothlet), api.slothlet);
+ * runtime_registerFrameworkMemberCopy(viewOf(api.slothlet), api.slothlet);
  */
 declare function runtime_registerFrameworkMemberCopy(copy: object, member: any): object;
 /**
@@ -843,7 +843,6 @@ declare class UnifiedWrapper extends ComponentBase {
      * @param {Function|Object|null} [options.initialImpl=null] - Initial implementation (null for lazy mode)
      * @param {Function} [options.materializeFunc=null] - Async function to materialize lazy modules
      * @param {boolean} [options.isCallable=false] - Whether the wrapper should be callable
-     * @param {boolean} [options.materializeOnCreate=false] - Whether to materialize on creation
      * @param {string} [options.filePath=null] - File path of the module source
      * @param {string[]|null} [options.exportPath] - Access path within `filePath`'s module namespace
      *   that produced `initialImpl` (#484). When omitted it is looked up from the ownership export index
@@ -880,13 +879,12 @@ declare class UnifiedWrapper extends ComponentBase {
      * 	materializeFunc: async () => import("./math.mjs")
      * });
      */
-    constructor(slothlet: Object, { mode, apiPath, initialImpl, materializeFunc, isCallable, materializeOnCreate, filePath, exportPath, moduleID, sourceFolder, memberNames, __adoptVisited, deferChildAdopt, __position, nullishDefault }: {
+    constructor(slothlet: Object, { mode, apiPath, initialImpl, materializeFunc, isCallable, filePath, exportPath, moduleID, sourceFolder, memberNames, __adoptVisited, deferChildAdopt, __position, nullishDefault }: {
         mode: string;
         apiPath: string;
         initialImpl?: Object | Function | null | undefined;
         materializeFunc?: Function | undefined;
         isCallable?: boolean | undefined;
-        materializeOnCreate?: boolean | undefined;
         filePath?: string | undefined;
         exportPath?: string[] | null | undefined;
         moduleID?: string | undefined;

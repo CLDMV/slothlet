@@ -397,9 +397,13 @@ export class LiveContextManager {
     /**
      * Cleanup instance context
      * @param {string} instanceID - Instance to cleanup
+     * @param {{keepFlows?: boolean}} [options] - `keepFlows`: leave the instance's run() / scope() stores in place (a
+     *   reload that keeps the instance's ID makes a new base store under the same ID).
      * @public
      */
-    public cleanup(instanceID: string): void;
+    public cleanup(instanceID: string, { keepFlows }?: {
+        keepFlows?: boolean;
+    }): void;
     /**
      * Diagnostics for one instance (#837): what this manager holds for that instance only, never the other instances
      * the process-wide manager also serves.
@@ -423,6 +427,17 @@ export class LiveContextManager {
     };
     #private;
 }
+/**
+ * A promise's record of the flow it was made in: the store id the active-instance field named, and with permissions on
+ * the call it was created in, while it ran synchronously or in a flow such a promise's reaction ran: the flow's starter.
+ * A promise made in a `run()` / `scope()` flow also holds that flow's store, so its jobs run in the flow after the
+ * `run()` has returned, for as long as the promise lives (see {@link LiveContextManager#reopenFlowStore}).
+ */
+export type PromiseFlowRecord = string | null | {
+    flow: string | null;
+    starter: object | null;
+    store?: object;
+};
 /**
  * The functions of the engine's promise hooks slothlet calls, as they were when slothlet loaded.
  */

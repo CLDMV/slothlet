@@ -1,4 +1,5 @@
 export class Lifecycle extends ComponentBase {
+    [x: symbol]: () => Lifecycle;
     /**
      * Where this component should be mounted on the Slothlet instance
      * @type {string}
@@ -15,7 +16,7 @@ export class Lifecycle extends ComponentBase {
     /** @type {Map<string, Map<Function, unknown>>} */
     subscriberReaders: Map<string, Map<Function, unknown>>;
     eventLog: any[];
-    maxLogSize: number;
+    maxLogSize: any;
     /**
      * Subscribe to lifecycle event
      * @param {string} event - Event name (impl:created, impl:changed, impl:collision, impl:removed, materialized:complete)
@@ -68,7 +69,7 @@ export class Lifecycle extends ComponentBase {
      * lifecycle.on('impl:changed', handler);
      * lifecycle.off('impl:changed', handler);
      */
-    public off(event: string, handler: Function): void;
+    public off(event: string, handler: Function): any;
     /**
      * Alias for off() - standard EventEmitter pattern
      * @param {string} event - Event name

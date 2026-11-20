@@ -1,4 +1,16 @@
 /**
+ * Make an `on<event>` property assignment through the platform's own setter. A platform that implements the property
+ * with a listener of its own (Node registers one through `addEventListener`) registers it as it is: the handler the
+ * property holds is carried and counted by the property's patch (see `helpers/eventtarget-property-context`), and the
+ * platform's listener, which serves whichever handler the property holds at the time, is no one's work.
+ * @param {Function} set - The platform's setter.
+ * @param {object} target - The target.
+ * @param {*} value - The value assigned.
+ * @returns {*} What the setter returns.
+ * @internal
+ */
+export function asPlatformRegistration(set: Function, target: object, value: any): any;
+/**
  * This file's internal bindings, for the files of slothlet's own that use them: each of those files takes them once, as
  * it loads, and anyone else is refused (see `ownBindingsRefusal` in `helpers/instance-imports`).
  * @param {string} consumer - The file asking: its path in slothlet's code folder, without its extension.
