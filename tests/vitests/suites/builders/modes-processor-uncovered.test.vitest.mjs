@@ -657,7 +657,7 @@ describe("modes-processor: FLATTEN_MULTI_EXPORT_BLOCKED debug log when skip bloc
 	});
 
 	it("#assignWithRoutineRevert invalidates a skip-rejected candidate's own wrapper, not just its raw entry (#372/#373 review, suppressed finding)", async () => {
-		// Reverting RoutineManager.raw alone is not enough when backgroundMaterialize is set: the
+		// Reverting RoutineManager.raw alone is not enough when loader.materialize is set: the
 		// rejected candidate's UnifiedWrapper can already be materializing in the background, and
 		// that materialization completing AFTER this revert would re-apply its result and re-fire
 		// impl:changed, undoing the rollback. #assignWithRoutineRevert must invalidate the specific

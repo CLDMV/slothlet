@@ -499,7 +499,7 @@ describe("deletePath — permanently invalidates a removed wrapper's still-in-fl
 		api = null;
 	});
 
-	it("blocks a stale backgroundMaterialize result from applying after the module is removed", async () => {
+	it("blocks a stale background-materialization result from applying after the module is removed", async () => {
 		// A lazy wrapper's materializeFunc can still be running when the api path it lives at is
 		// removed (api.remove()/deletePath). ___materialize()'s own guard re-checks `invalid` both
 		// before starting and immediately after its awaited work resolves — but only deletePath can

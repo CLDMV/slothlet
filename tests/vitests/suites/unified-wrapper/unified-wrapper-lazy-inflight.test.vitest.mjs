@@ -555,7 +555,7 @@ describe("unified-wrapper: in-flight, wrapper.contextManager set, impl={default:
 // ---------------------------------------------------------------------------
 describe("unified-wrapper: ___invalidate() stops an already-in-flight materialization from applying (#372 review)", () => {
 	it("invalidating mid-flight prevents the setter path from applying its result", async () => {
-		// A rejected candidate's backgroundMaterialize: true wrapper can already be mid-materialization
+		// A rejected candidate's loader.materialize: true wrapper can already be mid-materialization
 		// by the time api-manager.mjs's revert logic runs. ___invalidate()'s own `invalid` flag is only
 		// checked at ___materialize()'s START — this confirms it's ALSO checked inside the setter
 		// (lazy_setImpl) so a synchronous setImpl() call from materializeFunc is blocked too.
