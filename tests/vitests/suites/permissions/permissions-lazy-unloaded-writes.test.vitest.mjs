@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-31T20:52:50-07:00 (1793505170)
+ *	@Last modified time: 2026-11-16T18:29:57-08:00 (1794882597)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -35,7 +35,7 @@ import slothletInstance from "@cldmv/slothlet";
  * @returns {Promise<object>} The api.
  */
 const slothlet = (config) =>
-	slothletInstance(config?.permissions ? { ...config, permissions: { provenance: false, ...config.permissions } } : config);
+	slothletInstance(config?.permissions ? { ...config, permissions: { caller: { provenance: false }, ...config.permissions } } : config);
 import { TEST_DIRS, withSuppressedSlothletErrorOutput } from "../../setup/vitest-helper.mjs";
 
 const FIXTURE = TEST_DIRS.API_TEST_SELF_WRITE_REACH;
@@ -57,8 +57,8 @@ describe.each([{ runtime: "async" }, { runtime: "live" }])(
 			["off", {}, "done"]
 		])("holds another module's change to the same rule as a loaded node (permissions %s)", async (_label, options, expected) => {
 			api = await slothlet({ base: path.join(FIXTURE, "base"), mode: "lazy", runtime, silent: true, ...options });
-			await api.slothlet.api.add("holder", path.join(FIXTURE, "holder"), { moduleID: "holder" });
-			await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { moduleID: "guest" });
+			await api.slothlet.api.add("holder", path.join(FIXTURE, "holder"), { id: "holder" });
+			await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { id: "guest" });
 			globalThis[Symbol.for(PROBE)] = (self) => {
 				/**
 				 * Run `change`, reporting `"done"` or the error code it was refused with.
@@ -98,12 +98,12 @@ describe.each([{ runtime: "async" }, { runtime: "live" }])(
 			["granted the write", { permissions: { rules: [{ caller: "guest.**", target: "holder.**:write", effect: "allow" }] } }],
 			[
 				"granted the write, capture off",
-				{ permissions: { references: { capture: false }, rules: [{ caller: "guest.**", target: "holder.**:write", effect: "allow" }] } }
+				{ permissions: { rules: [{ caller: "guest.**", target: "holder.**:write", effect: "allow" }], caller: { capture: false } } }
 			]
 		])("lets a module %s freeze its view of another module's unloaded node without an error", async (_label, options) => {
 			api = await slothlet({ base: path.join(FIXTURE, "base"), mode: "lazy", runtime, silent: true, ...options });
-			await api.slothlet.api.add("holder", path.join(FIXTURE, "holder"), { moduleID: "holder" });
-			await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { moduleID: "guest" });
+			await api.slothlet.api.add("holder", path.join(FIXTURE, "holder"), { id: "holder" });
+			await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { id: "guest" });
 			globalThis[Symbol.for(PROBE)] = (self) => {
 				try {
 					Object.freeze(self.holder.deep.inner);
@@ -121,7 +121,7 @@ describe.each([{ runtime: "async" }, { runtime: "live" }])(
 			["off", {}]
 		])("an unloaded node frozen by the host still answers for its prototype (permissions %s)", async (_label, options) => {
 			api = await slothlet({ base: path.join(FIXTURE, "base"), mode: "lazy", runtime, silent: true, ...options });
-			await api.slothlet.api.add("holder", path.join(FIXTURE, "holder"), { moduleID: "holder" });
+			await api.slothlet.api.add("holder", path.join(FIXTURE, "holder"), { id: "holder" });
 			const inner = api.holder.deep.inner;
 			Object.freeze(inner);
 			expect(Object.isFrozen(inner)).toBe(true);
@@ -169,8 +169,8 @@ describe.each([{ runtime: "async" }, { runtime: "live" }])(
 			const reports = {};
 			for (const mode of ["eager", "lazy"]) {
 				api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, ...options });
-				await api.slothlet.api.add("holder", path.join(FIXTURE, "holder"), { moduleID: "holder" }, { version: "v1", default: true });
-				await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { moduleID: "guest" });
+				await api.slothlet.api.add("holder", path.join(FIXTURE, "holder"), { id: "holder", version: { tag: "v1", default: true } });
+				await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { id: "guest" });
 				reports[mode] = await withSuppressedSlothletErrorOutput(() => api.guest.x.runWithSelf(PROBE));
 				await api.slothlet.shutdown();
 				api = null;

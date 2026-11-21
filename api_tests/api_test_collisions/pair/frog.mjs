@@ -14,9 +14,10 @@
  */
 
 /**
- * @fileoverview File side of a nested file+directory collision whose folder module exports members
- * that child adoption skips by its private list (`_state`, `_invalid`). Those members reach the
- * surviving slot only through the extracted snapshot — the collision merge's snapshot arm.
+ * @fileoverview File side of a nested file+directory collision whose folder module exports `_state`
+ * and `_invalid`. Those are ordinary export names (the framework's own state is `____state` /
+ * `____invalid`), so they are adopted as children and reach the surviving slot through the ordinary
+ * child merge, in both modes.
  * @module api_test_collisions.pair.frog
  * @memberof module:api_test_collisions
  */

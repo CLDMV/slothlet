@@ -147,7 +147,7 @@ if (subStructure.files.length === 0 && subStructure.directories.length === 0) { 
 **Related Rule**: [Rule 14](../API-RULES.md#rule-14-api-directory-scan--inclusion)
 **Status**: ✅ Active
 
-**Pattern**: Subdirectories beyond `apiDepth`/`maxDepth`, or all subdirectories when `recursive` is false, are silently dropped (no truncation notice).
+**Pattern**: Subdirectories beyond `depth`/`maxDepth`, or all subdirectories when `recursive` is false, are silently dropped (no truncation notice).
 
 **Source(s)**: `src/lib/processors/loader.mjs:500-519`
 
@@ -180,12 +180,12 @@ if (recursive && currentDepth < maxDepth) {
 
 ```javascript
 if (isFrameworkReservedKey(nameWithoutExt)) {
-	throw new this.SlothletError("MODULE_RESERVED_FILENAME", { file: entry.name, dir }, null, { validationError: true });
+	throw new this.SlothletError("MODULE_RESERVED_FILE", { file: entry.name, dir });
 }
 ```
 
 **Trigger**: `isFrameworkReservedKey(nameWithoutExt)`
-**Result**: `throw MODULE_RESERVED_FILENAME` — the scan fails.
+**Result**: `throw MODULE_RESERVED_FILE` — the scan fails.
 
 ---
 
@@ -201,14 +201,14 @@ if (isFrameworkReservedKey(nameWithoutExt)) {
 **Condition Check**:
 
 ```javascript
-const RESERVED_MOUNTPATH_ROOTS = Object.freeze(new Set(["slothlet", "shutdown", "destroy"]));
-if (RESERVED_MOUNTPATH_ROOTS.has(mountPathSegments[0])) {
-	throw new SlothletError("MODULE_RESERVED_MOUNTPATH" /* … */);
+const RESERVED_MOUNT_ROOTS = Object.freeze(new Set(["slothlet", "shutdown", "destroy"]));
+if (RESERVED_MOUNT_ROOTS.has(mountSegments[0])) {
+	throw new SlothletError("MODULE_RESERVED_MOUNT" /* … */);
 }
 ```
 
-**Trigger**: `RESERVED_MOUNTPATH_ROOTS.has(mountPathSegments[0])`
-**Result**: `throw MODULE_RESERVED_MOUNTPATH` — the module never mounts.
+**Trigger**: `RESERVED_MOUNT_ROOTS.has(mountSegments[0])`
+**Result**: `throw MODULE_RESERVED_MOUNT` — the module never mounts.
 
 ---
 

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:17:42-08:00 (1794874662)
+ *	@Last modified time: 2026-11-17T13:37:06-08:00 (1794951426)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -31,6 +31,16 @@
  *   `Date.now` and `NativeObject.keys` read a member a module can replace on the shared constructor. Their captured
  *   forms are `Promises.*`, `Symbols.*`, `Dates.*` and `Objects.*`. An import renamed (`import { Error as E }`) is
  *   checked by the name it imports;
+ * - a member read off the `prototype` of one of them (`Objects.prototype.hasOwnProperty`, `Promise.prototype.then`,
+ *   `Map.prototype[name]`), anywhere in the file, its top level included: the prototype object is fixed, but its
+ *   members are not, and a file of slothlet's can load after module code has run. Its captured forms are the
+ *   `…Methods` (`ObjectMethods.hasOwnProperty(value, key)`) and `PrototypeFunctions` (the function itself). Writing a
+ *   member (`EventTarget.prototype.addEventListener = patch`) is not a read; the reads `KEPT_PROTOTYPE_MEMBERS` lists
+ *   are made on purpose;
+ * - the same prototype handed to something that reads its members by key, anywhere in the file, its top level
+ *   included: `getOwnPropertyDescriptor(RegExp.prototype, "source")` (and `getOwnPropertyDescriptors`), a
+ *   `getPrototypeOf` of it, or a function of the file's own (`getterOf(DataView.prototype, "byteLength")`). Its captured
+ *   form is `PrototypeFunctions`, which takes accessors as their getters (`PrototypeFunctions.RegExp.source`);
  * - a member of one of Node's built-in modules read while slothlet runs rather than when the file loads: off what
  *   `process.getBuiltinModule(…)` or a helper of slothlet's around it (`nodeBuiltin(…)`, `builtin(…)`) returns, off
  *   `import("node:…")`, off `createRequire(…)("node:…")`, off a default or namespace import of a built-in, off a
@@ -246,6 +256,40 @@ const KEPT_MEMBERS = {
 	navigator: new Set(["language", "languages"])
 };
 
+/**
+ * Members read off a captured constructor's `prototype` on purpose, as they are when read: the `EventTarget` boundary
+ * patch layers its listener methods over whatever is installed when it is turned on (another copy of slothlet's
+ * patch, or the host's), as the `EventEmitter` patch does over `node:events`, and restores what it found.
+ * @type {Record<string, Set<string>>}
+ */
+const KEPT_PROTOTYPE_MEMBERS = {
+	EventTarget: new Set(["addEventListener", "removeEventListener"])
+};
+
+/**
+ * Descriptors read off a captured constructor's `prototype` on purpose, as they are when read: the promise patch layers
+ * its `then` over whatever descriptor is installed when it is turned on, and restores it; settling a promise checks that
+ * `constructor` is still the one taken at load before handing back the promise the engine's `then` made.
+ * @type {Record<string, Set<string>>}
+ */
+const KEPT_DESCRIPTOR_READS = {
+	Promise: new Set(["then", "constructor"])
+};
+
+/**
+ * Functions that read a prototype handed to them by key (or its own prototype): reported for a captured constructor's
+ * `prototype`, as a member read off it is.
+ * @type {Set<string>}
+ */
+const PROTOTYPE_READERS = new Set(["getOwnPropertyDescriptor", "getOwnPropertyDescriptors", "getPrototypeOf"]);
+
+/**
+ * Captured holders of a built-in's data members whose `prototype` is the built-in's: a member read off it is reported
+ * like one read off a captured constructor's.
+ * @type {Set<string>}
+ */
+const PROTOTYPE_HOLDERS = new Set(["Objects", "Functions", "Arrays", "NativeFunction", "NativeArray"]);
+
 /** The import source of the captured copies. */
 const INTRINSICS = "#helpers/intrinsics";
 
@@ -266,6 +310,10 @@ const rule = {
 			unknown:
 				"`{{name}}` here is a global, which module code can replace after slothlet loads. Take it in #helpers/intrinsics and import it, or read the current one as `globalThis.{{name}}` with a one-line reason.",
 			member: "`{{name}}.{{member}}` reads a member module code can replace on the shared constructor.{{use}}",
+			prototypeMember:
+				"`{{text}}` reads a member module code can replace on the shared prototype. Call the copy taken at load, `{{builtin}}Methods.{{member}}(value, …)`, or take the function itself as `PrototypeFunctions.{{builtin}}.{{member}}`, from #helpers/intrinsics.",
+			prototypeHanded:
+				"`{{text}}` reads the shared prototype's members (or its prototype) when it runs, which module code can replace by then, a file of slothlet's top level included. Take the function or getter from `PrototypeFunctions.{{builtin}}` in #helpers/intrinsics (add it there if it is missing).",
 			directive: "slothlet/captured-intrinsics has no exemptions: import the captured copy, or read the current global as `globalThis.X`.",
 			nodeMember:
 				"`{{name}}` reads a member of a Node built-in module after slothlet loaded, which module code can replace by then. Take it when the file loads (at its top level) and call that copy.",
@@ -284,7 +332,11 @@ const rule = {
 			const parent = identifier.parent;
 			if (parent?.type !== "MemberExpression" || parent.object !== identifier) return;
 			const member = parent.computed ? null : parent.property.name;
-			if (member === "prototype") return;
+			if (member === "prototype") {
+				checkPrototypeMember(parent, name);
+				return;
+			}
+			if (!Object.hasOwn(CONSTRUCTORS, name)) return;
 			// The well-known symbols are non-writable, non-configurable members of `Symbol`.
 			if (name === "Symbol" && member !== "for" && member !== "keyFor") return;
 			if (member !== null && KEPT_MEMBERS[name]?.has(member)) return;
@@ -294,6 +346,70 @@ const rule = {
 				messageId: "member",
 				data: { name, member: member ?? "[…]", use: copy ? ` Use ${copy}.${member ?? "[…]"}.` : "" }
 			});
+		};
+		/**
+		 * Report a member read off a captured constructor's `prototype`, other than one it keeps on purpose. Writing the
+		 * member (the target of an assignment) is not a read.
+		 * @param {object} prototypeRead - The `X.prototype` member expression.
+		 * @param {string} name - The constructor's name (the imported name, for an import).
+		 */
+		const checkPrototypeMember = (prototypeRead, name) => {
+			const read = prototypeRead.parent;
+			if (read?.type === "CallExpression" && read.arguments.includes(prototypeRead)) {
+				checkPrototypeHanded(read, prototypeRead, name);
+				return;
+			}
+			if (read?.type !== "MemberExpression" || read.object !== prototypeRead) return;
+			if (read.parent?.type === "AssignmentExpression" && read.parent.left === read) return;
+			const member = read.computed ? null : read.property.name;
+			if (member !== null && KEPT_PROTOTYPE_MEMBERS[name]?.has(member)) return;
+			const builtin =
+				{
+					Objects: "Object",
+					NativeObject: "Object",
+					Functions: "Function",
+					NativeFunction: "Function",
+					Arrays: "Array",
+					NativeArray: "Array"
+				}[name] ?? name;
+			context.report({
+				node: read,
+				messageId: "prototypeMember",
+				data: { text: sourceCode.getText(read), builtin, member: member ?? "[…]" }
+			});
+		};
+		/**
+		 * Report a captured constructor's `prototype` handed to a function that reads its members by key: one of
+		 * {@link PROTOTYPE_READERS}, or a function of the file's own. A key read on purpose is left alone.
+		 * @param {object} call - The call expression.
+		 * @param {object} prototypeRead - The `X.prototype` argument.
+		 * @param {string} name - The constructor's name (the imported name, for an import).
+		 */
+		const checkPrototypeHanded = (call, prototypeRead, name) => {
+			const callee = call.callee.type === "ChainExpression" ? call.callee.expression : call.callee;
+			const calleeName =
+				callee.type === "Identifier" ? callee.name : callee.type === "MemberExpression" && !callee.computed ? callee.property.name : null;
+			if (calleeName === null) return;
+			let reads = PROTOTYPE_READERS.has(calleeName);
+			if (!reads && callee.type === "Identifier") {
+				const def = variableOf(callee)?.defs[0];
+				reads =
+					def?.type === "FunctionName" ||
+					(def?.type === "Variable" && def.node.init !== null && def.node.init !== undefined && isFunction(def.node.init));
+			}
+			if (!reads) return;
+			const key = call.arguments[call.arguments.indexOf(prototypeRead) + 1];
+			if (key?.type === "Literal" && KEPT_DESCRIPTOR_READS[name]?.has(String(key.value))) return;
+			const builtin =
+				{
+					Objects: "Object",
+					NativeObject: "Object",
+					Functions: "Function",
+					NativeFunction: "Function",
+					Arrays: "Array",
+					NativeArray: "Array"
+				}[name] ?? name;
+			context.report({ node: call, messageId: "prototypeHanded", data: { text: sourceCode.getText(call).slice(0, 80), builtin } });
 		};
 		/**
 		 * The variable an identifier refers to, from the scope it is in.
@@ -474,7 +590,7 @@ const rule = {
 					const def = variable.defs.find((candidate) => candidate.type === "ImportBinding");
 					if (!def || def.parent?.source?.value !== INTRINSICS) continue;
 					const imported = def.node.imported?.name ?? variable.name;
-					if (!Object.hasOwn(CONSTRUCTORS, imported)) continue;
+					if (!Object.hasOwn(CONSTRUCTORS, imported) && !PROTOTYPE_HOLDERS.has(imported)) continue;
 					for (const ref of variable.references) checkMember(ref.identifier, imported);
 				}
 			}

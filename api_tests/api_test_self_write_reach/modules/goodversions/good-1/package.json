@@ -1,0 +1,5 @@
+{
+	"name": "good",
+	"version": "1.0.0",
+	"description": "Test fixture: one of two versions of the same package, at different mount paths (#625)."
+}

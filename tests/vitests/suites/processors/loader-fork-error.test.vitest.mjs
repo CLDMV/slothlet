@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:20-07:00 (1791090920)
+ *	@Last modified time: 2026-11-16T18:30:51-08:00 (1794882651)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -22,7 +22,7 @@
  * real spawn failure requires a corrupt install.  Instead we mock child_process.fork
  * to return a fake EventEmitter that immediately emits "error", which is exactly the
  * same signal the parent's child.on("error") handler would receive for a real spawn
- * failure.  This causes loader to reject with TS_TYPE_GENERATION_FORK_FAILED (L115).
+ * failure.  This causes loader to reject with TYPESCRIPT_TYPE_GENERATION_FORK_FAILED (L115).
  *
  * This file intentionally lives alone because vi.mock() is file-scoped — sharing it
  * with loader.test.vitest.mjs would break tests there that need a real fork.
@@ -91,7 +91,7 @@ describe("loader.mjs L115 — child.on(error) fork-spawn failure path", () => {
 		}
 	});
 
-	it("rejects with TS_TYPE_GENERATION_FORK_FAILED when fork emits error (L115)", async () => {
+	it("rejects with TYPESCRIPT_TYPE_GENERATION_FORK_FAILED when fork emits error (L115)", async () => {
 		// Dynamic import slothlet inside the test so it uses the mocked child_process
 		const { default: slothlet } = await import("@cldmv/slothlet");
 
@@ -104,11 +104,11 @@ describe("loader.mjs L115 — child.on(error) fork-spawn failure path", () => {
 						mode: "strict",
 						types: {
 							output: join(fixtureRoot, "generated", "api.d.ts"),
-							interfaceName: "ForkErrorAPI"
+							name: "ForkErrorAPI"
 						}
 					}
 				})
-			).rejects.toThrow("TS_TYPE_GENERATION_FORK_FAILED");
+			).rejects.toThrow("TYPESCRIPT_TYPE_GENERATION_FORK_FAILED");
 		});
 	});
 });

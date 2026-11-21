@@ -98,7 +98,7 @@ export const gatedSibling = async (gate) => {
 export const gatedInternalRoute = async (gate) => {
 	await gate;
 	try {
-		return { ok: true, count: (await self.slothlet.permissions.global.rulesForPath("db.write.insert")).length };
+		return { ok: true, count: (await self.slothlet.permissions.global.rules.path("db.write.insert")).length };
 	} catch (err) {
 		return { ok: false, code: err.code ?? String(err.message).slice(0, 40) };
 	}

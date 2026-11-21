@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T01:00:00-08:00 (1794819600)
+ *	@Last modified time: 2026-11-16T18:28:08-08:00 (1794882488)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -38,11 +38,13 @@ describe("browser per-instance methods", () => {
 		const mod = await import("@cldmv/slothlet");
 		const slothlet = mod.default ?? mod.slothlet;
 		const api = await slothlet({
-			platform: "browser",
+			loader: {
+				platform: "browser"
+			},
 			mode,
 			silent: true,
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				rules: [
 					{ caller: "**", target: "vault.**", effect: "deny" },
 					{ caller: "bag.**", target: "vault.**", effect: "allow" },
@@ -62,8 +64,8 @@ describe("browser per-instance methods", () => {
 				return error?.code ?? String(error?.message ?? error);
 			}
 		};
-		await api.slothlet.api.add("vault", { exports: { get: () => "SECRET" } }, { moduleID: "vault" });
-		await api.slothlet.api.add("bag", { exports: { inst: () => new Client() } }, { moduleID: "bag" });
+		await api.slothlet.api.add("vault", { exports: { get: () => "SECRET" } }, { id: "vault" });
+		await api.slothlet.api.add("bag", { exports: { inst: () => new Client() } }, { id: "bag" });
 		await api.slothlet.api.add(
 			"runner",
 			{
@@ -75,7 +77,7 @@ describe("browser per-instance methods", () => {
 					}
 				}
 			},
-			{ moduleID: "runner" }
+			{ id: "runner" }
 		);
 		await api.slothlet.api.add(
 			"ext",
@@ -89,7 +91,7 @@ describe("browser per-instance methods", () => {
 					}
 				}
 			},
-			{ moduleID: "ext" }
+			{ id: "ext" }
 		);
 		return api;
 	};

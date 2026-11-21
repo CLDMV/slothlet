@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-11T13:14:42-08:00 (1794431682)
+ *	@Last modified time: 2026-11-16T18:29:35-08:00 (1794882575)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -36,8 +36,8 @@ const matrix = ["eager", "lazy"].flatMap((mode) =>
 	["async", "live"].flatMap((runtime) =>
 		[
 			{ name: "permissions off", permissions: null },
-			{ name: "precise", permissions: { defaultPolicy: "allow", attribution: "precise" } },
-			{ name: "fast", permissions: { defaultPolicy: "allow", attribution: "fast" } }
+			{ name: "precise", permissions: { policy: "allow", caller: { attribution: "precise" } } },
+			{ name: "fast", permissions: { policy: "allow", caller: { attribution: "fast" } } }
 		].map((entry) => ({ mode, runtime, ...entry }))
 	)
 );
@@ -49,8 +49,8 @@ const matrix = ["eager", "lazy"].flatMap((mode) =>
  */
 async function mount(options) {
 	const api = await slothlet({ base: join(FIXTURE, "host"), silent: true, ...options });
-	await api.slothlet.api.add("owner", join(FIXTURE, "owner"), { moduleID: "owner" });
-	await api.slothlet.api.add("reader", join(FIXTURE, "reader"), { moduleID: "reader" });
+	await api.slothlet.api.add("owner", join(FIXTURE, "owner"), { id: "owner" });
+	await api.slothlet.api.add("reader", join(FIXTURE, "reader"), { id: "reader" });
 	await api.owner;
 	await api.reader;
 	return api;
@@ -90,10 +90,10 @@ describe.each(matrix)("cloning another module's data > $mode / $runtime / $name"
 describe("cloning another module's data > the wrappers", () => {
 	it("are installed once for any number of instances and removed with the last one", async () => {
 		expect(globalThis.structuredClone[WATERMARK]).toBeUndefined();
-		const first = await mount({ permissions: { defaultPolicy: "allow" } });
+		const first = await mount({ permissions: { policy: "allow" } });
 		const installed = globalThis.structuredClone;
 		expect(typeof installed[WATERMARK]).toBe("function");
-		const second = await mount({ permissions: { defaultPolicy: "allow" } });
+		const second = await mount({ permissions: { policy: "allow" } });
 		expect(globalThis.structuredClone).toBe(installed);
 		expect(installed[WATERMARK][WATERMARK]).toBeUndefined();
 		await first.shutdown();

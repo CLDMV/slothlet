@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:59-07:00 (1791090899)
+ *	@Last modified time: 2026-11-16T18:29:34-08:00 (1794882574)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -21,7 +21,7 @@
  * matching base, all files present). This file targets the validation branches
  * in `#scanDirectoryBrowser`, `#findManifestNode`, and `#manifestNodeToStructure`:
  *
- *  - `api.slothlet.api.add` to a path NOT present in the manifest → INVALID_DIRECTORY
+ *  - `api.slothlet.api.add` to a path NOT present in the manifest → FOLDER_UNREADABLE
  *  - Manifest files using fallback fields (`relativePath` instead of `path`,
  *    `dir.name` only without `dir.path`)
  *  - File entries without an extension (no `.`)
@@ -48,7 +48,7 @@ function browserCfg(matrixConfig) {
 	return makeBrowserConfig(matrixConfig, FIXTURE_DIR, BROWSER_MANIFEST);
 }
 
-// ─── INVALID_DIRECTORY when manifest node not found ──────────────────────────
+// ─── FOLDER_UNREADABLE when manifest node not found ──────────────────────────
 
 describe.each(getBrowserMatrixConfigs())("Browser loader > invalid directory > $name", ({ config }) => {
 	let api;
@@ -58,13 +58,13 @@ describe.each(getBrowserMatrixConfigs())("Browser loader > invalid directory > $
 		api = null;
 	});
 
-	it("api.add to a non-existent manifest path throws INVALID_DIRECTORY", async () => {
+	it("api.add to a non-existent manifest path throws FOLDER_UNREADABLE", async () => {
 		api = await slothlet(browserCfg(config));
 
 		// The manifest only has utils/, math.mjs, auth.mjs — `does/not/exist`
-		// is guaranteed missing. The browser scanner should throw INVALID_DIRECTORY
+		// is guaranteed missing. The browser scanner should throw FOLDER_UNREADABLE
 		// when #findManifestNode returns null.
-		await expect(api.slothlet.api.add("ghost", `${FIXTURE_DIR}/does/not/exist`)).rejects.toThrow(/INVALID_DIRECTORY/);
+		await expect(api.slothlet.api.add("ghost", `${FIXTURE_DIR}/does/not/exist`)).rejects.toThrow(/FOLDER_UNREADABLE/);
 	});
 });
 
@@ -81,7 +81,9 @@ describe.each(getBrowserMatrixConfigs())("Browser loader > invalid directory > $
 function syntheticBrowserConfig(manifest, extra = {}) {
 	return {
 		base: FIXTURE_DIR,
-		manifest,
+		loader: {
+			files: manifest
+		},
 		// Default resolver works because the file paths in our synthetic manifest
 		// either map to real files in FIXTURE_DIR or never actually get imported
 		// (tests assert on shape pre-materialization).
@@ -102,9 +104,9 @@ describe("Browser loader > #manifestNodeToStructure filtering", () => {
 		// math.mjs is a real file; add synthetic non-mjs entries that should be skipped.
 		const manifest = {
 			files: [
-				{ path: "math.mjs", name: "math", fullName: "math.mjs" },
-				{ path: "config.json", name: "config", fullName: "config.json" },
-				{ path: "readme.md", name: "readme", fullName: "readme.md" }
+				{ path: "math.mjs", name: "math", full: "math.mjs" },
+				{ path: "config.json", name: "config", full: "config.json" },
+				{ path: "readme.md", name: "readme", full: "readme.md" }
 			],
 			directories: []
 		};
@@ -117,8 +119,8 @@ describe("Browser loader > #manifestNodeToStructure filtering", () => {
 	it("filters out files prefixed with __", async () => {
 		const manifest = {
 			files: [
-				{ path: "math.mjs", name: "math", fullName: "math.mjs" },
-				{ path: "__internal.mjs", name: "__internal", fullName: "__internal.mjs" }
+				{ path: "math.mjs", name: "math", full: "math.mjs" },
+				{ path: "__internal.mjs", name: "__internal", full: "__internal.mjs" }
 			],
 			directories: []
 		};
@@ -130,7 +132,7 @@ describe("Browser loader > #manifestNodeToStructure filtering", () => {
 	it("uses file.relativePath as fallback when file.path is missing", async () => {
 		// Older or hand-rolled manifest format: relativePath key. Both must work.
 		const manifest = {
-			files: [{ relativePath: "math.mjs", name: "math", fullName: "math.mjs" }],
+			files: [{ relativePath: "math.mjs", name: "math", full: "math.mjs" }],
 			directories: []
 		};
 		api = await slothlet(syntheticBrowserConfig(manifest));
@@ -149,7 +151,7 @@ describe("Browser loader > #manifestNodeToStructure filtering", () => {
 
 	it("derives name from fullName when name is missing", async () => {
 		const manifest = {
-			files: [{ path: "math.mjs", fullName: "math.mjs" }], // no name
+			files: [{ path: "math.mjs", full: "math.mjs" }], // no name
 			directories: []
 		};
 		api = await slothlet(syntheticBrowserConfig(manifest));
@@ -169,12 +171,12 @@ describe("Browser loader > hidden / apiDepth honored in manifest mode (#423)", (
 		// "secret" points its file at a real fixture module so it would resolve if included;
 		// with hidden:["secret"] it must be excluded from the api entirely.
 		const manifest = {
-			files: [{ path: "math.mjs", name: "math", fullName: "math.mjs" }],
+			files: [{ path: "math.mjs", name: "math", full: "math.mjs" }],
 			directories: [
 				{
 					name: "secret",
 					path: "secret",
-					children: { files: [{ path: "math.mjs", name: "keys", fullName: "keys.mjs" }], directories: [] }
+					children: { files: [{ path: "math.mjs", name: "keys", full: "keys.mjs" }], directories: [] }
 				}
 			]
 		};
@@ -191,19 +193,19 @@ describe("Browser loader > hidden / apiDepth honored in manifest mode (#423)", (
 					name: "utils",
 					path: "utils",
 					children: {
-						files: [{ path: "utils/format.mjs", name: "format", fullName: "format.mjs" }],
+						files: [{ path: "utils/format.mjs", name: "format", full: "format.mjs" }],
 						directories: [
 							{
 								name: "deep",
 								path: "utils/deep",
-								children: { files: [{ path: "math.mjs", name: "x", fullName: "x.mjs" }], directories: [] }
+								children: { files: [{ path: "math.mjs", name: "x", full: "x.mjs" }], directories: [] }
 							}
 						]
 					}
 				}
 			]
 		};
-		api = await slothlet(syntheticBrowserConfig(manifest, { apiDepth: 1 }));
+		api = await slothlet(syntheticBrowserConfig(manifest, { depth: 1 }));
 		expect(api.utils.format).toBeDefined();
 		expect(api.utils.deep).toBeUndefined();
 	});
@@ -222,8 +224,8 @@ describe("Browser loader > #manifestNodeToStructure gating branches (#423)", () 
 		// must drop it — the file-level hidden check (apiPrefix === "" arm).
 		const manifest = {
 			files: [
-				{ path: "math.mjs", name: "math", fullName: "math.mjs" },
-				{ path: "math.mjs", name: "secret", fullName: "secret.mjs" }
+				{ path: "math.mjs", name: "math", full: "math.mjs" },
+				{ path: "math.mjs", name: "secret", full: "secret.mjs" }
 			],
 			directories: []
 		};
@@ -243,8 +245,8 @@ describe("Browser loader > #manifestNodeToStructure gating branches (#423)", () 
 					path: "utils",
 					children: {
 						files: [
-							{ path: "utils/format.mjs", name: "format", fullName: "format.mjs" },
-							{ path: "math.mjs", name: "secret", fullName: "secret.mjs" }
+							{ path: "utils/format.mjs", name: "format", full: "format.mjs" },
+							{ path: "math.mjs", name: "secret", full: "secret.mjs" }
 						],
 						directories: []
 					}
@@ -258,12 +260,12 @@ describe("Browser loader > #manifestNodeToStructure gating branches (#423)", () 
 
 	it("a `!**/.*/` hidden glob scans a dot-prefixed folder that is skipped by default", async () => {
 		const manifest = {
-			files: [{ path: "math.mjs", name: "math", fullName: "math.mjs" }],
+			files: [{ path: "math.mjs", name: "math", full: "math.mjs" }],
 			directories: [
 				{
 					name: ".secret",
 					path: ".secret",
-					children: { files: [{ path: "math.mjs", name: "keys", fullName: "keys.mjs" }], directories: [] }
+					children: { files: [{ path: "math.mjs", name: "keys", full: "keys.mjs" }], directories: [] }
 				}
 			]
 		};
@@ -281,12 +283,12 @@ describe("Browser loader > #manifestNodeToStructure gating branches (#423)", () 
 		// The folder holds only a non-JS file, so the recursive walk returns an empty structure and
 		// the folder must not create a leaf.
 		const manifest = {
-			files: [{ path: "math.mjs", name: "math", fullName: "math.mjs" }],
+			files: [{ path: "math.mjs", name: "math", full: "math.mjs" }],
 			directories: [
 				{
 					name: "empty",
 					path: "empty",
-					children: { files: [{ path: "data.json", name: "data", fullName: "data.json" }], directories: [] }
+					children: { files: [{ path: "data.json", name: "data", full: "data.json" }], directories: [] }
 				}
 			]
 		};
@@ -295,14 +297,14 @@ describe("Browser loader > #manifestNodeToStructure gating branches (#423)", () 
 		expect(api.empty).toBeUndefined();
 	});
 
-	it("throws MODULE_RESERVED_FILENAME for a manifest file named a framework-reserved key", async () => {
-		// "_impl" is a single-underscore INTERNAL_KEY, so it passes the "__"-prefix skip and reaches the
-		// reserved-name guard — same hazard as the disk scan (#260), platform-independent.
+	it("throws MODULE_RESERVED_FILE for a manifest file named a framework-reserved key", async () => {
+		// "-____impl" sanitizes to the reserved "____impl" without starting with "__", so it passes the hidden-name skip
+		// and reaches the reserved-name guard — same hazard as the disk scan (#260), platform-independent.
 		const manifest = {
-			files: [{ path: "_impl.mjs", name: "_impl", fullName: "_impl.mjs" }],
+			files: [{ path: "-____impl.mjs", name: "-____impl", full: "-____impl.mjs" }],
 			directories: []
 		};
-		await expect(slothlet(syntheticBrowserConfig(manifest))).rejects.toThrow(/MODULE_RESERVED_FILENAME/);
+		await expect(slothlet(syntheticBrowserConfig(manifest))).rejects.toThrow(/MODULE_RESERVED_FILE/);
 	});
 });
 
@@ -322,7 +324,7 @@ describe("Browser loader > nested directory recursion", () => {
 					name: "utils",
 					// no path
 					children: {
-						files: [{ path: "utils/format.mjs", name: "format", fullName: "format.mjs" }],
+						files: [{ path: "utils/format.mjs", name: "format", full: "format.mjs" }],
 						directories: []
 					}
 				}
@@ -341,7 +343,7 @@ describe("Browser loader > nested directory recursion", () => {
 					path: "utils",
 					// no name
 					children: {
-						files: [{ path: "utils/format.mjs", name: "format", fullName: "format.mjs" }],
+						files: [{ path: "utils/format.mjs", name: "format", full: "format.mjs" }],
 						directories: []
 					}
 				}
@@ -361,7 +363,7 @@ describe("Browser loader > nested directory recursion", () => {
 				{
 					path: "utils",
 					name: "utils",
-					files: [{ path: "utils/format.mjs", name: "format", fullName: "format.mjs" }],
+					files: [{ path: "utils/format.mjs", name: "format", full: "format.mjs" }],
 					directories: []
 				}
 			]
@@ -406,7 +408,7 @@ describe("Browser loader > #findManifestNode nested recursion", () => {
 								name: "level2",
 								path: "level1/level2",
 								children: {
-									files: [{ path: "utils/format.mjs", name: "format", fullName: "format.mjs" }],
+									files: [{ path: "utils/format.mjs", name: "format", full: "format.mjs" }],
 									directories: []
 								}
 							}
@@ -457,7 +459,7 @@ describe("Browser loader > #manifestNodeToStructure missing-field fallbacks", ()
 		// Top-level requires both arrays (validation); the nested children object is where
 		// the || [] fallback fires when scanning into a subdirectory.
 		const manifest = {
-			files: [{ path: "math.mjs", name: "math", fullName: "math.mjs" }],
+			files: [{ path: "math.mjs", name: "math", full: "math.mjs" }],
 			directories: [
 				{
 					name: "utils",
@@ -475,13 +477,13 @@ describe("Browser loader > #manifestNodeToStructure missing-field fallbacks", ()
 
 	it("treats a nested manifest child with no `directories` key as having zero subdirs (line 565 || [] arm)", async () => {
 		const manifest = {
-			files: [{ path: "math.mjs", name: "math", fullName: "math.mjs" }],
+			files: [{ path: "math.mjs", name: "math", full: "math.mjs" }],
 			directories: [
 				{
 					name: "utils",
 					path: "utils",
 					children: {
-						files: [{ path: "utils/format.mjs", name: "format", fullName: "format.mjs" }]
+						files: [{ path: "utils/format.mjs", name: "format", full: "format.mjs" }]
 						// no directories key
 					}
 				}
@@ -497,8 +499,8 @@ describe("Browser loader > #manifestNodeToStructure missing-field fallbacks", ()
 		// Exercises BOTH line 542 arm 2 (fallback to "") and line 545 ternary false (no dot).
 		const manifest = {
 			files: [
-				{ name: "ghost", fullName: "ghost" }, // no path/relativePath, no dot
-				{ path: "math.mjs", name: "math", fullName: "math.mjs" }
+				{ name: "ghost", full: "ghost" }, // no path/relativePath, no dot
+				{ path: "math.mjs", name: "math", full: "math.mjs" }
 			],
 			directories: []
 		};
@@ -510,9 +512,9 @@ describe("Browser loader > #manifestNodeToStructure missing-field fallbacks", ()
 	it("skips files with no extension marker / no dot in fullName (line 545 ternary false)", async () => {
 		const manifest = {
 			files: [
-				{ path: "math.mjs", name: "math", fullName: "math.mjs" },
+				{ path: "math.mjs", name: "math", full: "math.mjs" },
 				// fullName has no dot → ext === "" → fails ALLOWED_EXTS check.
-				{ path: "README", name: "README", fullName: "README" }
+				{ path: "README", name: "README", full: "README" }
 			],
 			directories: []
 		};
@@ -538,7 +540,7 @@ describe("Browser loader > #manifestNodeToStructure missing-field fallbacks", ()
 		const manifest = {
 			files: [
 				// No name field, but has a dot → ternary true arm derives name from fullName slice.
-				{ path: "math.mjs", fullName: "math.mjs" }
+				{ path: "math.mjs", full: "math.mjs" }
 			],
 			directories: []
 		};
@@ -549,8 +551,8 @@ describe("Browser loader > #manifestNodeToStructure missing-field fallbacks", ()
 	it("skips files when fileFilter returns false (line 552)", async () => {
 		const manifest = {
 			files: [
-				{ path: "math.mjs", name: "math", fullName: "math.mjs" },
-				{ path: "auth.mjs", name: "auth", fullName: "auth.mjs" }
+				{ path: "math.mjs", name: "math", full: "math.mjs" },
+				{ path: "auth.mjs", name: "auth", full: "auth.mjs" }
 			],
 			directories: []
 		};
@@ -568,12 +570,12 @@ describe("Browser loader > #manifestNodeToStructure missing-field fallbacks", ()
 		// from "".split("/").pop() which is "" → the directory still mounts but gets
 		// an empty-string segment. This exercises the fallback chain without crashing.
 		const manifest = {
-			files: [{ path: "math.mjs", name: "math", fullName: "math.mjs" }],
+			files: [{ path: "math.mjs", name: "math", full: "math.mjs" }],
 			directories: [
 				{
 					// no path, no name
 					children: {
-						files: [{ path: "utils/format.mjs", name: "format", fullName: "format.mjs" }],
+						files: [{ path: "utils/format.mjs", name: "format", full: "format.mjs" }],
 						directories: []
 					}
 				}

@@ -2,13 +2,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /packaging/slothlet-migrate/bin/slothlet-migrate.mjs
+ *	@Filename: /bin/slothlet-migrate.mjs
  *	@Date: 2026-11-16T16:15:10-08:00 (1794874510)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:28:23-08:00 (1794875303)
+ *	@Last modified time: 2026-11-17T07:26:22-08:00 (1794929182)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *

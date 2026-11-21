@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:17:02-08:00 (1794874622)
+ *	@Last modified time: 2026-11-16T18:30:12-08:00 (1794882612)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -20,7 +20,7 @@
  * Pure function — no slothlet instance needed, no matrix. Covers every
  * MODULE_* validation rule the validator can throw, plus the normalization
  * contract (defaults applied, package.json fallbacks for name/version,
- * description override semantics, mountPath segment normalization).
+ * description override semantics, mount segment normalization).
  *
  * @module tests/vitests/suites/modules/manifest-validator
  */
@@ -44,9 +44,9 @@ function makeContext(overrides = {}) {
 
 function makeMinimalManifest(overrides = {}) {
 	return {
-		schemaVersion: 1,
-		mountPath: ["drivers", "sample"],
-		apiDir: "./dist/api",
+		schema: 2,
+		mount: ["drivers", "sample"],
+		base: "./dist/api",
 		...overrides
 	};
 }
@@ -56,9 +56,9 @@ function makeMinimalManifest(overrides = {}) {
 describe("validateModuleManifest — happy paths", () => {
 	it("accepts a minimal manifest with only required fields", () => {
 		const result = validateModuleManifest(makeMinimalManifest(), makeContext());
-		expect(result.schemaVersion).toBe(1);
-		expect(result.mountPath).toEqual(["drivers", "sample"]);
-		expect(result.apiDir).toBe("./dist/api");
+		expect(result.schema).toBe(2);
+		expect(result.mount).toEqual(["drivers", "sample"]);
+		expect(result.base).toBe("./dist/api");
 		expect(result.name).toBe("@org/sample-driver"); // from package.json
 		expect(result.version).toBe("1.4.2"); // from package.json
 		expect(result.description).toBe("package.json description"); // fallback
@@ -68,12 +68,12 @@ describe("validateModuleManifest — happy paths", () => {
 	it("accepts a fully-populated manifest and normalizes it", () => {
 		const result = validateModuleManifest(
 			{
-				schemaVersion: 1,
+				schema: 2,
 				name: "@org/sample-driver",
 				version: "1.4.2",
 				description: "manifest override description",
-				mountPath: ["drivers", "sample"],
-				apiDir: "./dist/api",
+				mount: ["drivers", "sample"],
+				base: "./dist/api",
 				kind: "driver",
 				priority: 100,
 				dependencies: { "@org/core": "^2.0.0" },
@@ -90,14 +90,14 @@ describe("validateModuleManifest — happy paths", () => {
 		expect(result.metadata).toEqual({ tags: ["a", "b"] });
 	});
 
-	it("normalizes a string mountPath into an array of segments", () => {
-		const result = validateModuleManifest(makeMinimalManifest({ mountPath: "drivers.sample" }), makeContext());
-		expect(result.mountPath).toEqual(["drivers", "sample"]);
+	it("normalizes a string mount into an array of segments", () => {
+		const result = validateModuleManifest(makeMinimalManifest({ mount: "drivers.sample" }), makeContext());
+		expect(result.mount).toEqual(["drivers", "sample"]);
 	});
 
-	it("preserves an array mountPath as-is", () => {
-		const result = validateModuleManifest(makeMinimalManifest({ mountPath: ["a", "b", "c"] }), makeContext());
-		expect(result.mountPath).toEqual(["a", "b", "c"]);
+	it("preserves an array mount as-is", () => {
+		const result = validateModuleManifest(makeMinimalManifest({ mount: ["a", "b", "c"] }), makeContext());
+		expect(result.mount).toEqual(["a", "b", "c"]);
 	});
 
 	it("falls back to package.json description when manifest omits it", () => {
@@ -150,116 +150,174 @@ describe("validateModuleManifest — top-level shape", () => {
 			validateModuleManifest({ ...makeMinimalManifest(), bogus: true }, makeContext());
 		} catch (err) {
 			expect(err.code).toBe("MODULE_MANIFEST_UNKNOWN_FIELD");
-			expect(err.context.field).toBe("bogus");
-			// manifestPath must stay in context so the error names which manifest file had the bad key.
-			expect(err.context.manifestPath).toBe(path.join(TEST_PACKAGE_ROOT, "slothlet.module.json"));
+			expect(err.details.field).toBe("bogus");
+			// the manifest path must stay in context so the error names which manifest file had the bad key.
+			expect(err.details.manifest).toBe(path.join(TEST_PACKAGE_ROOT, "slothlet.module.json"));
 		}
 	});
 });
 
-// ─── schemaVersion ──────────────────────────────────────────────────────────
+// ─── schema (format 2) and format 1 ─────────────────────────────────────────
 
-describe("validateModuleManifest — schemaVersion", () => {
-	it("throws MODULE_MANIFEST_INVALID when schemaVersion missing", () => {
-		const { schemaVersion: ___schemaVersion, ...rest } = makeMinimalManifest();
+describe("validateModuleManifest — schema", () => {
+	it("throws MODULE_MANIFEST_INVALID when schema missing", () => {
+		const { schema: ___schema, ...rest } = makeMinimalManifest();
 		expect(() => validateModuleManifest(rest, makeContext())).toThrowError(/MODULE_MANIFEST_INVALID/);
 	});
 
-	it("throws MODULE_VERSION_UNSUPPORTED when schemaVersion is 2", () => {
-		expect(() => validateModuleManifest(makeMinimalManifest({ schemaVersion: 2 }), makeContext())).toThrowError(
-			/MODULE_VERSION_UNSUPPORTED/
+	it("throws MODULE_MANIFEST_FORMAT_UNSUPPORTED when schema is 3", () => {
+		expect(() => validateModuleManifest(makeMinimalManifest({ schema: 3 }), makeContext())).toThrowError(
+			/MODULE_MANIFEST_FORMAT_UNSUPPORTED/
 		);
 	});
 
-	it("throws MODULE_VERSION_UNSUPPORTED when schemaVersion is a string '1'", () => {
-		expect(() => validateModuleManifest(makeMinimalManifest({ schemaVersion: "1" }), makeContext())).toThrowError(
-			/MODULE_VERSION_UNSUPPORTED/
-		);
-	});
-});
-
-// ─── mountPath ───────────────────────────────────────────────────────────────
-
-describe("validateModuleManifest — mountPath", () => {
-	it("throws MODULE_MANIFEST_INVALID when mountPath missing", () => {
-		const { mountPath: ___mountPath, ...rest } = makeMinimalManifest();
-		expect(() => validateModuleManifest(rest, makeContext())).toThrowError(/MODULE_MANIFEST_INVALID/);
-	});
-
-	it("throws MODULE_MANIFEST_INVALID when mountPath is an empty string", () => {
-		expect(() => validateModuleManifest(makeMinimalManifest({ mountPath: "" }), makeContext())).toThrowError(/MODULE_MANIFEST_INVALID/);
-	});
-
-	it("throws MODULE_MANIFEST_INVALID when mountPath is an empty array", () => {
-		expect(() => validateModuleManifest(makeMinimalManifest({ mountPath: [] }), makeContext())).toThrowError(/MODULE_MANIFEST_INVALID/);
-	});
-
-	it("throws MODULE_MANIFEST_INVALID when mountPath array has non-string segment", () => {
-		expect(() => validateModuleManifest(makeMinimalManifest({ mountPath: ["a", 42] }), makeContext())).toThrowError(
-			/MODULE_MANIFEST_INVALID/
+	it("throws MODULE_MANIFEST_FORMAT_UNSUPPORTED when schema is 1 (the format 1 value is schemaVersion)", () => {
+		expect(() => validateModuleManifest(makeMinimalManifest({ schema: 1 }), makeContext())).toThrowError(
+			/MODULE_MANIFEST_FORMAT_UNSUPPORTED/
 		);
 	});
 
-	it("throws MODULE_MANIFEST_INVALID when mountPath array has empty-string segment", () => {
-		expect(() => validateModuleManifest(makeMinimalManifest({ mountPath: ["a", ""] }), makeContext())).toThrowError(
-			/MODULE_MANIFEST_INVALID/
+	it("throws MODULE_MANIFEST_FORMAT_UNSUPPORTED when schema is a string '2'", () => {
+		expect(() => validateModuleManifest(makeMinimalManifest({ schema: "2" }), makeContext())).toThrowError(
+			/MODULE_MANIFEST_FORMAT_UNSUPPORTED/
 		);
 	});
 
-	it("throws MODULE_MANIFEST_INVALID when mountPath is a number", () => {
-		expect(() => validateModuleManifest(makeMinimalManifest({ mountPath: 42 }), makeContext())).toThrowError(/MODULE_MANIFEST_INVALID/);
-	});
-
-	it.each(["slothlet", "shutdown", "destroy"])("throws MODULE_RESERVED_MOUNTPATH when mountPath root is '%s'", (reserved) => {
-		expect(() => validateModuleManifest(makeMinimalManifest({ mountPath: [reserved, "x"] }), makeContext())).toThrowError(
-			/MODULE_RESERVED_MOUNTPATH/
-		);
-	});
-
-	it("MODULE_RESERVED_MOUNTPATH error names the reserved root in context", () => {
+	it("MODULE_MANIFEST_FORMAT_UNSUPPORTED names the package and the schema in context", () => {
 		try {
-			validateModuleManifest(makeMinimalManifest({ mountPath: "slothlet.x" }), makeContext());
+			validateModuleManifest(makeMinimalManifest({ schema: 3 }), makeContext());
+			expect.unreachable();
 		} catch (err) {
-			expect(err.code).toBe("MODULE_RESERVED_MOUNTPATH");
-			expect(err.context.mountPathRoot).toBe("slothlet");
+			expect(err.code).toBe("MODULE_MANIFEST_FORMAT_UNSUPPORTED");
+			expect(err.details.package).toBe("@org/sample-driver");
+			expect(err.details.schema).toBe("3");
 		}
 	});
 });
 
-// ─── apiDir ──────────────────────────────────────────────────────────────────
+describe("validateModuleManifest — format 1 (deprecated)", () => {
+	const format1 = (overrides = {}) => ({ schemaVersion: 1, mountPath: ["drivers", "sample"], apiDir: "./dist/api", ...overrides });
 
-describe("validateModuleManifest — apiDir", () => {
-	it("throws MODULE_MANIFEST_INVALID when apiDir missing", () => {
-		const { apiDir: ___apiDir, ...rest } = makeMinimalManifest();
+	it("reads a format 1 manifest and returns it under the format 2 names", () => {
+		const result = validateModuleManifest(format1(), makeContext());
+		expect(result.schema).toBe(2);
+		expect(result.mount).toEqual(["drivers", "sample"]);
+		expect(result.base).toBe("./dist/api");
+		expect(result).not.toHaveProperty("schemaVersion");
+		expect(result).not.toHaveProperty("mountPath");
+		expect(result).not.toHaveProperty("apiDir");
+	});
+
+	it("applies the same checks under the format 1 names (reserved root)", () => {
+		expect(() => validateModuleManifest(format1({ mountPath: ["slothlet"] }), makeContext())).toThrowError(/MODULE_RESERVED_MOUNT/);
+	});
+
+	it("names the format 1 field in the shape error", () => {
+		try {
+			validateModuleManifest(format1({ mountPath: "" }), makeContext());
+			expect.unreachable();
+		} catch (err) {
+			expect(err.code).toBe("MODULE_MANIFEST_INVALID");
+			expect(err.details.reason).toContain("mountPath");
+		}
+	});
+
+	it("throws MODULE_MANIFEST_FORMAT_UNSUPPORTED when schemaVersion is not 1", () => {
+		expect(() => validateModuleManifest(format1({ schemaVersion: 2 }), makeContext())).toThrowError(/MODULE_MANIFEST_FORMAT_UNSUPPORTED/);
+	});
+
+	it.each([
+		["schemaVersion with schema", { schema: 2 }],
+		["mountPath with mount", { mount: ["a"] }],
+		["apiDir with base", { base: "./api" }]
+	])("throws MODULE_MANIFEST_INVALID when a manifest mixes format 1 and format 2 names (%s)", (_label, extra) => {
+		try {
+			validateModuleManifest(format1(extra), makeContext());
+			expect.unreachable();
+		} catch (err) {
+			expect(err.code).toBe("MODULE_MANIFEST_INVALID");
+			expect(err.details.reason).toMatch(/format 2.*format 1/);
+		}
+	});
+});
+
+// ─── mount ───────────────────────────────────────────────────────────────
+
+describe("validateModuleManifest — mount", () => {
+	it("throws MODULE_MANIFEST_INVALID when mount missing", () => {
+		const { mount: ___mountPath, ...rest } = makeMinimalManifest();
 		expect(() => validateModuleManifest(rest, makeContext())).toThrowError(/MODULE_MANIFEST_INVALID/);
 	});
 
-	it("throws MODULE_MANIFEST_INVALID when apiDir is empty string", () => {
-		expect(() => validateModuleManifest(makeMinimalManifest({ apiDir: "" }), makeContext())).toThrowError(/MODULE_MANIFEST_INVALID/);
+	it("throws MODULE_MANIFEST_INVALID when mount is an empty string", () => {
+		expect(() => validateModuleManifest(makeMinimalManifest({ mount: "" }), makeContext())).toThrowError(/MODULE_MANIFEST_INVALID/);
 	});
 
-	it("throws MODULE_MANIFEST_INVALID when apiDir is not a string", () => {
-		expect(() => validateModuleManifest(makeMinimalManifest({ apiDir: 42 }), makeContext())).toThrowError(/MODULE_MANIFEST_INVALID/);
+	it("throws MODULE_MANIFEST_INVALID when mount is an empty array", () => {
+		expect(() => validateModuleManifest(makeMinimalManifest({ mount: [] }), makeContext())).toThrowError(/MODULE_MANIFEST_INVALID/);
 	});
 
-	it("throws MODULE_PATH_TRAVERSAL when apiDir escapes packageRoot via ..", () => {
-		expect(() => validateModuleManifest(makeMinimalManifest({ apiDir: "../escape" }), makeContext())).toThrowError(/MODULE_PATH_TRAVERSAL/);
+	it("throws MODULE_MANIFEST_INVALID when mount array has non-string segment", () => {
+		expect(() => validateModuleManifest(makeMinimalManifest({ mount: ["a", 42] }), makeContext())).toThrowError(/MODULE_MANIFEST_INVALID/);
 	});
 
-	it("throws MODULE_PATH_TRAVERSAL when apiDir is an absolute path outside packageRoot", () => {
-		expect(() => validateModuleManifest(makeMinimalManifest({ apiDir: "/etc/passwd" }), makeContext())).toThrowError(
-			/MODULE_PATH_TRAVERSAL/
+	it("throws MODULE_MANIFEST_INVALID when mount array has empty-string segment", () => {
+		expect(() => validateModuleManifest(makeMinimalManifest({ mount: ["a", ""] }), makeContext())).toThrowError(/MODULE_MANIFEST_INVALID/);
+	});
+
+	it("throws MODULE_MANIFEST_INVALID when mount is a number", () => {
+		expect(() => validateModuleManifest(makeMinimalManifest({ mount: 42 }), makeContext())).toThrowError(/MODULE_MANIFEST_INVALID/);
+	});
+
+	it.each(["slothlet", "shutdown", "destroy"])("throws MODULE_RESERVED_MOUNT when mount root is '%s'", (reserved) => {
+		expect(() => validateModuleManifest(makeMinimalManifest({ mount: [reserved, "x"] }), makeContext())).toThrowError(
+			/MODULE_RESERVED_MOUNT/
 		);
 	});
 
-	it("accepts apiDir as a deep relative path inside packageRoot", () => {
-		const result = validateModuleManifest(makeMinimalManifest({ apiDir: "./dist/api/v2" }), makeContext());
-		expect(result.apiDir).toBe("./dist/api/v2");
+	it("MODULE_RESERVED_MOUNT error names the reserved root in context", () => {
+		try {
+			validateModuleManifest(makeMinimalManifest({ mount: "slothlet.x" }), makeContext());
+		} catch (err) {
+			expect(err.code).toBe("MODULE_RESERVED_MOUNT");
+			expect(err.details.mount).toEqual(["slothlet", "x"]);
+			expect(err.message).toContain("(slothlet.x)"); // segments read dotted in the message
+		}
+	});
+});
+
+// ─── base ──────────────────────────────────────────────────────────────────
+
+describe("validateModuleManifest — base", () => {
+	it("throws MODULE_MANIFEST_INVALID when base missing", () => {
+		const { base: ___apiDir, ...rest } = makeMinimalManifest();
+		expect(() => validateModuleManifest(rest, makeContext())).toThrowError(/MODULE_MANIFEST_INVALID/);
 	});
 
-	it("accepts apiDir as a bare directory name", () => {
-		const result = validateModuleManifest(makeMinimalManifest({ apiDir: "api" }), makeContext());
-		expect(result.apiDir).toBe("api");
+	it("throws MODULE_MANIFEST_INVALID when base is empty string", () => {
+		expect(() => validateModuleManifest(makeMinimalManifest({ base: "" }), makeContext())).toThrowError(/MODULE_MANIFEST_INVALID/);
+	});
+
+	it("throws MODULE_MANIFEST_INVALID when base is not a string", () => {
+		expect(() => validateModuleManifest(makeMinimalManifest({ base: 42 }), makeContext())).toThrowError(/MODULE_MANIFEST_INVALID/);
+	});
+
+	it("throws MODULE_PATH_TRAVERSAL when base escapes packageRoot via ..", () => {
+		expect(() => validateModuleManifest(makeMinimalManifest({ base: "../escape" }), makeContext())).toThrowError(/MODULE_PATH_TRAVERSAL/);
+	});
+
+	it("throws MODULE_PATH_TRAVERSAL when base is an absolute path outside packageRoot", () => {
+		expect(() => validateModuleManifest(makeMinimalManifest({ base: "/etc/passwd" }), makeContext())).toThrowError(/MODULE_PATH_TRAVERSAL/);
+	});
+
+	it("accepts base as a deep relative path inside packageRoot", () => {
+		const result = validateModuleManifest(makeMinimalManifest({ base: "./dist/api/v2" }), makeContext());
+		expect(result.base).toBe("./dist/api/v2");
+	});
+
+	it("accepts base as a bare directory name", () => {
+		const result = validateModuleManifest(makeMinimalManifest({ base: "api" }), makeContext());
+		expect(result.base).toBe("api");
 	});
 });
 
@@ -291,8 +349,9 @@ describe("validateModuleManifest — name / version mismatch", () => {
 			validateModuleManifest(makeMinimalManifest({ name: "@org/forked" }), makeContext());
 		} catch (err) {
 			expect(err.code).toBe("MODULE_MANIFEST_NAME_MISMATCH");
-			expect(err.context.packageName).toBe("@org/sample-driver");
-			expect(err.context.manifestName).toBe("@org/forked");
+			expect(err.details.package).toBe("@org/sample-driver");
+			expect(err.details.received).toBe("@org/forked");
+			expect(err.details.expected).toBe("@org/sample-driver");
 		}
 	});
 });

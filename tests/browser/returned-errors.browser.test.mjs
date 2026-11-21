@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T00:00:00-08:00 (1794816000)
+ *	@Last modified time: 2026-11-16T18:28:09-08:00 (1794882489)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -36,10 +36,12 @@ describe("browser returned errors", () => {
 		const mod = await import("@cldmv/slothlet");
 		const slothlet = mod.default ?? mod.slothlet;
 		const api = await slothlet({
-			platform: "browser",
+			loader: {
+				platform: "browser"
+			},
 			mode: "eager",
 			silent: true,
-			permissions: { defaultPolicy: "allow", provenance: false }
+			permissions: { policy: "allow", caller: { provenance: false } }
 		});
 		const steal = () => "module code";
 		await api.slothlet.api.add(
@@ -59,7 +61,7 @@ describe("browser returned errors", () => {
 					}
 				}
 			},
-			{ moduleID: "slots" }
+			{ id: "slots" }
 		);
 		return api;
 	};

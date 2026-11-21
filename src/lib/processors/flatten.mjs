@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:14-08:00 (1794874574)
+ *	@Last modified time: 2026-11-17T13:35:22-08:00 (1794951322)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -28,12 +28,12 @@
  * const decision = flatten.getFlatteningDecision(options);
  * const categoryDecisions = flatten.buildCategoryDecisions(options);
  */
+import { segmentsOf } from "#helpers/segments";
 import { ComponentBase } from "#factories/component-base";
 import { copyForComposition, relayer, holdMember } from "#helpers/composition";
 import {
 	ArrayMethods,
 	Arrays,
-	FunctionMethods,
 	Functions,
 	Objects,
 	Reflect,
@@ -177,14 +177,14 @@ export class Flatten extends ComponentBase {
 				return {
 					flattenToCategory: true,
 					flattenType: "addapi-metadata-default",
-					reason: await t("FLATTEN_REASON_ADDAPI_METADATA_DEFAULT")
+					reason: await t("FLATTEN_REASON_MOUNT_METADATA_DEFAULT")
 				};
 			}
 			// Even without metadata pattern, addapi files should always flatten
 			return {
 				flattenToCategory: true,
 				flattenType: "addapi-special-file",
-				reason: await t("FLATTEN_REASON_ADDAPI_SPECIAL_FILE")
+				reason: await t("FLATTEN_REASON_MOUNT_SPECIAL_FILE")
 			};
 		}
 
@@ -310,7 +310,7 @@ export class Flatten extends ComponentBase {
 	 * flatten.primitiveDefaultNamespace(3, { default: 3, label: "x" }, ["label"]); // { default: 3, label: "x" }
 	 */
 	primitiveDefaultNamespace(value, mod, moduleKeys) {
-		if (!FunctionMethods.call(Objects.prototype.hasOwnProperty, mod, "default") || moduleKeys.length === 0) return null;
+		if (!Objects.hasOwn(mod, "default") || moduleKeys.length === 0) return null;
 		if (value !== null && (typeof value === "object" || typeof value === "function")) return null;
 		const namespace = { default: value };
 		for (let ofIndex = 0, ofList = moduleKeys; ofIndex < ofList.length; ofIndex++) {
@@ -415,10 +415,10 @@ export class Flatten extends ComponentBase {
 	namedExportWinsOverDefault(key, collisionMode, apiPath) {
 		if (collisionMode === "merge" || collisionMode === "skip") return false;
 		if (collisionMode === "error") {
-			throw new this.slothlet.SlothletError("COLLISION_DEFAULT_EXPORT_ERROR", { key, apiPath }, null, { validationError: true });
+			throw new this.slothlet.SlothletError("COLLISION_DEFAULT_EXPORT_ERROR", { key, path: segmentsOf(apiPath) });
 		}
 		if (collisionMode === "warn") {
-			new this.slothlet.SlothletWarning("WARNING_COLLISION_DEFAULT_EXPORT_OVERWRITE", { key, apiPath });
+			new this.slothlet.SlothletWarning("WARNING_COLLISION_DEFAULT_EXPORT_OVERWRITE", { key, path: segmentsOf(apiPath) });
 		}
 		return true;
 	}
@@ -432,7 +432,7 @@ export class Flatten extends ComponentBase {
 	 * @private
 	 */
 	#defaultConflictMode(collisionModeOverride, collisionContext) {
-		const collisionConfig = this.slothlet.config.api?.collision || this.slothlet.config.collision;
+		const collisionConfig = this.slothlet.config.api.collision.mode;
 		return collisionModeOverride || (collisionContext === "initial" ? collisionConfig.initial : collisionConfig.api);
 	}
 
@@ -459,7 +459,7 @@ export class Flatten extends ComponentBase {
 	 * @param {string}   [options.collisionContext="initial"] - Collision context ("initial" | "api").
 	 * @param {string}   [options.apiPathPrefix=""]          - API path prefix for collision error messages.
 	 * @param {string|null} [options.collisionModeOverride=null] - Caller's per-call override (e.g.
-	 *   `api.add({ forceOverwrite: true })`), preferred over `collisionContext`'s config default for
+	 *   `api.add({ collision: { force: true } })`), preferred over `collisionContext`'s config default for
 	 *   the function-default-vs-named-export merge decision below.
 	 * @returns {{ moduleContent: object|Function, origins: {self: (string[]|null), members: Object<string, string[]>} }}
 	 *   Built module content ready for wrapping/assignment, plus where it came from (#484): `self` is the
@@ -537,10 +537,10 @@ export class Flatten extends ComponentBase {
 				}
 				return { moduleContent: primitiveNamespace, origins: { self: null, members } };
 			}
-			if (FunctionMethods.call(Objects.prototype.hasOwnProperty, mod, "default") && moduleKeys.length === 0) {
+			if (Objects.hasOwn(mod, "default") && moduleKeys.length === 0) {
 				return { moduleContent: mod.default, origins: { self: ["default"], members: {} } };
 			}
-			if (FunctionMethods.call(Objects.prototype.hasOwnProperty, mod, "default") && moduleKeys.length > 0) {
+			if (Objects.hasOwn(mod, "default") && moduleKeys.length > 0) {
 				const isFunctionDefault = typeof mod.default === "function";
 				const moduleContent = isFunctionDefault ? this.composeFunctionDefault(mod.default) : this.cloneDefault(mod.default);
 				const members = {};
@@ -585,15 +585,15 @@ export class Flatten extends ComponentBase {
 		}
 
 		// Hybrid pattern: default + named exports
-		if (FunctionMethods.call(Objects.prototype.hasOwnProperty, mod, "default") && moduleKeys.length > 0) {
+		if (Objects.hasOwn(mod, "default") && moduleKeys.length > 0) {
 			if (typeof mod.default === "function") {
 				// Default is a function: attach named exports as properties (e.g. logger(), logger.info())
 				const moduleContent = this.composeFunctionDefault(
 					this.slothlet.helpers.modesUtils.ensureNamedExportFunction(mod.default, propertyName)
 				);
 				const members = {};
-				const collisionConfig = this.slothlet.config.api?.collision || this.slothlet.config.collision;
-				// Per-call override (e.g. api.add({ forceOverwrite: true })) takes priority over the
+				const collisionConfig = this.slothlet.config.api.collision.mode;
+				// Per-call override (e.g. api.add({ collision: { force: true } })) takes priority over the
 				// config default, matching every other collision decision in this same build
 				// (#372/#373 review, suppressed finding).
 				const collisionMode = collisionModeOverride || (collisionContext === "initial" ? collisionConfig.initial : collisionConfig.api);
@@ -617,7 +617,7 @@ export class Flatten extends ComponentBase {
 				// module's own default object is not mutated (#587).
 				const moduleContent = this.cloneDefault(mod.default);
 				const members = {};
-				const collisionConfig = this.slothlet.config.api?.collision || this.slothlet.config.collision;
+				const collisionConfig = this.slothlet.config.api.collision.mode;
 				const collisionMode = collisionModeOverride || (collisionContext === "initial" ? collisionConfig.initial : collisionConfig.api);
 				for (let ofIndex = 0, ofList = moduleKeys; ofIndex < ofList.length; ofIndex++) {
 					const key = ofList[ofIndex];
@@ -645,7 +645,7 @@ export class Flatten extends ComponentBase {
 		}
 
 		// Rule 1 (F01), Rule 2 - C09b: Traditional namespace preservation — only default export, use it directly
-		if (FunctionMethods.call(Objects.prototype.hasOwnProperty, mod, "default") && moduleKeys.length === 0) {
+		if (Objects.hasOwn(mod, "default") && moduleKeys.length === 0) {
 			return {
 				moduleContent: this.slothlet.helpers.modesUtils.ensureNamedExportFunction(mod.default, propertyName),
 				origins: { self: ["default"], members: {} }
@@ -702,14 +702,14 @@ export class Flatten extends ComponentBase {
 				return {
 					shouldFlatten: true,
 					flattenType: "addapi-metadata-default",
-					reason: await t("FLATTEN_REASON_ADDAPI_SPECIAL_FILE_PARENT")
+					reason: await t("FLATTEN_REASON_MOUNT_SPECIAL_FILE_PARENT")
 				};
 			}
 			// Even without metadata pattern, addapi files should always flatten
 			return {
 				shouldFlatten: true,
 				flattenType: "addapi-special-file",
-				reason: await t("FLATTEN_REASON_ADDAPI_SPECIAL_FILE")
+				reason: await t("FLATTEN_REASON_MOUNT_SPECIAL_FILE")
 			};
 		}
 

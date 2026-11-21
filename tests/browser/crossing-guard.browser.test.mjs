@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:17-08:00 (1794874577)
+ *	@Last modified time: 2026-11-16T18:28:03-08:00 (1794882483)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -36,7 +36,7 @@ describe("browser crossing guard", () => {
 	const boot = async (permissions) => {
 		const mod = await import("@cldmv/slothlet");
 		const slothlet = mod.default ?? mod.slothlet;
-		const api = await slothlet({ platform: "browser", mode: "eager", silent: true, ...(permissions ? { permissions } : {}) });
+		const api = await slothlet({ loader: { platform: "browser" }, mode: "eager", silent: true, ...(permissions ? { permissions } : {}) });
 		class Foo {
 			hi() {
 				return "hi";
@@ -70,7 +70,7 @@ describe("browser crossing guard", () => {
 					}
 				}
 			},
-			{ moduleID: "owner" }
+			{ id: "owner" }
 		);
 		await api.slothlet.api.add(
 			"reader",
@@ -108,7 +108,7 @@ describe("browser crossing guard", () => {
 					}
 				}
 			},
-			{ moduleID: "reader" }
+			{ id: "reader" }
 		);
 		return api;
 	};
@@ -116,7 +116,7 @@ describe("browser crossing guard", () => {
 	const ROUTES = ["returned", "inData", "onDate", "inMap", "callback"];
 
 	it("refuses a reader with no write rule a change to another module's class, by every route", async () => {
-		const api = await boot({ defaultPolicy: "allow" });
+		const api = await boot({ policy: "allow" });
 		const outcome = {};
 		const landed = {};
 		for (const route of ROUTES) {
@@ -130,7 +130,7 @@ describe("browser crossing guard", () => {
 
 	it("lets a reader granted the owner's subtree, and every reader with the system off, make the write", async () => {
 		const granted = await boot({
-			defaultPolicy: "allow",
+			policy: "allow",
 			rules: [
 				{ caller: "reader.**", target: "owner.**:write", effect: "allow" },
 				{ caller: "reader.**", target: "owner:write", effect: "allow" }
@@ -147,7 +147,7 @@ describe("browser crossing guard", () => {
 
 	it("lets the platform's cloning functions copy another module's data, as plain JavaScript does", async () => {
 		const expected = (viewed) => JSON.stringify([viewed, { b: 1 }, [1, 2, 3], [["k", { z: 1 }]], true, { theirs: [1, 2, 3] }]);
-		const on = await boot({ defaultPolicy: "allow" });
+		const on = await boot({ policy: "allow" });
 		expect(await on.reader.copies()).toBe(expected(true));
 		await on.shutdown();
 		const off = await boot();

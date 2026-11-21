@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-14T20:01:58-08:00 (1794715318)
+ *	@Last modified time: 2026-11-16T18:29:38-08:00 (1794882578)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -57,7 +57,7 @@ describe("Permissions > rule specificity (#770) > the rule manager", () => {
 	 */
 	const build = (rules, permissions = {}) => {
 		const manager = new PermissionManager({
-			config: { permissions: { mode: "on", defaultPolicy: "allow", ...permissions } },
+			config: { permissions: { mode: "on", policy: "allow", ...permissions } },
 			handlers: {},
 			debug() {},
 			SlothletError
@@ -83,7 +83,7 @@ describe("Permissions > rule specificity (#770) > the rule manager", () => {
 
 		it("ranks a.b.** over a.** over ** in every order", () => {
 			for (const order of orderings([rule("a.b.**", "deny"), rule("a.**", "allow"), rule("**", "deny")])) {
-				const manager = build(order, { defaultPolicy: "deny" });
+				const manager = build(order, { policy: "deny" });
 				expect(manager.checkAccess("m.n", "a.b.c")).toBe(false);
 				expect(manager.checkAccess("m.n", "a.x")).toBe(true);
 				expect(manager.checkAccess("m.n", "z")).toBe(false);
@@ -208,7 +208,7 @@ describe("Permissions > rule specificity (#770) > the rule manager", () => {
 
 		it("ranks the same hook type by literal segments, in either order", () => {
 			for (const order of orderings([hook("db.**:before", "deny"), hook("db.write.**:before", "allow")])) {
-				const manager = build(order, { defaultPolicy: "deny" });
+				const manager = build(order, { policy: "deny" });
 				expect(manager.checkHookAccess("a.b", "db.write.x", "before")).toBe(true);
 				expect(manager.checkHookAccess("a.b", "db.read.x", "before")).toBe(false);
 			}
@@ -258,7 +258,7 @@ describe.each(CONFIGS)("Permissions > rule specificity (#770) > an instance > $m
 	 * @returns {Promise<void>}
 	 */
 	const load = async (rules, attribution) => {
-		api = await slothlet({ base: FIXTURE, mode, runtime, silent: true, permissions: { defaultPolicy: "allow", attribution, rules } });
+		api = await slothlet({ base: FIXTURE, mode, runtime, silent: true, permissions: { policy: "allow", caller: { attribution }, rules } });
 	};
 
 	/** What calling `payments.charge.process` as the payments caller answers. */
@@ -276,8 +276,8 @@ describe.each(CONFIGS)("Permissions > rule specificity (#770) > an instance > $m
 			for (const order of orderings([rule("payments.**", "allow", "callers.**"), rule("payments.charge.**", "deny", "callers.**")])) {
 				await load(order, attribution);
 				expect(await charge()).toBe("PERMISSION_DENIED");
-				expect(api.slothlet.permissions.global.checkAccess("callers.paymentsCaller.callCharge", "payments.charge.process")).toBe(false);
-				expect(api.slothlet.permissions.global.checkAccess("callers.paymentsCaller.callCharge", "payments.webhook.handleWebhook")).toBe(
+				expect(api.slothlet.permissions.global.check.access("callers.paymentsCaller.callCharge", "payments.charge.process")).toBe(false);
+				expect(api.slothlet.permissions.global.check.access("callers.paymentsCaller.callCharge", "payments.webhook.handleWebhook")).toBe(
 					true
 				);
 				await api.shutdown();
@@ -289,7 +289,7 @@ describe.each(CONFIGS)("Permissions > rule specificity (#770) > an instance > $m
 			for (const order of orderings([rule("payments.**", "deny", "callers.**"), rule("payments.charge.**", "allow", "callers.**")])) {
 				await load(order, attribution);
 				expect(await charge()).toBe("allowed");
-				expect(api.slothlet.permissions.global.checkAccess("callers.paymentsCaller.callCharge", "payments.webhook.handleWebhook")).toBe(
+				expect(api.slothlet.permissions.global.check.access("callers.paymentsCaller.callCharge", "payments.webhook.handleWebhook")).toBe(
 					false
 				);
 				await api.shutdown();
@@ -299,12 +299,12 @@ describe.each(CONFIGS)("Permissions > rule specificity (#770) > an instance > $m
 
 		it("lets a narrower rule added at runtime win over a broader one in the config, and the reverse by layer at a tie", async () => {
 			await load([rule("payments.charge.**", "allow", "callers.**")], attribution);
-			const broad = api.slothlet.permissions.addRule(rule("payments.**", "deny", "callers.**"));
+			const broad = api.slothlet.permissions.rules.add(rule("payments.**", "deny", "callers.**"));
 			expect(await charge()).toBe("allowed");
-			api.slothlet.permissions.removeRule(broad);
-			const equal = api.slothlet.permissions.addRule(rule("payments.charge.**", "deny", "callers.**"));
+			api.slothlet.permissions.rules.remove(broad);
+			const equal = api.slothlet.permissions.rules.add(rule("payments.charge.**", "deny", "callers.**"));
 			expect(await charge()).toBe("PERMISSION_DENIED");
-			api.slothlet.permissions.removeRule(equal);
+			api.slothlet.permissions.rules.remove(equal);
 			expect(await charge()).toBe("allowed");
 		});
 	});

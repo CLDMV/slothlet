@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-14T14:30:00-08:00 (1794695400)
+ *	@Last modified time: 2026-11-16T18:29:41-08:00 (1794882581)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -81,7 +81,7 @@ function childScript(asyncHook) {
 			const name = config.mode + "/" + config.runtime + "/" + config.attribution;
 			const api = await slothlet({
 				base: FIXTURE, mode: config.mode, runtime: config.runtime, silent: true,
-				permissions: { defaultPolicy: "allow", attribution: config.attribution, rules }
+				permissions: { policy: "allow", rules, caller: { attribution: config.attribution } }
 			});
 			out[name] = {};
 			for (const node of NODES) {

@@ -1,0 +1,21 @@
+/**
+ *
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /api/info.mjs
+ *	@Date: 2026-11-18T21:49:06-08:00 (1795067346)
+ *	@Author: Nate Corcoran <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-11-18T21:57:55-08:00 (1795067875)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ *
+ */
+
+/**
+ * Trivial leaf so the module has an api surface to mount. The point of this fixture is its manifest-declared
+ * permission rule, not its api.
+ * @returns {string} The module name.
+ */
+export const name = () => "@local/unknown-suffix";

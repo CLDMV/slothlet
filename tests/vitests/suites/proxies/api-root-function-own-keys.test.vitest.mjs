@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-14T00:00:00-08:00 (1794643200)
+ *	@Last modified time: 2026-11-16T18:30:18-08:00 (1794882618)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -73,8 +73,8 @@ const MODES = ["eager", "lazy"];
 const RUNTIMES = ["async", "live"];
 const PERMISSIONS = [
 	{ name: "permissions off", permissions: null },
-	{ name: "permissions on, precise", permissions: { defaultPolicy: "allow", attribution: "precise" } },
-	{ name: "permissions on, fast", permissions: { defaultPolicy: "allow", attribution: "fast" } }
+	{ name: "permissions on, precise", permissions: { policy: "allow", caller: { attribution: "precise" } } },
+	{ name: "permissions on, fast", permissions: { policy: "allow", caller: { attribution: "fast" } } }
 ];
 const matrix = MODES.flatMap((mode) => RUNTIMES.flatMap((runtime) => PERMISSIONS.map((entry) => ({ mode, runtime, ...entry }))));
 
@@ -208,7 +208,7 @@ async function build(fixture, place, options) {
 		await api.slothlet.api.add("zz.s", fixture.mount);
 		node = api.zz.s;
 	} else if (place !== "api root") node = api.e;
-	if (typeof node._materialize === "function") await node._materialize();
+	if (typeof node.___materialize === "function") await node.___materialize();
 	return { api, node };
 }
 
@@ -289,8 +289,10 @@ describe.each(
 					runtime,
 					silent: true,
 					permissions: {
-						defaultPolicy: "allow",
-						attribution,
+						policy: "allow",
+						caller: {
+							attribution
+						},
 						rules: [
 							{ caller: "reader.**", target: "helper", effect: "deny" },
 							{ caller: "reader.**", target: "secret", effect: "deny" }
@@ -298,7 +300,7 @@ describe.each(
 					}
 				});
 				try {
-					await api.slothlet.api.add("reader", readerDir, { moduleID: "reader" });
+					await api.slothlet.api.add("reader", readerDir, { id: "reader" });
 					return { host: Object.keys(api), reader: await api.reader.look() };
 				} finally {
 					await api.slothlet.shutdown();

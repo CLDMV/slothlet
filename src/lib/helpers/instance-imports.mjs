@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:12-08:00 (1794874572)
+ *	@Last modified time: 2026-11-17T13:35:20-08:00 (1794951320)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -91,6 +91,7 @@ import {
 	NativeProxy,
 	Objects,
 	Processes,
+	PrototypeFunctions,
 	Reflect,
 	RegExpMethods,
 	regExpReplace,
@@ -378,7 +379,7 @@ const HELPER_SEALS = new Map();
  * hook, of the module's instance copy whose code was running when the file was resolved (a `require` it made through
  * `createRequire` of any path). Kept here, out of every
  * module's reach, and read through the frozen reader on the shared object (see {@link SCRIPTS_READER}): whose code
- * an untagged file's code is, under `permissions.provenance`. A file loaded before slothlet's hook was registered has
+ * an untagged file's code is, under `permissions.caller.provenance`. A file loaded before slothlet's hook was registered has
  * no entry: it is the host's.
  * @type {Map<string, Set<string>>}
  * @private
@@ -648,7 +649,8 @@ const SCRIPTS_READER = Objects.freeze({
  * @property {(url: string) => string} scriptKeyOf - How a URL is reduced to its script key.
  * @property {(url: string) => (object|undefined)} own - The namespace of one of slothlet's runtime entry files the
  *   keeping copy has evaluated (#760, see registerOwnModule).
- * @property {(instanceID: string) => (object|null)} claim - Claims an instance ID (see claimInstanceScope).
+ * @property {(instanceID: string) => (object|null)} claim - Claims an instance ID for another copy of slothlet (see
+ *   claimInstanceScope); null when the code calling it is not slothlet's (see claimForCopy).
  * @property {() => boolean} hooks - Registers the keeping copy's hooks with Node, once.
  * @property {(ticket: string) => object} redeem - Entry point of the code the load hook generates (see mintTicket).
  * @property {(specifier: *, importer: string) => *} checkImport - Holds an import or `import.meta.resolve` an instance
@@ -812,7 +814,7 @@ function sharedState() {
 		commonJS: COMMONJS_READER,
 		scriptKeyOf: (url) => (SCRIPT_KEY_OF ? SCRIPT_KEY_OF(url) : url),
 		own: (url) => MapMethods.get(OWN_MODULES, url),
-		claim: claimHere,
+		claim: claimForCopy,
 		hooks: () => installInstanceImportHooks(NODE_MODULE),
 		redeem: redeemTicket,
 		requireCJS: requireCJSFromRunner,
@@ -886,7 +888,7 @@ const HOST = (() => {
 	const update = hashPrototype.update;
 	const digest = hashPrototype.digest;
 	const Decoder = TextDecoder;
-	const decode = Decoder.prototype.decode;
+	const decode = PrototypeFunctions.TextDecoder.decode;
 	return Objects.freeze({
 		randomUUID: FunctionMethods.bind(crypto.randomUUID, crypto),
 		// What a loaded script is recorded under (see recordLoadedSource): the hash and the decoding are the ones in place
@@ -2014,7 +2016,7 @@ async function viteImportRefusal(specifier, file) {
 		try {
 			const { SlothletError } = await import("#errors");
 			IMPORT_REFUSAL = ({ specifier: named, file: target, allowed }) =>
-				new SlothletError("MODULE_INTERNAL_NOT_IMPORTABLE", { specifier: named, file: target, allowed }, null, { validationError: true });
+				new SlothletError("MODULE_INTERNAL_NOT_IMPORTABLE", { specifier: named, file: target, allowed });
 		} catch {
 			// Without slothlet's errors loadable here the refusal carries its code alone (see importRefusal).
 		}
@@ -2024,7 +2026,7 @@ async function viteImportRefusal(specifier, file) {
 
 /**
  * The error the vite plugin throws for an `import` statement of a `data:` or `blob:` URL in an instance file:
- * `CAPABILITY_REFUSED`, slothlet's own error loaded where the plugin runs.
+ * `PERMISSION_CAPABILITY_REFUSED`, slothlet's own error loaded where the plugin runs.
  * @param {string} importer - The importing file.
  * @returns {Promise<Error>} The error.
  * @private
@@ -2034,18 +2036,18 @@ async function viteCapabilityRefusal(importer) {
 		const { SlothletError } = await import("#errors");
 		const { translate } = await import("#i18n");
 		// The vite server holds none of the instance's rules: the import is no leaf's it could decide for.
-		const refusal = new SlothletError(
-			"CAPABILITY_REFUSED",
-			{ caller: importer, capability: "imports", route: "import", reason: translate("CAPABILITY_REASON_UNATTRIBUTED") },
-			null,
-			{ validationError: true }
-		);
+		const refusal = new SlothletError("PERMISSION_CAPABILITY_REFUSED", {
+			caller: importer,
+			capability: "imports",
+			route: "import",
+			reason: translate("PERMISSION_CAPABILITY_REASON_UNATTRIBUTED")
+		});
 		refusal.context.reasonCode = "unattributed";
 		return refusal;
 	} catch {
 		/* v8 ignore next 4 -- slothlet's errors are loadable wherever the plugin runs; the code alone otherwise. */
-		const error = new PristineError(`CAPABILITY_REFUSED: imports (import) ${importer}`);
-		error.code = "CAPABILITY_REFUSED";
+		const error = new PristineError(`PERMISSION_CAPABILITY_REFUSED: imports (import) ${importer}`);
+		error.code = "PERMISSION_CAPABILITY_REFUSED";
 		return error;
 	}
 }
@@ -2104,7 +2106,7 @@ function setCapabilityCheck(check) {
  * @param {string|null} parentURL - The importer.
  * @param {Array<string>|undefined} conditions - The resolution's conditions.
  * @returns {void}
- * @throws {SlothletError} `CAPABILITY_REFUSED`.
+ * @throws {SlothletError} `PERMISSION_CAPABILITY_REFUSED`.
  * @private
  */
 function refuseCodeImport(specifier, parentURL, conditions) {
@@ -2921,6 +2923,66 @@ function claimHere(instanceID) {
 }
 
 /**
+ * Where this file is, as {@link toSlashPath} gives it: frames of this file are passed over when the code that called
+ * {@link claimForCopy} is looked for on an engine with no `Error.captureStackTrace`.
+ * @type {string}
+ * @private
+ */
+const THIS_FILE = toSlashPath(import.meta.url);
+
+/**
+ * Where the stack reader is, as {@link toSlashPath} gives it (see {@link THIS_FILE}).
+ * @type {string}
+ * @private
+ */
+const STACK_READ_FILE = toSlashPath(URLMethods.href(new URL("./stack-read.mjs", import.meta.url)));
+
+/**
+ * Whether the code that called a function of this file is slothlet's own (this copy's or another copy's, see
+ * {@link isOwnCodeLocation}) and no module's. The caller's frame is read right below the function's (V8's
+ * `Error.captureStackTrace`); elsewhere it is the first frame outside this file and the stack reader. A built-in
+ * frame in its place (a callback run by `Array.map`, say) cannot be placed, and is not slothlet's.
+ * @param {Function} callee - The function whose caller is asked about.
+ * @returns {boolean} True when slothlet's own code called it.
+ * @private
+ */
+function calledBySlothlet(callee) {
+	let stack;
+	try {
+		stack =
+			typeof PristineError.captureStackTrace === "function"
+				? String(readStack(stackText, { limit: 1, skip: callee })?.value ?? "")
+				: ownStackText(USE_FRAME_LIMIT);
+	} catch {
+		return false;
+	}
+	for (let ofIndex = 0, ofList = splitText(stack, "\n"); ofIndex < ofList.length; ofIndex++) {
+		const line = ofList[ofIndex];
+		if (!(RegExpMethods.exec(/\S/, line) !== null) || RegExpMethods.exec(/^\s*Error\s*$/, line) !== null) continue;
+		const location = stackLineLocation(line);
+		if (location === null) return false;
+		const path = toSlashPath(location);
+		if (typeof PristineError.captureStackTrace !== "function" && (path === THIS_FILE || path === STACK_READ_FILE)) continue;
+		return isOwnCodeLocation(location) && !isModuleCodeLocation(location);
+	}
+	return false;
+}
+
+/**
+ * The `claim` of the shared object: how another copy of slothlet claims an instance ID in the keeping copy's state
+ * (see {@link claimHere}). The object is on the global object, where a module's code can reach it too, so a claim
+ * is taken only from slothlet's own code: a module claiming IDs ahead of an instance (the IDs a reload would take)
+ * gets null. The keeping copy's own instances claim through {@link claimHere} directly.
+ * @param {string} instanceID - The instance ID.
+ * @returns {{instanceID: string, require: function(string, object=): *, release: function(): void}|null} The handle,
+ *   or null when the ID is not a string, is claimed already, or the caller is not slothlet's code.
+ * @private
+ */
+function claimForCopy(instanceID) {
+	return calledBySlothlet(claimForCopy) ? claimHere(instanceID) : null;
+}
+
+/**
  * Claim an instance ID for the instance that carries it, before any of its files load. The handle is how the instance
  * loads its CommonJS files ({@link scopeRequire}) and, when it shuts down or takes a new ID, releases what slothlet
  * keeps about its files. The instance keeps the handle to itself: nothing else can load a file as the instance's code
@@ -2936,7 +2998,7 @@ function claimHere(instanceID) {
  * scope.release();
  */
 function claimInstanceScope(instanceID) {
-	const handle = sharedState().claim(instanceID) ?? null;
+	const handle = (isKeeper() ? claimHere(instanceID) : sharedState().claim(instanceID)) ?? null;
 	// Claimed by this copy's own slothlet: its files are given this copy's runtime (see isOtherCopysFile).
 	if (handle && isKeeper()) SetMethods.add(OWN_CLAIMS, instanceID);
 	return handle;

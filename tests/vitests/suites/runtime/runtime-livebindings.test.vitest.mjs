@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:21-07:00 (1791090921)
+ *	@Last modified time: 2026-11-16T18:30:59-08:00 (1794882659)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -95,11 +95,11 @@ describe("runtime-livebindings", () => {
 			expect(Object.getOwnPropertyDescriptor(self, "ping")).toBeUndefined();
 		});
 
-		it("throws RUNTIME_NO_ACTIVE_CONTEXT_SELF when store has no self object", async () => {
+		it("throws CONTEXT_NOT_ACTIVE_SELF when store has no self object", async () => {
 			initializeActiveStore({ self: null });
 
 			await withSuppressedSlothletErrorOutput(async () => {
-				expect(() => self.anyProperty).toThrow("RUNTIME_NO_ACTIVE_CONTEXT_SELF");
+				expect(() => self.anyProperty).toThrow("CONTEXT_NOT_ACTIVE_SELF");
 			});
 		});
 
@@ -143,13 +143,13 @@ describe("runtime-livebindings", () => {
 			expect(Object.getOwnPropertyDescriptor(context, "userId")).toBeUndefined();
 		});
 
-		it("throws RUNTIME_NO_ACTIVE_CONTEXT_CONTEXT when setting without context object", async () => {
+		it("throws CONTEXT_NOT_ACTIVE_WRITE when setting without context object", async () => {
 			initializeActiveStore({ context: null });
 
 			await withSuppressedSlothletErrorOutput(async () => {
 				expect(() => {
 					context.newValue = 1;
-				}).toThrow("RUNTIME_NO_ACTIVE_CONTEXT_CONTEXT");
+				}).toThrow("CONTEXT_NOT_ACTIVE_WRITE");
 			});
 		});
 	});

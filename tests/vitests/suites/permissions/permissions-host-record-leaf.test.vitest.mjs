@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-08T14:46:13-08:00 (1794177973)
+ *	@Last modified time: 2026-11-16T18:30:33-08:00 (1794882633)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -82,7 +82,7 @@ function tryPartition(getApi) {
 	try {
 		return getApi().store.partition();
 	} catch (error) {
-		return `${error?.code}:${error?.context?.caller ?? null}`;
+		return `${error?.code}:${error?.details?.caller ?? null}`;
 	}
 }
 
@@ -184,8 +184,9 @@ const rows = (mount) => [
 const AUTHORED = { ok: false, code: "PERMISSION_DENIED", caller: expect.stringMatching(/^ext\.b\./) };
 
 const MODULE_NODE_ROWS = [
-	["madeOwn", "made's own body", REFUSED, { ok: true, value: "p:null" }],
-	["madeInvoke", "a package function ext.b assigned as made.invoke", REFUSED, { ok: true, value: "p:null" }],
+	// metadata.caller() answers the caller object (its path) for any caller, not only one with metadata of its own.
+	["madeOwn", "made's own body", REFUSED, { ok: true, value: "p:made.open" }],
+	["madeInvoke", "a package function ext.b assigned as made.invoke", REFUSED, { ok: true, value: "p:made.invoke" }],
 	["madeRun", "a package function ext.b passes to made.run", REFUSED, REFUSED],
 	["addedOwn", "added's own body", REFUSED, AUTHORED],
 	["addedInvoke", "a package function ext.b added as added.invoke", REFUSED, AUTHORED],
@@ -253,12 +254,12 @@ describe.each(CONFIGS)("Permissions > a host record leaf is its own entity at it
 				mode,
 				runtime,
 				silent: true,
-				permissions: { defaultPolicy: "deny", rules: RULES }
+				permissions: { policy: "deny", rules: RULES }
 			});
 			await api.slothlet.api.add(
 				mount.split("."),
 				make(() => api),
-				{ moduleID: "host-records" }
+				{ id: "host-records" }
 			);
 			await api.ext.b.prepare();
 		});

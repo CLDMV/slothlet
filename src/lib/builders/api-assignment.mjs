@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:08-08:00 (1794874568)
+ *	@Last modified time: 2026-11-17T13:35:15-08:00 (1794951315)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -25,6 +25,7 @@
  * const assignment = new ApiAssignment(slothlet);
  * assignment.assignToApiPath(api, "math", mathWrapper, {});
  */
+import { segmentsOf } from "#helpers/segments";
 import { ComponentBase } from "#factories/component-base";
 import { isFrameworkReservedKey, internals as unifiedWrapperInternals } from "#handlers/unified-wrapper";
 import { isFrameworkInternal, internals as frameworkInternalsInternals } from "#handlers/framework-internals";
@@ -32,7 +33,6 @@ import {
 	ArrayMethods,
 	Error,
 	filterList,
-	FunctionMethods,
 	Map,
 	MapMethods,
 	Objects,
@@ -114,8 +114,8 @@ export class ApiAssignment extends ComponentBase {
 			// api member, and skipping it here would merge the extracted snapshot instead of the live
 			// child wrapper, stripping its apiPath and gating.
 			// Reaching the skip needs a reserved name among the folder wrapper's own enumerable keys.
-			// That CAN occur — adoption places a module's `__type`-style reserved export onto the wrapper,
-			// and a file named `_materialize.mjs` / `_impl.mjs` does the same before breaking the load —
+			// That CAN occur — adoption places a module's reserved-name export (`___materialize`) onto the wrapper,
+			// and a file named `___materialize.mjs` / `____impl.mjs` does the same before breaking the load —
 			// but every such module is exporting a name whose surface contract is the #260 hazard, so the
 			// suite deliberately composes none and the skip stays guarded rather than pinned.
 			/* v8 ignore next */
@@ -133,7 +133,7 @@ export class ApiAssignment extends ComponentBase {
 			const folderKey = ofList[ofIndex];
 			// The full reserved set, not just the metadata names: when the folder's impl is a CALLABLE,
 			// extraction returns the function itself with every own key unfiltered, so a module export
-			// named for a reserved key (`__type`, `_materialize`, …) can appear here — and merging it
+			// named for a reserved key (`___materialize`, `____state`, …) can appear here — and merging it
 			// would plant a framework name as an own member of the surviving wrapper. Reachable only by
 			// a module exporting a reserved name, whose surface contract is the #260 hazard — the suite
 			// deliberately composes no such module, so the skip is guarded rather than pinned.
@@ -141,9 +141,7 @@ export class ApiAssignment extends ComponentBase {
 			if (isFrameworkReservedKey(folderKey)) continue;
 			// Own-member tests: `in` walks the prototype chain, so an export named after an inherited
 			// member (`call`, `bind`, `toString`) would read as already present and be dropped.
-			const alreadyPresent =
-				FunctionMethods.call(Objects.prototype.hasOwnProperty, keptWrapper, folderKey) ||
-				(!!keptImpl && FunctionMethods.call(Objects.prototype.hasOwnProperty, keptImpl, folderKey));
+			const alreadyPresent = Objects.hasOwn(keptWrapper, folderKey) || (!!keptImpl && Objects.hasOwn(keptImpl, folderKey));
 			if (alreadyPresent) {
 				// #441: the survivor already owns this name, so the folded-off folder's member is dropped.
 				// This is the "completely invisible" case — a self-named-namespace fold emits no per-leaf
@@ -161,17 +159,21 @@ export class ApiAssignment extends ComponentBase {
 				});
 				continue;
 			}
-			Objects.defineProperty(keptWrapper, folderKey, {
-				__proto__: null,
-				// Prefer the live child wrapper over the extracted snapshot of it. The snapshot arm serves
-				// the members adoption never turned into children — its private skip list holds `_state` /
-				// `_invalid`, which are NOT framework-reserved, so a module exporting them reaches the
-				// merged slot only through the extracted product (pair/frog pins this in both modes).
-				value: MapMethods.has(folderChildren, folderKey) ? MapMethods.get(folderChildren, folderKey) : folderProduct[folderKey],
-				writable: false,
-				enumerable: true,
-				configurable: true
-			});
+			// The folder's own children (wrapper proxies) move across as the nodes they are. A member that is not a
+			// child at all — a callable folder module's impl keeps its function's own enumerable properties
+			// (`fn.tag = …`, a getter, `fn.me = fn`) on the function, where the traps serve them — is adopted from the
+			// folder's function the way the folder's own node serves it: an accessor stays live and an object or
+			// function becomes a child node at the kept slot's path (#874). Eager adopts the same members from the
+			// losing module's function in modes-processor (pair/fnprop pins both modes against pair/fnsolo).
+			if (MapMethods.has(folderChildren, folderKey)) {
+				Objects.defineProperty(keptWrapper, folderKey, {
+					__proto__: null,
+					value: MapMethods.get(folderChildren, folderKey),
+					writable: false,
+					enumerable: true,
+					configurable: true
+				});
+			} else keptWrapper.___adoptForeignMember(folderKey, folderProduct);
 		}
 	}
 
@@ -185,12 +187,12 @@ export class ApiAssignment extends ComponentBase {
 	 * @param {Object} options - Assignment options
 	 * @param {boolean} [options.allowOverwrite=false] - Allow overwriting existing non-wrapper values
 	 * @param {boolean} [options.mutateExisting=false] - Sync existing wrappers instead of replacing
-	 * @param {boolean} [options.useCollisionDetection=false] - Enable collision detection using config.collision mode
-	 * @param {Object} [options.config] - Slothlet config (uses config.collision.initial or config.collision.api)
+	 * @param {boolean} [options.useCollisionDetection=false] - Enable collision detection using config.api.collision.mode
+	 * @param {Object} [options.config] - Slothlet config (uses config.api.collision.mode.initial or config.api.collision.mode.api)
 	 * @param {string} [options.collisionContext="initial"] - Collision context: "initial" or "api"
 	 * @param {Function} [options.syncWrapper] - Function to sync two wrapper proxies
 	 * @param {string} [options.collisionMode="merge"] - Mode used by the mutateExisting/hot-reload path (Case 1) when syncing two existing wrappers
-	 * @param {string|null} [options.collisionModeOverride=null] - Per-call override (e.g. `api.add()`'s `forceOverwrite`) for the collision-detection branch (Case 2); takes precedence over `config.collision[collisionContext]`
+	 * @param {string|null} [options.collisionModeOverride=null] - Per-call override (e.g. `api.add()`'s `forceOverwrite`) for the collision-detection branch (Case 2); takes precedence over `config.api.collision.mode[collisionContext]`
 	 * @param {string|null} [options.moduleID=null] - Module id to associate with this assignment, forwarded to `syncWrapper`
 	 * @returns {Promise<boolean>} True if assignment succeeded, false if blocked by collision or other constraint
 	 *
@@ -198,7 +200,7 @@ export class ApiAssignment extends ComponentBase {
 	 * This function encapsulates all assignment patterns from processFiles:
 	 * - Direct assignment when no collision
 	 * - Wrapper sync when both existing and new are wrappers
-	 * - Collision detection using config.collision[context] mode (merge/replace/error/skip/warn)
+	 * - Collision detection using config.api.collision.mode[context] (merge/replace/error/skip/warn)
 	 * - Proper handling of UnifiedWrapper proxies (preserves them, doesn't unwrap)
 	 *
 	 * Async (#369) because Case 1 awaits `syncWrapper` — itself async since it force-materializes
@@ -285,11 +287,11 @@ export class ApiAssignment extends ComponentBase {
 				valueType: typeof value
 			});
 			// Get collision mode from the per-call override (e.g. api.add()'s forceOverwrite) first,
-			// falling back to config.collision.initial or config.collision.api. Without this, a
+			// falling back to config.api.collision.mode.initial or config.api.collision.mode.api. Without this, a
 			// forceOverwrite mount's internal file/folder collisions silently used the instance
 			// default instead of the override, disagreeing with the mount's own top-level decision
 			// (#365/#366 review).
-			const collisionMode = collisionModeOverride || config.collision?.[collisionContext] || "merge";
+			const collisionMode = collisionModeOverride || config.api?.collision?.mode?.[collisionContext] || "merge";
 
 			if (collisionMode === "error") {
 				// this.slothlet?.SlothletError is always defined in tests; the || Error fallback branch never fires.
@@ -297,8 +299,8 @@ export class ApiAssignment extends ComponentBase {
 				const SlothletError = this.slothlet?.SlothletError || Error;
 				throw new SlothletError("COLLISION_ERROR", {
 					key: String(key),
-					collisionMode,
-					collisionContext
+					collision: collisionMode,
+					phase: collisionContext
 				});
 			}
 
@@ -375,13 +377,13 @@ export class ApiAssignment extends ComponentBase {
 					});
 
 					// CRITICAL: In replace mode, trigger immediate materialization
-					// This ensures _impl is populated as soon as possible
+					// This ensures ____impl is populated as soon as possible
 					if (effectiveMode === "replace") {
 						this.slothlet.debug("api", {
 							key: "DEBUG_MODE_COLLISION_REPLACE_MATERIALIZE",
 							apiPath: valueWrapper.____slothletInternal.apiPath
 						});
-						valueWrapper._materialize(); // Fire-and-forget - will populate _impl asynchronously
+						valueWrapper.___materialize(); // Fire-and-forget - will populate ____impl asynchronously
 					}
 				}
 			}
@@ -485,10 +487,10 @@ export class ApiAssignment extends ComponentBase {
 						}
 
 						// Get file wrapper's metadata to extract filePath for child mappings
-						const valueMetadata = this.slothlet.handlers?.metadata?.getMetadata(value);
+						const valueMetadata = this.slothlet.handlers?.metadata?.getSystemMetadata(value);
 						const valueFilePath = valueMetadata?.filePath;
 
-						// Create temporary object to hold __childFilePaths if _impl doesn't exist yet
+						// Create temporary object to hold ____childFilePaths if ____impl doesn't exist yet
 						// When lazy materializes, it will merge with this or we can store it on the wrapper directly
 						// Map is created fresh with each lazy-folder wrapper; the false branch
 						// (map already present) is never triggered in tests.
@@ -550,7 +552,7 @@ export class ApiAssignment extends ComponentBase {
 								!valueWrapper.____slothletInternal.state?.materialized &&
 								!valueWrapper.____slothletInternal.state?.inFlight
 							) {
-								PromiseMethods.catch(valueWrapper._materialize(), () => {});
+								PromiseMethods.catch(valueWrapper.___materialize(), () => {});
 							}
 							// Keep the existing callable on the slot; the merge above finishes the composition.
 							runtime_frameworkWrite(targetApi, () => {
@@ -563,10 +565,10 @@ export class ApiAssignment extends ComponentBase {
 							// When folder materializes, ___adoptImplChildren will preserve these (merge scenario)
 
 							// Get file wrapper's metadata to extract filePath for child mappings
-							const existingMetadata = this.slothlet.handlers?.metadata?.getMetadata(existing);
+							const existingMetadata = this.slothlet.handlers?.metadata?.getSystemMetadata(existing);
 							const existingFilePath = existingMetadata?.filePath;
 
-							// Create temporary object to hold __childFilePaths if _impl doesn't exist yet
+							// Create temporary object to hold ____childFilePaths if ____impl doesn't exist yet
 							if (!valueWrapper.____slothletInternal.childFilePathsPreMaterialize) {
 								valueWrapper.____slothletInternal.childFilePathsPreMaterialize = {};
 							}
@@ -623,13 +625,13 @@ export class ApiAssignment extends ComponentBase {
 								!valueWrapper.____slothletInternal.state?.materialized &&
 								!valueWrapper.____slothletInternal.state?.inFlight
 							) {
-								PromiseMethods.catch(valueWrapper._materialize(), (err) => {
+								PromiseMethods.catch(valueWrapper.___materialize(), (err) => {
 									new this.slothlet.SlothletWarning(
 										"WARNING_COLLISION_TRIGGER_MATERIALIZE_ERROR",
 										{
-											apiPath: valueWrapper.____slothletInternal.apiPath
+											path: segmentsOf(valueWrapper.____slothletInternal.apiPath)
 										},
-										err
+										{ cause: err }
 									);
 								});
 							}
@@ -657,7 +659,7 @@ export class ApiAssignment extends ComponentBase {
 					}
 
 					// CRITICAL: For materialized lazy wrappers, we need child caches populated
-					// In lazy mode, _impl is already set but ___adoptImplChildren hasn't run yet
+					// In lazy mode, ____impl is already set but ___adoptImplChildren hasn't run yet
 					const existingChildCount = filterList(Objects.keys(existingWrapper), (k) => !isFrameworkReservedKey(k)).length;
 					const valueChildCount = filterList(Objects.keys(valueWrapper), (k) => !isFrameworkReservedKey(k)).length;
 					if (existingWrapper.____slothletInternal.impl && existingChildCount === 0) {
@@ -685,7 +687,7 @@ export class ApiAssignment extends ComponentBase {
 						const existingChildKeys2 = filterList(Objects.keys(existingWrapper), (k) => !isFrameworkReservedKey(k));
 						for (let ofIndex = 0, ofList = existingChildKeys2; ofIndex < ofList.length; ofIndex++) {
 							const key2 = ofList[ofIndex];
-							const keyOnValue = FunctionMethods.call(Objects.prototype.hasOwnProperty, valueWrapper, key2);
+							const keyOnValue = Objects.hasOwn(valueWrapper, key2);
 							if (keyOnValue && isMergeReplace) {
 								// merge-replace: the second source's member wins the conflict — leave it.
 								continue;
@@ -721,7 +723,7 @@ export class ApiAssignment extends ComponentBase {
 						const key = ofList[ofIndex];
 						const isInternal = isFrameworkReservedKey(key);
 						// CRITICAL: Use hasOwnProperty to avoid matching ComponentBase prototype getters
-						const keyExists = !isInternal && FunctionMethods.call(Objects.prototype.hasOwnProperty, existingWrapper, key);
+						const keyExists = !isInternal && Objects.hasOwn(existingWrapper, key);
 
 						if (!keyExists) {
 							// A getter stays a getter, running on the node that holds the slot (#585 review).
@@ -756,7 +758,7 @@ export class ApiAssignment extends ComponentBase {
 								const ____existingChildKeys = filterList(Objects.keys(existingChildWrapper), (k) => !isFrameworkReservedKey(k));
 								for (let ofIndex = 0, ofList = newChildKeys; ofIndex < ofList.length; ofIndex++) {
 									const childKey = ofList[ofIndex];
-									const childKeyExists = FunctionMethods.call(Objects.prototype.hasOwnProperty, existingChildWrapper, childKey);
+									const childKeyExists = Objects.hasOwn(existingChildWrapper, childKey);
 									// childKeyExists is always false during initial merge (keys are new).
 									/* v8 ignore next */
 									if (!childKeyExists) {
@@ -781,7 +783,7 @@ export class ApiAssignment extends ComponentBase {
 				} else if (existingIsWrapper && !valueIsWrapper) {
 					// Existing is wrapper, new value is plain - merge into impl
 					const existingWrapper = resolveWrapper(existing);
-					const existingImpl = existingWrapper.__impl;
+					const existingImpl = existingWrapper.____impl;
 					// existingImpl is always an object when the wrapper has impl set (null guard dead code).
 					/* v8 ignore next */
 					const mergedImpl = { ...(existingImpl || {}), ...value };
@@ -865,7 +867,7 @@ export class ApiAssignment extends ComponentBase {
 		const { removeMissing = false, moduleID = null, ...assignOptions } = options;
 
 		// #283: a version dispatcher is a branded framework-internal object that carries slothlet's OWN
-		// reserved marker keys (__isVersionDispatcher/__logicalPath). Merging it here copies those keys
+		// reserved marker keys (____isVersionDispatcher/____logicalPath). Merging it here copies those keys
 		// onto the colliding wrapper, which the framework then reads back as the host (caller null).
 		// Brand that wrapper by OBJECT IDENTITY so those specific marker reads are exempt from the
 		// module-private host gate — never by name, so a consumer member of the same name (on a

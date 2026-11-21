@@ -59,7 +59,7 @@ describe.each(CONFIGS)("permissions as a bare mode string (#765) — $mode / $ru
 	 */
 	async function load(permissions) {
 		api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, permissions });
-		await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { moduleID: "guest" });
+		await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { id: "guest" });
 		return api;
 	}
 
@@ -71,13 +71,13 @@ describe.each(CONFIGS)("permissions as a bare mode string (#765) — $mode / $ru
 
 	it.each(SHORTHANDS)("%j behaves as { mode: %j }", async (shorthand, modeName) => {
 		await load(shorthand);
-		const shorthandMode = api.slothlet.permissions.control.mode;
+		const shorthandMode = api.slothlet.permissions.control.mode();
 		const shorthandWrite = writeNamespace();
 		await api.shutdown();
 
 		await load({ mode: modeName });
 		expect(shorthandMode).toBe(modeName);
-		expect(api.slothlet.permissions.control.mode).toBe(modeName);
+		expect(api.slothlet.permissions.control.mode()).toBe(modeName);
 		expect(shorthandWrite).toBe(writeNamespace());
 		expect(shorthandWrite).toBe(modeName === "disabled" ? "done" : "PERMISSION_DENIED");
 	});

@@ -2,12 +2,12 @@
  *
  *	@Project: @cldmv/slothlet
  *	@Filename: /tests/browser/define-fixed-object.browser.test.mjs
- *	@Date: 2026-11-16T05:00:00-08:00 (1795352400)
+ *	@Date: 2026-11-16T05:00:00-08:00 (1794834000)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T05:00:00-08:00 (1795352400)
+ *	@Last modified time: 2026-11-16T18:28:57-08:00 (1794882537)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -60,12 +60,14 @@ describe.each(["eager", "lazy"].flatMap((mode) => ["on", "off"].map((permissionM
 			const mod = await import("@cldmv/slothlet");
 			const slothlet = mod.default ?? mod.slothlet;
 			const api = await slothlet({
-				platform: "browser",
+				loader: {
+					platform: "browser"
+				},
 				mode,
 				silent: true,
 				permissions: {
 					mode: permissionMode,
-					defaultPolicy: "allow",
+					policy: "allow",
 					rules: [{ caller: "reader.**", target: "owner.data.locked.hidden", effect: "deny" }]
 				}
 			});
@@ -81,19 +83,19 @@ describe.each(["eager", "lazy"].flatMap((mode) => ["on", "off"].map((permissionM
 						}
 					}
 				},
-				{ moduleID: "owner" }
+				{ id: "owner" }
 			);
 			await api.slothlet.api.add(
 				"reader",
 				{ exports: { probe: () => ({ hidden: answer(() => self.owner.data.locked.hidden), v: answer(() => self.owner.data.locked.v) }) } },
-				{ moduleID: "reader" }
+				{ id: "reader" }
 			);
 			return api;
 		};
 
 		it("refuses the one-step definition while on, by the host and a module, and allows a primitive", async () => {
 			const api = await boot();
-			const refused = { threw: "API_MEMBER_FIXED_OBJECT", typeError: true };
+			const refused = { threw: "PERMISSION_MEMBER_FIXED_OBJECT", typeError: true };
 			expect(defined(() => Object.defineProperty(api, "rootFixed", { value: { v: 1 }, ...FIXED }) === api)).toEqual(on ? refused : true);
 			expect(defined(() => Reflect.defineProperty(api.owner.data, "hostFixed", { value: { v: 1 }, ...FIXED }))).toEqual(
 				on ? refused : true

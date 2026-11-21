@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:04-07:00 (1791090904)
+ *	@Last modified time: 2026-11-16T18:29:50-08:00 (1794882590)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -25,7 +25,7 @@
  *   1. The constructor body runs and own properties are set.
  *   2. The prototype chain is preserved (methods are reachable).
  *   3. Private class fields work correctly (raw instance returned, not re-proxied).
- *   4. Constructing a non-function impl throws INVALID_CONFIG_NOT_A_FUNCTION.
+ *   4. Constructing a non-function impl throws API_PATH_NOT_CALLABLE.
  * @module tests.vitests.suites.handlers.unified-wrapper-construct-trap
  */
 
@@ -39,7 +39,7 @@ describe.each(getMatrixConfigs({ mode: "eager" }))("UnifiedWrapper > constructTr
 
 	beforeEach(async () => {
 		const { default: slothlet } = await import("@cldmv/slothlet");
-		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST, collision: { initial: "replace", api: "replace" } });
+		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST, api: { collision: { mode: { initial: "replace", api: "replace" } } } });
 	});
 
 	afterEach(async () => {
@@ -95,7 +95,7 @@ describe.each(getMatrixConfigs({ mode: "lazy" }))("UnifiedWrapper > constructTra
 
 	beforeEach(async () => {
 		const { default: slothlet } = await import("@cldmv/slothlet");
-		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST, collision: { initial: "replace", api: "replace" } });
+		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST, api: { collision: { mode: { initial: "replace", api: "replace" } } } });
 	});
 
 	afterEach(async () => {
@@ -142,14 +142,14 @@ describe.each(getMatrixConfigs({ mode: "lazy" }))("UnifiedWrapper > constructTra
 //
 // These tests cover lines 3424-3472: the polling-promise path in the construct
 // trap when `new proxy()` is called on a lazy, unmaterialized wrapper. The first
-// lazy guard fires `_materialize()` (setting inFlight=true synchronously), then
+// lazy guard fires `___materialize()` (setting inFlight=true synchronously), then
 // the second guard detects `inFlight===true` and returns a Promise that polls via
 // `setImmediate` until materialization completes.
 //
 // Three sub-paths are exercised:
 //   - Line 3432: impl is a function  → resolve(Reflect.construct(impl, …))
 //   - Line 3434: impl.default is fn  → resolve(Reflect.construct(impl.default, …))
-//   - Line 3436: impl is an object   → reject(INVALID_CONFIG_NOT_A_FUNCTION)
+//   - Line 3436: impl is an object   → reject(API_PATH_NOT_CALLABLE)
 
 describe("UnifiedWrapper > constructTrap > lazy in-flight Promise path (lines 3424-3472)", () => {
 	let api;
@@ -166,8 +166,8 @@ describe("UnifiedWrapper > constructTrap > lazy in-flight Promise path (lines 34
 		const { default: slothlet } = await import("@cldmv/slothlet");
 		api = await slothlet({ mode: "lazy", runtime: "async", hook: { enabled: false }, base: TEST_DIRS.API_TEST });
 		const loggerProxy = api.logger;
-		expect(loggerProxy.__mode).toBe("lazy");
-		expect(loggerProxy.__materialized).toBe(false);
+		expect(api.slothlet.node(loggerProxy).mode).toBe("lazy");
+		expect(api.slothlet.node(loggerProxy).materialized).toBe(false);
 		// new on unmaterialized lazy wrapper → Promise (lines 3424-3472)
 		const inst = await new loggerProxy();
 		// impl is the log function → Reflect.construct resolves to a log instance
@@ -181,22 +181,22 @@ describe("UnifiedWrapper > constructTrap > lazy in-flight Promise path (lines 34
 		const { default: slothlet } = await import("@cldmv/slothlet");
 		api = await slothlet({ mode: "lazy", runtime: "async", hook: { enabled: false }, base: TEST_DIRS.API_TEST_CJS });
 		const dfProxy = api.defaultFn;
-		expect(dfProxy.__mode).toBe("lazy");
-		expect(dfProxy.__materialized).toBe(false);
+		expect(api.slothlet.node(dfProxy).mode).toBe("lazy");
+		expect(api.slothlet.node(dfProxy).materialized).toBe(false);
 		const inst = await new dfProxy();
 		// Reflect.construct(multiply, [], multiply) → instance of multiply
 		expect(inst?.constructor?.name).toBe("multiply");
 	});
 
-	test("rejects with INVALID_CONFIG_NOT_A_FUNCTION when lazy impl is a namespace object (line 3436)", async () => {
+	test("rejects with API_PATH_NOT_CALLABLE when lazy impl is a namespace object (line 3436)", async () => {
 		// api.database is a lazy folder namespace — impl materialises to a plain object.
 		// The in-flight Promise rejects because impl is neither function nor has .default fn.
 		const { default: slothlet } = await import("@cldmv/slothlet");
 		api = await slothlet({ mode: "lazy", runtime: "async", hook: { enabled: false }, base: TEST_DIRS.API_TEST });
 		const dbProxy = api.database;
-		expect(dbProxy.__mode).toBe("lazy");
-		expect(dbProxy.__materialized).toBe(false);
-		await expect(new dbProxy()).rejects.toMatchObject({ code: "INVALID_CONFIG_NOT_A_FUNCTION" });
+		expect(api.slothlet.node(dbProxy).mode).toBe("lazy");
+		expect(api.slothlet.node(dbProxy).materialized).toBe(false);
+		await expect(new dbProxy()).rejects.toMatchObject({ code: "API_PATH_NOT_CALLABLE" });
 	});
 });
 
@@ -208,7 +208,7 @@ describe("UnifiedWrapper > constructTrap > lazy in-flight Promise path (lines 34
 // section that has its own impl-type checks.
 //
 //   - Line 3487: impl.default is fn → Reflect.construct(impl.default, …)
-//   - Line 3490: neither           → throw INVALID_CONFIG_NOT_A_FUNCTION
+//   - Line 3490: neither           → throw API_PATH_NOT_CALLABLE
 
 describe("UnifiedWrapper > constructTrap > materialized lazy wrapper — eager fallback (lines 3486-3498)", () => {
 	let api;
@@ -225,8 +225,8 @@ describe("UnifiedWrapper > constructTrap > materialized lazy wrapper — eager f
 		const { default: slothlet } = await import("@cldmv/slothlet");
 		api = await slothlet({ mode: "lazy", runtime: "async", hook: { enabled: false }, base: TEST_DIRS.API_TEST_CJS });
 		const dfProxy = api.defaultFn;
-		await dfProxy._materialize();
-		expect(dfProxy.__materialized).toBe(true);
+		await dfProxy.___materialize();
+		expect(api.slothlet.node(dfProxy).materialized).toBe(true);
 		// Eager path: impl.default is the multiply function
 		const inst = new dfProxy(3, 4);
 		expect(inst?.constructor?.name).toBe("multiply");
@@ -238,8 +238,8 @@ describe("UnifiedWrapper > constructTrap > materialized lazy wrapper — eager f
 		const { default: slothlet } = await import("@cldmv/slothlet");
 		api = await slothlet({ mode: "lazy", runtime: "async", hook: { enabled: false }, base: TEST_DIRS.API_TEST });
 		const dbProxy = api.database;
-		await dbProxy._materialize();
-		expect(dbProxy.__materialized).toBe(true);
+		await dbProxy.___materialize();
+		expect(api.slothlet.node(dbProxy).materialized).toBe(true);
 		let caught = null;
 		try {
 			new dbProxy();
@@ -267,7 +267,7 @@ describe.each(getMatrixConfigs({ mode: "eager" }))(
 
 		beforeEach(async () => {
 			const { default: slothlet } = await import("@cldmv/slothlet");
-			api = await slothlet({ ...config, base: TEST_DIRS.API_TEST, collision: { initial: "replace", api: "replace" } });
+			api = await slothlet({ ...config, base: TEST_DIRS.API_TEST, api: { collision: { mode: { initial: "replace", api: "replace" } } } });
 		});
 
 		afterEach(async () => {
@@ -353,9 +353,9 @@ describe("UnifiedWrapper > constructTrap > invalid wrapper throws TypeError (lin
 		api = await slothlet({ mode: "lazy", runtime: "async", hook: { enabled: false }, base: TEST_DIRS.API_TEST });
 
 		// Materialise math so api.math.add is a real callable UnifiedWrapper proxy.
-		await api.math._materialize();
+		await api.math.___materialize();
 		const addProxy = api.math.add;
-		expect(addProxy.__isCallable).toBe(true);
+		expect(api.slothlet.node(addProxy).callable).toBe(true);
 
 		// Put the held proxy into the reset-window state: invalid = true, no revival scheduled.
 		resolveWrapper(addProxy).___invalidate();

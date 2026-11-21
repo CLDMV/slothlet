@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:12-08:00 (1794874572)
+ *	@Last modified time: 2026-11-17T21:05:03-08:00 (1794978303)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -36,6 +36,7 @@
  * - `Promises` and `Symbols` hold the static functions of `Promise` (bound to it) and `Symbol` on frozen objects with
  *   no prototype, like `Objects` and `Arrays`.
  * - `NativeObject` is the `Object` function itself, for `NativeObject(value)`; its static functions are on `Objects`.
+ *   `NativeArray` is the `Array` function itself; its static functions are on `Arrays`.
  * - `Functions` holds the data members of `Function` (`Functions.prototype`) like `Objects` and `Arrays`.
  * - `URL` and `URLSearchParams` are those constructors themselves, shadowing the globals like `Map`.
  * - The other built-ins slothlet uses, under their own names, shadowing the globals like `Map`: `String`, `Boolean`,
@@ -60,6 +61,9 @@
  * `Map` or a `Set` goes through `mapEntries`, `mapKeys`, `mapValues` and `setValues`, whose iterators read nothing a
  * module can reach; arrays are walked by index. `copyList`, `concatLists`, `mapList` and `filterList` make arrays
  * without reading `constructor` or `Symbol.species` off the array they start from.
+ * The functions themselves, for code that compares a value against one or hands one to `Reflect.apply`, are on
+ * `PrototypeFunctions`, by built-in (`PrototypeFunctions.Promise.then`, `PrototypeFunctions.Object.valueOf`). The lint
+ * rule reports a member read off a built-in's `prototype` anywhere else in `src/`.
  *
  * @module @cldmv/slothlet/helpers/intrinsics
  * @internal
@@ -80,9 +84,9 @@ const NativeReflect = globalThis.Reflect;
 const NativePromise = globalThis.Promise;
 const NativeSymbol = globalThis.Symbol;
 const { getOwnPropertyNames, getOwnPropertyDescriptor, freeze, create } = NativeObject;
+const hasOwnAtLoad = NativeObject.hasOwn;
 const { apply } = NativeReflect;
 const getPrototypeOfNative = NativeReflect.getPrototypeOf;
-const setPrototypeOfNative = NativeReflect.setPrototypeOf;
 const ownKeysNative = NativeReflect.ownKeys;
 const defineOwnAtLoad = NativeReflect.defineProperty;
 const globalThisMap = globalThis.Map;
@@ -112,8 +116,56 @@ function staticsOf(source) {
 }
 
 /**
+ * A data descriptor with no members beyond its own four. Its prototype is an empty object with no prototype, so a
+ * member it lacks (`get`, `set`) reads as absent whatever module code put on `Object.prototype`. Every instance gets
+ * the same four members in the same order, so the engine keeps one shape for all of them.
+ * @param {*} value - The property's value.
+ * @param {boolean} writable - Whether the property is writable.
+ * @param {boolean} enumerable - Whether the property is enumerable.
+ * @param {boolean} configurable - Whether the property is configurable.
+ * @private
+ */
+function DataDescriptor(value, writable, enumerable, configurable) {
+	this.value = value;
+	this.writable = writable;
+	this.enumerable = enumerable;
+	this.configurable = configurable;
+}
+DataDescriptor.prototype = freeze(create(null));
+
+/**
+ * An accessor descriptor with no members beyond its own four; see {@link DataDescriptor}.
+ * @param {Function|undefined} get - The getter.
+ * @param {Function|undefined} set - The setter.
+ * @param {boolean} enumerable - Whether the property is enumerable.
+ * @param {boolean} configurable - Whether the property is configurable.
+ * @private
+ */
+function AccessorDescriptor(get, set, enumerable, configurable) {
+	this.get = get;
+	this.set = set;
+	this.enumerable = enumerable;
+	this.configurable = configurable;
+}
+AccessorDescriptor.prototype = freeze(create(null));
+
+/**
+ * Copy a descriptor the engine made into a {@link DataDescriptor} or an {@link AccessorDescriptor}. The engine's
+ * descriptor always holds all four of its members as its own, so each read below finds an own member and nothing on
+ * `Object.prototype` is consulted. Copying is several times cheaper than giving the engine's object a new prototype.
+ * @param {PropertyDescriptor} descriptor - A complete descriptor from `getOwnPropertyDescriptor`.
+ * @returns {PropertyDescriptor} The copy.
+ * @private
+ */
+function plainDescriptor(descriptor) {
+	return hasOwnAtLoad(descriptor, "value")
+		? new DataDescriptor(descriptor.value, descriptor.writable, descriptor.enumerable, descriptor.configurable)
+		: new AccessorDescriptor(descriptor.get, descriptor.set, descriptor.enumerable, descriptor.configurable);
+}
+
+/**
  * {@link staticsOf} for `Reflect` or `Object`, with `getOwnPropertyDescriptor` (and `Object.getOwnPropertyDescriptors`)
- * answering descriptors with no prototype: a member a descriptor lacks (`get` on a data descriptor, `value` on an
+ * answering descriptors that inherit nothing: a member a descriptor lacks (`get` on a data descriptor, `value` on an
  * accessor) reads as absent, whatever module code put on `Object.prototype`, and a descriptor handed back to
  * `defineProperty` or a proxy trap is read for its own members only.
  * @param {object|Function} source - `Reflect` or `Object`.
@@ -130,17 +182,16 @@ function withPlainDescriptors(source) {
 	const describe = copy.getOwnPropertyDescriptor;
 	copy.getOwnPropertyDescriptor = (target, key) => {
 		const descriptor = describe(target, key);
-		if (descriptor !== undefined) setPrototypeOfNative(descriptor, null);
-		return descriptor;
+		return descriptor === undefined ? undefined : plainDescriptor(descriptor);
 	};
 	if (typeof copy.getOwnPropertyDescriptors === "function") {
 		const describeAll = copy.getOwnPropertyDescriptors;
 		copy.getOwnPropertyDescriptors = (target) => {
 			const all = describeAll(target);
 			const keys = ownKeysNative(all);
-			for (let i = 0; i < keys.length; i++) setPrototypeOfNative(all[keys[i]], null);
-			setPrototypeOfNative(all, null);
-			return all;
+			const plain = create(null);
+			for (let i = 0; i < keys.length; i++) plain[keys[i]] = plainDescriptor(all[keys[i]]);
+			return plain;
 		};
 	}
 	return freeze(copy);
@@ -1067,6 +1118,17 @@ export const WeakMapMethods = methodsOf(globalThis.WeakMap.prototype);
 export const WeakSetMethods = methodsOf(globalThis.WeakSet.prototype);
 
 /**
+ * The methods of `EventTarget.prototype`, as they were when slothlet loaded, each taking the target first: below
+ * slothlet's own listener patch. Empty where the host has no `EventTarget`.
+ * @type {object}
+ * @internal
+ * @example
+ * import { EventTargetMethods } from "#helpers/intrinsics";
+ * EventTargetMethods.addEventListener(signal, "abort", onAbort, { once: true });
+ */
+export const EventTargetMethods = methodsOf(globalThis.EventTarget?.prototype);
+
+/**
  * The methods of `WeakRef.prototype` (`deref`), as they were when slothlet loaded, each taking the reference first.
  * @type {object}
  * @internal
@@ -1276,6 +1338,110 @@ export const IteratorMethods = freeze({
 	generatorReturn: uncurryThis(GeneratorPrototype.return),
 	generatorThrow: uncurryThis(GeneratorPrototype.throw)
 });
+
+/**
+ * The functions and accessor getters a built-in prototype holds under string keys (and the symbol-keyed ones named),
+ * as they are, on a frozen object with no prototype. `constructor` is left out.
+ * @param {object|undefined} proto - The prototype, or undefined where the host has none.
+ * @param {Object<string, symbol>} [symbols] - Symbol-keyed functions to take too, by the name to take them under.
+ * @returns {object} The functions, by name.
+ * @private
+ */
+function functionsOf(proto, symbols) {
+	const copy = create(null);
+	if (!proto) return freeze(copy);
+	const names = getOwnPropertyNames(proto);
+	for (let i = 0; i < names.length; i++) {
+		const name = names[i];
+		if (name === "constructor") continue;
+		const descriptor = getOwnPropertyDescriptor(proto, name);
+		if (typeof descriptor.value === "function") copy[name] = descriptor.value;
+		else if (typeof descriptor.get === "function") copy[name] = descriptor.get;
+	}
+	if (symbols) {
+		const keys = getOwnPropertyNames(symbols);
+		for (let i = 0; i < keys.length; i++) {
+			const descriptor = getOwnPropertyDescriptor(proto, symbols[keys[i]]);
+			if (descriptor && typeof descriptor.value === "function") copy[keys[i]] = descriptor.value;
+			else if (descriptor && typeof descriptor.get === "function") copy[keys[i]] = descriptor.get;
+		}
+	}
+	return freeze(copy);
+}
+
+/**
+ * The functions of the built-in prototypes themselves, as they were when slothlet loaded, by prototype and name, for
+ * the code that needs the function rather than a call of it: to compare a value against it, hand it to
+ * `Reflect.apply`, or call it on a value whose kind it checks (`PrototypeFunctions.Map.has`). Under `Function` the
+ * language's `Symbol.hasInstance` is `hasInstance`; under `TypedArray` (the prototype every typed array class inherits
+ * from) the `Symbol.toStringTag` getter is `toStringTag`. An accessor is taken as its getter (`PrototypeFunctions.RegExp.source`,
+ * `PrototypeFunctions.ArrayBuffer.byteLength`). To call one on a value, `ObjectMethods.hasOwnProperty(value, key)`
+ * and the other `…Methods` read the same.
+ * @type {Readonly<Record<string, Readonly<Record<string, Function>>>>}
+ * @internal
+ * @example
+ * import { PrototypeFunctions } from "#helpers/intrinsics";
+ * Reflect.apply(PrototypeFunctions.Promise.then, promise, [onFulfilled, onRejected]);
+ */
+export const PrototypeFunctions = freeze({
+	__proto__: null,
+	Object: functionsOf(NativeObject.prototype),
+	Function: functionsOf(globalThis.Function.prototype, { hasInstance: NativeSymbol.hasInstance }),
+	Promise: functionsOf(NativePromise.prototype),
+	Map: functionsOf(globalThis.Map.prototype),
+	Set: functionsOf(globalThis.Set.prototype),
+	WeakMap: functionsOf(globalThis.WeakMap.prototype),
+	WeakSet: functionsOf(globalThis.WeakSet.prototype),
+	WeakRef: functionsOf(globalThis.WeakRef?.prototype),
+	Date: functionsOf(globalThis.Date.prototype),
+	Symbol: functionsOf(NativeSymbol.prototype),
+	TextDecoder: functionsOf(globalThis.TextDecoder?.prototype),
+	URLSearchParams: functionsOf(globalThis.URLSearchParams?.prototype),
+	Iterator: functionsOf(globalThis.Iterator?.prototype),
+	Error: functionsOf(globalThis.Error.prototype),
+	RegExp: functionsOf(globalThis.RegExp.prototype),
+	ArrayBuffer: functionsOf(globalThis.ArrayBuffer.prototype),
+	SharedArrayBuffer: functionsOf(globalThis.SharedArrayBuffer?.prototype),
+	DataView: functionsOf(globalThis.DataView.prototype),
+	TypedArray: functionsOf(getPrototypeOfNative(globalThis.Uint8Array.prototype), { toStringTag: NativeSymbol.toStringTag }),
+	Number: functionsOf(NativeNumber.prototype),
+	String: functionsOf(NativeString.prototype),
+	Boolean: functionsOf(globalThis.Boolean.prototype),
+	BigInt: functionsOf(globalThis.BigInt?.prototype)
+});
+
+/**
+ * `%TypedArray%.prototype`, the prototype every typed array class's `prototype` inherits from, as it was when slothlet
+ * loaded (its functions and getters are `PrototypeFunctions.TypedArray`).
+ * @type {object}
+ * @internal
+ * @example
+ * import { TypedArrayPrototype } from "#helpers/intrinsics";
+ * Reflect.getPrototypeOf(Uint8Array.prototype) === TypedArrayPrototype;
+ */
+export const TypedArrayPrototype = getPrototypeOfNative(globalThis.Uint8Array.prototype);
+
+/**
+ * The language's own setter of `Object.prototype.__proto__`, as it was when slothlet loaded (its getter is
+ * `PrototypeFunctions.Object.__proto__`).
+ * @type {function(this: object, (object|null)): void}
+ * @internal
+ * @example
+ * import { ObjectProtoSetter, Reflect } from "#helpers/intrinsics";
+ * Reflect.apply(ObjectProtoSetter, value, [null]);
+ */
+export const ObjectProtoSetter = getOwnPropertyDescriptor(NativeObject.prototype, "__proto__").set;
+
+/**
+ * The `Array` function, as it was when slothlet loaded, for comparing a value's `constructor` against. Its static
+ * functions are on `Arrays`.
+ * @type {ArrayConstructor}
+ * @internal
+ * @example
+ * import { NativeArray } from "#helpers/intrinsics";
+ * value.constructor === NativeArray;
+ */
+export const NativeArray = globalThis.Array;
 
 /**
  * An iterator over one the language made, stepping it with the `next` taken at load. Its prototype is frozen and has
@@ -1608,7 +1774,7 @@ export function listPush(list, ...values) {
 export function listUnshift(list, ...values) {
 	const count = values.length;
 	for (let i = list.length - 1; i >= 0; i--) put(list, i + count, list[i]);
-	for (let i = 0; i < count; i++) list[i] = values[i];
+	for (let i = 0; i < count; i++) put(list, i, values[i]);
 	return list.length;
 }
 
@@ -1632,7 +1798,7 @@ export function listSplice(list, start, ...rest) {
 	for (let i = 0; i < removeCount; i++) put(removed, i, list[from + i]);
 	const insertCount = rest.length > 1 ? rest.length - 1 : 0;
 	if (insertCount < removeCount) {
-		for (let k = from; k < length - removeCount; k++) list[k + insertCount] = list[k + removeCount];
+		for (let k = from; k < length - removeCount; k++) put(list, k + insertCount, list[k + removeCount]);
 		list.length = length - removeCount + insertCount;
 	} else if (insertCount > removeCount) {
 		for (let k = length - removeCount; k > from; k--) put(list, k + insertCount - 1, list[k + removeCount - 1]);
@@ -1903,11 +2069,12 @@ export function regExpReplace(regexp, text, replacement) {
 		const position = match.index;
 		let piece;
 		if (typeof replacement === "function") {
+			// Built through `put`, never `args[i] =`: a plain index write runs a setter module code put on the shared prototypes.
 			const args = [];
-			for (let i = 0; i < match.length; i++) args[i] = match[i];
-			args[args.length] = position;
-			args[args.length] = text;
-			if (match.groups !== undefined) args[args.length] = match.groups;
+			for (let i = 0; i < match.length; i++) put(args, i, match[i]);
+			put(args, args.length, position);
+			put(args, args.length, text);
+			if (match.groups !== undefined) put(args, args.length, match.groups);
 			piece = NativeString(apply(replacement, undefined, args));
 		} else piece = substitution(NativeString(replacement), match, text, position, match.groups);
 		out += StringMethods.slice(text, from, position) + piece;

@@ -68,13 +68,13 @@ describe("OwnershipManager — collision-conflict handling in register() (#366)"
 		expect(own.getCurrentOwner("p").moduleID).toBe("modA");
 	});
 
-	it("warn mode (silent): skips the conflicting registration without emitting a warning", () => {
+	it("warn mode (silent): skips the conflicting registration and still raises the warning (#838)", () => {
 		const own = makeOwn();
 		own.register({ moduleID: "modA", apiPath: "p", value: () => "a", collisionMode: "error" });
 		const before = own.slothlet.__warnings;
 		const b = own.register({ moduleID: "modB", apiPath: "p", value: () => "b", collisionMode: "warn", config: { silent: true } });
 		expect(b).toBeNull();
-		expect(own.slothlet.__warnings).toBe(before);
+		expect(own.slothlet.__warnings).toBe(before + 1);
 	});
 
 	it("error mode: a conflicting registration throws OWNERSHIP_CONFLICT", () => {
@@ -132,7 +132,7 @@ describe("OwnershipManager — revertSpeculativeSubtree (#372/#373)", () => {
 		expect(own.getCurrentOwner("root.dropped")).not.toBeNull();
 
 		// Walk a candidate tree that has both children plus an internal key that must be skipped.
-		const tree = { kept: () => {}, dropped: () => {}, __metadata: { anything: true } };
+		const tree = { kept: () => {}, dropped: () => {}, ____impl: { anything: true } };
 		own.revertSpeculativeSubtree(tree, "mod", "root", prior);
 
 		expect(own.getCurrentValue("root.kept")).toBe("orig"); // restored from prior

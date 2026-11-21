@@ -2,12 +2,12 @@
  *
  *	@Project: @cldmv/slothlet
  *	@Filename: /tests/vitests/suites/permissions/permissions-view-mirror-rules.test.vitest.mjs
- *	@Date: 2026-11-16T01:30:00-08:00 (1795339800)
+ *	@Date: 2026-11-16T00:29:25-08:00 (1794817765)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T01:30:00-08:00 (1795339800)
+ *	@Last modified time: 2026-11-16T18:30:48-08:00 (1794882648)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -120,7 +120,7 @@ describe.each(matrix)("a kept node's answers follow the rules alone ($mode, $run
 	 * @returns {Promise<object>} The api.
 	 */
 	const build = async (rules = []) => {
-		api = await slothlet({ base: BASE, mode, runtime, silent: true, permissions: { defaultPolicy: "allow", attribution, rules } });
+		api = await slothlet({ base: BASE, mode, runtime, silent: true, permissions: { policy: "allow", caller: { attribution }, rules } });
 		return api;
 	};
 
@@ -149,20 +149,20 @@ describe.each(matrix)("a kept node's answers follow the rules alone ($mode, $run
 				await build();
 				await api.a.keep(name);
 				expect(await api.a.reads(name, list)).toEqual(plain(name));
-				const id = api.slothlet.permissions.addRule({ caller: "a.**", target: target(name), effect: "deny" });
+				const id = api.slothlet.permissions.rules.add({ caller: "a.**", target: target(name), effect: "deny" });
 				expect(await api.a.reads(name, list)).toEqual(denied);
 				expect(await api.a.later(name, list)).toEqual(denied);
-				api.slothlet.permissions.removeRule(id);
+				api.slothlet.permissions.rules.remove(id);
 				expect(await api.a.reads(name, list)).toEqual(plain(name));
 				expect(await api.a.later(name, list)).toEqual(plain(name));
 			});
 
 			it("is lifted from the next read when the view was first read under it", async () => {
 				await build();
-				const id = api.slothlet.permissions.addRule({ caller: "a.**", target: target(name), effect: "deny" });
+				const id = api.slothlet.permissions.rules.add({ caller: "a.**", target: target(name), effect: "deny" });
 				await api.a.keep(name);
 				await api.a.reads(name, list);
-				api.slothlet.permissions.removeRule(id);
+				api.slothlet.permissions.rules.remove(id);
 				expect(await api.a.reads(name, list)).toEqual(plain(name));
 			});
 

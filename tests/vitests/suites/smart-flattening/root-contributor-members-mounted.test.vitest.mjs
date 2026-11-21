@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-14T00:00:00-08:00 (1794643200)
+ *	@Last modified time: 2026-11-16T18:30:28-08:00 (1794882628)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -66,13 +66,13 @@ describe.each(CONFIGS)(
 
 		describe.each(PLACES)("placed at '%s'", (place) => {
 			const P = place ? `${place}.` : "";
-			const permissions = (rules) => ({ permissions: { defaultPolicy: "allow", attribution, rules } });
+			const permissions = (rules) => ({ permissions: { policy: "allow", caller: { attribution }, rules } });
 
 			it("each member records the file it was written in", async () => {
 				const { api, root } = await build(place, { mode, runtime });
 				try {
 					for (const name of ["add", "peek", "me", "cfg", "cfg.f"]) {
-						expect([name, path.basename(String(nodeAt(root, name).__metadata?.filePath))]).toEqual([name, "calc.mjs"]);
+						expect([name, path.basename(String(api.slothlet.node(nodeAt(root, name))?.file))]).toEqual([name, "calc.mjs"]);
 					}
 				} finally {
 					await api.slothlet.shutdown();

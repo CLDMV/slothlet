@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:15:48-08:00 (1794874548)
+ *	@Last modified time: 2026-11-16T18:28:00-08:00 (1794882480)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -43,7 +43,7 @@ const outcome = async (call) => {
 	try {
 		return { ok: true, value: await call() };
 	} catch (error) {
-		return { ok: false, code: error?.code, caller: error?.context?.caller ?? null };
+		return { ok: false, code: error?.code, caller: error?.details?.caller ?? null };
 	}
 };
 
@@ -62,9 +62,9 @@ export async function runCalls(slothlet) {
 				mode,
 				runtime,
 				silent: true,
-				permissions: { defaultPolicy: "deny", rules: RULES }
+				permissions: { policy: "deny", rules: RULES }
 			});
-			await api.slothlet.api.add("host", { echo: (value) => `echo:${value}` }, { moduleID: "host-mod" });
+			await api.slothlet.api.add("host", { echo: (value) => `echo:${value}` }, { id: "host-mod" });
 			// A query of its own each round, so every round imports the package's files anew after its instance exists.
 			const query = `?round=${round++}`;
 			const late = await import(pathToFileURL(path.join(here, "late-pkg", "context.mjs")).href + query);
@@ -74,7 +74,7 @@ export async function runCalls(slothlet) {
 			await api.caller.setup();
 			out[`${mode}/${runtime}/handed`] = await outcome(() => api.callee.fire());
 			out[`${mode}/${runtime}/json`] = await outcome(async () => {
-				await api.slothlet.api.add("info", path.join(here, "json-api"), { moduleID: "info" });
+				await api.slothlet.api.add("info", path.join(here, "json-api"), { id: "info" });
 				return api.info.name();
 			});
 			await api.slothlet.shutdown();

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-08T14:42:10-08:00 (1794177730)
+ *	@Last modified time: 2026-11-16T18:24:37-08:00 (1794882277)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -94,12 +94,12 @@ for (const mode of ["eager", "lazy"]) {
 				mode,
 				runtime,
 				silent: true,
-				permissions: { defaultPolicy: "deny", rules: RULES }
+				permissions: { policy: "deny", rules: RULES }
 			});
 			await api.slothlet.api.add(
 				mount.split("."),
 				makeRecords(() => api),
-				{ moduleID: "host-records" }
+				{ id: "host-records" }
 			);
 			// A leaf whose host file the host loaded through a package ext.b imports too.
 			const loadedByPackage = await load(new URL("./host/loaded-by-package.mjs", import.meta.url));
@@ -110,7 +110,7 @@ for (const mode of ["eager", "lazy"]) {
 						return loadedByPackage.open(api.store);
 					}
 				},
-				{ moduleID: "host-loaded" }
+				{ id: "host-loaded" }
 			);
 			await api.ext.b.prepare();
 			for (const row of ROWS)

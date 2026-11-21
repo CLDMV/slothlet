@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:21-07:00 (1791090921)
+ *	@Last modified time: 2026-11-16T18:30:51-08:00 (1794882651)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -103,18 +103,18 @@ describe("Loader processor (real slothlet integration)", () => {
 		}
 	});
 
-	it("returns INVALID_DIRECTORY when initializing from a non-existent root", async () => {
+	it("returns FOLDER_UNREADABLE when initializing from a non-existent root", async () => {
 		await withSuppressedSlothletErrorOutput(async () => {
 			await expect(
 				slothlet({
 					base: join(fixtureRoot, "missing-root"),
 					mode: "eager"
 				})
-			).rejects.toThrow("INVALID_DIRECTORY");
+			).rejects.toThrow("FOLDER_UNREADABLE");
 		});
 	});
 
-	it("initializes from an empty directory (exercises WARN_DIRECTORY_EMPTY path)", async () => {
+	it("initializes from an empty directory (exercises WARNING_FOLDER_EMPTY path)", async () => {
 		const api = await slothlet({ base: fixtureRoot, mode: "eager" });
 		activeApis.push(api);
 
@@ -237,7 +237,7 @@ describe("Loader processor (real slothlet integration)", () => {
 				mode: "strict",
 				types: {
 					output: typesOutput,
-					interfaceName: "LoaderStrictAPI"
+					name: "LoaderStrictAPI"
 				}
 			}
 		});
@@ -259,7 +259,7 @@ describe("Loader processor (real slothlet integration)", () => {
 						mode: "strict",
 						types: {
 							output: join(fixtureRoot, "generated", "api-errors.d.ts"),
-							interfaceName: "LoaderStrictErrorAPI"
+							name: "LoaderStrictErrorAPI"
 						}
 					}
 				})
@@ -278,11 +278,11 @@ describe("Loader processor (real slothlet integration)", () => {
 					typescript: {
 						mode: "strict",
 						types: {
-							interfaceName: "MissingOutput"
+							name: "MissingOutput"
 						}
 					}
 				})
-			).rejects.toThrow("TS_STRICT_REQUIRES_OUTPUT");
+			).rejects.toThrow("TYPESCRIPT_TYPES_OUTPUT_MISSING");
 
 			await expect(
 				slothlet({
@@ -295,7 +295,7 @@ describe("Loader processor (real slothlet integration)", () => {
 						}
 					}
 				})
-			).rejects.toThrow("TS_STRICT_REQUIRES_INTERFACE_NAME");
+			).rejects.toThrow("TYPESCRIPT_TYPES_NAME_MISSING");
 		});
 	});
 
@@ -311,7 +311,7 @@ describe("Loader processor (real slothlet integration)", () => {
 						mode: "strict",
 						types: {
 							output: "/dev/null/slothlet-invalid-output.d.ts",
-							interfaceName: "InvalidStrictOutput"
+							name: "InvalidStrictOutput"
 						}
 					}
 				})
@@ -319,25 +319,43 @@ describe("Loader processor (real slothlet integration)", () => {
 		});
 	});
 
-	it("surfaces strict-mode worker startup failure from invalid root path", async () => {
+	it("surfaces the strict-mode type-generation worker's failure when types.output cannot be written", async () => {
 		await writeModule(join(fixtureRoot, "worker-root-fail.ts"), "export const value: number = 42;");
+		// types.output sits under a regular file, so the worker builds the api, then fails creating the output
+		// directory (ENOTDIR) and reports it back over IPC. The parent config itself is valid.
+		const blocker = join(fixtureRoot, "..", `worker-output-blocker-${process.pid}-${Date.now()}`);
+		await writeFile(blocker, "not a directory");
 
-		await withSuppressedSlothletErrorOutput(async () => {
-			await expect(
-				slothlet({
-					base: fixtureRoot,
-					root: "/definitely/not/a/real/slothlet/root",
-					mode: "eager",
-					typescript: {
-						mode: "strict",
-						types: {
-							output: join(fixtureRoot, "generated", "worker-root-fail.d.ts"),
-							interfaceName: "WorkerRootFail"
+		try {
+			let caught = null;
+			await withSuppressedSlothletErrorOutput(async () => {
+				try {
+					const api = await slothlet({
+						base: fixtureRoot,
+						mode: "eager",
+						typescript: {
+							mode: "strict",
+							types: {
+								output: join(blocker, "generated", "worker-root-fail.d.ts"),
+								name: "WorkerRootFail"
+							}
 						}
-					}
-				})
-			).rejects.toThrow("TS_TYPE_GENERATION_FAILED");
-		});
+					});
+					activeApis.push(api);
+				} catch (error) {
+					caught = error;
+				}
+			});
+
+			// The loader reports the import of worker-root-fail.ts; the worker's own error is its cause.
+			expect(caught).not.toBeNull();
+			expect(caught.code).not.toBe("INVALID_CONFIG_UNKNOWN_KEY");
+			expect(caught.code).toBe("MODULE_IMPORT_FAILED");
+			expect(caught.cause?.code).toBe("TYPESCRIPT_TYPE_GENERATION_FAILED");
+			expect(caught.cause.message).toMatch(/ENOTDIR/);
+		} finally {
+			await rm(blocker, { force: true });
+		}
 	});
 
 	it("silently ignores symlinks during directory scan (L267 arm1 — neither dir nor file)", async () => {

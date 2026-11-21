@@ -21,10 +21,12 @@ const { manifest, importmap } = await files.assets("./src/api");
 <script type="module">
 	import slothlet from "@cldmv/slothlet";
 	const api = await slothlet({
-	  platform: "browser",
 	  base: "/api/",                       // where your API modules are served
-	  manifest: /* …manifest… */,
-	  resolveModuleSpecifier: ({ path }) => new URL(path, "/api/").href,
+	  loader: {
+	    platform: "browser",
+	    files: /* …manifest… */,
+	    resolve: ({ path }) => new URL(path, "/api/").href
+	  },
 	  mode: "eager"
 	});
 	await api.math.add(2, 3); // 5
@@ -39,8 +41,8 @@ An instance can also start with **no base at all** — omit `base` and `manifest
 
 Browser mode loads two different kinds of module, resolved at two different times:
 
-- **Your API leaves** are loaded by slothlet **at runtime**. Slothlet walks the manifest and, for each entry, calls your `resolveModuleSpecifier({ path })` to turn the manifest-relative path into a URL and dynamically `import()`s it. The manifest only needs to say _which files exist_; the URL is supplied live by your resolver.
-- **Slothlet's own modules** (`@cldmv/slothlet` and the package-private `#helpers/*`, `#handlers/*`, …) are static imports the browser resolves **before slothlet runs** — so they cannot route through `resolveModuleSpecifier`. They have to be declared in the page's `<script type="importmap">`.
+- **Your API leaves** are loaded by slothlet **at runtime**. Slothlet walks the manifest and, for each entry, calls your `loader.resolve({ path })` to turn the manifest-relative path into a URL and dynamically `import()`s it. The manifest only needs to say _which files exist_; the URL is supplied live by your resolver.
+- **Slothlet's own modules** (`@cldmv/slothlet` and the package-private `#helpers/*`, `#handlers/*`, …) are static imports the browser resolves **before slothlet runs** — so they cannot route through `loader.resolve`. They have to be declared in the page's `<script type="importmap">`.
 
 So the manifest is consumed by slothlet (runtime config); the importmap is consumed by the browser (page setup, before any code runs). `files.assets` produces both in one call so consumers never hand-roll the importmap.
 
@@ -112,7 +114,7 @@ ipcMain.handle("slothlet:assets", async () => {
 const { manifest, importmap } = await window.electron.invoke("slothlet:assets");
 // inject importmap into a <script type="importmap"> BEFORE importing slothlet, then:
 const slothlet = (await import("@cldmv/slothlet")).default;
-const api = await slothlet({ platform: "browser", manifest, resolveModuleSpecifier, mode: "eager" });
+const api = await slothlet({ loader: { platform: "browser", files: manifest, resolve }, mode: "eager" });
 ```
 
 Pick the `base` that matches how your renderer is loaded: a **custom protocol** you register in main (`protocol.handle("app", …)` serving the package dir → `"app://slothlet/"`), a **`file://`** path when loading the page straight from disk, or the **dev server's** node_modules path under electron-vite.
@@ -132,14 +134,16 @@ const manifest = await files.generate("./src/api");
 
 ### `files.resolver(base)`
 
-A ready-made `resolveModuleSpecifier` that resolves manifest-relative paths against a base URL (`new URL(entry.path, base)`), which covers the common case of serving API modules from a known base.
+A ready-made `loader.resolve` that resolves manifest-relative paths against a base URL (`new URL(entry.path, base)`), which covers the common case of serving API modules from a known base.
 
 ```js
 import { files } from "@cldmv/slothlet/files";
 const api = await slothlet({
-	platform: "browser",
-	manifest,
-	resolveModuleSpecifier: files.resolver(new URL("./api/", import.meta.url))
+	loader: {
+		platform: "browser",
+		files: manifest,
+		resolve: files.resolver(new URL("./api/", import.meta.url))
+	}
 });
 ```
 
@@ -147,9 +151,9 @@ const api = await slothlet({
 
 - **Live-binding context manager.** Browsers have no `AsyncLocalStorage`, so browser mode forces the live context manager regardless of the requested `runtime`. Sequential `context.run()` / `scope()` calls are isolated, but interleaved concurrent calls on the same instance require the Node async (ALS) runtime — see [CONTEXT-PROPAGATION.md](./CONTEXT-PROPAGATION.md) for the boundary.
 - **Caller identity reads the stack while a call is suspended.** With any module call suspended at an `await`, an identity read made with nothing entered synchronously reads the call stack, so host code running meanwhile is not mistaken for the suspended module: each host api call, each `self.*` call a resumed module makes, and each promise reaction registered on the page. The read costs from a few to tens of microseconds, depending on stack depth. A browser loads the files a leaf imports without slothlet's instance tag, so a resumed call's code in such a file is placed by its module's folder, or, outside every module folder, by the function the call entered, which the stack names as `at async <name>`. That name counts only when no frame on the stack is placed otherwise; code that names none of the suspended calls is the host's, and host code calling a function that shares a suspended entry's name is held to that call's rules. Leaves themselves carry the tag, so a leaf of an api path with nothing suspended running in a callback is refused rather than run as another module's call. Work a module starts without awaiting it (an un-awaited async helper that resumes after the module's call has ended) is not linked back to the module: the browser has no way to carry identity across that `await` until the `AsyncContext` proposal ships. Calls made while nothing is suspended, or synchronously inside another call, do not read the stack. See [PERMISSIONS.md → Overlapping calls](./PERMISSIONS.md).
-- **One copy of each leaf per instance, mount and reload.** When `resolveModuleSpecifier` returns a `file:`, `http:` or `https:` URL, the leaf is imported with the same `?slothlet_instance=…&module=…&_reload=…` query Node uses, merged with any query the URL already has. Two instances of one folder, two `api.slothlet.api.add()` mounts of one folder, and a full reload each get their own copy of the leaf and its module-level state. A bare or import-map specifier, and a `blob:` or `data:` URL, is imported exactly as returned — a query would no longer match the importmap entry, or would change the content's identity.
-- **`api.slothlet.api.add()` mounts a folder or a single file the manifest lists.** A file is named by its URL under `base` or by its path relative to the manifest's root (`"utils/format.mjs"`), and the add loads only that file of its folder, as it does in Node; `api.slothlet.api.reload()` and `remove()` take its moduleID or path. The browser has no `node:path`, so the folder, file name and extension come from the string itself; a name that does not end in `.mjs`, `.cjs` or `.js` is refused with `INVALID_CONFIG_FILE_TYPE`.
-- **No module discovery.** `api.slothlet.api.modules.discover()` walks the filesystem, so in a browser it, `addDiscovered()` and an `addModule(name)` that has to discover are refused with `MODULE_DISCOVERY_REQUIRES_NODE` ([MODULE-DISCOVERY.md](./MODULE-DISCOVERY.md)). Mount modules with `api.slothlet.api.add()` from the manifest.
+- **One copy of each leaf per instance, mount and reload.** When `loader.resolve` returns a `file:`, `http:` or `https:` URL, the leaf is imported with the same `?slothlet_instance=…&module=…&_reload=…` query Node uses, merged with any query the URL already has. Two instances of one folder, two `api.slothlet.api.add()` mounts of one folder, and a full reload each get their own copy of the leaf and its module-level state. A bare or import-map specifier, and a `blob:` or `data:` URL, is imported exactly as returned — a query would no longer match the importmap entry, or would change the content's identity.
+- **`api.slothlet.api.add()` mounts a folder or a single file the manifest lists.** A file is named by its URL under `base` or by its path relative to the manifest's root (`"utils/format.mjs"`), and the add loads only that file of its folder, as it does in Node; `api.slothlet.api.reload()` and `remove()` take its moduleID or path. The browser has no `node:path`, so the folder, file name and extension come from the string itself; a name that does not end in `.mjs`, `.cjs` or `.js` is refused with `FILE_TYPE_UNSUPPORTED`.
+- **No module discovery.** `api.slothlet.api.modules.discover()` walks the filesystem, so in a browser it, `modules.add()` and an `modules.add(name)` that has to discover are refused with `MODULE_DISCOVERY_REQUIRES_NODE` ([MODULE-DISCOVERY.md](./MODULE-DISCOVERY.md)). Mount modules with `api.slothlet.api.add()` from the manifest.
 - **Relative imports a leaf makes are still shared.** In Node a resolve hook carries the leaf's query onto the relative helpers it imports, so each instance has its own copy of those too. A browser has no resolve hook, so a helper module a leaf imports is one copy for every instance, mount and reload in the page: keep per-instance state in the leaf itself (or in `context`), not in a module-level variable of a shared helper.
 - **Awaitable locale switching.** [`language.set(lang)`](./I18N.md) returns a promise in a browser, since browser locales arrive via dynamic `import(…, { with: { type: "json" } })`: `await` it when you need the switch done.
 - **No `node:*`.** All Node-builtin access is gated behind a single platform layer, so the browser graph never touches `node:fs` / `node:path` / `node:url` / `node:async_hooks`.

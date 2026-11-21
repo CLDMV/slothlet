@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:29-08:00 (1794874589)
+ *	@Last modified time: 2026-11-17T12:09:27-08:00 (1794946167)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -144,6 +144,8 @@ export const TEST_DIRS = {
 	API_TEST_FRAMEWORK_NAMESPACE_GUARD: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_framework_namespace_guard`),
 	// #625 — what a module reaches through another module's node, symbol keys, and `self` itself.
 	API_TEST_SELF_WRITE_REACH: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_self_write_reach`),
+	API_TEST_WRITE_NOT_EASIER: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_write_not_easier`),
+	API_TEST_WRITE_CREATED: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_write_created`),
 	// #653 — writes through a lazy node that has not loaded yet.
 	API_TEST_LAZY_UNLOADED_WRITE: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_lazy_unloaded_write`),
 	// A module file compiling code under its own name as vitest's module runner compiles it.
@@ -157,9 +159,7 @@ export const TEST_DIRS = {
 const CONFIG_SPACE = {
 	mode: ["eager", "lazy"],
 	runtime: ["async", "live"],
-	// allowApiOverwrite: [false, true],
-	// apiDepth: [1, 3, Infinity],
-	// allowMutation: [false, true],
+	// depth: [1, 3, Infinity],
 	// collision: [
 	// 	{ initial: "merge", api: "merge" },      // Default - allow all overwrites
 	// 	{ initial: "error", api: "error" }       // Strict - prevent overwrites
@@ -211,17 +211,17 @@ export async function materialize(api, path, ...args) {
 	// 	`[MATERIALIZE] path="${path}" typeof value="${typeof value}" value.name="${value?.name}" value.constructor.name="${value?.constructor?.name}"`
 	// );
 
-	// Trigger materialization if _materialize exists (for lazy mode)
-	if (typeof value?._materialize === "function") {
-		// console.log(`[MATERIALIZE] Calling value._materialize()`);
-		await value._materialize();
-		// console.log(`[MATERIALIZE] _materialize() completed`);
+	// Trigger materialization if ___materialize exists (for lazy mode)
+	if (typeof value?.___materialize === "function") {
+		// console.log(`[MATERIALIZE] Calling value.___materialize()`);
+		await value.___materialize();
+		// console.log(`[MATERIALIZE] ___materialize() completed`);
 	}
 
 	// Check actual type using __type property (for lazy mode compatibility)
 	// __type returns Symbol(inFlight) or Symbol(unmaterialized) for lazy wrappers,
 	// or the actual type string ("function", "object", etc.) after materialization
-	const typeInfo = value?.__type;
+	const typeInfo = api.slothlet.node(value)?.type;
 	// console.log(`[MATERIALIZE] typeof typeInfo="${typeof typeInfo}" typeInfo="${String(typeInfo)}" isSymbol=${typeof typeInfo === "symbol"}`);
 	const isFunction = typeInfo === "function" || (typeof typeInfo !== "symbol" && typeof value === "function");
 	// console.log(`[MATERIALIZE] isFunction=${isFunction} args.length=${args.length}`);
@@ -526,10 +526,8 @@ function generateTestMatrix(configSpace) {
 			config[key] = combination[i];
 		});
 
-		// Enable diagnostics for non-mutate configs to expose api.slothlet.api/reload/hooks for testing
-		// if (config.allowMutation === false) {
+		// Enable diagnostics to expose api.slothlet.api/reload/hooks for testing
 		config.diagnostics = true;
-		// }
 
 		// Generate descriptive name
 		const nameParts = [];
@@ -537,7 +535,7 @@ function generateTestMatrix(configSpace) {
 		if (config.runtime === "live") nameParts.push("LIVE");
 
 		// Add collision mode indicator (only if not default merge/merge)
-		if (config.collision && (config.collision.initial === "error" || config.collision.api === "error")) {
+		if (config.api?.collision?.mode && (config.api.collision.mode.initial === "error" || config.api.collision.mode.api === "error")) {
 			nameParts.push("STRICT");
 		}
 
@@ -614,7 +612,7 @@ export function getMatrixConfigs(requirements = {}) {
 				if (value.pattern !== undefined && configValue.pattern !== value.pattern) {
 					return false;
 				}
-				if (value.suppressErrors !== undefined && configValue.suppressErrors !== value.suppressErrors) {
+				if (value.errors !== undefined && configValue.errors !== value.errors) {
 					return false;
 				}
 			} else if (configValue !== value) {
@@ -706,7 +704,8 @@ export const RUNTIME_MATRIX = getMatrixConfigs({ runtime: "live" });
  */
 export const COMPLEX_MATRIX = TEST_MATRIX.filter(({ config }) => {
 	let featureCount = 0;
-	if (config.collision && (config.collision.initial === "error" || config.collision.api === "error")) featureCount++;
+	if (config.api?.collision?.mode && (config.api.collision.mode.initial === "error" || config.api.collision.mode.api === "error"))
+		featureCount++;
 	if (config.runtime === "live") featureCount++;
 	if (config.hooks === true) featureCount++;
 	return featureCount >= 2;
@@ -820,7 +819,7 @@ const _manifestCache = new Map();
  * share a single `generateManifest` run.
  *
  * @param {string} dir - Absolute path to the API directory.
- * @returns {Promise<object>} Manifest structure compatible with slothlet's `manifest` config key.
+ * @returns {Promise<object>} Manifest structure compatible with slothlet's `loader.files` config key.
  */
 export function getManifest(dir) {
 	if (!_manifestCache.has(dir)) {
@@ -834,7 +833,7 @@ export function getManifest(dir) {
 
 /**
  * Merge a matrix config slice with browser-mode settings for the given directory.
- * Providing `manifest` automatically activates browser mode — no `platform: "browser"` needed.
+ * Providing `loader.files` automatically activates browser mode — no `loader.platform: "browser"` needed.
  * `base` is passed as a plain filesystem path; the default resolver converts it to `file://`.
  *
  * @param {object} matrixConfig - Config slice from getMatrixConfigs().
@@ -852,5 +851,5 @@ export function getManifest(dir) {
  * });
  */
 export function makeBrowserConfig(matrixConfig, dir, manifest) {
-	return { ...matrixConfig, base: dir, manifest };
+	return { ...matrixConfig, base: dir, loader: { files: manifest } };
 }

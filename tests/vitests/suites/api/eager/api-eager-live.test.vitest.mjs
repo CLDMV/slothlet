@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:56-07:00 (1791090896)
+ *	@Last modified time: 2026-11-16T18:28:30-08:00 (1794882510)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -41,7 +41,8 @@ describe("API (eager-live)", () => {
 				base: TEST_DIRS.API_TEST,
 				reference: { md5: mockMd5 },
 				diagnostics: true,
-				api: { collision: { initial: "replace", api: "replace" } } // Match basic/hooks test collision mode
+				api: { collision: { mode: { initial: "replace", api: "replace" } } }
+				// Match basic/hooks test collision mode
 			});
 		});
 

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:09-08:00 (1794874569)
+ *	@Last modified time: 2026-11-16T18:28:44-08:00 (1794882524)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -42,6 +42,7 @@
 import { translate } from "#i18n";
 import { internals as reservedKeysInternals } from "#helpers/reserved-keys";
 import { DEFAULT_CLOCK } from "#helpers/clock";
+import { segmentsOf } from "#helpers/segments";
 const reservedKeysOwn = reservedKeysInternals("lib/factories/component-base");
 
 /**
@@ -142,7 +143,7 @@ export class ComponentBase {
 	 * Named with ____ prefix to avoid shadowing user API names like 'config'.
 	 *
 	 * @example
-	 * const collisionMode = this.____config.collision.api;
+	 * const collisionMode = this.____config.api.collision.mode.api;
 	 */
 	get ____config() {
 		return this.____slothlet.config;
@@ -205,7 +206,7 @@ export class ComponentBase {
 	 * Emit a non-throwing diagnostic lifecycle event (`impl:warning` or `impl:error`).
 	 * @param {"warning"|"error"} level - Diagnostic level → `impl:warning` or `impl:error`.
 	 * @param {object} data - Diagnostic payload.
-	 * @param {string} data.code - i18n code (e.g. "WARN_SYNTHETIC_ROOT_COLLISION") used to translate `message`.
+	 * @param {string} data.code - i18n code (e.g. "WARNING_INLINE_ROOT_COLLISION") used to translate `message`.
 	 * @param {object} data.context - Structured context object passed to the diagnostic (also the i18n interpolation params).
 	 * @param {string} [data.apiPath] - API path where the mutation was attempted ("" / "(root)" for root).
 	 * @param {string} [data.source] - Command family that produced the diagnostic (addApi | reload | buildAPI | module-mount).
@@ -229,13 +230,13 @@ export class ComponentBase {
 	 *
 	 * @example
 	 * await this.emitImplDiagnostic("warning", {
-	 *   apiPath: "", code: "WARN_SYNTHETIC_ROOT_EMPTY", context: { apiPath: "(root)" }, source: "addApi"
+	 *   apiPath: "", code: "WARNING_INLINE_ROOT_EMPTY", context: { apiPath: "(root)" }, source: "addApi"
 	 * });
 	 */
 	async emitImplDiagnostic(level, data) {
 		const { code, context, apiPath, source, moduleID, error } = data;
 		const event = level === "error" ? "impl:error" : "impl:warning";
-		const payload = { apiPath, code, message: translate(code, context), source, context, moduleID };
+		const payload = { path: segmentsOf(apiPath), code, message: translate(code, context), source, details: context, module: moduleID };
 		if (error !== undefined) {
 			payload.error = error;
 		}
@@ -249,7 +250,7 @@ export class ComponentBase {
 	 * @param {"dropped"|"replaced"|"merged"|"stacked"} data.resolution - What became of the two
 	 *   writers: `dropped` (incoming discarded, `owner` retained), `replaced` (incoming won, `owner`
 	 *   shadowed), `merged` (namespace nodes combined, both retained), `stacked` (both run as a
-	 *   routine stack under `stackRoutines`).
+	 *   routine stack under `routines.stack`).
 	 * @param {string|null} data.incoming - moduleID of the arriving writer (`null` when unknown).
 	 * @param {string|null} data.owner - moduleID of the writer that already held the path (`null`
 	 *   when unknown).
@@ -279,12 +280,12 @@ export class ComponentBase {
 	 */
 	emitImplCollision({ apiPath, resolution, incoming, owner, kind, collisionMode }) {
 		void this.____slothlet.handlers.lifecycle.emit("impl:collision", {
-			apiPath,
+			path: segmentsOf(apiPath),
 			resolution,
 			incoming,
 			owner,
 			kind,
-			collisionMode
+			collision: collisionMode
 		});
 	}
 
@@ -302,11 +303,11 @@ export class ComponentBase {
 	 *   - Determining whether a set(trap) write should be silently absorbed (`setTrap`)
 	 *   - Filtering what getTrap exposes externally on wrapper proxies
 	 *
-	 * Note: `_materialize` is included here (skip for collection/extraction) but
+	 * Note: `___materialize` is included here (skip for collection/extraction) but
 	 * setTrap exempts it since the framework needs to write it directly.
 	 *
 	 * The Set itself is defined in `#helpers/reserved-keys`, a module with no
-	 * imports, so `slothlet.defaults.reservedExports` can be built without loading this class.
+	 * imports, so `slothlet.defaults.reserved` can be built without loading this class.
 	 *
 	 * @type {Set<string>}
 	 * @static

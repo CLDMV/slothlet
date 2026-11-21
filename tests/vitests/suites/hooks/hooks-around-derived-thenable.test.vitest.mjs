@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-16T21:59:39-07:00 (1792213179)
+ *	@Last modified time: 2026-11-16T18:29:15-08:00 (1794882555)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -267,7 +267,9 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))(
 		it("still refuses a thenable when next() returned a plain value", async () => {
 			api = await boot(config);
 			const sources = [];
-			api.slothlet.hook.on("svc.mulSync:error", ({ error, source }) => sources.push({ code: error.code, type: source.type }), { id: "er" });
+			api.slothlet.hook.on("svc.mulSync:error", ({ error, origin: source }) => sources.push({ code: error.code, type: source.type }), {
+				id: "er"
+			});
 			api.slothlet.hook.on(
 				"svc.mulSync:around",
 				({ next }) => {
@@ -297,8 +299,12 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))(
 			api = await boot(config);
 			const errors = [];
 			const always = [];
-			api.slothlet.hook.on("svc.rejectThenable:error", ({ error, source }) => errors.push(`${error.message}:${source.type}`), { id: "er" });
-			api.slothlet.hook.on("svc.rejectThenable:always", ({ hasError }) => always.push(hasError), { id: "always" });
+			api.slothlet.hook.on("svc.rejectThenable:error", ({ error, origin: source }) => errors.push(`${error.message}:${source.type}`), {
+				id: "er"
+			});
+			api.slothlet.hook.on("svc.rejectThenable:always", ({ errors, hasError = errors.length > 0 }) => always.push(hasError), {
+				id: "always"
+			});
 			api.slothlet.hook.on("svc.rejectThenable:around", ({ next }) => next().then((value) => value), { id: "derived" });
 
 			const result = await outcome(() => api.svc.rejectThenable("target gone"));
@@ -313,7 +319,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))(
 			const errors = [];
 			api.slothlet.hook.on(
 				"svc.mulThenable:error",
-				({ error, source }) => errors.push(`${error.message}:${source.type}:${source.hookId}`),
+				({ error, origin: source }) => errors.push(`${error.message}:${source.type}:${source.hook}`),
 				{
 					id: "er"
 				}
@@ -348,7 +354,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))(
 			const errors = [];
 			api.slothlet.hook.on(
 				"svc.mulThenable:error",
-				({ error, source }) => errors.push(`${error.message}:${source.type}:${source.hookId}`),
+				({ error, origin: source }) => errors.push(`${error.message}:${source.type}:${source.hook}`),
 				{
 					id: "er"
 				}
@@ -385,9 +391,11 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))(
 		});
 
 		it("with errors suppressed, a derived rejection resolves to undefined and reaches the error hooks once", async () => {
-			api = await boot(config, { suppressErrors: true });
+			api = await boot(config, { errors: "suppress" });
 			const errors = [];
-			api.slothlet.hook.on("svc.rejectThenable:error", ({ error, source }) => errors.push(`${error.message}:${source.type}`), { id: "er" });
+			api.slothlet.hook.on("svc.rejectThenable:error", ({ error, origin: source }) => errors.push(`${error.message}:${source.type}`), {
+				id: "er"
+			});
 			api.slothlet.hook.on("svc.rejectThenable:around", ({ next }) => next().then((value) => value), { id: "derived" });
 
 			expect(await api.svc.rejectThenable("target gone")).toBeUndefined();
@@ -397,7 +405,9 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))(
 		it("nests: a target rejection through two derived thenables is reported once, with the function source", async () => {
 			api = await boot(config);
 			const errors = [];
-			api.slothlet.hook.on("svc.rejectThenable:error", ({ error, source }) => errors.push(`${error.message}:${source.type}`), { id: "er" });
+			api.slothlet.hook.on("svc.rejectThenable:error", ({ error, origin: source }) => errors.push(`${error.message}:${source.type}`), {
+				id: "er"
+			});
 			api.slothlet.hook.on("svc.rejectThenable:around", ({ next }) => next().then((value) => value), { id: "outer", priority: 10 });
 			api.slothlet.hook.on("svc.rejectThenable:around", ({ next }) => next().then((value) => value), { id: "inner", priority: 1 });
 
@@ -450,8 +460,10 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))(
 			api = await boot(config);
 			const errors = [];
 			const always = [];
-			api.slothlet.hook.on("svc.mulThenable:error", ({ error, source }) => errors.push(`${error.message}:${source.type}`), { id: "er" });
-			api.slothlet.hook.on("svc.mulThenable:always", ({ hasError }) => always.push(hasError), { id: "always" });
+			api.slothlet.hook.on("svc.mulThenable:error", ({ error, origin: source }) => errors.push(`${error.message}:${source.type}`), {
+				id: "er"
+			});
+			api.slothlet.hook.on("svc.mulThenable:always", ({ errors, hasError = errors.length > 0 }) => always.push(hasError), { id: "always" });
 			api.slothlet.hook.on(
 				"svc.mulThenable:around",
 				({ next }) => {
@@ -485,10 +497,10 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))(
 			process.on("uncaughtException", onUncaught);
 			api.slothlet.hook.on(
 				"svc.mulThenable:error",
-				({ error, source }) => errors.push(`${error.message}:${source.type}:${source.hookId}`),
+				({ error, origin: source }) => errors.push(`${error.message}:${source.type}:${source.hook}`),
 				{ id: "er" }
 			);
-			api.slothlet.hook.on("svc.mulThenable:always", ({ hasError }) => always.push(hasError), { id: "always" });
+			api.slothlet.hook.on("svc.mulThenable:always", ({ errors, hasError = errors.length > 0 }) => always.push(hasError), { id: "always" });
 			api.slothlet.hook.on(
 				"svc.mulThenable:around",
 				({ next }) => {
@@ -527,7 +539,9 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))(
 			const unhandled = [];
 			const onUnhandled = (reason) => unhandled.push(reason);
 			process.on("unhandledRejection", onUnhandled);
-			api.slothlet.hook.on("svc.mulThenable:error", ({ error, source }) => errors.push(`${error.message}:${source.type}`), { id: "er" });
+			api.slothlet.hook.on("svc.mulThenable:error", ({ error, origin: source }) => errors.push(`${error.message}:${source.type}`), {
+				id: "er"
+			});
 			api.slothlet.hook.on(
 				"svc.mulThenable:around",
 				({ next }) => {
@@ -557,7 +571,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))(
 		it("a target's NaN rejection through a derived thenable keeps the function source", async () => {
 			api = await boot(config);
 			const errors = [];
-			api.slothlet.hook.on("svc.rejectNaN:error", ({ error, source }) => errors.push({ error, type: source.type }), { id: "er" });
+			api.slothlet.hook.on("svc.rejectNaN:error", ({ error, origin: source }) => errors.push({ error, type: source.type }), { id: "er" });
 			api.slothlet.hook.on("svc.rejectNaN:around", ({ next }) => next().then((value) => value), { id: "derived" });
 
 			const result = await outcome(() => api.svc.rejectNaN());
@@ -573,7 +587,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))(
 			const errors = [];
 			api.slothlet.hook.on(
 				"svc.mulThenable:error",
-				({ error, source }) => errors.push(`${error.message}:${source.type}:${source.hookId}`),
+				({ error, origin: source }) => errors.push(`${error.message}:${source.type}:${source.hook}`),
 				{ id: "er" }
 			);
 			// Its `then` drops the rejection callback and returns its own kind, which rejects on its own.
@@ -630,7 +644,9 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))(
 		])("a hand-written thenable whose then %s settles once, as awaiting it would", async (_label, make, expected) => {
 			api = await boot(config);
 			const errors = [];
-			api.slothlet.hook.on("svc.mulThenable:error", ({ error, source }) => errors.push(`${error.message}:${source.type}`), { id: "er" });
+			api.slothlet.hook.on("svc.mulThenable:error", ({ error, origin: source }) => errors.push(`${error.message}:${source.type}`), {
+				id: "er"
+			});
 			api.slothlet.hook.on(
 				"svc.mulThenable:around",
 				({ next }) => {
@@ -656,7 +672,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))(
 			const errors = [];
 			api.slothlet.hook.on(
 				"svc.mulThenable:error",
-				({ error, source }) => errors.push(`${error.message}:${source.type}:${source.hookId}`),
+				({ error, origin: source }) => errors.push(`${error.message}:${source.type}:${source.hook}`),
 				{ id: "er" }
 			);
 			api.slothlet.hook.on("svc.mulThenable:around", ({ next }) => next(), { id: "outer", priority: 10 });
@@ -701,7 +717,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))(
 			const errors = [];
 			api.slothlet.hook.on(
 				`svc.${target}:error`,
-				({ error, source }) => errors.push(`${error.message}:${source.type}:${source.hookId ?? ""}`),
+				({ error, origin: source }) => errors.push(`${error.message}:${source.type}:${source.hook ?? ""}`),
 				{ id: "er" }
 			);
 			for (const [id, priority] of [
@@ -729,8 +745,12 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))(
 			api = await boot(config);
 			const errors = [];
 			const always = [];
-			api.slothlet.hook.on("svc.dropsToNative:error", ({ error, source }) => errors.push(`${error.message}:${source.type}`), { id: "er" });
-			api.slothlet.hook.on("svc.dropsToNative:always", ({ hasError }) => always.push(hasError), { id: "always" });
+			api.slothlet.hook.on("svc.dropsToNative:error", ({ error, origin: source }) => errors.push(`${error.message}:${source.type}`), {
+				id: "er"
+			});
+			api.slothlet.hook.on("svc.dropsToNative:always", ({ errors, hasError = errors.length > 0 }) => always.push(hasError), {
+				id: "always"
+			});
 			api.slothlet.hook.on("svc.dropsToNative:around", ({ next }) => next(), { id: "pass" });
 
 			const result = await outcome(() => api.svc.dropsToNative());
@@ -763,7 +783,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))(
 			const errors = [];
 			api.slothlet.hook.on(
 				`svc.${target}:error`,
-				({ error, source }) => errors.push(`${error.message}:${source.type}:${source.hookId ?? ""}`),
+				({ error, origin: source }) => errors.push(`${error.message}:${source.type}:${source.hook ?? ""}`),
 				{ id: "er" }
 			);
 			api.slothlet.hook.on(`svc.${target}:around`, ({ next }) => handler(next), { id: "hand" });
@@ -782,7 +802,9 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))(
 		it("a target thenable whose then throws synchronously reports a function failure", async () => {
 			api = await boot(config);
 			const errors = [];
-			api.slothlet.hook.on("svc.thenThrows:error", ({ error, source }) => errors.push(`${error.message}:${source.type}`), { id: "er" });
+			api.slothlet.hook.on("svc.thenThrows:error", ({ error, origin: source }) => errors.push(`${error.message}:${source.type}`), {
+				id: "er"
+			});
 			api.slothlet.hook.on("svc.thenThrows:around", ({ next }) => next(), { id: "pass" });
 
 			const result = await outcome(() => api.svc.thenThrows());
@@ -807,7 +829,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))(
 			const errors = [];
 			api.slothlet.hook.on(
 				"svc.mulThenable:error",
-				({ error, source }) => errors.push(`${error.message}:${source.type}:${source.hookId}`),
+				({ error, origin: source }) => errors.push(`${error.message}:${source.type}:${source.hook}`),
 				{ id: "er" }
 			);
 			api.slothlet.hook.on(
@@ -829,7 +851,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))(
 			const errors = [];
 			api.slothlet.hook.on(
 				"svc.mulThenable:error",
-				({ error, source }) => errors.push(`${error.message}:${source.type}:${source.hookId}`),
+				({ error, origin: source }) => errors.push(`${error.message}:${source.type}:${source.hook}`),
 				{
 					id: "er"
 				}
@@ -860,7 +882,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))(
 			const onUncaught = (error) => uncaught.push(error);
 			process.on("uncaughtException", onUncaught);
 			for (const target of ["laterResolves", "laterRejects"]) {
-				api.slothlet.hook.on(`svc.${target}:error`, ({ error, source }) => errors.push(`${error.message}:${source.type}`), {
+				api.slothlet.hook.on(`svc.${target}:error`, ({ error, origin: source }) => errors.push(`${error.message}:${source.type}`), {
 					id: `er-${target}`
 				});
 				if (kind === "around") api.slothlet.hook.on(`svc.${target}:around`, ({ next }) => next(), { id: `pass-${target}` });
@@ -884,7 +906,9 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))(
 		it("an after hook that throws on a target's Promise is reported once, with no around hook", async () => {
 			api = await boot(config);
 			const errors = [];
-			api.slothlet.hook.on("svc.mulThenable:error", ({ error, source }) => errors.push(`${error.message}:${source.type}`), { id: "er" });
+			api.slothlet.hook.on("svc.mulThenable:error", ({ error, origin: source }) => errors.push(`${error.message}:${source.type}`), {
+				id: "er"
+			});
 			api.slothlet.hook.on("svc.mulThenable:before", () => {}, { id: "before" });
 			api.slothlet.hook.on(
 				"svc.mulThenable:after",
@@ -907,10 +931,12 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))(
 			api = await boot(config);
 			const errors = [];
 			const always = [];
-			api.slothlet.hook.on("svc.rejectUndefined:error", ({ error, source }) => errors.push(`${String(error)}:${source.type}`), {
+			api.slothlet.hook.on("svc.rejectUndefined:error", ({ error, origin: source }) => errors.push(`${String(error)}:${source.type}`), {
 				id: "er"
 			});
-			api.slothlet.hook.on("svc.rejectUndefined:always", ({ hasError }) => always.push(hasError), { id: "always" });
+			api.slothlet.hook.on("svc.rejectUndefined:always", ({ errors, hasError = errors.length > 0 }) => always.push(hasError), {
+				id: "always"
+			});
 			api.slothlet.hook.on("svc.rejectUndefined:before", () => {}, { id: "before", ...options });
 
 			const result = await outcome(() => api.svc.rejectUndefined());
@@ -927,7 +953,9 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))(
 		])("a %s hook that throws undefined rejects the call with undefined (%o)", async (kind, options) => {
 			api = await boot(config);
 			const errors = [];
-			api.slothlet.hook.on("svc.mulSync:error", ({ error, source }) => errors.push(`${String(error)}:${source.type}`), { id: "er" });
+			api.slothlet.hook.on("svc.mulSync:error", ({ error, origin: source }) => errors.push(`${String(error)}:${source.type}`), {
+				id: "er"
+			});
 			api.slothlet.hook.on(
 				`svc.mulSync:${kind}`,
 				() => {
@@ -947,7 +975,9 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))(
 		])("a target throwing a frozen error rethrows it and reports it once, with %s", async (_label, around) => {
 			api = await boot(config);
 			const errors = [];
-			api.slothlet.hook.on("svc.throwFrozen:error", ({ error, source }) => errors.push(`${error.message}:${source.type}`), { id: "er" });
+			api.slothlet.hook.on("svc.throwFrozen:error", ({ error, origin: source }) => errors.push(`${error.message}:${source.type}`), {
+				id: "er"
+			});
 			if (around) api.slothlet.hook.on("svc.throwFrozen:around", ({ next }) => around(next), { id: "pass" });
 
 			const result = await outcome(() => api.svc.throwFrozen());

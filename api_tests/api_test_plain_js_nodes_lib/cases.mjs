@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-07T21:55:08-08:00 (1794117308)
+ *	@Last modified time: 2026-11-18T21:57:32-08:00 (1795067852)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -306,6 +306,31 @@ export function relayInstanceOf(relay, node, relayClass) {
 
 /** The instances whose prototypes the identity cases ask for: of an exported class, of one kept to the module, of a subclass, and two emitters. */
 export const IDENTITY_CASES = ["inst", "hiddenInst", "subInst", "bus", "relay"];
+
+/**
+ * The prototypes of the owner's instances as the code asking reads them through its own root (`self` in a module,
+ * `api` in the host): the class's `prototype` where a node exports the class, and the instance's own prototype where
+ * none does. A read refused to the code asking is left out.
+ * @param {object} owner - The owner's node, as the code asking reads it.
+ * @returns {object} The prototypes, by the names {@link prototypeAnswers} takes.
+ */
+export function selfPrototypes(owner) {
+	const read = (ask) => {
+		try {
+			return ask();
+		} catch {
+			return undefined;
+		}
+	};
+	return {
+		inst: read(() => owner.Foo.prototype),
+		hiddenInst: read(() => Object.getPrototypeOf(owner.hiddenInst)),
+		subInst: read(() => owner.FooSub.prototype),
+		subInstBase: read(() => owner.Foo.prototype),
+		bus: read(() => Object.getPrototypeOf(owner.bus)),
+		relay: read(() => owner.Relay.prototype)
+	};
+}
 
 /**
  * Ask each instance for its prototype by `Object.getPrototypeOf`, `Reflect.getPrototypeOf` and `__proto__`, and say what

@@ -43,7 +43,7 @@ async function main() {
 	console.log("typeof api.math.add:", typeof eager.math.add);
 	console.log("Function name:", eager.math.add.name);
 	console.log("Has __slothletPath?", "__slothletPath" in eager.math.add);
-	console.log("__slothletPath value:", eager.math.add.__slothletPath);
+	console.log("__slothletPath value:", eager.slothlet.node(eager.math.add).path.join("."));
 	console.log("Function toString:", eager.math.add.toString().substring(0, 200));
 	console.log("Own properties:", Object.getOwnPropertyNames(eager.math.add));
 	console.log("Prototype:", Object.getPrototypeOf(eager.math.add));

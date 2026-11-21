@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-13T07:23:44-08:00 (1794583424)
+ *	@Last modified time: 2026-11-16T18:30:38-08:00 (1794882638)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -66,35 +66,35 @@ describe.each(CONFIGS)(
 		 */
 		async function load(permissionMode) {
 			const permissions =
-				permissionMode === "none" ? undefined : { mode: permissionMode, attribution, defaultPolicy: "allow", rules: [GUEST_EVENTS] };
+				permissionMode === "none" ? undefined : { mode: permissionMode, caller: { attribution }, policy: "allow", rules: [GUEST_EVENTS] };
 			api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, ...(permissions ? { permissions } : {}) });
-			await api.slothlet.api.add("victim", path.join(FIXTURE, "victim"), { moduleID: "victim" });
-			await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { moduleID: "guest" });
+			await api.slothlet.api.add("victim", path.join(FIXTURE, "victim"), { id: "victim" });
+			await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { id: "guest" });
 			return api;
 		}
 
 		describe.each(["none", "off"])("permissions %s", (permissionMode) => {
 			it("refuses a module an event rule beyond its own events", async () => {
 				await load(permissionMode);
-				expect(api.slothlet.permissions.control.mode).toBe("off");
-				expect(api.guest.x.addEventRuleFor({ caller: "**", event: "**", effect: "deny" })).toBe("INVALID_PERMISSION_RULE");
-				expect(api.guest.x.addEventRuleFor({ caller: "**", event: "victim.**", effect: "deny" })).toBe("INVALID_PERMISSION_RULE");
+				expect(api.slothlet.permissions.control.mode()).toBe("off");
+				expect(api.guest.x.addEventRuleFor({ caller: "**", event: "**", effect: "deny" })).toBe("PERMISSION_RULE_INVALID");
+				expect(api.guest.x.addEventRuleFor({ caller: "**", event: "victim.**", effect: "deny" })).toBe("PERMISSION_RULE_INVALID");
 				// Nothing was registered: switched on, the victim's own event resolves as with no rule at all.
-				api.slothlet.permissions.control.enable();
-				expect(api.slothlet.event.resolveLevel("victim.v", "victim.ping")).toBe("notify");
+				api.slothlet.permissions.control.mode("on");
+				expect(api.slothlet.event.level("victim.v", "victim.ping")).toBe("notify");
 			});
 
 			it("refuses a module removing the host's event rule, even for the module's own events", async () => {
 				await load(permissionMode);
 				const hostId = api.slothlet.event.rules.add({ caller: "victim.**", event: "guest.*", effect: "deny" });
 				expect(hostId).toMatch(/^evt-/);
-				expect(api.guest.x.removeEventRuleFor(hostId)).toBe("INVALID_PERMISSION_RULE");
-				api.slothlet.permissions.control.enable();
-				expect(api.slothlet.event.resolveLevel("victim.v", "guest.ping")).toBe("deny");
+				expect(api.guest.x.removeEventRuleFor(hostId)).toBe("PERMISSION_RULE_INVALID");
+				api.slothlet.permissions.control.mode("on");
+				expect(api.slothlet.event.level("victim.v", "guest.ping")).toBe("deny");
 			});
 		});
 
-		describe("switched on with control.enable()", () => {
+		describe("switched on with control.mode('on')", () => {
 			it("applies the module's own event rules added while off, ranked below the host's", async () => {
 				await load("off");
 				// While off no event rule is evaluated.
@@ -102,27 +102,27 @@ describe.each(CONFIGS)(
 				expect(own).toMatch(/^evt-/);
 				expect(api.slothlet.event.rules.add({ caller: "victim.**", event: "guest.contested.**", effect: "deny" })).toMatch(/^evt-/);
 				expect(api.guest.x.addEventRuleFor({ caller: "victim.**", event: "guest.contested.**", effect: "allow" })).toMatch(/^evt-/);
-				expect(api.guest.x.addEventRuleFor({ caller: "**", event: "victim.**", effect: "deny" })).toBe("INVALID_PERMISSION_RULE");
-				expect(api.slothlet.event.resolveLevel("victim.v", "guest.own.a")).toBe("allow");
-				expect(api.slothlet.event.resolveLevel("victim.v", "guest.contested.a")).toBe("allow");
+				expect(api.guest.x.addEventRuleFor({ caller: "**", event: "victim.**", effect: "deny" })).toBe("PERMISSION_RULE_INVALID");
+				expect(api.slothlet.event.level("victim.v", "guest.own.a")).toBe("allow");
+				expect(api.slothlet.event.level("victim.v", "guest.contested.a")).toBe("allow");
 
-				api.slothlet.permissions.control.enable();
-				expect(api.slothlet.permissions.control.mode).toBe("on");
+				api.slothlet.permissions.control.mode("on");
+				expect(api.slothlet.permissions.control.mode()).toBe("on");
 				// The module's own rule applies.
-				expect(api.slothlet.event.resolveLevel("victim.v", "guest.own.a")).toBe("deny");
+				expect(api.slothlet.event.level("victim.v", "guest.own.a")).toBe("deny");
 				// Equal specificity: the host's deny outranks the module's later allow.
-				expect(api.slothlet.event.resolveLevel("victim.v", "guest.contested.a")).toBe("deny");
+				expect(api.slothlet.event.level("victim.v", "guest.contested.a")).toBe("deny");
 				// The rule refused while off is not there.
-				expect(api.slothlet.event.resolveLevel("victim.v", "victim.ping")).toBe("notify");
+				expect(api.slothlet.event.level("victim.v", "victim.ping")).toBe("notify");
 				// And the module still removes its own rule.
 				expect(api.guest.x.removeEventRuleFor(own)).toBe(true);
-				expect(api.slothlet.event.resolveLevel("victim.v", "guest.own.a")).toBe("notify");
+				expect(api.slothlet.event.level("victim.v", "guest.own.a")).toBe("notify");
 			});
 
 			it("holds the condition of a rule the module added while off to the module's own writes", async () => {
 				await load("off");
 				expect(api.guest.x.addWritingEventCondition("victim.v")).toMatch(/^evt-/);
-				api.slothlet.permissions.control.enable();
+				api.slothlet.permissions.control.mode("on");
 				api.guest.x.takeConditionWrites();
 				api.victim.v.listen("guest.zap");
 				await api.guest.x.shout("guest.zap", { n: 1 });
@@ -137,19 +137,19 @@ describe.each(CONFIGS)(
 		describe('permissions mode "disabled", then switched on', () => {
 			it("brings the module's event rules along, held to the same limits", async () => {
 				await load("disabled");
-				expect(api.slothlet.permissions.control.mode).toBe("disabled");
+				expect(api.slothlet.permissions.control.mode()).toBe("disabled");
 				const own = api.guest.x.addEventRuleFor({ caller: "victim.**", event: "guest.own.**", effect: "deny" });
 				expect(own).toMatch(/^evt-/);
 				expect(api.slothlet.event.rules.add({ caller: "victim.**", event: "guest.contested.**", effect: "deny" })).toMatch(/^evt-/);
 				expect(api.guest.x.addEventRuleFor({ caller: "victim.**", event: "guest.contested.**", effect: "allow" })).toMatch(/^evt-/);
-				expect(api.guest.x.addEventRuleFor({ caller: "**", event: "victim.**", effect: "deny" })).toBe("INVALID_PERMISSION_RULE");
-				expect(api.slothlet.event.resolveLevel("victim.v", "guest.own.a")).toBe("allow");
+				expect(api.guest.x.addEventRuleFor({ caller: "**", event: "victim.**", effect: "deny" })).toBe("PERMISSION_RULE_INVALID");
+				expect(api.slothlet.event.level("victim.v", "guest.own.a")).toBe("allow");
 
-				api.slothlet.permissions.control.enable();
-				expect(api.slothlet.permissions.control.mode).toBe("on");
-				expect(api.slothlet.event.resolveLevel("victim.v", "guest.own.a")).toBe("deny");
-				expect(api.slothlet.event.resolveLevel("victim.v", "guest.contested.a")).toBe("deny");
-				expect(api.slothlet.event.resolveLevel("victim.v", "victim.ping")).toBe("notify");
+				api.slothlet.permissions.control.mode("on");
+				expect(api.slothlet.permissions.control.mode()).toBe("on");
+				expect(api.slothlet.event.level("victim.v", "guest.own.a")).toBe("deny");
+				expect(api.slothlet.event.level("victim.v", "guest.contested.a")).toBe("deny");
+				expect(api.slothlet.event.level("victim.v", "victim.ping")).toBe("notify");
 			});
 		});
 	}

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:09-08:00 (1794874569)
+ *	@Last modified time: 2026-11-17T19:49:35-08:00 (1794973775)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -26,7 +26,7 @@
  *
  * - deny   → subscription refused; the listener is never registered and never fires.
  * - notify → subscribed, but the listener receives only a safe trigger envelope
- *            `{ event, at, instanceID }` (no domain payload). This is the default.
+ *            `{ event, at, instance }` (no domain payload). This is the default.
  * - allow  → subscribed with the full domain payload.
  *
  * Listeners are called `(payload, meta)`: at `allow`, `payload` is the emitted value; at `notify`,
@@ -48,21 +48,26 @@
  * `deliver`, so an envelope stays deliverable across a reload once the listener re-registers.
  */
 
+import { assertOptionKeys } from "#helpers/config-schema";
 import { ComponentBase } from "#factories/component-base";
 import { MODULE_ID_SEPARATOR } from "#handlers/metadata";
 import { identityCeilings } from "#handlers/trusted-root";
 import { internals as unifiedWrapperInternals } from "#handlers/unified-wrapper";
+import { segmentsOf } from "#helpers/segments";
+import { FORK, writeTarget } from "#helpers/flow-stores";
 import {
 	ArrayMethods,
 	filterList,
 	listPush,
 	Map,
+	mapEntries,
 	mapEntriesToArray,
+	mapFrom,
 	mapList,
 	MapMethods,
 	Numbers,
 	Objects,
-	Promise,
+	PrototypeFunctions,
 	Reflect,
 	SafePromise,
 	Set,
@@ -78,7 +83,7 @@ import {
 const { runtime_eventPayloadFor } = unifiedWrapperInternals("lib/handlers/event-manager");
 
 /** The functions the dispatcher uses, taken when slothlet loaded. */
-const promiseThen = Promise.prototype.then;
+const promiseThen = PrototypeFunctions.Promise.then;
 const reflectApply = Reflect.apply;
 
 /**
@@ -142,6 +147,13 @@ const EVENT_LEVEL_RANK = Objects.freeze({ deny: 0, notify: 1, allow: 2 });
  * @extends ComponentBase
  * @public
  */
+/**
+ * The manager {@link EventManager#[FORK]} is copying, read once by the constructor it calls; null otherwise.
+ * @type {EventManager|null}
+ * @private
+ */
+let forkingFrom = null;
+
 export class EventManager extends ComponentBase {
 	/**
 	 * Where this component mounts on the Slothlet instance (`slothlet.handlers.eventManager`).
@@ -188,6 +200,40 @@ export class EventManager extends ComponentBase {
 		this.#subscribers = new Map();
 		this.#ordinals = new Map();
 		this.#strategy = null;
+		const from = forkingFrom;
+		if (from !== null) {
+			forkingFrom = null;
+			this.#copyFrom(from);
+		}
+	}
+
+	/**
+	 * A copy of this manager for a `run()` / `scope()` (see `FORK` in `helpers/flow-stores`): its subscriptions, the
+	 * listener ordinals and the delivery strategy, which later changes to either leave the other as it is. Each
+	 * subscription record is copied with its cached level dropped.
+	 * @returns {EventManager} The copy.
+	 * @internal
+	 */
+	[FORK]() {
+		forkingFrom = this;
+		return new EventManager(this.slothlet);
+	}
+
+	/**
+	 * Fill a new manager from the one it is a copy of (see {@link EventManager#[FORK]}).
+	 * @param {EventManager} from - The manager copied.
+	 * @returns {void}
+	 * @private
+	 */
+	#copyFrom(from) {
+		for (const ofEntry of mapEntries(from.#subscribers)) {
+			const set = new Set();
+			for (const sub of setValues(ofEntry[1])) SetMethods.add(set, { ...sub, level: null, levelEpoch: -1 });
+			MapMethods.set(this.#subscribers, ofEntry[0], set);
+		}
+		for (const ofEntry of mapEntries(from.#ordinals)) MapMethods.set(this.#ordinals, ofEntry[0], mapFrom(mapEntriesToArray(ofEntry[1])));
+		this.#strategy = from.#strategy;
+		this.#strategyOwner = from.#strategyOwner;
 	}
 
 	/**
@@ -206,7 +252,7 @@ export class EventManager extends ComponentBase {
 	 *
 	 * @param {string} event - Event name to subscribe to.
 	 * @param {Function} listener - Listener, called `(payload, meta)` on emit. At `notify`, `payload`
-	 *   is `undefined`; `meta` is `{ event, at, instanceID }`.
+	 *   is `undefined`; `meta` is `{ event, at, instance }`.
 	 * @param {object} [options={}] - Options.
 	 * @param {boolean} [options.once=false] - Remove the subscription after its first delivery.
 	 * @param {string|number} [options.key] - Replaces the ordinal `<n>` in the listener id, for a listener
@@ -219,12 +265,15 @@ export class EventManager extends ComponentBase {
 	 * @public
 	 */
 	on(event, listener, options = {}) {
+		const written = writeTarget(this);
+		if (written !== this) return written.on(event, listener, options);
 		if (typeof event !== "string" || !event) {
 			throw new this.SlothletError("INVALID_ARGUMENT", { argument: "event", expected: "a non-empty string", received: typeof event });
 		}
 		if (typeof listener !== "function") {
 			throw new this.SlothletError("INVALID_ARGUMENT", { argument: "listener", expected: "a function", received: typeof listener });
 		}
+		assertOptionKeys(options, "slothlet.event.on");
 		const key = options.key;
 		if (key !== undefined && !((typeof key === "string" && key !== "") || (typeof key === "number" && Numbers.isFinite(key)))) {
 			throw new this.SlothletError("INVALID_ARGUMENT", {
@@ -329,6 +378,8 @@ export class EventManager extends ComponentBase {
 	 * @public
 	 */
 	off(event, listener) {
+		const written = writeTarget(this);
+		if (written !== this) return written.off(event, listener);
 		const set = MapMethods.get(this.#subscribers, event);
 		if (!set) return false;
 		for (const sub of setValues(set)) {
@@ -370,7 +421,7 @@ export class EventManager extends ComponentBase {
 		}
 		if (!set || SetMethods.size(set) === 0) return;
 
-		const meta = { event, at: this.clock.now(), instanceID: this.instanceID };
+		const meta = { event, at: this.clock.now(), instance: this.instanceID };
 		const emitter = this.slothlet.contextManager?.getCallerIdentity?.(this.instanceID)?.currentWrapper ?? null;
 		// Snapshot: allow listeners to off()/subscribe during dispatch, and support `once` removal.
 		await this.#dispatch(event, payload, meta, setToArray(set), emitter);
@@ -381,7 +432,7 @@ export class EventManager extends ComponentBase {
 	 * `emit` and a strategy's `defaultDeliver`.
 	 * @param {string} event - Event name.
 	 * @param {*} payload - Domain payload.
-	 * @param {object} meta - Trigger envelope `{ event, at, instanceID }` handed to every listener.
+	 * @param {object} meta - Trigger envelope `{ event, at, instance }` handed to every listener.
 	 * @param {Array<object>} subs - Subscription records to deliver to.
 	 * @param {object|null} [emitter=null] - The wrapper of the module that emitted, or null for the host.
 	 * @returns {Promise<void>} Resolves once every listener has settled.
@@ -471,7 +522,7 @@ export class EventManager extends ComponentBase {
 	 * @private
 	 */
 	async #emitThroughStrategy(strategy, event, payload, subs) {
-		const meta = { event, at: this.clock.now(), instanceID: this.instanceID };
+		const meta = { event, at: this.clock.now(), instance: this.instanceID };
 		const cm = this.slothlet.contextManager;
 		// The emitter's flow — its user context, caller identity and trust — so a deferred delivery runs
 		// in it, exactly as the immediate one would have. Also the emitter identity for the envelope.
@@ -499,9 +550,12 @@ export class EventManager extends ComponentBase {
 			event,
 			payload,
 			at: meta.at,
-			instanceID: this.instanceID,
+			instance: this.instanceID,
 			emitter: emitterWrapper
-				? Objects.freeze({ moduleID: ownerIdOf(emitterWrapper), apiPath: emitterWrapper.____slothletInternal.apiPath })
+				? Objects.freeze({
+						module: ownerIdOf(emitterWrapper),
+						path: Objects.freeze(segmentsOf(emitterWrapper.____slothletInternal.apiPath))
+					})
 				: null,
 			levels: Objects.freeze(levels),
 			listeners
@@ -524,8 +578,8 @@ export class EventManager extends ComponentBase {
 	 * built-in `slothlet.event.**` deny. The strategy is called per emit as
 	 * `strategy(envelope, listeners, defaultDeliver)`:
 	 *
-	 * - `envelope` — frozen `{ event, payload, at, instanceID, emitter, levels, listeners }`: `emitter` is
-	 *   `{ moduleID, apiPath }` of the emitting module (null for the host); `levels` maps each recipient's
+	 * - `envelope` — frozen `{ event, payload, at, instance, emitter, levels, listeners }`: `emitter` is
+	 *   `{ module, path }` of the emitting module (null for the host); `levels` maps each recipient's
 	 *   listener id to its level resolved at emit time (informational — levels are enforced at delivery).
 	 * - `listeners` — the recipients' listener ids (the same array as `envelope.listeners`).
 	 * - `defaultDeliver()` — delivers now, exactly as without a strategy; returns a promise that settles
@@ -541,6 +595,8 @@ export class EventManager extends ComponentBase {
 	 * @public
 	 */
 	strategy(fn) {
+		const written = writeTarget(this);
+		if (written !== this) return written.strategy(fn);
 		if (fn !== null && typeof fn !== "function") {
 			throw new this.SlothletError("INVALID_ARGUMENT", { argument: "fn", expected: "a function or null", received: typeof fn });
 		}
@@ -795,22 +851,32 @@ export class EventManager extends ComponentBase {
 	 * @private
 	 */
 	#removeSub(event, sub) {
+		const written = writeTarget(this);
+		if (written !== this) return written.#removeSub(event, sub);
 		const set = MapMethods.get(this.#subscribers, event);
 		if (!set) return;
-		SetMethods.delete(set, sub);
+		// A record from another copy of this manager (an `off` handed out before a run forked) is found by its id and
+		// listener: the copy of that subscription.
+		if (!SetMethods.delete(set, sub)) {
+			for (const own of setValues(set)) {
+				if (own.id === sub.id && own.listener === sub.listener) {
+					SetMethods.delete(set, own);
+					break;
+				}
+			}
+		}
 		if (SetMethods.size(set) === 0) MapMethods.delete(this.#subscribers, event);
 	}
 
 	/**
-	 * Surface a listener error as a non-fatal warning (unless the instance is silent).
+	 * Surface a listener error as a non-fatal warning.
 	 * @param {string} event - Event name.
 	 * @param {Error} error - The error a listener threw or rejected with.
 	 * @returns {void}
 	 * @private
 	 */
 	#warnListener(event, error) {
-		if (this.____config?.silent) return;
-		new this.SlothletWarning("WARNING_EVENT_HANDLER_ERROR", { event }, error);
+		new this.SlothletWarning("WARNING_EVENT_HANDLER_ERROR", { event }, { cause: error });
 	}
 
 	/**
@@ -819,6 +885,8 @@ export class EventManager extends ComponentBase {
 	 * @public
 	 */
 	shutdown() {
+		// The instance's teardown of its own handler: the copies that hold it keep theirs.
+		writeTarget(this, true);
 		MapMethods.clear(this.#subscribers);
 		MapMethods.clear(this.#ordinals);
 		this.#strategy = null;

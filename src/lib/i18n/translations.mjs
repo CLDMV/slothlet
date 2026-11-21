@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:14-08:00 (1794874574)
+ *	@Last modified time: 2026-11-16T18:28:52-08:00 (1794882532)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -26,14 +26,16 @@ import defaultTranslations from "./languages/en-us.json" with { type: "json" };
 // on-disk locales load only under Node — a browser keeps the bundled default.
 import { isNode, fs, path, url, loadJson } from "#helpers/platform";
 import {
+	ArrayMethods,
+	Arrays,
 	Boolean,
 	filterList,
+	mapList,
 	listPush,
 	listSplice,
 	NativeProcess,
 	navigator,
 	Objects,
-	RegExp,
 	regExpReplace,
 	Set,
 	setFrom,
@@ -278,15 +280,14 @@ export function registerWarningClass(WarningClass) {
 
 /**
  * Report a locale that failed to load as a coded, translated `WARNING_LANGUAGE_LOAD_FAILED` SlothletWarning (#820).
- * A call made through an instance passes that instance's warning class (so it is captured there) and its `silent`
- * flag; a call made outside any instance uses the process-level class. Nothing is raised when `silent` is true.
+ * A call made through an instance passes that instance's warning class, so it is recorded there and printed unless the
+ * instance is silent; a call made outside any instance uses the process-level class.
  * @param {string} lang - The language that failed to load.
- * @param {{SlothletWarning?: Function, silent?: boolean}} [options] - Instance warning class and silent flag.
+ * @param {{SlothletWarning?: Function}} [options] - Instance warning class.
  * @returns {void}
  * @private
  */
 function i18n_warnLoadFailed(lang, options) {
-	if (options?.silent === true) return;
 	const WarningClass = options?.SlothletWarning ?? processWarningClass;
 	// errors.mjs registers the class when it loads, which is after this module's import-time initialisation. A
 	// failure from that initialisation is held and raised on registration. The suite always has errors.mjs loaded
@@ -303,7 +304,7 @@ function i18n_warnLoadFailed(lang, options) {
  * Set current language (synchronous)
  * Merges requested language translations over default English translations
  * @param {string} lang - Language code
- * @param {{SlothletWarning?: Function, silent?: boolean}} [options] - Warning class and `silent` flag for a failed load
+ * @param {{SlothletWarning?: Function}} [options] - Warning class for a failed load
  * @public
  */
 function setLanguage(lang, options) {
@@ -344,7 +345,7 @@ function setLanguage(lang, options) {
  * awaits the same synchronous read (the await is a no-op). A failed load warns and keeps the bundled
  * English default. Use this when you need to *await* a locale switch (e.g. in an Electron renderer).
  * @param {string} lang - Language code (e.g. "es-mx").
- * @param {{SlothletWarning?: Function, silent?: boolean}} [options] - Warning class and `silent` flag for a failed load
+ * @param {{SlothletWarning?: Function}} [options] - Warning class for a failed load
  * @returns {Promise<void>}
  * @public
  */
@@ -385,7 +386,7 @@ async function setLanguageAsync(lang, options) {
  * asynchronous (a browser) it returns a promise that settles once the locale is in place. `await language.set(x)`
  * works everywhere. A locale that fails to load raises `WARNING_LANGUAGE_LOAD_FAILED` and keeps `"en-us"`.
  * @param {string} lang - Language code (e.g. "es-mx").
- * @param {{SlothletWarning?: Function, silent?: boolean}} [options] - Warning class and `silent` flag for a failed load.
+ * @param {{SlothletWarning?: Function}} [options] - Warning class for a failed load.
  * @returns {Promise<void>|undefined} A promise only when the load is asynchronous.
  * @public
  * @example
@@ -425,14 +426,24 @@ export function translate(errorCode, params = {}) {
 		template = currentTranslations.INVALID_CONFIG_generic;
 	}
 
-	// Interpolate parameters
+	// Interpolate parameters. `{name}` renders a value; an array renders joined with "." (the paths slothlet reports
+	// are segments arrays, shown in their dotted form). `{name.N}` renders one element of an array, and `{name|list}`
+	// renders an array as a list ("a, b"). A placeholder with no value renders empty.
 	let message = template || `Error: ${errorCode}`;
-	for (let ofIndex = 0, ofList = Objects.entries(params); ofIndex < ofList.length; ofIndex++) {
-		const ofEntry = ofList[ofIndex],
-			key = ofEntry[0],
-			value = ofEntry[1];
-		message = regExpReplace(new RegExp(`\\{${key}\\}`, "g"), message, value !== undefined ? stringOf(value) : "");
-	}
+	const values = { __proto__: null };
+	for (let ofIndex = 0, ofList = Objects.entries(params ?? {}); ofIndex < ofList.length; ofIndex++)
+		values[ofList[ofIndex][0]] = ofList[ofIndex][1];
+	message = regExpReplace(/\{(\w+)(?:\.(\d+))?(\|list)?\}/g, message, (whole, name, index, list) => {
+		let value = values[name];
+		if (index !== undefined) value = Arrays.isArray(value) ? value[index] : undefined;
+		if (value === undefined) return "";
+		if (Arrays.isArray(value))
+			return ArrayMethods.join(
+				mapList(value, (item) => stringOf(item)),
+				list ? ", " : "."
+			);
+		return stringOf(value);
+	});
 
 	// Clean up empty placeholders (no surrounding \s* to avoid ReDoS on whitespace-heavy input)
 	message = StringMethods.trim(regExpReplace(/\s+/g, regExpReplace(/\{\w+\}/g, message, ""), " "));

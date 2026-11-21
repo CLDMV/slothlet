@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T20:45:25-08:00 (1794804325)
+ *	@Last modified time: 2026-11-16T18:30:15-08:00 (1794882615)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -50,8 +50,8 @@ beforeAll(() => {
 			"\t\t\truntime,",
 			"\t\t\tsilent: true,",
 			"\t\t\tpermissions: {",
-			'\t\t\t\tdefaultPolicy: "allow",',
-			"\t\t\t\tprovenance,",
+			'\t\t\t\tpolicy: "allow",',
+			"\t\t\t\tcaller: { provenance },",
 			"\t\t\t\trules: [",
 			'\t\t\t\t\t{ caller: "consumer.**", target: "id.consumer", effect: "deny" },',
 			'\t\t\t\t\t{ caller: "producer.**", target: "id.producer", effect: "deny" }',
@@ -68,7 +68,7 @@ beforeAll(() => {
 			"\t\t\tmode,",
 			"\t\t\truntime,",
 			"\t\t\tsilent: true,",
-			'\t\t\tpermissions: { defaultPolicy: "allow", provenance, rules: [{ caller: "scheduler.**", target: "slothlet.lockCaller.caller", effect: "allow" }] }',
+			'\t\t\tpermissions: { policy: "allow", rules: [{ caller: "scheduler.**", target: "slothlet.pin.caller", effect: "allow" }], caller: { provenance } }',
 			"\t\t});",
 			"\t\tawait sched.scheduler.service.clear();",
 			"\t\tawait sched.client.app.scheduleWhoamiAsService();",

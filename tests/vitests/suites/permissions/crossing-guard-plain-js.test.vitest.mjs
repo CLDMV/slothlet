@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-10T21:29:39-08:00 (1794374979)
+ *	@Last modified time: 2026-11-16T18:29:35-08:00 (1794882575)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -46,16 +46,16 @@ const ALLOW_READER_WRITES = [
 
 const PERMISSIONS = [
 	{ name: "permissions off", permissions: null, viewed: false },
-	{ name: "on, precise, no rule", permissions: { defaultPolicy: "allow", attribution: "precise" }, viewed: true },
-	{ name: "on, fast, no rule", permissions: { defaultPolicy: "allow", attribution: "fast" }, viewed: true },
+	{ name: "on, precise, no rule", permissions: { policy: "allow", caller: { attribution: "precise" } }, viewed: true },
+	{ name: "on, fast, no rule", permissions: { policy: "allow", caller: { attribution: "fast" } }, viewed: true },
 	{
 		name: "on, precise, writes granted",
-		permissions: { defaultPolicy: "allow", attribution: "precise", rules: ALLOW_READER_WRITES },
+		permissions: { policy: "allow", caller: { attribution: "precise" }, rules: ALLOW_READER_WRITES },
 		viewed: false
 	},
 	{
 		name: "on, fast, writes granted",
-		permissions: { defaultPolicy: "allow", attribution: "fast", rules: ALLOW_READER_WRITES },
+		permissions: { policy: "allow", caller: { attribution: "fast" }, rules: ALLOW_READER_WRITES },
 		viewed: false
 	}
 ];
@@ -67,8 +67,8 @@ const PERMISSIONS = [
  */
 async function mount(options) {
 	const api = await slothlet({ base: join(FIXTURE, "host"), silent: true, ...options });
-	await api.slothlet.api.add("owner", join(FIXTURE, "owner"), { moduleID: "owner" });
-	await api.slothlet.api.add("reader", join(FIXTURE, "reader"), { moduleID: "reader" });
+	await api.slothlet.api.add("owner", join(FIXTURE, "owner"), { id: "owner" });
+	await api.slothlet.api.add("reader", join(FIXTURE, "reader"), { id: "reader" });
 	await api.owner;
 	await api.reader;
 	return api;

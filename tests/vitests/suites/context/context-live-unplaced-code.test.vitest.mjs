@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-31T15:24:34-07:00 (1793485474)
+ *	@Last modified time: 2026-11-16T18:29:42-08:00 (1794882582)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -36,13 +36,13 @@ const REAL = path.join(ROOT, "real");
 const LINK = path.join(ROOT, "link");
 
 const RULES = {
-	defaultPolicy: "allow",
+	policy: "allow",
 	rules: ["x", "y", "z", "w"].map((module) => ({ caller: `${module}.**`, target: "c.**", effect: "deny" }))
 };
 
 // A module the rules deny, for the cases where it tries to act as a module they allow.
 const ROGUE_RULES = {
-	defaultPolicy: "allow",
+	policy: "allow",
 	rules: [
 		{ caller: "rogue.**", target: "c.**", effect: "deny" },
 		{ caller: "**", target: "capability:code", effect: "allow" }
@@ -151,9 +151,9 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])(
 		});
 
 		it.each([
-			["off", { provenance: false }, ["PERMISSION_DENIED"]],
+			["off", { caller: { provenance: false } }, ["PERMISSION_DENIED"]],
 			// With provenance on, the rogue code running inside the call is refused as code of no module.
-			["on", {}, ["PERMISSION_DENIED", "RUNTIME_NO_ACTIVE_CONTEXT_SELF"]]
+			["on", {}, ["PERMISSION_DENIED", "CONTEXT_NOT_ACTIVE_SELF"]]
 		])(
 			"a function named after another module's suspended entry does not borrow that module's identity (provenance %s)",
 			async (_label, extra, refusals) => {

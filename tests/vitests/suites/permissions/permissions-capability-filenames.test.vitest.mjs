@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T00:00:00-08:00 (1794816000)
+ *	@Last modified time: 2026-11-16T18:30:24-08:00 (1794882624)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -21,7 +21,7 @@
  * A leaf a rule opens `capability:code` for compiles `return 7` under a file name, with `vm.compileFunction`,
  * `vm.runInThisContext`, `new vm.Script` and `Module#_compile`. Under its own file, or a name no file holds, the
  * compile goes through. Under another module's file, a package's file or a file of the host's, it is refused with
- * `CAPABILITY_REFUSED`, reason `foreign-filename`, however the name is spelled: a `file:` URL, a path through `..`, a
+ * `PERMISSION_CAPABILITY_REFUSED`, reason `foreign-filename`, however the name is spelled: a `file:` URL, a path through `..`, a
  * symbolic link to the file. Host code, and every compile while the permission system is off or disabled, is not
  * checked.
  *
@@ -49,7 +49,7 @@ const ROUTES = ["compileFunction", "runInThisContext", "script", "moduleCompile"
 const OPEN = { caller: "**", target: "**", effect: "allow" };
 const RULES = [OPEN, { caller: "coder.probe.compileUnder", target: "capability:code", effect: "allow" }];
 const ALLOWED = { ok: true, value: 7 };
-const FOREIGN = { ok: false, code: "CAPABILITY_REFUSED", reason: "foreign-filename" };
+const FOREIGN = { ok: false, code: "PERMISSION_CAPABILITY_REFUSED", reason: "foreign-filename" };
 
 /** The names compiled under, with the outcome each gives a leaf the capability is opened for. */
 const NAMES = [
@@ -109,10 +109,10 @@ describe.each(getMatrixConfigs())("Permissions > capability:code and the file na
 		 * @param {object} [permissions] - The permission settings.
 		 * @returns {Promise<object>} The api.
 		 */
-		const build = async (permissions = { defaultPolicy: "deny", rules: RULES, attribution }) => {
+		const build = async (permissions = { policy: "deny", rules: RULES, caller: { attribution } }) => {
 			api = await slothlet({ ...config, silent: true, base: path.join(ROOT, "base"), permissions });
-			await api.slothlet.api.add("coder", path.join(ROOT, "coder"), { moduleID: "coder" });
-			await api.slothlet.api.add("other", path.join(ROOT, "other"), { moduleID: "other" });
+			await api.slothlet.api.add("coder", path.join(ROOT, "coder"), { id: "coder" });
+			await api.slothlet.api.add("other", path.join(ROOT, "other"), { id: "other" });
 			return api;
 		};
 
@@ -127,7 +127,7 @@ describe.each(getMatrixConfigs())("Permissions > capability:code and the file na
 		});
 
 		it.each([["off"], ["disabled"]])("with the permission system %s nothing is checked", async (mode) => {
-			await build({ mode, defaultPolicy: "deny", rules: [OPEN], attribution });
+			await build({ mode, policy: "deny", rules: [OPEN], caller: { attribution } });
 			for (const route of ROUTES) expect([route, await api.coder.probe.compileUnder(route, SIBLING)]).toEqual([route, ALLOWED]);
 		});
 	});

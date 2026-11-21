@@ -30,7 +30,7 @@ import { self } from "@cldmv/slothlet/runtime";
  * api.target.probe.whoami(); // null (host)
  */
 export function whoami() {
-	return self.slothlet.metadata.caller()?.apiPath ?? null;
+	return self.slothlet.metadata.caller()?.path?.join(".") ?? null;
 }
 
 /**

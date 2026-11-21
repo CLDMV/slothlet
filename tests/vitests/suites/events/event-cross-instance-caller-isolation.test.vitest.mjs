@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:27-07:00 (1791091707)
+ *	@Last modified time: 2026-11-16T18:29:02-08:00 (1794882542)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -30,7 +30,7 @@
  *    not this module's path.
  * 2. A listener subscribed on `foreign` while this module's flow is active is pinned to the HOST there
  *    (its `ownerWrapper` is host, not the leaked foreign module), so the host-only
- *    `foreign.slothlet.event.resolveLevel(...)` succeeds inside its delivery instead of being denied
+ *    `foreign.slothlet.event.level(...)` succeeds inside its delivery instead of being denied
  *    under a leaked identity — the exact failure that stopped the vine's trusted side from forwarding.
  *
  * @module tests/vitests/suites/events/event-cross-instance-caller-isolation.test.vitest
@@ -43,7 +43,7 @@ import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
 const PROBE_BASE = TEST_DIRS.API_TEST_CROSS_INSTANCE;
 
 /** Serving-side event rules: the host is trusted; a `probe.**` subscriber is allowed on `orders.*`. */
-const TRUSTED_EVENTS = { default: "notify", rules: [{ caller: "probe.**", event: "orders.*", effect: "allow" }] };
+const TRUSTED_EVENTS = { policy: "notify", rules: [{ caller: "probe.**", event: "orders.*", effect: "allow" }] };
 
 describe.each(getMatrixConfigs())("Events > cross-instance caller isolation > $name", ({ config }) => {
 	/** The two instances torn down after each test. @type {object[]} */
@@ -66,15 +66,15 @@ describe.each(getMatrixConfigs())("Events > cross-instance caller isolation > $n
 	 * @returns {Promise<{ trusted: object, subscriber: object }>} The wired pair.
 	 */
 	async function twoInstances() {
-		const trusted = await slothlet({ ...config, base: PROBE_BASE, permissions: { defaultPolicy: "allow", events: TRUSTED_EVENTS } });
-		const subscriber = await slothlet({ ...config, base: PROBE_BASE, permissions: { defaultPolicy: "allow" } });
+		const trusted = await slothlet({ ...config, base: PROBE_BASE, permissions: { policy: "allow", events: TRUSTED_EVENTS } });
+		const subscriber = await slothlet({ ...config, base: PROBE_BASE, permissions: { policy: "allow" } });
 		instances.push(trusted, subscriber);
 		return { trusted, subscriber };
 	}
 
 	it("caller() reports the module's own path within its own instance (baseline)", async () => {
 		const { subscriber } = await twoInstances();
-		expect(await subscriber.probe.whoami()).toBe("probe.whoami");
+		expect((await subscriber.probe.whoami()).path.join(".")).toBe("probe.whoami");
 	});
 
 	it("a foreign instance's caller() is the host (null), not this module, while this module's flow is active", async () => {
@@ -84,7 +84,7 @@ describe.each(getMatrixConfigs())("Events > cross-instance caller isolation > $n
 		expect(callerOnTrusted).toBe(null); // host — probe belongs to `subscriber`, not `trusted`
 	});
 
-	it("a listener subscribed on a foreign instance is host-pinned — its delivery can drive the host-only resolveLevel", async () => {
+	it("a listener subscribed on a foreign instance is host-pinned — its delivery can drive the host-only event.level", async () => {
 		const { trusted, subscriber } = await twoInstances();
 
 		let sawCaller = "unset";
@@ -94,7 +94,7 @@ describe.each(getMatrixConfigs())("Events > cross-instance caller isolation > $n
 			trusted.slothlet.event.on("orders.created", () => {
 				sawCaller = trusted.slothlet.caller();
 				try {
-					resolveOutcome = trusted.slothlet.event.resolveLevel("probe.here", "orders.created");
+					resolveOutcome = trusted.slothlet.event.level("probe.here", "orders.created");
 				} catch (error) {
 					resolveOutcome = `THREW:${error.code || error.name}`;
 				}
@@ -107,7 +107,7 @@ describe.each(getMatrixConfigs())("Events > cross-instance caller isolation > $n
 
 		// The listener ran pinned to the HOST of `trusted`, not to `subscriber`'s leaked probe identity:
 		expect(sawCaller).toBe(null);
-		// so the host-only resolveLevel answered instead of being denied under the leaked identity.
+		// so the host-only event.level answered instead of being denied under the leaked identity.
 		expect(resolveOutcome).toBe("allow");
 	});
 });

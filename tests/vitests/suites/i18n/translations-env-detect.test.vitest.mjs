@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:08-07:00 (1791090908)
+ *	@Last modified time: 2026-11-16T18:30:02-08:00 (1794882602)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -38,8 +38,8 @@
  */
 
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { SlothletWarning } from "@cldmv/slothlet/errors";
 import { setLanguage, setLanguageAsync, getLanguage, initI18n } from "#i18n";
+import { captureWarnings } from "../../setup/warning-capture.mjs";
 
 // ─── env variable save/restore helpers ───────────────────────────────────────
 
@@ -95,21 +95,11 @@ describe("setLanguageAsync() — async locale loading", () => {
 	});
 
 	it("raises a coded warning and falls back to en-us for an unknown locale (#820)", async () => {
-		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-		SlothletWarning.suppressConsole = true;
-		SlothletWarning.clearCaptured();
-		try {
-			await setLanguageAsync("zz-zz");
-			expect(getLanguage()).toBe("en-us");
-			const warnings = SlothletWarning.captured.filter((w) => w.code === "WARNING_LANGUAGE_LOAD_FAILED");
-			expect(warnings).toHaveLength(1);
-			expect(warnings[0].context).toEqual({ lang: "zz-zz" });
-			expect(warn).not.toHaveBeenCalled();
-		} finally {
-			SlothletWarning.suppressConsole = false;
-			SlothletWarning.clearCaptured();
-			warn.mockRestore();
-		}
+		const printed = await captureWarnings(() => setLanguageAsync("zz-zz"));
+		expect(getLanguage()).toBe("en-us");
+		const warnings = printed.filter((w) => w.code === "WARNING_LANGUAGE_LOAD_FAILED");
+		expect(warnings).toHaveLength(1);
+		expect(warnings[0].details).toEqual({ lang: "zz-zz" });
 	});
 
 	it("reports en-us (not the stale prior locale) while a non-default load is pending", async () => {

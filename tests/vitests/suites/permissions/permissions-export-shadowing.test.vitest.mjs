@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:41-07:00 (1791091721)
+ *	@Last modified time: 2026-11-16T18:29:50-08:00 (1794882590)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -56,7 +56,7 @@ describe.each(getMatrixConfigs())("Permissions > exports shadowed by wrapper-own
 	});
 
 	it("reading such an export from another module is permission-gated", async () => {
-		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST_EXPORT_SHADOW, permissions: { defaultPolicy: "deny", rules: [] } });
+		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST_EXPORT_SHADOW, permissions: { policy: "deny", rules: [] } });
 		await expect(readFromModule(api, "label")).rejects.toThrow(/PERMISSION_DENIED/);
 
 		await expect(readFromModule(api, "name")).rejects.toThrow(/PERMISSION_DENIED/);

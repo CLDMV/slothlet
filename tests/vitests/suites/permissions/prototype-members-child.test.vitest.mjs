@@ -2,12 +2,12 @@
  *
  *	@Project: @cldmv/slothlet
  *	@Filename: /tests/vitests/suites/permissions/prototype-members-child.test.vitest.mjs
- *	@Date: 2026-11-16T05:00:00-08:00 (1794834000)
+ *	@Date: 2026-11-16T01:34:54-08:00 (1794821694)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T05:00:00-08:00 (1794834000)
+ *	@Last modified time: 2026-11-16T18:30:50-08:00 (1794882650)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -235,11 +235,11 @@ beforeAll(() => {
 		"};",
 		"const out = {};",
 		"const api = await slothlet({",
-		"\tdir: API, mode, runtime, hook: true, silent: true,",
-		"\tpermissions: { defaultPolicy: 'allow', attribution, rules: [{ caller: 'guest.**', target: 'math.**', effect: 'deny' }] }",
+		"\tbase: API, mode, runtime, hook: true, silent: true,",
+		"\tpermissions: { policy: 'allow', rules: [{ caller: 'guest.**', target: 'math.**', effect: 'deny' }], caller: { attribution } }",
 		"});",
-		"await api.slothlet.api.add('owner', OWNER, { moduleID: 'owner' });",
-		"await api.slothlet.api.add('reader', READER, { moduleID: 'reader' });",
+		"await api.slothlet.api.add('owner', OWNER, { id: 'owner' });",
+		"await api.slothlet.api.add('reader', READER, { id: 'reader' });",
 		"// Every node loaded and every path taken once before anything is replaced.",
 		"await step(() => api.math.add(1, 1));",
 		"await step(() => api.guest.tryMath());",

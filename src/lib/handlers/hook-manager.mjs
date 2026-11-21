@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:09-08:00 (1794874569)
+ *	@Last modified time: 2026-11-17T19:49:35-08:00 (1794973775)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -19,10 +19,12 @@
  * @internal
  */
 
+import { segmentsOf } from "#helpers/segments";
 import { util, inheritsFrom } from "#helpers/platform";
 import { ComponentBase } from "#factories/component-base";
 import { compilePattern } from "#helpers/pattern-matcher";
 import { normalizeHookConfig } from "#helpers/config";
+import { FORK, writeTarget } from "#helpers/flow-stores";
 import { internals as unifiedWrapperInternals } from "#handlers/unified-wrapper";
 import { identityCeilings } from "#handlers/trusted-root";
 import { internals as frameworkInternalsInternals } from "#handlers/framework-internals";
@@ -31,12 +33,13 @@ import {
 	ArrayMethods,
 	Arrays,
 	Boolean,
-	Date,
 	filterList,
 	FunctionMethods,
 	listPush,
 	listSplice,
 	Map,
+	mapEntriesToArray,
+	mapFrom,
 	mapList,
 	MapMethods,
 	mapValues,
@@ -86,7 +89,7 @@ const DEFAULT_HOOK_SUBSET = "primary";
  * pipeline can report the right source once the error escapes the around chain.
  * @callback HookErrorSink
  * @param {*} error - The thrown value.
- * @param {object} source - Error source details (`type`, `subset`, `hookId`, `hookTag`, `timestamp`, `stack`).
+ * @param {object} source - Error origin details (`type`, `subset`, `hook`, `at`, `stack`).
  * @returns {void}
  */
 
@@ -111,7 +114,7 @@ const DEFAULT_HOOK_SUBSET = "primary";
  * @typedef {Object} AroundChainOptions
  * @property {HookAroundCore} core - Innermost stage invoked by the last around hook's `next()`.
  * @property {boolean} isAsync - Whether the call runs the asynchronous pipeline.
- * @property {object|null} caller - Calling module's metadata, or null for an entry call.
+ * @property {{path: string[], module: string|null, metadata: object, version: {tag: string, default: boolean, metadata: object}|null}|null} caller - The calling leaf (its path segments, module id, user metadata and version record), or null for an entry call.
  * @property {boolean} entry - True when the call has no module caller.
  * @property {HookErrorSink} errorSink - Records where each failure originated.
  * @property {HookFlowRunner|null} runInCallerFlow - Restores the call's own identity inside a pinned hook's `next()`.
@@ -212,12 +215,12 @@ const isObjectLike = (value) => value !== null && (typeof value === "object" || 
 /**
  * Extract the original error from a SlothletError wrapper if present.
  * @param {*} error - What was thrown.
- * @returns {*} The SlothletError's original error, otherwise the value itself.
+ * @returns {*} The SlothletError's cause, otherwise the value itself.
  * @public
  */
 export function unwrapThrown(error) {
-	if (error && error.name === "SlothletError" && error.originalError) {
-		return error.originalError;
+	if (error && error.name === "SlothletError" && error.cause) {
+		return error.cause;
 	}
 	return error;
 }
@@ -250,7 +253,7 @@ const typeNameOf = (error) => error?.constructor?.name || "Error";
  * A record of a failure that reads it only as the code that made it, and only when something asks (#599).
  *
  * Unwrapping an error reads its `name`, formatting its stack reads `name` and `message`, and the error hooks'
- * `errorType` reads `constructor` and the class's `name`. Each can be an accessor or a Proxy trap of the module that
+ * `class` reads `constructor` and the class's `name`. Each can be an accessor or a Proxy trap of the module that
  * threw it, so each is read through `runAs` — as that module — and at most once. Nothing is read until it is needed,
  * so a failure no hook looks at runs no more of the error's code than plain JavaScript would.
  *
@@ -397,6 +400,13 @@ const VERSION_BINDING = Symbol("@cldmv/slothlet/hook-version-binding");
  * @class HookManager
  * @extends ComponentBase
  */
+/**
+ * The manager {@link HookManager#[FORK]} is copying, read once by the constructor it calls; null otherwise.
+ * @type {HookManager|null}
+ * @private
+ */
+let forkingFrom = null;
+
 export class HookManager extends ComponentBase {
 	/**
 	 * Property name for auto-discovery
@@ -452,6 +462,12 @@ export class HookManager extends ComponentBase {
 	 */
 	constructor(slothlet) {
 		super(slothlet);
+		const from = forkingFrom;
+		if (from !== null) {
+			forkingFrom = null;
+			this.#copyFrom(from);
+			return;
+		}
 
 		// Read hook configuration from slothlet.config.hook. The HookManager is constructed
 		// during _initializeComponents — BEFORE transformConfig runs — so slothlet.config.hook
@@ -462,9 +478,9 @@ export class HookManager extends ComponentBase {
 
 		this.enabled = hookConfig.enabled;
 		this.defaultPattern = hookConfig.pattern || "**";
-		this.suppressErrors = hookConfig.suppressErrors || false;
+		this.suppressErrors = hookConfig.errors === "suppress";
 
-		// Pin-enforcement policy. When true (default) a per-registration `lockCaller: false` on a
+		// Pin-enforcement policy. When true (default) a per-registration `pin: false` on a
 		// MODULE hook is ignored (force-pinned) — an unpinned module hook runs without an enforced
 		// caller identity and is a permission-bypass vector. Disable via `hook: { pin: false }` or the
 		// host-only runtime switch `api.slothlet.hook.pin.disable()`.
@@ -547,25 +563,25 @@ export class HookManager extends ComponentBase {
 	 * Register a hook for API functions.
 	 *
 	 * @param {string} typePattern - Path pattern then hook type, `"pattern:type"` (e.g. `"math.*:before"`).
-	 *   The legacy `"type:pattern"` form (e.g. `"before:math.*"`) is still accepted but deprecated.
 	 * @param {function} handler - Hook handler function
 	 * @param {object} [options={}] - Hook options
 	 * @param {string} [options.id] - Unique identifier (auto-generated if not provided)
 	 * @param {string} [options.pattern] - Path pattern; overrides the pattern parsed from `typePattern` when supplied
 	 * @param {number} [options.priority=0] - Higher = earlier execution
 	 * @param {string} [options.subset=DEFAULT_HOOK_SUBSET] - Phase: "before", "primary", or "after" ({@link HOOK_SUBSETS})
-	 * @param {boolean} [options.lockCaller=true] - Pin the registering module's caller
+	 * @param {boolean} [options.pin=true] - Pin the registering module's caller
 	 *   identity onto the handler so its `self.*` calls and permission checks are
 	 *   attributed to the module that registered the hook, not the caller whose API
 	 *   call triggered it. On by default; pass `false` to opt out — the handler then
 	 *   runs un-pinned, with whatever async context is ambient when it fires (for a
 	 *   `before` hook, typically none, so a `self.*` call inside it has no context).
 	 *   No effect when the hook is registered outside a module (no caller identity to
-	 *   capture) or when `handler` is already a `lockCaller`-wrapped function.
+	 *   capture) or when `handler` is already a `pin`-wrapped function.
 	 * @param {boolean} [options.async] - Declare the handler asynchronous when its async-ness cannot be detected (a plain function returning a Promise)
-	 * @param {boolean} [options.versioned=false] - Resolve `pattern` (written against the logical path) through the instance's configured `versionDispatcher`,
-	 *   registering against the physical path of each selected version. The returned id is a group id that removes every version's hook.
-	 * @param {function(object, object): (string|string[]|null|undefined)} [options.versionDispatcher] - Per-registration dispatcher, `(allVersions, caller) => tag | tag[] | null`,
+	 * @param {object} [options.versioning] - Version dispatch for the hook's pattern.
+	 * @param {boolean} [options.versioning.enabled=false] - Resolve `pattern` (written against the logical path) through the instance's configured
+	 *   `versioning.dispatcher`, registering against the physical path of each selected version. The returned id is a group id that removes every version's hook.
+	 * @param {function(object, object): (string|string[]|null|undefined)} [options.versioning.dispatcher] - Per-registration dispatcher, `(allVersions, caller) => tag | tag[] | null`,
 	 *   overriding the instance's. Implies versioned registration. Returning nothing takes the default-version resolution a call would.
 	 * @returns {string} Hook ID
 	 * @public
@@ -577,6 +593,8 @@ export class HookManager extends ComponentBase {
 	 * }, { priority: 100 });
 	 */
 	on(typePattern, handler, options = {}) {
+		const written = writeTarget(this);
+		if (written !== this) return written.on(typePattern, handler, options);
 		// Parse typePattern (format: "type:pattern")
 		let { type, pattern } = this.#parseTypePattern(typePattern);
 
@@ -589,9 +607,8 @@ export class HookManager extends ComponentBase {
 
 		// Validate handler
 		if (typeof handler !== "function") {
-			throw new this.slothlet.SlothletError("INVALID_HOOK_HANDLER", {
-				receivedType: typeof handler,
-				validationError: true
+			throw new this.slothlet.SlothletError("HOOK_HANDLER_INVALID", {
+				received: typeof handler
 			});
 		}
 
@@ -603,15 +620,15 @@ export class HookManager extends ComponentBase {
 		// are stored as `id::tag`), so without the second arm a later plain hook could claim the same
 		// id, shadow the group on remove()'s fast path, and strand its members unremovable.
 		if (MapMethods.has(this.#byId, id) || this.#isGroupId(id)) {
-			throw new this.slothlet.SlothletError("DUPLICATE_HOOK_ID", { id, validationError: true });
+			throw new this.slothlet.SlothletError("HOOK_ID_IN_USE", { id });
 		}
 
 		// Get subset (default: primary)
 		const subset = options.subset ?? DEFAULT_HOOK_SUBSET;
 		if (!SetMethods.has(this.#validSubsets, subset)) {
-			throw new this.slothlet.SlothletError("INVALID_HOOK_SUBSET", {
+			throw new this.slothlet.SlothletError("HOOK_SUBSET_INVALID", {
 				subset,
-				validSubsets: setToArray(this.#validSubsets)
+				expected: setToArray(this.#validSubsets)
 			});
 		}
 
@@ -645,26 +662,29 @@ export class HookManager extends ComponentBase {
 
 		// Version-dispatch seam (#250): hook registration resolves through the same dispatcher a call
 		// on the pattern's path would, so hooks and calls can never disagree about which mounted
-		// version a logical path means. `{ versioned: true }` uses the instance's configured
-		// dispatcher; a per-registration `versionDispatcher(allVersions, caller)` overrides it and
+		// version a logical path means. `{ versioning: { enabled: true } }` uses the instance's configured
+		// dispatcher; a per-registration `versioning.dispatcher(allVersions, caller)` overrides it and
 		// may select SEVERAL tags; returning nothing falls back to the same default-version
 		// resolution calls use. One registration per selected tag is delegated below with the
 		// physical (`tag.pattern`) target — each re-entry runs the ordinary permission gate for its
 		// concrete pattern — and the shared group id lets one remove({ id }) unhook them all.
 		const versionBinding = options[VERSION_BINDING] ?? null;
-		if ((options.versioned === true || typeof options.versionDispatcher === "function") && !versionBinding) {
+		const versioning = options.versioning ?? null;
+		const dispatcher = versioning !== null && typeof versioning === "object" ? versioning.dispatcher : undefined;
+		const versioned = versioning !== null && typeof versioning === "object" && versioning.enabled === true;
+		if ((versioned || typeof dispatcher === "function") && !versionBinding) {
 			const versionManager = this.slothlet.handlers?.versionManager;
 			const logicalPath = versionManager?.findLogicalPathFor?.(pattern) ?? null;
 			const registered = logicalPath ? versionManager.list(logicalPath) : undefined;
 			if (!registered) {
-				throw new this.SlothletError("HOOK_VERSION_UNRESOLVED", { pattern }, null, { validationError: true });
+				throw new this.SlothletError("HOOK_VERSION_UNRESOLVED", { pattern });
 			}
 			const allVersions = versionManager.buildAllVersionsArg(logicalPath);
 			const callerArg = versionManager.buildCallerArg(ownerWrapper);
 			let selected;
-			if (typeof options.versionDispatcher === "function") {
+			if (typeof dispatcher === "function") {
 				try {
-					selected = options.versionDispatcher(allVersions, callerArg);
+					selected = dispatcher(allVersions, callerArg);
 				} catch {
 					selected = null;
 				}
@@ -674,7 +694,7 @@ export class HookManager extends ComponentBase {
 			// Copy an array the dispatcher returned rather than aliasing it: the empty-selection
 			// fallback below pushes the default tag, which would otherwise mutate the caller's own
 			// array as a side effect of registering. De-duplicated at the same time — a dispatcher
-			// naming the same tag twice means one registration for that tag, not a DUPLICATE_HOOK_ID
+			// naming the same tag twice means one registration for that tag, not a HOOK_ID_IN_USE
 			// failure on a member id the caller never chose.
 			const tags = selected == null ? [] : Arrays.isArray(selected) ? setToArray(setFrom(selected)) : [selected];
 			if (tags.length === 0) {
@@ -685,7 +705,7 @@ export class HookManager extends ComponentBase {
 				const defaultTag = versionManager.getDefaultVersion(logicalPath);
 				/* v8 ignore next 3 */
 				if (defaultTag == null) {
-					throw new this.SlothletError("HOOK_VERSION_UNRESOLVED", { pattern }, null, { validationError: true });
+					throw new this.SlothletError("HOOK_VERSION_UNRESOLVED", { pattern });
 				}
 				listPush(tags, defaultTag);
 			}
@@ -695,7 +715,7 @@ export class HookManager extends ComponentBase {
 				// "toString" or "constructor" would resolve up the prototype chain to a truthy value and
 				// register a hook against a physical path that was never mounted.
 				if (typeof tag !== "string" || !Objects.hasOwn(registered.versions, tag)) {
-					throw new this.SlothletError("HOOK_VERSION_UNKNOWN_TAG", { pattern, version: String(tag) }, null, { validationError: true });
+					throw new this.SlothletError("HOOK_VERSION_UNKNOWN_TAG", { pattern, version: String(tag) });
 				}
 			}
 			const groupId = id;
@@ -708,8 +728,7 @@ export class HookManager extends ComponentBase {
 						this.on(`${tag}.${pattern}:${type}`, handler, {
 							...options,
 							pattern: undefined,
-							versioned: undefined,
-							versionDispatcher: undefined,
+							versioning: undefined,
 							id: `${groupId}::${tag}`,
 							[VERSION_BINDING]: { groupId, version: tag }
 						})
@@ -740,7 +759,7 @@ export class HookManager extends ComponentBase {
 			if (!permissionManager.enforceHookAccess(ownerPath, pattern, type, ownerFilePath, null, runtimeContext)) {
 				throw new this.slothlet.SlothletError("PERMISSION_DENIED", {
 					caller: ownerPath,
-					target: `${pattern}:${type}`
+					target: segmentsOf(`${pattern}:${type}`)
 				});
 			}
 			for (let i = 0; i < ownerCeilings.length; i++) {
@@ -751,7 +770,7 @@ export class HookManager extends ComponentBase {
 				) {
 					throw new this.slothlet.SlothletError("PERMISSION_DENIED", {
 						caller: ceiling.path,
-						target: `${pattern}:${type}`
+						target: segmentsOf(`${pattern}:${type}`)
 					});
 				}
 			}
@@ -761,15 +780,13 @@ export class HookManager extends ComponentBase {
 		// self.*/permission checks to the module that registered the hook rather than
 		// to whichever caller's API call triggered it. #pinHandler is a no-op when the
 		// hook is registered outside a module or the handler is already locked.
-		let lockCaller = options.lockCaller !== false;
+		let lockCaller = options.pin !== false;
 		// Force-pin module hooks while pin enforcement is on (the default): an unpinned module hook
 		// runs with no enforced caller identity and could reach denied paths through the bound `api`.
 		// Host hooks (no owner) are unaffected — #pinHandler is already a no-op without a caller.
 		if (!lockCaller && ownerWrapper && this.pinEnforced) {
 			lockCaller = true;
-			if (!this.slothlet.config?.silent) {
-				new this.SlothletWarning("HOOK_UNPINNED_IGNORED", { pattern });
-			}
+			new this.SlothletWarning("WARNING_HOOK_UNPINNED_IGNORED", { pattern });
 		}
 		// Async-ness is a property of the AUTHOR'S function, so it is read off the original before
 		// pinning wraps it in a plain function (a pre-locked handler exposes its original the same
@@ -779,7 +796,7 @@ export class HookManager extends ComponentBase {
 		// the conservative direction is: undeclared and undetected means the sync pipeline, which now
 		// fails loudly rather than corrupting (HOOK_AFTER_RETURNED_PROMISE).
 		const handlerIsAsync =
-			options.async === true || util.types.isAsyncFunction(runtime_isCallerLocked(handler) ? handler._slothletOriginal : handler);
+			options.async === true || util.types.isAsyncFunction(runtime_isCallerLocked(handler) ? handler.____slothletOriginal : handler);
 		let effectiveHandler = lockCaller ? this.#pinHandler(handler) : handler;
 		// A handler pinned to a module is handed its payload as that module reads the api through `self`:
 		// its own views of the call's nodes and a root view as `api`, never the values themselves (#625).
@@ -831,15 +848,15 @@ export class HookManager extends ComponentBase {
 	/**
 	 * Pin the registering module's caller identity onto a hook handler.
 	 *
-	 * Mirrors `self.slothlet.lockCaller()`: captures the `currentWrapper` active at
+	 * Mirrors `self.slothlet.pin()`: captures the `currentWrapper` active at
 	 * registration time and, on every invocation, runs the handler with that caller
 	 * identity restored — so the handler's `self.*` calls and permission checks are
 	 * attributed to the module that registered the hook, not to whichever caller
 	 * triggered the intercepted API path.
 	 *
 	 * No-op passthrough when there is nothing to pin: the hook was registered outside
-	 * a module (no `currentWrapper`), or `handler` is already a `lockCaller`-wrapped
-	 * function (it carries `_slothletOriginal`) — in which case the existing lock is
+	 * a module (no `currentWrapper`), or `handler` is already a `pin`-wrapped
+	 * function (it carries `____slothletOriginal`) — in which case the existing lock is
 	 * respected rather than double-wrapped. This also makes re-registration after a
 	 * full reload (via {@link exportHooks}/{@link importHooks}) idempotent.
 	 *
@@ -850,8 +867,8 @@ export class HookManager extends ComponentBase {
 	 *   nothing to pin.
 	 */
 	#pinHandler(handler) {
-		// Already locked (manual lockCaller, or a re-registered hook) — respect it. Known by the framework's own
-		// record, never by a property: a module can put `_slothletOriginal` on any function (#625).
+		// Already locked (manual pin, or a re-registered hook) — respect it. Known by the framework's own
+		// record, never by a property: a module can put `____slothletOriginal` on any function (#625).
 		if (runtime_isCallerLocked(handler)) return handler;
 
 		// `slothlet` is the long-lived instance object; a full reload() swaps both
@@ -873,8 +890,8 @@ export class HookManager extends ComponentBase {
 			// error-hook pipeline sees the original type/code, not CONTEXT_EXECUTION_FAILED.
 			return slothlet.contextManager.runInContext(slothlet.instanceID, handler, this, args, capturedWrapper, true, false, capturedCeiling);
 		};
-		// Parity with lockCaller / the EventEmitter patch metadata.
-		pinned._slothletOriginal = handler;
+		// Parity with pin / the EventEmitter patch metadata.
+		pinned.____slothletOriginal = handler;
 		return runtime_markCallerLocked(pinned);
 	}
 
@@ -889,6 +906,8 @@ export class HookManager extends ComponentBase {
 	 * @public
 	 */
 	remove(filter = {}) {
+		const written = writeTarget(this);
+		if (written !== this) return written.remove(filter);
 		let removed = 0;
 
 		// Filter by ID (fast path)
@@ -962,6 +981,8 @@ export class HookManager extends ComponentBase {
 	 * @public
 	 */
 	enable(filter = {}) {
+		const written = writeTarget(this);
+		if (written !== this) return written.enable(filter);
 		// Support string pattern shorthand
 		if (typeof filter === "string") {
 			filter = { pattern: filter };
@@ -984,6 +1005,8 @@ export class HookManager extends ComponentBase {
 	 * @public
 	 */
 	disable(filter = {}) {
+		const written = writeTarget(this);
+		if (written !== this) return written.disable(filter);
 		// Support string pattern shorthand
 		if (typeof filter === "string") {
 			filter = { pattern: filter };
@@ -1010,9 +1033,11 @@ export class HookManager extends ComponentBase {
 	 * @public
 	 *
 	 * @example
-	 * api.slothlet.hook.enablePattern("database.*"); // only intercept database.* paths
+	 * api.slothlet.hook.pattern.enable("database.*"); // only intercept database.* paths
 	 */
 	enablePattern(pattern) {
+		const written = writeTarget(this);
+		if (written !== this) return written.enablePattern(pattern);
 		// Validate by compiling (throws on malformed patterns, consistent with on()).
 		this.#compilePattern(pattern);
 		if (!SetMethods.has(this.enabledPatterns, pattern)) {
@@ -1037,9 +1062,11 @@ export class HookManager extends ComponentBase {
 	 * @public
 	 *
 	 * @example
-	 * api.slothlet.hook.disablePattern("database.*"); // stop restricting to database.*
+	 * api.slothlet.hook.pattern.disable("database.*"); // stop restricting to database.*
 	 */
 	disablePattern(pattern) {
+		const written = writeTarget(this);
+		if (written !== this) return written.disablePattern(pattern);
 		const removed = SetMethods.delete(this.enabledPatterns, pattern);
 		MapMethods.delete(this.#globalFilterCache, pattern);
 		if (SetMethods.size(this.enabledPatterns) === 0) {
@@ -1064,6 +1091,8 @@ export class HookManager extends ComponentBase {
 	 * @public
 	 */
 	resetPatternFilter() {
+		const written = writeTarget(this);
+		if (written !== this) return written.resetPatternFilter();
 		SetMethods.clear(this.enabledPatterns);
 		MapMethods.clear(this.#globalFilterCache);
 		this.patternFilterActive = false;
@@ -1077,7 +1106,7 @@ export class HookManager extends ComponentBase {
 	/**
 	 * Set the pin-enforcement policy at runtime (backs `api.slothlet.hook.pin.enable`/`disable`).
 	 * When true (the default) module hooks are force-pinned to their owner; false permits a
-	 * per-registration `lockCaller: false`. The public wrapper is host-only when permissions are
+	 * per-registration `pin: false`. The public wrapper is host-only when permissions are
 	 * enabled — `slothlet.hook.pin.*` falls under the `slothlet.hook.**` deny baseline.
 	 *
 	 * @param {boolean} value - True to enforce pinning (force-pin module hooks), false to permit unpinned.
@@ -1085,6 +1114,8 @@ export class HookManager extends ComponentBase {
 	 * @public
 	 */
 	setPinEnforced(value) {
+		const written = writeTarget(this);
+		if (written !== this) return written.setPinEnforced(value);
 		this.pinEnforced = value === true;
 		return this.pinEnforced;
 	}
@@ -1344,7 +1375,7 @@ export class HookManager extends ComponentBase {
 
 				// Before hooks must be synchronous - reject Promises
 				if (result && typeof result === "object" && typeof result.then === "function") {
-					throw new this.SlothletError("HOOK_BEFORE_RETURNED_PROMISE", { id: hook.id, path }, null, { validationError: true });
+					throw new this.SlothletError("HOOK_BEFORE_RETURNED_PROMISE", { id: hook.id, path });
 				}
 
 				// Check for short-circuit (hook returns value directly)
@@ -1359,7 +1390,7 @@ export class HookManager extends ComponentBase {
 			} catch (error) {
 				// Execute error hooks for before hook failure
 				const sourceInfo = failureSource(
-					{ type: "before", subset: hook.subset, hookTag: hook.id, hookId: hook.id, timestamp: this.clock.now() },
+					{ type: "before", subset: hook.subset, hook: hook.id, at: this.clock.now() },
 					this.failureOf(error)
 				);
 				// Inside an around pipeline the observers sit OUTSIDE the around chain: the failure is
@@ -1426,7 +1457,7 @@ export class HookManager extends ComponentBase {
 				// attribution across the permission suites. Every `.then` test on a value path in this
 				// codebase is object-only for the same reason; don't "fix" them.
 				if (transformed && typeof transformed === "object" && typeof transformed.then === "function") {
-					throw new this.SlothletError("HOOK_AFTER_RETURNED_PROMISE", { id: hook.id, path }, null, { validationError: true });
+					throw new this.SlothletError("HOOK_AFTER_RETURNED_PROMISE", { id: hook.id, path });
 				}
 
 				// Hook can transform result by returning a value
@@ -1436,7 +1467,7 @@ export class HookManager extends ComponentBase {
 			} catch (error) {
 				// Execute error hooks for after hook failure
 				const sourceInfo = failureSource(
-					{ type: "after", subset: hook.subset, hookTag: hook.id, hookId: hook.id, timestamp: this.clock.now() },
+					{ type: "after", subset: hook.subset, hook: hook.id, at: this.clock.now() },
 					this.failureOf(error)
 				);
 				// Inside an around pipeline the observers sit OUTSIDE the around chain: the failure is
@@ -1503,7 +1534,7 @@ export class HookManager extends ComponentBase {
 			} catch (error) {
 				// Execute error hooks for before hook failure
 				const sourceInfo = failureSource(
-					{ type: "before", subset: hook.subset, hookTag: hook.id, hookId: hook.id, timestamp: this.clock.now() },
+					{ type: "before", subset: hook.subset, hook: hook.id, at: this.clock.now() },
 					this.failureOf(error)
 				);
 				// Inside an around pipeline the observers sit OUTSIDE the around chain: the failure is
@@ -1563,7 +1594,7 @@ export class HookManager extends ComponentBase {
 			} catch (error) {
 				// Execute error hooks for after hook failure
 				const sourceInfo = failureSource(
-					{ type: "after", subset: hook.subset, hookTag: hook.id, hookId: hook.id, timestamp: this.clock.now() },
+					{ type: "after", subset: hook.subset, hook: hook.id, at: this.clock.now() },
 					this.failureOf(error)
 				);
 				// Inside an around pipeline the observers sit OUTSIDE the around chain: the failure is
@@ -1718,13 +1749,7 @@ export class HookManager extends ComponentBase {
 
 		// The stack is read from the failure's record, as the code it belongs to (#599).
 		const sinkAround = (hook, error) =>
-			errorSink(
-				error,
-				failureSource(
-					{ type: "around", subset: hook.subset, hookTag: hook.id, hookId: hook.id, timestamp: this.clock.now() },
-					this.failureOf(error)
-				)
-			);
+			errorSink(error, failureSource({ type: "around", subset: hook.subset, hook: hook.id, at: this.clock.now() }, this.failureOf(error)));
 
 		// Any thenable a handler returns other than next()'s own (`next().then(check)`, or another): a rejection
 		// of it is this hook's failure unless the target or an inner hook already reported it, which keeps its
@@ -1740,9 +1765,8 @@ export class HookManager extends ComponentBase {
 					onUnobserved({
 						type: "around",
 						subset: hook.subset,
-						hookTag: hook.id,
-						hookId: hook.id,
-						timestamp: this.clock.now(),
+						hook: hook.id,
+						at: this.clock.now(),
 						stack: undefined
 					})
 			);
@@ -1751,12 +1775,10 @@ export class HookManager extends ComponentBase {
 		// handed back so the synchronous pipeline can tell whether `next()` returned a thenable.
 		const makeNext = (hook, index, currentArgs, state, invoke) => (nextArgs) => {
 			if (state.called) {
-				throw new this.SlothletError("HOOK_AROUND_NEXT_CALLED_TWICE", { id: hook.id, path }, null, { validationError: true });
+				throw new this.SlothletError("HOOK_AROUND_NEXT_CALLED_TWICE", { id: hook.id, path });
 			}
 			if (nextArgs !== undefined && !Arrays.isArray(nextArgs)) {
-				throw new this.SlothletError("HOOK_AROUND_NEXT_INVALID_ARGS", { id: hook.id, path, received: typeof nextArgs }, null, {
-					validationError: true
-				});
+				throw new this.SlothletError("HOOK_AROUND_NEXT_INVALID_ARGS", { id: hook.id, path, received: typeof nextArgs });
 			}
 			state.called = true;
 			const forwarded = nextArgs === undefined ? currentArgs : nextArgs;
@@ -1798,7 +1820,7 @@ export class HookManager extends ComponentBase {
 				// A thenable is accepted only when next() was called and itself returned one: the caller already
 				// gets a thenable then, so whatever thenable the handler returns adds no asynchrony the target did not.
 				if (!(state.called && returned && typeof returned === "object" && typeof returned.then === "function")) {
-					throw new this.SlothletError("HOOK_AROUND_RETURNED_PROMISE", { id: hook.id, path }, null, { validationError: true });
+					throw new this.SlothletError("HOOK_AROUND_RETURNED_PROMISE", { id: hook.id, path });
 				}
 				if (result === returned) return result;
 				return observeReturnedThenable(hook, result);
@@ -1832,7 +1854,6 @@ export class HookManager extends ComponentBase {
 					path,
 					args,
 					result: hasError ? undefined : resultOrError,
-					hasError,
 					errors: errors,
 					api,
 					ctx,
@@ -1841,7 +1862,7 @@ export class HookManager extends ComponentBase {
 			} catch (error) {
 				// Execute error hooks for always hook failure
 				const sourceInfo = failureSource(
-					{ type: "always", subset: hook.subset, hookTag: hook.id, hookId: hook.id, timestamp: this.clock.now() },
+					{ type: "always", subset: hook.subset, hook: hook.id, at: this.clock.now() },
 					this.failureOf(error)
 				);
 				this.executeErrorHooks(path, error, sourceInfo, args, api, ctx);
@@ -1872,7 +1893,7 @@ export class HookManager extends ComponentBase {
 	 *
 	 * @param {string} path - API path being called
 	 * @param {Error} error - The error that occurred
-	 * @param {object} source - Error source info with type, hookTag, hookId, timestamp, stack
+	 * @param {object} source - Error origin: `type`, `subset`, `hook` (the hook id), `at` (a clock time) and `stack`
 	 * @param {Array} args - Function arguments
 	 * @param {object} api - Bound API object
 	 * @param {object} ctx - User context object
@@ -1893,9 +1914,9 @@ export class HookManager extends ComponentBase {
 					path,
 					args,
 					error,
-					errorType,
-					source,
-					timestamp: new Date(this.clock.now()),
+					class: errorType,
+					origin: source,
+					at: this.clock.now(),
 					api,
 					ctx,
 					version: hook.version
@@ -1915,12 +1936,8 @@ export class HookManager extends ComponentBase {
 	 * This matches the suffix form used by permission rule targets, so a hook and the permission
 	 * that gates it read identically.
 	 *
-	 * The legacy `type:pattern` form (type first, e.g. `"before:math.*"`) is still parsed for
-	 * backward compatibility but emits a `HOOK_TYPEPATTERN_PREFIX_DEPRECATED` warning (suppressed by
-	 * `silent: true`) and will be removed in v4. Detection prefers the new form: a valid trailing
-	 * type is read as suffix form (no warning); otherwise a valid leading type is read as the
-	 * deprecated prefix form (warning). The sole ambiguous input — a path literally named after a
-	 * hook type used with the legacy form (e.g. `"error:before"`) — resolves to the suffix reading.
+	 * A type-first string (`"before:math.*"`) names no hook type at its end and is refused like any
+	 * other string without one.
 	 *
 	 * @param {string} typePattern - Combined path pattern and type (e.g. "math.*:before").
 	 * @returns {{ type: string, pattern: string }} Parsed hook type and path pattern.
@@ -1928,16 +1945,16 @@ export class HookManager extends ComponentBase {
 	 */
 	#parseTypePattern(typePattern) {
 		if (typeof typePattern !== "string") {
-			throw new this.slothlet.SlothletError("INVALID_TYPE_PATTERN", {
-				typePattern,
+			throw new this.slothlet.SlothletError("HOOK_PATTERN_INVALID", {
+				received: typePattern,
 				expected: "expected a string in the form 'pattern:type' (e.g. 'math.*:before')"
 			});
 		}
 
 		const firstColon = StringMethods.indexOf(typePattern, ":");
 		if (firstColon === -1) {
-			throw new this.slothlet.SlothletError("INVALID_TYPE_PATTERN", {
-				typePattern,
+			throw new this.slothlet.SlothletError("HOOK_PATTERN_INVALID", {
+				received: typePattern,
 				expected: "missing ':' — use 'pattern:type' (e.g. 'math.*:before')"
 			});
 		}
@@ -1949,37 +1966,17 @@ export class HookManager extends ComponentBase {
 		if (SetMethods.has(this.#validTypes, trailing)) {
 			const pattern = StringMethods.substring(typePattern, 0, lastColon);
 			if (!pattern) {
-				throw new this.slothlet.SlothletError("INVALID_TYPE_PATTERN", {
-					typePattern,
+				throw new this.slothlet.SlothletError("HOOK_PATTERN_INVALID", {
+					received: typePattern,
 					expected: "empty path pattern — use 'pattern:type' (e.g. 'math.*:before')"
 				});
 			}
 			return { type: trailing, pattern };
 		}
 
-		// Deprecated prefix form: type:pattern — the leading token is a known hook type.
-		const leading = StringMethods.substring(typePattern, 0, firstColon);
-		if (SetMethods.has(this.#validTypes, leading)) {
-			const pattern = StringMethods.substring(typePattern, firstColon + 1);
-			if (!pattern) {
-				throw new this.slothlet.SlothletError("INVALID_TYPE_PATTERN", {
-					typePattern,
-					expected: "empty path pattern — use 'pattern:type' (e.g. 'math.*:before')"
-				});
-			}
-			// Deprecation: nudge toward the canonical suffix form. Suppressed by `silent`.
-			if (!this.slothlet.config?.silent) {
-				new this.SlothletWarning("HOOK_TYPEPATTERN_PREFIX_DEPRECATED", {
-					given: typePattern,
-					suggested: `${pattern}:${leading}`
-				});
-			}
-			return { type: leading, pattern };
-		}
-
-		// Neither end names a hook type.
-		throw new this.slothlet.SlothletError("INVALID_TYPE_PATTERN", {
-			typePattern,
+		// The string does not end with a hook type.
+		throw new this.slothlet.SlothletError("HOOK_PATTERN_INVALID", {
+			received: typePattern,
 			expected: `no hook type found — end with one of: ${ArrayMethods.join(setToArray(this.#validTypes), ", ")} (e.g. 'math.*:before')`
 		});
 	}
@@ -1995,7 +1992,7 @@ export class HookManager extends ComponentBase {
 	#compilePattern(pattern) {
 		return compilePattern(pattern, {
 			onMaxDepth: (maxDepth) => {
-				throw new this.SlothletError("HOOK_BRACE_EXPANSION_MAX_DEPTH", { maxDepth }, null, { validationError: true });
+				throw new this.SlothletError("HOOK_BRACE_EXPANSION_MAX_DEPTH", { depth: maxDepth });
 			}
 		});
 	}
@@ -2072,7 +2069,7 @@ export class HookManager extends ComponentBase {
 		/* v8 ignore next */
 		if (!patternHooks) {
 			throw new this.slothlet.SlothletError("INTERNAL_HOOK_STATE_CORRUPT", {
-				hookId: hook.id,
+				id: hook.id,
 				type: hook.type,
 				subset: hook.subset,
 				pattern: hook.pattern,
@@ -2090,7 +2087,7 @@ export class HookManager extends ComponentBase {
 		/* v8 ignore next */
 		if (index === -1) {
 			throw new this.slothlet.SlothletError("INTERNAL_HOOK_STATE_CORRUPT", {
-				hookId: hook.id,
+				id: hook.id,
 				type: hook.type,
 				subset: hook.subset,
 				pattern: hook.pattern,
@@ -2230,10 +2227,10 @@ export class HookManager extends ComponentBase {
 					priority: hook.priority,
 					subset: hook.subset,
 					// Preserve an explicit opt-out across reload. The exported handler is
-					// already in final form (pinned handlers carry _slothletOriginal, so
+					// already in final form (pinned handlers carry ____slothletOriginal, so
 					// re-registration is idempotent), so this only keeps the hook object's
 					// lockCaller flag accurate for introspection.
-					lockCaller: hook.lockCaller,
+					pin: hook.lockCaller,
 					// Preserve async-ness across reload: a handler declared `{ async: true }` for a
 					// detection blind spot must not silently demote to the sync pipeline at replay —
 					// exactly the stale-strategy class the epoch cache exists to prevent.
@@ -2268,6 +2265,8 @@ export class HookManager extends ComponentBase {
 	 * @public
 	 */
 	importHooks(registrations) {
+		const written = writeTarget(this);
+		if (written !== this) return written.importHooks(registrations);
 		if (!Arrays.isArray(registrations)) return;
 		for (let ofIndex = 0, ofList = registrations; ofIndex < ofList.length; ofIndex++) {
 			const reg = ofList[ofIndex];
@@ -2291,10 +2290,60 @@ export class HookManager extends ComponentBase {
 	}
 
 	/**
+	 * A copy of this manager for a `run()` / `scope()` (see `FORK` in `helpers/flow-stores`): its hooks, their enabled
+	 * states, the path filter and the pin switch, which later changes to either leave the other as it is. Each hook
+	 * record is copied (enable / disable change a record); the per-path strategies are worked out again.
+	 * @returns {HookManager} The copy.
+	 * @internal
+	 */
+	[FORK]() {
+		forkingFrom = this;
+		return new HookManager(this.slothlet);
+	}
+
+	/**
+	 * Fill a new manager from the one it is a copy of (see {@link HookManager#[FORK]}).
+	 * @param {HookManager} from - The manager copied.
+	 * @returns {void}
+	 * @private
+	 */
+	#copyFrom(from) {
+		this.enabled = from.enabled;
+		this.defaultPattern = from.defaultPattern;
+		this.suppressErrors = from.suppressErrors;
+		this.pinEnforced = from.pinEnforced;
+		this.enabledPatterns = setFrom(setToArray(from.enabledPatterns));
+		this.patternFilterActive = from.patternFilterActive;
+		this.hooks = mapFrom(mapEntriesToArray(from.hooks));
+		this.registrationOrder = from.registrationOrder;
+		// What was reported is reported once, whichever copy reports it.
+		this.reportedErrors = from.reportedErrors;
+		this.#idCounter = from.#idCounter;
+		for (let typeIndex = 0, types = Objects.keys(from.#hooks); typeIndex < types.length; typeIndex++) {
+			const type = types[typeIndex];
+			for (let subsetIndex = 0, subsets = Objects.keys(from.#hooks[type]); subsetIndex < subsets.length; subsetIndex++) {
+				const subset = subsets[subsetIndex];
+				const source = from.#hooks[type][subset];
+				const copy = this.#hooks[type][subset];
+				for (let patternIndex = 0, patterns = Objects.keys(source); patternIndex < patterns.length; patternIndex++) {
+					const pattern = patterns[patternIndex];
+					copy[pattern] = mapList(source[pattern], (hook) => {
+						const own = { ...hook };
+						MapMethods.set(this.#byId, own.id, own);
+						return own;
+					});
+				}
+			}
+		}
+	}
+
+	/**
 	 * Cleanup hook manager on shutdown.
 	 * @public
 	 */
 	async shutdown() {
+		// The instance's teardown of its own handler: the copies that hold it keep theirs.
+		writeTarget(this, true);
 		// Clear all hooks
 		this.#hooks = {
 			before: { before: {}, primary: {}, after: {} },

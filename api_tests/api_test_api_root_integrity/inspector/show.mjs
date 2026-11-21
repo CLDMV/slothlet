@@ -14,7 +14,7 @@
  */
 
 /**
- * @fileoverview Inspects the api root through `self` and through `self.slothlet.diag.getAPI()`, and lists the keys
+ * @fileoverview Inspects the api root through `self` and through `self.slothlet.diag.api()`, and lists the keys
  * the same route gives.
  * @module api_test_api_root_integrity/inspector/show
  */
@@ -24,10 +24,10 @@ import util from "node:util";
 
 /**
  * What `util.inspect` shows of the root through a route, and the keys the route lists.
- * @param {"self"|"api"} via - Through `self` or `self.slothlet.diag.getAPI()`.
+ * @param {"self"|"api"} via - Through `self` or `self.slothlet.diag.api()`.
  * @returns {{shown: string, keys: string[]}} Both.
  */
 export function show(via) {
-	const root = via === "api" ? self.slothlet.diag.getAPI() : self;
+	const root = via === "api" ? self.slothlet.diag.api() : self;
 	return { shown: util.inspect(root, { depth: 0 }), keys: Object.keys(root) };
 }

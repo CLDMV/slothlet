@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-26T02:52:50-07:00 (1793008370)
+ *	@Last modified time: 2026-11-16T18:30:02-08:00 (1794882602)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -75,11 +75,11 @@ describe.each(CONFIGS)("aliases a module stores (#625) — $mode / $runtime", ({
 				mode,
 				runtime,
 				silent: true,
-				api: { mutations: { allowCollisionOverride: true } },
+				api: { collision: { override: true } },
 				...options
 			});
-			await api.slothlet.api.add("victim", VICTIM, { moduleID: "victim" });
-			await api.slothlet.api.add("guest", GUEST, { moduleID: "guest" });
+			await api.slothlet.api.add("victim", VICTIM, { id: "victim" });
+			await api.slothlet.api.add("guest", GUEST, { id: "guest" });
 			expect(await api.guest.x.storeAlias("guest.x", "ref", "victim.v")).toBe("done");
 			return api;
 		}
@@ -102,16 +102,14 @@ describe.each(CONFIGS)("aliases a module stores (#625) — $mode / $runtime", ({
 		});
 
 		it.each([
-			["merge", { collisionMode: "merge" }],
-			["replace", { collisionMode: "replace" }],
-			["forceOverwrite", { forceOverwrite: true }],
+			["merge", { collision: { mode: "merge" } }],
+			["replace", { collision: { mode: "replace" } }],
+			["forceOverwrite", { collision: { force: true } }],
 			["default", {}]
 		])("holds an add through the alias into the aliased node to the rule for that node (%s)", async (label, addOptions) => {
 			await load();
 			expect(await withSuppressedSlothletErrorOutput(() => api.guest.x.addInjected("guest.x.ref", "planted", addOptions))).toBe(WRITE);
-			expect(await withSuppressedSlothletErrorOutput(() => api.guest.x.addAt("guest.x.ref.deep", HOLDER, { moduleID: "deep" }))).toBe(
-				WRITE
-			);
+			expect(await withSuppressedSlothletErrorOutput(() => api.guest.x.addAt("guest.x.ref.deep", HOLDER, { id: "deep" }))).toBe(WRITE);
 			if (refused) {
 				await victimIntact();
 				expect(api.victim.v.deep).toBeUndefined();
@@ -127,7 +125,7 @@ describe.each(CONFIGS)("aliases a module stores (#625) — $mode / $runtime", ({
 			await load();
 			expect(await withSuppressedSlothletErrorOutput(() => api.guest.x.callSetter("setFor", "guest.x.ref"))).toBe(WRITE);
 			expect(await withSuppressedSlothletErrorOutput(() => api.guest.x.callSetter("reload", "guest.x.ref"))).toBe(WRITE);
-			expect(api.slothlet.metadata.getFor("victim.v").planted).toBeUndefined();
+			expect(api.slothlet.metadata.get("victim.v").planted).toBeUndefined();
 			await victimIntact();
 		});
 
@@ -162,7 +160,7 @@ describe.each(CONFIGS)("aliases a module stores (#625) — $mode / $runtime", ({
 		it("treats an alias to the module's own node as that node", async () => {
 			await load();
 			expect(await api.guest.x.storeAlias("guest", "mine", "guest.x")).toBe("done");
-			expect(await api.guest.x.addInjected("guest.mine", "planted", { collisionMode: "merge" })).toBe("done");
+			expect(await api.guest.x.addInjected("guest.mine", "planted", { collision: { mode: "merge" } })).toBe("done");
 			expect(await api.guest.x.planted.injected()).toBe("injected");
 			expect(await api.guest.x.removeAt("guest.mine")).toBe(true);
 			expect(api.guest.mine).toBeUndefined();
@@ -176,7 +174,7 @@ describe.each(CONFIGS)("aliases a module stores (#625) — $mode / $runtime", ({
 			 */
 			async function loadVersioned() {
 				await load();
-				await api.slothlet.api.add("victim.lib", VICTIM, { moduleID: "vl1" }, { version: "v1" });
+				await api.slothlet.api.add("victim.lib", VICTIM, { id: "vl1", version: { tag: "v1" } });
 				return api;
 			}
 
@@ -197,8 +195,10 @@ describe.each(CONFIGS)("aliases a module stores (#625) — $mode / $runtime", ({
 			])("holds an add through %s to the rule for the node it reaches", async (_label, store, at) => {
 				await load();
 				expect(await store(api.guest.x)).toBe("done");
-				expect(await withSuppressedSlothletErrorOutput(() => api.guest.x.addAt(`${at}.zz`, HOLDER, { moduleID: "gz" }))).toBe(WRITE);
-				expect(await withSuppressedSlothletErrorOutput(() => api.guest.x.addInjected(at, "zz", { collisionMode: "merge" }))).toBe(WRITE);
+				expect(await withSuppressedSlothletErrorOutput(() => api.guest.x.addAt(`${at}.zz`, HOLDER, { id: "gz" }))).toBe(WRITE);
+				expect(await withSuppressedSlothletErrorOutput(() => api.guest.x.addInjected(at, "zz", { collision: { mode: "merge" } }))).toBe(
+					WRITE
+				);
 				expect(typeof api.victim.v.zz).toBe(refused ? "undefined" : "object");
 				await victimIntact();
 				// What landed is mounted under its own moduleID, so removing the module that added it leaves it.
@@ -210,7 +210,7 @@ describe.each(CONFIGS)("aliases a module stores (#625) — $mode / $runtime", ({
 			it("holds the setters through a getter to the rule for the node it reaches, and removes nothing through it", async () => {
 				await load();
 				expect(await api.guest.x.defineGetterAlias("guest.x", "g", "victim.v")).toBe("done");
-				api.slothlet.metadata.setFor("victim.v", "kept", 1);
+				api.slothlet.metadata.set("victim.v", "kept", 1);
 				for (const what of ["setFor", "removeFor", "reload"]) {
 					expect({ what, outcome: await withSuppressedSlothletErrorOutput(() => api.guest.x.callSetter(what, "guest.x.g")) }).toEqual({
 						what,
@@ -218,18 +218,18 @@ describe.each(CONFIGS)("aliases a module stores (#625) — $mode / $runtime", ({
 					});
 				}
 				expect(await withSuppressedSlothletErrorOutput(() => api.guest.x.removeAt("guest.x.g.secret"))).toBe(false);
-				expect(api.slothlet.metadata.getFor("victim.v").kept).toBe(1);
-				expect(api.slothlet.metadata.getFor("victim.v").planted).toBeUndefined();
+				expect(api.slothlet.metadata.get("victim.v").kept).toBe(1);
+				expect(api.slothlet.metadata.get("victim.v").planted).toBeUndefined();
 				await victimIntact();
 			});
 
 			it("holds an add through a version dispatcher stored as an alias to the rule for the version it reaches, before and after the host removes the module", async () => {
 				await loadVersioned();
 				expect(await api.guest.x.storeAlias("guest.x", "vl", "victim.lib")).toBe("done");
-				expect(await withSuppressedSlothletErrorOutput(() => api.guest.x.addAt("guest.x.vl.v.zz", HOLDER, { moduleID: "vz" }))).toBe(WRITE);
-				expect(await withSuppressedSlothletErrorOutput(() => api.guest.x.addInjected("guest.x.vl", "zz", { collisionMode: "merge" }))).toBe(
-					WRITE
-				);
+				expect(await withSuppressedSlothletErrorOutput(() => api.guest.x.addAt("guest.x.vl.v.zz", HOLDER, { id: "vz" }))).toBe(WRITE);
+				expect(
+					await withSuppressedSlothletErrorOutput(() => api.guest.x.addInjected("guest.x.vl", "zz", { collision: { mode: "merge" } }))
+				).toBe(WRITE);
 				if (refused) {
 					await versionedIntact();
 					await api.slothlet.api.remove("guest");
@@ -261,8 +261,8 @@ describe.each(CONFIGS)("aliases a module stores (#625) — $mode / $runtime", ({
 				api.guest.x.hostRef = api.victim.v;
 				const node = api.victim.v;
 				Object.defineProperty(api.guest.x, "hostGetter", { get: () => node, configurable: true });
-				await api.slothlet.api.add("guest.x.hostRef", { exports: { viaRef: { ok: () => "ref" } } }, { moduleID: "hr" });
-				await api.slothlet.api.add("guest.x.hostGetter.viaGetter", { exports: { ok: () => "getter" } }, { moduleID: "hg" });
+				await api.slothlet.api.add("guest.x.hostRef", { exports: { viaRef: { ok: () => "ref" } } }, { id: "hr" });
+				await api.slothlet.api.add("guest.x.hostGetter.viaGetter", { exports: { ok: () => "getter" } }, { id: "hg" });
 				expect(await api.victim.v.viaRef.ok()).toBe("ref");
 				expect(await api.victim.v.viaGetter.ok()).toBe("getter");
 			});

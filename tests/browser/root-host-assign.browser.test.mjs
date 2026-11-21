@@ -2,12 +2,12 @@
  *
  *	@Project: @cldmv/slothlet
  *	@Filename: /tests/browser/root-host-assign.browser.test.mjs
- *	@Date: 2026-11-16T03:00:00-08:00 (1795345200)
+ *	@Date: 2026-11-16T00:59:40-08:00 (1794819580)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T03:00:00-08:00 (1795345200)
+ *	@Last modified time: 2026-11-16T18:29:02-08:00 (1794882542)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -42,12 +42,16 @@ describe.each(["eager", "lazy"].flatMap((mode) => ["precise", "fast"].map((attri
 			const mod = await import("@cldmv/slothlet");
 			const slothlet = mod.default ?? mod.slothlet;
 			const api = await slothlet({
-				platform: "browser",
+				loader: {
+					platform: "browser"
+				},
 				mode,
 				silent: true,
 				permissions: {
-					defaultPolicy: "deny",
-					attribution,
+					policy: "deny",
+					caller: {
+						attribution
+					},
 					rules: [{ caller: "reader.**", target: "reader.**", effect: "allow" }, ...rules]
 				}
 			});
@@ -66,7 +70,7 @@ describe.each(["eager", "lazy"].flatMap((mode) => ["precise", "fast"].map((attri
 						})
 					}
 				},
-				{ moduleID: "reader" }
+				{ id: "reader" }
 			);
 			api.ownNothing = { a: 1 };
 			return api;

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:16-07:00 (1791090916)
+ *	@Last modified time: 2026-11-16T18:29:48-08:00 (1794882588)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -35,7 +35,7 @@ describe.each(getMatrixConfigs())("Permissions > Enforcement Point > $name", ({ 
 			base: BASE,
 			hook: { enabled: true },
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				rules: [{ caller: "callers.**", target: "payments.**", effect: "deny" }]
 			}
 		});
@@ -62,7 +62,7 @@ describe.each(getMatrixConfigs())("Permissions > Enforcement Point > $name", ({ 
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				rules: [{ caller: "**", target: "payments.**", effect: "deny" }]
 			}
 		});

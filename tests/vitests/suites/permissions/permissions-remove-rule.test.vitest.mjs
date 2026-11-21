@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:19-07:00 (1791090919)
+ *	@Last modified time: 2026-11-16T18:30:05-08:00 (1794882605)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -27,17 +27,17 @@ describe.each(getMatrixConfigs())("Permissions > removeRule > $name", ({ config 
 		api = null;
 	});
 
-	it("removeRule removes a rule and previously denied call is now allowed", async () => {
+	it("rules.remove removes a rule and previously denied call is now allowed", async () => {
 		api = await slothlet({
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "allow"
+				policy: "allow"
 			}
 		});
 
 		// Add deny rule
-		const ruleId = api.slothlet.permissions.addRule({ caller: "callers.**", target: "payments.**", effect: "deny" });
+		const ruleId = api.slothlet.permissions.rules.add({ caller: "callers.**", target: "payments.**", effect: "deny" });
 
 		// Should be denied
 		try {
@@ -48,7 +48,7 @@ describe.each(getMatrixConfigs())("Permissions > removeRule > $name", ({ config 
 		}
 
 		// Remove rule
-		const removed = api.slothlet.permissions.removeRule(ruleId);
+		const removed = api.slothlet.permissions.rules.remove(ruleId);
 		expect(removed).toBe(true);
 
 		// Should be allowed again
@@ -56,17 +56,17 @@ describe.each(getMatrixConfigs())("Permissions > removeRule > $name", ({ config 
 		expect(result.ok).toBe(true);
 	});
 
-	it("removeRule returns false when ruleId does not exist", async () => {
+	it("rules.remove returns false when ruleId does not exist", async () => {
 		api = await slothlet({
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "allow"
+				policy: "allow"
 			}
 		});
 
 		// Non-existent rule ID — should return false without throwing
-		const result = api.slothlet.permissions.removeRule("nonexistent-rule-id-xyz");
+		const result = api.slothlet.permissions.rules.remove("nonexistent-rule-id-xyz");
 		expect(result).toBe(false);
 	});
 });

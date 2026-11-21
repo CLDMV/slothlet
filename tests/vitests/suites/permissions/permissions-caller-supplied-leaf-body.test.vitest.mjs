@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-10T21:29:44-08:00 (1794374984)
+ *	@Last modified time: 2026-11-16T18:30:23-08:00 (1794882623)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -25,7 +25,7 @@
  * The host's leaves here are added as an object, the shape of rummage's `host.records.*` and `host.callback.*`: once
  * mounted at `host.access` with functions written in a host file (`host/access.mjs`), and once mounted at `host.inline`
  * with functions written in this file; either way each leaf is identified by its path. Their bodies read `vault.get`, which only `host.**` may call, call a helper of their own file that does, ask
- * `permissions.global.checkAccess`, and run what they were handed. `project.hand` hands them a value; `project.**` may
+ * `permissions.global.check.access`, and run what they were handed. `project.hand` hands them a value; `project.**` may
  * call `host.**` and `vault.open` but not `vault.get`.
  *
  * @module tests/vitests/suites/permissions/permissions-caller-supplied-leaf-body
@@ -69,7 +69,7 @@ function inlineAttempt(access) {
 	try {
 		return access();
 	} catch (error) {
-		return `${error?.code}:${error?.context?.caller ?? null}`;
+		return `${error?.code}:${error?.details?.caller ?? null}`;
 	}
 }
 
@@ -88,7 +88,7 @@ function inlineLeaves(getApi) {
 			return readVault();
 		},
 		check(_) {
-			return inlineAttempt(() => getApi().slothlet.permissions.global.checkAccess("project.hand", "vault.get"));
+			return inlineAttempt(() => getApi().slothlet.permissions.global.check.access("project.hand", "vault.get"));
 		},
 		who(_) {
 			return inlineAttempt(() => getApi().vault.whoami());
@@ -120,7 +120,7 @@ function inlineLeaves(getApi) {
 		},
 		async awaitCheck(_) {
 			await Promise.resolve();
-			return inlineAttempt(() => getApi().slothlet.permissions.global.checkAccess("project.hand", "vault.get"));
+			return inlineAttempt(() => getApi().slothlet.permissions.global.check.access("project.hand", "vault.get"));
 		},
 		async timerWho(_) {
 			await new Promise((resolve) => setTimeout(resolve, 1));
@@ -137,7 +137,7 @@ function inlineLeaves(getApi) {
 				.then(callback)
 				.then(
 					(handed) => ({ handed }),
-					(error) => ({ handed: `${error?.code}:${error?.context?.caller ?? null}` })
+					(error) => ({ handed: `${error?.code}:${error?.details?.caller ?? null}` })
 				);
 		},
 		defer(callback) {
@@ -147,7 +147,7 @@ function inlineLeaves(getApi) {
 				.then(callback)
 				.then(
 					(handed) => ({ own, handed }),
-					(error) => ({ own, handed: `${error?.code}:${error?.context?.caller ?? null}` })
+					(error) => ({ own, handed: `${error?.code}:${error?.details?.caller ?? null}` })
 				);
 		}
 	};
@@ -170,17 +170,17 @@ describe.each(CONFIGS)("Permissions > a host leaf's own body runs as the leaf (#
 			mode,
 			runtime,
 			silent: true,
-			permissions: { defaultPolicy: "deny", rules: RULES }
+			permissions: { policy: "deny", rules: RULES }
 		});
 		await api.slothlet.api.add(
 			["host", "access"],
 			makeAccess(() => api),
-			{ moduleID: "host-access" }
+			{ id: "host-access" }
 		);
 		await api.slothlet.api.add(
 			["host", "inline"],
 			inlineLeaves(() => api),
-			{ moduleID: "host-inline" }
+			{ id: "host-inline" }
 		);
 	});
 
@@ -235,7 +235,7 @@ describe.each(CONFIGS)("Permissions > a host leaf's own body runs as the leaf (#
 		it.each(["vm", "vmScript", "sourceURL"])("refuses code compiled to look like the leaf's (%s)", async (kind) => {
 			if (kind === "vm" || kind === "vmScript") {
 				// Compiling under the host's real file is refused itself, whatever the rules (D8 ruling).
-				await expect(api.project.hand(mount, "run", kind, file)).rejects.toMatchObject({ code: "CAPABILITY_REFUSED" });
+				await expect(api.project.hand(mount, "run", kind, file)).rejects.toMatchObject({ code: "PERMISSION_CAPABILITY_REFUSED" });
 				return;
 			}
 			expect(await api.project.hand(mount, "run", kind, file)).toEqual({ own: "secret", handed: DENIED, after: "secret" });
@@ -254,7 +254,7 @@ describe.each(CONFIGS)("Permissions > a host leaf's own body runs as the leaf (#
 			async (kind) => {
 				if (kind === "vm" || kind === "vmScript") {
 					// Compiling under the host's real file is refused itself, whatever the rules (D8 ruling).
-					await expect(api.project.hand(mount, "defer", kind, file)).rejects.toMatchObject({ code: "CAPABILITY_REFUSED" });
+					await expect(api.project.hand(mount, "defer", kind, file)).rejects.toMatchObject({ code: "PERMISSION_CAPABILITY_REFUSED" });
 					return;
 				}
 				const result = await api.project.hand(mount, "defer", kind, file);
@@ -284,7 +284,7 @@ describe.each(CONFIGS)("Permissions > a host leaf's own body runs as the leaf (#
 			async (kind) => {
 				if (kind === "vm" || kind === "vmScript") {
 					// Compiling under the host's real file is refused itself, whatever the rules (D8 ruling).
-					await expect(api.project.hand(mount, "awaitRun", kind, file)).rejects.toMatchObject({ code: "CAPABILITY_REFUSED" });
+					await expect(api.project.hand(mount, "awaitRun", kind, file)).rejects.toMatchObject({ code: "PERMISSION_CAPABILITY_REFUSED" });
 					return;
 				}
 				expect(await api.project.hand(mount, "awaitRun", kind, file)).toEqual({ own: "secret", handed: DENIED });
@@ -296,7 +296,7 @@ describe.each(CONFIGS)("Permissions > a host leaf's own body runs as the leaf (#
 			async (kind) => {
 				if (kind === "vm" || kind === "vmScript") {
 					// Compiling under the host's real file is refused itself, whatever the rules (D8 ruling).
-					await expect(api.project.hand(mount, "deferFirst", kind, file)).rejects.toMatchObject({ code: "CAPABILITY_REFUSED" });
+					await expect(api.project.hand(mount, "deferFirst", kind, file)).rejects.toMatchObject({ code: "PERMISSION_CAPABILITY_REFUSED" });
 					return;
 				}
 				const result = await api.project.hand(mount, "deferFirst", kind, file);

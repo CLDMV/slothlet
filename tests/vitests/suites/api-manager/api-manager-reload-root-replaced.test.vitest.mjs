@@ -103,10 +103,10 @@ describe.each(TEST_MATRIX)("a scoped reload of the module a later add replaced p
 			put(root, "base-other/keep.mjs", `export const k = 1;\n`);
 			put(root, "R/x.mjs", `export function x() { return "R"; }\n`);
 			api = await slothlet({ ...config, base: at === null ? first : path.join(root, "base-other"), silent: true });
-			if (at !== null) await api.slothlet.api.add(at, first, { moduleID: "first" });
+			if (at !== null) await api.slothlet.api.add(at, first, { id: "first" });
 			const grp = () => (prefix ? api.pp.grp : api.grp);
 			await read(grp());
-			await api.slothlet.api.add(`${prefix}grp`, path.join(root, "R"), { moduleID: "R", forceOverwrite: true });
+			await api.slothlet.api.add(`${prefix}grp`, path.join(root, "R"), { id: "R", collision: { force: true } });
 			expect(await read(grp())).toEqual({ x: "R", y: "hidden" });
 
 			writeGroup(first, 2);

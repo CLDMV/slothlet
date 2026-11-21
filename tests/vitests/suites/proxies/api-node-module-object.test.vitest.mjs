@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-13T07:23:52-08:00 (1794583432)
+ *	@Last modified time: 2026-11-16T18:30:17-08:00 (1794882617)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -38,8 +38,8 @@ const MODES = ["eager", "lazy"];
 const RUNTIMES = ["async", "live"];
 const PERMISSIONS = [
 	{ name: "permissions off", permissions: null },
-	{ name: "permissions on, precise", permissions: { defaultPolicy: "allow", attribution: "precise" } },
-	{ name: "permissions on, fast", permissions: { defaultPolicy: "allow", attribution: "fast" } }
+	{ name: "permissions on, precise", permissions: { policy: "allow", caller: { attribution: "precise" } } },
+	{ name: "permissions on, fast", permissions: { policy: "allow", caller: { attribution: "fast" } } }
 ];
 
 const matrix = MODES.flatMap((mode) => RUNTIMES.flatMap((runtime) => PERMISSIONS.map((entry) => ({ mode, runtime, ...entry }))));
@@ -285,9 +285,9 @@ describe.each(guarded)(
 				silent: true,
 				mode,
 				runtime,
-				permissions: { defaultPolicy: "allow", attribution, rules }
+				permissions: { policy: "allow", caller: { attribution }, rules }
 			});
-			for (const name of ["owner", "reader", "writer"]) await api.slothlet.api.add(name, join(FIXTURE, name), { moduleID: name });
+			for (const name of ["owner", "reader", "writer"]) await api.slothlet.api.add(name, join(FIXTURE, name), { id: name });
 			for (const node of [api.owner, api.owner.config, api.owner.config.nested, api.reader, api.writer]) await node;
 			return api;
 		};

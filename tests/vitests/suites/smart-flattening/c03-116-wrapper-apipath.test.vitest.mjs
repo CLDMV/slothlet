@@ -56,9 +56,10 @@ describe.each(HOOK_MATRIX)("C03_116 wrapper apiPath - $name", ({ config }) => {
 		await api.notifications.formatPhone("5555555555");
 
 		const meta = await api.slothlet.metadata.get("notifications.formatPhone");
+		const metaNode = api.slothlet.node("notifications.formatPhone");
 
 		expect(meta).not.toBeNull();
-		expect(meta.apiPath).toBe("notifications.formatPhone");
+		expect(metaNode.path.join(".")).toBe("notifications.formatPhone");
 
 		await api.shutdown();
 	});

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:15-08:00 (1794874575)
+ *	@Last modified time: 2026-11-17T14:44:13-08:00 (1794955453)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -95,7 +95,7 @@ async function getEsbuild() {
 			// The catch only fires in end-user environments where esbuild is not installed.
 			/* v8 ignore start */
 		} catch (error) {
-			throw new SlothletError("TYPESCRIPT_ESBUILD_NOT_INSTALLED", { mode: "fast" }, error);
+			throw new SlothletError("TYPESCRIPT_ESBUILD_NOT_INSTALLED", { mode: "fast" }, { cause: error });
 		}
 		/* v8 ignore stop */
 	}
@@ -145,14 +145,12 @@ export async function getTypeScript() {
 			// The catch only fires in end-user environments where typescript is not installed.
 			/* v8 ignore start */
 		} catch (error) {
-			throw new SlothletError("TYPESCRIPT_TSC_NOT_INSTALLED", { mode: "strict" }, error);
+			throw new SlothletError("TYPESCRIPT_TSC_NOT_INSTALLED", { mode: "strict" }, { cause: error });
 		}
 		/* v8 ignore stop */
 		const api = resolveStrictCompilerApi(ts);
 		if (!api) {
-			throw new SlothletError("TYPESCRIPT_STRICT_REQUIRES_TS6", { version: ts?.version ?? ts?.default?.version ?? "unknown" }, null, {
-				validationError: true
-			});
+			throw new SlothletError("TYPESCRIPT_STRICT_REQUIRES_TS6", { version: ts?.version ?? ts?.default?.version ?? "unknown" });
 		}
 		typescriptInstance = api;
 	}
@@ -784,7 +782,7 @@ export function rewriteRelativeSpecifiers(code, sourcePath, resolve) {
  * file in the graph produces fresh URLs for every importer — a reload never
  * serves stale linked output.
  *
- * Cache lives at `<projectRoot>/.slothlet-cache/<pid>-<instanceID>/<hash>.mjs` —
+ * Cache lives at `<projectRoot>/.slothlet-cache/<pid>-<hash of instanceID>/<hash>.mjs` —
  * deliberately OUTSIDE `node_modules/` because Node's `READ_PACKAGE_SCOPE` halts
  * at a `node_modules` segment and would otherwise break self-reference resolution
  * (needed when slothlet runs inside its own repo / monorepo workspace, where no
@@ -813,12 +811,25 @@ export async function writeTransformedToCache(originalPath, code, instanceID, tr
 		const projectRoot = packageRoot ?? getSecureFallbackRoot();
 		if (usesFallback) await (fallbackSweepPromise ??= sweepStaleFallbackRoots());
 		await sweepStaleSlothletCache(projectRoot);
-		const cacheDir = path.join(projectRoot, ".slothlet-cache", `${NativeProcess.pid}-${instanceID}`);
+		const cacheDir = path.join(projectRoot, ".slothlet-cache", `${NativeProcess.pid}-${cacheDirKey(instanceID)}`);
 		await mkdir(cacheDir, { recursive: true });
 		return await writeTransformedGraph(absolutePath, code, cacheDir, transform);
 	} finally {
 		if (usesFallback) pendingFallbackWrites--;
 	}
+}
+
+/**
+ * The part of an instance's cache folder name after the PID: a hash of the instance ID, so the name stays the same
+ * length however long the ID is.
+ * @param {string} instanceID - Slothlet instance ID.
+ * @returns {string} 24 hex characters.
+ * @private
+ */
+function cacheDirKey(instanceID) {
+	const hash = createHash("sha256");
+	Reflect.apply(HASH_UPDATE, hash, [`${instanceID}`]);
+	return StringMethods.slice(Reflect.apply(HASH_DIGEST, hash, ["hex"]), 0, 24);
 }
 
 /**
@@ -1060,21 +1071,14 @@ function convertCompilerOptions(ts, compilerOptions) {
 	if (!compilerOptions) return {};
 	const { options, errors } = ts.convertCompilerOptionsFromJson(compilerOptions, Processes.cwd());
 	if (errors.length > 0) {
-		throw new SlothletError(
-			"INVALID_CONFIG",
-			{
-				option: "typescript.compilerOptions",
-				value: ArrayMethods.join(
-					mapList(errors, (error) => ts.flattenDiagnosticMessageText(error.messageText, " ")),
-					" "
-				),
-				expected: "valid tsconfig.json compilerOptions",
-				hint: "HINT_INVALID_CONFIG",
-				validationError: true
-			},
-			null,
-			{ validationError: true }
-		);
+		throw new SlothletError("INVALID_CONFIG", {
+			option: "typescript.compiler",
+			value: ArrayMethods.join(
+				mapList(errors, (error) => ts.flattenDiagnosticMessageText(error.messageText, " ")),
+				" "
+			),
+			expected: "valid tsconfig.json compilerOptions"
+		});
 	}
 	return options;
 }

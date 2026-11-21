@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:14-08:00 (1794874574)
+ *	@Last modified time: 2026-11-17T21:24:22-08:00 (1794979462)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -24,6 +24,7 @@
  * @module @cldmv/slothlet/processors/loader
  * @internal
  */
+import { segmentsOf } from "#helpers/segments";
 import { ComponentBase } from "#factories/component-base";
 import { DEFAULT_API_DEPTH } from "#helpers/defaults";
 
@@ -41,6 +42,7 @@ import { isFrameworkReservedKey, isAwaitableThen, thenableExportError } from "#h
 import { SlothletError, SlothletWarning } from "#errors";
 import { translate } from "#i18n";
 import { HELPERS_PARAM, HELPERS_PER_MODULE, internals as instanceImportsInternals } from "#helpers/instance-imports";
+import { COPY_SOURCE_URL } from "#helpers/flow-stores";
 import { internals as framePlacementInternals, toComparablePath } from "#handlers/frame-placement";
 import {
 	ArrayMethods,
@@ -71,6 +73,7 @@ import {
 	Set,
 	setFrom,
 	SetMethods,
+	setToArray,
 	setValues,
 	splitText,
 	String,
@@ -154,24 +157,28 @@ const CHILD_PROCESS_FORK = NODE_CHILD_PROCESS?.fork;
  * @param {object|undefined} [overrides.worker] - The vitest worker global, when present.
  * @param {boolean} [overrides.externalized] - Whether this slothlet copy is outside the runner's
  *   module graph.
+ * @param {Function} [overrides.Warning] - The warning class to raise it through (the instance's), so it is recorded on the
+ *   instance and printed unless the instance is `silent`.
  * @returns {boolean} True when the warning was emitted.
  * @package
  *
  * @description
  * Fires only when every condition of the misattribution scenario holds: a vitest COVERAGE run is
  * active (`__vitest_worker__.config.coverage.enabled` — a plain test run stays silent), this
- * slothlet copy is EXTERNALIZED (an inlined copy attributes fine), no `import` importer is
- * configured (the fix), and the instance is not `silent`. The worker global is vitest-internal,
+ * slothlet copy is EXTERNALIZED (an inlined copy attributes fine), and no `loader.import` importer is
+ * configured (the fix). The worker global is vitest-internal,
  * so it is read defensively — its absence or a shape change simply means no hint, never a wrong
  * one. Detection cannot DO the fix: the importer must be a closure authored in the consumer's own
  * transformed code, which is why this is a pointer to docs/TESTING.md rather than an auto-enable.
  */
-export function warnIfCoverageWithoutImporter(config, { worker = globalThis.__vitest_worker__, externalized = RUNTIME_EXTERNALIZED } = {}) {
+export function warnIfCoverageWithoutImporter(
+	config,
+	{ worker = globalThis.__vitest_worker__, externalized = RUNTIME_EXTERNALIZED, Warning = SlothletWarning } = {}
+) {
 	if (worker?.config?.coverage?.enabled !== true) return false;
 	if (!externalized) return false;
-	if (typeof config?.import === "function") return false;
-	if (config?.silent) return false;
-	new SlothletWarning("WARNING_COVERAGE_IMPORTER_UNSET", {});
+	if (typeof config?.loader?.import === "function") return false;
+	new Warning("WARNING_COVERAGE_IMPORTER_UNSET", {});
 	return true;
 }
 
@@ -219,20 +226,22 @@ export function resolveSourcemap(typescriptConfig, overrides) {
  * Warns when a coverage run loads TypeScript leaves with source maps explicitly off (#484).
  *
  * @param {object} config - The instance's transformed config.
- * @param {object} [overrides] - Environment inputs forwarded to {@link isCoverageRun}.
+ * @param {object} [overrides] - Environment inputs forwarded to {@link isCoverageRun}, and `Warning`, the warning class
+ *   to raise it through (the instance's).
  * @returns {boolean} True when the warning was emitted.
  * @package
  *
  * @description
  * Without the inline map, coverage for a TypeScript leaf is recorded against its cache copy and
  * can never reach the `.ts` source. The Loader calls this once per instance, on the first
- * TypeScript leaf it loads; a `silent` instance stays quiet.
+ * TypeScript leaf it loads, through the instance's warning class (`overrides.Warning`), so a `silent` instance records it
+ * without printing.
  */
 export function warnIfCoverageWithoutSourcemap(config, overrides) {
 	if (config?.typescript?.sourcemap !== false) return false;
-	if (config?.silent) return false;
 	if (!isCoverageRun(overrides)) return false;
-	new SlothletWarning("WARNING_COVERAGE_TS_SOURCEMAP_OFF", {});
+	const Warning = overrides?.Warning ?? SlothletWarning;
+	new Warning("WARNING_COVERAGE_TYPESCRIPT_SOURCEMAP_OFF", {});
 	return true;
 }
 
@@ -468,10 +477,7 @@ function runtime_sortedQuery(query) {
 function ensureInstanceImportHooks() {
 	if (instanceImportHooksInstalled) return;
 	// A module's import of one of slothlet's own files is refused with slothlet's own error.
-	setImportRefusal(
-		({ specifier, file, allowed }) =>
-			new SlothletError("MODULE_INTERNAL_NOT_IMPORTABLE", { specifier, file, allowed }, null, { validationError: true })
-	);
+	setImportRefusal(({ specifier, file, allowed }) => new SlothletError("MODULE_INTERNAL_NOT_IMPORTABLE", { specifier, file, allowed }));
 	instanceImportHooksInstalled = installInstanceImportHooks(createRequire(import.meta.url)("node:module"));
 }
 
@@ -644,6 +650,15 @@ export class Loader extends ComponentBase {
 	 * @private
 	 */
 	async #loadModuleTracked(filePath, instanceID, moduleID, cacheBust = null) {
+		// A copy of a run's tree imports each file from the URL the copied tree did, so it uses the very module; a run's
+		// own reload or restart reads every file again (see Slothlet#buildCopy).
+		let copyFrom = null;
+		const copySource = this.slothlet?.[COPY_SOURCE_URL];
+		if (typeof copySource === "function") {
+			const source = Reflect.apply(copySource, this.slothlet, []);
+			if (typeof source === "number") cacheBust ??= source;
+			else if (source !== null && source !== this) copyFrom = source;
+		}
 		// Slothlet's runtime is loaded before any api file is, from outside every file's load (see ensureRuntimeLoaded).
 		if (!runtimeLoaded) {
 			// The hooks first, under Node: they see whether Node itself loads the runtime (#760).
@@ -652,9 +667,10 @@ export class Loader extends ComponentBase {
 		}
 		// The file's top level runs as the file's module (#726): what it starts while it loads carries that identity.
 		const contextManager = this.slothlet.contextManager;
-		if (typeof contextManager?.runModuleLoad !== "function") return this.#loadModuleFile(filePath, instanceID, moduleID, cacheBust);
+		if (typeof contextManager?.runModuleLoad !== "function")
+			return this.#loadModuleFile(filePath, instanceID, moduleID, cacheBust, copyFrom);
 		return contextManager.runModuleLoad(createModuleLoad(this.slothlet, filePath, moduleID), () =>
-			this.#loadModuleFile(filePath, instanceID, moduleID, cacheBust)
+			this.#loadModuleFile(filePath, instanceID, moduleID, cacheBust, copyFrom)
 		);
 	}
 
@@ -667,10 +683,10 @@ export class Loader extends ComponentBase {
 	 * @returns {Promise<Object>} Loaded module
 	 * @private
 	 */
-	async #loadModuleFile(filePath, instanceID, moduleID, cacheBust = null) {
+	async #loadModuleFile(filePath, instanceID, moduleID, cacheBust = null, copyFrom = null) {
 		try {
 			// Browser mode: filesystem paths and pathToFileURL are not available.
-			// Delegate to the callback the user supplied via config.resolveModuleSpecifier.
+			// Delegate to the callback the user supplied via config.loader.resolve.
 			if (this.slothlet.envTarget === "browser") {
 				return this.#loadModuleBrowser(filePath, instanceID, moduleID, cacheBust);
 			}
@@ -682,6 +698,12 @@ export class Loader extends ComponentBase {
 			// The hooks serve its require() of an ES module the instance's copy (#534).
 			if (StringMethods.endsWith(filePath, ".cjs") || (StringMethods.endsWith(filePath, ".js") && (await this.#isCommonJSFile(filePath)))) {
 				ensureInstanceImportHooks();
+				// A copy's CommonJS leaf is the copied tree's, not evaluated again.
+				const copied = copyFrom?.loadedCommonJS?.(filePath, moduleID) ?? null;
+				if (copied !== null) {
+					MapMethods.set(this.#commonJSLoaded, `${filePath}\u0000${moduleID ?? ""}`, copied);
+					return copied;
+				}
 				return this.#loadCJSIsolated(filePath, instanceID, moduleID);
 			}
 
@@ -701,15 +723,15 @@ export class Loader extends ComponentBase {
 				const sourcemap = resolveSourcemap(typescriptConfig);
 				if (!this.#coverageSourcemapChecked) {
 					this.#coverageSourcemapChecked = true;
-					warnIfCoverageWithoutSourcemap(this.slothlet.config);
+					warnIfCoverageWithoutSourcemap(this.slothlet.config, { Warning: this.slothlet.SlothletWarning });
 				}
 				if (mode === "strict") {
 					// Validate strict mode config
 					if (!typescriptConfig.types?.output) {
-						throw new this.SlothletError("TS_STRICT_REQUIRES_OUTPUT", {}, null, { validationError: true });
+						throw new this.SlothletError("TYPESCRIPT_TYPES_OUTPUT_MISSING", {});
 					}
-					if (!typescriptConfig.types?.interfaceName) {
-						throw new this.SlothletError("TS_STRICT_REQUIRES_INTERFACE_NAME", {}, null, { validationError: true });
+					if (!typescriptConfig.types?.name) {
+						throw new this.SlothletError("TYPESCRIPT_TYPES_NAME_MISSING", {});
 					}
 
 					// Generate types if not already generated for this instance
@@ -719,14 +741,13 @@ export class Loader extends ComponentBase {
 						// The worker ships next to this file (src/lib/processors → dist/lib/processors).
 						const scriptPath = typeGenerationWorkerPath();
 
-						// Prepare config for child process
-						// Note: Child process needs 'dir' not 'root', and should use eager mode
+						// The child process builds the same tree in eager, fast mode; `types` is the worker's own field,
+						// not a slothlet option.
 						const childConfig = JSON.stringify({
-							dir: this.slothlet.config.root || this.slothlet.config.dir,
-							mode: "eager",
-							typescript: {
-								enabled: true,
-								mode: "fast"
+							config: {
+								base: this.slothlet.config.base,
+								mode: "eager",
+								typescript: "fast"
 							},
 							types: typescriptConfig.types
 						});
@@ -756,24 +777,20 @@ export class Loader extends ComponentBase {
 									/* v8 ignore start */
 								} else if (msg.type === "error") {
 									// msg.error is a string (serialized over IPC). Wrap in a message-object so
-									// SlothletError auto-enriches {error} from originalError.message without
+									// SlothletError renders the cause into {error} without
 									// needing a bare new Error() construction.
-									reject(new this.SlothletError("TS_TYPE_GENERATION_FAILED", {}, { message: msg.error }));
+									reject(new this.SlothletError("TYPESCRIPT_TYPE_GENERATION_FAILED", {}, { cause: { message: msg.error } }));
 								}
 								/* v8 ignore stop */
 							});
 
 							child.on("error", (error) => {
-								reject(new this.SlothletError("TS_TYPE_GENERATION_FORK_FAILED", {}, error));
+								reject(new this.SlothletError("TYPESCRIPT_TYPE_GENERATION_FORK_FAILED", {}, { cause: error }));
 							});
 
 							child.on("exit", (code) => {
 								if (code !== 0 && !this.slothlet._typesGenerated) {
-									reject(
-										new this.SlothletError("TS_TYPE_GENERATION_PROCESS_EXITED", { code, output: errorOutput }, null, {
-											validationError: true
-										})
-									);
+									reject(new this.SlothletError("TYPESCRIPT_TYPE_GENERATION_PROCESS_EXITED", { code, output: errorOutput }));
 								}
 							});
 						});
@@ -792,7 +809,7 @@ export class Loader extends ComponentBase {
 							module: typescriptConfig.module,
 							strict: typescriptConfig.strict,
 							typeDefinitionPath: typescriptConfig.types.output,
-							compilerOptions: typescriptConfig.compilerOptions,
+							compilerOptions: typescriptConfig.compiler,
 							sourcemap
 						});
 						// Check for type errors
@@ -804,14 +821,10 @@ export class Loader extends ComponentBase {
 							const errors = formatDiagnostics(result.diagnostics, ts);
 
 							// Throw error with formatted diagnostics
-							const error = new this.SlothletError(
-								"TS_TYPE_CHECK_ERRORS",
-								{ filePath: tsPath, errors: ArrayMethods.join(errors, "\n") },
-								null,
-								{
-									validationError: true
-								}
-							);
+							const error = new this.SlothletError("TYPESCRIPT_TYPE_CHECK_ERRORS", {
+								file: tsPath,
+								errors: ArrayMethods.join(errors, "\n")
+							});
 							error.diagnostics = result.diagnostics;
 							throw error;
 						}
@@ -854,19 +867,23 @@ export class Loader extends ComponentBase {
 			} else {
 				// Regular JavaScript file
 				const fileUrl = url.pathToFileURL(filePath).href;
+				// A copy's file is imported from the URL the copied tree imported it from: the very module (#876).
+				const copiedUrls = copyFrom?.importedLocationsFor?.(filePath, moduleID ?? null);
+				const copiedUrl = copiedUrls && SetMethods.size(copiedUrls) === 1 ? setToArray(copiedUrls)[0] : null;
 				// Cache bust using instanceID to prevent cross-instance pollution
 				// Add moduleID for api.slothlet.api.add calls to prevent cache reuse between different API paths
 				moduleUrl = `${fileUrl}?slothlet_instance=${instanceID}`;
 				if (moduleID) {
 					moduleUrl += `&module=${runtime_encodeQueryValue(moduleID)}`;
 				}
+				if (copiedUrl !== null) moduleUrl = copiedUrl;
 				// `helpers: "module"`: the resolve hook loads each helper this file imports as this file's own copy.
 				if (this.slothlet.config?.helpers === "module") moduleUrl += `&${HELPERS_PARAM}=${HELPERS_PER_MODULE}`;
 				// Append reload timestamp to force fresh imports during rebuildCache.
 				// This prevents the Node.js module cache from returning the same function
 				// reference used by the live API (which would cause applyRootContributor's
 				// Object.assign to overwrite the live API's properties).
-				if (cacheBust) {
+				if (cacheBust && copiedUrl === null) {
 					moduleUrl += `&_reload=${cacheBust}`;
 				}
 			}
@@ -875,7 +892,7 @@ export class Loader extends ComponentBase {
 			// it loads itself, so a configured importer receives the exact cache-busted URL and its
 			// module namespace is used unchanged — per-instance isolation, mount identity, and reload
 			// busting ride the URL either way; only whose import() executes differs.
-			const customImport = this.slothlet?.config?.import;
+			const customImport = this.slothlet?.config?.loader?.import;
 			// The live runtime matches a suspended call's frames against the file it was imported from; a
 			// TypeScript leaf runs from its compiled copy, not its source, so that location is recorded (#601 review).
 			let byMount = MapMethods.get(this.#importedLocations, filePath);
@@ -896,17 +913,17 @@ export class Loader extends ComponentBase {
 			throw new this.SlothletError(
 				"MODULE_IMPORT_FAILED",
 				{
-					modulePath: filePath
+					file: filePath
 				},
-				error
+				{ cause: error }
 			);
 		}
 	}
 
 	/**
 	 * Whether a file or folder name is, or sanitizes to, a framework-reserved key. The member a file
-	 * or folder produces is named by its sanitized name, so `_materialize-` or `-_impl` collides with
-	 * the framework handle exactly as `_materialize` does (#571 review).
+	 * or folder produces is named by its sanitized name, so `___materialize-` or `-____impl` collides with
+	 * the framework handle exactly as `___materialize` does (#571 review).
 	 * @param {string} name - Entry name without extension (a folder's name as-is).
 	 * @returns {boolean} True when the entry's name or its member name is reserved.
 	 * @private
@@ -928,7 +945,7 @@ export class Loader extends ComponentBase {
 	 */
 	#assertNotThenable(name, entry, dir) {
 		if (this.slothlet.helpers.sanitize.sanitizePropertyName(name) === "then") {
-			throw new this.SlothletError("MODULE_THENABLE_NAME", { entry, dir }, null, { validationError: true });
+			throw new this.SlothletError("MODULE_THENABLE_NAME", { entry, folder: dir });
 		}
 	}
 
@@ -939,12 +956,12 @@ export class Loader extends ComponentBase {
 	 * @param {string} folder - Folder name.
 	 * @param {string} dir - Containing directory, for the error.
 	 * @returns {void}
-	 * @throws {SlothletError} MODULE_RESERVED_DIRNAME or MODULE_THENABLE_NAME.
+	 * @throws {SlothletError} MODULE_RESERVED_FOLDER or MODULE_THENABLE_NAME.
 	 * @private
 	 */
 	#assertLoadableFolderName(folder, dir) {
 		if (this.#isReservedEntryName(folder)) {
-			throw new this.SlothletError("MODULE_RESERVED_DIRNAME", { folder, dir }, null, { validationError: true });
+			throw new this.SlothletError("MODULE_RESERVED_FOLDER", { name: folder, folder: dir });
 		}
 		this.#assertNotThenable(folder, folder, dir);
 	}
@@ -975,9 +992,12 @@ export class Loader extends ComponentBase {
 		const options = { fresh: true, importer: perModule ? filePath : null, mount: perModule ? (moduleID ?? null) : null };
 		// The instance's own files load through the handle the instance holds for its ID; a load under another ID (a
 		// caller driving the loader directly) goes through the cache of an ID no instance holds.
+		// A kept copy's lazy node loads under the ID that copy was loaded under, which the instance still holds.
+		const held =
+			typeof this.slothlet.holdsScope === "function" ? this.slothlet.holdsScope(scopeKey) : scopeKey === this.slothlet.instanceID;
 		const exports =
-			scopeKey === this.slothlet.instanceID && typeof this.slothlet.requireInScope === "function"
-				? this.slothlet.requireInScope(filePath, options)
+			held && typeof this.slothlet.requireInScope === "function"
+				? this.slothlet.requireInScope(filePath, options, scopeKey)
 				: requireInInstance(filePath, scopeKey, options);
 
 		// A callable `then` export (#571): copied onto the namespace below, it makes the namespace thenable,
@@ -1009,8 +1029,28 @@ export class Loader extends ComponentBase {
 		// recognises a CommonJS namespace whose file is not named `.cjs` (a CommonJS `.js`, #521). It is
 		// non-enumerable so every key walk over the namespace sees exactly the exports listed above.
 		Objects.defineProperty(namespace, "module.exports", { __proto__: null, value: exports, enumerable: false });
+		MapMethods.set(this.#commonJSLoaded, `${filePath}\u0000${moduleID ?? ""}`, namespace);
 		return namespace;
 	}
+
+	/**
+	 * The namespace of the CommonJS leaf this loader last loaded for a mount, which a copy of the tree uses instead of
+	 * evaluating the leaf again (see `Slothlet#buildCopy`).
+	 * @param {string} filePath - The file.
+	 * @param {string|null} moduleID - The mount.
+	 * @returns {object|null} The namespace, or null when it was not loaded.
+	 * @internal
+	 */
+	loadedCommonJS(filePath, moduleID) {
+		return MapMethods.get(this.#commonJSLoaded, `${filePath}\u0000${moduleID ?? ""}`) ?? null;
+	}
+
+	/**
+	 * The namespace of each CommonJS leaf loaded, by file and mount (see {@link Loader#loadedCommonJS}).
+	 * @type {Map<string, object>}
+	 * @private
+	 */
+	#commonJSLoaded = new Map();
 
 	/**
 	 * Per-directory cache of the nearest package.json `type` scope, so a tree of `.js` leaves reads each
@@ -1178,11 +1218,11 @@ export class Loader extends ComponentBase {
 			await fsp.stat(dir);
 		} catch (error) {
 			throw new this.SlothletError(
-				"INVALID_DIRECTORY",
+				"FOLDER_UNREADABLE",
 				{
-					dir
+					folder: dir
 				},
-				error
+				{ cause: error }
 			);
 		}
 
@@ -1249,9 +1289,10 @@ export class Loader extends ComponentBase {
 
 					// Reserved-name rejection (#260): a module file named for a framework-reserved key
 					// would overwrite the framework's own handle when its children are adopted — the
-					// `_materialize.mjs` shape used to break composition with a bare TypeError, and
-					// `_impl.mjs` silently emptied the lazy surface. Fail the scan with a named error
-					// instead, for a `__`-prefixed name a `hidden` glob brought back as for the rest.
+					// `___materialize.mjs` shape used to break composition with a bare TypeError, and
+					// `____impl.mjs` silently emptied the lazy surface. Fail the scan with a named error
+					// instead, for a `__`-prefixed name a `hidden` glob brought back as for a name that
+					// only sanitizes into a reserved one (such as `-____impl`).
 					//
 					// Checked LAST, after every exclusion: the refusal covers the files this mount
 					// actually loads. A single-file `api.add` filters the listing down to one file, and
@@ -1259,7 +1300,7 @@ export class Loader extends ComponentBase {
 					// surface, so neither is this mount's problem. Each fails on its own the moment
 					// something does try to compose it.
 					if (this.#isReservedEntryName(nameWithoutExt)) {
-						throw new this.SlothletError("MODULE_RESERVED_FILENAME", { file: entry.name, dir }, null, { validationError: true });
+						throw new this.SlothletError("MODULE_RESERVED_FILE", { file: entry.name, folder: dir });
 					}
 					this.#assertNotThenable(nameWithoutExt, entry.name, dir);
 
@@ -1274,11 +1315,10 @@ export class Loader extends ComponentBase {
 		}
 
 		// Warn if directory is empty or has no loadable modules (only for root scans or add-api workflows).
-		// Console warning honors `silent`, consistent with every other SlothletWarning site.
-		if (isRootScan && structure.files.length === 0 && structure.directories.length === 0 && !this.____config?.silent) {
-			new this.SlothletWarning("WARN_DIRECTORY_EMPTY", {
-				dir,
-				resolvedPath: path.resolve(dir)
+		if (isRootScan && structure.files.length === 0 && structure.directories.length === 0) {
+			new this.SlothletWarning("WARNING_FOLDER_EMPTY", {
+				folder: dir,
+				resolved: path.resolve(dir)
 			});
 		}
 
@@ -1307,23 +1347,23 @@ export class Loader extends ComponentBase {
 	 * this.#scanDirectoryBrowser("billing", { fileFilter: (n) => n === "invoice.mjs" });
 	 */
 	#scanDirectoryBrowser(dir, options = {}) {
-		const manifest = this.slothlet.config?.manifest;
+		const manifest = this.slothlet.config?.loader?.files;
 		// manifest is validated during transformConfig; this guard protects against
 		// accidental calls before config is fully applied.
 		/* v8 ignore next 3 */
 		if (!manifest) {
-			throw new this.SlothletError("INVALID_CONFIG_BROWSER_REQUIRES_MANIFEST", {}, null, { validationError: true });
+			throw new this.SlothletError("INVALID_CONFIG_FILES_REQUIRED", {});
 		}
 
 		// Compute the relative path by stripping the base URL/path prefix.
-		// When dir equals config.dir (the root), the relative path is empty → root scan.
+		// When dir equals config.base (the root), the relative path is empty → root scan.
 		// When dir is a relative segment like "utils", it passes through unchanged.
 		// The `|| ""` fallbacks on each line are defensive: real callers always go
-		// through transformConfig (config.dir non-empty) and pass a resolved dir
+		// through transformConfig (config.base non-empty) and pass a resolved dir
 		// via scanDirectory's public callers (modes/{eager,lazy}.mjs + api.add).
 		// Direct internal `loader.scanDirectory("")` is not a supported path.
 		/* v8 ignore next */
-		const configBase = regExpReplace(/\/$/, this.slothlet.config?.dir || "", "");
+		const configBase = regExpReplace(/\/$/, this.slothlet.config?.base || "", "");
 		/* v8 ignore next */
 		let relativePath = regExpReplace(/\/$/, dir || "", "");
 		if (configBase && StringMethods.startsWith(relativePath, configBase)) {
@@ -1333,7 +1373,7 @@ export class Loader extends ComponentBase {
 		const isRoot = !relativePath || relativePath === "/" || relativePath === ".";
 		const node = isRoot ? manifest : this.#findManifestNode(manifest, relativePath);
 		if (!node) {
-			throw new this.SlothletError("INVALID_DIRECTORY", { dir }, null);
+			throw new this.SlothletError("FOLDER_UNREADABLE", { folder: dir });
 		}
 
 		return this.#manifestNodeToStructure(node, dir, options);
@@ -1400,7 +1440,7 @@ export class Loader extends ComponentBase {
 		for (let i = 0, files = node.files || []; i < files.length; i++) {
 			const file = files[i];
 			const filePath = file.path || file.relativePath || "";
-			const fullName = file.fullName || ArrayMethods.pop(splitText(filePath, "/"));
+			const fullName = file.full || ArrayMethods.pop(splitText(filePath, "/"));
 			const lastDot = StringMethods.lastIndexOf(fullName, ".");
 			const ext = lastDot >= 0 ? (typeof fullName === "string" ? StringMethods.slice(fullName, lastDot) : copyList(fullName, lastDot)) : "";
 
@@ -1427,10 +1467,10 @@ export class Loader extends ComponentBase {
 			if (isHiddenEntry(hiddenMatcher, apiPrefix ? `${apiPrefix}.${hiddenSegment(name)}` : hiddenSegment(name), fullName, false)) continue;
 
 			// Reserved-name rejection (#260), mirroring the filesystem scan. The hazard is the
-			// composed wrapper shape, not the platform: a manifest carrying `_impl.mjs` would empty
+			// composed wrapper shape, not the platform: a manifest carrying `____impl.mjs` would empty
 			// the lazy surface in a browser exactly as it does under Node.
 			if (this.#isReservedEntryName(name)) {
-				throw new this.SlothletError("MODULE_RESERVED_FILENAME", { file: fullName, dir: rootPath }, null, { validationError: true });
+				throw new this.SlothletError("MODULE_RESERVED_FILE", { file: fullName, folder: rootPath });
 			}
 			this.#assertNotThenable(name, fullName, rootPath);
 
@@ -1475,7 +1515,7 @@ export class Loader extends ComponentBase {
 	}
 
 	/**
-	 * Browser-mode module loading: delegates to the `resolveModuleSpecifier` callback
+	 * Browser-mode module loading: delegates to the `loader.resolve` callback
 	 * supplied in `config`, or falls back to resolving relative to `config.base`. Plain
 	 * filesystem paths are automatically converted to `file://` URLs so callers do not
 	 * need to prefix `base` with `"file://"`.
@@ -1485,13 +1525,13 @@ export class Loader extends ComponentBase {
 	 * @private
 	 *
 	 * @example
-	 * // Default resolver — no resolveModuleSpecifier needed when base is a filesystem path:
+	 * // Default resolver — no loader.resolve needed when base is a filesystem path:
 	 * // config.base = "/srv/api"  →  loads file:///srv/api/auth.mjs
 	 * await this.#loadModuleBrowser("auth.mjs");
 	 *
 	 * @example
-	 * // Custom resolver — user supplies resolveModuleSpecifier:
-	 * // config.resolveModuleSpecifier = ({ path }) => `https://cdn.example.com/api/${path}`;
+	 * // Custom resolver — user supplies loader.resolve:
+	 * // config.loader.resolve = ({ path }) => `https://cdn.example.com/api/${path}`;
 	 * await this.#loadModuleBrowser("auth.mjs");
 	 */
 	async #loadModuleBrowser(filePath, instanceID, moduleID, cacheBust = null) {
@@ -1499,13 +1539,11 @@ export class Loader extends ComponentBase {
 		// Plain filesystem paths (no URL scheme) are automatically converted to file:// URLs
 		// so callers can pass base: "/path/to/api" without manually prefixing "file://".
 		const resolveModuleSpecifier =
-			this.slothlet.config?.resolveModuleSpecifier ??
+			this.slothlet.config?.loader?.resolve ??
 			(({ path: p }) => {
-				// `?? config?.dir ?? ""` chain: transformConfig sets both `base` and
-				// `dir` to the same resolved value, so `config?.base ?? ...` always
-				// hits the first arm in normal flow. Both fallback arms are defensive.
+				// `?? ""`: transformConfig always sets `base`, so the fallback arm is defensive.
 				/* v8 ignore next */
-				const base = this.slothlet.config?.base ?? this.slothlet.config?.dir ?? "";
+				const base = this.slothlet.config?.base ?? "";
 				// If base already has a URL scheme (file://, https://, etc.) keep it; otherwise
 				// convert a plain filesystem path to a file:// URL with a trailing slash so that
 				// new URL(relativePath, base) resolves correctly.
@@ -1533,7 +1571,7 @@ export class Loader extends ComponentBase {
 		/* v8 ignore next */
 		const name = lastDot >= 0 ? StringMethods.slice(fullName, 0, lastDot) : fullName;
 
-		const specifier = resolveModuleSpecifier({ path: filePath, name, fullName });
+		const specifier = resolveModuleSpecifier({ path: filePath, name, full: fullName });
 		const imported = withInstanceQuery(specifier, instanceID, moduleID, cacheBust);
 		// The live runtime tells a suspended call apart from the host by the module's location in a stack
 		// frame. A resolver can return a URL that does not end in the manifest path (a `blob:` or `data:`
@@ -1650,22 +1688,21 @@ export class Loader extends ComponentBase {
 			const key = ofList[ofIndex];
 			if (key !== "default" && key !== "module.exports" && typeof key === "string") {
 				// Reserved-name rejection (#260): an export named for a framework-reserved key
-				// (`_materialize`, `__impl`, …) can only ever be shadowed by the framework's own
+				// (`___materialize`, `____impl`, …) can only ever be shadowed by the framework's own
 				// handle — it is unreachable on the composed surface and a standing hazard to the
 				// wrapper contract. Refuse it loudly at load instead of silently coexisting, so the
 				// module author learns at the file, not from a distant behavioral surprise.
 				if (isFrameworkReservedKey(key)) {
-					throw new this.SlothletError("MODULE_RESERVED_EXPORT", { name: key }, null, { validationError: true });
+					throw new this.SlothletError("MODULE_RESERVED_EXPORT", { name: key });
 				}
 				// No api path can hold `__proto__`: composing it would set the node's prototype rather than add a
 				// member. It is refused as a mount path, a `self` write or a routine name is (#585 review).
 				if (key === "__proto__") {
-					throw new this.SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
-						apiPath: filePath ? `${filePath} (export '__proto__')` : "export '__proto__'",
+					throw new this.SlothletError("API_PATH_INVALID", {
+						path: segmentsOf(filePath ? `${filePath} (export '__proto__')` : "export '__proto__'"),
 						reason: translate("API_PATH_REASON_UNSAFE_SEGMENT"),
 						index: 0,
-						segment: key,
-						validationError: true
+						segment: key
 					});
 				}
 				// A `then` export that is a function would make the module's namespace awaitable (#571); one

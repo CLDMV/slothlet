@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-14T00:00:00-08:00 (1794643200)
+ *	@Last modified time: 2026-11-16T18:30:19-08:00 (1794882619)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -23,7 +23,7 @@
  * holds has a twin one level down: a folder, a file of named exports, a function, a file's default object, a file's
  * default primitive of every kind, and for the function roots the root file's named primitives of every kind, an object
  * of data and a function. A `reader` module the rules name and an `open` module they do not list and read both through
- * `self`, the `self` they kept at load, and `self.slothlet.diag.getAPI()`, under the same rule written for the root's
+ * `self`, the `self` they kept at load, and `self.slothlet.diag.api()`, under the same rule written for the root's
  * member and for its twin. The expected answers are the twin's, and for the host, and for a module no rule names,
  * the whole listing; a file's primitive default reads as the plain module's default export. Eager and lazy mode, the
  * async and live runtime, both attributions, and the permission system off and disabled.
@@ -113,7 +113,7 @@ const RULE_SETS = {
 	},
 	"a default deny with allows": {
 		everyRoute: true,
-		defaultPolicy: "deny",
+		policy: "deny",
 		rules: (p) => [
 			{ caller: "open.**", target: "**", effect: "allow" },
 			{ caller: "zz.open.**", target: "**", effect: "allow" },
@@ -145,7 +145,7 @@ const RULE_SETS = {
  */
 async function build(root, options, { load = true } = {}) {
 	const api = await slothlet({ base: join(FIXTURE, root), silent: true, diagnostics: true, ...options });
-	await api.slothlet.api.add("zz", join(FIXTURE, root), { moduleID: "zz" });
+	await api.slothlet.api.add("zz", join(FIXTURE, root), { id: "zz" });
 	if (load) {
 		for (const member of [...membersOf(root), "reader", "open"]) {
 			await api[member];
@@ -213,8 +213,10 @@ describe.each(ROOTS)("the api root's listing and reads > %s", (root) => {
 				runtime,
 				context: set.context,
 				permissions: {
-					defaultPolicy: set.defaultPolicy ?? "allow",
-					attribution,
+					policy: set.defaultPolicy ?? "allow",
+					caller: {
+						attribution
+					},
 					rules: [...set.rules("", members), ...set.rules("zz.", members)]
 				}
 			});
@@ -239,7 +241,7 @@ describe.each(ROOTS)("the api root's listing and reads > %s", (root) => {
 				{
 					mode,
 					runtime,
-					permissions: { defaultPolicy: "allow", attribution, rules: [...set.rules("", members), ...set.rules("zz.", members)] }
+					permissions: { policy: "allow", caller: { attribution }, rules: [...set.rules("", members), ...set.rules("zz.", members)] }
 				},
 				{ load: false }
 			);
@@ -249,7 +251,7 @@ describe.each(ROOTS)("the api root's listing and reads > %s", (root) => {
 		});
 
 		it("a file's primitive default export at the root reads as its value, as one level down and in plain JavaScript", async () => {
-			api = await build(root, { mode, runtime, permissions: { defaultPolicy: "allow", attribution, rules: [] } });
+			api = await build(root, { mode, runtime, permissions: { policy: "allow", caller: { attribution }, rules: [] } });
 			const plain = await plainDefaults(root);
 			for (const member of FILE_PRIMITIVES) {
 				expect(described(api[member]), `the host reads ${member}`).toEqual(described(api.zz[member]));

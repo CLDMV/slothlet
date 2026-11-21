@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-13T07:23:52-08:00 (1794583432)
+ *	@Last modified time: 2026-11-16T18:30:17-08:00 (1794882617)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -78,7 +78,7 @@ const WRITER_RULES = [
  */
 async function mount(options) {
 	const api = await slothlet({ base: join(FIXTURE, "host"), silent: true, ...options });
-	for (const name of ["owner", "single", "reader", "writer"]) await api.slothlet.api.add(name, join(FIXTURE, name), { moduleID: name });
+	for (const name of ["owner", "single", "reader", "writer"]) await api.slothlet.api.add(name, join(FIXTURE, name), { id: name });
 	for (const name of ["owner", "single", "reader", "writer"]) await api[name];
 	for (const key of [...Object.keys(KINDS), "ddate", "derr"]) {
 		await api.owner[key];
@@ -117,7 +117,7 @@ describe.each(guarded)(
 		});
 
 		const build = (rules = []) =>
-			mount({ mode, runtime, permissions: { defaultPolicy: "allow", attribution, rules: [...WRITER_RULES, ...rules] } });
+			mount({ mode, runtime, permissions: { policy: "allow", caller: { attribution }, rules: [...WRITER_RULES, ...rules] } });
 
 		it.each(WRITES)("a reader with no write rights changes nothing the owner holds: $key, $route", async ({ key, kind, route }) => {
 			api = await build();
@@ -215,7 +215,7 @@ describe.each(guarded)(
 			api = null;
 		});
 
-		const build = (rules) => mount({ mode, runtime, permissions: { defaultPolicy: "allow", attribution, rules } });
+		const build = (rules) => mount({ mode, runtime, permissions: { policy: "allow", caller: { attribution }, rules } });
 
 		/** Every answer refused, for each member. */
 		const refused = (members) => Object.fromEntries(members.map((member) => [member, { threw: "PERMISSION_DENIED" }]));
@@ -310,7 +310,7 @@ describe.each(answering)(
 				length: plain.length === undefined && nodeAnswers ? 0 : plain.length,
 				tag: SLOT_TAGGED.has(key) ? "[object Object]" : plain.tag
 			};
-			api = await mount({ mode, runtime, ...(attribution ? { permissions: { defaultPolicy: "allow", attribution } } : {}) });
+			api = await mount({ mode, runtime, ...(attribution ? { permissions: { policy: "allow", caller: { attribution } } } : {}) });
 			expect(asks(api.single[key])).toEqual(expected);
 			expect(await api.reader.asks("single", key)).toEqual(expected);
 		});
@@ -327,7 +327,7 @@ describe.each(guarded)(
 			api = null;
 		});
 
-		const build = (rules) => mount({ mode, runtime, permissions: { defaultPolicy: "allow", attribution, rules } });
+		const build = (rules) => mount({ mode, runtime, permissions: { policy: "allow", caller: { attribution }, rules } });
 
 		/**
 		 * How plain JavaScript lists and serializes an object with some members left out.

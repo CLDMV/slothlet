@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:09-07:00 (1791090909)
+ *	@Last modified time: 2026-11-19T16:10:25-08:00 (1795133425)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -59,7 +59,7 @@ describe("Background Materialization (config.tracking.materialization)", () => {
 				api = await slothlet({
 					...config,
 					base: TEST_DIRS.API_TEST,
-					tracking: { materialization: false }
+					loader: { materialize: false }
 				});
 
 				// Give background work time to NOT happen
@@ -78,7 +78,7 @@ describe("Background Materialization (config.tracking.materialization)", () => {
 				const api = await slothlet({
 					base: TEST_DIRS.API_TEST,
 					mode: "lazy",
-					tracking: { materialization: true }
+					loader: { materialize: true }
 				});
 
 				// Wait for background materialization to complete
@@ -89,7 +89,7 @@ describe("Background Materialization (config.tracking.materialization)", () => {
 				// With background materialization, all should be materialized
 				expect(stats.remaining).toBe(0);
 				expect(stats.percentage).toBe(100);
-				expect(api.slothlet.materialize.materialized).toBe(true);
+				expect(api.slothlet.materialize.complete).toBe(true);
 
 				await api.shutdown();
 			});
@@ -98,14 +98,14 @@ describe("Background Materialization (config.tracking.materialization)", () => {
 				const api = await slothlet({
 					base: TEST_DIRS.API_TEST,
 					mode: "lazy",
-					tracking: true // Boolean shorthand
+					loader: { materialize: true } // Boolean shorthand
 				});
 
 				expect(await backgroundSettles(api)).toBe(true);
 
 				const stats = api.slothlet.materialize.get();
 				expect(stats.remaining).toBe(0);
-				expect(api.slothlet.materialize.materialized).toBe(true);
+				expect(api.slothlet.materialize.complete).toBe(true);
 
 				await api.shutdown();
 			});
@@ -135,7 +135,7 @@ describe("Background Materialization (config.tracking.materialization)", () => {
 				const api = await slothlet({
 					base: TEST_DIRS.API_TEST,
 					mode: "lazy",
-					tracking: { materialization: true }
+					loader: { materialize: true }
 				});
 
 				// Subscribe to lifecycle event via public API
@@ -151,7 +151,7 @@ describe("Background Materialization (config.tracking.materialization)", () => {
 				expect(eventEmitted).toBe(true);
 				expect(eventData).toBeDefined();
 				expect(eventData.total).toBeGreaterThanOrEqual(0);
-				expect(typeof eventData.timestamp).toBe("number");
+				expect(typeof eventData.at).toBe("number");
 
 				await api.shutdown();
 			});
@@ -162,7 +162,7 @@ describe("Background Materialization (config.tracking.materialization)", () => {
 				const api = await slothlet({
 					base: TEST_DIRS.API_TEST,
 					mode: "lazy",
-					tracking: { materialization: false }
+					loader: { materialize: false }
 				});
 
 				api.slothlet.lifecycle.on("materialized:complete", () => {
@@ -192,7 +192,7 @@ describe("Background Materialization (config.tracking.materialization)", () => {
 				const api = await slothlet({
 					base: TEST_DIRS.API_TEST,
 					mode: "lazy",
-					tracking: { materialization: true }
+					loader: { materialize: true }
 				});
 
 				api.slothlet.lifecycle.on("materialized:complete", () => {
@@ -219,7 +219,7 @@ describe("Background Materialization (config.tracking.materialization)", () => {
 				const api = await slothlet({
 					base: TEST_DIRS.API_TEST,
 					mode: "lazy",
-					tracking: { materialization: true }
+					loader: { materialize: true }
 				});
 
 				// Wait for background work to complete
@@ -228,7 +228,7 @@ describe("Background Materialization (config.tracking.materialization)", () => {
 				// All should be materialized
 				const stats = api.slothlet.materialize.get();
 				expect(stats.remaining).toBe(0);
-				expect(api.slothlet.materialize.materialized).toBe(true);
+				expect(api.slothlet.materialize.complete).toBe(true);
 
 				await api.shutdown();
 			});
@@ -237,7 +237,7 @@ describe("Background Materialization (config.tracking.materialization)", () => {
 				const api = await slothlet({
 					base: TEST_DIRS.API_TEST,
 					mode: "lazy",
-					tracking: { materialization: true }
+					loader: { materialize: true }
 				});
 
 				// Wait for background materialization
@@ -250,7 +250,7 @@ describe("Background Materialization (config.tracking.materialization)", () => {
 
 				// Should resolve nearly instantly
 				expect(duration).toBeLessThan(100);
-				expect(api.slothlet.materialize.materialized).toBe(true);
+				expect(api.slothlet.materialize.complete).toBe(true);
 
 				await api.shutdown();
 			});
@@ -261,7 +261,7 @@ describe("Background Materialization (config.tracking.materialization)", () => {
 				const api = await slothlet({
 					base: TEST_DIRS.API_TEST,
 					mode: "eager",
-					tracking: { materialization: true }
+					loader: { materialize: true }
 				});
 
 				await new Promise((resolve) => setTimeout(resolve, 100));
@@ -269,7 +269,7 @@ describe("Background Materialization (config.tracking.materialization)", () => {
 				// Eager mode should always show 100% materialized
 				const stats = api.slothlet.materialize.get();
 				expect(stats.remaining).toBe(0);
-				expect(api.slothlet.materialize.materialized).toBe(true);
+				expect(api.slothlet.materialize.complete).toBe(true);
 
 				await api.shutdown();
 			});
@@ -279,7 +279,7 @@ describe("Background Materialization (config.tracking.materialization)", () => {
 				const api = await slothlet({
 					base: TEST_DIRS.API_TEST,
 					mode: "lazy",
-					tracking: { materialization: true }
+					loader: { materialize: true }
 				});
 
 				// Wait for background work (should not throw)
@@ -296,7 +296,7 @@ describe("Background Materialization (config.tracking.materialization)", () => {
 				const api = await slothlet({
 					base: TEST_DIRS.API_TEST,
 					mode: "lazy",
-					tracking: false
+					loader: { materialize: false }
 				});
 
 				// Background materialization should NOT happen

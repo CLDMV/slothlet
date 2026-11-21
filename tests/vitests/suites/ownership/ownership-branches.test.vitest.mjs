@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:13-07:00 (1791090913)
+ *	@Last modified time: 2026-11-16T18:30:13-08:00 (1794882613)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -72,39 +72,39 @@ describe("OwnershipManager getDiagnostics — conflictedPaths filter/map via api
 		}
 	});
 
-	it("conflictedPaths is defined in the ownership diagnostics", () => {
+	it("conflicts is defined in the ownership diagnostics", () => {
 		const diag = api.slothlet.diag.inspect();
 
 		expect(diag.ownership).toBeDefined();
-		expect(Array.isArray(diag.ownership.conflictedPaths)).toBe(true);
+		expect(Array.isArray(diag.ownership.conflicts)).toBe(true);
 	});
 
-	it("conflictedPaths contains entries after api.add registers math.mjs a second time (lines 309-311)", () => {
+	it("conflicts contains entries after api.add registers math.mjs a second time (lines 309-311)", () => {
 		const diag = api.slothlet.diag.inspect();
 
 		// api.add("math", math.mjs) created a second ownership entry for the "math" apiPath;
 		// the initial dir scan already registered it under base_slothlet.
-		expect(diag.ownership.conflictedPaths.length).toBeGreaterThan(0);
+		expect(diag.ownership.conflicts.length).toBeGreaterThan(0);
 	});
 
-	it("each conflicted path entry has apiPath (line 310) and ownerStack (line 311)", () => {
+	it("each conflict entry has path and owners", () => {
 		const diag = api.slothlet.diag.inspect();
-		const conflicts = diag.ownership.conflictedPaths;
+		const conflicts = diag.ownership.conflicts;
 
 		// Require at least one conflict to validate the shape of the mapped objects
 		expect(conflicts.length).toBeGreaterThan(0);
 
 		const first = conflicts[0];
-		expect(typeof first.apiPath).toBe("string"); // line 310: apiPath field
-		expect(Array.isArray(first.ownerStack)).toBe(true); // line 311: ownerStack field
-		expect(first.ownerStack.length).toBeGreaterThanOrEqual(2); // stack had length > 1
+		expect(Array.isArray(first.path)).toBe(true); // the path, as its segments
+		expect(Array.isArray(first.owners)).toBe(true); // the owners, oldest first
+		expect(first.owners.length).toBeGreaterThanOrEqual(2); // stack had length > 1
 	});
 
-	it("ownerStack contains moduleID strings for each owner (line 311)", () => {
+	it("owners contains module id strings for each owner (line 311)", () => {
 		const diag = api.slothlet.diag.inspect();
 
-		for (const conflict of diag.ownership.conflictedPaths) {
-			for (const moduleID of conflict.ownerStack) {
+		for (const conflict of diag.ownership.conflicts) {
+			for (const moduleID of conflict.owners) {
 				expect(typeof moduleID).toBe("string");
 				expect(moduleID.length).toBeGreaterThan(0);
 			}
@@ -279,29 +279,29 @@ describe("OwnershipManager.ownsPath — true/false check (lines 290-291)", () =>
 // ─── register() input validation (lines 53, 57) ──────────────────────────────
 
 describe("OwnershipManager.register — input validation error paths (lines 53, 57)", () => {
-	it("throws OWNERSHIP_INVALID_MODULE_ID when moduleID is null (line 53)", () => {
+	it("throws OWNERSHIP_MODULE_ID_INVALID when moduleID is null (line 53)", () => {
 		const ownership = new OwnershipManager(makeMock());
 
 		expect(() => ownership.register({ moduleID: null, apiPath: "math.add", value: () => {} })).toThrow(SlothletError);
 	});
 
-	it("thrown error message contains OWNERSHIP_INVALID_MODULE_ID (line 53)", () => {
+	it("thrown error message contains OWNERSHIP_MODULE_ID_INVALID (line 53)", () => {
 		const ownership = new OwnershipManager(makeMock());
 
-		expect(() => ownership.register({ moduleID: undefined, apiPath: "math.add", value: () => {} })).toThrow(/OWNERSHIP_INVALID_MODULE_ID/);
+		expect(() => ownership.register({ moduleID: undefined, apiPath: "math.add", value: () => {} })).toThrow(/OWNERSHIP_MODULE_ID_INVALID/);
 	});
 
-	it("throws OWNERSHIP_INVALID_API_PATH when apiPath is a number (line 57)", () => {
+	it("throws OWNERSHIP_API_PATH_INVALID when apiPath is a number (line 57)", () => {
 		const ownership = new OwnershipManager(makeMock());
 
 		// apiPath !== "" and not a string → line 57 throws
 		expect(() => ownership.register({ moduleID: "mod-1", apiPath: 42, value: () => {} })).toThrow(SlothletError);
 	});
 
-	it("thrown error message contains OWNERSHIP_INVALID_API_PATH (line 57)", () => {
+	it("thrown error message contains OWNERSHIP_API_PATH_INVALID (line 57)", () => {
 		const ownership = new OwnershipManager(makeMock());
 
-		expect(() => ownership.register({ moduleID: "mod-1", apiPath: {}, value: () => {} })).toThrow(/OWNERSHIP_INVALID_API_PATH/);
+		expect(() => ownership.register({ moduleID: "mod-1", apiPath: {}, value: () => {} })).toThrow(/OWNERSHIP_API_PATH_INVALID/);
 	});
 
 	it("does NOT throw for empty string apiPath (root-level special case)", () => {

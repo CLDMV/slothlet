@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T00:46:26-08:00 (1794818786)
+ *	@Last modified time: 2026-11-16T18:30:19-08:00 (1794882619)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -22,7 +22,7 @@
  * Each of three roots (a folder of files, one whose root file's default export is a function, and one whose root file's
  * default export is an async function) is loaded as the api and mounted again at `zz`, so the root has a twin one level
  * down, and a `writer` module is mounted at `w`, where it owns neither. The writer makes each change through the api the
- * host handed it and through `self.slothlet.diag.getAPI()`, to `zz` and to the root of a fresh instance, and the root's
+ * host handed it and through `self.slothlet.diag.api()`, to `zz` and to the root of a fresh instance, and the root's
  * answer must be the twin's: with no write rule, with write rules granting each member, with the permission system off
  * and with it disabled. The host's own changes are checked against a plain object's. Eager and lazy mode, the async and
  * live runtime, both attributions.
@@ -59,10 +59,12 @@ const WRITTEN = ["wset", "wdef", "wfix", "data"];
  * @type {Record<string, function(string): (object|undefined)>}
  */
 const PERMISSIONS = {
-	"no write rule": (attribution) => ({ defaultPolicy: "allow", attribution, rules: [] }),
+	"no write rule": (attribution) => ({ policy: "allow", caller: { attribution }, rules: [] }),
 	"write rules granting each member": (attribution) => ({
-		defaultPolicy: "allow",
-		attribution,
+		policy: "allow",
+		caller: {
+			attribution
+		},
 		rules: ["", "zz."].flatMap((prefix) =>
 			WRITTEN.map((member) => ({ caller: "w.**", target: `${prefix}${member}:write`, effect: "allow" }))
 		)
@@ -79,8 +81,8 @@ const PERMISSIONS = {
  */
 async function build(root, options) {
 	const api = await slothlet({ base: join(FIXTURE, root), silent: true, diagnostics: true, ...options });
-	await api.slothlet.api.add("zz", join(FIXTURE, root), { moduleID: "zz" });
-	await api.slothlet.api.add("w", join(FIXTURE, "writer"), { moduleID: "w" });
+	await api.slothlet.api.add("zz", join(FIXTURE, root), { id: "zz" });
+	await api.slothlet.api.add("w", join(FIXTURE, "writer"), { id: "w" });
 	for (const member of ["data", "pnum", "tool"]) {
 		await api[member];
 		await api.zz[member];
@@ -300,10 +302,10 @@ describe.each(ROOTS)("the api root's integrity > %s", (root) => {
 					root === "objroot" ? Object.prototype : Object.getPrototypeOf(root === "fnroot" ? function () {} : async () => {})
 				);
 				// A member's own subtree still changes, the framework's work under it included.
-				await api.slothlet.api.add("zz.more", join(FIXTURE, root, "data.mjs"), { moduleID: "more" });
+				await api.slothlet.api.add("zz.more", join(FIXTURE, root, "data.mjs"), { id: "more" });
 				expect(api.zz.more.a).toBe(1);
 				// A member the root did not hold is not added, as on a frozen node.
-				await expect(api.slothlet.api.add("extra", join(FIXTURE, root, "data.mjs"), { moduleID: "extra" })).rejects.toMatchObject({
+				await expect(api.slothlet.api.add("extra", join(FIXTURE, root, "data.mjs"), { id: "extra" })).rejects.toMatchObject({
 					code: "API_ROOT_CLOSED"
 				});
 				expect("extra" in api).toBe(false);
@@ -381,14 +383,14 @@ describe.each(ROOTS)("the api root's integrity > %s", (root) => {
 					{ caller: "w.ops.protoListed", target: "inherited", effect: "allow" },
 					{ caller: "w.ops.protoKeys", target: "inherited", effect: "allow" },
 					{ caller: "w.ops.protoRead", target: "deepRuled", effect: "allow" },
-					// The writer reaches the root through `self.slothlet.diag.getAPI()` too.
+					// The writer reaches the root through `self.slothlet.diag.api()` too.
 					{ caller: "w.**", target: "slothlet.diag", effect: "allow" },
 					{ caller: "w.**", target: "slothlet.diag.**", effect: "allow" }
 				];
 				const NAMES_ASKED = ["inherited", "unruled", "deepRuled", "deepUnruled"];
 
 				it("reads and lists each member as the root reads it, and leaves the rest out", async () => {
-					api = await build(root, { mode, runtime, permissions: { defaultPolicy: "deny", attribution, rules } });
+					api = await build(root, { mode, runtime, permissions: { policy: "deny", caller: { attribution }, rules } });
 					const prototype = Object.assign(Object.create({ deepRuled: 1, deepUnruled: 2 }), { inherited: 5, unruled: 6 });
 					Object.setPrototypeOf(api, prototype);
 					// The host is handed the object itself, and reads everything.
@@ -426,7 +428,7 @@ describe.each(ROOTS)("the api root's integrity > %s", (root) => {
 
 				it("an inherited object member the module may read nothing beneath is left out of its listings", async () => {
 					const objectRules = [...rules, { caller: "w.ops.protoObjects", target: "partly.a", effect: "allow" }];
-					api = await build(root, { mode, runtime, permissions: { defaultPolicy: "deny", attribution, rules: objectRules } });
+					api = await build(root, { mode, runtime, permissions: { policy: "deny", caller: { attribution }, rules: objectRules } });
 					Object.setPrototypeOf(api, { nothing: { a: 1 }, partly: { a: 1, b: 2 } });
 					for (const via of ["given", "api"]) {
 						// Plain JS lists both; the module may read nothing beneath `nothing`, which is left out as a node leaves out
@@ -444,7 +446,7 @@ describe.each(ROOTS)("the api root's integrity > %s", (root) => {
 				});
 
 				it("a closed root holds the checked prototype for every holder", async () => {
-					api = await build(root, { mode, runtime, permissions: { defaultPolicy: "deny", attribution, rules } });
+					api = await build(root, { mode, runtime, permissions: { policy: "deny", caller: { attribution }, rules } });
 					const prototype = { inherited: 5, unruled: 6 };
 					Object.setPrototypeOf(api, prototype);
 					Object.freeze(api);

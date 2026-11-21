@@ -1,4 +1,10 @@
 /**
+ * Whether a parsed manifest is written in the deprecated format 1 (`schemaVersion`, `mountPath`, `apiDir`).
+ * @param {object} manifest - Parsed manifest.
+ * @returns {boolean} True when it uses any format 1 field name.
+ */
+export function isFormat1(manifest: object): boolean;
+/**
  * Validate a parsed slothlet.module.json manifest and return a normalized form.
  *
  * @param {object} manifest - Parsed JSON manifest object (must already be valid JSON).
@@ -13,7 +19,7 @@
  *   - `name`, `version` always present (from package.json if absent in manifest)
  *   - `description` from manifest (override) or package.json (fallback)
  *   - `priority` defaults to 0 if absent
- *   - `mountPath` normalized to an array of segments
+ *   - `mount` normalized to an array of segments
  * @throws {SlothletError} with `MODULE_*` code on any validation failure.
  *
  * @example

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-13T07:23:31-08:00 (1794583411)
+ *	@Last modified time: 2026-11-16T18:29:35-08:00 (1794882575)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -84,9 +84,9 @@ describe.each(matrix)("generator steps across modules > $mode / $runtime / $attr
 			silent: true,
 			mode,
 			runtime,
-			permissions: { defaultPolicy: "allow", attribution }
+			permissions: { policy: "allow", caller: { attribution } }
 		});
-		for (const name of ["owner", "reader"]) await api.slothlet.api.add(name, join(FIXTURE, name), { moduleID: name });
+		for (const name of ["owner", "reader"]) await api.slothlet.api.add(name, join(FIXTURE, name), { id: name });
 		for (const node of [api.owner, api.reader]) await node;
 		return api;
 	};

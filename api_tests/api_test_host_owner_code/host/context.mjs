@@ -28,8 +28,8 @@
  */
 export function makeContext(api) {
 	return {
-		pin: (fn) => typeof api.slothlet.lockCaller(fn),
-		meta: () => api.slothlet.metadata.caller()?.apiPath ?? null,
+		pin: (fn) => typeof api.slothlet.pin(fn),
+		meta: () => api.slothlet.metadata.caller()?.path?.join(".") ?? null,
 		emit: () => {
 			api.slothlet.event.emit("host:ping", { n: 1 });
 			return "emitted";

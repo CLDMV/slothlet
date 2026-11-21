@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:25-07:00 (1791090925)
+ *	@Last modified time: 2026-11-19T16:11:39-08:00 (1795133499)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -166,7 +166,7 @@ describe("prototype [util.inspect.custom] unmaterialized lazy branch (line 352)"
 
 describe("background materialization via tracking.materialization (line 352)", () => {
 	it("lazy mode with tracking.materialization starts background materialization via setImmediate", async () => {
-		const api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "lazy", silent: true, tracking: { materialization: true } });
+		const api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "lazy", silent: true, loader: { materialize: true } });
 		_api = api;
 		// Wrappers are created with mode=lazy and background materialization triggered.
 		// Wait multiple ticks to let setImmediate and async materialization complete.
@@ -191,7 +191,7 @@ describe("__metadata fallback when metadata handler is null (line 2122)", () => 
 		const originalMetadata = sl.handlers.metadata;
 		sl.handlers.metadata = null;
 		try {
-			const meta = api.math.__metadata;
+			const meta = api.slothlet.metadata.get(api.math);
 			expect(meta).toEqual({});
 		} finally {
 			sl.handlers.metadata = originalMetadata;

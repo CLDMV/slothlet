@@ -34,6 +34,6 @@ export async function make() {
 	const shared = { kind: "shared" };
 	leaf.conn.open = shared;
 	leaf.conn.shut = shared;
-	await self.slothlet.api.add("things.x", leaf, { moduleID: "thing:x" });
+	await self.slothlet.api.add("things.x", leaf, { id: "thing:x" });
 	return self.things.x;
 }

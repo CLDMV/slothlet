@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-11T13:13:35-08:00 (1794431615)
+ *	@Last modified time: 2026-11-16T18:27:53-08:00 (1794882473)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -25,7 +25,7 @@ import { self } from "@cldmv/slothlet/runtime";
  * @param {*} error - What was thrown.
  * @returns {string} The report.
  */
-const refused = (error) => `${error?.code}:${error?.context?.caller ?? null}`;
+const refused = (error) => `${error?.code}:${error?.details?.caller ?? null}`;
 
 /**
  * Read the vault from code outside every export.

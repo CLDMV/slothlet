@@ -250,8 +250,8 @@ describe("modes-processor – lazy mode with debug.modes=true", () => {
 		expect(api).toBeDefined();
 
 		// Trigger materialization of sub-dirs (exercises lazy debug paths)
-		await api.string._materialize?.();
-		await api.logger._materialize?.();
+		await api.string.___materialize?.();
+		await api.logger.___materialize?.();
 
 		expect(api.string).toBeDefined();
 		expect(api.logger).toBeDefined();

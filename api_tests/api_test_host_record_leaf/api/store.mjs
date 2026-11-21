@@ -28,5 +28,5 @@ import { self } from "@cldmv/slothlet/runtime";
  * api.store.partition(); // "p:host.records.apply"
  */
 export function partition() {
-	return `p:${self.slothlet.metadata.caller()?.apiPath ?? null}`;
+	return `p:${self.slothlet.metadata.caller()?.path?.join(".") ?? null}`;
 }

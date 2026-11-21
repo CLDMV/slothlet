@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:20-07:00 (1791090920)
+ *	@Last modified time: 2026-11-16T18:30:51-08:00 (1794882651)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -19,7 +19,7 @@
  *
  * When the forked generate-types-worker sends `{ type: "error", error: "..." }` via
  * `process.send()`, the parent's `child.on("message")` handler rejects with
- * `TS_TYPE_GENERATION_FAILED` (L109).
+ * `TYPESCRIPT_TYPE_GENERATION_FAILED` (L109).
  *
  * This is separate from loader-fork-error.test.vitest.mjs (which covers the process
  * "error" event at L115) because vi.mock() is file-scoped — a single fork mock
@@ -35,7 +35,7 @@ import { join, resolve } from "node:path";
 import { withSuppressedSlothletErrorOutput } from "../../setup/vitest-helper.mjs";
 
 // ─── Mock child_process so fork() returns a fake child that sends a message
-// with { type: "error" } to trigger the TS_TYPE_GENERATION_FAILED rejection. ──
+// with { type: "error" } to trigger the TYPESCRIPT_TYPE_GENERATION_FAILED rejection. ──
 
 vi.mock("child_process", async (importOriginal) => {
 	const actual = await importOriginal();
@@ -88,7 +88,7 @@ describe("loader.mjs L109 — child.on(message) type=error path", () => {
 		}
 	});
 
-	it("rejects with TS_TYPE_GENERATION_FAILED when fork sends message type=error (L109)", async () => {
+	it("rejects with TYPESCRIPT_TYPE_GENERATION_FAILED when fork sends message type=error (L109)", async () => {
 		const { default: slothlet } = await import("@cldmv/slothlet");
 
 		await withSuppressedSlothletErrorOutput(async () => {
@@ -100,11 +100,11 @@ describe("loader.mjs L109 — child.on(message) type=error path", () => {
 						mode: "strict",
 						types: {
 							output: join(fixtureRoot, "generated", "api.d.ts"),
-							interfaceName: "ForkMessageErrorAPI"
+							name: "ForkMessageErrorAPI"
 						}
 					}
 				})
-			).rejects.toThrow("TS_TYPE_GENERATION_FAILED");
+			).rejects.toThrow("TYPESCRIPT_TYPE_GENERATION_FAILED");
 		});
 	});
 });

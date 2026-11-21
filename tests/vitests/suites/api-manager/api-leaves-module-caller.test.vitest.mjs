@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T21:10:11-08:00 (1794805811)
+ *	@Last modified time: 2026-11-16T18:28:33-08:00 (1794882513)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -35,15 +35,15 @@ const configs = ["eager", "lazy"].flatMap((mode) =>
 	["async", "live"].flatMap((runtime) => ["precise", "fast"].map((attribution) => ({ mode, runtime, attribution })))
 );
 
-/** Whether a path's last segment is a private member's name. */
-const isPrivate = (path) => path.slice(path.lastIndexOf(".") + 1).startsWith("_");
+/** Whether a path's last segment is a private member's name (leaves() reports a path as its segments). */
+const isPrivate = (path) => path[path.length - 1].startsWith("_");
 
 /** The listings with no permission config, eager: everything is public there. */
 const all = {};
 
 beforeAll(async () => {
 	const api = await slothlet({ base: BASE, mode: "eager", silent: true });
-	await api.slothlet.api.add("ext", EXT, { moduleID: "ext-mod" });
+	await api.slothlet.api.add("ext", EXT, { id: "ext-mod" });
 	all.base = await api.slothlet.api.leaves(".");
 	all.ext = await api.slothlet.api.leaves("ext-mod");
 	await api.shutdown();
@@ -58,8 +58,8 @@ describe.each(configs)("api.leaves from a module > $mode / $runtime / $attributi
 	});
 
 	it("shows a module its own module's leaves, privates included, and another module's without them", async () => {
-		api = await slothlet({ base: BASE, mode, runtime, silent: true, permissions: { defaultPolicy: "allow", attribution, rules: [] } });
-		await api.slothlet.api.add("ext", EXT, { moduleID: "ext-mod" });
+		api = await slothlet({ base: BASE, mode, runtime, silent: true, permissions: { policy: "allow", caller: { attribution }, rules: [] } });
+		await api.slothlet.api.add("ext", EXT, { id: "ext-mod" });
 		expect(all.ext.some(isPrivate)).toBe(true);
 		expect(all.base.some(isPrivate)).toBe(true);
 		expect(await api.ext.list.paths("ext")).toEqual({ paths: all.ext, error: null });

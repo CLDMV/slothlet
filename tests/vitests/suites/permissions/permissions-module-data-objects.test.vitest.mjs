@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-31T20:52:51-07:00 (1793505171)
+ *	@Last modified time: 2026-11-16T18:30:37-08:00 (1794882637)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -39,7 +39,7 @@ import slothletInstance from "@cldmv/slothlet";
  * @returns {Promise<object>} The api.
  */
 const slothlet = (config) =>
-	slothletInstance(config?.permissions ? { ...config, permissions: { provenance: false, ...config.permissions } } : config);
+	slothletInstance(config?.permissions ? { ...config, permissions: { caller: { provenance: false }, ...config.permissions } } : config);
 import { TEST_DIRS, withSuppressedSlothletErrorOutput, withSuppressedSlothletErrorOutputSync } from "../../setup/vitest-helper.mjs";
 
 const FIXTURE = TEST_DIRS.API_TEST_SELF_WRITE_REACH;
@@ -90,8 +90,8 @@ describe.each(CONFIGS)("a module's data objects (#625) — $mode / $runtime", ({
 	 */
 	async function load(options) {
 		api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, ...options });
-		await api.slothlet.api.add("victim", path.join(FIXTURE, "victim"), { moduleID: "victim" });
-		await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { moduleID: "guest" });
+		await api.slothlet.api.add("victim", path.join(FIXTURE, "victim"), { id: "victim" });
+		await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { id: "guest" });
 		return api;
 	}
 
@@ -133,7 +133,7 @@ describe.each(CONFIGS)("a module's data objects (#625) — $mode / $runtime", ({
 		await api.slothlet.api.add(
 			"syn",
 			{ pending: Promise.resolve(value), ref: new WeakRef(value), map: new Map([["k", value]]) },
-			{ moduleID: "syn" }
+			{ id: "syn" }
 		);
 		globalThis[Symbol.for("slothlet.test.i625.probe")] = async (self) => {
 			const outcome = async (change) => {
@@ -169,7 +169,7 @@ describe.each(CONFIGS)("a module's data objects (#625) — $mode / $runtime", ({
 		const report = await withSuppressedSlothletErrorOutput(() => api.guest.x.runWithSelf("slothlet.test.i625.probe"));
 		delete globalThis[Symbol.for("slothlet.test.i625.probe")];
 		// Refused for not owning the path, or, under the live runtime, for having no module caller after an await.
-		for (const outcome of Object.values(report)) expect(["LOOSE_SET_NOT_OWNED", "RUNTIME_NO_ACTIVE_CONTEXT_SELF"]).toContain(outcome);
+		for (const outcome of Object.values(report)) expect(["LOOSE_SET_NOT_OWNED", "CONTEXT_NOT_ACTIVE_SELF"]).toContain(outcome);
 		expect(value.n).toBe(0);
 	});
 
@@ -219,7 +219,7 @@ describe.each(CONFIGS)("a module's data objects (#625) — $mode / $runtime", ({
 	])("holds a data object a module exports as a leaf to the same rule (permissions %s)", async (_label, options, change, changed) => {
 		await load(options);
 		const cache = new Map([["k", { n: 1 }]]);
-		await api.slothlet.api.add("syn", { cache }, { moduleID: "syn" });
+		await api.slothlet.api.add("syn", { cache }, { id: "syn" });
 		expect(withSuppressedSlothletErrorOutputSync(() => api.guest.x.changeMapAt("syn.cache"))).toEqual({ read: 1, change });
 		expect(cache.has("evil")).toBe(changed);
 	});
@@ -394,7 +394,7 @@ describe.each(CONFIGS)("a module's data objects (#625) — $mode / $runtime", ({
 				await load(options);
 				const shared = new SharedArrayBuffer(8, { maxByteLength: 16 });
 				const foreign = vm.runInNewContext("({ map: new Map([['k', { n: 0 }]]), bytes: new Uint8Array([1, 2]), date: new Date(0) })");
-				await api.slothlet.api.add("syn", { shared, foreign }, { moduleID: "syn" });
+				await api.slothlet.api.add("syn", { shared, foreign }, { id: "syn" });
 				const report = await asGuest((self) => ({
 					sharedGrow: outcome(() => self.syn.shared.grow(16)),
 					sharedRead: outcome(() => {

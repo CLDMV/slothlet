@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:51-08:00 (1794874611)
+ *	@Last modified time: 2026-11-17T13:27:43-08:00 (1794950863)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -26,7 +26,7 @@
  *
  * @module tests/vitests/suites/helpers/instance-imports-two-copies
  */
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import fs from "node:fs";
 import fsp from "node:fs/promises";
 import path from "node:path";
@@ -34,6 +34,7 @@ import nodeModule, { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import slothlet from "@cldmv/slothlet";
 import * as first from "#helpers/instance-imports";
+import { Utilities } from "#helpers/utilities";
 import { makeTestTmpDir } from "../../setup/test-fixtures-tmp.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -68,7 +69,7 @@ describe("Helpers > instance-imports > two copies of the module in one process",
 	});
 
 	it("reads the record the first copy keeps", () => {
-		const instanceID = api.slothlet.instanceID;
+		const instanceID = api.slothlet.instance.id;
 		expect(first.instanceCommonJSFiles(instanceID).length).toBeGreaterThan(0);
 		expect([...second.instanceCommonJSFiles(instanceID)].sort()).toEqual([...first.instanceCommonJSFiles(instanceID)].sort());
 		expect(second.instanceCommonJSVersion(instanceID)).toEqual(first.instanceCommonJSVersion(instanceID));
@@ -77,7 +78,7 @@ describe("Helpers > instance-imports > two copies of the module in one process",
 	});
 
 	it("cannot claim, load under or release the ID of an instance the first copy's slothlet built", () => {
-		const instanceID = api.slothlet.instanceID;
+		const instanceID = api.slothlet.instance.id;
 		const before = [...first.instanceCommonJSFiles(instanceID)].sort();
 		expect(second.claimInstanceScope(instanceID)).toBe(null);
 		expect(first.claimInstanceScope(instanceID)).toBe(null);
@@ -140,20 +141,25 @@ describe("Helpers > instance-imports > two copies of the module in one process",
 			expect(member in shared).toBe(false);
 		for (const value of Object.values(shared)) expect(value instanceof Map || value instanceof Set).toBe(false);
 		expect(() => shared.redeem("not-a-ticket")).toThrow(TypeError);
-		expect(() => shared.requireCJS(path.join(root, "helper.cjs"), api.slothlet.instanceID)).toThrow(TypeError);
+		expect(() => shared.requireCJS(path.join(root, "helper.cjs"), api.slothlet.instance.id)).toThrow(TypeError);
 	});
 });
 
 describe("Helpers > instance-imports > an instance ID something else holds", () => {
 	it("refuses to load an instance's files under it", async () => {
-		// The instance's clock is fixed, so the ID a full reload gives it (made from the old one and the time) is known.
-		const api = await slothlet({ base: DIR, silent: true, clock: { now: () => 1790000000000 } });
-		const instanceID = api.slothlet.instanceID;
-		const taken = first.claimInstanceScope(`${instanceID}_reload_1790000000000`);
+		const api = await slothlet({ base: DIR, silent: true });
+		const instanceID = api.slothlet.instance.id;
+		// A reload's ID has a random part; fixed here so the ID it would take is known and can be held.
+		const generate = vi.spyOn(Utilities.prototype, "generateId").mockImplementation((prefix = "slothlet") => `${prefix}_held`);
+		const taken = first.claimInstanceScope(`${instanceID}_reload_held`);
 		try {
 			expect(taken).not.toBe(null);
 			await expect(api.slothlet.reload()).rejects.toMatchObject({ code: "INSTANCE_ID_IN_USE" });
+			// The reload failed before it let go of the instance's own ID: the instance is as it was.
+			expect(api.slothlet.instance.id).toBe(instanceID);
+			expect(await api.one.bump()).toBeTypeOf("number");
 		} finally {
+			generate.mockRestore();
 			taken?.release();
 			await api.shutdown().catch(() => {});
 		}

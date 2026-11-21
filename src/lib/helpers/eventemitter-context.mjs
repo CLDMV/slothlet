@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:12-08:00 (1794874572)
+ *	@Last modified time: 2026-11-17T20:34:19-08:00 (1794976459)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -31,7 +31,7 @@
 // meaningless in a browser. Gated so node:events/node:async_hooks stay out of the browser static
 // graph (#123); the exported patching entry points no-op when EventEmitter is null.
 import { EventEmitter, AsyncResource } from "#helpers/platform";
-import { pinToCurrentCaller } from "#helpers/caller-pinning";
+import { holdForCurrentFlow, pinToCurrentCaller } from "#helpers/caller-pinning";
 import { openLayer, closeLayer, holdsValue, markLayer } from "#helpers/boundary-patch-layers";
 import { internals as sharedValuesInternals } from "../handlers/shared-values.mjs";
 import {
@@ -73,6 +73,27 @@ let isInApiContext = null;
  */
 function setApiContextChecker(checker) {
 	isInApiContext = checker;
+}
+
+/**
+ * How a listener keeps the flow it was registered in, set by the async runtime: `capture()` answers, as a listener is
+ * registered, the store the registering code acts in (a flow for the flow's own code, the host's or a call's; a store
+ * outside the flow for a module's code that entered the flow by itself), and undefined outside every flow; `run(flow,
+ * fn, thisArg, args)` runs the listener entered in that store. Null where no runtime needs it: the listener runs in the
+ * scope of the `AsyncResource` it was registered with, and is told by its frames there.
+ * @type {{capture: function(): *, run: function(*, Function, *, Array<*>): *}|null}
+ * @private
+ */
+let listenerFlow = null;
+
+/**
+ * Register how a listener keeps the flow it was registered in (see {@link listenerFlow}).
+ * @param {{capture: function(): *, run: function(*, Function, *, Array<*>): *}|null} strategy - The strategy, or null.
+ * @returns {void}
+ * @internal
+ */
+function setListenerFlow(strategy) {
+	listenerFlow = strategy;
 }
 /**
  * The patched EventEmitter methods: each patch, and its layer (which records the method it replaced).
@@ -199,6 +220,14 @@ function runtime_wrapEventListener(listener) {
 	// not serve. Done here, at registration, because that is when the registering module is the
 	// executing one; by the time the event fires it is long gone.
 	let bound = pinToCurrentCaller(listener);
+	// The store the registering code acts in: a listener the host or a call of a run registers keeps the run when Node
+	// emits, whoever wrote the listener, as a function the run calls itself does; one a module's code registers from a
+	// flow it entered by itself runs outside that flow, as that code did.
+	let flow = listenerFlow !== null ? listenerFlow.capture() : undefined;
+	// Registered in a run() / scope(), the listener is the run's work until it is taken off its emitter: counted here on
+	// the live runtime, and through its resource on the async runtime (see runtime_listenerDone).
+	let release = holdForCurrentFlow();
+	let destroyable = resource;
 
 	const epoch = releaseEpoch;
 	// Create wrapped listener that executes within captured context
@@ -210,19 +239,35 @@ function runtime_wrapEventListener(listener) {
 		/* v8 ignore next — the no-AsyncResource (browser) path; see the capture above. */
 		if (!resource) return FunctionMethods.apply(bound, this, args);
 		return resource.runInAsyncScope(() => {
+			if (flow !== undefined && listenerFlow !== null) return listenerFlow.run(flow, bound, this, args);
 			return FunctionMethods.apply(bound, this, args);
 		}, this);
 	};
 
 	// Attach metadata for cleanup and identification
-	runtime_wrappedListener._slothletOriginal = listener;
-	runtime_wrappedListener._slothletResource = resource;
+	runtime_wrappedListener.____slothletOriginal = listener;
+	runtime_wrappedListener.____slothletResource = resource;
 	// Drops the captured context at the last shutdown (#605 review), whether or not the wrapper can be
 	// taken off its emitter: a released wrapper calls its listener directly and needs neither capture.
-	runtime_wrappedListener._slothletRelease = () => {
+	runtime_wrappedListener.____slothletRelease = () => {
+		runtime_wrappedListener.____slothletDone?.();
 		resource = null;
 		bound = null;
-		runtime_wrappedListener._slothletResource = null;
+		flow = undefined;
+		runtime_wrappedListener.____slothletResource = null;
+	};
+	// The listener is off its emitter: the work it was for a run is done, once.
+	runtime_wrappedListener.____slothletDone = () => {
+		if (release !== null) {
+			const held = release;
+			release = null;
+			held();
+		}
+		if (destroyable !== null) {
+			const own = destroyable;
+			destroyable = null;
+			own.emitDestroy();
+		}
 	};
 
 	return runtime_wrappedListener;
@@ -333,8 +378,9 @@ function runtime_untrackListener(emitter, event, originalListener) {
 	if (!wrappers || wrappers.length === 0) return;
 
 	const wrappedListener = ArrayMethods.pop(wrappers);
-	// Cleanup AsyncResource reference (_slothletResource is always set by runtime_wrapEventListener)
-	wrappedListener._slothletResource = null;
+	// Cleanup AsyncResource reference (____slothletResource is always set by runtime_wrapEventListener)
+	wrappedListener.____slothletResource = null;
+	wrappedListener.____slothletDone?.();
 
 	if (wrappers.length === 0) {
 		MapMethods.delete(eventTracking, originalListener);
@@ -393,7 +439,8 @@ function runtime_untrackSpecificWrapper(emitter, event, originalListener, wrappe
 	if (idx === -1) return;
 
 	listSplice(wrappers, idx, 1);
-	wrappedListener._slothletResource = null;
+	wrappedListener.____slothletResource = null;
+	wrappedListener.____slothletDone?.();
 
 	if (wrappers.length === 0) {
 		MapMethods.delete(eventTracking, originalListener);
@@ -417,7 +464,7 @@ function runtime_shouldWrapListener(listener) {
 	if (typeof listener !== "function") return false;
 
 	// Don't double-wrap
-	if (listener._slothletOriginal) return false;
+	if (listener.____slothletOriginal) return false;
 
 	return true;
 }
@@ -473,7 +520,7 @@ function runtime_patchOn() {
  * We do NOT delegate to native `EventEmitter.prototype.once` here. Native
  * `once` internally calls `this.on(event, _onceWrap(...))`, and `this.on`
  * routes through the PATCHED prototype `on` — which sees the fresh
- * `_onceWrap_output` (no `_slothletOriginal` marker), wraps it AGAIN as a
+ * `_onceWrap_output` (no `____slothletOriginal` marker), wraps it AGAIN as a
  * second listener (call it `L2`), and attaches `L2` to the listener array.
  * The tracking map ends up with `userFn → runtime_onceWrapper` (from this
  * patch) but the listener array holds `L2`, so a subsequent
@@ -500,7 +547,7 @@ function runtime_patchOn() {
  * Calling the base `EventEmitter.prototype.on` directly attached the
  * listener but skipped `resume()`, so `socket.once("data")` never fired.
  * Dispatching through `this.on` is safe from the double-wrap above because
- * `runtime_onceWrapper` carries `_slothletOriginal`: the patched `on` and
+ * `runtime_onceWrapper` carries `____slothletOriginal`: the patched `on` and
  * `removeListener` see the marker and pass it straight to the original
  * without wrapping or tracking it again.
  *
@@ -539,17 +586,18 @@ function runtime_patchOnce() {
 		};
 
 		// Metadata for slothlet tracking + Node's introspection contract.
-		runtime_onceWrapper._slothletOriginal = listener;
-		runtime_onceWrapper._slothletResource = wrapped._slothletResource;
-		runtime_onceWrapper._slothletRelease = () => {
-			wrapped._slothletRelease();
-			runtime_onceWrapper._slothletResource = null;
+		runtime_onceWrapper.____slothletOriginal = listener;
+		runtime_onceWrapper.____slothletResource = wrapped.____slothletResource;
+		runtime_onceWrapper.____slothletRelease = () => {
+			wrapped.____slothletRelease();
+			runtime_onceWrapper.____slothletResource = null;
 		};
+		runtime_onceWrapper.____slothletDone = wrapped.____slothletDone;
 		runtime_onceWrapper.listener = listener;
 
 		runtime_trackListener(this, event, listener, runtime_onceWrapper);
 		// Attach through the emitter's own `on` so subclass overrides run (#503);
-		// the `_slothletOriginal` marker stops the patched `on` from re-wrapping.
+		// the `____slothletOriginal` marker stops the patched `on` from re-wrapping.
 		return this.on(event, runtime_onceWrapper);
 	};
 	runtime_installPatch("once", layer, patch);
@@ -588,7 +636,7 @@ function runtime_patchPrependListener() {
  * `prependOnceListener` internally calls `this.prependListener(...)` which
  * routes through the patched prototype and double-wraps. Same fix shape:
  * attach through `this.prependListener`, auto-cleanup through
- * `this.removeListener` (both see the `_slothletOriginal` marker and pass the
+ * `this.removeListener` (both see the `____slothletOriginal` marker and pass the
  * wrapper through unwrapped), set `.listener = userFn`.
  *
  * @private
@@ -621,12 +669,13 @@ function runtime_patchPrependOnceListener() {
 			return FunctionMethods.apply(wrapped, this, args);
 		};
 
-		runtime_onceWrapper._slothletOriginal = listener;
-		runtime_onceWrapper._slothletResource = wrapped._slothletResource;
-		runtime_onceWrapper._slothletRelease = () => {
-			wrapped._slothletRelease();
-			runtime_onceWrapper._slothletResource = null;
+		runtime_onceWrapper.____slothletOriginal = listener;
+		runtime_onceWrapper.____slothletResource = wrapped.____slothletResource;
+		runtime_onceWrapper.____slothletRelease = () => {
+			wrapped.____slothletRelease();
+			runtime_onceWrapper.____slothletResource = null;
 		};
+		runtime_onceWrapper.____slothletDone = wrapped.____slothletDone;
 		runtime_onceWrapper.listener = listener;
 
 		runtime_trackListener(this, event, listener, runtime_onceWrapper);
@@ -694,8 +743,9 @@ function runtime_patchRemoveAllListeners() {
 					for (const wrappers of mapValues(eventTracking)) {
 						for (let ofIndex = 0, ofList = wrappers; ofIndex < ofList.length; ofIndex++) {
 							const wrappedListener = ofList[ofIndex];
-							// _slothletResource is always set by runtime_wrapEventListener
-							wrappedListener._slothletResource = null;
+							// ____slothletResource is always set by runtime_wrapEventListener
+							wrappedListener.____slothletResource = null;
+							wrappedListener.____slothletDone?.();
 						}
 					}
 				}
@@ -707,8 +757,9 @@ function runtime_patchRemoveAllListeners() {
 					for (const wrappers of mapValues(eventTracking)) {
 						for (let ofIndex = 0, ofList = wrappers; ofIndex < ofList.length; ofIndex++) {
 							const wrappedListener = ofList[ofIndex];
-							// _slothletResource is always set by runtime_wrapEventListener
-							wrappedListener._slothletResource = null;
+							// ____slothletResource is always set by runtime_wrapEventListener
+							wrappedListener.____slothletResource = null;
+							wrappedListener.____slothletDone?.();
 						}
 					}
 					MapMethods.delete(emitterTracking, event);
@@ -842,7 +893,7 @@ function cleanupEventEmitterResources() {
 				for (const wrappers of mapValues(byOriginal)) {
 					for (let ofIndex = 0, ofList = wrappers; ofIndex < ofList.length; ofIndex++) {
 						const wrapper = ofList[ofIndex];
-						wrapper._slothletRelease();
+						wrapper.____slothletRelease();
 					}
 				}
 			}
@@ -901,7 +952,7 @@ function cleanupEventEmitterResources() {
 export function internals(consumer) {
 	if (!mayTakeInternals(consumer, ["lib/handlers/context-async", "lib/handlers/context-live", "slothlet"]))
 		throw ownBindingsRefusal("lib/helpers/eventemitter-context", import.meta.url);
-	return { cleanupEventEmitterResources, disableEventEmitterPatching, enableEventEmitterPatching, setApiContextChecker };
+	return { cleanupEventEmitterResources, disableEventEmitterPatching, enableEventEmitterPatching, setApiContextChecker, setListenerFlow };
 }
 
 /**

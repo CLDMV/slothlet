@@ -15,7 +15,7 @@
  * in lazy mode while eager served them.
  *
  * @example
- * isFrameworkReservedKey("__childFilePaths"); // true
+ * isFrameworkReservedKey("____childFilePaths"); // true
  * isFrameworkReservedKey("__priv"); // false — a module's own export
  */
 export function isFrameworkReservedKey(key: string | symbol): boolean;
@@ -34,7 +34,7 @@ export function writeTargetLiteralPrefix(pattern: string): string[];
  * @returns {boolean} Whether it names the framework's own.
  * @example
  * isFrameworkWriteTarget("slothlet.**"); // true
- * isFrameworkWriteTarget("victim.**.__metadata"); // true
+ * isFrameworkWriteTarget("victim.**.____state"); // true
  */
 export function isFrameworkWriteTarget(pattern: string): boolean;
 /**

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T18:46:54-08:00 (1794797214)
+ *	@Last modified time: 2026-11-16T18:28:03-08:00 (1794882483)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -35,7 +35,7 @@ const ADDS = [
 	[["deep", "one"], "pundef.mjs"]
 ];
 
-const configs = matrix().map((config) => ({ ...config, permissions: { attribution: config.attribution, rules: [] } }));
+const configs = matrix().map((config) => ({ ...config, permissions: { caller: { attribution: config.attribution }, rules: [] } }));
 
 /**
  * A value as the fixture's reader describes it.

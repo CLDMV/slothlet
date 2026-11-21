@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:13-08:00 (1794874573)
+ *	@Last modified time: 2026-11-17T13:35:21-08:00 (1794951321)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -55,39 +55,32 @@
  */
 
 import {
-	ArrayBuffer,
 	ArrayBuffers,
 	ArrayMethods,
-	BigInt,
 	Boolean,
 	CryptoKey,
-	DataView,
-	Date,
 	Error,
 	Errors,
+	filterList,
 	FunctionMethods,
-	Functions,
 	JSON,
 	Map,
 	mapList,
 	MessageChannel,
 	NativeProcess,
-	Number,
+	ObjectMethods,
 	Objects,
 	Promise,
 	promiseAll,
+	PrototypeFunctions,
 	Reflect,
 	RegExp,
 	Set,
 	setImmediate,
 	setTimeout,
-	SharedArrayBuffer,
-	String,
 	StringMethods,
 	Symbol,
-	Symbols,
-	WeakMap,
-	WeakSet
+	Symbols
 } from "#helpers/intrinsics";
 import { pinToCurrentCaller } from "#helpers/caller-pinning";
 
@@ -123,6 +116,12 @@ let EventEmitter = null;
 let AsyncLocalStorage = null;
 /** @type {any} */
 let AsyncResource = null;
+/** @type {any} */
+let executionAsyncResource = null;
+/** @type {any} */
+let executionAsyncId = null;
+/** @type {any} */
+let createHook = null;
 /** @type {any} */
 let createRequire = null;
 
@@ -162,7 +161,7 @@ if (isNode) {
 	Objects.defineProperty(inspect, "custom", { __proto__: null, value: nodeInspect.custom, enumerable: true });
 	util = Objects.freeze({ ...utilMod, inspect: Objects.freeze(inspect), types: { ...utilMod.types } });
 	({ EventEmitter } = eventsMod);
-	({ AsyncLocalStorage, AsyncResource } = asyncHooksMod);
+	({ AsyncLocalStorage, AsyncResource, executionAsyncResource, executionAsyncId, createHook } = asyncHooksMod);
 	({ createRequire } = moduleMod);
 	// Browser host: the `else` arm (util shim) runs without `process`; exercised by the vitest browser run.
 } else {
@@ -191,14 +190,27 @@ if (isNode) {
 				return false;
 			}
 		};
-	/** The getter of an accessor a kind's prototype holds. */
-	const getterOf = (prototype, name) => Objects.getOwnPropertyDescriptor(prototype, name).get;
-	const IS_REGEXP = brand(getterOf(RegExp.prototype, "source"));
-	const IS_ARRAY_BUFFER = brand(getterOf(ArrayBuffer.prototype, "byteLength"));
+	// The getters and `valueOf`s of the built-in prototypes, as slothlet took them when it loaded.
+	const IS_REGEXP = brand(PrototypeFunctions.RegExp.source);
+	const IS_ARRAY_BUFFER = brand(PrototypeFunctions.ArrayBuffer.byteLength);
 	const IS_SHARED_ARRAY_BUFFER =
-		typeof SharedArrayBuffer === "function" ? brand(getterOf(SharedArrayBuffer.prototype, "byteLength")) : () => false;
-	const IS_DATA_VIEW = brand(getterOf(DataView.prototype, "byteLength"));
-	const BOXED_BRANDS = mapList([Number, String, Boolean, Symbol, BigInt], (kind) => brand(kind.prototype.valueOf));
+		typeof PrototypeFunctions.SharedArrayBuffer.byteLength === "function"
+			? brand(PrototypeFunctions.SharedArrayBuffer.byteLength)
+			: () => false;
+	const IS_DATA_VIEW = brand(PrototypeFunctions.DataView.byteLength);
+	const BOXED_BRANDS = mapList(
+		filterList(
+			[
+				PrototypeFunctions.Number.valueOf,
+				PrototypeFunctions.String.valueOf,
+				PrototypeFunctions.Boolean.valueOf,
+				PrototypeFunctions.Symbol.valueOf,
+				PrototypeFunctions.BigInt.valueOf
+			],
+			(valueOf) => typeof valueOf === "function"
+		),
+		(valueOf) => brand(valueOf)
+	);
 	// `util` is the one builtin consumed in both hosts: `inspect` (with its custom
 	// symbol) for value formatting and `types.isProxy` for proxy detection. Slothlet's
 	// own wrappers are resolved via resolveWrapper(), so a browser-side `isProxy()`
@@ -215,7 +227,7 @@ if (isNode) {
 			isPromise: (value) => {
 				if (inheritsFrom(value, Promise)) return true;
 				try {
-					return FunctionMethods.call(Objects.prototype.toString, value) === "[object Promise]";
+					return ObjectMethods.toString(value) === "[object Promise]";
 				} catch {
 					return false;
 				}
@@ -230,21 +242,23 @@ if (isNode) {
 			isGeneratorObject: (value) =>
 				value !== null &&
 				typeof value === "object" &&
-				ArrayMethods.some(GENERATOR_PROTOTYPES, (prototype) => FunctionMethods.call(Objects.prototype.isPrototypeOf, prototype, value)),
+				ArrayMethods.some(GENERATOR_PROTOTYPES, (prototype) =>
+					FunctionMethods.call(PrototypeFunctions.Object.isPrototypeOf, prototype, value)
+				),
 			// Prototype check: the browser stand-in for Node's brand check of a generator function, an async one included.
 			isGeneratorFunction: (fn) =>
 				typeof fn === "function" &&
 				ArrayMethods.some(GENERATOR_FUNCTION_PROTOTYPES, (prototype) =>
-					FunctionMethods.call(Objects.prototype.isPrototypeOf, prototype, fn)
+					FunctionMethods.call(PrototypeFunctions.Object.isPrototypeOf, prototype, fn)
 				),
 			// The rest are the engine's own brand checks, made by calling a method of the kind that reads nothing but the
 			// object's internal data and throws for any other object: none of a value's own code runs, and a Proxy never
 			// passes, as with Node's checks.
-			isMap: brand(Map.prototype.has, [undefined]),
-			isSet: brand(Set.prototype.has, [undefined]),
-			isWeakMap: brand(WeakMap.prototype.has, [undefined]),
-			isWeakSet: brand(WeakSet.prototype.has, [undefined]),
-			isDate: brand(Date.prototype.getTime),
+			isMap: brand(PrototypeFunctions.Map.has, [undefined]),
+			isSet: brand(PrototypeFunctions.Set.has, [undefined]),
+			isWeakMap: brand(PrototypeFunctions.WeakMap.has, [undefined]),
+			isWeakSet: brand(PrototypeFunctions.WeakSet.has, [undefined]),
+			isDate: brand(PrototypeFunctions.Date.getTime),
 			isRegExp: (value) => value !== RegExp.prototype && IS_REGEXP(value),
 			isArrayBuffer: IS_ARRAY_BUFFER,
 			isSharedArrayBuffer: IS_SHARED_ARRAY_BUFFER,
@@ -257,9 +271,9 @@ if (isNode) {
 			// from `Error.prototype` passes too.
 			isNativeError: typeof Errors.isError === "function" ? (value) => Errors.isError(value) : (value) => inheritsFrom(value, Error),
 			isMapIterator: (value) =>
-				value !== null && typeof value === "object" && FunctionMethods.call(Objects.prototype.isPrototypeOf, MAP_ITERATOR, value),
+				value !== null && typeof value === "object" && FunctionMethods.call(PrototypeFunctions.Object.isPrototypeOf, MAP_ITERATOR, value),
 			isSetIterator: (value) =>
-				value !== null && typeof value === "object" && FunctionMethods.call(Objects.prototype.isPrototypeOf, SET_ITERATOR, value),
+				value !== null && typeof value === "object" && FunctionMethods.call(PrototypeFunctions.Object.isPrototypeOf, SET_ITERATOR, value),
 			// Node's own key objects do not exist in a browser; a Web Crypto key is told by its class.
 			isKeyObject: () => false,
 			isCryptoKey: (value) => typeof CryptoKey === "function" && inheritsFrom(value, CryptoKey)
@@ -401,7 +415,7 @@ function scheduleMacrotask(fn, hosts = MACROTASK_HOSTS, clock = undefined) {
  * @type {Function}
  * @private
  */
-const INTRINSIC_HAS_INSTANCE = Functions.prototype[Symbol.hasInstance];
+const INTRINSIC_HAS_INSTANCE = PrototypeFunctions.Function.hasInstance;
 
 /**
  * The language's own `Reflect.apply`, taken when this file loads, before any module runs: a module replacing
@@ -462,6 +476,9 @@ export {
 	EventEmitter,
 	AsyncLocalStorage,
 	AsyncResource,
+	executionAsyncResource,
+	executionAsyncId,
+	createHook,
 	createRequire,
 	loadJson,
 	fileParts,

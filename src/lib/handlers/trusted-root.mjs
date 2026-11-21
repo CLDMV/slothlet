@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:10-08:00 (1794874570)
+ *	@Last modified time: 2026-11-18T07:07:21-08:00 (1795014441)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -36,6 +36,7 @@
  * public export — so module-land code can neither read the markers nor spoof registry membership.
  */
 
+import { segmentsOf } from "#helpers/segments";
 import { SlothletError } from "#errors";
 import { internals as frameworkInternalsInternals } from "#handlers/framework-internals";
 import {
@@ -44,7 +45,6 @@ import {
 	concatLists,
 	Dates,
 	filterList,
-	FunctionMethods,
 	listPush,
 	Map,
 	mapKeysToArray,
@@ -64,6 +64,7 @@ import {
 	WeakSetMethods
 } from "#helpers/intrinsics";
 import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "#helpers/instance-imports";
+import { RUN_COPY, trackFlowStore } from "#helpers/flow-stores";
 const { markSlothletProxy } = frameworkInternalsInternals("lib/handlers/trusted-root");
 
 /**
@@ -72,6 +73,16 @@ const { markSlothletProxy } = frameworkInternalsInternals("lib/handlers/trusted-
  * @internal
  */
 const TRUSTED_ROOT = Symbol("slothlet.trustedRoot");
+
+/**
+ * Marker on a `run()` / `scope()` store the live runtime has put back among the instances while work the run left
+ * behind runs after the run has returned. Such work keeps the run's context, never the run's standing: who runs it is
+ * decided as for code running in the instance's own store, so a store marked {@link TRUSTED_ROOT} that carries this
+ * marker is no flow the host has open.
+ * @type {symbol}
+ * @internal
+ */
+const REOPENED_FLOW = Symbol("slothlet.reopenedFlow");
 
 /**
  * Registry of every genuine `UnifiedWrapper` instance. A caller identity absent from this set is a
@@ -262,11 +273,12 @@ function enforceContextKeyWrite(ctx, prop) {
 function enforceOwnedContextWrite(ctx, ownerKey, pathKey, writerCtx = ctx) {
 	const owners = ctx?.__contextOwners;
 	// `owners` is a null-prototype map (see `buildContextOwners` in api_builder.mjs), but the lookup
-	// still goes through `hasOwnProperty` rather than a bare `owners[ownerKey]` as a second, independent
+	// still goes through an own-member check (`Object.hasOwn` as slothlet loaded it, which module code replacing
+	// `Object.prototype.hasOwnProperty` does not reach) rather than a bare `owners[ownerKey]` as a second, independent
 	// guard: a caller-supplied key like "__proto__" or "constructor" must never be resolved as an
 	// inherited property (of the map itself, or of whatever `owners` turns out to be) and mistaken
 	// for an existing claim.
-	if (!owners || !FunctionMethods.call(Objects.prototype.hasOwnProperty, owners, ownerKey)) return;
+	if (!owners || !Objects.hasOwn(owners, ownerKey)) return;
 	const owner = owners[ownerKey];
 	// The writers are who is executing — resolved the way the call gate resolves its caller — and, for code a caller
 	// supplied to another module's call, every call of the ceiling it runs under (#597): each of them has to own the
@@ -275,9 +287,7 @@ function enforceOwnedContextWrite(ctx, ownerKey, pathKey, writerCtx = ctx) {
 	const writers = mapList(writersOf(writerCtx), (wrapper) => wrapper?.____slothletInternal?.apiPath ?? null);
 	const writer = writers[0] ?? null;
 	if (owner === PROTECT_SENTINEL) {
-		throw new SlothletError("CONTEXT_KEY_PROTECTED", { key: pathKey, owner: "protected", writer: writer ?? "host" }, null, {
-			validationError: true
-		});
+		throw new SlothletError("CONTEXT_KEY_PROTECTED", { key: pathKey, owner: "protected", writer: writer ?? "host" });
 	}
 	// A writer identity is an executing module's full leaf apiPath (e.g. `callers.dataReader.write`).
 	// An owner name matches that leaf exactly OR as a module prefix (`callers.dataReader` owns every
@@ -286,12 +296,11 @@ function enforceOwnedContextWrite(ctx, ownerKey, pathKey, writerCtx = ctx) {
 		? ArrayMethods.find(writers, (path) => !(path !== null && (path === owner || StringMethods.startsWith(path, owner + "."))))
 		: null;
 	if (!writers.length || refused !== undefined) {
-		throw new SlothletError(
-			"CONTEXT_KEY_PROTECTED",
-			{ key: pathKey, owner: String(owner), writer: (writers.length ? refused : null) ?? "host" },
-			null,
-			{ validationError: true }
-		);
+		throw new SlothletError("CONTEXT_KEY_PROTECTED", {
+			key: pathKey,
+			owner: String(owner),
+			writer: (writers.length ? refused : null) ?? "host"
+		});
 	}
 }
 
@@ -312,7 +321,7 @@ function writersOf(store) {
 		ceiling: store?.currentCeiling ?? null
 	};
 	// A writer that cannot be told apart is no one's, and not the host either.
-	if (identity.unresolved) throw new SlothletError("PERMISSION_DENIED", { caller: null, target: "self" }, null, { validationError: true });
+	if (identity.unresolved) throw new SlothletError("PERMISSION_DENIED", { caller: null, target: segmentsOf("self") });
 	if (!identity.currentWrapper) return [];
 	return concatLists([identity.currentWrapper], identityCeilings(identity));
 }
@@ -438,7 +447,7 @@ function makeProtectedContextView(ctx, getContext, ownerKey, value, path) {
  */
 function readProtectedContextValue(ctx, prop, getContext) {
 	const owners = ctx.__contextOwners;
-	if (owners && FunctionMethods.call(Objects.prototype.hasOwnProperty, owners, prop)) {
+	if (owners && Objects.hasOwn(owners, prop)) {
 		return makeProtectedContextView(ctx, getContext, prop, ctx.context[prop], String(prop));
 	}
 	return ctx.context[prop];
@@ -463,8 +472,8 @@ function buildCapturedFlowStore(instances, instanceID, captured) {
 	const baseStore = MapMethods.get(instances, instanceID);
 	if (!baseStore) {
 		throw new SlothletError("CONTEXT_NOT_FOUND", {
-			instanceID,
-			availableInstances: ArrayMethods.join(mapKeysToArray(instances), ", ") || "none"
+			instance: instanceID,
+			instances: ArrayMethods.join(mapKeysToArray(instances), ", ") || "none"
 		});
 	}
 	const childStore = {
@@ -480,11 +489,15 @@ function buildCapturedFlowStore(instances, instanceID, captured) {
 		currentCeiling: captured.ceiling ?? null,
 		callerCeiling: captured.callerCeiling ?? null,
 		slothlet: baseStore.slothlet,
-		__contextOwners: captured.contextOwners
+		__contextOwners: captured.contextOwners,
+		// The copy of the instance the snapshotted flow ran on, if it ran in a run() / scope(): its calls keep it.
+		[RUN_COPY]: captured.copy ?? null
 	};
 	if (captured.trusted) {
 		Objects.defineProperty(childStore, TRUSTED_ROOT, { __proto__: null, value: true, configurable: true });
 	}
+	// Work the flow leaves behind can outlive it and a reload: the reload moves the store to the new ID.
+	trackFlowStore(childStore.slothlet, childStore);
 	return childStore;
 }
 
@@ -515,6 +528,9 @@ export function internals(consumer) {
 		},
 		get TRUSTED_ROOT() {
 			return TRUSTED_ROOT;
+		},
+		get REOPENED_FLOW() {
+			return REOPENED_FLOW;
 		},
 		buildCapturedFlowStore,
 		enforceContextKeyWrite,

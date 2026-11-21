@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:11-08:00 (1794874571)
+ *	@Last modified time: 2026-11-16T18:28:48-08:00 (1794882528)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -67,7 +67,7 @@ const { setCapabilityCheck } = instanceImportsInternals("lib/helpers/capability-
 
 /**
  * The checks of the instances that are up with the permission system configured, by instance id: each throws
- * `CAPABILITY_REFUSED` for module code of its own that no rule opens a capability for.
+ * `PERMISSION_CAPABILITY_REFUSED` for module code of its own that no rule opens a capability for.
  * @type {Map<string, function(string, string, ?string): void>}
  * @private
  */
@@ -79,10 +79,12 @@ const CHECKS = new Map();
  * @param {string} route - What the code used.
  * @param {string|null} [importer=null] - The importing file's URL, for an import being linked.
  * @param {*} [filename=null] - The file name the code is compiled under, when one is given.
- * @param {boolean} [runnerCompile=false] - Whether the compile is vitest's own compile of the code its server sent
- *   for that file (see {@link module:@cldmv/slothlet/helpers/vitest-worker-setup}).
+ * @param {boolean|null} [runnerCompile=false] - Whether the compile is vitest's own compile of the code its server
+ *   sent for that file (see {@link module:@cldmv/slothlet/helpers/vitest-worker-setup}); null, under vitest only, for
+ *   a compile shaped as vitest's runner makes one when no worker setup records the server's replies, so it cannot be
+ *   told either way.
  * @returns {void}
- * @throws {SlothletError} `CAPABILITY_REFUSED`.
+ * @throws {SlothletError} `PERMISSION_CAPABILITY_REFUSED`.
  * @internal
  * @example
  * checkCapability("code", "setTimeout");
@@ -90,6 +92,19 @@ const CHECKS = new Map();
 export function checkCapability(name, route, importer = null, filename = null, runnerCompile = false) {
 	if (MapMethods.size(CHECKS) === 0) return;
 	for (const check of mapValues(CHECKS)) check(name, route, importer, filename, runnerCompile);
+}
+
+/**
+ * Whether an instance is up with a capability check of its own registered: code compiled under a name tagged with
+ * that instance's id is then judged by that instance's check, not by any other's.
+ * @param {*} instanceID - The instance id a name is tagged with.
+ * @returns {boolean} True while that instance's check is registered.
+ * @internal
+ * @example
+ * hasCapabilityCheck("b"); // true while instance "b" is up with the permission system configured
+ */
+export function hasCapabilityCheck(instanceID) {
+	return typeof instanceID === "string" && MapMethods.has(CHECKS, instanceID);
 }
 
 /**
@@ -233,16 +248,27 @@ const RUNNER_VERIFY = (() => {
 const RUNNER_COMPILES = ["runInThisContext", "runInContext", "Script", "createScript"];
 
 /**
+ * Whether this process is a vitest worker, read from vitest's worker global as slothlet loads (before any module code
+ * runs). Outside vitest no module runner compiles module files, so there is no runner compile to leave to its caller.
+ * @type {boolean}
+ * @private
+ */
+const UNDER_VITEST_RUNNER = globalThis.__vitest_worker__ != null;
+
+/**
  * Whether a `vm` call is vitest's compile of exactly the code its server last sent for the file it names (one use per
- * reply, see {@link RUNNER_VERIFY}).
+ * reply, see {@link RUNNER_VERIFY}). Under vitest with no verifier published (no worker setup ran first: vitest without
+ * the `@cldmv/slothlet/vite` plugin), a compile of the shape vitest's runner makes cannot be told apart by its code,
+ * and is answered null. Outside vitest no compile is the runner's.
  * @param {string} key - The `vm` function.
  * @param {Array<*>} args - Its arguments.
  * @param {*} filename - The name it compiles under.
- * @returns {boolean} True for that compile.
+ * @returns {boolean|null} True for that compile; null for a runner-shaped compile under vitest no verifier can check.
  * @private
  */
 function runtime_runnerCompile(key, args, filename) {
-	if (RUNNER_VERIFY === null || typeof filename !== "string" || !ArrayMethods.includes(RUNNER_COMPILES, key)) return false;
+	if (typeof filename !== "string" || !ArrayMethods.includes(RUNNER_COMPILES, key)) return false;
+	if (RUNNER_VERIFY === null) return UNDER_VITEST_RUNNER ? null : false;
 	try {
 		return RUNNER_VERIFY(filename, args[0]) === true;
 	} catch {

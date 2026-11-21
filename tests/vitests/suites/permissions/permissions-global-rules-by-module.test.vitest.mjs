@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:17-07:00 (1791090917)
+ *	@Last modified time: 2026-11-16T18:29:52-08:00 (1794882592)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -19,7 +19,7 @@ import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
 const BASE = TEST_DIRS.API_TEST_PERMISSIONS;
 
-describe.each(getMatrixConfigs())("Permissions > global.rulesByModule > $name", ({ config }) => {
+describe.each(getMatrixConfigs())("Permissions > global.rules.module > $name", ({ config }) => {
 	let api;
 
 	afterEach(async () => {
@@ -32,7 +32,7 @@ describe.each(getMatrixConfigs())("Permissions > global.rulesByModule > $name", 
 			...config,
 			base: `${BASE}/callers`,
 			permissions: {
-				defaultPolicy: "allow"
+				policy: "allow"
 			}
 		});
 
@@ -42,7 +42,7 @@ describe.each(getMatrixConfigs())("Permissions > global.rulesByModule > $name", 
 			}
 		});
 
-		const rules = api.slothlet.permissions.global.rulesByModule(moduleID);
+		const rules = api.slothlet.permissions.global.rules.module(moduleID);
 		expect(rules.length).toBeGreaterThanOrEqual(2);
 		expect(rules.every((r) => r.ownerModuleID === moduleID)).toBe(true);
 	});

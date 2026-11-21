@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-13T23:21:07-08:00 (1794640867)
+ *	@Last modified time: 2026-11-16T18:30:17-08:00 (1794882617)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -49,7 +49,7 @@ const DENIED = { threw: "PERMISSION_DENIED" };
  */
 async function mount(options) {
 	const api = await slothlet({ base: join(FIXTURE, "host"), silent: true, ...options });
-	for (const name of ["owner", "single", "reader", "writer"]) await api.slothlet.api.add(name, join(FIXTURE, name), { moduleID: name });
+	for (const name of ["owner", "single", "reader", "writer"]) await api.slothlet.api.add(name, join(FIXTURE, name), { id: name });
 	for (const name of ["owner", "single", "reader", "writer"]) await api[name];
 	await api.owner.ruled;
 	await api.single.dconfig;
@@ -89,7 +89,7 @@ describe.each(guarded)("an exact deny on an object member's path > $mode / $runt
 		api = null;
 	});
 
-	const build = (rules) => mount({ mode, runtime, permissions: { defaultPolicy: "allow", attribution, rules } });
+	const build = (rules) => mount({ mode, runtime, permissions: { policy: "allow", caller: { attribution }, rules } });
 
 	it.each([
 		{ form: "the member's path", target: "owner.ruled.nested" },
@@ -147,13 +147,13 @@ describe.each(guarded)("an exact deny on an object member's path > $mode / $runt
 		const { many } = await import(`${pathToFileURL(join(FIXTURE, "bulk", "bulk.mjs")).href}?plain-twin-member-deny`);
 		const { m0: ___m0, ...rest } = many;
 		api = await build([{ caller: "reader.**", target: "bulk.many.m0", effect: "deny" }]);
-		await api.slothlet.api.add("bulk", join(FIXTURE, "bulk"), { moduleID: "bulk" });
+		await api.slothlet.api.add("bulk", join(FIXTURE, "bulk"), { id: "bulk" });
 		await api.bulk.many;
 		expect(await api.reader.readAt("bulk.many.m0.v")).toEqual(DENIED);
 		expect((await api.reader.listingsAt("bulk.many")).json).toBe(JSON.stringify(rest));
 		await api.shutdown();
 		api = await build([{ caller: "reader.**", target: "bulk.many.**", effect: "deny" }]);
-		await api.slothlet.api.add("bulk", join(FIXTURE, "bulk"), { moduleID: "bulk" });
+		await api.slothlet.api.add("bulk", join(FIXTURE, "bulk"), { id: "bulk" });
 		await api.bulk.many;
 		expect((await api.reader.listingsAt("bulk.many")).json).toBe("{}");
 		expect(await api.writer.readAt("bulk.many.m1099.v")).toBe(many.m1099.v);

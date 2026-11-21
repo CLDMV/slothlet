@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-11T13:14:54-08:00 (1794431694)
+ *	@Last modified time: 2026-11-16T18:30:05-08:00 (1794882605)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -23,7 +23,7 @@
  * object leaf `host.records`. `ext` (denied) asks `bag` for closures that read the vault and hands them to the allowed
  * leaves. Expected values come from the rule: the definer, the leaf the code runs inside and every call that handed
  * the code down have to be allowed. `ext` is one of those calls, so each relay is refused. What stays allowed is what
- * lends on purpose: a closure pinned with `self.slothlet.lockCaller()`, a leaf, and a leaf acting on its own with
+ * lends on purpose: a closure pinned with `self.slothlet.pin()`, a leaf, and a leaf acting on its own with
  * nothing handed in. The host handing the same closure to the same leaf is allowed: the host is no module.
  *
  * Inside a call that was handed code, a closure the leaf asked for itself is held to the leaf alone under "precise",
@@ -58,7 +58,13 @@ describe.each(MATRIX)("Permissions > a closure relayed through an allowed leaf >
 	let api;
 
 	beforeAll(async () => {
-		api = await slothlet({ base: DIR, mode, runtime, silent: true, permissions: { defaultPolicy: "allow", attribution, rules: RULES } });
+		api = await slothlet({
+			base: DIR,
+			mode,
+			runtime,
+			silent: true,
+			permissions: { policy: "allow", caller: { attribution }, rules: RULES }
+		});
 		await api.slothlet.api.add(["host", "records"], {
 			run(fn) {
 				return fn();

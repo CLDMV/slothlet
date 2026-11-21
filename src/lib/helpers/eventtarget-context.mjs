@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:12-08:00 (1794874572)
+ *	@Last modified time: 2026-11-17T21:05:02-08:00 (1794978302)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -24,7 +24,7 @@
  * runtimes something different:
  *
  * - **async** — the AsyncLocalStorage store is gone, so `self` inside a listener throws
- *   `RUNTIME_NO_ACTIVE_CONTEXT_SELF`. Capturing an `AsyncResource` at registration restores it, the
+ *   `CONTEXT_NOT_ACTIVE_SELF`. Capturing an `AsyncResource` at registration restores it, the
  *   same fix `EventEmitter` already gets.
  * - **live** — the caller field has unwound, and enforcement reads an absent caller as host-initiated
  *   and exempt. So a module reached denied targets from inside a listener the host dispatched.
@@ -43,7 +43,7 @@
  */
 
 import { AsyncResource } from "#helpers/platform";
-import { pinToCurrentCaller } from "#helpers/caller-pinning";
+import { holdForCurrentFlow, pinToCurrentCaller } from "#helpers/caller-pinning";
 import { openLayer, closeLayer, holdsValue, markLayer } from "#helpers/boundary-patch-layers";
 import { Boolean, EventTarget, FunctionMethods, Map, mapEntries, MapMethods, String, WeakMap, WeakMapMethods } from "#helpers/intrinsics";
 import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "#helpers/instance-imports";
@@ -69,6 +69,40 @@ const wrappers = new WeakMap();
  * @private
  */
 const originalMethods = new Map();
+
+/**
+ * The `signal` option of the registration the platform is making right now, if any (see {@link runtime_patchAdd}).
+ * @type {*}
+ * @private
+ */
+let registeringSignal = undefined;
+
+/**
+ * How many `on<event>` property assignments are being made right now (see {@link asPlatformRegistration}).
+ * @type {number}
+ * @private
+ */
+let platformRegistrations = 0;
+
+/**
+ * Make an `on<event>` property assignment through the platform's own setter. A platform that implements the property
+ * with a listener of its own (Node registers one through `addEventListener`) registers it as it is: the handler the
+ * property holds is carried and counted by the property's patch (see `helpers/eventtarget-property-context`), and the
+ * platform's listener, which serves whichever handler the property holds at the time, is no one's work.
+ * @param {Function} set - The platform's setter.
+ * @param {object} target - The target.
+ * @param {*} value - The value assigned.
+ * @returns {*} What the setter returns.
+ * @internal
+ */
+export function asPlatformRegistration(set, target, value) {
+	platformRegistrations++;
+	try {
+		return FunctionMethods.call(set, target, value);
+	} finally {
+		platformRegistrations--;
+	}
+}
 
 /**
  * Whether `EventTarget.prototype` is currently patched.
@@ -121,13 +155,35 @@ function runtime_wrapListener(listener) {
 					return listener.handleEvent(event);
 				});
 
+	// Registered in a run() / scope(), the listener is the run's work until it is removed (or, registered `once`, has
+	// run): counted here on the live runtime, and through its resource on the async runtime.
+	let release = holdForCurrentFlow();
+	let destroyable = resource;
+
 	const runtime_wrappedListener = function (event) {
-		/* v8 ignore next — the no-AsyncResource (browser) path; see the capture above. */
-		if (!resource) return FunctionMethods.call(invoke, this, event);
-		return resource.runInAsyncScope(() => FunctionMethods.call(invoke, this, event), this);
+		try {
+			/* v8 ignore next — the no-AsyncResource (browser) path; see the capture above. */
+			if (!resource) return FunctionMethods.call(invoke, this, event);
+			return resource.runInAsyncScope(() => FunctionMethods.call(invoke, this, event), this);
+		} finally {
+			if (runtime_wrappedListener.____slothletOnce) runtime_wrappedListener.____slothletDone();
+		}
 	};
 
-	runtime_wrappedListener._slothletOriginal = listener;
+	runtime_wrappedListener.____slothletOriginal = listener;
+	runtime_wrappedListener.____slothletOnce = false;
+	runtime_wrappedListener.____slothletDone = () => {
+		if (release !== null) {
+			const held = release;
+			release = null;
+			held();
+		}
+		if (destroyable !== null) {
+			const own = destroyable;
+			destroyable = null;
+			own.emitDestroy();
+		}
+	};
 	return runtime_wrappedListener;
 }
 
@@ -141,9 +197,46 @@ function runtime_wrapListener(listener) {
 function runtime_shouldWrap(listener) {
 	// `null` is legal and ignored by the DOM; anything else non-listener-shaped is the host's problem
 	// to reject, and passing it through unchanged keeps that error identical to the unpatched one.
-	if (typeof listener === "function") return !listener._slothletOriginal;
+	if (typeof listener === "function") return !listener.____slothletOriginal;
 	if (listener && typeof listener.handleEvent === "function") return true;
 	return false;
+}
+
+/**
+ * End a wrapped listener's work when the `signal` it was registered with aborts: the platform takes the listener off
+ * then (or never adds it, when the signal has aborted already). Each registration with a signal listens to it, since
+ * any of them takes the listener off. The listener this adds to the signal is added with the method below this patch,
+ * and taken off the signal again once the wrapper's work has ended some other way.
+ *
+ * @param {*} signal - The `signal` option.
+ * @param {Map<*, Function>} byListener - The wrappers registered for the listener's type and capture on its target.
+ * @param {Function|object} listener - The listener.
+ * @param {Function} wrapper - Its wrapper.
+ * @param {boolean} fresh - Whether this call made the wrapper (no registration of the listener was in place).
+ * @param {Function} add - `addEventListener` below this patch.
+ * @returns {void}
+ * @private
+ */
+function runtime_endOnAbort(signal, byListener, listener, wrapper, fresh, add) {
+	if (signal === null || typeof signal !== "object" || typeof wrapper.____slothletDone !== "function") return;
+	const end = () => {
+		if (MapMethods.get(byListener, listener) === wrapper) MapMethods.delete(byListener, listener);
+		wrapper.____slothletDone();
+	};
+	if (signal.aborted === true) {
+		// Refused: a registration of the listener already in place stays, a new one was never made.
+		if (fresh) end();
+		return;
+	}
+	const onAbort = () => end();
+	FunctionMethods.call(add, signal, "abort", onAbort, { __proto__: null, once: true });
+	const done = wrapper.____slothletDone;
+	wrapper.____slothletDone = () => {
+		wrapper.____slothletDone = done;
+		const remove = MapMethods.get(originalMethods, "removeEventListener")?.layer.below;
+		if (typeof remove === "function") FunctionMethods.call(remove, signal, "abort", onAbort);
+		done();
+	};
 }
 
 /**
@@ -157,8 +250,16 @@ function runtime_patchAdd() {
 	const original = layer.below;
 
 	const patch = function (type, listener, options) {
-		// Disabled under another copy's patch: register as given.
-		if (!layer.active || !runtime_shouldWrap(listener)) return FunctionMethods.call(original, this, type, listener, options);
+		// Disabled under another copy's patch: register as given. So is the listener the platform puts on a `signal` while
+		// it registers a listener with that signal (Node does so through this method): it only takes that listener off,
+		// and is no work of the code registering it.
+		if (
+			!layer.active ||
+			!runtime_shouldWrap(listener) ||
+			platformRegistrations !== 0 ||
+			(this === registeringSignal && this !== undefined && type === "abort")
+		)
+			return FunctionMethods.call(original, this, type, listener, options);
 
 		const key = runtime_trackingKey(type, options);
 		let byKey = WeakMapMethods.get(wrappers, this);
@@ -176,12 +277,36 @@ function runtime_patchAdd() {
 		// reference, so the DOM would treat it as a second listener and the callback would run twice
 		// where the spec says the duplicate is ignored.
 		let wrapper = MapMethods.get(byListener, listener);
-		if (!wrapper) {
+		const fresh = !wrapper;
+		if (fresh) {
 			wrapper = runtime_wrapListener(listener);
+			// A `once` listener the target drops after it runs: the work it was for a run ends then, and a later
+			// registration makes a fresh wrapper.
+			if (typeof options === "object" && options !== null && options.once) {
+				wrapper.____slothletOnce = true;
+				const own = wrapper;
+				const done = own.____slothletDone;
+				own.____slothletDone = () => {
+					if (MapMethods.get(byListener, listener) === own) MapMethods.delete(byListener, listener);
+					done();
+				};
+			}
 			MapMethods.set(byListener, listener, wrapper);
 		}
 
-		return FunctionMethods.call(original, this, type, wrapper, options);
+		const signal = typeof options === "object" && options !== null ? options.signal : undefined;
+		const outer = registeringSignal;
+		registeringSignal = signal;
+		let result;
+		try {
+			result = FunctionMethods.call(original, this, type, wrapper, options);
+		} finally {
+			registeringSignal = outer;
+		}
+		// A `signal` takes the listener off when it aborts, without a removeEventListener() call slothlet sees in every
+		// host: the work it was for a run ends then too.
+		if (signal !== undefined) runtime_endOnAbort(signal, byListener, listener, wrapper, fresh, original);
+		return result;
 	};
 
 	markLayer(patch, layer);
@@ -207,7 +332,9 @@ function runtime_patchRemove() {
 		if (!wrapper) return FunctionMethods.call(original, this, type, listener, options);
 
 		MapMethods.delete(byListener, listener);
-		return FunctionMethods.call(original, this, type, wrapper, options);
+		const result = FunctionMethods.call(original, this, type, wrapper, options);
+		wrapper.____slothletDone?.();
+		return result;
 	};
 
 	markLayer(patch, layer);

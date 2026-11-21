@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-13T07:23:04-08:00 (1794583384)
+ *	@Last modified time: 2026-11-16T18:28:41-08:00 (1794882521)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -37,7 +37,7 @@ describe.each([
 ])("%s's child-process script", (folder, script, leafName) => {
 	it.each(["eager", "lazy"])("is not loaded as an api file of the fixture root (%s)", async (mode) => {
 		expect(existsSync(path.join(API_TESTS, folder, script))).toBe(true);
-		const api = await slothlet({ dir: path.join(API_TESTS, folder), mode, silent: true });
+		const api = await slothlet({ base: path.join(API_TESTS, folder), mode, silent: true });
 		try {
 			const keys = Object.keys(api);
 			expect(keys).not.toContain(leafName);

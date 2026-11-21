@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-07T21:55:08-08:00 (1794117308)
+ *	@Last modified time: 2026-11-18T21:57:32-08:00 (1795067852)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -32,7 +32,8 @@ import {
 	chainReads,
 	emitterPrototypes,
 	relayInstanceOf,
-	prototypeAnswers
+	prototypeAnswers,
+	selfPrototypes
 } from "../../api_test_plain_js_nodes_lib/cases.mjs";
 import { Relay } from "../../api_test_plain_js_nodes_lib/relay-class.mjs";
 
@@ -266,7 +267,7 @@ export function heldRelayClassTests(relay, node) {
  */
 export function readPrototypeAnswers() {
 	const { inst, hiddenInst, subInst, bus, relay } = self.owner;
-	return prototypeAnswers({ inst, hiddenInst, subInst, bus, relay });
+	return prototypeAnswers({ inst, hiddenInst, subInst, bus, relay }, selfPrototypes(self.owner));
 }
 
 /**
@@ -275,7 +276,7 @@ export function readPrototypeAnswers() {
  * @returns {object} The answers, per instance and path.
  */
 export function heldPrototypeAnswers(instances) {
-	return prototypeAnswers(instances);
+	return prototypeAnswers(instances, selfPrototypes(self.owner));
 }
 
 /**

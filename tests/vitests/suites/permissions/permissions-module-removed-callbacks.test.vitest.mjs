@@ -57,8 +57,8 @@ describe.each(CONFIGS)("a removed module's callbacks (#625) — $mode / $runtime
 	 */
 	async function load(options) {
 		api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, hook: { enabled: true }, ...options });
-		await api.slothlet.api.add("victim", VICTIM, { moduleID: "victim" });
-		await api.slothlet.api.add("g", GUEST, { moduleID: "gA" });
+		await api.slothlet.api.add("victim", VICTIM, { id: "victim" });
+		await api.slothlet.api.add("g", GUEST, { id: "gA" });
 		api.g.x.takeLifecycleSeen();
 		return api;
 	}
@@ -80,10 +80,10 @@ describe.each(CONFIGS)("a removed module's callbacks (#625) — $mode / $runtime
 		await load(options);
 		expect(api.g.x.registerCallbacks("g.v.**:after", "g.news").hook).toBe("done");
 		await api.slothlet.api.remove("gA");
-		await api.slothlet.api.add("g", VICTIM, { moduleID: "other" });
+		await api.slothlet.api.add("g", VICTIM, { id: "other" });
 		expect(await api.g.v.secret()).toBe("SECRET");
 		await api.slothlet.api.remove("other");
-		await api.slothlet.api.add("g", VICTIM, { moduleID: "gA" });
+		await api.slothlet.api.add("g", VICTIM, { id: "gA" });
 		expect(await api.g.v.secret()).toBe("SECRET");
 	});
 
@@ -108,10 +108,10 @@ describe.each(CONFIGS)("a removed module's callbacks (#625) — $mode / $runtime
 			hook: { enabled: true },
 			permissions: {}
 		});
-		await api.slothlet.api.add("victim", VICTIM, { moduleID: "victim" });
-		await api.slothlet.api.add("g", GUEST, { moduleID: "gA" });
-		await api.slothlet.api.add("holder", GUEST, { moduleID: "holder" });
-		await api.slothlet.api.add("bait", VICTIM, { moduleID: "bait" });
+		await api.slothlet.api.add("victim", VICTIM, { id: "victim" });
+		await api.slothlet.api.add("g", GUEST, { id: "gA" });
+		await api.slothlet.api.add("holder", GUEST, { id: "holder" });
+		await api.slothlet.api.add("bait", VICTIM, { id: "bait" });
 		const caller = api.g.x.keepCaller("victim.v.secret");
 		const registering = api.g.x.keepRegistering("victim.v.secret:after", "victim.news");
 		expect(await caller()).toBe("SECRET");
@@ -174,7 +174,7 @@ describe.each(CONFIGS)("a removed module's callbacks (#625) — $mode / $runtime
 		const [envelope] = held;
 		const [listenerId] = envelope.listeners;
 		await api.slothlet.api.remove("gA");
-		await api.slothlet.api.add("g2", GUEST, { moduleID: "gA" });
+		await api.slothlet.api.add("g2", GUEST, { id: "gA" });
 		expect(api.g2.x.registerCallbacks("g2.v.**:after", "victim.news").event).toBe("done");
 		globalThis[Symbol.for("slothlet.test.i625.lifecycleSeen")].splice(0);
 		expect(await api.slothlet.event.deliver(envelope, listenerId)).toEqual({ delivered: false, reason: "listener-gone" });
@@ -187,7 +187,7 @@ describe.each(CONFIGS)("a removed module's callbacks (#625) — $mode / $runtime
 	])("hands a module's lifecycle subscriber no token, and nothing once the module is removed (permissions %s)", async (_label, options) => {
 		await load(options);
 		expect(api.g.x.registerCallbacks("g.v.**:after", "g.news").lifecycle).toBe("done");
-		await api.slothlet.api.add("tmp1", VICTIM, { moduleID: "tmp1" });
+		await api.slothlet.api.add("tmp1", VICTIM, { id: "tmp1" });
 		await api.slothlet.api.remove("tmp1");
 		const seen = api.g.x.takeLifecycleSeen().filter((entry) => entry.event === "impl:removed");
 		expect(seen.length).toBeGreaterThan(0);

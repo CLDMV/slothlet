@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:06-07:00 (1791090906)
+ *	@Last modified time: 2026-11-16T18:29:57-08:00 (1794882597)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -56,7 +56,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("HookManager > on()
 
 	beforeEach(async () => {
 		const { default: slothlet } = await import("@cldmv/slothlet");
-		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST, collision: { initial: "replace", api: "replace" } });
+		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST, api: { collision: { mode: { initial: "replace", api: "replace" } } } });
 	});
 
 	afterEach(async () => {
@@ -64,44 +64,44 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("HookManager > on()
 		api = null;
 	});
 
-	test("on() with non-string typePattern throws INVALID_TYPE_PATTERN (line 626)", async () => {
+	test("on() with non-string typePattern throws HOOK_PATTERN_INVALID (line 626)", async () => {
 		await withSuppressedSlothletErrorOutput(async () => {
 			expect(() => api.slothlet.hook.on(123, noop)).toThrow();
 		});
 	});
 
-	test("on() with no colon in typePattern throws INVALID_TYPE_PATTERN (line 634)", async () => {
+	test("on() with no colon in typePattern throws HOOK_PATTERN_INVALID (line 634)", async () => {
 		await withSuppressedSlothletErrorOutput(async () => {
 			expect(() => api.slothlet.hook.on("noColonHere", noop)).toThrow();
 		});
 	});
 
-	test("on() with empty type throws INVALID_TYPE_PATTERN (line 644)", async () => {
+	test("on() with empty type throws HOOK_PATTERN_INVALID (line 644)", async () => {
 		await withSuppressedSlothletErrorOutput(async () => {
 			expect(() => api.slothlet.hook.on(":some.path", noop)).toThrow();
 		});
 	});
 
-	test("on() with empty pattern throws INVALID_TYPE_PATTERN (line 644)", async () => {
+	test("on() with empty pattern throws HOOK_PATTERN_INVALID (line 644)", async () => {
 		await withSuppressedSlothletErrorOutput(async () => {
-			expect(() => api.slothlet.hook.on("before:", noop)).toThrow();
+			expect(() => api.slothlet.hook.on(":before", noop)).toThrow();
 		});
 	});
 
-	test("on() with an unrecognized type throws (INVALID_TYPE_PATTERN)", async () => {
+	test("on() with an unrecognized type throws (HOOK_PATTERN_INVALID)", async () => {
 		await withSuppressedSlothletErrorOutput(async () => {
 			// Neither end of "invalid:math.add" is a known hook type, so #parseTypePattern rejects it.
 			expect(() => api.slothlet.hook.on("invalid:math.add", noop)).toThrow();
 		});
 	});
 
-	test("on() with non-function handler throws INVALID_HOOK_HANDLER (line 140)", async () => {
+	test("on() with non-function handler throws HOOK_HANDLER_INVALID (line 140)", async () => {
 		await withSuppressedSlothletErrorOutput(async () => {
 			expect(() => api.slothlet.hook.on("math.add:before", "notAFunction")).toThrow();
 		});
 	});
 
-	test("on() with duplicate ID throws DUPLICATE_HOOK_ID (line 151)", async () => {
+	test("on() with duplicate ID throws HOOK_ID_IN_USE (line 151)", async () => {
 		await withSuppressedSlothletErrorOutput(async () => {
 			api.slothlet.hook.on("math.add:before", noop, { id: "my-unique-id" });
 			expect(() => api.slothlet.hook.on("math.add:after", noop, { id: "my-unique-id" })).toThrow();
@@ -126,7 +126,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("HookManager > off(
 
 	beforeEach(async () => {
 		const { default: slothlet } = await import("@cldmv/slothlet");
-		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST, collision: { initial: "replace", api: "replace" } });
+		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST, api: { collision: { mode: { initial: "replace", api: "replace" } } } });
 	});
 
 	afterEach(async () => {
@@ -154,7 +154,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("HookManager > disa
 
 	beforeEach(async () => {
 		const { default: slothlet } = await import("@cldmv/slothlet");
-		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST, collision: { initial: "replace", api: "replace" } });
+		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST, api: { collision: { mode: { initial: "replace", api: "replace" } } } });
 	});
 
 	afterEach(async () => {
@@ -187,7 +187,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("HookManager > list
 
 	beforeEach(async () => {
 		const { default: slothlet } = await import("@cldmv/slothlet");
-		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST, collision: { initial: "replace", api: "replace" } });
+		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST, api: { collision: { mode: { initial: "replace", api: "replace" } } } });
 	});
 
 	afterEach(async () => {
@@ -270,7 +270,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))(
 
 		beforeEach(async () => {
 			const { default: slothlet } = await import("@cldmv/slothlet");
-			api = await slothlet({ ...config, base: TEST_DIRS.API_TEST, collision: { initial: "replace", api: "replace" } });
+			api = await slothlet({ ...config, base: TEST_DIRS.API_TEST, api: { collision: { mode: { initial: "replace", api: "replace" } } } });
 		});
 
 		afterEach(async () => {
@@ -318,8 +318,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))(
 			api = await slothlet({
 				...config,
 				base: TEST_DIRS.API_TEST,
-				collision: { initial: "replace", api: "replace" },
-				api: { mutations: { reload: true } }
+				api: { mutations: { reload: true }, collision: { mode: { initial: "replace", api: "replace" } } }
 			});
 		});
 
@@ -351,7 +350,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))(
 
 		beforeEach(async () => {
 			const { default: slothlet } = await import("@cldmv/slothlet");
-			api = await slothlet({ ...config, base: TEST_DIRS.API_TEST, collision: { initial: "replace", api: "replace" } });
+			api = await slothlet({ ...config, base: TEST_DIRS.API_TEST, api: { collision: { mode: { initial: "replace", api: "replace" } } } });
 		});
 
 		afterEach(async () => {
@@ -383,7 +382,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))(
 
 		beforeEach(async () => {
 			const { default: slothlet } = await import("@cldmv/slothlet");
-			api = await slothlet({ ...config, base: TEST_DIRS.API_TEST, collision: { initial: "replace", api: "replace" } });
+			api = await slothlet({ ...config, base: TEST_DIRS.API_TEST, api: { collision: { mode: { initial: "replace", api: "replace" } } } });
 		});
 
 		afterEach(async () => {
@@ -412,8 +411,12 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("HookManager > erro
 		api = await slothlet({
 			...config,
 			base: TEST_DIRS.API_TEST,
-			// suppressErrors intentionally left false so errors propagate for assertion
-			collision: { initial: "replace", api: "replace" }
+			api: {
+				// suppressErrors intentionally left false so errors propagate for assertion
+				collision: {
+					mode: { initial: "replace", api: "replace" }
+				}
+			}
 		});
 	});
 
@@ -449,7 +452,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))(
 
 		beforeEach(async () => {
 			const { default: slothlet } = await import("@cldmv/slothlet");
-			api = await slothlet({ ...config, base: TEST_DIRS.API_TEST, collision: { initial: "replace", api: "replace" } });
+			api = await slothlet({ ...config, base: TEST_DIRS.API_TEST, api: { collision: { mode: { initial: "replace", api: "replace" } } } });
 		});
 
 		afterEach(async () => {

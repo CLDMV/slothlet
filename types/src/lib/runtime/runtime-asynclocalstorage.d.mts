@@ -20,7 +20,7 @@ export let self: ProxyConstructor;
  *
  * @description
  * A proxy that provides access to user-provided context data (e.g., request data, user info).
- * Can be set via `slothlet.run()` or `slothlet.scope()`.
+ * Can be set via `slothlet.context.run()` or `slothlet.context.scope()`.
  *
  * @example
  * import { context } from "@cldmv/slothlet/runtime/async";
@@ -50,20 +50,23 @@ export const context: ProxyConstructor;
  * }
  */
 /**
- * Current instance ID
- * @type {Proxy}
+ * Read-only facts about the running slothlet instance.
+ * @type {Readonly<{id: (string|undefined)}>}
  * @public
  *
  * @description
- * A proxy that provides access to the current slothlet instance ID.
- * Useful for debugging and tracking which instance is handling a request.
+ * `instance.id` is the id of the instance whose call is running, read at access: a real string inside a call (so
+ * `instance.id === "slothlet_…"` holds), undefined outside one. Useful for debugging and tracking which instance is
+ * handling a request.
  *
  * @example
- * import { instanceID } from "@cldmv/slothlet/runtime/async";
+ * import { instance } from "@cldmv/slothlet/runtime/async";
  *
  * export function getInstanceInfo() {
- *   return { instanceID };
+ *   return { id: instance.id };
  * }
  */
-export const instanceID: ProxyConstructor;
+export const instance: Readonly<{
+    id: (string | undefined);
+}>;
 //# sourceMappingURL=runtime-asynclocalstorage.d.mts.map

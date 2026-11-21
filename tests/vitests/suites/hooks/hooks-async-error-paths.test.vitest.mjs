@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:07-07:00 (1791090907)
+ *	@Last modified time: 2026-11-16T18:29:16-08:00 (1794882556)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -50,7 +50,11 @@ describe.each(configs)("Hooks Async Error Paths > Config: '$name'", ({ config })
 			api = await slothlet({
 				...config,
 				base: TEST_DIRS.API_TEST,
-				collision: { initial: "replace", api: "replace" }
+				api: {
+					collision: {
+						mode: { initial: "replace", api: "replace" }
+					}
+				}
 			});
 		});
 
@@ -70,7 +74,7 @@ describe.each(configs)("Hooks Async Error Paths > Config: '$name'", ({ config })
 			// Register error hook to capture the error
 			api.slothlet.hook.on(
 				"task.autoIP:error",
-				({ source }) => {
+				({ origin: source }) => {
 					errorHookFired = true;
 					errorHookSource = source;
 				},
@@ -100,7 +104,7 @@ describe.each(configs)("Hooks Async Error Paths > Config: '$name'", ({ config })
 			// Register always hook to verify it fires even on error
 			api.slothlet.hook.on(
 				"task.autoIP:always",
-				({ hasError }) => {
+				({ errors, hasError = errors.length > 0 }) => {
 					alwaysHookFired = true;
 					alwaysHookHasError = hasError;
 				},
@@ -122,10 +126,14 @@ describe.each(configs)("Hooks Async Error Paths > Config: '$name'", ({ config })
 			api = await slothlet({
 				...config,
 				base: TEST_DIRS.API_TEST,
-				collision: { initial: "replace", api: "replace" },
+				api: {
+					collision: {
+						mode: { initial: "replace", api: "replace" }
+					}
+				},
 				hook: {
 					...config.hook,
-					suppressErrors: true
+					errors: true
 				}
 			});
 		});
@@ -154,7 +162,11 @@ describe.each(configs)("Hooks Async Error Paths > Config: '$name'", ({ config })
 			api = await slothlet({
 				...config,
 				base: TEST_DIRS.API_TEST,
-				collision: { initial: "replace", api: "replace" }
+				api: {
+					collision: {
+						mode: { initial: "replace", api: "replace" }
+					}
+				}
 			});
 		});
 
@@ -165,7 +177,7 @@ describe.each(configs)("Hooks Async Error Paths > Config: '$name'", ({ config })
 			// Register error hook to capture async rejection
 			api.slothlet.hook.on(
 				"task.asyncReject:error",
-				({ source }) => {
+				({ origin: source }) => {
 					errorHookFired = true;
 					errorHookSourceType = source?.type;
 				},
@@ -186,7 +198,7 @@ describe.each(configs)("Hooks Async Error Paths > Config: '$name'", ({ config })
 			// Register always hook to verify it fires even on rejection
 			api.slothlet.hook.on(
 				"task.asyncReject:always",
-				({ hasError }) => {
+				({ errors, hasError = errors.length > 0 }) => {
 					alwaysHookFired = true;
 					alwaysHookHasError = hasError;
 				},
@@ -213,10 +225,14 @@ describe.each(configs)("Hooks Async Error Paths > Config: '$name'", ({ config })
 			api = await slothlet({
 				...config,
 				base: TEST_DIRS.API_TEST,
-				collision: { initial: "replace", api: "replace" },
+				api: {
+					collision: {
+						mode: { initial: "replace", api: "replace" }
+					}
+				},
 				hook: {
 					...config.hook,
-					suppressErrors: true
+					errors: true
 				}
 			});
 		});
@@ -249,7 +265,11 @@ describe("Hooks Async Error Paths > Hooks disabled (no-hook branch)", () => {
 		const slothlet = slothletModule.default;
 		api = await slothlet({
 			base: TEST_DIRS.API_TEST,
-			collision: { initial: "replace", api: "replace" },
+			api: {
+				collision: {
+					mode: { initial: "replace", api: "replace" }
+				}
+			},
 			hook: { enabled: false }
 		});
 

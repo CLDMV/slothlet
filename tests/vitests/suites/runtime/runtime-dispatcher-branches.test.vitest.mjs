@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:21-07:00 (1791090921)
+ *	@Last modified time: 2026-11-16T18:30:59-08:00 (1794882659)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -19,7 +19,7 @@
  *
  * @description
  * The dispatcher module (`@cldmv/slothlet/runtime`) re-exports `self`, `context`, and
- * `instanceID` as Proxy objects that delegate to either the async or live runtime based on
+ * `instance` (`self` and `context` as Proxy objects) that delegate to either the async or live runtime based on
  * which context is active.  The existing tests import directly from the sub-modules
  * (`runtime/live`, `runtime/async`), bypassing the dispatcher proxy entirely.
  *
@@ -33,15 +33,14 @@
  *               returning `undefined` (missing prop) inside live context.
  * - Lines 103-104: `context.has()` trap — `"prop" in context` inside live context.
  * - Lines 111-113: `context.set()` trap — `context.prop = value` inside live context.
- * - Lines 128-129: `instanceID.get()` trap — `instanceID.someKey` outside context (falsy path).
- * - Lines 132-133: `instanceID.has()` trap — `"someKey" in instanceID` outside context.
+ * - `instance.id` outside a call (undefined).
  *
  * @module tests/vitests/suites/runtime/runtime-dispatcher-branches.test.vitest
  */
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 // Import from the DISPATCHER module (not the live/async sub-modules)
-import { self, context, instanceID } from "@cldmv/slothlet/runtime";
+import { self, context, instance } from "@cldmv/slothlet/runtime";
 import { liveRuntime } from "#factories/context";
 import { withSuppressedSlothletErrorOutput } from "../../setup/vitest-helper.mjs";
 
@@ -84,7 +83,7 @@ describe("runtime dispatcher — getCurrentRuntime default return (line 48)", ()
 
 	it("throws when self.prop is accessed outside all runtime contexts (line 48)", async () => {
 		// No async or live context active → getCurrentRuntime() hits line 48 →
-		// delegates to asyncRuntimeModule which throws RUNTIME_NO_ACTIVE_CONTEXT_SELF.
+		// delegates to asyncRuntimeModule which throws CONTEXT_NOT_ACTIVE_SELF.
 		await withSuppressedSlothletErrorOutput(async () => {
 			expect(() => self.ping).toThrow();
 		});
@@ -178,28 +177,14 @@ describe("runtime dispatcher — context set trap via live context (lines 111-11
 	});
 });
 
-// ─── Lines 128-129: instanceID.get trap ──────────────────────────────────────
+// ─── instance.id outside a call ──────────────────────────────────────────────
 
-describe("runtime dispatcher — instanceID get trap (lines 128-129)", () => {
+describe("runtime dispatcher — instance.id outside a call", () => {
 	beforeEach(resetLiveRuntimeState);
 	afterEach(resetLiveRuntimeState);
 
-	it("instanceID.someKey returns undefined outside context (lines 128-129, falsy branch)", () => {
-		// No context active → runtime = asyncRuntimeModule → runtime.instanceID = undefined
-		// ternary falsy branch fires → returns undefined
-		const val = instanceID.someKey;
-		expect(val).toBeUndefined();
-	});
-});
-
-// ─── Lines 132-133: instanceID.has trap ──────────────────────────────────────
-
-describe("runtime dispatcher — instanceID has trap (lines 132-133)", () => {
-	beforeEach(resetLiveRuntimeState);
-	afterEach(resetLiveRuntimeState);
-
-	it("'someKey' in instanceID returns false outside context (lines 132-133, falsy branch)", () => {
-		// No context active → runtime.instanceID = undefined → returns false
-		expect("someKey" in instanceID).toBe(false);
+	it("instance.id is undefined outside a call", () => {
+		// No context active → the dispatcher asks the async runtime, whose instance.id is undefined there.
+		expect(instance.id).toBeUndefined();
 	});
 });

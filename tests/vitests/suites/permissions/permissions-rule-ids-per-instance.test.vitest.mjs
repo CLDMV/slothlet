@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T12:00:00-08:00 (1794772800)
+ *	@Last modified time: 2026-11-16T18:30:07-08:00 (1794882607)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -34,14 +34,14 @@ describe.each(["eager", "lazy"])("permission rule ids are per instance (#822) > 
 		a = b = null;
 	});
 
-	const make = () => slothlet({ base: TEST_DIRS.API_TEST, mode, permissions: { defaultPolicy: "allow", rules: [RULE] } });
+	const make = () => slothlet({ base: TEST_DIRS.API_TEST, mode, permissions: { policy: "allow", rules: [RULE] } });
 
 	it("a second instance numbers its rules from the same start as the first", async () => {
 		a = await make();
-		const firstA = a.slothlet.permissions.addRule(RULE);
-		const secondA = a.slothlet.permissions.addRule(RULE);
+		const firstA = a.slothlet.permissions.rules.add(RULE);
+		const secondA = a.slothlet.permissions.rules.add(RULE);
 		b = await make();
-		const firstB = b.slothlet.permissions.addRule(RULE);
+		const firstB = b.slothlet.permissions.rules.add(RULE);
 		expect(firstB).toBe(firstA);
 		expect(secondA).not.toBe(firstA);
 	});
@@ -49,9 +49,9 @@ describe.each(["eager", "lazy"])("permission rule ids are per instance (#822) > 
 	it("rules added to one instance do not move the other instance's ids", async () => {
 		a = await make();
 		b = await make();
-		const before = b.slothlet.permissions.addRule(RULE);
-		for (let i = 0; i < 5; i++) a.slothlet.permissions.addRule(RULE);
-		const after = b.slothlet.permissions.addRule(RULE);
+		const before = b.slothlet.permissions.rules.add(RULE);
+		for (let i = 0; i < 5; i++) a.slothlet.permissions.rules.add(RULE);
+		const after = b.slothlet.permissions.rules.add(RULE);
 		expect(Number(after.split("-").pop())).toBe(Number(before.split("-").pop()) + 1);
 	});
 });

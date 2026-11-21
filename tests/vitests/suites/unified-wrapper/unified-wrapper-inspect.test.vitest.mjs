@@ -102,7 +102,7 @@ describe("util.inspect.custom on non-callable wrapper with children", () => {
 
 // ---------------------------------------------------------------------------
 // 2. util.inspect.custom — callable wrapper (returns impl, not children)
-//    Covers line 2163 (return _impl path)
+//    Covers line 2163 (return ____impl path)
 // ---------------------------------------------------------------------------
 describe("util.inspect.custom on callable leaf wrapper", () => {
 	it("util.inspect(api.math.add) returns the function impl (eager)", async () => {
@@ -110,7 +110,7 @@ describe("util.inspect.custom on callable leaf wrapper", () => {
 		expect(api.math.add).toBeDefined();
 
 		// api.math.add is a callable wrapper — childKeys will be 0 or isCallable=true
-		// → inspect fall-through path returns _impl
+		// → inspect fall-through path returns ____impl
 		const inspected = util.inspect(api.math.add);
 		expect(typeof inspected).toBe("string");
 	});

@@ -21,7 +21,7 @@
  * @description
  * `ComponentBase.INTERNAL_KEYS` (`#factories/component-base`) and `IMPL_METADATA_KEYS`
  * (`#handlers/unified-wrapper`) are these exact Set objects. They live here so
- * `helpers/defaults` can build `slothlet.defaults.reservedExports` without loading the wrapper
+ * `helpers/defaults` can build `slothlet.defaults.reserved` without loading the wrapper
  * classes, whose import graph reaches `helpers/platform` and its top-level await. index.mjs imports
  * `helpers/defaults` statically and index.cjs loads index.mjs through Node's synchronous
  * require(esm), which rejects any module graph containing top-level await.
@@ -55,26 +55,13 @@ const WRAPPER_INTERNAL_KEYS = setFrom([
 	"___setImpl",
 	"___resetLazy",
 	"___invalidate",
-	// 2-underscore: read-only info/mode/state props exposed through proxy
-	"__state",
-	"__invalid",
-	"__mode",
-	"__apiPath",
-	"__slothletPath",
-	"__isCallable",
-	"__materializeOnCreate",
-	"__displayName",
-	"__type",
-	"__metadata",
-	"__filePath",
-	"__sourceFolder",
-	"__moduleID",
-	"__materialized",
-	"__inFlight",
-	"__impl",
-	// 1-underscore: internal method and raw impl alias
-	"_impl",
-	"_materialize"
+	// 2-underscore: internal state props (what a node reports about itself is `slothlet.node(target)`, not a key)
+	"____state",
+	"____invalid",
+	"____materializeOnCreate",
+	"____displayName",
+	"____impl",
+	"___materialize"
 	// NOTE: "slothlet"/"shutdown"/"destroy" are intentionally NOT listed here. They are
 	// builtin namespace/lifecycle keys injected by buildFinalAPI directly onto the plain
 	// root object (never a UnifiedWrapper — see api_builder.mjs buildFinalAPI), so this
@@ -90,7 +77,7 @@ const WRAPPER_INTERNAL_KEYS = setFrom([
  * `IMPL_METADATA_KEYS` from `#handlers/unified-wrapper`. Matched by exact name, never by prefix.
  * @type {Set<string>}
  */
-const IMPL_METADATA_KEYS = setFrom(["__childFilePaths", "__filePath", "__childFilePathsPreMaterialize"]);
+const IMPL_METADATA_KEYS = setFrom(["____childFilePaths", "____filePath", "____childFilePathsPreMaterialize"]);
 
 /**
  * Whether a property name belongs to the framework rather than to a module's exports.
@@ -109,7 +96,7 @@ const IMPL_METADATA_KEYS = setFrom(["__childFilePaths", "__filePath", "__childFi
  * in lazy mode while eager served them.
  *
  * @example
- * isFrameworkReservedKey("__childFilePaths"); // true
+ * isFrameworkReservedKey("____childFilePaths"); // true
  * isFrameworkReservedKey("__priv"); // false — a module's own export
  */
 export function isFrameworkReservedKey(key) {
@@ -157,7 +144,7 @@ export function writeTargetLiteralPrefix(pattern) {
  * @returns {boolean} Whether it names the framework's own.
  * @example
  * isFrameworkWriteTarget("slothlet.**"); // true
- * isFrameworkWriteTarget("victim.**.__metadata"); // true
+ * isFrameworkWriteTarget("victim.**.____state"); // true
  */
 export function isFrameworkWriteTarget(pattern) {
 	const segments = splitText(String(pattern), ".");

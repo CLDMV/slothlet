@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:16-07:00 (1791090916)
+ *	@Last modified time: 2026-11-16T18:30:25-08:00 (1794882625)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -34,7 +34,7 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "deny",
+				policy: "deny",
 				rules: [
 					{
 						caller: "callers.**",
@@ -61,7 +61,7 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "deny",
+				policy: "deny",
 				rules: [
 					{
 						caller: "callers.**",
@@ -91,7 +91,7 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "deny",
+				policy: "deny",
 				rules: [
 					{ caller: "callers.**", target: "payments.**", effect: "allow", condition: { tenant: "tenant-a" } },
 					{ caller: "callers.**", target: "payments.**", effect: "deny", condition: { tenant: "tenant-b" } }
@@ -123,7 +123,7 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "deny",
+				policy: "deny",
 				rules: [
 					{
 						caller: "callers.**",
@@ -148,7 +148,7 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "deny",
+				policy: "deny",
 				rules: [
 					{
 						caller: "callers.**",
@@ -177,7 +177,7 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "deny",
+				policy: "deny",
 				rules: [
 					{
 						caller: "callers.**",
@@ -209,7 +209,7 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "deny",
+				policy: "deny",
 				rules: [
 					{
 						caller: "callers.**",
@@ -230,12 +230,12 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 		}
 	});
 
-	it("global.checkAccess uses context.run() runtime context for conditional rules", async () => {
+	it("global.check.access uses context.run() runtime context for conditional rules", async () => {
 		api = await slothlet({
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "deny",
+				policy: "deny",
 				rules: [
 					{
 						caller: "callers.**",
@@ -248,12 +248,12 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 		});
 
 		const allowed = await api.slothlet.context.run({ tenant: "tenant-a" }, async () => {
-			return api.slothlet.permissions.global.checkAccess("callers.paymentsCaller.callCharge", "payments.charge.process");
+			return api.slothlet.permissions.global.check.access("callers.paymentsCaller.callCharge", "payments.charge.process");
 		});
 		expect(allowed).toBe(true);
 
 		const denied = await api.slothlet.context.run({ tenant: "tenant-b" }, async () => {
-			return api.slothlet.permissions.global.checkAccess("callers.paymentsCaller.callCharge", "payments.charge.process");
+			return api.slothlet.permissions.global.check.access("callers.paymentsCaller.callCharge", "payments.charge.process");
 		});
 		expect(denied).toBe(false);
 	});
@@ -263,7 +263,7 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "deny",
+				policy: "deny",
 				rules: [
 					{
 						caller: "**",
@@ -286,12 +286,12 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 		expect(denied).toBe(false);
 	});
 
-	it("control.enable caller-wrapper path uses context.run() runtime context for conditional allow", async () => {
+	it("control.mode caller-wrapper path uses context.run() runtime context for conditional allow", async () => {
 		api = await slothlet({
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "deny",
+				policy: "deny",
 				rules: [
 					{
 						caller: "callers.controlCaller.callEnable",
@@ -318,31 +318,31 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 			})
 		).rejects.toThrow("PERMISSION_DENIED");
 
-		expect(deniedEvents.some((evt) => String(evt?.target || "").includes(".__probe__"))).toBe(false);
+		expect(deniedEvents.some((evt) => (evt?.target ?? []).join(".").includes(".__probe__"))).toBe(false);
 	});
 
 	// ── Invalid condition type ───────────────────────────────────────────────────
 
-	it("invalid condition type (string) throws INVALID_PERMISSION_RULE", async () => {
+	it("invalid condition type (string) throws PERMISSION_RULE_INVALID", async () => {
 		api = await slothlet({
 			...config,
 			base: `${BASE}/callers`,
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				rules: []
 			}
 		});
 
 		try {
-			api.slothlet.permissions.addRule({
+			api.slothlet.permissions.rules.add({
 				caller: "callers.**",
 				target: "payments.**",
 				effect: "allow",
 				condition: "tenant-a"
 			});
-			expect.unreachable("Should have thrown INVALID_PERMISSION_RULE");
+			expect.unreachable("Should have thrown PERMISSION_RULE_INVALID");
 		} catch (err) {
-			expect(err.message).toContain("INVALID_PERMISSION_RULE");
+			expect(err.message).toContain("PERMISSION_RULE_INVALID");
 		}
 	});
 
@@ -353,7 +353,7 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "deny",
+				policy: "deny",
 				rules: [
 					{
 						caller: "callers.**",
@@ -389,7 +389,7 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "deny",
+				policy: "deny",
 				rules: [{ caller: "callers.**", target: "payments.**", effect: "allow" }]
 			}
 		});
@@ -408,7 +408,7 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "deny",
+				policy: "deny",
 				rules: [{ caller: "callers.**", target: "payments.**", effect: "allow" }]
 			}
 		});
@@ -424,7 +424,7 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "allow"
+				policy: "allow"
 			}
 		});
 
@@ -435,7 +435,7 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 		});
 
 		// Rule was created — verify it appears in getRulesForPath output with condition
-		const rules = api.slothlet.permissions.global.rulesForPath("admin.manage.createUser");
+		const rules = api.slothlet.permissions.global.rules.path("admin.manage.createUser");
 		const rule = rules.find((r) => r.caller === "extra.**" && r.effect === "deny");
 		expect(rule).toBeDefined();
 		expect(rule.condition).toEqual({ tenant: "trial" });
@@ -448,7 +448,7 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "allow"
+				policy: "allow"
 			}
 		});
 
@@ -458,23 +458,23 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 			}
 		});
 
-		const adminRules = api.slothlet.permissions.global.rulesForPath("admin.manage.createUser");
+		const adminRules = api.slothlet.permissions.global.rules.path("admin.manage.createUser");
 		const plainRule = adminRules.find((r) => r.caller === "extra.**" && r.target === "admin.**");
 		expect(plainRule).toBeDefined();
 		expect(plainRule.condition).toBeNull();
 
-		const dbRules = api.slothlet.permissions.global.rulesForPath("db.write.insert");
+		const dbRules = api.slothlet.permissions.global.rules.path("db.write.insert");
 		const condRule = dbRules.find((r) => r.caller === "extra.**" && r.target === "db.write.**");
 		expect(condRule).toBeDefined();
 		expect(condRule.condition).toEqual({ role: "guest" });
 	});
 
-	it("api.add shorthand rejects null entries with INVALID_PERMISSION_RULE", async () => {
+	it("api.add shorthand rejects null entries with PERMISSION_RULE_INVALID", async () => {
 		api = await slothlet({
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "allow"
+				policy: "allow"
 			}
 		});
 
@@ -484,18 +484,18 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 					allow: [null]
 				}
 			});
-			expect.unreachable("Should have thrown INVALID_PERMISSION_RULE");
+			expect.unreachable("Should have thrown PERMISSION_RULE_INVALID");
 		} catch (err) {
-			expect(err.message).toContain("INVALID_PERMISSION_RULE");
+			expect(err.message).toContain("PERMISSION_RULE_INVALID");
 		}
 	});
 
-	it("api.add shorthand rejects array entries with INVALID_PERMISSION_RULE (received: array)", async () => {
+	it("api.add shorthand rejects array entries with PERMISSION_RULE_INVALID (received: array)", async () => {
 		api = await slothlet({
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "allow"
+				policy: "allow"
 			}
 		});
 
@@ -506,18 +506,18 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 					allow: [["admin.**"]]
 				}
 			});
-			expect.unreachable("Should have thrown INVALID_PERMISSION_RULE");
+			expect.unreachable("Should have thrown PERMISSION_RULE_INVALID");
 		} catch (err) {
-			expect(err.message).toContain("INVALID_PERMISSION_RULE");
+			expect(err.message).toContain("PERMISSION_RULE_INVALID");
 		}
 	});
 
-	it("api.add shorthand rejects primitive entries with INVALID_PERMISSION_RULE (received: typeof)", async () => {
+	it("api.add shorthand rejects primitive entries with PERMISSION_RULE_INVALID (received: typeof)", async () => {
 		api = await slothlet({
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "allow"
+				policy: "allow"
 			}
 		});
 
@@ -528,18 +528,18 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 					allow: [42]
 				}
 			});
-			expect.unreachable("Should have thrown INVALID_PERMISSION_RULE");
+			expect.unreachable("Should have thrown PERMISSION_RULE_INVALID");
 		} catch (err) {
-			expect(err.message).toContain("INVALID_PERMISSION_RULE");
+			expect(err.message).toContain("PERMISSION_RULE_INVALID");
 		}
 	});
 
-	it("api.add shorthand rejects object entries missing target with INVALID_PERMISSION_RULE", async () => {
+	it("api.add shorthand rejects object entries missing target with PERMISSION_RULE_INVALID", async () => {
 		api = await slothlet({
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "allow"
+				policy: "allow"
 			}
 		});
 
@@ -549,20 +549,20 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 					deny: [{ condition: { tenant: "trial" } }]
 				}
 			});
-			expect.unreachable("Should have thrown INVALID_PERMISSION_RULE");
+			expect.unreachable("Should have thrown PERMISSION_RULE_INVALID");
 		} catch (err) {
-			expect(err.message).toContain("INVALID_PERMISSION_RULE");
+			expect(err.message).toContain("PERMISSION_RULE_INVALID");
 		}
 	});
 
 	// ── Audit payload conditionMatched: true ─────────────────────────────────────
 
-	it("audit event payload includes conditionMatched: true when winning rule has a condition", async () => {
+	it("audit event payload carries the winning rule, whose condition is set, when it has a condition", async () => {
 		api = await slothlet({
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				audit: "verbose",
 				rules: [
 					{
@@ -583,19 +583,20 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 		});
 
 		expect(events.length).toBeGreaterThan(0);
-		const evt = events.find((e) => e.caller === "callers.paymentsCaller.callCharge" && e.target === "payments.charge.process");
+		const evt = events.find((e) => e.caller === "callers.paymentsCaller.callCharge" && e.target?.join(".") === "payments.charge.process");
 		expect(evt).toBeDefined();
-		expect(evt.conditionMatched).toBe(true);
+		expect(evt.rule.condition != null).toBe(true);
+		expect("conditionMatched" in evt).toBe(false);
 	});
 
 	// ── Audit payload conditionMatched: false ────────────────────────────────────
 
-	it("audit event payload includes conditionMatched: false when winning rule has no condition", async () => {
+	it("audit event payload carries the winning rule, whose condition is null, when it has no condition", async () => {
 		api = await slothlet({
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				audit: "verbose",
 				rules: [{ caller: "callers.**", target: "payments.**", effect: "allow" }]
 			}
@@ -607,9 +608,10 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 		await api.callers.paymentsCaller.callCharge(100);
 
 		expect(events.length).toBeGreaterThan(0);
-		const evt = events.find((e) => e.caller === "callers.paymentsCaller.callCharge" && e.target === "payments.charge.process");
+		const evt = events.find((e) => e.caller === "callers.paymentsCaller.callCharge" && e.target?.join(".") === "payments.charge.process");
 		expect(evt).toBeDefined();
-		expect(evt.conditionMatched).toBe(false);
+		expect(evt.rule.condition != null).toBe(false);
+		expect("conditionMatched" in evt).toBe(false);
 	});
 
 	// ── Array condition: OR semantics — first entry matches ───────────────────────
@@ -619,7 +621,7 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "deny",
+				policy: "deny",
 				rules: [
 					{
 						caller: "callers.**",
@@ -645,7 +647,7 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "deny",
+				policy: "deny",
 				rules: [
 					{
 						caller: "callers.**",
@@ -671,7 +673,7 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "deny",
+				policy: "deny",
 				rules: [
 					{
 						caller: "callers.**",
@@ -701,7 +703,7 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "deny",
+				policy: "deny",
 				rules: [
 					{
 						caller: "callers.**",
@@ -727,7 +729,7 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "deny",
+				policy: "deny",
 				rules: [
 					{
 						caller: "callers.**",
@@ -753,7 +755,7 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "deny",
+				policy: "deny",
 				rules: [
 					{
 						caller: "callers.**",
@@ -783,7 +785,7 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "deny",
+				policy: "deny",
 				rules: [
 					{
 						caller: "callers.**",
@@ -808,45 +810,45 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 
 	// ── Invalid condition: array with invalid entry ───────────────────────────────
 
-	it("array condition with a non-object/non-function entry throws INVALID_PERMISSION_RULE", async () => {
+	it("array condition with a non-object/non-function entry throws PERMISSION_RULE_INVALID", async () => {
 		api = await slothlet({
 			...config,
 			base: `${BASE}/callers`,
-			permissions: { defaultPolicy: "allow", rules: [] }
+			permissions: { policy: "allow", rules: [] }
 		});
 
 		try {
-			api.slothlet.permissions.addRule({
+			api.slothlet.permissions.rules.add({
 				caller: "callers.**",
 				target: "payments.**",
 				effect: "allow",
 				condition: [{ role: "admin" }, 42]
 			});
-			expect.unreachable("Should have thrown INVALID_PERMISSION_RULE");
+			expect.unreachable("Should have thrown PERMISSION_RULE_INVALID");
 		} catch (err) {
-			expect(err.message).toContain("INVALID_PERMISSION_RULE");
+			expect(err.message).toContain("PERMISSION_RULE_INVALID");
 		}
 	});
 
 	// ── Invalid condition: empty array ────────────────────────────────────────────
 
-	it("empty array condition throws INVALID_PERMISSION_RULE", async () => {
+	it("empty array condition throws PERMISSION_RULE_INVALID", async () => {
 		api = await slothlet({
 			...config,
 			base: `${BASE}/callers`,
-			permissions: { defaultPolicy: "allow", rules: [] }
+			permissions: { policy: "allow", rules: [] }
 		});
 
 		try {
-			api.slothlet.permissions.addRule({
+			api.slothlet.permissions.rules.add({
 				caller: "callers.**",
 				target: "payments.**",
 				effect: "allow",
 				condition: []
 			});
-			expect.unreachable("Should have thrown INVALID_PERMISSION_RULE");
+			expect.unreachable("Should have thrown PERMISSION_RULE_INVALID");
 		} catch (err) {
-			expect(err.message).toContain("INVALID_PERMISSION_RULE");
+			expect(err.message).toContain("PERMISSION_RULE_INVALID");
 		}
 	});
 
@@ -857,7 +859,7 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "deny",
+				policy: "deny",
 				rules: [{ caller: "callers.**", target: "payments.**", effect: "allow" }]
 			}
 		});
@@ -873,14 +875,14 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 		expect(r2.ok).toBe(true);
 	});
 
-	// ── control.enable/disable: ctx.context undefined (no context.run) ────────────
+	// ── control.mode(on/off): ctx.context undefined (no context.run) ────────────
 
-	it("control.enable called without context.run() — ctx.context is undefined, runtimeContext falls back to null", async () => {
+	it('control.mode("on") called without context.run() — ctx.context is undefined, runtimeContext falls back to null', async () => {
 		api = await slothlet({
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				rules: [{ caller: "callers.controlCaller.callEnable", target: "slothlet.permissions.control.**", effect: "allow" }]
 			}
 		});
@@ -890,12 +892,12 @@ describe.each(getMatrixConfigs())("Permissions > Context Condition > $name", ({ 
 		await Promise.resolve(api.callers.controlCaller.callEnable());
 	});
 
-	it("control.disable called without context.run() — ctx.context is undefined, runtimeContext falls back to null", async () => {
+	it('control.mode("off") called without context.run() — ctx.context is undefined, runtimeContext falls back to null', async () => {
 		api = await slothlet({
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				rules: [{ caller: "callers.controlCaller.callDisable", target: "slothlet.permissions.control.**", effect: "allow" }]
 			}
 		});

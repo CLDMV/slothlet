@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:09-08:00 (1794874569)
+ *	@Last modified time: 2026-11-16T18:28:45-08:00 (1794882525)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -34,6 +34,7 @@
  * });
  * const baseApi = cache.get("base_abc123").api; // Get API from cache
  */
+import { segmentsOf } from "#helpers/segments";
 import { ComponentBase } from "#factories/component-base";
 import { isFrameworkReservedKey } from "#helpers/reserved-keys";
 import {
@@ -119,7 +120,7 @@ export class ApiCacheManager extends ComponentBase {
 	 *   endpoint: ".",
 	 *   moduleID: "base_abc123",
 	 *   api: apiTree,
-	 *   folderPath: this.____config.dir,
+	 *   folderPath: this.____config.base,
 	 *   mode: "lazy",
 	 *   sanitizeOptions: {},
 	 *   collisionMode: "merge",
@@ -132,8 +133,7 @@ export class ApiCacheManager extends ComponentBase {
 			throw new this.SlothletError("INVALID_ARGUMENT", {
 				argument: "moduleID",
 				expected: "non-empty string",
-				received: typeof moduleID,
-				validationError: true
+				received: typeof moduleID
 			});
 		}
 
@@ -141,17 +141,15 @@ export class ApiCacheManager extends ComponentBase {
 			throw new this.SlothletError("INVALID_ARGUMENT", {
 				argument: "entry.api",
 				expected: "API tree object",
-				received: typeof entry?.api,
-				validationError: true
+				received: typeof entry?.api
 			});
 		}
 
 		// Ensure moduleID matches entry
 		if (entry.moduleID && entry.moduleID !== moduleID) {
-			throw new this.SlothletError("CACHE_MODULEID_MISMATCH", {
-				cacheKey: moduleID,
-				entryModuleID: entry.moduleID,
-				validationError: true
+			throw new this.SlothletError("CACHE_MODULE_ID_MISMATCH", {
+				expected: moduleID,
+				received: entry.moduleID
 			});
 		}
 
@@ -249,9 +247,8 @@ export class ApiCacheManager extends ComponentBase {
 	 * @example
 	 * const diag = cacheManager.getCacheDiagnostics();
 	 * // {
-	 * //   totalCaches: 3,
 	 * //   caches: [
-	 * //     { moduleID: "base_abc123", endpoint: ".", pathCount: 42, timestamp: ... },
+	 * //     { module: "base_abc123", path: [], folder: "/app/api", mode: "eager", count: 42, at: 1708012345 },
 	 * //     ...
 	 * //   ]
 	 * // }
@@ -266,19 +263,16 @@ export class ApiCacheManager extends ComponentBase {
 			const pathCount = this._countPaths(entry.api);
 
 			listPush(caches, {
-				moduleID,
-				endpoint: entry.endpoint,
-				folderPath: entry.folderPath,
+				module: moduleID,
+				path: segmentsOf(entry.endpoint),
+				folder: entry.folderPath,
 				mode: entry.mode,
-				pathCount,
-				timestamp: entry.timestamp
+				count: pathCount,
+				at: entry.timestamp
 			});
 		}
 
-		return {
-			totalCaches: MapMethods.size(this.caches),
-			caches
-		};
+		return { caches };
 	}
 
 	/**
@@ -354,9 +348,8 @@ export class ApiCacheManager extends ComponentBase {
 
 		if (!entry) {
 			throw new this.SlothletError("CACHE_NOT_FOUND", {
-				moduleID,
-				operation: "rebuild",
-				validationError: true
+				module: moduleID,
+				operation: ["slothlet", "api", "reload"]
 			});
 		}
 

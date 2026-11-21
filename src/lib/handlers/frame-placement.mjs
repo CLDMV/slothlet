@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:09-08:00 (1794874569)
+ *	@Last modified time: 2026-11-17T17:16:26-08:00 (1794964586)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -25,7 +25,8 @@
  * @module @cldmv/slothlet/handlers/frame-placement
  * @internal
  */
-import { isNode, util } from "#helpers/platform";
+import { segmentsOf } from "#helpers/segments";
+import { AsyncResource, isNode, util } from "#helpers/platform";
 import {
 	rememberNewest,
 	LOADED_BY_SPECIFIER,
@@ -59,6 +60,7 @@ import {
 	Math,
 	Objects,
 	Processes,
+	PrototypeFunctions,
 	Reflect,
 	RegExp,
 	RegExpMethods,
@@ -131,12 +133,12 @@ const HASH_PROTOTYPE = NODE_CRYPTO ? Objects.getPrototypeOf(Reflect.apply(CRYPTO
 const HASH_UPDATE = HASH_PROTOTYPE?.update;
 const HASH_DIGEST = HASH_PROTOTYPE?.digest;
 const CapturedTextDecoder = TextDecoder;
-const TEXT_DECODE = TextDecoder.prototype.decode;
+const TEXT_DECODE = PrototypeFunctions.TextDecoder.decode;
 const JSON_PARSE = JSON.parse;
-const MAP_FOREACH = Map.prototype.forEach;
-const SET_FOREACH = Set.prototype.forEach;
+const MAP_FOREACH = PrototypeFunctions.Map.forEach;
+const SET_FOREACH = PrototypeFunctions.Set.forEach;
 const CapturedURLSearchParams = URLSearchParams;
-const CapturedURLSearchParamsGet = URLSearchParams.prototype.get;
+const CapturedURLSearchParamsGet = PrototypeFunctions.URLSearchParams.get;
 
 /**
  * Call one of the captured `fs` functions.
@@ -583,7 +585,7 @@ function runtime_captureFrames(limit) {
 	const read = readStack(runtime_structuredFrames, { limit });
 	// The global `Error` or its stack settings were changed so that slothlet's own formatter could not be the one that
 	// ran: the frames are not the engine's, and what they would have decided is refused.
-	if (read === null) throw new SlothletError("PERMISSION_DENIED", { caller: null, target: "self" }, null, { validationError: true });
+	if (read === null) throw new SlothletError("PERMISSION_DENIED", { caller: null, target: segmentsOf("self") });
 	if (read.value?.structured) return read.value;
 	// An engine without V8's call-site hook formats the trace as text, which is parsed instead.
 	return textFrames(String(read.text ?? ""), limit);
@@ -1285,32 +1287,216 @@ function describeCall(wrapper) {
 }
 
 /**
- * The module root folders of the instances some calls belong to, longest first.
+ * The module root folders of some instances' api caches, longest first.
  *
  * Taken from each instance's module cache — the folder every `base`/`api.add()` module was loaded from —
  * so a frame in any file of a module's folder can be attributed to that module, not only a frame in the
  * exact file its call entered through. Synthetic (in-memory) modules have no folder and contribute
  * nothing. Longest first so a module mounted from inside another module's folder owns its own files.
  *
- * @param {Array<{currentWrapper: object}>} candidates - Calls being placed.
+ * @param {Array<object>} caches - The api caches of the calls being placed, each once.
  * @returns {Array<{moduleID: string, root: string}>} Module roots, longest first.
  * @private
  */
-function runtime_moduleRootsFor(candidates) {
-	// Every candidate is a live wrapper, which always reaches its instance's cache; the optional chain
-	// guards a partially-built wrapper handed in by a direct caller.
-	/* v8 ignore next */
-	const caches = setFrom(
-		filterList(
-			mapList(candidates, (entry) => entry.currentWrapper?.slothlet?.handlers?.apiCacheManager),
-			Boolean
-		)
-	);
+function runtime_moduleRootsOf(caches) {
 	// One instance's roots are kept between reads as they are; several instances' are merged, deepest first.
-	if (SetMethods.size(caches) === 1) return runtime_moduleRoots(setToArray(caches)[0]);
+	if (caches.length === 1) return runtime_moduleRoots(caches[0]);
 	const roots = [];
-	for (const cache of setValues(caches)) appendList(roots, runtime_moduleRoots(cache));
+	for (let i = 0; i < caches.length; i++) appendList(roots, runtime_moduleRoots(caches[i]));
 	return ArrayMethods.sort(roots, (a, b) => b.root.length - a.root.length);
+}
+
+/**
+ * Candidate indexes by the list of calls they were built for.
+ * @type {WeakMap<ArrayLike<object>, object>}
+ * @private
+ */
+const CANDIDATE_INDEXES = new WeakMap();
+
+/**
+ * A new empty list with no prototype, for lists of slothlet's own entries kept inside slothlet's own code: an element is
+ * written to it as `list[list.length] = value` without any check, as nothing a module puts on `Array.prototype` or
+ * `Object.prototype` is on its chain. Read by index and length only (it has no iterator).
+ * @returns {Array<object>} The list.
+ * @internal
+ */
+export function bareList() {
+	return Objects.setPrototypeOf([], null);
+}
+
+/**
+ * The entries of a list for which `keep` answers true, in a {@link bareList}; the list itself when it keeps all of them.
+ * @param {ArrayLike<object>} list - The entries, only read.
+ * @param {function(object): boolean} keep - The test.
+ * @returns {ArrayLike<object>} The entries kept.
+ * @private
+ */
+function keepAll(list, keep) {
+	let at = 0;
+	while (at < list.length && keep(list[at])) at++;
+	if (at === list.length) return list;
+	const kept = bareList();
+	for (let i = 0; i < at; i++) kept[i] = list[i];
+	for (let i = at + 1; i < list.length; i++) if (keep(list[i])) kept[kept.length] = list[i];
+	return kept;
+}
+
+/**
+ * Add an entry to the bare list kept under a key.
+ * @param {Map<unknown, Array<object>>} map - The index.
+ * @param {unknown} key - The key.
+ * @param {object} entry - The entry.
+ * @returns {Array<object>} The list.
+ * @private
+ */
+function fileUnder(map, key, entry) {
+	let list = MapMethods.get(map, key);
+	if (!list) MapMethods.set(map, key, (list = bareList()));
+	list[list.length] = entry;
+	return list;
+}
+
+/**
+ * What placing a frame among a list of calls needs from the calls alone, built once per list and kept with it.
+ *
+ * The calls are looked up by their files instead of each being compared to each frame: by comparable path (a relative
+ * one as a whole-segment suffix of a location), by real path and by imported location, and by module. What a call's
+ * file and a frame's tags select is kept too, by location and tags, so a list read again places the same frames by a
+ * lookup. Only what the calls themselves describe is kept here: what an instance has loaded, which grows, is read
+ * when a frame is placed. The lists it answers are slothlet's own and shared between reads, so they are only read.
+ *
+ * @param {ArrayLike<object>} candidates - The calls, each with a file. The list is not changed afterwards.
+ * @returns {object} The index.
+ * @private
+ */
+function runtime_candidateIndex(candidates) {
+	let index = WeakMapMethods.get(CANDIDATE_INDEXES, candidates);
+	if (index) return index;
+	// Comparable paths that are strings, matched equal and as a suffix; any other only as the suffix its text makes.
+	const byComparable = new Map();
+	const bySuffixOnly = new Map();
+	const byLocation = new Map();
+	const byModule = new Map();
+	const families = new Set();
+	const caches = new Set();
+	const loaders = new Set();
+	const wrappers = new Set();
+	// The lists the last entry was filed under: an entry of the same call of the same instance (overlapping calls of
+	// one function) is filed under the same ones.
+	let last = null;
+	let lastLists = bareList();
+	for (let i = 0; i < candidates.length; i++) {
+		const entry = candidates[i];
+		if (
+			last !== null &&
+			entry.currentWrapper === last.currentWrapper &&
+			entry.family === last.family &&
+			entry.comparablePath === last.comparablePath &&
+			entry.realComparablePath === last.realComparablePath &&
+			entry.locations === last.locations &&
+			entry.moduleID === last.moduleID
+		) {
+			for (let j = 0; j < lastLists.length; j++) lastLists[j][lastLists[j].length] = entry;
+			continue;
+		}
+		last = entry;
+		lastLists = bareList();
+		// An entry is filed once per list, even under keys that coincide (a real path also recorded as a location).
+		const file = (map, key) => {
+			const list = MapMethods.get(map, key);
+			if (list && list[list.length - 1] === entry) return;
+			lastLists[lastLists.length] = fileUnder(map, key, entry);
+		};
+		const comparable = entry.comparablePath;
+		if (typeof comparable === "string") file(byComparable, comparable);
+		else file(bySuffixOnly, `${comparable}`);
+		if (entry.realComparablePath != null) file(byLocation, entry.realComparablePath);
+		if (entry.locations != null) SetMethods.forEach(entry.locations, (location) => file(byLocation, location));
+		file(byModule, entry.moduleID);
+		if (frameFamilyOf(entry)) SetMethods.add(families, frameFamilyOf(entry));
+		// The calls of one function share its wrapper: its instance's cache and loader are read once.
+		const wrapper = entry.currentWrapper;
+		if (SetMethods.has(wrappers, wrapper)) continue;
+		SetMethods.add(wrappers, wrapper);
+		// Every candidate is a live wrapper, which always reaches its instance's cache and loader; the chains guard a
+		// partially-built wrapper handed in by a direct caller.
+		/* v8 ignore next 4 */
+		const cache = wrapper?.slothlet?.handlers?.apiCacheManager;
+		if (cache) SetMethods.add(caches, cache);
+		const loader = wrapper?.slothlet?.processors?.loader;
+		if (loader) SetMethods.add(loaders, loader);
+	}
+
+	// Entries of several lists, once each, in the order of the candidates.
+	let order = null;
+	const merged = (lists) => {
+		if (order === null) {
+			order = new Map();
+			for (let i = 0; i < candidates.length; i++) if (!MapMethods.has(order, candidates[i])) MapMethods.set(order, candidates[i], i);
+		}
+		const seen = new Set();
+		const list = bareList();
+		for (let i = 0; i < lists.length; i++)
+			for (let j = 0; j < lists[i].length; j++) {
+				const entry = lists[i][j];
+				if (SetMethods.has(seen, entry)) continue;
+				SetMethods.add(seen, entry);
+				list[list.length] = entry;
+			}
+		if (list.length > 1) ArrayMethods.sort(list, (a, b) => MapMethods.get(order, a) - MapMethods.get(order, b));
+		return list;
+	};
+
+	// The calls a location is the file of. A browser-mode wrapper records its file relative to the manifest root, so a
+	// relative path matches as a whole-segment suffix of a location; an absolute one must be equal. A file reached
+	// through a symlink is matched by its real path too, as Node reports it.
+	const atLocation = new Map();
+	const entriesAt = (location) => {
+		let found = MapMethods.get(atLocation, location);
+		if (found) return found;
+		const lists = bareList();
+		const take = (list) => {
+			if (list) lists[lists.length] = list;
+		};
+		take(MapMethods.get(byComparable, location));
+		take(MapMethods.get(byLocation, location));
+		for (let at = StringMethods.indexOf(location, "/"); at !== -1; at = StringMethods.indexOf(location, "/", at + 1)) {
+			const suffix = StringMethods.slice(location, at + 1);
+			take(MapMethods.get(byComparable, suffix));
+			take(MapMethods.get(bySuffixOnly, suffix));
+		}
+		found = lists.length === 0 ? bareList() : lists.length === 1 ? lists[0] : merged(lists);
+		MapMethods.set(atLocation, location, found);
+		return found;
+	};
+
+	// The calls a frame in a call's own file is placed among, by its location and the instance and mount tags it carries.
+	const inFile = new Map();
+	const fileMatches = (location, frameInstance, frameModule) => {
+		const key = `${location}\u0000${frameInstance ?? ""}\u0000${frameModule ?? ""}`;
+		let found = MapMethods.get(inFile, key);
+		if (found) return found;
+		found = keepAll(
+			entriesAt(location),
+			(entry) =>
+				(!frameInstance || !frameFamilyOf(entry) || frameFamilyOf(entry) === frameInstance) &&
+				(frameModule ? entry.moduleID === frameModule : !frameInstance || !entry.moduleID)
+		);
+		MapMethods.set(inFile, key, found);
+		return found;
+	};
+
+	index = {
+		merged,
+		entriesAt,
+		fileMatches,
+		families,
+		caches: setToArray(caches),
+		loaders: setToArray(loaders),
+		ofModule: (moduleID) => MapMethods.get(byModule, moduleID) ?? bareList()
+	};
+	WeakMapMethods.set(CANDIDATE_INDEXES, candidates, index);
+	return index;
 }
 
 /**
@@ -1328,6 +1514,10 @@ function runtime_moduleRootsFor(candidates) {
  *   folder belongs to that module's calls (#512); the deepest root wins, so a module mounted inside
  *   another's folder owns its files.
  *
+ * What the calls alone decide is indexed once per list (see runtime_candidateIndex): a caller placing frames among the
+ * same calls again passes the same list, unchanged, and places them by lookups. The `matches` lists placements answer
+ * can be shared between placements, so they are only read.
+ *
  * @param {Array<{currentWrapper: object, family: string|null, comparablePath: string, realComparablePath: string|null, locations: Set<string>|null, moduleID: string|null}>} candidates - The calls, each with a file.
  * @returns {{place: function(object): ({matches: Array<object>, byFile: boolean, byModule?: boolean}|null), families: Set<string>}}
  *   `place` answers a frame's placement — `{ matches }` (possibly none: an orphan), or null when the frame is
@@ -1336,13 +1526,9 @@ function runtime_moduleRootsFor(candidates) {
  * @internal
  */
 function createFramePlacer(candidates) {
-	const roots = runtime_moduleRootsFor(candidates);
-	const families = setFrom(
-		filterList(
-			mapList(candidates, (entry) => entry.family),
-			Boolean
-		)
-	);
+	const index = runtime_candidateIndex(candidates);
+	const { families, entriesAt } = index;
+	const roots = runtime_moduleRootsOf(index.caches);
 
 	// The CommonJS helpers each instance's leaves required run under their plain path, untagged; a frame
 	// in one of them is that instance's code all the same. Node loads a CommonJS file once, so several
@@ -1371,33 +1557,15 @@ function createFramePlacer(candidates) {
 		return seen;
 	};
 
-	// A browser-mode wrapper records its file relative to the manifest root, so a relative path matches as a
-	// whole-segment suffix of a location; an absolute one must be equal. A file reached through a symlink is
-	// matched by its real path too, as Node reports it.
-	const isEntryLocation = (location, entry) =>
-		location === entry.comparablePath ||
-		StringMethods.endsWith(location, "/" + entry.comparablePath) ||
-		(entry.realComparablePath !== null && location === entry.realComparablePath) ||
-		Boolean(entry.locations == null ? undefined : SetMethods.has(entry.locations, location));
-
 	// The files the candidates' instances loaded under their tag: every leaf, and every file of their import
 	// graphs. The sets are cached across reads and rebuilt only when their instance loads more.
 	let tagged = null;
 	const isInstanceFile = (location) => {
-		if (!tagged) {
-			// Every candidate is a live wrapper, which always reaches its loader; the chain guards a partial one.
-			/* v8 ignore next */
-			const loaders = setFrom(
-				filterList(
-					mapList(candidates, (entry) => entry.currentWrapper?.slothlet?.processors?.loader),
-					Boolean
-				)
-			);
+		if (!tagged)
 			tagged = concatLists(
-				mapList(setToArray(loaders), runtime_loadedLocations),
+				mapList(index.loaders, runtime_loadedLocations),
 				mapList(setToArray(families), (family) => runtime_importGraphEntry(family).files)
 			);
-		}
 		return ArrayMethods.some(tagged, (set) => SetMethods.has(set, location));
 	};
 
@@ -1415,28 +1583,38 @@ function createFramePlacer(candidates) {
 		const frameModule = runtime_frameModuleTag(frame.line);
 		// A leaf's file an api file imported itself is no leaf's: it is placed as a helper file of the module is.
 		const copy = runtime_leafFileCopyOf(frame) !== null;
-		const byFile = filterList(
-			candidates,
-			(entry) =>
-				!copy &&
-				isEntryLocation(frame.path, entry) &&
-				(!frameInstance || !entry.family || entry.family === frameInstance) &&
-				(frameModule ? entry.moduleID === frameModule : !frameInstance || !entry.moduleID)
-		);
+		const byFile = copy ? bareList() : index.fileMatches(frame.path, frameInstance, frameModule);
 		if (byFile.length) return { matches: byFile, byFile: true };
 		const commonJSFamilies = frameInstance ? null : commonJSFamiliesAt(frame.path);
 		const frameFamilies = frameInstance ? setFrom([frameInstance]) : commonJSFamilies;
 		if (frameFamilies) {
 			// A helper copy loaded for one api file (`helpers: "module"`) names it: only that file's calls can be running it.
 			const loadedFor = frameInstance ? runtime_helperCopyOf(frameInstance, frame) : null;
-			const owners = filterList(candidates, (entry) => {
-				if (!SetMethods.has(frameFamilies, entry.family)) return false;
-				// A leaf's own copy names its mount: only that mount's calls can be running it.
-				if (frameModule && entry.moduleID !== frameModule) return false;
-				if (loadedFor) return isEntryLocation(loadedFor.path, entry) && (!loadedFor.mount || entry.moduleID === loadedFor.mount);
-				for (const importer of setValues(importersOf(entry.family, frame.path))) if (isEntryLocation(importer, entry)) return true;
-				return false;
-			});
+			let owners;
+			if (loadedFor)
+				owners = keepAll(
+					entriesAt(loadedFor.path),
+					(entry) =>
+						SetMethods.has(frameFamilies, frameFamilyOf(entry)) &&
+						// A leaf's own copy names its mount: only that mount's calls can be running it.
+						(!frameModule || entry.moduleID === frameModule) &&
+						(!loadedFor.mount || entry.moduleID === loadedFor.mount)
+				);
+			else {
+				// The calls of the frame's instances whose files import it.
+				const lists = bareList();
+				for (const family of setValues(frameFamilies)) {
+					if (!SetMethods.has(families, family)) continue;
+					for (const importer of setValues(importersOf(family, frame.path))) {
+						const list = keepAll(
+							entriesAt(importer),
+							(entry) => frameFamilyOf(entry) === family && (!frameModule || entry.moduleID === frameModule)
+						);
+						if (list.length) lists[lists.length] = list;
+					}
+				}
+				owners = lists.length === 0 ? bareList() : lists.length === 1 ? lists[0] : index.merged(lists);
+			}
 			// A CommonJS file runs under its plain path, which code compiled by someone can name too (#597).
 			return { matches: owners, byFile: false, unverified: Boolean(commonJSFamilies) };
 		}
@@ -1444,25 +1622,25 @@ function createFramePlacer(candidates) {
 		// import): the leaves its record names as importers, directly or through other such helpers (#714).
 		if (!frameInstance) {
 			const importers = runtime_runnerTaggedImporters(frame.path);
-			const owners = importers.length
-				? filterList(candidates, (entry) =>
-						ArrayMethods.some(
-							importers,
-							(importer) =>
-								importer.family === entry.family &&
-								(!importer.mount || importer.mount === entry.moduleID) &&
-								isEntryLocation(importer.location, entry)
-						)
-					)
-				: [];
-			if (owners.length) return { matches: owners, byFile: false, unverified: true };
+			if (importers.length) {
+				const lists = bareList();
+				for (let i = 0; i < importers.length; i++) {
+					const importer = importers[i];
+					const list = keepAll(
+						entriesAt(importer.location),
+						(entry) => importer.family === frameFamilyOf(entry) && (!importer.mount || importer.mount === entry.moduleID)
+					);
+					if (list.length) lists[lists.length] = list;
+				}
+				if (lists.length) return { matches: lists.length === 1 ? lists[0] : index.merged(lists), byFile: false, unverified: true };
+			}
 		}
 		// A CommonJS file only a gone instance loaded: its code is accounted for by no live call.
 		if (isNode && !frameInstance && SetMethods.has(RETIRED_COMMONJS, frame.path)) return { matches: [], byFile: false };
 		const owner = ArrayMethods.find(roots, ({ root }) => StringMethods.startsWith(frame.path, root + "/"));
 		if (owner)
 			return {
-				matches: filterList(candidates, (entry) => entry.moduleID === owner.moduleID),
+				matches: index.ofModule(owner.moduleID),
 				byFile: false,
 				byModule: true,
 				unverified: true
@@ -1471,6 +1649,67 @@ function createFramePlacer(candidates) {
 	};
 
 	return { place, families };
+}
+
+/**
+ * The calls of lists grouped by the names their entry function goes by, and the answers already given for a frame's
+ * text, by the list.
+ * @type {WeakMap<ArrayLike<object>, {groups: Array<{names: *, entry: object, list: Array<object>}>, byHead: Map<string, ArrayLike<object>>}>}
+ * @private
+ */
+const NAMED_AMONG = new WeakMap();
+
+/**
+ * The calls of a list whose entry function a stack frame's text names (see {@link runtime_namesEntry}).
+ *
+ * Calls of one function go by the same names, so the list is grouped by them once and each group's names are tested
+ * once; a list read again (a placement's matches, a caller's candidates) answers for the same frame text by a lookup.
+ * The list is only read, and the answer may be the list itself or shared, so it is only read too.
+ *
+ * @param {ArrayLike<{fnNames?: string[], fnName?: string}>} list - The calls. The list is not changed afterwards.
+ * @param {string} head - The frame's text before its location.
+ * @returns {ArrayLike<object>} The calls the frame names, in the list's order.
+ * @internal
+ */
+export function runtime_namedAmong(list, head) {
+	if (!head) return bareList();
+	let known = WeakMapMethods.get(NAMED_AMONG, list);
+	if (!known) {
+		// Entries of one wrapper share its names list; an entry with no list goes by its single name.
+		const byNames = new Map();
+		const groups = bareList();
+		for (let i = 0; i < list.length; i++) {
+			const entry = list[i];
+			const names = entry.fnNames ?? entry.fnName;
+			let group = MapMethods.get(byNames, names);
+			if (!group) {
+				MapMethods.set(byNames, names, (group = { names, entry, list: bareList() }));
+				groups[groups.length] = group;
+			}
+			group.list[group.list.length] = entry;
+		}
+		WeakMapMethods.set(NAMED_AMONG, list, (known = { groups, byHead: new Map() }));
+	}
+	let named = MapMethods.get(known.byHead, head);
+	if (named) return named;
+	const { groups } = known;
+	let hit = null;
+	let hits = 0;
+	const verdicts = new Map();
+	for (let i = 0; i < groups.length; i++) {
+		const verdict = runtime_namesEntry(head, groups[i].entry);
+		MapMethods.set(verdicts, groups[i].names, verdict);
+		if (verdict) {
+			hits++;
+			hit = groups[i];
+		}
+	}
+	if (hits === 0) named = bareList();
+	else if (hits === groups.length) named = list;
+	else if (hits === 1) named = hit.list;
+	else named = keepAll(list, (entry) => MapMethods.get(verdicts, entry.fnNames ?? entry.fnName));
+	MapMethods.set(known.byHead, head, named);
+	return named;
 }
 
 /**
@@ -1651,7 +1890,7 @@ function ownReceiver(parent, identity) {
 	if (!parent?.flagged || !identity || identity.unresolved || !parent.wrapper) return null;
 	if (!WeakSetMethods.has(trustedRootOwn.genuineWrappers, parent.wrapper)) return null;
 	// With `provenance` off no frames are read, so code the parent was handed is not told from the parent's own.
-	if (parent.wrapper.slothlet?.config?.permissions?.provenance === false) return null;
+	if (parent.wrapper.slothlet?.config?.permissions?.caller?.provenance === false) return null;
 	if (identity.currentWrapper !== parent.wrapper || (identity.ceiling ?? null) !== (parent.ceiling ?? null)) return null;
 	return parent;
 }
@@ -1954,7 +2193,7 @@ function supplierChainCeiling(record) {
  * function a module passed by any route — a callback, a shared object, a global, a built-in it replaced — runs as no
  * module inside a call it was not handed to; otherwise it answers without reading the stack.
  *
- * The ceiling is the leaf the code is running inside. With `permissions.ceiling: "chain"` it is cumulative instead: the
+ * The ceiling is the leaf the code is running inside. With `permissions.caller.ceiling: "chain"` it is cumulative instead: the
  * leaf, every call between it and the supplier (the supplier's code runs inside each of them), and every ceiling
  * those calls and the supplier's own call already carried, so a nested resolution cannot shed one an earlier
  * resolution imposed.
@@ -2000,7 +2239,7 @@ function resolveSupplier(record, capture = null) {
 	// in runs as the caller (see runtime_isFilelessLeafCode).
 	const fileless = runtime_isHostObjectLeaf(leaf, leafDescription.filePath);
 	if (!fileless && leafDescription.filePath)
-		listPush(chain, { ...leafDescription, currentWrapper: leaf, family: leaf.slothlet.instanceID, distance: 0, record });
+		listPush(chain, { ...leafDescription, currentWrapper: leaf, family: runtime_builtUnder(leaf), distance: 0, record });
 	let current = record.parent;
 	for (let depth = 1; current && depth < MAX_CHAIN; depth++, current = current.parent) {
 		const wrapper = current.wrapper;
@@ -2013,7 +2252,7 @@ function resolveSupplier(record, capture = null) {
 		listPush(chain, {
 			...description,
 			currentWrapper: wrapper,
-			family: wrapper.slothlet.instanceID,
+			family: runtime_builtUnder(wrapper),
 			distance: chain.length,
 			record: current
 		});
@@ -2950,7 +3189,7 @@ function installViteHostRegistry(target) {
 		for (let i = 0; i < current.value.length; i++) {
 			const entry = Objects.getOwnPropertyDescriptor(current.value, i)?.value;
 			if (entry !== null && typeof entry === "object") WeakMapMethods.set(EARLY_READS, entry, runtime_registrationFrames(entry));
-			queue[queue.length] = entry;
+			listPush(queue, entry);
 		}
 	}
 	/** @type {Map<string, Set<string>>} */
@@ -2983,7 +3222,7 @@ function installViteHostRegistry(target) {
 			const captured = unreadError(REGISTRATION_FRAMES);
 			if (captured !== null) {
 				WeakSetMethods.add(OWN_CAPTURES, captured);
-				queue[queue.length] = captured;
+				listPush(queue, captured);
 			}
 			return queue.length;
 		}),
@@ -3309,6 +3548,9 @@ function runtime_authorAnswer(record, frame, outer = []) {
 	// Only a file's own source is its author's: code compiled under its name by someone is no one's (#597). Under vite, the
 	// code its runner evaluated for the file (#714).
 	if (!runtime_runsFileSource(frame) && !runtime_runsRunnerTransform(frame)) return null;
+	// Another copy of a file the instance loaded under its tag, which a package or the host imported itself: no leaf's
+	// code, as frame placement reads it (see createFramePlacer).
+	if (runtime_untaggedInstanceCopy(record.wrapper.slothlet, frame)) return null;
 	// The nearest leaf frame of the file, or the file's module when no frame of it is inside a leaf's range (#726).
 	// Read as far as each reader goes, once: the readers stop at the first frame of another file.
 	const further = Arrays.isArray(outer) ? outer : runtime_replayable(outer);
@@ -3327,6 +3569,27 @@ function runtime_authorAnswer(record, frame, outer = []) {
 			concatLists([record.wrapper, record.ceiling, supplierChainCeiling(record)], copyList(authors, 1))
 		)
 	};
+}
+
+/**
+ * Whether a frame runs in an untagged copy of a file an instance loaded under its tag. In Node slothlet loads every ES
+ * module of an instance under its tag and knows its CommonJS files, so an untagged frame at such a file is another
+ * copy of it, a package's or the host's own import: code no call accounts for, and no leaf's (see
+ * {@link createFramePlacer}, which places such a frame on no call).
+ * @param {object|null|undefined} slothlet - The instance.
+ * @param {{path: string, line: string}} frame - The frame.
+ * @returns {boolean} True when it is such a copy.
+ * @private
+ */
+function runtime_untaggedInstanceCopy(slothlet, frame) {
+	if (!isNode || !slothlet || typeof frame.line !== "string" || runtime_frameInstanceTag(frame.line)) return false;
+	const leaves = runtime_leavesAtFile(slothlet, frame.path, null, null);
+	if (!leaves.length) return false;
+	for (let ofIndex = 0, ofList = leaves; ofIndex < ofList.length; ofIndex++) {
+		if (SetMethods.has(runtime_commonJSLocations(runtime_builtUnder(ofList[ofIndex])), frame.path)) return false;
+	}
+	const loader = slothlet.processors?.loader;
+	return Boolean(loader) && SetMethods.has(runtime_loadedLocations(loader), frame.path);
 }
 
 /**
@@ -3802,16 +4065,12 @@ function createModuleLoad(slothlet, filePath, moduleID) {
 		slothlet,
 		filePath,
 		moduleID: moduleID ?? null,
-		// The context the instance runs in now: a reload moves it to a new ID.
+		// The context the instance runs in now: a reload moves it to a new ID once that ID's context is set up.
 		instanceID() {
 			const instances = slothlet?.contextManager?.instances;
 			if (!instances?.has) return null;
-			for (let id = slothlet.instanceID; id;) {
-				if (MapMethods.has(instances, id)) return id;
-				const reloaded = StringMethods.lastIndexOf(id, "_reload_");
-				id = reloaded > 0 ? (typeof id === "string" ? StringMethods.slice(id, 0, reloaded) : copyList(id, 0, reloaded)) : null;
-			}
-			return null;
+			const current = slothlet.instanceID;
+			return current && MapMethods.has(instances, current) ? current : null;
 		},
 		wrapper() {
 			if (typeof filePath !== "string" || !runtime_instanceRuns(slothlet)) return null;
@@ -3910,6 +4169,30 @@ function runtime_isGone(wrapper) {
 }
 
 /**
+ * The instance ID the frames of a call's code carry, which a frame's tag is matched against: the ID the called node was
+ * built under (see runtime_builtUnder) when the call says so, else the instance the call belongs to. They differ for a
+ * call of a node a full reload is replacing, made while the reload builds its new copy or still in flight after it.
+ * @param {{family?: string|null, builtUnder?: string|null}} entry - A call.
+ * @returns {string|null|undefined} The ID.
+ * @private
+ */
+function frameFamilyOf(entry) {
+	return entry.builtUnder ?? entry.family;
+}
+
+/**
+ * The instance ID a node was built under: the tag the code of its file carries in a stack frame, and the ID its
+ * instance's import graph for that copy is kept under. A full reload gives the instance a new ID; the code of the copy
+ * it replaced (a call still in flight, a timer it set) still carries the ID the instance had then.
+ * @param {object} wrapper - A genuine wrapper.
+ * @returns {string|null} The ID.
+ * @private
+ */
+function runtime_builtUnder(wrapper) {
+	return wrapper.____slothletInternal.builtUnder ?? wrapper.slothlet.instanceID;
+}
+
+/**
  * Whether an instance's permission system is on: only then does what a removed node or a shut-down instance made lose
  * its standing. With it off nothing is checked, and code runs as plain JavaScript (#726).
  * @param {object|null|undefined} slothlet - The instance.
@@ -3953,7 +4236,7 @@ function outerCallerCeiling(contextManager, instanceID, slothlet = null, origin 
 				break;
 			}
 			if (!running) return null;
-			throw new SlothletError("PERMISSION_DENIED", { caller: null, target: "self" }, null, { validationError: true });
+			throw new SlothletError("PERMISSION_DENIED", { caller: null, target: segmentsOf("self") });
 		}
 		// No call says who runs it: the leaves whose code is on the stack do (a module running the code from a timer it
 		// reached without slothlet's store or pin). Only read where the frames are (`provenance`), and never inside a
@@ -3972,7 +4255,7 @@ function outerCallerCeiling(contextManager, instanceID, slothlet = null, origin 
 
 /**
  * Whether what a module hands out and is handed is set up as that module's code (#597, #726): only while the
- * permission system of the wrapper's instance is on and `permissions.attribution` is `"precise"` (the default). Then a
+ * permission system of the wrapper's instance is on and `permissions.caller.attribution` is `"precise"` (the default). Then a
  * value that is itself code (a function, a class, a class instance, a generator, a promise, a Proxy export) is a
  * stand-in recording the module as its definer; plain data passes as itself unsearched, and code nested in it is told
  * by its frames when it runs. With `"fast"`, or with the permission system not on (no `permissions` config,
@@ -3983,12 +4266,12 @@ function outerCallerCeiling(contextManager, instanceID, slothlet = null, origin 
  */
 export function handsOutAsModule(wrapper) {
 	const slothlet = wrapper?.slothlet;
-	return slothlet?.config?.permissions?.attribution !== "fast" && slothlet?.handlers?.permissionManager?.isEnabled?.() === true;
+	return slothlet?.config?.permissions?.caller?.attribution !== "fast" && slothlet?.handlers?.permissionManager?.isEnabled?.() === true;
 }
 
 /**
  * Whether a module call's result is passed through {@link attributeResult} (#726): while the permission system of the
- * wrapper's instance is on, under either `permissions.attribution`. `"precise"` hands out code as stand-ins there;
+ * wrapper's instance is on, under either `permissions.caller.attribution`. `"precise"` hands out code as stand-ins there;
  * `"fast"` hands back only a node's own Proxy export as the node's member.
  * @param {object|null|undefined} wrapper - A wrapper of the module.
  * @returns {boolean} True while results are attributed.
@@ -4007,8 +4290,8 @@ export function attributesResults(wrapper) {
 const LIVE_INSTANCES = new Map();
 
 /**
- * Whether an instance still has a context its code can run in: it is not shut down. While a reload has moved it to an
- * ID whose context is not set up yet, the one it is reloading from counts.
+ * Whether an instance still has a context its code can run in: it is not shut down. A reload switches the instance to
+ * its new ID only once that ID's context is set up.
  * @param {object} slothlet - The instance.
  * @returns {boolean} True while it runs.
  * @private
@@ -4016,12 +4299,8 @@ const LIVE_INSTANCES = new Map();
 function runtime_instanceRuns(slothlet) {
 	const instances = slothlet?.contextManager?.instances;
 	if (!instances?.has) return false;
-	for (let id = slothlet.instanceID; id;) {
-		if (MapMethods.has(instances, id)) return true;
-		const reloaded = StringMethods.lastIndexOf(id, "_reload_");
-		id = reloaded > 0 ? (typeof id === "string" ? StringMethods.slice(id, 0, reloaded) : copyList(id, 0, reloaded)) : null;
-	}
-	return false;
+	const current = slothlet.instanceID;
+	return Boolean(current && MapMethods.has(instances, current));
 }
 
 /**
@@ -4108,6 +4387,203 @@ function runtime_leavesAtLocation(path, line, running = null, location = null) {
 function frameDefiner(running = null) {
 	const frames = runtime_captureFrames(24);
 	return runtime_holdDetachedJob(runtime_definerAt(frames, running), frames);
+}
+
+/**
+ * Whether the code running now is not the code of the flow it runs in: a module's code that entered, by itself, a flow
+ * the host or another module's call opened. Node's async context hands any code holding an async resource of a flow (an
+ * `AsyncResource`, a function `AsyncLocalStorage.snapshot()` or `bind()` made there, the context a timer or a resource
+ * keeps under a symbol, copied onto a timer of its own) that flow's store, so the store alone does not say whose the code
+ * is. The frames do.
+ *
+ * The frames are read from the access outward, up to where slothlet entered a call or the job began. The flow's own
+ * code is the host's code or the code of a call of the flow (`owners`), with the helpers, packages and Node code they
+ * run, which act for them. The code running is the flow's when the first code of anyone's found is the flow's, or when
+ * code of the flow's is further out (it called the code running, as a call of the flow or the host calling a module's
+ * function does). It is not when the first code found is a module's (or code no file accounts for) and nothing further
+ * out is the flow's. Where an async resource put the flow in place (`runInAsyncScope`, which `bind()` and `snapshot()`
+ * run through), the code that called it put it there: the flow's own code doing so keeps it, anyone else's does not, and
+ * Node's own code beginning the job with it (a timer running a bound function) says nothing, so the code is held to the
+ * frames inside alone.
+ *
+ * @param {string} instanceID - The instance the flow belongs to.
+ * @param {ReadonlyArray<object>} owners - The calls of the flow: the call it names and the calls above it. Empty for a
+ *   flow the host opened.
+ * @returns {{outside: false, clean: boolean, found: boolean}|{outside: true, reader: object|null, begun: boolean}|null} For
+ *   the flow's code, whether every frame up to where the code's job began or slothlet entered a call is the flow's
+ *   (`clean`), and whether a frame of the flow's own code was found (`found`; false when nothing but slothlet's and
+ *   Node's code is on the stack, as when Node runs a job it was handed); otherwise the leaf the code is (null when no
+ *   single leaf of the instance stands for it), and whether the flow was put in place by an async resource's scope that
+ *   Node itself entered as it began the job (`begun`: a bound function Node was handed), which the frames cannot tell
+ *   apart. Null when the instance is not running.
+ * @param {boolean} [making=false] - Whether the code is told as it makes an async resource (from an async hook's
+ *   `init`): Node's own frames that make the resource (a timer's, an immediate's, a microtask's) sit above the code
+ *   that asked for it, and are not where a job began.
+ * @internal
+ */
+function runningOutsideFlow(instanceID, owners, making = false) {
+	const reference = MapMethods.get(LIVE_INSTANCES, instanceID);
+	const slothlet = reference ? WeakRefMethods.deref(reference) : null;
+	if (!slothlet) return null;
+	// The files of the flow's calls, read once a frame asks.
+	let ownerFiles = null;
+	const runtime_ownsPath = (path) => {
+		if (ownerFiles === null) {
+			ownerFiles = [];
+			for (let i = 0; i < owners.length; i++) {
+				const description = describeCall(owners[i]);
+				if (description.comparablePath) listPush(ownerFiles, description.comparablePath);
+				if (description.realComparablePath) listPush(ownerFiles, description.realComparablePath);
+			}
+		}
+		return path !== null && ArrayMethods.includes(ownerFiles, path);
+	};
+	const ownsFile = (leaf) => {
+		const description = describeCall(leaf);
+		return runtime_ownsPath(description.comparablePath) || runtime_ownsPath(description.realComparablePath);
+	};
+	// What a frame is to the flow: "own" (the host's code or a call of the flow's), "foreign" (another module's code, or
+	// code no file accounts for), or null (a package's or a helper's, which act for their caller).
+	const kindOf = (frame) => {
+		if (frame.evaluated || isForeignScript(frame)) return "foreign";
+		// The copy of a call's own file the instance's loader imported: the call's code, as the frame placement below says.
+		if (runtime_frameInstanceTag(frame.line) === instanceID && runtime_ownsPath(frame.path)) return "own";
+		const leaves =
+			runtime_leafFileCopyOf(frame) !== null ? null : runtime_leavesAtLocation(frame.path, frame.line, instanceID, frame.location ?? null);
+		if (leaves?.length) {
+			for (let i = 0; i < leaves.length; i++) if (ArrayMethods.includes(owners, leaves[i]) || ownsFile(leaves[i])) return "own";
+			return "foreign";
+		}
+		if (runtime_isInstanceFile(frame.path) || runtime_helperOwner(frame, null)) return null;
+		// A package's file, or one a module of the instance loaded: it acts for whoever called it.
+		if (
+			(StringMethods.includes(frame.path, "/node_modules/") && !isInstanceOwnerFile(slothlet, frame.path)) ||
+			SetMethods.size(runtime_packageImportingLeaves(slothlet, frame.path))
+		)
+			return null;
+		return "own";
+	};
+	// `own`: whether the code is the flow's (undefined when the frames read stop before saying). `clean`: whether every
+	// frame read, up to where slothlet entered a call or the job began, is the flow's or acts for it.
+	const decide = (frames) => {
+		let own;
+		let foreign = false;
+		// Past a `runInAsyncScope`: the code that called it put the flow in place, and is looked for.
+		let switched = false;
+		// Whether the frames read reach where slothlet entered a call or the job began.
+		let ended = false;
+		let cut = false;
+		// Making a resource: below the hook's own frames, Node's frames up to the first frame of anyone else's code
+		// (slothlet's included) are the resource's making.
+		let leading = making;
+		let pastHook = false;
+		for (const frame of framesOf(frames)) {
+			if (StringMethods.startsWith(frame.path, FRAMEWORK_DIR + "/")) {
+				if (pastHook) leading = false;
+				if (frame.enter) {
+					ended = true;
+					break;
+				}
+				continue;
+			}
+			if (!StringMethods.startsWith(frame.path, "node:")) leading = false;
+			pastHook = true;
+			if (frame.async || (!leading && isRunnerFrame(frame))) {
+				ended = true;
+				break;
+			}
+			let kind = null;
+			if (StringMethods.startsWith(frame.path, "node:")) {
+				// Code compiled under a `node:` name is no one's.
+				if (!runtime_isNodeScript(frame)) kind = "foreign";
+				else if (frame.path === "node:async_hooks" && StringMethods.endsWith(frame.head ?? "", "runInAsyncScope")) {
+					switched = true;
+					if (own !== undefined) {
+						cut = true;
+						break;
+					}
+				}
+			} else kind = kindOf(frame);
+			if (kind === "own") own ??= true;
+			else if (kind === "foreign") {
+				// Anyone else's code put the flow in place, or runs in it with nothing of the flow's calling it.
+				if (own === undefined && switched) {
+					own = false;
+					cut = true;
+					break;
+				}
+				foreign = true;
+				if (own !== undefined) {
+					cut = true;
+					break;
+				}
+			}
+		}
+		if (!ended && !cut && !frames.truncated) ended = true;
+		if (!ended && own === undefined && frames.truncated) return { own: undefined, clean: false, found: false };
+		const found = own === true;
+		// A scope nothing of anyone's put in place: Node began the job with it (a bound function it was handed).
+		const begun = switched && own === undefined && !cut && ended;
+		own ??= !foreign && !switched;
+		return { own, clean: own && ended && !foreign && !switched, found, begun };
+	};
+	// The deciding frame is nearly always a few frames below slothlet's own: a short capture settles it, and the stack is
+	// read further only when it does not. Cut off even then, the code is not taken for the flow's.
+	let answer = decide(runtime_captureFrames(NEAR_FRAMES));
+	if (answer.own === undefined) answer = decide(runtime_captureFrames(FAR_FRAMES));
+	if (answer.own === true) return { outside: false, clean: answer.clean, found: answer.found };
+	// The leaf the code running is, read as code run while no call runs is read.
+	const definer = runtime_definerAt(runtime_captureFrames(24), instanceID);
+	return { outside: true, reader: definer?.wrapper?.slothlet === slothlet ? definer.wrapper : null, begun: answer.begun === true };
+}
+
+/**
+ * Node's own `AsyncResource.prototype.runInAsyncScope`, taken as slothlet loads, before any module's code runs: the
+ * function whose frame {@link scopeEnteredByCode} looks for. A wrapper put on the prototype later (the live runtime's,
+ * or a module's) still calls it to enter the scope. Null where the platform has no `node:async_hooks`.
+ * @type {Function|null}
+ * @private
+ */
+const RUN_IN_ASYNC_SCOPE = typeof AsyncResource?.prototype?.runInAsyncScope === "function" ? AsyncResource.prototype.runInAsyncScope : null;
+
+/**
+ * Whether the async resource running now was put in place by code, through `AsyncResource.prototype.runInAsyncScope()`
+ * (which a resource's `bind()` runs through), rather than by Node as it began the resource's job. A promise or a
+ * `process.nextTick()` job carries the async id `runInAsyncScope()` reads, so code holding one can run a function of its
+ * own in that job's scope; Node itself never begins a promise's or a tick's job through `runInAsyncScope()`.
+ *
+ * Told without reading the frames: the capture skips every frame down to the innermost call of `runInAsyncScope()`
+ * (`Error.captureStackTrace`'s second argument), and collects none when no such call is on the stack, so the engine
+ * only walks the stack and formats at most one frame. A call with nothing of anyone's below it (a function bound to the
+ * job that the engine calls by itself) collects none either; the caller tells that apart by another callback running
+ * below the job (see `begunByNode` in `handlers/context-async`). A stack that cannot be read counts as entered by code.
+ *
+ * Used where Node runs every async hook for a promise's job (Node 22.15 and 24.0, whose hooks cannot leave promises
+ * out), and before the install-time probe has answered.
+ * @returns {boolean} True when a call of `runInAsyncScope()` is on the stack, or the stack cannot say.
+ * @internal
+ */
+function scopeEnteredByCode() {
+	// Only the async runtime asks, which runs only where `node:async_hooks` (and so `runInAsyncScope`) exists.
+	/* v8 ignore next */
+	if (RUN_IN_ASYNC_SCOPE === null) return true;
+	const read = readStack(runtime_siteCount, { limit: 1, skip: RUN_IN_ASYNC_SCOPE });
+	// A read that cannot be trusted (the stack settings fixed in place where no realm of slothlet's own can be made) can
+	// happen, and counts as entered by code; the suite cannot make a realm fail to be made.
+	/* v8 ignore next */
+	if (read === null) return true;
+	return read.value !== 0;
+}
+
+/**
+ * V8's `prepareStackTrace` hook for {@link scopeEnteredByCode}: how many call sites were collected.
+ * @param {Error} _error - The error being captured.
+ * @param {Array<object>} callSites - V8 call sites.
+ * @returns {number} Their count.
+ * @private
+ */
+function runtime_siteCount(_error, callSites) {
+	return callSites.length;
 }
 
 /**
@@ -4683,7 +5159,7 @@ function runtime_anyInstanceChecks() {
  */
 function runtime_guardsForeignCode(record) {
 	const slothlet = record?.wrapper?.slothlet;
-	return Boolean(slothlet?.handlers?.permissionManager?.isEnabled?.() && slothlet.config?.permissions?.provenance !== false);
+	return Boolean(slothlet?.handlers?.permissionManager?.isEnabled?.() && slothlet.config?.permissions?.caller?.provenance !== false);
 }
 
 /**
@@ -4874,7 +5350,8 @@ function runtime_leavesAtFile(slothlet, path, instance, mount) {
 			continue;
 		}
 		if (runtime_isGone(wrapper) && !keepGone) continue;
-		if (instance && wrapper.slothlet.instanceID !== instance) continue;
+		// The tag is the ID the node was built under: code of a copy a reload replaced carries the ID the instance had then.
+		if (instance && runtime_builtUnder(wrapper) !== instance) continue;
 		if (mount && wrapper.____slothletInternal.moduleID !== mount) continue;
 		// Code carrying the instance's tag but no mount's runs in the copy a raw `import` of the leaf's file loads (#691):
 		// a module of its own, which slothlet loaded for no leaf, as frame placement reads it inside a call.
@@ -4958,7 +5435,7 @@ function runtime_foreignCodeRunning(record, capture = null) {
 	const entryOf = (wrapper, call) => ({
 		...describeCall(wrapper),
 		currentWrapper: wrapper,
-		family: wrapper.slothlet.instanceID,
+		family: runtime_builtUnder(wrapper),
 		distance: 0,
 		record: call
 	});
@@ -5071,7 +5548,7 @@ function runtime_unaccountedInside(record) {
 	const leaf = record.wrapper;
 	const description = describeCall(leaf);
 	if (!description.filePath) return null;
-	const { place } = createFramePlacer([{ ...description, currentWrapper: leaf, family: leaf.slothlet.instanceID, distance: 0, record }]);
+	const { place } = createFramePlacer([{ ...description, currentWrapper: leaf, family: runtime_builtUnder(leaf), distance: 0, record }]);
 	// The frames that decide sit near the top of the stack: the capture is widened only when it was cut short first.
 	const decide = (frames) => {
 		for (const frame of framesOf(frames)) {
@@ -5111,7 +5588,7 @@ const REFUSED_SUPPLIER = Objects.freeze({ unaccounted: true, refused: true });
 
 /**
  * The answer {@link resolveSupplier} gives for a supplier found up a chain: its wrapper, under the leaf — or, with
- * `permissions.ceiling: "chain"`, under every call from the leaf up to it and every ceiling those calls and its own call
+ * `permissions.caller.ceiling: "chain"`, under every call from the leaf up to it and every ceiling those calls and its own call
  * carried.
  * @param {{wrapper: object, parent: object|null, ceiling?: object|null}} record - The leaf's call.
  * @param {{currentWrapper: object, record: object}} supplier - The supplier's call.
@@ -5119,9 +5596,9 @@ const REFUSED_SUPPLIER = Objects.freeze({ unaccounted: true, refused: true });
  * @private
  */
 function runtime_supplierAnswer(record, supplier) {
-	// By default the supplier is held to the leaf its code is running inside; `permissions.ceiling: "chain"` carries
+	// By default the supplier is held to the leaf its code is running inside; `permissions.caller.ceiling: "chain"` carries
 	// every call it was handed through, and the ceilings they carried, as well.
-	if (record.wrapper.slothlet?.config?.permissions?.ceiling !== "chain")
+	if (record.wrapper.slothlet?.config?.permissions?.caller?.ceiling !== "chain")
 		return { wrapper: supplier.currentWrapper, ceiling: record.wrapper };
 	const parts = [supplier.record.ceiling];
 	for (let current = record, depth = 0; current && current !== supplier.record && depth < MAX_CHAIN; current = current.parent, depth++) {
@@ -5335,7 +5812,9 @@ export function internals(consumer) {
 		recordInstanceOwner,
 		registerLeafFile,
 		resolveSupplier,
+		runningOutsideFlow,
 		runtime_captureFrames,
+		scopeEnteredByCode,
 		sampleStoreScripts,
 		runtime_codeWritersOnStack,
 		runtime_loadingFileRunning,

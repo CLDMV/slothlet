@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:13-08:00 (1794874573)
+ *	@Last modified time: 2026-11-18T08:12:03-08:00 (1795018323)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -23,6 +23,13 @@
  * - `csp-eval` (browser): the page refuses code made from a string (`Function`, and so `eval`): its Content Security
  *   Policy has no `'unsafe-eval'`.
  * - `csp-blob-script` and `csp-data-script` (browser): the page refuses scripts from `blob:` and `data:` URLs.
+ * - `async-context-frame` (Node): Node's `AsyncContextFrame` is on. Where it is off (Node 22's default, or a later
+ *   Node run with `--no-async-context-frame`), Node keeps what an `AsyncLocalStorage` holds on async resources module
+ *   code can reach. Tested by running a storage of slothlet's own with a marker and looking for the marker on the
+ *   running async resource and a fresh promise; the flags are never parsed, since a version's default and flags passed
+ *   through `NODE_OPTIONS` decide it as well. Run once per process, and only for an instance on the async runtime: the
+ *   live runtime keeps nothing in an `AsyncLocalStorage` and makes none, so there is nothing of slothlet's for the
+ *   frame to hold, and the probe's own storage would be the only one in a live-only process.
  * - `vitest-plugin` (Node, under vitest): the `slothletInstanceImports()` plugin is loaded: its records of who loaded
  *   each file have reached slothlet.
  *
@@ -39,7 +46,20 @@
  */
 
 import { translate } from "#i18n";
-import { ArrayMethods, Blob, EvalError, listPush, NativeFunction, Reflect, Symbols, URL, URLs } from "#helpers/intrinsics";
+import { asyncStoreExposed, asyncStoreProbeAvailable } from "#helpers/async-store-slot";
+import {
+	ArrayMethods,
+	Blob,
+	EvalError,
+	listPush,
+	NativeFunction,
+	NativeProcess,
+	parseInt,
+	Reflect,
+	Symbols,
+	URL,
+	URLs
+} from "#helpers/intrinsics";
 
 /**
  * The global key of the record of who loaded each file vite transformed (#714), as `helpers/instance-imports` names it.
@@ -111,12 +131,50 @@ function viteRecords() {
 }
 
 /**
+ * Node's major version, as slothlet loaded, or 0 where it is not Node.
+ * @type {number}
+ * @private
+ */
+const NODE_MAJOR = parseInt(NativeProcess?.versions?.node ?? "0", 10) || 0;
+
+/**
+ * Whether Node's `AsyncContextFrame` is on: what a storage holds is out of reach of the running async resource and a
+ * fresh promise (see `helpers/async-store-slot`, whose probe this shares). Tested once per process.
+ *
+ * Where the frame is off, Node puts what every storage holds on each async resource as it is made, promises included,
+ * so the running resource and a fresh promise both hold the probe's marker. Where it is on, neither does.
+ * @returns {boolean} True when the marker is out of reach.
+ * @private
+ */
+function asyncContextFrameOn() {
+	return !asyncStoreExposed();
+}
+
+/**
+ * The reason `async-context-frame` is not met, with the fix for this Node: Node 22 and 23 turn it on with
+ * `--experimental-async-context-frame`; Node 24 and later have it on unless started with `--no-async-context-frame`.
+ * @returns {string} The reason, translated.
+ * @private
+ */
+function asyncContextFrameReason() {
+	if (NODE_MAJOR !== 0 && NODE_MAJOR < 24) {
+		return translate("PERMISSION_BASELINE_REASON_ASYNC_CONTEXT_FRAME_OFF_ENABLE", { flag: "--experimental-async-context-frame" });
+	}
+	return translate("PERMISSION_BASELINE_REASON_ASYNC_CONTEXT_FRAME_OFF_REMOVE_FLAG", {
+		flag: "--no-async-context-frame",
+		env: "NODE_OPTIONS"
+	});
+}
+
+/**
  * What the checks ask of the host.
  * @typedef {object} BaselineProbes
  * @property {function(): boolean} codeFromStringsRefused - Whether making code from a string is refused.
  * @property {function(string): Promise<boolean>} importRefused - Whether a script from a `blob:` or `data:` URL is refused.
  * @property {object|null} vitestWorker - vitest's worker global, or null outside vitest.
  * @property {function(): (number|null)} viteRecords - How many vite plugin records slothlet accepted, or null.
+ * @property {?function(): boolean} [asyncContextFrameOn] - Whether Node's `AsyncContextFrame` is on; null (or
+ *   absent) where there is no `node:async_hooks` to test, and then the check does not apply.
  * @private
  */
 
@@ -125,7 +183,13 @@ function viteRecords() {
  * @type {BaselineProbes}
  * @private
  */
-const PROBES = { codeFromStringsRefused, importRefused, vitestWorker: VITEST_WORKER, viteRecords };
+const PROBES = {
+	codeFromStringsRefused,
+	importRefused,
+	vitestWorker: VITEST_WORKER,
+	viteRecords,
+	asyncContextFrameOn: asyncStoreProbeAvailable() ? asyncContextFrameOn : null
+};
 
 /**
  * One check's result.
@@ -149,13 +213,14 @@ async function check(id, probe, reason) {
  * Run the baseline checks for where the instance runs.
  * @param {"node"|"browser"} envTarget - Where the instance runs.
  * @param {BaselineProbes} [probes] - Stand-ins for the probes, for a test.
+ * @param {"async"|"live"} [runtime="async"] - The instance's runtime; `async-context-frame` is checked for `"async"` only.
  * @returns {Promise<{met: boolean, checks: Array<{id: string, met: boolean, reason: string|null}>}>} Whether every check
  *   is met, and each check.
  * @internal
  * @example
  * const { met, checks } = await runBaseline("node");
  */
-export async function runBaseline(envTarget, probes = PROBES) {
+export async function runBaseline(envTarget, probes = PROBES, runtime = "async") {
 	const checks = [];
 	if (envTarget === "browser") {
 		listPush(
@@ -163,7 +228,7 @@ export async function runBaseline(envTarget, probes = PROBES) {
 			await check(
 				"csp-eval",
 				() => probes.codeFromStringsRefused(),
-				() => translate("BASELINE_CSP_EVAL_ALLOWED")
+				() => translate("PERMISSION_BASELINE_REASON_CSP_EVAL_ALLOWED")
 			)
 		);
 		listPush(
@@ -171,7 +236,7 @@ export async function runBaseline(envTarget, probes = PROBES) {
 			await check(
 				"csp-blob-script",
 				() => probes.importRefused("blob"),
-				() => translate("BASELINE_CSP_BLOB_ALLOWED")
+				() => translate("PERMISSION_BASELINE_REASON_CSP_BLOB_ALLOWED")
 			)
 		);
 		listPush(
@@ -179,17 +244,20 @@ export async function runBaseline(envTarget, probes = PROBES) {
 			await check(
 				"csp-data-script",
 				() => probes.importRefused("data"),
-				() => translate("BASELINE_CSP_DATA_ALLOWED")
+				() => translate("PERMISSION_BASELINE_REASON_CSP_DATA_ALLOWED")
 			)
 		);
 	} else {
+		if (runtime !== "live" && typeof probes.asyncContextFrameOn === "function") {
+			listPush(checks, await check("async-context-frame", () => probes.asyncContextFrameOn(), asyncContextFrameReason));
+		}
 		if (probes.vitestWorker) {
 			listPush(
 				checks,
 				await check(
 					"vitest-plugin",
 					() => (probes.viteRecords() ?? 0) > 0,
-					() => translate("BASELINE_VITEST_PLUGIN_ABSENT")
+					() => translate("PERMISSION_BASELINE_REASON_VITEST_PLUGIN_ABSENT")
 				)
 			);
 		}

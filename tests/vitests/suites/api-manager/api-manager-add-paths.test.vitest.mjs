@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:57-07:00 (1791090897)
+ *	@Last modified time: 2026-11-16T18:29:25-08:00 (1794882565)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -23,7 +23,7 @@
  *     - folderPath is an Array → iterates via addApiComponent recursion
  *   addApiComponent single-file path (lines ~1095-1130):
  *     - isFile=true → sets dirForBuild and fileFilter
- *     - invalid extension → throws INVALID_CONFIG_FILE_TYPE
+ *     - invalid extension → throws FILE_TYPE_UNSUPPORTED
  *   addApiComponent single-file apiToMerge (lines ~1261-1277):
  *     - Special apiToMerge reassignment for single-file loads
  *   Metadata registration (lines ~1411-1441):
@@ -74,7 +74,7 @@ async function makeApi(baseConfig, overrides = {}) {
 	return slothlet({
 		...baseConfig,
 		...overrides,
-		api: { ...overrides.api, mutations: { ...overrides.api?.mutations, allowCollisionOverride: true } }
+		api: { ...overrides.api, mutations: { ...overrides.api?.mutations }, collision: { override: true } }
 	});
 }
 
@@ -95,7 +95,9 @@ describe.each(EAGER_CONFIGS)("addApiComponent — array of paths ($name)", ({ co
 
 		// Add two directories under "multi" using an array, with merge collision mode
 		const moduleIDs = await api.slothlet.api.add("multi", [TEST_DIRS.API_TEST_MIXED, TEST_DIRS.API_TEST_MIXED], {
-			collisionMode: "merge"
+			collision: {
+				mode: "merge"
+			}
 		});
 
 		// Returns an array of moduleIDs
@@ -118,7 +120,9 @@ describe.each(EAGER_CONFIGS)("addApiComponent — array of paths ($name)", ({ co
 
 		// First add creates the endpoint, second merges
 		await api.slothlet.api.add("combo", [TEST_DIRS.API_TEST_MIXED, TEST_DIRS.API_TEST_COLLECTIONS], {
-			collisionMode: "merge"
+			collision: {
+				mode: "merge"
+			}
 		});
 		expect(api.combo).toBeDefined();
 	});
@@ -172,7 +176,7 @@ describe.each(EAGER_CONFIGS)("addApiComponent — invalid file extension ($name)
 		await new Promise((r) => setTimeout(r, 30));
 	});
 
-	it("throws INVALID_CONFIG_FILE_TYPE for .json extension", async () => {
+	it("throws FILE_TYPE_UNSUPPORTED for .json extension", async () => {
 		api = await makeApi(config, { base: TEST_DIRS.API_TEST });
 
 		// Create a temp path that looks like a .json file (won't exist but isFile check needs it)
@@ -214,7 +218,9 @@ describe.each(EAGER_CONFIGS)("addApiComponent — metadata registration ($name)"
 		// Root level add (apiPath="") with metadata — covers root metadata loop
 		await api.slothlet.api.add("", TEST_DIRS.API_TEST_MIXED, {
 			metadata: { root: true, version: "2.0" },
-			collisionMode: "merge"
+			collision: {
+				mode: "merge"
+			}
 		});
 
 		// At least one key from api_test_mixed should be at root
@@ -261,13 +267,16 @@ describe("addApiComponent — debug.api=true traces add paths", () => {
 			runtime: "async",
 			hook: { enabled: false },
 			debug: { api: true },
-			api: { mutations: { allowCollisionOverride: true } } // #380: honor per-call collisionMode below
+			api: { collision: { override: true } }
+			// #380: honor per-call collisionMode below
 		});
 		expect(api.math).toBeDefined();
 
 		// Add with debug mode active — covers debug branch in addApiComponent
 		await api.slothlet.api.add("debugged", TEST_DIRS.API_TEST_MIXED, {
-			collisionMode: "merge"
+			collision: {
+				mode: "merge"
+			}
 		});
 		expect(api.debugged).toBeDefined();
 	});
@@ -281,14 +290,15 @@ describe("addApiComponent — debug.api=true traces add paths", () => {
 			runtime: "async",
 			hook: { enabled: false },
 			debug: { api: true },
-			api: { mutations: { allowCollisionOverride: true } } // #380: honor per-call collisionMode below
+			api: { collision: { override: true } }
+			// #380: honor per-call collisionMode below
 		});
 
 		// Remove existing config first to allow clean add
 		await api.slothlet.api.remove("config");
 
 		// Now add config dir under "config" endpoint — should trigger Rule 13
-		await api.slothlet.api.add("config", TEST_DIRS.API_TEST, { collisionMode: "replace" });
+		await api.slothlet.api.add("config", TEST_DIRS.API_TEST, { collision: { mode: "replace" } });
 		expect(api.config).toBeDefined();
 	});
 });
@@ -308,13 +318,15 @@ describe.each(EAGER_CONFIGS)("addApiComponent — forceOverwrite + moduleID ($na
 	it("replaces an existing module when forceOverwrite is set", async () => {
 		api = await makeApi(config, { base: TEST_DIRS.API_TEST });
 
-		await api.slothlet.api.add("fow", TEST_DIRS.API_TEST_MIXED, { moduleID: "fow-mod" });
+		await api.slothlet.api.add("fow", TEST_DIRS.API_TEST_MIXED, { id: "fow-mod" });
 		expect(api.fow).toBeDefined();
 
 		// forceOverwrite replaces as replace mode
 		await api.slothlet.api.add("fow", TEST_DIRS.API_TEST_MIXED, {
-			moduleID: "fow-mod",
-			forceOverwrite: true
+			id: "fow-mod",
+			collision: {
+				force: true
+			}
 		});
 		expect(api.fow).toBeDefined();
 	});
@@ -348,12 +360,14 @@ describe.each(EAGER_CONFIGS)("addApiComponent — Rule 13 dedup vs. a self-named
 	it("replaces a self-named leaf's callable impl on forceOverwrite instead of corrupting it to {}", async () => {
 		api = await makeApi(config, { base: TEST_DIRS.API_TEST });
 
-		await api.slothlet.api.add("thing", TEST_DIRS.API_TEST_ADD_DEDUP_LEAF, { moduleID: "dedup-leaf" });
+		await api.slothlet.api.add("thing", TEST_DIRS.API_TEST_ADD_DEDUP_LEAF, { id: "dedup-leaf" });
 		expect(api.thing("x")).toBe("base:x");
 
 		await api.slothlet.api.add("thing", TEST_DIRS.API_TEST_ADD_DEDUP_LEAF_OVERRIDE, {
-			moduleID: "dedup-leaf",
-			forceOverwrite: true
+			id: "dedup-leaf",
+			collision: {
+				force: true
+			}
 		});
 
 		expect(typeof api.thing).toBe("function");

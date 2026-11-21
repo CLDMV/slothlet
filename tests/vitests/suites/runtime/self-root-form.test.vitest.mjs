@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T02:17:41-08:00 (1794824261)
+ *	@Last modified time: 2026-11-16T18:30:26-08:00 (1794882626)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -57,10 +57,14 @@ const POLICIES = [
 	// Off keeps the framework's built-in protections: a module is refused `slothlet.permissions.principal` and `control`.
 	{ label: "permissions off", permissions: () => undefined, exact: false },
 	{ label: "permissions disabled", permissions: () => ({ mode: "disabled" }), exact: true },
-	{ label: "permissions on, default allow", permissions: (attribution) => ({ attribution }), exact: false },
+	{ label: "permissions on, default allow", permissions: (attribution) => ({ caller: { attribution } }), exact: false },
 	{
 		label: "permissions on, default deny, the probe allowed everything",
-		permissions: (attribution) => ({ attribution, defaultPolicy: "deny", rules: [{ caller: "probe.**", target: "**", effect: "allow" }] }),
+		permissions: (attribution) => ({
+			caller: { attribution },
+			policy: "deny",
+			rules: [{ caller: "probe.**", target: "**", effect: "allow" }]
+		}),
 		exact: false
 	}
 ];
@@ -180,7 +184,9 @@ describe.each(CONFIGS)("a module's self takes the api root's form > $mode / $run
 					runtime,
 					silent: true,
 					permissions: {
-						attribution,
+						caller: {
+							attribution
+						},
 						rules: [
 							{ caller: "probe.**", target: "**", effect: "deny" },
 							{ caller: "probe.**", target: "math.**", effect: "allow" }
@@ -323,7 +329,7 @@ describe.each(["async", "live"])("self in a scope the host opens > %s", (runtime
 		it.each(["partial", "full"])("with %s isolation, self answers as the host's api does", async (isolation) => {
 			const api = await slothlet({ base: path.join(FIXTURE, folder), runtime, silent: true });
 			try {
-				const rows = await api.slothlet.scope({ context: {}, isolation, fn: () => moduleShape(api) });
+				const rows = await api.slothlet.context.scope({ context: {}, isolation, fn: () => moduleShape(api) });
 				expectMirror(rows, hostShape(api), false);
 			} finally {
 				await api.shutdown();
@@ -381,7 +387,7 @@ describe.each(CONFIGS)("self() runs the root as the api root > $mode / $runtime 
 		let api;
 
 		beforeAll(async () => {
-			const permissions = policy.permissions === undefined ? undefined : { attribution, ...policy.permissions };
+			const permissions = policy.permissions === undefined ? undefined : { caller: { attribution }, ...policy.permissions };
 			api = await slothlet({ base: path.join(FIXTURE, "ownleaf"), mode, runtime, silent: true, permissions });
 		}, 60000);
 
@@ -428,7 +434,7 @@ const JSON_POLICIES = [
 	},
 	{
 		label: "permissions on, no rule",
-		permissions: (attribution) => ({ attribution }),
+		permissions: (attribution) => ({ caller: { attribution } }),
 		config: { settings: SETTINGS },
 		hidden: 2,
 		principal: DENIED,
@@ -436,7 +442,10 @@ const JSON_POLICIES = [
 	},
 	{
 		label: "permissions on, a deny rule on one member",
-		permissions: (attribution) => ({ attribution, rules: [{ caller: "probe.**", target: "config.settings.hidden", effect: "deny" }] }),
+		permissions: (attribution) => ({
+			caller: { attribution },
+			rules: [{ caller: "probe.**", target: "config.settings.hidden", effect: "deny" }]
+		}),
 		config: { settings: { public: 1, list: SETTINGS.list } },
 		hidden: DENIED,
 		principal: DENIED,
@@ -444,7 +453,7 @@ const JSON_POLICIES = [
 	},
 	{
 		label: "default deny, no rule",
-		permissions: (attribution) => ({ attribution, defaultPolicy: "deny" }),
+		permissions: (attribution) => ({ caller: { attribution }, policy: "deny" }),
 		// The file's node is traversal, listed with nothing the module may read.
 		config: {},
 		hidden: DENIED,
@@ -454,8 +463,10 @@ const JSON_POLICIES = [
 	{
 		label: "default deny, the probe allowed the config",
 		permissions: (attribution) => ({
-			attribution,
-			defaultPolicy: "deny",
+			caller: {
+				attribution
+			},
+			policy: "deny",
 			rules: [{ caller: "probe.**", target: "config.**", effect: "allow" }]
 		}),
 		config: { settings: SETTINGS },

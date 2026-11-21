@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:12-08:00 (1794874572)
+ *	@Last modified time: 2026-11-16T18:27:55-08:00 (1794882475)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -38,7 +38,7 @@ const { markSlothletProxy } = frameworkInternalsInternals("lib/helpers/defaults"
 /**
  * The default `apiDepth` (directory-traversal depth) applied when a caller does not specify one.
  * Unbounded by default. The config normalizer ({@link module:@cldmv/slothlet/helpers/config}) is
- * what every real compose path reads — it resolves `config.apiDepth` once and the mode processors
+ * what every real compose path reads — it resolves `config.depth` once and the mode processors
  * receive that already-normalized value. The mode processors' and the loader's own parameter
  * defaults exist only for the case where they are invoked directly, bypassing normalization (a
  * standalone call, a future direct consumer); they read this same constant so that case can never

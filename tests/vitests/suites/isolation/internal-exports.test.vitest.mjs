@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-14T09:00:00-08:00 (1794675600)
+ *	@Last modified time: 2026-11-16T18:29:20-08:00 (1794882560)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -71,8 +71,10 @@ const options = ({ mode, runtime, permissions }) => ({
 		? {}
 		: {
 				permissions: {
-					defaultPolicy: "allow",
-					attribution: permissions,
+					policy: "allow",
+					caller: {
+						attribution: permissions
+					},
 					// `data:` and `blob:` imports and code from strings are built-in capabilities (D4 ruling part 1); this suite is about what they reach.
 					rules: [
 						{ caller: "**", target: "capability:imports", effect: "allow" },
@@ -134,7 +136,7 @@ describe.each(MATRIX)("Isolation > slothlet's internal exports answer slothlet a
 		expect(await api.slothlet.context.run({}, resolveWrapper, api.held)).toBe(resolveWrapper(api.held));
 		const manager = held["#factories/context:getContextManager"](config.runtime);
 		expect(manager).toBe(held[`#factories/context:${config.runtime === "live" ? "liveRuntime" : "asyncRuntime"}`]);
-		expect(manager.instances.has(api.slothlet.instanceID)).toBe(true);
+		expect(manager.instances.has(api.slothlet.instance.id)).toBe(true);
 	});
 
 	it("refuses a module the static functions of the wrapper class, held or imported by package path or by file URL", async () => {

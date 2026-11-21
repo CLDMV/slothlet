@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T12:58:25-07:00 (1792353505)
+ *	@Last modified time: 2026-11-16T18:30:24-08:00 (1794882624)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -50,7 +50,7 @@ const RULES = [
 ];
 
 /** How a module's code is refused while it is built as no module's (see the seventh round). */
-const BUILD_REFUSALS = new Set(["PERMISSION_DENIED", "RUNTIME_NO_ACTIVE_CONTEXT_SELF"]);
+const BUILD_REFUSALS = new Set(["PERMISSION_DENIED", "CONTEXT_NOT_ACTIVE_SELF"]);
 
 beforeAll(() => {
 	rmSync(LINKS, { recursive: true, force: true });
@@ -92,9 +92,9 @@ describe.each(getMatrixConfigs())("A module adds a folder however it is spelled 
 		["through a parent segment", () => `${DIR7}/brokenplug/../slowplug`],
 		["through a symlink", () => path.join(LINKS, "slowplug")]
 	])("%s: the added module's top level after its await is refused", async (_label, folder) => {
-		api = await slothlet({ ...config, base: path.join(DIR7, "base"), hook: true, permissions: { defaultPolicy: "deny", rules: RULES } });
+		api = await slothlet({ ...config, base: path.join(DIR7, "base"), hook: true, permissions: { policy: "deny", rules: RULES } });
 		await api.vault.secret.whoami();
-		await api.slothlet.api.add("callee", path.join(DIR7, "callee"), { moduleID: "callee-mod" });
+		await api.slothlet.api.add("callee", path.join(DIR7, "callee"), { id: "callee-mod" });
 		const adding = api.callee.adder.addWhile(folder());
 		expect(await api.vault.secret.secret()).toBe("s3cret");
 		expect(await adding).toBe("s3cret");
@@ -133,7 +133,7 @@ describe.each(getMatrixConfigs({ runtime: "live" }))(
 			v8.setFlagsFromString("--expose-gc");
 			const gc = vm.runInNewContext("gc");
 			api = await slothlet({ ...config, base: path.join(DIR, "base") });
-			await api.slothlet.api.add("ticker", path.join(DIR, "ticker"), { moduleID: "ticker-mod" });
+			await api.slothlet.api.add("ticker", path.join(DIR, "ticker"), { id: "ticker-mod" });
 			const manager = resolveWrapper(api.probe.ping).slothlet.contextManager;
 			const before = manager.suspendedCallCount;
 			for (let batch = 0; batch < 3; batch++) {

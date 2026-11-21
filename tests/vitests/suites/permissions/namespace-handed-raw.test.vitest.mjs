@@ -65,7 +65,7 @@ describe.each(MODES.flatMap((mode) => RUNTIMES.map((runtime) => ({ mode, runtime
 		async function load(options) {
 			const api = await slothlet({ base: join(FIXTURE, "base"), mode, runtime, silent: true, ...options });
 			instances.push(api);
-			await api.slothlet.api.add("holder", join(FIXTURE, "holder"), { moduleID: "holder" });
+			await api.slothlet.api.add("holder", join(FIXTURE, "holder"), { id: "holder" });
 			return api;
 		}
 

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-04T19:59:41-08:00 (1793851181)
+ *	@Last modified time: 2026-11-16T18:30:22-08:00 (1794882622)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -228,7 +228,7 @@ describe.each(CONFIGS)(
 				mode,
 				runtime,
 				silent: true,
-				...(permissions ? { permissions: { defaultPolicy: "allow", rules: [] } } : {})
+				...(permissions ? { permissions: { policy: "allow", rules: [] } } : {})
 			});
 			return api;
 		}

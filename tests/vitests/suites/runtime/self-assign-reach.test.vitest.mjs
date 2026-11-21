@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-10T21:30:07-08:00 (1794375007)
+ *	@Last modified time: 2026-11-18T19:30:38-08:00 (1795059038)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -77,12 +77,14 @@ const READ_RULES = [
 	{ caller: "**", target: "guest.**", effect: "allow" },
 	{ caller: "**", target: "root.**", effect: "allow" },
 	// The member `root.changeSelf` defines on the api root and reads back is data at the root, read under a rule for that leaf.
-	{ caller: "root.changeSelf", target: "baseDefined", effect: "allow" }
+	{ caller: "root.changeSelf", target: "baseDefined", effect: "allow" },
+	// So is the member `root.changeScopedSelf` defines and reads back inside a fully isolated scope.
+	{ caller: "root.changeScopedSelf", target: "scoped", effect: "allow" }
 ];
 const PERMISSIONS = [
 	{ label: "no permissions config", options: {} },
 	{ label: "permissions with defaults", options: { permissions: {} } },
-	{ label: "permissions defaultPolicy deny", options: { permissions: { defaultPolicy: "deny", rules: READ_RULES } } }
+	{ label: "permissions defaultPolicy deny", options: { permissions: { policy: "deny", rules: READ_RULES } } }
 ];
 
 /**
@@ -125,8 +127,8 @@ describe.each(CONFIGS)("what a module reaches through self (#625) — $mode / $r
 		async function load() {
 			const api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, ...options });
 			instances.push(api);
-			await api.slothlet.api.add("victim", path.join(FIXTURE, "victim"), { moduleID: "victim" });
-			await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { moduleID: "guest" });
+			await api.slothlet.api.add("victim", path.join(FIXTURE, "victim"), { id: "victim" });
+			await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { id: "guest" });
 			return api;
 		}
 
@@ -226,11 +228,11 @@ describe.each(CONFIGS)("what a module reaches through self (#625) — $mode / $r
 				mode,
 				runtime,
 				silent: true,
-				permissions: { ...options.permissions, references: { capture: false } }
+				permissions: { ...options.permissions, caller: { capture: false } }
 			});
 			instances.push(api);
-			await api.slothlet.api.add("victim", path.join(FIXTURE, "victim"), { moduleID: "victim" });
-			await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { moduleID: "guest" });
+			await api.slothlet.api.add("victim", path.join(FIXTURE, "victim"), { id: "victim" });
+			await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { id: "guest" });
 			const later = await api.guest.x.keepVictimFrozenMembers();
 			const report = withSuppressedSlothletErrorOutputSync(() => later());
 			expect(report).toEqual(Object.fromEntries(Object.keys(report).map((key) => [key, "LOOSE_SET_NOT_OWNED"])));
@@ -252,7 +254,7 @@ describe.each(CONFIGS)("what a module reaches through self (#625) — $mode / $r
 			withSuppressedSlothletErrorOutputSync(() => {
 				expect(() => {
 					api.guest.x.keptElement.hostNote = 1;
-				}).toThrow(/RUNTIME_NO_ACTIVE_CONTEXT_SELF/);
+				}).toThrow(/CONTEXT_NOT_ACTIVE_SELF/);
 			});
 			api.victim.v.shelf[0].hostNote = 1;
 			expect(api.victim.v.shelf[0].hostNote).toBe(1);
@@ -378,11 +380,12 @@ describe.each(CONFIGS)("what a module reaches through self (#625) — $mode / $r
 			});
 			instances.push(isolated);
 			let report;
-			await isolated.slothlet.run({}, async () => {
+			await isolated.slothlet.context.run({}, async () => {
 				report = await isolated.root.changeScopedSelf();
 			});
-			expect(report).toEqual({ define: "done", read: 3, accessor: "TypeError", remove: "done", gone: true });
+			expect(report).toEqual({ define: "done", read: 3, accessor: "done", remove: "done", gone: true });
 			expect(isolated.scoped).toBeUndefined();
+			expect(isolated.scopedGetter).toBeUndefined();
 		});
 
 		it("hands a module the framework's view of the framework namespace stored on another module's class", async () => {
@@ -400,17 +403,24 @@ describe.each(CONFIGS)("what a module reaches through self (#625) — $mode / $r
 		it.runIf(off)("leaves the framework namespace stored on another module's class to a module with the system disabled", async () => {
 			const api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, permissions: { mode: "disabled" } });
 			instances.push(api);
-			await api.slothlet.api.add("victim", path.join(FIXTURE, "victim"), { moduleID: "victim" });
-			await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { moduleID: "guest" });
+			await api.slothlet.api.add("victim", path.join(FIXTURE, "victim"), { id: "victim" });
+			await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { id: "guest" });
 			api.victim.v.Account.prototype.namespace = api.slothlet;
 			expect(api.guest.x.changeStoredNamespace()).toBe("done");
 			expect(api.slothlet.planted).toBe(1);
 		});
 
-		it("hands the host, inside a run() it opened, a module's class prototype itself", async () => {
+		it("hands the host, inside a run() it opened, the run's own copy of a module's class prototype", async () => {
 			const api = await load();
 			const proto = api.victim.v.Account.prototype;
-			expect(await api.slothlet.context.run({}, () => self.victim.v.Account.prototype === proto)).toBe(true);
+			const seen = await api.slothlet.context.run({}, () => {
+				const inRun = self.victim.v.Account.prototype;
+				inRun.inRunOnly = 1;
+				return { same: inRun === proto, readBack: inRun.inRunOnly };
+			});
+			// A full-isolation run reads a copy: its prototype is not the instance's, and what it writes there stays in the run.
+			expect(seen).toEqual({ same: false, readBack: 1 });
+			expect(Object.hasOwn(api.victim.v.Account.prototype, "inRunOnly")).toBe(false);
 		});
 
 		it.each([
@@ -435,8 +445,8 @@ describe.each(CONFIGS)("what a module reaches through self (#625) — $mode / $r
 				setPrototypeOf: outcome(() => Object.setPrototypeOf(self, null)),
 				preventExtensions: outcome(() => Object.preventExtensions(self))
 			}).toEqual({
-				remove: "RUNTIME_NO_ACTIVE_CONTEXT_SELF",
-				define: "RUNTIME_NO_ACTIVE_CONTEXT_SELF",
+				remove: "CONTEXT_NOT_ACTIVE_SELF",
+				define: "CONTEXT_NOT_ACTIVE_SELF",
 				setPrototypeOf: "TypeError",
 				preventExtensions: "TypeError"
 			});
@@ -485,10 +495,10 @@ describe.each(CONFIGS)("reading back a member a module made on a folder — $mod
 			mode,
 			runtime,
 			silent: true,
-			permissions: { defaultPolicy: "deny", rules: [...MADE_BASE_RULES, ...rules] }
+			permissions: { policy: "deny", rules: [...MADE_BASE_RULES, ...rules] }
 		});
 		instances.push(api);
-		await api.slothlet.api.add("zz", MADE, { moduleID: "zz" });
+		await api.slothlet.api.add("zz", MADE, { id: "zz" });
 		return api;
 	}
 

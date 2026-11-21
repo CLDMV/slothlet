@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:12-08:00 (1794874572)
+ *	@Last modified time: 2026-11-17T21:05:02-08:00 (1794978302)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -24,7 +24,7 @@
  * lands on an IDL attribute the target interface declares on its own prototype — there is no single
  * shared setter the way `EventTarget.prototype.addEventListener` is shared, so `addEventListener`
  * patching never sees it. The callback then runs with no pinned identity, the same
- * `RUNTIME_NO_ACTIVE_CONTEXT_SELF` / unattributed-caller failure the `addEventListener` patch exists
+ * `CONTEXT_NOT_ACTIVE_SELF` / unattributed-caller failure the `addEventListener` patch exists
  * to prevent.
  *
  * Each interface below declares its `on*` attributes independently, so each one is patched by name on
@@ -51,7 +51,9 @@
  * and does not bound.
  */
 
-import { pinToCurrentCaller } from "#helpers/caller-pinning";
+import { AsyncResource } from "#helpers/platform";
+import { holdForCurrentFlow, pinToCurrentCaller } from "#helpers/caller-pinning";
+import { asPlatformRegistration } from "#helpers/eventtarget-context";
 import { openLayer, closeLayer, isActiveLayer, markLayer } from "#helpers/boundary-patch-layers";
 import {
 	EventTarget,
@@ -59,6 +61,7 @@ import {
 	FunctionMethods,
 	listPush,
 	Objects,
+	PrototypeFunctions,
 	StringMethods,
 	WeakMap,
 	WeakMapMethods,
@@ -156,10 +159,25 @@ function runtime_patchHandlerAccessor(proto, propName) {
 	const { get: originalGet, set: originalSet } = layer.below;
 
 	/**
-	 * Targets currently holding a pinned wrapper through this accessor, and what was assigned.
-	 * @type {WeakMap<object, {original: Function, wrapper: Function}>}
+	 * Targets currently holding a pinned wrapper through this accessor, what was assigned, and what releases the count
+	 * of it as work of the `run()` / `scope()` that assigned it: a handler assigned in a run is the run's work until it is
+	 * replaced or cleared (see `holdForCurrentFlow` in `helpers/caller-pinning`).
+	 * @type {WeakMap<object, {original: Function, wrapper: Function, release: Function|null, resource: object|null}>}
 	 */
 	const tracked = new WeakMap();
+
+	/**
+	 * Drop a target's entry: the handler it describes is no longer the target's, so the work it was for a run is done.
+	 * @param {object} target - The target.
+	 * @returns {void}
+	 */
+	const forget = (target) => {
+		const entry = WeakMapMethods.get(tracked, target);
+		if (entry === undefined) return;
+		WeakMapMethods.delete(tracked, target);
+		if (entry.release !== null) entry.release();
+		if (entry.resource !== null) entry.resource.emitDestroy();
+	};
 
 	const wrapperGet = function () {
 		const entry = WeakMapMethods.get(tracked, this);
@@ -172,7 +190,7 @@ function runtime_patchHandlerAccessor(proto, propName) {
 			// The platform no longer reports the wrapper this patch installed, so the entry no longer
 			// describes reality. Drop it rather than leaving it to keep the stale original/wrapper pair
 			// reachable for the lifetime of `this`.
-			WeakMapMethods.delete(tracked, this);
+			forget(this);
 		}
 		return current;
 	};
@@ -182,16 +200,38 @@ function runtime_patchHandlerAccessor(proto, propName) {
 		// or reject the same way it would unpatched. Neither has an identity to pin — and an accessor
 		// disabled under another copy's pins nothing either.
 		if (typeof value !== "function" || !layer.active) {
-			const result = FunctionMethods.call(originalSet, this, value);
-			WeakMapMethods.delete(tracked, this);
+			const result = asPlatformRegistration(originalSet, this, value);
+			forget(this);
 			return result;
 		}
 
-		const wrapper = pinToCurrentCaller(value);
+		// Restores the AsyncLocalStorage store active now when the handler runs, as the `addEventListener` patch does for
+		// a listener: the platform's own listener behind the property (Node registers one through `addEventListener`)
+		// is registered as it is, and serves whichever handler the property holds then. Null in a browser.
+		/* v8 ignore next */
+		const resource = AsyncResource ? new AsyncResource("slothlet-event-handler") : null;
+		const pinned = pinToCurrentCaller(value);
+		const wrapper =
+			resource === null
+				? pinned
+				: function (...args) {
+						return resource.runInAsyncScope(() => FunctionMethods.apply(pinned, this, args));
+					};
+		// Assigned in a run() / scope(), the handler is the run's work until it is replaced or cleared: counted here on
+		// the live runtime, and through its resource on the async runtime.
+		const release = holdForCurrentFlow();
 		// Mutate `tracked` only once the platform setter has actually accepted the assignment — if it
 		// throws, the previous tracked entry (or lack of one) is still the accurate description of state.
-		const result = FunctionMethods.call(originalSet, this, wrapper);
-		WeakMapMethods.set(tracked, this, { original: value, wrapper });
+		let result;
+		try {
+			result = asPlatformRegistration(originalSet, this, wrapper);
+		} catch (error) {
+			if (release !== null) release();
+			if (resource !== null) resource.emitDestroy();
+			throw error;
+		}
+		forget(this);
+		WeakMapMethods.set(tracked, this, { original: value, wrapper, release, resource });
 		return result;
 	};
 
@@ -274,7 +314,7 @@ function runtime_patchDiscoveredHandlers() {
 			typeof value !== "function" ||
 			isSlothletProxy(value) ||
 			!value.prototype ||
-			!FunctionMethods.call(Objects.prototype.isPrototypeOf, base, value.prototype)
+			!FunctionMethods.call(PrototypeFunctions.Object.isPrototypeOf, base, value.prototype)
 		)
 			continue;
 		for (let ofIndex = 0, ofList = runtime_ownHandlerNames(value.prototype); ofIndex < ofList.length; ofIndex++) {
@@ -284,7 +324,7 @@ function runtime_patchDiscoveredHandlers() {
 	}
 
 	// A Window or worker global: WebIDL declares its handlers on the global object itself.
-	if (FunctionMethods.call(Objects.prototype.isPrototypeOf, base, globalThis)) {
+	if (FunctionMethods.call(PrototypeFunctions.Object.isPrototypeOf, base, globalThis)) {
 		for (let ofIndex = 0, ofList = runtime_ownHandlerNames(globalThis); ofIndex < ofList.length; ofIndex++) {
 			const propName = ofList[ofIndex];
 			runtime_patchHandlerAccessor(globalThis, propName);

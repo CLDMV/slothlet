@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-08T01:03:27-08:00 (1794128607)
+ *	@Last modified time: 2026-11-19T05:16:54-08:00 (1795094214)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -54,6 +54,7 @@ import {
 	prototypeWrites,
 	relayInstanceOf,
 	prototypeAnswers,
+	selfPrototypes,
 	IDENTITY_CASES
 } from "../../../../api_tests/api_test_plain_js_nodes_lib/cases.mjs";
 import { Relay } from "../../../../api_tests/api_test_plain_js_nodes_lib/relay-class.mjs";
@@ -65,10 +66,10 @@ const RUNTIMES = ["async", "live"];
 const PERMISSIONS = [
 	{ name: "permissions off", permissions: null },
 	{ name: "permissions on", permissions: {} },
-	{ name: "permissions on, capture off", permissions: { references: { capture: false } } }
+	{ name: "permissions on, capture off", permissions: { caller: { capture: false } } }
 ];
 
-const DENY_READER = { defaultPolicy: "allow", rules: [{ caller: "reader.**", target: "owner.**", effect: "deny" }] };
+const DENY_READER = { policy: "allow", rules: [{ caller: "reader.**", target: "owner.**", effect: "deny" }] };
 
 /** Grants the reader writes into the owner's subtree, and refuses it nothing. */
 const ALLOW_READER_WRITES = { rules: [{ caller: "reader.**", target: "owner.**:write", effect: "allow" }] };
@@ -96,7 +97,7 @@ const heldInstances = (api) => Object.fromEntries(IDENTITY_CASES.map((name) => [
 
 /** Refuses the reader the owner's classes, exported (`Foo`) and kept to itself (reached as `hiddenInst.constructor`), and nothing else. */
 const DENY_CLASSES = {
-	defaultPolicy: "allow",
+	policy: "allow",
 	rules: ["owner.Foo", "owner.Foo.**", "owner.hiddenInst.constructor", "owner.hiddenInst.constructor.**"].map((target) => ({
 		caller: "reader.**",
 		target,
@@ -115,7 +116,7 @@ const heldOddShapes = (api) => Object.fromEntries(ODD_SHAPES.map((name) => [name
 const WRITE_KEYS = ["hostWrite", "selfEmitter", "heldEmitter", "selfRelay", "heldRelay", "keptEmitter", "plainEmitter"];
 
 /** A member no other code uses, written onto prototypes to see where the write lands. */
-const PROBE_KEY = "__slothlet667PrototypeProbe";
+const PROBE_KEY = "slothlet667PrototypeProbe";
 
 let twinCount = 0;
 /**
@@ -131,8 +132,8 @@ const plainOwner = () => import(`${pathToFileURL(join(FIXTURE, "owner", "owner.m
  */
 async function mount(options) {
 	const api = await slothlet({ base: join(FIXTURE, "host"), silent: true, ...options });
-	await api.slothlet.api.add("owner", join(FIXTURE, "owner"), { moduleID: "owner" });
-	await api.slothlet.api.add("reader", join(FIXTURE, "reader"), { moduleID: "reader" });
+	await api.slothlet.api.add("owner", join(FIXTURE, "owner"), { id: "owner" });
+	await api.slothlet.api.add("reader", join(FIXTURE, "reader"), { id: "reader" });
 	await api.owner;
 	await api.reader;
 	return api;
@@ -719,7 +720,7 @@ describe.each(
 			[
 				{ name: "permissions off", permissions: null, off: true },
 				{ name: "permissions on, no rules", permissions: {}, off: false },
-				{ name: "permissions on, capture off", permissions: { references: { capture: false } }, off: false },
+				{ name: "permissions on, capture off", permissions: { caller: { capture: false } }, off: false },
 				{ name: "reader's writes allowed", permissions: ALLOW_READER_WRITES, off: false }
 			].map((entry) => ({ mode, runtime, ...entry }))
 		)
@@ -739,11 +740,10 @@ describe.each(
 		expect(prototypeAnswers(heldInstances(api))).toEqual(answering("object"));
 	});
 
-	it("is the object itself to another module whose writes are allowed, and a checked view to one only allowed the read", async () => {
+	it("is the prototype another module reads through self, whatever it is allowed", async () => {
 		api = await mount({ mode, runtime, ...(permissions ? { permissions } : {}) });
 		for (const name of IDENTITY_CASES) await api.owner[name];
-		const writes = off || permissions === ALLOW_READER_WRITES;
-		expect(await api.reader.heldPrototypeAnswers(heldInstances(api))).toEqual(answering(writes ? "object" : "view"));
+		expect(await api.reader.heldPrototypeAnswers(heldInstances(api))).toEqual(answering("object"));
 	});
 
 	it("refuses another module's write through it while the permission system is on, unless a rule grants the write", async () => {
@@ -772,16 +772,16 @@ describe.each(
 		RUNTIMES.flatMap((runtime) =>
 			["freeze", "seal", "preventExtensions"].flatMap((closing) =>
 				[
-					{ name: "permissions off", permissions: null, readerGets: "object", writesLand: true },
-					{ name: "permissions on, no rules", permissions: {}, readerGets: "view", writesLand: false },
-					{ name: "reader's writes allowed", permissions: ALLOW_READER_WRITES, readerGets: "object", writesLand: true }
+					{ name: "permissions off", permissions: null, writesLand: true },
+					{ name: "permissions on, no rules", permissions: {}, writesLand: false },
+					{ name: "reader's writes allowed", permissions: ALLOW_READER_WRITES, writesLand: true }
 				].map((entry) => ({ mode, runtime, closing, ...entry }))
 			)
 		)
 	)
 )(
 	"a closed emitter's prototype for each reader > $mode / $runtime / $closing / $name",
-	({ mode, runtime, closing, permissions, readerGets, writesLand }) => {
+	({ mode, runtime, closing, permissions, writesLand }) => {
 		let api;
 
 		afterEach(async () => {
@@ -797,18 +797,25 @@ describe.each(
 			Object[closing](api.owner.relay);
 		};
 
-		it("is the object itself through self to the owner and to a module whose writes are allowed, and a view to one only allowed the read", async () => {
+		it("is the prototype each module reads through self, whatever it is allowed", async () => {
 			await load();
 			expect(await api.owner.ownPrototypeAnswers()).toEqual(answering("object"));
-			expect(await api.reader.readPrototypeAnswers()).toEqual(answering(readerGets));
+			expect(await api.reader.readPrototypeAnswers()).toEqual(answering("object"));
 		});
 
-		it("is one view to every holder of the node, the host and the owner among them, since a closed node reports one prototype", async () => {
+		it("is the prototype every holder of the node reads through its own root, the host and the owner among them", async () => {
 			await load();
+			// The node itself, which the host holds, reports one prototype to every holder of it once closed, as JavaScript
+			// requires: the handle, which the host reads `Relay.prototype` as the object itself beside.
+			expect(prototypeAnswers(heldInstances(api), selfPrototypes(api.owner))).toEqual(answering("object", { relay: "view" }));
+			// The owner, and every module while the permission system is off, read the prototypes themselves through `self`,
+			// so the handle a closed node it is handed reports is not that object; a module handed the handle reads that
+			// same handle through `self`.
 			const emitters = { bus: "view", relay: "view" };
-			expect(prototypeAnswers(heldInstances(api))).toEqual(answering("object", emitters));
 			expect(await api.owner.heldPrototypeAnswers(heldInstances(api))).toEqual(answering("object", emitters));
-			expect(await api.reader.heldPrototypeAnswers(heldInstances(api))).toEqual(answering(readerGets, emitters));
+			expect(await api.reader.heldPrototypeAnswers(heldInstances(api))).toEqual(
+				permissions === null ? answering("object", emitters) : answering("object")
+			);
 		});
 
 		it("lands a write as plain JS does where the module's writes are allowed, and refuses it otherwise", async () => {
@@ -875,7 +882,7 @@ describe.each(
 			expect(await api.reader.readHeldEmitter(api.owner.relay, "beforeHeld")).toEqual(plain.relay);
 			expect((await api.owner.prototypesHolding("beforeSelf")).bus).toBe(true);
 			expect((await api.owner.prototypesHolding("beforeHeld")).relay).toBe(true);
-			api.slothlet.permissions.control.enable();
+			api.slothlet.permissions.control.mode("on");
 			for (const [key, emitter, run] of [
 				["selfEmitter", "bus", () => api.reader.readEmitter("selfEmitter")],
 				["heldEmitter", "bus", () => api.reader.readHeldEmitter(api.owner.bus, "heldEmitter")],
@@ -901,14 +908,14 @@ describe.each(
 	MODES.flatMap((mode) =>
 		RUNTIMES.flatMap((runtime) =>
 			[
-				{ name: "permissions off", permissions: null, readerGets: "object" },
-				{ name: "permissions on, no rules", permissions: {}, readerGets: "view" },
-				{ name: "permissions on, capture off", permissions: { references: { capture: false } }, readerGets: "view" },
-				{ name: "reader's writes allowed", permissions: ALLOW_READER_WRITES, readerGets: "object" }
+				{ name: "permissions off", permissions: null },
+				{ name: "permissions on, no rules", permissions: {} },
+				{ name: "permissions on, capture off", permissions: { caller: { capture: false } } },
+				{ name: "reader's writes allowed", permissions: ALLOW_READER_WRITES }
 			].map((entry) => ({ mode, runtime, ...entry }))
 		)
 	)
-)("an open node's prototype read through self > $mode / $runtime / $name", ({ mode, runtime, permissions, readerGets }) => {
+)("an open node's prototype read through self > $mode / $runtime / $name", ({ mode, runtime, permissions }) => {
 	let api;
 
 	afterEach(async () => {
@@ -916,11 +923,11 @@ describe.each(
 		api = null;
 	});
 
-	it("is the object itself to the owner and to a module whose writes are allowed, and a checked view to one only allowed the read", async () => {
+	it("is the prototype the owner and another module read through self, whatever the module is allowed", async () => {
 		api = await mount({ mode, runtime, ...(permissions ? { permissions } : {}) });
 		for (const name of IDENTITY_CASES) await api.owner[name];
 		expect(await api.owner.ownPrototypeAnswers()).toEqual(answering("object"));
-		expect(await api.reader.readPrototypeAnswers()).toEqual(answering(readerGets));
+		expect(await api.reader.readPrototypeAnswers()).toEqual(answering("object"));
 	});
 });
 
@@ -984,12 +991,12 @@ describe.each(
 			}
 		});
 
-		it("is the object itself to the owner through self, and to another module through self as its standing gives it", async () => {
+		it("is the prototype the owner and another module read through self, and refused to a module denied the class", async () => {
 			await load();
 			expect(await api.owner.ownPrototypeAnswers()).toEqual(answering("object"));
 			const throughSelf = await api.reader.readPrototypeAnswers();
 			if (readerGets !== null) {
-				expect(throughSelf).toEqual(answering(readerGets));
+				expect(throughSelf).toEqual(answering("object"));
 				return;
 			}
 			const refused = "threw PERMISSION_DENIED";
@@ -1050,7 +1057,7 @@ describe.each(
 			[
 				{ name: "permissions off", permissions: null, writesLand: true },
 				{ name: "permissions on, no rules", permissions: {}, writesLand: false },
-				{ name: "permissions on, capture off", permissions: { references: { capture: false } }, writesLand: false },
+				{ name: "permissions on, capture off", permissions: { caller: { capture: false } }, writesLand: false },
 				{ name: "reader's writes allowed", permissions: ALLOW_READER_WRITES, writesLand: true }
 			].map((entry) => ({ mode, runtime, ...entry }))
 		)

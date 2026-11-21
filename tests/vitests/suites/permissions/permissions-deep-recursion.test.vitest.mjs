@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-12T23:28:42-08:00 (1794554922)
+ *	@Last modified time: 2026-11-16T18:29:47-08:00 (1794882587)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -102,7 +102,7 @@ describe.each(matrix)(
 					mode,
 					runtime,
 					silent: true,
-					permissions: { defaultPolicy: "allow", attribution, rules, references: { capture: false } }
+					permissions: { policy: "allow", caller: { attribution, capture: false }, rules }
 				});
 				await api.vault;
 				await api.sup;

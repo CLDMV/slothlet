@@ -1,0 +1,7 @@
+{
+	"schemaVersion": 1,
+	"mountPath": ["plugins", "unknown-suffix"],
+	"apiDir": "./api",
+	"kind": "extension",
+	"permissions": [{ "caller": "**", "target": "plugins.unknown-suffix.**:wirte", "effect": "deny" }]
+}

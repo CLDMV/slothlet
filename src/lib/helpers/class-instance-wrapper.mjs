@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:11-08:00 (1794874571)
+ *	@Last modified time: 2026-11-17T13:35:18-08:00 (1794951318)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -31,16 +31,14 @@ import { isFrameworkReservedKey } from "#helpers/reserved-keys";
 import { internals as framePlacementInternals } from "#handlers/frame-placement";
 import {
 	ArrayBuffer,
-	Arrays,
 	Boolean,
 	DataView,
 	Date,
 	Error,
 	filterList,
-	FunctionMethods,
-	Functions,
 	Map,
 	MapMethods,
+	NativeArray,
 	NativeObject,
 	NativeProxy,
 	Objects,
@@ -64,7 +62,7 @@ const { outerCallerCeiling } = framePlacementInternals("lib/helpers/class-instan
  * @constant
  * @private
  */
-const EXCLUDED_CONSTRUCTORS = setFrom([NativeObject, Arrays.prototype.constructor, Promise, Date, RegExp, Error]);
+const EXCLUDED_CONSTRUCTORS = setFrom([NativeObject, NativeArray, Promise, Date, RegExp, Error]);
 
 /**
  * Sentinel marking a Proxy already produced by {@link runtime_wrapClassInstance}.
@@ -139,7 +137,7 @@ function runtime_classInstanceCreator(value) {
 }
 
 /** `WeakMap.prototype.has` as it was when slothlet loaded, so a module replacing it changes no answer below. */
-const weakMapHas = FunctionMethods.bind(Functions.prototype.call, WeakMap.prototype.has);
+const weakMapHas = WeakMapMethods.has;
 
 // The language's own reflection, taken at load.
 const { getPrototypeOf, getOwnPropertyDescriptor } = Reflect;

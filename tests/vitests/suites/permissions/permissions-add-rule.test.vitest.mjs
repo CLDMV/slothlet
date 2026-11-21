@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:14-07:00 (1791090914)
+ *	@Last modified time: 2026-11-16T18:29:39-08:00 (1794882579)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -27,12 +27,12 @@ describe.each(getMatrixConfigs())("Permissions > addRule > $name", ({ config }) 
 		api = null;
 	});
 
-	it("programmatic addRule adds a rule enforced immediately", async () => {
+	it("programmatic rules.add adds a rule enforced immediately", async () => {
 		api = await slothlet({
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "allow"
+				policy: "allow"
 			}
 		});
 
@@ -41,7 +41,7 @@ describe.each(getMatrixConfigs())("Permissions > addRule > $name", ({ config }) 
 		expect(result.ok).toBe(true);
 
 		// Add deny rule
-		const ruleId = api.slothlet.permissions.addRule({ caller: "callers.**", target: "payments.**", effect: "deny" });
+		const ruleId = api.slothlet.permissions.rules.add({ caller: "callers.**", target: "payments.**", effect: "deny" });
 		expect(ruleId).toBeTypeOf("string");
 
 		// Should be denied after rule

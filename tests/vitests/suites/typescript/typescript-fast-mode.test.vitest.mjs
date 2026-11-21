@@ -173,19 +173,21 @@ describe("TypeScript Fast Mode", () => {
 		});
 
 		it("should have metadata on TypeScript functions", async () => {
-			const metadata = api.math.add.__metadata;
+			const metadata = api.slothlet.metadata.get(api.math.add);
+			const metadataNode = api.slothlet.node(api.math.add);
 
 			expect(metadata).toBeDefined();
-			expect(metadata.filePath).toContain("math.ts");
-			expect(metadata.apiPath).toBe("math.add");
+			expect(metadataNode.file).toContain("math.ts");
+			expect(metadataNode.path.join(".")).toBe("math.add");
 		});
 
 		it("should track moduleID for TypeScript modules", async () => {
-			const metadata = api.string.capitalize.__metadata;
+			const metadata = api.slothlet.metadata.get(api.string.capitalize);
+			const metadataNode = api.slothlet.node(api.string.capitalize);
 
 			expect(metadata).toBeDefined();
-			expect(metadata.moduleID).toBeDefined();
-			expect(metadata.filePath).toContain("string.ts");
+			expect(metadataNode.module).toBeDefined();
+			expect(metadataNode.file).toContain("string.ts");
 		});
 	});
 
@@ -281,7 +283,7 @@ describe("TypeScript Fast Mode", () => {
 
 			// Add TypeScript module
 			await api.slothlet.api.add("tsModule", "./api_tests/api_test_typescript", {
-				moduleID: "ts_addon"
+				id: "ts_addon"
 			});
 
 			expect(api.tsModule).toBeDefined();

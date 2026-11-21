@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-06T22:14:34-08:00 (1794032074)
+ *	@Last modified time: 2026-11-16T18:30:32-08:00 (1794882632)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -23,7 +23,7 @@
  * suites (`permissions-host-owner-code`, `permissions-host-owner-calls`) assert it, lazy equal to eager, in both
  * runtimes ("Where the source cannot be checked": slothlet reads vitest's records once, when it loads, and never again):
  *
- * - the context the owner package hands a module (`lockCaller`, `metadata`, `event`, a host leaf) is reached: the
+ * - the context the owner package hands a module (`pin`, `metadata`, `event`, a host leaf) is reached: the
  *   host's own file running its own source runs as the module's call ("Code passed by routes slothlet does not see");
  * - the host record leaf's own body, handed a callback, runs as the leaf; only the code the caller hands in runs as the
  *   caller ("Code a caller hands to a leaf runs as the caller"), so the store partition `host.records.**` may open is
@@ -101,7 +101,7 @@ describe("Permissions > a host like rummage's under vitest, with only server.dep
 		// cannot be checked"); attributing a module's code under vitest is #682. The async runtime refuses the access;
 		// the live runtime, which tells the running call from the stack, refuses `self` itself ("`self` requires an
 		// executing module").
-		const code = config.endsWith("/live") ? "RUNTIME_NO_ACTIVE_CONTEXT_SELF" : "PERMISSION_DENIED";
+		const code = config.endsWith("/live") ? "CONTEXT_NOT_ACTIVE_SELF" : "PERMISSION_DENIED";
 		expect(out[`${config}/helper`]).toEqual({ ok: false, code, caller: null });
 	});
 

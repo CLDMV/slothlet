@@ -24,8 +24,8 @@
  *              being looked up has NO tracked listeners. Triggered by removing a listener
  *              from an untracked event whilst the emitter is still tracked for other events.
  *
- *   Line 202 — `if (listener._slothletOriginal) return false` in runtime_shouldWrapListener
- *              Fires when a listener that is already marked as wrapped (has `_slothletOriginal`)
+ *   Line 202 — `if (listener.____slothletOriginal) return false` in runtime_shouldWrapListener
+ *              Fires when a listener that is already marked as wrapped (has `____slothletOriginal`)
  *              is passed to a patched EventEmitter method. This prevents double-wrapping.
  *              Note: the existing eventemitter-nowrap-branches tests cover addListener/on/
  *              prependListener/once, but each patched method checks runtime_shouldWrapListener
@@ -107,9 +107,9 @@ describe("eventemitter-context: getWrappedListener untracked event returns undef
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// LINE 202: runtime_shouldWrapListener — `if (listener._slothletOriginal) return false`
+// LINE 202: runtime_shouldWrapListener — `if (listener.____slothletOriginal) return false`
 //
-// The `_slothletOriginal` property is set on `runtime_onceWrapper` (inside patchOnce).
+// The `____slothletOriginal` property is set on `runtime_onceWrapper` (inside patchOnce).
 // When such a pre-marked function is passed to any patched method, shouldWrapListener
 // returns false at line 202 to prevent double-wrapping.
 //
@@ -118,15 +118,15 @@ describe("eventemitter-context: getWrappedListener untracked event returns undef
 // via multiple patched methods.
 // ─────────────────────────────────────────────────────────────────────────────
 describe("eventemitter-context: shouldWrapListener prevents double-wrap (line 202)", () => {
-	it("passing a pre-marked listener (_slothletOriginal set) to prependListener skips wrapping (line 202)", () => {
+	it("passing a pre-marked listener (____slothletOriginal set) to prependListener skips wrapping (line 202)", () => {
 		const emitter = new EventEmitter();
 
-		// Create a function that looks like it's already wrapped (has _slothletOriginal).
+		// Create a function that looks like it's already wrapped (has ____slothletOriginal).
 		const alreadyWrapped = function testableFn() {};
-		alreadyWrapped._slothletOriginal = function originalFn() {};
+		alreadyWrapped.____slothletOriginal = function originalFn() {};
 
 		// emitter.prependListener calls runtime_shouldWrapListener.
-		// Since _slothletOriginal is set, shouldWrapListener returns false (line 202).
+		// Since ____slothletOriginal is set, shouldWrapListener returns false (line 202).
 		// The original prependListener is called directly without wrapping.
 		expect(() => emitter.prependListener("test", alreadyWrapped)).not.toThrow();
 
@@ -139,11 +139,11 @@ describe("eventemitter-context: shouldWrapListener prevents double-wrap (line 20
 		emitter.removeAllListeners();
 	});
 
-	it("passing a pre-marked listener (_slothletOriginal set) to prependOnceListener skips wrapping (line 202)", () => {
+	it("passing a pre-marked listener (____slothletOriginal set) to prependOnceListener skips wrapping (line 202)", () => {
 		const emitter = new EventEmitter();
 
 		const alreadyWrapped = function anotherFn() {};
-		alreadyWrapped._slothletOriginal = function anotherOriginalFn() {};
+		alreadyWrapped.____slothletOriginal = function anotherOriginalFn() {};
 
 		// prependOnceListener also calls runtime_shouldWrapListener → line 202 fires.
 		expect(() => emitter.prependOnceListener("data", alreadyWrapped)).not.toThrow();
@@ -317,7 +317,7 @@ describe("eventemitter-context: runtime_untrackListener wrappedListener missing 
 	});
 });
 // ─────────────────────────────────────────────────────────────────────────────
-// LINE 171: runtime_untrackListener — `wrappedListener._slothletResource = null`
+// LINE 171: runtime_untrackListener — `wrappedListener.____slothletResource = null`
 //
 // Fires when removeListener is called for an event+listener pair that IS tracked
 // (wrappedListeners map has an entry for this emitter+event+listener combination).
@@ -330,10 +330,10 @@ describe("eventemitter-context: runtime_untrackListener wrappedListener missing 
 //      wrappedListeners[emitter]["foo"][fn]
 //   2. emitter.off("foo", fn) → runtime_untrackListener is called with emitter, "foo", fn
 //      → eventTracking.get(fn) returns the wrappedListener (not falsy)
-//      → line 171 fires: wrappedListener._slothletResource = null
+//      → line 171 fires: wrappedListener.____slothletResource = null
 // ─────────────────────────────────────────────────────────────────────────────
-describe("eventemitter-context: untrackListener cleans up _slothletResource for tracked listener (line 171)", () => {
-	it("removeListener on a tracked listener nulls _slothletResource (line 171)", () => {
+describe("eventemitter-context: untrackListener cleans up ____slothletResource for tracked listener (line 171)", () => {
+	it("removeListener on a tracked listener nulls ____slothletResource (line 171)", () => {
 		const emitter = new EventEmitter();
 		const fn = () => {};
 
@@ -341,7 +341,7 @@ describe("eventemitter-context: untrackListener cleans up _slothletResource for 
 		emitter.on("data", fn);
 
 		// off() with the same event+fn → runtime_untrackListener → wrappedListener found
-		// → line 171: wrappedListener._slothletResource = null fires.
+		// → line 171: wrappedListener.____slothletResource = null fires.
 		expect(() => emitter.removeListener("data", fn)).not.toThrow();
 
 		// The emitter should have no listeners remaining.

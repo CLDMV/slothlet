@@ -14,8 +14,8 @@ declare const guarded_disableObserverPatching: typeof disableObserverPatching;
  * Pin observer callbacks to the module that constructs them.
  *
  * Called once globally when the first instance is created; later calls are ignored, matching how the
- * other boundary patches behave. Costs nothing when no runtime registered a pinning strategy — the
- * wrapper hands the callback straight through.
+ * other boundary patches behave. An observer constructed while an instance on the async runtime is up gets an
+ * `AsyncResource` to carry that runtime's store into its callback, as a listener does; the live runtime alone makes none.
  *
  * @returns {void}
  * @public

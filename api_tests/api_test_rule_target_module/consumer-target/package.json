@@ -1,0 +1,5 @@
+{
+	"name": "@local/consumer-target",
+	"version": "0.1.0",
+	"description": "Test fixture: slothlet module whose manifest declares a permission rule (consumer path that does not exist)."
+}

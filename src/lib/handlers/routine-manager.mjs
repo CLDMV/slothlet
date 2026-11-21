@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:10-08:00 (1794874570)
+ *	@Last modified time: 2026-11-17T21:15:38-08:00 (1794978938)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -24,11 +24,12 @@
  * @module @cldmv/slothlet/handlers/routine-manager
  * @internal
  */
+import { segmentsOf } from "#helpers/segments";
 import { ComponentBase } from "#factories/component-base";
 import { SlothletError } from "#errors";
 import { internals as unifiedWrapperInternals } from "#handlers/unified-wrapper";
 import { isFrameworkReservedKey } from "#helpers/reserved-keys";
-import { isFrameworkInternal } from "#handlers/framework-internals";
+import { isFrameworkInternal, internals as frameworkInternalsInternals } from "#handlers/framework-internals";
 import { compilePattern, expandBraces } from "#helpers/pattern-matcher";
 import { scheduleMacrotask } from "#helpers/platform";
 import {
@@ -63,6 +64,7 @@ import {
 	WeakSetMethods
 } from "#helpers/intrinsics";
 const { resolveWrapper, runtime_frameworkWrite } = unifiedWrapperInternals("lib/handlers/routine-manager");
+const { markFrameworkRoutine } = frameworkInternalsInternals("lib/handlers/routine-manager");
 
 /**
  * Root-level api keys whose routine cascade is integrated into the framework's own existing
@@ -74,7 +76,7 @@ const { resolveWrapper, runtime_frameworkWrite } = unifiedWrapperInternals("lib/
  * @type {ReadonlySet<string>}
  */
 // --- API-RULES condition markers (see docs/API-RULES/API-ROUTINE-CONDITIONS.md) ---
-// Rule 20 (T01): stackRoutines contributor gate — ~L273
+// Rule 20 (T01): routines.stack contributor gate — ~L273
 // Rule 20 (T02): Routine name matching (^/relative/recursive) — ~L201
 // Rule 20 (T03): Slot type: single-value / stack / cascade — ~L443
 // Rule 20 (T04): Last-registered-routine wins — ~L466
@@ -197,7 +199,7 @@ export class RoutineManager extends ComponentBase {
 		// always present when the RoutineManager runs — so neither the `config?.` nor the `?? []` arm
 		// is ever taken.
 		/* v8 ignore next */
-		return this.slothlet.config?.routines ?? [];
+		return this.slothlet.config?.routines?.entries ?? [];
 	}
 
 	/**
@@ -323,7 +325,7 @@ export class RoutineManager extends ComponentBase {
 	}
 
 	/**
-	 * Apply the `stackRoutines` (#365) gate to a list of entries already known to belong to the
+	 * Apply the `routines.stack` (#365) gate to a list of entries already known to belong to the
 	 * same routine/path grouping. Both {@link #contributorsFor} (routine name matching) and
 	 * {@link runPath} (the installed stacked callable's own direct apiPath lookup — a SEPARATE
 	 * `this.raw` read that does not go through `#contributorsFor` at all) must apply this
@@ -334,7 +336,7 @@ export class RoutineManager extends ComponentBase {
 	 * @private
 	 */
 	#applyStackFilter(entries) {
-		if (this.slothlet.config?.stackRoutines) return entries;
+		if (this.slothlet.config?.routines?.stack) return entries;
 		return filterList(entries, (entry) => this.#isCurrentOwner(entry));
 	}
 
@@ -343,12 +345,12 @@ export class RoutineManager extends ComponentBase {
 	 *
 	 * @description
 	 * Whether a module that LOST a collision at this exact api path still counts is governed by
-	 * `stackRoutines` (#365) — independent of `collisionMode` entirely. Nothing before #341 ever
+	 * `routines.stack` (#365) — independent of `collisionMode` entirely. Nothing before #341 ever
 	 * stacked functions at a shared api path, so stacking must not be an implicit side effect of
-	 * whichever collisionMode happened to be in play. `stackRoutines: false` (the default) narrows
+	 * whichever collisionMode happened to be in play. `routines.stack: false` narrows
 	 * to whichever contribution is ownership's currently-recognized owner of that path — matching
 	 * what actually won the collision on the real composed tree, regardless of collisionMode.
-	 * `stackRoutines: true` keeps every raw-captured contribution, uniformly, regardless of mode.
+	 * `routines.stack: true` keeps every raw-captured contribution, uniformly, regardless of mode.
 	 * @param {string} name - Routine name.
 	 * @returns {Array<{apiPath: string, moduleID: string, fn: Function}>}
 	 * @private
@@ -395,9 +397,9 @@ export class RoutineManager extends ComponentBase {
 	 * Subscribed to the INTERNAL contribution stream (#398), `emitInternal("impl:created"/"impl:changed")`,
 	 * which fires once per contribution BEFORE collision resolution decides which contributor's value
 	 * survives onto the composed tree — so every contributor is captured, not just the merge winner.
-	 * Reads the leaf's callable from `data.wrapper.__impl` (present on every such event, eager and
+	 * Reads the leaf's callable from `data.wrapper.____impl` (present on every such event, eager and
 	 * lazy); the raw `data.impl` field no longer exists (that was the enforcement-bypassing leak #398
-	 * removed). The real `UnifiedWrapper` instance, when there is one, arrives on `data.__wrapperRef`.
+	 * removed). The real `UnifiedWrapper` instance, when there is one, arrives on `data.____wrapperRef`.
 	 *
 	 * Also subscribed to `impl:changed` so a LATE, direct reassignment (`self.auth.shutdown = fn`,
 	 * done after the module that owns `auth` finished loading) is captured too, not just the
@@ -414,7 +416,7 @@ export class RoutineManager extends ComponentBase {
 		const apiPath = data?.apiPath;
 		if (typeof apiPath !== "string" || apiPath.length === 0) return;
 		const moduleID = data.moduleID;
-		const fn = data.wrapper?.__impl;
+		const fn = data.wrapper?.____impl;
 		const existingIndex = ArrayMethods.findIndex(this.raw, (e) => e.apiPath === apiPath && e.moduleID === moduleID);
 		// A stacked callable installed by rebuildStacks() must never be captured as if it were a
 		// module's own contribution, no matter what later re-touches the property it was written
@@ -426,8 +428,8 @@ export class RoutineManager extends ComponentBase {
 		// invoking it re-enters runPath() for the same apiPath, which finds this same
 		// self-referential entry again — infinite async recursion that grows the heap until OOM
 		// (#372 review; confirmed pre-existing, reproducible without any of this session's other
-		// changes: stackRoutines: true + a "merge" collision + removing the merge-loser).
-		if (typeof fn === "function" && fn.__slothletRoutineStack === true) {
+		// changes: routines.stack: true + a "merge" collision + removing the merge-loser).
+		if (typeof fn === "function" && fn.____slothletRoutineStack === true) {
 			return;
 		}
 		if (typeof fn !== "function") {
@@ -444,13 +446,13 @@ export class RoutineManager extends ComponentBase {
 		const entry = { apiPath, moduleID, fn };
 		if (existingIndex === -1) listPush(this.raw, entry);
 		else this.raw[existingIndex] = entry;
-		// `data.wrapper` is a deliberately minimal frozen `{ __impl }` shape (the emit sites'), never
+		// `data.wrapper` is a deliberately minimal frozen `{ ____impl }` shape (the emit sites'), never
 		// the actual UnifiedWrapper — it has no `___invalidate()` to call. The REAL wrapper instance is
-		// reachable via `data.__wrapperRef` (#398), set by the construction + `impl:changed` emit sites
+		// reachable via `data.____wrapperRef` (#398), set by the construction + `impl:changed` emit sites
 		// (unified-wrapper.mjs). The lazy-materialization internal emit (modes-processor.mjs) carries a
-		// raw exported function and no `__wrapperRef`, so `resolveWrapper(undefined)` returns null —
+		// raw exported function and no `____wrapperRef`, so `resolveWrapper(undefined)` returns null —
 		// correctly leaving whatever this key already tracked untouched rather than clobbering it.
-		const wrapper = resolveWrapper(data.__wrapperRef);
+		const wrapper = resolveWrapper(data.____wrapperRef);
 		if (wrapper) MapMethods.set(this.#moduleWrappers(moduleID), apiPath, wrapper);
 
 		// Reactive self-heal (#362): rebuildStacks() only (re)installs the stacked callable at the
@@ -575,7 +577,7 @@ export class RoutineManager extends ComponentBase {
 		if (target === null || target === undefined || (typeof target !== "object" && typeof target !== "function")) return;
 
 		// Re-validate after the await (#362 review — findings #2/#4/#6). `#resolveContainer` yields (and
-		// may itself await a lazy `_materialize()`), so state can have moved on since the pre-await
+		// may itself await a lazy `___materialize()`), so state can have moved on since the pre-await
 		// snapshot above:
 		//   - A build/add/reload may have STARTED — defer to its terminal rebuildStacks() (same reason
 		//     as the top-of-method gate), and don't write raw mid-build.
@@ -627,7 +629,11 @@ export class RoutineManager extends ComponentBase {
 				/* v8 ignore next */
 				return;
 			}
-			if (!(typeof current === "function" && current.__slothletRoutineCascade === true && current.__slothletRoutineName === winner.name)) {
+			if (!(
+				typeof current === "function" &&
+				current.____slothletRoutineCascade === true &&
+				current.____slothletRoutineName === winner.name
+			)) {
 				this.recording = false;
 				try {
 					// The framework's own install, not a write by whichever module's change scheduled it (#625).
@@ -660,7 +666,7 @@ export class RoutineManager extends ComponentBase {
 			/* v8 ignore next */
 			return;
 		}
-		if (typeof current === "function" && current.__slothletRoutineStack === true && current.__slothletRoutineName === winner.name) {
+		if (typeof current === "function" && current.____slothletRoutineStack === true && current.____slothletRoutineName === winner.name) {
 			return; // Already correctly stacked for the winning routine.
 		}
 		this.recording = false;
@@ -704,7 +710,7 @@ export class RoutineManager extends ComponentBase {
 	 * rooted at `apiPath` (`ApiManager#deletePath`), but `impl:removed` only ever fires for the
 	 * exact property that was deleted — never for descendants that were simply carried away with
 	 * it. A nested routine capture like `auth.initialize` therefore survived indefinitely in `raw`
-	 * after removing `auth`, still invoked by `stackRoutines: true`'s cascades even though its
+	 * after removing `auth`, still invoked by `routines.stack: true`'s cascades even though its
 	 * whole subtree is gone (#372/#373 review, suppressed finding).
 	 *
 	 * @example
@@ -743,7 +749,7 @@ export class RoutineManager extends ComponentBase {
 	 * so removing it resolves as an ownership "restore" (the current owner's value is re-applied,
 	 * unchanged) rather than a "delete" — `impl:removed` never fires for the loser's own entry, and
 	 * its raw contribution would otherwise survive `api.remove()` indefinitely, still invoked under
-	 * `stackRoutines: true` (#372). Call this alongside `OwnershipManager#unregister()` for a
+	 * `routines.stack: true` (#372). Call this alongside `OwnershipManager#unregister()` for a
 	 * whole-module removal, which already discards every path the module owned regardless of
 	 * whether the live tree changed for each one.
 	 *
@@ -757,7 +763,7 @@ export class RoutineManager extends ComponentBase {
 		if (!moduleWrappers) return [];
 		// A merge-loser's wrapper is never the live api-tree property at its path — ownership's
 		// own unregister()/removePath() has nothing to invalidate it via. Without this, a
-		// still-in-flight backgroundMaterialize: true materialization on this detached wrapper (or
+		// still-in-flight loader.materialize: true materialization on this detached wrapper (or
 		// one of its own children) can complete after this prune and re-fire impl:changed,
 		// re-capturing the just-removed module into `raw` (#372/#373 review, suppressed finding).
 		// Recursive + children-before-parent ordering via ApiManager's own helper, since this
@@ -825,7 +831,7 @@ export class RoutineManager extends ComponentBase {
 	 * a `false` assignment result, so a skip/warn-rejected internal candidate's raw capture is
 	 * corrected without needing a whole-module snapshot (#372/#373 review). Capturing `index`
 	 * alongside `fn` lets a restore re-insert at the original registration position instead of
-	 * appending, preserving `stackRoutines: true`'s registration-order execution semantics (#372/#373
+	 * appending, preserving `routines.stack: true`'s registration-order execution semantics (#372/#373
 	 * review, suppressed finding).
 	 *
 	 * @example
@@ -869,7 +875,7 @@ export class RoutineManager extends ComponentBase {
 			// The candidate's own touch deleted this pair outright (onImplCreated's non-function
 			// guard) rather than overwriting it — re-insert at its ORIGINAL position instead of
 			// appending, or a rejected re-touch would silently move this contributor to the end of
-			// `raw`, changing `stackRoutines: true`'s registration-order execution (#372/#373 review,
+			// `raw`, changing `routines.stack: true`'s registration-order execution (#372/#373 review,
 			// suppressed finding). Clamp to the current length in case other entries were removed
 			// in the interim.
 			else listSplice(this.raw, Math.min(priorEntry.index, this.raw.length), 0, entry);
@@ -907,7 +913,7 @@ export class RoutineManager extends ComponentBase {
 	 * `onImplCreated` fires from the SAME `impl:created`/`impl:changed` events during a candidate
 	 * build's construction, before addApiComponent's own collision decision runs — capturing every
 	 * constructed wrapper's function into `this.raw` regardless of whether the build is later
-	 * accepted. Under `stackRoutines: true` (which bypasses ownership filtering entirely), a
+	 * accepted. Under `routines.stack: true` (which bypasses ownership filtering entirely), a
 	 * skip/warn-rejected candidate's raw entry would otherwise still be invoked by root-anchored
 	 * routines and the exact-path stacked callable, even though its module was never actually
 	 * mounted. At each level: if `priorEntries` has this exact apiPath, moduleID already
@@ -941,7 +947,7 @@ export class RoutineManager extends ComponentBase {
 				if (idx !== -1) this.raw[idx] = { apiPath: revertPath, moduleID, fn: prior.fn };
 				// Re-insert at the ORIGINAL registration position rather than appending — otherwise a
 				// rejected re-touch silently moves this contributor to the end of `raw`, changing
-				// `stackRoutines: true`'s registration-order execution (#372/#373 review, suppressed
+				// `routines.stack: true`'s registration-order execution (#372/#373 review, suppressed
 				// finding). Clamp to the current length in case other entries were removed meanwhile.
 				else listSplice(this.raw, Math.min(prior.index, this.raw.length), 0, { apiPath: revertPath, moduleID, fn: prior.fn });
 				// Callers pair this with ApiManager#invalidateSpeculativeWrappers() on the concrete
@@ -968,7 +974,7 @@ export class RoutineManager extends ComponentBase {
 			const ofEntry = ofList[ofIndex],
 				key = ofEntry[0],
 				value = ofEntry[1];
-			const skipProps = ["__metadata", "__type", "_materialize", "_impl", "____slothletInternal"];
+			const skipProps = ["___materialize", "____impl", "____slothletInternal"];
 			if (ArrayMethods.includes(skipProps, key)) {
 				continue;
 			}
@@ -1005,7 +1011,7 @@ export class RoutineManager extends ComponentBase {
 	 * `revertSpeculativeSubtree()`'s two callers already pair it with
 	 * `ApiManager#invalidateSpeculativeWrappers()` on a concrete tree; this is the state-only
 	 * variant's equivalent, since there is no tree here to walk. Restoring/dropping the raw `fn`
-	 * alone is not enough when `materializeOnCreate` (`config.backgroundMaterialize`) is set: that
+	 * alone is not enough when `materializeOnCreate` (`config.loader.materialize`) is set: that
 	 * wrapper can already be materializing in the background and would otherwise re-apply its
 	 * result and re-fire `impl:changed` after this rollback (#372/#373 review, suppressed finding).
 	 * A path this build attempt never touched (`raw`'s current `fn` still equals what `priorEntries`
@@ -1062,7 +1068,7 @@ export class RoutineManager extends ComponentBase {
 	/**
 	 * Run one exact api path's contributors sequentially, awaiting each before the next, collecting
 	 * both what each one returns AND what each one throws — best-effort, mirroring
-	 * `module-manager.mjs`'s own `onFailure: "best-effort"` convention and the dispose semantics this
+	 * `module-manager.mjs`'s own `failure: "best-effort"` convention and the dispose semantics this
 	 * replaces: every contributor gets a chance to run regardless of an earlier one failing.
 	 *
 	 * @description
@@ -1097,7 +1103,7 @@ export class RoutineManager extends ComponentBase {
 		// The wrapper is the LEAF wrapper captured in onImplCreated (pre-stacking, keyed
 		// moduleID -> apiPath), NOT the stacked callable, so `runInContext` runs the raw impl and never
 		// re-enters `runPath` (no recursion). Before this, the cascade invoked contributors with no
-		// active extent, so a body reaching ambient `self.*` threw RUNTIME_NO_ACTIVE_CONTEXT_SELF
+		// active extent, so a body reaching ambient `self.*` threw CONTEXT_NOT_ACTIVE_SELF
 		// (CLDMV/slothlet#393).
 		const contextManager = this.slothlet.contextManager;
 		const instanceID = this.slothlet.instanceID;
@@ -1146,7 +1152,7 @@ export class RoutineManager extends ComponentBase {
 
 	/**
 	 * Throw an aggregate `ROUTINE_FAILED` error for a batch of collected failures, chaining the
-	 * first one as `cause` and carrying the full list in `context.failures` — never called when
+	 * first one as `cause` and carrying the full list in `details.failures` — never called when
 	 * `failures` is empty.
 	 * @param {Array<{apiPath: string, moduleID: string, error: unknown}>} failures - Collected failures, in the order they occurred.
 	 * @returns {never}
@@ -1154,29 +1160,17 @@ export class RoutineManager extends ComponentBase {
 	 * @private
 	 */
 	#throwAggregate(failures) {
-		// Each entry keeps its plain {apiPath, moduleID} shape (structurally matched elsewhere via
-		// context.failures) but gains a non-enumerable toString so the translated message — which
-		// interpolates {failures} via String(value) — renders a readable list instead of the array's
-		// default "[object Object],[object Object]" join.
-		const failureEntries = mapList(failures, ({ apiPath, moduleID }) => {
-			const entry = { apiPath, moduleID };
-			Objects.defineProperty(entry, "toString", { __proto__: null, value: () => `${apiPath} (${moduleID})`, enumerable: false });
-			return entry;
-		});
-		Objects.defineProperty(failureEntries, "toString", {
-			__proto__: null,
-			value: () => ArrayMethods.join(mapList(failureEntries, String), ", "),
-			enumerable: false
-		});
+		// Each entry is plain data: the failure's api path, its module and what it threw.
+		const failureEntries = mapList(failures, ({ apiPath, moduleID, error }) => ({ path: segmentsOf(apiPath), module: moduleID, error }));
 		throw new SlothletError(
 			"ROUTINE_FAILED",
 			{
-				apiPath: failures[0].apiPath,
-				moduleID: failures[0].moduleID,
+				path: segmentsOf(failures[0].apiPath),
+				module: failures[0].moduleID,
 				count: failures.length,
 				failures: failureEntries
 			},
-			failures[0].error
+			{ cause: failures[0].error }
 		);
 	}
 
@@ -1215,7 +1209,7 @@ export class RoutineManager extends ComponentBase {
 	/**
 	 * Run ONE contributor at an exact api path, selected by its `moduleID` (#400 — the mechanism
 	 * behind `api.<path>.<name>.for(key)`). Unlike {@link runPath}, this deliberately does NOT apply
-	 * the `stackRoutines` owner-filter: selecting a specific co-owner by key is the whole point, so a
+	 * the `routines.stack` owner-filter: selecting a specific co-owner by key is the whole point, so a
 	 * contributor that would lose the shared-path collision still runs when addressed directly. The
 	 * contributor runs in its own extent + identity via {@link #runEntries}, exactly as a normal
 	 * stacked/cascade run does — so `self.*` and permission checks resolve against that contributor.
@@ -1236,19 +1230,13 @@ export class RoutineManager extends ComponentBase {
 		const entries = routine ? filterList(pathEntries, (entry) => this.#matches(routine, entry)) : pathEntries;
 		if (entries.length === 0) {
 			const available = this.contributorsAt(apiPath, routine);
-			throw new SlothletError(
-				"INVALID_ARGUMENT",
-				{
-					argument: "key",
-					expected: `a moduleID contributing "${routine?.name ?? "the routine"}" at "${apiPath}"${
-						available.length ? ` (contributors: ${ArrayMethods.join(available, ", ")})` : " (no contributors at this path)"
-					}`,
-					received: String(key),
-					validationError: true
-				},
-				null,
-				{ validationError: true }
-			);
+			throw new SlothletError("INVALID_ARGUMENT", {
+				argument: "key",
+				expected: `a moduleID contributing "${routine?.name ?? "the routine"}" at "${apiPath}"${
+					available.length ? ` (contributors: ${ArrayMethods.join(available, ", ")})` : " (no contributors at this path)"
+				}`,
+				received: String(key)
+			});
 		}
 		const { results, failures } = await this.#runEntries(apiPath, entries, args);
 		if (failures.length > 0) this.#throwAggregate(failures);
@@ -1264,7 +1252,7 @@ export class RoutineManager extends ComponentBase {
 	 * order (#400 — the mechanism behind `api.<path>.<name>.contributors`). Symmetry with
 	 * `versioning.list(path)`: it lets a host discover which co-owners it can address via
 	 * {@link runPathFor} / `.for(key)`. Enumerates every contribution regardless of the
-	 * `stackRoutines` owner-filter, since `.for(key)` can address any of them.
+	 * `routines.stack` owner-filter, since `.for(key)` can address any of them.
 	 * @param {string} apiPath - Exact composed api path.
 	 * @param {object} [routine] - The routine config; entries are filtered by {@link #matches} so a
 	 *   different routine sharing the same exact apiPath isn't counted.
@@ -1319,7 +1307,7 @@ export class RoutineManager extends ComponentBase {
 				if (wrapper) {
 					if (wrapper.____slothletInternal.mode === "lazy" && !wrapper.____slothletInternal.state.materialized) {
 						try {
-							await wrapper._materialize();
+							await wrapper.___materialize();
 						} catch {
 							return; // Materialization failed — do not descend into a broken subtree.
 						}
@@ -1397,7 +1385,7 @@ export class RoutineManager extends ComponentBase {
 		const nodeWrapper = resolveWrapper(node);
 		if (nodeWrapper && nodeWrapper.____slothletInternal.mode === "lazy" && !nodeWrapper.____slothletInternal.state.materialized) {
 			try {
-				await nodeWrapper._materialize();
+				await nodeWrapper.___materialize();
 			} catch {
 				return; // Materialization failed — nothing further to resolve down this branch.
 			}
@@ -1565,8 +1553,8 @@ export class RoutineManager extends ComponentBase {
 
 	/**
 	 * Run the root cascade for a routine: every matching contribution anywhere, grouped by exact
-	 * api path — with `stackRoutines: true`, contributors colliding at the same path all run
-	 * together, adjacently; with the default `stackRoutines: false`, only the current owner at
+	 * api path — with `routines.stack: true` (the default), contributors colliding at the same path all run
+	 * together, adjacently; with `routines.stack: false`, only the current owner at
 	 * that path runs, exactly like a direct call — the groups themselves ordered per the routine's
 	 * configured `order` (see {@link #orderPaths}). No-op — and returns `undefined` — when the
 	 * routine isn't configured.
@@ -1632,7 +1620,7 @@ export class RoutineManager extends ComponentBase {
 		// Recorded fresh on every run (#542), so a skipped run never leaves an earlier run's record behind.
 		const invoked = new Set();
 		MapMethods.set(this.modeRunInvoked, mode, invoked);
-		if (!this.slothlet.config?.autoRoutines) return;
+		if (!this.slothlet.config?.routines?.auto) return;
 		const routines = filterList(this.#routines, (routine) => routine.mode === mode);
 		if (routines.length === 0) return;
 		for (let ofIndex = 0, ofList = routines; ofIndex < ofList.length; ofIndex++) {
@@ -1663,7 +1651,7 @@ export class RoutineManager extends ComponentBase {
 	 *
 	 * @description
 	 * The dispose builtins also call the root `shutdown`/`destroy` export captured as a user hook. When
-	 * `autoRoutines` is on, that same export is a contribution to the default `mode: "shutdown"` routine
+	 * `routines.auto` is on, that same export is a contribution to the default `mode: "shutdown"` routine
 	 * (or a configured `mode: "destroy"` one), so the routine run has already invoked it — the builtin
 	 * asks here and skips the second call.
 	 *
@@ -1675,7 +1663,7 @@ export class RoutineManager extends ComponentBase {
 		if (!invoked || SetMethods.size(invoked) === 0 || !value) return false;
 		if (SetMethods.has(invoked, value)) return true;
 		const wrapper = resolveWrapper(value);
-		return !!wrapper && (SetMethods.has(invoked, wrapper) || SetMethods.has(invoked, wrapper.__impl));
+		return !!wrapper && (SetMethods.has(invoked, wrapper) || SetMethods.has(invoked, wrapper.____impl));
 	}
 
 	/**
@@ -1685,13 +1673,9 @@ export class RoutineManager extends ComponentBase {
 	 * default `shutdown` routine and any custom-named `mode: "shutdown"` routine alike.
 	 *
 	 * @description
-	 * TEMPORARY v3-compat gate (#341): a no-op unless `config.autoRoutines` is `true` (its
-	 * deprecated alias is `collectLifecycleHooks`, which also expands into an implicit
-	 * `mode: "shutdown"` routine — see `Config.normalizeRoutines`). Every routine is always
-	 * stacked/wrapped regardless of this flag — `self.<path>()` is always directly callable — only
-	 * the AUTOMATIC firing at dispose is gated, so that a project upgrading to a slothlet version
-	 * carrying #341 sees no behavior change by default. Planned for v4: default `autoRoutines` to
-	 * `true` and remove `collectLifecycleHooks` — do not lose track of this before that release.
+	 * Gated by `config.routines.auto` (default `true`): with it `false` this is a no-op. Every
+	 * routine is always stacked/wrapped regardless of this flag — `self.<path>()` is always directly
+	 * callable — only the AUTOMATIC firing at dispose is gated.
 	 * @returns {Promise<void>}
 	 * @public
 	 */
@@ -1708,8 +1692,7 @@ export class RoutineManager extends ComponentBase {
 	 * a consumer wants to fire on `destroy()` specifically, not on a plain `shutdown()`.
 	 *
 	 * @description
-	 * Same TEMPORARY v3-compat `autoRoutines` gate as {@link runShutdownModeRoutines} — see that
-	 * method's description for the full rationale and the v4 migration plan.
+	 * Same `routines.auto` gate as {@link runShutdownModeRoutines}.
 	 * @returns {Promise<void>}
 	 * @public
 	 */
@@ -1722,9 +1705,8 @@ export class RoutineManager extends ComponentBase {
 	 * step of `load()` — `await slothlet(...)` resolves only after this completes.
 	 *
 	 * @description
-	 * Same TEMPORARY v3-compat `autoRoutines` gate as {@link runShutdownModeRoutines} — see that
-	 * method's description for the full rationale and the v4 migration plan. Wrapping still always
-	 * happens; only automatic firing is gated.
+	 * Same `routines.auto` gate as {@link runShutdownModeRoutines}. Wrapping still always happens;
+	 * only automatic firing is gated.
 	 * @returns {Promise<void>}
 	 * @public
 	 */
@@ -1764,7 +1746,7 @@ export class RoutineManager extends ComponentBase {
 			const wrapper = resolveWrapper(node);
 			if (wrapper && wrapper.____slothletInternal.mode === "lazy" && !wrapper.____slothletInternal.state.materialized) {
 				try {
-					await wrapper._materialize();
+					await wrapper.___materialize();
 				} catch {
 					return undefined;
 				}
@@ -1775,11 +1757,11 @@ export class RoutineManager extends ComponentBase {
 
 	/**
 	 * Build the stacked callable for one exact api path — invoking each of that path's contributors
-	 * in registration order, sequentially, awaiting each. Branded with `__slothletRoutineStack` as a
-	 * public introspection marker (`fn.__slothletRoutineStack === true` identifies a
+	 * in registration order, sequentially, awaiting each. Branded with `____slothletRoutineStack` as a
+	 * public introspection marker (`fn.____slothletRoutineStack === true` identifies a
 	 * routine-managed callable) — no longer load-bearing for double-invoke prevention since
 	 * `collectLifecycleHooks` now expands into ordinary routines (see `Config.normalizeRoutines`)
-	 * rather than running a separate parallel walk. Also branded with `__slothletRoutineName` (the
+	 * rather than running a separate parallel walk. Also branded with `____slothletRoutineName` (the
 	 * exact `routine.name` it was built for) so a later reactive self-heal (#362) can tell whether an
 	 * already-installed stack belongs to the correct routine — needed because two DIFFERENT routines
 	 * can match the same exact apiPath (#366 review's "last-registered-routine-wins" test), and a
@@ -1803,8 +1785,8 @@ export class RoutineManager extends ComponentBase {
 		// violates the ES Proxy invariant — so `Object.getOwnPropertyDescriptor(slot, "for")` (or
 		// `.contributors`, or a marker) throws once the slot is reached through the wrapper. Keeping them
 		// configurable lets the trap report them without tripping the invariant; non-enumerable is retained.
-		Objects.defineProperty(stacked, "__slothletRoutineStack", { __proto__: null, value: true, enumerable: false, configurable: true });
-		Objects.defineProperty(stacked, "__slothletRoutineName", {
+		Objects.defineProperty(stacked, "____slothletRoutineStack", { __proto__: null, value: true, enumerable: false, configurable: true });
+		Objects.defineProperty(stacked, "____slothletRoutineName", {
 			__proto__: null,
 			value: routine.name,
 			enumerable: false,
@@ -1830,15 +1812,16 @@ export class RoutineManager extends ComponentBase {
 			enumerable: false,
 			configurable: true
 		});
-		return stacked;
+		// The framework built this callable and its markers: a module's api.add that the stack takes in installs none of them.
+		return markFrameworkRoutine(stacked);
 	}
 
 	/**
 	 * Build the root-cascade callable for a routine. Forwards whatever arguments it's called with,
 	 * unchanged, to every contributor at every matching path (#362 review — previously took no
-	 * arguments at all). Branded with both the generic `__slothletRoutineStack` marker (any
-	 * routine-managed callable) and a distinct `__slothletRoutineCascade` marker plus
-	 * `__slothletRoutineName`, so a reactive self-heal (#362) can tell a cascade callable apart from
+	 * arguments at all). Branded with both the generic `____slothletRoutineStack` marker (any
+	 * routine-managed callable) and a distinct `____slothletRoutineCascade` marker plus
+	 * `____slothletRoutineName`, so a reactive self-heal (#362) can tell a cascade callable apart from
 	 * an ordinary per-path stack — and confirm it's already correctly installed for THIS routine —
 	 * without confusing the two, since a routine's own name can coincide with a root-level
 	 * contributor's own apiPath (see {@link rebuildStacks}'s cascade-slot skip).
@@ -1858,10 +1841,10 @@ export class RoutineManager extends ComponentBase {
 		// #443: configurable for the same proxy-invariant reason as #buildStackedCallable — a cascade
 		// callable can also be reached through the wrapper (e.g. a nested run-all slot), and a
 		// non-configurable marker would trip getOwnPropertyDescriptor there. Non-enumerable is retained.
-		Objects.defineProperty(cascade, "__slothletRoutineStack", { __proto__: null, value: true, enumerable: false, configurable: true });
-		Objects.defineProperty(cascade, "__slothletRoutineCascade", { __proto__: null, value: true, enumerable: false, configurable: true });
-		Objects.defineProperty(cascade, "__slothletRoutineName", { __proto__: null, value: name, enumerable: false, configurable: true });
-		return cascade;
+		Objects.defineProperty(cascade, "____slothletRoutineStack", { __proto__: null, value: true, enumerable: false, configurable: true });
+		Objects.defineProperty(cascade, "____slothletRoutineCascade", { __proto__: null, value: true, enumerable: false, configurable: true });
+		Objects.defineProperty(cascade, "____slothletRoutineName", { __proto__: null, value: name, enumerable: false, configurable: true });
+		return markFrameworkRoutine(cascade);
 	}
 
 	/**
@@ -1893,7 +1876,7 @@ export class RoutineManager extends ComponentBase {
 		const wasRecording = this.recording;
 		this.recording = true;
 		try {
-			await slotWrapper._materialize();
+			await slotWrapper.___materialize();
 		} catch {
 			// A node that fails to load contributes nothing; the cascade is installed either way.
 		} finally {

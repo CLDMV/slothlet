@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-12T23:09:13-08:00 (1794553753)
+ *	@Last modified time: 2026-11-16T18:30:06-08:00 (1794882606)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -92,7 +92,7 @@ describe.each(MATRIX)("Permissions > every api file requiring a CommonJS helper 
 					runtime,
 					helpers,
 					silent: true,
-					permissions: { defaultPolicy: "allow", attribution, rules: list }
+					permissions: { policy: "allow", caller: { attribution }, rules: list }
 				});
 				for (const file of LOADERS) await api[file].bumpCjs();
 			});
@@ -134,7 +134,7 @@ describe.each(MATRIX)("Permissions > every api file requiring a helper from a pl
 					runtime,
 					helpers,
 					silent: true,
-					permissions: { defaultPolicy: "allow", attribution, rules: list }
+					permissions: { policy: "allow", caller: { attribution }, rules: list }
 				});
 				for (const file of PLAIN_LOADERS) await api[file].bump();
 			});

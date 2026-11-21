@@ -73,19 +73,19 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])('api-manager — remove a "
 		await writeModule(join(sibMod, "keepme.mjs"), "export function keepme() { return 'kept'; }");
 
 		api = await slothlet({ base, mode, silent: true, diagnostics: true });
-		await api.slothlet.api.add("", rootMod, { moduleID: "rootmod" });
-		await api.slothlet.api.add("shared.b", sibMod, { moduleID: "sibmod" });
+		await api.slothlet.api.add("", rootMod, { id: "rootmod" });
+		await api.slothlet.api.add("shared.b", sibMod, { id: "sibmod" });
 
 		// Sanity: the foreign sibling resolves and the root mount is registered. (Deliberately do NOT touch
 		// shared.a first — that trips a *separate* lazy-materialization bug that drops the sibling; this
 		// test targets removal ownership, not materialization order.)
 		expect(await api.shared.b.keepme()).toBe("kept");
-		expect(api.slothlet.diag.caches.getAllModuleIDs().some((id) => id.startsWith("rootmod"))).toBe(true);
+		expect(api.slothlet.diag.caches.ids().some((id) => id.startsWith("rootmod"))).toBe(true);
 
 		await api.slothlet.api.remove("rootmod");
 
 		// The root mount is actually gone…
-		expect(api.slothlet.diag.caches.getAllModuleIDs().some((id) => id.startsWith("rootmod"))).toBe(false);
+		expect(api.slothlet.diag.caches.ids().some((id) => id.startsWith("rootmod"))).toBe(false);
 		// …but the sibling another module added under the shared container survives, and the base is intact.
 		expect(await api.shared.b.keepme()).toBe("kept");
 		expect(await api.math.add(1, 2)).toBe(3);

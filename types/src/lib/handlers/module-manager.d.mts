@@ -4,23 +4,23 @@
  */
 /**
  * @typedef {object} AddModuleOptions
- * @property {"skip"|"warn"|"replace"|"merge"|"merge-replace"|"error"} [collisionMode="merge"] - Per-mount override; defaults to "merge" (matches `DEFAULT_MODULE_COLLISION_MODE`). Use "error" to throw on any pre-flight mountPath collision against api-manager's `addHistory`.
+ * @property {string|{mode?: "skip"|"warn"|"replace"|"merge"|"merge-replace"|"error"}} [collision] - `collision.mode` (or the mode as a bare string): per-mount override; defaults to "merge" (matches `DEFAULT_MODULE_COLLISION_MODE`). Use "error" to throw on any pre-flight mount collision against api-manager's `addHistory`.
  * @property {string} [version] - When the discovery cache holds multiple versions of the same `name`, mount only the entry whose package.json version matches.
  * @property {DiscoverOptions} [discover] - Options to forward to the lazy discover() call if the cache is empty. Ignored when the cache already holds data.
  */
 /**
  * @typedef {object} AddModulesOptions
- * @property {"skip"|"warn"|"replace"|"merge"|"merge-replace"|"error"} [collisionMode="merge"] - Per-call collision policy passed to every mount. Defaults to "merge" (matches `DEFAULT_MODULE_COLLISION_MODE`); use "error" to throw on any pre-flight mountPath collision.
- * @property {"throw"|"rollback"|"best-effort"} [onFailure="throw"] - Failure policy. `throw` (default): throw on first failure, leave mounted entries in place. `rollback`: throw on first failure, remove every entry mounted in this call. `best-effort`: collect failures, return aggregate `{ mounted, failed }`.
+ * @property {string|{mode?: "skip"|"warn"|"replace"|"merge"|"merge-replace"|"error"}} [collision] - `collision.mode` (or the mode as a bare string): per-call collision policy passed to every mount. Defaults to "merge" (matches `DEFAULT_MODULE_COLLISION_MODE`); use "error" to throw on any pre-flight mount collision.
+ * @property {"throw"|"rollback"|"best-effort"} [failure="throw"] - Failure policy. `throw` (default): throw on first failure, leave mounted entries in place. `rollback`: throw on first failure, remove every entry mounted in this call. `best-effort`: collect failures, return aggregate `{ mounted, failed }`.
  * @property {number} [concurrency=1] - Mount concurrency. `1` (default) = serial. Higher values mount in parallel batches.
  */
 /**
  * @typedef {object} MountResult
- * @property {string} packageName
- * @property {string} mountPath - Dot-notation path used at the time of mount.
- * @property {string} moduleID - moduleID returned by api.add().
- * @property {DiscoverResult} discoverResult
- * @property {{version: string, default: boolean}|null} versionConfig - Versioning descriptor when the module mounted under a `vMAJOR.<mountPath>` prefix (multi-version case from `#buildVersionConfigs`), otherwise `null`. `version` is the slothlet version tag (`vMAJOR`); `default` indicates whether this entry is the default for the unversioned dispatch path.
+ * @property {string} module - The module id api.add() returned for the mount.
+ * @property {string} package - The package name.
+ * @property {string[]} mount - Segments of the path used at the time of mount, including any version prefix.
+ * @property {DiscoverResult} found - The discovery result the module was mounted from.
+ * @property {{default: boolean, tag: string}|null} version - Versioning descriptor when the module mounted under a `vMAJOR.<mount>` prefix (multi-version case from `#buildVersionConfigs`), otherwise `null`. `tag` is the slothlet version tag (`vMAJOR`); `default` indicates whether this entry is the default for the unversioned dispatch path.
  */
 /**
  * @typedef {object} FailureEntry
@@ -57,6 +57,14 @@ export class ModuleManager extends ComponentBase {
      */
     discover(options?: DiscoverOptions): Promise<DiscoverResult[]>;
     /**
+     * Whether `value` is a discover result this instance's `discover()` returned. `modules.add()` takes one of these
+     * back as a module to mount and reads any other object as options: a result is told apart by where it came from,
+     * never by its shape.
+     * @param {unknown} value - Any value.
+     * @returns {boolean} True for a result this instance's discovery produced.
+     */
+    issued(value: unknown): boolean;
+    /**
      * Pure sort wrapper. Forwards to `sortModules()` without touching cache state.
      *
      * @param {DiscoverResult[]} results
@@ -79,7 +87,7 @@ export class ModuleManager extends ComponentBase {
      * in the most recent `discover()` cache. Host calls this after re-discovery
      * to decide what to unmount.
      *
-     * @returns {MountResult[]} Mounts whose `${packageName}@${version}` is no longer in the cache.
+     * @returns {MountResult[]} Mounts whose `${package}@${version}` is no longer in the cache.
      */
     getStaleMounts(): MountResult[];
     /**
@@ -129,9 +137,11 @@ export type DiscoverResult = import("../helpers/module-discovery.mjs").DiscoverR
 export type DiscoverOptions = import("../helpers/module-discovery.mjs").DiscoverOptions;
 export type AddModuleOptions = {
     /**
-     * - Per-mount override; defaults to "merge" (matches `DEFAULT_MODULE_COLLISION_MODE`). Use "error" to throw on any pre-flight mountPath collision against api-manager's `addHistory`.
+     * - `collision.mode` (or the mode as a bare string): per-mount override; defaults to "merge" (matches `DEFAULT_MODULE_COLLISION_MODE`). Use "error" to throw on any pre-flight mount collision against api-manager's `addHistory`.
      */
-    collisionMode?: "error" | "skip" | "warn" | "replace" | "merge" | "merge-replace" | undefined;
+    collision?: string | {
+        mode?: "skip" | "warn" | "replace" | "merge" | "merge-replace" | "error";
+    } | undefined;
     /**
      * - When the discovery cache holds multiple versions of the same `name`, mount only the entry whose package.json version matches.
      */
@@ -143,35 +153,43 @@ export type AddModuleOptions = {
 };
 export type AddModulesOptions = {
     /**
-     * - Per-call collision policy passed to every mount. Defaults to "merge" (matches `DEFAULT_MODULE_COLLISION_MODE`); use "error" to throw on any pre-flight mountPath collision.
+     * - `collision.mode` (or the mode as a bare string): per-call collision policy passed to every mount. Defaults to "merge" (matches `DEFAULT_MODULE_COLLISION_MODE`); use "error" to throw on any pre-flight mount collision.
      */
-    collisionMode?: "error" | "skip" | "warn" | "replace" | "merge" | "merge-replace" | undefined;
+    collision?: string | {
+        mode?: "skip" | "warn" | "replace" | "merge" | "merge-replace" | "error";
+    } | undefined;
     /**
      * - Failure policy. `throw` (default): throw on first failure, leave mounted entries in place. `rollback`: throw on first failure, remove every entry mounted in this call. `best-effort`: collect failures, return aggregate `{ mounted, failed }`.
      */
-    onFailure?: "throw" | "rollback" | "best-effort" | undefined;
+    failure?: "throw" | "rollback" | "best-effort" | undefined;
     /**
      * - Mount concurrency. `1` (default) = serial. Higher values mount in parallel batches.
      */
     concurrency?: number | undefined;
 };
 export type MountResult = {
-    packageName: string;
     /**
-     * - Dot-notation path used at the time of mount.
+     * - The module id api.add() returned for the mount.
      */
-    mountPath: string;
+    module: string;
     /**
-     * - moduleID returned by api.add().
+     * - The package name.
      */
-    moduleID: string;
-    discoverResult: DiscoverResult;
+    package: string;
     /**
-     * - Versioning descriptor when the module mounted under a `vMAJOR.<mountPath>` prefix (multi-version case from `#buildVersionConfigs`), otherwise `null`. `version` is the slothlet version tag (`vMAJOR`); `default` indicates whether this entry is the default for the unversioned dispatch path.
+     * - Segments of the path used at the time of mount, including any version prefix.
      */
-    versionConfig: {
-        version: string;
+    mount: string[];
+    /**
+     * - The discovery result the module was mounted from.
+     */
+    found: DiscoverResult;
+    /**
+     * - Versioning descriptor when the module mounted under a `vMAJOR.<mount>` prefix (multi-version case from `#buildVersionConfigs`), otherwise `null`. `tag` is the slothlet version tag (`vMAJOR`); `default` indicates whether this entry is the default for the unversioned dispatch path.
+     */
+    version: {
         default: boolean;
+        tag: string;
     } | null;
 };
 export type FailureEntry = {

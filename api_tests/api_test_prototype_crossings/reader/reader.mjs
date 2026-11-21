@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-08T16:11:39-08:00 (1794183099)
+ *	@Last modified time: 2026-11-18T21:57:36-08:00 (1795067856)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -209,4 +209,22 @@ export function writeThrough(name, key) {
  */
 export function holdsItself(name) {
 	return !types.isProxy(self.owner[name].prototype);
+}
+
+/**
+ * The owner's class prototype at `name`, as this module reads it through `self`.
+ * @param {string} name - The export it is read through.
+ * @returns {object} The prototype.
+ */
+export function prototypeAt(name) {
+	return self.owner[name].prototype;
+}
+
+/**
+ * Whether the owner's class prototype at `name` that the owner module reads through `self` is the one this module reads.
+ * @param {string} name - The export it is read through.
+ * @returns {boolean} True when both read the same object.
+ */
+export function holdsSelfPrototype(name) {
+	return self.owner.prototypeAt(name) === self.owner[name].prototype;
 }

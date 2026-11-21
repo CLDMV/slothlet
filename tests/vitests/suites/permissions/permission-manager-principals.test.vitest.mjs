@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:17:06-08:00 (1794874626)
+ *	@Last modified time: 2026-11-16T18:30:19-08:00 (1794882619)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -39,7 +39,7 @@ const TARGET = "project.files.list";
 const makeManager = (rules = [], extra = {}, clock = undefined) => {
 	const debug = vi.fn();
 	const manager = new PermissionManager({
-		config: { permissions: { enabled: true, defaultPolicy: "deny", rules, ...extra } },
+		config: { permissions: { mode: true, policy: "deny", rules, ...extra } },
 		handlers: {},
 		debug,
 		SlothletError,
@@ -200,12 +200,12 @@ describe("PermissionManager > principals (#459)", () => {
 		expect(manager.checkAccess(CALLER, TARGET, null, null, { user: "u1" })).toBe(false);
 	});
 
-	it("maxAge expiry makes a value stale; grace accepts it only for the promoted re-check", async () => {
+	it("ttl expiry makes a value stale; grace accepts it only for the promoted re-check", async () => {
 		vi.useFakeTimers();
 		try {
 			// The manager reads the clock it is given, as an instance's clock hands it the (fake) Date.now.
 			({ manager } = makeManager([REQUIRES_ROLES], {}, normalizeClockConfig({ now: Date.now })));
-			manager.registerPrincipal("roles", { key: (ctx) => ctx.user, resolve: () => ({}), maxAge: 1000 });
+			manager.registerPrincipal("roles", { key: (ctx) => ctx.user, resolve: () => ({}), ttl: 1000 });
 			await manager.resolvePrincipals([{ name: "roles", identityKey: "u1" }]);
 			expect(manager.enforceAccess(CALLER, TARGET, null, null, { user: "u1" })).toBe(true);
 			vi.advanceTimersByTime(1001);
@@ -218,11 +218,11 @@ describe("PermissionManager > principals (#459)", () => {
 		}
 	});
 
-	it("expired identities are pruned once a maxAge principal's cache grows past the threshold", async () => {
+	it("expired identities are pruned once a ttl principal's cache grows past the threshold", async () => {
 		vi.useFakeTimers();
 		try {
 			({ manager } = makeManager([REQUIRES_ROLES], {}, normalizeClockConfig({ now: Date.now })));
-			manager.registerPrincipal("roles", { key: (ctx) => ctx.user, resolve: () => ({}), maxAge: 10 });
+			manager.registerPrincipal("roles", { key: (ctx) => ctx.user, resolve: () => ({}), ttl: 10 });
 			await manager.resolvePrincipals(Array.from({ length: 1025 }, (_, i) => ({ name: "roles", identityKey: `u${i}` })));
 			vi.advanceTimersByTime(20);
 			await manager.resolvePrincipals([{ name: "roles", identityKey: "fresh" }]);
@@ -255,14 +255,14 @@ describe("PermissionManager > principals (#459)", () => {
 
 		const roles = seen.roles;
 		expect(roles.nested).toBe(roles.nested);
-		expect(() => Object.setPrototypeOf(roles, null)).toThrow(/PRINCIPAL_READ_ONLY/);
-		expect(() => Object.defineProperty(roles.nested, "b", { value: 2 })).toThrow(/PRINCIPAL_READ_ONLY/);
+		expect(() => Object.setPrototypeOf(roles, null)).toThrow(/PERMISSION_PRINCIPAL_READ_ONLY/);
+		expect(() => Object.defineProperty(roles.nested, "b", { value: 2 })).toThrow(/PERMISSION_PRINCIPAL_READ_ONLY/);
 		expect(() => {
 			roles.bare.x = 1;
-		}).toThrow(/PRINCIPAL_READ_ONLY/);
+		}).toThrow(/PERMISSION_PRINCIPAL_READ_ONLY/);
 		expect(() => {
 			roles.list[0] = 9;
-		}).toThrow(/PRINCIPAL_READ_ONLY/);
+		}).toThrow(/PERMISSION_PRINCIPAL_READ_ONLY/);
 		// Non-plain values are handed back as-is.
 		expect(roles.when).toBeInstanceOf(Date);
 		// A frozen (non-configurable, non-writable) property must read back as its exact value.
@@ -279,7 +279,7 @@ describe("PermissionManager > principals (#459)", () => {
 		const composite = `roles-mod${MODULE_ID_SEPARATOR}roles.registry.setup`;
 		expect(() => manager.registerPrincipal("roles", { key: () => 1, resolve: () => ({}) }, composite)).not.toThrow();
 		expect(manager.invalidatePrincipal("roles", undefined, composite)).toBe(true);
-		expect(() => manager.invalidatePrincipal("roles", undefined, "other-mod")).toThrow(/PRINCIPAL_NOT_OWNER/);
+		expect(() => manager.invalidatePrincipal("roles", undefined, "other-mod")).toThrow(/PERMISSION_PRINCIPAL_NOT_OWNER/);
 		expect(manager.unregisterPrincipal("ghost", "other-mod")).toBe(false);
 		expect(manager.invalidatePrincipal("ghost")).toBe(false);
 	});
@@ -306,13 +306,17 @@ describe("PermissionManager > principals (#459)", () => {
 		let debug;
 		({ manager, debug } = makeManager([REQUIRES_ROLES]));
 		manager.reservePrincipal("roles", "roles-mod");
-		expect(() => manager.registerPrincipal("roles", { key: () => 1, resolve: () => ({}) }, "other-mod")).toThrow(/PRINCIPAL_NAME_OWNED/);
+		expect(() => manager.registerPrincipal("roles", { key: () => 1, resolve: () => ({}) }, "other-mod")).toThrow(
+			/PERMISSION_PRINCIPAL_NAME_OWNED/
+		);
 		manager.enforceAccess(CALLER, TARGET, null, null, { user: "u1" });
 		expect(debug).toHaveBeenCalledWith("permissions", expect.objectContaining({ reason: "dormant" }));
 
 		manager.registerPrincipal("live", { key: () => 1, resolve: () => ({}) });
 		manager.reservePrincipal("live", "someone");
-		expect(() => manager.registerPrincipal("live", { key: () => 1, resolve: () => ({}) }, "someone")).toThrow(/PRINCIPAL_NAME_OWNED/);
+		expect(() => manager.registerPrincipal("live", { key: () => 1, resolve: () => ({}) }, "someone")).toThrow(
+			/PERMISSION_PRINCIPAL_NAME_OWNED/
+		);
 	});
 
 	it("shutdown clears principals", async () => {

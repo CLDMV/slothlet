@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:15:39-08:00 (1794874539)
+ *	@Last modified time: 2026-11-16T18:27:43-08:00 (1794882463)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -39,7 +39,7 @@ const outcome = async (call) => {
 	try {
 		return { ok: true, value: await call() };
 	} catch (error) {
-		return { ok: false, code: error?.code, caller: error?.context?.caller ?? null };
+		return { ok: false, code: error?.code, caller: error?.details?.caller ?? null };
 	}
 };
 
@@ -60,11 +60,11 @@ export async function runCalls(slothlet) {
 					mode,
 					runtime,
 					silent: true,
-					permissions: { defaultPolicy: "deny", rules: RULES }
+					permissions: { policy: "deny", rules: RULES }
 				});
 				apis.push(api);
-				await api.slothlet.api.add("a", path.join(here, "a"), { moduleID: "mod-a" });
-				await api.slothlet.api.add("b", path.join(here, "b"), { moduleID: "mod-b" });
+				await api.slothlet.api.add("a", path.join(here, "a"), { id: "mod-a" });
+				await api.slothlet.api.add("b", path.join(here, "b"), { id: "mod-b" });
 			}
 			for (const [index, api] of apis.entries()) {
 				out[`${mode}/${runtime}/${index + 1}`] = {

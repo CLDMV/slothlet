@@ -41,7 +41,7 @@ function attempt(change) {
  * @param {string} name - Member of the namespace.
  * @returns {{assign: string, define: string, remove: string}} Outcome of each change.
  * @example
- * changeMember("lockCaller");
+ * changeMember("pin");
  */
 export function changeMember(name) {
 	return {
@@ -101,13 +101,13 @@ export function changeNamespace() {
 export function changeNested() {
 	return {
 		lockCallerCallerDefine: attempt(() => {
-			Object.defineProperty(self.slothlet.lockCaller, "caller", { value: () => "FAKE", configurable: true, writable: true });
+			Object.defineProperty(self.slothlet.pin, "caller", { value: () => "FAKE", configurable: true, writable: true });
 		}),
 		lockCallerCallerDelete: attempt(() => {
-			delete self.slothlet.lockCaller.caller;
+			delete self.slothlet.pin.caller;
 		}),
 		permissionsMember: attempt(() => {
-			self.slothlet.permissions.addRule = () => "FAKE";
+			self.slothlet.permissions.rules.add = () => "FAKE";
 		}),
 		permissionsPlant: attempt(() => {
 			self.slothlet.permissions.planted = 1;
@@ -134,7 +134,7 @@ export function changeNested() {
 			self.slothlet.materialize.wait.planted = 1;
 		}),
 		materializedGetterPlant: attempt(() => {
-			Object.getOwnPropertyDescriptor(self.slothlet.materialize, "materialized").get.planted = 1;
+			Object.getOwnPropertyDescriptor(self.slothlet.materialize, "complete").get.planted = 1;
 		}),
 		permissionsSymbol: attempt(() => {
 			self.slothlet.permissions[Symbol.for("slothlet.test.i625.namespace")] = 1;
@@ -197,7 +197,7 @@ export function keepNamespace() {
 	return function writeKept() {
 		return {
 			assign: attempt(() => {
-				kept.lockCaller = () => "FAKE";
+				kept.pin = () => "FAKE";
 			}),
 			remove: attempt(() => {
 				delete kept.version;
@@ -211,16 +211,16 @@ export function keepNamespace() {
 
 /**
  * Read and call members of the namespace, as a module normally does.
- * @returns {{version: string, lockCaller: string, has: boolean, ownLockCaller: string, hooks: boolean}} What it read.
+ * @returns {{version: string, pin: string, has: boolean, ownPin: string, hooks: boolean}} What it read.
  * @example
  * readAndCall();
  */
 export function readAndCall() {
 	return {
 		version: self.slothlet.version,
-		lockCaller: typeof self.slothlet.lockCaller,
-		has: "lockCaller" in self.slothlet,
-		ownLockCaller: typeof Object.getOwnPropertyDescriptor(self.slothlet, "lockCaller").value,
+		pin: typeof self.slothlet.pin,
+		has: "pin" in self.slothlet,
+		ownPin: typeof Object.getOwnPropertyDescriptor(self.slothlet, "pin").value,
 		hooks: Array.isArray(self.slothlet.hook.list()) || typeof self.slothlet.hook.list() === "object"
 	};
 }

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:08-07:00 (1791090908)
+ *	@Last modified time: 2026-11-16T18:30:01-08:00 (1794882601)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -33,7 +33,7 @@ const matrixConfigs = getMatrixConfigs({ mode: "lazy" });
  */
 function buildTranslationTestMessage(i18n) {
 	return {
-		message: i18n.t("NO_ACTIVE_CONTEXT_ASYNC"),
+		message: i18n.t("CONTEXT_NOT_ACTIVE_ASYNC"),
 		expectedSpanishFragment: "Sin contexto activo"
 	};
 }

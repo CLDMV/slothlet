@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-07T21:55:08-08:00 (1794117308)
+ *	@Last modified time: 2026-11-18T21:57:31-08:00 (1795067851)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -20,7 +20,7 @@
 
 import { EventEmitter } from "node:events";
 import { self } from "@cldmv/slothlet/runtime";
-import { ownerWrites, freezeLater, reads, prototypeAnswers } from "../../api_test_plain_js_nodes_lib/cases.mjs";
+import { ownerWrites, freezeLater, reads, prototypeAnswers, selfPrototypes } from "../../api_test_plain_js_nodes_lib/cases.mjs";
 import { Relay } from "../../api_test_plain_js_nodes_lib/relay-class.mjs";
 
 /** A base class with a static method its derived class inherits. */
@@ -164,27 +164,12 @@ export function ownEmitterIdentity() {
 }
 
 /**
- * The real prototypes of this module's instances, as {@link prototypeAnswers} compares them.
- * @returns {object} Each instance's prototype, and the base class's for the subclass instance.
- */
-function realPrototypes() {
-	return {
-		inst: Foo.prototype,
-		hiddenInst: Hidden.prototype,
-		subInst: FooSub.prototype,
-		subInstBase: Foo.prototype,
-		bus: Bus.prototype,
-		relay: Relay.prototype
-	};
-}
-
-/**
  * What this module's instances answer for their prototypes when it reads them through `self` (#667).
  * @returns {object} The answers, per instance and path.
  */
 export function ownPrototypeAnswers() {
 	const { inst, hiddenInst, subInst, bus, relay } = self.owner;
-	return prototypeAnswers({ inst, hiddenInst, subInst, bus, relay }, realPrototypes());
+	return prototypeAnswers({ inst, hiddenInst, subInst, bus, relay }, selfPrototypes(self.owner));
 }
 
 /**
@@ -193,7 +178,7 @@ export function ownPrototypeAnswers() {
  * @returns {object} The answers, per instance and path.
  */
 export function heldPrototypeAnswers(instances) {
-	return prototypeAnswers(instances, realPrototypes());
+	return prototypeAnswers(instances, selfPrototypes(self.owner));
 }
 
 /**

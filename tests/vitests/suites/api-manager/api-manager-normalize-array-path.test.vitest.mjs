@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:57-07:00 (1791090897)
+ *	@Last modified time: 2026-11-16T18:29:28-08:00 (1794882568)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -20,10 +20,10 @@
  * Exercises the previously uncovered array-input branch in normalizeApiPath:
  *  - valid array of strings  (lines 118-158 in api-manager.mjs)
  *  - empty array             (returns root)
- *  - array with non-string   (throws INVALID_CONFIG_API_PATH_INVALID)
- *  - array with empty string (throws INVALID_CONFIG_API_PATH_INVALID)
+ *  - array with non-string   (throws API_PATH_INVALID)
+ *  - array with empty string (throws API_PATH_INVALID)
  *  - array whose first elem  is "slothlet" (reserved name)
- *  - non-string, non-array   (throws INVALID_CONFIG_API_PATH_INVALID)
+ *  - non-string, non-array   (throws API_PATH_INVALID)
  *
  * All paths flow through api.slothlet.api.add() which calls
  * normalizeApiPath() immediately, so we can test from the public surface.

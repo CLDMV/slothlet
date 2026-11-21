@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-06T06:24:36-08:00 (1793975076)
+ *	@Last modified time: 2026-11-16T18:25:59-08:00 (1794882359)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -35,7 +35,7 @@ const RULES = [
 	{ caller: "host.records.**", target: "store.partition", effect: "allow" }
 ];
 const forgedContext = vm.runInThisContext(
-	"(api) => ({ pin: (fn) => typeof api.slothlet.lockCaller(fn), meta: () => api.slothlet.metadata.caller()?.apiPath ?? null, " +
+	"(api) => ({ pin: (fn) => typeof api.slothlet.pin(fn), meta: () => api.slothlet.metadata.caller()?.path?.join('.') ?? null, " +
 		"emit: () => (api.slothlet.event.emit('host:ping', { n: 1 }), 'emitted'), hostLeaf: () => api.host.echo('x') })",
 	{ filename: OWNER_CONTEXT }
 );
@@ -49,7 +49,7 @@ const outcome = async (call) => {
 	try {
 		return { ok: true, value: await call() };
 	} catch (error) {
-		return { ok: false, code: error?.code, caller: error?.context?.caller ?? null };
+		return { ok: false, code: error?.code, caller: error?.details?.caller ?? null };
 	}
 };
 
@@ -63,7 +63,7 @@ it("reports every call", async () => {
 				runtime,
 				silent: true,
 				hook: { enabled: true },
-				permissions: { defaultPolicy: "deny", rules: RULES }
+				permissions: { policy: "deny", rules: RULES }
 			};
 			const { api, ctx } = await boot(slothlet, config);
 			out[`${mode}/${runtime}/owner`] = await api.ext.a.activate(ctx);
@@ -73,7 +73,7 @@ it("reports every call", async () => {
 			const host = await bootHost(slothlet, config);
 			out[`${mode}/${runtime}/records`] = await outcome(() => host.ext.b.work());
 			out[`${mode}/${runtime}/hook`] = await outcome(() => host.ext.b.callHooked());
-			await host.slothlet.api.add(["ext", "c"], path.join(here, "..", "ext-pkg", "api"), { moduleID: "ext-c" });
+			await host.slothlet.api.add(["ext", "c"], path.join(here, "..", "ext-pkg", "api"), { id: "ext-c" });
 			out[`${mode}/${runtime}/helper`] = await outcome(() => host.ext.c.useHelper());
 			await host.slothlet.shutdown();
 		}

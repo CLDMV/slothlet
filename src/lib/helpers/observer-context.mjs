@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:13-08:00 (1794874573)
+ *	@Last modified time: 2026-11-17T21:25:52-08:00 (1794979552)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -25,7 +25,7 @@
  * `addEventListener` patch nor the `on*` property patch applies, because there is no method call or
  * property assignment to intercept, only a constructor invocation. Left unpinned, the callback runs
  * with no active identity the first time the observer actually fires, the same
- * `RUNTIME_NO_ACTIVE_CONTEXT_SELF` failure the other boundary patches exist to prevent.
+ * `CONTEXT_NOT_ACTIVE_SELF` failure the other boundary patches exist to prevent.
  *
  * The fix wraps each constructor so the callback argument is pinned before it reaches the native
  * constructor. The constructed instance itself is untouched — `observe()`, `disconnect()`, and every
@@ -34,14 +34,21 @@
  * `instanceof` working the same as the unpatched constructor, and omitting `new` still throws the same
  * way a native class constructor does.
  *
+ * On the async runtime the callback is carried the way a listener is: an `AsyncResource` made as the observer is
+ * constructed restores the AsyncLocalStorage store active there whenever the callback runs. An observer constructed in a
+ * `run()` / `scope()` is the run's work from its first `observe()` until it is disconnected (or has nothing left to
+ * observe), on either runtime.
+ *
  * This closes the boundary for cooperative code, not a sandbox — a module can still reach an
  * unpatched constructor through another realm. See `docs/PERMISSIONS.md` on what the live runtime does
  * and does not bound.
  */
 
-import { pinToCurrentCaller } from "#helpers/caller-pinning";
+import { AsyncResource } from "#helpers/platform";
+import { pinToCurrentCaller, recordOfCurrentFlow } from "#helpers/caller-pinning";
 import { openLayer, closeLayer, holdsValue, markLayer } from "#helpers/boundary-patch-layers";
-import { concatLists, listPush, Objects, Reflect, TypeError } from "#helpers/intrinsics";
+import { anyAsyncInstance, holdRunWorkOnce, UNCOUNTED_RESOURCE } from "#helpers/flow-stores";
+import { concatLists, listPush, Objects, Reflect, Set, SetMethods, TypeError, WeakMap, WeakMapMethods } from "#helpers/intrinsics";
 import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "#helpers/instance-imports";
 
 /**
@@ -52,12 +59,30 @@ import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "#helpers/ins
 const PATCHED_CONSTRUCTORS = ["MutationObserver", "ResizeObserver", "IntersectionObserver", "PerformanceObserver", "ReportingObserver"];
 
 /**
+ * The observer methods that start and stop an observer's work (see {@link runtime_countObserving}).
+ * @type {string[]}
+ * @private
+ */
+const OBSERVER_METHODS = ["observe", "unobserve", "disconnect"];
+
+/**
  * Patched entry points, holding what {@link disableObserverPatching} needs to restore only the
  * global it actually replaced.
  * @type {Array<{name: string, layer: {active: boolean, below: Function}, wrapper: Function}>}
  * @private
  */
 const patched = [];
+
+/**
+ * Observers constructed in a `run()` / `scope()`, and the run's count of them: an observer is the run's work from its
+ * first `observe()` until it is disconnected (or, where it has `unobserve()`, has nothing left to observe), so the run's
+ * copy of the instance stays while its callback can still be called (see `holdRunWork` in `helpers/flow-stores`). On the
+ * live runtime `record` is the run's record, counted directly; on the async runtime `carrier` is the resource the
+ * callback runs in, and the work is a resource made in its scope, which the async runtime counts until it is destroyed.
+ * @type {WeakMap<object, {record: object|null, carrier: object|null, release: Function|null, targets: Set<object>|null}>}
+ * @private
+ */
+const observing = new WeakMap();
 
 /**
  * Whether the observer constructors are currently patched.
@@ -97,6 +122,90 @@ function runtime_carryOwnExtras(wrapper, original) {
 }
 
 /**
+ * Give a wrapper's prototype its own `observe()`, `unobserve()` and `disconnect()`, each calling the method the
+ * original prototype has when it is called, then counting an observer constructed in a run as the run's work while it
+ * observes anything (see {@link observing}). The original prototype is untouched; an observer constructed outside every
+ * run is only passed through.
+ *
+ * @param {object} proto - The wrapper's prototype.
+ * @param {object} originalProto - The original constructor's prototype.
+ * @returns {void}
+ * @private
+ */
+function runtime_countObserving(proto, originalProto) {
+	if (!originalProto || typeof originalProto.observe !== "function") return;
+	const tracksTargets = typeof originalProto.unobserve === "function";
+	const methods = {
+		observe(target, ...rest) {
+			const result = Reflect.apply(originalProto.observe, this, concatLists([target], rest));
+			const state = WeakMapMethods.get(observing, this);
+			if (state !== undefined) {
+				if (state.release === null) state.release = runtime_startObserving(state);
+				if (tracksTargets) SetMethods.add((state.targets ??= new Set()), target);
+			}
+			return result;
+		},
+		unobserve(target, ...rest) {
+			const result = Reflect.apply(originalProto.unobserve, this, concatLists([target], rest));
+			const state = WeakMapMethods.get(observing, this);
+			if (state !== undefined && state.targets !== null) {
+				SetMethods.delete(state.targets, target);
+				if (SetMethods.size(state.targets) === 0) runtime_stopObserving(state);
+			}
+			return result;
+		},
+		disconnect(...args) {
+			const result = Reflect.apply(originalProto.disconnect, this, args);
+			const state = WeakMapMethods.get(observing, this);
+			if (state !== undefined) runtime_stopObserving(state);
+			return result;
+		}
+	};
+	for (let ofIndex = 0, ofList = OBSERVER_METHODS; ofIndex < ofList.length; ofIndex++) {
+		const key = ofList[ofIndex];
+		const below = Objects.getOwnPropertyDescriptor(originalProto, key);
+		if (typeof below?.value !== "function") continue;
+		const method = methods[key];
+		Objects.defineProperty(method, "length", { __proto__: null, value: below.value.length, configurable: true });
+		Objects.defineProperty(proto, key, {
+			__proto__: null,
+			value: method,
+			writable: below.writable,
+			enumerable: below.enumerable,
+			configurable: true
+		});
+	}
+}
+
+/**
+ * An observer started observing: count it as work of the run it was constructed in. On the live runtime through the
+ * run's record; on the async runtime by making a resource in the scope of the observer's carrier, which the async
+ * runtime counts as the work of the run whose store is active there until it is destroyed (outside every run it is no
+ * one's work, and destroying it costs nothing).
+ * @param {{record: object|null, carrier: object|null}} state - The observer's state.
+ * @returns {Function} What releases the count, once.
+ * @private
+ */
+function runtime_startObserving(state) {
+	if (state.record !== null) return holdRunWorkOnce(state.record);
+	const work = state.carrier.runInAsyncScope(() => new AsyncResource("slothlet-observing"));
+	return () => work.emitDestroy();
+}
+
+/**
+ * An observer stopped observing: release the run's count of it, once.
+ * @param {{release: Function|null, targets: Set<object>|null}} state - The observer's state.
+ * @returns {void}
+ * @private
+ */
+function runtime_stopObserving(state) {
+	state.targets = null;
+	const release = state.release;
+	state.release = null;
+	if (release !== null) release();
+}
+
+/**
  * Replace one observer constructor with a wrapper that pins its callback argument.
  *
  * @param {string} name - Global constructor name (e.g. `"MutationObserver"`).
@@ -121,8 +230,25 @@ function runtime_patchObserverConstructor(name) {
 		// A non-function callback is the platform's problem to reject, and it should see the exact error
 		// it would unpatched — hand it through untouched rather than pinning nothing.
 		// A wrapper disabled under another copy's passes the callback through as well.
-		const pinned = typeof callback === "function" && layer.active ? pinToCurrentCaller(callback) : callback;
-		return Reflect.construct(original, concatLists([pinned], rest), new.target);
+		const pins = typeof callback === "function" && layer.active;
+		let pinned = pins ? pinToCurrentCaller(callback) : callback;
+		const record = pins ? recordOfCurrentFlow() : null;
+		// While an instance on the async runtime is up and no run of the live runtime counts the observer, restore the
+		// AsyncLocalStorage store active now when the callback runs, as the listener patches do: the async runtime's run
+		// then reaches the callback, which the platform calls from wherever the observed change happened. The carrier
+		// itself is no one's work (see UNCOUNTED_RESOURCE in helpers/flow-stores): the observer counts from its first
+		// observe(). Null on the live runtime alone, and in a browser.
+		/* v8 ignore next */
+		const carrier = pins && record === null && AsyncResource && anyAsyncInstance() ? new AsyncResource(UNCOUNTED_RESOURCE) : null;
+		if (carrier !== null) {
+			const inner = pinned;
+			pinned = function (...args) {
+				return Reflect.apply(carrier.runInAsyncScope, carrier, concatLists([inner, this], args));
+			};
+		}
+		const observer = Reflect.construct(original, concatLists([pinned], rest), new.target);
+		if (record !== null || carrier !== null) WeakMapMethods.set(observing, observer, { record, carrier, release: null, targets: null });
+		return observer;
 	};
 
 	// A prototype shared verbatim with `original` would leave `instance.constructor` pointing at the
@@ -132,6 +258,7 @@ function runtime_patchObserverConstructor(name) {
 	wrapper.prototype = Objects.create(original.prototype, {
 		constructor: { __proto__: null, value: wrapper, writable: true, configurable: true }
 	});
+	runtime_countObserving(wrapper.prototype, original.prototype);
 	runtime_carryOwnExtras(wrapper, original);
 	markLayer(wrapper, layer);
 	globalThis[name] = wrapper;
@@ -142,8 +269,8 @@ function runtime_patchObserverConstructor(name) {
  * Pin observer callbacks to the module that constructs them.
  *
  * Called once globally when the first instance is created; later calls are ignored, matching how the
- * other boundary patches behave. Costs nothing when no runtime registered a pinning strategy — the
- * wrapper hands the callback straight through.
+ * other boundary patches behave. An observer constructed while an instance on the async runtime is up gets an
+ * `AsyncResource` to carry that runtime's store into its callback, as a listener does; the live runtime alone makes none.
  *
  * @returns {void}
  * @public

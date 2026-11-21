@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T23:40:00-08:00 (1794814800)
+ *	@Last modified time: 2026-11-16T18:29:33-08:00 (1794882573)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -251,11 +251,11 @@ beforeAll(() => {
 		"};",
 		"const out = {};",
 		"const api = await slothlet({",
-		"\tdir: API, mode, runtime, hook: true, silent: true,",
-		"\tpermissions: { defaultPolicy: 'allow', attribution, rules: [{ caller: 'guest.**', target: 'math.**', effect: 'deny' }] }",
+		"\tbase: API, mode, runtime, hook: true, silent: true,",
+		"\tpermissions: { policy: 'allow', rules: [{ caller: 'guest.**', target: 'math.**', effect: 'deny' }], caller: { attribution } }",
 		"});",
-		"await api.slothlet.api.add('owner', OWNER, { moduleID: 'owner' });",
-		"await api.slothlet.api.add('reader', READER, { moduleID: 'reader' });",
+		"await api.slothlet.api.add('owner', OWNER, { id: 'owner' });",
+		"await api.slothlet.api.add('reader', READER, { id: 'reader' });",
 		"// Every node loaded and every path taken once before anything is replaced.",
 		"await step(() => api.math.add(1, 1));",
 		"await step(() => api.guest.tryMath());",

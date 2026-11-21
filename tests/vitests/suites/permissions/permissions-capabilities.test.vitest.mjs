@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T00:00:00-08:00 (1794816000)
+ *	@Last modified time: 2026-11-16T18:30:24-08:00 (1794882624)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -70,7 +70,7 @@ const CAPABILITIES = {
 // opened (see permissions-capability-filenames).
 const REFUSED_ONLY = { code: ["binding"], loader: ["register"] };
 
-const REFUSED = { ok: false, code: "CAPABILITY_REFUSED" };
+const REFUSED = { ok: false, code: "PERMISSION_CAPABILITY_REFUSED" };
 const OPEN = { caller: "**", target: "**", effect: "allow" };
 
 /**
@@ -127,10 +127,10 @@ describe.each(getMatrixConfigs())("Permissions > built-in capabilities > $name",
 		 * @param {object} [permissions] - The permission settings.
 		 * @returns {Promise<object>} The api.
 		 */
-		const build = async (permissions = { defaultPolicy: "deny", rules: [OPEN], attribution }) => {
+		const build = async (permissions = { policy: "deny", rules: [OPEN], caller: { attribution } }) => {
 			api = await slothlet({ ...config, silent: true, base: path.join(ROOT, "base"), permissions });
-			await api.slothlet.api.add("coder", path.join(ROOT, "coder"), { moduleID: "coder" });
-			await api.slothlet.api.add("other", path.join(ROOT, "other"), { moduleID: "other" });
+			await api.slothlet.api.add("coder", path.join(ROOT, "coder"), { id: "coder" });
+			await api.slothlet.api.add("other", path.join(ROOT, "other"), { id: "other" });
 			return api;
 		};
 
@@ -153,8 +153,10 @@ describe.each(getMatrixConfigs())("Permissions > built-in capabilities > $name",
 
 			it("a rule opens it for exactly the leaf it names", async () => {
 				await build({
-					defaultPolicy: "deny",
-					attribution,
+					policy: "deny",
+					caller: {
+						attribution
+					},
 					rules: [OPEN, { caller: "coder.probe.attempt", target: `capability:${name}`, effect: "allow" }]
 				});
 				expect(await tryAll(api.coder.probe.attempt, list)).toEqual(expected(list, null));
@@ -164,8 +166,10 @@ describe.each(getMatrixConfigs())("Permissions > built-in capabilities > $name",
 
 			it("a more specific deny beats a broader allow", async () => {
 				await build({
-					defaultPolicy: "deny",
-					attribution,
+					policy: "deny",
+					caller: {
+						attribution
+					},
 					rules: [
 						OPEN,
 						{ caller: "coder.**", target: `capability:${name}`, effect: "allow" },
@@ -179,17 +183,17 @@ describe.each(getMatrixConfigs())("Permissions > built-in capabilities > $name",
 			it("a rule added at runtime opens it, and sealed rules take no more", async () => {
 				await build();
 				expect(await tryAll(api.coder.probe.attempt, list)).toEqual(expected(list, REFUSED));
-				api.slothlet.permissions.addRule({ caller: "coder.probe.attempt", target: `capability:${name}`, effect: "allow" });
+				api.slothlet.permissions.rules.add({ caller: "coder.probe.attempt", target: `capability:${name}`, effect: "allow" });
 				expect(await tryAll(api.coder.probe.attempt, list)).toEqual(expected(list, null));
 				api.slothlet.permissions.control.seal();
 				expect(() =>
-					api.slothlet.permissions.addRule({ caller: "coder.probe.attemptToo", target: `capability:${name}`, effect: "allow" })
+					api.slothlet.permissions.rules.add({ caller: "coder.probe.attemptToo", target: `capability:${name}`, effect: "allow" })
 				).toThrow();
 				expect(await tryAll(api.coder.probe.attemptToo, list)).toEqual(expected(list, REFUSED));
 			});
 
 			it.each([["off"], ["disabled"]])("with the permission system %s nothing is refused", async (mode) => {
-				await build({ mode, defaultPolicy: "deny", rules: [OPEN], attribution });
+				await build({ mode, policy: "deny", rules: [OPEN], caller: { attribution } });
 				expect(await tryAll(api.coder.probe.attempt, list)).toEqual(expected(list, null));
 			});
 		});
@@ -221,10 +225,10 @@ describe.each(getMatrixConfigs())("Permissions > built-in capabilities > $name",
 				...config,
 				silent: true,
 				base: path.join(ROOT, "base"),
-				permissions: { defaultPolicy: "deny", rules: [OPEN, ...extra], attribution }
+				permissions: { policy: "deny", rules: [OPEN, ...extra], caller: { attribution } }
 			});
-			await api.slothlet.api.add("coder", path.join(ROOT, "coder"), { moduleID: "coder" });
-			await api.slothlet.api.add("toplevel", path.join(ROOT, "toplevel"), { moduleID: "toplevel" });
+			await api.slothlet.api.add("coder", path.join(ROOT, "coder"), { id: "coder" });
+			await api.slothlet.api.add("toplevel", path.join(ROOT, "toplevel"), { id: "toplevel" });
 			expect(await api.toplevel.boot.result()).toEqual(outcome);
 		});
 
@@ -243,10 +247,10 @@ describe.each(getMatrixConfigs())("Permissions > built-in capabilities > $name",
 				...config,
 				silent: true,
 				base: path.join(ROOT, "base"),
-				permissions: { defaultPolicy: "deny", rules: [OPEN, ...extra], attribution }
+				permissions: { policy: "deny", rules: [OPEN, ...extra], caller: { attribution } }
 			});
-			await api.slothlet.api.add("coder", path.join(ROOT, "coder"), { moduleID: "coder" });
-			await api.slothlet.api.add("helpertop", path.join(ROOT, "helpertop"), { moduleID: "helpertop" });
+			await api.slothlet.api.add("coder", path.join(ROOT, "coder"), { id: "coder" });
+			await api.slothlet.api.add("helpertop", path.join(ROOT, "helpertop"), { id: "helpertop" });
 			expect(await api.helpertop.user.result()).toEqual(REFUSED);
 		});
 
@@ -263,16 +267,16 @@ describe.each(getMatrixConfigs())("Permissions > built-in capabilities > $name",
 				...config,
 				silent: true,
 				base: path.join(ROOT, "base"),
-				permissions: { defaultPolicy: "deny", rules: [OPEN, ...extra], attribution }
+				permissions: { policy: "deny", rules: [OPEN, ...extra], caller: { attribution } }
 			});
 			const loading = (async () => {
-				await api.slothlet.api.add("staticdata", path.join(ROOT, "staticdata"), { moduleID: "staticdata" });
+				await api.slothlet.api.add("staticdata", path.join(ROOT, "staticdata"), { id: "staticdata" });
 				return api.staticdata.inline.value();
 			})();
 			const outcome = await withSuppressedSlothletErrorOutput(() =>
 				loading.then(
 					(value) => ({ ok: true, value }),
-					(error) => ({ ok: false, refused: String(error?.message).includes("CAPABILITY_REFUSED") })
+					(error) => ({ ok: false, refused: String(error?.message).includes("PERMISSION_CAPABILITY_REFUSED") })
 				)
 			);
 			expect(outcome).toEqual({ ok: false, refused: true });
@@ -280,8 +284,10 @@ describe.each(getMatrixConfigs())("Permissions > built-in capabilities > $name",
 
 		it("Node's contextify binding stays refused to a leaf the capability is opened for", async () => {
 			await build({
-				defaultPolicy: "deny",
-				attribution,
+				policy: "deny",
+				caller: {
+					attribution
+				},
 				rules: [OPEN, { caller: "coder.probe.attempt", target: "capability:code", effect: "allow" }]
 			});
 			expect(await withSuppressedSlothletErrorOutput(() => api.coder.probe.attempt("binding"))).toEqual(REFUSED);
@@ -289,8 +295,8 @@ describe.each(getMatrixConfigs())("Permissions > built-in capabilities > $name",
 
 		it("an unknown capability is not a rule", async () => {
 			await build();
-			expect(() => api.slothlet.permissions.addRule({ caller: "coder.**", target: "capability:nothing", effect: "allow" })).toThrow(
-				expect.objectContaining({ code: "INVALID_PERMISSION_RULE" })
+			expect(() => api.slothlet.permissions.rules.add({ caller: "coder.**", target: "capability:nothing", effect: "allow" })).toThrow(
+				expect.objectContaining({ code: "PERMISSION_RULE_UNKNOWN_TARGET" })
 			);
 		});
 	});
@@ -315,22 +321,22 @@ describe("Permissions > built-in capabilities > a static data: import and a help
 		for (const mode of ["eager", "lazy"]) for (const runtime of ["async", "live"]) for (const attribution of ["precise", "fast"]) {
 			for (const [name, extra] of Object.entries(SCENARIOS)) {
 				const api = await slothlet({ mode, runtime, silent: true, base: path.join(ROOT, "base"),
-					permissions: { defaultPolicy: "deny", rules: [{ caller: "**", target: "**", effect: "allow" }, ...extra], attribution } });
-				await api.slothlet.api.add("coder", path.join(ROOT, "coder"), { moduleID: "coder" });
+					permissions: { policy: "deny", rules: [{ caller: "**", target: "**", effect: "allow" }, ...extra], caller: { attribution } } });
+				await api.slothlet.api.add("coder", path.join(ROOT, "coder"), { id: "coder" });
 				let outcome;
 				try {
-					await api.slothlet.api.add("staticdata", path.join(ROOT, "staticdata"), { moduleID: "staticdata" });
+					await api.slothlet.api.add("staticdata", path.join(ROOT, "staticdata"), { id: "staticdata" });
 					outcome = await api.staticdata.inline.value();
 				} catch (error) {
-					outcome = String(error?.message).includes("CAPABILITY_REFUSED") ? "CAPABILITY_REFUSED" : String(error?.code);
+					outcome = String(error?.message).includes("PERMISSION_CAPABILITY_REFUSED") ? "PERMISSION_CAPABILITY_REFUSED" : String(error?.code);
 				}
 				out[mode + "/" + runtime + "/" + attribution + "/" + name] = outcome;
 				await api.shutdown();
 				const helperRules = name === "own" ? [{ caller: "helpertop.user", target: "capability:code", effect: "allow" }] : name === "sibling" ? [{ caller: "coder.**", target: "capability:code", effect: "allow" }] : [];
 				const helperApi = await slothlet({ mode, runtime, silent: true, base: path.join(ROOT, "base"),
-					permissions: { defaultPolicy: "deny", rules: [{ caller: "**", target: "**", effect: "allow" }, ...helperRules], attribution } });
-				await helperApi.slothlet.api.add("coder", path.join(ROOT, "coder"), { moduleID: "coder" });
-				await helperApi.slothlet.api.add("helpertop", path.join(ROOT, "helpertop"), { moduleID: "helpertop" });
+					permissions: { policy: "deny", rules: [{ caller: "**", target: "**", effect: "allow" }, ...helperRules], caller: { attribution } } });
+				await helperApi.slothlet.api.add("coder", path.join(ROOT, "coder"), { id: "coder" });
+				await helperApi.slothlet.api.add("helpertop", path.join(ROOT, "helpertop"), { id: "helpertop" });
 				const helper = await helperApi.helpertop.user.result();
 				out[mode + "/" + runtime + "/" + attribution + "/helper/" + name] = helper.ok ? helper.value : helper.code;
 				await helperApi.shutdown();
@@ -358,12 +364,20 @@ describe("Permissions > built-in capabilities > a static data: import and a help
 			for (const attribution of ["precise", "fast"]) {
 				it(`${mode}/${runtime}/${attribution}: refused by default, opened by a rule on the importing file's module path, not by another module's`, () => {
 					const at = `${mode}/${runtime}/${attribution}`;
-					expect([out[`${at}/none`], out[`${at}/own`], out[`${at}/sibling`]]).toEqual(["CAPABILITY_REFUSED", 7, "CAPABILITY_REFUSED"]);
+					expect([out[`${at}/none`], out[`${at}/own`], out[`${at}/sibling`]]).toEqual([
+						"PERMISSION_CAPABILITY_REFUSED",
+						7,
+						"PERMISSION_CAPABILITY_REFUSED"
+					]);
 				});
 
 				it(`${mode}/${runtime}/${attribution}: a helper's top-level compile runs as its importer's module path`, () => {
 					const at = `${mode}/${runtime}/${attribution}/helper`;
-					expect([out[`${at}/none`], out[`${at}/own`], out[`${at}/sibling`]]).toEqual(["CAPABILITY_REFUSED", 7, "CAPABILITY_REFUSED"]);
+					expect([out[`${at}/none`], out[`${at}/own`], out[`${at}/sibling`]]).toEqual([
+						"PERMISSION_CAPABILITY_REFUSED",
+						7,
+						"PERMISSION_CAPABILITY_REFUSED"
+					]);
 				});
 			}
 });

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T23:18:14-08:00 (1794813494)
+ *	@Last modified time: 2026-11-16T18:30:01-08:00 (1794882601)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -32,7 +32,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { setLanguage, translate, initI18n, getLanguage } from "#i18n";
-import { SlothletWarning } from "@cldmv/slothlet/errors";
+import { captureWarnings } from "../../setup/warning-capture.mjs";
 
 describe("translations.mjs edge cases", () => {
 	let warnSpy;
@@ -49,21 +49,14 @@ describe("translations.mjs edge cases", () => {
 
 	// ─── setLanguage failure path (lines 103-105) ───────────────────────────
 
-	it("should log a warning and fall back to 'en-us' when the language file cannot be loaded", () => {
+	it("should log a warning and fall back to 'en-us' when the language file cannot be loaded", async () => {
 		// "zz" is not a valid language; its JSON file does not exist in languages/
 		// → i18n_loadLanguageSync returns null → else branch fires (lines 103-105)
-		SlothletWarning.suppressConsole = true;
-		SlothletWarning.clearCaptured();
-		try {
-			setLanguage("zz");
+		const warnings = await captureWarnings(() => setLanguage("zz"));
 
-			// A coded, translated SlothletWarning (#820), not a bare console.warn; outside any instance it is process-level
-			const [warning] = SlothletWarning.captured.filter((w) => w.code === "WARNING_LANGUAGE_LOAD_FAILED");
-			expect(warning.message).toContain("Failed to load language 'zz'");
-		} finally {
-			SlothletWarning.suppressConsole = false;
-			SlothletWarning.clearCaptured();
-		}
+		// A coded, translated SlothletWarning (#820); outside any instance it is printed, not kept
+		const [warning] = warnings.filter((w) => w.code === "WARNING_LANGUAGE_LOAD_FAILED");
+		expect(warning.message).toContain("Failed to load language 'zz'");
 
 		// Language should reset to the English fallback
 		expect(getLanguage()).toBe("en-us");
@@ -72,7 +65,7 @@ describe("translations.mjs edge cases", () => {
 	it("should still produce valid translations after recovering from a failed setLanguage call", () => {
 		setLanguage("totally-invalid-lang-code");
 		// After recovery, translate() should still work normally with English defaults
-		const msg = translate("MODULE_NOT_FOUND", { modulePath: "./api.mjs" });
+		const msg = translate("MODULE_IMPORT_FAILED", { modulePath: "./api.mjs" });
 		expect(typeof msg).toBe("string");
 		expect(msg.length).toBeGreaterThan(0);
 	});
@@ -108,7 +101,7 @@ describe("translations.mjs edge cases", () => {
 	it("should remain functional (language = 'en-us') after initI18n catches an error", () => {
 		initI18n(null);
 		// Translations should still produce valid output after the fallback
-		const msg = translate("MODULE_NOT_FOUND", { modulePath: "./x.mjs" });
+		const msg = translate("MODULE_IMPORT_FAILED", { modulePath: "./x.mjs" });
 		expect(typeof msg).toBe("string");
 		expect(msg.length).toBeGreaterThan(0);
 		expect(getLanguage()).toBe("en-us");

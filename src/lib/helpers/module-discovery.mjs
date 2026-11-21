@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:13-08:00 (1794874573)
+ *	@Last modified time: 2026-11-16T18:28:50-08:00 (1794882530)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -27,9 +27,9 @@
  * looking for the first ancestor with a `node_modules` directory, capped at 20
  * levels. Falls back to `process.cwd()` if no `node_modules` found.
  *
- * Per-root mode auto-detect (G6): if `<scanRoot>/node_modules` exists, scan in
+ * Per-root mode auto-detect (G6): if `<root>/node_modules` exists, scan in
  * npm mode (walk `node_modules/*` and `node_modules/@*\/*`). Otherwise scan in
- * folder mode (immediate subfolders of `scanRoot` containing a manifest).
+ * folder mode (immediate subfolders of `root` containing a manifest).
  *
  * Dedupe and multi-version handling (G7):
  *  - Same real path → dedupe silently (first wins).
@@ -41,7 +41,7 @@
  * locator. Default is `"slothlet.module.json"`.
  *
  * Field-name remap (S1): `schema` option maps canonical field names to the
- * legacy manifest's names, e.g. `{ mountPath: "apiPath" }`.
+ * legacy manifest's names, e.g. `{ mount: "apiPath" }`.
  *
  * Prefix filter (G6 pre-skip): name-prefix filtering runs DURING directory
  * enumeration, before any manifest is read. `prefix: string | string[]`
@@ -53,7 +53,7 @@
 
 import { SlothletError } from "#errors";
 import { t } from "#i18n";
-import { validateModuleManifest } from "#helpers/module-manifest-validator";
+import { isFormat1, validateModuleManifest } from "#helpers/module-manifest-validator";
 
 // Node-only static imports resolved via top-level await so `node:*` never
 // enters the static-import graph in browser bundles. Module discovery walks
@@ -80,7 +80,7 @@ import {
 } from "#helpers/intrinsics";
 
 // --- API-RULES condition markers (see docs/API-RULES/API-DISCOVERY-CONDITIONS.md) ---
-// Rule 15 (G09): Reserved mountPath-root rejection — module-manifest-validator.mjs ~L189
+// Rule 15 (G09): Reserved mount-root rejection — module-manifest-validator.mjs ~L189
 // Rule 15 (G10): External-module validity gate — ~L139 / ~L146
 // Rule 15 (G11): Real-path dedupe & duplicate name@version — ~L128 / ~L172
 // Rule 15 (G12): Content-filter veto — ~L168
@@ -91,7 +91,7 @@ const UPWARD_WALK_CAP = 20;
 
 /**
  * @typedef {object} DiscoverOptions
- * @property {string|string[]} [scanRoot] - Filesystem path(s) to scan. Default: upward-walk from process.cwd() to nearest node_modules ancestor.
+ * @property {string|string[]} [root] - Filesystem path(s) to scan. Default: upward-walk from process.cwd() to nearest node_modules ancestor.
  * @property {string} [manifest="slothlet.module.json"] - Manifest filename, or `<file>#<dotted.key>` locator pointing at a subkey of another file (e.g. `"package.json#slothlet"`).
  * @property {Record<string, string>} [schema] - Field-name remap for legacy manifests. Maps canonical name → legacy name.
  * @property {string|string[]} [prefix] - Name-prefix filter applied BEFORE manifest read. Matches against full package name including scope.
@@ -100,10 +100,10 @@ const UPWARD_WALK_CAP = 20;
 
 /**
  * @typedef {object} DiscoverResult
- * @property {string} packageName - Package name from package.json.
- * @property {string} packageRoot - Resolved absolute filesystem path to the package directory.
- * @property {string[]} mountPath - Normalized mountPath segments (always an array).
- * @property {string} apiDir - Absolute resolved filesystem path to the apiDir inside the package.
+ * @property {string} package - Package name from package.json.
+ * @property {string} folder - Resolved absolute filesystem path to the package directory.
+ * @property {string[]} mount - Normalized mount segments (always an array).
+ * @property {string} base - Absolute resolved filesystem path to the manifest's `base` folder inside the package.
  * @property {object} manifest - Normalized + deep-frozen manifest (per M3).
  */
 
@@ -111,6 +111,8 @@ const UPWARD_WALK_CAP = 20;
  * Walk the filesystem and return validated module candidates.
  *
  * @param {DiscoverOptions} [options] - Discovery options.
+ * @param {object} [hooks] - Internal hooks.
+ * @param {(details: {package: string, manifest: string}) => void} [hooks.warn] - Called for a manifest that is valid but written in the deprecated format 1 (`WARNING_MODULE_MANIFEST_FORMAT_1`).
  * @returns {Promise<DiscoverResult[]>} Discovered modules in walk order (apply `sort()` for deterministic ordering).
  * @throws {SlothletError} `MODULE_*` codes on manifest validation failures or G7 duplicate-name-version-mismatch.
  *
@@ -118,7 +120,7 @@ const UPWARD_WALK_CAP = 20;
  * import { discoverModules } from "#helpers/module-discovery";
  *
  * const found = await discoverModules();
- * // Default upward-walk scanRoot, default slothlet.module.json manifest.
+ * // Default upward-walk root, default slothlet.module.json manifest.
  *
  * @example
  * const drivers = await discoverModules({
@@ -126,8 +128,8 @@ const UPWARD_WALK_CAP = 20;
  *   filter: (m) => m.kind === "driver"
  * });
  */
-export async function discoverModules(options = {}) {
-	const scanRoots = await resolveScanRoots(options.scanRoot);
+export async function discoverModules(options = {}, hooks = {}) {
+	const scanRoots = await resolveScanRoots(options.root);
 	const manifestSource = parseManifestSource(options.manifest);
 	const fieldSchema = options.schema ?? {};
 	const filterFn = options.filter;
@@ -178,9 +180,11 @@ export async function discoverModules(options = {}) {
 		// Apply field-name remap (S1) before validation.
 		const remapped = applySchemaRemap(manifestRaw, fieldSchema);
 
-		// Lenient assume-v1 when schemaVersion is absent under override locator (S2).
-		if (manifestSource.isOverride && remapped.schemaVersion === undefined) {
-			remapped.schemaVersion = 1;
+		// Lenient assume-the-format when the schema field is absent under an override locator (S2): format 1 when the
+		// manifest uses a format 1 field name, otherwise the current format 2.
+		if (manifestSource.isOverride && remapped.schemaVersion === undefined && remapped.schema === undefined) {
+			if (isFormat1(remapped)) remapped.schemaVersion = 1;
+			else remapped.schema = 2;
 		}
 
 		// Validate (throws MODULE_* on any rule violation).
@@ -191,6 +195,11 @@ export async function discoverModules(options = {}) {
 			packageRoot: realPath,
 			manifestPath
 		});
+
+		// A valid format 1 manifest is still read (mapped to the format 2 names above); say it should be migrated.
+		if (isFormat1(remapped) && typeof hooks.warn === "function") {
+			hooks.warn({ package: pkg.name, manifest: manifestPath });
+		}
 
 		// Content filter (post-manifest-read).
 		if (typeof filterFn === "function" && !filterFn(normalized, pkg.name)) {
@@ -208,29 +217,24 @@ export async function discoverModules(options = {}) {
 			// against an upstream refactor that loosens the realPath dedupe.
 			/* v8 ignore next */
 			if (otherRealPath !== realPath) {
-				throw new SlothletError(
-					"MODULE_DUPLICATE_NAME_VERSION_MISMATCH",
-					{
-						packageName: pkg.name,
-						version: pkg.version,
-						paths: ArrayMethods.join([otherRealPath, realPath], ", ")
-					},
-					null,
-					{ validationError: true }
-				);
+				throw new SlothletError("MODULE_DUPLICATE_NAME_VERSION_MISMATCH", {
+					package: pkg.name,
+					version: pkg.version,
+					paths: ArrayMethods.join([otherRealPath, realPath], ", ")
+				});
 			}
 		} else {
 			MapMethods.set(realPathByNameVersion, nameVersionKey, realPath);
 		}
 
-		const apiDirAbs = path.resolve(realPath, normalized.apiDir);
+		const baseAbs = path.resolve(realPath, normalized.base);
 		listPush(
 			results,
 			Objects.freeze({
-				packageName: pkg.name,
-				packageRoot: realPath,
-				mountPath: Objects.freeze(copyList(normalized.mountPath)),
-				apiDir: apiDirAbs,
+				package: pkg.name,
+				folder: realPath,
+				mount: Objects.freeze(copyList(normalized.mount)),
+				base: baseAbs,
 				manifest: deepFreeze(normalized)
 			})
 		);
@@ -242,7 +246,7 @@ export async function discoverModules(options = {}) {
 // ─── Scan-root resolution ────────────────────────────────────────────────────
 
 /**
- * Resolve the `scanRoot` option into an array of absolute paths.
+ * Resolve the `root` option into an array of absolute paths.
  * Default: upward-walk from process.cwd() to nearest node_modules ancestor (S6, max 20 levels).
  *
  * @param {string|string[]} [opt]
@@ -259,16 +263,11 @@ async function resolveScanRoots(opt) {
 	if (Arrays.isArray(opt)) {
 		return mapList(opt, (p) => path.resolve(p));
 	}
-	throw new SlothletError(
-		"INVALID_ARGUMENT",
-		{
-			argument: "scanRoot",
-			expected: "string or string[]",
-			received: typeof opt
-		},
-		null,
-		{ validationError: true }
-	);
+	throw new SlothletError("INVALID_ARGUMENT", {
+		argument: "options.root",
+		expected: "string or string[]",
+		received: typeof opt
+	});
 }
 
 /**
@@ -295,7 +294,7 @@ async function defaultScanRoot() {
 }
 
 /**
- * Detect npm-mode vs folder-mode for a scanRoot.
+ * Detect npm-mode vs folder-mode for a scan root.
  * @param {string} root
  * @returns {Promise<"npm"|"folder">}
  * @private
@@ -404,16 +403,11 @@ function normalizePrefixes(opt) {
 		if (opt.length === 0) return null;
 		return copyList(opt);
 	}
-	throw new SlothletError(
-		"INVALID_ARGUMENT",
-		{
-			argument: "prefix",
-			expected: "string or string[]",
-			received: typeof opt
-		},
-		null,
-		{ validationError: true }
-	);
+	throw new SlothletError("INVALID_ARGUMENT", {
+		argument: "prefix",
+		expected: "string or string[]",
+		received: typeof opt
+	});
 }
 
 /**
@@ -445,16 +439,11 @@ function parseManifestSource(opt) {
 		return { file: DEFAULT_MANIFEST_FILE, subkey: null, isOverride: false };
 	}
 	if (typeof opt !== "string" || opt.length === 0) {
-		throw new SlothletError(
-			"INVALID_ARGUMENT",
-			{
-				argument: "manifest",
-				expected: "string",
-				received: typeof opt
-			},
-			null,
-			{ validationError: true }
-		);
+		throw new SlothletError("INVALID_ARGUMENT", {
+			argument: "manifest",
+			expected: "string",
+			received: typeof opt
+		});
 	}
 	const hashIdx = StringMethods.indexOf(opt, "#");
 	if (hashIdx === -1) {
@@ -463,16 +452,11 @@ function parseManifestSource(opt) {
 	const file = StringMethods.slice(opt, 0, hashIdx);
 	const subkey = StringMethods.slice(opt, hashIdx + 1);
 	if (file.length === 0 || subkey.length === 0) {
-		throw new SlothletError(
-			"INVALID_ARGUMENT",
-			{
-				argument: "manifest",
-				expected: "<file>#<dotted.key> with both parts non-empty",
-				received: opt
-			},
-			null,
-			{ validationError: true }
-		);
+		throw new SlothletError("INVALID_ARGUMENT", {
+			argument: "manifest",
+			expected: "<file>#<dotted.key> with both parts non-empty",
+			received: opt
+		});
 	}
 	return { file, subkey, isOverride: true };
 }
@@ -519,19 +503,13 @@ async function loadManifestRaw(manifestPath, source, packageName) {
 	try {
 		parsed = JSON.parse(content);
 	} catch (err) {
-		throw new SlothletError(
-			"MODULE_MANIFEST_INVALID",
-			{
-				packageName,
-				manifestPath,
-				// err.message is already surfaced through the JSON_PARSE reason; passing err as the
-				// originalError 3rd-arg too would be a dropped cause on a validationError (the
-				// MODULE_MANIFEST_INVALID template has no {error} slot), so it is intentionally omitted.
-				reason: t("MODULE_MANIFEST_REASON_JSON_PARSE", { error: err.message })
-			},
-			null,
-			{ validationError: true }
-		);
+		throw new SlothletError("MODULE_MANIFEST_INVALID", {
+			package: packageName,
+			manifest: manifestPath,
+			// err.message is already surfaced through the JSON_PARSE reason (the MODULE_MANIFEST_INVALID
+			// template has no {error} slot).
+			reason: t("MODULE_MANIFEST_REASON_JSON_PARSE", { error: err.message })
+		});
 	}
 	if (source.subkey === null) {
 		return parsed;

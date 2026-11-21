@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-10T21:29:58-08:00 (1794374998)
+ *	@Last modified time: 2026-11-16T18:30:10-08:00 (1794882610)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -110,7 +110,7 @@ describe.each(getMatrixConfigs())("Permissions > sync leaf thenable (#599) > $na
 	 * @returns {Promise<object>} The api.
 	 */
 	const build = async (permissions = {}) => {
-		api = await slothlet({ ...config, base: BASE, permissions: { defaultPolicy: "deny", rules: RULES, ...permissions } });
+		api = await slothlet({ ...config, base: BASE, permissions: { policy: "deny", rules: RULES, ...permissions } });
 		return api;
 	};
 
@@ -246,7 +246,7 @@ describe.each(getMatrixConfigs())("Permissions > sync leaf thenable (#599) > $na
 		it.each(FAILURES)(
 			"%s/%s/%s: with provenance off, what slothlet reads of the error still never runs as a",
 			async (how, inherited, prop) => {
-				await setup({ provenance: false });
+				await setup({ caller: { provenance: false } });
 				const label = failureLabel(how, inherited, prop);
 				expect(await api.a.use.fails("failWithGetter", "secret", how, inherited, prop)).toBe(true);
 				expect(await api.b.give.drain(), label).not.toContainEqual(expect.objectContaining({ ok: true }));
@@ -268,7 +268,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Permissions > sync
 	});
 
 	it("an after hook sees the value the thenable resolved to and can replace it", async () => {
-		api = await slothlet({ ...config, base: BASE, permissions: { defaultPolicy: "deny", rules: RULES } });
+		api = await slothlet({ ...config, base: BASE, permissions: { policy: "deny", rules: RULES } });
 		const seen = [];
 		api.slothlet.hook.on(
 			"b.give.value:after",
@@ -283,7 +283,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Permissions > sync
 	});
 
 	it("an around hook's next() hands back the thenable's settlement, and the caller gets its value", async () => {
-		api = await slothlet({ ...config, base: BASE, permissions: { defaultPolicy: "deny", rules: RULES } });
+		api = await slothlet({ ...config, base: BASE, permissions: { policy: "deny", rules: RULES } });
 		const seen = [];
 		api.slothlet.hook.on(
 			"b.give.value:around",
@@ -299,9 +299,9 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Permissions > sync
 	});
 
 	it("an error hook sees the target's error and stack, read as b", async () => {
-		api = await slothlet({ ...config, base: BASE, permissions: { defaultPolicy: "deny", rules: RULES } });
+		api = await slothlet({ ...config, base: BASE, permissions: { policy: "deny", rules: RULES } });
 		const seen = [];
-		api.slothlet.hook.on("b.give.failWithGetter:error", ({ error, source }) => seen.push({ error, stack: source?.stack }), {
+		api.slothlet.hook.on("b.give.failWithGetter:error", ({ error, origin: source }) => seen.push({ error, stack: source?.stack }), {
 			id: "i599-error"
 		});
 		expect(await api.a.use.fails("failWithGetter", "secret", "reject")).toBe(true);
@@ -312,7 +312,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Permissions > sync
 	});
 
 	it("an around hook's next() rejects with the thenable's reason", async () => {
-		api = await slothlet({ ...config, base: BASE, permissions: { defaultPolicy: "deny", rules: RULES } });
+		api = await slothlet({ ...config, base: BASE, permissions: { policy: "deny", rules: RULES } });
 		api.slothlet.hook.on("b.give.rejects:around", ({ next }) => next(), { id: "i599-around" });
 		const reason = new Error("rejected");
 		await expect(api.a.use.give("rejects", reason)).rejects.toBe(reason);
@@ -348,7 +348,7 @@ describe.each(getMatrixConfigs())("Permissions > sync leaf thenable (#599) > exa
 		 * @returns {Promise<void>}
 		 */
 		const setup = async () => {
-			api = await slothlet({ ...config, base: BASE, permissions: { defaultPolicy: "deny", rules: RULES } });
+			api = await slothlet({ ...config, base: BASE, permissions: { policy: "deny", rules: RULES } });
 			if (config.hook?.enabled) register(api);
 		};
 
@@ -382,14 +382,14 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))(
 		 * @returns {Promise<object>} The api.
 		 */
 		const build = async () => {
-			api = await slothlet({ ...config, base: BASE, permissions: { defaultPolicy: "deny", rules: RULES } });
+			api = await slothlet({ ...config, base: BASE, permissions: { policy: "deny", rules: RULES } });
 			return api;
 		};
 
 		it.each(HOWS)("%s: a hand-set processed mark does not silence the error hook", async (how) => {
 			await build();
 			const seen = [];
-			api.slothlet.hook.on("b.give.failWith:error", ({ errorType }) => seen.push(errorType), { id: "i599-error" });
+			api.slothlet.hook.on("b.give.failWith:error", ({ class: errorType }) => seen.push(errorType), { id: "i599-error" });
 			expect(await api.a.use.fails("failWith", "forgedMark", "whoami", how)).toBe(true);
 			expect(seen).toEqual(["Error"]);
 		});
@@ -397,7 +397,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))(
 		it.each(HOWS)("%s: the error hook gets the class's own name as errorType, read as b", async (how) => {
 			await build();
 			const seen = [];
-			api.slothlet.hook.on("b.give.failWith:error", ({ errorType }) => seen.push(errorType), { id: "i599-error" });
+			api.slothlet.hook.on("b.give.failWith:error", ({ class: errorType }) => seen.push(errorType), { id: "i599-error" });
 			expect(await api.a.use.fails("failWith", "staticName", "secret", how)).toBe(true);
 			expect(seen).toEqual(["NamedError"]);
 			expect(await api.b.give.drain()).not.toContainEqual(expect.objectContaining({ ok: true }));
@@ -471,7 +471,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))(
 				["with an error hook", true]
 			])("%s", (_errorHook, withErrorHook) => {
 				it.each(MADE_ERRORS)("%s: what slothlet reads of the error never runs as a", async (kind) => {
-					api = await slothlet({ ...config, base: BASE, permissions: { defaultPolicy: "deny", rules: RULES } });
+					api = await slothlet({ ...config, base: BASE, permissions: { policy: "deny", rules: RULES } });
 					if (withErrorHook) api.slothlet.hook.on("**:error", () => {}, { id: "i599-error-all" });
 					for (const target of ["secret", "whoami"]) {
 						const made = await api.b.give.made(kind, target);
@@ -501,7 +501,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))(
 
 		describe.each(Object.entries(PIPELINES).filter(([name]) => name !== "an error hook"))("with %s", (_pipeline, register) => {
 			it.each([["constructorGetter"], ["staticName"]])("%s: with no error hook, the error's class is never looked at", async (kind) => {
-				api = await slothlet({ ...config, base: BASE, permissions: { defaultPolicy: "deny", rules: RULES } });
+				api = await slothlet({ ...config, base: BASE, permissions: { policy: "deny", rules: RULES } });
 				register(api);
 				for (const how of HOWS) {
 					expect(await api.a.use.fails("failWith", kind, "whoami", how)).toBe(true);

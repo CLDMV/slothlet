@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-14T23:02:12-08:00 (1794726132)
+ *	@Last modified time: 2026-11-16T18:28:39-08:00 (1794882519)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -122,7 +122,7 @@ async function summary(api, segments, shape) {
 		call: await shape.call(node),
 		extra: await node.extra(),
 		extraType: typeof node.extra,
-		extraPath: node.extra.__metadata?.apiPath,
+		extraPath: api.slothlet.node(node.extra)?.path?.join("."),
 		listed: Object.keys(node).includes("extra")
 	};
 }
@@ -158,7 +158,7 @@ describe.each(SHAPE_CONFIGS)("in-memory default function + named exports — $mo
 			runtime,
 			silent: true,
 			hook: { enabled: true },
-			api: { collision: { api: "merge" }, mutations: { add: true, remove: true, reload: true } }
+			api: { collision: { mode: { api: "merge" } }, mutations: { add: true, remove: true, reload: true } }
 		});
 	}, HOOK_TIMEOUT);
 
@@ -242,7 +242,7 @@ describe.each(SHAPE_CONFIGS)("in-memory default function + named exports — $mo
 		await api.slothlet.reload();
 		expect(api.mem.full.calc()).toBe("calc");
 		expect(await api.mem.full.calc.extra()).toBe("extra");
-		expect(api.mem.full.calc.extra.__metadata?.apiPath).toBe("mem.full.calc.extra");
+		expect(api.slothlet.node(api.mem.full.calc.extra)?.path?.join(".")).toBe("mem.full.calc.extra");
 	});
 
 	it("keeps an in-memory default function with no other export a plain callable leaf", async () => {
@@ -285,8 +285,10 @@ describe.each(PERMISSION_CONFIGS)(
 				silent: true,
 				api: { mutations: { add: true, remove: true, reload: true } },
 				permissions: {
-					defaultPolicy: "deny",
-					attribution,
+					policy: "deny",
+					caller: {
+						attribution
+					},
 					rules: [
 						{ caller: "**", target: "vault.whoami", effect: "allow" },
 						{ caller: "mem.**", target: "vault.get", effect: "allow" },

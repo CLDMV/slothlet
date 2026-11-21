@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:10-08:00 (1794874570)
+ *	@Last modified time: 2026-11-17T19:49:36-08:00 (1794973776)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -23,6 +23,7 @@
 import { ComponentBase } from "#factories/component-base";
 import { internals as unifiedWrapperInternals } from "#handlers/unified-wrapper";
 import { verifyToken } from "#handlers/lifecycle-token";
+import { FORK, writeTarget } from "#helpers/flow-stores";
 import {
 	ArrayMethods,
 	Arrays,
@@ -41,6 +42,7 @@ import {
 	setValues,
 	splitText,
 	StringMethods,
+	Symbol,
 	WeakMap,
 	WeakMapMethods,
 	WeakSet,
@@ -61,11 +63,49 @@ const { resolveWrapper } = unifiedWrapperInternals("lib/handlers/metadata");
 export const MODULE_ID_SEPARATOR = "__slothlet_sep__";
 
 /**
+ * Add-option key (a symbol, so no consumer option can name it) carrying the parsed `slothlet.module.json` of a package
+ * mount from `modules.add` to the add that mounts it; reported as `slothlet.node(target).manifest`. Recorded with the
+ * add, so a reload's replay records it again.
+ * @type {symbol}
+ * @internal
+ */
+export const MODULE_MANIFEST = Symbol("slothlet.moduleManifest");
+
+/**
  * Metadata handler for introspection of function metadata
  * @class Metadata
  * @extends ComponentBase
  * @package
  */
+/**
+ * The handler {@link Metadata#[FORK]} is copying, read once by the constructor it calls; null otherwise.
+ * @type {Metadata|null}
+ * @private
+ */
+let forkingFrom = null;
+
+/**
+ * A copy of user metadata a later change to the original leaves as it is: plain objects (null-prototype ones included)
+ * and arrays are copied all the way down; any other value is the same value.
+ * @param {*} value - The metadata value.
+ * @returns {*} The copy.
+ * @private
+ */
+function copyMetadataValue(value) {
+	if (Arrays.isArray(value)) {
+		const copy = [];
+		for (let index = 0; index < value.length; index++) copy[index] = copyMetadataValue(value[index]);
+		return copy;
+	}
+	if (value === null || typeof value !== "object") return value;
+	const proto = Objects.getPrototypeOf(value);
+	if (proto !== null && proto !== Objects.prototype) return value;
+	const copy = Objects.create(proto);
+	for (let ofIndex = 0, keys = Objects.keys(value); ofIndex < keys.length; ofIndex++)
+		copy[keys[ofIndex]] = copyMetadataValue(value[keys[ofIndex]]);
+	return copy;
+}
+
 export class Metadata extends ComponentBase {
 	static slothletProperty = "metadata";
 
@@ -78,16 +118,64 @@ export class Metadata extends ComponentBase {
 	 */
 	constructor(slothlet) {
 		super(slothlet);
+		const from = forkingFrom;
+		if (from !== null) {
+			forkingFrom = null;
+			this._instanceId = from._instanceId;
+			this.#copyFrom(from);
+			return;
+		}
 		this._instanceId = `metadata_${this.clock.now()}_${StringMethods.substr(NumberMethods.toString(Math.random(), 36), 2, 9)}`;
 	}
 
 	// Secure WeakMap storage for immutable system metadata
 	#secureMetadata = new WeakMap(); // target → system metadata (IMMUTABLE)
 
+	/**
+	 * The Metadata handler of the copy a full reload is replacing, asked for the system facts of a node this one never
+	 * tagged, while the reload builds in a host with no AsyncLocalStorage (see readThrough); null otherwise.
+	 * @type {Metadata|null}
+	 */
+	#readThrough = null;
+
 	// Centralized user metadata storage - keyed by moduleID
 	/** @type {Map<string, {metadata: object, apiPaths: Set<string>}>} */
 	#userMetadataStore = new Map(); // moduleID → { metadata: {}, apiPaths: Set<string> }
 	#globalUserMetadata = Objects.create(null); // global user metadata (applies to all)
+	/** @type {Map<string, object>} */
+	#manifests = new Map(); // raw moduleID → parsed slothlet.module.json of a package mount
+
+	/**
+	 * A copy of this handler for a `run()` / `scope()` (see `FORK` in `helpers/flow-stores`): its user metadata (by
+	 * module and by path) and global metadata, which later changes to either leave the other as it is. The system
+	 * metadata nodes carry is the api tree's, and stays shared with it, as do the mounted manifests.
+	 * @returns {Metadata} The copy.
+	 * @internal
+	 */
+	[FORK]() {
+		forkingFrom = this;
+		return new Metadata(this.slothlet);
+	}
+
+	/**
+	 * Fill a new handler from the one it is a copy of (see {@link Metadata#[FORK]}).
+	 * @param {Metadata} from - The handler copied.
+	 * @returns {void}
+	 * @private
+	 */
+	#copyFrom(from) {
+		this.#secureMetadata = from.#secureMetadata;
+		this.#readThrough = from.#readThrough;
+		this.#manifests = from.#manifests;
+		this.#globalUserMetadata = copyMetadataValue(from.#globalUserMetadata);
+		for (const ofEntry of mapEntries(from.#userMetadataStore)) {
+			const entry = ofEntry[1];
+			MapMethods.set(this.#userMetadataStore, ofEntry[0], {
+				metadata: copyMetadataValue(entry.metadata),
+				apiPaths: setFrom(setToArray(entry.apiPaths))
+			});
+		}
+	}
 
 	/**
 	 * Merge metadata values while preserving nested plain-object structure.
@@ -105,13 +193,17 @@ export class Metadata extends ComponentBase {
 			this.#assertSafeMetadataKeySegment(metadataKey);
 		}
 
+		if (utilities?.isPlainObject(currentValue) || Arrays.isArray(currentValue)) {
+			this.#assertAcyclic(currentValue, argumentName, metadataKey);
+		}
 		if (utilities?.isPlainObject(currentValue)) {
-			this.#assertAcyclicPlainObject(currentValue, argumentName, metadataKey);
 			this.#assertNoReservedMetadataKeys(currentValue, metadataKey);
 		}
 
+		if (utilities?.isPlainObject(nextValue) || Arrays.isArray(nextValue)) {
+			this.#assertAcyclic(nextValue, argumentName, metadataKey);
+		}
 		if (utilities?.isPlainObject(nextValue)) {
-			this.#assertAcyclicPlainObject(nextValue, argumentName, metadataKey);
 			this.#assertNoReservedMetadataKeys(nextValue, metadataKey);
 		}
 
@@ -123,30 +215,32 @@ export class Metadata extends ComponentBase {
 	}
 
 	/**
-	 * Reject circular plain objects before merging metadata values.
+	 * Reject circular references in a metadata value, through plain objects and arrays in any mix
+	 * (object → array → object, an array holding itself, …) before merging.
 	 * Shared references across sibling branches are allowed because the recursion
 	 * path is released on unwind; only back-edges on the active path throw.
 	 *
-	 * @param {unknown} value - Metadata value to validate.
+	 * @param {unknown} value - Metadata value to validate (a plain object or an array).
 	 * @param {string} argumentName - User-facing argument name used in the error context.
 	 * @param {string|null} [metadataKey=null] - Optional metadata key being merged.
 	 * @returns {void}
+	 * @throws {SlothletError} INVALID_ARGUMENT when the value reaches itself.
 	 * @private
 	 */
-	#assertAcyclicPlainObject(value, argumentName, metadataKey = null) {
+	#assertAcyclic(value, argumentName, metadataKey = null) {
 		const utilities = this.slothlet.helpers?.utilities;
+		const isContainer = (candidate) => Arrays.isArray(candidate) || utilities.isPlainObject(candidate);
 		// Only #mergeMetadataValue() calls this helper, and both call sites already guard with
-		// utilities.isPlainObject(...) before invoking it. The non-plain early return is unreachable.
+		// a plain-object / array check before invoking it. The non-container early return is unreachable.
 		/* v8 ignore next */
-		if (!utilities?.isPlainObject(value)) return;
+		if (!isContainer(value)) return;
 
 		const validate = (candidate, ancestors = new WeakSet()) => {
 			if (WeakSetMethods.has(ancestors, candidate)) {
 				throw new this.SlothletError("INVALID_ARGUMENT", {
 					argument: metadataKey ? `${argumentName}.${metadataKey}` : argumentName,
 					expected: "acyclic object",
-					received: "circular reference",
-					validationError: true
+					received: "circular reference"
 				});
 			}
 
@@ -154,7 +248,7 @@ export class Metadata extends ComponentBase {
 			try {
 				for (let ofIndex = 0, ofList = Objects.values(candidate); ofIndex < ofList.length; ofIndex++) {
 					const nestedValue = ofList[ofIndex];
-					if (utilities.isPlainObject(nestedValue)) {
+					if (isContainer(nestedValue)) {
 						validate(nestedValue, ancestors);
 					}
 				}
@@ -171,7 +265,7 @@ export class Metadata extends ComponentBase {
 	 *
 	 * @param {string} key - Metadata key segment.
 	 * @returns {void}
-	 * @throws {SlothletError} INVALID_METADATA_KEY for reserved key segments.
+	 * @throws {SlothletError} METADATA_KEY_INVALID for reserved key segments.
 	 * @private
 	 */
 	#assertSafeMetadataKeySegment(key) {
@@ -180,7 +274,7 @@ export class Metadata extends ComponentBase {
 		for (let ofIndex = 0, ofList = splitText(key, "."); ofIndex < ofList.length; ofIndex++) {
 			const segment = ofList[ofIndex];
 			if (SetMethods.has(blocked, segment)) {
-				throw new this.SlothletError("INVALID_METADATA_KEY", {
+				throw new this.SlothletError("METADATA_KEY_INVALID", {
 					key,
 					type: "string",
 					expected: "safe dot-notation key without reserved segments"
@@ -195,7 +289,7 @@ export class Metadata extends ComponentBase {
 	 * @param {object} value - Plain-object metadata payload.
 	 * @param {string|null} [metadataKey=null] - Optional key prefix for error context.
 	 * @returns {void}
-	 * @throws {SlothletError} INVALID_METADATA_KEY for reserved key segments.
+	 * @throws {SlothletError} METADATA_KEY_INVALID for reserved key segments.
 	 * @private
 	 */
 	#assertNoReservedMetadataKeys(value, metadataKey = null) {
@@ -210,7 +304,7 @@ export class Metadata extends ComponentBase {
 				if (SetMethods.has(blocked, key)) {
 					const fullPath = path ? `${path}.${key}` : key;
 					const keyPath = metadataKey ? `${metadataKey}.${fullPath}` : fullPath;
-					throw new this.SlothletError("INVALID_METADATA_KEY", {
+					throw new this.SlothletError("METADATA_KEY_INVALID", {
 						key: keyPath,
 						type: "string",
 						expected: "safe dot-notation key without reserved segments"
@@ -271,7 +365,7 @@ export class Metadata extends ComponentBase {
 		// inside lifecycle-token.mjs — it is never exported as a constant, so no static
 		// file import can yield a usable value.
 		if (!verifyToken(this.slothlet, token)) {
-			throw new this.SlothletError("METADATA_LIFECYCLE_BYPASS", {}, null, { validationError: true });
+			throw new this.SlothletError("METADATA_LIFECYCLE_BYPASS", {});
 		}
 
 		if (!target) return;
@@ -310,41 +404,62 @@ export class Metadata extends ComponentBase {
 	}
 
 	/**
-	 * Get system metadata only (without user metadata)
-	 * @param {Function|Object} target - Wrapper or function
-	 * @returns {Object|null} System metadata or null
+	 * The system facts slothlet recorded for a node: its file, folder, api path and owning module.
+	 *
+	 * @description
+	 * Looked up on the wrapper first, then on its impl (for a node whose wrapper was never tagged), the order every
+	 * reader uses, so set(), get() and node() always agree on which node they mean. Internal only: consumers read
+	 * these facts through `slothlet.node(target)`; user metadata never carries them.
+	 *
+	 * @param {Function|Object} target - Wrapper, proxy or function.
+	 * @returns {{filePath: string, sourceFolder: string, apiPath: string, moduleID: string, baseModuleID: string, taggedAt: number}|null}
+	 *   The frozen system record, or null when the target was never tagged.
 	 * @package
+	 * @example
+	 * metadata.getSystemMetadata(api.math.add)?.baseModuleID; // "base"
 	 */
 	getSystemMetadata(target) {
-		if (!target) return null;
-
-		// Normalize target: if it's a proxy, get the underlying wrapper
+		if (!target || (typeof target !== "object" && typeof target !== "function")) return null;
 		const actualTarget = resolveWrapper(target) ?? target;
-
-		// Try impl first (for wrapped functions), then target itself
-		const systemData = WeakMapMethods.get(this.#secureMetadata, actualTarget.____slothletInternal?.impl || actualTarget);
-		return systemData || null;
+		const impl = actualTarget.____slothletInternal?.impl;
+		return (
+			WeakMapMethods.get(this.#secureMetadata, actualTarget) ||
+			(impl && (typeof impl === "object" || typeof impl === "function") ? WeakMapMethods.get(this.#secureMetadata, impl) : undefined) ||
+			(this.#readThrough !== null ? this.#readThrough.getSystemMetadata(target) : null) ||
+			null
+		);
 	}
 
 	/**
-	 * Get metadata for a target (combines system + user)
-	 * For wrappers: checks current impl to ensure metadata is current
-	 * @param {Function|Object} target - Wrapper or function
-	 * @returns {Object} Combined metadata (deeply frozen)
+	 * While a full reload builds its new copy in a host with no AsyncLocalStorage, calls reach the new copy's handler,
+	 * and the nodes they run are the copy the instance has: this handler answers the system facts of those nodes from
+	 * that copy's handler until the reload ends.
+	 * @param {Metadata|null} handler - The handler of the copy being replaced, or null to stop.
+	 * @returns {void}
+	 * @package
+	 * @example
+	 * metadata.readThrough(previous.metadata);
+	 */
+	readThrough(handler) {
+		this.#readThrough = handler === this ? null : (handler ?? null);
+	}
+
+	/**
+	 * The user metadata of a node: global < api path chain < the node's own.
+	 *
+	 * @description
+	 * Only what consumers set (through `metadata.global`, `metadata.set`, or the `metadata` option of an add). The system
+	 * facts slothlet records (file, folder, path, module) are never merged in; `slothlet.node(target)` reports them.
+	 *
+	 * @param {Function|Object} target - Wrapper, proxy or function.
+	 * @returns {Object} The merged user metadata (deeply frozen).
 	 * @public
+	 * @example
+	 * metadata.getMetadata(api.math.add); // { category: "math" }
 	 */
 	getMetadata(target) {
-		if (!target) return {};
-
-		// Normalize target: if it's a proxy, get the underlying wrapper
-		const actualTarget = resolveWrapper(target) ?? target;
-
-		// Get system metadata - try WRAPPER first (each wrapper has unique metadata),
-		// then fall back to impl (for cases where wrapper wasn't tagged)
-		const systemData =
-			WeakMapMethods.get(this.#secureMetadata, actualTarget) ||
-			WeakMapMethods.get(this.#secureMetadata, actualTarget.____slothletInternal?.impl) ||
-			{};
+		if (!target) return this.#deepFreeze({ ...this.#globalUserMetadata });
+		const systemData = this.getSystemMetadata(target) ?? {};
 
 		// Lookup user metadata by BOTH moduleID AND rootApiPath
 		// - registerUserMetadata() stores by root apiPath (for api.add())
@@ -352,42 +467,14 @@ export class Metadata extends ComponentBase {
 		const moduleID = systemData.moduleID;
 		const apiPath = systemData.apiPath;
 
-		// Traverse UP the apiPath chain to collect inherited metadata
-		// Example: "mixed.config.settings.getPluginConfig" checks:
-		//   - "mixed.config.settings.getPluginConfig"
-		//   - "mixed.config.settings"
-		//   - "mixed.config"
-		//   - "mixed"
-		const collectMetadataFromParents = (path) => {
-			const parts = splitText(path, ".");
-			const collected = {};
-
-			// Start from root and work down (parent metadata merged first, child overrides)
-			for (let i = 1; i <= parts.length; i++) {
-				const parentPath = ArrayMethods.join(typeof parts === "string" ? StringMethods.slice(parts, 0, i) : copyList(parts, 0, i), ".");
-				const parentMeta = MapMethods.get(this.#userMetadataStore, parentPath);
-				if (parentMeta?.metadata) {
-					Objects.assign(collected, parentMeta.metadata);
-				}
-			}
-
-			return collected;
-		};
-
 		const userMetadataByModule = moduleID ? MapMethods.get(this.#userMetadataStore, moduleID) : null;
-		const userMetadataByPath = apiPath ? collectMetadataFromParents(apiPath) : {};
+		const userMetadataByPath = apiPath ? this.#collectPathChain(apiPath) : {};
 
-		// Merge both user metadata sources (path < moduleID priority)
-		const userData = {
-			...userMetadataByPath,
-			...(userMetadataByModule?.metadata || {})
-		};
-
-		// Merge order: global < user (by path) < user (by moduleID) < SYSTEM (system always wins)
+		// Merge order: global < user (by path) < user (by moduleID)
 		const combined = {
 			...this.#globalUserMetadata,
-			...userData,
-			...systemData // System metadata LAST = highest priority (immutable)
+			...userMetadataByPath,
+			...(userMetadataByModule?.metadata || {})
 		};
 
 		// If there's a nested 'metadata' key, spread it to root level and remove the nested key
@@ -403,12 +490,62 @@ export class Metadata extends ComponentBase {
 	}
 
 	/**
+	 * Merge the path-store entries along an api path, root to leaf (closer to the leaf wins).
+	 * @param {string} apiPath - Dot-notation api path.
+	 * @returns {Object} The merged entries.
+	 * @private
+	 * @example
+	 * this.#collectPathChain("math.add"); // entries of "math" then "math.add"
+	 */
+	#collectPathChain(apiPath) {
+		const parts = splitText(apiPath, ".");
+		const collected = {};
+		for (let i = 1; i <= parts.length; i++) {
+			const parentPath = ArrayMethods.join(copyList(parts, 0, i), ".");
+			const parentMeta = MapMethods.get(this.#userMetadataStore, parentPath);
+			if (parentMeta?.metadata) {
+				Objects.assign(collected, parentMeta.metadata);
+			}
+		}
+		return collected;
+	}
+
+	/**
+	 * Record (or clear) the parsed `slothlet.module.json` of a package mount, reported as `node(target).manifest`.
+	 * @param {string} moduleID - The raw module id of the mount.
+	 * @param {object|null|undefined} manifest - The normalized manifest, or nothing to clear it.
+	 * @returns {void}
+	 * @package
+	 * @example
+	 * metadata.setModuleManifest("pkg-a", manifest);
+	 */
+	setModuleManifest(moduleID, manifest) {
+		if (typeof moduleID !== "string") return;
+		if (manifest && typeof manifest === "object") MapMethods.set(this.#manifests, moduleID, manifest);
+		else MapMethods.delete(this.#manifests, moduleID);
+	}
+
+	/**
+	 * The parsed `slothlet.module.json` of the package mount that owns a module id.
+	 * @param {string|null|undefined} moduleID - The raw module id.
+	 * @returns {object|undefined} The manifest, or undefined when the module is no package mount.
+	 * @package
+	 * @example
+	 * metadata.getModuleManifest("pkg-a")?.name; // "@acme/pkg-a"
+	 */
+	getModuleManifest(moduleID) {
+		return typeof moduleID === "string" ? MapMethods.get(this.#manifests, moduleID) : undefined;
+	}
+
+	/**
 	 * Set global user metadata (applies to all functions)
 	 * @param {string} key - Metadata key
 	 * @param {unknown} value - Metadata value
 	 * @public
 	 */
 	setGlobalMetadata(key, value) {
+		const written = writeTarget(this);
+		if (written !== this) return written.setGlobalMetadata(key, value);
 		this.#globalUserMetadata[key] = this.#mergeMetadataValue(this.#globalUserMetadata[key], value, "metadata", key);
 	}
 
@@ -420,8 +557,10 @@ export class Metadata extends ComponentBase {
 	 * @public
 	 */
 	setUserMetadata(target, key, value) {
+		const written = writeTarget(this);
+		if (written !== this) return written.setUserMetadata(target, key, value);
 		if (typeof target !== "function" && typeof target !== "object") {
-			throw new this.SlothletError("INVALID_METADATA_TARGET", {
+			throw new this.SlothletError("METADATA_TARGET_INVALID", {
 				target: typeof target,
 				expected: "function or object"
 			});
@@ -440,7 +579,7 @@ export class Metadata extends ComponentBase {
 		const moduleID = systemData.moduleID;
 
 		if (!moduleID) {
-			throw new this.SlothletError("METADATA_NO_MODULE_ID", {}, null, { validationError: true });
+			throw new this.SlothletError("METADATA_NO_MODULE", {});
 		}
 
 		// Get or create user metadata entry for this moduleID
@@ -478,8 +617,10 @@ export class Metadata extends ComponentBase {
 	 * @public
 	 */
 	removeUserMetadata(target, key) {
+		const written = writeTarget(this);
+		if (written !== this) return written.removeUserMetadata(target, key);
 		if (typeof target !== "function" && typeof target !== "object") {
-			throw new this.SlothletError("INVALID_METADATA_TARGET", {
+			throw new this.SlothletError("METADATA_TARGET_INVALID", {
 				target: typeof target,
 				expected: "function or object"
 			});
@@ -509,7 +650,7 @@ export class Metadata extends ComponentBase {
 				for (let ofIndex = 0, ofList = key; ofIndex < ofList.length; ofIndex++) {
 					const k = ofList[ofIndex];
 					if (typeof k !== "string") {
-						throw new this.SlothletError("INVALID_METADATA_KEY", {
+						throw new this.SlothletError("METADATA_KEY_INVALID", {
 							key: k,
 							type: typeof k,
 							expected: "string"
@@ -523,7 +664,7 @@ export class Metadata extends ComponentBase {
 						metadataKey = ofEntry[0],
 						nestedKeys = ofEntry[1];
 					if (!Arrays.isArray(nestedKeys)) {
-						throw new this.SlothletError("INVALID_METADATA_KEY", {
+						throw new this.SlothletError("METADATA_KEY_INVALID", {
 							key: metadataKey,
 							type: typeof nestedKeys,
 							expected: "array"
@@ -534,7 +675,7 @@ export class Metadata extends ComponentBase {
 						for (let ofIndex = 0, ofList = nestedKeys; ofIndex < ofList.length; ofIndex++) {
 							const nestedKey = ofList[ofIndex];
 							if (typeof nestedKey !== "string") {
-								throw new this.SlothletError("INVALID_METADATA_KEY", {
+								throw new this.SlothletError("METADATA_KEY_INVALID", {
 									key: nestedKey,
 									type: typeof nestedKey,
 									expected: "string"
@@ -547,7 +688,7 @@ export class Metadata extends ComponentBase {
 			} else if (typeof key === "string") {
 				delete storeEntry.metadata[key];
 			} else {
-				throw new this.SlothletError("INVALID_METADATA_KEY", {
+				throw new this.SlothletError("METADATA_KEY_INVALID", {
 					key: key,
 					type: typeof key,
 					expected: "string, string[], or object"
@@ -583,16 +724,11 @@ export class Metadata extends ComponentBase {
 	 */
 	registerUserMetadata(identifier, metadata) {
 		if (!identifier || typeof identifier !== "string") {
-			throw new this.SlothletError(
-				"INVALID_ARGUMENT",
-				{
-					argument: "identifier",
-					expected: "non-empty string",
-					received: typeof identifier
-				},
-				null,
-				{ validationError: true }
-			);
+			throw new this.SlothletError("INVALID_ARGUMENT", {
+				argument: "identifier",
+				expected: "non-empty string",
+				received: typeof identifier
+			});
 		}
 
 		let entry = MapMethods.get(this.#userMetadataStore, identifier);
@@ -633,7 +769,7 @@ export class Metadata extends ComponentBase {
 	 * Multiple calls to the same path are merged; later calls override earlier
 	 * ones for conflicting keys.
 	 *
-	 * Priority (lowest → highest): global → setForPath → set() → system.
+	 * Priority (lowest → highest): global → path (closer to the leaf wins) → the function's own.
 	 *
 	 * @param {string} apiPath - Dot-notation path (e.g. `"math"`, `"math.add"`)
 	 * @param {string|Object} keyOrObj - Key string (with `value`) OR metadata object to merge
@@ -641,24 +777,20 @@ export class Metadata extends ComponentBase {
 	 * @public
 	 */
 	setPathMetadata(apiPath, keyOrObj, value) {
+		const written = writeTarget(this);
+		if (written !== this) return written.setPathMetadata(apiPath, keyOrObj, value);
 		if (typeof apiPath !== "string" || !apiPath) {
-			throw new this.SlothletError(
-				"INVALID_ARGUMENT",
-				{ argument: "apiPath", expected: "non-empty string", received: typeof apiPath },
-				null,
-				{ validationError: true }
-			);
+			throw new this.SlothletError("INVALID_ARGUMENT", { argument: "apiPath", expected: "non-empty string", received: typeof apiPath });
 		}
 
 		const metadataObj = typeof keyOrObj === "string" ? { [keyOrObj]: value } : keyOrObj;
 
 		if (!metadataObj || typeof metadataObj !== "object" || Arrays.isArray(metadataObj)) {
-			throw new this.SlothletError(
-				"INVALID_ARGUMENT",
-				{ argument: "keyOrObj", expected: "string key or plain object", received: typeof keyOrObj },
-				null,
-				{ validationError: true }
-			);
+			throw new this.SlothletError("INVALID_ARGUMENT", {
+				argument: "keyOrObj",
+				expected: "string key or plain object",
+				received: typeof keyOrObj
+			});
 		}
 
 		this.registerUserMetadata(apiPath, metadataObj);
@@ -679,19 +811,10 @@ export class Metadata extends ComponentBase {
 	 * metadata.getPathMetadata("v1.auth"); // { stable: true, category: "auth" }
 	 */
 	getPathMetadata(apiPath) {
-		// All callers (getForVersion) always pass a valid resolved string; the null/non-string guard is defensive.
+		// All callers (metadata.get) always pass a valid resolved string; the null/non-string guard is defensive.
 		/* v8 ignore next */
 		if (!apiPath || typeof apiPath !== "string") return {};
-		const parts = splitText(apiPath, ".");
-		const collected = {};
-		for (let i = 1; i <= parts.length; i++) {
-			const parentPath = ArrayMethods.join(copyList(parts, 0, i), ".");
-			const parentMeta = MapMethods.get(this.#userMetadataStore, parentPath);
-			if (parentMeta?.metadata) {
-				Objects.assign(collected, parentMeta.metadata);
-			}
-		}
-		return { ...this.#globalUserMetadata, ...collected };
+		return { ...this.#globalUserMetadata, ...this.#collectPathChain(apiPath) };
 	}
 
 	/**
@@ -708,6 +831,8 @@ export class Metadata extends ComponentBase {
 	 * @public
 	 */
 	removePathMetadata(apiPath, key) {
+		const written = writeTarget(this);
+		if (written !== this) return written.removePathMetadata(apiPath, key);
 		if (!apiPath || typeof apiPath !== "string") return;
 
 		const entry = MapMethods.get(this.#userMetadataStore, apiPath);
@@ -719,7 +844,7 @@ export class Metadata extends ComponentBase {
 			for (let ofIndex = 0, ofList = key; ofIndex < ofList.length; ofIndex++) {
 				const k = ofList[ofIndex];
 				if (typeof k !== "string") {
-					throw new this.SlothletError("INVALID_METADATA_KEY", {
+					throw new this.SlothletError("METADATA_KEY_INVALID", {
 						key: k,
 						type: typeof k,
 						expected: "string"
@@ -730,7 +855,7 @@ export class Metadata extends ComponentBase {
 		} else if (typeof key === "string") {
 			delete entry.metadata[key];
 		} else {
-			throw new this.SlothletError("INVALID_METADATA_KEY", {
+			throw new this.SlothletError("METADATA_KEY_INVALID", {
 				key,
 				type: typeof key,
 				expected: "string or string[]"
@@ -782,6 +907,8 @@ export class Metadata extends ComponentBase {
 	 * @package
 	 */
 	importUserState(state) {
+		const written = writeTarget(this);
+		if (written !== this) return written.importUserState(state);
 		if (!state) return;
 
 		// Restore global metadata (merge, existing keys win)
@@ -818,65 +945,17 @@ export class Metadata extends ComponentBase {
 	}
 
 	/**
-	 * Get metadata of any function by API path.
-	 *
-	 * Traverses `this.slothlet.api` using the dot-notation path, materializes
-	 * lazy wrappers as needed, then returns the combined metadata for the
-	 * resolved target via `getMetadata()`.
-	 *
-	 * Called by the `api.slothlet.metadata.get()` closure injected in
-	 * `slothlet.injectRuntimeMetadataFunctions()`.
-	 *
-	 * @param {string} path - Dot-notation API path (e.g. `"math.add"`)
-	 * @returns {Promise<object|null>} Combined metadata or null
-	 * @public
-	 */
-	async get(path) {
-		if (typeof path !== "string") {
-			throw new this.SlothletError("INVALID_ARGUMENT", {
-				argument: "path",
-				expected: "string",
-				received: typeof path
-			});
-		}
-
-		const apiRoot = this.slothlet.api;
-		if (!apiRoot) return null;
-
-		const parts = splitText(path, ".");
-		let target = apiRoot;
-
-		for (let ofIndex = 0, ofList = parts; ofIndex < ofList.length; ofIndex++) {
-			const part = ofList[ofIndex];
-			if (!target || (typeof target !== "object" && typeof target !== "function")) {
-				return null;
-			}
-			target = target[part];
-		}
-
-		if (target && typeof target._materialize === "function") {
-			await target._materialize();
-		}
-
-		if (typeof target === "function" || (target && resolveWrapper(target)?.____slothletInternal?.impl)) {
-			return this.getMetadata(target);
-		}
-
-		return null;
-	}
-
-	/**
-	 * Get metadata for the currently-executing API function.
+	 * The currently-executing API function, as a caller object ({ path, module, metadata, version }).
 	 *
 	 * Reads `currentWrapper` from the active context-manager store — the same
 	 * fast synchronous path used by the unified wrapper's `apply` trap.
-	 * Throws `RUNTIME_NO_ACTIVE_CONTEXT` when called outside of a slothlet
+	 * Throws `CONTEXT_NOT_ACTIVE` when called outside of a slothlet
 	 * execution context.
 	 *
 	 * Called by the `api.slothlet.metadata.self()` closure injected in
 	 * `slothlet.injectRuntimeMetadataFunctions()`.
 	 *
-	 * @returns {object} Combined metadata for the current function
+	 * @returns {{path: string[], module: string|null, metadata: object, version: object|null}} The current leaf, as a caller object
 	 * @public
 	 */
 	self() {
@@ -889,13 +968,13 @@ export class Metadata extends ComponentBase {
 		// `await` while another is suspended would be handed the *other* module's metadata.
 		const currentWrapper = this.slothlet.contextManager?.getCallerIdentity?.(instanceID)?.currentWrapper;
 		if (!ctx || !currentWrapper) {
-			throw new this.SlothletError("RUNTIME_NO_ACTIVE_CONTEXT", {}, null, { validationError: true });
+			throw new this.SlothletError("CONTEXT_NOT_ACTIVE", {});
 		}
-		return this.getMetadata(currentWrapper);
+		return this.#identity(currentWrapper);
 	}
 
 	/**
-	 * Get metadata for the API function that called the current function.
+	 * The API function that called the current function, as a caller object ({ path, module, metadata, version }).
 	 *
 	 * Reads `callerWrapper` from the active context-manager store.
 	 * Returns `null` when there is no caller in context (e.g. the function
@@ -904,20 +983,43 @@ export class Metadata extends ComponentBase {
 	 * Called by the `api.slothlet.metadata.caller()` closure injected in
 	 * `slothlet.injectRuntimeMetadataFunctions()`.
 	 *
-	 * @returns {object|null} Combined metadata for the calling function, or null
+	 * @returns {{path: string[], module: string|null, metadata: object, version: object|null}|null} The calling leaf, as a caller object, or null
 	 * @public
 	 */
 	caller() {
 		const callerWrapper = this.callerWrapper();
 		if (!callerWrapper) return null;
-		return this.getMetadata(callerWrapper);
+		return this.#identity(callerWrapper);
+	}
+
+	/**
+	 * The `caller` object of a leaf, the one shape slothlet hands out for "who": `{ path, module, metadata, version }`
+	 * (its api path as segments, its module id, its user metadata, its version record or null). The same object a
+	 * version dispatcher and an around hook get.
+	 * @param {object} wrapper - The leaf's wrapper.
+	 * @returns {{path: string[], module: string|null, metadata: object, version: object|null}} The caller object.
+	 * @private
+	 * @example
+	 * this.#identity(currentWrapper).path; // ["payments", "charge"]
+	 */
+	#identity(wrapper) {
+		const built = this.slothlet.handlers?.versionManager?.buildCallerArg?.(wrapper);
+		/* v8 ignore next 2 -- the version manager is always registered; the fallback keeps the shape without one */
+		if (built) return built;
+		const system = this.getSystemMetadata(wrapper);
+		return {
+			path: system?.apiPath ? splitText(system.apiPath, ".") : [],
+			module: system?.baseModuleID ?? null,
+			metadata: this.getMetadata(wrapper),
+			version: null
+		};
 	}
 
 	/**
 	 * Resolve the wrapper of the API function that called the current function.
 	 *
 	 * The single resolution behind {@link Metadata#caller}: reads `callerWrapper` from the active
-	 * context-manager store. `self.slothlet.lockCaller.caller()` pins exactly this identity, so the
+	 * context-manager store. `self.slothlet.pin.caller()` pins exactly this identity, so the
 	 * two can never disagree about who "the caller" is.
 	 *
 	 * @returns {object|null} The calling function's wrapper, or null when there is no module caller

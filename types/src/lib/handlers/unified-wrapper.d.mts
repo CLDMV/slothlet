@@ -289,7 +289,7 @@ declare function runtime_selfModuleCeilings(slothlet: object, writer?: object | 
 /**
  * Hand out a node of the api reached through `self` as a view that keeps who read it (#625).
  *
- * `self.X = …` with no module executing is refused (`RUNTIME_NO_ACTIVE_CONTEXT_SELF`): nobody is there to
+ * `self.X = …` with no module executing is refused (`CONTEXT_NOT_ACTIVE_SELF`): nobody is there to
  * own the write. A node a module took through `self` and wrote into later from outside any call would
  * otherwise reach the node with no caller, which is the host's standing. So a write through the view made
  * with no module executing (outside a `run()` / `scope()` the host opened) is held to the module that read
@@ -324,7 +324,7 @@ declare function runtime_selfModuleCeilings(slothlet: object, writer?: object | 
  */
 declare function runtime_selfView(node: any, reader?: object, from?: object | null, access?: object | null): any;
 /**
- * Record a stand-in for one of the framework's root members (an isolated scope's copy-on-write view of the
+ * Record a stand-in for one of the framework's root members (a view of the
  * `slothlet` namespace) as that member, so module code reading it through the scope's `self` is handed the same
  * view of it as outside the scope ({@link runtime_selfFrameworkView}). Anything else is left unrecorded.
  *
@@ -334,7 +334,7 @@ declare function runtime_selfView(node: any, reader?: object, from?: object | nu
  * @internal
  *
  * @example
- * runtime_registerFrameworkMemberCopy(makeCopyOnWriteSelf(api.slothlet), api.slothlet);
+ * runtime_registerFrameworkMemberCopy(viewOf(api.slothlet), api.slothlet);
  */
 declare function runtime_registerFrameworkMemberCopy(copy: object, member: any): object;
 /**
@@ -355,12 +355,13 @@ declare function runtime_registerFrameworkMember(member: object | Function, slot
  * The framework's own namespace (`self.slothlet`) and root functions (`self.shutdown`, `self.destroy`) as a
  * module reads them (#625).
  *
- * What they do depends on who calls: `diag.getAPI()` hands module code a view of the api and the host the
+ * What they do depends on who calls: `diag.api()` hands module code a view of the api and the host the
  * api itself, `hook.on()` / `lifecycle.on()` register for the module calling or for the host. A function a
  * module read and kept, called later from outside any call, would run as the host. Through the view it runs
  * as the module that read it, and so does every other use of the view — a member read, a write — made with
- * no standing of its own. While a module executes, or inside a `run()` / `scope()` the host opened, the view
- * behaves as the member itself. The host is handed the member itself.
+ * no standing of its own. While a module executes, or while the host's own code runs inside a `run()` / `scope()`
+ * it opened, the view behaves as the member itself; a module's code running in such a flow uses it as the reader
+ * (see {@link runtime_selfWriteHasStanding}). The host is handed the member itself.
  *
  * A module never changes them (#625): they are shared by every module and the host, so an assignment,
  * definition, or deletion of a member at any depth, or a change to a member's prototype or extensibility
@@ -375,7 +376,7 @@ declare function runtime_registerFrameworkMember(member: object | Function, slot
  * @internal
  *
  * @example
- * const diag = runtime_selfFrameworkView(api.slothlet).diag; // later diag.getAPI() still answers the module
+ * const diag = runtime_selfFrameworkView(api.slothlet).diag; // later diag.api() still answers the module
  */
 declare function runtime_selfFrameworkView(member: any, reader?: object, slothlet?: object): any;
 /**
@@ -389,7 +390,7 @@ declare function runtime_selfFrameworkView(member: any, reader?: object, slothle
  * @returns {void}
  * @throws {SlothletError} `PERMISSION_DENIED` when module code changes a framework root member the write
  *   rules protect, `LOOSE_SET_UNATTRIBUTED` when the live runtime cannot tell which call is executing, and
- *   `INVALID_CONFIG_API_PATH_INVALID` for the reserved name otherwise.
+ *   `API_PATH_INVALID` for the reserved name otherwise.
  * @internal
  *
  * @example
@@ -423,7 +424,7 @@ declare function runtime_selfChangeTarget(ctx: object, prop: string | symbol | n
  * own (a function of `self.slothlet` a module kept, called later from outside any call) (#625).
  *
  * Run that way the code has no caller, which reads as "called from the host". What pins the caller
- * (`lockCaller.caller`) pins this module instead, so a kept function never acts as the host.
+ * (`pin.caller`) pins this module instead, so a kept function never acts as the host.
  *
  * @param {object} slothlet - Instance the executing code runs in.
  * @returns {object|null} The reader's wrapper, or null when the executing code is no such use.
@@ -660,7 +661,7 @@ declare function runtime_contextRead(ctx: object, value: any): any;
 declare function runtime_eventPayloadFor(payload: any, listener: object | null, emitter: object | null, slothlet: object): any;
 /**
  * Unified wrapper class that handles all proxy concerns in one place:
- * - __impl pattern for reload support
+ * - ____impl pattern for reload support
  * - Lazy/eager mode materialization
  * - Recursive waiting proxy for deep lazy loading
  * - Context binding through contextManager
@@ -773,16 +774,16 @@ declare class UnifiedWrapper extends ComponentBase {
         sourceFolder: string | null;
     }): object | Function | null;
     /**
-     * Reconstruct a full implementation object from a wrapper whose _impl may have
+     * Reconstruct a full implementation object from a wrapper whose ____impl may have
      * been depleted by ___adoptImplChildren.
      *
      * @description
-     * After ___adoptImplChildren runs, children are moved from _impl onto the wrapper as
-     * own properties and deleted from _impl. This helper reconstructs the original
-     * impl by merging the remaining _impl keys with the adopted children extracted
+     * After ___adoptImplChildren runs, children are moved from ____impl onto the wrapper as
+     * own properties and deleted from ____impl. This helper reconstructs the original
+     * impl by merging the remaining ____impl keys with the adopted children extracted
      * from the wrapper.
      *
-     * Recursively walks the wrapper tree so nested objects whose _impl was also
+     * Recursively walks the wrapper tree so nested objects whose ____impl was also
      * depleted are properly reconstructed. For callable (function) impls, returns
      * the function directly since keepImplProperties prevents depletion.
      *
@@ -842,7 +843,6 @@ declare class UnifiedWrapper extends ComponentBase {
      * @param {Function|Object|null} [options.initialImpl=null] - Initial implementation (null for lazy mode)
      * @param {Function} [options.materializeFunc=null] - Async function to materialize lazy modules
      * @param {boolean} [options.isCallable=false] - Whether the wrapper should be callable
-     * @param {boolean} [options.materializeOnCreate=false] - Whether to materialize on creation
      * @param {string} [options.filePath=null] - File path of the module source
      * @param {string[]|null} [options.exportPath] - Access path within `filePath`'s module namespace
      *   that produced `initialImpl` (#484). When omitted it is looked up from the ownership export index
@@ -879,13 +879,12 @@ declare class UnifiedWrapper extends ComponentBase {
      * 	materializeFunc: async () => import("./math.mjs")
      * });
      */
-    constructor(slothlet: Object, { mode, apiPath, initialImpl, materializeFunc, isCallable, materializeOnCreate, filePath, exportPath, moduleID, sourceFolder, memberNames, __adoptVisited, deferChildAdopt, __position, nullishDefault }: {
+    constructor(slothlet: Object, { mode, apiPath, initialImpl, materializeFunc, isCallable, filePath, exportPath, moduleID, sourceFolder, memberNames, __adoptVisited, deferChildAdopt, __position, nullishDefault }: {
         mode: string;
         apiPath: string;
         initialImpl?: Object | Function | null | undefined;
         materializeFunc?: Function | undefined;
         isCallable?: boolean | undefined;
-        materializeOnCreate?: boolean | undefined;
         filePath?: string | undefined;
         exportPath?: string[] | null | undefined;
         moduleID?: string | undefined;
@@ -927,15 +926,15 @@ declare class UnifiedWrapper extends ComponentBase {
     ____inspectCustom(____depth: any, ____options: any, ____inspect: any): any;
     /**
      * Get current implementation
-     * @returns {Function|Object|null} Current __impl value
+     * @returns {Function|Object|null} Current ____impl value
      * @public
      */
-    public get __impl(): Function | Object | null;
+    public get ____impl(): Function | Object | null;
     /**
      * Core implementation-application logic shared by ___setImpl and lazy materialization.
      * Clones the implementation (protecting the API cache from ___adoptImplChildren's
-     * delete operations), clears the invalid flag, upgrades __isCallable when a
-     * callable impl arrives on a configurable wrapper, updates __filePath for lazy
+     * delete operations), clears the invalid flag, upgrades callability when a
+     * callable impl arrives on a configurable wrapper, updates ____filePath for lazy
      * folder wrappers, and adopts children.
      *
      * @param {*} newImpl - The new implementation value.
@@ -979,7 +978,7 @@ declare class UnifiedWrapper extends ComponentBase {
      * to the live namespace — but stays non-callable itself and keeps `typeof` "object".
      *
      * The upgrade is one-way: when the function later goes away (a remove or a reload), the callable
-     * proxy stays and a call throws `INVALID_CONFIG_NOT_A_FUNCTION`, the same as for a namespace that
+     * proxy stays and a call throws `API_PATH_NOT_CALLABLE`, the same as for a namespace that
      * was callable from the start.
      *
      * @returns {void}
@@ -1083,17 +1082,6 @@ declare class UnifiedWrapper extends ComponentBase {
      */
     private ___materialize;
     /**
-     * @private
-     * @returns {Promise<void>}
-     *
-     * @description
-     * Exposes lazy materialization for waiting proxies and nested wrappers.
-     *
-     * @example
-     * await wrapper._materialize();
-     */
-    private _materialize;
-    /**
      * Hand the value a lazy node just loaded to the routine manager as its module's contribution at this
      * path (#754). An eager node's value reaches it through the construction's internal `impl:created`;
      * a lazy node is built with no value, so its own function (a callable folder's `default`) would never
@@ -1167,6 +1155,26 @@ declare class UnifiedWrapper extends ComponentBase {
      * wrapper.___adoptImplChildren();
      */
     private ___adoptImplChildren;
+    /**
+     * Adopt one member of another value (a collision's losing callable) onto this node the way the node's own
+     * members are adopted: an accessor stays an accessor, run on every read with the node as `this`; an object or
+     * function becomes a child node at this node's path and the member's key; anything else is held as it is.
+     *
+     * @private
+     * @param {string} key - The member's key.
+     * @param {object|Function} source - The value holding the member.
+     * @returns {void}
+     *
+     * @description
+     * A callable folder module that puts members on its own function (`fn.live` as a getter, `fn.me = fn`) keeps
+     * them on its impl, where the get trap serves them live and wraps a function or object as a child. When that
+     * folder loses its slot in a collision, its members move to the node that kept the slot; copying their values
+     * would freeze a getter at the value it had and hand out a self-reference as the bare function (#874).
+     *
+     * @example
+     * keptWrapper.___adoptForeignMember("live", losingFn);
+     */
+    private ___adoptForeignMember;
     /**
      * @private
      * @param {string|symbol} key - Child property name

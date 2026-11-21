@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-14T20:02:33-08:00 (1794715353)
+ *	@Last modified time: 2026-11-16T18:30:46-08:00 (1794882646)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -42,7 +42,7 @@ import { ROUTES } from "../../../../api_tests/api_test_stack_settings/routes.mjs
 const FIXTURE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../../api_tests/api_test_stack_settings");
 const DENIED = "PERMISSION_DENIED";
 /** `self` read with no call to tell whose it is (the host running settler's function under fast, capture off). */
-const NO_CONTEXT = "RUNTIME_NO_ACTIVE_CONTEXT_SELF";
+const NO_CONTEXT = "CONTEXT_NOT_ACTIVE_SELF";
 
 const CHANGES = [
 	"globalFunction",
@@ -99,7 +99,7 @@ describe.each(matrix)(
 				mode,
 				runtime,
 				silent: true,
-				permissions: { defaultPolicy: "allow", attribution, references: { capture }, rules: ROUTES.rules }
+				permissions: { policy: "allow", caller: { attribution, capture }, rules: ROUTES.rules }
 			});
 			for (const route of ROUTE_NAMES) unchanged[route] = await answer(api, route, "none");
 		});

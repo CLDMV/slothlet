@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:10-08:00 (1794874570)
+ *	@Last modified time: 2026-11-17T21:24:11-08:00 (1794979451)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -22,20 +22,29 @@
  */
 
 import { ComponentBase } from "#factories/component-base";
+import { segmentsOf } from "#helpers/segments";
 import { getInstanceToken } from "#handlers/lifecycle-token";
+import { FORK, SILENT_BUILD, writeTarget } from "#helpers/flow-stores";
 import { internals as unifiedWrapperInternals } from "#handlers/unified-wrapper";
 import {
 	ArrayMethods,
+	copyList,
 	listPush,
 	Map,
+	mapEntries,
+	mapEntriesToArray,
+	mapFrom,
 	MapMethods,
+	Objects,
 	promiseAll,
 	PromiseMethods,
 	Reflect,
 	SafePromise,
 	Set,
+	setFrom,
 	SetMethods,
 	settledWith,
+	setToArray,
 	setValues
 } from "#helpers/intrinsics";
 const { runtime_selfModuleReader, runtime_selfView } = unifiedWrapperInternals("lib/handlers/lifecycle");
@@ -45,6 +54,24 @@ const { runtime_selfModuleReader, runtime_selfView } = unifiedWrapperInternals("
  * @extends ComponentBase
  * @public
  */
+
+/**
+ * The `source` a public event reports, by the operation slothlet ran (D-5): one word for each. The internal stream keeps
+ * its own words.
+ * @type {Readonly<Record<string, string>>}
+ * @private
+ */
+const PUBLIC_SOURCE = Objects.freeze({
+	__proto__: null,
+	initial: "create",
+	"hot-reload": "reload",
+	reload: "reload",
+	"lazy-materialization": "materialize",
+	removal: "remove",
+	buildAPI: "build",
+	addApi: "add",
+	"module-mount": "mount"
+});
 
 /**
  * Run a subscriber and settle what it returns while still inside its call: a `then` it carries (a getter, a thenable's
@@ -64,6 +91,13 @@ function runAndSettle(handler, args) {
 	if (typeof then !== "function") return undefined;
 	return new SafePromise((resolve, reject) => Reflect.apply(then, result, [() => resolve(), reject]));
 }
+
+/**
+ * The handler {@link Lifecycle#[FORK]} is copying, read once by the constructor it calls; null otherwise.
+ * @type {Lifecycle|null}
+ * @private
+ */
+let forkingFrom = null;
 
 export class Lifecycle extends ComponentBase {
 	/**
@@ -93,6 +127,28 @@ export class Lifecycle extends ComponentBase {
 		this.subscriberReaders = new Map();
 		this.eventLog = [];
 		this.maxLogSize = 1000;
+		const from = forkingFrom;
+		if (from !== null) {
+			forkingFrom = null;
+			for (const ofEntry of mapEntries(from.subscribers)) MapMethods.set(this.subscribers, ofEntry[0], setFrom(setToArray(ofEntry[1])));
+			for (const ofEntry of mapEntries(from.internalSubscribers))
+				MapMethods.set(this.internalSubscribers, ofEntry[0], setFrom(setToArray(ofEntry[1])));
+			for (const ofEntry of mapEntries(from.subscriberReaders))
+				MapMethods.set(this.subscriberReaders, ofEntry[0], mapFrom(mapEntriesToArray(ofEntry[1])));
+			this.eventLog = copyList(from.eventLog);
+			this.maxLogSize = from.maxLogSize;
+		}
+	}
+
+	/**
+	 * A copy of this handler for a `run()` / `scope()` (see `FORK` in `helpers/flow-stores`): its subscribers (public
+	 * and the framework's own) and the event log, which later changes to either leave the other as it is.
+	 * @returns {Lifecycle} The copy.
+	 * @internal
+	 */
+	[FORK]() {
+		forkingFrom = this;
+		return new Lifecycle(this.slothlet);
 	}
 
 	/**
@@ -111,6 +167,8 @@ export class Lifecycle extends ComponentBase {
 	 * });
 	 */
 	subscribe(event, handler) {
+		const written = writeTarget(this);
+		if (written !== this) return written.subscribe(event, handler);
 		if (!MapMethods.has(this.subscribers, event)) {
 			MapMethods.set(this.subscribers, event, new Set());
 			MapMethods.set(this.subscriberReaders, event, new Map());
@@ -182,6 +240,8 @@ export class Lifecycle extends ComponentBase {
 	 * lifecycle.off('impl:changed', handler);
 	 */
 	off(event, handler) {
+		const written = writeTarget(this);
+		if (written !== this) return written.off(event, handler);
 		const handlers = MapMethods.get(this.subscribers, event);
 		if (handlers) {
 			SetMethods.delete(handlers, handler);
@@ -232,6 +292,10 @@ export class Lifecycle extends ComponentBase {
 		// Not an async function: the promise handed back is slothlet's own (helpers/intrinsics `SafePromise`), so awaiting
 		// it reads nothing module code can put on `Promise.prototype`.
 		try {
+			// A copy of a tree built for a run loads nothing new: its subscribers hear nothing of the build.
+			if (this.slothlet?.[SILENT_BUILD]?.() === true) return new SafePromise((resolve) => resolve());
+			if (data && typeof data.source === "string" && PUBLIC_SOURCE[data.source] !== undefined)
+				data = { ...data, source: PUBLIC_SOURCE[data.source] };
 			this.#logEvent(event, data);
 			return this.#notify(MapMethods.get(this.subscribers, event), event, data, MapMethods.get(this.subscriberReaders, event), nodes);
 		} catch (error) {
@@ -281,9 +345,9 @@ export class Lifecycle extends ComponentBase {
 			this.slothlet.debug("lifecycle", {
 				key: "DEBUG_MODE_LIFECYCLE_EVENT",
 				event,
-				apiPath: data.apiPath,
+				apiPath: data.apiPath ?? (data.path ? ArrayMethods.join(data.path, ".") : undefined),
 				source: data.source,
-				moduleID: data.moduleID
+				moduleID: data.moduleID ?? data.module
 			});
 		}
 	}
@@ -299,16 +363,16 @@ export class Lifecycle extends ComponentBase {
 	 * @private
 	 */
 	#warnHandlerError(event, data, error) {
-		if (this.____config?.silent) return;
-		if (data.apiPath) {
+		const path = data.path ?? segmentsOf(data.apiPath);
+		if (path && path.length > 0) {
 			new this.SlothletWarning(
 				"WARNING_LIFECYCLE_HANDLER_ERROR",
-				{ key: "WARNING_LIFECYCLE_HANDLER_ERROR_AT_PATH", event, apiPath: data.apiPath, moduleID: data.moduleID },
-				error
+				{ key: "WARNING_LIFECYCLE_HANDLER_ERROR_AT_PATH", event, path: segmentsOf(path), module: data.module ?? data.moduleID },
+				{ cause: error }
 			);
 			return;
 		}
-		new this.SlothletWarning("WARNING_LIFECYCLE_HANDLER_ERROR", { event }, error);
+		new this.SlothletWarning("WARNING_LIFECYCLE_HANDLER_ERROR", { event }, { cause: error });
 	}
 
 	/**
@@ -372,7 +436,8 @@ export class Lifecycle extends ComponentBase {
 				// A removed module's subscriber hears nothing more but its own removal (#625), and a module's is handed the
 				// event only: the instance's token is the framework's own.
 				const apiManager = this.slothlet.handlers?.apiManager;
-				if (reader && apiManager?.isRemovedCaller(reader) && !apiManager.isOwnRetired(reader, data?.moduleID)) continue;
+				// Only a public subscriber has a reader, and the public payload names the module `module`.
+				if (reader && apiManager?.isRemovedCaller(reader) && !apiManager.isOwnRetired(reader, data?.module)) continue;
 				// What the subscriber returns is settled inside its own call, as an event listener's is: the promise made
 				// there is slothlet's, and settles to `undefined` whatever the subscriber's result resolves to.
 				const settle = (...args) => runAndSettle(handler, args);

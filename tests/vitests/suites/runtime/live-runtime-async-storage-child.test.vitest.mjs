@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-14T10:00:00-08:00 (1794679200)
+ *	@Last modified time: 2026-11-16T18:30:21-08:00 (1794882621)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -128,8 +128,8 @@ beforeAll(() => {
 		"\t}",
 		"};",
 		"const config = (runtime) => {",
-		"\tconst out = { dir: API, mode, runtime, context: { who: 'base' } };",
-		"\tif (permissions !== 'off') out.permissions = { defaultPolicy: 'allow', attribution: permissions, rules: [{ caller: 'guest.**', target: 'math.**', effect: 'deny' }] };",
+		"\tconst out = { base: API, mode, runtime, context: { who: 'base' } };",
+		"\tif (permissions !== 'off') out.permissions = { policy: 'allow', rules: [{ caller: 'guest.**', target: 'math.**', effect: 'deny' }], caller: { attribution: permissions } };",
 		"\tif (hooked === 'on') out.hook = true;",
 		"\treturn out;",
 		"};",

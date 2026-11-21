@@ -22,10 +22,10 @@ import { self } from "@cldmv/slothlet/runtime";
 
 /**
  * The instance ID `self` resolves to.
- * @returns {string} `self.slothlet.instanceID`.
+ * @returns {string} `self.slothlet.instance.id`.
  */
 export function instanceID() {
-	return self.slothlet.instanceID;
+	return self.slothlet.instance.id;
 }
 
 /**

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T23:16:04-08:00 (1794813364)
+ *	@Last modified time: 2026-11-16T18:28:38-08:00 (1794882518)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -71,8 +71,10 @@ describe.each(configs)("removing a takeover of private members > $mode / $runtim
 			runtime: config.runtime,
 			silent: true,
 			permissions: {
-				defaultPolicy: "allow",
-				attribution: config.attribution,
+				policy: "allow",
+				caller: {
+					attribution: config.attribution
+				},
 				rules: [],
 				private: { scope: config.scope, host: config.host }
 			}
@@ -84,7 +86,7 @@ describe.each(configs)("removing a takeover of private members > $mode / $runtim
 		const hostBefore = await settled(() => api.billing.internals.__rate);
 		expect(hostBefore).toEqual(hostAnswer);
 
-		await api.slothlet.api.add("billing", LAYER, { moduleID: "layer", forceOverwrite: true });
+		await api.slothlet.api.add("billing", LAYER, { id: "layer", collision: { force: true } });
 		expect(await settled(() => api.slothlet.api.remove("layer"))).toEqual({ value: true, error: null });
 
 		expect(Object.keys(api.billing).sort()).toEqual(before);
@@ -109,14 +111,16 @@ describe.each(configs)("removing a takeover of private members > $mode / $runtim
 			runtime: config.runtime,
 			silent: true,
 			permissions: {
-				defaultPolicy: "allow",
-				attribution: config.attribution,
+				policy: "allow",
+				caller: {
+					attribution: config.attribution
+				},
 				rules: [],
 				private: { scope: config.scope, host: config.host }
 			}
 		});
 		await api.billing.reader.read("billing.internals.__rate");
-		await api.slothlet.api.add("billing", LAYER, { moduleID: "layer", forceOverwrite: true });
+		await api.slothlet.api.add("billing", LAYER, { id: "layer", collision: { force: true } });
 		await api.slothlet.api.reload("layer");
 		expect(await settled(() => api.slothlet.api.remove("layer"))).toEqual({ value: true, error: null });
 		await api.slothlet.reload();

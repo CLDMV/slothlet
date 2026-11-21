@@ -26,7 +26,7 @@
  *     return original.call(this, event, listener);  ← lines 234/259/294/316
  *   }
  *
- * `runtime_shouldWrapListener` returns false when `listener._slothletOriginal` is
+ * `runtime_shouldWrapListener` returns false when `listener.____slothletOriginal` is
  * already set — meaning the listener was already wrapped.  Passing such a pre-marked
  * listener directly to each patched method exercises the "no double-wrap" branch.
  *
@@ -50,7 +50,7 @@ afterAll(() => {
 });
 
 /**
- * Create a listener function that already has `_slothletOriginal` set,
+ * Create a listener function that already has `____slothletOriginal` set,
  * simulating a previously-wrapped listener.
  *
  * @returns {Function} Pre-marked listener.
@@ -63,7 +63,7 @@ function makePreWrapped() {
 	const originalHandler = () => {};
 	const fn = function listener() {};
 	// Mark as already wrapped — shouldWrapListener will return false
-	fn._slothletOriginal = originalHandler;
+	fn.____slothletOriginal = originalHandler;
 	return fn;
 }
 
@@ -102,7 +102,7 @@ describe("EventEmitter.once — no-wrap fast-path (line 259)", () => {
 		const fn2 = function onceHandler() {
 			fired = true;
 		};
-		fn2._slothletOriginal = () => {};
+		fn2.____slothletOriginal = () => {};
 		emitter.once("fire", fn2);
 		emitter.emit("fire");
 		expect(fired).toBe(true);

@@ -16,6 +16,7 @@ Slothlet supports three runtime mutation operations - `add`, `remove`, and `relo
 - [ESM / CJS Cache Busting](#esm--cjs-cache-busting)
 - [Operation History and Replay](#operation-history-and-replay)
 - [Module Ownership (moduleID)](#module-ownership-moduleid)
+- [Calls During a Full Reload, and After One Fails](#calls-during-a-full-reload-and-after-one-fails)
 - [api.slothlet.restart()](#apislothletrestart)
 - [Lifecycle Events](#lifecycle-events)
 
@@ -38,7 +39,7 @@ const api = await slothlet({
 });
 ```
 
-Disabling a mutation throws `INVALID_CONFIG_MUTATIONS_DISABLED` when that method is called. Set all three to `false` to create a locked, immutable API after build.
+Disabling a mutation throws `API_MUTATION_DISABLED` when that method is called. Set all three to `false` to create a locked, immutable API after build.
 
 ---
 
@@ -50,16 +51,19 @@ Mounts API modules into the live API at runtime — from a directory, a single f
 await api.slothlet.api.add(apiPath, folderPath, options);
 ```
 
-| Parameter                | Type                                                        | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| ------------------------ | ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `apiPath`                | `string`                                                    | Dot-separated path where modules are mounted (e.g. `"plugins"`, `"plugins.tools"`). Pass `""` or `null` to add directly to root.                                                                                                                                                                                                                                                                                                                                                          |
-| `folderPath`             | `string \| string[] \| Function \| Record<string, unknown>` | What to mount: a **directory** to scan, a **single file** (`.mjs`/`.cjs`/`.js`), an **array** of file/folder paths, a bare **function** (mounts as one callable leaf), a **plain object** used directly as the export map (its keys mount as leaves), or the **`{ exports, ...options }`** shorthand (the `exports` value is the export map; sibling keys apply as options). The last two are synthetic / in-memory leaves — no filesystem. Relative paths resolve from the calling file. |
-| `options.moduleID`       | `string?`                                                   | Stable identifier for this module. Used for targeted `reload()` and `remove()`. Auto-generated if omitted (including for synthetic leaves).                                                                                                                                                                                                                                                                                                                                               |
-| `options.forceOverwrite` | `boolean?`                                                  | Override collision mode for this call. Use with ownership-aware workflows.                                                                                                                                                                                                                                                                                                                                                                                                                |
-| `options.metadata`       | `object?`                                                   | Metadata to apply to loaded API paths after mount.                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| `options.hidden`         | `string \| string[]?`                                       | Glob(s) hiding files/folders from this mount, matched against each entry's path relative to the **added** folder (files match extension-stripped). Same syntax and semantics as the init-time [`hidden`](./CONFIGURATION.md#hidden) option, `!` globs over the built-in `.`/`__` rule included. Persisted, so `reload()` re-applies it.                                                                                                                                                   |
+| Parameter             | Type                                                        | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| --------------------- | ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `apiPath`             | `string`                                                    | Dot-separated path where modules are mounted (e.g. `"plugins"`, `"plugins.tools"`). Pass `""` or `null` to add directly to root.                                                                                                                                                                                                                                                                                                                                                          |
+| `folderPath`          | `string \| string[] \| Function \| Record<string, unknown>` | What to mount: a **directory** to scan, a **single file** (`.mjs`/`.cjs`/`.js`), an **array** of file/folder paths, a bare **function** (mounts as one callable leaf), a **plain object** used directly as the export map (its keys mount as leaves), or the **`{ exports, ...options }`** shorthand (the `exports` value is the export map; sibling keys apply as options). The last two are synthetic / in-memory leaves — no filesystem. Relative paths resolve from the calling file. |
+| `options.id`          | `string?`                                                   | Stable module id. Used for targeted `reload()` and `remove()`. Generated if omitted (including for synthetic leaves).                                                                                                                                                                                                                                                                                                                                                                     |
+| `options.collision`   | `string \| { mode?, force?, mutate? }?`                     | What happens when the mount meets an existing path. `force: true` replaces whatever is there regardless of the collision mode. `mode` and `mutate` (and a bare mode string) are locked unless config `api.collision.override` is true.                                                                                                                                                                                                                                                    |
+| `options.metadata`    | `object?`                                                   | Metadata to apply to loaded API paths after mount.                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `options.replay`      | `boolean?`                                                  | Whether a full `reload()` replays this add (default `true`). Locked like `collision.mode`.                                                                                                                                                                                                                                                                                                                                                                                                |
+| `options.permissions` | `{ allow?, deny? }?`                                        | Rules the module mounts with.                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| `options.version`     | `{ tag, default?, metadata? }?`                             | Mount as one version of the path; see [VERSIONING.md](VERSIONING.md).                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| `options.hidden`      | `string \| string[]?`                                       | Glob(s) hiding files/folders from this mount, matched against each entry's path relative to the **added** folder (files match extension-stripped). Same syntax and semantics as the init-time [`hidden`](./CONFIGURATION.md#hidden) option, `!` globs over the built-in `.`/`__` rule included. Persisted, so `reload()` re-applies it.                                                                                                                                                   |
 
-**Validation.** A mount `apiPath` may not contain a `__proto__` / `constructor` / `prototype` segment (a prototype-pollution guard) or the reserved internal separator `__slothlet_sep__`; a supplied `moduleID` may not contain the reserved separator either (see [Module Ownership](#module-ownership-moduleid)). Any of these is refused up front with a validation error (`INVALID_CONFIG_API_PATH_INVALID` / `MODULE_ID_RESERVED_SEPARATOR`) rather than mounted.
+**Validation.** A mount `apiPath` may not contain a `__proto__` / `constructor` / `prototype` segment (a prototype-pollution guard) or the reserved internal separator `__slothlet_sep__`; a supplied `moduleID` may not contain the reserved separator either (see [Module Ownership](#module-ownership-moduleid)). Any of these is refused up front with a validation error (`API_PATH_INVALID` / `MODULE_ID_RESERVED_SEPARATOR`) rather than mounted.
 
 **Examples:**
 
@@ -74,7 +78,7 @@ await api.slothlet.api.add("plugins.tools", "./tools/string-utils.mjs");
 await api.slothlet.api.add("plugins", ["./a.mjs", "./b.mjs", "./extras"]);
 
 // Mount with stable ID for later reload/remove
-await api.slothlet.api.add("plugins", "./plugins", { moduleID: "core-plugins" });
+await api.slothlet.api.add("plugins", "./plugins", { id: "core-plugins" });
 await api.slothlet.api.remove("core-plugins"); // remove by ID
 await api.slothlet.api.reload("core-plugins"); // reload by ID
 
@@ -103,7 +107,7 @@ await api.tools.ping(); // "pong"
 // A plain object (no `exports` key) IS the exports map — its keys mount as leaves, even keys
 // that happen to share an option name. The 2nd arg is never scanned for options.
 await api.slothlet.api.add("util", { upper: (s) => s.toUpperCase() });
-await api.slothlet.api.add("cfg", { moduleID: "x" }); // mounts api.cfg.moduleID = "x" (content, not an option)
+await api.slothlet.api.add("cfg", { id: "x" }); // mounts api.cfg.id = "x" (content, not an option)
 
 // A default function with named exports → the function at the apiPath, the named exports as its members
 await api.slothlet.api.add("calc", {
@@ -114,7 +118,7 @@ await api.calc.half(4); // 2
 
 // Shorthand: when the inline object carries an `exports` key, its sibling keys ARE options
 // (here a custom moduleID), exactly as if passed third. `exports` must be present.
-await api.slothlet.api.add("svc", { exports: { ping: () => "pong" }, moduleID: "svc-id" });
+await api.slothlet.api.add("svc", { exports: { ping: () => "pong" }, id: "svc-id" });
 
 // Mount at root ("" or null) — exports land directly on api.*
 await api.slothlet.api.add("", { exports: { ping: () => "pong" } }); // api.ping
@@ -136,7 +140,7 @@ Enumerates the api paths a module owns — the inverse of the ownership tracking
 const moduleID = await api.slothlet.api.add("modules.acme.shop", "/path/to/extension/api");
 
 await api.slothlet.api.leaves(moduleID);
-// ["modules.acme.shop.connect", "modules.acme.shop.search", …]  — flattened, callable paths
+// [["modules", "acme", "shop", "connect"], ["modules", "acme", "shop", "search"], …]  — callable paths, each as its segments
 
 await api.slothlet.api.leaves("modules.acme.shop"); // same, keyed by mount endpoint
 await api.slothlet.api.leaves("."); // the base load's own leaves
@@ -149,20 +153,20 @@ await api.slothlet.api.leaves("."); // the base load's own leaves
 | any owned path | `"shop.ns"`           | Resolved to the owning module — the enumeration is always module-scoped |
 | `"."` / `""`   | `"."`                 | The base load (the injected `slothlet.*` control tree is excluded)      |
 
-The default return is the **callable** leaf paths — one entry per function a caller can invoke, the one-stub-per-callable contract. Pass `{ details: true }` for every owned path tagged with its kind:
+The default return is the **callable** leaf paths — one entry per function a caller can invoke, the one-stub-per-callable contract. Each path is reported as its segments; join it (`path.join(".")`) for the dotted form. Pass `{ details: true }` for every owned path tagged with its kind:
 
 ```javascript
 await api.slothlet.api.leaves("modules.acme.shop", { details: true });
 // [
-//   { path: "modules.acme.shop",         kind: "namespace" },
-//   { path: "modules.acme.shop.connect", kind: "function" },
-//   { path: "modules.acme.shop.limit",   kind: "data" }
+//   { path: ["modules", "acme", "shop"],            kind: "namespace" },
+//   { path: ["modules", "acme", "shop", "connect"], kind: "function" },
+//   { path: ["modules", "acme", "shop", "limit"],   kind: "data" }
 // ]
 ```
 
-An unknown key throws `API_LEAVES_UNKNOWN_MODULE`. Module callers pass through the same internal-permission gate as the rest of `slothlet.*` (`slothlet.api.leaves`); the host's bound handle is exempt from that gate, matching the carve-out documented in [PERMISSIONS.md](PERMISSIONS.md).
+An unknown key throws `MODULE_UNKNOWN`. Module callers pass through the same internal-permission gate as the rest of `slothlet.*` (`slothlet.api.leaves`); the host's bound handle is exempt from that gate, matching the carve-out documented in [PERMISSIONS.md](PERMISSIONS.md).
 
-Enumeration is a disclosure surface, so the answer is scoped to the caller: [module-private members](PERMISSIONS.md#module-private-exports) the caller could not read are omitted, matching the redaction `Object.keys` already performs on the composed surface. A module sees its own module's privates and no other module's, and the host's bound handle is redacted too by default (`permissions.private.host: "deny"`). Pass `{ includePrivate: true }` — host only — for the unredacted list; a module asking for it is refused with `PERMISSION_DENIED` rather than quietly downgraded to the redacted answer. With permissions disabled nothing is private and nothing is filtered.
+Enumeration is a disclosure surface, so the answer is scoped to the caller: [module-private members](PERMISSIONS.md#module-private-exports) the caller could not read are omitted, matching the redaction `Object.keys` already performs on the composed surface. A module sees its own module's privates and no other module's, and the host's bound handle is redacted too by default (`permissions.private.host: "deny"`). Pass `{ private: true }` — host only — for the unredacted list; a module asking for it is refused with `PERMISSION_DENIED` rather than quietly downgraded to the redacted answer. With permissions disabled nothing is private and nothing is filtered.
 
 ---
 
@@ -189,8 +193,8 @@ await api.slothlet.api.remove("plugins.tools");
 await api.slothlet.api.remove("core-plugins");
 
 // Scoped: remove only modA's nodes under "shop" — modB's shop.b and the container survive
-await api.slothlet.api.add("shop.a", "./a", { moduleID: "modA" });
-await api.slothlet.api.add("shop.b", "./b", { moduleID: "modB" });
+await api.slothlet.api.add("shop.a", "./a", { id: "modA" });
+await api.slothlet.api.add("shop.b", "./b", { id: "modB" });
 await api.slothlet.api.remove("shop", "modA"); // → true; api.shop.a gone, api.shop.b intact
 ```
 
@@ -271,10 +275,10 @@ In eager mode, every API namespace is a fully-materialized `UnifiedWrapper` whos
 
 ```text
 Before reload:      api.math        ← wrapper proxy (unchanged ref)
-                        └── _impl = { add: fn_v1, subtract: fn_v1 }
+                        └── ____impl = { add: fn_v1, subtract: fn_v1 }
 
 After reload:       api.math        ← same proxy ref
-                        └── _impl = { add: fn_v2, subtract: fn_v2 }
+                        └── ____impl = { add: fn_v2, subtract: fn_v2 }
 ```
 
 The transition is synchronous and immediate. Any call to `api.math.add` after `await reload()` returns will invoke the new implementation.
@@ -352,7 +356,7 @@ Slothlet forces fresh module loading on every rebuild rather than serving cached
 
 **ESM**: A reload timestamp (`&_reload=…`) is appended to the cache-busted import path, causing Node's ESM loader to treat it as a new module specifier and re-execute the file. Bare package imports are not reloaded.
 
-**Helpers** (relative / `file:` modules a leaf imports or requires) are one copy per instance, not per reload. A partial reload — `api.slothlet.api.reload()`, `api.slothlet.api.reload(path)`, or a reload by moduleID — re-imports the reloaded leaves against the instance's existing helper copy, so helper state is preserved and reloaded leaves keep sharing it with the rest of the instance. A full reload, `api.slothlet.reload()`, rotates the instance ID and gives every leaf one fresh helper copy. **Edits to helper code need a full reload** (a changed TypeScript helper is the exception: it is re-transpiled to a new cache file). See [MODULE-STRUCTURE.md → Helper Modules Are Per Instance](MODULE-STRUCTURE.md#helper-modules-are-per-instance).
+**Helpers** (relative / `file:` modules a leaf imports or requires) are one copy per instance, not per reload. A partial reload — `api.slothlet.api.reload()`, `api.slothlet.api.reload(path)`, or a reload by moduleID — re-imports the reloaded leaves against the instance's existing helper copy, so helper state is preserved and reloaded leaves keep sharing it with the rest of the instance. A full reload, `api.slothlet.reload()`, rotates the instance ID and gives every leaf one fresh helper copy. The new ID is `<id>_reload_<time>_<random>`, with a random part no code in the process can work out ahead of time, and it is claimed before the old one is let go: in the unlikely case it cannot be claimed, the reload fails with `INSTANCE_ID_IN_USE` and the instance stays on its current ID, still working. **Edits to helper code need a full reload** (a changed TypeScript helper is the exception: it is re-transpiled to a new cache file). See [MODULE-STRUCTURE.md → Helper Modules Are Per Instance](MODULE-STRUCTURE.md#helper-modules-are-per-instance).
 
 **Adding a removed module again** works the same way. An `add()` under a moduleID that was added before and has since been removed (no mount of it is left) imports its files with a reload stamp, so it runs the code on disk now and each file's top level runs again; without it Node's cache would serve the import of the removed module. A first `add()` is a plain import, and an `add()` under a moduleID that still has a live mount (the same module mounted at a second path) is not imported again, so a live module never gets a second copy. The same rules as a partial reload apply to helpers: the instance's helper copy is kept. A path added again under a new moduleID is imported under that moduleID's own URL, so it is fresh as well.
 
@@ -367,7 +371,7 @@ Every `api.slothlet.api.add()` and `api.slothlet.api.remove()` call is recorded 
 ```javascript
 const api = await slothlet({ base: "./api" });
 
-await api.slothlet.api.add("plugins", "./plugins", { moduleID: "core-plugins" });
+await api.slothlet.api.add("plugins", "./plugins", { id: "core-plugins" });
 await api.slothlet.api.add("tools", "./tools");
 
 // Reload base module - replays both add() calls automatically
@@ -389,14 +393,14 @@ Targeted reloads (by path or moduleID) rebuild only the affected cache entries a
 
 Every module mounted via `add()` is tracked by a `moduleID`. If you don't provide one, slothlet generates a stable ID from the apiPath and resolved folder path.
 
-A `moduleID` may contain **any character** — `:`, `/`, `.`, `-`, and so on all round-trip through `add` / `leaves` / `remove` / `reload`, so a namespaced convention like `vine:abc` or `plugin:opensearch:v1` is safe. Internally slothlet joins the id and its apiPath into a composite metadata key using a **reserved multi-character token** (`__slothlet_sep__`), not `:`, and stores the raw base id verbatim — so no ordinary character collides with the delimiter. The one token a `moduleID` (or an `apiPath`) may **not** contain is that reserved separator: `add()` refuses it up front with a named error (`MODULE_ID_RESERVED_SEPARATOR` for a supplied or auto-generated id, `INVALID_CONFIG_API_PATH_INVALID` for an apiPath).
+A `moduleID` may contain **any character** — `:`, `/`, `.`, `-`, and so on all round-trip through `add` / `leaves` / `remove` / `reload`, so a namespaced convention like `vine:abc` or `plugin:opensearch:v1` is safe. Internally slothlet joins the id and its apiPath into a composite metadata key using a **reserved multi-character token** (`__slothlet_sep__`), not `:`, and stores the raw base id verbatim — so no ordinary character collides with the delimiter. The one token a `moduleID` (or an `apiPath`) may **not** contain is that reserved separator: `add()` refuses it up front with a named error (`MODULE_ID_RESERVED_SEPARATOR` for a supplied or auto-generated id, `API_PATH_INVALID` for an apiPath).
 
 Ownership is **stack-based**: each API path maintains a history of which modules have written to it. Removing a module automatically rolls back to the previous owner for all paths it touched.
 
 ```javascript
 // Two modules coexist at peer namespaces
-await api.slothlet.api.add("plugins.auth", "./auth", { moduleID: "auth-module" });
-await api.slothlet.api.add("plugins.billing", "./billing", { moduleID: "billing-module" });
+await api.slothlet.api.add("plugins.auth", "./auth", { id: "auth-module" });
+await api.slothlet.api.add("plugins.billing", "./billing", { id: "billing-module" });
 
 // Reload only authentication
 await api.slothlet.api.reload("auth-module");
@@ -415,6 +419,32 @@ api.slothlet.diag.owner.get("plugins.auth");
 ```
 
 See [CONFIGURATION.md](CONFIGURATION.md#the-apislothletdiag-namespace) for the full `diag.owner` API.
+
+---
+
+## Calls During a Full Reload, and After One Fails
+
+A full reload (`api.slothlet.reload()`) builds its new copy to the side and swaps it in at the end. Until the swap, every call (from the host or from module code, synchronous or after an `await`, through `self` or not, a call already in flight and work a module left behind: a timer, a listener, a promise chain) is answered by the copy the instance has, with everything that copy has: its permission rules, mode, policy and seal, its principals, its hooks, its metadata, its ownership and its api tree. Nothing of the half-built copy is reachable meanwhile. A change a call makes while the reload builds (`rules.add()`, `control.mode()`, `hook.on()`, `metadata.set()`, an `add()` or `remove()`) is made to the instance, and the new copy takes it at the swap. At the swap everything moves to the new copy at once. A call made while the reload builds keeps the `context` of the `run()` / `scope()` it was made in, its code is still its module's (`metadata.self()` names its leaf, and the permission system checks it as that leaf), on both runtimes.
+
+A `run()` / `scope()` keeps the copy it started with after the swap too. Its calls (synchronous, after an `await`, through `self`, and from work it left behind: a timer, a listener, a promise chain) are answered by the api tree, permission rules and mode, hooks and metadata the instance had when the run started, while calls made outside any run, and runs started after the swap, get the new copy. A nested run starts on the copy of the run it was opened in. Each run keeps the `context` it had: only the copy of the instance stays behind, not the run's values. In lazy mode, a node of the run's copy that was never loaded loads the file as it is when the run first reaches it, as that copy's files did: under the instance ID the copy was loaded under, so it shares the copy's other files rather than the new copy's.
+
+A run also has its own copy of what it changes. The first time code in a run changes the permission rules or event rules, the mode, read gating or the seal, a principal, a hook, metadata (a node's or global), an event subscription (or the delivery strategy) or a lifecycle subscription, that part of the instance is copied into the run, and the change is made there: the instance, sibling runs and runs opened before never see it, and it is gone with the run. A nested run starts from its parent run's copy, and from then on neither one's changes reach the other. Changes the instance makes after a run started never reach that run, and neither does a `restart()`: a run open across it keeps the rules, hooks, metadata and subscriptions it had. A run that changes nothing costs nothing for this; a run's first change to one part costs a copy of that part. Revoking a principal's cached facts (`principal.invalidate`) is not a change a run keeps to itself: it drops them in the copy the caller is answered from, and a copy made later resolves them again.
+
+The api tree is copied the same way. The first time code in a run changes the tree (`api.slothlet.api.add()`, `remove()` or `reload(path)`, a module mount through `api.slothlet.api.modules`), the run gets a copy of the tree it reads and the change is made there: the instance, sibling runs and runs opened before never see the module it adds or removes, and it is gone with the run. Once a run has a tree of its own, everything code in it writes into the tree (`self.x = …`, a member set on `api`) lands in that tree too, and members it creates are owned by the module that created them, as on the instance. A nested run starts on its parent run's tree, and from then on neither one's changes reach the other. A change the instance makes to its tree after a run started (an `add()`, a `remove()`, a `restart()`) gives every run still reading the old tree a copy of its own first, so it never reaches them. A run open across a `restart()` keeps its whole copy, tree, handlers and modules alike, and keeps loading its lazy nodes under the instance ID it was loaded under.
+
+A copy is built from the modules the copied tree uses, without running any of them again: each file comes from the URL the copied tree imported it from (a CommonJS file from the module the copied tree loaded), the `add()` / `remove()` history is replayed onto it, and what was written into the tree at runtime is written into the copy. Module state is therefore shared between the instance and a run's copy, as a shallow copy shares what it holds, and so is a plain object or array written into the tree at runtime. A node a run read before it got its own tree answers from the run's tree, at its path, as a node a `restart()` replaced does. The build announces nothing to lifecycle subscribers, since nothing new is loaded. A run that never changes its tree pays nothing for this; the first change costs a build of the tree from the modules already loaded.
+
+Inside a run, `reload()`, `restart()` and `shutdown()` act on the run's copy and leave the instance as it is. `reload()` rebuilds the run's tree as a reload rebuilds the instance's: every file is read again (for the run only), the history is replayed, and the rules, hooks, metadata and event strategy carry over. A `reload()` in a run that fails (a module of the run's copy refuses to load as it is read again) leaves the run on the copy and context it had, as a failed reload leaves the instance, and the instance's ID and context are never touched by it. `restart()` starts the run's copy over from the original config, announcing `restart` and `shutdown` to the run's lifecycle subscribers and `init` and `restarted` to its new copy's. `shutdown()` shuts the run's copy down: it clears the copy's ownership, versions, permission rules and event subscriptions, and stops it being loaded. A module's own `shutdown` routine and the root `shutdown` hook that `api.shutdown()` runs before it are module code, and run as any call of it would.
+
+Until a run has a tree of its own, a write through `self` from the run stays in the run under the default `"full"` isolation, whose `self` of its own is taken as the run starts (and what it wrote goes into the run's tree once it has one), while under `isolation: "partial"` a synchronous `self.x = …` reaches the instance's tree (see [CONTEXT-PROPAGATION.md](CONTEXT-PROPAGATION.md#isolation-modes)). A member set on `api` itself from such a run still reaches the instance's tree, and a synchronous write the instance makes reaches the runs that read its tree.
+
+A run's copy lives exactly as long as the run needs it: until the run's callback has settled and every piece of work the run began has finished. That work is a timer until it fires or is cleared (through the global clearing functions, the ones `node:timers` exports, `close()` or `[Symbol.dispose]()`, by the handle or by the id it gives as a number, `clearTimeout(+timer)`), an interval until it is cleared, an immediate, a microtask or a `process.nextTick()` callback until it has run, a `scheduler.postTask()` callback until it has run or its signal aborted it, a promise until it settles, a listener on an `EventEmitter` or an `EventTarget` until it is removed (a `once` listener until it has run, one given a `signal` until that aborts), an `on<event>` handler property until it is replaced or cleared, an observer (`MutationObserver`, `PerformanceObserver`, `ResizeObserver`, ...) from its first `observe()` until it is disconnected or has nothing left to observe (its callback runs in the run that constructed it, on either runtime), and a Node callback (`fs.readFile(file, cb)`, `dns.lookup(host, cb)`, ...) until it has been called. Work that such work begins while it runs counts too. Once the count reaches zero the copy is torn down, on a later macrotask rather than in the middle of the work that finished it: its forked parts go, its own api tree goes with what goes with it (its ownership, versions and event subscriptions, and the modules mounted only in it), and a node of that tree still held somewhere answers from the instance's tree at its path, the copy it read through to goes when it was the last run reading it, and with it the import scope of an instance ID a reload left behind, which a kept copy holds until then. A value a run hands out through the runtime `context` export does not keep its copy: code reached that way after the copy is torn down answers from the instance. `shutdown()` tears down every copy still kept. Work that will never finish keeps the copy for good, by design: a listener left on an emitter that lives on, an interval never cleared, a promise that never settles, so the copy stays until that work is removed or the instance shuts down.
+
+One full reload runs at a time: a `reload()` asked for while another builds starts once that one has finished, and so do `shutdown()` and `restart()`. A `reload()` asked for by the build itself (a startup routine of the new copy, or a module's code while it loads) is refused with `RELOAD_IN_PROGRESS`, as it could never start.
+
+The build is told apart from everything else by an `AsyncLocalStorage`. A host with none (a browser) cannot keep the two apart, so there calls made while the reload builds reach the new copy's components: before any module of the new copy loads, those take the permission rules, mode and policy, the principals, the hooks, the metadata and the event-delivery strategy the instance has, so a call is held to the same rules and hooks as before. The seal goes back on at the end of the reload there (the replayed `add()` history registers rules of its own), and a call made meanwhile reaches the api tree as the build has it. Once the reload is done, a run opened before it keeps the copy the instance had before it, as above.
+
+A full reload that fails leaves the instance as it was. Whether it fails before the new ID's context exists (the ID cannot be claimed, the context cannot be set up) or while the new copy loads (a module throws), every call keeps answering from the copy the instance had, with the hooks, metadata, permission rules and `add()` / `remove()` history it had, and the error propagates from `reload()`. A later reload that succeeds switches to the new copy, and `shutdown()` cleans up either way.
 
 ---
 
@@ -452,11 +482,11 @@ See [LIFECYCLE.md](LIFECYCLE.md#instance-events) for the four events and who rec
 | Runtime permission rules, event rules, principals | replayed                                                | **dropped** (config-declared rules re-applied)          |
 | Runtime event subscriptions (`event.on`)          | dropped                                                 | **dropped**                                             |
 | Runtime lifecycle subscribers (`lifecycle.on`)    | dropped                                                 | **dropped** (config `lifecycle` handlers re-subscribed) |
-| User metadata (`metadata.set` / `setGlobal`)      | kept                                                    | **dropped** (config `metadata` re-applied)              |
+| User metadata (`metadata.set` / `global`)         | kept                                                    | **dropped** (config `metadata` re-applied)              |
 | Runtime assignments (`api.x = …`, `self.x = …`)   | cleared (a base `api.slothlet.api.reload()` keeps them) | **dropped**                                             |
 | `control.seal()`                                  | preserved                                               | **dropped** — the new instance starts unsealed          |
 | `api.slothlet.env` snapshot                       | kept                                                    | re-captured (a new instance)                            |
-| Instance ID                                       | rotated (`<id>_reload_<ts>`)                            | new                                                     |
+| Instance ID                                       | rotated (`<id>_reload_<ts>_<random>`)                   | new                                                     |
 | `api` reference                                   | preserved                                               | preserved                                               |
 | Held child references (`const conn = api.conn`)   | see [Reference Preservation](#reference-preservation)   | re-pointed to the new instance's node at the same path  |
 | Lifecycle events                                  | `impl:changed` per replaced leaf                        | `restart` → `shutdown` → `init` → `restarted`           |
@@ -490,7 +520,7 @@ A held reference keeps the `typeof` it had when it was taken (a proxy's callabil
 
 - A throwing `mode: "shutdown"` routine or root `shutdown` hook does not stop the restart; the old instance is still torn down, the new one is built, and the error is re-thrown once `restarted` has been emitted.
 - If building the new instance fails (for example a module that no longer parses), the old instance is already shut down and the error propagates; fix the cause and call `restart()` again — the original config is still retained.
-- `restart()` throws `INVALID_CONFIG_MUTATIONS_DISABLED` when `api.mutations.reload` is `false`.
+- `restart()` throws `API_MUTATION_DISABLED` when `api.mutations.reload` is `false`.
 - `restart()`, like `api.slothlet.reload()`, throws `API_ROOT_CLOSED` when the host has sealed, frozen or closed the api root to new members (`Object.seal(api)` and the like): a closed root keeps the members it holds, as a closed object does, so it cannot take the ones a rebuild makes. `api.slothlet.api.add()` of a new member at the root is refused the same way; members below the root still reload and take adds.
 
 ### Permissions and the seal
@@ -535,7 +565,7 @@ unsubscribe(); // clean up
 Each event handler receives an object with:
 
 - `apiPath` - dot-path of the affected API member
-- `wrapper` - the wrapped leaf; read its implementation via `wrapper.__impl` (the raw `impl` field was removed in v3.16.x, #398)
+- `wrapper` - the wrapped leaf; read its implementation via `wrapper.____impl` (the raw `impl` field was removed in v3.16.x, #398)
 - `source` - e.g. `"initial"`, `"hot-reload"`, `"lazy-materialization"` (see [LIFECYCLE.md](LIFECYCLE.md) for the full set)
 - `moduleID` - the module identifier that triggered the event
 - `filePath` - source file path (when available)

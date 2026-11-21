@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T00:00:00-08:00 (1794729600)
+ *	@Last modified time: 2026-11-16T18:30:19-08:00 (1794882619)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -21,7 +21,7 @@
  * Each of three roots (a folder of files, one whose root file's default export is a function, and one whose root file's
  * default export is an async function) is loaded as the api and mounted again at `zz`. The host inspects the root and
  * `zz`; an `inspector` module the rules deny `pnum` and `data` inspects the root through `self` and through
- * `self.slothlet.diag.getAPI()`; a denied primitive is left out, a file's namespace stays listed. The host's view shows what its listed members show as a plain object, a module's
+ * `self.slothlet.diag.api()`; a denied primitive is left out, a file's namespace stays listed. The host's view shows what its listed members show as a plain object, a module's
  * shows exactly the members it lists, and a function root or function node starts with the function's form. Eager and lazy mode, the async and live runtime, both attributions,
  * and a frozen root.
  * @module tests/vitests/suites/proxies/api-root-inspect
@@ -76,16 +76,18 @@ describe.each(ROOTS)("util.inspect of the api root > %s", (root) => {
 				mode,
 				runtime,
 				permissions: {
-					defaultPolicy: "allow",
-					attribution,
+					policy: "allow",
+					caller: {
+						attribution
+					},
 					rules: [
 						{ caller: "i.**", target: "pnum", effect: "deny" },
 						{ caller: "i.**", target: "data", effect: "deny" }
 					]
 				}
 			});
-			await api.slothlet.api.add("zz", join(FIXTURE, root), { moduleID: "zz" });
-			await api.slothlet.api.add("i", join(FIXTURE, "inspector"), { moduleID: "i" });
+			await api.slothlet.api.add("zz", join(FIXTURE, root), { id: "zz" });
+			await api.slothlet.api.add("i", join(FIXTURE, "inspector"), { id: "i" });
 			for (const member of ["data", "pnum", "tool"]) {
 				await api[member];
 				await api.zz[member];

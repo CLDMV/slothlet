@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-14T09:09:44-08:00 (1794676184)
+ *	@Last modified time: 2026-11-16T18:29:09-08:00 (1794882549)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -39,7 +39,7 @@ describe.each([
 	});
 
 	it("a hook on svc.** fires for svc() and for svc.start()", async () => {
-		const api = await slothlet({ dir: BASE, mode, runtime, silent: true, hook: true });
+		const api = await slothlet({ base: BASE, mode, runtime, silent: true, hook: true });
 		try {
 			const seen = [];
 			api.slothlet.hook.on("svc.**:before", ({ path: apiPath }) => {
@@ -55,7 +55,7 @@ describe.each([
 	});
 
 	it("a hook on **.svc fires for svc() and not for svc.start()", async () => {
-		const api = await slothlet({ dir: BASE, mode, runtime, silent: true, hook: true });
+		const api = await slothlet({ base: BASE, mode, runtime, silent: true, hook: true });
 		try {
 			const seen = [];
 			api.slothlet.hook.on("**.svc:before", ({ path: apiPath }) => {
@@ -70,7 +70,7 @@ describe.each([
 	});
 
 	it("the default hook pattern svc.** covers svc()", async () => {
-		const api = await slothlet({ dir: BASE, mode, runtime, silent: true, hook: "svc.**" });
+		const api = await slothlet({ base: BASE, mode, runtime, silent: true, hook: "svc.**" });
 		try {
 			const seen = [];
 			api.slothlet.hook.on("**:before", ({ path: apiPath }) => {
@@ -86,7 +86,7 @@ describe.each([
 	});
 
 	it("a root-anchored routine ^work.** runs work and work.step", async () => {
-		const api = await slothlet({ dir: BASE, mode, runtime, silent: true, routines: [{ name: "^work.**", mode: "manual" }] });
+		const api = await slothlet({ base: BASE, mode, runtime, silent: true, routines: { entries: [{ name: "^work.**", mode: "manual" }] } });
 		try {
 			await api["^work.**"]();
 			expect([...globalThis.__slothletGlobstarLog].sort()).toEqual(["work.job", "work.job.step"]);
@@ -96,7 +96,7 @@ describe.each([
 	});
 
 	it("a mount-relative routine work.** runs work and work.step", async () => {
-		const api = await slothlet({ dir: BASE, mode, runtime, silent: true, routines: [{ name: "work.**", mode: "manual" }] });
+		const api = await slothlet({ base: BASE, mode, runtime, silent: true, routines: { entries: [{ name: "work.**", mode: "manual" }] } });
 		try {
 			await api["work.**"]();
 			expect([...globalThis.__slothletGlobstarLog].sort()).toEqual(["work.job", "work.job.step"]);
@@ -106,7 +106,7 @@ describe.each([
 	});
 
 	it("hidden: tools.** hides the root file tools.mjs as well as the folder's files", async () => {
-		const api = await slothlet({ dir: BASE, mode, runtime, silent: true, hidden: ["tools.**"] });
+		const api = await slothlet({ base: BASE, mode, runtime, silent: true, hidden: ["tools.**"] });
 		try {
 			expect(api.tools).toBeUndefined();
 			expect(await api.other.ping()).toBe("pong");
@@ -116,7 +116,7 @@ describe.each([
 	});
 
 	it("hidden: tools/** written folder-style hides the same", async () => {
-		const api = await slothlet({ dir: BASE, mode, runtime, silent: true, hidden: "tools/**" });
+		const api = await slothlet({ base: BASE, mode, runtime, silent: true, hidden: "tools/**" });
 		try {
 			expect(api.tools).toBeUndefined();
 		} finally {
@@ -125,7 +125,7 @@ describe.each([
 	});
 
 	it("without hidden, both the root file and the folder are there", async () => {
-		const api = await slothlet({ dir: BASE, mode, runtime, silent: true });
+		const api = await slothlet({ base: BASE, mode, runtime, silent: true });
 		try {
 			expect(await api.tools.top()).toBe("top");
 			expect(await api.tools.sub.deep()).toBe("deep");

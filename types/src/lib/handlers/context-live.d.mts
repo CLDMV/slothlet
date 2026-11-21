@@ -167,6 +167,32 @@ export class LiveContextManager {
      */
     runningInstanceID(): string | null;
     /**
+     * Run a `run()` / `scope()` callback in its store, marked on the stack as one (see {@link slothlet_liveRunBody}).
+     * Where each flow is carried across its promise jobs (see {@link LiveContextManager#holdFlowHooks}) the store is the
+     * active one only while the callback runs synchronously, and its own promise jobs pick up in it; code after the
+     * `run()` call goes on in the flow it was in. Without promise hooks (a browser) the store stays active until the
+     * callback's promise settles, so the callback's own code after a bare `await` finds it.
+     * @param {string} flowID - The `run()` / `scope()` store's id.
+     * @param {Function} fn - The callback.
+     * @param {Array<*>} args - Its arguments.
+     * @returns {Promise<*>} What it returned.
+     * @internal
+     */
+    runFlowBody(flowID: string, fn: Function, args: Array<any>): Promise<any>;
+    /**
+     * The store a new `run()` / `scope()` of an instance takes its context and caller from. The active-instance field
+     * names the store of the last `run()` / `scope()` entered until it returns, so a `run()` that is still waiting at an
+     * `await` would hand its context to a sibling `run()` opened meanwhile from elsewhere. That store is the parent only
+     * when the code opening the new one is part of its flow: a call of the instance is executing on it, a call waiting on
+     * it is the code that picked up, or a `run()` / `scope()` callback is on the stack (synchronously or at an `await`
+     * further out). Otherwise the instance's own store is the parent. Where each flow is carried across its promise jobs
+     * (Node) the field names the code's own flow, and is taken as it is.
+     * @param {string} instanceID - The instance.
+     * @returns {object|undefined} The store; undefined when the instance has none.
+     * @internal
+     */
+    runParent(instanceID: string): object | undefined;
+    /**
      * Run `fn` outside every instance (#597), as the async manager does: no instance is active while its synchronous
      * body runs, so code an instance that has shut down made reaches no instance's api through the active one.
      * @param {Function} fn - What to run.
@@ -206,6 +232,15 @@ export class LiveContextManager {
      */
     public initialize(instanceID: string, config?: Object, clock?: import("#helpers/clock").Clock): Object;
     /**
+     * Whether a promise is one a leaf's call handed back through {@link LiveContextManager#runInContext}: slothlet made it,
+     * with the `Promise` taken at load, and settles it with the leaf's own result, so a caller with no reaction to add
+     * can be handed it as it is.
+     * @param {*} value - The value a call returned.
+     * @returns {boolean} True for such a promise.
+     * @public
+     */
+    public ownsResult(value: any): boolean;
+    /**
      * Run function with instance context active (live mode)
      * @param {string} instanceID - Instance to run in context of
      * @param {Function} fn - Function to execute
@@ -214,12 +249,12 @@ export class LiveContextManager {
      * @param {Object} [currentWrapper] - Current wrapper being executed (for metadata.self())
      * @param {boolean} [rawErrors=false] - When `true`, let a non-SlothletError thrown by
      *   `fn` propagate unchanged instead of wrapping it as `CONTEXT_EXECUTION_FAILED`. Used
-     *   for framework callbacks (`lockCaller`, pinned hooks) where the caller expects the
+     *   for framework callbacks (`pin`, pinned hooks) where the caller expects the
      *   original error type/code/status.
      * @param {boolean} [asHost=false] - When `true`, run `fn` with **no module caller**: both
      *   `currentWrapper` and `callerWrapper` are cleared for the execution, so `fn` runs as the host
      *   (`metadata.caller()` returns null inside it). `currentWrapper` is ignored. Used by
-     *   `lockCaller.caller()` when the pinned caller is the host.
+     *   `pin.caller()` when the pinned caller is the host.
      * @param {object|null} [ceiling=null] - For an identity pinned from a caller-supplied-code read (#597): the
      *   call that code ran inside, which has to allow everything `currentWrapper` does here as well.
      * @param {{store: object|null, identity: object}|null} [resolved=null] - The caller identity already resolved
@@ -362,17 +397,47 @@ export class LiveContextManager {
     /**
      * Cleanup instance context
      * @param {string} instanceID - Instance to cleanup
+     * @param {{keepFlows?: boolean}} [options] - `keepFlows`: leave the instance's run() / scope() stores in place (a
+     *   reload that keeps the instance's ID makes a new base store under the same ID).
      * @public
      */
-    public cleanup(instanceID: string): void;
+    public cleanup(instanceID: string, { keepFlows }?: {
+        keepFlows?: boolean;
+    }): void;
     /**
-     * Get diagnostic information
-     * @returns {Object} Diagnostic data
+     * Diagnostics for one instance (#837): what this manager holds for that instance only, never the other instances
+     * the process-wide manager also serves.
+     * @param {string} instanceID - The instance.
+     * @returns {{ type: "live", running: boolean, at: number|null, context: object|null, self: string[], current: { context: object, nested: boolean }|null }}
+     *   The runtime word, whether code of the instance (a call, a `run()` / `scope()` callback, a load) is running now,
+     *   when its record was made, its context data, the top-level names its `self` shows, and the running flow's context
+     *   (and whether it is a nested run/scope).
      * @public
      */
-    public getDiagnostics(): Object;
+    public getInstanceDiagnostics(instanceID: string): {
+        type: "live";
+        running: boolean;
+        at: number | null;
+        context: object | null;
+        self: string[];
+        current: {
+            context: object;
+            nested: boolean;
+        } | null;
+    };
     #private;
 }
+/**
+ * A promise's record of the flow it was made in: the store id the active-instance field named, and with permissions on
+ * the call it was created in, while it ran synchronously or in a flow such a promise's reaction ran: the flow's starter.
+ * A promise made in a `run()` / `scope()` flow also holds that flow's store, so its jobs run in the flow after the
+ * `run()` has returned, for as long as the promise lives (see {@link LiveContextManager#reopenFlowStore}).
+ */
+export type PromiseFlowRecord = string | null | {
+    flow: string | null;
+    starter: object | null;
+    store?: object;
+};
 /**
  * The functions of the engine's promise hooks slothlet calls, as they were when slothlet loaded.
  */

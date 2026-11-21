@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:16-07:00 (1791090916)
+ *	@Last modified time: 2026-11-16T18:30:27-08:00 (1794882627)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -27,103 +27,103 @@ describe.each(getMatrixConfigs())("Permissions > Error Invalid Rule > $name", ({
 		api = null;
 	});
 
-	it("INVALID_PERMISSION_RULE for rule missing caller", async () => {
+	it("PERMISSION_RULE_INVALID for rule missing caller", async () => {
 		api = await slothlet({
 			...config,
 			base: `${BASE}/callers`,
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				rules: []
 			}
 		});
 
 		try {
-			api.slothlet.permissions.addRule({
+			api.slothlet.permissions.rules.add({
 				target: "payments.**",
 				effect: "allow"
 			});
 			expect.unreachable("Should have thrown");
 		} catch (err) {
-			expect(err.message).toContain("INVALID_PERMISSION_RULE");
+			expect(err.message).toContain("PERMISSION_RULE_INVALID");
 		}
 	});
 
-	it("INVALID_PERMISSION_RULE for rule missing target", async () => {
+	it("PERMISSION_RULE_INVALID for rule missing target", async () => {
 		api = await slothlet({
 			...config,
 			base: `${BASE}/callers`,
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				rules: []
 			}
 		});
 
 		try {
-			api.slothlet.permissions.addRule({
+			api.slothlet.permissions.rules.add({
 				caller: "callers.**",
 				effect: "allow"
 			});
 			expect.unreachable("Should have thrown");
 		} catch (err) {
-			expect(err.message).toContain("INVALID_PERMISSION_RULE");
+			expect(err.message).toContain("PERMISSION_RULE_INVALID");
 		}
 	});
 
-	it("INVALID_PERMISSION_RULE for rule with invalid effect", async () => {
+	it("PERMISSION_RULE_INVALID for rule with invalid effect", async () => {
 		api = await slothlet({
 			...config,
 			base: `${BASE}/callers`,
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				rules: []
 			}
 		});
 
 		try {
-			api.slothlet.permissions.addRule({
+			api.slothlet.permissions.rules.add({
 				caller: "callers.**",
 				target: "payments.**",
 				effect: "invalid"
 			});
 			expect.unreachable("Should have thrown");
 		} catch (err) {
-			expect(err.message).toContain("INVALID_PERMISSION_RULE");
+			expect(err.message).toContain("PERMISSION_RULE_INVALID");
 		}
 	});
 
-	it("INVALID_PERMISSION_RULE for null rule (non-object)", async () => {
+	it("PERMISSION_RULE_INVALID for null rule (non-object)", async () => {
 		api = await slothlet({
 			...config,
 			base: `${BASE}/callers`,
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				rules: []
 			}
 		});
 
 		try {
-			api.slothlet.permissions.addRule(null);
+			api.slothlet.permissions.rules.add(null);
 			expect.unreachable("Should have thrown");
 		} catch (err) {
-			expect(err.message).toContain("INVALID_PERMISSION_RULE");
+			expect(err.message).toContain("PERMISSION_RULE_INVALID");
 		}
 	});
 
-	it("INVALID_PERMISSION_RULE for string rule (non-object)", async () => {
+	it("PERMISSION_RULE_INVALID for string rule (non-object)", async () => {
 		api = await slothlet({
 			...config,
 			base: `${BASE}/callers`,
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				rules: []
 			}
 		});
 
 		try {
-			api.slothlet.permissions.addRule("invalid-string");
+			api.slothlet.permissions.rules.add("invalid-string");
 			expect.unreachable("Should have thrown");
 		} catch (err) {
-			expect(err.message).toContain("INVALID_PERMISSION_RULE");
+			expect(err.message).toContain("PERMISSION_RULE_INVALID");
 		}
 	});
 });

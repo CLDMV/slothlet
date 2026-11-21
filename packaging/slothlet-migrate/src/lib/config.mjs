@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /packaging/slothlet-migrate/src/lib/config.mjs
+ *	@Filename: /src/lib/config.mjs
  *	@Date: 2026-11-16T16:07:40-08:00 (1794874060)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:28:24-08:00 (1794875304)
+ *	@Last modified time: 2026-11-19T16:09:08-08:00 (1795133348)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -40,9 +40,11 @@ const SPECIAL = new Set([
 	"config|routines",
 	"config|scanHiddenFolders",
 	"config|suppressFixes",
+	"config|tracking",
 	"config|hidden",
 	"config|context",
-	"config|permissions.mode"
+	"config|permissions.mode",
+	"config|scope.isolation"
 ]);
 
 /** Plain key moves, in table order (a parent's own move runs before moves into it). */
@@ -364,6 +366,8 @@ export function applyConfigRules(model, prefix, ctx, isRoot) {
 		);
 	}
 
+	rewriteTracking(at, model, prefix, ctx);
+
 	// behaviour rows: nothing to edit, worth a look
 	const hidden = at("hidden");
 	if (hidden && hidden.prop.node) result.info("config|hidden", hidden.prop.node.start);
@@ -373,6 +377,8 @@ export function applyConfigRules(model, prefix, ctx, isRoot) {
 	}
 	const mode = at("permissions.mode");
 	if (mode && mode.prop.node) result.info("config|permissions.mode", mode.prop.node.start);
+	const isolation = at("scope.isolation");
+	if (isolation && isolation.prop.node) result.info("config|scope.isolation", isolation.prop.node.start);
 
 	// v4 default changes the config does not override
 	if (isRoot && !model.hasOpaque() && model.node) {
@@ -391,6 +397,92 @@ export function applyConfigRules(model, prefix, ctx, isRoot) {
 			);
 		}
 	}
+}
+
+/**
+ * Whether a v3 `tracking` value turned materialization on: `true` / `false`, or `{ materialization: true|false }`
+ * (an empty object is off).
+ * @param {import("./object-model.mjs").PropModel} prop - The tracking property.
+ * @returns {boolean|undefined} The setting, or undefined when it cannot be read statically.
+ */
+function trackingSetting(prop) {
+	if (prop.valueText !== null) return undefined;
+	if (prop.value) {
+		let on = false;
+		for (const p of prop.value.props) {
+			if (p.type !== "prop" || p.key !== "materialization") return undefined;
+			const v = p.valueNode;
+			if (p.value || p.valueText !== null || !v || v.type !== "Literal" || typeof v.value !== "boolean") return undefined;
+			on = v.value;
+		}
+		return on;
+	}
+	const v = prop.valueNode;
+	return v && v.type === "Literal" && typeof v.value === "boolean" ? v.value : undefined;
+}
+
+/**
+ * `tracking: true` / `tracking: { materialization: true }` is `loader.materialize: true` in v4 (the two options did the
+ * same thing; v4 keeps only loader.materialize). Off, it is dropped. Runs after the plain moves, so a
+ * `backgroundMaterialize` the config also had already sits at loader.materialize.
+ * @param {(path: string) => ({ obj: ObjModel, prop: import("./object-model.mjs").PropModel }|null)} at - Locate by absolute path.
+ * @param {ObjModel} model - Literal model.
+ * @param {string[]} prefix - Where it sits.
+ * @param {RewriteContext} ctx - Context.
+ * @returns {void}
+ */
+function rewriteTracking(at, model, prefix, ctx) {
+	const found = at("tracking");
+	if (!found) return;
+	const { prop, obj } = found;
+	const { result } = ctx;
+	const id = "config|tracking";
+	const offset = prop.node?.start ?? 0;
+	const manual = (why) =>
+		result.manual(id, offset, `tracking is gone: loader.materialize: true replaces tracking: { materialization: true }; ${why}`);
+	const on = trackingSetting(prop);
+	if (on === undefined) {
+		manual("its value is not a plain true / false or { materialization: true / false }, so write it by hand.");
+		return;
+	}
+	if (!on) {
+		obj.drop(prop);
+		prune(obj, model);
+		result.rewrite(id, offset, "tracking removed (materialization off is the default)");
+		return;
+	}
+	const existing = at("loader.materialize");
+	if (existing) {
+		const v = existing.prop.valueNode;
+		const plain = existing.prop.valueText === null && !existing.prop.value && v;
+		const literalTrue = plain && v.type === "Literal" && v.value === true;
+		const fn = plain && (v.type === "ArrowFunctionExpression" || v.type === "FunctionExpression");
+		if (!literalTrue && !fn) {
+			manual(
+				"loader.materialize is set here too, and tracking turned materialization on whatever it said; set loader.materialize by hand."
+			);
+			return;
+		}
+		obj.drop(prop);
+		prune(obj, model);
+		result.rewrite(id, offset, "tracking removed (loader.materialize already turns materialization on)");
+		return;
+	}
+	const loaderRel = relative(["loader"], prefix);
+	if (!loaderRel) {
+		manual("loader does not sit inside this object literal.");
+		return;
+	}
+	const index = obj.drop(prop);
+	const group = ensureGroup(model, loaderRel, { hintObj: obj, hintIndex: index });
+	if (!group) {
+		obj.insert(prop, index);
+		manual("loader is not an object literal here.");
+		return;
+	}
+	group.addRaw("materialize", "true");
+	if (obj !== model) prune(obj, model);
+	result.rewrite(id, offset, "tracking → loader.materialize: true");
 }
 
 /** Routine modes v3's `collectLifecycleHooks: true` replaced with its two root-anchored routines. */

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:14-07:00 (1791090914)
+ *	@Last modified time: 2026-11-16T18:29:39-08:00 (1794882579)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -51,7 +51,7 @@ describe.each(getMatrixConfigs())("Permissions > api.add flattened target path >
 		const instance = await slothlet({
 			...config,
 			base: BASE,
-			permissions: { defaultPolicy: "deny", rules: [{ caller: "**", target, effect: "allow" }] }
+			permissions: { policy: "deny", rules: [{ caller: "**", target, effect: "allow" }] }
 		});
 		await instance.slothlet.api.add("config", MOUNT);
 		return instance;

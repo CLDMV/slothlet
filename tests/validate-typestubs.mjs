@@ -59,14 +59,14 @@ import { plugin } from "@cldmv/slothlet/vite";
 import { files } from "@cldmv/slothlet/files";
 import * as errors from "@cldmv/slothlet/errors";
 import * as runtime from "@cldmv/slothlet/runtime";
-import { generateTypes } from "@cldmv/slothlet/typegen";
+import { generate } from "@cldmv/slothlet/typegen";
 
 async function check() {
 	const api = await slothlet({ base: "./api" });
 	const api2 = await named({ base: "./api" });
 	const name: string = sanitize("my-file");
 	const resolve = files.resolver("https://example.com/api/");
-	return { api, api2, name, plugin, resolve, errors, runtime, generateTypes };
+	return { api, api2, name, plugin, resolve, errors, runtime, generate };
 }
 export default check;
 `;
@@ -185,7 +185,7 @@ function main() {
 		const typedDeclaration = join(typedDir, "api.d.mts");
 		execFileSync(
 			"node",
-			[join(projectRoot, "bin", "slothlet.mjs"), "typegen", "-d", join(typedDir, "api"), "-o", typedDeclaration, "-n", "ConsumerApi"],
+			[join(projectRoot, "bin", "slothlet.mjs"), "typegen", "-b", join(typedDir, "api"), "-o", typedDeclaration, "-n", "ConsumerApi"],
 			{ stdio: "pipe", cwd: typedDir }
 		);
 		const typedConsumer = join(typedDir, "consumer.mts");

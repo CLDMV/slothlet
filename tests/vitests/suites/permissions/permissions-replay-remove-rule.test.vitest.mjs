@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:19-07:00 (1791090919)
+ *	@Last modified time: 2026-11-16T18:30:06-08:00 (1794882606)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -27,18 +27,18 @@ describe.each(getMatrixConfigs())("Permissions > Replay removeRule > $name", ({ 
 		api = null;
 	});
 
-	it("removeRule survives reload — rule remains removed after replay", async () => {
+	it("rules.remove survives reload — rule remains removed after replay", async () => {
 		api = await slothlet({
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "allow"
+				policy: "allow"
 			}
 		});
 
 		// Add then remove a deny rule
-		const ruleId = api.slothlet.permissions.addRule({ caller: "callers.**", target: "payments.**", effect: "deny" });
-		api.slothlet.permissions.removeRule(ruleId);
+		const ruleId = api.slothlet.permissions.rules.add({ caller: "callers.**", target: "payments.**", effect: "deny" });
+		api.slothlet.permissions.rules.remove(ruleId);
 
 		// Verify allowed (rule removed)
 		const result = await api.callers.paymentsCaller.callCharge(100);

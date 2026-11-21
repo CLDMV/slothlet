@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-14T09:00:00-08:00 (1794675600)
+ *	@Last modified time: 2026-11-16T18:30:06-08:00 (1794882606)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -101,7 +101,7 @@ describe.each(MATRIX)("Permissions > every CommonJS api file requiring a package
 				mode,
 				runtime,
 				silent: true,
-				permissions: { defaultPolicy: "allow", attribution, rules: list }
+				permissions: { policy: "allow", caller: { attribution }, rules: list }
 			});
 			// Every file loads and requires its packages, `count-later` included, in this order.
 			for (const { file, packages } of FILES) for (const name of packages) await api[file].bump(name);
@@ -125,7 +125,7 @@ describe.each(MATRIX)("Permissions > every CommonJS api file requiring a package
 				mode,
 				runtime,
 				silent: true,
-				permissions: { defaultPolicy: "allow", attribution, rules: [{ caller: "second.**", target: "vault.**", effect: "deny" }] }
+				permissions: { policy: "allow", caller: { attribution }, rules: [{ caller: "second.**", target: "vault.**", effect: "deny" }] }
 			});
 			for (const file of ["second", "first"]) await api[file].bump("later");
 		});

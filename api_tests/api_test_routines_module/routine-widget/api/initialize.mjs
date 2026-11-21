@@ -15,7 +15,7 @@
 
 /**
  * @fileoverview Leaf matched by a configured `initialize` routine, used to verify that mounting a
- * module via `api.modules.addModule()`/`addModules()` installs the routine's stacked callable at the
+ * module via `api.modules.add()`/`addModules()` installs the routine's stacked callable at the
  * mounted leaf's composed path (#362 — the mount path previously never called rebuildStacks()).
  * @module api_test_routines_module.routine-widget.initialize
  */

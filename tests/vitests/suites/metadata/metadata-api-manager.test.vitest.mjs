@@ -55,11 +55,12 @@ describe.each(getMatrixConfigs())("Metadata API Manager > Config: '$name'", ({ c
 			});
 
 			await materialize(api, "newApi.config.settings.getPluginConfig");
-			const meta = api.newApi.config.settings.getPluginConfig.__metadata;
+			const meta = api.slothlet.metadata.get(api.newApi.config.settings.getPluginConfig);
+			const metaNode = api.slothlet.node(api.newApi.config.settings.getPluginConfig);
 
 			expect(meta.added).toBe(true);
 			expect(meta.timestamp).toBeDefined();
-			expect(meta.moduleID).toContain("newApi");
+			expect(metaNode.module).toContain("newApi");
 		});
 
 		it("should support multiple add() calls with different metadata", async () => {
@@ -80,8 +81,8 @@ describe.each(getMatrixConfigs())("Metadata API Manager > Config: '$name'", ({ c
 			await materialize(api, "api1.config.settings.getPluginConfig");
 			await materialize(api, "api2.config.settings.getPluginConfig");
 
-			const meta1 = api.api1.config.settings.getPluginConfig.__metadata;
-			const meta2 = api.api2.config.settings.getPluginConfig.__metadata;
+			const meta1 = api.slothlet.metadata.get(api.api1.config.settings.getPluginConfig);
+			const meta2 = api.slothlet.metadata.get(api.api2.config.settings.getPluginConfig);
 
 			expect(meta1.name).toBe("api1");
 			expect(meta1.order).toBe(1);
@@ -119,12 +120,10 @@ describe.each(getMatrixConfigs())("Metadata API Manager > Config: '$name'", ({ c
 			});
 
 			await materialize(api, "keep.config.settings.getPluginConfig");
-			const ____metaBefore = api.keep.config.settings.getPluginConfig.__metadata;
 
 			await api.slothlet.api.remove("remove");
 
 			await materialize(api, "keep.config.settings.getPluginConfig");
-			const ____metaAfter = api.keep.config.settings.getPluginConfig.__metadata;
 		});
 	});
 
@@ -138,7 +137,8 @@ describe.each(getMatrixConfigs())("Metadata API Manager > Config: '$name'", ({ c
 			});
 
 			await materialize(api, "replaceable.config.settings.getPluginConfig");
-			const meta1 = api.replaceable.config.settings.getPluginConfig.__metadata;
+			const meta1 = api.slothlet.metadata.get(api.replaceable.config.settings.getPluginConfig);
+			const meta1Node = api.slothlet.node(api.replaceable.config.settings.getPluginConfig);
 			expect(meta1.version).toBe("1.0.0");
 
 			await api.slothlet.api.remove("replaceable");
@@ -150,11 +150,12 @@ describe.each(getMatrixConfigs())("Metadata API Manager > Config: '$name'", ({ c
 			});
 
 			await materialize(api, "replaceable.config.settings.getPluginConfig");
-			const meta2 = api.replaceable.config.settings.getPluginConfig.__metadata;
+			const meta2 = api.slothlet.metadata.get(api.replaceable.config.settings.getPluginConfig);
+			const meta2Node = api.slothlet.node(api.replaceable.config.settings.getPluginConfig);
 
 			expect(meta2.version).toBe("2.0.0");
 			expect(meta2.iteration).toBe(2);
-			expect(meta2.moduleID).not.toBe(meta1.moduleID); // New moduleID
+			expect(meta2Node.module).not.toBe(meta1Node.module); // New moduleID
 		});
 	});
 
@@ -171,7 +172,7 @@ describe.each(getMatrixConfigs())("Metadata API Manager > Config: '$name'", ({ c
 				});
 
 				await materialize(api, "cycled.config.settings.getPluginConfig");
-				const meta = api.cycled.config.settings.getPluginConfig.__metadata;
+				const meta = api.slothlet.metadata.get(api.cycled.config.settings.getPluginConfig);
 				expect(meta.cycle).toBe(i);
 
 				if (i < cycles) {
@@ -181,7 +182,7 @@ describe.each(getMatrixConfigs())("Metadata API Manager > Config: '$name'", ({ c
 			}
 
 			// Final state
-			const finalMeta = api.cycled.config.settings.getPluginConfig.__metadata;
+			const finalMeta = api.slothlet.metadata.get(api.cycled.config.settings.getPluginConfig);
 			expect(finalMeta.cycle).toBe(cycles);
 		});
 	});
@@ -222,7 +223,12 @@ describe.each(getMatrixConfigs())("Metadata API Manager > Config: '$name'", ({ c
 			expect(metadata).toBeDefined();
 			expect(metadata.addedViaInternal).toBe(true);
 			expect(metadata.timestamp).toBeDefined();
-			expect(metadata.apiPath).toBe("internalAdd.config.settings.getPluginConfig");
+			expect(api.slothlet.node(api.internalAdd.config.settings.getPluginConfig).path).toEqual([
+				"internalAdd",
+				"config",
+				"settings",
+				"getPluginConfig"
+			]);
 		});
 
 		it("should reflect user metadata set via external API in internal API", async () => {
@@ -256,7 +262,7 @@ describe.each(getMatrixConfigs())("Metadata API Manager > Config: '$name'", ({ c
 
 			// Should be undefined via internal API
 			metadata = await api.metadataTestHelper.getMetadata("removableInternal.config.settings.getPluginConfig");
-			expect(metadata).toBeUndefined();
+			expect(metadata).toEqual({}); // metadata.get reads user metadata only and answers {} when there is none
 		});
 
 		it("should handle multiple add/remove cycles via internal API", async () => {
@@ -281,7 +287,7 @@ describe.each(getMatrixConfigs())("Metadata API Manager > Config: '$name'", ({ c
 
 				// Verify removed via internal API
 				const afterRemove = await api.metadataTestHelper.getMetadata("cycleInternal.config.settings.getPluginConfig");
-				expect(afterRemove).toBeUndefined();
+				expect(afterRemove).toEqual({}); // metadata.get reads user metadata only and answers {} when there is none
 			}
 		});
 
@@ -303,7 +309,7 @@ describe.each(getMatrixConfigs())("Metadata API Manager > Config: '$name'", ({ c
 
 			// Child should be gone
 			const afterRemove = await api.metadataTestHelper.getMetadata("partialInternal.config.settings.getPluginConfig");
-			expect(afterRemove).toBeUndefined();
+			expect(afterRemove).toEqual({}); // metadata.get reads user metadata only and answers {} when there is none
 		});
 	});
 });

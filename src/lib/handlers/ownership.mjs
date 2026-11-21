@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:10-08:00 (1794874570)
+ *	@Last modified time: 2026-11-17T13:35:17-08:00 (1794951317)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -18,6 +18,7 @@
  * @module @cldmv/slothlet/ownership
  * @internal
  */
+import { segmentsOf } from "#helpers/segments";
 import { ComponentBase } from "#factories/component-base";
 import { internals as unifiedWrapperInternals } from "#handlers/unified-wrapper";
 import {
@@ -27,7 +28,6 @@ import {
 	concatLists,
 	copyList,
 	filterList,
-	FunctionMethods,
 	listPush,
 	listSplice,
 	Map,
@@ -109,6 +109,17 @@ const REGISTRATION_SOURCE_AUTHORITATIVE = "core";
  */
 function isIndexable(value) {
 	return (typeof value === "object" && value !== null) || typeof value === "function";
+}
+
+/**
+ * Whether a registered value is a leaf member: a function or a primitive (an exported string, number, boolean,
+ * `null`…), as opposed to a container. `undefined` is no value at all — a value-less marker registration.
+ * @param {*} value - Registered value.
+ * @returns {boolean} True for a function or a defined primitive.
+ * @private
+ */
+function isLeafValue(value) {
+	return value !== undefined && (typeof value === "function" || typeof value !== "object" || value === null);
 }
 
 /**
@@ -199,7 +210,7 @@ function readOwnData(value, key) {
  * The proxy's get trap is the authoritative read: it builds child wrappers from the impl, unwraps
  * primitive leaves, and so on, so the walk reads through it. The one exception is a child that is
  * itself an unmaterialized lazy wrapper: for that child the trap returns the same stored proxy
- * unchanged, and its only other effect is to start a fire-and-forget `_materialize()`. That child
+ * unchanged, and its only other effect is to start a fire-and-forget `___materialize()`. That child
  * is read from the wrapper directly, so observing the tree never loads it.
  */
 function readWithoutMaterializing(proxy, inner, key) {
@@ -229,7 +240,8 @@ function readWithoutMaterializing(proxy, inner, key) {
  * Summary result of an unregister operation.
  * @typedef {Object} UnregisterResult
  * @property {string[]} removed - API paths that were removed.
- * @property {Object[]} rolledBack - Entries that were rolled back to a previous owner.
+ * @property {Array<{apiPath: string, restoredTo: string, wasCurrent: boolean}>} rolledBack - Entries that were rolled back
+ *   to a previous owner; `wasCurrent` says whether the removed module's value was the live one there.
  */
 
 /**
@@ -289,8 +301,7 @@ export class OwnershipManager extends ComponentBase {
 		// Merge into an existing entry rather than replace it: the same file loaded again (a reload, or
 		// a second mount of it) yields new value identities, while wrappers from an earlier load may
 		// still be looked up against the earlier ones.
-		const isCommonJS =
-			StringMethods.endsWith(filePath, ".cjs") || FunctionMethods.call(Objects.prototype.hasOwnProperty, mod, "module.exports");
+		const isCommonJS = StringMethods.endsWith(filePath, ".cjs") || Objects.hasOwn(mod, "module.exports");
 		let entry = MapMethods.get(this.exportIndex, filePath);
 		if (!entry) {
 			entry = { values: new WeakMap(), members: new WeakMap(), keys: new Map(), commonJS: isCommonJS };
@@ -688,7 +699,6 @@ export class OwnershipManager extends ComponentBase {
 	 * @param {*} options.value - The actual function/object being registered
 	 * @param {string} [options.source="core"] - Source of registration
 	 * @param {string} [options.collisionMode="error"] - Collision mode: skip, warn, error, merge, replace
-	 * @param {Object} [options.config] - Config object for silent mode check
 	 * @param {string} [options.filePath=null] - File path of the module source (for metadata tracking)
 	 * @param {string[]|null} [options.exportPath=null] - Access path within `filePath`'s module namespace
 	 *   that produced `value` (`["add"]`, `["default"]`, `["default", "member"]`); `null` when the value
@@ -704,18 +714,17 @@ export class OwnershipManager extends ComponentBase {
 		value,
 		source = "core",
 		collisionMode = "error",
-		config = null,
 		filePath = null,
 		exportPath = null,
 		memberExportPaths = null
 	}) {
 		// Validate inputs
 		if (!moduleID || typeof moduleID !== "string") {
-			throw new this.SlothletError("OWNERSHIP_INVALID_MODULE_ID", { moduleID }, null, { validationError: true });
+			throw new this.SlothletError("OWNERSHIP_MODULE_ID_INVALID", { module: moduleID });
 		}
 		// Allow empty string for root-level registrations
 		if (apiPath !== "" && (!apiPath || typeof apiPath !== "string")) {
-			throw new this.SlothletError("OWNERSHIP_INVALID_API_PATH", { apiPath }, null, { validationError: true });
+			throw new this.SlothletError("OWNERSHIP_API_PATH_INVALID", { path: segmentsOf(apiPath) });
 		}
 
 		// Guard: reject registration for modules that have been explicitly unregistered.
@@ -735,22 +744,19 @@ export class OwnershipManager extends ComponentBase {
 				// Skip registration silently
 				return null;
 			} else if (collisionMode === "warn") {
-				// Skip registration but emit warning (unless silent)
-				if (!config?.silent) {
-					new this.SlothletWarning("WARNING_OWNERSHIP_CONFLICT", {
-						apiPath,
-						existingModuleId: currentOwner.moduleID,
-						newModuleId: moduleID
-					});
-				}
+				// Skip registration but emit warning (printed unless the instance is silent)
+				new this.SlothletWarning("WARNING_OWNERSHIP_CONFLICT", {
+					path: segmentsOf(apiPath),
+					owner: currentOwner.moduleID,
+					incoming: moduleID
+				});
 				return null;
 			} else {
 				// error mode - throw
 				throw new this.SlothletError("OWNERSHIP_CONFLICT", {
-					apiPath,
-					existingModuleId: currentOwner.moduleID,
-					newModuleId: moduleID,
-					validationError: true
+					path: segmentsOf(apiPath),
+					owner: currentOwner.moduleID,
+					incoming: moduleID
 				});
 			}
 		}
@@ -893,13 +899,17 @@ export class OwnershipManager extends ComponentBase {
 		// value in that shape, so its registration must be flagged a loss too, or `#currentEntry()`'s
 		// "last non-loss wins" scan hands callers the no-longer-live namespace instead of the
 		// still-live callable (#372/#373 review, suppressed finding).
+		// A primitive member (an exported string or number) is a leaf like a function: merge keeps whatever
+		// already sits at the key (syncWrapper adds only keys the existing namespace lacks), so an incoming value
+		// loses to an existing leaf of either kind, and an incoming primitive also loses to an existing namespace.
 		const isMergeLoss =
 			source !== REGISTRATION_SOURCE_CONFIRM &&
 			Boolean(currentOwner) &&
 			currentOwner.moduleID !== moduleID &&
 			collisionMode === "merge" &&
-			((typeof value === "function" && typeof currentOwner.value === "function") ||
-				(typeof currentOwner.value === "function" && typeof value === "object" && value !== null));
+			((isLeafValue(value) && isLeafValue(currentOwner.value)) ||
+				(isLeafValue(currentOwner.value) && typeof value === "object" && value !== null) ||
+				(isLeafValue(value) && typeof value !== "function" && typeof currentOwner.value === "object" && currentOwner.value !== null));
 
 		const entry = {
 			moduleID,
@@ -928,6 +938,9 @@ export class OwnershipManager extends ComponentBase {
 	 * first-ever registration at a path is never itself a merge loss, so this only matters for a
 	 * stack this invariant has somehow already broken; kept as a defensive floor so a lookup never
 	 * returns nothing for a non-empty stack.
+	 *
+	 * An entry a cross-module `replace` took off the api ({@link OwnershipManager#shadowSubtree}) is never
+	 * current: its value is not live anywhere. A stack holding only such entries has no current entry.
 	 */
 	#currentEntry(stack) {
 		// Unreachable: every caller passes a non-empty stack — getCurrentOwner() returns early on an
@@ -935,10 +948,64 @@ export class OwnershipManager extends ComponentBase {
 		// their own non-empty guard / the stack.length===0 delete branch. Kept as a defensive floor.
 		/* v8 ignore next */
 		if (!stack || stack.length === 0) return undefined;
+		let fallback;
 		for (let i = stack.length - 1; i >= 0; i--) {
+			if (stack[i].shadowedBy) continue;
 			if (!stack[i].isMergeLoss) return stack[i];
+			if (fallback === undefined) fallback = stack[i];
 		}
-		return stack[stack.length - 1];
+		return fallback;
+	}
+
+	/**
+	 * Mark every entry at `apiPath` and below as taken off the api by a cross-module `replace`.
+	 * @param {string} apiPath - The member the replace removed from the live api; `""` for every path.
+	 * @param {string} byModuleID - The module whose `replace` removed it.
+	 * @returns {void}
+	 * @public
+	 *
+	 * @description
+	 * A `replace` swaps a namespace's surface for the incoming module's: a member only the earlier module
+	 * provides leaves the api, but its entries stay on record so removing the replacing module can put it back.
+	 * While it is off the api nobody owns the path — whoever's value is live owns it, and none is — so the
+	 * entries are flagged and skipped as current until {@link OwnershipManager#unshadowSubtree}.
+	 *
+	 * @example
+	 * ownership.shadowSubtree("p.shared.count", "b");
+	 */
+	shadowSubtree(apiPath, byModuleID) {
+		const prefix = `${apiPath}.`;
+		for (let ofIndex = 0, ofList = mapEntriesToArray(this.pathToModule); ofIndex < ofList.length; ofIndex++) {
+			const ofEntry = ofList[ofIndex],
+				path = ofEntry[0];
+			if (apiPath !== "" && path !== apiPath && !StringMethods.startsWith(path, prefix)) continue;
+			for (let i = 0, stack = ofEntry[1]; i < stack.length; i++) {
+				if (stack[i].moduleID !== byModuleID && !stack[i].shadowedBy) stack[i].shadowedBy = byModuleID;
+			}
+		}
+	}
+
+	/**
+	 * Clear the flag {@link OwnershipManager#shadowSubtree} set for `byModuleID` at `apiPath` and below: the member
+	 * is back on the api.
+	 * @param {string} apiPath - The member put back; `""` for every path.
+	 * @param {string} byModuleID - The module whose `replace` had removed it.
+	 * @returns {void}
+	 * @public
+	 *
+	 * @example
+	 * ownership.unshadowSubtree("p.shared.count", "b");
+	 */
+	unshadowSubtree(apiPath, byModuleID) {
+		const prefix = `${apiPath}.`;
+		for (let ofIndex = 0, ofList = mapEntriesToArray(this.pathToModule); ofIndex < ofList.length; ofIndex++) {
+			const ofEntry = ofList[ofIndex],
+				path = ofEntry[0];
+			if (apiPath !== "" && path !== apiPath && !StringMethods.startsWith(path, prefix)) continue;
+			for (let i = 0, stack = ofEntry[1]; i < stack.length; i++) {
+				if (stack[i].shadowedBy === byModuleID) delete stack[i].shadowedBy;
+			}
+		}
 	}
 
 	/**
@@ -973,7 +1040,8 @@ export class OwnershipManager extends ComponentBase {
 			} else if (result.action === "restore") {
 				listPush(rolledBack, {
 					apiPath,
-					restoredTo: result.restoreModuleId
+					restoredTo: result.restoreModuleId,
+					wasCurrent: result.wasCurrent
 				});
 			}
 		}
@@ -982,6 +1050,9 @@ export class OwnershipManager extends ComponentBase {
 		MapMethods.delete(this.moduleEndpoints, moduleID);
 		MapMethods.delete(this.moduleMounts, moduleID);
 		MapMethods.delete(this.placementModes, moduleID);
+		// The module is gone, so nothing it took off the api with a replace stays hidden: the removal puts
+		// those members back (rollback and shadow re-attach), and their modules own them again.
+		this.unshadowSubtree("", moduleID);
 
 		return { removed, rolledBack };
 	}
@@ -1048,7 +1119,8 @@ export class OwnershipManager extends ComponentBase {
 	 * @param {string} apiPath - API path to modify.
 	 * @param {string|null} [moduleID=null] - Module to remove (defaults to current owner).
 	 * @returns {{ action: "delete"|"none"|"restore", removedModuleId: string|null,
-	 * restoreModuleId: string|null }} Action taken for the path.
+	 * restoreModuleId: string|null, wasCurrent: (boolean|undefined) }} Action taken for the path; `wasCurrent` says whether the
+	 * removed entry was the path's current one.
 	 * @public
 	 *
 	 * @description
@@ -1073,9 +1145,15 @@ export class OwnershipManager extends ComponentBase {
 		if (index === -1) {
 			return { action: "none", removedModuleId: null, restoreModuleId: null };
 		}
+		// Whether the removed entry was the one live at the path: only then does a restore change the live value.
+		const wasCurrent = stack[index] === this.#currentEntry(stack);
 		const unpacked1 = listSplice(stack, index, 1),
 			removed = unpacked1[0];
 		const removedModuleId = removed.moduleID;
+		// What the removed module's replace had taken off the api at this path is eligible again.
+		for (let i = 0; i < stack.length; i++) {
+			if (stack[i].shadowedBy === removedModuleId) delete stack[i].shadowedBy;
+		}
 		if (removedModuleId && MapMethods.has(this.moduleToPath, removedModuleId)) {
 			const pathSet = MapMethods.get(this.moduleToPath, removedModuleId);
 			SetMethods.delete(pathSet, apiPath);
@@ -1087,17 +1165,20 @@ export class OwnershipManager extends ComponentBase {
 		// If stack empty, delete path entirely
 		if (stack.length === 0) {
 			MapMethods.delete(this.pathToModule, apiPath);
-			return { action: "delete", removedModuleId, restoreModuleId: null };
+			return { action: "delete", removedModuleId, restoreModuleId: null, wasCurrent };
 		}
 
 		// Otherwise, restore to previous owner — skip a stale merge-loss entry so a module that
 		// lost a collision earlier doesn't accidentally resurface as "current" just because
 		// whichever module beat it is the one being removed now (#372).
 		const previous = this.#currentEntry(stack);
+		// Every remaining entry is off the api under a cross-module replace: nothing is live to restore to.
+		if (!previous) return { action: "none", removedModuleId, restoreModuleId: null, wasCurrent };
 		return {
 			action: "restore",
 			removedModuleId,
-			restoreModuleId: previous.moduleID
+			restoreModuleId: previous.moduleID,
+			wasCurrent
 		};
 	}
 
@@ -1136,6 +1217,33 @@ export class OwnershipManager extends ComponentBase {
 	}
 
 	/**
+	 * Drop every module's entries at `apiPath` and below: the namespace left the api because nothing was left in it.
+	 * @param {string} apiPath - The pruned namespace's path.
+	 * @returns {void}
+	 * @public
+	 *
+	 * @description
+	 * A removal that empties a namespace prunes it from the api. The owner of a path is whoever's value is live there,
+	 * and nothing is, so no module owns it any more. A module that later puts something there again (a reload or an
+	 * add) creates the namespace anew and owns it.
+	 *
+	 * @example
+	 * ownership.forgetPath("p"); // "p" is no longer anyone's
+	 */
+	forgetPath(apiPath) {
+		this.removeSubtree(apiPath);
+		const stack = MapMethods.get(this.pathToModule, apiPath);
+		if (!stack) return;
+		for (let ofIndex = 0, ofList = stack; ofIndex < ofList.length; ofIndex++) {
+			const pathSet = MapMethods.get(this.moduleToPath, ofList[ofIndex].moduleID);
+			if (!pathSet) continue;
+			SetMethods.delete(pathSet, apiPath);
+			if (SetMethods.size(pathSet) === 0) MapMethods.delete(this.moduleToPath, ofList[ofIndex].moduleID);
+		}
+		MapMethods.delete(this.pathToModule, apiPath);
+	}
+
+	/**
 	 * Get current owner of API path
 	 * @param {string} apiPath - API path to check
 	 * @returns {Object|null} Current owner entry or null
@@ -1144,14 +1252,7 @@ export class OwnershipManager extends ComponentBase {
 	getCurrentOwner(apiPath) {
 		const stack = MapMethods.get(this.pathToModule, apiPath);
 		if (!stack || stack.length === 0) return null;
-		// The `?? null` is unreachable. #currentEntry() returns undefined in two cases: an empty/absent
-		// stack (excluded by the guard above) OR a non-empty stack whose every entry is a merge-loss
-		// (the loop finds no non-loss entry). The latter never occurs: register() flags an entry
-		// isMergeLoss only when a non-loss currentOwner already exists (see its `Boolean(currentOwner)`
-		// condition), so a stack always retains at least one non-loss owner, and removePath() promotes
-		// the next owner rather than leaving an all-loss stack — so for a non-empty stack #currentEntry
-		// always returns an entry.
-		/* v8 ignore next */
+		// No current entry when every entry is off the api under a cross-module replace (shadowSubtree()).
 		return this.#currentEntry(stack) ?? null;
 	}
 
@@ -1169,10 +1270,10 @@ export class OwnershipManager extends ComponentBase {
 
 		// If value is a wrapper proxy, unwrap it to get the raw implementation.
 		// Use resolveWrapper (checks the internal _proxyRegistry WeakMap directly) rather than
-		// `"__impl" in value`, which goes through the hasTrap - and __impl is now blocked there.
+		// `"____impl" in value`, which goes through the hasTrap - and ____impl is now blocked there.
 		const rawWrapper = resolveWrapper(value);
 		if (rawWrapper) {
-			return rawWrapper.__impl;
+			return rawWrapper.____impl;
 		}
 
 		return value;
@@ -1211,23 +1312,24 @@ export class OwnershipManager extends ComponentBase {
 	}
 
 	/**
-	 * Get diagnostic info about ownership
-	 * @returns {Object} Diagnostic information
+	 * Diagnostic summary of ownership: how many api paths are registered, how many each module owns, and the paths
+	 * more than one module holds (their owners, oldest first).
+	 * @returns {{ count: number, modules: Array<{ module: string, count: number }>, conflicts: Array<{ path: string[], owners: string[] }> }}
+	 *   The summary.
 	 * @public
 	 */
 	getDiagnostics() {
 		return {
-			totalModules: MapMethods.size(this.moduleToPath),
-			totalPaths: MapMethods.size(this.pathToModule),
+			count: MapMethods.size(this.pathToModule),
 			modules: mapList(mapEntriesToArray(this.moduleToPath), (entry2) => {
 				const id = entry2[0],
 					paths = entry2[1];
 				return {
-					moduleID: id,
-					pathCount: SetMethods.size(paths)
+					module: id,
+					count: SetMethods.size(paths)
 				};
 			}),
-			conflictedPaths: mapList(
+			conflicts: mapList(
 				filterList(mapEntriesToArray(this.pathToModule), (entry3) => {
 					const _ = entry3[0],
 						stack = entry3[1];
@@ -1237,8 +1339,8 @@ export class OwnershipManager extends ComponentBase {
 					const path = entry4[0],
 						stack = entry4[1];
 					return {
-						apiPath: path,
-						ownerStack: mapList(stack, (e) => e.moduleID)
+						path: segmentsOf(path),
+						owners: mapList(stack, (e) => e.moduleID)
 					};
 				}
 			)
@@ -1307,7 +1409,7 @@ export class OwnershipManager extends ComponentBase {
 		// Recursively register children. Reads go through the proxy (its get trap produces the values
 		// callers see) EXCEPT for a child that is an unmaterialized lazy wrapper: reading that one
 		// through the trap returns the same stored proxy but also starts a fire-and-forget
-		// `_materialize()`, which left a freshly added lazy mount mid-materialization when
+		// `___materialize()`, which left a freshly added lazy mount mid-materialization when
 		// `api.slothlet.api.add()` resolved and made what add() returned depend on timing (#462). Such a
 		// child registers its own descendants when it materializes.
 		const inner = resolveWrapper(api);
@@ -1317,17 +1419,19 @@ export class OwnershipManager extends ComponentBase {
 				key = ofEntry[0],
 				value = ofEntry[1];
 			// Skip internal properties
-			const skipProps = ["__metadata", "__type", "_materialize", "_impl", "____slothletInternal"];
+			const skipProps = ["___materialize", "____impl", "____slothletInternal"];
 			if (ArrayMethods.includes(skipProps, key)) {
 				continue;
 			}
 
 			const childPath = path ? `${path}.${key}` : key;
-			if (typeof value === "function" || (value && typeof value === "object")) {
+			// Every member is the module's: an exported string or number is registered and claimed exactly like
+			// an exported function (load-time registration already records primitives; this walk must agree).
+			if (value !== undefined) {
 				this.#confirm(moduleID, childPath, value, claims);
 
 				// Recurse for objects (not functions with properties)
-				if (typeof value === "object" && !Arrays.isArray(value)) {
+				if (value !== null && typeof value === "object" && !Arrays.isArray(value)) {
 					this.registerSubtree(value, moduleID, childPath, { collisionMode, visited });
 				}
 			}
@@ -1355,6 +1459,8 @@ export class OwnershipManager extends ComponentBase {
 		});
 		if (!claim || !entry) return;
 		entry.isMergeLoss = false;
+		// Claimed: the module's content is live at the path again.
+		delete entry.shadowedBy;
 		const stack = MapMethods.get(this.pathToModule, apiPath);
 		const index = ArrayMethods.indexOf(stack, entry);
 		if (index !== stack.length - 1) {
@@ -1540,17 +1646,18 @@ export class OwnershipManager extends ComponentBase {
 				key = ofEntry[0],
 				value = ofEntry[1];
 			// Skip internal properties
-			const skipProps = ["__metadata", "__type", "_materialize", "_impl", "____slothletInternal"];
+			const skipProps = ["___materialize", "____impl", "____slothletInternal"];
 			if (ArrayMethods.includes(skipProps, key)) {
 				continue;
 			}
 
 			const childPath = path ? `${path}.${key}` : key;
-			if (typeof value === "function" || (value && typeof value === "object")) {
+			// Primitive members included, as registerSubtree() registers them.
+			if (value !== undefined) {
 				revert(childPath);
 
 				// Recurse for objects (not functions with properties)
-				if (typeof value === "object" && !Arrays.isArray(value)) {
+				if (value !== null && typeof value === "object" && !Arrays.isArray(value)) {
 					this.revertSpeculativeSubtree(value, moduleID, childPath, priorEntries, visited);
 				}
 			}

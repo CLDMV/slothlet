@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:19-08:00 (1794874579)
+ *	@Last modified time: 2026-11-16T18:28:08-08:00 (1794882488)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -73,7 +73,7 @@ function smokeHtml(importmap, manifest, heldManifest, helperManifest) {
 <script type="module">
 const out = { loaded: false, composed: false, value: null, self: null, hook: null, metadataType: null, metadataGetFor: null, i18n: null, events: null, added: null, perm: null, keys: null, advanced: null, internal: null, runtime: null, exports: null, hostExports: null, helperExports: null, error: null };
 const BASE = ${JSON.stringify(base)};
-const cfg = (extra) => ({ platform: "browser", base: BASE, manifest: window.__MANIFEST__, resolveModuleSpecifier: ({ path }) => new URL(path, BASE).href, mode: "eager", ...extra });
+const cfg = (extra, loader) => ({ base: BASE, mode: "eager", ...extra, loader: { platform: "browser", files: window.__MANIFEST__, resolve: ({ path }) => new URL(path, BASE).href, ...loader } });
 // calc may smart-flatten to a function or to an object exposing addViaSelf — handle both.
 const callCalc = (node, a, b) => (typeof node === "function" ? node(a, b) : node.addViaSelf(a, b));
 try {
@@ -97,7 +97,7 @@ try {
 
 	// metadata: both the namespace presence (typeof) AND a real getFor() read (merged metadata for a path).
 	out.metadataType = typeof api.slothlet.metadata; // "object" | "function"
-	const meta = api.slothlet.metadata.getFor("math.add");
+	const meta = api.slothlet.metadata.get("math.add");
 	out.metadataGetFor = meta && typeof meta === "object" ? "ok" : "bad:" + typeof meta;
 
 	// i18n: switch locale via the async dynamic-import path (real browser fetch of the locale JSON).
@@ -119,7 +119,7 @@ try {
 
 	// ── Compose #2: permissions gate the INTERNAL self.math.add call (external calls are exempt) ──
 	const api2 = await slothlet(cfg({
-		permissions: { defaultPolicy: "allow", rules: [{ caller: "advanced.calc.**", target: "math.**", effect: "deny" }] }
+		permissions: { policy: "allow", rules: [{ caller: "advanced.calc.**", target: "math.**", effect: "deny" }] }
 	}));
 	try {
 		await callCalc(api2.advanced?.calc ?? api2.advanced, 2, 3);
@@ -147,16 +147,16 @@ try {
 	// A file served is importable by its URL, but slothlet's internal exports answer only slothlet's own files and the
 	// page's own code: an api leaf importing them by URL is refused every use, and the page's script is answered.
 	const lib = new URL("/src/lib/", location.href).href;
-	const api3 = await slothlet(cfg({ base: ${JSON.stringify(heldBase)}, manifest: window.__HELD_MANIFEST__, resolveModuleSpecifier: ({ path }) => new URL(path, ${JSON.stringify(heldBase)}).href }));
+	const api3 = await slothlet(cfg({ base: ${JSON.stringify(heldBase)} }, { files: window.__HELD_MANIFEST__, resolve: ({ path }) => new URL(path, ${JSON.stringify(heldBase)}).href }));
 	out.exports = await api3.held.tryInternals(lib);
 	const hostWrapper = await import(new URL("handlers/unified-wrapper.mjs", lib).href);
 	const hostContext = await import(new URL("factories/context.mjs", lib).href);
-	out.hostExports = [hostWrapper.resolveWrapper(api3.held) !== null, hostContext.getContextManager("live").instances.has(api3.slothlet.instanceID)].join(",");
+	out.hostExports = [hostWrapper.resolveWrapper(api3.held) !== null, hostContext.getContextManager("live").instances.has(api3.slothlet.instance.id)].join(",");
 	await api3.shutdown();
 
 	// A helper file a leaf imports from the module's folder is the module's code too; one outside every module's folder
 	// cannot be told from the page's own code.
-	const api4 = await slothlet(cfg({ base: ${JSON.stringify(helperBase)}, manifest: window.__HELPER_MANIFEST__, resolveModuleSpecifier: ({ path }) => new URL(path, ${JSON.stringify(helperBase)}).href }));
+	const api4 = await slothlet(cfg({ base: ${JSON.stringify(helperBase)} }, { files: window.__HELPER_MANIFEST__, resolve: ({ path }) => new URL(path, ${JSON.stringify(helperBase)}).href }));
 	out.helperExports = [await api4.porter.viaInside(lib), await api4.porter.viaOutside(lib)].join(",");
 	await api4.shutdown();
 } catch (e) {
@@ -237,7 +237,7 @@ async function main() {
 		"self=5": smoke?.self === 5,
 		"hook=7": smoke?.hook === 7,
 		"metadata(typeof)": smoke?.metadataType === "object" || smoke?.metadataType === "function",
-		"metadata.getFor": smoke?.metadataGetFor === "ok",
+		"metadata.get": smoke?.metadataGetFor === "ok",
 		"i18n=es-mx": smoke?.i18n === "es-mx",
 		events: String(smoke?.events).startsWith("fired"),
 		"api.add": smoke?.added === "mounted",

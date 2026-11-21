@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:34-07:00 (1791091714)
+ *	@Last modified time: 2026-11-16T18:29:25-08:00 (1794882565)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -20,10 +20,9 @@
  * whatever) always stacked every raw-captured contributor regardless of what the real composed
  * tree actually kept, which is wrong: nothing before #341 ever stacked functions at a shared api
  * path, and #341 should not have made that automatic/implicit in `collisionMode`'s side effects.
- * `stackRoutines` defaults to `false` (like `autoRoutines`, a deliberate opt-in) — a module that
- * lost a collision (under ANY collisionMode) must not still run via the routine system unless
- * `stackRoutines: true` is explicitly set, and that setting is honored uniformly, independent of
- * which collisionMode produced the winner.
+ * `routines.stack` defaults to `true` in v4 — every contributor at a shared path runs. With
+ * `routines.stack: false`, a module that lost a collision (under ANY collisionMode) does not run via
+ * the routine system, honored uniformly, independent of which collisionMode produced the winner.
  * @module tests/vitests/suites/lifecycle/routines-stack-flag
  */
 
@@ -36,9 +35,9 @@ describe.each(["eager", "lazy"])("stackRoutines (#365) — mode: %s", (mode) => 
 		globalThis.__slothletRoutineLog = [];
 	});
 
-	describe("default (stackRoutines omitted, false)", () => {
+	describe("routines.stack: false", () => {
 		it("a merge collision at the same api path runs only the surviving (existing) contributor", async () => {
-			const api = await slothlet({ dir: TEST_DIRS.API_TEST_ROUTINES, mode, autoRoutines: true, silent: true });
+			const api = await slothlet({ base: TEST_DIRS.API_TEST_ROUTINES, mode, routines: { auto: true, stack: false }, silent: true });
 			try {
 				globalThis.__slothletRoutineLog = [];
 				await api.slothlet.api.add(["auth"], TEST_DIRS.API_TEST_ROUTINES_AUTH1);
@@ -52,13 +51,15 @@ describe.each(["eager", "lazy"])("stackRoutines (#365) — mode: %s", (mode) => 
 		});
 
 		it("a replace collision at the same api path runs only the winning (incoming) contributor", async () => {
-			const api = await slothlet({ dir: TEST_DIRS.API_TEST_ROUTINES, mode, autoRoutines: true, silent: true });
+			const api = await slothlet({ base: TEST_DIRS.API_TEST_ROUTINES, mode, routines: { auto: true, stack: false }, silent: true });
 			try {
 				globalThis.__slothletRoutineLog = [];
 				await api.slothlet.api.add(["auth"], TEST_DIRS.API_TEST_ROUTINES_AUTH1);
 				await api.slothlet.api.add(["auth"], TEST_DIRS.API_TEST_ROUTINES_AUTH2, {
-					forceOverwrite: true,
-					moduleID: "auth2-forced"
+					collision: {
+						force: true
+					},
+					id: "auth2-forced"
 				});
 
 				await api.auth.initialize();
@@ -69,7 +70,7 @@ describe.each(["eager", "lazy"])("stackRoutines (#365) — mode: %s", (mode) => 
 		});
 
 		it("the root cascade also only reflects the surviving contributor at a collided path", async () => {
-			const api = await slothlet({ dir: TEST_DIRS.API_TEST_ROUTINES, mode, autoRoutines: true, silent: true });
+			const api = await slothlet({ base: TEST_DIRS.API_TEST_ROUTINES, mode, routines: { auto: true, stack: false }, silent: true });
 			try {
 				globalThis.__slothletRoutineLog = [];
 				await api.slothlet.api.add(["auth"], TEST_DIRS.API_TEST_ROUTINES_AUTH1);
@@ -86,15 +87,32 @@ describe.each(["eager", "lazy"])("stackRoutines (#365) — mode: %s", (mode) => 
 		});
 	});
 
-	describe("stackRoutines: true", () => {
-		it("a merge collision at the same api path stacks both contributors, in mount order", async () => {
-			const api = await slothlet({ dir: TEST_DIRS.API_TEST_ROUTINES, mode, autoRoutines: true, stackRoutines: true, silent: true });
+	describe("default (routines omitted): stacks", () => {
+		it("a merge collision at the same api path runs every contributor, in mount order", async () => {
+			const api = await slothlet({ base: TEST_DIRS.API_TEST_ROUTINES, mode, silent: true });
 			try {
 				globalThis.__slothletRoutineLog = [];
 				await api.slothlet.api.add(["auth"], TEST_DIRS.API_TEST_ROUTINES_AUTH1);
 				await api.slothlet.api.add(["auth"], TEST_DIRS.API_TEST_ROUTINES_AUTH2);
 
-				expect(api.auth.initialize.__slothletRoutineStack).toBe(true);
+				globalThis.__slothletRoutineLog = [];
+				await api.auth.initialize();
+				expect(globalThis.__slothletRoutineLog).toEqual(["auth1:initialize", "auth2:initialize"]);
+			} finally {
+				await api.slothlet.shutdown();
+			}
+		});
+	});
+
+	describe("stackRoutines: true", () => {
+		it("a merge collision at the same api path stacks both contributors, in mount order", async () => {
+			const api = await slothlet({ base: TEST_DIRS.API_TEST_ROUTINES, mode, routines: { auto: true, stack: true }, silent: true });
+			try {
+				globalThis.__slothletRoutineLog = [];
+				await api.slothlet.api.add(["auth"], TEST_DIRS.API_TEST_ROUTINES_AUTH1);
+				await api.slothlet.api.add(["auth"], TEST_DIRS.API_TEST_ROUTINES_AUTH2);
+
+				expect(api.auth.initialize.____slothletRoutineStack).toBe(true);
 				await api.auth.initialize();
 				expect(globalThis.__slothletRoutineLog).toEqual(["auth1:initialize", "auth2:initialize"]);
 			} finally {
@@ -103,13 +121,15 @@ describe.each(["eager", "lazy"])("stackRoutines (#365) — mode: %s", (mode) => 
 		});
 
 		it("a replace collision at the same api path ALSO stacks both contributors — stacking is independent of collisionMode", async () => {
-			const api = await slothlet({ dir: TEST_DIRS.API_TEST_ROUTINES, mode, autoRoutines: true, stackRoutines: true, silent: true });
+			const api = await slothlet({ base: TEST_DIRS.API_TEST_ROUTINES, mode, routines: { auto: true, stack: true }, silent: true });
 			try {
 				globalThis.__slothletRoutineLog = [];
 				await api.slothlet.api.add(["auth"], TEST_DIRS.API_TEST_ROUTINES_AUTH1);
 				await api.slothlet.api.add(["auth"], TEST_DIRS.API_TEST_ROUTINES_AUTH2, {
-					forceOverwrite: true,
-					moduleID: "auth2-forced"
+					collision: {
+						force: true
+					},
+					id: "auth2-forced"
 				});
 
 				await api.auth.initialize();
@@ -120,7 +140,7 @@ describe.each(["eager", "lazy"])("stackRoutines (#365) — mode: %s", (mode) => 
 		});
 
 		it("a removed merge-loser's raw contribution stops running — stale raw entries don't survive api.remove() (#372)", async () => {
-			const api = await slothlet({ dir: TEST_DIRS.API_TEST_ROUTINES, mode, autoRoutines: true, stackRoutines: true, silent: true });
+			const api = await slothlet({ base: TEST_DIRS.API_TEST_ROUTINES, mode, routines: { auto: true, stack: true }, silent: true });
 			try {
 				globalThis.__slothletRoutineLog = [];
 				await api.slothlet.api.add(["auth"], TEST_DIRS.API_TEST_ROUTINES_AUTH1);
@@ -145,11 +165,11 @@ describe.each(["eager", "lazy"])("stackRoutines (#365) — mode: %s", (mode) => 
 		});
 
 		it("removing one of 3+ contributors keeps the live property a stacked callable, not a bare function (#372 review)", async () => {
-			const api = await slothlet({ dir: TEST_DIRS.API_TEST_ROUTINES, mode, autoRoutines: true, stackRoutines: true, silent: true });
+			const api = await slothlet({ base: TEST_DIRS.API_TEST_ROUTINES, mode, routines: { auto: true, stack: true }, silent: true });
 			try {
 				const idA = await api.slothlet.api.add(["auth"], TEST_DIRS.API_TEST_ROUTINES_AUTH1);
 				await api.slothlet.api.add(["auth"], TEST_DIRS.API_TEST_ROUTINES_AUTH2);
-				await api.slothlet.api.add(["auth"], TEST_DIRS.API_TEST_ROUTINES_AUTH1, { moduleID: "auth1-again" });
+				await api.slothlet.api.add(["auth"], TEST_DIRS.API_TEST_ROUTINES_AUTH1, { id: "auth1-again" });
 
 				globalThis.__slothletRoutineLog = [];
 				await api.auth.initialize();
@@ -161,7 +181,7 @@ describe.each(["eager", "lazy"])("stackRoutines (#365) — mode: %s", (mode) => 
 				// contributor from a DIRECT call to the property (a `^`-anchored cascade, reading
 				// RoutineManager.raw directly, would still see all of them — the discrepancy is the bug).
 				await api.slothlet.api.remove(idA);
-				expect(api.auth.initialize.__slothletRoutineStack).toBe(true);
+				expect(api.auth.initialize.____slothletRoutineStack).toBe(true);
 
 				globalThis.__slothletRoutineLog = [];
 				await api.auth.initialize();
@@ -173,11 +193,17 @@ describe.each(["eager", "lazy"])("stackRoutines (#365) — mode: %s", (mode) => 
 
 		it("a skip-rejected add's raw-captured contribution does not run — the module was never mounted (#372/#373)", async () => {
 			const api = await slothlet({
-				dir: TEST_DIRS.API_TEST_ROUTINES,
+				base: TEST_DIRS.API_TEST_ROUTINES,
 				mode,
-				autoRoutines: true,
-				stackRoutines: true,
-				collision: { api: "skip" },
+				routines: {
+					auto: true,
+					stack: true
+				},
+				api: {
+					collision: {
+						mode: { api: "skip" }
+					}
+				},
 				silent: true
 			});
 			try {

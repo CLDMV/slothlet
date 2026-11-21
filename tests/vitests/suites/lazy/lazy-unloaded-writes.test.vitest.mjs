@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T22:53:59-08:00 (1794812039)
+ *	@Last modified time: 2026-11-16T18:30:05-08:00 (1794882605)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -47,7 +47,6 @@
 import { describe, it, expect, afterEach } from "vitest";
 import path from "node:path";
 import slothletInstance from "@cldmv/slothlet";
-import { SlothletWarning } from "@cldmv/slothlet/errors";
 import { refusedChangeCount, resolveWrapper } from "#handlers/unified-wrapper";
 import { TEST_DIRS, withSuppressedSlothletErrorOutput } from "../../setup/vitest-helper.mjs";
 
@@ -58,7 +57,7 @@ import { TEST_DIRS, withSuppressedSlothletErrorOutput } from "../../setup/vitest
  * @returns {Promise<object>} The api.
  */
 const slothlet = (config) =>
-	slothletInstance(config?.permissions ? { ...config, permissions: { provenance: false, ...config.permissions } } : config);
+	slothletInstance(config?.permissions ? { ...config, permissions: { caller: { provenance: false }, ...config.permissions } } : config);
 
 const FIXTURE = TEST_DIRS.API_TEST_LAZY_UNLOADED_WRITE;
 const BREAK = Symbol.for("slothlet.test.i653.break");
@@ -108,9 +107,9 @@ describe.each([{ runtime: "async" }, { runtime: "live" }])("writes through an un
 	 */
 	async function load(mode, options = {}) {
 		api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, diagnostics: true, ...options });
-		await api.slothlet.api.add("holder", path.join(FIXTURE, "holder"), { moduleID: "holder" });
-		await api.slothlet.api.add("writer", path.join(FIXTURE, "writer"), { moduleID: "writer" });
-		await api.slothlet.api.add("intruder", path.join(FIXTURE, "writer"), { moduleID: "intruder" });
+		await api.slothlet.api.add("holder", path.join(FIXTURE, "holder"), { id: "holder" });
+		await api.slothlet.api.add("writer", path.join(FIXTURE, "writer"), { id: "writer" });
+		await api.slothlet.api.add("intruder", path.join(FIXTURE, "writer"), { id: "intruder" });
 		return api;
 	}
 
@@ -355,75 +354,55 @@ describe.each([{ runtime: "async" }, { runtime: "live" }])("writes through an un
 	});
 
 	it("refuses a new member through a stand-in closed to extension once the node loads, and warns", async () => {
-		SlothletWarning.suppressConsole = true;
-		try {
-			api = await slothlet({ base: path.join(FIXTURE, "base"), mode: "lazy", runtime, diagnostics: true });
-			await api.slothlet.api.add("holder", path.join(FIXTURE, "holder"), { moduleID: "holder" });
-			const inner = api.holder.deep.inner;
-			Object.preventExtensions(inner);
-			inner.leaf = 5;
-			inner.added = 1;
-			expect(await settled(api.holder.deep.inner)).toBe("LAZY_WRITE_REFUSED");
-			const node = api.holder.deep.inner;
-			expect([node.leaf, node.added, Object.isExtensible(node)]).toEqual([5, undefined, false]);
-			const warnings = api.slothlet.diag.SlothletWarning.captured.filter((warning) => warning.code === "WARNING_LAZY_WRITE_REFUSED");
-			expect(warnings.map((warning) => warning.context.apiPath)).toEqual(["holder.deep.inner"]);
-			expect(warnings[0].cause).toBeInstanceOf(TypeError);
-		} finally {
-			SlothletWarning.suppressConsole = false;
-		}
+		api = await slothlet({ base: path.join(FIXTURE, "base"), mode: "lazy", runtime, diagnostics: true });
+		await api.slothlet.api.add("holder", path.join(FIXTURE, "holder"), { id: "holder" });
+		const inner = api.holder.deep.inner;
+		Object.preventExtensions(inner);
+		inner.leaf = 5;
+		inner.added = 1;
+		expect(await settled(api.holder.deep.inner)).toBe("LAZY_WRITE_REFUSED");
+		const node = api.holder.deep.inner;
+		expect([node.leaf, node.added, Object.isExtensible(node)]).toEqual([5, undefined, false]);
+		const warnings = api.slothlet.warnings.get().filter((warning) => warning.code === "WARNING_LAZY_WRITE_REFUSED");
+		expect(warnings.map((warning) => warning.details.path)).toEqual([["holder", "deep", "inner"]]);
+		expect(warnings[0].cause).toBeInstanceOf(TypeError);
 	});
 
 	it("warns of a refused change that nothing awaits", async () => {
-		SlothletWarning.suppressConsole = true;
-		try {
-			api = await slothlet({ base: path.join(FIXTURE, "base"), mode: "lazy", runtime, diagnostics: true });
-			await api.slothlet.api.add("holder", path.join(FIXTURE, "holder"), { moduleID: "holder" });
-			api.holder.deep.cfg.getterOnly.g = 2;
-			// Loaded through another member, not through a stand-in the refused change was made on.
-			await api.holder.deep.cfg.plain;
-			const warnings = api.slothlet.diag.SlothletWarning.captured.filter((warning) => warning.code === "WARNING_LAZY_WRITE_REFUSED");
-			expect(warnings.map((warning) => [warning.context.apiPath, warning.context.operation])).toEqual([
-				["holder.deep.cfg.getterOnly", "set"]
-			]);
-		} finally {
-			SlothletWarning.suppressConsole = false;
-		}
+		api = await slothlet({ base: path.join(FIXTURE, "base"), mode: "lazy", runtime, diagnostics: true });
+		await api.slothlet.api.add("holder", path.join(FIXTURE, "holder"), { id: "holder" });
+		api.holder.deep.cfg.getterOnly.g = 2;
+		// Loaded through another member, not through a stand-in the refused change was made on.
+		await api.holder.deep.cfg.plain;
+		const warnings = api.slothlet.warnings.get().filter((warning) => warning.code === "WARNING_LAZY_WRITE_REFUSED");
+		expect(warnings.map((warning) => [warning.details.path, warning.details.operation])).toEqual([
+			[["holder", "deep", "cfg", "getterOnly"], "set"]
+		]);
 	});
 
-	it("warns of nothing when the instance is silent", async () => {
-		SlothletWarning.suppressConsole = true;
-		try {
-			await load("lazy");
-			api.holder.deep.cfg.getterOnly.g = 2;
-			expect(await settled(api.holder.deep.cfg.getterOnly)).toBe("LAZY_WRITE_REFUSED");
-			expect(api.slothlet.diag.SlothletWarning.captured.filter((warning) => warning.code === "WARNING_LAZY_WRITE_REFUSED")).toEqual([]);
-		} finally {
-			SlothletWarning.suppressConsole = false;
-		}
+	it("still records the warning when the instance is silent (#838)", async () => {
+		await load("lazy");
+		api.holder.deep.cfg.getterOnly.g = 2;
+		expect(await settled(api.holder.deep.cfg.getterOnly)).toBe("LAZY_WRITE_REFUSED");
+		expect(api.slothlet.warnings.get().filter((warning) => warning.code === "WARNING_LAZY_WRITE_REFUSED")).toHaveLength(1);
 	});
 
 	it.each(["freeze", "seal"])("closes an object node with %s once it loads, refusing nothing, as eager mode does", async (kind) => {
 		const refusals = []; // per instance (#819): gathered from each instance before it shuts down
-		SlothletWarning.suppressConsole = true;
-		try {
-			const reports = {};
-			for (const mode of ["eager", "lazy"]) {
-				api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, diagnostics: true });
-				await api.slothlet.api.add("holder", path.join(FIXTURE, "holder"), { moduleID: "holder" });
-				const made = outcome(() => Object[kind](api.holder.deep.cfg.plain));
-				const awaited = await settled(api.holder.deep.cfg.plain);
-				reports[mode] = [made, awaited, lockState(api.holder.deep.cfg.plain), api.holder.deep.cfg.plain.p];
-				refusals.push(...api.slothlet.diag.SlothletWarning.captured.filter((warning) => warning.code === "WARNING_LAZY_WRITE_REFUSED"));
-				await api.slothlet.shutdown();
-				api = null;
-			}
-			expect(reports.lazy).toEqual(reports.eager);
-			expect(reports.lazy).toEqual(["done", "ok", kind === "freeze" ? "frozen" : "sealed", 1]);
-			expect(refusals).toEqual([]);
-		} finally {
-			SlothletWarning.suppressConsole = false;
+		const reports = {};
+		for (const mode of ["eager", "lazy"]) {
+			api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, diagnostics: true });
+			await api.slothlet.api.add("holder", path.join(FIXTURE, "holder"), { id: "holder" });
+			const made = outcome(() => Object[kind](api.holder.deep.cfg.plain));
+			const awaited = await settled(api.holder.deep.cfg.plain);
+			reports[mode] = [made, awaited, lockState(api.holder.deep.cfg.plain), api.holder.deep.cfg.plain.p];
+			refusals.push(...api.slothlet.warnings.get().filter((warning) => warning.code === "WARNING_LAZY_WRITE_REFUSED"));
+			await api.slothlet.shutdown();
+			api = null;
 		}
+		expect(reports.lazy).toEqual(reports.eager);
+		expect(reports.lazy).toEqual(["done", "ok", kind === "freeze" ? "frozen" : "sealed", 1]);
+		expect(refusals).toEqual([]);
 	});
 
 	it("refuses a callable `then` defined through an unloaded node at once, as eager mode does", async () => {
@@ -530,41 +509,31 @@ describe.each([{ runtime: "async" }, { runtime: "live" }])("writes through an un
 	});
 
 	it("makes a write queued before a module reload before the reload, so a refused one is still reported", async () => {
-		SlothletWarning.suppressConsole = true;
-		try {
-			api = await slothlet({ base: path.join(FIXTURE, "base"), mode: "lazy", runtime, diagnostics: true });
-			await api.slothlet.api.add("holder", path.join(FIXTURE, "holder"), { moduleID: "holder" });
-			api.holder.deep.cfg.getterOnly.g = 2;
-			await api.slothlet.api.reload("holder");
-			const warnings = api.slothlet.diag.SlothletWarning.captured.filter((warning) => warning.code === "WARNING_LAZY_WRITE_REFUSED");
-			expect(warnings.map((warning) => warning.context.apiPath)).toEqual(["holder.deep.cfg.getterOnly"]);
-		} finally {
-			SlothletWarning.suppressConsole = false;
-		}
+		api = await slothlet({ base: path.join(FIXTURE, "base"), mode: "lazy", runtime, diagnostics: true });
+		await api.slothlet.api.add("holder", path.join(FIXTURE, "holder"), { id: "holder" });
+		api.holder.deep.cfg.getterOnly.g = 2;
+		await api.slothlet.api.reload("holder");
+		const warnings = api.slothlet.warnings.get().filter((warning) => warning.code === "WARNING_LAZY_WRITE_REFUSED");
+		expect(warnings.map((warning) => warning.details.path)).toEqual([["holder", "deep", "cfg", "getterOnly"]]);
 	});
 
 	it("handles a whole-instance reload as eager mode does, with nothing left to replay or refuse", async () => {
 		const refusals = []; // per instance (#819): gathered from each instance before it shuts down
-		SlothletWarning.suppressConsole = true;
-		try {
-			const reports = {};
-			for (const mode of ["eager", "lazy"]) {
-				api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, diagnostics: true });
-				await api.slothlet.api.add("holder", path.join(FIXTURE, "holder"), { moduleID: "holder" });
-				api.holder.deep.inner.planted = 1;
-				await api.slothlet.reload();
-				const awaited = await settled(api.holder.deep.inner);
-				reports[mode] = [awaited, api.holder.deep.inner.planted];
-				refusals.push(...api.slothlet.diag.SlothletWarning.captured.filter((warning) => warning.code === "WARNING_LAZY_WRITE_REFUSED"));
-				await api.slothlet.shutdown();
-				api = null;
-			}
-			expect(reports.lazy).toEqual(reports.eager);
-			expect(reports.lazy[0]).toBe("ok");
-			expect(refusals).toEqual([]);
-		} finally {
-			SlothletWarning.suppressConsole = false;
+		const reports = {};
+		for (const mode of ["eager", "lazy"]) {
+			api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, diagnostics: true });
+			await api.slothlet.api.add("holder", path.join(FIXTURE, "holder"), { id: "holder" });
+			api.holder.deep.inner.planted = 1;
+			await api.slothlet.reload();
+			const awaited = await settled(api.holder.deep.inner);
+			reports[mode] = [awaited, api.holder.deep.inner.planted];
+			refusals.push(...api.slothlet.warnings.get().filter((warning) => warning.code === "WARNING_LAZY_WRITE_REFUSED"));
+			await api.slothlet.shutdown();
+			api = null;
 		}
+		expect(reports.lazy).toEqual(reports.eager);
+		expect(reports.lazy[0]).toBe("ok");
+		expect(refusals).toEqual([]);
 	});
 
 	it("leaves a loaded node as it is when a change made on it was refused, as eager mode does", async () => {
@@ -612,7 +581,7 @@ describe.each([{ runtime: "async" }, { runtime: "live" }])("writes through an un
 		});
 		try {
 			await load("lazy");
-			await api.slothlet.api.add("slow", path.join(FIXTURE, "slow"), { moduleID: "slow" });
+			await api.slothlet.api.add("slow", path.join(FIXTURE, "slow"), { id: "slow" });
 			// The node holding this change cannot load until the gate opens.
 			api.slow.hold.wait.x = 1;
 			const reloaded = api.slothlet.api.reload("writer").then(() => "reloaded");
@@ -657,7 +626,7 @@ describe.each([{ runtime: "async" }, { runtime: "live" }])("writes through an un
 				});
 				try {
 					await load("lazy");
-					await api.slothlet.api.add("race", path.join(FIXTURE, "race"), { moduleID: "race" });
+					await api.slothlet.api.add("race", path.join(FIXTURE, "race"), { id: "race" });
 					await api.race;
 					// The read starts `a`'s load, which waits on the gate; the change is refused when it finishes.
 					api.race.a.x.getterOnly.g = 2;
@@ -682,7 +651,7 @@ describe.each([{ runtime: "async" }, { runtime: "live" }])("writes through an un
 				});
 				try {
 					await load("lazy");
-					await api.slothlet.api.add("race", path.join(FIXTURE, "race"), { moduleID: "race" });
+					await api.slothlet.api.add("race", path.join(FIXTURE, "race"), { id: "race" });
 					await api.race;
 					const loading = api.race.a;
 					// Queued on `a`, whose load waits on the gate; once `a` has loaded, the change moves down to `a.sub`.
@@ -708,8 +677,8 @@ describe.each([{ runtime: "async" }, { runtime: "live" }])("writes through an un
 			["c1", "ok"]
 		])("of one module mounted with another are kept when the other reloads (reload %s)", async (reloadID, expected) => {
 			await load("lazy");
-			await api.slothlet.api.add("co", path.join(FIXTURE, "co", "c1"), { moduleID: "c1" });
-			await api.slothlet.api.add("co", path.join(FIXTURE, "co", "c2"), { moduleID: "c2", collisionMode: "merge" });
+			await api.slothlet.api.add("co", path.join(FIXTURE, "co", "c1"), { id: "c1" });
+			await api.slothlet.api.add("co", path.join(FIXTURE, "co", "c2"), { id: "c2", collision: { mode: "merge" } });
 			// Only c1 provides `k.v`.
 			const standIn = api.co.k.v.getterOnly;
 			standIn.g = 2;
@@ -737,7 +706,7 @@ describe.each([{ runtime: "async" }, { runtime: "live" }])("writes through an un
 						open = resolve;
 					});
 					await load("lazy");
-					await api.slothlet.api.add("relay", path.join(FIXTURE, "relay"), { moduleID: "relay" });
+					await api.slothlet.api.add("relay", path.join(FIXTURE, "relay"), { id: "relay" });
 					await api.relay;
 					// Queued on `a`, whose load waits on the gate. Replayed once it loads, the setter writes through the
 					// api as it is by then: below a node `a` that loaded, through a stand-in for `a.deep`.
@@ -756,9 +725,9 @@ describe.each([{ runtime: "async" }, { runtime: "live" }])("writes through an un
 
 			it.each([["relay"], [null]])("stand with the other instance's node it was written through (reload %s)", async (reloadPath) => {
 				await load("lazy");
-				await api.slothlet.api.add("relay", path.join(FIXTURE, "relay"), { moduleID: "relay" });
+				await api.slothlet.api.add("relay", path.join(FIXTURE, "relay"), { id: "relay" });
 				other = await slothlet({ base: path.join(FIXTURE, "base"), mode: "lazy", runtime, silent: true });
-				await other.slothlet.api.add("relay", path.join(FIXTURE, "relay"), { moduleID: "relay" });
+				await other.slothlet.api.add("relay", path.join(FIXTURE, "relay"), { id: "relay" });
 				await other.relay.a;
 				// Replayed when this instance's `a` loads, the setter writes through a stand-in for the other's `a.deep`.
 				let held;
@@ -777,7 +746,7 @@ describe.each([{ runtime: "async" }, { runtime: "live" }])("writes through an un
 			const instance = resolveWrapper(api.holder).slothlet;
 			await leaveRefusal();
 			await api.slothlet.api.remove("holder");
-			await api.slothlet.api.add("holder", path.join(FIXTURE, "holder"), { moduleID: "holder" });
+			await api.slothlet.api.add("holder", path.join(FIXTURE, "holder"), { id: "holder" });
 			expect(refusedChangeCount(instance)).toBe(0);
 			expect(await settled(api.holder.deep.cfg.getterOnly)).toBe("ok");
 		});
@@ -866,7 +835,7 @@ describe.each([{ runtime: "async" }, { runtime: "live" }])("writes through an un
 		const codes = [];
 		for (const written of [false, true]) {
 			api = await slothlet({ base: path.join(FIXTURE, "base"), mode: "lazy", runtime, silent: true });
-			await api.slothlet.api.add("broken", path.join(FIXTURE, "broken"), { moduleID: "broken" });
+			await api.slothlet.api.add("broken", path.join(FIXTURE, "broken"), { id: "broken" });
 			globalThis[BREAK] = true;
 			if (written) write(api.broken);
 			codes.push(await withSuppressedSlothletErrorOutput(() => settled(read(api.broken))));
@@ -966,7 +935,7 @@ describe.each([{ runtime: "async" }, { runtime: "live" }])("writes through an un
 			const reports = {};
 			for (const mode of ["eager", "lazy"]) {
 				await load(mode);
-				reports[mode] = await withSuppressedSlothletErrorOutput(() => api.writer.ops.assign("__metadata", 1));
+				reports[mode] = await withSuppressedSlothletErrorOutput(() => api.writer.ops.assign("____state", 1));
 				await api.slothlet.shutdown();
 				api = null;
 			}

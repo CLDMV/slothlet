@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:53-07:00 (1791090893)
+ *	@Last modified time: 2026-11-16T17:23:49-08:00 (1794878629)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -20,7 +20,7 @@
  *
  * @description
  * Default comparator sorts by `manifest.priority` descending (higher first)
- * with `packageName` ascending as the tiebreak. Pass any custom comparator
+ * with `package` ascending as the tiebreak. Pass any custom comparator
  * matching `Array.prototype.sort`'s `(a, b) => number` signature to override.
  *
  * Pure function: returns a new array; never mutates the input. The
@@ -31,10 +31,10 @@ import { ArrayMethods, copyList } from "#helpers/intrinsics";
 
 /**
  * @typedef {object} DiscoverResult
- * @property {string} packageName
- * @property {string} packageRoot
- * @property {string[]} mountPath
- * @property {string} apiDir
+ * @property {string} package
+ * @property {string} folder
+ * @property {string[]} mount
+ * @property {string} base
  * @property {object} manifest
  */
 
@@ -49,11 +49,11 @@ import { ArrayMethods, copyList } from "#helpers/intrinsics";
  * import { sortModules } from "#helpers/module-sort";
  *
  * const sorted = sortModules(found);
- * // Default: priority desc, then packageName asc.
+ * // Default: priority desc, then package asc.
  *
  * @example
  * // Custom: alphabetical only.
- * const alpha = sortModules(found, (a, b) => a.packageName.localeCompare(b.packageName));
+ * const alpha = sortModules(found, (a, b) => a.package.localeCompare(b.package));
  *
  * @example
  * // Topological over manifest.dependencies (caller's responsibility to
@@ -67,7 +67,7 @@ export function sortModules(results, comparator) {
 
 /**
  * Default comparator: `manifest.priority` descending (higher first), with
- * `packageName` ascending as a stable, deterministic tiebreak.
+ * `package` ascending as a stable, deterministic tiebreak.
  *
  * Uses straight `<`/`>` string comparison (JS codepoint ordering) — not
  * `String.prototype.localeCompare()` — because the latter delegates to the
@@ -84,8 +84,8 @@ function defaultModuleComparator(a, b) {
 	const pa = typeof a?.manifest?.priority === "number" ? a.manifest.priority : 0;
 	const pb = typeof b?.manifest?.priority === "number" ? b.manifest.priority : 0;
 	if (pa !== pb) return pb - pa;
-	const na = a?.packageName ?? "";
-	const nb = b?.packageName ?? "";
+	const na = a?.package ?? "";
+	const nb = b?.package ?? "";
 	if (na < nb) return -1;
 	if (na > nb) return 1;
 	return 0;

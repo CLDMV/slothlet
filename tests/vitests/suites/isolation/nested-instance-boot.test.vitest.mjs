@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:09-07:00 (1791090909)
+ *	@Last modified time: 2026-11-16T18:29:20-08:00 (1794882560)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -49,7 +49,7 @@ describe.each(ALL_CONFIGS)("Nested instance boot inside a permissioned leaf > Co
 		const api = await slothlet({
 			...config,
 			base: TEST_DIRS.API_TEST_NESTED_ISOLATION,
-			permissions: { defaultPolicy: "deny", rules: [{ caller: "**", target: "root.**", effect: "allow" }] }
+			permissions: { policy: "deny", rules: [{ caller: "**", target: "root.**", effect: "allow" }] }
 		});
 		instances.push(api);
 
@@ -60,7 +60,7 @@ describe.each(ALL_CONFIGS)("Nested instance boot inside a permissioned leaf > Co
 		const api = await slothlet({
 			...config,
 			base: TEST_DIRS.API_TEST_NESTED_ISOLATION,
-			permissions: { defaultPolicy: "deny", rules: [{ caller: "**", target: "root.**", effect: "allow" }] }
+			permissions: { policy: "deny", rules: [{ caller: "**", target: "root.**", effect: "allow" }] }
 		});
 		instances.push(api);
 

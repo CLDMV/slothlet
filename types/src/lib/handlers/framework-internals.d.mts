@@ -22,6 +22,17 @@ export function isFrameworkMarkerKey(key: string): boolean;
  */
 export function isFrameworkInternal(obj: any): boolean;
 /**
+ * Whether `key` on `holder` is a marker slothlet stamped on a routine callable it built: the framework's own member,
+ * which nothing written by a module installs or takes over. Decided by the holder's identity, never by the name alone.
+ * @param {*} holder - The object or function carrying the key.
+ * @param {string} key - The key.
+ * @returns {boolean} True for a routine marker on a routine callable slothlet built.
+ * @internal
+ * @example
+ * if (isFrameworkRoutineMarker(fn, "____slothletRoutineStack")) continue;
+ */
+export function isFrameworkRoutineMarker(holder: any, key: string): boolean;
+/**
  * Whether a value is a Proxy slothlet made on its own account (see {@link markSlothletProxy}).
  *
  * @param {*} value - Candidate value.

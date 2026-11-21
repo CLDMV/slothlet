@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-09T00:51:50-08:00 (1794214310)
+ *	@Last modified time: 2026-11-16T18:29:48-08:00 (1794882588)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -82,7 +82,7 @@ describe.each(MATRIX)("Permissions > definer is the nearest leaf frame > $name (
 			runtime,
 			silent: true,
 			hook: { enabled: true },
-			permissions: { defaultPolicy: "deny", attribution, rules: RULES }
+			permissions: { policy: "deny", caller: { attribution }, rules: RULES }
 		});
 		return api;
 	};
@@ -210,8 +210,10 @@ describe.each(MATRIX)("Permissions > refused handed-out code, node not loaded ye
 			runtime,
 			silent: true,
 			permissions: {
-				defaultPolicy: "deny",
-				attribution,
+				policy: "deny",
+				caller: {
+					attribution
+				},
 				rules: [
 					{ caller: "bag.**", target: "vault.**", effect: "allow" },
 					{ caller: "**", target: "bag.**", effect: "allow" }

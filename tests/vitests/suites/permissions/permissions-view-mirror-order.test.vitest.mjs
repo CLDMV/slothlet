@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-12T02:01:09-08:00 (1794477669)
+ *	@Last modified time: 2026-11-16T18:30:11-08:00 (1794882611)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -126,7 +126,7 @@ describe.each(matrix)("a kept node read first by someone else ($mode, $runtime, 
 			mode,
 			runtime,
 			silent: true,
-			permissions: { defaultPolicy: "allow", attribution, rules: [{ caller: "b.**", target, effect: "deny" }] }
+			permissions: { policy: "allow", caller: { attribution }, rules: [{ caller: "b.**", target, effect: "deny" }] }
 		});
 		return api;
 	};

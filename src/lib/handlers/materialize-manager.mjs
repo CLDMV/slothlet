@@ -37,7 +37,7 @@ import { listPush, Math, Promise } from "#helpers/intrinsics";
  * const api = await slothlet({ base: "./api", mode: "lazy" });
  *
  * // Check if fully materialized
- * if (api.slothlet.materialize.materialized) {
+ * if (api.slothlet.materialize.complete) {
  *   console.log("All lazy folders loaded!");
  * }
  *
@@ -67,7 +67,7 @@ export class MaterializeManager extends ComponentBase {
 	 * @public
 	 *
 	 * @example
-	 * if (api.slothlet.materialize.materialized) {
+	 * if (api.slothlet.materialize.complete) {
 	 *   console.log("API is fully loaded");
 	 * }
 	 */

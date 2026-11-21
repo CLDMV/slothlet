@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T22:54:02-08:00 (1794812042)
+ *	@Last modified time: 2026-11-16T18:30:06-08:00 (1794882606)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -21,27 +21,23 @@
  *
  * **Line 62 — static HINT lookup: `translatedHint = staticHint`**
  *
- *   Fires inside the `SlothletError` constructor when:
- *   1. `validationError: true` is passed as a constructor option, AND
- *   2. `HINT_<CODE>` is a real, non-fallback string in the i18n translations.
+ *   Fires inside the `SlothletError` constructor when no `{ cause }` is passed and
+ *   `HINT_<CODE>` is a real, non-fallback string in the i18n translations.
  *
  *   Trigger path through slothlet:
- *   `slothlet({ base: "" })` → config validation throws `INVALID_CONFIG_DIR_MISSING`
- *   with `{ validationError: true }`.  `HINT_INVALID_CONFIG_DIR_MISSING` exists in
+ *   `slothlet({ base: "" })` → config validation throws `INVALID_CONFIG_BASE_MISSING`
+ *   with no cause.  `HINT_INVALID_CONFIG_BASE_MISSING` exists in
  *   en-us.json as a genuine hint string, so the constructor takes line 62.
  *
- * **Line 184 — `SlothletWarning.captured.push(this)`**
+ * **The instance recorder — `record(this)`**
  *
- *   Fires when a `SlothletWarning` is constructed while
- *   `SlothletWarning.suppressConsole === true`.  The global vitest setup sets this
- *   flag to `true` before any test runs, so any warning goes into `captured[]`
- *   instead of printing to the console.
+ *   Fires when a `SlothletWarning` is constructed through an instance's warning class:
+ *   the instance keeps every warning it raises (`api.slothlet.warnings.get()`), printed or not.
  *
- *   Trigger path through slothlet:
- *   `slothlet({ dir, allowMutation: false })` — `allowMutation` is a v2 deprecated
- *   config key.  `transformConfig` detects it and creates `V3_CONFIG_DEPRECATED` via
- *   `new this.SlothletWarning(...)` (gated behind `if (!config.silent)`).
- *   Because `suppressConsole` is true, line 184 fires: `captured.push(this)`.
+ *   Trigger path through slothlet: `api.slothlet.api.add(path, dir, { collisionMode })` with
+ *   `api.collision.override` off creates `WARNING_COLLISION_OPTION_LOCKED` via
+ *   `new slothlet.SlothletWarning(...)` (gated behind `if (!config.silent)`).
+ *   The instance records it.
  *   NOTE: `silent: true` must NOT be passed here — it suppresses the warning entirely.
  *
  * @module tests/vitests/suites/lifecycle/errors-branches
@@ -54,15 +50,15 @@ import { TEST_DIRS } from "../../setup/vitest-helper.mjs";
 // ─── SlothletError static-hint path (line 62) ─────────────────────────────────
 
 describe("SlothletError — static HINT_<CODE> lookup via slothlet config validation (line 62)", () => {
-	it("slothlet with a present-but-empty base throws INVALID_CONFIG_DIR_MISSING and the error carries a hint (line 62)", async () => {
-		// Config validation checks the base before loading; an empty string triggers INVALID_CONFIG_DIR_MISSING
+	it("slothlet with a present-but-empty base throws INVALID_CONFIG_BASE_MISSING and the error carries a hint (line 62)", async () => {
+		// Config validation checks the base before loading; an empty string triggers INVALID_CONFIG_BASE_MISSING
 		// (an absent or null base is a valid no-base instance since #471)
-		// with { validationError: true }.  SlothletError constructor retrieves
-		// HINT_INVALID_CONFIG_DIR_MISSING from i18n → real string → line 62 fires:
+		// with no cause.  SlothletError constructor retrieves
+		// HINT_INVALID_CONFIG_BASE_MISSING from i18n → real string → line 62 fires:
 		//   translatedHint = staticHint
 		const err = await slothlet({ base: "" }).catch((e) => e);
 		expect(err).toBeInstanceOf(Error);
-		expect(err.code).toBe("INVALID_CONFIG_DIR_MISSING");
+		expect(err.code).toBe("INVALID_CONFIG_BASE_MISSING");
 		expect(err.hint).toBeDefined();
 		expect(typeof err.hint).toBe("string");
 		expect(err.hint.length).toBeGreaterThan(0);
@@ -73,17 +69,17 @@ describe("SlothletError — static HINT_<CODE> lookup via slothlet config valida
 		expect(err.hint).not.toMatch(/^Error:/);
 	});
 
-	it("slothlet with empty-string dir also throws INVALID_CONFIG_DIR_MISSING with a hint (line 62)", async () => {
+	it("slothlet with empty-string dir also throws INVALID_CONFIG_BASE_MISSING with a hint (line 62)", async () => {
 		const err = await slothlet({ base: "" }).catch((e) => e);
-		expect(err.code).toBe("INVALID_CONFIG_DIR_MISSING");
+		expect(err.code).toBe("INVALID_CONFIG_BASE_MISSING");
 		expect(err.hint).toBeDefined();
 		expect(err.hint).not.toMatch(/^Error:/);
 	});
 });
 
-// ─── SlothletWarning captured branch (line 184) ───────────────────────────────
+// ─── SlothletWarning instance recorder ───────────────────────────────────────
 
-describe("SlothletWarning — captured.push via deprecated-config warning through slothlet (line 184)", () => {
+describe("SlothletWarning — kept by the instance that raised it (a runtime warning)", () => {
 	let api;
 
 	afterEach(async () => {
@@ -91,21 +87,28 @@ describe("SlothletWarning — captured.push via deprecated-config warning throug
 			await api.shutdown().catch(() => {});
 		}
 		api = null;
-		// Capture is per instance (#819): nothing to drain on the process-level class.
 	});
 
-	it("slothlet with allowMutation:false creates a V3_CONFIG_DEPRECATED warning captured in captured[] (line 184)", async () => {
-		// allowMutation is a v2 deprecated key → transformConfig calls new SlothletWarning(...).
-		// suppressConsole is true (set globally in vitest.setup.mjs).
-		// The warning constructor takes the else branch → line 184: captured.push(this).
-		// IMPORTANT: do NOT pass silent:true here — it gates the warning creation entirely.
-		api = await slothlet({ base: TEST_DIRS.API_TEST, allowMutation: false, diagnostics: true });
-		expect(api.slothlet.diag.SlothletWarning.captured.length).toBeGreaterThan(0);
+	/**
+	 * Load the base api and pass `api.add()` an option the instance's collision config locks, which raises
+	 * `WARNING_COLLISION_OPTION_LOCKED`.
+	 * @returns {Promise<object>} The api.
+	 */
+	const loadAndWarn = async () => {
+		api = await slothlet({ base: TEST_DIRS.API_TEST, diagnostics: true });
+		await api.slothlet.api.add("locked", TEST_DIRS.API_TEST_MIXED, { collision: { mode: "replace" } });
+		return api;
+	};
+
+	it("a locked api.add() option creates a warning the instance keeps", async () => {
+		// The instance's warning class records it, printed or not.
+		await loadAndWarn();
+		expect(api.slothlet.warnings.get().length).toBeGreaterThan(0);
 	});
 
-	it("the captured warning has code V3_CONFIG_DEPRECATED (line 184)", async () => {
-		api = await slothlet({ base: TEST_DIRS.API_TEST, allowMutation: false, diagnostics: true });
-		const codes = api.slothlet.diag.SlothletWarning.captured.map((w) => w.code);
-		expect(codes).toContain("V3_CONFIG_DEPRECATED");
+	it("the kept warning has code WARNING_COLLISION_OPTION_LOCKED", async () => {
+		await loadAndWarn();
+		const codes = api.slothlet.warnings.get().map((w) => w.code);
+		expect(codes).toContain("WARNING_COLLISION_OPTION_LOCKED");
 	});
 });

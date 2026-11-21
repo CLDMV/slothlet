@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-14T23:40:00-08:00 (1794728400)
+ *	@Last modified time: 2026-11-16T18:28:37-08:00 (1794882517)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -144,9 +144,9 @@ describe.each(TEST_MATRIX)("scoped reload of a single-file add > $name", ({ conf
 	async function setup(shape, extra = {}) {
 		root = makeTestTmpDirSync("reload-single-file");
 		writeFixture(root, 1);
-		api = await slothlet({ ...config, dir: path.join(root, "base"), silent: true, ...extra });
-		await api.slothlet.api.add(shape.at, path.join(root, shape.src), { moduleID: shape.id });
-		await api.slothlet.api.add("tools.sib", path.join(root, "sib.mjs"), { moduleID: "sib-mod" });
+		api = await slothlet({ ...config, base: path.join(root, "base"), silent: true, ...extra });
+		await api.slothlet.api.add(shape.at, path.join(root, shape.src), { id: shape.id });
+		await api.slothlet.api.add("tools.sib", path.join(root, "sib.mjs"), { id: "sib-mod" });
 		return api;
 	}
 
@@ -193,7 +193,7 @@ describe.each(TEST_MATRIX)("scoped reload of a single-file add > $name", ({ conf
 			const shape = SHAPES[0];
 			await setup(shape);
 			const held = api.calc;
-			const before = api.calc.half.__metadata;
+			const beforeNode = api.slothlet.node(api.calc.half);
 			writeFixture(root, 2);
 			await api.slothlet.api.reload("calc-mod");
 			writeFixture(root, 3);
@@ -201,11 +201,11 @@ describe.each(TEST_MATRIX)("scoped reload of a single-file add > $name", ({ conf
 			expect(api.calc).toBe(held);
 			expect(await held(4)).toBe(12);
 			expect(await held.half(4)).toBe(2);
-			const after = api.calc.half.__metadata;
-			expect(after.moduleID).toBe(before.moduleID);
-			expect(after.apiPath).toBe("calc.half");
-			expect(after.filePath).toBe(path.join(root, "calc.mjs"));
-			expect(api.calc.__metadata.apiPath).toBe("calc");
+			const afterNode = api.slothlet.node(api.calc.half);
+			expect(afterNode.module).toBe(beforeNode.module);
+			expect(afterNode.path.join(".")).toBe("calc.half");
+			expect(afterNode.file).toBe(path.join(root, "calc.mjs"));
+			expect(api.slothlet.node(api.calc).path.join(".")).toBe("calc");
 		},
 		TIMEOUT
 	);
@@ -230,7 +230,9 @@ describe.each(TEST_MATRIX)("scoped reload of a single-file add > $name", ({ conf
 			`still applies a rule on the path after the reload (attribution "${attribution}")`,
 			async () => {
 				const shape = SHAPES[0];
-				await setup(shape, { permissions: { attribution, rules: [{ caller: "calc.**", target: "secret.**", effect: "deny" }] } });
+				await setup(shape, {
+					permissions: { caller: { attribution }, rules: [{ caller: "calc.**", target: "secret.**", effect: "deny" }] }
+				});
 				await expect(Promise.resolve().then(() => api.calc.peek())).rejects.toMatchObject({ code: "PERMISSION_DENIED" });
 				writeFixture(root, 2);
 				await api.slothlet.api.reload("calc-mod");
@@ -292,12 +294,12 @@ describe.each(TEST_MATRIX)("scoped reload of an add at the api root > $name", ({
 		writeRootFixture(1);
 		api = await slothlet({
 			...config,
-			dir: path.join(root, "base"),
+			base: path.join(root, "base"),
 			silent: true,
 			permissions: { rules: [{ caller: `${target.key}.**`, target: "secret.**", effect: "deny" }] }
 		});
-		await api.slothlet.api.add(target.at, path.join(root, target.src), { moduleID: target.id });
-		await api.slothlet.api.add("", path.join(root, "two.mjs"), { moduleID: "two-mod" });
+		await api.slothlet.api.add(target.at, path.join(root, target.src), { id: target.id });
+		await api.slothlet.api.add("", path.join(root, "two.mjs"), { id: "two-mod" });
 		return api;
 	}
 
@@ -311,7 +313,7 @@ describe.each(TEST_MATRIX)("scoped reload of an add at the api root > $name", ({
 					expect(await node().ping()).toBe(`${target.key}1`);
 					const held = node();
 					const keys = Object.keys(api);
-					const metadata = node().ping.__metadata;
+					const metadataNode = api.slothlet.node(node().ping);
 					const seen = [];
 					if (config.hook?.enabled) {
 						api.slothlet.hook.on(`${target.key}.ping:before`, ({ path: p }) => void seen.push(p), { id: "reload-root-add" });
@@ -328,8 +330,8 @@ describe.each(TEST_MATRIX)("scoped reload of an add at the api root > $name", ({
 					expect(await api.two.ping()).toBe("two1");
 					expect(await api.root.hello()).toBe("hi");
 					expect([...api.slothlet.diag.owner.get(target.key)]).toContain(target.id);
-					expect(node().ping.__metadata.moduleID).toBe(metadata.moduleID);
-					expect(node().ping.__metadata.filePath).toBe(metadata.filePath);
+					expect(api.slothlet.node(node().ping).module).toBe(metadataNode.module);
+					expect(api.slothlet.node(node().ping).file).toBe(metadataNode.file);
 					if (config.hook?.enabled) expect(seen).toEqual([`${target.key}.ping`]);
 					await expect(Promise.resolve().then(() => node().peek())).rejects.toMatchObject({ code: "PERMISSION_DENIED" });
 				},

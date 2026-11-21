@@ -139,7 +139,7 @@ export function rewriteRelativeSpecifiers(code: string, sourcePath: string, reso
  * file in the graph produces fresh URLs for every importer — a reload never
  * serves stale linked output.
  *
- * Cache lives at `<projectRoot>/.slothlet-cache/<pid>-<instanceID>/<hash>.mjs` —
+ * Cache lives at `<projectRoot>/.slothlet-cache/<pid>-<hash of instanceID>/<hash>.mjs` —
  * deliberately OUTSIDE `node_modules/` because Node's `READ_PACKAGE_SCOPE` halts
  * at a `node_modules` segment and would otherwise break self-reference resolution
  * (needed when slothlet runs inside its own repo / monorepo workspace, where no

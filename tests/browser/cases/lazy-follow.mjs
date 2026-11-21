@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T13:15:57-08:00 (1794777357)
+ *	@Last modified time: 2026-11-16T18:28:02-08:00 (1794882482)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -20,7 +20,7 @@
  * @description
  * - `zz/num/num.mjs` with `export default 42` loads in both modes and reads as 42; a module reads it through `self`
  *   and is refused it under a deny on its path. The expected value is the file's default export imported plainly.
- * - A module reading `self.d.fn.__type` is answered as the host is, and refused only under a deny on the node's path.
+ * - A module reading `api.slothlet.node(self.d.fn).type` is answered as the host is, and refused only under a deny on the node's path.
  *   The expected type is the host's answer on an eager instance in the same environment.
  * - A node kept before its lazy folder loaded as a primitive answers as the value once loaded (await, coercion,
  *   `__type`), and a module the rules deny the node is refused every answer.
@@ -115,7 +115,7 @@ const withoutType = ({ type: ___type, ...rest }) => rest;
  * @param {object[]} [rules=[]] - Rules.
  * @returns {object} The settings.
  */
-const permissionsOf = (config, rules = []) => config.permissions ?? { attribution: config.attribution, defaultPolicy: "allow", rules };
+const permissionsOf = (config, rules = []) => config.permissions ?? { caller: { attribution: config.attribution }, policy: "allow", rules };
 
 const keptConfigs = [
 	...matrix(),
@@ -185,13 +185,13 @@ export const rows = [
 			const options = (permissions = {}) => ({
 				mode: config.mode,
 				runtime: config.runtime,
-				permissions: { attribution: config.attribution, defaultPolicy: "allow", rules: [], ...permissions }
+				permissions: { caller: { attribution: config.attribution }, policy: "allow", rules: [], ...permissions }
 			});
 			const loadAll = async (api) => {
 				for (const path of TYPE_PATHS) await at(api, path);
 			};
 			const eager = await env.compose({ fixture: TYPE_READ, files: TYPE_READ_FILES, options: { mode: "eager" } });
-			const expected = Object.fromEntries(TYPE_PATHS.map((path) => [path, at(eager, path).__type]));
+			const expected = Object.fromEntries(TYPE_PATHS.map((path) => [path, eager.slothlet.node(at(eager, path)).type]));
 			await eager.shutdown();
 			const checks = [];
 			const open = await env.compose({ fixture: TYPE_READ, files: TYPE_READ_FILES, options: options() });
@@ -210,7 +210,7 @@ export const rows = [
 				try {
 					await loadAll(denied);
 					checks.push([`deny on ${path}`, await settled(() => denied.reader.type(path)), { threw: "PERMISSION_DENIED" }]);
-					checks.push([`the host beside the deny on ${path}`, at(denied, path).__type, expected[path]]);
+					checks.push([`the host beside the deny on ${path}`, denied.slothlet.node(at(denied, path)).type, expected[path]]);
 				} finally {
 					await denied.shutdown();
 				}
@@ -236,7 +236,7 @@ export const rows = [
 					const kept = api.zz[key];
 					checks.push([`the host awaits its kept ${key}`, report(await kept), report(plain)]);
 					checks.push([`the host's kept ${key} answers`, withoutType(answersOf(kept)), withoutType(answersOf(plain))]);
-					checks.push([`the host's kept ${key} __type`, kept.__type, config.mode === "lazy" ? typeof plain : undefined]);
+					checks.push([`the host's kept ${key} type`, api.slothlet.node(kept)?.type, config.mode === "lazy" ? "data" : undefined]);
 				}
 				for (const key of KEPT_KEYS) {
 					const plain = (await env.plain(KEPT, `zz/${key}/${key}.mjs`)).default;

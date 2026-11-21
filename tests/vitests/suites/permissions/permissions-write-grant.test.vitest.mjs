@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-26T02:52:58-07:00 (1793008378)
+ *	@Last modified time: 2026-11-16T18:30:14-08:00 (1794882614)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -67,9 +67,9 @@ describe.each(CONFIGS)("host write grants (#625) — $mode / $runtime", ({ mode,
 	 */
 	async function load(options = {}) {
 		api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, ...options });
-		await api.slothlet.api.add("victim", path.join(FIXTURE, "victim"), { moduleID: "victim" });
-		await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { moduleID: "guest" });
-		await api.slothlet.api.add("other", path.join(FIXTURE, "guest"), { moduleID: "other" });
+		await api.slothlet.api.add("victim", path.join(FIXTURE, "victim"), { id: "victim" });
+		await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { id: "guest" });
+		await api.slothlet.api.add("other", path.join(FIXTURE, "guest"), { id: "other" });
 		return api;
 	}
 
@@ -91,7 +91,7 @@ describe.each(CONFIGS)("host write grants (#625) — $mode / $runtime", ({ mode,
 
 	it("lets a host rule added at runtime grant the write", async () => {
 		await load({ permissions: {} });
-		for (const rule of GRANT) api.slothlet.permissions.addRule(rule);
+		for (const rule of GRANT) api.slothlet.permissions.rules.add(rule);
 		const report = await api.guest.x.writeVictim();
 		expect(report).toEqual(every(report, "done"));
 	});
@@ -107,7 +107,7 @@ describe.each(CONFIGS)("host write grants (#625) — $mode / $runtime", ({ mode,
 
 	it.each([
 		["permissions with defaults", { permissions: {} }],
-		["defaultPolicy allow, no write rule", { permissions: { defaultPolicy: "allow" } }]
+		["defaultPolicy allow, no write rule", { permissions: { policy: "allow" } }]
 	])("refuses the writes with no granting rule: %s", async (_label, options) => {
 		await load(options);
 		const report = withSuppressedSlothletErrorOutputSync(() => api.guest.x.writeVictim());

@@ -2,12 +2,12 @@
  *
  *	@Project: @cldmv/slothlet
  *	@Filename: /tests/vitests/suites/permissions/permissions-kept-node-reads.test.vitest.mjs
- *	@Date: 2026-11-16T00:30:00-08:00 (1795336200)
+ *	@Date: 2026-11-16T00:13:19-08:00 (1794816799)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T00:30:00-08:00 (1795336200)
+ *	@Last modified time: 2026-11-16T18:30:34-08:00 (1794882634)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -84,9 +84,9 @@ describe.each(matrix)(
 				mode,
 				runtime,
 				silent: true,
-				permissions: { defaultPolicy: "allow", attribution, rules }
+				permissions: { policy: "allow", caller: { attribution }, rules }
 			});
-			for (const name of ["secret", "reader"]) await api.slothlet.api.add(name, join(FIXTURE, name), { moduleID: name });
+			for (const name of ["secret", "reader"]) await api.slothlet.api.add(name, join(FIXTURE, name), { id: name });
 			for (const name of ["secret", "reader"]) await api[name];
 			return api;
 		};

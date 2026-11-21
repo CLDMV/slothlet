@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:14-08:00 (1794874574)
+ *	@Last modified time: 2026-11-19T08:57:47-08:00 (1795107467)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -21,8 +21,20 @@
  */
 
 import { ComponentBase } from "#factories/component-base";
-import { Arrays, Date, DateMethods, FunctionMethods, mapList, Math, NumberMethods, Objects, StringMethods } from "#helpers/intrinsics";
+import {
+	Arrays,
+	Date,
+	DateMethods,
+	FunctionMethods,
+	mapList,
+	Math,
+	NumberMethods,
+	Objects,
+	StringMethods,
+	Uint32Array
+} from "#helpers/intrinsics";
 import { cloneTakingViews } from "#helpers/clone-context";
+import { asNoRunWork } from "#helpers/flow-stores";
 
 /**
  * General utility functions
@@ -70,7 +82,7 @@ export class Utilities extends ComponentBase {
 		const result = { ...target };
 
 		for (const key in source) {
-			if (FunctionMethods.call(Objects.prototype.hasOwnProperty, source, key)) {
+			if (Objects.hasOwn(source, key)) {
 				if (this.isPlainObject(source[key])) {
 					// Recurse: start from target[key] if it's a plain object, otherwise {}
 					// so new nested keys in source always produce a fresh copy.
@@ -106,8 +118,7 @@ export class Utilities extends ComponentBase {
 			return cloneTakingViews(obj);
 		} catch {
 			// Fallback for Proxy / function / symbol values that structuredClone rejects.
-			// Use .__type for Slothlet-wrapped objects, otherwise fall back to typeof.
-			const objType = obj?.__type || typeof obj;
+			const objType = typeof obj;
 			if (obj === null || (objType !== "object" && objType !== "function")) return obj;
 			// Callables (plain functions AND callable Proxies) cannot be reconstructed from a
 			// property copy — retain them BY REFERENCE. A live reference in context (an rpc
@@ -131,11 +142,41 @@ export class Utilities extends ComponentBase {
 	}
 
 	/**
-	 * Generate unique ID
+	 * Generate a unique ID: the prefix, the time, and a random part. The random part comes from the platform's
+	 * cryptographic generator where there is one, so an ID cannot be worked out from the IDs and random numbers code
+	 * running in the process has seen (an instance's reload IDs are made here).
+	 * @param {string} [prefix="slothlet"] - What the ID starts with.
 	 * @returns {string} Unique identifier
 	 * @public
+	 * @example
+	 * utilities.generateId(); // "slothlet_1790000000000_k3j9x2m1q"
+	 * utilities.generateId("slothlet_1790000000000_k3j9x2m1q_reload"); // "slothlet_..._reload_1790000000123_7fz0c1a9d"
 	 */
-	generateId() {
-		return `slothlet_${this.clock.now()}_${StringMethods.substr(NumberMethods.toString(Math.random(), 36), 2, 9)}`;
+	generateId(prefix = "slothlet") {
+		return `${prefix}_${this.clock.now()}_${randomPart()}`;
 	}
+}
+
+/**
+ * The platform's cryptographic random generator (`crypto.getRandomValues`), taken when slothlet loads, before any api
+ * file runs; null where there is none.
+ * @type {?Function}
+ * @private
+ */
+const RANDOM_VALUES = (() => {
+	const crypto = globalThis.crypto;
+	return typeof crypto?.getRandomValues === "function" ? FunctionMethods.bind(crypto.getRandomValues, crypto) : null;
+})();
+
+/**
+ * The random part of an ID: lowercase letters and digits.
+ * @returns {string} The random part.
+ * @private
+ */
+function randomPart() {
+	if (RANDOM_VALUES === null) return StringMethods.substr(NumberMethods.toString(Math.random(), 36), 2, 9);
+	// The platform makes a job for the draw that it reports done only once the job is collected: slothlet's own draw is
+	// no work of a run it happens in (an ID made by reload() inside a run).
+	const words = asNoRunWork(() => RANDOM_VALUES(new Uint32Array(2)));
+	return `${NumberMethods.toString(words[0], 36)}${NumberMethods.toString(words[1], 36)}`;
 }

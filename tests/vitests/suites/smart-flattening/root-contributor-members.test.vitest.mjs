@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-14T00:00:00-08:00 (1794643200)
+ *	@Last modified time: 2026-11-16T18:30:28-08:00 (1794882628)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -76,9 +76,9 @@ describe.each(MODES)("a root file's members are nodes at the paths they are reac
 				expect(await nodeAt(api, `${P}add`)(2, 3)).toBe(5);
 				expect(await nodeAt(api, `${P}cfg.f`)()).toBe("cfg.f");
 				for (const name of ["add", "peek", "me", "cfg", "cfg.f"]) {
-					expect([name, nodeAt(api, `${P}${name}`).__metadata?.apiPath]).toEqual([name, `${P}${name}`]);
+					expect([name, api.slothlet.node(nodeAt(api, `${P}${name}`))?.path?.join(".")]).toEqual([name, `${P}${name}`]);
 				}
-				expect((await api.slothlet.metadata.get(`${P}add`))?.apiPath).toBe(`${P}add`);
+				expect(api.slothlet.node(`${P}add`)?.path?.join(".")).toBe(`${P}add`);
 				expect(await nodeAt(api, `${P}me`)()).toBe(`${P}me`);
 				expect(await nodeAt(api, `${P}probe.call`)(`${P}me`)).toBe(`${P}me`);
 				expect(api.slothlet.diag.owner.get(`${P}add`)?.size).toBe(1);
@@ -107,7 +107,7 @@ describe.each(MODES)("a root file's members are nodes at the paths they are reac
 		});
 
 		describe.each(ATTRIBUTIONS)("permissions, %s attribution", (attribution) => {
-			const options = (rules) => ({ mode, runtime, permissions: { defaultPolicy: "allow", attribution, rules } });
+			const options = (rules) => ({ mode, runtime, permissions: { policy: "allow", caller: { attribution }, rules } });
 
 			it("a deny on a member's path refuses that member and nothing beside it", async () => {
 				const denyAdd = await build(place, options([{ caller: `${P}probe.**`, target: `${P}add`, effect: "deny" }]));
@@ -129,7 +129,7 @@ describe.each(MODES)("a root file's members are nodes at the paths they are reac
 	});
 
 	describe.each(ATTRIBUTIONS)("loaded as the base folder, %s attribution", (attribution) => {
-		const options = (rules) => ({ mode, runtime, permissions: { defaultPolicy: "allow", attribution, rules } });
+		const options = (rules) => ({ mode, runtime, permissions: { policy: "allow", caller: { attribution }, rules } });
 
 		it("a deny naming a member as the caller refuses that member's access, whoever calls it", async () => {
 			const api = await build("", options([{ caller: "peek", target: "vault.**", effect: "deny" }]));
@@ -164,7 +164,7 @@ describe.each(MODES)("a root file's members are nodes at the paths they are reac
 					fired.push(at);
 				});
 				expect(await api[name](...args)).toBe(result);
-				expect([fixture, api[name].__metadata?.apiPath, fired]).toEqual([fixture, name, [name]]);
+				expect([fixture, api.slothlet.node(api[name])?.path?.join("."), fired]).toEqual([fixture, name, [name]]);
 			} finally {
 				await api.slothlet.shutdown();
 			}
@@ -195,7 +195,7 @@ describe.each(MODES)("a root file's members of every kind answer as plain JavaSc
 			try {
 				expect(root()).toBe("main");
 				for (const name of ["add", "later", "Klass", "cfg", "cfg.f", "cfg.nested", "cfg.nested.g", "inst", "arr", "launch"]) {
-					expect([name, nodeAt(root, name).__metadata?.apiPath]).toEqual([name, `${P}${name}`]);
+					expect([name, api.slothlet.node(nodeAt(root, name))?.path?.join(".")]).toEqual([name, `${P}${name}`]);
 				}
 				expect(await root.add(2, 3)).toBe(5);
 				expect(await root.later(4)).toBe(8);
@@ -212,7 +212,7 @@ describe.each(MODES)("a root file's members of every kind answer as plain JavaSc
 					true
 				]);
 				expect([root.arr.length, root.arr[0], root.arr[1], Array.isArray(root.arr)]).toEqual([2, 1, 2, true]);
-				expect([root.map instanceof Map, root.map.get("a"), root.map.__metadata]).toEqual([true, 1, undefined]);
+				expect([root.map instanceof Map, root.map.get("a"), api.slothlet.metadata.get(root.map)]).toEqual([true, 1, {}]);
 				expect([root.date instanceof Date, root.date.getTime()]).toEqual([true, 0]);
 				expect([root.err instanceof Error, root.err.message]).toEqual([true, "boom"]);
 				expect(root.num).toBe(3);
@@ -225,8 +225,8 @@ describe.each(MODES)("a root file's members of every kind answer as plain JavaSc
 			const { api, root } = await buildAt("api_test_root_contributor_cjs", place, { mode, runtime, hook: true });
 			try {
 				expect(root()).toBe("main");
-				expect(root.helper.__metadata?.apiPath).toBe(`${P}helper`);
-				expect(root.cfg.f.__metadata?.apiPath).toBe(`${P}cfg.f`);
+				expect(api.slothlet.node(root.helper)?.path?.join(".")).toBe(`${P}helper`);
+				expect(api.slothlet.node(root.cfg.f)?.path?.join(".")).toBe(`${P}cfg.f`);
 				const fired = [];
 				api.slothlet.hook.on(`${P}helper:before`, ({ path: at }) => {
 					fired.push(at);
@@ -244,7 +244,7 @@ describe.each(MODES)("a root file's members of every kind answer as plain JavaSc
 
 		it("a routine a root file's member provides runs once from the root cascade, and once more where it is placed", async () => {
 			globalThis.__rootKindsLaunches = 0;
-			const { api, root } = await buildAt("api_test_root_contributor_kinds", place, { mode, runtime, routines: ["launch"] });
+			const { api, root } = await buildAt("api_test_root_contributor_kinds", place, { mode, runtime, routines: { entries: ["launch"] } });
 			try {
 				// The root cascade is `api.launch`; at the base load the member is placed there too.
 				await api.launch();
@@ -264,7 +264,7 @@ describe.each(MODES)("a root file's members of every kind answer as plain JavaSc
 			try {
 				await api.slothlet.api.add(`${P}cfg.extra`, path.join(API_TESTS, "api_test_root_contributor_kinds"));
 				expect(await root.cfg.extra.add(1, 2)).toBe(3);
-				expect(root.cfg.extra.add.__metadata?.apiPath).toBe(`${P}cfg.extra.add`);
+				expect(api.slothlet.node(root.cfg.extra.add)?.path?.join(".")).toBe(`${P}cfg.extra.add`);
 				expect(await root.cfg.f()).toBe("cfg.f");
 				await api.slothlet.api.remove(`${P}cfg.extra`);
 				expect(root.cfg.extra).toBe(undefined);
@@ -272,7 +272,7 @@ describe.each(MODES)("a root file's members of every kind answer as plain JavaSc
 				await api.slothlet.reload();
 				const reloaded = place ? nodeAt(api, place) : api;
 				expect(await reloaded.add(2, 3)).toBe(5);
-				expect(reloaded.add.__metadata?.apiPath).toBe(`${P}add`);
+				expect(api.slothlet.node(reloaded.add)?.path?.join(".")).toBe(`${P}add`);
 				expect(api.slothlet.diag.owner.get(`${P}add`)?.size).toBe(1);
 			} finally {
 				await api.slothlet.shutdown();
@@ -280,7 +280,7 @@ describe.each(MODES)("a root file's members of every kind answer as plain JavaSc
 		});
 
 		it("writes by module code onto a member answer as they do on any node, in every permission mode", async () => {
-			for (const permissions of [undefined, { defaultPolicy: "allow" }, "disabled"]) {
+			for (const permissions of [undefined, { policy: "allow" }, "disabled"]) {
 				const { api, root } = await buildAt("api_test_root_contributor_members", place, {
 					mode,
 					runtime,
@@ -299,7 +299,7 @@ describe.each(MODES)("a root file's members of every kind answer as plain JavaSc
 			const { api, root } = await buildAt("api_test_root_contributor_members", place, {
 				mode,
 				runtime,
-				permissions: { mode: "disabled", attribution, rules: [{ caller: "**", target: `${P}add`, effect: "deny" }] }
+				permissions: { mode: "disabled", caller: { attribution }, rules: [{ caller: "**", target: `${P}add`, effect: "deny" }] }
 			});
 			try {
 				expect(await root.probe.call(`${P}add`, 2, 3)).toBe(5);
@@ -318,7 +318,7 @@ describe.each(MODES)("a root file's members of every kind answer as plain JavaSc
 			});
 			expect(api(3, 4)).toBe(12);
 			expect(typeof api).toBe("function");
-			expect(api.__metadata?.apiPath).toBe(undefined);
+			expect(api.slothlet.node(api)?.path?.join(".")).toBe(undefined);
 			expect(fired).toEqual([]);
 		} finally {
 			await api.slothlet.shutdown();

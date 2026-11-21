@@ -43,12 +43,10 @@ describe.each(getMatrixConfigs())("Versioning > Metadata Caller > $name", ({ con
 			hook: { enabled: true }
 		});
 
-		await api.slothlet.api.add(
-			"auth",
-			`${BASE}/v1`,
-			{ metadata: { regularField: "hello" } },
-			{ version: "v1", default: true, metadata: { versionField: "secret" } }
-		);
+		await api.slothlet.api.add("auth", `${BASE}/v1`, {
+			metadata: { regularField: "hello" },
+			version: { tag: "v1", default: true, metadata: { versionField: "secret" } }
+		});
 
 		api.slothlet.hook.on("v1.auth.login:before", (ctx) => {
 			hookFirings.push(ctx);
@@ -74,14 +72,12 @@ describe.each(getMatrixConfigs())("Versioning > Metadata Caller > $name", ({ con
 	it("getVersionMetadata returns versionConfig.metadata not options.metadata", async () => {
 		api = await slothlet({ ...config, base: `${BASE}/callers` });
 
-		await api.slothlet.api.add(
-			"auth",
-			`${BASE}/v1`,
-			{ metadata: { regularField: "options-meta" } },
-			{ version: "v1", default: true, metadata: { tier: "beta", versionSpecific: true } }
-		);
+		await api.slothlet.api.add("auth", `${BASE}/v1`, {
+			metadata: { regularField: "options-meta" },
+			version: { tag: "v1", default: true, metadata: { tier: "beta", versionSpecific: true } }
+		});
 
-		const versionMeta = api.slothlet.versioning.getVersionMetadata("auth", "v1");
+		const versionMeta = api.slothlet.versioning.metadata.get("auth", "v1");
 
 		// versionMeta should have versionConfig.metadata fields
 		expect(versionMeta).toHaveProperty("tier", "beta");

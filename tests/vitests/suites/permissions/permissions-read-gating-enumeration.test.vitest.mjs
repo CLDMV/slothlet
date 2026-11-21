@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:19-07:00 (1791090919)
+ *	@Last modified time: 2026-11-16T18:30:05-08:00 (1794882605)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -70,7 +70,7 @@ describe.each(getMatrixConfigs())("Permissions > Read Gating > Enumeration > $na
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				rules: [{ caller: "callers.**", target: "db.secrets.**", effect: "deny" }],
 				...extra
 			}
@@ -115,7 +115,7 @@ describe.each(getMatrixConfigs())("Permissions > Read Gating > Enumeration > $na
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				rules: [
 					{ caller: "callers.**", target: "db.secrets.**", effect: "deny" },
 					{ caller: "callers.**", target: "db.secrets.config.publicName", effect: "allow" }
@@ -140,7 +140,7 @@ describe.each(getMatrixConfigs())("Permissions > Read Gating > Enumeration > $na
 		await api.callers.dataReader.keysOfConfig();
 
 		expect(denied.length).toBeGreaterThan(0);
-		expect(denied.some((d) => String(d.target).endsWith("db.secrets.config.apiKey"))).toBe(true);
+		expect(denied.some((d) => (d.target ?? []).join(".").endsWith("db.secrets.config.apiKey"))).toBe(true);
 		expect(denied[0]).toHaveProperty("caller");
 	});
 
@@ -151,7 +151,7 @@ describe.each(getMatrixConfigs())("Permissions > Read Gating > Enumeration > $na
 	});
 
 	it("readGating: false opts out — enumeration discloses everything as before", async () => {
-		api = await denyAll({ readGating: false });
+		api = await denyAll({ gating: { read: false } });
 		expect(await warm(() => api.callers.dataReader.keysOfConfig())).toEqual(["apiKey", "publicName"]);
 		expect(JSON.parse(await warm(() => api.callers.dataReader.stringifyConfig()))).toEqual({ apiKey: "abc123", publicName: "slothlet" });
 	});

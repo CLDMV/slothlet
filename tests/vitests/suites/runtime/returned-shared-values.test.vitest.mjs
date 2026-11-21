@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T19:51:24-08:00 (1794801084)
+ *	@Last modified time: 2026-11-16T18:30:58-08:00 (1794882658)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -90,9 +90,9 @@ beforeAll(() => {
 			"\t\tmode,",
 			"\t\truntime,",
 			"\t\tsilent: true,",
-			'\t\tpermissions: { defaultPolicy: "allow", rules: [{ caller: "caller.**", target: "vault.**", effect: "deny" }] }',
+			'\t\tpermissions: { policy: "allow", rules: [{ caller: "caller.**", target: "vault.**", effect: "deny" }] }',
 			"\t});",
-			`\tawait api.slothlet.api.add("plug2", ${JSON.stringify(path.join(PLUGIN, "api"))}, { moduleID: "plug2" });`,
+			`\tawait api.slothlet.api.add("plug2", ${JSON.stringify(path.join(PLUGIN, "api"))}, { id: "plug2" });`,
 			"\tout[`${mode}/${runtime}`] = await api.caller.viaPlugin();",
 			"\tawait api.slothlet.shutdown();",
 			"}",
@@ -113,7 +113,7 @@ beforeAll(() => {
 			"\t\tmode,",
 			"\t\truntime,",
 			"\t\tsilent: true,",
-			'\t\tpermissions: { defaultPolicy: "allow", rules: [{ caller: "plug.**", target: "vault.**", effect: "deny" }] }',
+			'\t\tpermissions: { policy: "allow", rules: [{ caller: "plug.**", target: "vault.**", effect: "deny" }] }',
 			"\t});",
 			"\tconst results = { own: await api.trusted.own() };",
 			'\tfor (const route of ["objCb", "arrCb", "fill", "map", "emitter", "global", "patched", "generator", "chainKept", "chainRoot", "chainNode", "nsKept"])',
@@ -125,7 +125,7 @@ beforeAll(() => {
 			"\t\tmode,",
 			"\t\truntime,",
 			"\t\tsilent: true,",
-			'\t\tpermissions: { defaultPolicy: "allow", rules: [{ caller: "plug.**", target: "vault.**", effect: "deny" }] }',
+			'\t\tpermissions: { policy: "allow", rules: [{ caller: "plug.**", target: "vault.**", effect: "deny" }] }',
 			"\t});",
 			"\tconst unloaded = {};",
 			"\tawait fresh.plug.keepNamespace(unloaded);",
@@ -140,7 +140,7 @@ beforeAll(() => {
 			"\t\tmode,",
 			"\t\truntime,",
 			"\t\tsilent: true,",
-			'\t\tpermissions: { defaultPolicy: "allow", provenance: false, rules: [{ caller: "plug.**", target: "vault.**", effect: "deny" }] }',
+			'\t\tpermissions: { policy: "allow", rules: [{ caller: "plug.**", target: "vault.**", effect: "deny" }], caller: { provenance: false } }',
 			"\t});",
 			'\tresults.provenanceOff = await open.trusted.run("global");',
 			"\tawait open.slothlet.shutdown();",
@@ -148,7 +148,7 @@ beforeAll(() => {
 			'\t\t["bothAllowed", []],',
 			'\t\t["onlyPlugAllowed", [{ caller: "trusted.**", target: "vault.**", effect: "deny" }]]',
 			"\t]) {",
-			`\t\tconst other = await slothlet({ base: ${JSON.stringify(CHANNELS)}, mode, runtime, silent: true, permissions: { defaultPolicy: "allow", rules } });`,
+			`\t\tconst other = await slothlet({ base: ${JSON.stringify(CHANNELS)}, mode, runtime, silent: true, permissions: { policy: "allow", rules } });`,
 			'\t\tresults[name] = await other.trusted.run("global");',
 			"\t\tconst kept = {};",
 			"\t\tawait other.plug.keepNamespace(kept);",
@@ -276,9 +276,9 @@ beforeAll(() => {
 			"\tconst results = {};",
 			"\tfor (const [name, permissions] of [",
 			// Code from strings and data: imports are built-in capabilities (D4 ruling part 1); the rows are about where such code runs.
-			'\t\t["plugDenied", { defaultPolicy: "allow", rules: [{ caller: "plug.**", target: "vault.**", effect: "deny" }, { caller: "**", target: "capability:code", effect: "allow" }, { caller: "**", target: "capability:imports", effect: "allow" }] }],',
-			'\t\t["bothAllowed", { defaultPolicy: "allow", rules: [{ caller: "**", target: "capability:code", effect: "allow" }, { caller: "**", target: "capability:imports", effect: "allow" }] }],',
-			'\t\t["plugDeniedProvenanceOff", { defaultPolicy: "allow", provenance: false, rules: [{ caller: "plug.**", target: "vault.**", effect: "deny" }, { caller: "**", target: "capability:code", effect: "allow" }, { caller: "**", target: "capability:imports", effect: "allow" }] }]',
+			'\t\t["plugDenied", { policy: "allow", rules: [{ caller: "plug.**", target: "vault.**", effect: "deny" }, { caller: "**", target: "capability:code", effect: "allow" }, { caller: "**", target: "capability:imports", effect: "allow" }] }],',
+			'\t\t["bothAllowed", { policy: "allow", rules: [{ caller: "**", target: "capability:code", effect: "allow" }, { caller: "**", target: "capability:imports", effect: "allow" }] }],',
+			'\t\t["plugDeniedProvenanceOff", { policy: "allow", rules: [{ caller: "plug.**", target: "vault.**", effect: "deny" }, { caller: "**", target: "capability:code", effect: "allow" }, { caller: "**", target: "capability:imports", effect: "allow" }], caller: { provenance: false } }]',
 			"\t]) {",
 			`\t\tconst api = await slothlet({ base: ${JSON.stringify(PACKAGES_API)}, mode, runtime, silent: true, permissions });`,
 			"\t\tresults[name] = {",
@@ -304,7 +304,7 @@ beforeAll(() => {
 			"Error.stackTraceLimit = 1;",
 			"const out = {};",
 			'for (const mode of ["eager", "lazy"]) for (const runtime of ["async", "live"]) {',
-			`\tconst api = await slothlet({ base: ${JSON.stringify(PACKAGES_API)}, mode, runtime, silent: true, permissions: { defaultPolicy: "allow", rules: [{ caller: "plug.**", target: "vault.**", effect: "deny" }] } });`,
+			`\tconst api = await slothlet({ base: ${JSON.stringify(PACKAGES_API)}, mode, runtime, silent: true, permissions: { policy: "allow", rules: [{ caller: "plug.**", target: "vault.**", effect: "deny" }] } });`,
 			'\tout[`${mode}/${runtime}`] = await api.trusted.viaPlug("fillRequired");',
 			"\tawait api.slothlet.shutdown();",
 			"}",
@@ -322,8 +322,8 @@ beforeAll(() => {
 			'for (const format of ["esm", "cjs"]) for (const mode of ["eager", "lazy"]) for (const runtime of ["async", "live"]) {',
 			`\tconst base = ${JSON.stringify(API)};`,
 			'\tconst rules = [{ caller: `${format}.**`, target: "vault.**", effect: "deny" }];',
-			'\tconst gone = await slothlet({ base, mode, runtime, silent: true, permissions: { defaultPolicy: "allow", rules } });',
-			'\tconst live = await slothlet({ base, mode, runtime, silent: true, permissions: { defaultPolicy: "allow", rules } });',
+			'\tconst gone = await slothlet({ base, mode, runtime, silent: true, permissions: { policy: "allow", rules } });',
+			'\tconst live = await slothlet({ base, mode, runtime, silent: true, permissions: { policy: "allow", rules } });',
 			"\tconst read = await gone[format].laterReader();",
 			"\tawait gone.slothlet.shutdown();",
 			"\tout[`${format}/${mode}/${runtime}`] = await live.esm.callLater(read);",
@@ -401,7 +401,7 @@ describe.each(CONFIGS)("values a module hands out that no module made (#597) â€”
 	it("hands the host a package's exports a module returns in data as the exports themselves, working as they would", async () => {
 		// Plain data comes back to the host as it is, unsearched (#726): what it holds is the package's own export, as
 		// `return { Thing, tools, make, fakeCjs }` gives in plain JavaScript, with the permission system off or on.
-		for (const permissions of [undefined, { defaultPolicy: "allow" }]) {
+		for (const permissions of [undefined, { policy: "allow" }]) {
 			const api = await create(permissions);
 			const refs = await api.esm.refs();
 			const { fakeEsm, fakeCjs } = await hostPackages();
@@ -439,7 +439,7 @@ describe.each(CONFIGS)("values a module hands out that no module made (#597) â€”
 
 	it("keeps a built-in's class a module put its own code on as that module's", async () => {
 		// A stand-in is made only while the permission system is on; with it off the class comes back as itself (#726).
-		const api = await create({ defaultPolicy: "allow" });
+		const api = await create({ policy: "allow" });
 		const off = await create();
 		try {
 			const handed = await api.esm.plantOnBuiltin();
@@ -453,7 +453,7 @@ describe.each(CONFIGS)("values a module hands out that no module made (#597) â€”
 	});
 
 	it("keeps a built-in's class a module put its own code on deep below it as that module's", async () => {
-		const api = await create({ defaultPolicy: "allow" });
+		const api = await create({ policy: "allow" });
 		const off = await create();
 		try {
 			const handed = await api.esm.plantDeepOnBuiltin();
@@ -467,7 +467,7 @@ describe.each(CONFIGS)("values a module hands out that no module made (#597) â€”
 
 	it("records none of a module's code through the instance-import state", async () => {
 		// The function is the module's code: a stand-in while the permission system is on.
-		const api = await create({ defaultPolicy: "allow" });
+		const api = await create({ policy: "allow" });
 		const forged = await api.esm.forge();
 		expect(types.isProxy(forged)).toBe(true);
 		expect(forged()).toBe("forged");
@@ -476,7 +476,7 @@ describe.each(CONFIGS)("values a module hands out that no module made (#597) â€”
 
 	it("keeps a plugin's own helper, reached through its package name, as the plugin's", async () => {
 		const api = await create();
-		await api.slothlet.api.add("plug", path.join(PACKAGES, "plug", "api"), { moduleID: "plug" });
+		await api.slothlet.api.add("plug", path.join(PACKAGES, "plug", "api"), { id: "plug" });
 		const helper = await api.plug.leaf.helper();
 		const own = await import(pathToFileURL(path.join(PACKAGES, "plug", "lib", "helper.mjs")).href);
 		// The permission system is off here, so nothing is wrapped: the helper is the plugin's function itself, not a
@@ -508,7 +508,7 @@ describe.each(CONFIGS)("objects with internal slots a module hands out (#597) â€
 			silent: true,
 			// Code from strings is a built-in capability (D4 ruling part 1); these tests are about where such code runs.
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				...permissions,
 				rules: [
 					{ caller: "slots.**", target: "vault.**", effect: "deny" },
@@ -534,7 +534,7 @@ describe.each(CONFIGS)("objects with internal slots a module hands out (#597) â€
 	// With provenance off no frames are read, so what a module returns is searched for code when it is handed out and
 	// the code stands for the module that made it: turning the stack check off gives up nothing a return value carries.
 	it.each(HOLDERS)("runs the module's code a %s holds as that module with provenance off", async (kind) => {
-		await create({ provenance: false });
+		await create({ caller: { provenance: false } });
 		expect(await api.esm.viaHolding(kind)).toBe("PERMISSION_DENIED");
 	});
 
@@ -568,7 +568,7 @@ describe.each(CONFIGS)("objects with internal slots a module hands out (#597) â€
 	// With provenance off nothing reads the frames of what it yields, so it comes back as the module's: a stand-in the
 	// engine's own `next` refuses, never the iterator itself.
 	it.each(DISGUISED)("hands out $kind as the module's with provenance off", async ({ kind, next }) => {
-		await create({ provenance: false });
+		await create({ caller: { provenance: false } });
 		const held = await api.slots.holding(kind);
 		expect(types.isProxy(held)).toBe(true);
 		expect(await stepAndRun(held, next)).toBe("not stepped");
@@ -581,7 +581,7 @@ describe.each(CONFIGS)("objects with internal slots a module hands out (#597) â€
 	});
 
 	it("hands out data with the prototype of plain data as itself with provenance off", async () => {
-		await create({ provenance: false });
+		await create({ caller: { provenance: false } });
 		const held = await api.slots.plainData();
 		expect(types.isProxy(held)).toBe(false);
 		expect(types.isProxy(held.nested)).toBe(false);
@@ -593,7 +593,7 @@ describe.each(CONFIGS)("objects with internal slots a module hands out (#597) â€
 	it.each(["error", "typeError", "aggregate", "causeAndMembers", "stackRead"])(
 		"hands out data holding an error (%s) as itself with provenance off",
 		async (kind) => {
-			await create({ provenance: false });
+			await create({ caller: { provenance: false } });
 			const held = await api.slots.errorData(kind);
 			expect(types.isProxy(held)).toBe(false);
 			expect(types.isProxy(held.error)).toBe(false);
@@ -606,7 +606,7 @@ describe.each(CONFIGS)("objects with internal slots a module hands out (#597) â€
 	it.each(["iteratorHoldingError", "iteratorPosingAsError", "errorBesideIterator", "prototypeReplaced", "stackGetter"])(
 		"hands out data holding what only looks like plain data and an error (%s) as the module's with provenance off",
 		async (kind) => {
-			await create({ provenance: false });
+			await create({ caller: { provenance: false } });
 			const held = await api.slots.errorData(kind);
 			expect(types.isProxy(held)).toBe(true);
 			expect(await api.slots.stackGetterCount()).toBe(0);
@@ -614,7 +614,7 @@ describe.each(CONFIGS)("objects with internal slots a module hands out (#597) â€
 	);
 
 	it("hands out data holding an error without formatting its stack, with provenance off", async () => {
-		await create({ provenance: false });
+		await create({ caller: { provenance: false } });
 		const saved = Object.getOwnPropertyDescriptor(Error, "prepareStackTrace");
 		let formatted = 0;
 		Error.prepareStackTrace = () => {
@@ -634,7 +634,7 @@ describe.each(CONFIGS)("objects with internal slots a module hands out (#597) â€
 	});
 
 	it("hands out a compiled script of the module's as the module's, with provenance off", async () => {
-		await create({ provenance: false });
+		await create({ caller: { provenance: false } });
 		expect(types.isProxy(await api.slots.script())).toBe(true);
 		expect(await api.esm.viaScript()).toBe("PERMISSION_DENIED");
 	});
@@ -644,7 +644,7 @@ describe.each(CONFIGS)("objects with internal slots a module hands out (#597) â€
 			base: API,
 			...config,
 			silent: true,
-			permissions: { defaultPolicy: "allow", provenance: false, rules: [{ caller: "**", target: "capability:code", effect: "allow" }] }
+			permissions: { policy: "allow", caller: { provenance: false }, rules: [{ caller: "**", target: "capability:code", effect: "allow" }] }
 		});
 		expect(await api.esm.viaScript()).toBe(42);
 	});
@@ -675,7 +675,7 @@ describe.each(CONFIGS)("objects with internal slots a module hands out (#597) â€
 		async (kind) => {
 			await create();
 			// Refused: as the module, or as code of no module running inside the caller's call.
-			expect(["PERMISSION_DENIED", "RUNTIME_NO_ACTIVE_CONTEXT_SELF"]).toContain(await api.esm.viaCallback(kind));
+			expect(["PERMISSION_DENIED", "CONTEXT_NOT_ACTIVE_SELF"]).toContain(await api.esm.viaCallback(kind));
 		}
 	);
 
@@ -780,7 +780,7 @@ describe("a module's own function passed by routes slothlet does not see, run un
 			// A namespace the module kept before any of it was loaded is held to the module as well (hostNsCalled).
 			expect(Object.keys(routes)).toHaveLength(14);
 			for (const [route, value] of Object.entries(routes))
-				expect([config, route, ["PERMISSION_DENIED", "RUNTIME_NO_ACTIVE_CONTEXT_SELF"].includes(value)]).toEqual([config, route, true]);
+				expect([config, route, ["PERMISSION_DENIED", "CONTEXT_NOT_ACTIVE_SELF"].includes(value)]).toEqual([config, route, true]);
 		}
 	});
 });
@@ -846,7 +846,7 @@ describe("what a module of a shut-down instance made, run under Node's own loade
 		// has no context to read `self` from.
 		const untellable = new Set(["cjs/eager/async", "cjs/eager/live"]);
 		for (const [key, value] of Object.entries(out))
-			expect([key, value]).toEqual([key, untellable.has(key) ? "PERMISSION_DENIED" : "RUNTIME_NO_ACTIVE_CONTEXT_SELF"]);
+			expect([key, value]).toEqual([key, untellable.has(key) ? "PERMISSION_DENIED" : "CONTEXT_NOT_ACTIVE_SELF"]);
 	});
 });
 
@@ -869,7 +869,7 @@ describe.each(CONFIGS)("what a module of a shut-down instance made (#597) â€” $m
 
 describe.each(CONFIGS)("what a node removed since made (#625) â€” $mode / $runtime", (config) => {
 	it.each([
-		["has no standing left while the permission system is on", { defaultPolicy: "allow" }, "PERMISSION_DENIED"],
+		["has no standing left while the permission system is on", { policy: "allow" }, "PERMISSION_DENIED"],
 		["runs as plain JavaScript with the permission system off", undefined, 42]
 	])("%s", async (_label, permissions, expected) => {
 		const api = await slothlet({ base: API, ...config, silent: true, ...(permissions ? { permissions } : {}) });

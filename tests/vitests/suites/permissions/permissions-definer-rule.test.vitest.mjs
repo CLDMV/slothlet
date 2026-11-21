@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-08T22:59:48-08:00 (1794207588)
+ *	@Last modified time: 2026-11-16T18:29:48-08:00 (1794882588)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -76,7 +76,13 @@ describe.each(MATRIX)("Permissions > definer and caller both allowed > $name (#7
 	let reader;
 
 	beforeAll(async () => {
-		api = await slothlet({ base: DIR, mode, runtime, silent: true, permissions: { defaultPolicy: "deny", attribution, rules: RULES } });
+		api = await slothlet({
+			base: DIR,
+			mode,
+			runtime,
+			silent: true,
+			permissions: { policy: "deny", caller: { attribution }, rules: RULES }
+		});
 		// Materialize what the rulings touch, so a lazy node answers as an eager one.
 		await api.vault.get();
 		await api.shared.take();
@@ -159,31 +165,31 @@ describe.each(MATRIX)("Permissions > definer rule > what is told from the stack 
 	 * @returns {Promise<object>} The api.
 	 */
 	const build = async (permissions) => {
-		api = await slothlet({ base: DIR, mode, runtime, silent: true, permissions: { attribution, ...permissions } });
+		api = await slothlet({ base: DIR, mode, runtime, silent: true, permissions: { caller: { attribution }, ...permissions } });
 		return api;
 	};
 
 	it("a thenable lender returns runs its then as lender though bag awaits it, on the first call and after", async () => {
-		await build({ defaultPolicy: "deny", rules: [...RULES, { caller: "**", target: "lender.**", effect: "allow" }] });
+		await build({ policy: "deny", rules: [...RULES, { caller: "**", target: "lender.**", effect: "allow" }] });
 		expect(await settle(() => api.bag.awaitLender())).toBe(DENIED);
 		expect(await settle(() => api.bag.awaitLender())).toBe(DENIED);
 	});
 
 	it("a rule allowing mixed.** covers code outside every export of mixed: the host running its helper reads the vault", async () => {
-		await build({ defaultPolicy: "deny", rules: [...RULES, { caller: "mixed.**", target: "vault.**", effect: "allow" }] });
+		await build({ policy: "deny", rules: [...RULES, { caller: "mixed.**", target: "vault.**", effect: "allow" }] });
 		const helper = await api.mixed.viaHelper();
 		expect(await settle(() => helper())).toBe(42);
 	});
 
 	it("a rule denying mixed.** covers code outside every export of mixed, run by the host and inside bag's call", async () => {
-		await build({ defaultPolicy: "allow", rules: [{ caller: "mixed.**", target: "vault.**", effect: "deny" }] });
+		await build({ policy: "allow", rules: [{ caller: "mixed.**", target: "vault.**", effect: "deny" }] });
 		const helper = await api.mixed.viaHelper();
 		expect(await settle(() => helper())).toBe(DENIED);
 		expect(await settle(() => api.bag.call(helper))).toBe(DENIED);
 	});
 
 	it("a rule on the module path mixed names code outside every export of mixed, and no leaf of it", async () => {
-		await build({ defaultPolicy: "allow", rules: [{ caller: "mixed", target: "vault.**", effect: "deny" }] });
+		await build({ policy: "allow", rules: [{ caller: "mixed", target: "vault.**", effect: "deny" }] });
 		const helper = await api.mixed.viaHelper();
 		expect(await settle(() => helper())).toBe(DENIED);
 		expect(await settle(() => api.bag.call(helper))).toBe(DENIED);
@@ -192,14 +198,14 @@ describe.each(MATRIX)("Permissions > definer rule > what is told from the stack 
 	});
 
 	it("a helper a leaf returns is defined by its file's module, not by the leaf that returned it", async () => {
-		await build({ defaultPolicy: "deny", rules: [...RULES, { caller: "mixed.trustedHands", target: "vault.**", effect: "allow" }] });
+		await build({ policy: "deny", rules: [...RULES, { caller: "mixed.trustedHands", target: "vault.**", effect: "allow" }] });
 		const helper = await api.mixed.trustedHands();
 		expect(await settle(() => helper())).toBe(DENIED);
 		expect(await settle(() => api.bag.call(helper))).toBe(DENIED);
 	});
 
 	it("a module's own function bag hands back on its own runs as that module, whoever runs it", async () => {
-		await build({ defaultPolicy: "deny", rules: RULES });
+		await build({ policy: "deny", rules: RULES });
 		await api.vault.get();
 		const fn = await api.supplier.pickOwn();
 		expect(await settle(() => fn())).toBe(DENIED);
@@ -207,7 +213,7 @@ describe.each(MATRIX)("Permissions > definer rule > what is told from the stack 
 	});
 
 	it("a node's own Proxy export runs its traps as a call of the node, through the node and as a value handed back", async () => {
-		await build({ defaultPolicy: "deny", rules: RULES });
+		await build({ policy: "deny", rules: RULES });
 		await api.vault.get();
 		expect(await api.supplier.proxiedTraps()).toEqual({ get: 42, has: true, ownKeys: ["k42"], handedGet: 42, handedHas: true });
 	});

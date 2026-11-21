@@ -80,8 +80,8 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])("api.add nested sibling und
 		const containerKey = mountPath === "" ? "shared" : "ns";
 		const api = await slothlet({ base, mode });
 		apis.push(api);
-		await api.slothlet.api.add(mountPath, mounted, { moduleID: "mounted" });
-		await api.slothlet.api.add(`${containerKey}.b`, sibling, { moduleID: "sibling" });
+		await api.slothlet.api.add(mountPath, mounted, { id: "mounted" });
+		await api.slothlet.api.add(`${containerKey}.b`, sibling, { id: "sibling" });
 		return { api, container: () => api[containerKey] };
 	}
 

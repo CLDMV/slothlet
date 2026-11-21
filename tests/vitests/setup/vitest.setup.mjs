@@ -55,7 +55,7 @@ function ensureDevEnvFlags() {
 }
 // ensureDevEnvFlags();
 /**
- * Set the slothlet dev flags and quiet SlothletWarning output before the tests run.
+ * Set the slothlet dev flags and keep SlothletWarning output out of the test log before the tests run.
  * @returns {Promise<void>} Resolves when setup completes.
  */
 // export async function globalSetup() {
@@ -66,12 +66,20 @@ export async function setup() {
 
 	ensureDevEnvFlags();
 
-	// Suppress SlothletWarning console output during tests (still captured for assertions).
-	// Import via the package export (resolves to src under the slothlet-dev condition, dist otherwise),
-	// NOT a relative `../../../src/...` path: this setup file is loaded by @cldmv/vitest-runner, which
-	// resolves the relative specifier from the wrong base and fails with "Cannot find module /src/...".
-	const { SlothletWarning } = await import("@cldmv/slothlet/errors");
-	SlothletWarning.suppressConsole = true;
+	// Keep SlothletWarning console output out of the test log. Every warning is recorded on the class it was raised
+	// through whatever is printed (#838), so tests assert on `captured`; a test that spies on console.warn installs its
+	// spy over this filter and still sees every call.
+	const original = globalThis.console.warn;
+	let dropDetails = false;
+	globalThis.console.warn = function slothletTestWarnFilter(first, ...rest) {
+		if (typeof first === "string" && first.startsWith("\n⚠️  [")) {
+			dropDetails = true;
+			return;
+		}
+		if (dropDetails && (first === "Context:" || first === "Cause:")) return;
+		dropDetails = false;
+		return Reflect.apply(original, this, [first, ...rest]);
+	};
 }
 
 await setup();

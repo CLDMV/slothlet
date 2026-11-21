@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T03:00:00-08:00 (1794826800)
+ *	@Last modified time: 2026-11-16T18:27:01-08:00 (1794882421)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -22,10 +22,8 @@
 import { writeSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import slothlet from "@cldmv/slothlet";
-import { SlothletWarning } from "@cldmv/slothlet/errors";
 
 const [mode, loading, runtime] = process.argv.slice(2);
-SlothletWarning.suppressConsole = true;
 const out = {};
 
 /**
@@ -50,7 +48,7 @@ await record("start", async () => {
 		runtime,
 		permissions: {
 			mode,
-			defaultPolicy: "allow",
+			policy: "allow",
 			rules: [
 				{ caller: "settler.**", target: "vault.**", effect: "deny" },
 				{ caller: "**", target: "only.**", effect: "deny" },
@@ -60,15 +58,15 @@ await record("start", async () => {
 	});
 	return "started";
 });
-out.warnings = SlothletWarning.captured.map((warning) => ({ code: warning.code, check: warning.context?.check ?? null }));
+out.warnings = (api?.slothlet.warnings.get() ?? []).map((warning) => ({ code: warning.code, check: warning.details?.check ?? null }));
 if (api) {
 	await record("report", () => api.slothlet.permissions.control.report());
-	await record("mode", () => api.slothlet.permissions.control.mode);
+	await record("mode", () => api.slothlet.permissions.control.mode());
 	await record("good", () => api.good.readOnly());
 	await record("settler", () => api.settler.own("none"));
-	await record("disable", () => api.slothlet.permissions.control.disable());
-	await record("enable", () => api.slothlet.permissions.control.enable());
-	await record("modeAfter", () => api.slothlet.permissions.control.mode);
+	await record("disable", () => api.slothlet.permissions.control.mode("off"));
+	await record("enable", () => api.slothlet.permissions.control.mode("on"));
+	await record("modeAfter", () => api.slothlet.permissions.control.mode());
 	await record("settlerAfter", () => api.settler.own("none"));
 	await api.shutdown();
 }

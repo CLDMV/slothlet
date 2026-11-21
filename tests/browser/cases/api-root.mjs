@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T13:15:57-08:00 (1794777357)
+ *	@Last modified time: 2026-11-16T18:28:02-08:00 (1794882482)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -20,7 +20,7 @@
  * @description
  * Each root (a folder of files, one whose root file's default export is a function, one whose is an async function)
  * is the api and is mounted again at `zz`, so the root has a twin one level down; a `writer` module mounted at `w` owns
- * neither. A module's change through the api the host handed it or `self.slothlet.diag.getAPI()` answers at the root
+ * neither. A module's change through the api the host handed it or `self.slothlet.diag.api()` answers at the root
  * as at the twin; closing the root is refused to it. The host's own changes answer as on a plain object. Eager and
  * lazy mode, the async and live runtime, both attributions, with and without write rules granting the members.
  * @module tests/browser/cases/api-root
@@ -45,10 +45,12 @@ const NAMES = ["data", "pnum", "tool", "rnum", "wset", "wdef", "wfix"];
 const WRITTEN = ["wset", "wdef", "wfix", "data"];
 
 const PERMISSIONS = {
-	"no write rule": (attribution) => ({ defaultPolicy: "allow", attribution, rules: [] }),
+	"no write rule": (attribution) => ({ policy: "allow", caller: { attribution }, rules: [] }),
 	"write rules granting each member": (attribution) => ({
-		defaultPolicy: "allow",
-		attribution,
+		policy: "allow",
+		caller: {
+			attribution
+		},
 		rules: ["", "zz."].flatMap((prefix) =>
 			WRITTEN.map((member) => ({ caller: "w.**", target: `${prefix}${member}:write`, effect: "allow" }))
 		)
@@ -65,8 +67,8 @@ const PERMISSIONS = {
 async function build(env, root, options) {
 	const files = ROOT_FILES[root];
 	const api = await env.compose({ fixture: FIXTURE, root, files, options: { diagnostics: true, ...options } });
-	await api.slothlet.api.add("zz", env.mountTarget(api, { from: root, files }), { moduleID: "zz" });
-	await api.slothlet.api.add("w", env.mountTarget(api, { from: "writer", files: ["ops.mjs"] }), { moduleID: "w" });
+	await api.slothlet.api.add("zz", env.mountTarget(api, { from: root, files }), { id: "zz" });
+	await api.slothlet.api.add("w", env.mountTarget(api, { from: "writer", files: ["ops.mjs"] }), { id: "w" });
 	for (const member of ["data", "pnum", "tool"]) {
 		await api[member];
 		await api.zz[member];
@@ -195,7 +197,7 @@ export const rows = [
 					[false, false, false]
 				]);
 				const added = await settled(() =>
-					api.slothlet.api.add("extra", env.mountTarget(api, { from: `${root}/data.mjs` }), { moduleID: "extra" })
+					api.slothlet.api.add("extra", env.mountTarget(api, { from: `${root}/data.mjs` }), { id: "extra" })
 				);
 				checks.push(["an add at the closed root", added, { threw: "API_ROOT_CLOSED" }]);
 				checks.push(["a reload of the closed root", await settled(() => api.slothlet.reload()), { threw: "API_ROOT_CLOSED" }]);
@@ -244,7 +246,7 @@ export const rows = [
 			for (const root of ["fnroot", "asyncroot"]) {
 				const api = await env.compose({ fixture: FIXTURE, root: "objroot", files: ROOT_FILES.objroot, options: { mode, runtime } });
 				try {
-					await api.slothlet.api.add("zz", env.mountTarget(api, { from: root, files: ROOT_FILES[root] }), { moduleID: "zz" });
+					await api.slothlet.api.add("zz", env.mountTarget(api, { from: root, files: ROOT_FILES[root] }), { id: "zz" });
 					await api.zz.data;
 					checks.push([`${root}: a function node`, typeof api.zz, "function"]);
 					const gone = delete api.zz.data;
@@ -260,8 +262,8 @@ export const rows = [
 			}
 			const api = await env.compose({ fixture: FIXTURE, root: "objroot", files: ROOT_FILES.objroot, options: { mode, runtime } });
 			try {
-				await api.slothlet.api.add("zz", env.mountTarget(api, { from: "fnroot", files: ROOT_FILES.fnroot }), { moduleID: "zz" });
-				await api.slothlet.api.add("w", env.mountTarget(api, { from: "writer", files: ["ops.mjs"] }), { moduleID: "w" });
+				await api.slothlet.api.add("zz", env.mountTarget(api, { from: "fnroot", files: ROOT_FILES.fnroot }), { id: "zz" });
+				await api.slothlet.api.add("w", env.mountTarget(api, { from: "writer", files: ["ops.mjs"] }), { id: "w" });
 				await api.zz.data;
 				await api.w.ops;
 				checks.push(["a module deletes it", api.w.ops.change("delete", "given", "zz", api), { deleted: true, has: false }]);

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:17-07:00 (1791090917)
+ *	@Last modified time: 2026-11-16T18:29:55-08:00 (1794882595)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -32,13 +32,13 @@ describe.each(getMatrixConfigs())("Permissions > Immutability > $name", ({ confi
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				rules: [{ caller: "callers.**", target: "payments.**", effect: "deny" }]
 			}
 		});
 
 		// Get the rule for payments
-		const rules = api.slothlet.permissions.global.rulesForPath("payments.charge.process");
+		const rules = api.slothlet.permissions.global.rules.path("payments.charge.process");
 		const denyRule = rules.find((r) => r.effect === "deny" && r.target === "payments.**");
 		expect(denyRule).toBeDefined();
 		expect(denyRule.id).toBeTypeOf("string");
@@ -47,7 +47,7 @@ describe.each(getMatrixConfigs())("Permissions > Immutability > $name", ({ confi
 		denyRule.effect = "allow";
 
 		// Re-fetch — original rule should still be deny
-		const rules2 = api.slothlet.permissions.global.rulesForPath("payments.charge.process");
+		const rules2 = api.slothlet.permissions.global.rules.path("payments.charge.process");
 		const denyRule2 = rules2.find((r) => r.target === "payments.**");
 		expect(denyRule2.effect).toBe("deny");
 	});

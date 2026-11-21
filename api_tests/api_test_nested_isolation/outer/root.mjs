@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:40-07:00 (1791090880)
+ *	@Last modified time: 2026-11-16T18:25:35-08:00 (1794882335)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -72,7 +72,7 @@ export async function boot(runtime) {
  */
 export async function bootDeny(runtime) {
 	return bootNested(runtime, {
-		defaultPolicy: "deny",
+		policy: "deny",
 		rules: [{ caller: "**", target: "thing.**", effect: "allow" }]
 	});
 }

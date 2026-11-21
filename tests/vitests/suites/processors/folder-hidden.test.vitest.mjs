@@ -94,7 +94,7 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])("Hidden entries + empty-fol
 	it("skips `.`/`__`-prefixed files by default", async () => {
 		await writeModule(join(root, "math", "add.mjs"), "export function add(a, b) { return a + b; }");
 		await writeModule(join(root, ".secretrc.mjs"), "export function secretrc() { return 1; }");
-		await writeModule(join(root, "__helper.mjs"), "export function helper() { return 1; }");
+		await writeModule(join(root, "__helper.mjs"), "export function __helper() { return 1; }");
 		const api = await boot();
 		expect(api.math).toBeDefined();
 		expect(api.secretrc).toBeUndefined();
@@ -119,7 +119,7 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])("Hidden entries + empty-fol
 	});
 
 	it("`!**/__*` brings back `__`-prefixed files and folders alike", async () => {
-		await writeModule(join(root, "__helper.mjs"), "export function helper() { return 'h'; }");
+		await writeModule(join(root, "__helper.mjs"), "export function __helper() { return 'h'; }");
 		await writeModule(join(root, "__internal", "y.mjs"), "export function y() { return 1; }");
 		await writeModule(join(root, ".dotfile.mjs"), "export function dotfile() { return 1; }");
 		const api = await boot({ hidden: "!**/__*" });
@@ -149,8 +149,9 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])("Hidden entries + empty-fol
 
 	it("a framework-reserved name a `!` glob brings back is still refused", async () => {
 		await writeModule(join(root, "math", "add.mjs"), "export function add(a, b) { return a + b; }");
-		await writeModule(join(root, "__metadata.mjs"), "export function m() { return 1; }");
-		await expect(boot({ hidden: "!**/__*" })).rejects.toMatchObject({ code: "MODULE_RESERVED_FILENAME" });
+		// `__metadata` is an ordinary member name in v4 (nodes carry no framework keys); `____impl` is still reserved.
+		await writeModule(join(root, "____impl.mjs"), "export function m() { return 1; }");
+		await expect(boot({ hidden: "!**/__*" })).rejects.toMatchObject({ code: "MODULE_RESERVED_FILE" });
 	});
 
 	it("prunes a folder that becomes empty after hiding its only child (#156 + hidden)", async () => {
@@ -236,7 +237,7 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])("Hidden entries + empty-fol
 		extraDirs.push(addRoot);
 		await writeModule(join(addRoot, "keep", "k.mjs"), "export function k() { return 1; }");
 		await writeModule(join(addRoot, ".stash", "s.mjs"), "export function s() { return 1; }");
-		await writeModule(join(addRoot, "__inner.mjs"), "export function inner() { return 2; }");
+		await writeModule(join(addRoot, "__inner.mjs"), "export function __inner() { return 2; }");
 		const api = await boot();
 
 		await api.slothlet.api.add("plugins", addRoot);

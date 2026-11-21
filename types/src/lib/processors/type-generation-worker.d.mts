@@ -12,8 +12,9 @@
  */
 /**
  * Build the api described by `configJson` and write its declaration file.
- * @param {string|undefined} configJson - The serialized worker config (`SLOTHLET_CONFIG`): the
- *   slothlet config for an eager, fast-mode instance plus `types` (`{ output, interfaceName, ... }`).
+ * @param {string|undefined} configJson - The serialized worker config (`SLOTHLET_CONFIG`):
+ *   `{ config, types }`, the slothlet config for an eager, fast-mode instance and the `typescript.types` option
+ *   (`{ output, name }`).
  * @param {WorkerMessageSender|undefined} send - IPC sender to the parent (`process.send` in the
  *   fork); `undefined` when there is no IPC channel.
  * @returns {Promise<number>} The process exit code: `0` on success, `1` on failure.

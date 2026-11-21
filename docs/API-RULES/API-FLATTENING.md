@@ -249,7 +249,7 @@ api.e.helper(); // ✅ the other exports are members of the folder's function
 // NOT: api.e.x() / api.e.x.helper() ❌
 ```
 
-This holds in eager and lazy mode, at every depth, at initial load and under `api.slothlet.api.add()`. Permission rules, hook patterns and `__metadata.apiPath` name the folder's path (`e`, `e.helper`).
+This holds in eager and lazy mode, at every depth, at initial load and under `api.slothlet.api.add()`. Permission rules, hook patterns and `slothlet.node(target).path` name the folder's path (`e`, `e.helper`).
 
 **Not promoted:** a default export that is not a function (an object, a `Map`, a `Date`, a primitive) keeps the file's level (`e/x.mjs` exporting `default { a }` is `api.e.x.a`), as does a single file with no default export (`e/x.mjs` exporting `function x` is `api.e.x()`; see [Rule 2](../API-RULES.md#rule-2-single-function-file-promotion)). A folder holding a second file or a subfolder keeps every file at its own level.
 
@@ -307,19 +307,19 @@ api.plugins.cleanup(); // ✅
 
 ```javascript
 // Module A and B coexist in same namespace (moduleID lives in the third `options` argument)
-await api.slothlet.api.add("plugins.moduleA", "./modules/moduleA", { moduleID: "moduleA" });
-await api.slothlet.api.add("plugins.moduleB", "./modules/moduleB", { moduleID: "moduleB" });
+await api.slothlet.api.add("plugins.moduleA", "./modules/moduleA", { id: "moduleA" });
+await api.slothlet.api.add("plugins.moduleB", "./modules/moduleB", { id: "moduleB" });
 
 // Hot-reload module A - only its own paths are updated
 await api.slothlet.api.add("plugins.moduleA", "./modules/moduleA-v2", {
-	moduleID: "moduleA",
-	forceOverwrite: true // ✅ Allowed - moduleA owns these paths
+	id: "moduleA",
+	collision: { force: true } // ✅ Allowed - moduleA owns these paths
 });
 
 // Cross-module protection - blocked in "error" collision mode
 await api.slothlet.api.add("plugins.moduleB", "./other", {
-	moduleID: "moduleA", // moduleA does not own moduleB's paths
-	forceOverwrite: true // ❌ OWNERSHIP_CONFLICT thrown
+	id: "moduleA", // moduleA does not own moduleB's paths
+	collision: { force: true } // ❌ OWNERSHIP_CONFLICT thrown
 });
 ```
 
@@ -398,7 +398,7 @@ api.c.c.x.where(); // ✅ both levels: the outer folder holds something else too
 
 **Guard - Only Entry:** The outer folder must hold nothing but the same-named folder. A file or another folder beside it keeps both levels, and a FILE named after its folder is F01's case, not this one. The rule repeats while it holds (`t/t/t/x.mjs` → `api.t.x`), applies at every depth, in eager and lazy mode, at initial load and under `api.slothlet.api.add()`.
 
-**One path everywhere:** The path a node records (`__metadata.apiPath`, what a permission rule or a hook pattern has to name, what ownership tracks) is the path it is reached at: `e.x.where` above, never `e.e.x.where`.
+**One path everywhere:** The path a node records (`slothlet.node(target).path`, what a permission rule or a hook pattern has to name, what ownership tracks) is the path it is reached at: `e.x.where` above, never `e.e.x.where`.
 
 **Why:** `e/e/` adds a level that carries nothing. This is the 2.x shape; 3.0.0 through 3.24.0 kept both levels (see #743).
 

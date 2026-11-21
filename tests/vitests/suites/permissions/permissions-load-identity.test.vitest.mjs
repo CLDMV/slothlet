@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-11T13:14:52-08:00 (1794431692)
+ *	@Last modified time: 2026-11-16T18:30:01-08:00 (1794882601)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -107,7 +107,13 @@ describe.each(MATRIX)("Permissions > what a file starts while it loads runs as i
 		let api;
 
 		beforeAll(async () => {
-			api = await slothlet({ base: DIR, mode, runtime, silent: true, permissions: { defaultPolicy: "allow", attribution, rules: list } });
+			api = await slothlet({
+				base: DIR,
+				mode,
+				runtime,
+				silent: true,
+				permissions: { policy: "allow", caller: { attribution }, rules: list }
+			});
 			// Load every file, so a lazy node answers as an eager one.
 			await api.vault.get();
 			await api.bag.call(() => 1);

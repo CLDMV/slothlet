@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T18:56:45-08:00 (1794797805)
+ *	@Last modified time: 2026-11-16T18:30:06-08:00 (1794882606)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -44,16 +44,16 @@ const DENY_TAG = [{ caller: "reader.**", target: "tag", effect: "deny" }];
 const ALLOW_ALL = [{ caller: "reader.**", target: "**", effect: "allow" }];
 
 const POLICIES = [
-	{ label: "a deny rule on the member", permissions: (attribution) => ({ attribution, rules: DENY_TAG }), allowed: false },
+	{ label: "a deny rule on the member", permissions: (attribution) => ({ caller: { attribution }, rules: DENY_TAG }), allowed: false },
 	{
 		label: "default deny, everything but the member allowed",
-		permissions: (attribution) => ({ defaultPolicy: "deny", attribution, rules: [...ALLOW_ALL, ...DENY_TAG] }),
+		permissions: (attribution) => ({ policy: "deny", caller: { attribution }, rules: [...ALLOW_ALL, ...DENY_TAG] }),
 		allowed: false
 	},
-	{ label: "default allow, no rule", permissions: (attribution) => ({ attribution }), allowed: true },
+	{ label: "default allow, no rule", permissions: (attribution) => ({ caller: { attribution } }), allowed: true },
 	{
 		label: "default deny, everything allowed",
-		permissions: (attribution) => ({ defaultPolicy: "deny", attribution, rules: ALLOW_ALL }),
+		permissions: (attribution) => ({ policy: "deny", caller: { attribution }, rules: ALLOW_ALL }),
 		allowed: true
 	},
 	{ label: "permissions off", permissions: () => undefined, allowed: true },

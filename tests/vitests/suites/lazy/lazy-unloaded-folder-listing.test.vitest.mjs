@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T12:51:10-08:00 (1794775870)
+ *	@Last modified time: 2026-11-16T18:29:23-08:00 (1794882563)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -89,14 +89,14 @@ describe.each(configs)(
 				base: FIXTURE,
 				runtime,
 				silent: true,
-				permissions: { defaultPolicy: "allow", attribution, rules: RULE_SETS[name] }
+				permissions: { policy: "allow", caller: { attribution }, rules: RULE_SETS[name] }
 			};
 			const expected = await eagerListings(options);
 			api = await slothlet({ ...options, mode });
 			await api.outer;
 			if (mode === "lazy") {
-				expect(api.folder.__materialized).toBe(false);
-				expect(api.outer.inner.__materialized).toBe(false);
+				expect(api.slothlet.node(api.folder).materialized).toBe(false);
+				expect(api.slothlet.node(api.outer.inner).materialized).toBe(false);
 			}
 			expect(await listings(api)).toEqual(expected);
 			await api.folder;

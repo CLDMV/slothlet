@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:14:37-08:00 (1794874477)
+ *	@Last modified time: 2026-11-16T18:24:36-08:00 (1794882276)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -37,7 +37,7 @@ const { default: slothlet } = await import("@cldmv/slothlet");
 
 /** The owner's `makeContext` as source that is not the file's. */
 const forgedSource =
-	"(api) => ({ pin: (fn) => typeof api.slothlet.lockCaller(fn), meta: () => api.slothlet.metadata.caller()?.apiPath ?? null, " +
+	"(api) => ({ pin: (fn) => typeof api.slothlet.pin(fn), meta: () => api.slothlet.metadata.caller()?.path?.join('.') ?? null, " +
 	"emit: () => (api.slothlet.event.emit('host:ping', { n: 1 }), 'emitted'), hostLeaf: () => api.host.echo('x') })";
 
 if (process.argv.includes("--replace-builtins")) {
@@ -61,7 +61,7 @@ for (const mode of ["eager", "lazy"])
 			mode,
 			runtime,
 			silent: true,
-			permissions: { defaultPolicy: "deny", rules: [{ caller: "ext.**", target: "host.**", effect: "allow" }] }
+			permissions: { policy: "deny", rules: [{ caller: "ext.**", target: "host.**", effect: "allow" }] }
 		});
 		out[`${mode}/${runtime}/owner`] = await api.ext.a.activate(ctx);
 		out[`${mode}/${runtime}/stranger`] = await api.ext.a.activate(strangerContext(api));

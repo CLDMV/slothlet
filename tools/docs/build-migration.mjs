@@ -74,7 +74,8 @@ function cell(text) {
  */
 function code(name) {
 	if (name === null || name === undefined || name === "") return "—";
-	return "`" + String(name).replace(/\|/g, "\\|") + "`";
+	// Backslashes first, so the escape added for a pipe is not itself escaped.
+	return "`" + String(name).replace(/\\/g, "\\\\").replace(/\|/g, "\\|") + "`";
 }
 
 /**

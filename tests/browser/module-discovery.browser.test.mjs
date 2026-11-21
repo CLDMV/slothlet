@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T21:09:35-08:00 (1794805775)
+ *	@Last modified time: 2026-11-16T18:28:06-08:00 (1794882486)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -18,7 +18,7 @@
  *
  * @description
  * `api.slothlet.api.modules.discover()` walks the filesystem for module packages, which a browser does not have. In a
- * browser it, and every call that runs it (`addDiscovered()`, and `addModule(name)` with an empty discovery cache), is
+ * browser it, and every call that runs it (`modules.add()`, and `modules.add(name)` with an empty discovery cache), is
  * refused with `MODULE_DISCOVERY_REQUIRES_NODE` instead of failing on a missing Node builtin.
  *
  * @module tests/browser/module-discovery.browser
@@ -38,10 +38,12 @@ const build = async (mode) => {
 	const slothlet = mod.default ?? mod.slothlet;
 	const BASE = new URL("/" + fixtureRel + "/", location.origin).href;
 	return slothlet({
-		platform: "browser",
 		base: BASE,
-		manifest,
-		resolveModuleSpecifier: ({ path }) => new URL(path, BASE).href,
+		loader: {
+			platform: "browser",
+			files: manifest,
+			resolve: ({ path }) => new URL(path, BASE).href
+		},
 		silent: true,
 		mode
 	});
@@ -59,13 +61,13 @@ const codeOf = (promise) =>
 	);
 
 describe("module discovery in a real browser (#817)", () => {
-	it.each(["eager", "lazy"])("refuses discover, addDiscovered and a lazy addModule by name with a named error (%s)", async (mode) => {
+	it.each(["eager", "lazy"])("refuses discover, modules.add and a lazy modules.add by name with a named error (%s)", async (mode) => {
 		const api = await build(mode);
 		try {
 			const modules = api.slothlet.api.modules;
 			expect(await codeOf(modules.discover())).toBe("MODULE_DISCOVERY_REQUIRES_NODE");
-			expect(await codeOf(modules.addDiscovered())).toBe("MODULE_DISCOVERY_REQUIRES_NODE");
-			expect(await codeOf(modules.addModule("@example/some-module"))).toBe("MODULE_DISCOVERY_REQUIRES_NODE");
+			expect(await codeOf(modules.add())).toBe("MODULE_DISCOVERY_REQUIRES_NODE");
+			expect(await codeOf(modules.add("@example/some-module"))).toBe("MODULE_DISCOVERY_REQUIRES_NODE");
 			// The instance keeps working.
 			expect(await api.math.add(2, 3)).toBe(5);
 		} finally {

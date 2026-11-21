@@ -14,7 +14,7 @@
  */
 
 /**
- * @fileoverview Changes the api, at the root or at a node, through `self`, the api `self.slothlet.diag.getAPI()` hands
+ * @fileoverview Changes the api, at the root or at a node, through `self`, the api `self.slothlet.diag.api()` hands
  * a module, or an api the host handed it, and answers what each change gave.
  * @module api_test_api_root_integrity/writer/ops
  */
@@ -95,13 +95,13 @@ export const names = () => Object.keys(CHANGES);
 /**
  * Make one change and answer what it gave, or the code of what it threw.
  * @param {string} name - The change.
- * @param {"self"|"api"|"given"} via - Through `self`, `self.slothlet.diag.getAPI()`, or the api handed in.
+ * @param {"self"|"api"|"given"} via - Through `self`, `self.slothlet.diag.api()`, or the api handed in.
  * @param {string} path - The node's path; empty for the root.
  * @param {object} [given] - The api the host handed in.
  * @returns {object} The answer.
  */
 export function change(name, via, path, given) {
-	const root = via === "given" ? given : via === "api" ? self.slothlet.diag.getAPI() : self;
+	const root = via === "given" ? given : via === "api" ? self.slothlet.diag.api() : self;
 	try {
 		return CHANGES[name](at(root, path));
 	} catch (error) {
@@ -111,13 +111,13 @@ export function change(name, via, path, given) {
 
 /**
  * The root, or the prototype it reports to this module, any number of links up.
- * @param {"self"|"api"|"given"} via - Through `self`, `self.slothlet.diag.getAPI()`, or the api handed in.
+ * @param {"self"|"api"|"given"} via - Through `self`, `self.slothlet.diag.api()`, or the api handed in.
  * @param {object} given - The api the host handed in.
  * @param {number} links - `0` for the root, or how many links up its prototypes.
  * @returns {*} The value.
  */
 function rootOrPrototype(via, given, links) {
-	let value = via === "given" ? given : via === "api" ? self.slothlet.diag.getAPI() : self;
+	let value = via === "given" ? given : via === "api" ? self.slothlet.diag.api() : self;
 	for (let i = 0; i < links; i++) value = Object.getPrototypeOf(value);
 	return value;
 }

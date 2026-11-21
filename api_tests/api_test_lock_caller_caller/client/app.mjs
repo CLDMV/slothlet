@@ -161,7 +161,7 @@ export function pinThroughScheduler() {
  * api.client.app.pinDirectly();
  */
 export function pinDirectly() {
-	return self.slothlet.lockCaller.caller(() => 0);
+	return self.slothlet.pin.caller(() => 0);
 }
 
 /**

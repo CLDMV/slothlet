@@ -55,9 +55,9 @@ describe("Stack Trace Path Resolution", () => {
 
 		it("should resolve relative path from closure definition location, not execution location", async () => {
 			// Build api.slothlet.api.add options based on config capabilities
-			const addApiOptions = { moduleID: "testModule" };
+			const addApiOptions = { id: "testModule" };
 			if (config.api?.mutations?.reload) {
-				addApiOptions.forceOverwrite = true;
+				addApiOptions.collision = { force: true };
 			}
 
 			// Define closure HERE in this test file

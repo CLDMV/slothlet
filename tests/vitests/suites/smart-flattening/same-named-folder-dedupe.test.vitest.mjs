@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-12T02:01:19-08:00 (1794477679)
+ *	@Last modified time: 2026-11-16T18:30:29-08:00 (1794882629)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -103,7 +103,7 @@ describe.each([
 	describe("the tree and the recorded path", () => {
 		let api;
 		beforeAll(async () => {
-			api = await slothlet({ dir: DIR, mode, runtime, silent: true, hook: true });
+			api = await slothlet({ base: DIR, mode, runtime, silent: true, hook: true });
 		});
 		afterAll(async () => {
 			await api.slothlet.shutdown();
@@ -124,7 +124,7 @@ describe.each([
 			const keys = leaf.split(".");
 			for (let length = 1; length <= keys.length; length++) {
 				const at = keys.slice(0, length).join(".");
-				expect(reach(api, at).__metadata.apiPath).toBe(at);
+				expect(api.slothlet.node(reach(api, at)).path.join(".")).toBe(at);
 			}
 		});
 
@@ -162,11 +162,11 @@ describe.each([
 		it.each(LEAVES)("a deny on $leaf refuses it, and a deny on $wrong does not", async ({ leaf, wrong }) => {
 			const build = (target) =>
 				slothlet({
-					dir: DIR,
+					base: DIR,
 					mode,
 					runtime,
 					silent: true,
-					permissions: { defaultPolicy: "allow", attribution, rules: [{ caller: "probe.**", target, effect: "deny" }] }
+					permissions: { policy: "allow", caller: { attribution }, rules: [{ caller: "probe.**", target, effect: "deny" }] }
 				});
 			const denied = await build(leaf);
 			try {

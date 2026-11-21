@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-10T21:30:06-08:00 (1794375006)
+ *	@Last modified time: 2026-11-18T06:51:45-08:00 (1795013505)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -38,7 +38,7 @@ const FIXTURE = TEST_DIRS.API_TEST_NESTED_SELF_ASSIGN;
  * The permission system on, allowing every read and call: ownership decides the writes, and it decides them only
  * while the system is on (#625).
  */
-const PERMISSIONS_ON = { permissions: { defaultPolicy: "allow" } };
+const PERMISSIONS_ON = { permissions: { policy: "allow" } };
 
 const CONFIGS = [
 	{ mode: "eager", runtime: "async" },
@@ -63,9 +63,9 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 	 */
 	async function mountModules(options = {}) {
 		api = await slothlet({ base: TEST_DIRS.API_TEST, mode, runtime, silent: true, ...PERMISSIONS_ON, ...options });
-		await api.slothlet.api.add("callee", path.join(FIXTURE, "callee"), { moduleID: "callee" });
-		await api.slothlet.api.add("vault", path.join(FIXTURE, "vault"), { moduleID: "vault" });
-		await api.slothlet.api.add("supplier", path.join(FIXTURE, "supplier"), { moduleID: "supplier" });
+		await api.slothlet.api.add("callee", path.join(FIXTURE, "callee"), { id: "callee" });
+		await api.slothlet.api.add("vault", path.join(FIXTURE, "vault"), { id: "vault" });
+		await api.slothlet.api.add("supplier", path.join(FIXTURE, "supplier"), { id: "supplier" });
 		return api;
 	}
 
@@ -139,7 +139,7 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 		const SYMBOL = Symbol.for("slothlet.test.i625");
 		const SUPPLIER_WRITES_CALLEE = { caller: "supplier.**", target: "callee.**:write", effect: "allow" };
 		const SUPPLIER_DENIED_CALLEE = { caller: "supplier.**", target: "callee.**:write", effect: "deny" };
-		const FRONT_MANAGES = { caller: "front.**", target: "slothlet.permissions.addRule", effect: "allow" };
+		const FRONT_MANAGES = { caller: "front.**", target: "slothlet.permissions.rules.add", effect: "allow" };
 		const DONE = { assign: "done", define: "done", remove: "done" };
 		const NOT_OWNED = { assign: "LOOSE_SET_NOT_OWNED", define: "LOOSE_SET_NOT_OWNED", remove: "LOOSE_SET_NOT_OWNED" };
 		const DENIED = { assign: "PERMISSION_DENIED", define: "PERMISSION_DENIED", remove: "PERMISSION_DENIED" };
@@ -152,8 +152,8 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 		 */
 		async function mountAll(options = {}) {
 			await mountModules(options);
-			await api.slothlet.api.add("front", path.join(FIXTURE, "front"), { moduleID: "front" });
-			await api.slothlet.api.add("bystander", path.join(FIXTURE, "bystander"), { moduleID: "bystander" });
+			await api.slothlet.api.add("front", path.join(FIXTURE, "front"), { id: "front" });
+			await api.slothlet.api.add("bystander", path.join(FIXTURE, "bystander"), { id: "bystander" });
 			return api;
 		}
 
@@ -173,7 +173,7 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 		});
 
 		it("refuses it under defaultPolicy allow with no matching rule", async () => {
-			await mountAll({ permissions: { defaultPolicy: "allow" } });
+			await mountAll({ permissions: { policy: "allow" } });
 			expect(withSuppressedSlothletErrorOutputSync(() => api.supplier.attack.writeCalleeSymbol())).toEqual(NOT_OWNED);
 		});
 
@@ -185,7 +185,7 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 
 		it("lets the root module write symbols anywhere", async () => {
 			api = await slothlet({ base: path.join(FIXTURE, "supplier"), mode, runtime, silent: true });
-			await api.slothlet.api.add("callee", path.join(FIXTURE, "callee"), { moduleID: "callee" });
+			await api.slothlet.api.add("callee", path.join(FIXTURE, "callee"), { id: "callee" });
 			expect(await api.attack.writeCalleeSymbol()).toEqual(DONE);
 			expect(await api.attack.writeCalleeSymbol("callee.ops", "toPrimitive")).toEqual(DONE);
 		});
@@ -217,7 +217,7 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 		it("refuses a module that is no manager adding the grant", async () => {
 			await mountAll();
 			expect(withSuppressedSlothletErrorOutputSync(() => api.front.relay.addRuleFor(SUPPLIER_WRITES_CALLEE))).toBe(
-				"INVALID_PERMISSION_RULE"
+				"PERMISSION_RULE_INVALID"
 			);
 		});
 
@@ -257,7 +257,7 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 
 	it("allows two modules mounted at the same point to write under it", async () => {
 		await mountModules();
-		await api.slothlet.api.add("callee", path.join(FIXTURE, "callee_peer"), { moduleID: "callee-peer" });
+		await api.slothlet.api.add("callee", path.join(FIXTURE, "callee_peer"), { id: "callee-peer" });
 		expect(await api.callee.peer.writeShared("shared")).toBe("shared");
 		expect(api.callee.ops.peerNote).toBe("shared");
 	});
@@ -310,18 +310,20 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 			mode,
 			runtime,
 			silent: true,
-			stackRoutines: true,
-			routines: [{ name: "initialize", mode: "manual" }],
+			routines: {
+				stack: true,
+				entries: [{ name: "initialize", mode: "manual" }]
+			},
 			// The host's grant is a write rule, which applies only while the permission system is on; the host reads the
 			// framework's `__`-prefixed routine-stack marker below.
 			permissions: { private: { host: "allow" } }
 		});
-		for (const rule of grantMount("callee.boot")) api.slothlet.permissions.addRule(rule);
-		await api.slothlet.api.add("callee", path.join(FIXTURE, "callee"), { moduleID: "callee" });
-		await api.slothlet.api.add("supplier", path.join(FIXTURE, "supplier"), { moduleID: "supplier" });
-		await api.slothlet.api.add("callee.boot", path.join(FIXTURE, "routine_a"), { moduleID: "boot-a" });
+		for (const rule of grantMount("callee.boot")) api.slothlet.permissions.rules.add(rule);
+		await api.slothlet.api.add("callee", path.join(FIXTURE, "callee"), { id: "callee" });
+		await api.slothlet.api.add("supplier", path.join(FIXTURE, "supplier"), { id: "supplier" });
+		await api.slothlet.api.add("callee.boot", path.join(FIXTURE, "routine_a"), { id: "boot-a" });
 		await api.supplier.attack.addAt("callee.boot", path.join(FIXTURE, "routine_b"), "boot-b");
-		expect(api.callee.boot.initialize.__slothletRoutineStack).toBe(true);
+		expect(api.callee.boot.initialize.____slothletRoutineStack).toBe(true);
 		expect(await api.callee.boot.initialize()).toEqual(["a", "b"]);
 	});
 
@@ -336,8 +338,8 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 		"mounts a module's own api.add at %s below another module's mount point a host rule grants it (defaultPolicy allow: %s, awaited by the module: %s)",
 		async (at, allow, awaited) => {
 			// The host's grant is a write rule, which applies only while the permission system is on.
-			await mountModules({ permissions: allow ? { defaultPolicy: "allow" } : {} });
-			for (const rule of grantMount(at)) api.slothlet.permissions.addRule(rule);
+			await mountModules({ permissions: allow ? { policy: "allow" } : {} });
+			for (const rule of grantMount(at)) api.slothlet.permissions.rules.add(rule);
 			const folder = path.join(FIXTURE, "vault");
 			if (awaited) await api.supplier.attack.addAt(at, folder, "k4");
 			else await (await api.supplier.attack.addAtUnawaited(at, folder, "k4")).done;
@@ -349,7 +351,7 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 
 	it.each([[true], [false]])("leaves nothing behind when a module's api.add is refused (awaited by the module: %s)", async (awaited) => {
 		await mountModules({
-			permissions: { defaultPolicy: "allow", rules: [{ caller: "supplier.**", target: "slothlet.api.add", effect: "deny" }] }
+			permissions: { policy: "allow", rules: [{ caller: "supplier.**", target: "slothlet.api.add", effect: "deny" }] }
 		});
 		const folder = path.join(FIXTURE, "vault");
 		await withSuppressedSlothletErrorOutput(async () => {
@@ -401,8 +403,8 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 		let outcome;
 		await withSuppressedSlothletErrorOutput(async () => {
 			const lurking = api.supplier.attack.lurk();
-			await api.slothlet.api.add("vault2", path.join(FIXTURE, "vault"), { moduleID: "vault2" });
-			await api.slothlet.api.add("vault3", path.join(FIXTURE, "callee_peer"), { moduleID: "vault3" });
+			await api.slothlet.api.add("vault2", path.join(FIXTURE, "vault"), { id: "vault2" });
+			await api.slothlet.api.add("vault3", path.join(FIXTURE, "callee_peer"), { id: "vault3" });
 			api.supplier.attack.stopLurk();
 			outcome = await lurking;
 		});
@@ -484,7 +486,7 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 		withSuppressedSlothletErrorOutputSync(() => {
 			expect(() => {
 				node.useSecret = () => "pwned-through-host";
-			}).toThrow(/RUNTIME_NO_ACTIVE_CONTEXT_SELF/);
+			}).toThrow(/CONTEXT_NOT_ACTIVE_SELF/);
 		});
 		expect(await api.callee.ops.useSecret()).toBe("callee-original");
 	});
@@ -608,7 +610,7 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 		["bus", true]
 	])("refuses writes through the %s instance another module's method hands back as its receiver (async %s)", async (name, async) => {
 		await mountModules();
-		await api.slothlet.api.add("svc", path.join(FIXTURE, "svc"), { moduleID: "svc" });
+		await api.slothlet.api.add("svc", path.join(FIXTURE, "svc"), { id: "svc" });
 		let outcome;
 		await withSuppressedSlothletErrorOutput(async () => {
 			outcome = await api.supplier.attack.instanceLeak(name, async);
@@ -618,7 +620,7 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 			// `later` came back inside plain data, so it is the supplier's own function, run here by the host outside any
 			// call: the write goes through the view the supplier kept, which has no standing to write another module's
 			// node (#726). Still refused.
-			expect(() => outcome.later()).toThrow(/RUNTIME_NO_ACTIVE_CONTEXT_SELF/);
+			expect(() => outcome.later()).toThrow(/CONTEXT_NOT_ACTIVE_SELF/);
 		});
 		expect(await api.svc[name].read()).toBe(`${name}-secret`);
 	});
@@ -627,7 +629,7 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 		["run()", (callback) => api.slothlet.context.run({ request: "r1" }, callback)],
 		["scope()", (callback) => api.slothlet.context.scope({ context: { request: "r1" }, fn: callback })]
 	])("lets the host write a nested node through self inside %s", async (_name, enter) => {
-		await mountModules();
+		await mountModules({ scope: { isolation: "partial" } });
 		await enter(() => {
 			self.hostTop = "top";
 			self.callee.ops.hostNested = "nested";
@@ -679,9 +681,9 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 		const write = await api.supplier.attack.captureCallee();
 		const borrow = await api.supplier.attack.captureBorrow();
 		await api.slothlet.restart();
-		await api.slothlet.api.add("callee", path.join(FIXTURE, "callee"), { moduleID: "callee" });
-		await api.slothlet.api.add("vault", path.join(FIXTURE, "vault"), { moduleID: "vault" });
-		await api.slothlet.api.add("supplier", path.join(FIXTURE, "supplier"), { moduleID: "supplier" });
+		await api.slothlet.api.add("callee", path.join(FIXTURE, "callee"), { id: "callee" });
+		await api.slothlet.api.add("vault", path.join(FIXTURE, "vault"), { id: "vault" });
+		await api.slothlet.api.add("supplier", path.join(FIXTURE, "supplier"), { id: "supplier" });
 		withSuppressedSlothletErrorOutputSync(() => {
 			expect(() => write()).toThrow(/LOOSE_SET_NOT_OWNED/);
 		});
@@ -713,8 +715,8 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 	 */
 	async function mountSideChannels(options = {}) {
 		await mountModules(options);
-		await api.slothlet.api.add("svc", path.join(FIXTURE, "svc"), { moduleID: "svc" });
-		await api.slothlet.api.add("evil", path.join(FIXTURE, "evil"), { moduleID: "evil" });
+		await api.slothlet.api.add("svc", path.join(FIXTURE, "svc"), { id: "svc" });
+		await api.slothlet.api.add("evil", path.join(FIXTURE, "evil"), { id: "evil" });
 		api.svc.state = {
 			secret: "state-secret",
 			read() {
@@ -760,12 +762,12 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 				for (const node of targets) {
 					expect(() => {
 						node.useSecret = () => "pwned-by-hook";
-					}).toThrow(/RUNTIME_NO_ACTIVE_CONTEXT_SELF/);
+					}).toThrow(/CONTEXT_NOT_ACTIVE_SELF/);
 				}
 				// The test's own code writing through the api a hook kept: host code with no standing over the view.
 				expect(() => {
 					kept.api.callee = { pwned: true };
-				}).toThrow(/RUNTIME_NO_ACTIVE_CONTEXT_SELF/);
+				}).toThrow(/CONTEXT_NOT_ACTIVE_SELF/);
 			});
 			expect(await api.callee.ops.useSecret()).toBe("callee-original");
 			// What the hook handed back unchanged is what the call returned: the host may still write through it.
@@ -779,7 +781,7 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 		}
 	);
 
-	it.each([["describe"], ["getAPI"]])("refuses a later write through another module's node a module took from diag.%s", async (how) => {
+	it.each([["describe"], ["api"]])("refuses a later write through another module's node a module took from diag.%s", async (how) => {
 		await mountSideChannels({ diagnostics: true });
 		const later = await api.evil.x.keepDiag(how);
 		withSuppressedSlothletErrorOutputSync(() => {
@@ -795,7 +797,7 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 		async (event) => {
 			await mountSideChannels();
 			const subscription = await api.evil.x.keepLifecycle(event, "vault2");
-			await api.slothlet.api.add("vault2", path.join(FIXTURE, "callee"), { moduleID: "vault2" });
+			await api.slothlet.api.add("vault2", path.join(FIXTURE, "callee"), { id: "vault2" });
 			expect(await api.vault2.ops.useSecret()).toBe("callee-original");
 			await api.slothlet.api.reload("vault2");
 			expect(await api.vault2.ops.useSecret()).toBe("callee-original");
@@ -809,7 +811,7 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 					if (impl === null) continue;
 					expect(() => {
 						impl.useSecret = () => "pwned-by-lifecycle";
-					}).toThrow(/RUNTIME_NO_ACTIVE_CONTEXT_SELF/);
+					}).toThrow(/CONTEXT_NOT_ACTIVE_SELF/);
 				}
 			});
 			expect(await api.vault2.ops.useSecret()).toBe("callee-original");
@@ -821,7 +823,7 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 			await mountSideChannels();
 			const subscription = await api.evil.x.subscribeWriter();
 			await withSuppressedSlothletErrorOutput(async () => {
-				if (trigger === "the host's api.add") await api.slothlet.api.add("vault2", path.join(FIXTURE, "vault"), { moduleID: "vault2" });
+				if (trigger === "the host's api.add") await api.slothlet.api.add("vault2", path.join(FIXTURE, "vault"), { id: "vault2" });
 				else await api.callee.ops.writeOwnNested(() => 1);
 				await new Promise((resolve) => setTimeout(resolve, 0));
 			});
@@ -832,7 +834,7 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 		}
 	);
 
-	it.each([["before"], ["around"]])("pins a module's %s hook whose handler carries a forged _slothletOriginal", async (type) => {
+	it.each([["before"], ["around"]])("pins a module's %s hook whose handler carries a forged ____slothletOriginal", async (type) => {
 		await mountSideChannels({ hook: true });
 		const hook = await api.evil.x.forgedHook("callee.ops.writeOwnNested", type);
 		await withSuppressedSlothletErrorOutput(async () => {
@@ -846,8 +848,8 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 		"refuses a later write through a version dispatcher a module read (%s)",
 		async (how) => {
 			await mountSideChannels();
-			await api.slothlet.api.add("auth", path.join(TEST_DIRS.API_TEST_VERSIONED, "v1"), {}, { version: "v1", default: true });
-			await api.slothlet.api.add("auth", path.join(TEST_DIRS.API_TEST_VERSIONED, "v2"), {}, { version: "v2" });
+			await api.slothlet.api.add("auth", path.join(TEST_DIRS.API_TEST_VERSIONED, "v1"), { version: { tag: "v1", default: true } });
+			await api.slothlet.api.add("auth", path.join(TEST_DIRS.API_TEST_VERSIONED, "v2"), { version: { tag: "v2" } });
 			const later = await api.evil.x.dispatcherLeak(how);
 			withSuppressedSlothletErrorOutputSync(() => {
 				expect(() => later()).toThrow(/LOOSE_SET_NOT_OWNED/);
@@ -857,13 +859,13 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 		}
 	);
 
-	it.each([["getAPI"], ["describe"]])("refuses a later write through a node a kept diag.%s hands back", async (how) => {
+	it.each([["api"], ["describe"]])("refuses a later write through a node a kept diag.%s hands back", async (how) => {
 		await mountSideChannels({ diagnostics: true });
 		const kept = await api.evil.x.keepFrameworkFn(how);
 		withSuppressedSlothletErrorOutputSync(() => {
 			// `later` is a function in returned data, run by the host outside any call (#726): refused through the kept
 			// view, which has no standing.
-			expect(() => kept.later()).toThrow(/RUNTIME_NO_ACTIVE_CONTEXT_SELF/);
+			expect(() => kept.later()).toThrow(/CONTEXT_NOT_ACTIVE_SELF/);
 		});
 		expect(await api.callee.ops.useSecret()).toBe("callee-original");
 	});
@@ -882,11 +884,11 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 		expect(await api.callee.ops.useSecret()).toBe("callee-original");
 	});
 
-	it("runs a kept lockCaller.caller as the module that read it when the host calls it later", async () => {
+	it("runs a kept pin.caller as the module that read it when the host calls it later", async () => {
 		await mountSideChannels({
-			permissions: { defaultPolicy: "allow", rules: [{ caller: "evil.**", target: "slothlet.lockCaller.caller", effect: "allow" }] }
+			permissions: { policy: "allow", rules: [{ caller: "evil.**", target: "slothlet.pin.caller", effect: "allow" }] }
 		});
-		await api.slothlet.api.add("front", path.join(FIXTURE, "front"), { moduleID: "front" });
+		await api.slothlet.api.add("front", path.join(FIXTURE, "front"), { id: "front" });
 		const later = await api.front.relay.keepCallerPin();
 		withSuppressedSlothletErrorOutputSync(() => {
 			expect(() => later()).toThrow(/LOOSE_SET_NOT_OWNED/);
@@ -896,11 +898,11 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 
 	it("pins the host, not the module, for code pinned to the host that a kept framework function runs later", async () => {
 		await mountSideChannels({
-			permissions: { defaultPolicy: "allow", rules: [{ caller: "evil.**", target: "slothlet.lockCaller.caller", effect: "allow" }] }
+			permissions: { policy: "allow", rules: [{ caller: "evil.**", target: "slothlet.pin.caller", effect: "allow" }] }
 		});
 		const { run } = await api.evil.x.keepContextRun();
 		const { job } = await api.evil.x.pinForCaller(() =>
-			api.slothlet.lockCaller.caller(() => {
+			api.slothlet.pin.caller(() => {
 				api.callee.ops.hostNote = "host-pinned";
 				return "ran";
 			})()
@@ -937,7 +939,7 @@ describe.each(CONFIGS)("nested self assignment ownership (#625) — $mode / $run
 		withSuppressedSlothletErrorOutputSync(() => {
 			expect(() => {
 				kept.useSecret = () => "pwned-by-error-hook";
-			}).toThrow(/RUNTIME_NO_ACTIVE_CONTEXT_SELF/);
+			}).toThrow(/CONTEXT_NOT_ACTIVE_SELF/);
 		});
 		expect(await api.callee.ops.useSecret()).toBe("callee-original");
 	});
@@ -972,8 +974,8 @@ describe.each([
 
 	it("refuses a write the live runtime cannot attribute to one call, rather than taking the store's last caller", async () => {
 		api = await slothlet({ base: TEST_DIRS.API_TEST, mode, runtime, silent: true, ...PERMISSIONS_ON });
-		await api.slothlet.api.add("callee", path.join(FIXTURE, "callee"), { moduleID: "callee" });
-		await api.slothlet.api.add("twin", path.join(FIXTURE, "twin"), { moduleID: "twin" });
+		await api.slothlet.api.add("callee", path.join(FIXTURE, "callee"), { id: "callee" });
+		await api.slothlet.api.add("twin", path.join(FIXTURE, "twin"), { id: "twin" });
 		const [goGate, releaseGo] = gate();
 		const [peerGate, releasePeer] = gate();
 		const [holdGate, releaseHold] = gate();

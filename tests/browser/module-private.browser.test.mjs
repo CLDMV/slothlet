@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T20:11:48-08:00 (1794802308)
+ *	@Last modified time: 2026-11-16T18:28:06-08:00 (1794882486)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -37,8 +37,8 @@ const MANIFEST = {
 			path: "billing",
 			children: {
 				files: [
-					{ path: "billing/internals.mjs", name: "internals", fullName: "internals.mjs" },
-					{ path: "billing/quote.mjs", name: "quote", fullName: "quote.mjs" }
+					{ path: "billing/internals.mjs", name: "internals", full: "internals.mjs" },
+					{ path: "billing/quote.mjs", name: "quote", full: "quote.mjs" }
 				],
 				directories: []
 			}
@@ -46,7 +46,7 @@ const MANIFEST = {
 		{
 			name: "reporting",
 			path: "reporting",
-			children: { files: [{ path: "reporting/peek.mjs", name: "peek", fullName: "peek.mjs" }], directories: [] }
+			children: { files: [{ path: "reporting/peek.mjs", name: "peek", full: "peek.mjs" }], directories: [] }
 		}
 	]
 };
@@ -56,7 +56,7 @@ const MOUNTED = [
 	{
 		name: "mounted",
 		path: "mounted",
-		children: { files: [{ path: "reporting/peek.mjs", name: "peek", fullName: "peek.mjs" }], directories: [] }
+		children: { files: [{ path: "reporting/peek.mjs", name: "peek", full: "peek.mjs" }], directories: [] }
 	}
 ];
 
@@ -90,10 +90,12 @@ const build = async (options) => {
 	const BASE = baseUrl();
 	const manifest = structuredClone(MANIFEST);
 	const api = await slothlet({
-		platform: "browser",
 		base: BASE,
-		manifest,
-		resolveModuleSpecifier: ({ path }) => new URL(path, BASE).href,
+		loader: {
+			platform: "browser",
+			files: manifest,
+			resolve: ({ path }) => new URL(path, BASE).href
+		},
 		silent: true,
 		...options
 	});
@@ -121,7 +123,7 @@ describe("module-private members in a real browser", () => {
 			const api = await build({
 				mode,
 				runtime,
-				permissions: { defaultPolicy: "allow", attribution, rules: [], private: { scope: "folder" } }
+				permissions: { policy: "allow", caller: { attribution }, rules: [], private: { scope: "folder" } }
 			});
 			try {
 				expect(await settled(() => api.billing.quote.total(100))).toBe(100 * (1 + internals.__rate) + internals._fee);
@@ -134,7 +136,7 @@ describe("module-private members in a real browser", () => {
 			const api = await build({
 				mode,
 				runtime,
-				permissions: { defaultPolicy: "allow", attribution, rules: [], private: { scope: "folder" } }
+				permissions: { policy: "allow", caller: { attribution }, rules: [], private: { scope: "folder" } }
 			});
 			try {
 				expect(await settled(() => api.reporting.peek.rate())).toEqual({ rate: undefined, error: "PERMISSION_DENIED" });
@@ -149,8 +151,10 @@ describe("module-private members in a real browser", () => {
 				mode,
 				runtime,
 				permissions: {
-					defaultPolicy: "deny",
-					attribution,
+					policy: "deny",
+					caller: {
+						attribution
+					},
 					private: { scope: "folder" },
 					rules: [
 						{ caller: "**", target: "billing.internals.__rate", effect: "allow" },
@@ -167,7 +171,7 @@ describe("module-private members in a real browser", () => {
 
 		it("the default scope: every file of the base module reads the private members, in its own folder and another", async () => {
 			const internals = await import(/* @vite-ignore */ baseUrl() + "billing/internals.mjs?plain-twin");
-			const api = await build({ mode, runtime, permissions: { defaultPolicy: "allow", attribution, rules: [] } });
+			const api = await build({ mode, runtime, permissions: { policy: "allow", caller: { attribution }, rules: [] } });
 			try {
 				expect(await settled(() => api.billing.quote.total(100))).toBe(100 * (1 + internals.__rate) + internals._fee);
 				expect(await settled(() => api.reporting.peek.rate())).toEqual({ rate: internals.__rate, error: null });
@@ -178,11 +182,11 @@ describe("module-private members in a real browser", () => {
 		});
 
 		it("the default scope: a module added with a moduleID and the base module do not read each other's private members", async () => {
-			const api = await build({ mode, runtime, permissions: { defaultPolicy: "allow", attribution, rules: [] } });
+			const api = await build({ mode, runtime, permissions: { policy: "allow", caller: { attribution }, rules: [] } });
 			try {
 				// The add mounts a folder of the manifest outside the root: listed after the build, so the root never composes it.
 				MOUNTED.forEach((entry) => manifestOf(api).directories.push(entry));
-				await api.slothlet.api.add("ext", baseUrl() + "mounted", { moduleID: "ext-mod" });
+				await api.slothlet.api.add("ext", baseUrl() + "mounted", { id: "ext-mod" });
 				expect(await settled(() => api.ext.peek.rate())).toEqual({ rate: undefined, error: "PERMISSION_DENIED" });
 				expect(await settled(() => api.reporting.peek.rate())).toEqual({ rate: 0.2, error: null });
 			} finally {

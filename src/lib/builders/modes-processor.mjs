@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:09-08:00 (1794874569)
+ *	@Last modified time: 2026-11-19T16:09:10-08:00 (1795133350)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -102,7 +102,7 @@ export class ModesProcessor extends ComponentBase {
 	 * Prefers `collisionModeOverride` — the real per-call mode from the caller (e.g.
 	 * `api.add()`'s `forceOverwrite`) — over `getOwnershipCollisionMode()`'s config-default
 	 * fallback (#365, #367; the latter fixed a separate bug where that fallback's own
-	 * `collisionContext` lookup never matched `config.collision`'s `{ initial, api }` keys, so it
+	 * `collisionContext` lookup never matched `config.api.collision.mode`'s `{ initial, api }` keys, so it
 	 * silently always returned `"merge"` regardless of either value).
 	 *
 	 * The resolved value — from EITHER source — is then clamped to `"replace"`/`"merge-replace"`
@@ -170,7 +170,7 @@ export class ModesProcessor extends ComponentBase {
 		for (let level = content; level && level !== Objects.prototype; level = Objects.getPrototypeOf(level)) {
 			for (let ofIndex = 0, ofList = Objects.getOwnPropertyNames(level); ofIndex < ofList.length; ofIndex++) {
 				const key = ofList[ofIndex];
-				if (key === "constructor" || FunctionMethods.call(Objects.prototype.hasOwnProperty, members, key)) continue;
+				if (key === "constructor" || Objects.hasOwn(members, key)) continue;
 				const descriptor = Objects.getOwnPropertyDescriptor(level, key);
 				if (level === content && !descriptor.enumerable) continue;
 				if (typeof descriptor.value === "function" && isCompositionLayer(content)) {
@@ -232,7 +232,7 @@ export class ModesProcessor extends ComponentBase {
 	 * of the ~13 call sites (#372/#373 review).
 	 *
 	 * Reverting `RoutineManager.raw` alone is not enough when `materializeOnCreate` (driven by
-	 * `config.backgroundMaterialize`) is set: the constructed wrapper can already be materializing
+	 * `config.loader.materialize`) is set: the constructed wrapper can already be materializing
 	 * in the background, and that materialization completing AFTER this revert re-applies its
 	 * result and re-fires `impl:changed` — undoing the rollback (see `UnifiedWrapper#___invalidate()`
 	 * and its two `invalid`-flag checks inside `___materialize()`). `registerWrapper()` lets this
@@ -379,7 +379,7 @@ export class ModesProcessor extends ComponentBase {
 			// `toString` or `call` would read as already present and be dropped, while the proxy surface
 			// serves wrapper children ahead of anything inherited. Defined with the descriptor shape adoption
 			// gives children (non-writable, enumerable, configurable) rather than assigned.
-			if (isFrameworkReservedKey(key) || FunctionMethods.call(Objects.prototype.hasOwnProperty, fn, key)) continue;
+			if (isFrameworkReservedKey(key) || Objects.hasOwn(fn, key)) continue;
 			const accessor = this.#accessorToCarry(sourceWrapper, key);
 			Objects.defineProperty(
 				fn,
@@ -445,7 +445,7 @@ export class ModesProcessor extends ComponentBase {
 	 * this.#defaultOutranksSelfNamed(exports, "calc"); // true
 	 */
 	#defaultOutranksSelfNamed(exports, name) {
-		return FunctionMethods.call(Objects.prototype.hasOwnProperty, exports, "default") && exports[name] !== exports.default;
+		return Objects.hasOwn(exports, "default") && exports[name] !== exports.default;
 	}
 
 	/**
@@ -460,7 +460,7 @@ export class ModesProcessor extends ComponentBase {
 		const members = new Map();
 		for (let ofIndex = 0, ofList = ["name", "length", "prototype"]; ofIndex < ofList.length; ofIndex++) {
 			const key = ofList[ofIndex];
-			if (FunctionMethods.call(Objects.prototype.hasOwnProperty, sourceWrapper, key)) MapMethods.set(members, key, sourceWrapper[key]);
+			if (Objects.hasOwn(sourceWrapper, key)) MapMethods.set(members, key, sourceWrapper[key]);
 		}
 		return members;
 	}
@@ -584,7 +584,7 @@ export class ModesProcessor extends ComponentBase {
 	 * @param {boolean} recursive - Whether to descend into subdirectories at all.
 	 * @param {boolean} [populateDirectly=false] - Pour this directory's contents directly into `api` (no nested namespace level) — used for transparent-folder and lazy-materialization callers.
 	 * @param {string} [apiPathPrefix=""] - Dotted api path prefix this directory's own entries are built under.
-	 * @param {string} [collisionContext="initial"] - `"initial"` or `"api"` — which `config.collision` policy governs this build.
+	 * @param {string} [collisionContext="initial"] - `"initial"` or `"api"` — which `config.api.collision.mode` policy governs this build.
 	 * @param {string|null} [moduleID=null] - Module id every leaf produced by this call is attributed to.
 	 * @param {string|null} [sourceFolder=null] - Filesystem path this directory was scanned from, for metadata.
 	 * @param {string|null} [cacheBust=null] - Cache-busting value forwarded to dynamic imports.
@@ -623,7 +623,7 @@ export class ModesProcessor extends ComponentBase {
 		/* v8 ignore next 2 */
 		const modes_effectiveCollisionMode =
 			collisionModeOverride ||
-			(collisionContext === "initial" ? this.slothlet.config.collision?.initial : this.slothlet.config.collision?.api) ||
+			(collisionContext === "initial" ? this.slothlet.config.api.collision.mode.initial : this.slothlet.config.api.collision.mode.api) ||
 			"replace";
 
 		const categoryName = isRoot && !populateDirectly ? null : this.slothlet.helpers.sanitize.sanitizePropertyName(directory.name);
@@ -859,7 +859,7 @@ export class ModesProcessor extends ComponentBase {
 			if (file.synthetic) return { exports: file.exports };
 			const loadedNamespace = await this.slothlet.processors.loader.loadModule(
 				file.path,
-				this.slothlet.instanceID,
+				this.slothlet.loadID ?? this.slothlet.instanceID,
 				moduleID,
 				cacheBust,
 				modes_moduleLoadPaths(file)
@@ -913,9 +913,9 @@ export class ModesProcessor extends ComponentBase {
 				const moduleName = this.slothlet.helpers.sanitize.sanitizePropertyName(file.name);
 				const moduleKeys = filterList(Objects.keys(exports), (k) => k !== "default");
 				const analysis = {
-					hasDefault: FunctionMethods.call(Objects.prototype.hasOwnProperty, exports, "default"),
+					hasDefault: Objects.hasOwn(exports, "default"),
 					hasNamed: moduleKeys.length > 0,
-					defaultExportType: FunctionMethods.call(Objects.prototype.hasOwnProperty, exports, "default") ? typeof exports.default : null
+					defaultExportType: Objects.hasOwn(exports, "default") ? typeof exports.default : null
 				};
 				listPush(loadedModules, { file, mod: exports, moduleName, moduleKeys, analysis });
 			} catch (error) {
@@ -926,7 +926,7 @@ export class ModesProcessor extends ComponentBase {
 				// SlothletError("MODULE_IMPORT_FAILED"), so the only errors arriving here are
 				// already SlothletErrors (caught and re-thrown above). Guard kept for safety.
 				/* v8 ignore next */
-				throw new this.SlothletError("MODULE_LOAD_FAILED", { modulePath: file.path, moduleID: moduleID || file.moduleID }, error);
+				throw new this.SlothletError("MODULE_LOAD_FAILED", { file: file.path, module: moduleID || file.moduleID }, { cause: error });
 			}
 		}
 		// Rule 11 (F06 / C24): an `addapi` file is flattened into the level it sits in, with no `addapi`
@@ -1080,7 +1080,7 @@ export class ModesProcessor extends ComponentBase {
 					apiPathPrefix: apiPathPrefix || "",
 					// Same per-call override every assignToApiPath() call in this build receives — the
 					// function-default-vs-named-export merge below was re-deriving its own mode straight
-					// from config, ignoring an api.add({ forceOverwrite: true }) override entirely
+					// from config, ignoring an api.add({ collision: { force: true } }) override entirely
 					// (#372/#373 review, suppressed finding).
 					collisionModeOverride: modes_effectiveCollisionMode
 				});
@@ -1140,7 +1140,6 @@ export class ModesProcessor extends ComponentBase {
 										Arrays.isArray(exportedValue) && files.length > 1
 											? copyForComposition(exportedValue, { addsMembers: true })
 											: exportedValue,
-									materializeOnCreate: this.slothlet.config.backgroundMaterialize,
 									filePath: file.path,
 									// moduleID is always provided; || file.moduleID fallback is unreachable.
 									/* v8 ignore next */
@@ -1158,7 +1157,9 @@ export class ModesProcessor extends ComponentBase {
 								/* v8 ignore next 2 */
 								const modes_case1CollisionMode =
 									collisionModeOverride ||
-									(collisionContext === "initial" ? this.slothlet.config.collision?.initial : this.slothlet.config.collision?.api) ||
+									(collisionContext === "initial"
+										? this.slothlet.config.api.collision.mode.initial
+										: this.slothlet.config.api.collision.mode.api) ||
 									"merge";
 								const modes_case1Proxy = wrapper.createProxy();
 								WeakMapMethods.set(this.#folderModuleValues, modes_case1Proxy, exportedValue);
@@ -1171,10 +1172,7 @@ export class ModesProcessor extends ComponentBase {
 										const existingKey = ofList[ofIndex];
 										// Conflicts resolve as in Case 2 below: the earlier contribution (the existing side)
 										// wins, except under merge-replace, where the incoming module's member wins.
-										if (
-											modes_case1CollisionMode === "merge-replace" &&
-											FunctionMethods.call(Objects.prototype.hasOwnProperty, exportedValue, existingKey)
-										) {
+										if (modes_case1CollisionMode === "merge-replace" && Objects.hasOwn(exportedValue, existingKey)) {
 											continue;
 										}
 										// Carried as described, so an accessor stays live on this module's node (#585 review).
@@ -1293,7 +1291,9 @@ export class ModesProcessor extends ComponentBase {
 						/* v8 ignore next 2 */
 						const modes_eagerCollisionMode =
 							collisionModeOverride ||
-							(collisionContext === "initial" ? this.slothlet.config.collision?.initial : this.slothlet.config.collision?.api) ||
+							(collisionContext === "initial"
+								? this.slothlet.config.api.collision.mode.initial
+								: this.slothlet.config.api.collision.mode.api) ||
 							"merge";
 						// Two competing callables are a conflict like any other member: under merge/warn the FIRST
 						// loaded wins, so an existing callable KEEPS the slot — this module's default function loses
@@ -1310,8 +1310,22 @@ export class ModesProcessor extends ComponentBase {
 								const namedKey = ofList[ofIndex];
 								// Own-member test: `in` walks Function.prototype on this callable slot, so an export named
 								// `call` / `bind` / `toString` would read as already present and never be added.
-								if (!FunctionMethods.call(Objects.prototype.hasOwnProperty, existingCategory, namedKey)) {
+								if (!Objects.hasOwn(existingCategory, namedKey)) {
 									existingCategory[namedKey] = mod[namedKey];
+								}
+							}
+							// The losing function's own members (`fn.tag = …`, a getter, `fn.me = fn`) merge the same way: they
+							// are not named exports, but they are members of the module's value. They are adopted as the
+							// function's own node would serve them — an accessor stays live, an object or function becomes a
+							// child node at this slot's path (#874) — as the lazy settle adopts them from the folder's impl
+							// (mergeOffSlotCollisionFolder).
+							if (typeof mod.default === "function" && existingCategoryW) {
+								for (let ofIndex = 0, ofList = Objects.keys(mod.default); ofIndex < ofList.length; ofIndex++) {
+									const fnKey = ofList[ofIndex];
+									if (isFrameworkReservedKey(fnKey)) continue;
+									if (!Objects.hasOwn(existingCategory, fnKey)) {
+										existingCategoryW.___adoptForeignMember(fnKey, mod.default);
+									}
 								}
 							}
 							targetApi = existingCategory;
@@ -1331,7 +1345,7 @@ export class ModesProcessor extends ComponentBase {
 								// Own-member tests: `callableModule` is a function, so `in` would walk Function.prototype and
 								// treat an export named `call` / `bind` / `toString` as already defined — merge-replace would
 								// skip carrying it, and merge would mis-record it as a conflict the first source won.
-								const existingKeyOnCallable = FunctionMethods.call(Objects.prototype.hasOwnProperty, callableModule, existingKey);
+								const existingKeyOnCallable = Objects.hasOwn(callableModule, existingKey);
 								if (modes_eagerCollisionMode === "merge-replace" && existingKeyOnCallable) {
 									continue;
 								}
@@ -1355,7 +1369,6 @@ export class ModesProcessor extends ComponentBase {
 								initialImpl: this.slothlet.helpers.modesUtils.cloneWrapperImpl(callableModule, mode),
 								// A folder's only file whose module value is null or undefined is the folder's value (#792).
 								nullishDefault: callableModule === null || callableModule === undefined ? { value: callableModule } : null,
-								materializeOnCreate: this.slothlet.config.backgroundMaterialize,
 								filePath: file.path,
 								// moduleID is always provided; || file.moduleID fallback is unreachable.
 								/* v8 ignore next */
@@ -1418,7 +1431,6 @@ export class ModesProcessor extends ComponentBase {
 												mode: effectiveMode,
 												apiPath: modes_namedApiPath,
 												initialImpl: mod[key],
-												materializeOnCreate: this.slothlet.config.backgroundMaterialize,
 												filePath: file.path,
 												moduleID: modes_namedModuleID,
 												sourceFolder
@@ -1514,7 +1526,6 @@ export class ModesProcessor extends ComponentBase {
 												mode: effectiveMode,
 												apiPath: modes_hybridApiPath,
 												initialImpl: this.slothlet.helpers.modesUtils.cloneWrapperImpl(propValue, mode),
-												materializeOnCreate: this.slothlet.config.backgroundMaterialize,
 												filePath: file.path,
 												moduleID: modes_hybridModuleID,
 												sourceFolder
@@ -1568,7 +1579,6 @@ export class ModesProcessor extends ComponentBase {
 													mode: effectiveMode,
 													apiPath: modes_hybridOtherApiPath,
 													initialImpl: this.slothlet.helpers.modesUtils.cloneWrapperImpl(mod[key], mode),
-													materializeOnCreate: this.slothlet.config.backgroundMaterialize,
 													filePath: file.path,
 													moduleID: modes_hybridOtherModuleID,
 													sourceFolder
@@ -1642,7 +1652,6 @@ export class ModesProcessor extends ComponentBase {
 												mode: effectiveMode,
 												apiPath: modes_multiApiPath,
 												initialImpl: this.slothlet.helpers.modesUtils.cloneWrapperImpl(mod[key], mode),
-												materializeOnCreate: this.slothlet.config.backgroundMaterialize,
 												filePath: file.path,
 												moduleID: modes_multiModuleID,
 												sourceFolder
@@ -1730,7 +1739,6 @@ export class ModesProcessor extends ComponentBase {
 											mode: effectiveMode,
 											apiPath: modes_preferredApiPath,
 											initialImpl: this.slothlet.helpers.modesUtils.cloneWrapperImpl(mod[key], mode),
-											materializeOnCreate: this.slothlet.config.backgroundMaterialize,
 											filePath: file.path,
 											moduleID: modes_preferredModuleID,
 											sourceFolder
@@ -1774,16 +1782,10 @@ export class ModesProcessor extends ComponentBase {
 				// directly into the parent folder namespace, dissolving the intermediate
 				// per-file namespace hop (e.g. api.notifications.helpers.formatPhone
 				// becomes api.notifications.formatPhone).
-				// Skipped when the consumer has opted out via suppressFixes: ["C03_116"].
 				// Skipped at root because C03's contract is "dissolve into the parent FOLDER
 				// namespace" — root has no parent folder and dissolving file namespaces at
 				// root would collapse every no-default root file's exports into the API surface.
-				if (
-					decision.flattenToRoot &&
-					moduleContent &&
-					!isRoot &&
-					!(this.slothlet.config.suppressFixes && SetMethods.has(this.slothlet.config.suppressFixes, "C03_116"))
-				) {
+				if (decision.flattenToRoot && moduleContent && !isRoot) {
 					// Tracks which keys' assignToApiPath call actually succeeded, so the registration
 					// loop below can skip a skip/warn-rejected key instead of recording it as owned
 					// (#366 review — see #373).
@@ -1805,7 +1807,6 @@ export class ModesProcessor extends ComponentBase {
 										mode: effectiveMode,
 										apiPath: modes_hoistedApiPath,
 										initialImpl: value,
-										materializeOnCreate: this.slothlet.config.backgroundMaterialize,
 										filePath: file.path,
 										moduleID: modes_hoistedModuleID,
 										sourceFolder
@@ -1876,7 +1877,7 @@ export class ModesProcessor extends ComponentBase {
 							// and written through the instance) keeps both halves on the folder, as the object itself would
 							// answer it (#590). Defined only where the folder has no member of that name yet; a name
 							// already taken goes through the collision rules below.
-							if (member.accessor && !FunctionMethods.call(Objects.prototype.hasOwnProperty, targetApi, key)) {
+							if (member.accessor && !Objects.hasOwn(targetApi, key)) {
 								Objects.defineProperty(targetApi, key, {
 									__proto__: null,
 									get: member.accessor.get,
@@ -1901,7 +1902,6 @@ export class ModesProcessor extends ComponentBase {
 											mode: effectiveMode,
 											apiPath: modes_addapiApiPath,
 											initialImpl: value,
-											materializeOnCreate: this.slothlet.config.backgroundMaterialize,
 											filePath: file.path,
 											moduleID: modes_addapiModuleID,
 											sourceFolder
@@ -1964,7 +1964,6 @@ export class ModesProcessor extends ComponentBase {
 										mode: effectiveMode,
 										apiPath: modes_categoryApiPath,
 										initialImpl: moduleContent,
-										materializeOnCreate: this.slothlet.config.backgroundMaterialize,
 										filePath: file.path,
 										moduleID: modes_categoryModuleID,
 										sourceFolder,
@@ -2031,7 +2030,6 @@ export class ModesProcessor extends ComponentBase {
 								initialImpl: moduleContent, // Use moduleContent directly, don't clone (preserves added properties)
 								// A file whose module value is null or undefined reads as that value (#792).
 								nullishDefault: moduleContent === null || moduleContent === undefined ? { value: moduleContent } : null,
-								materializeOnCreate: this.slothlet.config.backgroundMaterialize,
 								filePath: file.path,
 								moduleID: modes_propertyModuleID,
 								sourceFolder
@@ -2162,7 +2160,7 @@ export class ModesProcessor extends ComponentBase {
 							const folderPath = levelPath ? `${levelPath}.${subDirName}` : subDirName;
 							const mod = await this.slothlet.processors.loader.loadModule(
 								file.path,
-								this.slothlet.instanceID,
+								this.slothlet.loadID ?? this.slothlet.instanceID,
 								moduleID,
 								cacheBust,
 								filenameMatchesFolder ? [folderPath] : [`${folderPath}.${moduleName}`, folderPath]
@@ -2171,13 +2169,11 @@ export class ModesProcessor extends ComponentBase {
 							const exports = this.slothlet.processors.loader.extractExports(mod, file.path);
 							const moduleKeys = filterList(Objects.keys(exports), (k) => k !== "default");
 							const analysis = {
-								hasDefault: FunctionMethods.call(Objects.prototype.hasOwnProperty, exports, "default"),
+								hasDefault: Objects.hasOwn(exports, "default"),
 								hasNamed: moduleKeys.length > 0,
-								defaultExportType: FunctionMethods.call(Objects.prototype.hasOwnProperty, exports, "default")
-									? typeof exports.default
-									: null
+								defaultExportType: Objects.hasOwn(exports, "default") ? typeof exports.default : null
 							};
-							const modContent = FunctionMethods.call(Objects.prototype.hasOwnProperty, exports, "default") ? exports.default : exports;
+							const modContent = Objects.hasOwn(exports, "default") ? exports.default : exports;
 							const categoryDecision = await this.slothlet.processors.flatten.buildCategoryDecisions({
 								categoryName: subDirName,
 								mod: modContent,
@@ -2209,9 +2205,7 @@ export class ModesProcessor extends ComponentBase {
 									// Starting from `{}` dropped the default object's members in eager mode only (#583).
 									// Copied, so the module's own default object is not mutated; a named export conflicting
 									// with the default's own member resolves by collision mode (#421, #587).
-									// config.collision fallback unreachable — config.api?.collision is always set.
-									/* v8 ignore next */
-									const addapiCollisionConfig = this.slothlet.config.api?.collision || this.slothlet.config.collision;
+									const addapiCollisionConfig = this.slothlet.config.api.collision.mode;
 									const addapiCollisionMode =
 										collisionModeOverride || (collisionContext === "initial" ? addapiCollisionConfig.initial : addapiCollisionConfig.api);
 									// A primitive default holds no members: it is kept under `default` beside the named exports.
@@ -2242,7 +2236,7 @@ export class ModesProcessor extends ComponentBase {
 								} else if (this.slothlet.processors.flatten.primitiveDefaultNamespace(exports.default, exports, moduleKeys)) {
 									// A primitive default holds no members: it is kept under `default` beside the named exports.
 									implToWrap = this.slothlet.processors.flatten.primitiveDefaultNamespace(exports.default, exports, moduleKeys);
-								} else if (FunctionMethods.call(Objects.prototype.hasOwnProperty, exports, "default")) {
+								} else if (Objects.hasOwn(exports, "default")) {
 									// Default export - use it. With named exports it gets a callable layer, so they are not
 									// written to the module's function (or through a Proxy's traps); alone it is the
 									// function itself, which keeps what it is (an async function stays one).
@@ -2260,9 +2254,7 @@ export class ModesProcessor extends ComponentBase {
 											// above — so a forceOverwrite-driven api.add() resolves this internal
 											// default-vs-named-export collision as "replace" too, instead of silently
 											// falling back to the instance's configured default (#372/#373 review).
-											// config.api.collision is always set; the config.collision fallback is unreachable.
-											/* v8 ignore next */
-											const collisionConfig = this.slothlet.config.api?.collision || this.slothlet.config.collision;
+											const collisionConfig = this.slothlet.config.api.collision.mode;
 											// || "merge" fallback unreachable — collisionConfig always has an initial/api value.
 											/* v8 ignore next */
 											const collisionMode =
@@ -2291,7 +2283,7 @@ export class ModesProcessor extends ComponentBase {
 										} else if (typeof implToWrap === "object" && implToWrap !== null) {
 											// Object default: copied, so the module's own default object is not mutated; a
 											// conflicting named export resolves by collision mode (#421, #587).
-											const objectCollisionConfig = this.slothlet.config.api?.collision || this.slothlet.config.collision;
+											const objectCollisionConfig = this.slothlet.config.api.collision.mode;
 											const objectCollisionMode =
 												collisionModeOverride ||
 												(collisionContext === "initial" ? objectCollisionConfig?.initial : objectCollisionConfig?.api) ||
@@ -2341,9 +2333,7 @@ export class ModesProcessor extends ComponentBase {
 								// as "replace" too, instead of silently falling back to the instance's configured
 								// default and retaining file content a true replace should have discarded
 								// (#372/#373 review).
-								// config.collision fallback unreachable — config.api?.collision is always set.
-								/* v8 ignore next */
-								const modes_eagerCollisionConfig = this.slothlet.config.api?.collision || this.slothlet.config.collision;
+								const modes_eagerCollisionConfig = this.slothlet.config.api.collision.mode;
 								// || "merge" fallback unreachable — collision config always provides an initial/api value.
 								/* v8 ignore next */
 								const modes_eagerCollisionMode =
@@ -2365,7 +2355,7 @@ export class ModesProcessor extends ComponentBase {
 											modes_existingWrapper.____slothletInternal?.materializeFunc &&
 											!modes_existingWrapper.____slothletInternal?.state?.materialized
 										) {
-											await modes_existingWrapper._materialize();
+											await modes_existingWrapper.___materialize();
 										}
 										/* v8 ignore stop */
 										// Ensure children are adopted from impl
@@ -2377,7 +2367,13 @@ export class ModesProcessor extends ComponentBase {
 										) {
 											modes_existingWrapper.___adoptImplChildren();
 										}
-										const modes_existingImpl = modes_existingWrapper.__impl;
+										// The file's members are merged into a copy, not into the module's own export: the export
+										// would keep the nodes of this tree, and a later tree built from the same module (a run's
+										// copy, #876) would read them as its own.
+										if (implToWrap === exports[subDirName] || implToWrap === exports.default || implToWrap === modContent) {
+											implToWrap = this.slothlet.processors.flatten.cloneDefault(implToWrap);
+										}
+										const modes_existingImpl = modes_existingWrapper.____impl;
 										// modes_existingImpl is always a non-null, non-array object here; IF FALSE unreachable.
 										/* v8 ignore next */
 										if (modes_existingImpl && typeof modes_existingImpl === "object" && !Arrays.isArray(modes_existingImpl)) {
@@ -2453,7 +2449,6 @@ export class ModesProcessor extends ComponentBase {
 											initialImpl: implToWrap, // Use implToWrap directly, don't clone (preserves added properties)
 											// A self-named file whose module value is null or undefined is the folder's value (#792).
 											nullishDefault: implToWrap === null || implToWrap === undefined ? { value: implToWrap } : null,
-											materializeOnCreate: this.slothlet.config.backgroundMaterialize,
 											filePath: file.path,
 											moduleID: modes_subDirModuleID,
 											sourceFolder
@@ -2607,7 +2602,7 @@ export class ModesProcessor extends ComponentBase {
 					// IMPORTANT: Only extract for merge/merge-replace modes. In replace mode,
 					// the folder completely replaces the file - no file exports should persist.
 					// The replace mode collision in api-assignment.mjs handles materialization.
-					const collisionConfig = this.slothlet.config.api?.collision;
+					const collisionConfig = this.slothlet.config.api?.collision?.mode;
 					// Third || arm ("replace") unreachable — collisionConfig always provides an initial/api value.
 					/* v8 ignore start */
 					const modes_initialCollisionMode =
@@ -2618,7 +2613,7 @@ export class ModesProcessor extends ComponentBase {
 					if (modes_initialCollisionMode !== "replace" && resolveWrapper(modes_lazyExisting)) {
 						const modes_lazyExistingW = resolveWrapper(modes_lazyExisting);
 						// Root files are processed eagerly even in lazy mode, so impl should exist
-						const existImpl = modes_lazyExistingW.__impl;
+						const existImpl = modes_lazyExistingW.____impl;
 						// existImpl is always a non-null, non-array object at this point; IF FALSE unreachable.
 						/* v8 ignore next */
 						if (existImpl && typeof existImpl === "object" && !Arrays.isArray(existImpl)) {
@@ -2640,7 +2635,7 @@ export class ModesProcessor extends ComponentBase {
 							const ck = ofList[ofIndex];
 							// Unreachable in practice: modes_fileFolderImpl is always initialised from
 							// existImpl in the block above because root files are processed eagerly
-							// (even in lazy mode), so __impl is always a non-null object by the time
+							// (even in lazy mode), so ____impl is always a non-null object by the time
 							// we reach this loop. The null-init guard is a defensive belt-and-suspenders
 							// safety net for future edge cases where impl may not yet exist.
 							/* v8 ignore next */
@@ -2661,7 +2656,7 @@ export class ModesProcessor extends ComponentBase {
 					// carries no initialImpl (its impl is only set later, on materialization), so
 					// RoutineManager's raw capture is a safe no-op here in the common case — but a
 					// rejected wrapper whose materialization is still later triggered (e.g. a caller
-					// holding its own reference, or `backgroundMaterialize` kicking it off before this
+					// holding its own reference, or `loader.materialize` kicking it off before this
 					// decision is even known) could still fire a real impl:changed for this (apiPath,
 					// moduleID) pair after the fact. registerWrapper() below covers that: the
 					// underlying UnifiedWrapper (via resolveWrapper on the proxy this method returns)
@@ -2683,7 +2678,7 @@ export class ModesProcessor extends ComponentBase {
 							config: this.slothlet.config,
 							collisionContext,
 							// modes_initialCollisionMode already resolves collisionModeOverride ||
-							// config.collision[collisionContext] — pass it through so a
+							// config.api.collision.mode[collisionContext] — pass it through so a
 							// forceOverwrite-driven mount's internal file/folder collision agrees with
 							// the mount's own top-level decision instead of re-deriving purely from
 							// config here (#365/#366 review).
@@ -2699,7 +2694,7 @@ export class ModesProcessor extends ComponentBase {
 					// keep their laziness untouched.
 					const modes_assignedCollision = resolveWrapper(targetApi[subDirName]);
 					if (modes_assignedCollision?.____slothletInternal.needsImmediateChildAdoption) {
-						await modes_assignedCollision._materialize();
+						await modes_assignedCollision.___materialize();
 					}
 					// Callable-vs-callable under merge: the slot kept the first-loaded callable and the folder
 					// composed off-slot. The assignment chains this same merge onto the folder's materialization
@@ -2708,7 +2703,7 @@ export class ModesProcessor extends ComponentBase {
 					const modes_keptCallable = resolveWrapper(targetApi[subDirName]);
 					const modes_offSlotFolder = modes_keptCallable?.____slothletInternal.offSlotCollisionFolder;
 					if (modes_offSlotFolder) {
-						await modes_offSlotFolder._materialize();
+						await modes_offSlotFolder.___materialize();
 						this.slothlet.builders.apiAssignment.mergeOffSlotCollisionFolder(modes_keptCallable);
 					}
 				}
@@ -2755,7 +2750,7 @@ export class ModesProcessor extends ComponentBase {
 							const key = ofList[ofIndex];
 							modes_rootChildPaths[key] = file.path;
 						}
-						defaultFunc.__childFilePaths = modes_rootChildPaths;
+						defaultFunc.____childFilePaths = modes_rootChildPaths;
 					}
 				}
 				if (this.slothlet.config.debug?.modes) {
@@ -2780,28 +2775,18 @@ export class ModesProcessor extends ComponentBase {
 				}
 			} else {
 				// Multiple root contributors: namespace ALL of them and warn.
-				// Console warning honors `silent` (like every other SlothletWarning site); the
+				// The warning prints unless the instance is silent (decided inside the warning, #838); the
 				// impl:warning event below is additive and fires regardless of `silent` (#148).
-				if (!this.____config?.silent) {
-					new this.SlothletWarning("WARNING_MULTIPLE_ROOT_CONTRIBUTORS", {
-						rootContributors: ArrayMethods.join(
-							mapList(rootContributors, (rc) => rc.moduleName),
-							", "
-						),
-						firstContributor: rootContributors[0].moduleName
-					});
-				}
+				new this.SlothletWarning("WARNING_MULTIPLE_ROOT_CONTRIBUTORS", {
+					contributors: mapList(rootContributors, (rc) => rc.moduleName)
+				});
 				// Also surface as an init-time impl:warning so construction-time `lifecycle` subscribers
 				// observe non-throwing diagnostics raised during cold-start buildAPI (#148).
 				await this.emitImplDiagnostic("warning", {
 					apiPath: "",
 					code: "WARNING_MULTIPLE_ROOT_CONTRIBUTORS",
 					context: {
-						rootContributors: ArrayMethods.join(
-							mapList(rootContributors, (rc) => rc.moduleName),
-							", "
-						),
-						firstContributor: rootContributors[0].moduleName
+						contributors: mapList(rootContributors, (rc) => rc.moduleName)
 					},
 					source: "buildAPI",
 					moduleID
@@ -2821,7 +2806,6 @@ export class ModesProcessor extends ComponentBase {
 								mode: effectiveMode,
 								apiPath: modes_rootApiPath,
 								initialImpl: this.slothlet.helpers.modesUtils.cloneWrapperImpl(defaultFunc, mode),
-								materializeOnCreate: this.slothlet.config.backgroundMaterialize,
 								filePath: file.path,
 								moduleID: modes_rootModuleID,
 								sourceFolder
@@ -2865,7 +2849,7 @@ export class ModesProcessor extends ComponentBase {
 					const modes_rootKept = resolveWrapper(targetApi[moduleName]);
 					const modes_rootOffSlot = modes_rootKept?.____slothletInternal.offSlotCollisionFolder;
 					if (modes_rootOffSlot) {
-						await modes_rootOffSlot._materialize();
+						await modes_rootOffSlot.___materialize();
 						this.slothlet.builders.apiAssignment.mergeOffSlotCollisionFolder(modes_rootKept);
 					}
 					// Under merge a lazy folder kept the slot; once it has loaded, it takes this root file's
@@ -2873,7 +2857,7 @@ export class ModesProcessor extends ComponentBase {
 					const modes_rootPendingCallable = modes_rootKept?.____slothletInternal.pendingCollisionCallable;
 					if (modes_rootPendingCallable) {
 						delete modes_rootKept.____slothletInternal.pendingCollisionCallable;
-						await modes_rootKept._materialize();
+						await modes_rootKept.___materialize();
 						modes_rootKept.___adoptCallableImpl(modes_rootPendingCallable, false);
 					}
 				}
@@ -2926,11 +2910,11 @@ export class ModesProcessor extends ComponentBase {
 			// Compute actual subdirectory sourceFolder path
 			// If parent sourceFolder exists, append this directory name
 			// Otherwise use config dir as base
-			// sourceFolder is always provided by callers; config?.dir fallback unreachable.
+			// sourceFolder is always provided by callers; config?.base fallback unreachable.
 			/* v8 ignore start */
 			const actualSourceFolder = sourceFolder
 				? regExpReplace(/\\/g, `${sourceFolder}/${dir.sourceName ?? dir.name}`, "/")
-				: regExpReplace(/\\/g, `${this.slothlet.config?.dir}/${dir.sourceName ?? dir.name}`, "/");
+				: regExpReplace(/\\/g, `${this.slothlet.config?.base}/${dir.sourceName ?? dir.name}`, "/");
 			/* v8 ignore stop */
 
 			// Compute parent API path prefix - strip the last segment (which is this directory)
@@ -2952,7 +2936,7 @@ export class ModesProcessor extends ComponentBase {
 				if (isGeneric || filenameMatchesFolder) {
 					const mod = await this.slothlet.processors.loader.loadModule(
 						file.path,
-						this.slothlet.instanceID,
+						this.slothlet.loadID ?? this.slothlet.instanceID,
 						moduleID,
 						cacheBust,
 						filenameMatchesFolder ? [apiPath] : [`${apiPath}.${moduleName}`, apiPath]
@@ -2961,11 +2945,11 @@ export class ModesProcessor extends ComponentBase {
 					const exports = this.slothlet.processors.loader.extractExports(mod, file.path);
 					const moduleKeys = filterList(Objects.keys(exports), (k) => k !== "default");
 					const analysis = {
-						hasDefault: FunctionMethods.call(Objects.prototype.hasOwnProperty, exports, "default"),
+						hasDefault: Objects.hasOwn(exports, "default"),
 						hasNamed: moduleKeys.length > 0,
-						defaultExportType: FunctionMethods.call(Objects.prototype.hasOwnProperty, exports, "default") ? typeof exports.default : null
+						defaultExportType: Objects.hasOwn(exports, "default") ? typeof exports.default : null
 					};
-					const modContent = FunctionMethods.call(Objects.prototype.hasOwnProperty, exports, "default") ? exports.default : exports;
+					const modContent = Objects.hasOwn(exports, "default") ? exports.default : exports;
 					const categoryDecision = await this.slothlet.processors.flatten.buildCategoryDecisions({
 						categoryName,
 						mod: modContent,
@@ -2982,7 +2966,7 @@ export class ModesProcessor extends ComponentBase {
 					if (
 						filenameMatchesFolder &&
 						moduleKeys.length === 0 &&
-						FunctionMethods.call(Objects.prototype.hasOwnProperty, exports, "default") &&
+						Objects.hasOwn(exports, "default") &&
 						(exports.default === null || (typeof exports.default !== "object" && typeof exports.default !== "function"))
 					) {
 						return exports.default;
@@ -3015,7 +2999,7 @@ export class ModesProcessor extends ComponentBase {
 						} else if (this.slothlet.processors.flatten.primitiveDefaultNamespace(exports.default, exports, moduleKeys)) {
 							// A primitive default holds no members: it is kept under `default` beside the named exports.
 							implToWrap = this.slothlet.processors.flatten.primitiveDefaultNamespace(exports.default, exports, moduleKeys);
-						} else if (FunctionMethods.call(Objects.prototype.hasOwnProperty, exports, "default")) {
+						} else if (Objects.hasOwn(exports, "default")) {
 							// An object default is copied, so the module's own default object is not mutated (#587). A
 							// function default gets a callable layer only when named exports are added to it.
 							implToWrap =
@@ -3032,7 +3016,7 @@ export class ModesProcessor extends ComponentBase {
 							if (moduleKeys.length > 0 && (typeof implToWrap === "function" || (typeof implToWrap === "object" && implToWrap !== null))) {
 								// Use the wrapper's own effective mode (createLazySubdirectoryWrapper's
 								// `collisionMode` param, already override-or-config-resolved by its caller)
-								// instead of re-deriving from config.collision.initial directly — this
+								// instead of re-deriving from config.api.collision.mode.initial directly — this
 								// materializer can be for an api.add()-mounted lazy subtree, whose
 								// effective policy may be collision.api or an explicit per-call override,
 								// not necessarily collision.initial (PR #366 review).
@@ -3074,29 +3058,29 @@ export class ModesProcessor extends ComponentBase {
 								if (typeof value === "function") {
 									// INTERNAL impl:created contribution event (#398) — delivered to the
 									// framework's metadata/routine/ownership systems only. RoutineManager#onImplCreated
-									// reads data.wrapper.__impl (not a raw `impl` field); the minimal wrapper shape below
+									// reads data.wrapper.____impl (not a raw `impl` field); the minimal wrapper shape below
 									// carries it. Without it, a lazily-materialized single-file subdirectory's exported
 									// functions were read as `undefined` (typeof !== "function"), so RoutineManager
 									// treated them as non-functions and never captured them — routines matching this
 									// shape silently missed their contribution under lazy mode (#372 review). No raw
-									// `impl` field and no __wrapperRef here: `value` is the exported function itself, not
+									// `impl` field and no ____wrapperRef here: `value` is the exported function itself, not
 									// a UnifiedWrapper, so there is no wrapper instance to capture for invalidation.
 									this.slothlet.handlers.lifecycle.emitInternal("impl:created", {
 										apiPath: `${apiPath}.${key}`,
-										wrapper: Objects.freeze({ __impl: value }),
+										wrapper: Objects.freeze({ ____impl: value }),
 										source: "lazy-materialization",
 										moduleID: moduleID,
 										filePath: file.path,
 										exportPath: this.slothlet.handlers.ownership?.resolveExportPath(file.path, value) ?? null,
-										// sourceFolder is always passed by every call site; config?.dir fallback is never evaluated.
+										// sourceFolder is always passed by every call site; config?.base fallback is never evaluated.
 										/* v8 ignore next */
-										sourceFolder: sourceFolder || this.slothlet.config?.dir
+										sourceFolder: sourceFolder || this.slothlet.config?.base
 									});
 								}
 							}
 						}
 
-						// CRITICAL: Create __childFilePaths for ALL children in this folder
+						// CRITICAL: Create ____childFilePaths for ALL children in this folder
 						// Map each child to the file.path they came from. An array has no children: it is data, and the
 						// key would be listed among its elements. A default-export function with named exports beside it
 						// is slothlet's own callable layer (composeFunctionDefault), never the module's export, so its
@@ -3107,26 +3091,34 @@ export class ModesProcessor extends ComponentBase {
 							implToWrap !== exports.default &&
 							!ArrayMethods.some(moduleKeys, (key) => exports[key] === implToWrap);
 						if (implToWrap && ((typeof implToWrap === "object" && !Arrays.isArray(implToWrap)) || modes_composedFunction)) {
-							// Initialize __childFilePaths with all children mapped to file.path
+							// Initialize ____childFilePaths with all children mapped to file.path
 							const childPaths = {};
 							for (let ofIndex = 0, ofList = Objects.keys(implToWrap); ofIndex < ofList.length; ofIndex++) {
 								const key = ofList[ofIndex];
-								if (typeof key !== "symbol" && key !== "__childFilePaths" && key !== "__filePath") {
+								if (typeof key !== "symbol" && key !== "____childFilePaths" && key !== "____filePath") {
 									childPaths[key] = file.path;
 								}
 							}
 
 							// May or may not be needed... so far removing it hasn't caused an issue.
 							// Merge with collision-merged children paths if they exist
-							// if (this.__childFilePathsPreMaterialize) {
-							// 	Object.assign(childPaths, this.__childFilePathsPreMaterialize);
+							// if (this.____childFilePathsPreMaterialize) {
+							// 	Object.assign(childPaths, this.____childFilePathsPreMaterialize);
 							// }
 
-							implToWrap.__childFilePaths = childPaths;
+							implToWrap.____childFilePaths = childPaths;
 						}
 
 						// Merge file-folder collision exports (from same-name file, e.g., math.mjs + math/)
 						// Each member is copied as described, not read, so a getter stays a getter (#585 review).
+						// They go onto a copy, not onto the module's own export: the export would keep the nodes of this
+						// tree, and a later tree built from the same module (a run's copy, #876) would read them as its own.
+						if (
+							fileFolderCollisionImpl &&
+							(implToWrap === exports[categoryName] || implToWrap === exports.default || implToWrap === modContent)
+						) {
+							implToWrap = this.slothlet.processors.flatten.cloneDefault(implToWrap);
+						}
 						if (fileFolderCollisionImpl && typeof implToWrap === "object" && implToWrap !== null) {
 							for (let ofIndex = 0, ofList = Objects.keys(fileFolderCollisionImpl); ofIndex < ofList.length; ofIndex++) {
 								const k = ofList[ofIndex];
@@ -3248,7 +3240,7 @@ export class ModesProcessor extends ComponentBase {
 				// this wrapper's impl would nest wrapper-in-wrapper — enumeration then synthesizes keys the
 				// plain callable never had (an own `apply`, answered by the inner proxy's descriptor trap)
 				// and every read pays two trap hops. Unwrap to the composed implementation instead; the
-				// single-key path below already does the same through `__impl`.
+				// single-key path below already does the same through `____impl`.
 				const mainValueW = resolveWrapper(mainValue);
 				// processFiles wraps every composed module, so a non-wrapper category value would need a
 				// raw-content path none of this materializer's call-sites produce; degrade to no-unwrap
@@ -3310,7 +3302,7 @@ export class ModesProcessor extends ComponentBase {
 							MapMethods.set(lazy_wrapperMembers, key, materialized[key]);
 						continue;
 					}
-					if (collisionMode === "merge-replace" && FunctionMethods.call(Objects.prototype.hasOwnProperty, mainValue, key)) continue;
+					if (collisionMode === "merge-replace" && Objects.hasOwn(mainValue, key)) continue;
 					const lazy_accessor = this.#accessorToCarry(materialized, key);
 					if (lazy_accessor) Objects.defineProperty(mainValue, key, lazy_accessor);
 					else holdMember(mainValue, key, materialized[key]);
@@ -3408,7 +3400,7 @@ export class ModesProcessor extends ComponentBase {
 						return nestedValue;
 					}
 					/* v8 ignore stop */
-					return nestedValue.__impl ?? nestedValue;
+					return nestedValue.____impl ?? nestedValue;
 					// nestedValue is always a valid lazy wrapper here; the else branch (null/undefined)
 					// is a defensive fallback never produced by processFiles.
 					/* v8 ignore start */
@@ -3425,7 +3417,6 @@ export class ModesProcessor extends ComponentBase {
 			mode: "lazy",
 			apiPath,
 			materializeFunc: lazy_materializeFunc,
-			materializeOnCreate: this.slothlet.config.backgroundMaterialize,
 			filePath: dir.path, // Use directory path so lifecycle events can tag system metadata
 			moduleID: moduleID, // Use parent moduleID
 			sourceFolder,

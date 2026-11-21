@@ -217,14 +217,14 @@ for (const { config, name } of configs) {
 			// A reload replays the add/remove history. A replayed remove must do
 			// the SAME full cleanup a live remove does — not just prune the `api`
 			// tree, but also drop the apiCacheManager entry and ownership records.
-			const baseCacheCount = api.slothlet.diag.caches.getAllModuleIDs().length;
+			const baseCacheCount = api.slothlet.diag.caches.ids().length;
 
 			await api.slothlet.api.add("keepNs", TEST_DIRS.API_TEST);
 			await api.slothlet.api.add("dropNs", TEST_DIRS.API_TEST);
 			await api.slothlet.api.remove("dropNs");
 
 			// Before reload: one extra cache entry (keepNs), dropNs fully gone.
-			expect(api.slothlet.diag.caches.getAllModuleIDs().length).toBe(baseCacheCount + 1);
+			expect(api.slothlet.diag.caches.ids().length).toBe(baseCacheCount + 1);
 			expect("dropNs" in api).toBe(false);
 			expect(api.slothlet.diag.owner.get("dropNs")).toBeNull();
 
@@ -241,7 +241,7 @@ for (const { config, name } of configs) {
 
 			// Cache: still exactly one extra entry — the replayed remove did not
 			// leave an orphaned cache entry behind for dropNs.
-			expect(api.slothlet.diag.caches.getAllModuleIDs().length).toBe(baseCacheCount + 1);
+			expect(api.slothlet.diag.caches.ids().length).toBe(baseCacheCount + 1);
 		});
 
 		it("should replay operations with different folders in chronological order", async () => {

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-17T00:00:00-07:00 (1792220400)
+ *	@Last modified time: 2026-11-16T18:29:41-08:00 (1794882581)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -19,12 +19,12 @@
  * @description
  * Code supplied to another module's call runs as its supplier, and the call it runs inside has to allow each
  * access as well. These tests pin the second half: an access only the supplier is allowed is refused from inside
- * the callee's call, and every identity taken there — a `lockCaller` pin, a captured reference, a `run()` scope,
- * a relay's `lockCaller.caller` — keeps the callee as its ceiling, so it cannot be used afterwards to carry the
+ * the callee's call, and every identity taken there — a `pin` pin, a captured reference, a `run()` scope,
+ * a relay's `pin.caller` — keeps the callee as its ceiling, so it cannot be used afterwards to carry the
  * supplier past what the callee may do.
  *
  * Fixture: `supplier.probe` may call `callee.**`, `relay.**` and its own `vault.secret.forSupplier` and read
- * `vault.data.level`; only `callee.**` may call `vault.secret.secret`; `relay.**` holds `lockCaller.caller`.
+ * `vault.data.level`; only `callee.**` may call `vault.secret.secret`; `relay.**` holds `pin.caller`.
  *
  * @module tests/vitests/suites/permissions/permissions-caller-supplied-ceiling
  */
@@ -43,8 +43,8 @@ const RULES = [
 	{ caller: "supplier.**", target: "callee.**", effect: "allow" },
 	{ caller: "supplier.**", target: "relay.**", effect: "allow" },
 	{ caller: "callee.**", target: "relay.**", effect: "allow" },
-	{ caller: "relay.**", target: "slothlet.lockCaller.caller", effect: "allow" },
-	{ caller: "**", target: "slothlet.run", effect: "allow" }
+	{ caller: "relay.**", target: "slothlet.pin.caller", effect: "allow" },
+	{ caller: "**", target: "slothlet.context.run", effect: "allow" }
 ];
 
 const DENIED = { ok: false, code: "PERMISSION_DENIED" };
@@ -62,7 +62,7 @@ describe.each(getMatrixConfigs())("Permissions > caller-supplied code keeps the 
 	 * @returns {Promise<object>} The api.
 	 */
 	const build = async () => {
-		api = await slothlet({ ...config, base: BASE, permissions: { defaultPolicy: "deny", rules: RULES } });
+		api = await slothlet({ ...config, base: BASE, permissions: { policy: "deny", rules: RULES } });
 		return api;
 	};
 
@@ -96,7 +96,7 @@ describe.each(getMatrixConfigs())("Permissions > caller-supplied code keeps the 
 		expect(await withSuppressedSlothletErrorOutput(() => api.supplier.probe.ceilingRead())).toEqual(DENIED);
 	});
 
-	it("a lockCaller pin taken by supplied code keeps the callee as its ceiling", async () => {
+	it("a pin taken by supplied code keeps the callee as its ceiling", async () => {
 		await build();
 		expect(await withSuppressedSlothletErrorOutput(() => api.supplier.probe.pinnedInside())).toEqual(DENIED);
 	});
@@ -111,7 +111,7 @@ describe.each(getMatrixConfigs())("Permissions > caller-supplied code keeps the 
 		expect(await withSuppressedSlothletErrorOutput(() => api.supplier.probe.scopeInside())).toEqual(DENIED);
 	});
 
-	it("a relay's lockCaller.caller pin of supplied code keeps the callee as its ceiling", async () => {
+	it("a relay's pin.caller pin of supplied code keeps the callee as its ceiling", async () => {
 		await build();
 		expect(await withSuppressedSlothletErrorOutput(() => api.supplier.probe.relayInside())).toEqual(DENIED);
 	});

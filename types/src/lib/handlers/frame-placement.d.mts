@@ -131,6 +131,30 @@ export function parseStackFrame(line: string): {
     path: string;
 } | null;
 /**
+ * A new empty list with no prototype, for lists of slothlet's own entries kept inside slothlet's own code: an element is
+ * written to it as `list[list.length] = value` without any check, as nothing a module puts on `Array.prototype` or
+ * `Object.prototype` is on its chain. Read by index and length only (it has no iterator).
+ * @returns {Array<object>} The list.
+ * @internal
+ */
+export function bareList(): Array<object>;
+/**
+ * The calls of a list whose entry function a stack frame's text names (see {@link runtime_namesEntry}).
+ *
+ * Calls of one function go by the same names, so the list is grouped by them once and each group's names are tested
+ * once; a list read again (a placement's matches, a caller's candidates) answers for the same frame text by a lookup.
+ * The list is only read, and the answer may be the list itself or shared, so it is only read too.
+ *
+ * @param {ArrayLike<{fnNames?: string[], fnName?: string}>} list - The calls. The list is not changed afterwards.
+ * @param {string} head - The frame's text before its location.
+ * @returns {ArrayLike<object>} The calls the frame names, in the list's order.
+ * @internal
+ */
+export function runtime_namedAmong(list: ArrayLike<{
+    fnNames?: string[];
+    fnName?: string;
+}>, head: string): ArrayLike<object>;
+/**
  * Whether a frame is one the microtask runner puts below a resumed function: a resumed function has
  * nothing of its own below it. Node also drains the microtask queue between the callbacks of one timer list and of
  * the immediate queue, so a function resumed there has the timers' own frames (`listOnTimeout`, `processTimers`,
@@ -177,7 +201,7 @@ export function isHandedOut(value: any): boolean;
 export function carriesCallerCode(thisArg: any, args: ArrayLike<any> | null | undefined): boolean;
 /**
  * Whether what a module hands out and is handed is set up as that module's code (#597, #726): only while the
- * permission system of the wrapper's instance is on and `permissions.attribution` is `"precise"` (the default). Then a
+ * permission system of the wrapper's instance is on and `permissions.caller.attribution` is `"precise"` (the default). Then a
  * value that is itself code (a function, a class, a class instance, a generator, a promise, a Proxy export) is a
  * stand-in recording the module as its definer; plain data passes as itself unsearched, and code nested in it is told
  * by its frames when it runs. With `"fast"`, or with the permission system not on (no `permissions` config,
@@ -189,7 +213,7 @@ export function carriesCallerCode(thisArg: any, args: ArrayLike<any> | null | un
 export function handsOutAsModule(wrapper: object | null | undefined): boolean;
 /**
  * Whether a module call's result is passed through {@link attributeResult} (#726): while the permission system of the
- * wrapper's instance is on, under either `permissions.attribution`. `"precise"` hands out code as stand-ins there;
+ * wrapper's instance is on, under either `permissions.caller.attribution`. `"precise"` hands out code as stand-ins there;
  * `"fast"` hands back only a node's own Proxy export as the node's member.
  * @param {object|null|undefined} wrapper - A wrapper of the module.
  * @returns {boolean} True while results are attributed.
@@ -411,6 +435,10 @@ declare function describeCall(wrapper: object): {
  *   folder belongs to that module's calls (#512); the deepest root wins, so a module mounted inside
  *   another's folder owns its files.
  *
+ * What the calls alone decide is indexed once per list (see runtime_candidateIndex): a caller placing frames among the
+ * same calls again passes the same list, unchanged, and places them by lookups. The `matches` lists placements answer
+ * can be shared between placements, so they are only read.
+ *
  * @param {Array<{currentWrapper: object, family: string|null, comparablePath: string, realComparablePath: string|null, locations: Set<string>|null, moduleID: string|null}>} candidates - The calls, each with a file.
  * @returns {{place: function(object): ({matches: Array<object>, byFile: boolean, byModule?: boolean}|null), families: Set<string>}}
  *   `place` answers a frame's placement — `{ matches }` (possibly none: an orphan), or null when the frame is
@@ -553,7 +581,7 @@ declare function supplierChainCeiling(record: {
  * function a module passed by any route — a callback, a shared object, a global, a built-in it replaced — runs as no
  * module inside a call it was not handed to; otherwise it answers without reading the stack.
  *
- * The ceiling is the leaf the code is running inside. With `permissions.ceiling: "chain"` it is cumulative instead: the
+ * The ceiling is the leaf the code is running inside. With `permissions.caller.ceiling: "chain"` it is cumulative instead: the
  * leaf, every call between it and the supplier (the supplier's code runs inside each of them), and every ceiling
  * those calls and the supplier's own call already carried, so a nested resolution cannot shed one an earlier
  * resolution imposed.

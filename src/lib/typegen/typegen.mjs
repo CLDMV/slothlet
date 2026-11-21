@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:15-08:00 (1794874575)
+ *	@Last modified time: 2026-11-16T18:28:54-08:00 (1794882534)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -25,7 +25,7 @@
  * mode at runtime.
  *
  * The same logic is exposed three ways:
- *   - As a function: `import { generateTypes } from "@cldmv/slothlet/typegen"`
+ *   - As a function: `import { generate } from "@cldmv/slothlet/typegen"`
  *   - As a CLI: `npx slothlet typegen ./api ./types/api.d.ts MyApi`
  *   - As a CLI with no args, falling back to the `slothlet.typegen` field in
  *     the project's `package.json`.
@@ -38,7 +38,8 @@ import * as nodePath from "node:path";
 import slothlet from "@cldmv/slothlet";
 import { generateTypes as writeDeclarationFile } from "#processors/type-generator";
 import { SlothletError } from "#errors";
-import { Arrays, Objects, regExpReplace, StringMethods } from "#helpers/intrinsics";
+import { Arrays, Objects } from "#helpers/intrinsics";
+import { assertOptionKeys } from "#helpers/config-schema";
 
 // Node's built-ins, as slothlet loaded: frozen copies of their members (see helpers/platform), so code that replaces one
 // on Node's module object later does not run here.
@@ -51,67 +52,46 @@ const path = Objects.freeze({ ...nodePath });
  * the structure walk uses the loaded API and source files), writes the `.d.ts`,
  * and shuts the loaded instance down before returning.
  *
- * @param {object} options
- * @param {string} options.dir - Path to the API directory to scan (relative or absolute).
+ * @param {object} options - A key not listed here throws `INVALID_CONFIG_UNKNOWN_KEY`.
+ * @param {string} options.base - Path to the API directory to scan (relative or absolute).
  * @param {string} options.output - Path to write the `.d.ts` file to (relative or absolute).
- * @param {string} options.interfaceName - Name of the generated TypeScript interface (e.g. `"MyApi"`).
+ * @param {string} options.name - Name of the generated TypeScript interface (e.g. `"MyApi"`).
  * @param {boolean|string|object} [options.typescript] - Override TypeScript loader config. Same union accepted by `slothlet({ typescript })`: pass `true` (default mode), `"fast"` / `"strict"`, or an object like `{ mode: "fast" }`. Defaults to `{ mode: "fast" }` when omitted.
- * @param {boolean} [options.includeDocumentation=true] - Include JSDoc comments in the generated declaration.
- * @param {boolean} [options.augmentRuntime=true] - Extend `SlothletSelf` from `@cldmv/slothlet/runtime` with the
+ * @param {boolean} [options.docs=true] - Include JSDoc comments in the generated declaration.
+ * @param {boolean} [options.augment=true] - Extend `SlothletSelf` from `@cldmv/slothlet/runtime` with the
  *   generated interface, so leaves that import `self` get the api's types. Set `false` when another generated
  *   declaration in the same TypeScript program should type `self` instead.
  * @returns {Promise<{filePath: string, content: string}>} Absolute path written and the declaration content.
- * @throws {SlothletError} `INVALID_CONFIG` when `dir`, `output`, or `interfaceName` is missing or not a string.
+ * @throws {SlothletError} `INVALID_CONFIG` when `base`, `output`, or `name` is missing or not a string.
  * @public
  *
  * @example
- * import { generateTypes } from "@cldmv/slothlet/typegen";
+ * import { generate } from "@cldmv/slothlet/typegen";
  *
- * await generateTypes({
- *     dir: "./api",
+ * await generate({
+ *     base: "./api",
  *     output: "./types/api.d.ts",
- *     interfaceName: "MyApi"
+ *     name: "MyApi"
  * });
  */
-export async function generateTypes(options = {}) {
+export async function generate(options = {}) {
 	// Public API: callers may pass null / true / a primitive accidentally. JSDoc
 	// promises a SlothletError(INVALID_CONFIG) for bad input — don't let a raw
 	// TypeError escape from `options.dir` dereference.
 	if (options === null || typeof options !== "object" || Arrays.isArray(options)) {
-		throw new SlothletError(
-			"INVALID_CONFIG",
-			{
-				option: "typegen.options",
-				expected: "plain object",
-				value: options,
-				hint: "Call generateTypes({ dir, output, interfaceName }) with an options object.",
-				validationError: true
-			},
-			null,
-			{ validationError: true }
-		);
+		throw new SlothletError("INVALID_CONFIG", { option: "typegen.options", expected: "plain object", value: options });
 	}
 
-	assertOption(options.dir, "dir");
+	assertOptionKeys(options, "typegen.generate");
+	assertOption(options.base, "base");
 	assertOption(options.output, "output");
-	assertOption(options.interfaceName, "interfaceName");
-	if (options.augmentRuntime !== undefined && typeof options.augmentRuntime !== "boolean") {
-		throw new SlothletError(
-			"INVALID_CONFIG",
-			{
-				option: "typegen.augmentRuntime",
-				expected: "boolean",
-				value: options.augmentRuntime,
-				hint: "Pass augmentRuntime: false to leave `self` untyped by this declaration, or omit it.",
-				validationError: true
-			},
-			null,
-			{ validationError: true }
-		);
+	assertOption(options.name, "name");
+	if (options.augment !== undefined && typeof options.augment !== "boolean") {
+		throw new SlothletError("INVALID_CONFIG", { option: "typegen.augment", expected: "boolean", value: options.augment });
 	}
 
 	const api = await slothlet({
-		base: path.resolve(options.dir),
+		base: path.resolve(options.base),
 		mode: "eager",
 		typescript: options.typescript ?? { mode: "fast" }
 	});
@@ -119,9 +99,9 @@ export async function generateTypes(options = {}) {
 	try {
 		const result = await writeDeclarationFile(api, {
 			output: path.resolve(options.output),
-			interfaceName: options.interfaceName,
-			includeDocumentation: options.includeDocumentation ?? true,
-			augmentRuntime: options.augmentRuntime ?? true
+			interfaceName: options.name,
+			includeDocumentation: options.docs ?? true,
+			augmentRuntime: options.augment ?? true
 		});
 		return { filePath: result.filePath, content: result.output };
 	} finally {
@@ -139,27 +119,6 @@ export async function generateTypes(options = {}) {
  */
 function assertOption(value, name) {
 	if (typeof value !== "string" || value.length === 0) {
-		throw new SlothletError(
-			"INVALID_CONFIG",
-			{
-				option: `typegen.${name}`,
-				expected: "non-empty string",
-				value,
-				hint: `Provide options.${name} as a non-empty string when calling generateTypes(). For the CLI, use --${camelToKebab(name)} or the matching positional argument.`,
-				validationError: true
-			},
-			null,
-			{ validationError: true }
-		);
+		throw new SlothletError("INVALID_CONFIG", { option: `typegen.${name}`, expected: "non-empty string", value });
 	}
-}
-
-/**
- * Convert a camelCase string to kebab-case (used to render flag names in error messages).
- * @param {string} s
- * @returns {string}
- * @private
- */
-function camelToKebab(s) {
-	return regExpReplace(/[A-Z]/g, s, (m) => `-${StringMethods.toLowerCase(m)}`);
 }

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T00:00:00-08:00 (1794729600)
+ *	@Last modified time: 2026-11-16T18:28:06-08:00 (1794882486)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -40,15 +40,17 @@ describe.each(["eager", "lazy"])("the api and self.slothlet as plain objects in 
 		const slothlet = mod.default ?? mod.slothlet;
 		const BASE = new URL("/" + fixtureRel + "/", location.origin).href;
 		const api = await slothlet({
-			platform: "browser",
 			base: BASE,
-			manifest,
-			resolveModuleSpecifier: ({ path }) => new URL(path, BASE).href,
+			loader: {
+				platform: "browser",
+				files: manifest,
+				resolve: ({ path }) => new URL(path, BASE).href
+			},
 			mode,
 			silent: true,
 			diagnostics: true,
 			...(permissions
-				? { permissions: { defaultPolicy: "allow", rules: [{ caller: "viewer.**", target: "slothlet.diag", effect: "deny" }] } }
+				? { permissions: { policy: "allow", rules: [{ caller: "viewer.**", target: "slothlet.diag", effect: "deny" }] } }
 				: {})
 		});
 		await api.viewer;

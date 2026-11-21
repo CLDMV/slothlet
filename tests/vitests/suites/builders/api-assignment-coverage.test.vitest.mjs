@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:23-07:00 (1791091703)
+ *	@Last modified time: 2026-11-16T18:28:45-08:00 (1794882525)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -37,11 +37,11 @@ describe("ApiAssignment collision-mode arm coverage", () => {
 		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", silent: true });
 		const assignment = resolveWrapper(api.math).slothlet.builders.apiAssignment;
 		// Case 2 (collision detection): existing !== undefined, no collisionModeOverride, so the
-		// resolved mode comes from config.collision[collisionContext] ("skip") — the middle arm.
+		// resolved mode comes from config.api.collision.mode[collisionContext] ("skip") — the middle arm.
 		const target = { foo: "old" };
 		const result = await assignment.assignToApiPath(target, "foo", "new", {
 			useCollisionDetection: true,
-			config: { collision: { initial: "skip" } },
+			config: { api: { collision: { mode: { initial: "skip" } } } },
 			collisionContext: "initial"
 		});
 		// "skip" keeps the existing value and reports false.
@@ -58,7 +58,7 @@ describe("ApiAssignment collision-mode arm coverage", () => {
 		const target = { foo: "old" };
 		const result = await assignment.assignToApiPath(target, "foo", "new", {
 			useCollisionDetection: true,
-			config: { collision: {} },
+			config: { api: { collision: { mode: {} } } },
 			collisionContext: "initial"
 		});
 		// "merge" between two plain, non-object primitives can't actually merge, so it falls through

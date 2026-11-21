@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:17:38-08:00 (1794874658)
+ *	@Last modified time: 2026-11-16T18:31:11-08:00 (1794882671)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -18,7 +18,7 @@
  *
  * @description
  * `normalizeTypeScript()` must carry every documented option — `target`, `sourcemap`, and the
- * strict-mode options `module`, `strict`, `compilerOptions` — through to the normalized config,
+ * strict-mode options `module`, `strict`, `compiler` — through to the normalized config,
  * and reject a value of the wrong type with INVALID_CONFIG (both directly and through the real
  * `slothlet({...})` config path).
  *
@@ -52,11 +52,11 @@ afterEach(async () => {
 });
 
 describe("normalizeTypeScript — option pass-through", () => {
-	it("carries module, strict and compilerOptions through the object form", () => {
+	it("carries module, strict and compiler through the object form", () => {
 		const cfg = new Config(makeMock());
-		const compilerOptions = { noUnusedLocals: true };
-		const result = cfg.normalizeTypeScript({ mode: "strict", module: "esnext", strict: false, compilerOptions });
-		expect(result).toMatchObject({ enabled: true, mode: "strict", module: "esnext", strict: false, compilerOptions });
+		const compiler = { noUnusedLocals: true };
+		const result = cfg.normalizeTypeScript({ mode: "strict", module: "esnext", strict: false, compiler });
+		expect(result).toMatchObject({ enabled: true, mode: "strict", module: "esnext", strict: false, compiler });
 	});
 
 	it("keeps sourcemap: true", () => {
@@ -66,7 +66,7 @@ describe("normalizeTypeScript — option pass-through", () => {
 
 	it("is idempotent on an already-normalized config", () => {
 		const cfg = new Config(makeMock());
-		const once = cfg.normalizeTypeScript({ mode: "strict", module: "esnext", strict: false, compilerOptions: { noUnusedLocals: true } });
+		const once = cfg.normalizeTypeScript({ mode: "strict", module: "esnext", strict: false, compiler: { noUnusedLocals: true } });
 		expect(cfg.normalizeTypeScript(once)).toEqual(once);
 	});
 });
@@ -77,9 +77,9 @@ describe("normalizeTypeScript — INVALID_CONFIG", () => {
 		["module", 99],
 		["strict", "no"],
 		["sourcemap", "inline"],
-		["compilerOptions", "noUnusedLocals"],
-		["compilerOptions", ["noUnusedLocals"]],
-		["compilerOptions", new Map()]
+		["compiler", "noUnusedLocals"],
+		["compiler", ["noUnusedLocals"]],
+		["compiler", new Map()]
 	];
 
 	it.each(cases)("rejects typescript.%s = %o", (option, value) => {
@@ -97,7 +97,7 @@ describe("normalizeTypeScript — INVALID_CONFIG", () => {
 		expect(() => cfg.normalizeTypeScript({ mode: "strict", strict: value })).toThrow(
 			expect.objectContaining({
 				code: "INVALID_CONFIG",
-				context: expect.objectContaining({ option: "typescript.strict", value: reported })
+				details: expect.objectContaining({ option: "typescript.strict", value: reported })
 			})
 		);
 	});
@@ -105,7 +105,7 @@ describe("normalizeTypeScript — INVALID_CONFIG", () => {
 	it("rejects an invalid option through slothlet()", async () => {
 		await withSuppressedSlothletErrorOutput(async () => {
 			await expect(
-				slothlet({ dir: "./api_tests/api_test_typescript", silent: true, typescript: { mode: "fast", strict: "yes" } })
+				slothlet({ base: "./api_tests/api_test_typescript", silent: true, typescript: { mode: "fast", strict: "yes" } })
 			).rejects.toMatchObject({ code: "INVALID_CONFIG" });
 		});
 	});

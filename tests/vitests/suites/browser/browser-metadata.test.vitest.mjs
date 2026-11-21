@@ -17,13 +17,13 @@
  * @fileoverview Integration tests for the metadata system in browser mode.
  *
  * @description
- * Browser mode resolves caller identity via wrapper metadata (`____slothletInternal`), not stack traces. The existing Playwright smoke verifies only that `typeof api.slothlet.metadata === "object"` and that `getFor("math.add")` returns an object — it does not assert metadata write/read round-trips, `setGlobal`, or `caller()` from inside a leaf. A regression here would silently break plugin-manifest storage, runtime metadata tagging, and any code that calls `self.slothlet.metadata.caller()` to identify its invoker.
+ * Browser mode resolves caller identity via wrapper metadata (`____slothletInternal`), not stack traces. The existing Playwright smoke verifies only that `typeof api.slothlet.metadata === "object"` and that `getFor("math.add")` returns an object — it does not assert metadata write/read round-trips, `metadata.global`, or `caller()` from inside a leaf. A regression here would silently break plugin-manifest storage, runtime metadata tagging, and any code that calls `self.slothlet.metadata.caller()` to identify its invoker.
  *
  * Covers (all under `platform:"browser"`, which forces the live runtime via manifest-based loading):
  * - `getFor` returns a plain object for a known path with no metadata set (returns `{}`)
  * - `getFor` returns the correct merged object after `setFor` writes to that path
- * - `setGlobal` (string-key form) is reflected in a subsequent `getFor` call
- * - `setGlobal` (object form) is reflected in a subsequent `getFor` call
+ * - `metadata.global` (string-key form) is reflected in a subsequent `getFor` call
+ * - `metadata.global` (object form) is reflected in a subsequent `getFor` call
  * - path-level `setFor` metadata is inherited by a descendant path via `getFor`
  * - `caller()` called from inside `api.probe.caller()` returns `null` (the test is not a slothlet function — no tracked caller in context)
  * - `getForVersion`: no versioned fixture exists in `api_test_browser`; `getForVersion` on a non-versioned path returns `{}` (the no-version/default path)
@@ -66,7 +66,7 @@ describe.each(getBrowserMatrixConfigs())("Browser Mode > metadata > $name", ({ c
 	it("getFor returns an object for a known path with no metadata set", async () => {
 		api = await slothlet(browserCfg(config));
 
-		const meta = api.slothlet.metadata.getFor("math.add");
+		const meta = api.slothlet.metadata.get("math.add");
 		expect(meta).toBeDefined();
 		expect(typeof meta).toBe("object");
 		expect(meta).not.toBeNull();
@@ -77,7 +77,7 @@ describe.each(getBrowserMatrixConfigs())("Browser Mode > metadata > $name", ({ c
 	it("getFor returns {} for a path that does not exist in the fixture", async () => {
 		api = await slothlet(browserCfg(config));
 
-		const meta = api.slothlet.metadata.getFor("nonexistent.path.deep");
+		const meta = api.slothlet.metadata.get("nonexistent.path.deep");
 		expect(meta).toEqual({});
 	});
 
@@ -86,10 +86,10 @@ describe.each(getBrowserMatrixConfigs())("Browser Mode > metadata > $name", ({ c
 	it("setFor write is reflected in a subsequent getFor read", async () => {
 		api = await slothlet(browserCfg(config));
 
-		api.slothlet.metadata.setFor("math", "category", "arithmetic");
-		api.slothlet.metadata.setFor("math", "version", "2.0.0");
+		api.slothlet.metadata.set("math", "category", "arithmetic");
+		api.slothlet.metadata.set("math", "version", "2.0.0");
 
-		const meta = api.slothlet.metadata.getFor("math");
+		const meta = api.slothlet.metadata.get("math");
 		expect(meta.category).toBe("arithmetic");
 		expect(meta.version).toBe("2.0.0");
 	});
@@ -97,9 +97,9 @@ describe.each(getBrowserMatrixConfigs())("Browser Mode > metadata > $name", ({ c
 	it("setFor (object form) write is reflected in a subsequent getFor read", async () => {
 		api = await slothlet(browserCfg(config));
 
-		api.slothlet.metadata.setFor("auth", { role: "gateway", plugin: "auth-core" });
+		api.slothlet.metadata.set("auth", { role: "gateway", plugin: "auth-core" });
 
-		const meta = api.slothlet.metadata.getFor("auth");
+		const meta = api.slothlet.metadata.get("auth");
 		expect(meta.role).toBe("gateway");
 		expect(meta.plugin).toBe("auth-core");
 	});
@@ -108,19 +108,19 @@ describe.each(getBrowserMatrixConfigs())("Browser Mode > metadata > $name", ({ c
 		api = await slothlet(browserCfg(config));
 
 		// Set at the parent "math" — should be visible at "math.add" via ancestor merge
-		api.slothlet.metadata.setFor("math", "category", "arithmetic");
+		api.slothlet.metadata.set("math", "category", "arithmetic");
 
-		const childMeta = api.slothlet.metadata.getFor("math.add");
+		const childMeta = api.slothlet.metadata.get("math.add");
 		expect(childMeta.category).toBe("arithmetic");
 	});
 
 	it("setFor at a child path overrides the parent entry for the same key", async () => {
 		api = await slothlet(browserCfg(config));
 
-		api.slothlet.metadata.setFor("math", { category: "arithmetic", version: "1.0.0" });
-		api.slothlet.metadata.setFor("math.add", { version: "2.0.0", specific: true });
+		api.slothlet.metadata.set("math", { category: "arithmetic", version: "1.0.0" });
+		api.slothlet.metadata.set("math.add", { version: "2.0.0", specific: true });
 
-		const meta = api.slothlet.metadata.getFor("math.add");
+		const meta = api.slothlet.metadata.get("math.add");
 		expect(meta.category).toBe("arithmetic"); // inherited from parent
 		expect(meta.version).toBe("2.0.0"); // overridden at child
 		expect(meta.specific).toBe(true); // set at child
@@ -129,58 +129,58 @@ describe.each(getBrowserMatrixConfigs())("Browser Mode > metadata > $name", ({ c
 	it("setFor does not expose system metadata fields (filePath, moduleID, etc.)", async () => {
 		api = await slothlet(browserCfg(config));
 
-		api.slothlet.metadata.setFor("math", "category", "arithmetic");
+		api.slothlet.metadata.set("math", "category", "arithmetic");
 
-		const meta = api.slothlet.metadata.getFor("math");
+		const meta = api.slothlet.metadata.get("math");
 		expect(meta.filePath).toBeUndefined();
 		expect(meta.moduleID).toBeUndefined();
 		expect(meta.apiPath).toBeUndefined();
 		expect(meta.taggedAt).toBeUndefined();
 	});
 
-	// ── setGlobal + getFor ───────────────────────────────────────────────────────
+	// ── metadata.global + getFor ───────────────────────────────────────────────────────
 
-	it("setGlobal (string-key form) is visible via getFor on any path", async () => {
+	it("metadata.global (string-key form) is visible via getFor on any path", async () => {
 		api = await slothlet(browserCfg(config));
 
-		api.slothlet.metadata.setGlobal("env", "browser-test");
+		api.slothlet.metadata.global("env", "browser-test");
 
-		const mathMeta = api.slothlet.metadata.getFor("math");
+		const mathMeta = api.slothlet.metadata.get("math");
 		expect(mathMeta.env).toBe("browser-test");
 
-		const authMeta = api.slothlet.metadata.getFor("auth");
+		const authMeta = api.slothlet.metadata.get("auth");
 		expect(authMeta.env).toBe("browser-test");
 	});
 
-	it("setGlobal (object form) is visible via getFor on any path", async () => {
+	it("metadata.global (object form) is visible via getFor on any path", async () => {
 		api = await slothlet(browserCfg(config));
 
-		api.slothlet.metadata.setGlobal({ build: "ci", region: "us" });
+		api.slothlet.metadata.global({ build: "ci", region: "us" });
 
-		const meta = api.slothlet.metadata.getFor("math.add");
+		const meta = api.slothlet.metadata.get("math.add");
 		expect(meta.build).toBe("ci");
 		expect(meta.region).toBe("us");
 	});
 
-	it("setFor key overrides setGlobal key at the same name", async () => {
+	it("setFor key overrides metadata.global key at the same name", async () => {
 		api = await slothlet(browserCfg(config));
 
-		api.slothlet.metadata.setGlobal("version", "global-1");
-		api.slothlet.metadata.setFor("math", "version", "path-2");
+		api.slothlet.metadata.global("version", "global-1");
+		api.slothlet.metadata.set("math", "version", "path-2");
 
-		const meta = api.slothlet.metadata.getFor("math");
+		const meta = api.slothlet.metadata.get("math");
 		// path-level wins over global
 		expect(meta.version).toBe("path-2");
 	});
 
-	it("setGlobal is live — an update is reflected immediately in getFor", async () => {
+	it("metadata.global is live — an update is reflected immediately in getFor", async () => {
 		api = await slothlet(browserCfg(config));
 
-		api.slothlet.metadata.setGlobal("counter", 1);
-		expect(api.slothlet.metadata.getFor("math").counter).toBe(1);
+		api.slothlet.metadata.global("counter", 1);
+		expect(api.slothlet.metadata.get("math").counter).toBe(1);
 
-		api.slothlet.metadata.setGlobal("counter", 2);
-		expect(api.slothlet.metadata.getFor("math").counter).toBe(2);
+		api.slothlet.metadata.global("counter", 2);
+		expect(api.slothlet.metadata.get("math").counter).toBe(2);
 	});
 
 	// ── caller() from inside a browser-mode leaf ────────────────────────────────
@@ -200,13 +200,13 @@ describe.each(getBrowserMatrixConfigs())("Browser Mode > metadata > $name", ({ c
 
 	it("getForVersion returns {} for a non-versioned path (no versioned fixture in browser fixture)", async () => {
 		// FINDING: api_test_browser has no versioned modules. getForVersion requires a
-		// registered versionManager entry (api.slothlet.metadata.getForVersion(logicalPath, versionTag)).
+		// registered versionManager entry (api.slothlet.metadata.get(logicalPath, { version: versionTag })).
 		// When versionManager.list(logicalPath) returns falsy or has no matching versionTag,
 		// the implementation returns {}. This tests the no-version/default path rather than
 		// fabricating a passing test against a fixture that does not exist.
 		api = await slothlet(browserCfg(config));
 
-		const meta = api.slothlet.metadata.getForVersion("math", "v1");
+		const meta = api.slothlet.metadata.get("math", { version: "v1" });
 		expect(meta).toBeDefined();
 		expect(typeof meta).toBe("object");
 		expect(meta).not.toBeNull();

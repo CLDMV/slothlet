@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-13T23:21:06-08:00 (1794640866)
+ *	@Last modified time: 2026-11-16T18:30:16-08:00 (1794882616)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -36,8 +36,8 @@ const FIXTURE = resolve("api_tests/api_test_api_node_default_data");
 const MODES = ["eager", "lazy"];
 const RUNTIMES = ["async", "live"];
 const PERMISSIONS = [
-	{ name: "permissions on, precise", permissions: { mode: "on", defaultPolicy: "allow", attribution: "precise" } },
-	{ name: "permissions on, fast", permissions: { mode: "on", defaultPolicy: "allow", attribution: "fast" } },
+	{ name: "permissions on, precise", permissions: { mode: "on", policy: "allow", caller: { attribution: "precise" } } },
+	{ name: "permissions on, fast", permissions: { mode: "on", policy: "allow", caller: { attribution: "fast" } } },
 	{ name: "permissions off", permissions: { mode: "off" } },
 	{ name: "permissions disabled", permissions: { mode: "disabled" } }
 ];
@@ -56,7 +56,7 @@ const COLLECTIONS = ["dmap", "dset"];
  */
 async function mount(options) {
 	const api = await slothlet({ base: join(FIXTURE, "host"), silent: true, hook: true, ...options });
-	for (const name of ["single", "reader", "writer"]) await api.slothlet.api.add(name, join(FIXTURE, name), { moduleID: name });
+	for (const name of ["single", "reader", "writer"]) await api.slothlet.api.add(name, join(FIXTURE, name), { id: name });
 	for (const name of ["single", "reader", "writer"]) await api[name];
 	for (const key of COLLECTIONS) await api.single[key];
 	return api;

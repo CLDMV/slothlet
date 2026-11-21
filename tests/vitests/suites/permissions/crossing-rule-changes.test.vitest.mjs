@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-12T02:00:45-08:00 (1794477645)
+ *	@Last modified time: 2026-11-16T18:29:36-08:00 (1794882576)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -68,10 +68,10 @@ describe.each(matrix)("crossing views follow runtime rule changes > $mode / $run
 			silent: true,
 			mode,
 			runtime,
-			permissions: { defaultPolicy: "allow", attribution, rules }
+			permissions: { policy: "allow", caller: { attribution }, rules }
 		});
-		await api.slothlet.api.add("owner", join(FIXTURE, "owner"), { moduleID: "owner" });
-		await api.slothlet.api.add("reader", join(FIXTURE, "reader"), { moduleID: "reader" });
+		await api.slothlet.api.add("owner", join(FIXTURE, "owner"), { id: "owner" });
+		await api.slothlet.api.add("reader", join(FIXTURE, "reader"), { id: "reader" });
 		await api.owner;
 		await api.reader;
 	}
@@ -84,10 +84,10 @@ describe.each(matrix)("crossing views follow runtime rule changes > $mode / $run
 	it("hands the function a view was first made for the value itself once a rule grants it the writes", async () => {
 		await mount();
 		expect(await api.reader.plain("__a1_")).toEqual(VIEWED);
-		const ids = allowWrites("plain").map((rule) => api.slothlet.permissions.addRule(rule));
+		const ids = allowWrites("plain").map((rule) => api.slothlet.permissions.rules.add(rule));
 		expect(await api.reader.plain("__a2_")).toEqual(ITSELF);
 		expect(await api.owner.landed("__a")).toEqual(["2_"]);
-		for (const id of ids) api.slothlet.permissions.removeRule(id);
+		for (const id of ids) api.slothlet.permissions.rules.remove(id);
 		expect(await api.reader.plain("__a3_")).toEqual(VIEWED);
 		expect(await api.owner.landed("__a")).toEqual([]);
 	});
@@ -97,36 +97,36 @@ describe.each(matrix)("crossing views follow runtime rule changes > $mode / $run
 		// `plain` reads first, so the view is made for it; `writer` is then decided against the same view.
 		expect(await api.reader.plain("__b1_")).toEqual(VIEWED);
 		expect(await api.reader.writer("__b2_")).toEqual(VIEWED);
-		const ids = allowWrites("writer").map((rule) => api.slothlet.permissions.addRule(rule));
+		const ids = allowWrites("writer").map((rule) => api.slothlet.permissions.rules.add(rule));
 		expect(await api.reader.writer("__b3_")).toEqual(ITSELF);
 		// The function no rule names is still handed the view.
 		expect(await api.reader.plain("__b4_")).toEqual(VIEWED);
 		expect(await api.owner.landed("__b")).toEqual(["3_"]);
-		for (const id of ids) api.slothlet.permissions.removeRule(id);
+		for (const id of ids) api.slothlet.permissions.rules.remove(id);
 		expect(await api.reader.writer("__b5_")).toEqual(VIEWED);
 		expect(await api.reader.plain("__b6_")).toEqual(VIEWED);
 	});
 
 	it("hands a function a view again once the rule that granted it the writes is removed, and the value itself when it is added back", async () => {
 		await mount();
-		const first = allowWrites("writer").map((rule) => api.slothlet.permissions.addRule(rule));
+		const first = allowWrites("writer").map((rule) => api.slothlet.permissions.rules.add(rule));
 		expect(await api.reader.writer("__c1_")).toEqual(ITSELF);
 		expect(await api.reader.plain("__c2_")).toEqual(VIEWED);
-		for (const id of first) api.slothlet.permissions.removeRule(id);
+		for (const id of first) api.slothlet.permissions.rules.remove(id);
 		expect(await api.reader.writer("__c3_")).toEqual(VIEWED);
-		const second = allowWrites("writer").map((rule) => api.slothlet.permissions.addRule(rule));
+		const second = allowWrites("writer").map((rule) => api.slothlet.permissions.rules.add(rule));
 		expect(await api.reader.writer("__c4_")).toEqual(ITSELF);
 		expect(await api.owner.landed("__c")).toEqual(["1_", "4_"]);
-		for (const id of second) api.slothlet.permissions.removeRule(id);
+		for (const id of second) api.slothlet.permissions.rules.remove(id);
 	});
 
 	it("decides again when the permission system is switched off and on", async () => {
 		await mount(allowWrites("writer"));
 		expect(await api.reader.plain("__d1_")).toEqual(VIEWED);
-		api.slothlet.permissions.control.disable();
+		api.slothlet.permissions.control.mode("off");
 		// Off: nothing is viewed and no write is refused on ownership.
 		expect(await api.reader.plain("__d2_")).toEqual(ITSELF);
-		api.slothlet.permissions.control.enable();
+		api.slothlet.permissions.control.mode("on");
 		expect(await api.reader.plain("__d3_")).toEqual(VIEWED);
 		expect(await api.reader.writer("__d4_")).toEqual(ITSELF);
 		expect(await api.owner.landed("__d")).toEqual(["2_", "4_"]);

@@ -255,7 +255,7 @@ api.greet.VERSION; // ✅ named export attached as a property
 **Behavior**: Files with a default export (C02) are preserved as their own named namespace. Files without a default export (C03) have their named exports hoisted directly into the parent folder namespace — the file's own intermediate namespace is dissolved.
 **Processing Path**: C02 → `preserveAsNamespace: true`; C03 → `flattenToRoot: true` (keys merged into `targetApi`)
 
-> **Bug Fix (PR [#116](https://github.com/CLDMV/slothlet/pull/116))**: Prior to this fix, C03 fell through to standard namespace wrapping, causing named-only files to appear nested under a `filename` sub-namespace (e.g. `api.notifications.helpers.formatPhone`) instead of being hoisted to the folder level (`api.notifications.formatPhone`). If you depend on the pre-fix nested behavior and need time to migrate, you can temporarily restore it with `suppressFixes: ["C03_116"]` — see [Bug-Fix Suppression](../docs/CONFIGURATION.md#bug-fix-suppression-suppressfixes) in the configuration docs. This option will be removed in v4.
+> **Bug Fix (PR [#116](https://github.com/CLDMV/slothlet/pull/116))**: Prior to this fix, C03 fell through to standard namespace wrapping, causing named-only files to appear nested under a `filename` sub-namespace (e.g. `api.notifications.helpers.formatPhone`) instead of being hoisted to the folder level (`api.notifications.formatPhone`). The pre-fix nesting cannot be restored in v4.
 
 **Verified Examples**:
 
@@ -572,8 +572,10 @@ const api = await slothlet({
 	base: "./api",
 	api: {
 		collision: {
-			initial: "merge", // During initial API build
-			api: "replace" // During api.slothlet.api.add()
+			mode: {
+				initial: "merge", // During initial API build
+				api: "replace" // During api.slothlet.api.add()
+			}
 		}
 	}
 });
@@ -581,29 +583,29 @@ const api = await slothlet({
 
 ### moduleID Tracking
 
-Each `api.slothlet.api.add()` call accepts an optional `moduleID` in its options object (the third argument — `api.add(apiPath, folderPath, options, versionConfig?)`; the optional fourth argument is `versionConfig` for versioned mounts, not a second options bag). This is the key for ownership tracking:
+Each `api.slothlet.api.add()` call accepts an optional `id` (the module id) in its options object, the third argument: `api.add(path, source, options)`. Versioned mounts put their version under `options.version`. The module id is the key for ownership tracking:
 
 ```javascript
 // Module A registers plugins namespace
 await api.slothlet.api.add("plugins.moduleA", "./modules/moduleA", {
-	moduleID: "moduleA"
+	id: "moduleA"
 });
 
 // Module B registers in the same parent namespace
 await api.slothlet.api.add("plugins.moduleB", "./modules/moduleB", {
-	moduleID: "moduleB"
+	id: "moduleB"
 });
 
 // Hot-reload Module A - ownership system allows this because moduleA owns these paths
 await api.slothlet.api.add("plugins.moduleA", "./modules/moduleA-v2", {
-	moduleID: "moduleA",
-	forceOverwrite: true
+	id: "moduleA",
+	collision: { force: true }
 });
 
 // Cross-module overwrite - blocked if the instance's configured collision mode is "error"
 await api.slothlet.api.add("plugins.moduleB", "./modules/other", {
-	moduleID: "moduleA", // moduleA does not own moduleB's paths
-	forceOverwrite: true // Throws OWNERSHIP_CONFLICT when the instance's collision mode is "error"
+	id: "moduleA", // moduleA does not own moduleB's paths
+	collision: { force: true } // Throws OWNERSHIP_CONFLICT when the instance's collision mode is "error"
 });
 ```
 
@@ -619,7 +621,7 @@ await api.slothlet.api.remove("module-b");
 
 ### Collision Modes
 
-Collision mode is fixed at instance initialization (the `collision` config option — see [CONFIGURATION.md](CONFIGURATION.md)). Passing `collisionMode` to an individual `api.add()` call is locked by default — it emits a `WARNING_API_ADD_OPTION_LOCKED` warning and is ignored (the add still succeeds), unless `api.mutations.allowCollisionOverride: true` is set, which makes a per-call `collisionMode` take effect. `forceOverwrite` (below) is the always-available per-call escape hatch regardless of that flag.
+Collision mode is fixed at instance initialization (the `api.collision.mode` config option — see [CONFIGURATION.md](CONFIGURATION.md)). Passing `collision.mode` to an individual `api.add()` call is locked by default — it emits a `WARNING_COLLISION_OPTION_LOCKED` warning and is ignored (the add still succeeds), unless `api.collision.override: true` is set, which makes a per-call `collision.mode` take effect. `collision.force` (below) is the always-available per-call escape hatch regardless of that flag.
 
 | Mode                | Behavior                                   |
 | ------------------- | ------------------------------------------ |
@@ -630,14 +632,14 @@ Collision mode is fixed at instance initialization (the `collision` config optio
 | `"warn"`            | Keep existing value, log a warning         |
 | `"error"`           | Throw `OWNERSHIP_CONFLICT` error           |
 
-### forceOverwrite
+### collision.force
 
-`forceOverwrite: true` performs a complete replacement regardless of the instance's configured collision mode (a `moduleID` is auto-generated when you don't supply one). Use for cases where a module must fully replace its own prior registration:
+`collision: { force: true }` performs a complete replacement regardless of the instance's configured collision mode (a module id is generated when you don't supply one). Use for cases where a module must fully replace its own prior registration:
 
 ```javascript
 await api.slothlet.api.add("config", "./new-config", {
-	moduleID: "config-v2",
-	forceOverwrite: true
+	id: "config-v2",
+	collision: { force: true }
 });
 ```
 
@@ -711,7 +713,7 @@ api.e.a(); // ✅ as addfolder/e/e.mjs builds it (not api.e.e.a)
 
 The direct child is composed by the same rules in eager and lazy mode before it is hoisted: a folder of one generic file (`e/main.mjs` or `e/e/main.mjs`, [Rule 10](#rule-10-generic-filename-parent-level-promotion)) mounted at `e` is `api.e.a`, a callable self-named file with a sibling (`e/e.mjs` default + `e/y.mjs`) is `api.e()` and `api.e.y`.
 
-Every node records the path it is placed at, after the hoist: `api.e.a.__metadata.apiPath === "e.a"`, and permission rules and hooks name `e.a`.
+Every node records the path it is placed at, after the hoist: `api.slothlet.node(api.e.a).path` is `["e", "a"]`, and permission rules and hooks name `e.a`.
 
 **Childless leaf case**: When the matching key's value has no children of its own — a single self-named file such as `thing.mjs` exporting a function named `thing`, mounted at `api.add("thing", folder)` — there is nothing to spread up from it. The value itself is what belongs at the mount path, so Rule 13 uses it directly rather than hoisting an empty set of children:
 
@@ -750,7 +752,7 @@ api.thing("x"); // ✅ the leaf itself, mounted directly (nothing to hoist)
 **Status**: ✅ Implemented (`src/lib/helpers/module-discovery.mjs`, `src/lib/helpers/module-manifest-validator.mjs`)
 **Conditions**: [G09–G14](API-RULES/API-DISCOVERY-CONDITIONS.md#g09-reserved-mountpath-root-rejection) — Reserved MountPath-Root Rejection, External-Module Validity Gate, Real-Path Dedupe & Duplicate `name@version`, Content-Filter Veto, ScanRoot Mode Auto-Detect, CJS Interop Export Shaping
 
-**Purpose**: Governs which installed packages / external modules become part of the api during `discover()` / `addModules()`. A candidate must have a valid `package.json` and resolvable manifest, must not duplicate a `name@version` at a different real path, must survive the consumer content-filter, and must not claim a reserved mount root. npm-mode vs folder-mode scanning selects the candidate universe.
+**Purpose**: Governs which installed packages / external modules become part of the api during `discover()` / `modules.add([...])`. A candidate must have a valid `package.json` and resolvable manifest, must not duplicate a `name@version` at a different real path, must survive the consumer content-filter, and must not claim a reserved mount root. npm-mode vs folder-mode scanning selects the candidate universe.
 
 ---
 
@@ -774,9 +776,9 @@ api.thing("x"); // ✅ the leaf itself, mounted directly (nothing to hoist)
 
 **Category**: Composition
 **Status**: ✅ Implemented (`src/lib/handlers/ownership.mjs`, `src/lib/builders/api-assignment.mjs`, `src/lib/handlers/api-manager.mjs`)
-**Conditions**: [O01–O13](API-RULES/API-COLLISION-CONDITIONS.md) — the six collision modes (`merge`, `merge-replace`, `replace`, `skip`, `warn`, `error`), `forceOverwrite`, Merge-Loss, Namespace-vs-Callable, Wrapper/Plain fall-throughs, `removeMissing`, Load Order, Mount Preflight
+**Conditions**: [O01–O13](API-RULES/API-COLLISION-CONDITIONS.md) — the six collision modes (`merge`, `merge-replace`, `replace`, `skip`, `warn`, `error`), `collision.force`, Merge-Loss, Namespace-vs-Callable, Wrapper/Plain fall-throughs, `removeMissing`, Load Order, Mount Preflight
 
-**Purpose**: Governs which value wins when two contributions land at the same api path. The six collision modes are the primary policy; `forceOverwrite` overrides per call; merge-loss and the wrapper/plain shape fall-throughs resolve mixed shapes; load order sets precedence. Ownership tracking, the ownership stack, and rollback stay with [Rule 12](#rule-12-module-ownership-and-selective-api-overwriting).
+**Purpose**: Governs which value wins when two contributions land at the same api path. The six collision modes are the primary policy; `collision.force` overrides per call; merge-loss and the wrapper/plain shape fall-throughs resolve mixed shapes; load order sets precedence. Ownership tracking, the ownership stack, and rollback stay with [Rule 12](#rule-12-module-ownership-and-selective-api-overwriting).
 
 **Note**: `warn` is intentionally context-dependent — a cross-module conflict keeps the existing owner, an intra-build file/folder collision merges (see O05).
 
@@ -814,7 +816,7 @@ api.thing("x"); // ✅ the leaf itself, mounted directly (nothing to hoist)
 
 **Category**: Routines
 **Status**: ✅ Implemented (`src/lib/handlers/routine-manager.mjs`)
-**Conditions**: [T01–T10](API-RULES/API-ROUTINE-CONDITIONS.md) — `stackRoutines` Gate, Name Matching, Slot-Type Selection, Last-Wins, Cascade-Slot Exclusivity, `cascade:false` Suppression, Root-Builtin Exclusion, Execution Order, `.for`/`.contributors` Surface, Return Shape
+**Conditions**: [T01–T10](API-RULES/API-ROUTINE-CONDITIONS.md) — `routines.stack` Gate, Name Matching, Slot-Type Selection, Last-Wins, Cascade-Slot Exclusivity, `cascade:false` Suppression, Root-Builtin Exclusion, Execution Order, `.for`/`.contributors` Surface, Return Shape
 
 **Purpose**: Governs how contributions to a named routine are collected and whether an api slot becomes a plain value, a per-path stacked callable, or a root cascade callable — including the contributor gate, name matching, execution order, and the scalar-vs-array return shape.
 
@@ -826,7 +828,7 @@ api.thing("x"); // ✅ the leaf itself, mounted directly (nothing to hoist)
 
 **Category**: Built-in
 **Status**: ✅ Implemented (`src/lib/builders/api_builder.mjs`)
-**Conditions**: [B01–B04](API-RULES/API-BUILTIN-CONDITIONS.md) — Reserved Root Keys, `slothlet.diag` Gating, `api.add` Option Lock, `versioning.unregister` No-Op
+**Conditions**: [B01–B04](API-RULES/API-BUILTIN-CONDITIONS.md) — Reserved Root Keys, `slothlet.diag` Gating, `api.add` Option Lock, `versioning.remove` No-Op
 
 **Purpose**: Governs the framework-owned surface: reserved root keys (`slothlet` replaced with a warning; `shutdown`/`destroy` captured as user hooks and invoked), the diagnostics namespace gate, and the `api.add` option lock. Reserved-key protection at the file/export/mount layers is enforced by G08/G09 (Rules 14/15). Names the api node answers like a function (`name`, `length`, `prototype`, `toString`, `valueOf`, `toJSON`, `constructor`) are not reserved: an export, file, folder or mount of that name is an ordinary member and wins over the node's own answer (see [Module Structure](MODULE-STRUCTURE.md)).
 
@@ -859,7 +861,7 @@ api.c.z.where(); // ✅ "c.z.where"
 api.t.x.where(); // ✅ "t.x.where"        (repeats while it holds)
 ```
 
-**Recorded path**: every node records the path it is placed at (`api.e.x.where.__metadata.apiPath === "e.x.where"`), derived from the level it is placed on and the key it is assigned under. Permission rules, hooks, ownership and metadata all read that one path, so a rule or hook pattern names the path the node is called at.
+**Recorded path**: every node records the path it is placed at (`api.slothlet.node(api.e.x.where).path` is `["e", "x", "where"]`), derived from the level it is placed on and the key it is assigned under. Permission rules, hooks, ownership and metadata all read that one path, so a rule or hook pattern names the path the node is called at.
 
 **History**: 2.x collapsed these folders; 3.0.0 through 3.24.0 built both levels, and recorded a repeated segment once whether or not the tree had it (#743). 3.25.0 restores the 2.x shape and derives the recorded path from the placement.
 

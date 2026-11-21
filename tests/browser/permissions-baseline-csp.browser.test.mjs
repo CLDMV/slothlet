@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:19-08:00 (1794874579)
+ *	@Last modified time: 2026-11-16T18:29:00-08:00 (1794882540)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -35,12 +35,14 @@ const boot = async (mode) => {
 	const slothlet = mod.default ?? mod.slothlet;
 	const BASE = new URL("/" + fixtureRel + "/", location.origin).href;
 	return slothlet({
-		platform: "browser",
 		base: BASE,
-		manifest,
-		resolveModuleSpecifier: ({ path }) => new URL(path, BASE).href,
+		loader: {
+			platform: "browser",
+			files: manifest,
+			resolve: ({ path }) => new URL(path, BASE).href
+		},
 		mode: "eager",
-		permissions: { mode, defaultPolicy: "allow" }
+		permissions: { mode, policy: "allow" }
 	});
 };
 
@@ -57,9 +59,6 @@ describe("permission baseline in a browser with a Content Security Policy that r
 	let api = null;
 
 	afterEach(async () => {
-		const { SlothletWarning } = await import("@cldmv/slothlet/errors");
-		SlothletWarning.suppressConsole = false;
-		SlothletWarning.captured.length = 0;
 		await api?.shutdown?.();
 		api = null;
 	});
@@ -73,11 +72,9 @@ describe("permission baseline in a browser with a Content Security Policy that r
 	});
 
 	it("under on, starts and warns once for each check not met", async () => {
-		const { SlothletWarning } = await import("@cldmv/slothlet/errors");
-		SlothletWarning.suppressConsole = true;
 		api = await boot("on");
-		const warned = SlothletWarning.captured.filter((warning) => warning.code === "WARNING_PERMISSION_BASELINE_UNMET");
-		expect(warned.map((warning) => warning.context.check)).toEqual(MET ? [] : IDS);
+		const warned = api.slothlet.warnings.get().filter((warning) => warning.code === "WARNING_PERMISSION_BASELINE_UNMET");
+		expect(warned.map((warning) => warning.details.check)).toEqual(MET ? [] : IDS);
 		const report = api.slothlet.permissions.control.report();
 		expect(report.mode).toBe("on");
 		expect(report.baseline.met).toBe(MET);
@@ -91,7 +88,7 @@ describe("permission baseline in a browser with a Content Security Policy that r
 		if (MET) {
 			expect(started).toBe("started");
 			expect(api.slothlet.permissions.control.report().mode).toBe("strict");
-			expect(() => api.slothlet.permissions.control.disable()).toThrow(expect.objectContaining({ code: "PERMISSION_STRICT_FIXED" }));
+			expect(() => api.slothlet.permissions.control.mode("off")).toThrow(expect.objectContaining({ code: "PERMISSION_STRICT_FIXED" }));
 		} else {
 			expect(started?.code).toBe("PERMISSION_BASELINE_UNMET");
 			for (const id of IDS) expect(started.message).toContain(id);

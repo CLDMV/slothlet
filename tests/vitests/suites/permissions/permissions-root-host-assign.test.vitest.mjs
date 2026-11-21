@@ -2,12 +2,12 @@
  *
  *	@Project: @cldmv/slothlet
  *	@Filename: /tests/vitests/suites/permissions/permissions-root-host-assign.test.vitest.mjs
- *	@Date: 2026-11-16T03:00:00-08:00 (1795345200)
+ *	@Date: 2026-11-16T00:59:40-08:00 (1794819580)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T03:00:00-08:00 (1795345200)
+ *	@Last modified time: 2026-11-16T18:30:44-08:00 (1794882644)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -70,12 +70,14 @@ describe.each(matrix)(
 				runtime,
 				silent: true,
 				permissions: {
-					defaultPolicy: "deny",
-					attribution,
+					policy: "deny",
+					caller: {
+						attribution
+					},
 					rules: [{ caller: "reader.**", target: "reader.**", effect: "allow" }, ...rules]
 				}
 			});
-			for (const name of ["reader", "nested"]) await api.slothlet.api.add(name, join(FIXTURE, name), { moduleID: name });
+			for (const name of ["reader", "nested"]) await api.slothlet.api.add(name, join(FIXTURE, name), { id: name });
 			for (const name of ["reader", "nested"]) await api[name];
 			api.ownNothing = { a: 1 };
 			api.nested.ownNothing = { a: 1 };

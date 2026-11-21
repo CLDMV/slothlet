@@ -174,7 +174,7 @@ describe.each(CONFIGS)("EventEmitter tracking does not retain emitters (#611) > 
 		emitter.on("tick", foreign);
 		expect(await api.emitters.listen(emitter)).toBe(true);
 		// The module's listeners are slothlet wrappers while the instance is up.
-		expect(emitter.rawListeners("tick").some((fn) => fn._slothletOriginal === emitter.leafOn)).toBe(true);
+		expect(emitter.rawListeners("tick").some((fn) => fn.____slothletOriginal === emitter.leafOn)).toBe(true);
 
 		await api.shutdown();
 		api = null;
@@ -182,7 +182,7 @@ describe.each(CONFIGS)("EventEmitter tracking does not retain emitters (#611) > 
 		const raw = emitter.rawListeners("tick");
 		expect(raw).toHaveLength(3);
 		// No slothlet wrapper is left on the emitter.
-		expect(raw.some((fn) => fn._slothletOriginal !== undefined)).toBe(false);
+		expect(raw.some((fn) => fn.____slothletOriginal !== undefined)).toBe(false);
 		// The `on` listener is the very function the module registered; the `once` listener a plain
 		// one-shot wrapper reporting it, as Node's own does.
 		expect(raw).toContain(emitter.leafOn);
@@ -208,7 +208,7 @@ describe.each(CONFIGS)("EventEmitter tracking does not retain emitters (#611) > 
 
 		// The emitter still alive was released as usual: its wrappers swapped for what the module registered.
 		const raw = emitter.rawListeners("tick");
-		expect(raw.some((fn) => fn._slothletOriginal !== undefined)).toBe(false);
+		expect(raw.some((fn) => fn.____slothletOriginal !== undefined)).toBe(false);
 		expect(raw).toContain(emitter.leafOn);
 		expect(emitter.listeners("tick")).toEqual([emitter.leafOn, emitter.leafOnce]);
 	});

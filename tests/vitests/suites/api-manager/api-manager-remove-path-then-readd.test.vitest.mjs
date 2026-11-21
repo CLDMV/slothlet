@@ -97,12 +97,12 @@ describe.each(TEST_MATRIX)("remove(apiPath) of a base path, then an add there re
 			expect(await api.slothlet.api.remove("extra")).toBe(true);
 			expect(await readExtra(api)).toEqual({ listed: false, ping: "absent" });
 
-			await api.slothlet.api.add("extra", file, { moduleID: "em" });
+			await api.slothlet.api.add("extra", file, { id: "em" });
 			expect(await readExtra(api)).toEqual({ listed: true, ping: "extra" });
 			expect(await api.slothlet.api.remove("em")).toBe(true);
 			expect(await readExtra(api)).toEqual({ listed: false, ping: "absent" });
 
-			await api.slothlet.api.add("extra", file, { moduleID: "em" });
+			await api.slothlet.api.add("extra", file, { id: "em" });
 			expect(await readExtra(api)).toEqual({ listed: true, ping: "extra" });
 			expect(await api.slothlet.api.remove("em")).toBe(true);
 			expect(await readExtra(api)).toEqual({ listed: false, ping: "absent" });
@@ -119,7 +119,7 @@ describe.each(TEST_MATRIX)("remove(apiPath) of a base path, then an add there re
 			await api.slothlet.reload();
 			expect(await readExtra(api)).toEqual({ listed: false, ping: "absent" });
 
-			await api.slothlet.api.add("extra", file, { moduleID: "em" });
+			await api.slothlet.api.add("extra", file, { id: "em" });
 			await api.slothlet.reload();
 			expect(await readExtra(api)).toEqual({ listed: true, ping: "extra" });
 			await api.slothlet.api.remove("em");
@@ -127,7 +127,7 @@ describe.each(TEST_MATRIX)("remove(apiPath) of a base path, then an add there re
 			await api.slothlet.reload();
 			expect(await readExtra(api)).toEqual({ listed: false, ping: "absent" });
 
-			await api.slothlet.api.add("extra", file, { moduleID: "em" });
+			await api.slothlet.api.add("extra", file, { id: "em" });
 			expect(await readExtra(api)).toEqual({ listed: true, ping: "extra" });
 			await api.slothlet.reload();
 			expect(await readExtra(api)).toEqual({ listed: true, ping: "extra" });
@@ -141,7 +141,7 @@ describe.each(TEST_MATRIX)("remove(apiPath) of a base path, then an add there re
 		async () => {
 			await build();
 			put(root, "em/extra.mjs", `export function ping() { return "em"; }\nexport function pong() { return "pong"; }\n`);
-			await api.slothlet.api.add("extra", path.join(root, "em/extra.mjs"), { moduleID: "em", forceOverwrite: true });
+			await api.slothlet.api.add("extra", path.join(root, "em/extra.mjs"), { id: "em", collision: { force: true } });
 			expect(await readExtra(api)).toEqual({ listed: true, ping: "em" });
 			expect(typeof api.extra.pong).toBe("function");
 

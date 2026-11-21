@@ -24,7 +24,6 @@ export class EagerMode extends ComponentBase {
      * @param {string|null} [options.cacheBust=null] - Cache-busting value
      * @param {Function|null} [options.fileFilter=null] - Optional filter (fileName) => boolean
      * @param {string|string[]|null} [options.hidden=null] - Glob(s) hiding files/folders, matched against each entry's path relative to the API root
-     * @param {boolean} [options.scanHiddenFolders=false] - Deprecated: restore the pre-v3.11 scanning of `.`/`__`-prefixed folders
      * @param {Object|null} [options.preloadedStructure=null] - Pre-built `{ files, directories }` structure
      *   to use instead of scanning `dir` (synthetic / in-memory build, #117). Each synthetic file entry
      *   carries its exports directly so no module is loaded from disk.
@@ -37,7 +36,7 @@ export class EagerMode extends ComponentBase {
      * @example
      * const api = await slothlet.modes.eager.buildAPI({ dir: "./api", moduleID: "base" });
      */
-    public buildAPI({ dir, apiPathPrefix, collisionContext, collisionMode, moduleID, apiDepth, cacheBust, fileFilter, hidden, scanHiddenFolders, preloadedStructure, rootUnwrap }: {
+    public buildAPI({ dir, apiPathPrefix, collisionContext, collisionMode, moduleID, apiDepth, cacheBust, fileFilter, hidden, preloadedStructure, rootUnwrap }: {
         dir: string;
         apiPathPrefix?: string | undefined;
         collisionContext?: string | undefined;
@@ -47,7 +46,6 @@ export class EagerMode extends ComponentBase {
         cacheBust?: string | null | undefined;
         fileFilter?: Function | null | undefined;
         hidden?: string | string[] | null | undefined;
-        scanHiddenFolders?: boolean | undefined;
         preloadedStructure?: Object | null | undefined;
         rootUnwrap?: boolean | undefined;
     }): Promise<Object>;

@@ -99,6 +99,26 @@
 				"stub": { "to": null, "note": "Internal flag, no longer stored on the details." }
 			}
 		},
+		"versioning-list": {
+			"label": "versioning.list() entry",
+			"keys": {
+				"versionTag": "tag",
+				"moduleID": "module",
+				"versionedPath": { "to": "path", "note": "The mounted path as a segments array in v4 (`[\"v1\", \"auth\"]`)." },
+				"versionedParts": { "to": "path", "note": "Same array; `versionedPath` and `versionedParts` are one key in v4." },
+				"isDefault": "default",
+				"versionMeta": "metadata"
+			}
+		},
+		"versioning-metadata": {
+			"label": "versioning.metadata.get() result",
+			"keys": {
+				"logicalPath": {
+					"to": "path",
+					"note": "A segments array in v4 (`[\"auth\"]`). `version` and `path` are reserved in version metadata: a key of either name you supply is replaced by the injected value (v3 reserved only `logicalPath`)."
+				}
+			}
+		},
 		"diag-inspect": {
 			"label": "diag.inspect() result",
 			"keys": {

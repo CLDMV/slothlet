@@ -176,7 +176,7 @@ describe("Browser Mode > context > runtime coercion", () => {
 		// "async" browser runtime.
 		const api = await slothlet(browserCfg({ mode: "eager", runtime: "async", hook: { enabled: false }, diagnostics: true }));
 		try {
-			expect(api.slothlet.context.diagnostics().managerType).toBe("LiveContextManager");
+			expect(api.slothlet.context.diagnostics().runtime).toBe("live");
 		} finally {
 			await api.shutdown();
 		}

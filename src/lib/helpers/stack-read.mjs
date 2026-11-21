@@ -48,7 +48,7 @@
  * @internal
  */
 
-import { Error, Errors, FunctionMethods, Objects, Processes, Reflect, Symbol } from "#helpers/intrinsics";
+import { Error, Errors, FunctionMethods, Objects, Processes, PrototypeFunctions, Reflect, Symbol } from "#helpers/intrinsics";
 
 /**
  * The realm's `Error`, as slothlet loaded with it.
@@ -70,10 +70,7 @@ const GLOBAL = globalThis;
  * @type {Function|null}
  * @private
  */
-const STACK_GETTER =
-	Objects.getOwnPropertyDescriptor(new RealmError(), "stack")?.get ??
-	Objects.getOwnPropertyDescriptor(RealmError.prototype, "stack")?.get ??
-	null;
+const STACK_GETTER = Objects.getOwnPropertyDescriptor(new RealmError(), "stack")?.get ?? PrototypeFunctions.Error.stack ?? null;
 
 /**
  * The `stack` getter V8 puts on each error of the global realm, as it was when slothlet loaded; undefined elsewhere.

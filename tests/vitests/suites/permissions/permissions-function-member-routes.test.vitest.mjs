@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T19:50:46-08:00 (1794801046)
+ *	@Last modified time: 2026-11-16T18:29:51-08:00 (1794882591)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -85,16 +85,16 @@ const ALLOW_ALL = [
 ];
 
 const POLICIES = [
-	{ label: "a deny rule on the member", permissions: (attribution) => ({ attribution, rules: DENY_MEMBER }), allowed: false },
+	{ label: "a deny rule on the member", permissions: (attribution) => ({ caller: { attribution }, rules: DENY_MEMBER }), allowed: false },
 	{
 		label: "default deny, everything but the member allowed",
-		permissions: (attribution) => ({ defaultPolicy: "deny", attribution, rules: [...ALLOW_ALL, ...DENY_MEMBER] }),
+		permissions: (attribution) => ({ policy: "deny", caller: { attribution }, rules: [...ALLOW_ALL, ...DENY_MEMBER] }),
 		allowed: false
 	},
-	{ label: "default allow, no rule", permissions: (attribution) => ({ attribution }), allowed: true },
+	{ label: "default allow, no rule", permissions: (attribution) => ({ caller: { attribution } }), allowed: true },
 	{
 		label: "default deny, everything allowed",
-		permissions: (attribution) => ({ defaultPolicy: "deny", attribution, rules: ALLOW_ALL }),
+		permissions: (attribution) => ({ policy: "deny", caller: { attribution }, rules: ALLOW_ALL }),
 		allowed: true
 	},
 	{ label: "permissions off", permissions: () => undefined, allowed: true },

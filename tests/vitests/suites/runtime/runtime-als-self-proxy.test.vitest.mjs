@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:21-07:00 (1791090921)
+ *	@Last modified time: 2026-11-16T18:30:58-08:00 (1794882658)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -23,7 +23,7 @@
  * Uncovered lines targeted (all in the `self` and `context` proxy definitions):
  *
  * - Line 83: `self.get` trap throw — fires outside ALS context; accessing any property
- *   on `self` with no active store throws RUNTIME_NO_ACTIVE_CONTEXT_SELF.
+ *   on `self` with no active store throws CONTEXT_NOT_ACTIVE_SELF.
  *
  * - Lines 93-94: `self.has` trap no-context path — `"prop" in self` without an active
  *   ALS store triggers the guard `if (!ctx || !ctx.self) return false`.
@@ -49,7 +49,7 @@ import { TEST_DIRS } from "../../setup/vitest-helper.mjs";
 describe("runtime-asynclocalstorage: self proxy — get trap outside ALS context (line 83)", () => {
 	it("throws when accessing any property on self without an active ALS context", () => {
 		// `self.anyProp` outside of any slothlet API function context must throw because
-		// safeGetContext() returns null → line 83 fires (RUNTIME_NO_ACTIVE_CONTEXT_SELF).
+		// safeGetContext() returns null → line 83 fires (CONTEXT_NOT_ACTIVE_SELF).
 		expect(() => self.someMethod).toThrow();
 	});
 
@@ -97,7 +97,7 @@ describe("runtime-asynclocalstorage: context proxy — set trap outside ALS cont
 	it("throws when assigning to context without an active ALS context", () => {
 		// `context.foo = …` outside any slothlet context → safeGetContext() = null
 		// → the set trap's `if (!ctx || !ctx.context)` guard throws
-		// RUNTIME_NO_ACTIVE_CONTEXT_CONTEXT. The context read traps return a
+		// CONTEXT_NOT_ACTIVE_WRITE. The context read traps return a
 		// graceful fallback when no context is active; the set trap is the one
 		// that throws, so it needs its own no-context case.
 		expect(() => {

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T12:51:07-08:00 (1794775867)
+ *	@Last modified time: 2026-11-16T18:29:22-08:00 (1794882562)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -39,7 +39,7 @@ const KEYS = ["num", "str", "bool", "big", "sym"];
 const configs = [
 	...["eager", "lazy"].flatMap((mode) =>
 		["async", "live"].flatMap((runtime) =>
-			["precise", "fast"].map((attribution) => ({ mode, runtime, permissions: { attribution }, name: attribution }))
+			["precise", "fast"].map((attribution) => ({ mode, runtime, permissions: { caller: { attribution } }, name: attribution }))
 		)
 	),
 	...["async", "live"].flatMap((runtime) =>
@@ -57,7 +57,7 @@ beforeAll(async () => {
 });
 
 /**
- * The answers a value gives, less `__type`, which a plain value does not have.
+ * The answers a value gives, less its node `type`, which a plain value does not have.
  * @param {object} answers - The reader's answers.
  * @returns {object} The answers without `type`.
  */
@@ -85,7 +85,7 @@ describe.each(configs)("a kept lazy folder node that loads as a primitive > $mod
 	 * @returns {Promise<object>} The api.
 	 */
 	const load = async (rules = []) => {
-		api = await slothlet({ base: FIXTURE, mode, runtime, silent: true, permissions: { defaultPolicy: "allow", rules, ...permissions } });
+		api = await slothlet({ base: FIXTURE, mode, runtime, silent: true, permissions: { policy: "allow", rules, ...permissions } });
 		await api.zz;
 		return api;
 	};
@@ -96,7 +96,7 @@ describe.each(configs)("a kept lazy folder node that loads as a primitive > $mod
 		expect(report(await kept)).toEqual(report(plain[key]));
 		expect(withoutType(answersOf(kept))).toEqual(withoutType(answersOf(plain[key])));
 		// In eager mode the folder is loaded from the start, so what is kept is the value itself.
-		expect(kept.__type).toBe(mode === "lazy" ? typeof plain[key] : undefined);
+		expect(api.slothlet.node(kept)?.type).toBe(mode === "lazy" ? "data" : undefined);
 		expect(api.zz[key]).toBe(plain[key]);
 	});
 
@@ -106,8 +106,8 @@ describe.each(configs)("a kept lazy folder node that loads as a primitive > $mod
 		expect(await api.reader.settle(key)).toEqual(report(plain[key]));
 		const answers = api.reader.answers(key);
 		expect(withoutType(answers)).toEqual(withoutType(answersOf(plain[key])));
-		expect(answers.type).toBe(mode === "lazy" ? typeof plain[key] : undefined);
-		// A fresh read is the plain value, which has no `__type`.
+		expect(answers.type).toBe(mode === "lazy" ? "data" : undefined);
+		// A fresh read is the plain value, which is no node: slothlet.node() reports nothing for it.
 		expect(api.reader.answers(key, true)).toEqual({ ...withoutType(answers), type: undefined });
 	});
 

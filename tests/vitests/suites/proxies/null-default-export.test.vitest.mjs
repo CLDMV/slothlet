@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T00:00:00-08:00 (1794729600)
+ *	@Last modified time: 2026-11-16T18:30:20-08:00 (1794882620)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -111,7 +111,7 @@ async function plainDefault(file) {
  */
 async function build(options, { load = true } = {}) {
 	const api = await slothlet({ base: FIXTURE, silent: true, ...options });
-	await api.slothlet.api.add("zz", FIXTURE, { moduleID: "zz" });
+	await api.slothlet.api.add("zz", FIXTURE, { id: "zz" });
 	if (load) {
 		for (const [path] of EVERY) await at(api, path);
 		for (const path of Object.values(BESIDE)) await at(api, path);
@@ -136,7 +136,7 @@ describe.each(configs)("a null or undefined default export > $mode / $runtime / 
 	});
 
 	it("reads, awaits and is described as the plain module's default export", async () => {
-		api = await build({ mode, runtime, permissions: { attribution, rules: [] } });
+		api = await build({ mode, runtime, permissions: { caller: { attribution }, rules: [] } });
 		for (const [path, file] of EVERY) {
 			const plain = await plainDefault(file);
 			const [parent, name] = split(path);
@@ -158,7 +158,7 @@ describe.each(configs)("a null or undefined default export > $mode / $runtime / 
 	});
 
 	it("a module the rules deny is refused the read and the await, and is not given it in a listing", async () => {
-		api = await build({ mode, runtime, permissions: { attribution, rules: denyRules() } });
+		api = await build({ mode, runtime, permissions: { caller: { attribution }, rules: denyRules() } });
 		for (const [path, file] of EVERY) {
 			const [parent, name] = split(path);
 			expect(await api.reader.read(path), `the reader reads ${path}`).toEqual({ threw: "PERMISSION_DENIED" });
@@ -174,7 +174,7 @@ describe.each(configs)("a null or undefined default export > $mode / $runtime / 
 	});
 
 	it("a node not loaded yet reads as the plain value once awaited", async () => {
-		api = await build({ mode, runtime, permissions: { attribution, rules: [] } }, { load: false });
+		api = await build({ mode, runtime, permissions: { caller: { attribution }, rules: [] } }, { load: false });
 		for (const [path, file] of EVERY) {
 			const plain = await plainDefault(file);
 			const awaited = await at(api, path);
@@ -186,7 +186,7 @@ describe.each(configs)("a null or undefined default export > $mode / $runtime / 
 	});
 
 	it("a file with a null default and named exports keeps both under its own node", async () => {
-		api = await build({ mode, runtime, permissions: { attribution, rules: [] } });
+		api = await build({ mode, runtime, permissions: { caller: { attribution }, rules: [] } });
 		for (const node of [api.nnamed, api.zz.nnamed]) {
 			await node;
 			expect(Object.keys(node).sort()).toEqual(["default", "label"]);
@@ -196,7 +196,7 @@ describe.each(configs)("a null or undefined default export > $mode / $runtime / 
 	});
 
 	it("a node added in memory or from a file reads as the plain value", async () => {
-		api = await build({ mode, runtime, permissions: { attribution, rules: [] } });
+		api = await build({ mode, runtime, permissions: { caller: { attribution }, rules: [] } });
 		await api.slothlet.api.add("memnull", { default: null });
 		await api.slothlet.api.add("memundef", { default: undefined });
 		await api.slothlet.api.add("memnamed", { default: null, x: 1 });
@@ -217,8 +217,8 @@ describe.each(configs)("a null or undefined default export > $mode / $runtime / 
 	});
 
 	it("reloads and removes such a node by its path and its module", async () => {
-		api = await build({ mode, runtime, permissions: { attribution, rules: [] } });
-		await api.slothlet.api.add("one", join(FIXTURE, "pnull.mjs"), { moduleID: "one" });
+		api = await build({ mode, runtime, permissions: { caller: { attribution }, rules: [] } });
+		await api.slothlet.api.add("one", join(FIXTURE, "pnull.mjs"), { id: "one" });
 		await api.slothlet.api.reload("pnull");
 		await api.slothlet.api.reload("zz.folder.inner");
 		await api.slothlet.api.reload("zz");

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:00-07:00 (1791090900)
+ *	@Last modified time: 2026-11-16T18:28:49-08:00 (1794882529)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -37,13 +37,16 @@ describe.each(LAZY_MATRIX)("Background Materialize - %s", ({ ____name, config })
 		const api = await slothlet({
 			...config,
 			base: path.join(__dirname, `../../../../${API_TEST_BASE}/api_test`),
-			backgroundMaterialize: false // Explicit false
+			loader: {
+				materialize: false
+			}
+			// Explicit false
 		});
 
 		// Without backgroundMaterialize, __type returns IN_FLIGHT or UNMATERIALIZED (not materialized yet)
 		// NOTE: Must test nested module (api.deep.folder.config) not root (api.math)
 		// because root files are always eager even in lazy mode for collision handling
-		const typeValue = api.deep.folder.config.__type;
+		const typeValue = api.slothlet.node(api.deep.folder.config).type;
 		const isNotMaterialized = typeValue === api.slothlet.types.UNMATERIALIZED || typeValue === api.slothlet.types.IN_FLIGHT;
 		expect(isNotMaterialized).toBe(true);
 
@@ -54,7 +57,10 @@ describe.each(LAZY_MATRIX)("Background Materialize - %s", ({ ____name, config })
 		const api = await slothlet({
 			...config,
 			base: path.join(__dirname, `../../../../${API_TEST_BASE}/api_test`),
-			backgroundMaterialize: true // Enable background materialization
+			loader: {
+				materialize: true
+			}
+			// Enable background materialization
 		});
 
 		// NOTE: Due to architecture limitation, lazy mode loads modules during init for flattening analysis,
@@ -63,8 +69,8 @@ describe.each(LAZY_MATRIX)("Background Materialize - %s", ({ ____name, config })
 		// can complete before this assertion — so we accept either pending OR already-materialized.
 		// NOTE: Must test nested module (api.deep.folder.config) not root (api.math)
 		// because root files are always eager even in lazy mode for collision handling
-		const configType = api.deep.folder.config.__type;
-		const isAlreadyMaterialized = api.deep.folder.config.__materialized === true;
+		const configType = api.slothlet.node(api.deep.folder.config).type;
+		const isAlreadyMaterialized = api.slothlet.node(api.deep.folder.config).materialized === true;
 		const isValidConfigState = isAlreadyMaterialized
 			? typeof configType === "string"
 			: configType === api.slothlet.types.UNMATERIALIZED || configType === api.slothlet.types.IN_FLIGHT;
@@ -89,15 +95,17 @@ describe.each(LAZY_MATRIX)("Background Materialize - %s", ({ ____name, config })
 		const api = await slothlet({
 			...config,
 			base: path.join(__dirname, `../../../../${API_TEST_BASE}/api_test`),
-			backgroundMaterialize: true
+			loader: {
+				materialize: true
+			}
 		});
 
 		// __type returns either the impl's actual type ("function") if already materialized,
 		// or a status symbol (IN_FLIGHT/UNMATERIALIZED) if still pending. Both are valid here
 		// since backgroundMaterialize=true triggers async materialization but doesn't guarantee
 		// completion before the assertion. Check __materialized to distinguish the two cases.
-		const loggerType = api.logger.__type;
-		const isAlreadyMaterialized = api.logger.__materialized === true;
+		const loggerType = api.slothlet.node(api.logger).type;
+		const isAlreadyMaterialized = api.slothlet.node(api.logger).materialized === true;
 		const isValidType = isAlreadyMaterialized
 			? loggerType === "function"
 			: loggerType === api.slothlet.types.UNMATERIALIZED || loggerType === api.slothlet.types.IN_FLIGHT;

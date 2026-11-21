@@ -184,33 +184,24 @@ describe.each(getMatrixConfigs())("Proxy set trap blocked keys > Config: '$name'
 		}
 	});
 
-	it("should silently absorb writes to __mode", async () => {
+	it("the node() report is frozen: a write to it throws and changes nothing", async () => {
 		await materialize(api, "math");
-		const modeBefore = api.math.__mode;
-		api.math.__mode = "totally-fake-mode";
-		const modeAfter = api.math.__mode;
-		expect(modeAfter).toBe(modeBefore);
+		const report = api.slothlet.node(api.math);
+		expect(Object.isFrozen(report)).toBe(true);
+		expect(Object.isFrozen(report.path)).toBe(true);
+		expect(() => {
+			report.mode = "totally-fake-mode";
+		}).toThrow(TypeError);
+		expect(() => {
+			report.path.push("fake");
+		}).toThrow(TypeError);
+		expect(api.slothlet.node(api.math)).toEqual(report);
 	});
 
-	it("should silently absorb writes to __type", async () => {
+	it("__mode / __type on a node are plain consumer names, not framework reports", async () => {
 		await materialize(api, "math");
-		const typeBefore = api.math.__type;
-		api.math.__type = "totally-fake-type";
-		expect(api.math.__type).toBe(typeBefore);
-	});
-
-	it("should silently absorb writes to __apiPath", async () => {
-		await materialize(api, "math");
-		const pathBefore = api.math.__apiPath;
-		api.math.__apiPath = "fake.path";
-		expect(api.math.__apiPath).toBe(pathBefore);
-	});
-
-	it("should silently absorb writes to __isCallable", async () => {
-		await materialize(api, "math");
-		const callableBefore = api.math.__isCallable;
-		api.math.__isCallable = !callableBefore;
-		expect(api.math.__isCallable).toBe(callableBefore);
+		expect(api.math.__mode).toBeUndefined();
+		expect(api.math.__type).toBeUndefined();
 	});
 
 	it("should NOT absorb writes to regular user properties", async () => {
@@ -239,25 +230,13 @@ describe.each(getMatrixConfigs())("Proxy delete trap blocked keys > Config: '$na
 		}
 	});
 
-	it("should silently absorb deletes of __type and preserve the value", async () => {
+	it("a delete on the node() report throws and the next report is unchanged", async () => {
 		await materialize(api, "math");
-		const typeBefore = api.math.__type;
-		delete api.math.__type;
-		expect(api.math.__type).toBe(typeBefore);
-	});
-
-	it("should silently absorb deletes of __mode and preserve the value", async () => {
-		await materialize(api, "math");
-		const modeBefore = api.math.__mode;
-		delete api.math.__mode;
-		expect(api.math.__mode).toBe(modeBefore);
-	});
-
-	it("should silently absorb deletes of __apiPath and preserve the value", async () => {
-		await materialize(api, "math");
-		const pathBefore = api.math.__apiPath;
-		delete api.math.__apiPath;
-		expect(api.math.__apiPath).toBe(pathBefore);
+		const report = api.slothlet.node(api.math);
+		expect(() => {
+			delete report.type;
+		}).toThrow(TypeError);
+		expect(api.slothlet.node(api.math).type).toBe(report.type);
 	});
 
 	it("should silently absorb deletes of ____slothletInternal (critical internal)", async () => {
@@ -267,7 +246,7 @@ describe.each(getMatrixConfigs())("Proxy delete trap blocked keys > Config: '$na
 			delete api.math.____slothletInternal;
 		}).not.toThrow();
 		// The wrapper is still functional after the no-op delete
-		expect(api.math.__type).toBeDefined();
+		expect(api.slothlet.node(api.math).type).toBeDefined();
 	});
 });
 
@@ -301,7 +280,7 @@ describe("Proxy hasTrap — impl function property check (unified-wrapper.mjs li
 	});
 });
 
-// ─── getOwnPropertyDescriptorTrap line 2772: lazy _materialize trigger ────
+// ─── getOwnPropertyDescriptorTrap line 2772: lazy ___materialize trigger ────
 
 describe("Proxy getOwnPropertyDescriptorTrap — lazy materialize trigger (unified-wrapper.mjs line 2772)", () => {
 	let api;
@@ -317,19 +296,19 @@ describe("Proxy getOwnPropertyDescriptorTrap — lazy materialize trigger (unifi
 		}
 	});
 
-	it("Object.getOwnPropertyDescriptor on a lazy wrapper triggers _materialize (line 2772)", async () => {
+	it("Object.getOwnPropertyDescriptor on a lazy wrapper triggers ___materialize (line 2772)", async () => {
 		// In lazy mode, api.math is unmaterialized. Calling getOwnPropertyDescriptor
 		// invokes getOwnPropertyDescriptorTrap, which checks materialized/inFlight at
-		// line 2768 and calls wrapper._materialize() at line 2772.
+		// line 2768 and calls wrapper.___materialize() at line 2772.
 		const desc = Object.getOwnPropertyDescriptor(api.math, "add");
-		// After _materialize fires, the descriptor should now be available
+		// After ___materialize fires, the descriptor should now be available
 		expect(desc).toBeDefined();
 	});
 
 	it("getOwnPropertyDescriptor on an already-materialized lazy wrapper does not double-materialize", async () => {
 		// Force eager materialization first
-		await api.math._materialize();
-		// Now calling getOwnPropertyDescriptor should NOT trigger _materialize again
+		await api.math.___materialize();
+		// Now calling getOwnPropertyDescriptor should NOT trigger ___materialize again
 		const desc = Object.getOwnPropertyDescriptor(api.math, "add");
 		expect(desc).toBeDefined();
 	});

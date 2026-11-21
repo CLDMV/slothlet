@@ -53,7 +53,7 @@ export async function peek(at) {
  * @returns {string|undefined} Its recorded api path.
  */
 export function me() {
-	return self.slothlet.metadata.self()?.apiPath;
+	return self.slothlet.metadata.self()?.path?.join(".");
 }
 
 /** A namespace member with a function of its own. */

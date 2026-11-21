@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-14T09:08:57-08:00 (1794676137)
+ *	@Last modified time: 2026-11-16T18:28:26-08:00 (1794882506)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -150,7 +150,7 @@ export async function walk(node, keys, lazy, out, depth) {
 		}
 	}
 	out.tree.push(marker === null ? at : `${at} -> ${marker}`);
-	const recorded = node.__metadata?.apiPath;
+	const recorded = out.api.slothlet.node(node)?.path?.join(".");
 	if (recorded !== at) out.drift.push(`${at} records ${recorded}`);
 	if (depth > 8) return;
 	for (const key of Object.keys(node)) {
@@ -202,7 +202,7 @@ export async function load(root, dotted) {
  */
 export async function build(fixture, at, options) {
 	const dir = path.join(FIXTURES, fixture);
-	const api = await slothlet({ dir: at === "base" ? dir : BASE, silent: true, ...options });
+	const api = await slothlet({ base: at === "base" ? dir : BASE, silent: true, ...options });
 	if (at === "base") await api.slothlet.api.add("probe", BASE);
 	else await api.slothlet.api.add(at, dir);
 	return api;

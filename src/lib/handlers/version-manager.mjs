@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:10-08:00 (1794874570)
+ *	@Last modified time: 2026-11-17T13:35:17-08:00 (1794951317)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -24,14 +24,17 @@
  * @package
  */
 
+import { segmentsOf } from "#helpers/segments";
 import { util } from "#helpers/platform";
 import { ComponentBase } from "#factories/component-base";
 import { internals as frameworkInternalsInternals } from "#handlers/framework-internals";
 import { identityCeilings } from "#handlers/trusted-root";
+import { MODULE_ID_SEPARATOR } from "#handlers/metadata";
 import {
 	ArrayMethods,
 	Arrays,
 	concatLists,
+	copyList,
 	isNaN,
 	listPush,
 	Map,
@@ -54,9 +57,12 @@ import {
 	SetMethods,
 	setToArray,
 	splitText,
+	String,
 	StringMethods,
 	Symbol,
-	Symbols
+	Symbols,
+	WeakMap,
+	WeakMapMethods
 } from "#helpers/intrinsics";
 const { markFrameworkInternal, registerVersionDispatcher } = frameworkInternalsInternals("lib/handlers/version-manager");
 
@@ -73,6 +79,27 @@ const { markFrameworkInternal, registerVersionDispatcher } = frameworkInternalsI
 // Rule 19 (V08): Versioned-add atomic rollback — api-manager.mjs ~L2565
 
 const inspect = util.inspect;
+
+/**
+ * Each dispatcher proxy slothlet made, with its logical path and how it resolves for the caller (see
+ * {@link VersionManager#dispatcherOf}).
+ * @type {WeakMap<object, {logicalPath: string, resolve: () => (object|null)}>}
+ * @private
+ */
+const DISPATCHERS = new WeakMap();
+
+/**
+ * The raw module id of a composite `moduleID<sep>apiPath` id; any other id as it is.
+ * @param {string} moduleID - A module id, composite or raw.
+ * @returns {string} The raw id.
+ * @private
+ * @example
+ * stripComposite("base__slothlet_sep__math"); // "base"
+ */
+function stripComposite(moduleID) {
+	const cut = StringMethods.indexOf(moduleID, MODULE_ID_SEPARATOR);
+	return cut === -1 ? moduleID : StringMethods.slice(moduleID, 0, cut);
+}
 
 // ─── Normalise a version string to a [major, minor, patch] numeric tuple ─────
 
@@ -222,7 +249,7 @@ export class VersionManager extends ComponentBase {
 		if (MapMethods.has(entry.versions, versionTag)) {
 			throw new this.SlothletError("VERSION_REGISTER_DUPLICATE", {
 				version: versionTag,
-				apiPath: logicalPath
+				path: segmentsOf(logicalPath)
 			});
 		}
 
@@ -235,12 +262,10 @@ export class VersionManager extends ComponentBase {
 			// Used by #walkApiPath to avoid re-splitting the concatenated versionedPath string,
 			// which would fragment "2.3.0" into ["2","3","0"] and walk the wrong tree nodes.
 			versionedParts: Objects.freeze(concatLists([versionTag], splitText(logicalPath, "."))),
-			// isDefault and versionMeta are always explicitly passed via registerVersion's callers.
+			// isDefault is always explicitly passed via registerVersion's callers.
 			/* v8 ignore next */
 			isDefault: isDefault ?? false,
-			/* v8 ignore next */
-			versionMeta: versionMeta ?? {},
-			registeredAt: this.clock.now()
+			at: this.clock.now()
 		};
 
 		MapMethods.set(entry.versions, versionTag, versionEntry);
@@ -252,7 +277,7 @@ export class VersionManager extends ComponentBase {
 			/* v8 ignore next */
 			...(versionMeta ?? {}), // user fields spread first — injected fields below always win
 			version: versionTag, // always injected; cannot be overridden by versionMeta
-			logicalPath // always injected; cannot be overridden by versionMeta
+			path: segmentsOf(logicalPath) // always injected (the logical path as segments); cannot be overridden by versionMeta
 		});
 
 		this.slothlet.debug("versioning", {
@@ -278,7 +303,7 @@ export class VersionManager extends ComponentBase {
 	 */
 	unregisterVersion(logicalPath, versionTag) {
 		const entry = MapMethods.get(this.#registry, logicalPath);
-		// api.slothlet.versioning.unregister (api_builder.mjs) checks existence before calling us;
+		// api.slothlet.versioning.remove (api_builder.mjs) checks existence before calling us;
 		// this guard is only reached via a direct internal call with a non-existent path.
 		/* v8 ignore next */
 		if (!entry) return false;
@@ -344,7 +369,7 @@ export class VersionManager extends ComponentBase {
 	 * @param {string} moduleID - Opaque module ID.
 	 * @returns {object | undefined} Stored version metadata or `undefined`.
 	 * @example
-	 * versionManager.getVersionMetadata("auth_abc123"); // { version: "v1", logicalPath: "auth", stable: true }
+	 * versionManager.getVersionMetadata("auth_abc123"); // { version: "v1", path: ["auth"], stable: true }
 	 */
 	getVersionMetadata(moduleID) {
 		return MapMethods.get(this.#versionMetadataByModule, moduleID);
@@ -357,7 +382,7 @@ export class VersionManager extends ComponentBase {
 	 * @param {string} versionTag - Version tag (e.g. `"v1"`, `"2.3.0"`).
 	 * @returns {object | undefined} Stored version metadata or `undefined` if not registered.
 	 * @example
-	 * versionManager.getVersionMetadataByPath("auth", "v1"); // { version: "v1", logicalPath: "auth", stable: true }
+	 * versionManager.getVersionMetadataByPath("auth", "v1"); // { version: "v1", path: ["auth"], stable: true }
 	 */
 	getVersionMetadataByPath(logicalPath, versionTag) {
 		const entry = MapMethods.get(this.#registry, logicalPath);
@@ -369,7 +394,7 @@ export class VersionManager extends ComponentBase {
 
 	/**
 	 * Patch (merge) the VersionManager-only metadata for a registered logical path and version tag at runtime.
-	 * The injected `version` and `logicalPath` keys always win over any user-supplied fields in `patch`.
+	 * The injected `version` and `path` keys always win over any user-supplied fields in `patch`.
 	 *
 	 * @param {string} logicalPath - Logical API path (e.g. `"auth"`).
 	 * @param {string} versionTag - Version tag (e.g. `"v1"`, `"2.3.0"`).
@@ -384,19 +409,19 @@ export class VersionManager extends ComponentBase {
 		if (!entry || !MapMethods.has(entry.versions, versionTag)) {
 			throw new this.SlothletError("VERSION_NOT_FOUND", {
 				version: versionTag,
-				apiPath: logicalPath
+				path: segmentsOf(logicalPath)
 			});
 		}
 		const ve = MapMethods.get(entry.versions, versionTag);
 		// #versionMetadataByModule is always populated at registerVersion time; the ?? {} fallback is defensive.
 		/* v8 ignore next */
 		const existing = MapMethods.get(this.#versionMetadataByModule, ve.moduleID) ?? {};
-		// version and logicalPath are injected fields that always take precedence over user-supplied fields.
+		// version and path are injected fields that always take precedence over user-supplied fields.
 		MapMethods.set(this.#versionMetadataByModule, ve.moduleID, {
 			...existing,
 			...(patch && typeof patch === "object" ? patch : {}),
 			version: ve.versionTag,
-			logicalPath
+			path: segmentsOf(logicalPath)
 		});
 	}
 
@@ -421,12 +446,17 @@ export class VersionManager extends ComponentBase {
 	}
 
 	/**
-	 * Return a snapshot of all registered versions and the default tag for a logical path.
+	 * Return a snapshot of all registered versions and the default tag for a logical path, in the shape consumers read.
+	 *
+	 * Each entry is `{ at, default, metadata, module, path, tag }`: a number, a boolean, the version-manager metadata, the
+	 * mounted module's id, the real mounted path as segments (`["v1", "auth"]`, a dotted tag such as `2.3.0` stays one
+	 * segment) and the tag. It is built fresh from the registry; the registry's own entry objects never leave this class.
 	 *
 	 * @param {string} logicalPath - Logical API path.
-	 * @returns {{ versions: object, default: string | null } | undefined} Snapshot object, or `undefined` if the path is not registered.
+	 * @returns {{ versions: Object<string, { at: number, default: boolean, metadata: object, module: string, path: string[], tag: string }>, default: string | null } | undefined} Snapshot object, or `undefined` if the path is not registered.
 	 * @example
-	 * versionManager.list("auth"); // { versions: { v1: {...}, v2: {...} }, default: "v2" }
+	 * versionManager.list("auth");
+	 * // { versions: { v1: { at: 1731800000000, default: false, metadata: {}, module: "auth_1", path: ["v1", "auth"], tag: "v1" }, v2: {...} }, default: "v2" }
 	 * versionManager.list("unknown"); // undefined
 	 */
 	list(logicalPath) {
@@ -437,7 +467,21 @@ export class VersionManager extends ComponentBase {
 		for (const ofEntry of mapEntries(entry.versions)) {
 			const tag = ofEntry[0],
 				ve = ofEntry[1];
-			versions[tag] = { ...ve };
+			// The same version metadata versioning.metadata.get() and the dispatcher read, with the injected version and path.
+			// #versionMetadataByModule is always populated at registerVersion time; the ?? fallback is defensive.
+			/* v8 ignore next */
+			const stored = MapMethods.get(this.#versionMetadataByModule, ve.moduleID) ?? {
+				version: ve.versionTag,
+				path: segmentsOf(logicalPath)
+			};
+			versions[tag] = {
+				at: ve.at,
+				default: ve.isDefault,
+				metadata: { ...stored, path: copyList(stored.path) },
+				module: ve.moduleID,
+				path: copyList(ve.versionedParts),
+				tag: ve.versionTag
+			};
 		}
 		return { versions, default: this.getDefaultVersion(logicalPath) };
 	}
@@ -458,13 +502,13 @@ export class VersionManager extends ComponentBase {
 		if (!entry) {
 			throw new this.SlothletError("VERSION_NOT_FOUND", {
 				version: versionTag,
-				apiPath: logicalPath
+				path: segmentsOf(logicalPath)
 			});
 		}
 		if (!MapMethods.has(entry.versions, versionTag)) {
 			throw new this.SlothletError("VERSION_NOT_FOUND", {
 				version: versionTag,
-				apiPath: logicalPath
+				path: segmentsOf(logicalPath)
 			});
 		}
 		// Clear all explicit defaults, then set the requested one
@@ -533,7 +577,7 @@ export class VersionManager extends ComponentBase {
 	 * Run the configured discriminator and return the winning version tag.
 	 *
 	 * When the configured `versionDispatcher` is a string, reads that key from
-	 * `caller.versionMetadata`. When it is a function, calls it with `(allVersions, caller)`.
+	 * `caller.version.metadata`. When it is a function, calls it with `(allVersions, caller)`.
 	 *
 	 * @param {string} logicalPath - Logical API path.
 	 * @param {object} allVersions - Pre-built allVersions arg (see `buildAllVersionsArg`).
@@ -543,13 +587,13 @@ export class VersionManager extends ComponentBase {
 	 * const tag = versionManager.resolveForPath("auth", allVersions, caller); // "v2"
 	 */
 	resolveForPath(logicalPath, allVersions, caller) {
-		const discriminator = this.slothlet.config?.versionDispatcher ?? "version";
+		const discriminator = this.slothlet.config?.versioning?.dispatcher ?? "version";
 
 		let resolvedTag = null;
 
 		if (typeof discriminator === "string") {
 			// String: look up key in caller's versionMetadata
-			resolvedTag = caller.versionMetadata?.[discriminator] ?? null;
+			resolvedTag = caller?.version?.metadata?.[discriminator] ?? null;
 		}
 		// Config validation ensures discriminator is always string or function;
 		// the function case is separated here so the false-branch (neither) can be annotated.
@@ -573,7 +617,7 @@ export class VersionManager extends ComponentBase {
 				apiPath: logicalPath,
 				// caller always has metadata with moduleID in normal versioned dispatch contexts.
 				/* v8 ignore next */
-				callerModule: caller?.metadata?.moduleID ?? null
+				callerModule: caller?.module ?? null
 			});
 			return null;
 		}
@@ -584,7 +628,7 @@ export class VersionManager extends ComponentBase {
 			apiPath: logicalPath,
 			// caller always has metadata with moduleID in normal versioned dispatch contexts.
 			/* v8 ignore next */
-			callerModule: caller?.metadata?.moduleID ?? null
+			callerModule: caller?.module ?? null
 		});
 
 		return resolvedTag;
@@ -593,16 +637,17 @@ export class VersionManager extends ComponentBase {
 	// ─── Discriminator argument builders ────────────────────────────────────
 
 	/**
-	 * Build the `allVersions` argument passed to function discriminators.
+	 * Build the `versions` argument passed to function dispatchers.
 	 *
-	 * Each key is a version tag; each value contains `version`, `default`, `metadata`
-	 * (regular Metadata system data), and `versionMetadata` (VersionManager-only store).
+	 * Keyed by version tag. Each entry carries the version's user `metadata` (what `metadata.get` reads for its path)
+	 * and its `version` record (`{ tag, default, metadata }`, the shape of the add option `version`; its `metadata` is
+	 * the version-manager store).
 	 *
 	 * @param {string} logicalPath - Logical API path.
-	 * @returns {object} Map-like object keyed by version tag.
+	 * @returns {object} Object keyed by version tag.
 	 * @example
 	 * versionManager.buildAllVersionsArg("auth");
-	 * // { v1: { version: "v1", default: true, metadata: {...}, versionMetadata: {...} } }
+	 * // { v1: { metadata: {...}, version: { tag: "v1", default: true, metadata: {...} } } }
 	 */
 	buildAllVersionsArg(logicalPath) {
 		const entry = MapMethods.get(this.#registry, logicalPath);
@@ -617,21 +662,19 @@ export class VersionManager extends ComponentBase {
 		for (const ofEntry of mapEntries(entry.versions)) {
 			const tag = ofEntry[0],
 				ve = ofEntry[1];
-			// Resolve the mounted UnifiedWrapper for this versioned path to get regular metadata.
+			// Resolve the mounted UnifiedWrapper for this versioned path to get its user metadata.
 			// Use versionedParts (segment array) to avoid re-splitting versionedPath on ".", which
 			// would fragment dotted version tags like "2.3.0" into ["2","3","0"].
 			const mountedWrapper = this.#walkApiPath(ve.versionedParts);
 			// metadata handler and versionMetadataByModule are always present in normal usage.
 			/* v8 ignore next */
-			const regularMetadata = this.slothlet.handlers.metadata?.getMetadata?.(mountedWrapper) ?? {};
+			const userMetadata = this.slothlet.handlers.metadata?.getMetadata?.(mountedWrapper) ?? {};
 			/* v8 ignore next */
 			const versionMetadata = MapMethods.get(this.#versionMetadataByModule, ve.moduleID) ?? {};
 
 			result[tag] = {
-				version: tag,
-				default: tag === defaultTag,
-				metadata: regularMetadata,
-				versionMetadata
+				metadata: userMetadata,
+				version: { tag, default: tag === defaultTag, metadata: versionMetadata }
 			};
 		}
 
@@ -639,33 +682,33 @@ export class VersionManager extends ComponentBase {
 	}
 
 	/**
-	 * Build the `caller` argument passed to function discriminators.
+	 * Build the `caller` object handed to dispatchers, around hooks and permission records.
 	 *
-	 * Returns `null` for version-specific fields when the caller is not a registered
-	 * versioned module.
+	 * `{ path, module, metadata, version }`: the calling leaf's api path as segments, its module id, its user metadata,
+	 * and its `version` record (`{ tag, default, metadata }`) when the calling module is a registered version, else
+	 * null. Null for a call from outside the api (no module caller).
 	 *
-	 * @param {object | null | undefined} callerWrapper - The caller's UnifiedWrapper proxy.
-	 * @returns {{ version: string|null, default: boolean|null, metadata: object, versionMetadata: object|null }}
+	 * @param {object | null | undefined} callerWrapper - The caller's UnifiedWrapper (or its proxy).
+	 * @returns {{ path: string[], module: string|null, metadata: object, version: { tag: string, default: boolean, metadata: object }|null }|null}
 	 * @example
 	 * versionManager.buildCallerArg(callerWrapper);
-	 * // { version: "v2", default: false, metadata: {...}, versionMetadata: {...} }
+	 * // { path: ["v2", "auth", "login"], module: "auth-v2", metadata: {...}, version: { tag: "v2", default: false, metadata: {...} } }
 	 */
 	buildCallerArg(callerWrapper) {
-		// callerWrapper always exposes moduleID via ____slothletInternal; __moduleID fallback is unreachable.
-		/* v8 ignore next */
-		const callerModuleID = callerWrapper?.____slothletInternal?.moduleID ?? callerWrapper?.__moduleID;
+		const internal = callerWrapper?.____slothletInternal;
+		if (!internal) return null;
+		const metadataHandler = this.slothlet.handlers.metadata;
+		const system = metadataHandler?.getSystemMetadata?.(callerWrapper) ?? null;
+		const callerModuleID = internal.moduleID ?? null;
 		const callerVersionEntry = callerModuleID ? this.#findVersionEntryForModule(callerModuleID) : null;
-		// metadata handler is always present during normal versioned dispatch.
+		const module = system?.baseModuleID ?? (typeof callerModuleID === "string" ? stripComposite(callerModuleID) : null);
+		// metadata handler is always present during normal dispatch.
 		/* v8 ignore next */
-		const regularMetadata = this.slothlet.handlers.metadata?.getMetadata?.(callerWrapper) ?? {};
+		const userMetadata = metadataHandler?.getMetadata?.(callerWrapper) ?? {};
+		const path = Objects.freeze(this.pathSegments(String(internal.apiPath ?? "")));
 
 		if (!callerVersionEntry) {
-			return {
-				version: null,
-				default: null,
-				metadata: regularMetadata,
-				versionMetadata: null
-			};
+			return { path, module, metadata: userMetadata, version: null };
 		}
 
 		const defaultTag = this.getDefaultVersion(callerVersionEntry.logicalPath);
@@ -674,11 +717,55 @@ export class VersionManager extends ComponentBase {
 		const versionMetadata = MapMethods.get(this.#versionMetadataByModule, callerModuleID) ?? {};
 
 		return {
-			version: callerVersionEntry.versionTag,
-			default: callerVersionEntry.versionTag === defaultTag,
-			metadata: regularMetadata,
-			versionMetadata
+			path,
+			module,
+			metadata: userMetadata,
+			version: { tag: callerVersionEntry.versionTag, default: callerVersionEntry.versionTag === defaultTag, metadata: versionMetadata }
 		};
+	}
+
+	/**
+	 * Split a dotted api path into its segments, keeping a registered version's tag whole (`"2.3.0.auth.login"` →
+	 * `["2.3.0", "auth", "login"]`).
+	 *
+	 * @param {string} apiPath - Dotted api path.
+	 * @returns {string[]} Its segments.
+	 * @package
+	 * @example
+	 * versionManager.pathSegments("2.3.0.auth"); // ["2.3.0", "auth"]
+	 */
+	pathSegments(apiPath) {
+		if (typeof apiPath !== "string" || apiPath === "") return [];
+		let best = null;
+		for (const ofEntry of mapEntries(this.#registry)) {
+			for (const ve of mapValues(ofEntry[1].versions)) {
+				const prefix = ve.versionedPath;
+				if (
+					typeof prefix === "string" &&
+					Arrays.isArray(ve.versionedParts) &&
+					(apiPath === prefix || StringMethods.startsWith(apiPath, prefix + ".")) &&
+					(!best || prefix.length > best.versionedPath.length)
+				) {
+					best = ve;
+				}
+			}
+		}
+		if (!best) return splitText(apiPath, ".");
+		const rest = StringMethods.slice(apiPath, best.versionedPath.length + 1);
+		return concatLists(mapList(best.versionedParts, String), rest ? splitText(rest, ".") : []);
+	}
+
+	/**
+	 * What a version dispatcher stands for, when `value` is one: its logical path and how it resolves for the caller.
+	 * @param {*} value - Any value (a node's impl).
+	 * @returns {{ logicalPath: string, resolve: () => (object|null) }|null} The dispatcher's record, or null.
+	 * @package
+	 * @example
+	 * versionManager.dispatcherOf(wrapper.____slothletInternal.impl)?.logicalPath; // "auth"
+	 */
+	dispatcherOf(value) {
+		if (value === null || (typeof value !== "object" && typeof value !== "function")) return null;
+		return WeakMapMethods.get(DISPATCHERS, value) ?? null;
 	}
 
 	/**
@@ -753,9 +840,9 @@ export class VersionManager extends ComponentBase {
 	 */
 	createDispatcher(logicalPath) {
 		const manager = this;
-		// Brand the target so slothlet's OWN reserved marker keys (__isVersionDispatcher/__logicalPath)
+		// Brand the target so slothlet's OWN reserved marker keys (____isVersionDispatcher/____logicalPath)
 		// are exempt from the module-private host gate by OBJECT IDENTITY, never by name (#283).
-		const target = markFrameworkInternal({ __isVersionDispatcher: true, __logicalPath: logicalPath });
+		const target = markFrameworkInternal({ ____isVersionDispatcher: true, ____logicalPath: logicalPath });
 		const displayName = ArrayMethods.pop(splitText(logicalPath, "."));
 
 		/** Resolve forced version or run discriminator; return tag or null. */
@@ -824,7 +911,7 @@ export class VersionManager extends ComponentBase {
 		// Node's util.inspect reads this symbol from the physical proxy target (bypassing
 		// all proxy traps), so it MUST be an own property of `target` — not just available
 		// via the get trap — for util.inspect(api.auth) to show the resolved versioned
-		// namespace content instead of the raw { __isVersionDispatcher, __logicalPath } target.
+		// namespace content instead of the raw dispatcher target.
 		target[Symbols.for("nodejs.util.inspect.custom")] = function (_depth, options, inspectFn) {
 			const vw = resolveVersionedWrapper();
 			if (vw) {
@@ -841,7 +928,7 @@ export class VersionManager extends ComponentBase {
 			// reachable in the live API tree).
 			const entry = MapMethods.get(manager.#registry, logicalPath);
 			const versions = entry ? mapKeysToArray(entry.versions) : [];
-			return { __versionDispatcher: logicalPath, versions };
+			return { path: splitText(logicalPath, "."), versions };
 		};
 
 		const handlers = {
@@ -854,31 +941,18 @@ export class VersionManager extends ComponentBase {
 			get(t, prop) {
 				// ── 1. Framework internal keys → undefined ────────────────────────
 				if (typeof prop === "string") {
-					if (prop === "____slothletInternal" || prop === "_impl" || prop === "__impl" || prop === "__state" || prop === "__invalid") {
+					if (prop === "____slothletInternal" || prop === "____impl" || prop === "____state" || prop === "____invalid") {
 						return undefined;
 					}
 				}
 
 				// ── 2. Stable framework accessors → fixed values ─────────────────
-				if (prop === "__isVersionDispatcher") return true;
-				// UnifiedWrapper intercepts __mode at L1547 before delegating to impl[prop].
-				/* v8 ignore next */
-				if (prop === "__mode") return "eager";
-				if (prop === "__apiPath") return logicalPath;
-				// UnifiedWrapper intercepts __slothletPath at L1708 before delegating to impl[prop].
-				/* v8 ignore next */
-				if (prop === "__slothletPath") return logicalPath;
-				if (prop === "__isCallable") return false;
-				// UnifiedWrapper intercepts the remaining case-2 properties at its own handlers
-				// before delegating to impl[prop]; these are only reachable via UW’s internal
-				// impl-adoption reads (__apiPath and __isCallable above), which are already covered.
+				if (prop === "____isVersionDispatcher") return true;
+				// UnifiedWrapper intercepts these at its own handlers before delegating to impl[prop].
 				/* v8 ignore start */
-				if (prop === "__materializeOnCreate") return false;
-				if (prop === "__materialized") return true;
-				if (prop === "__inFlight") return false;
-				if (prop === "__displayName") return displayName;
-				if (prop === "__moduleID") return `versionDispatcher:${logicalPath}`;
-				if (prop === "_materialize") return () => {};
+				if (prop === "____materializeOnCreate") return false;
+				if (prop === "____displayName") return displayName;
+				if (prop === "___materialize") return () => {};
 				if (prop === "length") return 0;
 				if (prop === "name") return displayName;
 				/* v8 ignore stop */
@@ -891,7 +965,7 @@ export class VersionManager extends ComponentBase {
 				// ── 4. constructor ────────────────────────────────────────────
 				// UnifiedWrapper intercepts "constructor" at L2351 before delegating to impl[prop].
 				/* v8 ignore next */
-				if (prop === "constructor") return Objects.prototype.constructor;
+				if (prop === "constructor") return NativeObject;
 
 				// ── 5. Symbol.toStringTag → delegate to resolved versioned wrapper ─
 				if (prop === Symbol.toStringTag) {
@@ -924,7 +998,7 @@ export class VersionManager extends ComponentBase {
 						// including direct dispatcher use before any versions are registered.
 						const entry = MapMethods.get(manager.#registry, logicalPath);
 						const versions = entry ? mapKeysToArray(entry.versions) : [];
-						return { __versionDispatcher: logicalPath, versions };
+						return { path: splitText(logicalPath, "."), versions };
 					};
 				}
 
@@ -940,16 +1014,6 @@ export class VersionManager extends ComponentBase {
 				// ── 10. All other symbols → undefined ─────────────────────────────
 				if (typeof prop === "symbol") return undefined;
 
-				// ── 11. Framework metadata accessors → delegate ───────────────────
-				if (prop === "__metadata" || prop === "__filePath" || prop === "__sourceFolder" || prop === "__type") {
-					const vw = resolveVersionedWrapper();
-					// vw can only be null if all versions are removed after the dispatcher was
-					// created — a transient race condition; defensive guard.
-					/* v8 ignore next */
-					if (!vw) return undefined;
-					return vw[prop];
-				}
-
 				// ── 12. Inline version override already handled inside resolveVersion ─
 				// ── 13. Version-routing dispatch (user-defined properties) ──────────
 				const versionTag = resolveVersion();
@@ -958,7 +1022,7 @@ export class VersionManager extends ComponentBase {
 				/* v8 ignore next 4 */
 				if (!versionTag) {
 					throw new manager.SlothletError("VERSION_NO_DEFAULT", {
-						apiPath: logicalPath
+						path: segmentsOf(logicalPath)
 					});
 				}
 
@@ -984,7 +1048,7 @@ export class VersionManager extends ComponentBase {
 			/* v8 ignore next 5 */
 			apply() {
 				throw new manager.SlothletError("VERSION_DISPATCH_NOT_CALLABLE", {
-					apiPath: logicalPath
+					path: segmentsOf(logicalPath)
 				});
 			},
 
@@ -1064,7 +1128,7 @@ export class VersionManager extends ComponentBase {
 						// non-configurable+non-writable property) are both satisfied.
 						return targetDesc;
 					}
-					// Configurable target properties (e.g. __isVersionDispatcher, __logicalPath):
+					// Configurable target properties (e.g. ____isVersionDispatcher, ____logicalPath):
 					// always report as configurable so version resolution retains maximum freedom.
 					return { __proto__: null, configurable: true, enumerable: true, writable: false, value: t[prop] };
 				}
@@ -1191,8 +1255,7 @@ export class VersionManager extends ComponentBase {
 			 * `set`/`get` behaviour consistent, writes to those keys are silently absorbed
 			 * (return `true` without touching vw).
 			 *
-			 * Keys NOT absorbed (get delegates to vw): `__metadata`, `__filePath`,
-			 * `__sourceFolder`, `__type`, and all user-defined string properties.
+			 * Keys NOT absorbed (get delegates to vw): all user-defined string properties.
 			 *
 			 * @param {object} t - Raw dispatcher target.
 			 * @param {string|symbol} prop - Property name.
@@ -1211,22 +1274,14 @@ export class VersionManager extends ComponentBase {
 				if (typeof prop === "symbol") return true;
 
 				// Framework internal string keys — get returns undefined (case 1).
-				if (prop === "____slothletInternal" || prop === "_impl" || prop === "__impl" || prop === "__state" || prop === "__invalid")
-					return true;
+				if (prop === "____slothletInternal" || prop === "____impl" || prop === "____state" || prop === "____invalid") return true;
 
 				// Stable framework accessors — get returns fixed non-vw values (case 2).
 				if (
-					prop === "__isVersionDispatcher" ||
-					prop === "__mode" ||
-					prop === "__apiPath" ||
-					prop === "__slothletPath" ||
-					prop === "__isCallable" ||
-					prop === "__materializeOnCreate" ||
-					prop === "__materialized" ||
-					prop === "__inFlight" ||
-					prop === "__displayName" ||
-					prop === "__moduleID" ||
-					prop === "_materialize" ||
+					prop === "____isVersionDispatcher" ||
+					prop === "____materializeOnCreate" ||
+					prop === "____displayName" ||
+					prop === "___materialize" ||
 					prop === "length" ||
 					prop === "name"
 				)
@@ -1254,6 +1309,7 @@ export class VersionManager extends ComponentBase {
 		// The mounted value is the proxy; brand it too so a merge/detection recognizes the dispatcher
 		// by identity (#283) rather than by reading its marker through the gated getTrap.
 		markFrameworkInternal(dispatcherProxy);
+		WeakMapMethods.set(DISPATCHERS, dispatcherProxy, Objects.freeze({ logicalPath, resolve: resolveVersionedWrapper }));
 		// Module code reads the dispatcher through a view that holds a later write to the versioned node it
 		// resolves to then (#625), see runtime_selfView.
 		registerVersionDispatcher(dispatcherProxy, { slothlet: manager.slothlet, resolve: resolveVersionedWrapper });

@@ -20,7 +20,7 @@
  * The live runtime restores its shared caller field in settle order, not entry order, so once two calls
  * overlap the field can name a call that has finished. A leaf entered from code that resumed after such
  * a settle must take its caller from the resolved identity (the one enforcement uses), not from that
- * field — otherwise `metadata.caller()` reports the wrong module (or none) and `lockCaller.caller` pins it.
+ * field — otherwise `metadata.caller()` reports the wrong module (or none) and `pin.caller` pins it.
  *
  * Sequence: the host calls `a.slow()` then `b.render()`; `a.slow` settles first, while `b.render` is
  * still suspended. `b.render` then resumes and calls `c.probe()` / `c.pinCaller()`.
@@ -84,7 +84,7 @@ describe.each(PLATFORMS)("Live runtime > caller of a leaf entered after an out-o
 		return api;
 	}
 
-	it("metadata.caller() and lockCaller.caller name the resumed call, not the field an earlier settle restored", async () => {
+	it("metadata.caller() and pin.caller name the resumed call, not the field an earlier settle restored", async () => {
 		await boot();
 		const [aGate, releaseA] = gate();
 		const [bGate, releaseB] = gate();

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:40-08:00 (1794874600)
+ *	@Last modified time: 2026-11-16T18:29:37-08:00 (1794882577)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -114,130 +114,6 @@ describe("Config.normalizeTypeScript — uncovered branches", () => {
 	});
 });
 
-// ─── normalizeSuppressFixes ──────────────────────────────────────────────────
-
-describe("Config.normalizeSuppressFixes — input shape and validation", () => {
-	it("returns an empty Set when suppressFixes is undefined", () => {
-		const cfg = new Config(makeMock());
-		const result = cfg.normalizeSuppressFixes(undefined, true);
-		expect(result).toBeInstanceOf(Set);
-		expect(result.size).toBe(0);
-	});
-
-	it("returns an empty Set when suppressFixes is null", () => {
-		const cfg = new Config(makeMock());
-		expect(cfg.normalizeSuppressFixes(null, true).size).toBe(0);
-	});
-
-	it("returns an empty Set when suppressFixes is an empty array", () => {
-		const cfg = new Config(makeMock());
-		expect(cfg.normalizeSuppressFixes([], true).size).toBe(0);
-	});
-
-	it("returns an empty Set when suppressFixes is a string (non-array)", () => {
-		const cfg = new Config(makeMock());
-		expect(cfg.normalizeSuppressFixes("C03_116", true).size).toBe(0);
-	});
-
-	it("returns an empty Set when suppressFixes is a number (non-array)", () => {
-		const cfg = new Config(makeMock());
-		expect(cfg.normalizeSuppressFixes(42, true).size).toBe(0);
-	});
-
-	it("returns an empty Set when suppressFixes is an object (non-array)", () => {
-		const cfg = new Config(makeMock());
-		expect(cfg.normalizeSuppressFixes({ C03_116: true }, true).size).toBe(0);
-	});
-});
-
-describe("Config.normalizeSuppressFixes — per-rule filtering", () => {
-	it("ignores non-string entries inside the array", () => {
-		const cfg = new Config(makeMock());
-		const result = cfg.normalizeSuppressFixes([42, null, undefined, { x: 1 }, ["nested"]], true);
-		expect(result.size).toBe(0);
-	});
-
-	it("ignores unknown rule IDs (bare 'C03' without PR suffix is invalid)", () => {
-		const cfg = new Config(makeMock());
-		const result = cfg.normalizeSuppressFixes(["C03"], true);
-		expect(result.size).toBe(0);
-	});
-
-	it("ignores unknown PR-suffixed rule IDs", () => {
-		const cfg = new Config(makeMock());
-		const result = cfg.normalizeSuppressFixes(["C99_999", "FOO_42"], true);
-		expect(result.size).toBe(0);
-	});
-
-	it("accepts a known rule ID and adds it to the Set", () => {
-		const cfg = new Config(makeMock());
-		const result = cfg.normalizeSuppressFixes(["C03_116"], true);
-		expect(result.has("C03_116")).toBe(true);
-		expect(result.size).toBe(1);
-	});
-
-	it("accepts known IDs and silently drops unknown / non-string entries in the same call", () => {
-		const cfg = new Config(makeMock());
-		const result = cfg.normalizeSuppressFixes(["C03_116", "C99_999", 42, null, "bare-name"], true);
-		expect(result.has("C03_116")).toBe(true);
-		expect(result.size).toBe(1);
-	});
-
-	it("dedupes when the same known rule ID appears multiple times", () => {
-		const cfg = new Config(makeMock());
-		const result = cfg.normalizeSuppressFixes(["C03_116", "C03_116", "C03_116"], true);
-		expect(result.size).toBe(1);
-	});
-});
-
-describe("Config.normalizeSuppressFixes — warning emission", () => {
-	it("emits WARN_SUPPRESS_FIX_ACTIVE for each accepted rule when silent is false", () => {
-		const mock = makeMock();
-		const warnSpy = vi.spyOn(mock, "SlothletWarning").mockImplementation(function () {});
-		const cfg = new Config(mock);
-
-		cfg.normalizeSuppressFixes(["C03_116"], false);
-
-		expect(warnSpy).toHaveBeenCalledTimes(1);
-		const callArgs = warnSpy.mock.calls[0];
-		expect(callArgs[0]).toBe("WARN_SUPPRESS_FIX_ACTIVE");
-		expect(callArgs[1].rule).toBe("C03_116");
-		expect(callArgs[1].url).toContain("https://github.com/CLDMV/slothlet/pull/");
-		expect(callArgs[1].url).toContain("116");
-	});
-
-	it("does NOT emit a warning when silent is true", () => {
-		const mock = makeMock();
-		const warnSpy = vi.spyOn(mock, "SlothletWarning").mockImplementation(function () {});
-		const cfg = new Config(mock);
-
-		cfg.normalizeSuppressFixes(["C03_116"], true);
-
-		expect(warnSpy).not.toHaveBeenCalled();
-	});
-
-	it("does NOT emit a warning for unknown rule IDs even with silent false", () => {
-		const mock = makeMock();
-		const warnSpy = vi.spyOn(mock, "SlothletWarning").mockImplementation(function () {});
-		const cfg = new Config(mock);
-
-		cfg.normalizeSuppressFixes(["C99_999"], false);
-
-		expect(warnSpy).not.toHaveBeenCalled();
-	});
-
-	it("URL contains the PR number extracted from the trailing _<number> segment", () => {
-		const mock = makeMock();
-		const warnSpy = vi.spyOn(mock, "SlothletWarning").mockImplementation(function () {});
-		const cfg = new Config(mock);
-
-		cfg.normalizeSuppressFixes(["C03_116"], false);
-
-		const callArgs = warnSpy.mock.calls[0];
-		expect(callArgs[1].url).toBe("https://github.com/CLDMV/slothlet/pull/116");
-	});
-});
-
 // ─── transformConfig — hook as string (lines 309-310) ────────────────────────
 
 describe("Config.transformConfig — hook as string (lines 309-310)", () => {
@@ -249,7 +125,7 @@ describe("Config.transformConfig — hook as string (lines 309-310)", () => {
 
 		expect(result.hook.enabled).toBe(true);
 		expect(result.hook.pattern).toBe("math/**");
-		expect(result.hook.suppressErrors).toBe(false);
+		expect(result.hook.errors).toBe(false);
 	});
 
 	it("preserves arbitrary string patterns in hookConfig.pattern (lines 309-310)", () => {
@@ -273,16 +149,15 @@ describe("Config.transformConfig — hook as string (lines 309-310)", () => {
 // ─── transformConfig — missing dir throws (line 241) ─────────────────────────
 
 describe("Config.transformConfig — missing dir throws (line 241)", () => {
-	it("an absent base is a no-base instance (#471): base and dir normalize to null", () => {
+	it("an absent base is a no-base instance (#471): base normalizes to null", () => {
 		const cfg = new Config(makeMock());
 
 		// No base at all is valid in node mode — the tree is built through api.add().
 		const normalized = cfg.transformConfig({});
 		expect(normalized.base).toBeNull();
-		expect(normalized.dir).toBeNull();
 	});
 
-	it("throws INVALID_CONFIG_DIR_MISSING when dir is an empty string (line 241)", () => {
+	it("throws INVALID_CONFIG_BASE_MISSING when dir is an empty string (line 241)", () => {
 		const cfg = new Config(makeMock());
 
 		expect(() => cfg.transformConfig({ base: "" })).toThrow();
@@ -396,30 +271,6 @@ describe("Config.normalizeCollision — unknown mode string in object falls back
 	});
 });
 
-// ─── transformConfig v2 allowMutation backward compat (lines 253, 267) ──────────
-
-describe("Config.transformConfig — v2 backward-compat warnings (lines 253, 267)", () => {
-	it("emits V3_CONFIG_DEPRECATED warning and maps allowMutation:false to mutations obj (line 253)", () => {
-		const cfg = new Config(makeMock());
-		// allowMutation: false is v2 shorthand; transformConfig emits a warning at line 253
-		const result = cfg.transformConfig({ base: ".", allowMutation: false });
-		// mutations should be mapped to all-disabled
-		expect(result.api?.mutations ?? result.mutations).toMatchObject({
-			add: false,
-			remove: false,
-			reload: false
-		});
-	});
-
-	it("emits V3_CONFIG_DEPRECATED warning for root-level collision (line 267)", () => {
-		const cfg = new Config(makeMock());
-		// Root-level collision (without api.collision) triggers the backward-compat warning at line 267
-		const result = cfg.transformConfig({ base: ".", collision: "merge" });
-		// The root-level collision should be remapped under api.collision
-		expect(result).toBeDefined();
-	});
-});
-
 // ─── transformConfig i18n config parsing (line 337) ─────────────────────────────
 
 describe("Config.transformConfig — i18n config parsed into normalized object (line 337)", () => {
@@ -438,45 +289,12 @@ describe("Config.transformConfig — i18n config parsed into normalized object (
 	});
 });
 
-// ─── transformConfig v2 warnings SUPPRESSED by silent:true (lines 253, 267) ────
-
-describe("Config.transformConfig — v2 warnings suppressed by silent:true (lines 253, 267)", () => {
-	it("emits no warning when allowMutation:false and silent:true (line 253 false branch)", () => {
-		// silent:true causes if (!config.silent) at line 253 to take the false branch,
-		// skipping the new SlothletWarning() call entirely.
-		const cfg = new Config(makeMock());
-		SlothletWarning.suppressConsole = true;
-		try {
-			const priorLength = SlothletWarning.captured.length;
-			cfg.transformConfig({ base: ".", allowMutation: false, silent: true });
-			expect(SlothletWarning.captured.length).toBe(priorLength);
-		} finally {
-			SlothletWarning.captured.splice(0);
-			SlothletWarning.suppressConsole = false;
-		}
-	});
-
-	it("emits no warning when root-level collision and silent:true (line 267 false branch)", () => {
-		// silent:true causes if (!config.silent) at line 267 to take the false branch.
-		const cfg = new Config(makeMock());
-		SlothletWarning.suppressConsole = true;
-		try {
-			const priorLength = SlothletWarning.captured.length;
-			cfg.transformConfig({ base: ".", collision: "merge", silent: true });
-			expect(SlothletWarning.captured.length).toBe(priorLength);
-		} finally {
-			SlothletWarning.captured.splice(0);
-			SlothletWarning.suppressConsole = false;
-		}
-	});
-});
-
 // ─── normalizePermissions — audit:false branch (line 538) ────────────────────
 
 describe("Config.normalizePermissions — audit:false maps to 'default' (line 538)", () => {
 	it("sets audit to 'default' when audit is boolean false (line 538)", () => {
 		const cfg = new Config(makeMock());
-		const result = cfg.normalizePermissions({ defaultPolicy: "allow", audit: false });
+		const result = cfg.normalizePermissions({ policy: "allow", audit: false });
 		expect(result.audit).toBe("default");
 	});
 });

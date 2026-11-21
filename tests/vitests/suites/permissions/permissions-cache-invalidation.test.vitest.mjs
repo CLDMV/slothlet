@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:15-07:00 (1791090915)
+ *	@Last modified time: 2026-11-16T18:29:40-08:00 (1794882580)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -27,12 +27,12 @@ describe.each(getMatrixConfigs())("Permissions > Cache Invalidation > $name", ({
 		api = null;
 	});
 
-	it("cache clears on addRule — new rule takes effect immediately", async () => {
+	it("cache clears on rules.add — new rule takes effect immediately", async () => {
 		api = await slothlet({
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "allow"
+				policy: "allow"
 			}
 		});
 
@@ -41,7 +41,7 @@ describe.each(getMatrixConfigs())("Permissions > Cache Invalidation > $name", ({
 		expect(result.ok).toBe(true);
 
 		// Add deny rule — cache should invalidate
-		api.slothlet.permissions.addRule({ caller: "callers.**", target: "payments.**", effect: "deny" });
+		api.slothlet.permissions.rules.add({ caller: "callers.**", target: "payments.**", effect: "deny" });
 
 		// Next call should be denied (cache was cleared)
 		try {
@@ -52,16 +52,16 @@ describe.each(getMatrixConfigs())("Permissions > Cache Invalidation > $name", ({
 		}
 	});
 
-	it("cache clears on removeRule", async () => {
+	it("cache clears on rules.remove", async () => {
 		api = await slothlet({
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "allow"
+				policy: "allow"
 			}
 		});
 
-		const ruleId = api.slothlet.permissions.addRule({ caller: "callers.**", target: "payments.**", effect: "deny" });
+		const ruleId = api.slothlet.permissions.rules.add({ caller: "callers.**", target: "payments.**", effect: "deny" });
 
 		// Denied
 		try {
@@ -72,7 +72,7 @@ describe.each(getMatrixConfigs())("Permissions > Cache Invalidation > $name", ({
 		}
 
 		// Remove rule — cache should invalidate
-		api.slothlet.permissions.removeRule(ruleId);
+		api.slothlet.permissions.rules.remove(ruleId);
 
 		// Now allowed
 		const result = await api.callers.paymentsCaller.callCharge(100);
@@ -85,7 +85,7 @@ describe.each(getMatrixConfigs())("Permissions > Cache Invalidation > $name", ({
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				rules: [{ caller: "callers.**", target: "payments.**", effect: "deny" }]
 			}
 		});

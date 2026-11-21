@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T01:52:15-08:00 (1794822735)
+ *	@Last modified time: 2026-11-16T18:29:32-08:00 (1794882572)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -55,8 +55,8 @@ describe.each(configs)("an object the host assigns to a node, listed by a module
 			{ caller: "lister.**", target: `${path}.ownPartly.a`, effect: "allow" },
 			{ caller: "lister.**", target: `${path}.ownDeep.open`, effect: "allow" }
 		];
-		api = await slothlet({ base: FIXTURE, silent: true, mode, runtime, permissions: { defaultPolicy: "deny", rules } });
-		await api.slothlet.api.add("lister", LISTER, { moduleID: "lister" });
+		api = await slothlet({ base: FIXTURE, silent: true, mode, runtime, permissions: { policy: "deny", rules } });
+		await api.slothlet.api.add("lister", LISTER, { id: "lister" });
 		await api.lister;
 		const node = path.split(".").reduce((holder, key) => holder[key], api);
 		await node;

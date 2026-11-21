@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T00:00:00-08:00 (1794729600)
+ *	@Last modified time: 2026-11-16T18:25:28-08:00 (1794882328)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -31,7 +31,7 @@ import { routes } from "../routes.mjs";
  * @returns {Promise<{ok: boolean, value?: *, code?: string}>} The outcome.
  * @public
  * @example
- * await api.coder.probe.attempt("Function"); // { ok: false, code: "CAPABILITY_REFUSED" }
+ * await api.coder.probe.attempt("Function"); // { ok: false, code: "PERMISSION_CAPABILITY_REFUSED" }
  */
 export async function attempt(route) {
 	try {
@@ -47,7 +47,7 @@ export async function attempt(route) {
  * @returns {Promise<{ok: boolean, value?: *, code?: string}>} The outcome.
  * @public
  * @example
- * await api.coder.probe.attemptToo("Function"); // { ok: false, code: "CAPABILITY_REFUSED" }
+ * await api.coder.probe.attemptToo("Function"); // { ok: false, code: "PERMISSION_CAPABILITY_REFUSED" }
  */
 export async function attemptToo(route) {
 	return attempt(route);
@@ -60,7 +60,7 @@ export async function attemptToo(route) {
  * @returns {{ok: boolean, value?: number, code?: string, reason?: string}} The outcome.
  * @public
  * @example
- * api.coder.probe.compileUnder("compileFunction", "/elsewhere/file.mjs"); // { ok: false, code: "CAPABILITY_REFUSED", … }
+ * api.coder.probe.compileUnder("compileFunction", "/elsewhere/file.mjs"); // { ok: false, code: "PERMISSION_CAPABILITY_REFUSED", … }
  */
 export function compileUnder(route, filename) {
 	try {
@@ -71,6 +71,6 @@ export function compileUnder(route, filename) {
 		module._compile("module.exports = 7;", filename);
 		return { ok: true, value: module.exports };
 	} catch (error) {
-		return { ok: false, code: error?.code ?? String(error), reason: error?.context?.reasonCode ?? error?.reasonCode };
+		return { ok: false, code: error?.code ?? String(error), reason: error?.details?.reasonCode ?? error?.reasonCode };
 	}
 }

@@ -45,16 +45,16 @@ describe.each(getMatrixConfigs({ runtime: "async" }))("ALS Cleanup > Config: '$n
 		// V3: Use context.diagnostics() API
 		const contextDiag = api.slothlet.context.diagnostics();
 		expect(contextDiag).toBeDefined();
-		expect(contextDiag.instanceID).toBeDefined();
-		expect(contextDiag.baseContext).toBeDefined();
-		expect(contextDiag.managerType).toBe("AsyncContextManager");
+		expect(contextDiag.instance).toBeDefined();
+		expect(contextDiag.base).toBeDefined();
+		expect(contextDiag.runtime).toBe("async");
 
-		const instanceId = api.slothlet.instanceID;
+		const instanceId = api.slothlet.instance.id;
 
-		// Verify instance is in the context manager's instances Map
-		expect(contextDiag.instancesMapKeys).toContain(instanceId);
-		const instanceBefore = contextDiag.instancesMapKeys.find((id) => id === instanceId);
-		expect(instanceBefore).toBeDefined();
+		// Verify instance is in the context manager's instances Map (read on the manager: the diagnostics describe
+		// this instance only, #837)
+		const { asyncContextManager: managerBefore } = await import("#factories/context");
+		expect(managerBefore.instances.has(instanceId)).toBe(true);
 
 		// Shutdown
 		await api.shutdown();
@@ -63,7 +63,7 @@ describe.each(getMatrixConfigs({ runtime: "async" }))("ALS Cleanup > Config: '$n
 		// Note: We can't call api.slothlet.diag.context() after shutdown,
 		// but we can verify the context manager directly via asyncContextManager
 		const { asyncContextManager } = await import("#factories/context");
-		const diagAfter = asyncContextManager.getDiagnostics();
+		const diagAfter = { instances: [...asyncContextManager.instances.keys()].map((id) => ({ id })) };
 
 		// Instance should be removed from context manager's instances Map
 		expect(diagAfter.instances.find((i) => i.id === instanceId)).toBeUndefined();
@@ -76,14 +76,14 @@ describe.each(getMatrixConfigs({ runtime: "async" }))("ALS Cleanup > Config: '$n
 			diagnostics: true
 		});
 
-		const instanceId = api.slothlet.instanceID;
+		const instanceId = api.slothlet.instance.id;
 
 		// Shutdown
 		await api.shutdown();
 
 		// After shutdown, verify instance is removed from context manager
 		const { asyncContextManager } = await import("#factories/context");
-		const diagAfter = asyncContextManager.getDiagnostics();
+		const diagAfter = { instances: [...asyncContextManager.instances.keys()].map((id) => ({ id })) };
 
 		// Instance should be removed
 		expect(diagAfter.instances.find((i) => i.id === instanceId)).toBeUndefined();
@@ -98,7 +98,7 @@ describe.each(getMatrixConfigs({ runtime: "async" }))("ALS Cleanup > Config: '$n
 		});
 
 		const diag1 = api1.slothlet.context.diagnostics();
-		const instanceId1 = api1.slothlet.instanceID;
+		const instanceId1 = api1.slothlet.instance.id;
 
 		await api1.shutdown();
 
@@ -111,14 +111,14 @@ describe.each(getMatrixConfigs({ runtime: "async" }))("ALS Cleanup > Config: '$n
 		});
 
 		const diag2 = api2.slothlet.context.diagnostics();
-		const instanceId2 = api2.slothlet.instanceID;
+		const instanceId2 = api2.slothlet.instance.id;
 
 		// Different instances should have different instance IDs
 		expect(instanceId2).not.toBe(instanceId1);
 
 		// Context data should be isolated
-		expect(diag1.baseContext.instance).toBe(1);
-		expect(diag2.baseContext.instance).toBe(2);
+		expect(diag1.base.instance).toBe(1);
+		expect(diag2.base.instance).toBe(2);
 
 		await api2.shutdown();
 	});
@@ -175,12 +175,12 @@ describe.each(getMatrixConfigs({ runtime: "async" }))("ALS Cleanup > Config: '$n
 		});
 
 		// Track instance IDs across reloads
-		const instanceIds = [api.slothlet.instanceID];
+		const instanceIds = [api.slothlet.instance.id];
 
 		// Perform multiple reloads
 		for (let i = 0; i < 3; i++) {
 			await api.slothlet.reload();
-			instanceIds.push(api.slothlet.instanceID);
+			instanceIds.push(api.slothlet.instance.id);
 		}
 
 		// All instance IDs should be different
@@ -189,7 +189,7 @@ describe.each(getMatrixConfigs({ runtime: "async" }))("ALS Cleanup > Config: '$n
 
 		// Verify old instances were cleaned up (only current should exist)
 		const { asyncContextManager } = await import("#factories/context");
-		const diag = asyncContextManager.getDiagnostics();
+		const diag = { instances: [...asyncContextManager.instances.keys()].map((id) => ({ id })) };
 
 		// Old instance IDs should not be in context manager
 		for (let i = 0; i < instanceIds.length - 1; i++) {
@@ -197,7 +197,7 @@ describe.each(getMatrixConfigs({ runtime: "async" }))("ALS Cleanup > Config: '$n
 		}
 
 		// Current instance should still exist
-		expect(diag.instances.find((inst) => inst.id === api.slothlet.instanceID)).toBeDefined();
+		expect(diag.instances.find((inst) => inst.id === api.slothlet.instance.id)).toBeDefined();
 
 		// API should still work after multiple reloads
 		// Note: math.mjs file collision test returns a+b+1000

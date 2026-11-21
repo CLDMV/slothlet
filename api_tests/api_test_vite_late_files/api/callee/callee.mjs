@@ -45,5 +45,5 @@ export async function fire() {
  * @returns {string|null} The caller's api path.
  */
 export function gated() {
-	return self.slothlet.metadata.caller()?.apiPath ?? null;
+	return self.slothlet.metadata.caller()?.path?.join(".") ?? null;
 }

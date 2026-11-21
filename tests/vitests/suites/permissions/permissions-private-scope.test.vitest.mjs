@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T20:14:49-08:00 (1794802489)
+ *	@Last modified time: 2026-11-16T18:30:04-08:00 (1794882604)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -83,7 +83,7 @@ describe.each(configs)("module-private members > $mode / $runtime / $attribution
 			mode,
 			runtime,
 			silent: true,
-			permissions: { defaultPolicy: "allow", attribution, rules: [], ...(privateConfig ? { private: privateConfig } : {}) }
+			permissions: { policy: "allow", caller: { attribution }, rules: [], ...(privateConfig ? { private: privateConfig } : {}) }
 		});
 
 	describe("the default: private to the module that owns the member", () => {
@@ -101,7 +101,7 @@ describe.each(configs)("module-private members > $mode / $runtime / $attribution
 		it("an add with a moduleID reads its own members in every folder, and neither it nor the base reads the other's", async () => {
 			const vault = await plain(`${EXT}/vault.mjs`);
 			api = await build();
-			await api.slothlet.api.add("ext", EXT, { moduleID: "ext-mod" });
+			await api.slothlet.api.add("ext", EXT, { id: "ext-mod" });
 			expect(await api.ext.reader.read("ext.vault.__key")).toEqual({ value: vault.__key, error: null });
 			expect(await api.ext.sub.reader.read("ext.vault.__key")).toEqual({ value: vault.__key, error: null });
 			expect(await api.billing.reader.read("ext.vault.__key")).toEqual(DENIED);
@@ -120,7 +120,7 @@ describe.each(configs)("module-private members > $mode / $runtime / $attribution
 			const layer = await plain(`${LAYER}/internals.mjs`);
 			api = await build();
 			await api.billing.reader.read("billing.internals.__rate");
-			await api.slothlet.api.add("billing", LAYER, { moduleID: "layer", forceOverwrite: true });
+			await api.slothlet.api.add("billing", LAYER, { id: "layer", collision: { force: true } });
 			expect(await api.billing.lreader.read("billing.internals.__rate")).toEqual({ value: layer.__rate, error: null });
 			expect(await api.reporting.reader.read("billing.internals.__rate")).toEqual(DENIED);
 		});
@@ -128,8 +128,8 @@ describe.each(configs)("module-private members > $mode / $runtime / $attribution
 		it("a scoped remove of one of a module's mounts leaves its other mount reading its members", async () => {
 			const vault = await plain(`${EXT}/vault.mjs`);
 			api = await build();
-			await api.slothlet.api.add("ext", EXT, { moduleID: "ext-mod" });
-			await api.slothlet.api.add("ext2", EXT, { moduleID: "ext-mod" });
+			await api.slothlet.api.add("ext", EXT, { id: "ext-mod" });
+			await api.slothlet.api.add("ext2", EXT, { id: "ext-mod" });
 			await api.slothlet.api.remove("ext");
 			expect(api.ext).toBeUndefined();
 			expect(await api.ext2.sub.reader.read("ext2.vault.__key")).toEqual({ value: vault.__key, error: null });
@@ -140,7 +140,7 @@ describe.each(configs)("module-private members > $mode / $runtime / $attribution
 			const vault = await plain(`${EXT}/vault.mjs`);
 			const internals = await plain(`${BASE}/billing/internals.mjs`);
 			api = await build();
-			await api.slothlet.api.add("ext", EXT, { moduleID: "ext-mod" });
+			await api.slothlet.api.add("ext", EXT, { id: "ext-mod" });
 			await api.slothlet.api.reload("ext-mod");
 			expect(await api.ext.sub.reader.read("ext.vault.__key")).toEqual({ value: vault.__key, error: null });
 			expect(await api.billing.reader.read("ext.vault.__key")).toEqual(DENIED);
@@ -151,7 +151,7 @@ describe.each(configs)("module-private members > $mode / $runtime / $attribution
 
 		it("an in-memory object leaf is its own module: it reads its own member, other modules do not", async () => {
 			api = await build();
-			await api.slothlet.api.add("obj", { _secret: 42, read: () => self.obj._secret }, { moduleID: "obj-mod" });
+			await api.slothlet.api.add("obj", { _secret: 42, read: () => self.obj._secret }, { id: "obj-mod" });
 			expect(await settled(() => api.obj.read())).toEqual({ value: 42, error: null });
 			expect(await api.billing.reader.read("obj._secret")).toEqual(DENIED);
 			expect(await settled(() => api.obj._secret)).toEqual(DENIED);
@@ -164,28 +164,30 @@ describe.each(configs)("module-private members > $mode / $runtime / $attribution
 				runtime,
 				silent: true,
 				permissions: {
-					defaultPolicy: "deny",
-					attribution,
+					policy: "deny",
+					caller: {
+						attribution
+					},
 					rules: [
 						{ caller: "**", target: "billing.internals.__rate", effect: "allow" },
 						{ caller: "**", target: "**", effect: "allow" }
 					]
 				}
 			});
-			await api.slothlet.api.add("ext", EXT, { moduleID: "ext-mod" });
+			await api.slothlet.api.add("ext", EXT, { id: "ext-mod" });
 			const denials = [];
 			api.slothlet.lifecycle.on("permission:denied", (payload) => denials.push(payload));
 			expect(await api.ext.reader.read("billing.internals.__rate")).toEqual(DENIED);
-			expect(denials.some((d) => d.target === "billing.internals.__rate")).toBe(true);
+			expect(denials.some((d) => d.target?.join(".") === "billing.internals.__rate")).toBe(true);
 		});
 
 		it("a supplied caller of another module is refused even under private.host allow", async () => {
 			api = await build({ host: "allow" });
-			await api.slothlet.api.add("ext", EXT, { moduleID: "ext-mod" });
+			await api.slothlet.api.add("ext", EXT, { id: "ext-mod" });
 			// A silent query answers for leaves that have loaded (lazy mode loads a folder on its first read).
 			await api.billing.reader.read("billing.internals.currency");
 			await api.ext.reader.read("ext.vault.name");
-			const { checkCall } = api.slothlet.permissions.global;
+			const { call: checkCall } = api.slothlet.permissions.global.check;
 			expect(checkCall("billing.reader.read", "billing.internals.__rate")).toBe(true);
 			expect(checkCall("ext.reader.read", "billing.internals.__rate")).toBe(false);
 		});
@@ -210,7 +212,7 @@ describe.each(configs)("module-private members > $mode / $runtime / $attribution
 		it("an add's own folder reads its members, its subfolder and other modules do not, with a given or a generated moduleID", async () => {
 			const vault = await plain(`${EXT}/vault.mjs`);
 			api = await build({ scope: "folder" });
-			await api.slothlet.api.add("ext", EXT, { moduleID: "ext-mod" });
+			await api.slothlet.api.add("ext", EXT, { id: "ext-mod" });
 			await api.slothlet.api.add("ext2", EXT);
 			for (const at of ["ext", "ext2"]) {
 				expect(await api[at].reader.read(`${at}.vault.__key`)).toEqual({ value: vault.__key, error: null });
@@ -223,7 +225,7 @@ describe.each(configs)("module-private members > $mode / $runtime / $attribution
 			const layer = await plain(`${LAYER}/internals.mjs`);
 			api = await build({ scope: "folder" });
 			await api.billing.reader.read("billing.internals.__rate");
-			await api.slothlet.api.add("billing", LAYER, { moduleID: "layer", forceOverwrite: true });
+			await api.slothlet.api.add("billing", LAYER, { id: "layer", collision: { force: true } });
 			expect(await api.billing.lreader.read("billing.internals.__rate")).toEqual({ value: layer.__rate, error: null });
 			expect(await api.reporting.reader.read("billing.internals.__rate")).toEqual(DENIED);
 		});
@@ -231,8 +233,8 @@ describe.each(configs)("module-private members > $mode / $runtime / $attribution
 		it("a scoped remove of one of a module's mounts leaves its other mount's folder reading its members", async () => {
 			const vault = await plain(`${EXT}/vault.mjs`);
 			api = await build({ scope: "folder" });
-			await api.slothlet.api.add("ext", EXT, { moduleID: "ext-mod" });
-			await api.slothlet.api.add("ext2", EXT, { moduleID: "ext-mod" });
+			await api.slothlet.api.add("ext", EXT, { id: "ext-mod" });
+			await api.slothlet.api.add("ext2", EXT, { id: "ext-mod" });
 			await api.slothlet.api.remove("ext");
 			expect(await api.ext2.reader.read("ext2.vault.__key")).toEqual({ value: vault.__key, error: null });
 			expect(await api.ext2.sub.reader.read("ext2.vault.__key")).toEqual(DENIED);
@@ -241,7 +243,7 @@ describe.each(configs)("module-private members > $mode / $runtime / $attribution
 		it("keeps the same answers across a reload of the add and of the base", async () => {
 			const vault = await plain(`${EXT}/vault.mjs`);
 			api = await build({ scope: "folder" });
-			await api.slothlet.api.add("ext", EXT, { moduleID: "ext-mod" });
+			await api.slothlet.api.add("ext", EXT, { id: "ext-mod" });
 			await api.slothlet.api.reload("ext-mod");
 			expect(await api.ext.reader.read("ext.vault.__key")).toEqual({ value: vault.__key, error: null });
 			expect(await api.ext.sub.reader.read("ext.vault.__key")).toEqual(DENIED);
@@ -251,7 +253,7 @@ describe.each(configs)("module-private members > $mode / $runtime / $attribution
 
 		it("an in-memory object leaf has no folder: other modules are refused its member", async () => {
 			api = await build({ scope: "folder" });
-			await api.slothlet.api.add("obj", { _secret: 42, read: () => self.obj._secret }, { moduleID: "obj-mod" });
+			await api.slothlet.api.add("obj", { _secret: 42, read: () => self.obj._secret }, { id: "obj-mod" });
 			expect(await api.billing.reader.read("obj._secret")).toEqual(DENIED);
 			expect(await settled(() => api.obj._secret)).toEqual(DENIED);
 		});
@@ -268,7 +270,7 @@ describe.each(configs)("module-private members > $mode / $runtime / $attribution
 				const own = await plain(`${BASE}/billing/internals.mjs`);
 				const twin = await plain(`${TWIN}/billing/internals.mjs`);
 				api = await build(privateConfig);
-				await api.slothlet.api.add("twin", TWIN, { moduleID: "twin-mod" });
+				await api.slothlet.api.add("twin", TWIN, { id: "twin-mod" });
 				await api.slothlet.api.add("twin2", TWIN);
 				// Each folder still reads its own module's member, so the refusals below are about the module, not the read.
 				expect(await api.billing.reader.read("billing.internals.__rate")).toEqual({ value: own.__rate, error: null });

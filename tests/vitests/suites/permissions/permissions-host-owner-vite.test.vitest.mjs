@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:17:15-08:00 (1794874635)
+ *	@Last modified time: 2026-11-16T18:29:55-08:00 (1794882595)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -44,7 +44,7 @@ import { makeContext as otherPackageContext } from "../../../../api_tests/api_te
 
 const FIXTURE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../../api_tests/api_test_host_owner_code");
 const CONTEXT_FILE = path.join(FIXTURE, "host", "context.mjs");
-const PERMISSIONS = { defaultPolicy: "deny", rules: [{ caller: "ext.**", target: "host.**", effect: "allow" }] };
+const PERMISSIONS = { policy: "deny", rules: [{ caller: "ext.**", target: "host.**", effect: "allow" }] };
 const CALLS = ["pin", "meta", "emit", "hostLeaf"];
 
 /** What each call gives when the host's code runs as the module's call (the plain-Node owner case's answers). */
@@ -60,7 +60,7 @@ const REFUSED = Object.fromEntries(CALLS.map((call) => [call, { ok: false, code:
 
 /** The context's closures as source, compiled again below under the host file's name. */
 const CONTEXT_SOURCE =
-	"(api) => ({ pin: (fn) => typeof api.slothlet.lockCaller(fn), meta: () => api.slothlet.metadata.caller()?.apiPath ?? null, " +
+	"(api) => ({ pin: (fn) => typeof api.slothlet.pin(fn), meta: () => api.slothlet.metadata.caller()?.path?.join('.') ?? null, " +
 	"emit: () => (api.slothlet.event.emit('host:ping', { n: 1 }), 'emitted'), hostLeaf: () => api.host.echo('x') })";
 
 /** The registration the plugin appends, made by the compiled code itself rather than by vitest's runner. */
@@ -117,7 +117,7 @@ describe.each(getMatrixConfigs())(
 		 */
 		const boot = async () => {
 			api = await slothlet({ ...config, base: path.join(FIXTURE, "api"), silent: true, permissions: PERMISSIONS });
-			await api.slothlet.api.add("host", { echo: (value) => `echo:${value}` }, { moduleID: "host-mod" });
+			await api.slothlet.api.add("host", { echo: (value) => `echo:${value}` }, { id: "host-mod" });
 			return api;
 		};
 

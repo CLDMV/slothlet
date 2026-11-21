@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T22:52:44-08:00 (1794811964)
+ *	@Last modified time: 2026-11-16T18:29:38-08:00 (1794882578)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -17,14 +17,13 @@
  * @fileoverview #471 — an instance (node or browser mode) needs no base directory: with `base` (or its `dir`
  * alias) absent or `null`, the instance composes an empty root with no warning and is built
  * entirely through `api.slothlet.api.add()`. A given-but-unusable base still fails loudly: an
- * empty-string base throws INVALID_CONFIG_DIR_MISSING, a missing path throws, and an existing
+ * empty-string base throws INVALID_CONFIG_BASE_MISSING, a missing path throws, and an existing
  * but empty directory still warns.
  */
 
-import { describe, it, expect, afterEach, beforeEach } from "vitest";
+import { describe, it, expect, afterEach } from "vitest";
 import path from "node:path";
 import slothlet from "@cldmv/slothlet";
-import { SlothletWarning } from "@cldmv/slothlet/errors";
 import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
 import { makeTestTmpDir } from "../../setup/test-fixtures-tmp.mjs";
 
@@ -43,18 +42,12 @@ const userKeys = (api) => Object.keys(api).filter((key) => !FRAMEWORK_ROOT_KEYS.
  * @param {object} instance - Bound api.
  * @returns {string[]} Warning codes.
  */
-const warningCodes = (instance) => instance.slothlet.diag.SlothletWarning.captured.map((w) => w.code);
+const warningCodes = (instance) => instance.slothlet.warnings.get().map((w) => w.code);
 
 describe.each(getMatrixConfigs())("No base directory (#471) > $name", ({ config }) => {
 	let api;
 
-	beforeEach(() => {
-		SlothletWarning.suppressConsole = true;
-		SlothletWarning.clearCaptured();
-	});
-
 	afterEach(async () => {
-		SlothletWarning.suppressConsole = false;
 		if (api) await api.shutdown();
 		api = null;
 	});
@@ -71,7 +64,7 @@ describe.each(getMatrixConfigs())("No base directory (#471) > $name", ({ config 
 	it("an instance with no base composes an empty root with no warning", async () => {
 		api = await slothlet(withoutBase());
 		expect(userKeys(api)).toEqual([]);
-		expect(warningCodes(api)).not.toContain("WARN_DIRECTORY_EMPTY");
+		expect(warningCodes(api)).not.toContain("WARNING_FOLDER_EMPTY");
 	});
 
 	it("`base: null` means the same as omitting it", async () => {
@@ -91,8 +84,8 @@ describe.each(getMatrixConfigs())("No base directory (#471) > $name", ({ config 
 	});
 
 	it("permissions and removal work on an api.add-built tree", async () => {
-		api = await slothlet({ ...withoutBase(), permissions: { defaultPolicy: "allow", rules: [] } });
-		await api.slothlet.api.add("tools", { exports: { ping: () => "pong" } }, { moduleID: "tools-mod" });
+		api = await slothlet({ ...withoutBase(), permissions: { policy: "allow", rules: [] } });
+		await api.slothlet.api.add("tools", { exports: { ping: () => "pong" } }, { id: "tools-mod" });
 		expect(await api.tools.ping()).toBe("pong");
 		expect(await api.slothlet.api.remove("tools-mod")).toBe(true);
 		expect(api.tools).toBeUndefined();
@@ -108,14 +101,14 @@ describe.each(getMatrixConfigs())("No base directory (#471) > $name", ({ config 
 	});
 
 	it("browser mode allows no base too: an empty root built through api.add", async () => {
-		api = await slothlet({ ...withoutBase(), platform: "browser" });
+		api = await slothlet({ ...withoutBase(), loader: { platform: "browser" } });
 		expect(userKeys(api)).toEqual([]);
 		await api.slothlet.api.add("tools", { exports: { ping: () => "pong" } });
 		expect(await api.tools.ping()).toBe("pong");
 	});
 
 	it("an empty-string base is still an error", async () => {
-		await expect(slothlet({ ...withoutBase(), base: "" })).rejects.toMatchObject({ code: "INVALID_CONFIG_DIR_MISSING" });
+		await expect(slothlet({ ...withoutBase(), base: "" })).rejects.toMatchObject({ code: "INVALID_CONFIG_BASE_MISSING" });
 	});
 
 	it("a base path that does not exist is still an error", async () => {
@@ -126,7 +119,7 @@ describe.each(getMatrixConfigs())("No base directory (#471) > $name", ({ config 
 		const empty = await makeTestTmpDir("empty-base-471");
 		try {
 			api = await slothlet({ ...withoutBase(), base: empty });
-			expect(warningCodes(api)).toContain("WARN_DIRECTORY_EMPTY");
+			expect(warningCodes(api)).toContain("WARNING_FOLDER_EMPTY");
 		} finally {
 			if (api) await api.shutdown();
 			api = null;

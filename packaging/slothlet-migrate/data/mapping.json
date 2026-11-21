@@ -13,7 +13,7 @@
 		"actions": "rename (same parent) · move (new parent) · remove · new · fold (several old names → one) · behaviour (same name, new behaviour/default)"
 	},
 	"counts": {
-		"config": 47,
+		"config": 48,
 		"option": 35,
 		"manifest": 3,
 		"export": 68,
@@ -134,6 +134,13 @@
 			"new": "loader.materialize",
 			"note": "Also accepts a function in v4: true | false | fn. A function turns it on and is called on materialized:complete (at once if already complete).",
 			"action": "move"
+		},
+		{
+			"kind": "config",
+			"old": "tracking",
+			"new": "loader.materialize",
+			"note": "tracking: true and tracking: { materialization: true } did what loader.materialize: true does; v4 keeps only loader.materialize (tracking throws INVALID_CONFIG_UNKNOWN_KEY). materialized:complete fires when loader.materialize is on.",
+			"action": "fold"
 		},
 		{
 			"kind": "config",
@@ -350,6 +357,13 @@
 			"old": "context",
 			"new": "context",
 			"note": "The init context is copied: mutating the object passed to slothlet() no longer changes the live context. Use api.slothlet.context.set().",
+			"action": "behaviour"
+		},
+		{
+			"kind": "config",
+			"old": "scope.isolation",
+			"new": "scope.isolation",
+			"note": "Defaults to \"full\" (was \"partial\"): a self write made in run() / scope() stays in the run. Set scope: { isolation: \"partial\" } (or isolation: \"partial\" per call) to let it reach the instance again.",
 			"action": "behaviour"
 		},
 		{

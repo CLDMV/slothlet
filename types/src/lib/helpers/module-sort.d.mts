@@ -1,9 +1,9 @@
 /**
  * @typedef {object} DiscoverResult
- * @property {string} packageName
- * @property {string} packageRoot
- * @property {string[]} mountPath
- * @property {string} apiDir
+ * @property {string} package
+ * @property {string} folder
+ * @property {string[]} mount
+ * @property {string} base
  * @property {object} manifest
  */
 /**
@@ -17,11 +17,11 @@
  * import { sortModules } from "#helpers/module-sort";
  *
  * const sorted = sortModules(found);
- * // Default: priority desc, then packageName asc.
+ * // Default: priority desc, then package asc.
  *
  * @example
  * // Custom: alphabetical only.
- * const alpha = sortModules(found, (a, b) => a.packageName.localeCompare(b.packageName));
+ * const alpha = sortModules(found, (a, b) => a.package.localeCompare(b.package));
  *
  * @example
  * // Topological over manifest.dependencies (caller's responsibility to
@@ -30,10 +30,10 @@
  */
 export function sortModules(results: DiscoverResult[], comparator?: (a: DiscoverResult, b: DiscoverResult) => number): DiscoverResult[];
 export type DiscoverResult = {
-    packageName: string;
-    packageRoot: string;
-    mountPath: string[];
-    apiDir: string;
+    package: string;
+    folder: string;
+    mount: string[];
+    base: string;
     manifest: object;
 };
 //# sourceMappingURL=module-sort.d.mts.map

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:14-08:00 (1794874574)
+ *	@Last modified time: 2026-11-16T18:28:52-08:00 (1794882532)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -58,8 +58,9 @@ const { resolve } = nodePath;
 
 /**
  * Build the api described by `configJson` and write its declaration file.
- * @param {string|undefined} configJson - The serialized worker config (`SLOTHLET_CONFIG`): the
- *   slothlet config for an eager, fast-mode instance plus `types` (`{ output, interfaceName, ... }`).
+ * @param {string|undefined} configJson - The serialized worker config (`SLOTHLET_CONFIG`):
+ *   `{ config, types }`, the slothlet config for an eager, fast-mode instance and the `typescript.types` option
+ *   (`{ output, name }`).
  * @param {WorkerMessageSender|undefined} send - IPC sender to the parent (`process.send` in the
  *   fork); `undefined` when there is no IPC channel.
  * @returns {Promise<number>} The process exit code: `0` on success, `1` on failure.
@@ -70,11 +71,11 @@ export async function runTypeGeneration(configJson, send) {
 	let api = null;
 	try {
 		if (!configJson) {
-			throw new SlothletError("TS_TYPE_GENERATION_WORKER_NO_CONFIG", {}, null, { validationError: true });
+			throw new SlothletError("TYPESCRIPT_TYPE_GENERATION_WORKER_NO_CONFIG", {});
 		}
-		const config = JSON.parse(configJson);
+		const { config, types } = JSON.parse(configJson);
 		api = await slothlet(config);
-		await generateTypes(api, config.types);
+		await generateTypes(api, { output: types?.output, interfaceName: types?.name });
 		send?.({ type: "success" });
 		return 0;
 	} catch (error) {
