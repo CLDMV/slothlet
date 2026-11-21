@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-21T13:39:41-08:00 (1795297181)
+ *	@Last modified time: 2026-11-21T15:02:25-08:00 (1795302145)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -22,8 +22,6 @@
  * fires while that build is under way is still that module's code: it gets exactly the answers the same code gets with
  * no reload running. The guest here has a deny rule on `vault.secret`, owns nothing of the vault and has no grant on the
  * permission controls, so every attempt is refused, under both runtimes, eager and lazy, precise and fast attribution.
- * The interval armed before a host's reload runs on the live runtime here; the async runtime's answer for it is
- * checked on its own.
  *
  * The eager build is held at the import of `base/gate.mjs` until the scheduled code has run, so that code runs inside
  * the build. A lazy build imports nothing, so there the reload is repeated until scheduled code lands before it settles.
@@ -198,39 +196,36 @@ describe.each(COMBOS)("Permissions > code a module scheduled runs as that module
 		expect(outcomes(await api.guest.probe.now("after"))).toEqual(expected);
 	}
 
-	it.runIf(combo.runtime === "live")(
-		"an interval armed in an earlier call gets the same refusals when it ticks inside a host's reload",
-		async () => {
-			await make();
-			const expected = await control();
-			await api.guest.probe.arm("iv");
-			let inside = [];
-			const tries = combo.mode === "eager" ? 1 : LAZY_TRIES;
-			for (let attempt = 0; attempt < tries && inside.length === 0; attempt++) {
-				const gate = globalThis.__slothletReloadBuildGate;
-				gate.shut = combo.mode === "eager";
-				gate.pending = true;
-				gate.settled = false;
-				const before = Object.keys(probeLog()).length;
-				const reloading = api.slothlet.reload();
-				if (gate.shut) {
-					await gate.whenEntered;
-					// A tick has run while the build waits at the gate.
-					expect(await until(() => Object.keys(probeLog()).length > before)).toBe(true);
-					gate.open();
-				}
-				await reloading;
-				gate.settled = true;
-				gate.pending = false;
-				gate.shut = false;
-				inside = Object.entries(probeLog()).filter(([label, record]) => label.startsWith("iv#") && record.pending);
+	it("an interval armed in an earlier call gets the same refusals when it ticks inside a host's reload", async () => {
+		await make();
+		const expected = await control();
+		await api.guest.probe.arm("iv");
+		let inside = [];
+		const tries = combo.mode === "eager" ? 1 : LAZY_TRIES;
+		for (let attempt = 0; attempt < tries && inside.length === 0; attempt++) {
+			const gate = globalThis.__slothletReloadBuildGate;
+			gate.shut = combo.mode === "eager";
+			gate.pending = true;
+			gate.settled = false;
+			const before = Object.keys(probeLog()).length;
+			const reloading = api.slothlet.reload();
+			if (gate.shut) {
+				await gate.whenEntered;
+				// A tick has run while the build waits at the gate.
+				expect(await until(() => Object.keys(probeLog()).length > before)).toBe(true);
+				gate.open();
 			}
-			globalThis.__slothletReloadBuildGate.stop = true;
-			expect(inside.length).toBeGreaterThan(0);
-			for (const [label, record] of inside) expectRefused(label, record, expected);
-			await expectInstanceUnchanged(expected);
+			await reloading;
+			gate.settled = true;
+			gate.pending = false;
+			gate.shut = false;
+			inside = Object.entries(probeLog()).filter(([label, record]) => label.startsWith("iv#") && record.pending);
 		}
-	);
+		globalThis.__slothletReloadBuildGate.stop = true;
+		expect(inside.length).toBeGreaterThan(0);
+		for (const [label, record] of inside) expectRefused(label, record, expected);
+		await expectInstanceUnchanged(expected);
+	});
 
 	it("a call into the module made inside a host's reload, and the rest of one made before it, get the same refusals", async () => {
 		await make();

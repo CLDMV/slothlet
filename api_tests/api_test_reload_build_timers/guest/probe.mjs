@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-21T13:35:58-08:00 (1795296958)
+ *	@Last modified time: 2026-11-21T14:59:12-08:00 (1795301952)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -104,15 +104,16 @@ export function later(label) {
 
 /**
  * Start an interval that tries everything on each tick while `globalThis.__slothletReloadBuildGate.pending` is set, and
- * stops once `count` ticks have been recorded or the gate says stop.
+ * stops once the gate says stop or another gate (the next test's) has taken its place.
  * @param {string} label - The records' key prefix.
  * @returns {string} "armed".
  */
 export function arm(label) {
 	let tick = 0;
+	const armed = globalThis.__slothletReloadBuildGate;
 	const id = setInterval(() => {
 		const gate = globalThis.__slothletReloadBuildGate;
-		if (gate?.stop) {
+		if (gate !== armed || gate?.stop) {
 			clearInterval(id);
 			return;
 		}

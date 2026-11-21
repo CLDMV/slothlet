@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-21T13:05:04-08:00 (1795295104)
+ *	@Last modified time: 2026-11-21T15:00:21-08:00 (1795302021)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -736,6 +736,26 @@ export class AsyncContextManager {
 	#lastTold = null;
 
 	/**
+	 * The instances that have shut down (see {@link AsyncContextManager#cleanup}).
+	 * @type {WeakMap<object, true>}
+	 * @private
+	 */
+	#ended = new WeakMap();
+
+	/**
+	 * Whether a store belongs to an instance that has shut down and has no context under its ID now (an instance
+	 * reloaded after a shutdown has one again).
+	 * @param {object} store - A context store.
+	 * @returns {boolean} True when it does.
+	 * @private
+	 */
+	#ofEndedInstance(store) {
+		const owner = store.slothlet;
+		if (owner === null || typeof owner !== "object" || !WeakMapMethods.has(this.#ended, owner)) return false;
+		return !MapMethods.has(this.instances, storeInstanceID(store));
+	}
+
+	/**
 	 * The store the code running now acts in. Node's async context gives a flow's store to any code holding an async
 	 * resource of that flow (an `AsyncResource`, a function `AsyncLocalStorage.snapshot()` or `bind()` made there, the
 	 * context a timer keeps, copied onto a timer of its own), so a module could run its own code in another call's flow,
@@ -750,6 +770,9 @@ export class AsyncContextManager {
 	 */
 	activeStore() {
 		const store = this.als.getStore();
+		// Code still running in a flow of an instance that has shut down (a timer, a listener, a promise chain its code
+		// left behind) runs in no store, as it does on the live runtime, whose stores go with the instance.
+		if (store !== undefined && store !== null && this.#ofEndedInstance(store)) return undefined;
 		if (store === undefined || this.#telling || this.store === null) return store;
 		if (this.store.entered() === store) return store;
 		// Code that entered a flow by itself put the rest of its run outside the flow: told again against that flow.
@@ -2046,9 +2069,11 @@ export class AsyncContextManager {
 	/**
 	 * Cleanup instance context
 	 * @param {string} instanceID - Instance to cleanup
+	 * @param {{keepFlows?: boolean}} [options] - `keepFlows`: the instance comes back on the flows it has (a restart),
+	 *   so they stay its.
 	 * @public
 	 */
-	cleanup(instanceID) {
+	cleanup(instanceID, { keepFlows = false } = {}) {
 		const store = MapMethods.get(this.instances, instanceID);
 		if (!store) {
 			throw new SlothletError("CONTEXT_NOT_FOUND", {
@@ -2056,6 +2081,11 @@ export class AsyncContextManager {
 				instances: ArrayMethods.join(mapKeysToArray(this.instances), ", ") || "none"
 			});
 		}
+		// The instance shuts down on the ID it holds (a reload leaves an old ID, a restart keeps the flows open across it):
+		// the flows its code left behind are no longer its (see activeStore).
+		const owner = store.slothlet;
+		if (!keepFlows && owner !== null && typeof owner === "object" && owner.instanceID === instanceID)
+			WeakMapMethods.set(this.#ended, owner, true);
 
 		// Clear the store data
 		store.self = {};
