@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-19T16:09:19-08:00 (1795133359)
+ *	@Last modified time: 2026-11-21T13:20:34-08:00 (1795296034)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -254,6 +254,35 @@ let loadAsStorage = null;
 function runInReloadBuild(mark, fn) {
 	reloadBuildStorage ??= new AsyncLocalStorage();
 	return reloadBuildStorage.run(mark, fn);
+}
+
+/**
+ * Run a build in a new flow of {@link reloadBuildStorage} (see {@link runInReloadBuild}), and close its mark once the
+ * build settles. Work module code begins while the build loads it (a timer, a server's callbacks) keeps the flow, and
+ * so the mark, for as long as it lives: once closed, the mark tells that work nothing (see {@link currentBuildMark}),
+ * so it runs as code outside the build does.
+ * @param {object} mark - The build's mark.
+ * @param {function(): Promise<*>} fn - The build.
+ * @returns {Promise<*>} What `fn` resolves to.
+ * @private
+ */
+async function runInClosingBuild(mark, fn) {
+	try {
+		return await runInReloadBuild(mark, fn);
+	} finally {
+		mark.closed = true;
+	}
+}
+
+/**
+ * What {@link reloadBuildStorage} holds for the running code, leaving out a mark whose build is over (see
+ * {@link runInClosingBuild}).
+ * @returns {*} The mark, or undefined.
+ * @private
+ */
+function currentBuildMark() {
+	const mark = reloadBuildStorage?.getStore();
+	return mark !== null && typeof mark === "object" && mark.closed === true ? undefined : mark;
 }
 
 /**
@@ -638,12 +667,13 @@ class Slothlet {
 	#keptScopes = new Map();
 
 	/**
-	 * The ALS mark of instance work that must read and write the instance's own fields even when called from a run: a
-	 * restart's teardown and rebuild.
-	 * @type {object}
+	 * The mark of the restart under way (see {@link Slothlet#_restart}), whose teardown and rebuild read and write the
+	 * instance's own fields; null while none is. It is closed when the restart ends (see {@link currentBuildMark}), so
+	 * work module code began while the restart loaded it is no longer taken for the restart's own.
+	 * @type {{closed: boolean}|null}
 	 * @private
 	 */
-	#instanceWork = {};
+	#instanceWork = null;
 
 	/**
 	 * Set by a reload with no window (see {@link Slothlet#carryIntoBuild}) for load() to call once the new copy's components
@@ -2282,7 +2312,7 @@ class Slothlet {
 			const mark = { copyOf: this, next: entry.values, kind: "materialize", bust: entry.bust, silent: this[SILENT_BUILD]() };
 			const owner = WeakMapMethods.get(this.#treeOwners, entry.values.api);
 			const id = this.#loadIDOf(owner);
-			const inSet = () => runInReloadBuild(mark, load);
+			const inSet = () => runInClosingBuild(mark, load);
 			if (id === undefined || id === this.instanceID) return inSet();
 			return runLoadAs(id, inSet);
 		}
@@ -2443,9 +2473,9 @@ class Slothlet {
 	 * @private
 	 */
 	#readField(field) {
-		const mark = reloadBuildStorage?.getStore();
+		const mark = currentBuildMark();
 		if (mark !== undefined) {
-			if (mark === this.#instanceWork) return this.#fields[field];
+			if (this.#inInstanceWork(mark)) return this.#fields[field];
 			const next = this.#buildNext(mark);
 			if (next !== null) return next[field];
 		}
@@ -2471,10 +2501,11 @@ class Slothlet {
 	 * @private
 	 */
 	#writeField(field, value) {
-		const mark = reloadBuildStorage?.getStore();
-		const next = mark === undefined || mark === this.#instanceWork ? null : this.#buildNext(mark);
+		const mark = currentBuildMark();
+		const instance = mark !== undefined && this.#inInstanceWork(mark);
+		const next = mark === undefined || instance ? null : this.#buildNext(mark);
 		if (next !== null) next[field] = value;
-		else if (mark !== this.#instanceWork && this.#heldCopies !== 0) {
+		else if (!instance && this.#heldCopies !== 0) {
 			// A run with a tree of its own writes its own set (a lazy node's count as it loads).
 			const record = this.#runRecord();
 			if (record !== null && record.values !== null) record.values[field] = value;
@@ -2494,6 +2525,20 @@ class Slothlet {
 		if (window !== null && !window.closed && mark === window.mark) return window.next;
 		if (mark !== null && typeof mark === "object" && mark.copyOf === this) return mark.next;
 		return null;
+	}
+
+	/**
+	 * Whether the code running with `mark` is the restart's own work (see {@link Slothlet#_restart}), which reads and
+	 * writes the instance's own set: code of the restart's flow, not in a `run()` / `scope()` opened in it. A run opened
+	 * in that flow (by work a module began while the restart loaded it) is an ordinary run with a copy of its own.
+	 * @param {*} mark - What {@link currentBuildMark} gives for the running code.
+	 * @returns {boolean} True for the restart's own work.
+	 * @private
+	 */
+	#inInstanceWork(mark) {
+		const work = this.#instanceWork;
+		if (work === null || mark !== work) return false;
+		return this.#runRecord() === null;
 	}
 
 	/**
@@ -2780,12 +2825,13 @@ class Slothlet {
 	[WRITE_TARGET](handler, instanceOnly) {
 		if (this.#copy === null && this.#fields === null) return handler;
 		const slot = handler.constructor.slothletProperty;
-		const mark = reloadBuildStorage?.getStore();
-		if (mark !== undefined && mark !== this.#instanceWork && this.#buildNext(mark) !== null) return handler;
+		const mark = currentBuildMark();
+		const instance = mark !== undefined && this.#inInstanceWork(mark);
+		if (mark !== undefined && !instance && this.#buildNext(mark) !== null) return handler;
 		const own = (this.#fields ?? this).handlers;
 		const known = own?.[slot] === handler || WeakMapMethods.has(this.#owners, handler);
 		if (!known) return handler;
-		const record = instanceOnly || (mark !== undefined && mark === this.#instanceWork) ? null : this.#runRecord();
+		const record = instanceOnly || instance ? null : this.#runRecord();
 		if (record === null) {
 			if (instanceOnly && own[slot] !== handler) return handler;
 			const target = own[slot];
@@ -2864,9 +2910,9 @@ class Slothlet {
 	 */
 	#treeWriter() {
 		if (!AsyncLocalStorage) return undefined;
-		const mark = reloadBuildStorage?.getStore();
+		const mark = currentBuildMark();
 		if (mark !== undefined) {
-			if (mark === this.#instanceWork) return null;
+			if (this.#inInstanceWork(mark)) return null;
 			if (this.#buildNext(mark) !== null) return undefined;
 		}
 		return this.#runRecord();
@@ -3104,7 +3150,7 @@ class Slothlet {
 		// The tree being built is one apart from the instance's from its first node on.
 		this._treeCopies++;
 		try {
-			await runInReloadBuild(mark, loadID === undefined ? build : () => runLoadAs(loadID, build));
+			await runInClosingBuild(mark, loadID === undefined ? build : () => runLoadAs(loadID, build));
 		} catch (error) {
 			this.#retireTree(next);
 			throw error;
@@ -3376,7 +3422,7 @@ class Slothlet {
 	 * @internal
 	 */
 	[SILENT_BUILD]() {
-		const mark = reloadBuildStorage?.getStore();
+		const mark = currentBuildMark();
 		return mark !== undefined && mark !== null && typeof mark === "object" && mark.copyOf === this && mark.silent === true;
 	}
 
@@ -3388,7 +3434,7 @@ class Slothlet {
 	 * @internal
 	 */
 	[COPY_SOURCE_URL]() {
-		const mark = reloadBuildStorage?.getStore();
+		const mark = currentBuildMark();
 		if (mark === undefined || mark === null || typeof mark !== "object" || mark.copyOf !== this) return null;
 		if (mark.kind !== "copy") return mark.bust ?? null;
 		return mark.view.processors?.loader ?? null;
@@ -3993,11 +4039,25 @@ class Slothlet {
 		// and write the instance's own set, never the calling run's copy.
 		this.#keepCurrentCopy();
 		if (!AsyncLocalStorage) return this.#restartOnto();
-		// Each run open now keeps a tree of its own, built before the teardown below: it keeps the api tree, the handlers
-		// and the modules it started with, and nothing of the rebuilt instance reaches it.
-		await runInReloadBuild(this.#instanceWork, () => this.#copyForSharers((this.#fields ?? this).api, null));
-		this.#keepScopeForCopies();
-		return runInReloadBuild(this.#instanceWork, () => this.#restartOnto());
+		// The async runtime counts the work of runs open now while any of its instances lives: the teardown below leaves
+		// it with none until the rebuild starts the new one, so it is held across, or the work those runs finish after the
+		// restart would never be counted done and their copies never torn down.
+		const contextManager = this.contextManager;
+		const holdsJobHook = typeof contextManager.holdJobHook === "function";
+		if (holdsJobHook) contextManager.holdJobHook();
+		const work = { closed: false };
+		this.#instanceWork = work;
+		try {
+			// Each run open now keeps a tree of its own, built before the teardown below: it keeps the api tree, the
+			// handlers and the modules it started with, and nothing of the rebuilt instance reaches it.
+			await runInReloadBuild(work, () => this.#copyForSharers((this.#fields ?? this).api, null));
+			this.#keepScopeForCopies();
+			return await runInReloadBuild(work, () => this.#restartOnto());
+		} finally {
+			work.closed = true;
+			this.#instanceWork = null;
+			if (holdsJobHook) contextManager.releaseJobHook();
+		}
 	}
 
 	/**
