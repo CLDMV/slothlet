@@ -3346,7 +3346,16 @@ export class LiveContextManager {
 		if (this.#flowBelongsToInstance(activeID, instanceID)) {
 			return MapMethods.get(this.instances, activeID);
 		}
-		return MapMethods.get(this.instances, instanceID);
+		const own = MapMethods.get(this.instances, instanceID);
+		// A full reload moves the instance to a new ID while its new copy builds, and the store of the ID it leaves stays
+		// until the swap: code of the copy being replaced (a call made before the reload, a timer or listener it set) runs
+		// in that store, and is answered there, as the module it is, not as the new store's resting host.
+		if (activeID && own?.slothlet) {
+			const active = MapMethods.get(this.instances, activeID);
+			const base = active ? MapMethods.get(this.instances, active.parentInstanceID ?? activeID) : undefined;
+			if (base !== undefined && base !== own && base.slothlet === own.slothlet) return active;
+		}
+		return own;
 	}
 
 	/**

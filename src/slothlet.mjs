@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-21T13:20:34-08:00 (1795296034)
+ *	@Last modified time: 2026-11-21T13:37:31-08:00 (1795297051)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -3721,15 +3721,9 @@ class Slothlet {
 		// listener, a promise chain) still holds them and runs in them: they move to the new ID too.
 		reparentFlowStores(this, [oldInstanceID], this.instanceID);
 
-		// 6. Clean up the old base context store now that the new one is active.
-		//    Guard with .has() because shutdown() may have already removed the store.
-		if (
-			oldInstanceID &&
-			oldInstanceID !== this.instanceID &&
-			(this.contextManager.instances == null ? undefined : MapMethods.has(this.contextManager.instances, oldInstanceID))
-		) {
-			this.contextManager.cleanup(oldInstanceID);
-		}
+		// 6. The old base context store stays until the swap (step 10): code of the copy being replaced still runs in it
+		//    while the new copy builds (a call made before the reload, a timer or listener it set), and is answered there as
+		//    the module it is (see the live context manager's tryGetContext).
 
 		// 7. Replay operation history in chronological order. With a window, that is everything the instance's api manager
 		//    recorded, read until nothing new is left, so an add(), remove() or rule change a call made while this reload
@@ -3790,12 +3784,21 @@ class Slothlet {
 		else if (savedMode === "off" && permissionManager?.mode?.() !== "off") permissionManager.disable();
 		if (wasSealed) this.handlers.permissionManager?.seal?.();
 
-		// 10. The swap: from here every call, whoever makes it, is answered by the new copy.
+		// 10. The swap: from here every call, whoever makes it, is answered by the new copy. The old base context store goes
+		//     last, once the files of the copy it served are retired. Guard with .has() because shutdown() may have already
+		//     removed the store.
 		if (window !== null) {
 			this.#closeReloadWindow(window, true);
 			await this.#retireReplacedScope(window);
 		} else {
 			this.handlers.metadata?.readThrough?.(null);
+		}
+		if (
+			oldInstanceID &&
+			oldInstanceID !== this.instanceID &&
+			(this.contextManager.instances == null ? undefined : MapMethods.has(this.contextManager.instances, oldInstanceID))
+		) {
+			this.contextManager.cleanup(oldInstanceID);
 		}
 
 		return this.boundApi;
