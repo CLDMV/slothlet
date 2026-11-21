@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-21T13:38:14-08:00 (1795297094)
+ *	@Last modified time: 2026-11-21T13:29:12-08:00 (1795296552)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -1147,14 +1147,24 @@ const ACTING_FOR = [];
  * @private
  */
 function runtime_crossRun(state, run) {
-	const from = state.from;
-	if (!from?.____slothletInternal || typeof state.original !== "function" || !runtime_runsNoModuleCode(state.original)) return run();
-	listPush(ACTING_FOR, from);
+	if (!runtime_crossRunsForHander(state)) return run();
+	listPush(ACTING_FOR, state.from);
 	try {
 		return run();
 	} finally {
 		ArrayMethods.pop(ACTING_FOR);
 	}
+}
+
+/**
+ * Whether a crossing view's function runs for the module that handed it over ({@link runtime_crossRun}).
+ * @param {object} state - The crossing view's state.
+ * @returns {boolean} True when it does.
+ * @private
+ */
+function runtime_crossRunsForHander(state) {
+	if (!state.from?.____slothletInternal || typeof state.original !== "function") return false;
+	return state.handed || runtime_runsNoModuleCode(state.original);
 }
 
 /**
@@ -1169,6 +1179,56 @@ function runtime_crossRun(state, run) {
 function runtime_runsNoModuleCode(fn) {
 	if (util.types.isProxy(fn)) return false;
 	return RegExpMethods.exec(/\{\s*\[native code\]\s*\}\s*$/, functionSource(fn)) !== null;
+}
+
+/**
+ * Whether a function a module hands on runs for that module wherever it runs ({@link ACTING_FOR}): it runs none of a
+ * module's code of its own, so no frame of the handing module's says whose its writes are. A bound built-in, an
+ * anonymous one (a promise's resolver), a function of the language's own and one of Node's (`util._extend`) are; a
+ * module's own function, whose frames attribute what it does, and slothlet's own values, are not.
+ * @param {*} value - The value handed on.
+ * @param {object|null} from - The wrapper of the module handing it on.
+ * @returns {boolean} True when it runs for that module.
+ * @private
+ */
+function runtime_runsForHander(value, from) {
+	if (typeof value !== "function" || !from?.____slothletInternal || util.types.isProxy(value)) return false;
+	if (runtime_isSlothletValue(value) || isFrameworkInternal(value)) return false;
+	return WeakSetMethods.has(INTRINSICS, value) || isSharedExport(value) || runtime_runsNoModuleCode(value);
+}
+
+/**
+ * The views of functions of the language's and Node's own that modules handed to others ({@link runtime_handedView}):
+ * by function, then by the module handing it, then by the reader. One function is handed by many modules, and each view
+ * runs for the module that handed it.
+ * @type {WeakMap<Function, WeakMap<object, Map<*, Function>>>}
+ * @private
+ */
+const HANDED_VIEWS = new WeakMap();
+
+/**
+ * A function of the language's or Node's own (`Reflect.set`, `util._extend`) that one module hands another as an
+ * argument, as the other gets it: a view that runs it for the module that handed it ({@link runtime_crossRun}), with
+ * what the reader calls it with reaching that module, so a target the reader holds as itself is the handing module's
+ * view of it again. Such a function shared by everyone passes between modules as itself everywhere else.
+ * @param {Function} fn - The function.
+ * @param {object} reader - The wrapper of the module it is handed to.
+ * @param {object} slothlet - The instance.
+ * @param {object} from - The wrapper of the module handing it.
+ * @returns {Function} The view, the same one for the same function, module and reader every time.
+ * @private
+ */
+function runtime_handedView(fn, reader, slothlet, from) {
+	let byFrom = WeakMapMethods.get(HANDED_VIEWS, fn);
+	if (!byFrom) WeakMapMethods.set(HANDED_VIEWS, fn, (byFrom = new WeakMap()));
+	let byReader = WeakMapMethods.get(byFrom, from);
+	if (!byReader) WeakMapMethods.set(byFrom, from, (byReader = new Map()));
+	const key = runtime_crossKey(reader);
+	const held = MapMethods.get(byReader, key);
+	if (held) return held;
+	const view = runtime_crossView(fn, reader, slothlet, from, true);
+	MapMethods.set(byReader, key, view);
+	return view;
 }
 
 /**
@@ -3442,6 +3502,12 @@ function runtime_assertOwnedWriteAt(wrapper, parts) {
 	for (let ofIndex = 0, ofList = concatLists([caller], identityCeilings(identity)); ofIndex < ofList.length; ofIndex++) {
 		const writer = ofList[ofIndex];
 		slothlet.handlers.apiManager.assertOwnedWrite(parts, writer);
+	}
+	// A function another module handed over to run, which runs none of that module's code (a bound built-in), makes the
+	// write for that module too, which has to be allowed it.
+	for (let actIndex = 0; actIndex < ACTING_FOR.length; actIndex++) {
+		const actor = ACTING_FOR[actIndex];
+		if (actor !== caller && actor.slothlet === slothlet) runtime_assertReaderWrite(slothlet, actor, caller, parts);
 	}
 }
 
@@ -9259,7 +9325,11 @@ function runtime_crossArgumentsFrom(wrapper, args, caller) {
 				if (prototype !== null && typeof prototype === "object") runtime_recordOrigin(prototype, caller);
 			}
 		}
-		const crossed = runtime_crossTo(value, wrapper, slothlet, from);
+		// A function of the language's or Node's own the caller hands over runs for the caller, with its target.
+		const crossed =
+			from !== null && runtime_guardOn(slothlet) && runtime_runsForHander(value, from) && !WeakMapMethods.has(CROSSINGS, value)
+				? runtime_handedView(value, wrapper, slothlet, from)
+				: runtime_crossTo(value, wrapper, slothlet, from);
 		if (crossed === value) continue;
 		if (result === args) result = copyList(args);
 		result[index] = crossed;
@@ -10795,6 +10865,8 @@ function runtime_crossTo(value, reader, slothlet, from = null) {
 		from ??= creator;
 	}
 	if (isModule && from !== null && runtime_asOneModule(slothlet, from, reader)) return value;
+	// A function of the language's own a module handed over, handed on again, still runs for the module that handed it.
+	if (crossing?.handed && isModule) return runtime_handedView(value, reader, slothlet, from);
 	// A value the reader's own module held as itself when it handed it on comes back to it as itself.
 	if (runtime_isOwnOrigin(value, reader)) return value;
 	// A view already made of it for the reader's module is what the module holds, except in a function of the module
@@ -10817,7 +10889,7 @@ function runtime_crossTo(value, reader, slothlet, from = null) {
 				state.decided = null;
 			}
 			if (state.reader === reader ? state.readerDecided : state.decided ? WeakSetMethods.has(state.decided, reader) : false) return held;
-			const itself = runtime_handedAsItself(slothlet, reader, from);
+			const itself = runtime_runsForHander(value, from) ? null : runtime_handedAsItself(slothlet, reader, from);
 			if (itself !== null) {
 				if (itself === "writer") runtime_recordOrigin(value, from);
 				return value;
@@ -10846,7 +10918,9 @@ function runtime_crossTo(value, reader, slothlet, from = null) {
 		// A module that may write everything at the path the value comes from gets the value itself, as the owner does,
 		// and so does a module handed a value by one that may write everything at its own path. Handed back to the
 		// module it came from, the first is that module's own value again.
-		const itself = isModule ? runtime_handedAsItself(slothlet, reader, from) : null;
+		// A function that runs no module's code is the module's that hands it on, however much the reader may write: it
+		// stays a view, so what it writes is that module's to write too ({@link runtime_crossRun}).
+		const itself = isModule && !runtime_runsForHander(value, from) ? runtime_handedAsItself(slothlet, reader, from) : null;
 		if (itself !== null) {
 			if (itself === "writer") runtime_recordOrigin(value, from);
 			return value;
@@ -10875,14 +10949,16 @@ function runtime_crossTo(value, reader, slothlet, from = null) {
  * @param {object} reader - Who it reaches.
  * @param {object} slothlet - The instance.
  * @param {object|null} from - The wrapper of the module it comes from.
+ * @param {boolean} [handed] - A function of the language's or Node's own handed on as an argument
+ *   ({@link runtime_handedView}), which keeps its views itself.
  * @returns {object|Function} The view, the same one for the same value and module every time.
  * @private
  */
-function runtime_crossView(original, reader, slothlet, from) {
+function runtime_crossView(original, reader, slothlet, from, handed = false) {
 	// The views of a value: its first module's held inline, any other module's in a map made only then.
 	const key = runtime_crossKey(reader);
-	const views = WeakMapMethods.get(CROSSING_VIEWS, original);
-	if (views !== undefined) {
+	const views = handed ? null : WeakMapMethods.get(CROSSING_VIEWS, original);
+	if (views != null) {
 		if (views.key === key) return views.view;
 		const other = views.others == null ? undefined : MapMethods.get(views.others, key);
 		if (other) return other;
@@ -10918,13 +10994,15 @@ function runtime_crossView(original, reader, slothlet, from) {
 		// The function the view is made for was just refused the value itself, under the rules as they are now.
 		epoch: slothlet?.handlers?.permissionManager?.ruleEpoch ?? 0,
 		readerDecided: true,
-		decided: null
+		decided: null,
+		handed
 	};
 	const view = new NativeProxy(shadow, CROSSING_HANDLER);
 	state.view = view;
 	WeakMapMethods.set(CROSSING_STATES, shadow, state);
 	WeakMapMethods.set(CROSSINGS, view, state);
-	if (views === undefined) WeakMapMethods.set(CROSSING_VIEWS, original, { key, view, reader, others: null });
+	if (handed) return view;
+	if (views == null) WeakMapMethods.set(CROSSING_VIEWS, original, { key, view, reader, others: null });
 	else MapMethods.set((views.others ??= new Map()), key, view);
 	return view;
 }
@@ -11409,7 +11487,15 @@ const CROSSING_HANDLER = {
 		let result;
 		try {
 			const receiver = runtime_crossIn(state, thisArg);
-			const given = mapList(args, (arg) => runtime_crossIn(state, arg));
+			// A function of the engine's own the runner gives one that runs for the module that handed it (a scheduler, a
+			// promise's `then`) runs for that module too, whenever it is called back.
+			const forHander = runtime_crossRunsForHander(state);
+			const given = mapList(args, (arg) => {
+				const behind = forHander ? runtime_uncross(arg) : arg;
+				return forHander && runtime_runsForHander(behind, state.from)
+					? runtime_handedView(behind, state.reader, state.slothlet, state.from)
+					: runtime_crossIn(state, arg);
+			});
 			result = runtime_crossRun(state, () => Reflect.apply(state.original, receiver, given));
 		} catch (error) {
 			throw runtime_crossOut(state, error);
