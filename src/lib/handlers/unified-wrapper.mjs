@@ -3545,6 +3545,18 @@ function runtime_runViewAccessor(accessor, half, receiver, args) {
 }
 
 /**
+ * Whether `node.__proto__ = x` on a node runs the language's own `__proto__` setter, as the set trap does for a node
+ * fronting a module's own object that holds no `__proto__` member (#757); any other node takes it as a member write.
+ * @param {*} node - The node, as a run's view reads through it.
+ * @returns {boolean} True when the assignment sets the prototype.
+ * @internal
+ */
+function runtime_protoAssignSetsPrototype(node) {
+	const wrapper = runtime_nodeWrapperOf(node);
+	return wrapper !== null && !hasOwn(wrapper, "__proto__") && runtime_moduleObjectOf(wrapper) !== null;
+}
+
+/**
  * What a node stores for a value assigned to it outside a build (wrap-on-set, #329): an object or function becomes a
  * node of its own, wrapped as `api.slothlet.api.add()` wraps one and marked as user-assigned; a primitive, a proxy, a
  * node, and a value the node cannot wrap are stored as they are.
@@ -22965,6 +22977,7 @@ export function internals(consumer) {
 		runtime_takeRunWrite,
 		runtime_viewAccessor,
 		runtime_runViewAccessor,
+		runtime_protoAssignSetsPrototype,
 		runtime_isApiNode,
 		runtime_nodeWrapperOf,
 		runtime_rootGate,

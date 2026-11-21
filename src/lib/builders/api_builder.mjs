@@ -109,7 +109,8 @@ const {
 	runtime_unwrapSelfView,
 	runtime_hasInternalSlots,
 	runtime_viewAccessor,
-	runtime_runViewAccessor
+	runtime_runViewAccessor,
+	runtime_protoAssignSetsPrototype
 } = unifiedWrapperInternals("lib/builders/api_builder");
 const { runtime_codeWritersOnStack } = framePlacementInternals("lib/builders/api_builder");
 const { markSlothletProxy } = frameworkInternalsInternals("lib/builders/api_builder");
@@ -1060,9 +1061,17 @@ function makeRunSelf(slothlet, parentSelf, record) {
 					return readMember(prop, receiver);
 				},
 				set(_t, prop, value) {
-					// `view.__proto__ = x` runs the language's own `__proto__` setter on the view, as on an object that does not
-					// hold a `__proto__` member itself: the prototype is set through the view, and kept by the run.
-					if (prop === "__proto__" && !closed() && !forked() && Reflect.getOwnPropertyDescriptor(view, prop) === undefined) {
+					// `view.__proto__ = x` on a view of a node fronting a module's own object runs the language's own `__proto__`
+					// setter on the view, as the node runs it on itself: the prototype is set through the view, and kept by the
+					// run. Anywhere else it is a member write, which the node checks as it checks one.
+					if (
+						prop === "__proto__" &&
+						!closed() &&
+						!forked() &&
+						!local &&
+						runtime_protoAssignSetsPrototype(real) &&
+						Reflect.getOwnPropertyDescriptor(view, prop) === undefined
+					) {
 						Reflect.apply(ObjectProtoSetter, view, [value]);
 						return true;
 					}
