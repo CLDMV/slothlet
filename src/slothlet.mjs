@@ -396,11 +396,21 @@ const RELOAD_COPY_FIELDS = [
 /**
  * The handlers a `run()` / `scope()` keeps a copy of its own of once it writes them (see {@link FORK}): permission rules,
  * event rules, mode, read gating, seal and principals; hooks; user and global metadata; event subscriptions; lifecycle
- * subscriptions. Each is a handler in the `handlers` namespace, by its property name there.
+ * subscriptions; which version is the default and each version's metadata. Each is a handler in the `handlers`
+ * namespace, by its property name there.
  * @type {string[]}
  * @private
  */
-const FORKABLE_HANDLERS = ["permissionManager", "hookManager", "metadata", "eventManager", "lifecycle"];
+const FORKABLE_HANDLERS = ["permissionManager", "hookManager", "metadata", "eventManager", "lifecycle", "versionManager"];
+
+/**
+ * The forkable handlers a copy of a tree starts from as forks of the copied set's (see {@link Slothlet#buildCopyOnto}).
+ * The version manager is not among them: the copy registers its versions again as it replays the history, and then
+ * takes the copied set's versioning state.
+ * @type {string[]}
+ * @private
+ */
+const COPIED_HANDLERS = ["permissionManager", "hookManager", "metadata", "eventManager", "lifecycle"];
 
 /**
  * The copy a run record reads through to once its copy is torn down: none, so what still runs in its store (code
@@ -3363,8 +3373,8 @@ class Slothlet {
 		if (kind === "copy") {
 			// The copy's rules, hooks, metadata and subscriptions are what the copied set has, in forks of its own. The
 			// lifecycle fork carries the framework's own subscribers too.
-			for (let ofIndex = 0; ofIndex < FORKABLE_HANDLERS.length; ofIndex++) {
-				const slot = FORKABLE_HANDLERS[ofIndex];
+			for (let ofIndex = 0; ofIndex < COPIED_HANDLERS.length; ofIndex++) {
+				const slot = COPIED_HANDLERS[ofIndex];
 				const from = oldHandlers[slot];
 				if (from !== null && typeof from === "object" && typeof from[FORK] === "function") handlers[slot] = from[FORK]();
 			}
@@ -3452,6 +3462,8 @@ class Slothlet {
 		if (kind === "copy") {
 			// What code wrote into the copied tree at runtime (`self.x = …`, a member the host set) is in the copy too.
 			await handlers.apiManager?.carryRuntimeMembers?.(view.api, apiWithBuiltins, oldHandlers.ownership);
+			// Which version is the default and each version's metadata are the copied set's too.
+			handlers.versionManager?.carryState?.(oldHandlers.versionManager);
 		}
 		/* v8 ignore next */
 		if (handlers.routineManager) {

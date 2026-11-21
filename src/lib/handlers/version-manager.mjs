@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T13:35:17-08:00 (1794951317)
+ *	@Last modified time: 2026-11-21T13:38:14-08:00 (1795297094)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -30,6 +30,7 @@ import { ComponentBase } from "#factories/component-base";
 import { internals as frameworkInternalsInternals } from "#handlers/framework-internals";
 import { identityCeilings } from "#handlers/trusted-root";
 import { MODULE_ID_SEPARATOR } from "#handlers/metadata";
+import { FORK, writeTarget } from "#helpers/flow-stores";
 import {
 	ArrayMethods,
 	Arrays,
@@ -187,8 +188,28 @@ const FORCE_VERSION_SYMBOL = Symbols.for("slothlet.versioning.force");
  * @extends ComponentBase
  * @package
  */
+/**
+ * The manager {@link VersionManager#[FORK]} is copying, read once by the constructor it calls; null otherwise.
+ * @type {VersionManager|null}
+ * @private
+ */
+let forkingFrom = null;
+
 export class VersionManager extends ComponentBase {
 	static slothletProperty = "versionManager";
+
+	/**
+	 * Create a VersionManager, or a copy of one for a run (see {@link VersionManager#[FORK]}).
+	 * @param {object} slothlet - The instance.
+	 */
+	constructor(slothlet) {
+		super(slothlet);
+		const from = forkingFrom;
+		if (from !== null) {
+			forkingFrom = null;
+			this.#copyFrom(from);
+		}
+	}
 
 	/**
 	 * Registry of versioned paths.
@@ -223,6 +244,74 @@ export class VersionManager extends ComponentBase {
 	 * @type {Map<string, Promise<void>>}
 	 */
 	#dispatcherMounts = new Map();
+
+	/**
+	 * A copy of this manager for a `run()` / `scope()` (see `FORK` in `helpers/flow-stores`): which version is the default
+	 * and each version's metadata, which later changes to either leave the other as it is. The dispatchers stay the
+	 * tree's: each routes by the versioning state of the code calling it (see {@link VersionManager#flowManager}).
+	 * @returns {VersionManager} The copy.
+	 * @internal
+	 */
+	[FORK]() {
+		forkingFrom = this;
+		return new VersionManager(this.slothlet);
+	}
+
+	/**
+	 * Fill a new manager from the one it is a copy of (see {@link VersionManager#[FORK]}).
+	 * @param {VersionManager} from - The manager copied.
+	 * @returns {void}
+	 * @private
+	 */
+	#copyFrom(from) {
+		for (const ofEntry of mapEntries(from.#registry)) {
+			const versions = new Map();
+			for (const versionEntry of mapEntries(ofEntry[1].versions)) MapMethods.set(versions, versionEntry[0], { ...versionEntry[1] });
+			MapMethods.set(this.#registry, ofEntry[0], { ...ofEntry[1], versions });
+		}
+		for (const ofEntry of mapEntries(from.#versionMetadataByModule)) {
+			MapMethods.set(this.#versionMetadataByModule, ofEntry[0], { ...ofEntry[1], path: copyList(ofEntry[1].path) });
+		}
+		for (const ofEntry of mapEntries(from.#moduleToVersionKey)) MapMethods.set(this.#moduleToVersionKey, ofEntry[0], { ...ofEntry[1] });
+		this.#dispatchers = from.#dispatchers;
+		this.#dispatcherMounts = from.#dispatcherMounts;
+	}
+
+	/**
+	 * The manager whose versioning state the code running now routes a logical path by: the one of the copy the code
+	 * answers from (a run's copy of this one, or the manager of a run's own tree), when it knows the path; else this one.
+	 * @param {string} logicalPath - The logical path routed.
+	 * @returns {VersionManager} The manager.
+	 * @private
+	 */
+	#flowManager(logicalPath) {
+		const current = this.slothlet.handlers?.versionManager;
+		return current instanceof VersionManager && current !== this && MapMethods.has(current.#registry, logicalPath) ? current : this;
+	}
+
+	/**
+	 * Take the versioning state of the manager a tree was copied from (which version is the default, each version's
+	 * metadata) for the same versions this one registered while the copy was built.
+	 * @param {VersionManager} from - The copied tree's manager, as the code the copy is for sees it.
+	 * @returns {void}
+	 * @internal
+	 */
+	carryState(from) {
+		if (!(from instanceof VersionManager) || from === this) return;
+		for (const ofEntry of mapEntries(this.#registry)) {
+			const fromEntry = MapMethods.get(from.#registry, ofEntry[0]);
+			if (fromEntry === undefined) continue;
+			for (const versionEntry of mapEntries(ofEntry[1].versions)) {
+				const fromVersion = MapMethods.get(fromEntry.versions, versionEntry[0]);
+				if (fromVersion === undefined) continue;
+				versionEntry[1].isDefault = fromVersion.isDefault;
+				const metadata = MapMethods.get(from.#versionMetadataByModule, fromVersion.moduleID);
+				if (metadata !== undefined) {
+					MapMethods.set(this.#versionMetadataByModule, versionEntry[1].moduleID, { ...metadata, path: copyList(metadata.path) });
+				}
+			}
+		}
+	}
 
 	// ─── Registry management ────────────────────────────────────────────────
 
@@ -405,6 +494,8 @@ export class VersionManager extends ComponentBase {
 	 * versionManager.setVersionMetadataByPath("auth", "v1", { stable: true });
 	 */
 	setVersionMetadataByPath(logicalPath, versionTag, patch) {
+		const written = writeTarget(this);
+		if (written !== this) return written.setVersionMetadataByPath(logicalPath, versionTag, patch);
 		const entry = MapMethods.get(this.#registry, logicalPath);
 		if (!entry || !MapMethods.has(entry.versions, versionTag)) {
 			throw new this.SlothletError("VERSION_NOT_FOUND", {
@@ -498,6 +589,8 @@ export class VersionManager extends ComponentBase {
 	 * versionManager.setDefault("auth", "v1");
 	 */
 	setDefault(logicalPath, versionTag) {
+		const written = writeTarget(this);
+		if (written !== this) return written.setDefault(logicalPath, versionTag);
 		const entry = MapMethods.get(this.#registry, logicalPath);
 		if (!entry) {
 			throw new this.SlothletError("VERSION_NOT_FOUND", {
@@ -840,6 +933,7 @@ export class VersionManager extends ComponentBase {
 	 */
 	createDispatcher(logicalPath) {
 		const manager = this;
+		const owner = this;
 		// Brand the target so slothlet's OWN reserved marker keys (____isVersionDispatcher/____logicalPath)
 		// are exempt from the module-private host gate by OBJECT IDENTITY, never by name (#283).
 		const target = markFrameworkInternal({ ____isVersionDispatcher: true, ____logicalPath: logicalPath });
@@ -847,6 +941,8 @@ export class VersionManager extends ComponentBase {
 
 		/** Resolve forced version or run discriminator; return tag or null. */
 		const resolveVersion = () => {
+			// The versioning state of the code calling: a run's own copy, once it changed it.
+			const manager = owner.#flowManager(logicalPath);
 			// Check for inline force-override symbol in ALS context
 			// Note: user-supplied data from context.run() is stored in ctx.context (not ctx root),
 			// so we read from ctx.context for Symbol-keyed overrides.
