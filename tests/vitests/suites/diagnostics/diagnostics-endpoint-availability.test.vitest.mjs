@@ -35,7 +35,7 @@
  *   reload        - reload entire instance
  *   shutdown      - shutdown instance
  *   owner         - ownership query: { get }
- *   materialize   - lazy materialization tracking: { complete, get, wait }
+ *   materialize   - lazy materialization state: { complete, get, wait }
  *   warnings      - this instance's warnings: { get, clear }
  *   lifecycle     - lifecycle event emitter: { on, off }
  *

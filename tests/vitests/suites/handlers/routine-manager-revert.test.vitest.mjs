@@ -196,7 +196,7 @@ describe("RoutineManager — pruneModule invalidates each removed module's wrapp
 	it("calls ___invalidate() on the tracked wrapper, then drops it", async () => {
 		// A merge-loser's wrapper is never the live api-tree property at its path — ownership's own
 		// unregister()/removePath() has nothing to invalidate it via. Without this, a still-in-flight
-		// backgroundMaterialize: true materialization on this detached wrapper can complete after the
+		// loader.materialize: true materialization on this detached wrapper can complete after the
 		// prune and re-fire impl:changed, re-capturing the just-removed module into `raw`.
 		_api = await slothlet({
 			mode: "eager",

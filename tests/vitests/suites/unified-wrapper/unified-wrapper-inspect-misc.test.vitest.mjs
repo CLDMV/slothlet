@@ -22,7 +22,7 @@
  *  Line 85: getSafeFunctionName fallback — null apiPath on callable createProxy()
  *  Lines 310-316: prototype [util.inspect.custom] on raw UnifiedWrapper instances
  *  Lines 2133-2163: getTrap closure for util.inspect.custom on proxy objects
- *  Line 352: background materialization via tracking.materialization = true
+ *  Line 352: background materialization via loader.materialize = true
  *  Line 2122: __metadata fallback when handlers.metadata is null
  *  Line 1179: ___createChildWrapper returns undefined for undefined value
  *
@@ -161,11 +161,11 @@ describe("prototype [util.inspect.custom] unmaterialized lazy branch (line 352)"
 });
 
 // ---------------------------------------------------------------------------
-// TEST GROUP 4 — Line 352: background materialization via tracking.materialization: true
+// TEST GROUP 4 — Line 352: background materialization via loader.materialize: true
 // ---------------------------------------------------------------------------
 
-describe("background materialization via tracking.materialization (line 352)", () => {
-	it("lazy mode with tracking.materialization starts background materialization via setImmediate", async () => {
+describe("background materialization via loader.materialize (line 352)", () => {
+	it("lazy mode with loader.materialize starts background materialization via setImmediate", async () => {
 		const api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "lazy", silent: true, loader: { materialize: true } });
 		_api = api;
 		// Wrappers are created with mode=lazy and background materialization triggered.
