@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-21T13:05:09-08:00 (1795295109)
+ *	@Last modified time: 2026-11-21T13:37:26-08:00 (1795297046)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -43,6 +43,7 @@
  */
 
 import { AsyncResource } from "#helpers/platform";
+import { anyAsyncInstance } from "#helpers/flow-stores";
 import { holdForCurrentFlow, pinToCurrentCaller } from "#helpers/caller-pinning";
 import { releaseWhenCollected } from "#helpers/flow-stores";
 import { openLayer, closeLayer, holdsValue, markLayer } from "#helpers/boundary-patch-layers";
@@ -144,8 +145,10 @@ function runtime_wrapListener(listener) {
 	// browser, where `async_hooks` does not exist — there the pinning below is the whole mechanism.
 	// Browser arm: without `async_hooks` there is nothing to capture, and the pinning below is the whole
 	// mechanism. Not takeable from a Node run for the same reason as the EventEmitter helper.
+	// Made only while an instance on the async runtime is up, the one runtime with a store to carry: none on the live
+	// runtime alone, which carries the caller by pinning below.
 	/* v8 ignore next */
-	const resource = AsyncResource ? new AsyncResource("slothlet-event-target-listener") : null;
+	const resource = AsyncResource && anyAsyncInstance() ? new AsyncResource("slothlet-event-target-listener") : null;
 
 	// Bind to whoever is registering, for the runtime the AsyncResource capture does not serve. Done
 	// here because this is when the registering module is the executing one.

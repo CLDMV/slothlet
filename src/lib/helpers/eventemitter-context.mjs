@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-21T13:05:09-08:00 (1795295109)
+ *	@Last modified time: 2026-11-21T13:37:26-08:00 (1795297046)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -31,6 +31,7 @@
 // meaningless in a browser. Gated so node:events/node:async_hooks stay out of the browser static
 // graph (#123); the exported patching entry points no-op when EventEmitter is null.
 import { EventEmitter, AsyncResource } from "#helpers/platform";
+import { anyAsyncInstance } from "#helpers/flow-stores";
 import { holdForCurrentFlow, pinToCurrentCaller } from "#helpers/caller-pinning";
 import { releaseWhenCollected } from "#helpers/flow-stores";
 import { openLayer, closeLayer, holdsValue, markLayer } from "#helpers/boundary-patch-layers";
@@ -214,8 +215,10 @@ function runtime_wrapEventListener(listener) {
 	// The null arm is the browser: no `async_hooks`, so no AsyncResource to capture with, and pinning
 	// carries identity instead. A Node run cannot take it — the import is a live binding, not a value
 	// this suite can swap — so it is exercised only where the platform lacks the module.
+	// Made only while an instance on the async runtime is up, the one runtime with a store to carry: none on the live
+	// runtime alone, which carries the caller by pinning below.
 	/* v8 ignore next */
-	let resource = AsyncResource ? new AsyncResource("slothlet-event-listener") : null;
+	let resource = AsyncResource && anyAsyncInstance() ? new AsyncResource("slothlet-event-listener") : null;
 
 	// Bind the listener to whoever registered it, for the runtimes the AsyncResource capture does
 	// not serve. Done here, at registration, because that is when the registering module is the
