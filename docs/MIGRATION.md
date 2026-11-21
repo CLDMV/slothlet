@@ -80,7 +80,7 @@ v4 reads and validates format 2: `schema: 2`, `mount` (a string or an array of s
 
 ### Lazy materialization takes a function
 
-`loader.materialize` (was `backgroundMaterialize`) accepts `true`, `false` or a function. A function turns background materialization on and is called on `materialized:complete`, at once if it has already completed. `api.slothlet.materialize.materialized` is `materialize.complete`.
+`loader.materialize` (was `backgroundMaterialize`) accepts `true`, `false` or a function. A function turns background materialization on and is called on `materialized:complete` with the event's payload, `{ total, at }`, at once if it has already completed. `api.slothlet.materialize.materialized` is `materialize.complete`.
 
 `loader.materialize` is now the only switch for background loading. v3's `tracking: { materialization: true }` (and `tracking: true`) did the same thing and is removed: passing `tracking` throws `INVALID_CONFIG_UNKNOWN_KEY`. Use `loader: { materialize: true }`; `materialized:complete` fires whenever `loader.materialize` is on. The migrate tool rewrites it.
 

@@ -389,6 +389,7 @@ const RELOAD_COPY_FIELDS = [
 	"_materializationWaiters",
 	"_materializationCompleteEmitted",
 	"_materializeCallbackCalled",
+	"_materializedPayload",
 	"_buildEpoch",
 	"_treeEpoch"
 ];
@@ -946,6 +947,7 @@ class Slothlet {
 		this._materializationWaiters = []; // Promises waiting for full materialization
 		this._materializationCompleteEmitted = false; // Track if event was already emitted
 		this._materializeCallbackCalled = false; // The `loader.materialize` callback ran (once per instance)
+		this._materializedPayload = null; // What `materialized:complete` was announced with, handed to the callback too
 
 		// Component categories
 		this.componentCategories = ["helpers", "handlers", "builders", "processors", "modes"];
@@ -1509,10 +1511,8 @@ class Slothlet {
 				// lifecycle is always auto-registered via slothletProperty; false arm unreachable.
 				/* v8 ignore next */
 				if (this.handlers?.lifecycle) {
-					this.handlers.lifecycle.emit("materialized:complete", {
-						total: this._totalLazyCount,
-						at: this.#clock.now()
-					});
+					this._materializedPayload = { total: this._totalLazyCount, at: this.#clock.now() };
+					this.handlers.lifecycle.emit("materialized:complete", { ...this._materializedPayload });
 				}
 			}
 
@@ -1536,7 +1536,9 @@ class Slothlet {
 			new this.SlothletWarning("WARNING_LIFECYCLE_HANDLER_ERROR", { event: "materialized:complete" }, { cause: error });
 		};
 		try {
-			PromiseMethods.then(settledWith(callback({ total: this._totalLazyCount, timestamp: this.#clock.now() })), undefined, warn);
+			// The `materialized:complete` event's payload, or one made now when no event was announced (eager mode).
+			const payload = this._materializedPayload ?? { total: this._totalLazyCount, at: this.#clock.now() };
+			PromiseMethods.then(settledWith(callback({ ...payload })), undefined, warn);
 		} catch (error) {
 			warn(error);
 		}
@@ -4845,7 +4847,7 @@ export default slothlet;
  * @property {{files: Array<{path:string,name:string,full:string}>, directories: Array}} [loader.files] - Pre-generated directory structure for browser mode.
  *   Produced at build time by `files.generate()` from `@cldmv/slothlet/files`. Required when `loader.platform` is `"browser"`.
  *   Giving it selects browser mode without an explicit `loader.platform`.
- * @property {boolean|Function} [loader.materialize=false] - When `mode: "lazy"`, immediately begins materializing all paths in the background after init and emits `materialized:complete` once everything has loaded (the v3 `tracking: { materialization: true }` option is folded into it). A function turns it on and is called once with `{ total, timestamp }` when everything has materialized — at once when that is already so when the instance finishes loading (always in eager mode). What it throws or rejects with is reported as a `WARNING_LIFECYCLE_HANDLER_ERROR` warning.
+ * @property {boolean|Function} [loader.materialize=false] - When `mode: "lazy"`, immediately begins materializing all paths in the background after init and emits `materialized:complete` once everything has loaded (the v3 `tracking: { materialization: true }` option is folded into it). A function turns it on and is called once with `{ total, at }` (the `materialized:complete` event's payload) when everything has materialized — at once when that is already so when the instance finishes loading (always in eager mode). What it throws or rejects with is reported as a `WARNING_LIFECYCLE_HANDLER_ERROR` warning.
  * @property {"browser"|"node"} [loader.platform] - Execution-environment target. Controls whether filesystem-dependent code paths run. Independent of `env` (the `process.env` snapshot).
  *   - `"browser"` — browser/worker/Electron-renderer mode. Skips filesystem operations and the `process.env` snapshot. Requires `loader.files`.
  *   - `"node"` — explicit Node.js mode.
