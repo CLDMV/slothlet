@@ -134,10 +134,14 @@ const DEFAULT_VITEST_CONFIG = ".configs/vitest.config.mjs";
  * The merge reads every per-file blob into one process; with 500+ files it outgrows
  * Node's default ~4 GB heap and dies with "heap out of memory" after every test passed.
  * It runs once, after all test workers have exited, so it can take a larger heap than
- * the workers without raising the run's peak memory.
+ * the workers without raising the run's peak memory. At ~800 files the merge outgrew 8 GB
+ * too, so the default is 12 GB (4 GB free on a 16 GB CI runner); on a machine with less
+ * than 14 GB it drops to total memory minus 2 GB, never below 4 GB.
  * @type {number}
  */
-const MERGE_HEAP_MB = process.env.VITEST_MERGE_HEAP_MB ? parseInt(process.env.VITEST_MERGE_HEAP_MB, 10) : 8192;
+const MERGE_HEAP_MB = process.env.VITEST_MERGE_HEAP_MB
+	? parseInt(process.env.VITEST_MERGE_HEAP_MB, 10)
+	: Math.max(4096, Math.min(12288, Math.floor(os.totalmem() / 1024 ** 2) - 2048));
 
 /**
  * Directory the coverage run writes its per-file blobs to before the merge.
