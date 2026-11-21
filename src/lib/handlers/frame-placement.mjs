@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T17:16:26-08:00 (1794964586)
+ *	@Last modified time: 2026-11-21T13:08:55-08:00 (1795295335)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -1109,6 +1109,63 @@ function slothlet_enterLeaf(wrapper, fn, thisArg, args) {
  */
 function slothlet_enterCall(fn, thisArg, args) {
 	return Reflect.apply(fn, thisArg, args);
+}
+
+/**
+ * The flows framework work runs in as the host (see {@link runAsHostWork}), each with the instance it is for: the store
+ * of the flow, which only the context manager makes and no module code can reach.
+ * @type {WeakMap<object, object>}
+ * @private
+ */
+const HOST_WORK_STORES = new WeakMap();
+
+/**
+ * This file, in comparable form: where the frame of {@link slothlet_hostWork} runs.
+ * @type {string}
+ * @private
+ */
+const OWN_FILE = toComparablePath(URLMethods.href(new URL(import.meta.url)));
+
+/**
+ * Run framework work an instance does as the host (a reload's build, a restart's load, a run's copy) in the flow the
+ * context manager opened for it: the flow's store is marked as that work's, and the work runs inside a frame of
+ * {@link slothlet_hostWork}. Whose code makes a change while no call runs is read from the stack (see
+ * {@link runtime_codeWritersOnStack}); in that flow, the frames past that one are the code that asked for the work, a
+ * module's own function awaiting `self.slothlet.reload()` among them, and the work is not theirs. Code running inside the
+ * work, nearer the stack's top, is still read as whoever's it is.
+ * @param {object} slothlet - The instance.
+ * @param {object|undefined} store - The flow's store, as the context manager reads it inside the flow.
+ * @param {Function} fn - The work.
+ * @returns {Promise<unknown>} Whatever `fn` resolves to.
+ * @internal
+ */
+function runAsHostWork(slothlet, store, fn) {
+	if (store && typeof store === "object") WeakMapMethods.set(HOST_WORK_STORES, store, slothlet);
+	return slothlet_hostWork(fn);
+}
+
+/**
+ * The frame framework work an instance does as the host runs inside ({@link runAsHostWork}): awaited, so it stays on
+ * the stack (as an async frame) for as long as the work runs.
+ * @param {Function} fn - The work.
+ * @returns {Promise<unknown>} Whatever `fn` resolves to.
+ * @private
+ */
+async function slothlet_hostWork(fn) {
+	return await fn();
+}
+
+/**
+ * Whether a frame is the one framework work runs inside ({@link slothlet_hostWork}): a frame of that function, in this
+ * file, running this file's own source. A frame that only names the function, in code compiled by someone, is not.
+ * @param {{head?: string, path: string, evaluated?: boolean, hash: string|null, key: string|null}} frame - A frame.
+ * @returns {boolean} True when it is.
+ * @private
+ */
+function runtime_isHostWorkFrame(frame) {
+	if (frame.path !== OWN_FILE || frame.evaluated || !frame.head) return false;
+	if (RegExpMethods.exec(/\bslothlet_hostWork$/, frame.head) === null) return false;
+	return !isForeignScript(frame) && (runtime_runsFileSource(frame) || runtime_runsRunnerTransform(frame));
 }
 
 /**
@@ -5374,8 +5431,16 @@ function runtime_leavesAtFile(slothlet, path, instance, mount) {
 function runtime_codeWritersOnStack(slothlet) {
 	const family = slothlet.instanceID;
 	const sources = [{ family, slothlet, roots: [] }];
+	// In the flow of framework work the instance does as the host, the code past the frame that work runs in asked for
+	// it, and the change is the work's own.
+	const store = slothlet.contextManager?.als?.getStore?.();
+	const hostWork = store !== undefined && WeakMapMethods.get(HOST_WORK_STORES, store) === slothlet;
 	for (const frame of framesOf(runtime_captureFrames(48))) {
-		if (StringMethods.startsWith(frame.path, FRAMEWORK_DIR + "/") || StringMethods.startsWith(frame.path, "node:")) continue;
+		if (StringMethods.startsWith(frame.path, FRAMEWORK_DIR + "/")) {
+			if (hostWork && runtime_isHostWorkFrame(frame)) return [];
+			continue;
+		}
+		if (StringMethods.startsWith(frame.path, "node:")) continue;
 		if (frame.evaluated || isForeignScript(frame)) return stackHoldsInstanceCode(sources) ? null : [];
 		const leaves = runtime_leavesAt(slothlet, frame);
 		if (leaves.length) return leaves;
@@ -5811,6 +5876,7 @@ export function internals(consumer) {
 		ownReceiver,
 		recordInstanceOwner,
 		registerLeafFile,
+		runAsHostWork,
 		resolveSupplier,
 		runningOutsideFlow,
 		runtime_captureFrames,

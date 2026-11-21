@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-21T16:48:16-08:00 (1795308496)
+ *	@Last modified time: 2026-11-21T13:09:09-08:00 (1795295349)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -213,7 +213,7 @@ const { enableNodeCallbackPatching, disableNodeCallbackPatching, enableAsyncCall
 const { enableFunctionSourcePatching, disableFunctionSourcePatching } = functionSourceContextInternals("slothlet");
 const { registerCapabilityCheck, releaseCapabilityCheck } = capabilityContextInternals("slothlet");
 const { claimInstanceScope, setInstanceSelfKind, closeInstanceSelf } = instanceImportsInternals("slothlet");
-const { forgetInstanceScripts, recordInstanceOwner } = framePlacementInternals("slothlet");
+const { forgetInstanceScripts, recordInstanceOwner, runAsHostWork } = framePlacementInternals("slothlet");
 const { getContextManager } = contextInternals("slothlet");
 
 /**
@@ -4237,7 +4237,18 @@ class Slothlet {
 	async _runAsHost(fn) {
 		const identity = this.contextManager?.getCallerIdentity?.(this.instanceID);
 		if (!identity?.currentWrapper && !identity?.unresolved) return fn();
-		return this.contextManager.runInContext(this.instanceID, fn, null, [], null, true, true);
+		// The module's call that asked for the work stays on the stack below it (a function awaiting its own
+		// `self.slothlet.reload()`): the work is marked as the host's, so the code that asked is not read as making it.
+		const contextManager = this.contextManager;
+		return contextManager.runInContext(
+			this.instanceID,
+			() => runAsHostWork(this, contextManager.als?.getStore?.(), fn),
+			null,
+			[],
+			null,
+			true,
+			true
+		);
 	}
 
 	/**
