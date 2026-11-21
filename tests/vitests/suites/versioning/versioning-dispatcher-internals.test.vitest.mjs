@@ -36,8 +36,8 @@ const BASE = TEST_DIRS.API_TEST_VERSIONED;
 /** Helper: set up a slothlet instance with auth registered as v1 + v2. */
 async function makeApi(config, extra = {}) {
 	const api = await slothlet({ ...config, base: `${BASE}/callers`, ...extra });
-	await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1", default: true });
-	await api.slothlet.api.add("auth", `${BASE}/v2`, {}, { version: "v2" });
+	await api.slothlet.api.add("auth", `${BASE}/v1`, { version: { tag: "v1", default: true } });
+	await api.slothlet.api.add("auth", `${BASE}/v2`, { version: { tag: "v2" } });
 	return api;
 }
 
@@ -83,8 +83,8 @@ describe.each(getMatrixConfigs())("Versioning > Dispatcher Internals > $name", (
 	it("dispatcher.valueOf returns the dispatcher proxy itself", async () => {
 		api = await makeApi(config);
 		const val = api.auth.valueOf();
-		// The returned value should itself have __isVersionDispatcher = true
-		expect(val.__isVersionDispatcher).toBe(true);
+		// The returned value should itself have ____isVersionDispatcher = true
+		expect(val.____isVersionDispatcher).toBe(true);
 	});
 
 	// ── Case 9 — toJSON ──────────────────────────────────────────────────────
@@ -124,21 +124,21 @@ describe.each(getMatrixConfigs())("Versioning > Dispatcher Internals > $name", (
 	it("__metadata on the dispatcher delegates to the resolved versioned wrapper", async () => {
 		api = await makeApi(config);
 		// __metadata should not throw and should return an object (or undefined)
-		const meta = api.auth.__metadata;
+		const meta = api.slothlet.metadata.get(api.auth);
 		// It's either an object or undefined depending on whether metadata handler is active
 		expect(meta === undefined || typeof meta === "object").toBe(true);
 	});
 
-	it("__filePath on the dispatcher delegates to the resolved versioned wrapper", async () => {
+	it("____filePath on the dispatcher delegates to the resolved versioned wrapper", async () => {
 		api = await makeApi(config);
-		// __filePath should be a string pointing to the resolved version's source file
-		const fp = api.auth.__filePath;
+		// ____filePath should be a string pointing to the resolved version's source file
+		const fp = api.slothlet.node(api.auth).file;
 		expect(fp === undefined || typeof fp === "string").toBe(true);
 	});
 
 	it("__type on the dispatcher delegates to the resolved versioned wrapper", async () => {
 		api = await makeApi(config);
-		const t = api.auth.__type;
+		const t = api.slothlet.node(api.auth).type;
 		expect(t === undefined || typeof t === "string").toBe(true);
 	});
 

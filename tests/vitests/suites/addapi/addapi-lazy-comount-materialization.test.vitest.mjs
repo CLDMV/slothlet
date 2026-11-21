@@ -91,7 +91,8 @@ function at(api, dotted) {
 function loaded(api, dotted) {
 	let node = api.plugins;
 	for (const part of dotted.split(".")) node = Object.getOwnPropertyDescriptor(node, part)?.value;
-	return node.__materialized === true || node.__inFlight === true;
+	const report = api.slothlet.node(node);
+	return report.materialized === true || report.loading === true;
 }
 
 /**
@@ -121,8 +122,8 @@ describe.each(getMatrixConfigs())("api.add into an existing namespace: materiali
 			base: TEST_DIRS.API_TEST,
 			api: { ...config.api, mutations: { add: true, remove: true, reload: true } }
 		});
-		await instance.slothlet.api.add("plugins", A_DIR, { moduleID: "a" });
-		await instance.slothlet.api.add("plugins", B_DIR, { moduleID: "b" });
+		await instance.slothlet.api.add("plugins", A_DIR, { id: "a" });
+		await instance.slothlet.api.add("plugins", B_DIR, { id: "b" });
 		return instance;
 	}
 
@@ -149,7 +150,7 @@ describe.each(getMatrixConfigs())("api.add into an existing namespace: materiali
 
 	it.skipIf(config.mode !== "eager")("eager control: every subfolder is materialized by the add", async () => {
 		api = await createComounted();
-		for (const folder of B_ONLY_FOLDERS) expect(at(api, folder).__materialized, `plugins.${folder}`).toBe(true);
+		for (const folder of B_ONLY_FOLDERS) expect(api.slothlet.node(at(api, folder)).materialized, `plugins.${folder}`).toBe(true);
 	});
 
 	it("keeps every leaf of both modules reachable", async () => {

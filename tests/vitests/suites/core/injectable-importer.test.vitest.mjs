@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:02-07:00 (1791090902)
+ *	@Last modified time: 2026-11-16T18:29:46-08:00 (1794882586)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -33,6 +33,7 @@
 
 import { describe, it, expect, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
+import { captureWarnings } from "../../setup/warning-capture.mjs";
 
 const BASE = new URL("../../../../api_tests/api_test_underscore", import.meta.url).pathname;
 const MOD_FILE = new URL("../../../../api_tests/api_test_underscore/mod/mod.mjs", import.meta.url).pathname;
@@ -50,9 +51,11 @@ describe("Core > injectable leaf importer (#235)", () => {
 		api = await slothlet({
 			mode: "eager",
 			base: BASE,
-			import: (moduleUrl) => {
-				seen.push(moduleUrl);
-				return import(moduleUrl);
+			loader: {
+				import: (moduleUrl) => {
+					seen.push(moduleUrl);
+					return import(moduleUrl);
+				}
 			}
 		});
 
@@ -72,9 +75,11 @@ describe("Core > injectable leaf importer (#235)", () => {
 		api = await slothlet({
 			mode: "eager",
 			base: BASE,
-			import: (moduleUrl) => {
-				seen.push(moduleUrl);
-				return import(moduleUrl);
+			loader: {
+				import: (moduleUrl) => {
+					seen.push(moduleUrl);
+					return import(moduleUrl);
+				}
 			}
 		});
 
@@ -91,9 +96,11 @@ describe("Core > injectable leaf importer (#235)", () => {
 		api = await slothlet({
 			mode: "lazy",
 			base: BASE,
-			import: (moduleUrl) => {
-				seen.push(moduleUrl);
-				return import(moduleUrl);
+			loader: {
+				import: (moduleUrl) => {
+					seen.push(moduleUrl);
+					return import(moduleUrl);
+				}
 			}
 		});
 
@@ -109,9 +116,11 @@ describe("Core > injectable leaf importer (#235)", () => {
 		api = await slothlet({
 			mode: "eager",
 			base: BASE,
-			import: (moduleUrl) => {
-				seen.push(moduleUrl);
-				return import(moduleUrl);
+			loader: {
+				import: (moduleUrl) => {
+					seen.push(moduleUrl);
+					return import(moduleUrl);
+				}
 			}
 		});
 
@@ -123,7 +132,9 @@ describe("Core > injectable leaf importer (#235)", () => {
 	});
 
 	it("rejects a non-function importer with a named config error", async () => {
-		await expect(slothlet({ mode: "eager", base: BASE, import: "not-a-function" })).rejects.toThrow(/INVALID_CONFIG_IMPORT/);
+		await expect(slothlet({ mode: "eager", base: BASE, loader: { import: "not-a-function" } })).rejects.toThrow(
+			/INVALID_CONFIG_IMPORTER_INVALID/
+		);
 	});
 });
 
@@ -135,18 +146,12 @@ describe("Core > coverage-run hint (#235)", () => {
 	 * @returns {Promise<{fired: boolean, captured: number}>} Whether it warned and how many captures.
 	 */
 	async function probe(config, overrides) {
-		const { warnIfCoverageWithoutImporter } = await import("@cldmv/slothlet/processors/loader");
-		const { SlothletWarning } = await import("@cldmv/slothlet/errors");
-		SlothletWarning.clearCaptured();
-		const prior = SlothletWarning.suppressConsole;
-		SlothletWarning.suppressConsole = true;
-		try {
-			const fired = warnIfCoverageWithoutImporter(config, overrides);
-			return { fired, captured: SlothletWarning.captured.filter((w) => w.code === "WARNING_COVERAGE_IMPORTER_UNSET").length };
-		} finally {
-			SlothletWarning.suppressConsole = prior;
-			SlothletWarning.clearCaptured();
-		}
+		const { warnIfCoverageWithoutImporter } = await import("#processors/loader");
+		let fired;
+		const warnings = await captureWarnings(() => {
+			fired = warnIfCoverageWithoutImporter(config, overrides);
+		});
+		return { fired, captured: warnings.filter((w) => w.code === "WARNING_COVERAGE_IMPORTER_UNSET").length };
 	}
 
 	const COVERAGE_WORKER = { config: { coverage: { enabled: true, provider: "v8" } } };
@@ -177,30 +182,28 @@ describe("Core > coverage-run hint (#235)", () => {
 	});
 
 	it("stays silent once the importer is configured — the fix is in place", async () => {
-		const out = await probe({ import: (url) => import(url) }, { worker: COVERAGE_WORKER, externalized: true });
+		const out = await probe({ loader: { import: (url) => import(url) } }, { worker: COVERAGE_WORKER, externalized: true });
 		expect(out.fired).toBe(false);
 	});
 
-	it("respects silent instances", async () => {
+	it("still records the warning for a silent instance, whose class leaves it unprinted (#838)", async () => {
 		const out = await probe({ silent: true }, { worker: COVERAGE_WORKER, externalized: true });
-		expect(out.fired).toBe(false);
+		expect(out.fired).toBe(true);
+		expect(out.captured).toBe(1);
 	});
 
 	it("never fires from an in-repo boot, where slothlet is the project under test", async () => {
-		const { SlothletWarning } = await import("@cldmv/slothlet/errors");
-		SlothletWarning.clearCaptured();
-		const prior = SlothletWarning.suppressConsole;
-		SlothletWarning.suppressConsole = true;
 		let api;
 		try {
 			// The real boot consults the helper with REAL environment inputs; in this suite slothlet
 			// is transformed project code (not externalized), so the hint must not fire even under
 			// the repo's own coverage runs.
-			api = await slothlet({ mode: "eager", base: BASE });
-			expect(SlothletWarning.captured.filter((w) => w.code === "WARNING_COVERAGE_IMPORTER_UNSET")).toHaveLength(0);
+			const printed = await captureWarnings(async () => {
+				api = await slothlet({ mode: "eager", base: BASE });
+			});
+			const raised = [...printed, ...api.slothlet.warnings.get()];
+			expect(raised.filter((w) => w.code === "WARNING_COVERAGE_IMPORTER_UNSET")).toHaveLength(0);
 		} finally {
-			SlothletWarning.suppressConsole = prior;
-			SlothletWarning.clearCaptured();
 			if (api) await api.shutdown();
 		}
 	});

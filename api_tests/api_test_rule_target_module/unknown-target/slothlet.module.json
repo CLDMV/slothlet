@@ -1,0 +1,7 @@
+{
+	"schemaVersion": 1,
+	"mountPath": ["plugins", "unknown-target"],
+	"apiDir": "./api",
+	"kind": "extension",
+	"permissions": [{ "caller": "**", "target": "slothlet.permissions.addRule", "effect": "deny" }]
+}

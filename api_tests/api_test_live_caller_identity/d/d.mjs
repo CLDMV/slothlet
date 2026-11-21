@@ -27,7 +27,7 @@ import { self, context } from "@cldmv/slothlet/runtime";
 export async function resume(gate) {
 	const svc = self.svc;
 	const meta = self.slothlet.metadata;
-	const lockCaller = self.slothlet.lockCaller;
+	const lockCaller = self.slothlet.pin;
 	await gate;
 	// The instance's own context, as the `context` binding resolves it after the await.
 	const tag = context.tag;
@@ -39,7 +39,7 @@ export async function resume(gate) {
 	}
 	let metadataSelf;
 	try {
-		metadataSelf = meta.self()?.apiPath ?? null;
+		metadataSelf = meta.self()?.path.join(".") ?? null;
 	} catch (error) {
 		metadataSelf = error.code;
 	}

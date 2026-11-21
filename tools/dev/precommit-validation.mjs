@@ -77,6 +77,7 @@ async function main() {
 		{ name: "Format (Prettier)", command: "npm", args: ["run", "format"] },
 		{ name: "Analyze Error and i18n Quality", command: "npm", args: ["run", "analyze"] },
 		{ name: "i18n Language Parity + Script Purity", command: "npm", args: ["run", "i18n:check"] },
+		{ name: "Migration Guide In Sync", command: "npm", args: ["run", "docs:migration:check"] },
 		{ name: "Build Full Artifacts", command: "npm", args: ["run", "build:dev"] },
 		{ name: "API Structure Debug", command: "npm", args: ["run", "debug"] },
 		{ name: "Node Test Suite", command: "npm", args: ["run", "test:node"] }

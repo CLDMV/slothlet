@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:18-07:00 (1791090918)
+ *	@Last modified time: 2026-11-16T18:30:41-08:00 (1794882641)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -91,10 +91,10 @@ describe.each(getMatrixConfigs())("Permissions > Principals (#459) > $name", ({ 
 		const instance = await slothlet({
 			...config,
 			base: path.join(FIXTURE, "base"),
-			permissions: { defaultPolicy: "deny", rules: [...PLUGIN_GRANTS, ...rules], ...permissions }
+			permissions: { policy: "deny", rules: [...PLUGIN_GRANTS, ...rules], ...permissions }
 		});
-		await instance.slothlet.api.add("roles", path.join(FIXTURE, "roles"), { moduleID: "roles-mod" });
-		await instance.slothlet.api.add("billing", path.join(FIXTURE, "billing"), { moduleID: "billing-mod" });
+		await instance.slothlet.api.add("roles", path.join(FIXTURE, "roles"), { id: "roles-mod" });
+		await instance.slothlet.api.add("billing", path.join(FIXTURE, "billing"), { id: "billing-mod" });
 		if (roles !== false) await instance.roles.registry.setup(roles);
 		if (billing) await instance.billing.plans.setup();
 		return instance;
@@ -201,8 +201,8 @@ describe.each(getMatrixConfigs())("Permissions > Principals (#459) > $name", ({ 
 		expect(api.slothlet.permissions.principal.invalidate("nope")).toBe(false);
 	});
 
-	it("maxAge: 0 re-resolves on every call and each promoted call still succeeds", async () => {
-		api = await build([FILES_RULE], { roles: { maxAge: 0 } });
+	it("ttl: 0 re-resolves on every call and each promoted call still succeeds", async () => {
+		api = await build([FILES_RULE], { roles: { ttl: 0 } });
 		await api.roles.registry.grant("u1", "p1", ["read"]);
 		// Let the clock move so a same-millisecond hit cannot read as fresh.
 		for (let i = 0; i < 3; i++) {
@@ -267,7 +267,7 @@ describe.each(getMatrixConfigs())("Permissions > Principals (#459) > $name", ({ 
 
 	// ── Read-only views ─────────────────────────────────────────────────────────
 
-	it("conditions receive read-only views: writes throw PRINCIPAL_READ_ONLY", async () => {
+	it("conditions receive read-only views: writes throw PERMISSION_PRINCIPAL_READ_ONLY", async () => {
 		let seen = null;
 		api = await build([
 			{
@@ -288,13 +288,13 @@ describe.each(getMatrixConfigs())("Permissions > Principals (#459) > $name", ({ 
 		expect(seen.roles.projects.p1).toEqual(["read"]);
 		expect(() => {
 			seen.roles.projects.p1.push("admin");
-		}).toThrow(/PRINCIPAL_READ_ONLY/);
+		}).toThrow(/PERMISSION_PRINCIPAL_READ_ONLY/);
 		expect(() => {
 			seen.roles.projects.p2 = ["read"];
-		}).toThrow(/PRINCIPAL_READ_ONLY/);
+		}).toThrow(/PERMISSION_PRINCIPAL_READ_ONLY/);
 		expect(() => {
 			delete seen.roles.projects;
-		}).toThrow(/PRINCIPAL_READ_ONLY/);
+		}).toThrow(/PERMISSION_PRINCIPAL_READ_ONLY/);
 		// Repeated reads hand back the same view.
 		expect(seen.roles.projects).toBe(seen.roles.projects);
 	});
@@ -308,9 +308,9 @@ describe.each(getMatrixConfigs())("Permissions > Principals (#459) > $name", ({ 
 
 	it("the first registrant owns the name; other modules cannot claim, invalidate, or unregister it", async () => {
 		api = await build([{ caller: "client.**", target: "slothlet.permissions.principal.**", effect: "allow" }]);
-		await expectFails(() => api.client.app.claim("roles"), /PRINCIPAL_NAME_OWNED/);
-		await expectFails(() => api.client.app.invalidate("roles"), /PRINCIPAL_NOT_OWNER/);
-		await expectFails(() => api.client.app.unregister("roles"), /PRINCIPAL_NOT_OWNER/);
+		await expectFails(() => api.client.app.claim("roles"), /PERMISSION_PRINCIPAL_NAME_OWNED/);
+		await expectFails(() => api.client.app.invalidate("roles"), /PERMISSION_PRINCIPAL_NOT_OWNER/);
+		await expectFails(() => api.client.app.unregister("roles"), /PERMISSION_PRINCIPAL_NOT_OWNER/);
 		// A module can register a fresh name, and re-register its own.
 		await api.client.app.claim("fresh");
 		await api.client.app.claim("fresh");
@@ -333,7 +333,7 @@ describe.each(getMatrixConfigs())("Permissions > Principals (#459) > $name", ({ 
 		api.slothlet.permissions.principal.register("roles", { key: (ctx) => ctx.user, resolve: () => ({ projects: { p7: ["read"] } }) });
 		expect(await as({ user: "u1" }, () => api.client.app.files("p7"))).toMatchObject({ projectId: "p7" });
 		// Still owned by the roles plugin, not taken over by the host or open to other modules.
-		await expectFails(() => api.client.app.claim("roles"), /PRINCIPAL_NAME_OWNED/);
+		await expectFails(() => api.client.app.claim("roles"), /PERMISSION_PRINCIPAL_NAME_OWNED/);
 		expect(await api.roles.registry.revoke("u1", "p7")).toBe(true);
 	});
 
@@ -344,18 +344,18 @@ describe.each(getMatrixConfigs())("Permissions > Principals (#459) > $name", ({ 
 		expect(() => register("x", null)).toThrow(/INVALID_ARGUMENT/);
 		expect(() => register("x", { resolve: () => 1 })).toThrow(/INVALID_ARGUMENT/);
 		expect(() => register("x", { key: () => 1 })).toThrow(/INVALID_ARGUMENT/);
-		expect(() => register("x", { key: () => 1, resolve: () => 1, maxAge: -1 })).toThrow(/INVALID_ARGUMENT/);
-		expect(() => register("x", { key: () => 1, resolve: () => 1, maxAge: "1s" })).toThrow(/INVALID_ARGUMENT/);
+		expect(() => register("x", { key: () => 1, resolve: () => 1, ttl: -1 })).toThrow(/INVALID_ARGUMENT/);
+		expect(() => register("x", { key: () => 1, resolve: () => 1, ttl: "1s" })).toThrow(/INVALID_ARGUMENT/);
 
-		const addRule = api.slothlet.permissions.addRule;
-		expect(() => addRule({ caller: "**", target: "x", effect: "allow", requires: [] })).toThrow(/INVALID_PERMISSION_RULE/);
-		expect(() => addRule({ caller: "**", target: "x", effect: "allow", requires: "roles" })).toThrow(/INVALID_PERMISSION_RULE/);
-		expect(() => addRule({ caller: "**", target: "x", effect: "allow", requires: [""] })).toThrow(/INVALID_PERMISSION_RULE/);
+		const addRule = api.slothlet.permissions.rules.add;
+		expect(() => addRule({ caller: "**", target: "x", effect: "allow", requires: [] })).toThrow(/PERMISSION_RULE_INVALID/);
+		expect(() => addRule({ caller: "**", target: "x", effect: "allow", requires: "roles" })).toThrow(/PERMISSION_RULE_INVALID/);
+		expect(() => addRule({ caller: "**", target: "x", effect: "allow", requires: [""] })).toThrow(/PERMISSION_RULE_INVALID/);
 	});
 
 	it("rule introspection reports `requires`", async () => {
 		api = await build([FILES_RULE]);
-		const rules = api.slothlet.permissions.global.rulesForPath("project.files.list");
+		const rules = api.slothlet.permissions.global.rules.path("project.files.list");
 		expect(rules.find((rule) => rule.requires)?.requires).toEqual(["roles"]);
 	});
 
@@ -364,12 +364,10 @@ describe.each(getMatrixConfigs())("Permissions > Principals (#459) > $name", ({ 
 			...config,
 			base: path.join(FIXTURE, "base"),
 			api: { mutations: { permissions: false } },
-			permissions: { defaultPolicy: "allow" }
+			permissions: { policy: "allow" }
 		});
-		expect(() => api.slothlet.permissions.principal.register("x", { key: () => 1, resolve: () => 1 })).toThrow(
-			/INVALID_CONFIG_MUTATIONS_DISABLED/
-		);
-		expect(() => api.slothlet.permissions.principal.unregister("x")).toThrow(/INVALID_CONFIG_MUTATIONS_DISABLED/);
+		expect(() => api.slothlet.permissions.principal.register("x", { key: () => 1, resolve: () => 1 })).toThrow(/API_MUTATION_DISABLED/);
+		expect(() => api.slothlet.permissions.principal.unregister("x")).toThrow(/API_MUTATION_DISABLED/);
 		expect(api.slothlet.permissions.principal.invalidate("x")).toBe(false);
 	});
 
@@ -417,7 +415,7 @@ describe.each(getMatrixConfigs())("Permissions > Principals (#459) > $name", ({ 
 		await expectDenied(() => as({ user: "u1" }, () => api.client.app.files("p1")));
 		expect(resolves).toBe(1);
 		// The name stays with its owner while dormant.
-		await expectFails(() => api.client.app.claim("roles"), /PRINCIPAL_NAME_OWNED/);
+		await expectFails(() => api.client.app.claim("roles"), /PERMISSION_PRINCIPAL_NAME_OWNED/);
 
 		// The reloaded module registers again and the rule matches with a fresh resolve.
 		await api.roles.registry.setup(options);
@@ -432,8 +430,13 @@ describe.each(getMatrixConfigs())("Permissions > Principals (#459) > $name", ({ 
 		expect(await api.roles.registry.drop()).toBe(true);
 		await api.roles.registry.setup();
 		expect(api.slothlet.permissions.principal.unregister("billing")).toBe(true);
-		await api.slothlet.permissions.addRule({ caller: "client.**", target: "slothlet.permissions.principal.**", effect: "allow" });
-		await api.slothlet.permissions.addRule({ caller: "client.**", target: "reports.exporter.run", effect: "allow", requires: ["tenant"] });
+		await api.slothlet.permissions.rules.add({ caller: "client.**", target: "slothlet.permissions.principal.**", effect: "allow" });
+		await api.slothlet.permissions.rules.add({
+			caller: "client.**",
+			target: "reports.exporter.run",
+			effect: "allow",
+			requires: ["tenant"]
+		});
 
 		await api.slothlet.reload();
 
@@ -442,7 +445,7 @@ describe.each(getMatrixConfigs())("Permissions > Principals (#459) > $name", ({ 
 		// Module principal: reserved for its owner, dormant until the reloaded module registers again.
 		await api.roles.registry.grant("u1", "p1", ["read"]);
 		await expectDenied(() => as({ user: "u1" }, () => api.client.app.files("p1")));
-		await expectFails(() => api.client.app.claim("roles"), /PRINCIPAL_NAME_OWNED/);
+		await expectFails(() => api.client.app.claim("roles"), /PERMISSION_PRINCIPAL_NAME_OWNED/);
 		await api.roles.registry.setup();
 		expect(await as({ user: "u1" }, () => api.client.app.files("p1"))).toMatchObject({ projectId: "p1" });
 		// The billing unregistration replayed too, so the name is free.

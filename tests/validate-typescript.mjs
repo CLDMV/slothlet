@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:55-07:00 (1791090895)
+ *	@Last modified time: 2026-11-16T18:28:12-08:00 (1794882492)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -101,6 +101,10 @@ async function main() {
 		await testMainExport(tempDir);
 		console.log("✅ Main export validated");
 
+		console.log("\n4. Testing self's type for a function root and an object root...");
+		await testSelfRootTypes(tempDir);
+		console.log("✅ self types as the api root (callable for a function root only)");
+
 		console.log("\n🎉 All TypeScript definitions validated successfully!");
 		console.log(`✅ Tested ${testCount + 1} exports individually`);
 		console.log("✅ Ready for CI/production deployment");
@@ -175,6 +179,84 @@ export { moduleType, hasExports, exportCount };
 }
 
 /**
+ * Type-checks one generated api declaration with a file that uses `self` and the host's `api` (#803).
+ * @internal
+ * @private
+ * @param {string} dir - Directory holding the generated `api.d.ts`.
+ * @param {string} body - The checked file's statements.
+ * @returns {void}
+ * @throws {Error} If the check fails
+ */
+function checkSelfProgram(dir, body) {
+	const testFile = join(dir, "check.mts");
+	writeFileSync(
+		testFile,
+		`import { self } from "@cldmv/slothlet/runtime";\nimport slothlet from "@cldmv/slothlet";\nimport type {} from "./api.js";\n${body}\nexport {};\n`,
+		"utf8"
+	);
+	try {
+		execSync(
+			`npx tsc --noEmit --strict --allowJs --moduleResolution bundler --customConditions slothlet-dev --module esnext --target es2022 "${testFile}" "${join(dir, "api.d.ts")}"`,
+			{ stdio: "pipe", encoding: "utf8", cwd: process.cwd() }
+		);
+	} catch (tscError) {
+		console.error(`    ❌ ${dir} failed:`);
+		console.error(tscError.stdout || tscError.stderr || tscError.message);
+		throw new Error(`TypeScript validation failed for ${dir}`, { cause: tscError });
+	}
+}
+
+/**
+ * Tests that `self` (and the host's `api`) types as the api root (#803): callable with the root function's own
+ * parameters and result when the root file exports a function, and not callable for an object root.
+ * @internal
+ * @private
+ * @param {string} tempDir - Temporary directory path
+ * @async
+ * @returns {Promise<void>}
+ * @throws {Error} If a check fails
+ */
+async function testSelfRootTypes(tempDir) {
+	const { generate } = await import("@cldmv/slothlet/typegen");
+	const fixtures = join(process.cwd(), "api_tests", "api_test_self_parity");
+
+	const fnDir = join(tempDir, "self-fnroot");
+	mkdirSync(fnDir, { recursive: true });
+	await generate({ base: join(fixtures, "fnroot"), output: join(fnDir, "api.d.ts"), name: "FnRootApi" });
+	checkSelfProgram(
+		fnDir,
+		[
+			"export function leaf(): number {",
+			"\tconst doubled: number = self(2);",
+			"\t// @ts-expect-error The root takes a number.",
+			'\tself("two");',
+			"\treturn doubled + self.math.add(1, 2);",
+			"}",
+			"export async function host(): Promise<number> {",
+			'\tconst api = await slothlet({ base: "./api" });',
+			"\treturn api(2);",
+			"}"
+		].join("\n")
+	);
+	console.log("   ✅ function root: self(2) is a number");
+
+	const objDir = join(tempDir, "self-objroot");
+	mkdirSync(objDir, { recursive: true });
+	await generate({ base: join(fixtures, "objroot"), output: join(objDir, "api.d.ts"), name: "ObjRootApi" });
+	checkSelfProgram(
+		objDir,
+		[
+			"export function leaf(): number {",
+			"\t// @ts-expect-error An object root is not callable.",
+			"\tself(2);",
+			"\treturn self.math.add(1, 2);",
+			"}"
+		].join("\n")
+	);
+	console.log("   ✅ object root: self is not callable");
+}
+
+/**
  * Tests the main export with comprehensive type usage.
  * @internal
  * @private
@@ -194,10 +276,10 @@ async function validateMainExport(): Promise<boolean> {
         base: './api_tests/api_test',
         mode: 'lazy',        // 'eager' | 'lazy'
         runtime: 'async',    // 'async' | 'live'
-        platform: 'node',    // execution target (independent of env)
+        loader: { platform: 'node' }, // execution target (independent of env)
         env: { include: ['NODE_ENV'] }, // process.env snapshot allowlist (independent of platform)
         debug: false,
-        apiDepth: 5,
+        depth: 5,
         hook: true,
         silent: false,
         context: { test: true },
@@ -209,11 +291,6 @@ async function validateMainExport(): Promise<boolean> {
     const api3 = await slothlet({}); // Empty object
     const api4 = await slothlet({ base: './test' }); // Single property
     
-    // Deprecated alias still type-checks (dir -> base)
-    const apiLegacy = await slothlet({
-        dir: './api_tests/api_test', // deprecated alias for base
-        mode: 'eager'
-    });
     
     // Test type extraction
     type SlothletType = typeof slothlet;

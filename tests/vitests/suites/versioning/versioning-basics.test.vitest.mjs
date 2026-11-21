@@ -40,8 +40,8 @@ describe.each(getMatrixConfigs())("Versioning > Basics > $name", ({ config }) =>
 	it("mounts versioned namespaces and creates dispatcher", async () => {
 		api = await slothlet({ ...config, base: `${BASE}/callers` });
 
-		await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1", default: true });
-		await api.slothlet.api.add("auth", `${BASE}/v2`, {}, { version: "v2" });
+		await api.slothlet.api.add("auth", `${BASE}/v1`, { version: { tag: "v1", default: true } });
+		await api.slothlet.api.add("auth", `${BASE}/v2`, { version: { tag: "v2" } });
 
 		// Direct versioned namespaces must exist
 		expect(api.v1).toBeDefined();
@@ -57,15 +57,15 @@ describe.each(getMatrixConfigs())("Versioning > Basics > $name", ({ config }) =>
 
 		// Dispatcher must be present at logical path
 		expect(api.auth).toBeDefined();
-		expect(api.auth.__isCallable).toBe(false);
-		expect(api.auth.__apiPath).toBe("auth");
+		expect(api.slothlet.node(api.auth).callable).toBe(false);
+		expect(api.slothlet.node(api.auth).logical).toEqual(["auth"]);
 	});
 
 	it("versioned namespace functions return correct shapes", async () => {
 		api = await slothlet({ ...config, base: `${BASE}/callers` });
 
-		await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1" });
-		await api.slothlet.api.add("auth", `${BASE}/v2`, {}, { version: "v2" });
+		await api.slothlet.api.add("auth", `${BASE}/v1`, { version: { tag: "v1" } });
+		await api.slothlet.api.add("auth", `${BASE}/v2`, { version: { tag: "v2" } });
 
 		const logout1 = api.v1.auth.logout();
 		const logout2 = api.v2.auth.logout();

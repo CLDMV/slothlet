@@ -16,7 +16,7 @@
 /**
  * @fileoverview What the framework's metadata and versioning getters hand module code is a copy (#625).
  *
- * `metadata.getFor`, `metadata.getForVersion`, `versioning.getVersionMetadata`, and `versioning.list` answer with
+ * `metadata.get`, `metadata.getForVersion`, `versioning.metadata.get`, and `versioning.list` answer with
  * what the framework stores for a path. Module code changing an object it got back changes its own copy, never the
  * store: another module's metadata, its version metadata, and the version registry a dispatcher routes by stay as
  * they were — the setters, which hold module code to its own paths, are the only way to change them.
@@ -51,21 +51,21 @@ describe.each(CONFIGS)("copies the metadata getters hand module code (#625) — 
 		["off", {}]
 	])("leaves the store as it was when module code changes what it read (permissions %s)", async (_label, options) => {
 		api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, ...options });
-		await api.slothlet.api.add("victim", VICTIM, { moduleID: "victim", metadata: { tier: { level: 1 } } });
-		await api.slothlet.api.add("svc", VICTIM, { moduleID: "svc1" }, { version: "v1", default: true, metadata: { nested: { flag: "ok" } } });
-		await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { moduleID: "guest" });
+		await api.slothlet.api.add("victim", VICTIM, { id: "victim", metadata: { tier: { level: 1 } } });
+		await api.slothlet.api.add("svc", VICTIM, { id: "svc1", version: { tag: "v1", default: true, metadata: { nested: { flag: "ok" } } } });
+		await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { id: "guest" });
 
 		await api.guest.x.changeReadMetadata("victim", "svc", "v1");
 
-		const meta = api.slothlet.metadata.getFor("victim");
+		const meta = api.slothlet.metadata.get("victim");
 		expect(meta.tier.level).toBe(1);
 		expect(meta.planted).toBeUndefined();
-		const versionMeta = api.slothlet.versioning.getVersionMetadata("svc", "v1");
+		const versionMeta = api.slothlet.versioning.metadata.get("svc", "v1");
 		expect(versionMeta.version).toBe("v1");
 		expect(versionMeta.nested.flag).toBe("ok");
 		const listed = api.slothlet.versioning.list("svc").versions.v1;
-		expect(listed.versionedParts).toEqual(["v1", "svc"]);
-		expect(listed.versionMeta.nested.flag).toBe("ok");
+		expect(listed.path).toEqual(["v1", "svc"]);
+		expect(listed.metadata.nested.flag).toBe("ok");
 		expect(await api.svc.v.secret()).toBe("SECRET");
 	});
 });

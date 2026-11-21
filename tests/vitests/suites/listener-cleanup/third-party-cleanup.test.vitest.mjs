@@ -37,14 +37,14 @@ import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
 /**
  * Count the listeners on `emitter` for `events` that are still slothlet wrappers. A slothlet wrapper,
- * `on` or `once`, carries `_slothletOriginal`; the plain one-shot wrapper that replaces a `once` wrapper at
+ * `on` or `once`, carries `____slothletOriginal`; the plain one-shot wrapper that replaces a `once` wrapper at
  * shutdown does not.
  * @param {import("node:events").EventEmitter} emitter - Emitter.
  * @param {string[]} events - Event names.
  * @returns {number} Wrapped listeners still attached.
  */
 const wrappedListeners = (emitter, events) =>
-	events.reduce((sum, event) => sum + emitter.rawListeners(event).filter((fn) => fn._slothletOriginal !== undefined).length, 0);
+	events.reduce((sum, event) => sum + emitter.rawListeners(event).filter((fn) => fn.____slothletOriginal !== undefined).length, 0);
 
 const POOL_EVENTS = ["connect", "query", "error", "disconnect"];
 const WATCHER_EVENTS = ["add", "change", "unlink", "error", "ready"];

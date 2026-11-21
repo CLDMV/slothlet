@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-11T17:02:27-07:00 (1791763347)
+ *	@Last modified time: 2026-11-16T18:31:16-08:00 (1794882676)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -113,12 +113,9 @@ describe.each(getMatrixConfigs())("wrapper-answered names as namespace members (
 
 	it("mounts a version dispatcher below a `name` segment that follows an unloaded nested folder before the add resolves", async () => {
 		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST_WRAPPER_PROP_MEMBERS_DEEP });
-		await api.slothlet.api.add(
-			"outer.inner.name.deep",
-			TEST_DIRS.API_TEST_WRAPPER_PROP_MEMBERS_MOUNT,
-			{},
-			{ version: "v1", default: true }
-		);
+		await api.slothlet.api.add("outer.inner.name.deep", TEST_DIRS.API_TEST_WRAPPER_PROP_MEMBERS_MOUNT, {
+			version: { tag: "v1", default: true }
+		});
 		// Read with no await in between: the add has resolved, so the dispatcher is already mounted.
 		const dispatcher = api.outer.inner.name.deep;
 		expect(typeof dispatcher === "object" || typeof dispatcher === "function").toBe(true);
@@ -130,7 +127,7 @@ describe.each(getMatrixConfigs())("wrapper-answered names as namespace members (
 		api = await compose();
 		expect(api.label.name).toBe("label-name");
 		await expect(api.slothlet.api.add("label.name.deep", TEST_DIRS.API_TEST_WRAPPER_PROP_MEMBERS_MOUNT)).rejects.toThrow(
-			"INVALID_CONFIG_API_PATH_INVALID"
+			"API_PATH_INVALID"
 		);
 		expect(api.label.name).toBe("label-name");
 	});
@@ -240,15 +237,15 @@ describe.each(getMatrixConfigs())("names that cannot be api members are refused 
 	});
 
 	it("refuses a folder named for a framework-reserved key", async () => {
-		await expect(composeAndTouch(TEST_DIRS.API_TEST_REJECT_RESERVED_FOLDER)).rejects.toThrow(/MODULE_RESERVED_DIRNAME/);
+		await expect(composeAndTouch(TEST_DIRS.API_TEST_REJECT_RESERVED_FOLDER)).rejects.toThrow(/MODULE_RESERVED_FOLDER/);
 	});
 
 	it("refuses a folder whose name sanitizes to a framework-reserved key", async () => {
-		await expect(composeAndTouch(TEST_DIRS.API_TEST_REJECT_RESERVED_FOLDER_SANITIZED)).rejects.toThrow(/MODULE_RESERVED_DIRNAME/);
+		await expect(composeAndTouch(TEST_DIRS.API_TEST_REJECT_RESERVED_FOLDER_SANITIZED)).rejects.toThrow(/MODULE_RESERVED_FOLDER/);
 	});
 
 	it("refuses a file whose name sanitizes to a framework-reserved key", async () => {
-		await expect(composeAndTouch(TEST_DIRS.API_TEST_REJECT_RESERVED_FILE_SANITIZED)).rejects.toThrow(/MODULE_RESERVED_FILENAME/);
+		await expect(composeAndTouch(TEST_DIRS.API_TEST_REJECT_RESERVED_FILE_SANITIZED)).rejects.toThrow(/MODULE_RESERVED_FILE/);
 	});
 
 	it("refuses a CommonJS module exporting `then` instead of hanging the load", async () => {
@@ -524,7 +521,7 @@ describe.each(getMatrixConfigs())("names that cannot be api members are refused 
 		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST_WRAPPER_PROP_MEMBERS });
 		await expect(api.slothlet.api.add("profile.then", TEST_DIRS.API_TEST_WRAPPER_PROP_MEMBERS_MOUNT)).rejects.toThrow(/then/);
 		await expect(api.slothlet.api.add(["profile", "then", "deep"], TEST_DIRS.API_TEST_WRAPPER_PROP_MEMBERS_MOUNT)).rejects.toThrow(
-			/INVALID_CONFIG_API_PATH_INVALID/
+			/API_PATH_INVALID/
 		);
 		expect(await api.profile.bio()).toBe("profile.bio");
 	});
@@ -536,32 +533,32 @@ describe("browser manifests refuse the same folder and file names (#571)", () =>
 	 * @param {object} manifest - Manifest with the entry under test.
 	 * @returns {Promise<object>} The composed api.
 	 */
-	const composeManifest = (manifest) => slothlet({ base: TEST_DIRS.API_TEST_BROWSER, mode: "eager", manifest });
-	const math = { path: "math.mjs", name: "math", fullName: "math.mjs" };
+	const composeManifest = (manifest) => slothlet({ base: TEST_DIRS.API_TEST_BROWSER, mode: "eager", loader: { files: manifest } });
+	const math = { path: "math.mjs", name: "math", full: "math.mjs" };
 	const folder = (name) => ({
 		path: name,
 		name,
-		files: [{ path: `${name}/format.mjs`, name: "format", fullName: "format.mjs" }],
+		files: [{ path: `${name}/format.mjs`, name: "format", full: "format.mjs" }],
 		directories: []
 	});
 
 	it("refuses a `then` file", async () => {
-		await expect(
-			composeManifest({ files: [math, { path: "then.mjs", name: "then", fullName: "then.mjs" }], directories: [] })
-		).rejects.toThrow(/MODULE_THENABLE_NAME/);
+		await expect(composeManifest({ files: [math, { path: "then.mjs", name: "then", full: "then.mjs" }], directories: [] })).rejects.toThrow(
+			/MODULE_THENABLE_NAME/
+		);
 	});
 
 	it("refuses folder and file names that sanitize to `then` or a framework-reserved key", async () => {
 		await expect(composeManifest({ files: [math], directories: [folder("Then")] })).rejects.toThrow(/MODULE_THENABLE_NAME/);
-		await expect(composeManifest({ files: [math], directories: [folder("_materialize-")] })).rejects.toThrow(/MODULE_RESERVED_DIRNAME/);
+		await expect(composeManifest({ files: [math], directories: [folder("-___materialize-")] })).rejects.toThrow(/MODULE_RESERVED_FOLDER/);
 		await expect(
-			composeManifest({ files: [math, { path: "-_impl.mjs", name: "-_impl", fullName: "-_impl.mjs" }], directories: [] })
-		).rejects.toThrow(/MODULE_RESERVED_FILENAME/);
+			composeManifest({ files: [math, { path: "-____impl.mjs", name: "-____impl", full: "-____impl.mjs" }], directories: [] })
+		).rejects.toThrow(/MODULE_RESERVED_FILE/);
 	});
 
 	it("refuses a `then` folder and a framework-reserved folder", async () => {
 		await expect(composeManifest({ files: [math], directories: [folder("then")] })).rejects.toThrow(/MODULE_THENABLE_NAME/);
-		await expect(composeManifest({ files: [math], directories: [folder("_materialize")] })).rejects.toThrow(/MODULE_RESERVED_DIRNAME/);
+		await expect(composeManifest({ files: [math], directories: [folder("-___materialize")] })).rejects.toThrow(/MODULE_RESERVED_FOLDER/);
 	});
 });
 

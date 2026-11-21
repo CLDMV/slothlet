@@ -248,7 +248,7 @@ export function throwOwnNode() {
  */
 export function grant(rule) {
 	try {
-		return self.slothlet.permissions.addRule(rule);
+		return self.slothlet.permissions.rules.add(rule);
 	} catch (error) {
 		return error?.code ?? String(error);
 	}
@@ -261,7 +261,7 @@ export function grant(rule) {
  */
 export function revoke(ruleId) {
 	try {
-		return self.slothlet.permissions.removeRule(ruleId);
+		return self.slothlet.permissions.rules.remove(ruleId);
 	} catch (error) {
 		return error?.code ?? String(error);
 	}

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:56-07:00 (1791090896)
+ *	@Last modified time: 2026-11-16T18:28:32-08:00 (1794882512)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -76,7 +76,7 @@ describe("ApiCacheManager.delete — if(deleted) false branch for non-existent k
 			mode: "eager",
 			runtime: "async",
 			base: TEST_DIRS.API_TEST,
-			api: { collision: { initial: "replace", api: "replace" } }
+			api: { collision: { mode: { initial: "replace", api: "replace" } } }
 		});
 
 		const sl = getSlInstance(api);
@@ -94,7 +94,7 @@ describe("ApiCacheManager.delete — if(deleted) false branch for non-existent k
 			mode: "eager",
 			runtime: "async",
 			base: TEST_DIRS.API_TEST,
-			api: { collision: { initial: "replace", api: "replace" } }
+			api: { collision: { mode: { initial: "replace", api: "replace" } } }
 		});
 
 		const sl = getSlInstance(api);

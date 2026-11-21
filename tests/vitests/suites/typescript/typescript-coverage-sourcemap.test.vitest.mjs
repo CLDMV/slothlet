@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:47-07:00 (1791091727)
+ *	@Last modified time: 2026-11-16T18:31:10-08:00 (1794882670)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -21,7 +21,7 @@
  * `.ts` source through the copy's inline source map. When `typescript.sourcemap` is not set,
  * slothlet turns it on for a coverage run — a vitest coverage run (the worker global the #235
  * hint already reads) or a native/c8 run (`NODE_V8_COVERAGE`). An explicit `sourcemap: false`
- * wins, and then a one-shot `WARNING_COVERAGE_TS_SOURCEMAP_OFF` says the TS coverage can't reach
+ * wins, and then a one-shot `WARNING_COVERAGE_TYPESCRIPT_SOURCEMAP_OFF` says the TS coverage can't reach
  * the source (silenced by `silent`).
  *
  * @module tests/vitests/suites/typescript/typescript-coverage-sourcemap.test.vitest
@@ -33,11 +33,12 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { writeFile, rm, mkdir, readdir, readFile } from "node:fs/promises";
 import { makeTestTmpDir } from "../../setup/test-fixtures-tmp.mjs";
+import { captureWarnings } from "../../setup/warning-capture.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, "../../../..");
 
-const WARNING_CODE = "WARNING_COVERAGE_TS_SOURCEMAP_OFF";
+const WARNING_CODE = "WARNING_COVERAGE_TYPESCRIPT_SOURCEMAP_OFF";
 const COVERAGE_WORKER = { config: { coverage: { enabled: true, provider: "v8" } } };
 const PLAIN_WORKER = { config: { coverage: { enabled: false } } };
 
@@ -71,17 +72,17 @@ afterAll(async () => {
 
 describe("coverage-run detection", () => {
 	it("detects a vitest coverage run from the worker global", async () => {
-		const { isCoverageRun } = await import("@cldmv/slothlet/processors/loader");
+		const { isCoverageRun } = await import("#processors/loader");
 		expect(isCoverageRun({ worker: COVERAGE_WORKER, env: {} })).toBe(true);
 	});
 
 	it("detects a native/c8 run from NODE_V8_COVERAGE", async () => {
-		const { isCoverageRun } = await import("@cldmv/slothlet/processors/loader");
+		const { isCoverageRun } = await import("#processors/loader");
 		expect(isCoverageRun({ worker: null, env: { NODE_V8_COVERAGE: "/some/dir" } })).toBe(true);
 	});
 
 	it("reports no coverage run for a plain test run or plain process", async () => {
-		const { isCoverageRun } = await import("@cldmv/slothlet/processors/loader");
+		const { isCoverageRun } = await import("#processors/loader");
 		expect(isCoverageRun({ worker: PLAIN_WORKER, env: {} })).toBe(false);
 		expect(isCoverageRun({ worker: null, env: {} })).toBe(false);
 		expect(isCoverageRun({ worker: null, env: { NODE_V8_COVERAGE: "" } })).toBe(false);
@@ -92,7 +93,7 @@ describe("coverage-run detection", () => {
 
 describe("resolveSourcemap", () => {
 	it("turns source maps on under a coverage run when sourcemap is not set", async () => {
-		const { resolveSourcemap } = await import("@cldmv/slothlet/processors/loader");
+		const { resolveSourcemap } = await import("#processors/loader");
 		expect(resolveSourcemap({ enabled: true, mode: "fast" }, { worker: COVERAGE_WORKER, env: {} })).toBe(true);
 		expect(resolveSourcemap({ enabled: true, mode: "fast", sourcemap: null }, { worker: null, env: { NODE_V8_COVERAGE: "/x" } })).toBe(
 			true
@@ -100,18 +101,18 @@ describe("resolveSourcemap", () => {
 	});
 
 	it("leaves source maps off outside a coverage run when sourcemap is not set", async () => {
-		const { resolveSourcemap } = await import("@cldmv/slothlet/processors/loader");
+		const { resolveSourcemap } = await import("#processors/loader");
 		expect(resolveSourcemap({ enabled: true, mode: "fast" }, { worker: PLAIN_WORKER, env: {} })).toBe(false);
 	});
 
 	it("lets an explicit sourcemap value win over detection", async () => {
-		const { resolveSourcemap } = await import("@cldmv/slothlet/processors/loader");
+		const { resolveSourcemap } = await import("#processors/loader");
 		expect(resolveSourcemap({ enabled: true, mode: "fast", sourcemap: false }, { worker: COVERAGE_WORKER, env: {} })).toBe(false);
 		expect(resolveSourcemap({ enabled: true, mode: "fast", sourcemap: true }, { worker: null, env: {} })).toBe(true);
 	});
 
 	it("keeps an unset sourcemap unset through config normalization", async () => {
-		const { Config } = await import("@cldmv/slothlet/helpers/config");
+		const { Config } = await import("#helpers/config");
 		const { SlothletError, SlothletWarning } = await import("@cldmv/slothlet/errors");
 		const cfg = new Config({
 			config: {},
@@ -133,18 +134,12 @@ describe("warnIfCoverageWithoutSourcemap", () => {
 	 * @returns {Promise<{fired: boolean, captured: number}>} Whether it warned and how many captures.
 	 */
 	async function probe(config, overrides) {
-		const { warnIfCoverageWithoutSourcemap } = await import("@cldmv/slothlet/processors/loader");
-		const { SlothletWarning } = await import("@cldmv/slothlet/errors");
-		SlothletWarning.clearCaptured();
-		const prior = SlothletWarning.suppressConsole;
-		SlothletWarning.suppressConsole = true;
-		try {
-			const fired = warnIfCoverageWithoutSourcemap(config, overrides);
-			return { fired, captured: SlothletWarning.captured.filter((w) => w.code === WARNING_CODE).length };
-		} finally {
-			SlothletWarning.suppressConsole = prior;
-			SlothletWarning.clearCaptured();
-		}
+		const { warnIfCoverageWithoutSourcemap } = await import("#processors/loader");
+		let fired;
+		const warnings = await captureWarnings(() => {
+			fired = warnIfCoverageWithoutSourcemap(config, overrides);
+		});
+		return { fired, captured: warnings.filter((w) => w.code === WARNING_CODE).length };
 	}
 
 	const OFF = { typescript: { enabled: true, mode: "fast", sourcemap: false } };
@@ -165,8 +160,15 @@ describe("warnIfCoverageWithoutSourcemap", () => {
 		expect((await probe(unset, { worker: COVERAGE_WORKER, env: {} })).fired).toBe(false);
 	});
 
-	it("respects silent instances", async () => {
-		expect(await probe({ ...OFF, silent: true }, { worker: COVERAGE_WORKER, env: {} })).toEqual({ fired: false, captured: 0 });
+	it("respects silent instances: raised through the instance's class, recorded there and not printed (#838)", async () => {
+		const { SlothletWarning } = await import("@cldmv/slothlet/errors");
+		const recorded = [];
+		const Warning = SlothletWarning.forInstance(
+			() => true,
+			(warning) => recorded.push(warning)
+		);
+		expect(await probe(OFF, { worker: COVERAGE_WORKER, env: {}, Warning })).toEqual({ fired: true, captured: 0 });
+		expect(recorded.filter((w) => w.code === WARNING_CODE)).toHaveLength(1);
 	});
 });
 
@@ -182,7 +184,7 @@ describe("a real NODE_V8_COVERAGE process", () => {
 	function runChild({ typescript, silent = false, coverageDir }) {
 		const script = [
 			`import slothlet from ${JSON.stringify(pathToFileURL(path.join(REPO_ROOT, "index.mjs")).href)};`,
-			`const api = await slothlet({ dir: ${JSON.stringify(apiDir)}, mode: "eager", silent: ${silent}, typescript: ${JSON.stringify(typescript)} });`,
+			`const api = await slothlet({ base: ${JSON.stringify(apiDir)}, mode: "eager", silent: ${silent}, typescript: ${JSON.stringify(typescript)} });`,
 			`await api.other();`,
 			`try { await api.boom("x"); } catch (error) { process.stdout.write(String(error.stack)); }`,
 			`await api.slothlet.shutdown();`

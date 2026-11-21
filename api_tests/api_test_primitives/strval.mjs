@@ -18,7 +18,7 @@
  * @module api_test_primitives.strval
  * @memberof module:api_test_primitives
  * @example
- * // api.strval.__type === "string"
+ * // api.slothlet.node(api.strval).type === "data"
  */
 /**
  * @namespace strval

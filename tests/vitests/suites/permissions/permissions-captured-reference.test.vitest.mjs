@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:15-07:00 (1791090915)
+ *	@Last modified time: 2026-11-16T18:29:45-08:00 (1794882585)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -63,7 +63,7 @@ describe.each(getMatrixConfigs())("Permissions > captured references > $name", (
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "deny",
+				policy: "deny",
 				rules: [
 					{ caller: "callers.paymentsCaller.**", target: "db.write.**", effect: "allow" },
 					{ caller: "**", target: "callers.**", effect: "allow" }
@@ -114,12 +114,14 @@ describe.each(getMatrixConfigs())("Permissions > captured references > $name", (
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "deny",
-				references: { capture: false },
+				policy: "deny",
 				rules: [
 					{ caller: "callers.paymentsCaller.**", target: "db.write.**", effect: "allow" },
 					{ caller: "**", target: "callers.**", effect: "allow" }
-				]
+				],
+				caller: {
+					capture: false
+				}
 			}
 		});
 

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:22-07:00 (1791090922)
+ *	@Last modified time: 2026-11-16T18:30:31-08:00 (1794882631)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -331,7 +331,7 @@ describe.each(FULL_MATRIX)("Smart Flattening Folders - $name", ({ name: ___name,
 		// In lazy mode this exercises the `attachedKeys.length > 0` branch in
 		// lazy_materializeFunc (modes-processor.mjs ~line 1512): the same-name subdir lazy
 		// wrapper is pre-populated with the file's exports as direct own keys, so it is
-		// returned directly as nestedValue (rather than unwrapping __impl).
+		// returned directly as nestedValue (rather than unwrapping ____impl).
 		const api = await slothlet({
 			...config,
 			base: path.join(__dirname, `../../../../${API_TEST_BASE}/api_test`)
@@ -355,15 +355,16 @@ describe.each(FULL_MATRIX)("Smart Flattening Folders - $name", ({ name: ___name,
 		await api.shutdown();
 	});
 
-	test("Folder with ONLY a same-name subfolder keeps it nested, in eager and lazy alike (#581)", async () => {
-		// Fixture: pipe/ contains ONLY a pipe/pipe/ subfolder (no pipe.mjs file at the outer level).
-		// Only a FILE named after its folder flattens into it (Rule 1); a same-named SUBFOLDER is a
-		// nested namespace. Eager has always composed `pipe.pipe`; lazy used to unwrap the subfolder
-		// into `pipe` (#581), so this asserts the same shape in both modes. Background materialization
-		// stays on so lazy settles the inner wrapper before the outer one, the order that unwrapped it.
+	test("Folder with ONLY a same-name subfolder is one level, in eager and lazy alike (#581, #743)", async () => {
+		// Fixture: pipe/ contains ONLY a pipe/pipe/ subfolder (no pipe.mjs file at the outer level), which holds
+		// pipe.mjs. The two folders are one level (Rule 22, the 2.x shape #743 restores), and the file named after
+		// that level flattens into it (Rule 1), so its exports are `pipe`'s own members in both modes. Background
+		// materialization stays on so lazy settles the inner wrapper before the outer one.
 		const api = await slothlet({
 			...config,
-			backgroundMaterialize: true,
+			loader: {
+				materialize: true
+			},
 			base: path.join(__dirname, `../../../../${API_TEST_BASE}/smart_flatten/api_smart_flatten_solo_subfolder`)
 		});
 
@@ -371,10 +372,15 @@ describe.each(FULL_MATRIX)("Smart Flattening Folders - $name", ({ name: ___name,
 
 		expect(isValidFolderType(api.pipe, config.mode)).toBe(true);
 		await api.pipe;
-		expect(Object.keys(api.pipe).filter((key) => !key.startsWith("_"))).toEqual(["pipe"]);
+		expect(
+			Object.keys(api.pipe)
+				.filter((key) => !key.startsWith("_"))
+				.sort()
+		).toEqual(["doWork", "getStatus"]);
+		expect(api.pipe.pipe).toBeUndefined();
 
-		expect(await api.pipe.pipe.doWork()).toBe("pipe-done");
-		expect(await api.pipe.pipe.getStatus()).toBe("pipe-ready");
+		expect(await api.pipe.doWork()).toBe("pipe-done");
+		expect(await api.pipe.getStatus()).toBe("pipe-ready");
 
 		await api.shutdown();
 	});

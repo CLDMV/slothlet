@@ -227,7 +227,7 @@ export function passThrough() {
  * await api.callee.ops.addPlug(dir);
  */
 export async function addPlug(dir) {
-	await self.slothlet.api.add("plug", dir, { moduleID: "plug-mod" });
+	await self.slothlet.api.add("plug", dir, { id: "plug-mod" });
 }
 
 /**

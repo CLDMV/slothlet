@@ -51,8 +51,8 @@ describe.each(getMatrixConfigs())("values set on a lazy namespace during its mat
 		["a namespace placed by a forceOverwrite add", true, "shadow-open"]
 	])("keeps a primitive, a plain object and a function set on %s while it materializes", async (_label, overwrite, lockResult) => {
 		api = await slothlet({ ...config, base: BASE, silent: true });
-		await api.slothlet.api.add("launcher", EXT, { moduleID: "launcher" });
-		if (overwrite) await api.slothlet.api.add("launcher.session", SHADOW, { moduleID: "shadow", forceOverwrite: true });
+		await api.slothlet.api.add("launcher", EXT, { id: "launcher" });
+		if (overwrite) await api.slothlet.api.add("launcher.session", SHADOW, { id: "shadow", collision: { force: true } });
 		// Materialize the parent, so `vault` below is the namespace's own wrapper rather than a waiting proxy.
 		await api.launcher.session.store.create();
 

@@ -37,14 +37,14 @@ describe.each(getMatrixConfigs())("Versioning > Remove All > $name", ({ config }
 	it("removes dispatcher when all versions are unregistered", async () => {
 		api = await slothlet({ ...config, base: `${BASE}/callers` });
 
-		await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1" });
-		await api.slothlet.api.add("auth", `${BASE}/v2`, {}, { version: "v2" });
+		await api.slothlet.api.add("auth", `${BASE}/v1`, { version: { tag: "v1" } });
+		await api.slothlet.api.add("auth", `${BASE}/v2`, { version: { tag: "v2" } });
 
 		expect(api.auth).toBeDefined();
 
 		// Remove all
-		await api.slothlet.versioning.unregister("auth", "v1");
-		await api.slothlet.versioning.unregister("auth", "v2");
+		await api.slothlet.versioning.remove("auth", "v1");
+		await api.slothlet.versioning.remove("auth", "v2");
 
 		// Dispatcher torn down — api.auth should be undefined
 		expect(api.auth).toBeUndefined();
@@ -53,9 +53,9 @@ describe.each(getMatrixConfigs())("Versioning > Remove All > $name", ({ config }
 	it("version.list returns undefined when all versions are unregistered", async () => {
 		api = await slothlet({ ...config, base: `${BASE}/callers` });
 
-		await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1" });
+		await api.slothlet.api.add("auth", `${BASE}/v1`, { version: { tag: "v1" } });
 
-		await api.slothlet.versioning.unregister("auth", "v1");
+		await api.slothlet.versioning.remove("auth", "v1");
 
 		// After teardown the path is removed from the registry entirely;
 		// list() returns undefined (not { default: null }) for unknown paths.

@@ -134,10 +134,14 @@ const DEFAULT_VITEST_CONFIG = ".configs/vitest.config.mjs";
  * The merge reads every per-file blob into one process; with 500+ files it outgrows
  * Node's default ~4 GB heap and dies with "heap out of memory" after every test passed.
  * It runs once, after all test workers have exited, so it can take a larger heap than
- * the workers without raising the run's peak memory.
+ * the workers without raising the run's peak memory. At ~800 files the merge outgrew 8 GB
+ * too, so the default is 12 GB (4 GB free on a 16 GB CI runner); on a machine with less
+ * than 14 GB it drops to total memory minus 2 GB, never below 4 GB.
  * @type {number}
  */
-const MERGE_HEAP_MB = process.env.VITEST_MERGE_HEAP_MB ? parseInt(process.env.VITEST_MERGE_HEAP_MB, 10) : 8192;
+const MERGE_HEAP_MB = process.env.VITEST_MERGE_HEAP_MB
+	? parseInt(process.env.VITEST_MERGE_HEAP_MB, 10)
+	: Math.max(4096, Math.min(12288, Math.floor(os.totalmem() / 1024 ** 2) - 2048));
 
 /**
  * Directory the coverage run writes its per-file blobs to before the merge.
@@ -185,7 +189,17 @@ const SOLO_RUN_PATTERNS = [
 	// emit) plus a `tsc` compile of the output in the acceptance check. Under a full parallel run
 	// those tsc passes are starved by the other workers and blow past the test timeout (each takes
 	// ~3s in isolation), so it runs solo like typescript-strict-mode above.
-	"tests/vitests/suites/typegen/typegen-programmatic.test.vitest.mjs"
+	"tests/vitests/suites/typegen/typegen-programmatic.test.vitest.mjs",
+	// The four metadata suites below each build a slothlet instance per test across every LAZY* config
+	// (45-120s per file in isolation, 1-3 GB heap). Under the full sharded run on a CI runner the
+	// beforeEach instance build is starved by the other workers and exceeds the 10s hook timeout
+	// (a different test in each file on the Node 24 leg of PR #830). They pass in isolation and time the
+	// same on next and on the PR branch, so this is starvation, not a regression: they run solo like
+	// metadata-edge-cases above.
+	"tests/vitests/suites/metadata/system-metadata.test.vitest.mjs",
+	"tests/vitests/suites/metadata/user-metadata.test.vitest.mjs",
+	"tests/vitests/suites/metadata/metadata-reload.test.vitest.mjs",
+	"tests/vitests/suites/metadata/metadata-external-api.test.vitest.mjs"
 ];
 const PER_FILE_HEAP_OVERRIDES = [
 	{ pattern: "listener-cleanup/", heapMb: 6144 },

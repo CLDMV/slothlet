@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-01T09:24:29-08:00 (1793553869)
+ *	@Last modified time: 2026-11-16T18:27:39-08:00 (1794882459)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -20,7 +20,7 @@
 
 // Single source of truth for the `slothlet.defaults` namespace (#341) — a helper module with no
 // node:* specifiers, safe for the browser bundle's static-import graph (#123).
-import { DEFAULT_ROUTINES, RESERVED_EXPORTS } from "@cldmv/slothlet/helpers/defaults";
+import { DEFAULT_ROUTINES, RESERVED_EXPORTS } from "#helpers/defaults";
 
 // Custom uncaught exception handler for SlothletError
 // `process` is undefined in a browser, so define the handler unconditionally but
@@ -122,7 +122,7 @@ if (__isNode) process.on("uncaughtException", __slothletUncaughtHandler);
  */
 const slothlet = async (options = {}) => {
 	// Dynamic imports after environment check
-	const mod = await import("@cldmv/slothlet/slothlet");
+	const mod = await import("#slothlet");
 
 	const slothletImpl = mod.slothlet ?? mod.default;
 
@@ -137,7 +137,7 @@ const slothlet = async (options = {}) => {
  *
  * @example // ESM named import
  * import { slothlet } from "@cldmv/slothlet";
- * const api = await slothlet({ dir: './api' });
+ * const api = await slothlet({ base: './api' });
  */
 // Default export and named alias — both bind the same function. `slothlet` is a
 // `const` (not `export default function`) so the generated `.d.mts` reliably
@@ -150,9 +150,10 @@ export { slothlet };
 // implementation lazily, inside the call — so it carries none of the inner function's static
 // properties. Attach the identical, single-sourced value here too (see the static import above),
 // so `slothlet.defaults` is available synchronously through every entry point.
+/** @type {Readonly<{routines: ReadonlyArray<{name: string, mode: "manual"|"startup"|"shutdown"|"destroy"}>, reserved: ReadonlySet<string>}>} */
 slothlet.defaults = Object.freeze({
 	routines: DEFAULT_ROUTINES,
-	reservedExports: RESERVED_EXPORTS
+	reserved: RESERVED_EXPORTS
 });
 
 // The named alias as a property too, so the function carries the same own keys however the package

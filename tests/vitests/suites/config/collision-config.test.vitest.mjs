@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:00-07:00 (1791090900)
+ *	@Last modified time: 2026-11-16T18:28:49-08:00 (1794882529)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -100,7 +100,7 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 
 			// Should be able to add to existing path without errors
 			await api.slothlet.api.add("math", TEST_DIRS.API_TEST, {
-				moduleID: "math-extra"
+				id: "math-extra"
 			});
 
 			// Original function should still exist
@@ -112,7 +112,7 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 	describe("String shorthand", () => {
 		it("should apply string collision mode to both contexts (skip)", async () => {
 			// String shorthand: collision: "skip" => { initial: "skip", api: "skip" }
-			api = await createApiInstance(config, { collision: "skip" });
+			api = await createApiInstance(config, { api: { collision: "skip" } });
 
 			const math = getMath(api, config.base);
 			const originalAdd = math.add;
@@ -122,7 +122,7 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 
 			// Try to add collision content to math path (should be skipped by api: "skip")
 			await api.slothlet.api.add("", TEST_DIRS.API_TEST_COLLECTIONS, {
-				moduleID: "math-skip-shorthand"
+				id: "math-skip-shorthand"
 			});
 
 			// Original should still exist (collision was skipped)
@@ -137,7 +137,7 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 
 		it("should normalize collision mode case-insensitively (MERGE)", async () => {
 			// String shorthand with uppercase: collision: "MERGE" => { initial: "merge", api: "merge" }
-			api = await createApiInstance(config, { collision: "MERGE" });
+			api = await createApiInstance(config, { api: { collision: "MERGE" } });
 
 			const math = getMath(api, config.base);
 			const originalAdd = math.add;
@@ -146,7 +146,7 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 
 			// Add collision content to math path (should merge despite uppercase)
 			await api.slothlet.api.add("", TEST_DIRS.API_TEST_COLLECTIONS, {
-				moduleID: "math-merge-uppercase"
+				id: "math-merge-uppercase"
 			});
 
 			// Original should still exist (merged, keeps FIRST)
@@ -160,7 +160,7 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 
 		it("should default invalid modes to merge", async () => {
 			// Invalid mode defaults to merge: collision: "invalid" => { initial: "merge", api: "merge" }
-			api = await createApiInstance(config, { collision: "invalid-mode" });
+			api = await createApiInstance(config, { api: { collision: "invalid-mode" } });
 
 			const math = getMath(api, config.base);
 			const originalAdd = math.add;
@@ -169,7 +169,7 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 
 			// Add collision content - should merge (invalid mode defaults to merge)
 			await api.slothlet.api.add("", TEST_DIRS.API_TEST_COLLECTIONS, {
-				moduleID: "math-invalid-mode"
+				id: "math-invalid-mode"
 			});
 
 			// Should behave like merge: both original and new exist
@@ -187,7 +187,7 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 
 		it("merge mode: should merge file and folder exports, keeping FIRST version of conflicts", async () => {
 			api = await createApiInstance(config, {
-				api: { collision: { initial: "merge", api: "merge" } }
+				api: { collision: { mode: { initial: "merge", api: "merge" } } }
 			});
 
 			const math = getMath(api, config.base);
@@ -219,7 +219,7 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 
 		it("merge-replace mode: should merge file and folder exports, REPLACING conflicts with SECOND version", async () => {
 			api = await createApiInstance(config, {
-				api: { collision: { initial: "merge-replace", api: "merge-replace" } }
+				api: { collision: { mode: { initial: "merge-replace", api: "merge-replace" } } }
 			});
 
 			const math = getMath(api, config.base);
@@ -249,7 +249,7 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 
 		it("skip mode: should keep first loaded (folder or file)", async () => {
 			api = await createApiInstance(config, {
-				api: { collision: { initial: "skip", api: "merge" } }
+				api: { collision: { mode: { initial: "skip", api: "merge" } } }
 			});
 
 			const math = getMath(api, config.base);
@@ -274,7 +274,7 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 
 		it("replace mode: should replace with last loaded (folder or file)", async () => {
 			api = await createApiInstance(config, {
-				api: { collision: { initial: "replace", api: "merge" } }
+				api: { collision: { mode: { initial: "replace", api: "merge" } } }
 			});
 
 			const math = getMath(api, config.base);
@@ -299,7 +299,7 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 
 		it("warn mode: should warn and merge file and folder exports", async () => {
 			api = await createApiInstance(config, {
-				api: { collision: { initial: "warn", api: "merge" } },
+				api: { collision: { mode: { initial: "warn", api: "merge" } } },
 				silent: false
 			});
 
@@ -326,7 +326,7 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 			await withSuppressedSlothletErrorOutput(async () => {
 				await expect(async () => {
 					api = await createApiInstance(config, {
-						api: { collision: { initial: "error", api: "merge" } }
+						api: { collision: { mode: { initial: "error", api: "merge" } } }
 					});
 				}).rejects.toThrow();
 			});
@@ -336,7 +336,7 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 	describe("collision.api modes", () => {
 		it("merge mode: should preserve original and add new properties", async () => {
 			api = await createApiInstance(config, {
-				api: { collision: { initial: "merge", api: "merge" } }
+				api: { collision: { mode: { initial: "merge", api: "merge" } } }
 			});
 
 			const math = getMath(api, config.base);
@@ -346,7 +346,7 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 
 			// Add math-collision.mjs content to existing math path - should merge
 			await api.slothlet.api.add("", TEST_DIRS.API_TEST_COLLECTIONS, {
-				moduleID: "math-collision"
+				id: "math-collision"
 			});
 
 			// Original function should still exist (merge keeps FIRST)
@@ -363,7 +363,7 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 
 		it("merge-replace mode: should add new properties and REPLACE conflicting ones", async () => {
 			api = await createApiInstance(config, {
-				api: { collision: { initial: "merge", api: "merge-replace" } }
+				api: { collision: { mode: { initial: "merge", api: "merge-replace" } } }
 			});
 
 			const math = getMath(api, config.base);
@@ -376,7 +376,7 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 			// namespace merges recursively and each side's exclusive members coexist.
 
 			await api.slothlet.api.add("", TEST_DIRS.API_TEST_COLLECTIONS, {
-				moduleID: "math-collision-replace"
+				id: "math-collision-replace"
 			});
 
 			// `add` is defined by both modules → merge-replace replaces it with the second's version.
@@ -396,7 +396,7 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 
 		it("replace mode: should completely replace existing value", async () => {
 			api = await createApiInstance(config, {
-				api: { collision: { initial: "merge", api: "replace" } }
+				api: { collision: { mode: { initial: "merge", api: "replace" } } }
 			});
 
 			const mathOld = getMath(api, config.base);
@@ -405,7 +405,7 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 
 			// Replace math path with math-collision.mjs content
 			await api.slothlet.api.add("", TEST_DIRS.API_TEST_COLLECTIONS, {
-				moduleID: "math-collision"
+				id: "math-collision"
 			});
 
 			// Get NEW reference after replacement
@@ -430,7 +430,11 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 
 		it("skip mode: should silently keep existing value", async () => {
 			api = await createApiInstance(config, {
-				collision: { initial: "merge", api: "skip" }
+				api: {
+					collision: {
+						mode: { initial: "merge", api: "skip" }
+					}
+				}
 			});
 
 			const math = getMath(api, config.base);
@@ -440,7 +444,7 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 
 			// Try to add collision content to math path (should be skipped)
 			await api.slothlet.api.add("", TEST_DIRS.API_TEST_COLLECTIONS, {
-				moduleID: "math-skip"
+				id: "math-skip"
 			});
 
 			// Original should still exist
@@ -454,7 +458,7 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 
 		it("warn mode: should warn and keep existing value", async () => {
 			api = await createApiInstance(config, {
-				api: { collision: { initial: "merge", api: "warn" } },
+				api: { collision: { mode: { initial: "merge", api: "warn" } } },
 				silent: false
 			});
 
@@ -463,7 +467,7 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 
 			// Try to add collision content to math path (should warn and skip)
 			await api.slothlet.api.add("", TEST_DIRS.API_TEST_COLLECTIONS, {
-				moduleID: "math-warn"
+				id: "math-warn"
 			});
 
 			// Original should still exist
@@ -476,7 +480,11 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 
 		it("error mode: should throw error on collision", async () => {
 			api = await createApiInstance(config, {
-				collision: { initial: "merge", api: "error" }
+				api: {
+					collision: {
+						mode: { initial: "merge", api: "error" }
+					}
+				}
 			});
 
 			const math = getMath(api, config.base);
@@ -486,7 +494,7 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 			await withSuppressedSlothletErrorOutput(async () => {
 				await expect(
 					api.slothlet.api.add("", TEST_DIRS.API_TEST_COLLECTIONS, {
-						moduleID: "math-error"
+						id: "math-error"
 					})
 				).rejects.toThrow();
 			});
@@ -496,7 +504,11 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 	describe("Per-context configuration", () => {
 		it("should allow different modes for initial vs api", async () => {
 			api = await createApiInstance(config, {
-				collision: { initial: "merge", api: "error" }
+				api: {
+					collision: {
+						mode: { initial: "merge", api: "error" }
+					}
+				}
 			});
 
 			// Initial load should succeed (warn mode)
@@ -506,7 +518,7 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 			await withSuppressedSlothletErrorOutput(async () => {
 				await expect(
 					api.slothlet.api.add("", TEST_DIRS.API_TEST_COLLECTIONS, {
-						moduleID: "test-error"
+						id: "test-error"
 					})
 				).rejects.toThrow();
 			});
@@ -523,7 +535,7 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 
 			// Should be able to add (default merge mode)
 			await api.slothlet.api.add("extra", TEST_DIRS.API_TEST_MIXED, {
-				moduleID: "extra-test"
+				id: "extra-test"
 			});
 
 			expect(api.extra).toBeDefined();
@@ -539,7 +551,7 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 	describe("Collision with complex structures", () => {
 		it("should merge nested properties correctly", async () => {
 			api = await createApiInstance(config, {
-				api: { collision: { initial: "merge", api: "merge" } }
+				api: { collision: { mode: { initial: "merge", api: "merge" } } }
 			});
 
 			// Math module has nested structure
@@ -548,7 +560,7 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 
 			// Add collision content to math path (should merge at all levels)
 			await api.slothlet.api.add("", TEST_DIRS.API_TEST_COLLECTIONS, {
-				moduleID: "nested-merge"
+				id: "nested-merge"
 			});
 
 			// Both original and new should coexist

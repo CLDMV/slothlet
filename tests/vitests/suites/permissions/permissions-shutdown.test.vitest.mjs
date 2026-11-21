@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:20-07:00 (1791090920)
+ *	@Last modified time: 2026-11-16T18:30:08-08:00 (1794882608)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -32,7 +32,7 @@ describe.each(getMatrixConfigs())("Permissions > Shutdown > $name", ({ config })
 			...config,
 			base: `${BASE}/callers`,
 			permissions: {
-				defaultPolicy: "deny",
+				policy: "deny",
 				rules: [{ caller: "callers.**", target: "payments.**", effect: "allow" }]
 			}
 		});
@@ -41,7 +41,7 @@ describe.each(getMatrixConfigs())("Permissions > Shutdown > $name", ({ config })
 		await api.slothlet.api.add("callers", `${BASE}/callers`);
 
 		// Rules are present before shutdown
-		const rulesBefore = api.slothlet.permissions.global.rulesForPath("payments.charge");
+		const rulesBefore = api.slothlet.permissions.global.rules.path("payments.charge");
 		expect(rulesBefore.length).toBeGreaterThan(0);
 
 		await api.shutdown();

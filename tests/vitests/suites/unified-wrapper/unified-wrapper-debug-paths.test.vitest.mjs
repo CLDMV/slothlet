@@ -25,7 +25,7 @@
  * These debug paths check `apiPath === "string"` (literal string — covers the
  * api_test "string" module) and fire during lazy materialization:
  *
- *   line  668     `if (debug.wrapper && apiPath === "string")` at start of _materialize
+ *   line  668     `if (debug.wrapper && apiPath === "string")` at start of ___materialize
  *                 Triggered by materializing api.string in lazy mode with debug.wrapper=true.
  *
  *   line  680     Inside the materializationPromise async IIFE — same debug+string check
@@ -69,7 +69,7 @@ afterEach(async () => {
 // ---------------------------------------------------------------------------
 // 1. debug.wrapper=true in lazy mode — lines 668, 680, 705
 //    The "string" module (apiPath="string") materializes lazily.
-//    With debug.wrapper=true, _materialize() logs START, CALLING_FUNC, COMPLETE.
+//    With debug.wrapper=true, ___materialize() logs START, CALLING_FUNC, COMPLETE.
 // ---------------------------------------------------------------------------
 describe("debug.wrapper=true materialisation paths for lazy 'string' module", () => {
 	it("materialising api.string with debug.wrapper=true covers debug start/complete (lazy)", async () => {
@@ -96,17 +96,17 @@ describe("debug.wrapper=true materialisation paths for lazy 'string' module", ()
 		expect(result).toBe("cba");
 	});
 
-	it("materialization via explicit _materialize() call also fires debug paths (lazy)", async () => {
+	it("materialization via explicit ___materialize() call also fires debug paths (lazy)", async () => {
 		api = await slothlet({
 			base: TEST_DIRS.API_TEST,
 			mode: "lazy",
 			debug: { wrapper: true }
 		});
 
-		// Call _materialize() on string proxy directly — string was previously unmaterialized
+		// Call ___materialize() on string proxy directly — string was previously unmaterialized
 		const stringProxy = api.string;
-		if (typeof stringProxy?._materialize === "function") {
-			await stringProxy._materialize();
+		if (typeof stringProxy?.___materialize === "function") {
+			await stringProxy.___materialize();
 		}
 
 		const result = await api.string.upper("world");

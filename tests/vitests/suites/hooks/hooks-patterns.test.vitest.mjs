@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:07-07:00 (1791090907)
+ *	@Last modified time: 2026-11-16T18:29:17-08:00 (1794882557)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -61,7 +61,6 @@ import slothlet from "@cldmv/slothlet";
  */
 function toHookPath(pathValue) {
 	if (typeof pathValue === "string") return pathValue;
-	if (pathValue && typeof pathValue.__slothletPath === "string") return pathValue.__slothletPath;
 	try {
 		return String(pathValue);
 	} catch {
@@ -73,7 +72,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hook Pattern Match
 	let api;
 
 	beforeEach(async () => {
-		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST, collision: { initial: "replace", api: "replace" } });
+		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST, api: { collision: { mode: { initial: "replace", api: "replace" } } } });
 	});
 
 	afterEach(async () => {
@@ -348,7 +347,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hook Pattern Match
 		// In v3, pattern is part of the first argument typePattern string
 		withSuppressedSlothletErrorOutputSync(() => {
 			expect(() => {
-				api.slothlet.hook.on(`before:${pattern}`, () => {
+				api.slothlet.hook.on(`${pattern}:before`, () => {
 					// Hook registered but may not be called
 				});
 			}).toThrow("HOOK_BRACE_EXPANSION_MAX_DEPTH");
@@ -435,10 +434,11 @@ describe("Hook Pattern Edge Cases", () => {
 	beforeEach(async () => {
 		api = await slothlet({
 			base: TEST_DIRS.API_TEST,
-			lazy: false,
-			apiDepth: 1,
-			hook: { enabled: true }, // Enable hooks for pattern matching
-			api: { collision: { initial: "replace", api: "replace" } } // Use folder version, ignore file collisions
+			depth: 1,
+			hook: { enabled: true },
+			// Enable hooks for pattern matching
+			api: { collision: { mode: { initial: "replace", api: "replace" } } }
+			// Use folder version, ignore file collisions
 		});
 	});
 

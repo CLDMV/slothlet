@@ -53,12 +53,12 @@ export class ApiAssignment extends ComponentBase {
      * @param {Object} options - Assignment options
      * @param {boolean} [options.allowOverwrite=false] - Allow overwriting existing non-wrapper values
      * @param {boolean} [options.mutateExisting=false] - Sync existing wrappers instead of replacing
-     * @param {boolean} [options.useCollisionDetection=false] - Enable collision detection using config.collision mode
-     * @param {Object} [options.config] - Slothlet config (uses config.collision.initial or config.collision.api)
+     * @param {boolean} [options.useCollisionDetection=false] - Enable collision detection using config.api.collision.mode
+     * @param {Object} [options.config] - Slothlet config (uses config.api.collision.mode.initial or config.api.collision.mode.api)
      * @param {string} [options.collisionContext="initial"] - Collision context: "initial" or "api"
      * @param {Function} [options.syncWrapper] - Function to sync two wrapper proxies
      * @param {string} [options.collisionMode="merge"] - Mode used by the mutateExisting/hot-reload path (Case 1) when syncing two existing wrappers
-     * @param {string|null} [options.collisionModeOverride=null] - Per-call override (e.g. `api.add()`'s `forceOverwrite`) for the collision-detection branch (Case 2); takes precedence over `config.collision[collisionContext]`
+     * @param {string|null} [options.collisionModeOverride=null] - Per-call override (e.g. `api.add()`'s `forceOverwrite`) for the collision-detection branch (Case 2); takes precedence over `config.api.collision.mode[collisionContext]`
      * @param {string|null} [options.moduleID=null] - Module id to associate with this assignment, forwarded to `syncWrapper`
      * @returns {Promise<boolean>} True if assignment succeeded, false if blocked by collision or other constraint
      *
@@ -66,7 +66,7 @@ export class ApiAssignment extends ComponentBase {
      * This function encapsulates all assignment patterns from processFiles:
      * - Direct assignment when no collision
      * - Wrapper sync when both existing and new are wrappers
-     * - Collision detection using config.collision[context] mode (merge/replace/error/skip/warn)
+     * - Collision detection using config.api.collision.mode[context] (merge/replace/error/skip/warn)
      * - Proper handling of UnifiedWrapper proxies (preserves them, doesn't unwrap)
      *
      * Async (#369) because Case 1 awaits `syncWrapper` — itself async since it force-materializes

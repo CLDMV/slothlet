@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:56-07:00 (1791090896)
+ *	@Last modified time: 2026-11-16T18:28:31-08:00 (1794882511)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -39,10 +39,10 @@ describe("API (lazy-basic)", () => {
 			api = await slothlet({
 				...config,
 				base: TEST_DIRS.API_TEST,
-				api_mode: "function",
 				reference: { md5: mockMd5 },
 				diagnostics: true,
-				api: { collision: { initial: "replace", api: "replace" } } // Replace mode for deterministic results in basic tests
+				api: { collision: { mode: { initial: "replace", api: "replace" } } }
+				// Replace mode for deterministic results in basic tests
 			});
 		});
 

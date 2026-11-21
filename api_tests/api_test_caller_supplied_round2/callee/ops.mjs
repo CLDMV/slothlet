@@ -117,7 +117,7 @@ export function convertAfterNotify(value) {
  * await api.callee.ops.scoped(() => 1); // 1
  */
 export function scoped(fn) {
-	return self.slothlet.scope({ context: { token: "callee" }, owners: { token: "callee" }, fn });
+	return self.slothlet.context.scope({ context: { token: "callee" }, owners: { token: "callee" }, fn });
 }
 
 /**
@@ -128,7 +128,7 @@ export function scoped(fn) {
  * await api.callee.ops.scopedOwnWrite(); // "rewritten"
  */
 export function scopedOwnWrite() {
-	return self.slothlet.scope({
+	return self.slothlet.context.scope({
 		context: { token: "callee" },
 		owners: { token: "callee" },
 		fn: () => {

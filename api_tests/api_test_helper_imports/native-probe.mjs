@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-30T23:03:00-07:00 (1793426580)
+ *	@Last modified time: 2026-11-16T02:41:56-08:00 (1794825716)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -40,7 +40,8 @@ for (const mode of ["eager", "lazy"]) {
 	const refsA = await a.shared.refs();
 	const refsB = await b.shared.refs();
 	r.sharedRefs =
-		refsA.runtime === refsB.runtime &&
+		// Each instance's api files get a runtime module of their own (#803), whose members are the runtime's own.
+		["context", "instance", "SlothletSelf"].every((key) => refsA.runtime[key] === refsB.runtime[key]) &&
 		refsA.EventEmitter === refsB.EventEmitter &&
 		(await a.shared.sameParser()) &&
 		(await b.shared.sameParser());

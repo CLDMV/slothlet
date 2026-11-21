@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:53-07:00 (1791090893)
+ *	@Last modified time: 2026-11-16T18:27:56-08:00 (1794882476)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -20,7 +20,7 @@
  */
 
 import { ComponentBase } from "#factories/component-base";
-import { copyForComposition } from "@cldmv/slothlet/helpers/composition";
+import { copyForComposition } from "#helpers/composition";
 
 /**
  * Mode processing utilities component class
@@ -69,6 +69,6 @@ export class ModesUtils extends ComponentBase {
 	 * @public
 	 */
 	getOwnershipCollisionMode(config, collisionContext = "initial") {
-		return config.collision?.[collisionContext] || "merge";
+		return config.api?.collision?.mode?.[collisionContext] || "merge";
 	}
 }

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:57-07:00 (1791090897)
+ *	@Last modified time: 2026-11-16T18:29:29-08:00 (1794882569)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -17,7 +17,7 @@
  * @fileoverview Regression: removing a base/core module by its moduleID must not crash on the
  * OwnershipManager's "." endpoint. The moduleID-removal path in removeApiComponent fed the recorded
  * mount endpoint straight into normalizeApiPath(); for a base module that endpoint is ".", which
- * splits to empty segments and threw INVALID_CONFIG_API_PATH_INVALID. "." must be treated as the
+ * splits to empty segments and threw API_PATH_INVALID. "." must be treated as the
  * root so the longest-common-prefix fallback derives the real mount root instead of crashing.
  *
  * @module tests/vitests/suites/api-manager/api-manager-remove-base-module
@@ -53,7 +53,7 @@ describe('api-manager — remove a base module by moduleID ("." endpoint)', () =
 		api = null;
 	});
 
-	it('does not crash on the base module\'s "." endpoint (no INVALID_CONFIG_API_PATH_INVALID)', async () => {
+	it('does not crash on the base module\'s "." endpoint (no API_PATH_INVALID)', async () => {
 		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", diagnostics: true, silent: true });
 		const sl = getSlInstance(api);
 
@@ -62,7 +62,7 @@ describe('api-manager — remove a base module by moduleID ("." endpoint)', () =
 		expect(baseModuleId, 'a base module registered with the "." endpoint should exist').toBeTruthy();
 
 		// Before the fix, removeApiComponent fed "." straight into normalizeApiPath(), which splits to
-		// empty segments and rejected with INVALID_CONFIG_API_PATH_INVALID.
+		// empty segments and rejected with API_PATH_INVALID.
 		let caught = null;
 		try {
 			await api.slothlet.api.remove(baseModuleId);

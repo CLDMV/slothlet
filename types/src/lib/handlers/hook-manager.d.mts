@@ -18,20 +18,67 @@
  */
 export function settleThenable(thenable: object, onFulfilled: (arg0: any) => any, onRejected: (arg0: any) => any): object;
 /**
+ * Extract the original error from a SlothletError wrapper if present.
+ * @param {*} error - What was thrown.
+ * @returns {*} The SlothletError's cause, otherwise the value itself.
+ * @public
+ */
+export function unwrapThrown(error: any): any;
+/**
+ * @typedef {object} FailureRecord
+ * @property {function(): *} originalError - The unwrapped error.
+ * @property {function(): *} stack - The unwrapped error's stack.
+ * @property {function(*): string} typeOf - The class name of the error given (the thrown or the unwrapped one).
+ * @private
+ */
+/**
+ * A record of a failure that reads it only as the code that made it, and only when something asks (#599).
+ *
+ * Unwrapping an error reads its `name`, formatting its stack reads `name` and `message`, and the error hooks'
+ * `class` reads `constructor` and the class's `name`. Each can be an accessor or a Proxy trap of the module that
+ * threw it, so each is read through `runAs` — as that module — and at most once. Nothing is read until it is needed,
+ * so a failure no hook looks at runs no more of the error's code than plain JavaScript would.
+ *
+ * @param {*} error - What was thrown or rejected with.
+ * @param {function(Function, *): *} runAs - Runs a reader on a value as the code the failure belongs to.
+ * @returns {FailureRecord} The record.
+ * @public
+ */
+export function failureRecord(error: any, runAs: (arg0: Function, arg1: any) => any): FailureRecord;
+/**
+ * Remember whose code a failure is (see {@link failureRecord}). The first record kept for an error stands: the
+ * innermost code it was thrown from.
+ * @param {*} error - What was thrown or rejected with.
+ * @param {FailureRecord} record - Its record.
+ * @returns {FailureRecord} The record that stands for it.
+ * @public
+ */
+export function rememberFailure(error: any, record: FailureRecord): FailureRecord;
+/**
+ * The record kept for a failure (see {@link rememberFailure}).
+ * @param {*} error - The error, as thrown or unwrapped.
+ * @returns {FailureRecord|undefined} Its record, or undefined when none was kept.
+ * @public
+ */
+export function rememberedFailure(error: any): FailureRecord | undefined;
+/**
+ * Give an error hook's `source` a `stack` read from a failure's record on first access (#599), so the stack is formatted
+ * only when a hook reads it, and then as the code the failure belongs to.
+ * @param {object} fields - The source's other fields.
+ * @param {FailureRecord} record - The failure's record.
+ * @returns {object} The source.
+ * @public
+ */
+export function failureSource(fields: object, record: FailureRecord): object;
+/**
  * Whether error hooks have already run for an error.
  * @param {*} error - The error.
  * @returns {boolean} True when it was reported.
  * @public
  */
 export function isHookProcessed(error: any): boolean;
-/**
- * Manages hooks for API function interception.
- * Supports before/after/always/error/around hooks with pattern matching and priority ordering.
- *
- * @class HookManager
- * @extends ComponentBase
- */
 export class HookManager extends ComponentBase {
+    [x: symbol]: () => HookManager;
     /**
      * Property name for auto-discovery
      * @type {string}
@@ -43,33 +90,39 @@ export class HookManager extends ComponentBase {
      * @param {object} slothlet - Parent slothlet instance
      */
     constructor(slothlet: object);
-    enabled: boolean;
-    defaultPattern: string;
-    suppressErrors: boolean;
-    pinEnforced: boolean;
-    enabledPatterns: Set<any>;
-    patternFilterActive: boolean;
-    hooks: Map<any, any>;
-    registrationOrder: number;
-    reportedErrors: WeakSet<object>;
+    enabled: boolean | undefined;
+    defaultPattern: string | undefined;
+    suppressErrors: boolean | undefined;
+    pinEnforced: boolean | undefined;
+    enabledPatterns: Set<any> | undefined;
+    patternFilterActive: boolean | undefined;
+    hooks: Map<any, any> | undefined;
+    registrationOrder: number | undefined;
+    reportedErrors: WeakSet<object> | undefined;
     /**
      * Register a hook for API functions.
      *
      * @param {string} typePattern - Path pattern then hook type, `"pattern:type"` (e.g. `"math.*:before"`).
-     *   The legacy `"type:pattern"` form (e.g. `"before:math.*"`) is still accepted but deprecated.
      * @param {function} handler - Hook handler function
      * @param {object} [options={}] - Hook options
      * @param {string} [options.id] - Unique identifier (auto-generated if not provided)
+     * @param {string} [options.pattern] - Path pattern; overrides the pattern parsed from `typePattern` when supplied
      * @param {number} [options.priority=0] - Higher = earlier execution
      * @param {string} [options.subset=DEFAULT_HOOK_SUBSET] - Phase: "before", "primary", or "after" ({@link HOOK_SUBSETS})
-     * @param {boolean} [options.lockCaller=true] - Pin the registering module's caller
+     * @param {boolean} [options.pin=true] - Pin the registering module's caller
      *   identity onto the handler so its `self.*` calls and permission checks are
      *   attributed to the module that registered the hook, not the caller whose API
      *   call triggered it. On by default; pass `false` to opt out — the handler then
      *   runs un-pinned, with whatever async context is ambient when it fires (for a
      *   `before` hook, typically none, so a `self.*` call inside it has no context).
      *   No effect when the hook is registered outside a module (no caller identity to
-     *   capture) or when `handler` is already a `lockCaller`-wrapped function.
+     *   capture) or when `handler` is already a `pin`-wrapped function.
+     * @param {boolean} [options.async] - Declare the handler asynchronous when its async-ness cannot be detected (a plain function returning a Promise)
+     * @param {object} [options.versioning] - Version dispatch for the hook's pattern.
+     * @param {boolean} [options.versioning.enabled=false] - Resolve `pattern` (written against the logical path) through the instance's configured
+     *   `versioning.dispatcher`, registering against the physical path of each selected version. The returned id is a group id that removes every version's hook.
+     * @param {function(object, object): (string|string[]|null|undefined)} [options.versioning.dispatcher] - Per-registration dispatcher, `(allVersions, caller) => tag | tag[] | null`,
+     *   overriding the instance's. Implies versioned registration. Returning nothing takes the default-version resolution a call would.
      * @returns {string} Hook ID
      * @public
      *
@@ -81,9 +134,15 @@ export class HookManager extends ComponentBase {
      */
     public on(typePattern: string, handler: Function, options?: {
         id?: string | undefined;
+        pattern?: string | undefined;
         priority?: number | undefined;
         subset?: string | undefined;
-        lockCaller?: boolean | undefined;
+        pin?: boolean | undefined;
+        async?: boolean | undefined;
+        versioning?: {
+            enabled?: boolean | undefined;
+            dispatcher?: ((arg0: object, arg1: object) => (string | string[] | null | undefined)) | undefined;
+        } | undefined;
     }): string;
     /**
      * Remove hooks matching filter criteria.
@@ -136,7 +195,7 @@ export class HookManager extends ComponentBase {
      * @public
      *
      * @example
-     * api.slothlet.hook.enablePattern("database.*"); // only intercept database.* paths
+     * api.slothlet.hook.pattern.enable("database.*"); // only intercept database.* paths
      */
     public enablePattern(pattern: string): number;
     /**
@@ -150,7 +209,7 @@ export class HookManager extends ComponentBase {
      * @public
      *
      * @example
-     * api.slothlet.hook.disablePattern("database.*"); // stop restricting to database.*
+     * api.slothlet.hook.pattern.disable("database.*"); // stop restricting to database.*
      */
     public disablePattern(pattern: string): number;
     /**
@@ -167,7 +226,7 @@ export class HookManager extends ComponentBase {
     /**
      * Set the pin-enforcement policy at runtime (backs `api.slothlet.hook.pin.enable`/`disable`).
      * When true (the default) module hooks are force-pinned to their owner; false permits a
-     * per-registration `lockCaller: false`. The public wrapper is host-only when permissions are
+     * per-registration `pin: false`. The public wrapper is host-only when permissions are
      * enabled — `slothlet.hook.pin.*` falls under the `slothlet.hook.**` deny baseline.
      *
      * @param {boolean} value - True to enforce pinning (force-pin module hooks), false to permit unpinned.
@@ -380,11 +439,20 @@ export class HookManager extends ComponentBase {
      */
     public executeAlwaysHooks(path: string, args: any[], resultOrError: any, hasError: boolean | undefined, errors: Array<Error> | undefined, api: object, ctx: object): void;
     /**
+     * The record of a failure (#599): the one kept for it, or — for a failure no record was kept for, such as one a
+     * hook's own code threw — a new one that reads it outside every instance, so code the error carries runs as no
+     * module and never as whoever is calling.
+     * @param {*} error - What was thrown or rejected with.
+     * @returns {FailureRecord} Its record.
+     * @public
+     */
+    public failureOf(error: any): FailureRecord;
+    /**
      * Execute error hooks for an API path.
      *
      * @param {string} path - API path being called
      * @param {Error} error - The error that occurred
-     * @param {object} source - Error source info with type, hookTag, hookId, timestamp, stack
+     * @param {object} source - Error origin: `type`, `subset`, `hook` (the hook id), `at` (a clock time) and `stack`
      * @param {Array} args - Function arguments
      * @param {object} api - Bound API object
      * @param {object} ctx - User context object
@@ -423,6 +491,20 @@ export class HookManager extends ComponentBase {
     public shutdown(): Promise<void>;
     #private;
 }
+export type FailureRecord = {
+    /**
+     * - The unwrapped error.
+     */
+    originalError: () => any;
+    /**
+     * - The unwrapped error's stack.
+     */
+    stack: () => any;
+    /**
+     * - The class name of the error given (the thrown or the unwrapped one).
+     */
+    typeOf: (arg0: any) => string;
+};
 /**
  * Result returned by hook execution methods.
  */
@@ -464,9 +546,18 @@ export type AroundChainOptions = {
      */
     isAsync: boolean;
     /**
-     * - Calling module's metadata, or null for an entry call.
+     * - The calling leaf (its path segments, module id, user metadata and version record), or null for an entry call.
      */
-    caller: object | null;
+    caller: {
+        path: string[];
+        module: string | null;
+        metadata: object;
+        version: {
+            tag: string;
+            default: boolean;
+            metadata: object;
+        } | null;
+    } | null;
     /**
      * - True when the call has no module caller.
      */

@@ -18,37 +18,6 @@
  */
 export function toComparablePath(value: string): string;
 /**
- * The locations a suspended call's module was imported from, in the comparable form a stack frame's
- * location is reduced to (#601): a browser resolver's URL, or a TypeScript leaf's compiled copy.
- *
- * @param {object|null} wrapper - The wrapper being called.
- * @param {string|null} filePath - Its file.
- * @returns {Set<string>|null} Comparable locations, or null when none were recorded.
- * @private
- */
-export function runtime_importedLocations(wrapper: object | null, filePath: string | null): Set<string> | null;
-/**
- * The comparable form of a file's real path, when it differs from the path given (#601 review).
- *
- * Node reports a module in a stack frame by its real path, symlinks resolved, while slothlet records
- * the path it scanned. A base reached through a symlink (a package in a pnpm `node_modules`, a linked
- * workspace) therefore names every one of its files differently in a frame. Resolved once per path;
- * outside Node, or for a path that does not resolve, there is nothing to add.
- *
- * @param {string|null} filePath - A scanned path.
- * @returns {string|null} The real path's comparable form, or null when it is the same or unknown.
- * @private
- */
-export function runtime_realComparablePath(filePath: string | null): string | null;
-/**
- * The names a suspended call's entry function can appear under in a stack frame.
- * @param {string} apiPath - The call's api path.
- * @param {object|null} currentWrapper - The wrapper entered.
- * @returns {string[]} Its api key, and the function's own name when that is another.
- * @private
- */
-export function runtime_entryNames(apiPath: string, currentWrapper: object | null): string[];
-/**
  * Whether a stack frame's function text names a suspended call's entry function. Only the text before
  * the location is searched, so a name inside the path cannot match by accident.
  * @param {string} head - The frame's text before its location.
@@ -61,34 +30,37 @@ export function runtime_namesEntry(head: string, entry: {
     fnName?: string;
 }): boolean;
 /**
- * Read the current call stack as frames, innermost first: each frame's function text, its location in
- * comparable form, and the raw text to look for an instance's import tag in.
+ * Frames from a stack formatted as text (an engine without V8's call-site hook: Firefox, Safari), innermost first.
  *
- * On V8 (Node, Chromium) the engine hands over structured call sites, which skips formatting and
- * re-parsing every frame as text: the capture runs on every identity read while a call is suspended, so
- * that cost is paid per api call and per promise reaction. Elsewhere the formatted trace is parsed.
+ * Code compiled from a string is marked `evaluated`, whichever engine wrote the line, so it is never taken for the
+ * code of the file that compiled it:
  *
- * The frame budget is set for this capture only: the caller's frame sits below slothlet's own wrapper
- * frames, and the default of 10 can cut it off in a deep chain. The trace reports whether the budget cut it
- * short, so a reader that found nothing can look deeper. `prepareStackTrace` is set by this
- * capture for its duration as well. It is a writable global hook, so a leaf can install one that returns
- * an empty or forged trace — which would blank the frames this resolver matches on, and a caller that
- * cannot be attributed would otherwise be let through as though it were the host. Using the `Error`
- * captured at load and a formatter of slothlet's own keeps the capture out of a leaf's reach. Both
- * globals are restored immediately, so a legitimate consumer's formatter is unaffected.
+ * - V8: `at f (eval at g (file.js:3:9), <anonymous>:1:1)`.
+ * - SpiderMonkey (Firefox): the location names the file and line the code was compiled at, then what compiled it:
+ *   `f@file.js line 3 > eval:1:1`, `anonymous@file.js line 3 > Function:1:1`, nested `… line 3 > eval line 1 > eval:1:1`.
+ *   Any location with a ` line N > ` step is taken as compiled code.
+ * - JavaScriptCore (Safari): eval and `Function` code has no location at all: `eval code@`, `anonymous@`. A line whose
+ *   location is empty is taken as compiled code, whatever its function name says, as a function name is not to be
+ *   trusted (see {@link parseStackFrame}).
  *
- * @param {number} limit - The most frames to capture.
- * @returns {Iterable<{head: string, path: string, line: string, async: boolean, evaluated: boolean, hash: string|null, key: string|null, enter: "leaf"|"call"|null, gap: boolean}> & {truncated: boolean, trailingGap: boolean}} The frames.
- * @private
+ * A built-in's frame (`map@[native code]`) has no location and is passed over.
+ *
+ * @param {string} text - The stack.
+ * @param {number} limit - The frame budget the stack was captured with.
+ * @returns {Array<{head: string, path: string, line: string, async: boolean, evaluated: boolean, hash: null, key: null, enter: "leaf"|"call"|null, gap: boolean}> & {truncated: boolean, trailingGap: boolean}} The frames.
+ * @internal
+ * @example
+ * textFrames("@http://host/api/run.mjs line 3 > eval:1:1\nrun@http://host/api/run.mjs:3:9", 10);
+ * // [{ path: "http://host/api/run.mjs line 3 > eval", evaluated: true, … }, { path: "http://host/api/run.mjs", evaluated: false, … }]
  */
-export function runtime_captureFrames(limit: number): Iterable<{
+export function textFrames(text: string, limit: number): Array<{
     head: string;
     path: string;
     line: string;
     async: boolean;
     evaluated: boolean;
-    hash: string | null;
-    key: string | null;
+    hash: null;
+    key: null;
     enter: "leaf" | "call" | null;
     gap: boolean;
 }> & {
@@ -104,16 +76,6 @@ export function runtime_captureFrames(limit: number): Iterable<{
  */
 export function learnedScriptCount(): number;
 /**
- * Forget the scripts learned for an instance's own copies of its files, when it shuts down (#597), and remember its
- * CommonJS files as a gone instance's (see {@link RETIRED_COMMONJS}). Called before the instance's scope is released.
- * @param {string} instanceID - The instance.
- * @returns {void}
- * @internal
- * @example
- * forgetInstanceScripts(instanceID);
- */
-export function forgetInstanceScripts(instanceID: string): void;
-/**
  * Whether a frame runs in a script other than every one its location's code was seen to run in: code compiled under
  * that location by someone else (`vm.runInThisContext`, `new vm.Script`, `vm.compileFunction`, `Module#_compile`),
  * which can name any file it likes (#597). A location with no script known, or an engine that reports no hash, says
@@ -127,17 +89,21 @@ export function isForeignScript(frame: {
     key: string | null;
 }): boolean;
 /**
- * Enter a module call's function: every call a context manager runs under a module's identity goes through here,
- * so the frames of the call's own code end at a frame of this function's (#597). A leaf's own function is entered
- * through {@link slothlet_enterLeaf}, which also lets its script be learned.
- * @param {object} wrapper - The call's wrapper.
- * @param {Function} fn - The function to run.
- * @param {*} thisArg - Its receiver.
- * @param {ArrayLike<*>} args - Its arguments.
- * @returns {*} What it returned.
+ * Whether a frame the frame placer placed by its plain path alone (a module's folder, a CommonJS file) does not run
+ * that file's own source (#597, #691): code compiled under a file name in a module's folder that is not there, or
+ * whose source is something else. Such code is no module's, wherever it is read.
+ * @param {{path: string, hash: string|null, key: string|null}} frame - A frame.
+ * @param {{unverified?: boolean}|null} placement - What the placer answered for it.
+ * @returns {boolean} True when the frame cannot be the code its placement names.
  * @internal
  */
-export function enterCall(wrapper: object, fn: Function, thisArg: any, args: ArrayLike<any>): any;
+export function isUnverifiedCode(frame: {
+    path: string;
+    hash: string | null;
+    key: string | null;
+}, placement: {
+    unverified?: boolean;
+} | null): boolean;
 /**
  * Split one stack-trace line into the text naming the function and the location it runs at.
  *
@@ -165,6 +131,277 @@ export function parseStackFrame(line: string): {
     path: string;
 } | null;
 /**
+ * A new empty list with no prototype, for lists of slothlet's own entries kept inside slothlet's own code: an element is
+ * written to it as `list[list.length] = value` without any check, as nothing a module puts on `Array.prototype` or
+ * `Object.prototype` is on its chain. Read by index and length only (it has no iterator).
+ * @returns {Array<object>} The list.
+ * @internal
+ */
+export function bareList(): Array<object>;
+/**
+ * The calls of a list whose entry function a stack frame's text names (see {@link runtime_namesEntry}).
+ *
+ * Calls of one function go by the same names, so the list is grouped by them once and each group's names are tested
+ * once; a list read again (a placement's matches, a caller's candidates) answers for the same frame text by a lookup.
+ * The list is only read, and the answer may be the list itself or shared, so it is only read too.
+ *
+ * @param {ArrayLike<{fnNames?: string[], fnName?: string}>} list - The calls. The list is not changed afterwards.
+ * @param {string} head - The frame's text before its location.
+ * @returns {ArrayLike<object>} The calls the frame names, in the list's order.
+ * @internal
+ */
+export function runtime_namedAmong(list: ArrayLike<{
+    fnNames?: string[];
+    fnName?: string;
+}>, head: string): ArrayLike<object>;
+/**
+ * Whether a frame is one the microtask runner puts below a resumed function: a resumed function has
+ * nothing of its own below it. Node also drains the microtask queue between the callbacks of one timer list and of
+ * the immediate queue, so a function resumed there has the timers' own frames (`listOnTimeout`, `processTimers`,
+ * `processImmediate`) below the runner's. While async hooks are enabled (on Node 22 by any `AsyncLocalStorage` in use,
+ * slothlet's own included; on any version by `async_hooks.createHook()`), Node calls those queues through
+ * `callbackTrampoline` as well, which is one more of Node's own frames below them. That frame counts only when its
+ * script hashes as Node's own.
+ * @param {{path: string, head: string, hash?: string|null}} frame - A frame.
+ * @returns {boolean} True for a runner frame.
+ * @internal
+ */
+export function isRunnerFrame(frame: {
+    path: string;
+    head: string;
+    hash?: string | null;
+}): boolean;
+/**
+ * Whether a value a module's call returned is a prototype of a module's class (or a view of one), which the host gets
+ * as the object itself under either runtime and with the permission system on or off (#667, #726).
+ * @param {object} wrapper - The call's wrapper.
+ * @param {*} value - What the call returned.
+ * @returns {boolean} True for such a prototype.
+ * @internal
+ */
+export function isHostPrototype(wrapper: object, value: any): boolean;
+/**
+ * Whether a value is a stand-in slothlet hands a module's code out as (#597), already set up to run as its module.
+ * @param {*} value - The value.
+ * @returns {boolean} True for a stand-in.
+ * @internal
+ */
+export function isHandedOut(value: any): boolean;
+/**
+ * Whether a call is handed anything that can run its caller's code while it executes: a receiver or an
+ * argument with a `toString`, a getter, a Proxy trap or a callback of the caller's (#597). Plain data does not
+ * count (see {@link runtime_isPlainData}). Only such a call ever reads the stack to find who supplied the code
+ * that is running.
+ *
+ * @param {*} thisArg - The call's receiver.
+ * @param {ArrayLike<*>|null|undefined} args - The call's arguments.
+ * @returns {boolean} True when the call is to be checked for supplied code.
+ * @internal
+ */
+export function carriesCallerCode(thisArg: any, args: ArrayLike<any> | null | undefined): boolean;
+/**
+ * Whether what a module hands out and is handed is set up as that module's code (#597, #726): only while the
+ * permission system of the wrapper's instance is on and `permissions.caller.attribution` is `"precise"` (the default). Then a
+ * value that is itself code (a function, a class, a class instance, a generator, a promise, a Proxy export) is a
+ * stand-in recording the module as its definer; plain data passes as itself unsearched, and code nested in it is told
+ * by its frames when it runs. With `"fast"`, or with the permission system not on (no `permissions` config,
+ * `mode: "off"`, `enabled: false` or `mode: "disabled"`), nothing is wrapped and frames tell every definer.
+ * @param {object|null|undefined} wrapper - A wrapper of the module.
+ * @returns {boolean} True while code is handed out as stand-ins.
+ * @internal
+ */
+export function handsOutAsModule(wrapper: object | null | undefined): boolean;
+/**
+ * Whether a module call's result is passed through {@link attributeResult} (#726): while the permission system of the
+ * wrapper's instance is on, under either `permissions.caller.attribution`. `"precise"` hands out code as stand-ins there;
+ * `"fast"` hands back only a node's own Proxy export as the node's member.
+ * @param {object|null|undefined} wrapper - A wrapper of the module.
+ * @returns {boolean} True while results are attributed.
+ * @internal
+ */
+export function attributesResults(wrapper: object | null | undefined): boolean;
+/**
+ * Whether a call's identity is resolved from the stack (see {@link resolveSupplier}) rather than taken as its leaf's.
+ * @param {{wrapper: object, flagged: boolean}|null|undefined} record - The call.
+ * @returns {boolean} True when it is.
+ * @internal
+ */
+export function resolvesSupplier(record: {
+    wrapper: object;
+    flagged: boolean;
+} | null | undefined): boolean;
+/**
+ * This file's internal bindings, for the files of slothlet's own that use them: each of those files takes them once, as
+ * it loads, and anyone else is refused (see `ownBindingsRefusal` in `helpers/instance-imports`).
+ * @param {string} consumer - The file asking: its path in slothlet's code folder, without its extension.
+ * @returns {object} The bindings.
+ * @internal
+ */
+export function internals(consumer: string): object;
+/**
+ * Directory holding slothlet's own sources (`src/` or `dist/`).
+ *
+ * The frames at the top of every capture are the framework's — the gate, the wrapper, this
+ * resolver. They are never attributed to a module by folder, even when a module's root folder
+ * happens to contain slothlet's install (a base of `./` with slothlet in `node_modules`).
+ * @type {string}
+ * @private
+ */
+export const FRAMEWORK_DIR: string;
+/** @type {typeof runtime_importedLocations} */
+declare const guarded_runtime_importedLocations: typeof runtime_importedLocations;
+/** @type {typeof runtime_realComparablePath} */
+declare const guarded_runtime_realComparablePath: typeof runtime_realComparablePath;
+/** @type {typeof runtime_entryNames} */
+declare const guarded_runtime_entryNames: typeof runtime_entryNames;
+/** @type {typeof runtime_captureFrames} */
+declare const guarded_runtime_captureFrames: typeof runtime_captureFrames;
+/** @type {typeof forgetInstanceScripts} */
+declare const guarded_forgetInstanceScripts: typeof forgetInstanceScripts;
+/** @type {typeof enterCall} */
+declare const guarded_enterCall: typeof enterCall;
+/** @type {typeof describeCall} */
+declare const guarded_describeCall: typeof describeCall;
+/** @type {typeof createFramePlacer} */
+declare const guarded_createFramePlacer: typeof createFramePlacer;
+/** @type {typeof stackHoldsInstanceCode} */
+declare const guarded_stackHoldsInstanceCode: typeof stackHoldsInstanceCode;
+/** @type {typeof setApiValueCheck} */
+declare const guarded_setApiValueCheck: typeof setApiValueCheck;
+/** @type {typeof setResultAttributor} */
+declare const guarded_setResultAttributor: typeof setResultAttributor;
+/** @type {typeof attributeResult} */
+declare const guarded_attributeResult: typeof attributeResult;
+/** @type {typeof setHostPrototypeCheck} */
+declare const guarded_setHostPrototypeCheck: typeof setHostPrototypeCheck;
+/** @type {typeof setHandedOutCheck} */
+declare const guarded_setHandedOutCheck: typeof setHandedOutCheck;
+/** @type {typeof setInboundOriginal} */
+declare const guarded_setInboundOriginal: typeof setInboundOriginal;
+/** @type {typeof handedLeafFunctions} */
+declare const guarded_handedLeafFunctions: typeof handedLeafFunctions;
+/** @type {typeof supplierChainCeiling} */
+declare const guarded_supplierChainCeiling: typeof supplierChainCeiling;
+/** @type {typeof resolveSupplier} */
+declare const guarded_resolveSupplier: typeof resolveSupplier;
+/** @type {typeof recordInstanceOwner} */
+declare const guarded_recordInstanceOwner: typeof recordInstanceOwner;
+/** @type {typeof isInstanceOwnerFile} */
+declare const guarded_isInstanceOwnerFile: typeof isInstanceOwnerFile;
+/** @type {typeof installViteHostRegistry} */
+declare const guarded_installViteHostRegistry: typeof installViteHostRegistry;
+/** @type {typeof installViteLoadedRegistry} */
+declare const guarded_installViteLoadedRegistry: typeof installViteLoadedRegistry;
+/** @type {typeof setModuleNodeResolver} */
+declare const guarded_setModuleNodeResolver: typeof setModuleNodeResolver;
+/** @type {typeof createModuleLoad} */
+declare const guarded_createModuleLoad: typeof createModuleLoad;
+/** @type {typeof loadOnStack} */
+declare const guarded_loadOnStack: typeof loadOnStack;
+/** @type {typeof outerCallerCeiling} */
+declare const guarded_outerCallerCeiling: typeof outerCallerCeiling;
+/** @type {typeof ownReceiver} */
+declare const guarded_ownReceiver: typeof ownReceiver;
+/** @type {typeof frameDefiner} */
+declare const guarded_frameDefiner: typeof frameDefiner;
+/** @type {typeof isLeafFileFunction} */
+declare const guarded_isLeafFileFunction: typeof isLeafFileFunction;
+/** @type {typeof registerLeafFile} */
+declare const guarded_registerLeafFile: typeof registerLeafFile;
+/** @type {typeof runtime_codeWritersOnStack} */
+declare const guarded_runtime_codeWritersOnStack: typeof runtime_codeWritersOnStack;
+/** @type {typeof runtime_loadingFileRunning} */
+declare const guarded_runtime_loadingFileRunning: typeof runtime_loadingFileRunning;
+/**
+ * The locations a suspended call's module was imported from, in the comparable form a stack frame's
+ * location is reduced to (#601): a browser resolver's URL, or a TypeScript leaf's compiled copy.
+ *
+ * @param {object|null} wrapper - The wrapper being called.
+ * @param {string|null} filePath - Its file.
+ * @returns {Set<string>|null} Comparable locations, or null when none were recorded.
+ * @private
+ */
+declare function runtime_importedLocations(wrapper: object | null, filePath: string | null): Set<string> | null;
+/**
+ * The comparable form of a file's real path, when it differs from the path given (#601 review).
+ *
+ * Node reports a module in a stack frame by its real path, symlinks resolved, while slothlet records
+ * the path it scanned. A base reached through a symlink (a package in a pnpm `node_modules`, a linked
+ * workspace) therefore names every one of its files differently in a frame. Resolved once per path;
+ * outside Node, or for a path that does not resolve, there is nothing to add.
+ *
+ * @param {string|null} filePath - A scanned path.
+ * @returns {string|null} The real path's comparable form, or null when it is the same or unknown.
+ * @private
+ */
+declare function runtime_realComparablePath(filePath: string | null): string | null;
+/**
+ * The names a suspended call's entry function can appear under in a stack frame.
+ * @param {string} apiPath - The call's api path.
+ * @param {object|null} currentWrapper - The wrapper entered.
+ * @returns {string[]} Its api key, and the function's own name when that is another.
+ * @private
+ */
+declare function runtime_entryNames(apiPath: string, currentWrapper: object | null): string[];
+/**
+ * Read the current call stack as frames, innermost first: each frame's function text, its location in
+ * comparable form, and the raw text to look for an instance's import tag in.
+ *
+ * On V8 (Node, Chromium) the engine hands over structured call sites, which skips formatting and
+ * re-parsing every frame as text: the capture runs on every identity read while a call is suspended, so
+ * that cost is paid per api call and per promise reaction. Elsewhere the formatted trace is parsed.
+ *
+ * The frame budget is set for this capture only: the caller's frame sits below slothlet's own wrapper
+ * frames, and the default of 10 can cut it off in a deep chain. The trace reports whether the budget cut it
+ * short, so a reader that found nothing can look deeper. The formatter is slothlet's own, set for this
+ * capture by {@link readStack}, which also holds the global `Error` and the frame budget as plain values for
+ * the read: a formatter, an accessor or another `Error` a leaf installed could otherwise blank or forge the
+ * frames this resolver matches on, and a caller that cannot be attributed would be let through as though it
+ * were the host. Everything is put back immediately, so a legitimate consumer's formatter is unaffected.
+ * When the read cannot be held that way (a setting fixed in place) the access is refused.
+ *
+ * @param {number} limit - The most frames to capture.
+ * @returns {Iterable<{head: string, path: string, line: string, async: boolean, evaluated: boolean, hash: string|null, key: string|null, enter: "leaf"|"call"|null, gap: boolean}> & {truncated: boolean, trailingGap: boolean}} The frames.
+ * @throws {SlothletError} PERMISSION_DENIED when the stack cannot be read with slothlet's own formatter.
+ * @private
+ */
+declare function runtime_captureFrames(limit: number): Iterable<{
+    head: string;
+    path: string;
+    line: string;
+    async: boolean;
+    evaluated: boolean;
+    hash: string | null;
+    key: string | null;
+    enter: "leaf" | "call" | null;
+    gap: boolean;
+}> & {
+    truncated: boolean;
+    trailingGap: boolean;
+};
+/**
+ * Forget the scripts learned for an instance's own copies of its files, when it shuts down (#597), and remember its
+ * CommonJS files as a gone instance's (see {@link RETIRED_COMMONJS}). Called before the instance's scope is released.
+ * @param {string} instanceID - The instance.
+ * @returns {void}
+ * @internal
+ * @example
+ * forgetInstanceScripts(instanceID);
+ */
+declare function forgetInstanceScripts(instanceID: string): void;
+/**
+ * Enter a module call's function: every call a context manager runs under a module's identity goes through here,
+ * so the frames of the call's own code end at a frame of this function's (#597). A leaf's own function is entered
+ * through {@link slothlet_enterLeaf}, which also lets its script be learned.
+ * @param {object} wrapper - The call's wrapper.
+ * @param {Function} fn - The function to run.
+ * @param {*} thisArg - Its receiver.
+ * @param {ArrayLike<*>} args - Its arguments.
+ * @returns {*} What it returned.
+ * @internal
+ */
+declare function enterCall(wrapper: object, fn: Function, thisArg: any, args: ArrayLike<any>): any;
+/**
  * How a call's wrapper is recognised in a stack frame: its file in comparable form (and its real path
  * when a symlink makes that differ), the locations its module was imported from, its mount and api path,
  * and the names its function goes by. Built once per wrapper and implementation.
@@ -173,7 +410,7 @@ export function parseStackFrame(line: string): {
  * @returns {{filePath: string|null, comparablePath: string, realComparablePath: string|null, locations: Set<string>|null, moduleID: string|null, apiPath: string, fnName: string, fnNames: string[]}} The description.
  * @internal
  */
-export function describeCall(wrapper: object): {
+declare function describeCall(wrapper: object): {
     filePath: string | null;
     comparablePath: string;
     realComparablePath: string | null;
@@ -198,6 +435,10 @@ export function describeCall(wrapper: object): {
  *   folder belongs to that module's calls (#512); the deepest root wins, so a module mounted inside
  *   another's folder owns its files.
  *
+ * What the calls alone decide is indexed once per list (see runtime_candidateIndex): a caller placing frames among the
+ * same calls again passes the same list, unchanged, and places them by lookups. The `matches` lists placements answer
+ * can be shared between placements, so they are only read.
+ *
  * @param {Array<{currentWrapper: object, family: string|null, comparablePath: string, realComparablePath: string|null, locations: Set<string>|null, moduleID: string|null}>} candidates - The calls, each with a file.
  * @returns {{place: function(object): ({matches: Array<object>, byFile: boolean, byModule?: boolean}|null), families: Set<string>}}
  *   `place` answers a frame's placement — `{ matches }` (possibly none: an orphan), or null when the frame is
@@ -205,7 +446,7 @@ export function describeCall(wrapper: object): {
  *   function name may pin one of several. `families` are the instances the calls belong to.
  * @internal
  */
-export function createFramePlacer(candidates: Array<{
+declare function createFramePlacer(candidates: Array<{
     currentWrapper: object;
     family: string | null;
     comparablePath: string;
@@ -221,19 +462,6 @@ export function createFramePlacer(candidates: Array<{
     families: Set<string>;
 };
 /**
- * Whether a frame is one the microtask runner puts below a resumed function: a resumed function has
- * nothing of its own below it. Node also drains the microtask queue between the callbacks of one timer list and of
- * the immediate queue, so a function resumed there has the timers' own frames (`listOnTimeout`, `processTimers`,
- * `processImmediate`) below the runner's.
- * @param {{path: string, head: string}} frame - A frame.
- * @returns {boolean} True for a runner frame.
- * @internal
- */
-export function isRunnerFrame(frame: {
-    path: string;
-    head: string;
-}): boolean;
-/**
  * Whether the current stack holds code of an instance's own (#597): a frame carrying the instance's import tag, in one
  * of its CommonJS files, at a location its loader imported or its import graph names, or under one of its modules'
  * folders or a folder being built for it. A stack with none of these is the host's.
@@ -246,7 +474,7 @@ export function isRunnerFrame(frame: {
  * @returns {boolean} True when a frame is code of one of them.
  * @internal
  */
-export function stackHoldsInstanceCode(sources: Array<{
+declare function stackHoldsInstanceCode(sources: Array<{
     family: string;
     slothlet: object | null;
     roots: Array<string>;
@@ -258,56 +486,47 @@ export function stackHoldsInstanceCode(sources: Array<{
  * @returns {void}
  * @internal
  */
-export function setApiValueCheck(check: (arg0: any) => boolean, harborsCode?: null): void;
+declare function setApiValueCheck(check: (arg0: any) => boolean, harborsCode?: null): void;
 /**
  * Register how a module call's result is attributed to the module (see {@link attributeResult}).
- * @param {function(object, *): *} attributor - Takes the call's wrapper and its result; returns what the caller gets.
+ * @param {function(object, *, boolean): *} attributor - Takes the call's wrapper, its result, and whether the host made
+ *   the call; returns what the caller gets.
  * @returns {void}
  * @internal
  */
-export function setResultAttributor(attributor: (arg0: object, arg1: any) => any): void;
+declare function setResultAttributor(attributor: (arg0: object, arg1: any, arg2: boolean) => any): void;
 /**
  * What a module call's result is handed back as: code the module made — a function, a Proxy, a generator, an object
  * holding code — runs as that module whoever runs it, with no ceiling from them (#597).
  * @param {object} wrapper - The call's wrapper.
  * @param {*} value - What the call returned.
+ * @param {boolean} [callerIsHost=false] - Whether the host made the call, so is the one receiving what it returned.
+ * @param {object|null} [caller=null] - The wrapper of the module that made the call, when one did.
  * @returns {*} What the caller gets.
  * @internal
  */
-export function attributeResult(wrapper: object, value: any): any;
+declare function attributeResult(wrapper: object, value: any, callerIsHost?: boolean, caller?: object | null, receiver?: null): any;
+/**
+ * Register how a prototype of a module's class handed to the host is recognised (see {@link isHostPrototype}).
+ * @param {function(object, *): boolean} check - Takes the call's wrapper and its result; true for such a prototype.
+ * @returns {void}
+ * @internal
+ */
+declare function setHostPrototypeCheck(check: (arg0: object, arg1: any) => boolean): void;
 /**
  * Register how a stand-in is recognised (see {@link isHandedOut}).
  * @param {function(*): boolean} check - True for a stand-in.
  * @returns {void}
  * @internal
  */
-export function setHandedOutCheck(check: (arg0: any) => boolean): void;
-/**
- * Whether a value is a stand-in slothlet hands a module's code out as (#597), already set up to run as its module.
- * @param {*} value - The value.
- * @returns {boolean} True for a stand-in.
- * @internal
- */
-export function isHandedOut(value: any): boolean;
+declare function setHandedOutCheck(check: (arg0: any) => boolean): void;
 /**
  * Register how the caller's value behind a module's view of it is found (see {@link handedLeafFunctions}).
  * @param {function(*): *} unwrap - The value behind a view, or the value itself.
  * @returns {void}
  * @internal
  */
-export function setInboundOriginal(unwrap: (arg0: any) => any): void;
-/**
- * Whether a call is handed anything that can run its caller's code while it executes: a receiver or an
- * argument with a `toString`, a getter, a Proxy trap or a callback of the caller's (#597). Plain data does not
- * count (see {@link runtime_isPlainData}). Only such a call ever reads the stack to find who supplied the code
- * that is running.
- *
- * @param {*} thisArg - The call's receiver.
- * @param {ArrayLike<*>|null|undefined} args - The call's arguments.
- * @returns {boolean} True when the call is to be checked for supplied code.
- * @internal
- */
-export function carriesCallerCode(thisArg: any, args: ArrayLike<any> | null | undefined): boolean;
+declare function setInboundOriginal(unwrap: (arg0: any) => any): void;
 /**
  * The api nodes whose own leaf functions a call is handed as values (#597): a receiver or an argument that is a leaf
  * function slothlet wraps — imported raw from its file instead of read from `self` — or one held in plain data the
@@ -323,7 +542,25 @@ export function carriesCallerCode(thisArg: any, args: ArrayLike<any> | null | un
  * @returns {Array<object>|null} The wrappers, or null when there are none.
  * @internal
  */
-export function handedLeafFunctions(thisArg: any, args: ArrayLike<any> | null | undefined): Array<object> | null;
+declare function handedLeafFunctions(thisArg: any, args: ArrayLike<any> | null | undefined): Array<object> | null;
+/**
+ * The calls that handed code down to a call (#726): its parent when the call was handed anything that can carry code,
+ * that call's parent when it was too, and so on up, each with the ceiling it already carried. Another module's code
+ * running inside the call may be code those calls handed in, however it got there (bound, behind a getter or a Proxy,
+ * nested in data, kept from an earlier call), so it runs under all of them: returning a closure to a module lends that
+ * module nothing it can pass on. The one exception is a stand-in slothlet handed to the call's own code and has seen
+ * handed nowhere else, run by that code (see {@link outerCallerCeiling}).
+ * @param {{parent?: object|null, flagged?: boolean}|null|undefined} record - The call.
+ * @returns {object|ReadonlyArray<object>|null} The suppliers as a ceiling, or null when the call was handed no code
+ *   by a module.
+ * @internal
+ * @example
+ * combineCeilings(leaf, supplierChainCeiling(record));
+ */
+declare function supplierChainCeiling(record: {
+    parent?: object | null;
+    flagged?: boolean;
+} | null | undefined): object | ReadonlyArray<object> | null;
 /**
  * Who supplied the code that is running inside a call that was handed code (#597).
  *
@@ -344,54 +581,247 @@ export function handedLeafFunctions(thisArg: any, args: ArrayLike<any> | null | 
  * function a module passed by any route — a callback, a shared object, a global, a built-in it replaced — runs as no
  * module inside a call it was not handed to; otherwise it answers without reading the stack.
  *
- * The ceiling is the leaf the code is running inside. With `permissions.ceiling: "chain"` it is cumulative instead: the
+ * The ceiling is the leaf the code is running inside. With `permissions.caller.ceiling: "chain"` it is cumulative instead: the
  * leaf, every call between it and the supplier (the supplier's code runs inside each of them), and every ceiling
  * those calls and the supplier's own call already carried, so a nested resolution cannot shed one an earlier
  * resolution imposed.
  *
  * @param {{wrapper: object, parent: object|null, flagged: boolean, ceiling?: object|null, unaccountedCaller?: boolean}|null|undefined} record - The running call.
+ * @param {Iterable<object>|null} [capture=null] - A capture of the stack taken at this same point, inside slothlet's own
+ *   code, by a caller that read it already: read first instead of a capture of its own (see
+ *   runtime_foreignCodeRunning).
  * @returns {{wrapper: object, ceiling: object|ReadonlyArray<object>}|{unaccounted: true}|null} The supplier's wrapper and
  *   the ceiling it runs under when it is a call above the leaf, `{unaccounted: true}` for code no call accounts for,
  *   otherwise null (the leaf's own code is running).
  * @internal
  */
-export function resolveSupplier(record: {
+declare function resolveSupplier(record: {
     wrapper: object;
     parent: object | null;
     flagged: boolean;
     ceiling?: object | null;
     unaccountedCaller?: boolean;
-} | null | undefined): {
+} | null | undefined, capture?: Iterable<object> | null): {
     wrapper: object;
     ceiling: object | ReadonlyArray<object>;
 } | {
     unaccounted: true;
 } | null;
 /**
- * Index a wrapper by the file it was built from (see {@link LEAF_FILES}).
- * @param {object} wrapper - A genuine wrapper.
+ * Record which package created an instance (#714): the package of the innermost code on the stack that is neither
+ * slothlet's nor Node's, read when `slothlet()` is called. A host installed as a package (rummage, under
+ * `node_modules/@cldmv/rummage`) is loaded before slothlet, so slothlet's loader records no importer for its files; its
+ * own files are the host's, and run inside a module's call as that call, as the host's files anywhere else do. Code
+ * compiled under some location (`eval`, `vm`) names no package.
+ * @param {object} slothlet - The new instance.
+ * @returns {void}
+ * @internal
+ * @example
+ * recordInstanceOwner(instance);
+ */
+declare function recordInstanceOwner(slothlet: object): void;
+/**
+ * Whether a file belongs to the package that created an instance (see {@link recordInstanceOwner}): its own nearest
+ * package root is that package's, so a package installed inside the owner's folder is not the owner's.
+ * @param {object} slothlet - The instance.
+ * @param {string} path - The file, in comparable form.
+ * @returns {boolean} True when it does.
+ * @internal
+ * @example
+ * isInstanceOwnerFile(instance, "/app/node_modules/host/lib/context.mjs"); // true when host created the instance
+ */
+declare function isInstanceOwnerFile(slothlet: object, path: string): boolean;
+/**
+ * Fix the registry of {@link VITE_HOST_REGISTRY} on a global object (#714): take over what registrations already
+ * pushed onto a plain array there, and put in its place, unchangeable, an array with a frozen `registered(key, hash)`
+ * reader. A registry another copy of slothlet already fixed is used as it is.
+ * @param {object} target - The global object.
+ * @returns {{registered: (key: string, hash: string) => boolean}|null} The registry, or null when the one in place
+ *   offers no reader.
+ * @internal
+ * @example
+ * installViteHostRegistry(globalThis).registered(frame.key, frame.hash);
+ */
+declare function installViteHostRegistry(target: object): {
+    registered: (key: string, hash: string) => boolean;
+} | null;
+/**
+ * Fix the registry of {@link VITE_LOADED_REGISTRY} on a global object (#714): read what records were already pushed
+ * onto a plain array there, and put in its place, unchangeable, a frozen object whose `push` reads each record as it
+ * comes and whose `importersOf(path)` gives the ids of the modules recorded as loading a file, or null when no record
+ * of it was made. A registry another copy of slothlet already fixed is used as it is.
+ * @param {object} target - The global object.
+ * @returns {{importersOf: (path: string) => Array<string>|null}|null} The registry, or null when the one in place
+ *   offers no reader.
+ * @internal
+ * @example
+ * installViteLoadedRegistry(globalThis).importersOf("/app/exts/x/extension.mjs"); // [] when only the host loaded it
+ */
+declare function installViteLoadedRegistry(target: object): {
+    importersOf: (path: string) => Array<string> | null;
+} | null;
+/**
+ * Register how the node at an api path is found: the file's module node of a lazy tree, built with no file of its own,
+ * is looked up by its path (#726).
+ * @param {function(object, string): (object|null)} resolver - Takes an instance and an api path; returns its node's
+ *   wrapper, or null.
  * @returns {void}
  * @internal
  */
-export function registerLeafFile(wrapper: object): void;
+declare function setModuleNodeResolver(resolver: (arg0: object, arg1: string) => (object | null)): void;
 /**
- * Whether a call's identity is resolved from the stack (see {@link resolveSupplier}) rather than taken as its leaf's.
- * @param {{wrapper: object, flagged: boolean}|null|undefined} record - The call.
- * @returns {boolean} True when it is.
+ * What a file's top level runs as (#726): made when slothlet loads the file, and read whenever something the file
+ * started while it loaded (a timer, a listener, a queue, an async resource) runs later. The identity is the file's
+ * module, the node code outside every export of the file runs as, found when it is asked for: the node does not exist
+ * yet while the file loads, and a reload or a removal changes it afterwards. While it cannot be found (the file is
+ * still loading, its node is gone, its instance has shut down) there is no identity, and the code is refused as code
+ * no one accounts for.
+ * @param {object} slothlet - The instance loading the file.
+ * @param {string} filePath - The file.
+ * @param {string|null|undefined} moduleID - The mount the file is loaded for.
+ * @returns {{slothlet: object, filePath: string, moduleID: string|null, instanceID: function(): (string|null), wrapper: function(): (object|null), record: function(): (object|null)}} The load.
+ * @internal
+ * @example
+ * const loading = createModuleLoad(slothlet, "/app/api/sync.mjs", null);
+ * loading.wrapper(); // null while the file loads, then the node at `sync`
+ */
+declare function createModuleLoad(slothlet: object, filePath: string, moduleID: string | null | undefined): {
+    slothlet: object;
+    filePath: string;
+    moduleID: string | null;
+    instanceID: () => (string | null);
+    wrapper: () => (object | null);
+    record: () => (object | null);
+};
+/**
+ * The load a stack's innermost code belongs to, among files being loaded (#726): the code registering something
+ * while its file loads, for a runtime with no async store to carry the load (the live runtime). The innermost frame
+ * that is neither slothlet's nor Node's decides: a frame in a loading file is that load's; a frame of another file of
+ * a loading instance (a helper the file imports, evaluated as part of the load) is the load's when one load of that
+ * instance is pending, and otherwise the first pending load whose file imports it. `false` when the code is a loading
+ * instance's and no pending load imports its file; null when it is not a loading file's code.
+ * @param {Iterable<{slothlet: object, filePath: string, moduleID: string|null}>} loads - The loads pending.
+ * @returns {object|false|null} The load, false, or null.
+ * @internal
+ * @example
+ * const loading = loadOnStack(pending); // the load whose file's top level is registering a timer
+ */
+declare function loadOnStack(loads: Iterable<{
+    slothlet: object;
+    filePath: string;
+    moduleID: string | null;
+}>): object | false | null;
+/**
+ * The ceiling code entered on its definer's behalf (a handed-out function, an instance method) runs under (#726): the
+ * caller running it, read now — its executing module and that module's own ceiling — or none for the host. Entering
+ * code as its definer never grants the definer's rights to whoever runs it: both have to allow every access.
+ * @param {object} contextManager - The instance's context manager.
+ * @param {string} instanceID - The instance.
+ * @param {object|null} [slothlet=null] - The instance, to read the callers from the stack when no call names one.
+ * @param {object|null} [origin=null] - For a stand-in, the call it was handed to alone, when slothlet has seen it handed
+ *   nowhere else (see {@link ownReceiver}): run by that call's own code, it is code the call obtained itself, not code a
+ *   call above handed in, so the calls that handed code down are not its ceiling.
+ * @returns {object|ReadonlyArray<object>|null} The ceiling.
+ * @throws {SlothletError} PERMISSION_DENIED when who is running the code cannot be told while the permission system is on.
  * @internal
  */
-export function resolvesSupplier(record: {
-    wrapper: object;
-    flagged: boolean;
-} | null | undefined): boolean;
+declare function outerCallerCeiling(contextManager: object, instanceID: string, slothlet?: object | null, origin?: object | null): object | ReadonlyArray<object> | null;
 /**
- * Directory holding slothlet's own sources (`src/` or `dist/`).
- *
- * The frames at the top of every capture are the framework's — the gate, the wrapper, this
- * resolver. They are never attributed to a module by folder, even when a module's root folder
- * happens to contain slothlet's install (a base of `./` with slothlet in `node_modules`).
- * @type {string}
- * @private
+ * The call whose own code receives what a call returns, when that call was handed code (see
+ * {@link supplierChainCeiling}): the parent call, when the code that made the call is the parent leaf's own (its
+ * identity, as resolved for the call, is the parent's wrapper under the parent's own ceiling). Null when the parent was
+ * handed no code, when code the parent was handed made the call, when that cannot be told (`provenance` off, an
+ * identity left unresolved), or when the parent is not known. A stand-in made for what such a call returns is recorded
+ * as handed to that call alone, until slothlet sees it handed anywhere else (see `runtime_originOf`).
+ * @param {{wrapper?: object, flagged?: boolean, ceiling?: object|null}|null|undefined} parent - The call that made the
+ *   call.
+ * @param {{currentWrapper?: object|null, ceiling?: object|ReadonlyArray<object>|null, unresolved?: boolean}|null|undefined} identity -
+ *   The identity the call was made with.
+ * @returns {object|null} The parent's record, or null.
+ * @internal
  */
-export const FRAMEWORK_DIR: string;
+declare function ownReceiver(parent: {
+    wrapper?: object;
+    flagged?: boolean;
+    ceiling?: object | null;
+} | null | undefined, identity: {
+    currentWrapper?: object | null;
+    ceiling?: object | ReadonlyArray<object> | null;
+    unresolved?: boolean;
+} | null | undefined): object | null;
+/**
+ * The definer of the code doing an access while no call runs (the host running code a module handed out, #726): the
+ * innermost frame below slothlet's own, placed on the leaf whose source range holds it, or on the file's module for
+ * code outside every leaf's range. `null` when that frame is the host's (no running instance's file holds it);
+ * `{ unplaced }` when it is code whose definer the frames cannot tell — evaluated or foreign-script code, or a file of
+ * more than one instance — and `{ leaves }` when several leaves stand for it and none is the file's module (code
+ * outside every export, in a tree where no node was built for the file itself).
+ * With a definer come its `callers`: the leaves whose code is further out on the synchronous stack (see
+ * runtime_outerCallers), which have to be allowed as well.
+ * @param {string|null} [running=null] - The instance whose flow is running, when something names one (see the
+ *   context managers' `runningInstanceID`): a file several running instances load untold apart is then that one's.
+ * @returns {{wrapper: object, callers: Array<object>}|{leaves: Array<object>, callers: Array<object>}|{unplaced: true, shared?: true}|null} The
+ *   definer. `shared` marks code of a file more than one running instance holds, with nothing naming which.
+ * @internal
+ */
+declare function frameDefiner(running?: string | null): {
+    wrapper: object;
+    callers: Array<object>;
+} | {
+    leaves: Array<object>;
+    callers: Array<object>;
+} | {
+    unplaced: true;
+    shared?: true;
+} | null;
+/**
+ * Whether a function a leaf hands out is written in a leaf's own file and in no helper file of its instance (#726), as
+ * far as the sources the loader recorded say. Such a function is told by its frames when it runs, so one stand-in of it
+ * serves every leaf of its module; any other (a helper file's own function, a bound or native function, one whose
+ * source cannot be found) is handed out per leaf, each stand-in recording the leaf that handed it out. A class is one
+ * value whoever hands it out. Decided from the function's text and the recorded sources alone: nothing of the function
+ * runs.
+ * @param {Function} fn - The function.
+ * @param {Array<object>} leaves - The wrappers of the leaves that handed it out.
+ * @returns {boolean} True when one stand-in serves every leaf.
+ * @internal
+ * @example
+ * isLeafFileFunction(fn, [first, owner]); // false for a function written in a helper file
+ */
+declare function isLeafFileFunction(fn: Function, leaves: Array<object>): boolean;
+/**
+ * Index a wrapper by the file it was built from (see {@link LEAF_FILES}).
+ * @param {object} wrapper - A genuine wrapper.
+ * @param {string} [at] - The file to index it at, when it is not the wrapper's own `filePath`: a lazy folder whose only
+ *   file is its function is built with the folder as its path, while the function's code runs from the file.
+ * @returns {void}
+ * @internal
+ */
+declare function registerLeafFile(wrapper: object, at?: string): void;
+/**
+ * Whose code is running while no call of an instance's is (#597): the code nearest the stack's top that is not
+ * slothlet's own or Node's decides. Code written in a file a module's leaves were built from is those leaves'; code of
+ * the instance no leaf accounts for (a helper file of a module's, code compiled by someone) is no one's, and is refused
+ * as such; anything else (the host's own code, a package's) is the host's. Read from the stack, so a function a module
+ * left on an object of the host's, or on `globalThis`, is that module's whoever calls it later.
+ * @param {object} slothlet - The instance.
+ * @returns {Array<object>|null} The leaves whose code it is, empty for the host's, or null for code no one accounts for.
+ * @internal
+ */
+declare function runtime_codeWritersOnStack(slothlet: object): Array<object> | null;
+/**
+ * The load of an instance's file whose own code is running now, before any node stands for it: the file of the nearest
+ * frame that is not slothlet's own or Node's, or the file an import is being resolved for, among the files the
+ * instance's loader is loading (see `Loader#loadingFile`). Its top-level code runs as its module path (S4).
+ * @param {object} slothlet - The instance.
+ * @param {string|null} [importer=null] - The importing file's URL, for an import being resolved as the file links.
+ * @returns {{path: string, moduleID: string|null, paths: ReadonlyArray<string>|null}|null} The load, or null.
+ * @internal
+ */
+declare function runtime_loadingFileRunning(slothlet: object, importer?: string | null): {
+    path: string;
+    moduleID: string | null;
+    paths: ReadonlyArray<string> | null;
+} | null;
+export { guarded_runtime_importedLocations as runtime_importedLocations, guarded_runtime_realComparablePath as runtime_realComparablePath, guarded_runtime_entryNames as runtime_entryNames, guarded_runtime_captureFrames as runtime_captureFrames, guarded_forgetInstanceScripts as forgetInstanceScripts, guarded_enterCall as enterCall, guarded_describeCall as describeCall, guarded_createFramePlacer as createFramePlacer, guarded_stackHoldsInstanceCode as stackHoldsInstanceCode, guarded_setApiValueCheck as setApiValueCheck, guarded_setResultAttributor as setResultAttributor, guarded_attributeResult as attributeResult, guarded_setHostPrototypeCheck as setHostPrototypeCheck, guarded_setHandedOutCheck as setHandedOutCheck, guarded_setInboundOriginal as setInboundOriginal, guarded_handedLeafFunctions as handedLeafFunctions, guarded_supplierChainCeiling as supplierChainCeiling, guarded_resolveSupplier as resolveSupplier, guarded_recordInstanceOwner as recordInstanceOwner, guarded_isInstanceOwnerFile as isInstanceOwnerFile, guarded_installViteHostRegistry as installViteHostRegistry, guarded_installViteLoadedRegistry as installViteLoadedRegistry, guarded_setModuleNodeResolver as setModuleNodeResolver, guarded_createModuleLoad as createModuleLoad, guarded_loadOnStack as loadOnStack, guarded_outerCallerCeiling as outerCallerCeiling, guarded_ownReceiver as ownReceiver, guarded_frameDefiner as frameDefiner, guarded_isLeafFileFunction as isLeafFileFunction, guarded_registerLeafFile as registerLeafFile, guarded_runtime_codeWritersOnStack as runtime_codeWritersOnStack, guarded_runtime_loadingFileRunning as runtime_loadingFileRunning };
 //# sourceMappingURL=frame-placement.d.mts.map

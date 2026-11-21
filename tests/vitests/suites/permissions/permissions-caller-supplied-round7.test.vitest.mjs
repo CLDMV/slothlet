@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-31T09:04:32-07:00 (1793462672)
+ *	@Last modified time: 2026-11-16T18:30:24-08:00 (1794882624)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -29,6 +29,7 @@ import path from "node:path";
 import v8 from "node:v8";
 import vm from "node:vm";
 import slothlet from "@cldmv/slothlet";
+import { settleHookCount } from "#handlers/context-live";
 import { getMatrixConfigs, TEST_DIRS, withSuppressedSlothletErrorOutput } from "../../setup/vitest-helper.mjs";
 
 const DIR = TEST_DIRS.API_TEST_CALLER_SUPPLIED_ROUND7;
@@ -54,7 +55,7 @@ const RULES = [
  * How a module's code is refused while it is built as no module's: refused as unattributable, or — in the live
  * runtime, whose `self` names no instance outside a call — refused any context at all.
  */
-const BUILD_REFUSALS = new Set(["PERMISSION_DENIED", "RUNTIME_NO_ACTIVE_CONTEXT_SELF"]);
+const BUILD_REFUSALS = new Set(["PERMISSION_DENIED", "CONTEXT_NOT_ACTIVE_SELF"]);
 
 /** The callee's rules, and the same for the module that adds by a relative folder. */
 const REL_RULES = [
@@ -117,9 +118,9 @@ describe.each(getMatrixConfigs())("Permissions > caller-supplied code, seventh r
 	 * @returns {Promise<object>} The api.
 	 */
 	const build = async () => {
-		api = await slothlet({ ...config, base: path.join(DIR, "base"), hook: true, permissions: { defaultPolicy: "deny", rules: RULES } });
+		api = await slothlet({ ...config, base: path.join(DIR, "base"), hook: true, permissions: { policy: "deny", rules: RULES } });
 		await api.vault.secret.whoami();
-		await api.slothlet.api.add("callee", path.join(DIR, "callee"), { moduleID: "callee-mod" });
+		await api.slothlet.api.add("callee", path.join(DIR, "callee"), { id: "callee-mod" });
 		return api;
 	};
 
@@ -194,10 +195,10 @@ describe.each(getMatrixConfigs())("Permissions > host calls while a module's add
 	 * @returns {Promise<object>} The api.
 	 */
 	const build = async () => {
-		api = await slothlet({ ...config, base: path.join(DIR, "base"), hook: true, permissions: { defaultPolicy: "deny", rules: REL_RULES } });
+		api = await slothlet({ ...config, base: path.join(DIR, "base"), hook: true, permissions: { policy: "deny", rules: REL_RULES } });
 		await api.vault.secret.whoami();
-		await api.slothlet.api.add("callee", path.join(DIR, "callee"), { moduleID: "callee-mod" });
-		await api.slothlet.api.add("reladder", path.join(DIR, "reladder"), { moduleID: "reladder-mod" });
+		await api.slothlet.api.add("callee", path.join(DIR, "callee"), { id: "callee-mod" });
+		await api.slothlet.api.add("reladder", path.join(DIR, "reladder"), { id: "reladder-mod" });
 		return api;
 	};
 
@@ -240,7 +241,7 @@ describe.each(getMatrixConfigs())("A promise a module's callback returns is left
 
 	it.each(KINDS)("a %s promise the callback handles leaves nothing unhandled", async (kind) => {
 		api = await slothlet({ ...config, base: path.join(DIR, "base"), hook: true });
-		await api.slothlet.api.add("callee", path.join(DIR, "callee"), { moduleID: "callee-mod" });
+		await api.slothlet.api.add("callee", path.join(DIR, "callee"), { id: "callee-mod" });
 		const reported = await uncaughtDuring(async () => {
 			await api.callee.adder.timerReturns(kind, true);
 		});
@@ -249,7 +250,7 @@ describe.each(getMatrixConfigs())("A promise a module's callback returns is left
 
 	it.each(KINDS)("a %s promise the callback leaves unhandled is reported once", async (kind) => {
 		api = await slothlet({ ...config, base: path.join(DIR, "base"), hook: true });
-		await api.slothlet.api.add("callee", path.join(DIR, "callee"), { moduleID: "callee-mod" });
+		await api.slothlet.api.add("callee", path.join(DIR, "callee"), { id: "callee-mod" });
 		const reported = await uncaughtDuring(async () => {
 			await api.callee.adder.timerReturns(kind, false);
 		});
@@ -261,45 +262,34 @@ describe.each(getMatrixConfigs({ runtime: "live" }))(
 	"Live runtime > a promise followed for a callback is let go (#597) > $name",
 	({ config }) => {
 		let api;
-		let original;
-		let active;
+		let base;
+		// The settle hooks slothlet installed since this test began and has not yet stopped. slothlet calls the
+		// `promiseHooks.onSettled` it took when it loaded, so it counts them itself.
+		const active = () => settleHookCount() - base;
 
 		beforeEach(() => {
-			original = v8.promiseHooks.onSettled;
-			active = 0;
-			// Count the settle hooks installed and not yet stopped.
-			v8.promiseHooks.onSettled = (hook) => {
-				active++;
-				const stop = original(hook);
-				let stopped = false;
-				return () => {
-					if (!stopped) active--;
-					stopped = true;
-					stop();
-				};
-			};
+			base = settleHookCount();
 		});
 
 		afterEach(async () => {
 			if (api) await api.shutdown();
 			api = null;
-			v8.promiseHooks.onSettled = original;
 		});
 
 		it("a callback's promise that never settles stops being followed when its instance shuts down", async () => {
 			api = await slothlet({ ...config, base: path.join(DIR, "base"), hook: true });
-			await api.slothlet.api.add("callee", path.join(DIR, "callee"), { moduleID: "callee-mod" });
+			await api.slothlet.api.add("callee", path.join(DIR, "callee"), { id: "callee-mod" });
 			await api.callee.adder.timerHangs();
 			await new Promise((resolve) => setTimeout(resolve, 20));
-			expect(active).toBe(1);
+			expect(active()).toBe(1);
 			await api.shutdown();
 			api = null;
-			expect(active).toBe(0);
+			expect(active()).toBe(0);
 		});
 
 		it("a callback's promise is followed without running an inspector of its own", async () => {
 			api = await slothlet({ ...config, base: path.join(DIR, "base"), hook: true });
-			await api.slothlet.api.add("callee", path.join(DIR, "callee"), { moduleID: "callee-mod" });
+			await api.slothlet.api.add("callee", path.join(DIR, "callee"), { id: "callee-mod" });
 			await api.callee.adder.timerInspectable();
 			await new Promise((resolve) => setTimeout(resolve, 40));
 			expect(await api.callee.adder.inspected()).toBe(0);
@@ -309,15 +299,15 @@ describe.each(getMatrixConfigs({ runtime: "live" }))(
 			v8.setFlagsFromString("--expose-gc");
 			const gc = vm.runInNewContext("gc");
 			api = await slothlet({ ...config, base: path.join(DIR, "base"), hook: true });
-			await api.slothlet.api.add("callee", path.join(DIR, "callee"), { moduleID: "callee-mod" });
+			await api.slothlet.api.add("callee", path.join(DIR, "callee"), { id: "callee-mod" });
 			await api.callee.adder.timerHangs();
 			await new Promise((resolve) => setTimeout(resolve, 20));
-			expect(active).toBe(1);
-			for (let round = 0; round < 20 && active > 0; round++) {
+			expect(active()).toBe(1);
+			for (let round = 0; round < 20 && active() > 0; round++) {
 				gc();
 				await new Promise((resolve) => setTimeout(resolve, 10));
 			}
-			expect(active).toBe(0);
+			expect(active()).toBe(0);
 		});
 	}
 );
@@ -337,14 +327,17 @@ describe.each(getMatrixConfigs({ runtime: "live", mode: "lazy" }))(
 				...config,
 				base: path.join(DIR5, "base"),
 				hook: true,
-				permissions: { defaultPolicy: "deny", rules: [{ caller: "**", target: "slothlet.**", effect: "allow" }] }
+				permissions: { policy: "deny", rules: [{ caller: "**", target: "slothlet.**", effect: "allow" }] }
 			});
-			await api.slothlet.api.add("supplier", path.join(DIR5, "supplier"), { moduleID: "supplier-mod" });
+			await api.slothlet.api.add("supplier", path.join(DIR5, "supplier"), { id: "supplier-mod" });
 			const reported = await uncaughtDuring(async () => {
 				expect((await api.supplier.trap.p).x).toBe(1);
 				await api.slothlet.reload();
 			});
 			expect(reported).toEqual([]);
+			// The traps run as the supplier, whose calls to the vault the reload left unloaded answer once it has loaded.
+			await api.vault.secret;
+			await new Promise((resolve) => setImmediate(resolve));
 			const answers = await api.supplier.trap.taken();
 			expect(answers.length).toBeGreaterThan(0);
 			expect(answers.filter((answer) => answer === "s3cret")).toEqual([]);
@@ -352,7 +345,7 @@ describe.each(getMatrixConfigs({ runtime: "live", mode: "lazy" }))(
 
 		it("the Proxy held past shutdown runs its traps as plain code, outside every instance", async () => {
 			api = await slothlet({ ...config, base: path.join(DIR5, "base"), hook: true });
-			await api.slothlet.api.add("supplier", path.join(DIR5, "supplier"), { moduleID: "supplier-mod" });
+			await api.slothlet.api.add("supplier", path.join(DIR5, "supplier"), { id: "supplier-mod" });
 			const held = await api.supplier.trap.p;
 			expect(held.x).toBe(1);
 			await api.shutdown();

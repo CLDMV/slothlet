@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:52-07:00 (1791090892)
+ *	@Last modified time: 2026-11-17T21:05:02-08:00 (1794978302)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -24,7 +24,7 @@
  * lands on an IDL attribute the target interface declares on its own prototype — there is no single
  * shared setter the way `EventTarget.prototype.addEventListener` is shared, so `addEventListener`
  * patching never sees it. The callback then runs with no pinned identity, the same
- * `RUNTIME_NO_ACTIVE_CONTEXT_SELF` / unattributed-caller failure the `addEventListener` patch exists
+ * `CONTEXT_NOT_ACTIVE_SELF` / unattributed-caller failure the `addEventListener` patch exists
  * to prevent.
  *
  * Each interface below declares its `on*` attributes independently, so each one is patched by name on
@@ -51,8 +51,25 @@
  * and does not bound.
  */
 
-import { pinToCurrentCaller } from "@cldmv/slothlet/helpers/caller-pinning";
-import { openLayer, markLayer, closeLayer, isActiveLayer } from "@cldmv/slothlet/helpers/boundary-patch-layers";
+import { AsyncResource } from "#helpers/platform";
+import { holdForCurrentFlow, pinToCurrentCaller } from "#helpers/caller-pinning";
+import { asPlatformRegistration } from "#helpers/eventtarget-context";
+import { openLayer, closeLayer, isActiveLayer, markLayer } from "#helpers/boundary-patch-layers";
+import {
+	EventTarget,
+	filterList,
+	FunctionMethods,
+	listPush,
+	Objects,
+	PrototypeFunctions,
+	StringMethods,
+	WeakMap,
+	WeakMapMethods,
+	WeakSet,
+	WeakSetMethods
+} from "#helpers/intrinsics";
+import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "#helpers/instance-imports";
+import { isSlothletProxy } from "#handlers/framework-internals";
 
 /**
  * Interfaces and the `on*` handler properties patched on each.
@@ -126,7 +143,7 @@ function runtime_patchHandlerProperty(ctor, propName) {
  * @private
  */
 function runtime_patchHandlerAccessor(proto, propName) {
-	const descriptor = proto && Object.getOwnPropertyDescriptor(proto, propName);
+	const descriptor = proto && Objects.getOwnPropertyDescriptor(proto, propName);
 	// Absent on this host's prototype, not an IDL-style accessor, or non-configurable: nothing to patch.
 	// Covers a host that lacks the interface entirely, an exotic embedder that exposes the handler as a
 	// plain data property instead, and a host that locked the accessor down — redefining a
@@ -135,21 +152,36 @@ function runtime_patchHandlerAccessor(proto, propName) {
 	if (!descriptor || typeof descriptor.get !== "function" || typeof descriptor.set !== "function" || !descriptor.configurable) return;
 	// Already this patch's accessor: an interface listed by name is also reached by discovery. One this
 	// copy disabled earlier, and that is back on top, is wrapped afresh instead.
-	if (installedGetters.has(descriptor.get) && isActiveLayer(descriptor.get)) return;
+	if (WeakSetMethods.has(installedGetters, descriptor.get) && isActiveLayer(descriptor.get)) return;
 
 	// Shared with any other copy of slothlet in the realm (see boundary-patch-layers).
 	const layer = openLayer(descriptor, runtime_descriptorGetter);
 	const { get: originalGet, set: originalSet } = layer.below;
 
 	/**
-	 * Targets currently holding a pinned wrapper through this accessor, and what was assigned.
-	 * @type {WeakMap<object, {original: Function, wrapper: Function}>}
+	 * Targets currently holding a pinned wrapper through this accessor, what was assigned, and what releases the count
+	 * of it as work of the `run()` / `scope()` that assigned it: a handler assigned in a run is the run's work until it is
+	 * replaced or cleared (see `holdForCurrentFlow` in `helpers/caller-pinning`).
+	 * @type {WeakMap<object, {original: Function, wrapper: Function, release: Function|null, resource: object|null}>}
 	 */
 	const tracked = new WeakMap();
 
+	/**
+	 * Drop a target's entry: the handler it describes is no longer the target's, so the work it was for a run is done.
+	 * @param {object} target - The target.
+	 * @returns {void}
+	 */
+	const forget = (target) => {
+		const entry = WeakMapMethods.get(tracked, target);
+		if (entry === undefined) return;
+		WeakMapMethods.delete(tracked, target);
+		if (entry.release !== null) entry.release();
+		if (entry.resource !== null) entry.resource.emitDestroy();
+	};
+
 	const wrapperGet = function () {
-		const entry = tracked.get(this);
-		const current = originalGet.call(this);
+		const entry = WeakMapMethods.get(tracked, this);
+		const current = FunctionMethods.call(originalGet, this);
 		// Only substitute when the platform still reports the wrapper this patch installed — anything
 		// else means the property was reassigned to something this setter did not wrap (e.g. `null`),
 		// and the platform's own value is already the right answer.
@@ -158,7 +190,7 @@ function runtime_patchHandlerAccessor(proto, propName) {
 			// The platform no longer reports the wrapper this patch installed, so the entry no longer
 			// describes reality. Drop it rather than leaving it to keep the stale original/wrapper pair
 			// reachable for the lifetime of `this`.
-			tracked.delete(this);
+			forget(this);
 		}
 		return current;
 	};
@@ -168,29 +200,52 @@ function runtime_patchHandlerAccessor(proto, propName) {
 		// or reject the same way it would unpatched. Neither has an identity to pin — and an accessor
 		// disabled under another copy's pins nothing either.
 		if (typeof value !== "function" || !layer.active) {
-			const result = originalSet.call(this, value);
-			tracked.delete(this);
+			const result = asPlatformRegistration(originalSet, this, value);
+			forget(this);
 			return result;
 		}
 
-		const wrapper = pinToCurrentCaller(value);
+		// Restores the AsyncLocalStorage store active now when the handler runs, as the `addEventListener` patch does for
+		// a listener: the platform's own listener behind the property (Node registers one through `addEventListener`)
+		// is registered as it is, and serves whichever handler the property holds then. Null in a browser.
+		/* v8 ignore next */
+		const resource = AsyncResource ? new AsyncResource("slothlet-event-handler") : null;
+		const pinned = pinToCurrentCaller(value);
+		const wrapper =
+			resource === null
+				? pinned
+				: function (...args) {
+						return resource.runInAsyncScope(() => FunctionMethods.apply(pinned, this, args));
+					};
+		// Assigned in a run() / scope(), the handler is the run's work until it is replaced or cleared: counted here on
+		// the live runtime, and through its resource on the async runtime.
+		const release = holdForCurrentFlow();
 		// Mutate `tracked` only once the platform setter has actually accepted the assignment — if it
 		// throws, the previous tracked entry (or lack of one) is still the accurate description of state.
-		const result = originalSet.call(this, wrapper);
-		tracked.set(this, { original: value, wrapper });
+		let result;
+		try {
+			result = asPlatformRegistration(originalSet, this, wrapper);
+		} catch (error) {
+			if (release !== null) release();
+			if (resource !== null) resource.emitDestroy();
+			throw error;
+		}
+		forget(this);
+		WeakMapMethods.set(tracked, this, { original: value, wrapper, release, resource });
 		return result;
 	};
 
-	Object.defineProperty(proto, propName, {
+	Objects.defineProperty(proto, propName, {
+		__proto__: null,
 		configurable: descriptor.configurable,
 		enumerable: descriptor.enumerable,
 		get: wrapperGet,
 		set: wrapperSet
 	});
-	installedGetters.add(wrapperGet);
+	WeakSetMethods.add(installedGetters, wrapperGet);
 	markLayer(wrapperGet, layer);
 
-	patched.push({ proto, propName, layer, wrapperGet, wrapperSet });
+	listPush(patched, { proto, propName, layer, wrapperGet, wrapperSet });
 }
 
 /**
@@ -203,14 +258,20 @@ function runtime_patchHandlerAccessor(proto, propName) {
  * @returns {void}
  * @public
  */
-export function enableEventTargetPropertyPatching() {
+function enableEventTargetPropertyPatching() {
 	if (isPatchingEnabled) return;
 
-	for (const [ctorName, propNames] of PATCHED_INTERFACES) {
+	for (let ofIndex = 0, ofList = PATCHED_INTERFACES; ofIndex < ofList.length; ofIndex++) {
+		const ofEntry = ofList[ofIndex],
+			ctorName = ofEntry[0],
+			propNames = ofEntry[1];
 		const ctor = globalThis[ctorName];
 		// Host doesn't provide this interface at all (most of these are browser-only) — nothing to patch.
 		if (typeof ctor !== "function") continue;
-		for (const propName of propNames) runtime_patchHandlerProperty(ctor, propName);
+		for (let ofIndex = 0, ofList = propNames; ofIndex < ofList.length; ofIndex++) {
+			const propName = ofList[ofIndex];
+			runtime_patchHandlerProperty(ctor, propName);
+		}
 	}
 
 	runtime_patchDiscoveredHandlers();
@@ -225,7 +286,7 @@ export function enableEventTargetPropertyPatching() {
  * @private
  */
 function runtime_ownHandlerNames(target) {
-	return Object.getOwnPropertyNames(target).filter((name) => name.startsWith("on") && name.length > 2);
+	return filterList(Objects.getOwnPropertyNames(target), (name) => StringMethods.startsWith(name, "on") && name.length > 2);
 }
 
 /**
@@ -240,20 +301,34 @@ function runtime_ownHandlerNames(target) {
  * @private
  */
 function runtime_patchDiscoveredHandlers() {
-	const EventTargetCtor = globalThis.EventTarget;
+	const EventTargetCtor = EventTarget;
 	// A host without EventTarget has no DOM-style handlers to discover; the named list still applies.
 	if (typeof EventTargetCtor !== "function") return;
 	const base = EventTargetCtor.prototype;
 
-	for (const name of Object.getOwnPropertyNames(globalThis)) {
-		const value = Object.getOwnPropertyDescriptor(globalThis, name)?.value;
-		if (typeof value !== "function" || !value.prototype || !Object.prototype.isPrototypeOf.call(base, value.prototype)) continue;
-		for (const propName of runtime_ownHandlerNames(value.prototype)) runtime_patchHandlerAccessor(value.prototype, propName);
+	for (let ofIndex = 0, ofList = Objects.getOwnPropertyNames(globalThis); ofIndex < ofList.length; ofIndex++) {
+		const name = ofList[ofIndex];
+		const value = Objects.getOwnPropertyDescriptor(globalThis, name)?.value;
+		// Slothlet's own Proxies (a function root's `self`, #803) are no interface, and are not read here.
+		if (
+			typeof value !== "function" ||
+			isSlothletProxy(value) ||
+			!value.prototype ||
+			!FunctionMethods.call(PrototypeFunctions.Object.isPrototypeOf, base, value.prototype)
+		)
+			continue;
+		for (let ofIndex = 0, ofList = runtime_ownHandlerNames(value.prototype); ofIndex < ofList.length; ofIndex++) {
+			const propName = ofList[ofIndex];
+			runtime_patchHandlerAccessor(value.prototype, propName);
+		}
 	}
 
 	// A Window or worker global: WebIDL declares its handlers on the global object itself.
-	if (Object.prototype.isPrototypeOf.call(base, globalThis)) {
-		for (const propName of runtime_ownHandlerNames(globalThis)) runtime_patchHandlerAccessor(globalThis, propName);
+	if (FunctionMethods.call(PrototypeFunctions.Object.isPrototypeOf, base, globalThis)) {
+		for (let ofIndex = 0, ofList = runtime_ownHandlerNames(globalThis); ofIndex < ofList.length; ofIndex++) {
+			const propName = ofList[ofIndex];
+			runtime_patchHandlerAccessor(globalThis, propName);
+		}
 	}
 }
 
@@ -267,17 +342,76 @@ function runtime_patchDiscoveredHandlers() {
  * @returns {void}
  * @public
  */
-export function disableEventTargetPropertyPatching() {
+function disableEventTargetPropertyPatching() {
 	if (!isPatchingEnabled) return;
 
-	for (const { proto, propName, layer, wrapperGet, wrapperSet } of patched) {
+	for (let ofIndex = 0, ofList = patched; ofIndex < ofList.length; ofIndex++) {
+		const { proto, propName, layer, wrapperGet, wrapperSet } = ofList[ofIndex];
 		const restore = closeLayer(layer, runtime_descriptorGetter);
-		const current = Object.getOwnPropertyDescriptor(proto, propName);
+		const current = Objects.getOwnPropertyDescriptor(proto, propName);
 		if (current && current.get === wrapperGet && current.set === wrapperSet) {
-			Object.defineProperty(proto, propName, restore);
+			Objects.defineProperty(proto, propName, restore);
 		}
 	}
 
 	patched.length = 0;
 	isPatchingEnabled = false;
 }
+
+/**
+ * This file's internal bindings, for the files of slothlet's own that use them: each of those files takes them once, as
+ * it loads, and anyone else is refused (see `ownBindingsRefusal` in `helpers/instance-imports`).
+ * @param {string} consumer - The file asking: its path in slothlet's code folder, without its extension.
+ * @returns {object} The bindings.
+ * @internal
+ */
+export function internals(consumer) {
+	if (!mayTakeInternals(consumer, ["slothlet"])) throw ownBindingsRefusal("lib/helpers/eventtarget-property-context", import.meta.url);
+	return { disableEventTargetPropertyPatching, enableEventTargetPropertyPatching };
+}
+
+/**
+ * The files of slothlet's own that took this file's bindings (see {@link internals}). A `var` with no initializer, so a
+ * file can take them before this file's top level has run (a cycle of slothlet's own files), and that run does not reset
+ * what was taken.
+ * @type {object|undefined}
+ * @private
+ */
+var internalsTaken;
+
+/**
+ * Whether a file may take this file's bindings: it is one of those listed, and has not taken them yet. Reads no import
+ * and no built-in a module can replace, so it answers the same before this file's imports are ready and after.
+ * @param {string} consumer - The file asking.
+ * @param {string[]} consumers - The files that take them.
+ * @returns {boolean} True, once, for each file listed.
+ * @private
+ */
+function mayTakeInternals(consumer, consumers) {
+	if (internalsTaken === undefined) internalsTaken = { __proto__: null };
+	let listed = false;
+	for (let i = 0; i < consumers.length; i++) if (consumers[i] === consumer) listed = true;
+	if (!listed || typeof consumer !== "string") return false;
+	// Taken already: only a second evaluation of that very file, at its own top level, takes them again.
+	if (internalsTaken[consumer] === true) return isOwnTopLevelOf(consumer);
+	internalsTaken[consumer] = true;
+	return true;
+}
+
+// The exports below answer slothlet's own files and the host only (see `guardInternal` in `helpers/instance-imports`).
+/** @type {typeof enableEventTargetPropertyPatching} */
+const guarded_enableEventTargetPropertyPatching = guardInternal(
+	enableEventTargetPropertyPatching,
+	"enableEventTargetPropertyPatching",
+	import.meta.url
+);
+/** @type {typeof disableEventTargetPropertyPatching} */
+const guarded_disableEventTargetPropertyPatching = guardInternal(
+	disableEventTargetPropertyPatching,
+	"disableEventTargetPropertyPatching",
+	import.meta.url
+);
+export {
+	guarded_enableEventTargetPropertyPatching as enableEventTargetPropertyPatching,
+	guarded_disableEventTargetPropertyPatching as disableEventTargetPropertyPatching
+};

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-16T16:46:22-07:00 (1792194382)
+ *	@Last modified time: 2026-11-18T18:40:13-08:00 (1795056013)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -77,7 +77,7 @@ describe.each(getMatrixConfigs({}))("Permissions > Read Gating > a frozen callab
 		api = await slothlet({
 			...config,
 			base: root,
-			permissions: { defaultPolicy: "allow", rules: [{ caller: "rogue.**", target: "vault.**", effect: "deny" }] }
+			permissions: { policy: "allow", rules: [{ caller: "rogue.**", target: "vault.**", effect: "deny" }] }
 		});
 		expect(await api.vault(1, 2)).toBe("vault:12");
 		expect(await api.vault.key).toBe("SECRET");
@@ -98,23 +98,24 @@ describe.each(getMatrixConfigs({}))("Permissions > Read Gating > a frozen callab
 		expect(Object.keys(api.vault)).toEqual(keys);
 	});
 
-	it("keeps every member for the host when a caller denied some of them freezes the node", async () => {
+	it("refuses a freeze from a caller denied some of the node's members, and keeps every member for the host", async () => {
 		api = await slothlet({
 			...config,
 			base: root,
-			permissions: { defaultPolicy: "allow", rules: [{ caller: "rogue.**", target: "vault.**", effect: "deny" }] }
+			// The members only: `vault.**` would name the callable node `vault` itself too (`**` matches zero segments), and
+			// the caller could then not freeze it at all.
+			permissions: { policy: "allow", rules: [{ caller: "rogue.**", target: "vault.*", effect: "deny" }] }
 		});
 		expect(await api.vault.key).toBe("SECRET");
 		const keys = Object.keys(api.vault);
 		expect(keys).toContain("key");
 
-		expect(await api.rogue.freeze()).toBe("true");
+		expect(await api.rogue.freeze()).toBe("denied");
 		expect(await api.rogue.direct()).toBe("denied");
-		// A frozen value's descriptor must carry the value itself, so checking the integrity of a node holding one
-		// the caller may not read is refused rather than answered with it.
-		expect(await api.rogue.isFrozen()).toBe("denied");
+		// The refused freeze left the node open, so its integrity check answers without reading any member.
+		expect(await api.rogue.isFrozen()).toBe("false");
 
-		expect(Object.isFrozen(api.vault)).toBe(true);
+		expect(Object.isFrozen(api.vault)).toBe(false);
 		expect(Object.keys(api.vault)).toEqual(keys);
 		expect(await api.vault.key).toBe("SECRET");
 	});

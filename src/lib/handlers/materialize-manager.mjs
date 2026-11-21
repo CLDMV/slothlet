@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:51-07:00 (1791090891)
+ *	@Last modified time: 2026-11-16T16:16:10-08:00 (1794874570)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -20,6 +20,7 @@
  */
 
 import { ComponentBase } from "#factories/component-base";
+import { listPush, Math, Promise } from "#helpers/intrinsics";
 
 /**
  * Manager for tracking lazy folder materialization state
@@ -36,7 +37,7 @@ import { ComponentBase } from "#factories/component-base";
  * const api = await slothlet({ base: "./api", mode: "lazy" });
  *
  * // Check if fully materialized
- * if (api.slothlet.materialize.materialized) {
+ * if (api.slothlet.materialize.complete) {
  *   console.log("All lazy folders loaded!");
  * }
  *
@@ -66,7 +67,7 @@ export class MaterializeManager extends ComponentBase {
 	 * @public
 	 *
 	 * @example
-	 * if (api.slothlet.materialize.materialized) {
+	 * if (api.slothlet.materialize.complete) {
 	 *   console.log("API is fully loaded");
 	 * }
 	 */
@@ -126,7 +127,7 @@ export class MaterializeManager extends ComponentBase {
 
 		// Create a promise that will resolve when materialization completes
 		return new Promise((resolve) => {
-			this.slothlet._materializationWaiters.push(resolve);
+			listPush(this.slothlet._materializationWaiters, resolve);
 		});
 	}
 }

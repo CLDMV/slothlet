@@ -7,6 +7,7 @@ This document covers the lifecycle event system, module type inspection, and bac
 - [Lifecycle Events](#lifecycle-events)
 - [Routines](#routines)
 - [Module Type Inspection](#module-type-inspection)
+- [Changes Before a Node Loads](#changes-before-a-node-loads)
 - [Background Materialization](#background-materialization)
 - [API Reference](#api-reference)
 
@@ -21,12 +22,12 @@ This document covers the lifecycle event system, module type inspection, and bac
 ```javascript
 // Standard EventEmitter pattern
 api.slothlet.lifecycle.on("impl:created", (data) => {
-	console.log(`Module loaded: ${data.apiPath}`);
+	console.log(`Module loaded: ${data.path.join(".")}`);
 });
 
 // on() returns an unsubscribe function
 const unsubscribe = api.slothlet.lifecycle.on("impl:changed", (data) => {
-	console.log(`Module reloaded: ${data.apiPath} from ${data.source}`);
+	console.log(`Module reloaded: ${data.path.join(".")} from ${data.source}`);
 });
 
 // Later, clean up
@@ -56,7 +57,7 @@ const api = await slothlet({
 		// Event name → a handler, or an array of handlers.
 		"impl:warning": (data) => console.warn(`[init] ${data.code}: ${data.message}`),
 		"impl:error": [onError, auditError],
-		"impl:created": (data) => registry.add(data.apiPath)
+		"impl:created": (data) => registry.add(data.path.join("."))
 	}
 });
 ```
@@ -75,16 +76,18 @@ Emitted when a module implementation is first placed on the composed api — dur
 
 ```javascript
 {
-	apiPath: "plugins.auth",         // API path dot-notation
+	path: ["plugins", "auth"],       // API path as its segments
 	impl: [Function],                // The wrapped callable on a stable public field (#433); null before a lazy wrapper materializes
-	source: "initial",               // "initial" | "hot-reload" | "lazy-materialization"
-	moduleID: "plugins_xyz789",      // Module identifier of the placed owner
-	filePath: "/path/to/auth.mjs",   // Absolute source file path
-	sourceFolder: "/path/to/plugins" // Source directory
+	source: "create",                // "create" | "reload" | "materialize": the operation that caused the event
+	module: "plugins_xyz789",        // Module identifier of the placed owner
+	file: "/path/to/auth.mjs",       // Absolute source file path
+	folder: "/path/to/plugins"       // Source folder
 }
 ```
 
-> The **raw, unwrapped** `impl` field was removed in v3.16.x (#398): it exposed the module's raw callable, which a subscriber could invoke outside slothlet's enforced boundary. v3.18.0 (#433) restores `impl` as a stable public field carrying the **wrapped** callable, and drops the reserved internal `wrapper.__impl` handle from the **public** event entirely — read `data.impl` for the leaf's (wrapped) implementation; there is no public `wrapper` to reach into. (The internal tier still carries `wrapper` for the framework's own ownership / metadata / routine subscribers.) The event also fires only for the leaf actually placed on the tree, so a registry keyed off it no longer records a contribution that a later merge discards.
+Every api path a lifecycle event reports is a segments array; join it (`data.path.join(".")`) for the dotted form.
+
+> The **raw, unwrapped** `impl` field was removed in v3.16.x (#398): it exposed the module's raw callable, which a subscriber could invoke outside slothlet's enforced boundary. v3.18.0 (#433) restores `impl` as a stable public field carrying the **wrapped** callable, and drops the reserved internal `wrapper.____impl` handle from the **public** event entirely — read `data.impl` for the leaf's (wrapped) implementation; there is no public `wrapper` to reach into. (The internal tier still carries `wrapper` for the framework's own ownership / metadata / routine subscribers.) The event also fires only for the leaf actually placed on the tree, so a registry keyed off it no longer records a contribution that a later merge discards.
 
 ### `impl:changed`
 
@@ -100,12 +103,12 @@ Emitted when composing a module into the api **resolves a collision** at a path 
 
 ```javascript
 {
-	apiPath: "shared.alpha",   // API path (dot-notation) where the collision resolved
+	path: ["shared", "alpha"], // API path (segments) where the collision resolved
 	resolution: "dropped",     // "dropped" | "replaced" | "merged"
-	incoming: "storage_b",     // moduleID of the arriving writer
-	owner: "storage_a",        // moduleID of the writer that already held the path
+	incoming: "storage_b",     // module id of the arriving writer
+	owner: "storage_a",        // module id of the writer that already held the path
 	kind: "value",             // "value" (leaf) | "namespace" (node)
-	collisionMode: "merge"     // "skip" | "warn" | "replace" | "merge" | "merge-replace"
+	collision: "merge"         // "skip" | "warn" | "replace" | "merge" | "merge-replace"
 }
 ```
 
@@ -130,28 +133,32 @@ pkg_a/shared/util/fmt.mjs  → shared.util.fmt        pkg_b/shared/beta.mjs     
 
 ```javascript
 api.slothlet.lifecycle.on("impl:collision", (d) => report(d));
-await api.slothlet.api.add("", "/abs/pkg_b", { moduleID: "pkg_b" });
+await api.slothlet.api.add("", "/abs/pkg_b", { id: "pkg_b" });
 // impl:collision fires (eager):
-//   { apiPath: "shared.alpha",    resolution: "dropped", incoming: "pkg_b", owner: "pkg_a", kind: "value" }
-//   { apiPath: "shared.util",     resolution: "merged",  incoming: "pkg_b", owner: "pkg_a", kind: "namespace" }
-//   { apiPath: "shared.util.fmt", resolution: "dropped", incoming: "pkg_b", owner: "pkg_a", kind: "value" }
+//   { path: ["shared", "alpha"],         resolution: "dropped", incoming: "pkg_b", owner: "pkg_a", kind: "value" }
+//   { path: ["shared", "util"],          resolution: "merged",  incoming: "pkg_b", owner: "pkg_a", kind: "namespace" }
+//   { path: ["shared", "util", "fmt"],   resolution: "dropped", incoming: "pkg_b", owner: "pkg_a", kind: "value" }
 // shared.beta is unique — no event.
 ```
 
 The event is **fire-and-forget**: like the other `impl:*` events its listeners are isolated (a throwing listener never affects the composition or the other listeners), and it fires synchronously at the collision-decision site, so a subscriber attached before the composing call observes every collision by the time that call resolves.
 
-> **Lazy note.** In lazy mode a collision between two **materialized** leaves, and a top-level namespace merge, are reported at compose time as above. A collision between leaves _nested inside_ a still-lazy folder is resolved when that folder materializes (deferred adoption), and is surfaced there rather than at the enclosing `api.add()`. The routine-stacking case (`stackRoutines`, where colliding contributions both run rather than one dropping the other) is an orthogonal execution concern reported through the routine system, not through this event.
+> **Lazy note.** In lazy mode a collision between two **materialized** leaves, and a top-level namespace merge, are reported at compose time as above. A collision between leaves _nested inside_ a still-lazy folder is resolved when that folder materializes (deferred adoption), and is surfaced there rather than at the enclosing `api.add()`. The routine-stacking case (`routines.stack`, where colliding contributions both run rather than one dropping the other) is an orthogonal execution concern reported through the routine system, not through this event.
 
 ### `impl:removed`
 
-Emitted when a module is removed via `api.slothlet.api.remove()`.
+Emitted when a module is removed via `api.slothlet.api.remove()`, before its members are deleted.
 
 **Event data:**
 
 ```javascript
 {
-	apiPath: "plugins.oldModule",
-	moduleID: "plugins_old123"
+	path: ["plugins", "oldModule"],   // API path (segments) being removed
+	impl: [Function],                 // The implementation being removed (a module's subscriber gets its own view of it)
+	source: "remove",                 // The operation that caused the event
+	module: "plugins_old123",         // Module identifier of the removed implementation
+	file: "/path/to/oldModule.mjs",   // Absolute source file path
+	folder: "/path/to/plugins"        // Source folder
 }
 ```
 
@@ -163,12 +170,12 @@ Emitted for a **non-throwing** diagnostic warning — a condition slothlet handl
 
 ```javascript
 {
-	apiPath: "",                             // Where the mutation was attempted ("" / "(root)" for the root)
-	code: "WARN_SYNTHETIC_ROOT_COLLISION",   // The i18n diagnostic code
-	message: "Synthetic add at the API root…", // Already-translated human-readable message
-	source: "addApi",                        // Command family: "addApi" | "reload" | "buildAPI" | "module-mount"
-	context: { name: "greet" },              // Structured context passed to the diagnostic
-	moduleID: "plugins_xyz789"               // Module identifier, when one is in scope
+	path: [],                                // Where the mutation was attempted ([] for the root)
+	code: "WARNING_INLINE_ROOT_COLLISION",   // The i18n diagnostic code
+	message: "Inline content at the API root…", // Already-translated human-readable message
+	source: "add",                           // The operation: "add" | "reload" | "build" | "mount"
+	details: { name: "greet" },              // Structured details of the diagnostic (the same keys an error's details use)
+	module: "plugins_xyz789"                 // Module identifier, when one is in scope
 }
 ```
 
@@ -187,32 +194,32 @@ Emitted for a **non-throwing** runtime error — a failure slothlet caught and c
 
 ```javascript
 {
-	apiPath: "plugins.count",
-	code: "WARNING_HOT_RELOAD_MERGE_PRIMITIVES",
+	path: ["plugins", "count"],
+	code: "WARNING_COLLISION_MERGE_PRIMITIVES",
 	message: "Cannot merge into primitive value…",
-	source: "addApi",
-	context: { apiPath: "plugins.count" },
-	moduleID: "plugins_xyz789",
+	source: "add",
+	details: { path: ["plugins", "count"] },
+	module: "plugins_xyz789",
 	error: SlothletError                     // The originating (non-thrown) error
 }
 ```
 
 ```javascript
 api.slothlet.lifecycle.on("impl:error", (data) => {
-	console.warn(`Handled runtime error at ${data.apiPath}:`, data.error);
+	console.warn(`Handled runtime error at ${data.path.join(".")}:`, data.error);
 });
 ```
 
 ### `materialized:complete`
 
-Emitted when all lazy-mode modules have been materialized. Requires `tracking: { materialization: true }` in config.
+Emitted when all lazy-mode modules have been materialized. Requires `loader.materialize` to be on (`true` or a function); without it nothing loads in the background and the event never fires. To be told without subscribing, give `loader.materialize` a function (see [A callback when everything is loaded](#a-callback-when-everything-is-loaded)).
 
 **Event data:**
 
 ```javascript
 {
 	total: 15,             // Total modules materialized
-	timestamp: 1708012345  // Unix timestamp (ms)
+	at: 1708012345         // When it completed (the instance clock, ms)
 }
 ```
 
@@ -235,13 +242,13 @@ Four events mark an instance coming up, going down, and being replaced by [`api.
 
 ```javascript
 // restart
-{ instanceID: "slothlet_…" }                                    // the instance being replaced
+{ instance: "slothlet_…" }                                      // the instance being replaced
 // shutdown
-{ instanceID: "slothlet_…", restart: true }                     // restart: false for a plain shutdown
+{ instance: "slothlet_…", restart: true }                       // restart: false for a plain shutdown
 // init
-{ instanceID: "slothlet_…", restart: true }                     // restart: false for the cold start
+{ instance: "slothlet_…", restart: true }                       // restart: false for the cold start
 // restarted
-{ instanceID: "slothlet_…", previousInstanceID: "slothlet_…" }
+{ instance: "slothlet_…", previous: "slothlet_…" }
 ```
 
 **Who receives them.** Each event reaches the subscribers of the instance it is emitted on. A restart builds the new instance from the original config and carries nothing runtime over, so:
@@ -255,8 +262,8 @@ To act once a restart has completed, either declare a `restarted` (or `init`) ha
 const api = await slothlet({
 	base: "./api",
 	lifecycle: {
-		restart: ({ instanceID }) => log(`restarting ${instanceID}`),
-		restarted: ({ instanceID, previousInstanceID }) => log(`${previousInstanceID} → ${instanceID}`)
+		restart: ({ instance }) => log(`restarting ${instance}`),
+		restarted: ({ instance, previous }) => log(`${previous} → ${instance}`)
 	}
 });
 
@@ -271,13 +278,13 @@ These fire from the module discovery + mount pipeline at `api.slothlet.api.modul
 
 ### `modules:discover-start`
 
-Emitted at the start of every `discover()` call (including the lazy-trigger call from `addModule(name)` when the cache is empty, and the chained call inside `addDiscovered()`).
+Emitted at the start of every `discover()` call (including the lazy-trigger call from `modules.add(name)` when the cache is empty, and the chained call inside `modules.add()`).
 
 **Event data:**
 
 ```javascript
 {
-	scanRoot: "/path/to/scan/root",  // The resolved scan root (string | string[] from options)
+	root: "/path/to/scan/root",      // options.root as given (string | string[])
 	options: { /* the full discover() options object */ }
 }
 ```
@@ -295,37 +302,37 @@ Emitted after `discover()` finishes walking the filesystem and replaces the disc
 }
 ```
 
-The `stale` array enables S3b reconciliation — the host can iterate it and call `removeModule()` on each to unmount packages that have been uninstalled from disk.
+The `stale` array enables S3b reconciliation — the host can iterate it and call `modules.remove()` on each to unmount packages that have been uninstalled from disk.
 
 ### `modules:mount-start`
 
-Emitted at the start of `addModule()`, `addModules()`, or `addDiscovered()`'s mount phase.
+Emitted at the start of a `modules.add()` mount phase (one module, a batch, or a discover run).
 
 **Event data:**
 
 ```javascript
 {
 	items: [ /* (string | DiscoverResult)[] — the input list */ ],
-	options: { /* the full options object: collisionMode, onFailure, concurrency, etc. */ }
+	options: { /* the full options object: collision, failure, concurrency, etc. */ }
 }
 ```
 
 ### `modules:mount-complete`
 
-Emitted once **per successfully mounted module**, immediately after the underlying `api.add()` resolves. Fires up to N times for `addModules` with N items — once per item that mounted cleanly. Failed mounts emit nothing on this channel. Whether failures surface elsewhere depends on `onFailure`:
+Emitted once **per successfully mounted module**, immediately after the underlying `api.add()` resolves. Fires up to N times for `modules.add` with N items — once per item that mounted cleanly. Failed mounts emit nothing on this channel. Whether failures surface elsewhere depends on `failure`:
 
-- **`onFailure: "best-effort"`** — every prior-success `modules:mount-complete` event still fires, plus the final `modules:loaded` payload carries a `failed[]` aggregate of every failure.
-- **`onFailure: "throw"` (default)** — every successful mount BEFORE the failing one still fires `modules:mount-complete`; the failure throws synchronously and `modules:loaded` is NOT emitted (see below).
-- **`onFailure: "rollback"`** — same as `throw`: prior successes' `modules:mount-complete` events still fired (they happened before the failure was known), then the failure triggers rollback + throws without emitting `modules:loaded`. Subscribers needing rollback awareness should listen for the thrown SlothletError, not for any lifecycle event.
+- **`failure: "best-effort"`** — every prior-success `modules:mount-complete` event still fires, plus the final `modules:loaded` payload carries a `failed[]` aggregate of every failure.
+- **`failure: "throw"` (default)** — every successful mount BEFORE the failing one still fires `modules:mount-complete`; the failure throws synchronously and `modules:loaded` is NOT emitted (see below).
+- **`failure: "rollback"`** — same as `throw`: prior successes' `modules:mount-complete` events still fired (they happened before the failure was known), then the failure triggers rollback + throws without emitting `modules:loaded`. Subscribers needing rollback awareness should listen for the thrown SlothletError, not for any lifecycle event.
 
 **Event data:**
 
 ```javascript
 {
-	name: "@org/some-module",        // packageName from package.json
+	package: "@org/some-module",     // package name from package.json
 	version: "1.4.2",                // semver from package.json
-	mountPath: "drivers.foo",        // effective mountPath; versioned (e.g., "v1.drivers.foo") when multi-version routing applied
-	moduleID: "drivers.foo_abc123"   // moduleID returned by the underlying api.add()
+	mount: ["drivers", "foo"],       // effective mount (segments); versioned (e.g. ["v1", "drivers", "foo"]) when multi-version routing applied
+	module: "drivers.foo_abc123"     // module id returned by the underlying api.add()
 }
 ```
 
@@ -333,11 +340,11 @@ Under `concurrency > 1` event order tracks **completion order**, not start order
 
 ### `modules:loaded`
 
-Emitted after the helper's entire async chain settles. Fires **exactly once on the happy path** — at the end of every `addModule`, `addModules`, or `addDiscovered` call that returns normally. Does **NOT** fire when the call throws:
+Emitted after the helper's entire async chain settles. Fires **exactly once on the happy path** — at the end of every `modules.add` call that returns normally. Does **NOT** fire when the call throws:
 
-- **`onFailure: "throw"` (default)** — fires only if every mount succeeded. The first failure rethrows synchronously and skips this emit.
-- **`onFailure: "rollback"`** — fires only if every mount succeeded. Any failure triggers a best-effort rollback and rethrows; this emit is skipped.
-- **`onFailure: "best-effort"`** — always fires; the payload includes the `failed[]` aggregate alongside `mounted[]`.
+- **`failure: "throw"` (default)** — fires only if every mount succeeded. The first failure rethrows synchronously and skips this emit.
+- **`failure: "rollback"`** — fires only if every mount succeeded. Any failure triggers a best-effort rollback and rethrows; this emit is skipped.
+- **`failure: "best-effort"`** — always fires; the payload includes the `failed[]` aggregate alongside `mounted[]`.
 
 Hosts that need a "settled regardless of outcome" signal should either use `best-effort` and inspect `failed[]`, or wrap the call in their own try/catch.
 
@@ -346,8 +353,7 @@ Hosts that need a "settled regardless of outcome" signal should either use `best
 ```javascript
 {
 	mounted: [ /* MountResult[] for every successful mount */ ],
-	failed?: [ /* FailureEntry[] with { item, error } — only present when onFailure was "best-effort" */ ],
-	stale?: [ /* MountResult[] — only present on addDiscovered chains that ran discover() */ ]
+	failed?: [ /* FailureEntry[] with { item, error } — only present when failure was "best-effort" */ ]
 }
 ```
 
@@ -361,9 +367,9 @@ Useful as a "module system is ready" signal for hosts that gate downstream work 
 
 ```javascript
 const api = await slothlet({
-	dir: "./api",
+	base: "./api",
 	mode: "lazy",
-	tracking: { materialization: true }
+	loader: { materialize: true }
 });
 
 showLoadingSpinner();
@@ -377,7 +383,7 @@ api.slothlet.lifecycle.on("materialized:complete", () => {
 
 ```javascript
 api.slothlet.lifecycle.on("impl:changed", (data) => {
-	notifyUser(`Module ${data.apiPath} was reloaded`);
+	notifyUser(`Module ${data.path.join(".")} was reloaded`);
 });
 ```
 
@@ -387,15 +393,15 @@ api.slothlet.lifecycle.on("impl:changed", (data) => {
 const moduleRegistry = new Map();
 
 api.slothlet.lifecycle.on("impl:created", (data) => {
-	moduleRegistry.set(data.apiPath, {
-		moduleID: data.moduleID,
-		filePath: data.filePath,
+	moduleRegistry.set(data.path.join("."), {
+		module: data.module,
+		file: data.file,
 		loadedAt: Date.now()
 	});
 });
 
 api.slothlet.lifecycle.on("impl:removed", (data) => {
-	moduleRegistry.delete(data.apiPath);
+	moduleRegistry.delete(data.path.join("."));
 });
 ```
 
@@ -407,12 +413,12 @@ Because `impl:created` fires post-placement for the winning contribution only (#
 
 A **routine** is a named cross-module runnable: every mounted module that exports a function matching a configured routine name is stacked into one callable at its exact composed api path, plus a root cascade that runs every matching contribution anywhere. This solves a gap ordinary composition leaves open — when a coordinator and its contributors all mount into the same namespace (e.g. several packages each contributing to `self.auth`), an ordinary leaf named `initialize` recursive-merges to a single first-writer and silently drops every other contributor. A configured routine name stacks them instead.
 
-Routines are not hooks (`api.slothlet.hook.*` intercepts calls), not phases (a hook's before/primary/after phases, or module discovery's own phases), and not the `impl:*` lifecycle event emitter (`api.slothlet.lifecycle`). They compose with all three — a routine contributor is an ordinary exported function, discoverable like any other leaf and callable directly in addition to being stacked. Routines also fully replace the legacy [`collectLifecycleHooks`](#construction-time-subscription-lifecycle-config-option) option's internals — see [Relationship to `collectLifecycleHooks`](#relationship-to-collectlifecyclehooks) below.
+Routines are not hooks (`api.slothlet.hook.*` intercepts calls), not phases (a hook's before/primary/after phases, or module discovery's own phases), and not the `impl:*` lifecycle event emitter (`api.slothlet.lifecycle`). They compose with all three — a routine contributor is an ordinary exported function, discoverable like any other leaf and callable directly in addition to being stacked. To run nested `shutdown`/`destroy` leaves anywhere in the tree, see [Nested `shutdown`/`destroy` leaves anywhere in the tree](#nested-shutdowndestroy-leaves-anywhere-in-the-tree) below.
 
 ### Configuring routines
 
 ```javascript
-const api = await slothlet({ dir: "./api", routines: [...slothlet.defaults.routines, "launch"] });
+const api = await slothlet({ base: "./api", routines: { entries: [...slothlet.defaults.routines, "launch"] } });
 ```
 
 Slothlet ships two built-in defaults, exposed as `slothlet.defaults.routines`:
@@ -425,10 +431,10 @@ Slothlet ships two built-in defaults, exposed as `slothlet.defaults.routines`:
 Passing `routines` at all **replaces** the built-ins — that is the off switch:
 
 ```javascript
-slothlet({ dir: "./api", routines: [...slothlet.defaults.routines, "launch"] }); // extend the defaults
-slothlet({ dir: "./api", routines: ["launch"] }); // REPLACE — no initialize/shutdown
-slothlet({ dir: "./api", routines: [] }); // disable every routine
-slothlet({ dir: "./api" }); // omit routines — keeps the built-in defaults
+slothlet({ base: "./api", routines: { entries: [...slothlet.defaults.routines, "launch"] } }); // extend the defaults
+slothlet({ base: "./api", routines: { entries: ["launch"] } }); // REPLACE — no initialize/shutdown
+slothlet({ base: "./api", routines: { entries: [] } }); // disable every routine
+slothlet({ base: "./api" }); // omit routines — keeps the built-in defaults
 ```
 
 `slothlet.defaults.routines` is frozen (at every level) and derived from the exact constant the runtime reads — spread it to extend, or filter it to drop one default while keeping the other:
@@ -458,7 +464,7 @@ Each array entry normalizes to `{ name, mode, recursive, order, cascade }`:
 
 - **`"manual"`** (default when omitted) — never runs automatically; the host calls it explicitly.
 
-Every mode's wrapping happens unconditionally — `self.<path>()` is always directly callable regardless of mode. The _automatic_ firing at the mode's trigger point (compose end for `startup`, dispose for `shutdown`/`destroy`) is gated by [`autoRoutines`](#autoroutines) (`false` by default). Whether **more than one** contributor at the same exact api path actually runs is a separate, independent question — see [`stackRoutines`](#stackroutines) below; by default only the single contributor that actually owns that path (per whatever `collisionMode` resolved) runs, matching how every other part of the framework has always worked.
+Every mode's wrapping happens unconditionally — `self.<path>()` is always directly callable regardless of mode. The _automatic_ firing at the mode's trigger point (compose end for `startup`, dispose for `shutdown`/`destroy`) is gated by [`routines.auto`](#routinesauto) (`true` by default). Whether **more than one** contributor at the same exact api path actually runs is a separate, independent question — see [`routines.stack`](#routinesstack) below; by default every contributor at that path runs, in mount order.
 
 ### Name matching: bare, mount-relative, recursive, or root-anchored
 
@@ -466,11 +472,13 @@ A routine's `name` is resolved **relative to a mount point** by default — a mo
 
 | Name form                                                                                                  | Resolves against                                                                                          | Lazy-mode materialization cost                                                                                                                                                                                                                                                                                                        |
 | ---------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Bare, e.g. `"initialize"`                                                                                  | Each mount's own top level only                                                                           | **None** — a mount's own top level is always constructed eagerly, in either mode                                                                                                                                                                                                                                                      |
+| Bare, e.g. `"initialize"`                                                                                  | Each mount's own top level only                                                                           | Only the node it names at each mount's top level: the node is always built, but a lazy node's own value (a callable folder's function) is loaded before the routine runs, or before its cascade takes that node's place at the root                                                                                                   |
 | Dotted, mount-relative (`recursive: false`, default), e.g. `"admin.initialize"`, `"admin.*"`, `"a{a,b}.*"` | The pattern's matches within each mount, relative to that mount                                           | Only what each `.`-segment actually requires: a literal segment resolves that one child; a single-level wildcard (`*`/`?`) enumerates just its own level; `{}` expands into concrete alternatives up front (`"a{a,b}.*"` walks only `aa`/`ab`, never a sibling `ac`) — none of these touch a sibling subtree the pattern doesn't name |
 | Dotted, mount-relative, containing `**` (`recursive: false`), e.g. `"admin.**"`                            | Every depth under wherever the pattern's literal/wildcard prefix narrows to                               | That prefix's own subtree, in full — but never a sibling of that prefix (`"admin.**"` walks all of `admin`, never an unrelated `quiet` under the same mount)                                                                                                                                                                          |
 | Mount-relative, `recursive: true`, or a `!`-negated name                                                   | The name at any depth within each mount's own subtree (`recursive: true`), or a computed complement (`!`) | That mount's entire subtree — unbounded from the mount's own root, not from any narrowing prefix                                                                                                                                                                                                                                      |
 | Root-anchored (`^` prefix), e.g. `"^ext.*.initialize"`                                                     | The full absolute api path, crossing mount boundaries                                                     | The entire composed tree (not mount-scoped at all)                                                                                                                                                                                                                                                                                    |
+
+A `**` that is a whole segment matches any number of segments, none included, as in hooks and permission rules: `"admin.**"` also matches a function at `admin` itself, and `"^ext.**.initialize"` also matches `ext.initialize`.
 
 `recursive` has no effect on a `^`-anchored name — that form already expresses depth directly via `*` vs `**` in the pattern.
 
@@ -494,20 +502,20 @@ A routine name is just an ordinary export otherwise — it can sit alongside nor
 
 ### Stacking and the root cascade
 
-At any exact composed api path where a mounted module's contribution resolves, `self.<path>` is that contribution's callable. When **[`stackRoutines`](#stackroutines) is `true`** and more than one module's contribution resolves to the identical api path, `self.<path>` becomes **one callable** that runs every contributor's function in registration order, sequentially, awaiting each — instead of just the single module that would otherwise win the path under the instance's `collisionMode`:
+At any exact composed api path where a mounted module's contribution resolves, `self.<path>` is that contribution's callable. When **[`routines.stack`](#routinesstack) is `true`** (the default) and more than one module's contribution resolves to the identical api path, `self.<path>` becomes **one callable** that runs every contributor's function in registration order, sequentially, awaiting each — instead of just the single module that would otherwise win the path under the instance's collision mode:
 
 ```javascript
 // package A mounts at ["auth"], package B mounts at ["auth"] too — both export `initialize`
-const api = await slothlet({ dir: "./api", stackRoutines: true });
+const api = await slothlet({ base: "./api" });
 await api.slothlet.api.add(["auth"], "./plugins/auth-core/api");
 await api.slothlet.api.add(["auth"], "./plugins/auth-audit/api");
 
 await api.auth.initialize(); // runs auth-core's initialize, then auth-audit's — both, in mount order
 ```
 
-Without `stackRoutines: true` (the default), the same setup runs only whichever contribution actually owns `auth.initialize` on the real composed tree — the other module's contribution is never invoked, matching ordinary (non-routine) collision behavior everywhere else in the framework.
+With `routines.stack: false`, the same setup runs only whichever contribution actually owns `auth.initialize` on the real composed tree — the other module's contribution is never invoked, matching ordinary (non-routine) collision behavior everywhere else in the framework.
 
-Slothlet also generates a **root cascade** for each configured routine — `api.<name>()` (equivalently `self.<name>()` inside a module; a dotted or `^`-prefixed name is reachable via bracket notation, e.g. `api["admin.initialize"]`) — that runs every matching contribution, grouped by exact path, the groups ordered per the routine's `order`. The cascade is installed **only** at the root `api.<name>` — it is not mirrored onto the `api.slothlet.*` control namespace (the `shutdown`/`destroy` dispose builtins, which do live at `api.slothlet.shutdown`/`destroy`, are a separate framework surface). Contributions at distinct paths are always unconditional; a group whose contributors collide at the identical path follows the same `stackRoutines` rule described above — all of them run together only with `stackRoutines: true`, otherwise just the current owner at that path runs:
+Slothlet also generates a **root cascade** for each configured routine — `api.<name>()` (equivalently `self.<name>()` inside a module; a dotted or `^`-prefixed name is reachable via bracket notation, e.g. `api["admin.initialize"]`) — that runs every matching contribution, grouped by exact path, the groups ordered per the routine's `order`. The cascade is installed **only** at the root `api.<name>` — it is not mirrored onto the `api.slothlet.*` control namespace (the `shutdown`/`destroy` dispose builtins, which do live at `api.slothlet.shutdown`/`destroy`, are a separate framework surface). Contributions at distinct paths are always unconditional; a group whose contributors collide at the identical path follows the same `routines.stack` rule described above — all of them run together with `routines.stack: true` (the default); with `false` just the current owner at that path runs:
 
 - **`order: "mount"`** (default for `startup`/`manual`) — groups run in first-appearance registration order.
 - **`order: "depth"`** (default for `shutdown`/`destroy`) — groups run deepest-path-first; contributors colliding at the identical path still run in registration order relative to each other, since depth can't distinguish those.
@@ -523,7 +531,7 @@ A later `api.slothlet.api.add()` re-derives every stacked callable (new contribu
 The root cascade is a **run-all**: `api.<name>()` fires every matching contribution. That is exactly wrong for a **per-entity** lifecycle — a namespace co-owned by several first-class packages, each contributing its own function at the _same_ leaf, where the host must invoke **exactly one** contributor (the one belonging to the entity being activated), never all of them. Two config-level controls cover that:
 
 - **`cascade: false`** on a routine entry (default `true`) — do not create the root `api.<name>()` run-all cascade at all. Use it when a run-all would be a bug.
-- **`api.<path>.<name>.for(key)`** — invoke the single contributor whose **moduleID** is `key`, run in that contributor's own extent + identity (ambient `self.*` and permission checks resolve against _that_ contributor), with the call's arguments passed straight through. It deliberately **bypasses the `stackRoutines` owner-filter**: selecting a specific co-owner is the whole point, so a contributor that would lose the shared-path collision still runs when addressed by key. An unknown `key` throws `INVALID_ARGUMENT`.
+- **`api.<path>.<name>.for(key)`** — invoke the single contributor whose **moduleID** is `key`, run in that contributor's own extent + identity (ambient `self.*` and permission checks resolve against _that_ contributor), with the call's arguments passed straight through. It deliberately **bypasses the `routines.stack` owner-filter**: selecting a specific co-owner is the whole point, so a contributor that would lose the shared-path collision still runs when addressed by key. An unknown `key` throws `INVALID_ARGUMENT`.
 - **`api.<path>.<name>.contributors`** — the moduleIDs present at that stacked path, in registration order, so a host can discover which co-owners it may address (symmetry with `versioning.list(path)`).
 
 Worked example — two packages co-own `self.storage`, each with its own `activate` at `self.storage.activate` (moduleIDs `"A"` and `"B"`):
@@ -531,11 +539,12 @@ Worked example — two packages co-own `self.storage`, each with its own `activa
 ```javascript
 const api = await slothlet({
 	base: "./api",
-	routines: [
-		{ name: "activate", mode: "manual", cascade: false },
-		{ name: "deactivate", mode: "manual", cascade: false }
-	],
-	stackRoutines: true
+	routines: {
+		entries: [
+			{ name: "activate", mode: "manual", cascade: false },
+			{ name: "deactivate", mode: "manual", cascade: false }
+		]
+	}
 });
 
 api.activate; // → undefined        (no run-all cascade — cascade:false)
@@ -549,7 +558,7 @@ await api.storage.deactivate.for("B")(ctx); // runs ONLY B.deactivate(ctx)
 
 ### Execution extent
 
-Every contribution runs **exactly as if it had been called directly** — inside the instance's own extent, attributed to its own module's wrapper. So ambient `self.*` inside a routine body resolves, and a permission check on a `self.*` call is evaluated against the contributing module's identity, never a shared slot or the instance root. This holds whether the contribution is invoked per-path (`api.<path>.<name>()`) or through the root cascade (`api.<name>()`), so a cascade needs no `api.slothlet.run(...)` wrap to make `self.*` resolve. A routine fans a call out to every matching contribution without changing the semantics of any one of them. (Fixed in v3.16.2: the root cascade previously ran contributors with no active extent, so a contributor reaching `self.*` threw `RUNTIME_NO_ACTIVE_CONTEXT_SELF` — see [#394](https://github.com/CLDMV/slothlet/pull/394).)
+Every contribution runs **exactly as if it had been called directly** — inside the instance's own extent, attributed to its own module's wrapper. So ambient `self.*` inside a routine body resolves, and a permission check on a `self.*` call is evaluated against the contributing module's identity, never a shared slot or the instance root. This holds whether the contribution is invoked per-path (`api.<path>.<name>()`) or through the root cascade (`api.<name>()`), so a cascade needs no `api.slothlet.context.run(...)` wrap to make `self.*` resolve. A routine fans a call out to every matching contribution without changing the semantics of any one of them. (Fixed in v3.16.2: the root cascade previously ran contributors with no active extent, so a contributor reaching `self.*` threw `CONTEXT_NOT_ACTIVE_SELF` — see [#394](https://github.com/CLDMV/slothlet/pull/394).)
 
 ### Errors: best-effort, aggregated
 
@@ -560,74 +569,87 @@ try {
 	await api.auth.initialize();
 } catch (error) {
 	// error.code === "ROUTINE_FAILED"
-	// error.context.count === 2                                // total failures
-	// error.context.failures === [{ apiPath, moduleID }, ...]  // every failure, in order
-	// error.context.apiPath / .moduleID                        // the FIRST failure, for quick access
+	// error.details.count === 2                                // total failures
+	// error.details.failures === [{ path, module, error }, ...]  // every failure, in order (path as segments)
+	// error.details.path / .module                              // the FIRST failure, for quick access
 	// error.cause is the first failure's own thrown error
 }
 ```
 
-### `autoRoutines`
+### `routines.auto`
 
-**Type**: `boolean` · **Default**: `false`
+**Type**: `boolean` · **Default**: `true`
 
-TEMPORARY v3-compat gate: a project upgrading to a slothlet version carrying routines sees no behavior change by default — a pre-existing nested leaf that happens to share a routine's name (e.g. `shutdown`) stays stacked and directly callable, but does not start auto-firing. Set `true` to enable automatic firing (`startup` at compose end, `shutdown`/`destroy` at dispose). Planned to default to `true` in v4, at which point `collectLifecycleHooks` (below) is removed.
+`startup`-mode routines run at compose end (`await slothlet(...)` resolves after them) and `shutdown`/`destroy`-mode routines run at dispose. With the default entries, every mount's top-level `initialize` export runs at startup and every mount's top-level `shutdown` export runs at shutdown. Every configured routine is stacked and directly callable whatever this is set to; set `false` to turn the automatic firing off and call the routines yourself.
 
 #### Root `shutdown`/`destroy` exports at teardown
 
 A function exported at the api root as `shutdown` or `destroy` is also the root teardown hook. Each teardown entry point calls it at most once:
 
-| Entry point               | `autoRoutines: true`                                                                                               | `autoRoutines: false`                                                       |
+| Entry point               | `routines.auto: true`                                                                                              | `routines.auto: false`                                                      |
 | ------------------------- | ------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------- |
 | `api.shutdown()`          | Runs the `shutdown`-mode routines; the root `shutdown` export runs once, as a routine contribution                 | Calls the root `shutdown` export once, as the hook                          |
 | `api.destroy()`           | Runs the `destroy`-mode routines, then `api.shutdown()`; each root export runs once                                | Calls the root `destroy` export, then the root `shutdown` export, once each |
 | `api.slothlet.shutdown()` | Runs the `shutdown`-mode routines; the root `shutdown` export runs once, as a routine contribution                 | **Framework-only: never calls the root `shutdown` export**                  |
 | `api.slothlet.restart()`  | Tears the old instance down like `api.shutdown()`; the root `shutdown` export runs once, as a routine contribution | Calls the root `shutdown` export once, as the hook                          |
 
-`api.slothlet.shutdown()` is the framework's own teardown. It runs the `shutdown`-mode routines (so with `autoRoutines: true` a root `shutdown` export runs as a contribution), but it never calls the root hooks itself. With `autoRoutines: false` it releases the instance without running any module code; use `api.shutdown()` when the root `shutdown` export must run.
+`api.slothlet.shutdown()` is the framework's own teardown. It runs the `shutdown`-mode routines (so with `routines.auto: true` a root `shutdown` export runs as a contribution), but it never calls the root hooks itself. With `routines.auto: false` it releases the instance without running any module code; use `api.shutdown()` when the root `shutdown` export must run.
 
-### `stackRoutines`
+### `routines.stack`
 
-**Type**: `boolean` · **Default**: `false`
+**Type**: `boolean` · **Default**: `true`
 
-Whether two or more modules' contributions colliding at the exact same composed api path all run, or only the single contribution that actually owns that path (per the instance's `collisionMode`) runs. `false` by default — matching ordinary (non-routine) collision behavior everywhere else in the framework, where a colliding key always resolves to one winner.
+Whether two or more modules' contributions colliding at the exact same composed api path all run (the default, in mount order), or only the single contribution that actually owns that path (per the instance's `api.collision.mode`) runs. Set `false` to match ordinary (non-routine) collision behavior, where a colliding key resolves to one winner.
 
-This is **deliberately independent of `collisionMode`** — it is its own flag, not a side effect of `merge`/`replace`/any other collision mode. A module that loses a collision, under any `collisionMode`, does not run via the routine system unless `stackRoutines: true` is set explicitly. Set `true` to let every contributor at a shared path run (see [Stacking and the root cascade](#stacking-and-the-root-cascade) above for the mechanics and an example).
+This is **deliberately independent of the collision mode** — it is its own flag, not a side effect of `merge`/`replace`/any other collision mode. With `routines.stack: false`, a module that loses a collision, under any collision mode, does not run via the routine system (see [Stacking and the root cascade](#stacking-and-the-root-cascade) above for the mechanics and an example).
 
-The root cascade (`api.<name>()`) runs every matching contribution across **distinct** api paths regardless of this flag. Where two or more contributions land on the **identical** api path, the cascade applies the same `stackRoutines` filtering a direct call at that path would: only the current owner's contribution runs there by default, and every contributor at that shared path runs when `stackRoutines: true`.
+The root cascade (`api.<name>()`) runs every matching contribution across **distinct** api paths regardless of this flag. Where two or more contributions land on the **identical** api path, the cascade applies the same `routines.stack` filtering a direct call at that path would: every contributor at that shared path runs by default, and only the current owner's contribution runs there when `routines.stack: false`.
 
-### Relationship to `collectLifecycleHooks`
+### Nested `shutdown`/`destroy` leaves anywhere in the tree
 
-The legacy [`collectLifecycleHooks`](#construction-time-subscription-lifecycle-config-option) option (a boolean, opt-in nested `shutdown`/`destroy` discovery) is now implemented entirely in terms of routines rather than a separate parallel mechanism. Setting it `true` does three things:
+To run a literally-named `shutdown`/`destroy` leaf anywhere in the tree, crossing every mount boundary, deepest first, configure root-anchored routines in place of the default `shutdown` one:
 
-1. Sets the effective `autoRoutines` to `true` (unless `autoRoutines` is given explicitly, which always wins).
-2. Injects two implicit routines reproducing its exact historical scope: `{ name: "^**.shutdown", mode: "shutdown", order: "depth" }` and `{ name: "^**.destroy", mode: "destroy", order: "depth" }` — root-anchored, so they match a literally-named `shutdown`/`destroy` leaf anywhere in the tree, crossing every mount boundary, deepest-first.
-3. Drops any existing `shutdown`/`destroy`-mode routine (including the built-in `shutdown` default) — a root-anchored routine of the same mode strictly subsumes a narrower mount-relative one, and keeping both would double-invoke the same contributor.
+```javascript
+const api = await slothlet({
+	base: "./api",
+	routines: {
+		entries: [
+			{ name: "initialize", mode: "startup" },
+			{ name: "^**.shutdown", mode: "shutdown", order: "depth" },
+			{ name: "^**.destroy", mode: "destroy", order: "depth" }
+		]
+	}
+});
+```
 
-`collectLifecycleHooks` is deprecated in favor of configuring `routines`/`autoRoutines` directly, and will be removed in v4.
+Keep the mount-relative `shutdown` default out of the list: a root-anchored routine of the same mode already matches everything it would, and keeping both would invoke the same contributor twice.
 
 ---
 
 ## Module Type Inspection
 
-In eager mode, `typeof api.math` accurately reflects the underlying type (`"object"` for object exports, `"function"` for function exports). In **lazy mode this is not the case** - the proxy target is always a function to make namespaces callable, so `typeof` always returns `"function"` regardless of what the module exports.
+In eager mode, `typeof api.math` reflects the underlying type (`"object"` for object exports, `"function"` for function exports). In **lazy mode a node that has not loaded yet** is always a function, because a Proxy's form is fixed when it is made and a folder may turn out callable: `typeof` returns `"function"` until the node loads. Once it has loaded, a node holding no function is rebuilt on the form eager gives it, so `typeof api.math` is `"object"`, `Function.prototype.toString` refuses it and calling it throws a `TypeError`, as in eager mode. A reference taken before the load (`const math = api.math`) keeps the function form and reads through to the loaded node; read the node again, or take it from `await api.math`, to get the loaded form.
 
-Use `__type` and `api.slothlet.types` symbols to check actual module state.
+Use `api.slothlet.node(target).type` and the `api.slothlet.types` symbols to check a node's state without depending on whether it has loaded.
 
-### `__type` property
+### `node(target).type`
 
 ```javascript
-const api = await slothlet({ dir: "./api", mode: "lazy" });
+const api = await slothlet({ base: "./api", mode: "lazy" });
 
-// typeof is always "function" in lazy mode (proxy target)
+// Before the node loads, typeof is "function" in lazy mode (proxy target)
 console.log(typeof api.math); // "function" - even if math module exports an object
+// once loaded: typeof (await api.math) === "object" for an object export
 
-// __type returns the real implementation type
-console.log(api.math.__type); // api.slothlet.types.UNMATERIALIZED  (not loaded yet)
+// node().type reports the node's state, then its kind
+console.log(api.slothlet.node(api.math).type); // api.slothlet.types.UNMATERIALIZED  (not loaded yet)
 // api.slothlet.types.IN_FLIGHT        (loading)
-// "object"                            (loaded, object export)
-// "function"                          (loaded, function export)
+// "namespace"                         (loaded, a node with members)
+// "function"                          (loaded, a callable with no members)
+// "data"                              (loaded, a plain value)
 ```
+
+Reading the report never starts loading a lazy node; reading or calling a member of it does.
 
 ### `api.slothlet.types` symbols
 
@@ -636,45 +658,95 @@ console.log(api.math.__type); // api.slothlet.types.UNMATERIALIZED  (not loaded 
 | `api.slothlet.types.UNMATERIALIZED` | Module not yet loaded; materialization not started |
 | `api.slothlet.types.IN_FLIGHT`      | Materialization in progress                        |
 
-Once materialized, `__type` returns a standard `typeof` string (`"object"`, `"function"`, etc.).
+Once materialized, `type` is `"function"`, `"data"` or `"namespace"`, and `callable` says whether the node can be called (a callable folder is a `"namespace"` with `callable: true`).
 
 ```javascript
 import slothlet from "@cldmv/slothlet";
 
-const api = await slothlet({ dir: "./api", mode: "lazy" });
+const api = await slothlet({ base: "./api", mode: "lazy" });
 
 const { UNMATERIALIZED, IN_FLIGHT } = api.slothlet.types;
+const { type } = api.slothlet.node(api.math);
 
-if (api.math.__type === UNMATERIALIZED) {
+if (type === UNMATERIALIZED) {
 	console.log("Not loaded yet");
-} else if (api.math.__type === IN_FLIGHT) {
+} else if (type === IN_FLIGHT) {
 	console.log("Loading...");
 } else {
-	console.log("Loaded, type:", api.math.__type); // "object" or "function"
+	console.log("Loaded, type:", type); // "namespace", "function" or "data"
 }
 ```
+
+### A kept folder that loads as a primitive
+
+A folder whose only file is named like it and exports a primitive by default (`zz/count/count.mjs` with `export default 7`) reads as that value once loaded. A reference to the folder's node taken before it loaded is an object, and JavaScript cannot turn an object into a primitive, so that reference stays an object: `typeof kept` is `"function"` and `kept === 7` is false. Everything else answers as the value: `await kept` gives `7`, `kept.valueOf()`, `String(kept)`, `` `${kept}` ``, `kept + 1`, `kept == 7` and `JSON.stringify(kept)` give what they give for `7`, the value's own methods run on it (`kept.toFixed(1)`), and `api.slothlet.node(kept).type` is `"data"`. A fresh read, `api.zz.count`, is the plain `7`. A module the rules deny the folder is refused each of these, the `await` included.
+
+```javascript
+const kept = api.zz.count; // the folder has not loaded yet
+await kept; // 7
+`${kept}`; // "7"
+api.slothlet.node(kept).type; // "data"
+api.zz.count === 7; // true
+```
+
+---
+
+## Changes Before a Node Loads
+
+In lazy mode, reading a member of a node that has not loaded yet hands back a stand-in for it until it loads. A change made through the stand-in is made on the node:
+
+- **Assigning, defining, or deleting a member, or setting the prototype**, is checked at once, by the same write rules and ownership checks a loaded node applies (see [PERMISSIONS.md](PERMISSIONS.md#write-permissions)), and refused there exactly as it would be in eager mode. A change that passes is made on the node when it loads, in the order the changes were made, as the code that made it and in the context it was made in (the `context.run()` data a setter reads), whoever's access loads the node. Any `await` of the node, or call through it, sees the change. A stand-in kept after its node has loaded makes the change at once.
+- **Freezing, sealing, or closing the node to extension** closes the stand-in at once, so a later change through it fails as it would on the closed object: an assignment to a frozen stand-in, or a new member defined on a closed one, is refused there and then. When the node loads it is closed the same way, after the changes made before the close, as the code that closed it and in the context it was closed in; if several stand-ins for the node were closed, the node ends up in the strongest state any of them reached.
+- **Assigning a callable `then`** is refused at once with `API_MEMBER_THEN_RESERVED`, as on any node.
+
+```javascript
+const api = await slothlet({ base: "./api", mode: "lazy" });
+
+api.holder.deep.inner.planted = 1; // checked now, made when `inner` loads
+const inner = await api.holder.deep.inner;
+inner.planted; // 1, as in eager mode
+
+Object.freeze(api.other.node); // the stand-in is frozen now
+api.other.node.late = 1; // refused: the stand-in is frozen
+Object.isFrozen(await api.other.node); // true once it loads
+```
+
+### Reloads
+
+`api.slothlet.api.reload()` first loads the nodes that hold changes queued at or below the reloaded module's mount path (or the reloaded path), so each change is made, or refused and reported, before the reload rebuilds the module. From then on it is a change made on a loaded node: in lazy mode a module reload builds fresh nodes, and changes made on the old ones, queued or not, do not carry over (eager mode keeps them). `api.slothlet.reload()` of the whole instance drops queued changes and refusals, as eager mode drops the changes made on the nodes it replaces.
+
+### What a stand-in reports before the node loads
+
+A stand-in answers `in` and `Object.getOwnPropertyDescriptor()` for a member the code asking assigned or defined through a stand-in for that node, until it deletes it again, as the node will once it loads: a module sees what any of its functions queued, and the host what host code queued. A member defined non-configurable through the stand-in reads as defined. It does not know what the module exports until the module loads, so `Object.keys()` and `in` for the module's own members only answer correctly after an `await`. A change another module queued is that module's: it shows on the node once it loads, read through the node's own permission checks, not through this reader's stand-in.
+
+A queued change is checked again when it is made, as the code that queued it. In eager mode it would already have been made, so a change that no longer passes by then is refused and reported as below: one queued by a module that was removed before the node loaded, or one that a write rule added after it was queued now denies. This fails closed on purpose.
+
+### A refused change is reported late
+
+Some changes depend on what the module exports: assigning a member that only has a getter, or writing below a path the module does not have. In eager mode the assignment itself throws. In lazy mode the shape is only known once the node loads, after the assignment has returned. The change is then dropped. It is always reported by a `WARNING_LAZY_WRITE_REFUSED` warning naming it, as soon as it is refused, unless the instance is `silent`. It is also reported by a rejection when an `await` of the node, or a call through it, goes through a stand-in for the node before the node is replaced: the first such `await` or call rejects with `LAZY_WRITE_REFUSED`, whose `cause` is the error the change raised, and the ones after it are answered as usual. The loaded node itself never changes because of a refusal: reached directly (after it loaded through a sibling or `api.add`), it reads, awaits and calls as usual. Reloading the node or the whole instance, removing its module, or shutting the instance down drops a refusal not yet delivered. A change made through a stand-in closed to extension, adding a member the loaded node does not have, is refused this way too. If a node fails to load, the changes queued for it are dropped with it, and the awaits fail with the load error as they would without them.
+
+```javascript
+api.config.limits.max = 10; // `limits` exports `max` as a getter only; no error yet
+await api.config.limits; // rejects: LAZY_WRITE_REFUSED, cause: TypeError
+```
+
+To get the refusal where the change is made, await the node before changing it.
 
 ---
 
 ## Background Materialization
 
-The `tracking.materialization` config option (or the `backgroundMaterialize` shorthand) causes lazy-mode modules to start loading in the background immediately after the API is initialized, rather than waiting for first access.
+The `loader.materialize` config option causes lazy-mode modules to start loading in the background immediately after the API is initialized, rather than waiting for first access. Each lazy node starts its own load one macrotask after it is built, through the instance's `clock.set` when one is given (see [CONFIGURATION.md](CONFIGURATION.md#clock)).
+
+`loader.materialize` is the only switch for this. v3 also had `tracking: { materialization: true }` (and `tracking: true`), which did the same thing; v4 removed it, and passing it throws `INVALID_CONFIG_UNKNOWN_KEY` (see [MIGRATION.md](MIGRATION.md)).
 
 ### Configuration
 
 ```javascript
-// Recommended: use tracking.materialization
 const api = await slothlet({
-	dir: "./api",
+	base: "./api",
 	mode: "lazy",
-	tracking: { materialization: true }
-});
-
-// Shorthand: backgroundMaterialize
-const api = await slothlet({
-	dir: "./api",
-	mode: "lazy",
-	backgroundMaterialize: true
+	loader: { materialize: true }
 });
 ```
 
@@ -683,37 +755,53 @@ const api = await slothlet({
 **Without background materialization (default):**
 
 ```javascript
-const api = await slothlet({ dir: "./api", mode: "lazy" });
+const api = await slothlet({ base: "./api", mode: "lazy" });
 
 // Modules are proxies - not loaded
-console.log(api.math.__type); // UNMATERIALIZED
+console.log(api.slothlet.node(api.math).type); // UNMATERIALIZED
 
 // First call triggers loading (slightly slower)
 const result = await api.math.add(2, 3);
 
 // Module is now loaded
-console.log(api.math.__type); // "object"
+console.log(api.slothlet.node(api.math).type); // "namespace"
 ```
 
 **With background materialization:**
 
 ```javascript
 const api = await slothlet({
-	dir: "./api",
+	base: "./api",
 	mode: "lazy",
-	tracking: { materialization: true }
+	loader: { materialize: true }
 });
 
 // Modules are loading in background - may already be IN_FLIGHT or loaded
-console.log(api.math.__type); // "object" (if fast enough) or IN_FLIGHT
+console.log(api.slothlet.node(api.math).type); // "namespace" (if fast enough) or IN_FLIGHT
 
 // Wait for all modules to finish loading
 await api.slothlet.materialize.wait();
 
 // All modules guaranteed loaded
-console.log(api.math.__type); // "object"
+console.log(api.slothlet.node(api.math).type); // "namespace"
 const result = await api.math.add(2, 3); // Fast - no loading delay
 ```
+
+### A callback when everything is loaded
+
+Give `loader.materialize` a function instead of `true`. It turns background materialization on and is called once, with `{ total, timestamp }` (the `materialized:complete` event data), when every lazy module has loaded. The `materialized:complete` event fires as well.
+
+```javascript
+const api = await slothlet({
+	base: "./api",
+	mode: "lazy",
+	loader: {
+		materialize: ({ total }) => console.log(`${total} modules loaded`)
+	}
+});
+```
+
+When everything has already loaded by the time the instance finishes building (always so in eager mode, where `total` is `0`), the function is called at once, before `await slothlet(...)` resolves. It runs once per instance: a module added later reopens `api.slothlet.materialize.wait()` but does not call it again; a restart builds a new instance and calls it again. What it throws, or a promise it returns rejects with, is reported as a `WARNING_LIFECYCLE_HANDLER_ERROR` warning, as for a failing event handler.
 
 ### `api.slothlet.materialize.wait()`
 
@@ -728,13 +816,13 @@ server.listen(3000);
 
 ### When to use background materialization
 
-| Use case                        | Recommendation                                 |
-| ------------------------------- | ---------------------------------------------- |
-| First-call latency is critical  | Enable (`tracking: { materialization: true }`) |
-| Fast startup is critical        | Disable (default)                              |
-| Large API, not all modules used | Disable                                        |
-| Small API, most modules used    | Enable                                         |
-| Unit/integration tests          | Enable for predictable behavior                |
+| Use case                        | Recommendation                           |
+| ------------------------------- | ---------------------------------------- |
+| First-call latency is critical  | Enable (`loader: { materialize: true }`) |
+| Fast startup is critical        | Disable (default)                        |
+| Large API, not all modules used | Disable                                  |
+| Small API, most modules used    | Enable                                   |
+| Unit/integration tests          | Enable for predictable behavior          |
 
 ---
 
@@ -793,9 +881,9 @@ Register handlers before the api builds (to observe init-time events) with the [
 | `api.slothlet.types.UNMATERIALIZED` | Module proxy, not yet loading |
 | `api.slothlet.types.IN_FLIGHT`      | Module loading in progress    |
 
-### `mod.__type`
+### `api.slothlet.node(mod).type`
 
-Direct property on any lazy-mode proxy. Returns `api.slothlet.types.UNMATERIALIZED`, `api.slothlet.types.IN_FLIGHT`, or a `typeof` string once materialized.
+Returns `api.slothlet.types.UNMATERIALIZED`, `api.slothlet.types.IN_FLIGHT`, or `"function"`, `"data"` or `"namespace"` once materialized. See [Node Reports](METADATA.md#node-reports) for the rest of the report.
 
 ---
 

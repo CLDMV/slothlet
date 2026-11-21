@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:07-07:00 (1791090907)
+ *	@Last modified time: 2026-11-16T18:29:17-08:00 (1794882557)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -44,7 +44,12 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks Mixed Scenar
 		api = await slothlet({
 			...config,
 			base: TEST_DIRS.API_TEST,
-			collision: { initial: "replace", api: "replace" } // Use folder version, ignore file collisions
+			api: {
+				collision: {
+					mode: { initial: "replace", api: "replace" }
+				}
+			}
+			// Use folder version, ignore file collisions
 		});
 	});
 
@@ -65,9 +70,14 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks Mixed Scenar
 			base: TEST_DIRS.API_TEST,
 			hook: {
 				enabled: true,
-				suppressErrors: true
+				errors: true
 			},
-			collision: { initial: "replace", api: "replace" } // Use folder version, ignore file collisions
+			api: {
+				collision: {
+					mode: { initial: "replace", api: "replace" }
+				}
+			}
+			// Use folder version, ignore file collisions
 		});
 
 		api.slothlet.hook.on(
@@ -102,9 +112,14 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks Mixed Scenar
 			base: TEST_DIRS.API_TEST,
 			hook: {
 				enabled: true,
-				suppressErrors: true
+				errors: true
 			},
-			collision: { initial: "replace", api: "replace" } // Use folder version, ignore file collisions
+			api: {
+				collision: {
+					mode: { initial: "replace", api: "replace" }
+				}
+			}
+			// Use folder version, ignore file collisions
 		});
 
 		api.slothlet.hook.on(
@@ -161,7 +176,12 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks Mixed Scenar
 			hook: {
 				enabled: false
 			},
-			collision: { initial: "replace", api: "replace" } // Use folder version, ignore file collisions
+			api: {
+				collision: {
+					mode: { initial: "replace", api: "replace" }
+				}
+			}
+			// Use folder version, ignore file collisions
 		});
 
 		let hookExecuted = false;
@@ -188,7 +208,12 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks Mixed Scenar
 			hook: {
 				enabled: false
 			},
-			collision: { initial: "replace", api: "replace" } // Use folder version, ignore file collisions
+			api: {
+				collision: {
+					mode: { initial: "replace", api: "replace" }
+				}
+			}
+			// Use folder version, ignore file collisions
 		});
 
 		let hookExecuted = false;

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:25-07:00 (1791090925)
+ *	@Last modified time: 2026-11-19T16:11:39-08:00 (1795133499)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -20,8 +20,8 @@
  * Targets the following uncovered line clusters:
  *
  *  Background materialization (constructor lines 304, 307-308):
- *    Triggered by config.tracking.materialization = true in lazy mode.
- *    The setImmediate callback fires and calls _materialize() in the background.
+ *    Triggered by config.loader.materialize = true in lazy mode.
+ *    The setImmediate callback fires and calls ___materialize() in the background.
  *
  *  util.inspect.custom handler in main proxy get trap (lines 2135-2165):
  *    Triggered by util.inspect(proxy) or console.log when the wrapper has children
@@ -64,7 +64,7 @@ afterAll(() => {
 
 // ---------------------------------------------------------------------------
 // 1. Background materialization path (constructor lines 304, 307-308)
-//    tracking.materialization = true → setImmediate fires in lazy wrapper constructor
+//    loader.materialize = true → setImmediate fires in lazy wrapper constructor
 // ---------------------------------------------------------------------------
 describe("unified-wrapper: background materialization (lines 304, 307-308)", () => {
 	let api;
@@ -77,15 +77,15 @@ describe("unified-wrapper: background materialization (lines 304, 307-308)", () 
 		await new Promise((r) => setTimeout(r, 50));
 	});
 
-	it("lazy mode with tracking.materialization=true triggers background setImmediate", async () => {
-		// tracking: { materialization: true } → in lazy wrapper constructor:
-		//   if (slothlet.config.tracking?.materialization) {
-		//     setImmediate(() => { this._materialize().catch(...) })  ← lines 304, 307-308
+	it("lazy mode with loader.materialize=true triggers background setImmediate", async () => {
+		// loader: { materialize: true } → in lazy wrapper constructor:
+		//   if (slothlet.config.loader?.materialize) {
+		//     setImmediate(() => { this.___materialize().catch(...) })  ← lines 304, 307-308
 		api = await slothlet({
 			base: TEST_DIRS.API_TEST,
 			mode: "lazy",
 			runtime: "async",
-			tracking: { materialization: true }
+			loader: { materialize: true }
 		});
 
 		expect(api.math).toBeDefined();
@@ -97,12 +97,12 @@ describe("unified-wrapper: background materialization (lines 304, 307-308)", () 
 		expect(typeof api.math.add).toBe("function");
 	});
 
-	it("tracking=true (shorthand) also triggers background materialization", async () => {
+	it("loader.materialize=true in async runtime also triggers background materialization", async () => {
 		api = await slothlet({
 			base: TEST_DIRS.API_TEST,
 			mode: "lazy",
 			runtime: "async",
-			tracking: true
+			loader: { materialize: true }
 		});
 
 		expect(api.math).toBeDefined();
@@ -117,7 +117,7 @@ describe("unified-wrapper: background materialization (lines 304, 307-308)", () 
 			base: TEST_DIRS.API_TEST,
 			mode: "lazy",
 			runtime: "async",
-			tracking: { materialization: true },
+			loader: { materialize: true },
 			debug: { materialize: true }
 		});
 
@@ -133,7 +133,7 @@ describe("unified-wrapper: background materialization (lines 304, 307-308)", () 
 //    Handler body:
 //      - Lines 2140-2148: childKeys.length > 0 && !isCallable (namespace wrapper)
 //      - Lines 2151-2162: lazy && !materialized && impl === null (lazy unmaterialized)
-//      - Line 2165: return wrapper._impl otherwise
+//      - Line 2165: return wrapper.____impl otherwise
 // ---------------------------------------------------------------------------
 describe("unified-wrapper: util.inspect.custom proxy handler (lines 2135-2165)", () => {
 	let api;
@@ -224,7 +224,7 @@ describe("unified-wrapper: debug.wrapper=true access to power/add (lines 2314, 2
 			mode: "eager",
 			runtime: "async",
 			debug: { wrapper: true },
-			api: { collision: { initial: "merge" } }
+			api: { collision: { mode: { initial: "merge" } } }
 		});
 
 		// api.math is a merged namespace from collision fixture
@@ -239,7 +239,7 @@ describe("unified-wrapper: debug.wrapper=true access to power/add (lines 2314, 2
 			mode: "eager",
 			runtime: "async",
 			debug: { wrapper: true },
-			api: { collision: { initial: "merge" } }
+			api: { collision: { mode: { initial: "merge" } } }
 		});
 
 		// api.math.add from collision fixture (math/ folder)
@@ -252,7 +252,7 @@ describe("unified-wrapper: debug.wrapper=true access to power/add (lines 2314, 2
 			mode: "lazy",
 			runtime: "async",
 			debug: { wrapper: true },
-			api: { collision: { initial: "merge" } }
+			api: { collision: { mode: { initial: "merge" } } }
 		});
 
 		// Trigger materialization by accessing power
@@ -301,7 +301,7 @@ describe("unified-wrapper: in-flight lazy get trap (lines 2362-2389)", () => {
 			base: TEST_DIRS.API_TEST,
 			mode: "lazy",
 			runtime: "async",
-			tracking: { materialization: true },
+			loader: { materialize: true },
 			debug: { wrapper: true }
 		});
 
@@ -317,8 +317,8 @@ describe("unified-wrapper: in-flight lazy get trap (lines 2362-2389)", () => {
 // ---------------------------------------------------------------------------
 // 5. has trap for lazy wrapper (lines 2743, 2778)
 //    `"key" in lazyWrapper` triggers the has trap
-//    Line 2743: lazy && !materialized && !inFlight → _materialize() in hasTrap
-//    Line 2778: lazy && !materialized && !inFlight → _materialize() in getOwnPropertyDescriptorTrap
+//    Line 2743: lazy && !materialized && !inFlight → ___materialize() in hasTrap
+//    Line 2778: lazy && !materialized && !inFlight → ___materialize() in getOwnPropertyDescriptorTrap
 //
 // NOTE: api.task is used instead of api.math because api_test/ has BOTH math.mjs (root file)
 // AND math/ (folder) — the collision between them produces a wrapper that may already
@@ -336,7 +336,7 @@ describe("unified-wrapper: has trap for lazy wrapper (lines 2743, 2778)", () => 
 		await new Promise((r) => setTimeout(r, 30));
 	});
 
-	it("'in' operator on lazy FOLDER wrapper (api.task) triggers _materialize() in hasTrap (line 2743)", async () => {
+	it("'in' operator on lazy FOLDER wrapper (api.task) triggers ___materialize() in hasTrap (line 2743)", async () => {
 		api = await slothlet({
 			base: TEST_DIRS.API_TEST,
 			mode: "lazy",
@@ -346,23 +346,23 @@ describe("unified-wrapper: has trap for lazy wrapper (lines 2743, 2778)", () => 
 		// api.task is a pure lazy folder wrapper (task/ folder with no same-named root file).
 		// Accessing api.task returns the proxy without triggering any get trap.
 		// Then "asyncReject" in api.task fires hasTrap:
-		//   wrapper is lazy && !materialized && !inFlight → calls wrapper._materialize() (line 2743)
+		//   wrapper is lazy && !materialized && !inFlight → calls wrapper.___materialize() (line 2743)
 		const taskProxy = api.task;
 		const hasAsyncReject = "asyncReject" in taskProxy;
 		// Result is boolean (true once materialization completes or false for pending)
 		expect(typeof hasAsyncReject).toBe("boolean");
 	});
 
-	it("'in' operator with _materialize prop always returns true (early-exit branch)", async () => {
+	it("'in' operator with ___materialize prop always returns true (early-exit branch)", async () => {
 		api = await slothlet({
 			base: TEST_DIRS.API_TEST,
 			mode: "lazy",
 			runtime: "async"
 		});
 
-		// Line 2731: if (prop === "_materialize") return true — the special early-exit guard
+		// Line 2731: if (prop === "___materialize") return true — the special early-exit guard
 		const taskProxy = api.task;
-		const hasMaterialize = "_materialize" in taskProxy;
+		const hasMaterialize = "___materialize" in taskProxy;
 		expect(hasMaterialize).toBe(true);
 	});
 
@@ -375,7 +375,7 @@ describe("unified-wrapper: has trap for lazy wrapper (lines 2743, 2778)", () => 
 
 		// Trigger materialization of task wrapper via a GET trap access
 		const taskProxy = api.task;
-		const _ = taskProxy.asyncReject; // triggers get trap → _materialize()
+		const _ = taskProxy.asyncReject; // triggers get trap → ___materialize()
 		await new Promise((r) => setTimeout(r, 150));
 
 		// After materialization: has trap checks wrapper children + impl
@@ -390,12 +390,12 @@ describe("unified-wrapper: has trap for lazy wrapper (lines 2743, 2778)", () => 
 			runtime: "async"
 		});
 
-		// Eager mode: has trap checks wrapper children and impl directly (no _materialize() called)
+		// Eager mode: has trap checks wrapper children and impl directly (no ___materialize() called)
 		const hasAsyncReject = "asyncReject" in api.task;
 		expect(hasAsyncReject).toBe(true);
 	});
 
-	it("Object.getOwnPropertyDescriptor on lazy FOLDER wrapper triggers _materialize() in getOwnPropertyDescriptorTrap (line 2778)", async () => {
+	it("Object.getOwnPropertyDescriptor on lazy FOLDER wrapper triggers ___materialize() in getOwnPropertyDescriptorTrap (line 2778)", async () => {
 		api = await slothlet({
 			base: TEST_DIRS.API_TEST,
 			mode: "lazy",
@@ -404,7 +404,7 @@ describe("unified-wrapper: has trap for lazy wrapper (lines 2743, 2778)", () => 
 
 		// api.task is a pure lazy folder wrapper — first access via getOwnPropertyDescriptor
 		// fires getOwnPropertyDescriptorTrap:
-		//   wrapper is lazy && !materialized && !inFlight → calls wrapper._materialize() (line 2778)
+		//   wrapper is lazy && !materialized && !inFlight → calls wrapper.___materialize() (line 2778)
 		const taskProxy = api.task;
 		const descriptor = Object.getOwnPropertyDescriptor(taskProxy, "asyncReject");
 		// Result may be undefined (not yet materialized) or a descriptor (after materialization)

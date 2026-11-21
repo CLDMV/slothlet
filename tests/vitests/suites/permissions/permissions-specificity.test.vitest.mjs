@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:20-07:00 (1791090920)
+ *	@Last modified time: 2026-11-16T18:30:08-08:00 (1794882608)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -32,7 +32,7 @@ describe.each(getMatrixConfigs())("Permissions > Specificity > $name", ({ config
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				rules: [
 					{ caller: "callers.**", target: "payments.**", effect: "deny" },
 					{ caller: "callers.paymentsCaller.callCharge", target: "payments.charge.process", effect: "allow" }
@@ -50,7 +50,7 @@ describe.each(getMatrixConfigs())("Permissions > Specificity > $name", ({ config
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				rules: [
 					{ caller: "**", target: "**", effect: "deny" },
 					{ caller: "callers.paymentsCaller.*", target: "payments.charge.*", effect: "allow" }

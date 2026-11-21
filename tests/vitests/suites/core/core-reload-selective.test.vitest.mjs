@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:26-07:00 (1791091706)
+ *	@Last modified time: 2026-11-16T18:28:59-08:00 (1794882539)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -45,8 +45,10 @@ for (const { config, name } of configs) {
 				base: TEST_DIRS.API_TEST,
 				api: {
 					collision: {
-						initial: "replace",
-						api: "replace"
+						mode: {
+							initial: "replace",
+							api: "replace"
+						}
 					},
 					mutations: {
 						add: true,

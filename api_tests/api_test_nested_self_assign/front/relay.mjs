@@ -32,7 +32,7 @@ export function keepCallerPin() {
  */
 export function addRuleFor(rule) {
 	try {
-		return self.slothlet.permissions.addRule(rule);
+		return self.slothlet.permissions.rules.add(rule);
 	} catch (error) {
 		return error?.code ?? String(error);
 	}
@@ -45,7 +45,7 @@ export function addRuleFor(rule) {
  */
 export function removeRuleFor(ruleId) {
 	try {
-		return self.slothlet.permissions.removeRule(ruleId);
+		return self.slothlet.permissions.rules.remove(ruleId);
 	} catch (error) {
 		return error?.code ?? String(error);
 	}

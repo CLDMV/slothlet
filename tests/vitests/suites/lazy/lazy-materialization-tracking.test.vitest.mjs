@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-12T11:35:13-07:00 (1791830113)
+ *	@Last modified time: 2026-11-16T18:29:22-08:00 (1794882562)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -57,7 +57,7 @@ describe.each(matrixConfigs)("Lazy Materialization Tracking > Config: $name", ({
 		});
 
 		it("should have materialized boolean property", () => {
-			expect(typeof api.slothlet.materialize.materialized).toBe("boolean");
+			expect(typeof api.slothlet.materialize.complete).toBe("boolean");
 		});
 
 		it("should have get() method returning statistics object", () => {
@@ -277,7 +277,7 @@ describe.each(matrixConfigs)("Lazy Materialization Tracking > Config: $name", ({
 			await new Promise((resolve) => setTimeout(resolve, 200));
 
 			const stats = api.slothlet.materialize.get();
-			const isMaterialized = api.slothlet.materialize.materialized;
+			const isMaterialized = api.slothlet.materialize.complete;
 
 			if (stats.remaining === 0) {
 				expect(isMaterialized).toBe(true);
@@ -292,7 +292,7 @@ describe.each(matrixConfigs)("Lazy Materialization Tracking > Config: $name", ({
 			});
 
 			const stats = freshApi.slothlet.materialize.get();
-			const isMaterialized = freshApi.slothlet.materialize.materialized;
+			const isMaterialized = freshApi.slothlet.materialize.complete;
 
 			if (stats.remaining > 0) {
 				expect(isMaterialized).toBe(false);
@@ -312,7 +312,7 @@ describe.each(matrixConfigs)("Lazy Materialization Tracking > Config: $name", ({
 		async function loadAll(node, seen = new WeakSet()) {
 			if (!node || (typeof node !== "object" && typeof node !== "function") || seen.has(node)) return;
 			seen.add(node);
-			if (typeof node._materialize === "function") await node._materialize();
+			if (typeof node.___materialize === "function") await node.___materialize();
 			for (const key of Object.keys(node)) await loadAll(node[key], seen);
 		}
 
@@ -337,7 +337,7 @@ describe.each(matrixConfigs)("Lazy Materialization Tracking > Config: $name", ({
 				const stats = collisionApi.slothlet.materialize.get();
 				expect(stats.remaining).toBe(0);
 				expect(stats.materialized).toBe(stats.total);
-				expect(collisionApi.slothlet.materialize.materialized).toBe(true);
+				expect(collisionApi.slothlet.materialize.complete).toBe(true);
 				expect(await waitSettles(collisionApi)).toBe(true);
 			} finally {
 				await collisionApi.shutdown();
@@ -352,7 +352,7 @@ describe.each(matrixConfigs)("Lazy Materialization Tracking > Config: $name", ({
 				await loadAll(reservedApi);
 				const stats = reservedApi.slothlet.materialize.get();
 				expect(stats.remaining).toBe(0);
-				expect(reservedApi.slothlet.materialize.materialized).toBe(true);
+				expect(reservedApi.slothlet.materialize.complete).toBe(true);
 				expect(await waitSettles(reservedApi)).toBe(true);
 			} finally {
 				await reservedApi.shutdown();
@@ -375,7 +375,7 @@ describe.each(matrixConfigs)("Lazy Materialization Tracking > Config: $name", ({
 					writeFileSync(path.join(dir, "shutdown", "run.mjs"), "export function run() {\n\treturn 2;\n}\n");
 					writeFileSync(path.join(dir, "shutdown", "inner", "peek.mjs"), "export function peek() {\n\treturn 3;\n}\n");
 				}
-				const hookApi = await slothlet({ ...config, base: dir, backgroundMaterialize: true });
+				const hookApi = await slothlet({ ...config, base: dir, loader: { materialize: true } });
 				try {
 					await loadAll(hookApi);
 					expect(await waitSettles(hookApi)).toBe(true);
@@ -401,7 +401,7 @@ describe.each(matrixConfigs)("Lazy Materialization Tracking > Config: $name", ({
 				const stats = reloadApi.slothlet.materialize.get();
 				expect(stats.remaining).toBe(0);
 				expect(stats.materialized).toBe(stats.total);
-				expect(reloadApi.slothlet.materialize.materialized).toBe(true);
+				expect(reloadApi.slothlet.materialize.complete).toBe(true);
 				expect(await waitSettles(reloadApi)).toBe(true);
 			} finally {
 				await reloadApi.shutdown();
@@ -414,7 +414,7 @@ describe.each(matrixConfigs)("Lazy Materialization Tracking > Config: $name", ({
 				await deepApi.l1;
 				const l2 = resolveWrapper(deepApi.l1.l2);
 				// l2 is loading when the result holding it is dropped; its own child l3 must not be counted.
-				const loading = l2._materialize();
+				const loading = l2.___materialize();
 				UnifiedWrapper._uncountUnappliedImpl({ l2: deepApi.l1.l2 });
 				await loading.catch(() => {});
 				expect(l2.____slothletInternal.invalid).toBe(true);
@@ -434,7 +434,7 @@ describe.each(matrixConfigs)("Lazy Materialization Tracking > Config: $name", ({
 				const l2 = resolveWrapper(deepApi.l1.l2);
 				// l2 has loaded, so it already holds its still-unloaded child l3 when the result holding it is
 				// dropped; l3 is unreachable from then on and must stop counting.
-				await l2._materialize();
+				await l2.___materialize();
 				const l3 = resolveWrapper(l2.l3);
 				expect(l3.____slothletInternal.state.materialized).toBe(false);
 				UnifiedWrapper._uncountUnappliedImpl({ l2: deepApi.l1.l2 });
@@ -472,8 +472,8 @@ describe.each(matrixConfigs)("Lazy Materialization Tracking > Config: $name", ({
 				base: TEST_DIR,
 				api: { ...config.api, mutations: { add: true, remove: true, reload: true } }
 			});
-			await shadowApi.slothlet.api.add("launcher", launcherDir, { moduleID: "launcher" });
-			await shadowApi.slothlet.api.add("launcher.session", FORCE_SHADOW_DIR, { moduleID: "shadow", forceOverwrite: true });
+			await shadowApi.slothlet.api.add("launcher", launcherDir, { id: "launcher" });
+			await shadowApi.slothlet.api.add("launcher.session", FORCE_SHADOW_DIR, { id: "shadow", collision: { force: true } });
 			return shadowApi;
 		}
 
@@ -512,7 +512,7 @@ describe.each(matrixConfigs)("Lazy Materialization Tracking > Config: $name", ({
 				const vault = resolveWrapper(shadows.find((shadow) => shadow.key === "vault").child);
 				expect(vault.____slothletInternal.state.materialized).toBe(false);
 				// Loading it makes its `inner` folder, which is off the api surface too and must not be counted.
-				await vault._materialize();
+				await vault.___materialize();
 				await loadAll(shadowApi);
 				expect(shadowApi.slothlet.materialize.get().remaining).toBe(0);
 				expect(await waitSettles(shadowApi)).toBe(true);
@@ -564,7 +564,7 @@ describe.each(matrixConfigs)("Lazy Materialization Tracking > Config: $name", ({
 				try {
 					if (loadWhileHidden) {
 						const shadows = [...resolveWrapper(shadowApi.launcher).slothlet.handlers.apiManager.state.replaceShadows.values()].flat();
-						await resolveWrapper(shadows.find((shadow) => shadow.key === "vault").child)._materialize();
+						await resolveWrapper(shadows.find((shadow) => shadow.key === "vault").child).___materialize();
 					}
 					await shadowApi.slothlet.api.remove("shadow");
 					await loadAll(shadowApi);
@@ -688,7 +688,7 @@ describe.each(matrixConfigs)("Lazy Materialization Tracking > Config: $name", ({
 			const stats = eagerApi.slothlet.materialize.get();
 			expect(stats.total).toBe(stats.materialized);
 			expect(stats.remaining).toBe(0);
-			expect(eagerApi.slothlet.materialize.materialized).toBe(true);
+			expect(eagerApi.slothlet.materialize.complete).toBe(true);
 
 			await eagerApi.shutdown();
 		});

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:05-07:00 (1791090905)
+ *	@Last modified time: 2026-11-16T16:16:51-08:00 (1794874611)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -29,7 +29,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { ModesUtils } from "@cldmv/slothlet/helpers/modes-utils";
+import { ModesUtils } from "#helpers/modes-utils";
 
 /**
  * Return a minimal slothlet mock sufficient for ComponentBase (stores reference only).

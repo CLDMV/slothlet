@@ -246,6 +246,12 @@ This methodology reveals:
 - **JIT warmup effects**: Shows compiler optimization impacts
 - **Caching interference**: Detects cross-test contamination
 
+### Comparing v3 and v4
+
+`npm run test:performance:compare` runs the same workloads against v3.24.0 and against the current checkout on one machine, back to back. Run it once with `-- --setup` first: that installs `@cldmv/slothlet@3.24.0` from the npm registry into `tmp/perf-compare/v3` (or the folder given with `--v3-dir`) and extracts the `api_tests/api_test` fixtures and `api-test-config.jsonc` from the `v3.24.0` tag next to it. Each version loads its own copy of the fixture tree, because the fixtures import `@cldmv/slothlet/runtime` and must resolve to the build being measured. v3 runs its published `dist/`; v4 runs this checkout's `dist/` when one exists (run `npm run build` first) and otherwise `src/` through the `slothlet-dev` condition, which the report states. The workloads are the ones above: startup (create plus shutdown, with each half also reported), `math.add` calls, the nested `nested.date.today` module, the three per-module probes and realistic usage over the 41 config calls, drawn with a fixed seed so both versions make the same calls. Every run is a fresh Node process loading one build, and rounds alternate which version goes first and which mode goes first. The report gives the median over rounds with the interquartile range, the Node version, OS, CPU, RAM, the load average at start and end, and the iteration counts, and it lists any probe whose result differs between versions. It writes a JSON file and a markdown table to `tmp/perf-compare/results/`. By default each version runs with its own shipped defaults; `--match-v3-defaults` turns off v4's routine cascades (`routines: { auto: false, stack: false }`). `--quick` only proves the harness runs; its numbers mean nothing.
+
+Both versions run the `api_tests/api_test` fixtures with the `replace` collision mode (the one the test suites use), because the fixtures collide on purpose (`math.mjs` against `math/`, `exportDefault`'s default export against its named `extra`) and the expected values in `api-test-config.jsonc` are the `replace` outcome. Under the default `merge` mode `api.math.add(2, 3)` returns 1005 and `api.exportDefault.extra()` returns "extra method", which is correct behaviour but not what the config expects.
+
 ### Verification Steps
 
 - ✅ Function results identical between modes
@@ -389,11 +395,11 @@ npm run test:performance
 import slothlet from "@cldmv/slothlet";
 
 console.time("eager-startup");
-const eagerApi = await slothlet({ mode: "eager", dir: "./api_tests/api_test" });
+const eagerApi = await slothlet({ mode: "eager", base: "./api_tests/api_test" });
 console.timeEnd("eager-startup");
 
 console.time("lazy-startup");
-const lazyApi = await slothlet({ mode: "lazy", dir: "./api_tests/api_test" });
+const lazyApi = await slothlet({ mode: "lazy", base: "./api_tests/api_test" });
 console.timeEnd("lazy-startup");
 
 // Test your specific usage patterns
@@ -417,11 +423,11 @@ const slothlet = require("@cldmv/slothlet");
 
 async function performanceTest() {
 	console.time("eager-startup");
-	const eagerApi = await slothlet({ mode: "eager", dir: "./api_tests/api_test" });
+	const eagerApi = await slothlet({ mode: "eager", base: "./api_tests/api_test" });
 	console.timeEnd("eager-startup");
 
 	console.time("lazy-startup");
-	const lazyApi = await slothlet({ mode: "lazy", dir: "./api_tests/api_test" });
+	const lazyApi = await slothlet({ mode: "lazy", base: "./api_tests/api_test" });
 	console.timeEnd("lazy-startup");
 
 	// Test your specific usage patterns

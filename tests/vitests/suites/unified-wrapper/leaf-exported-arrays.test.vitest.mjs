@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-16T14:31:21-07:00 (1792186281)
+ *	@Last modified time: 2026-11-16T18:30:37-08:00 (1794882637)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -23,7 +23,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import nodeUtil from "node:util";
+import { util as platformUtil } from "#helpers/platform";
 import { mkdir, writeFile, rm } from "node:fs/promises";
 import { join, resolve, dirname } from "node:path";
 import slothlet from "@cldmv/slothlet";
@@ -156,8 +156,8 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])("Leaf-exported nested array
 		expect(items.length).toBe(2);
 		// ...but each element is a real wrapper with a proper apiPath (the hook for api.add / permission
 		// rules / context at arr[i] and deeper), not a raw object.
-		expect(items[0].__apiPath).toBe("widget.items.0");
-		expect(items[1].__apiPath).toBe("widget.items.1");
+		expect(api.slothlet.node(items[0]).path.join(".")).toBe("widget.items.0");
+		expect(api.slothlet.node(items[1]).path.join(".")).toBe("widget.items.1");
 		// Nested members on a wrapped element still work (callable + data).
 		expect(items[0].greet()).toBe("hi a");
 		expect(items[1].id).toBe("b");
@@ -333,20 +333,20 @@ describe("Array elements are full slothlet nodes (api.add + permission gating)",
 	});
 
 	it("permission rules gate a method on an array element (deny-all via an inter-module caller)", async () => {
-		const api = await slothlet({ base: root, mode: "eager", permissions: { defaultPolicy: "allow" } });
+		const api = await slothlet({ base: root, mode: "eager", permissions: { policy: "allow" } });
 		apis.push(api);
 		// Allowed by default: caller.go() calls self.data.items[0].run() (an inter-module call).
 		expect(await api.caller.go()).toBe("secret-x");
 		// Deny everything under the array element for the caller — gating keys off the element apiPath.
-		api.slothlet.permissions.addRule({ caller: "caller.**", target: "data.items.**", effect: "deny" });
+		api.slothlet.permissions.rules.add({ caller: "caller.**", target: "data.items.**", effect: "deny" });
 		await expect(api.caller.go()).rejects.toThrow(/PERMISSION_DENIED/);
 	});
 
 	it("denies ONE deep path on an array element (data.items.*.plugin.hello) while siblings pass", async () => {
-		const api = await slothlet({ base: root, mode: "eager", permissions: { defaultPolicy: "allow" } });
+		const api = await slothlet({ base: root, mode: "eager", permissions: { policy: "allow" } });
 		apis.push(api);
 		// `*` must match the array index, and gating must be path-precise: deny only plugin.hello.
-		api.slothlet.permissions.addRule({ caller: "caller.**", target: "data.items.*.plugin.hello", effect: "deny" });
+		api.slothlet.permissions.rules.add({ caller: "caller.**", target: "data.items.*.plugin.hello", effect: "deny" });
 		await expect(api.caller.callHello()).rejects.toThrow(/PERMISSION_DENIED/);
 		// Sibling method on the same nested object — allowed.
 		expect(await api.caller.callBye()).toBe("bye");
@@ -358,7 +358,7 @@ describe("Array elements are full slothlet nodes (api.add + permission gating)",
 		const api = await slothlet({
 			base: root,
 			mode: "eager",
-			permissions: { defaultPolicy: "deny", rules: [{ caller: "caller.**", target: "data.items.*.plugin.hello", effect: "allow" }] }
+			permissions: { policy: "deny", rules: [{ caller: "caller.**", target: "data.items.*.plugin.hello", effect: "allow" }] }
 		});
 		apis.push(api);
 		// Only data.items.*.plugin.hello is allowed; everything else under the element is denied.
@@ -695,11 +695,11 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])("An array element's path fo
 		api = await slothlet({ base: root, mode });
 		await api.caller.hold(0);
 		const second = api.data.items[1];
-		expect(second.__slothletPath).toBe("data.items.1");
+		expect(api.slothlet.node(second).path.join(".")).toBe("data.items.1");
 		const first = api.data.items.shift();
-		expect(second.__slothletPath).toBe("data.items.0");
-		expect(second.run.__slothletPath).toBe("data.items.0.run");
-		expect(first.__slothletPath).toBe("data.items");
+		expect(api.slothlet.node(second).path.join(".")).toBe("data.items.0");
+		expect(api.slothlet.node(second.run).path.join(".")).toBe("data.items.0.run");
+		expect(api.slothlet.node(first).path.join(".")).toBe("data.items");
 		expect(first.run()).toBe("run-x");
 	});
 
@@ -714,7 +714,7 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])("An array element's path fo
 		api = await slothlet({ base: root, mode });
 		const second = api.data.items[1];
 		api.data.items.shift();
-		expect(second.__slothletPath).toBe("data.items.0");
+		expect(api.slothlet.node(second).path.join(".")).toBe("data.items.0");
 		expect(await api.data.indexOfCalls()).toBe(0);
 	});
 
@@ -735,9 +735,9 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])("An array element's path fo
 	});
 
 	it("a rule for an index applies to the element at that index, including a reference held from before it moved", async () => {
-		api = await slothlet({ base: root, mode, permissions: { defaultPolicy: "allow" } });
+		api = await slothlet({ base: root, mode, permissions: { policy: "allow" } });
 		expect(await api.caller.hold(1)).toBe("y");
-		api.slothlet.permissions.addRule({ caller: "caller.**", target: "data.items.0.**", effect: "deny" });
+		api.slothlet.permissions.rules.add({ caller: "caller.**", target: "data.items.0.**", effect: "deny" });
 		expect(await api.caller.callHeld()).toBe("run-y");
 		api.data.items.shift();
 		await expect(api.caller.callHeld()).rejects.toThrow(/PERMISSION_DENIED/);
@@ -982,9 +982,9 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])(
 
 		it("a member named 4294967295 is a property, not a position: its path stays when the property is deleted", () => {
 			const held = api.box.items["4294967295"];
-			expect(held.__slothletPath).toBe("box.items.4294967295");
+			expect(api.slothlet.node(held).path.join(".")).toBe("box.items.4294967295");
 			delete api.box.items["4294967295"];
-			expect(held.__slothletPath).toBe("box.items.4294967295");
+			expect(api.slothlet.node(held).path.join(".")).toBe("box.items.4294967295");
 		});
 
 		it("preventExtensions on an array whose own preventExtensions refuses is refused, as on the array", () => {
@@ -997,7 +997,7 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])(
 			const tag = Symbol.for("slothlet.test.tag");
 			const member = api.box.items[0][tag];
 			expect(member.deep).toBe(1);
-			expect(member.__slothletPath).toBe("box.items.0.Symbol(slothlet.test.tag)");
+			expect(api.slothlet.node(member).path.join(".")).toBe("box.items.0.Symbol(slothlet.test.tag)");
 		});
 
 		it("deleting a named member of an array invalidates its wrapper, as deleting an object's member does", () => {
@@ -1020,9 +1020,9 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])(
 
 		it("a value kept under 4294967295 does not stand in for a position the element has left", () => {
 			const held = api.box.dupes[0];
-			expect(held.__slothletPath).toBe("box.dupes.0");
+			expect(api.slothlet.node(held).path.join(".")).toBe("box.dupes.0");
 			delete api.box.dupes[0];
-			expect(held.__slothletPath).toBe("box.dupes");
+			expect(api.slothlet.node(held).path.join(".")).toBe("box.dupes");
 		});
 
 		it("a prototype set on an array member is the one it reports, before and after it is sealed", () => {
@@ -1048,7 +1048,7 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])(
 		it("an element an array inherits keeps the index it was read at", () => {
 			const held = api.box.inheritor_[0];
 			expect(held.id).toBe("inherited");
-			expect(held.__slothletPath).toBe("box.inheritor_.0");
+			expect(api.slothlet.node(held).path.join(".")).toBe("box.inheritor_.0");
 		});
 
 		it.each([
@@ -1109,23 +1109,24 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])(
 		it("an object an array proxy supplies from its get trap keeps the index it was read at", () => {
 			const held = api.box.virtualList[0];
 			expect(held.id).toBe("virtual");
-			expect(held.__slothletPath).toBe("box.virtualList.0");
+			expect(api.slothlet.node(held).path.join(".")).toBe("box.virtualList.0");
 		});
 
 		it("an inherited element moved to another inherited index follows it", async () => {
 			const held = api.box.mover[1];
-			expect(held.__slothletPath).toBe("box.mover.1");
+			expect(api.slothlet.node(held).path.join(".")).toBe("box.mover.1");
 			await api.box.moveInherited();
-			expect(held.__slothletPath).toBe("box.mover.0");
+			expect(api.slothlet.node(held).path.join(".")).toBe("box.mover.0");
 		});
 
 		it("a proxy array's virtual element keeps its index without asking whether the array is a proxy", () => {
 			const held = api.box.virtualList[0];
-			expect(held.__slothletPath).toBe("box.virtualList.0");
-			// Where the engine cannot tell a proxy (browser builds), the answer must not depend on it.
-			const spy = vi.spyOn(nodeUtil.types, "isProxy").mockReturnValue(false);
+			expect(api.slothlet.node(held).path.join(".")).toBe("box.virtualList.0");
+			// Where the engine cannot tell a proxy (browser builds), the answer must not depend on it. slothlet asks through
+			// the copy of `util.types` it took when it loaded, so the stand-in goes on that copy.
+			const spy = vi.spyOn(platformUtil.types, "isProxy").mockReturnValue(false);
 			try {
-				expect(held.__slothletPath).toBe("box.virtualList.0");
+				expect(api.slothlet.node(held).path.join(".")).toBe("box.virtualList.0");
 			} finally {
 				spy.mockRestore();
 			}
@@ -1170,7 +1171,12 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])("A named export called leng
 	beforeEach(async () => {
 		root = makeRoot(`named-length-${mode}`);
 		await writeModule(join(root, "lst4.mjs"), "export default [1, 2];\nexport const length = 99;\n");
-		api = await slothlet({ base: root, mode, silent: true, api: { collision: { initial: "merge-replace", api: "merge-replace" } } });
+		api = await slothlet({
+			base: root,
+			mode,
+			silent: true,
+			api: { collision: { mode: { initial: "merge-replace", api: "merge-replace" } } }
+		});
 		await api.lst4;
 	});
 

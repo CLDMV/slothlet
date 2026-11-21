@@ -21,8 +21,8 @@
  * integration tests:
  *
  * - Line 372: `continue` inside `registerSubtree()` — fires when a key in the API
- *   object is one of the internal skipProps ("__metadata", "__type", "_materialize",
- *   "_impl", "____slothletInternal").
+ *   object is one of the internal skipProps ("__metadata", "__type", "___materialize",
+ *   "____impl", "____slothletInternal").
  *
  * - Lines 409–414: `exportState()` — serialises moduleToPath and pathToModule to plain
  *   arrays for persistence across hot-reload cycles.
@@ -57,51 +57,30 @@ function makeMock() {
 // ─── registerSubtree skip-props continue (line 372) ───────────────────────────
 
 describe("OwnershipManager.registerSubtree - skipProps continue (line 372)", () => {
-	it("should skip __metadata key and not register it", () => {
+	it("registers a module's own __metadata / __type exports like any member (no framework keys on nodes)", () => {
 		const ownership = new OwnershipManager(makeMock());
 
 		const api = {
 			__metadata: { type: "folder-wrapper" },
+			__type: "lazy",
 			add: function () {
 				return 1;
 			}
 		};
 
-		// Empty path — the top-level registration is skipped (falsy path guard).
-		// The loop will find __metadata → continue (line 372) and "add" → register.
 		ownership.registerSubtree(api, "mod1", "");
 
-		// "add" should be owned (registered at childPath "add")
-		const owner = ownership.getCurrentOwner("add");
-		expect(owner).not.toBeNull();
-		expect(owner.moduleID).toBe("mod1");
-
-		// __metadata should NOT be in pathToModule
-		expect(ownership.getCurrentOwner("__metadata")).toBeNull();
+		expect(ownership.getCurrentOwner("add")?.moduleID).toBe("mod1");
+		expect(ownership.getCurrentOwner("__metadata")?.moduleID).toBe("mod1");
+		expect(ownership.getCurrentOwner("__type")?.moduleID).toBe("mod1");
 	});
 
-	it("should skip __type key", () => {
+	it("should skip ___materialize, ____impl, and ____slothletInternal keys", () => {
 		const ownership = new OwnershipManager(makeMock());
 
 		const api = {
-			__type: "lazy",
-			compute: function () {
-				return 2;
-			}
-		};
-
-		ownership.registerSubtree(api, "mod2", "");
-
-		expect(ownership.getCurrentOwner("compute")).not.toBeNull();
-		expect(ownership.getCurrentOwner("__type")).toBeNull();
-	});
-
-	it("should skip _materialize, _impl, and ____slothletInternal keys", () => {
-		const ownership = new OwnershipManager(makeMock());
-
-		const api = {
-			_materialize: function () {},
-			_impl: {},
+			___materialize: function () {},
+			____impl: {},
 			____slothletInternal: true,
 			visible: function () {
 				return "yes";
@@ -111,7 +90,7 @@ describe("OwnershipManager.registerSubtree - skipProps continue (line 372)", () 
 		ownership.registerSubtree(api, "mod3", "");
 
 		expect(ownership.getCurrentOwner("visible")).not.toBeNull();
-		for (const key of ["_materialize", "_impl", "____slothletInternal"]) {
+		for (const key of ["___materialize", "____impl", "____slothletInternal"]) {
 			expect(ownership.getCurrentOwner(key)).toBeNull();
 		}
 	});
@@ -120,8 +99,8 @@ describe("OwnershipManager.registerSubtree - skipProps continue (line 372)", () 
 		const ownership = new OwnershipManager(makeMock());
 
 		const api = {
-			__metadata: {},
-			__type: "eager"
+			___materialize: function () {},
+			____impl: {}
 		};
 
 		// Should not throw and should produce no registrations

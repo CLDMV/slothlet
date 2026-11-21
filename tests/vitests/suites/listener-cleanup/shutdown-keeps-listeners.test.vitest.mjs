@@ -110,8 +110,8 @@ describe.each(getMatrixConfigs({}))("the last shutdown keeps a module's listener
 		// The once listener that has not fired yet holds nothing of slothlet's.
 		const [pendingOnce] = conn.rawListeners("close");
 		expect(pendingOnce.listener.name).toBe(onClose.name);
-		expect(pendingOnce._slothletOriginal).toBeUndefined();
-		expect(pendingOnce._slothletResource).toBeUndefined();
+		expect(pendingOnce.____slothletOriginal).toBeUndefined();
+		expect(pendingOnce.____slothletResource).toBeUndefined();
 		expect(() => conn.emit("error", new Error("late"))).not.toThrow();
 		conn.emit("close");
 		conn.emit("close");
@@ -168,7 +168,7 @@ describe.each(getMatrixConfigs({}))("the last shutdown keeps a module's listener
 		api = null;
 		for (const event of ["error", "close", "ready"]) {
 			const [wrapper] = frozen.conn.rawListeners(event);
-			expect(wrapper._slothletResource ?? null, event).toBeNull();
+			expect(wrapper.____slothletResource ?? null, event).toBeNull();
 		}
 	});
 

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:27:38-07:00 (1791091658)
+ *	@Last modified time: 2026-11-13T21:41:54-08:00 (1794634914)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -19,6 +19,7 @@ import json from "@eslint/json";
 import markdown from "@eslint/markdown";
 import css from "@eslint/css";
 import { defineConfig } from "eslint/config";
+import capturedIntrinsics from "../tools/ci/eslint-captured-intrinsics.mjs";
 
 export default defineConfig([
 	// Global ignores - applies to all configurations
@@ -85,6 +86,19 @@ export default defineConfig([
 		languageOptions: { sourceType: "module" }
 	},
 	{ files: ["**/*.{js,mjs,cjs}"], languageOptions: { globals: { ...globals.node, ...globals.browser } } },
+	// slothlet's own code uses the built-ins helpers/intrinsics took when slothlet loaded (see the rule's file). Every
+	// file of src/ is covered, helpers/intrinsics itself included: it reads each global as `globalThis.X`.
+	{
+		files: ["src/**/*.{js,mjs,cjs}"],
+		plugins: { slothlet: capturedIntrinsics },
+		rules: {
+			"slothlet/captured-intrinsics": "error",
+			// The methods built-in values inherit, and the iteration `for…of`, spread and destructuring do: called through
+			// the copies helpers/intrinsics took at load. `framesOf` (frame placement, the live runtime) hands out a walk of
+			// a stack capture that steps its generator with those copies.
+			"slothlet/captured-prototype-methods": ["error", { safeIterators: ["framesOf"] }]
+		}
+	},
 	{
 		files: ["**/test/**/*test.js"],
 		languageOptions: {

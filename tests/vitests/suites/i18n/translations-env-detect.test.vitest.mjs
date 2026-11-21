@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:08-07:00 (1791090908)
+ *	@Last modified time: 2026-11-16T18:30:02-08:00 (1794882602)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -38,7 +38,8 @@
  */
 
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { setLanguage, setLanguageAsync, getLanguage, initI18n } from "@cldmv/slothlet/i18n";
+import { setLanguage, setLanguageAsync, getLanguage, initI18n } from "#i18n";
+import { captureWarnings } from "../../setup/warning-capture.mjs";
 
 // ─── env variable save/restore helpers ───────────────────────────────────────
 
@@ -93,15 +94,12 @@ describe("setLanguageAsync() — async locale loading", () => {
 		expect(getLanguage()).toBe("en-us");
 	});
 
-	it("warns and falls back to en-us for an unknown locale", async () => {
-		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-		try {
-			await setLanguageAsync("zz-zz");
-			expect(getLanguage()).toBe("en-us");
-			expect(warn).toHaveBeenCalled();
-		} finally {
-			warn.mockRestore();
-		}
+	it("raises a coded warning and falls back to en-us for an unknown locale (#820)", async () => {
+		const printed = await captureWarnings(() => setLanguageAsync("zz-zz"));
+		expect(getLanguage()).toBe("en-us");
+		const warnings = printed.filter((w) => w.code === "WARNING_LANGUAGE_LOAD_FAILED");
+		expect(warnings).toHaveLength(1);
+		expect(warnings[0].details).toEqual({ lang: "zz-zz" });
 	});
 
 	it("reports en-us (not the stale prior locale) while a non-default load is pending", async () => {
@@ -436,8 +434,8 @@ describe("i18n_normalizeEnvLanguage() — fallback and base branches", () => {
 
 			// zz-ca file is missing; zz base file exists -> line 85 true branch returns "zz"
 			process.env.LANG = "zz_CA.UTF-8";
-			i18n.initI18n();
-			expect(i18n.getLanguage()).toBe("zz");
+			i18n.init();
+			expect(i18n.language.get()).toBe("zz");
 		} finally {
 			vi.doUnmock("fs");
 			vi.resetModules();

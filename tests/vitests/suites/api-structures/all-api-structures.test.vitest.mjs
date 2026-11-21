@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-12T08:31:48-07:00 (1791819108)
+ *	@Last modified time: 2026-11-16T18:28:40-08:00 (1794882520)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -35,14 +35,28 @@ import { fileURLToPath } from "node:url";
 import { getAllApiTestFoldersSync, getMatrixConfigs } from "../../setup/vitest-helper.mjs";
 
 /**
- * Api paths whose primitive value differs on every load by design (a random per-instance id), so the
- * shape comparison checks their type but not their value. Keyed by fixture; `*` applies to all.
- * @type {Map<string, string[]>}
+ * Api paths whose primitive value differs on every load by design (a random per-instance id, a getter that counts its
+ * own reads), so the shape comparison checks their type but not their value. Keyed by fixture; `*` applies to all. A
+ * RegExp matches every dotted api path it fits (a function holding itself as `me` is read as `me.me…`).
+ * @type {Map<string, Array<string|RegExp>>}
  */
 const VOLATILE_VALUES = new Map([
-	["*", ["slothlet.instanceID"]],
-	["api_tv_test", ["config.state.instanceId"]]
+	["*", ["slothlet.instance.id"]],
+	["api_tv_test", ["config.state.instanceId"]],
+	["api_test_collisions", [/^pair\.(fnprop|fnsolo)(\.me)*\.live$/]]
 ]);
+
+/**
+ * Blank the value of every node in `shape` whose dotted api path `pattern` matches.
+ * @param {object} shape - A node's shape (`members` holds its children).
+ * @param {RegExp} pattern - The paths to blank.
+ * @param {string} [apiPath=""] - The node's dotted api path.
+ * @returns {void}
+ */
+function blankMatching(shape, pattern, apiPath = "") {
+	if (apiPath && pattern.test(apiPath) && "value" in shape) shape.value = "<volatile>";
+	for (const [key, child] of Object.entries(shape.members ?? {})) blankMatching(child, pattern, apiPath ? `${apiPath}.${key}` : key);
+}
 
 describe("All API Structures Validation", () => {
 	/**
@@ -57,7 +71,7 @@ describe("All API Structures Validation", () => {
 
 		for (const config of matrixConfigs) {
 			// Create a key from all config params except mode
-			const key = `${config.config.runtime}_${config.config.allowApiOverwrite}_${config.config.apiDepth}_${config.config.hook?.enabled ?? false}`;
+			const key = `${config.config.runtime}_${config.config.allowApiOverwrite}_${config.config.depth}_${config.config.hook?.enabled ?? false}`;
 
 			if (!configGroups.has(key)) {
 				configGroups.set(key, { eager: null, lazy: null });
@@ -137,11 +151,8 @@ describe("All API Structures Validation", () => {
 			if (config.hook?.enabled) {
 				args.push("--hooks");
 			}
-			if (config.allowApiOverwrite) {
-				args.push("--allowApiOverwrite");
-			}
-			if (config.apiDepth !== undefined) {
-				args.push("--apiDepth", config.apiDepth.toString());
+			if (config.depth !== undefined) {
+				args.push("--apiDepth", config.depth.toString());
 			}
 			if (config.debug) {
 				args.push("--debug");
@@ -263,6 +274,10 @@ describe("All API Structures Validation", () => {
 		if (!line) return null;
 		const shape = JSON.parse(line.slice("API Shape: ".length));
 		for (const apiPath of [...(VOLATILE_VALUES.get("*") ?? []), ...(VOLATILE_VALUES.get(folder) ?? [])]) {
+			if (apiPath instanceof RegExp) {
+				blankMatching(shape, apiPath);
+				continue;
+			}
 			const node = apiPath.split(".").reduce((current, segment) => current?.members?.[segment], shape);
 			if (node && "value" in node) node.value = "<volatile>";
 		}
@@ -302,7 +317,12 @@ describe("All API Structures Validation", () => {
 			// Compare critical aspects for consistency
 			expect(lazyStructure.apiType, `${folder} (${matrixName}): API type should be consistent`).toBe(eagerStructure.apiType);
 
-			expect(lazyStructure.callablePathsCount, `${folder} (${matrixName}): Callable path count should be consistent`).toBe(
+			// Which paths one mode lists and the other does not, so a failed count says where the two apis differ.
+			const onlyLazy = lazyStructure.callablePaths.filter((entry) => !eagerStructure.callablePaths.includes(entry));
+			const onlyEager = eagerStructure.callablePaths.filter((entry) => !lazyStructure.callablePaths.includes(entry));
+			const difference = `only in lazy: [${onlyLazy.join(", ")}], only in eager: [${onlyEager.join(", ")}]`;
+
+			expect(lazyStructure.callablePathsCount, `${folder} (${matrixName}): Callable path count should be consistent (${difference})`).toBe(
 				eagerStructure.callablePathsCount
 			);
 

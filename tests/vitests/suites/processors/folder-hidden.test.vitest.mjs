@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:20-07:00 (1791090920)
+ *	@Last modified time: 2026-11-15T22:55:19-08:00 (1794812119)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -15,8 +15,7 @@
 
 /**
  * @fileoverview Hidden entries in the api scan: built-in `.`/`__` prefixes (files AND folders), the
- * consumer `hidden` glob option (string or array, relative to the API base), the deprecated
- * `scanHiddenFolders` escape hatch (+ its warning), and empty-folder pruning (#156). All verified on
+ * consumer `hidden` glob option (string or array, relative to the API base), `!` globs over the built-in `.`/`__` rule, and empty-folder pruning (#156). All verified on
  * initial load and via api.add, in both eager and lazy modes.
  * @module tests/vitests/suites/processors/folder-hidden
  */
@@ -25,7 +24,6 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdir, writeFile, rm } from "node:fs/promises";
 import { join, resolve, dirname } from "node:path";
 import slothlet from "@cldmv/slothlet";
-import { SlothletWarning } from "@cldmv/slothlet/errors";
 
 /**
  * Unique fixture root under the project tmp folder.
@@ -69,26 +67,9 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])("Hidden entries + empty-fol
 	 * @returns {Promise<object>} The api.
 	 */
 	async function boot(opts = {}) {
-		const api = await slothlet({ base: root, mode, ...opts });
+		const api = await slothlet({ base: root, mode, diagnostics: true, ...opts });
 		apis.push(api);
 		return api;
-	}
-
-	/**
-	 * Run a callback with SlothletWarning console output suppressed and capture enabled.
-	 * @param {Function} fn - Async callback.
-	 * @returns {Promise<Array>} Warnings captured while the callback ran.
-	 */
-	async function captureWarnings(fn) {
-		SlothletWarning.suppressConsole = true;
-		SlothletWarning.clearCaptured();
-		try {
-			await fn();
-			return [...SlothletWarning.captured];
-		} finally {
-			SlothletWarning.clearCaptured();
-			SlothletWarning.suppressConsole = false;
-		}
 	}
 
 	it("does not create a leaf for an empty folder (#156)", async () => {
@@ -113,7 +94,7 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])("Hidden entries + empty-fol
 	it("skips `.`/`__`-prefixed files by default", async () => {
 		await writeModule(join(root, "math", "add.mjs"), "export function add(a, b) { return a + b; }");
 		await writeModule(join(root, ".secretrc.mjs"), "export function secretrc() { return 1; }");
-		await writeModule(join(root, "__helper.mjs"), "export function helper() { return 1; }");
+		await writeModule(join(root, "__helper.mjs"), "export function __helper() { return 1; }");
 		const api = await boot();
 		expect(api.math).toBeDefined();
 		expect(api.secretrc).toBeUndefined();
@@ -122,24 +103,55 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])("Hidden entries + empty-fol
 		expect(api.helper).toBeUndefined();
 	});
 
-	it("scanHiddenFolders: true restores hidden-folder scanning and emits the deprecation warning", async () => {
+	it('`["!**/.*/", "!**/__*/"]` brings back `.`/`__`-prefixed folders (what scanHiddenFolders did), files stay hidden', async () => {
 		await writeModule(join(root, ".stash", "x.mjs"), "export function x() { return 1; }");
 		await writeModule(join(root, "__internal", "y.mjs"), "export function y() { return 1; }");
-		// Prefixed FILES at the root must stay hidden — the opt-out restores folders only.
+		// Prefixed FILES at the root stay hidden: the trailing "/" names folders only.
 		await writeModule(join(root, "__skip.mjs"), "export function skip() { return 1; }");
 		await writeModule(join(root, ".dotfile.mjs"), "export function dotfile() { return 1; }");
-		let api;
-		const warnings = await captureWarnings(async () => {
-			api = await boot({ scanHiddenFolders: true });
-		});
-		// Old behavior restored: the dot folder surfaces under its sanitized name; __ stays as-is.
-		expect(api.stash).toBeDefined();
-		expect(api.__internal).toBeDefined();
-		// ...but prefixed files are still skipped (the dot/__ file rule is not shimmed by the opt-out).
+		const api = await boot({ hidden: ["!**/.*/", "!**/__*/"] });
+		// The dot folder surfaces under its sanitized name; __ stays as-is.
+		expect(await api.stash.x()).toBe(1);
+		expect(await api.__internal.y()).toBe(1);
 		expect(api.__skip).toBeUndefined();
 		expect(api.skip).toBeUndefined();
 		expect(api.dotfile).toBeUndefined();
-		expect(warnings.some((w) => w.code === "CONFIG_SCAN_HIDDEN_FOLDERS_DEPRECATED")).toBe(true);
+	});
+
+	it("`!**/__*` brings back `__`-prefixed files and folders alike", async () => {
+		await writeModule(join(root, "__helper.mjs"), "export function __helper() { return 'h'; }");
+		await writeModule(join(root, "__internal", "y.mjs"), "export function y() { return 1; }");
+		await writeModule(join(root, ".dotfile.mjs"), "export function dotfile() { return 1; }");
+		const api = await boot({ hidden: "!**/__*" });
+		expect(await api.__helper()).toBe("h");
+		expect(await api.__internal.y()).toBe(1);
+		expect(api.dotfile).toBeUndefined();
+	});
+
+	it("a dotted glob names a dot-prefixed entry by its leading dot (`!.stash`, `!a..git`)", async () => {
+		await writeModule(join(root, ".stash", "x.mjs"), "export function x() { return 1; }");
+		await writeModule(join(root, "a", ".git", "g.mjs"), "export function g() { return 2; }");
+		await writeModule(join(root, "a", "b.mjs"), "export function b() { return 3; }");
+		const api = await boot({ hidden: ["!.stash", "!a..git"] });
+		expect(await api.stash.x()).toBe(1);
+		expect(await api.a.git.g()).toBe(2);
+	});
+
+	it("the last matching glob decides: a later glob hides again what an earlier `!` brought back", async () => {
+		await writeModule(join(root, "math", "add.mjs"), "export function add(a, b) { return a + b; }");
+		await writeModule(join(root, "__one", "x.mjs"), "export function x() { return 1; }");
+		await writeModule(join(root, "__two", "y.mjs"), "export function y() { return 2; }");
+		const api = await boot({ hidden: ["!**/__*/", "__two"] });
+		expect(await api.__one.x()).toBe(1);
+		expect(await api.math.add(1, 1)).toBe(2);
+		expect(api.__two).toBeUndefined();
+	});
+
+	it("a framework-reserved name a `!` glob brings back is still refused", async () => {
+		await writeModule(join(root, "math", "add.mjs"), "export function add(a, b) { return a + b; }");
+		// `__metadata` is an ordinary member name in v4 (nodes carry no framework keys); `____impl` is still reserved.
+		await writeModule(join(root, "____impl.mjs"), "export function m() { return 1; }");
+		await expect(boot({ hidden: "!**/__*" })).rejects.toMatchObject({ code: "MODULE_RESERVED_FILE" });
 	});
 
 	it("prunes a folder that becomes empty after hiding its only child (#156 + hidden)", async () => {
@@ -219,22 +231,21 @@ describe.each([{ mode: "eager" }, { mode: "lazy" }])("Hidden entries + empty-fol
 		expect(api.plugins.skipfile).toBeUndefined();
 	});
 
-	it("api.add skips hidden-prefixed folders by default and honors scanHiddenFolders per call (+ warning)", async () => {
+	it("api.add skips hidden-prefixed folders by default and brings them back with a `!` glob per call", async () => {
 		await writeModule(join(root, "base.mjs"), "export function base() { return 'b'; }");
 		const addRoot = makeRoot(`${mode}-addhidden`);
 		extraDirs.push(addRoot);
 		await writeModule(join(addRoot, "keep", "k.mjs"), "export function k() { return 1; }");
 		await writeModule(join(addRoot, ".stash", "s.mjs"), "export function s() { return 1; }");
+		await writeModule(join(addRoot, "__inner.mjs"), "export function __inner() { return 2; }");
 		const api = await boot();
 
 		await api.slothlet.api.add("plugins", addRoot);
 		expect(api.plugins.keep).toBeDefined();
 		expect(api.plugins.stash).toBeUndefined();
 
-		const warnings = await captureWarnings(async () => {
-			await api.slothlet.api.add("plugins2", addRoot, { scanHiddenFolders: true });
-		});
-		expect(api.plugins2.stash).toBeDefined();
-		expect(warnings.some((w) => w.code === "CONFIG_SCAN_HIDDEN_FOLDERS_DEPRECATED")).toBe(true);
+		await api.slothlet.api.add("plugins2", addRoot, { hidden: ["!**/.*/", "!__inner"] });
+		expect(await api.plugins2.stash.s()).toBe(1);
+		expect(await api.plugins2.__inner()).toBe(2);
 	});
 });

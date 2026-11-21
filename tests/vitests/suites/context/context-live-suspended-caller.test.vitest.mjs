@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:01-07:00 (1791090901)
+ *	@Last modified time: 2026-11-16T18:28:56-08:00 (1794882536)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -22,7 +22,7 @@
  * off the call stack. V8's async stack traces also carry the `at async …` frames of the OUTER
  * suspended calls, which is what these cases are about:
  *
- * - **A synchronously entered module** — a nested leaf, or a `lockCaller`-pinned callback — whose
+ * - **A synchronously entered module** — a nested leaf, or a `pin`-pinned callback — whose
  *   own file is not a suspended call's was attributed to the outer suspended caller found further
  *   down the stack (`run.boot` here, `run.runHostBootChain` downstream).
  * - **A suspended call resuming in a sibling file of its module** was matched only by the exact
@@ -122,10 +122,12 @@ describe.each(PLATFORMS)("Live runtime > suspended caller attribution (#512) > $
 		api = await slothlet({
 			...base,
 			hidden: ["ext", "rogue", "shared"],
-			routines: [{ name: "activate", mode: "manual", cascade: false }],
-			stackRoutines: true,
+			routines: {
+				entries: [{ name: "activate", mode: "manual", cascade: false }],
+				stack: true
+			},
 			silent: true,
-			permissions: { defaultPolicy: "deny", rules: RULES }
+			permissions: { policy: "deny", rules: RULES }
 		});
 		const extID = await api.slothlet.api.add(["ext"], EXT_DIR);
 		const rogueID = await api.slothlet.api.add(["rogue"], ROGUE_DIR);
@@ -133,7 +135,7 @@ describe.each(PLATFORMS)("Live runtime > suspended caller attribution (#512) > $
 	}
 
 	describe("a synchronously entered module is attributed to itself, not to an outer suspended caller", () => {
-		it("a lockCaller-pinned callback the host invokes from its boot chain runs as the extension", async () => {
+		it("a pin-pinned callback the host invokes from its boot chain runs as the extension", async () => {
 			const { extID } = await boot();
 			// run.chain → run.boot → ext.activate.for(id) registers two pinned callbacks and settles;
 			// run.boot (still suspended inside run.chain) then renders them synchronously.
@@ -237,8 +239,9 @@ describe.each(PLATFORMS)("Live runtime > suspended caller attribution (#512) > $
 			await turn();
 			releaseActivation();
 			// ext.activate and ext.peer.wait may differ in rights and both import resume.mjs, so neither is
-			// chosen. With no caller, `self` itself refuses (reported through the routine that ran the activation).
-			await expect(activation).rejects.toMatchObject({ code: "ROUTINE_FAILED", cause: { code: "RUNTIME_NO_ACTIVE_CONTEXT_SELF" } });
+			// chosen. A caller that cannot be determined is refused each access with `PERMISSION_DENIED` (#726), which the
+			// fixture reports as "denied", so the activation completes with every access refused.
+			expect(await activation).toEqual(["denied", "denied"]);
 			releaseWait();
 			expect(await waiting).toBe("waited");
 		});
@@ -253,8 +256,8 @@ describe.each(PLATFORMS)("Live runtime > suspended caller attribution (#512) > $
 			await turn();
 			releaseActivation();
 			// resume.mjs narrows the caller to ext.activate or ext.peer.wait; run.boot's frame further out is
-			// the flow that awaited it, not a way to settle which of the two is running.
-			await expect(chained).rejects.toMatchObject({ code: "ROUTINE_FAILED", cause: { code: "RUNTIME_NO_ACTIVE_CONTEXT_SELF" } });
+			// the flow that awaited it, not a way to settle which of the two is running. Each access is refused (#726).
+			expect(await chained).toEqual(["denied", "denied"]);
 			releaseWait();
 			expect(await waiting).toBe("waited");
 		});
@@ -268,12 +271,11 @@ describe.each(PLATFORMS)("Live runtime > suspended caller attribution (#512) > $
 			const waiting = api.ext.peer.wait(waitGate);
 			await turn();
 			releaseActivation();
-			// Eager references are the leaves themselves, gated on whoever calls them — unresolved here, so
-			// denied rather than handed the host exemption. A lazy reference to a not-yet-loaded leaf is a
-			// pending value that carries the caller it was taken under (ext.activate), and is gated on that.
-			// The permissions namespace is gated on the live caller in both modes.
-			const expected = config.mode === "lazy" ? ["rendered:sibling", "subscribed", "denied"] : ["denied", "denied", "denied"];
-			expect(await activation).toEqual(expected);
+			// A reference is gated on whoever calls it — unresolved here, so denied rather than handed the host
+			// exemption. A lazy reference to a not-yet-loaded leaf carries the caller it was taken under (ext.activate),
+			// which is enforced in addition to the live caller, never instead of it: with no known caller it is refused
+			// too, as the eager leaf is (#726). The permissions namespace is gated on the live caller in both modes.
+			expect(await activation).toEqual(["denied", "denied", "denied"]);
 			releaseWait();
 			expect(await waiting).toBe("waited");
 		});
@@ -375,10 +377,12 @@ describe.each(getMatrixConfigs({ runtime: "live" }))(
 			api = await slothlet({
 				...config,
 				base: null,
-				routines: [{ name: "activate", mode: "manual", cascade: false }],
-				stackRoutines: true,
+				routines: {
+					entries: [{ name: "activate", mode: "manual", cascade: false }],
+					stack: true
+				},
 				silent: true,
-				permissions: { defaultPolicy: "deny", rules: RULES }
+				permissions: { policy: "deny", rules: RULES }
 			});
 			const extID = await api.slothlet.api.add(["ext"], EXT_DIR);
 			await api.slothlet.api.add(["rogue"], ROGUE_DIR);
@@ -469,3 +473,67 @@ describe("Live runtime > synchronous entries decide the caller (#512) [direct]",
 		manager.cleanup("direct-512b");
 	});
 });
+
+describe.each(getMatrixConfigs({ runtime: "live" }))(
+	"Live runtime > a call whose caller could not be told stays refused once its lazy target loads > $name",
+	({ config }) => {
+		describe.each(["precise", "fast"])("attribution %s", (attribution) => {
+			let api;
+
+			afterEach(async () => {
+				if (api) await api.shutdown();
+				api = null;
+			});
+
+			/**
+			 * Boot the host with the extension and the rogue module mounted.
+			 * @returns {Promise<{extID: string}>} The extension's id.
+			 */
+			async function boot() {
+				api = await slothlet({
+					...config,
+					base: ROOT,
+					hidden: ["ext", "rogue", "shared"],
+					routines: {
+						entries: [{ name: "activate", mode: "manual", cascade: false }],
+						stack: true
+					},
+					silent: true,
+					permissions: { policy: "deny", rules: RULES, caller: { attribution } }
+				});
+				const extID = await api.slothlet.api.add(["ext"], EXT_DIR);
+				await api.slothlet.api.add(["rogue"], ROGUE_DIR);
+				return { extID };
+			}
+
+			it("two api paths of one module resuming in a file both import: every access is refused", async () => {
+				const { extID } = await boot();
+				const [activationGate, releaseActivation] = gate();
+				const [waitGate, releaseWait] = gate();
+				const activation = api.ext.activate.for(extID)("sibling", activationGate);
+				await turn();
+				const waiting = api.ext.peer.wait(waitGate);
+				await turn();
+				releaseActivation();
+				// The caller cannot be told: refused, as in eager mode, not taken as the host once the lazy target loads.
+				expect(await activation).toEqual(["denied", "denied"]);
+				releaseWait();
+				expect(await waiting).toBe("waited");
+			});
+
+			it("an outer caller of another module is not chosen for them: every access is refused", async () => {
+				const { extID } = await boot();
+				const [activationGate, releaseActivation] = gate();
+				const [waitGate, releaseWait] = gate();
+				const chained = api.run.chain("sibling", extID, activationGate);
+				await turn();
+				const waiting = api.ext.peer.wait(waitGate);
+				await turn();
+				releaseActivation();
+				expect(await chained).toEqual(["denied", "denied"]);
+				releaseWait();
+				expect(await waiting).toBe("waited");
+			});
+		});
+	}
+);

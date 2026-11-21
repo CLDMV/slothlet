@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-09T21:00:00-07:00 (1791604800)
+ *	@Last modified time: 2026-11-17T11:23:41-08:00 (1794943421)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -34,29 +34,90 @@
  * through inactive layers to whatever is under them, so an out-of-order teardown still ends with the
  * original installed and a later enable never builds on a dead wrapper.
  *
- * The registry lives on the global object under a `Symbol.for` key, so every copy shares it.
+ * The registry lives on the global object under a `Symbol.for` key, so every copy shares it. The property cannot be
+ * replaced, and what a copy puts in it is a frozen view of its layer: code that reaches the registry cannot switch a
+ * layer off, and each copy reads its own layers from its own records, never from the registry.
  */
+
+import { Objects, Reflect, Symbols, WeakMap, WeakMapMethods } from "#helpers/intrinsics";
 
 /**
  * Where the registry lives on the global object.
  * @type {symbol}
  * @private
  */
-const LAYERS = Symbol.for("slothlet.boundaryPatch.layers");
+const LAYERS = Symbols.for("slothlet.boundaryPatch.layers");
 
 /**
- * The shared registry: identifying function → layer.
+ * This copy's own layers, by the function that identifies each: read from here, never from the shared registry, so
+ * nothing written to the registry changes how this copy sees its own wrappers.
+ * @type {WeakMap<Function, {active: boolean, below: *}>}
+ * @private
+ */
+const OWN_LAYERS = new WeakMap();
+
+/**
+ * The entry another copy's layer had in the registry when this copy first read it: an entry put in its place later is
+ * not taken for it.
+ * @type {WeakMap<Function, object>}
+ * @private
+ */
+const SEEN_LAYERS = new WeakMap();
+
+/**
+ * The shared registry: identifying function → layer. Kept on the global object as a property that cannot be written,
+ * deleted or redefined, so no one can swap the registry itself; each copy of slothlet keeps sharing the one map.
  * @returns {WeakMap<Function, {active: boolean, below: *}>} The registry, created on first use.
  * @private
  */
 function runtime_layers() {
-	let registry = globalThis[LAYERS];
+	const descriptor = Reflect.getOwnPropertyDescriptor(globalThis, LAYERS);
+	let registry = descriptor && "value" in descriptor ? descriptor.value : undefined;
 	if (!(registry instanceof WeakMap)) {
 		registry = new WeakMap();
 		// Non-enumerable, so the global object's own keys look the same as before.
-		Object.defineProperty(globalThis, LAYERS, { value: registry, configurable: true });
+		Objects.defineProperty(globalThis, LAYERS, { __proto__: null, value: registry, writable: false, configurable: false });
+	} else if (descriptor.configurable || descriptor.writable) {
+		// Made by an earlier copy that left it replaceable: the same map, fixed in place.
+		Objects.defineProperty(globalThis, LAYERS, { __proto__: null, value: registry, writable: false, configurable: false });
 	}
 	return registry;
+}
+
+/**
+ * The layer a function identifies: this copy's own, or another copy's entry as this copy first read it.
+ * @param {*} marker - A function that may identify a layer.
+ * @returns {{active: boolean, below: *}|undefined} The layer.
+ * @private
+ */
+function runtime_layerOf(marker) {
+	if (marker === null || (typeof marker !== "function" && typeof marker !== "object")) return undefined;
+	const own = WeakMapMethods.get(OWN_LAYERS, marker);
+	if (own !== undefined) return own;
+	const seen = WeakMapMethods.get(SEEN_LAYERS, marker);
+	if (seen !== undefined) return seen;
+	const entry = WeakMapMethods.get(runtime_layers(), marker);
+	if (entry !== null && typeof entry === "object") WeakMapMethods.set(SEEN_LAYERS, marker, entry);
+	return entry;
+}
+
+/**
+ * What the registry holds for one of this copy's layers: a frozen view that reads the layer, so code outside slothlet
+ * that reaches the registry cannot switch the layer off or point it elsewhere.
+ * @param {{active: boolean, below: *}} layer - The layer.
+ * @returns {{active: boolean, below: *}} The view (both members read-only).
+ * @private
+ */
+function runtime_layerView(layer) {
+	return Objects.freeze({
+		__proto__: null,
+		get active() {
+			return layer.active;
+		},
+		get below() {
+			return layer.below;
+		}
+	});
 }
 
 /**
@@ -75,10 +136,9 @@ const runtime_byValue = (value) => value;
  * @private
  */
 function runtime_collapse(installed, identify) {
-	const registry = runtime_layers();
 	let current = installed;
 	for (;;) {
-		const layer = registry.get(identify(current));
+		const layer = runtime_layerOf(identify(current));
 		if (!layer || layer.active) return current;
 		current = layer.below;
 	}
@@ -107,7 +167,8 @@ export function openLayer(installed, identify = runtime_byValue) {
  * @internal
  */
 export function markLayer(marker, layer) {
-	runtime_layers().set(marker, layer);
+	WeakMapMethods.set(OWN_LAYERS, marker, layer);
+	WeakMapMethods.set(runtime_layers(), marker, runtime_layerView(layer));
 }
 
 /**
@@ -117,7 +178,7 @@ export function markLayer(marker, layer) {
  * @internal
  */
 export function isActiveLayer(marker) {
-	return runtime_layers().get(marker)?.active === true;
+	return runtime_layerOf(marker)?.active === true;
 }
 
 /**

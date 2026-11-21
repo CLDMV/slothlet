@@ -39,31 +39,6 @@ export function transformTypeScript(filePath: string, options?: {
  */
 export function createDataUrl(code: string): string;
 /**
- * Remove fallback roots in the system temp directory that no live process can still be using
- * (#465). Runs once per process, on its first use of the fallback.
- *
- * - `slothlet-<pid>-XXXXXX`: removed when owned by this user and the PID is dead.
- * - `slothlet-XXXXXX` (pre-PID format): removed only when owned by this user, older than a day,
- *   and holding no `<pid>-…` cache directory whose PID is still alive.
- *
- * Symlinks and anything not owned by this user are never touched. Failures are swallowed —
- * cleanup is opportunistic, not load-bearing.
- *
- * @returns {Promise<void>}
- * @public
- */
-export function sweepStaleFallbackRoots(): Promise<void>;
-/**
- * Remove this process's fallback root once no instance still has a cache directory inside it
- * (#465). Called from `shutdown()` after the instance removed its own cache directory; a later
- * fallback use creates a fresh root. A root still holding another instance's cache, or with a
- * cache write in flight, is kept.
- *
- * @returns {Promise<boolean>} True when the root was removed.
- * @public
- */
-export function releaseSecureFallbackRoot(): Promise<boolean>;
-/**
  * Resolve the on-disk file a relative specifier targets and classify it as a
  * TypeScript source or not.
  *
@@ -164,7 +139,7 @@ export function rewriteRelativeSpecifiers(code: string, sourcePath: string, reso
  * file in the graph produces fresh URLs for every importer — a reload never
  * serves stale linked output.
  *
- * Cache lives at `<projectRoot>/.slothlet-cache/<pid>-<instanceID>/<hash>.mjs` —
+ * Cache lives at `<projectRoot>/.slothlet-cache/<pid>-<hash of instanceID>/<hash>.mjs` —
  * deliberately OUTSIDE `node_modules/` because Node's `READ_PACKAGE_SCOPE` halts
  * at a `node_modules` segment and would otherwise break self-reference resolution
  * (needed when slothlet runs inside its own repo / monorepo workspace, where no
@@ -221,4 +196,42 @@ export function transformTypeScriptStrict(filePath: string, options?: {
  * @public
  */
 export function formatDiagnostics(diagnostics: object[], ts: object): string[];
+/**
+ * This file's internal bindings, for the files of slothlet's own that use them: each of those files takes them once, as
+ * it loads, and anyone else is refused (see `ownBindingsRefusal` in `helpers/instance-imports`).
+ * @param {string} consumer - The file asking: its path in slothlet's code folder, without its extension.
+ * @returns {object} The bindings.
+ * @internal
+ */
+export function internals(consumer: string): object;
+/** @type {typeof sweepStaleFallbackRoots} */
+declare const guarded_sweepStaleFallbackRoots: typeof sweepStaleFallbackRoots;
+/** @type {typeof releaseSecureFallbackRoot} */
+declare const guarded_releaseSecureFallbackRoot: typeof releaseSecureFallbackRoot;
+/**
+ * Remove fallback roots in the system temp directory that no live process can still be using
+ * (#465). Runs once per process, on its first use of the fallback.
+ *
+ * - `slothlet-<pid>-XXXXXX`: removed when owned by this user and the PID is dead.
+ * - `slothlet-XXXXXX` (pre-PID format): removed only when owned by this user, older than a day,
+ *   and holding no `<pid>-…` cache directory whose PID is still alive.
+ *
+ * Symlinks and anything not owned by this user are never touched. Failures are swallowed —
+ * cleanup is opportunistic, not load-bearing.
+ *
+ * @returns {Promise<void>}
+ * @public
+ */
+declare function sweepStaleFallbackRoots(): Promise<void>;
+/**
+ * Remove this process's fallback root once no instance still has a cache directory inside it
+ * (#465). Called from `shutdown()` after the instance removed its own cache directory; a later
+ * fallback use creates a fresh root. A root still holding another instance's cache, or with a
+ * cache write in flight, is kept.
+ *
+ * @returns {Promise<boolean>} True when the root was removed.
+ * @public
+ */
+declare function releaseSecureFallbackRoot(): Promise<boolean>;
+export { guarded_sweepStaleFallbackRoots as sweepStaleFallbackRoots, guarded_releaseSecureFallbackRoot as releaseSecureFallbackRoot };
 //# sourceMappingURL=typescript.d.mts.map

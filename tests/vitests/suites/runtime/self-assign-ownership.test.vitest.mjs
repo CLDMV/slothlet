@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-26T02:53:05-07:00 (1793008385)
+ *	@Last modified time: 2026-11-16T18:30:24-08:00 (1794882624)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -42,8 +42,8 @@ describe("self.X = ... (Stage 2: ownership)", () => {
 	it("allows external code (no currentWrapper) to write at the root", async () => {
 		api = await slothlet({ base: "./api_tests/api_test", mode: "eager" });
 
-		await api.slothlet.run({}, () => {
-			// We're directly in user code via slothlet.run — no module currentWrapper.
+		await api.slothlet.context.run({}, () => {
+			// We're directly in user code via slothlet.context.run — no module currentWrapper.
 			self.bootstrapValue = "from-outside";
 			expect(self.bootstrapValue).toBe("from-outside");
 		});
@@ -60,8 +60,8 @@ describe("self.X = ... (Stage 2: ownership)", () => {
 	});
 
 	it("denies an api.add'd module writing outside its mount point, with the permission system on", async () => {
-		api = await slothlet({ base: "./api_tests/api_test", mode: "eager", permissions: { defaultPolicy: "allow" } });
-		await api.slothlet.api.add("ownerNs", "./api_tests/api_test_self_assign", { moduleID: "owner-ns" });
+		api = await slothlet({ base: "./api_tests/api_test", mode: "eager", permissions: { policy: "allow" } });
+		await api.slothlet.api.add("ownerNs", "./api_tests/api_test_self_assign", { id: "owner-ns" });
 
 		// owner.writeUnderOwn does `self.owner = …`. Mounted at "ownerNs.owner",
 		// the module's endpoint is "ownerNs" → only writes under "ownerNs.*"
@@ -74,7 +74,7 @@ describe("self.X = ... (Stage 2: ownership)", () => {
 
 	it("allows an api.add'd module to overwrite its own mount-point top-level key", async () => {
 		api = await slothlet({ base: "./api_tests/api_test", mode: "eager" });
-		await api.slothlet.api.add("ownerNs", "./api_tests/api_test_self_assign", { moduleID: "owner-ns" });
+		await api.slothlet.api.add("ownerNs", "./api_tests/api_test_self_assign", { id: "owner-ns" });
 
 		// `overwriteOwnMount("ownerNs", value)` does `self.ownerNs = value`.
 		// Caller endpoint is "ownerNs", target is "ownerNs" → isUnderOwn=true → allowed.
@@ -85,8 +85,8 @@ describe("self.X = ... (Stage 2: ownership)", () => {
 	});
 
 	it("denies an api.add'd module writing to a sibling root namespace, with the permission system on", async () => {
-		api = await slothlet({ base: "./api_tests/api_test", mode: "eager", permissions: { defaultPolicy: "allow" } });
-		await api.slothlet.api.add("isolated", "./api_tests/api_test_self_assign", { moduleID: "isolated-mod" });
+		api = await slothlet({ base: "./api_tests/api_test", mode: "eager", permissions: { policy: "allow" } });
+		await api.slothlet.api.add("isolated", "./api_tests/api_test_self_assign", { id: "isolated-mod" });
 
 		// writeOutside attempts `self.intruder = …`. Its module endpoint is
 		// "isolated"; "intruder" is not under "isolated.*". DENIED.
@@ -98,7 +98,7 @@ describe("self.X = ... (Stage 2: ownership)", () => {
 
 	it("lets an api.add'd module write to a sibling root namespace with the permission system off", async () => {
 		api = await slothlet({ base: "./api_tests/api_test", mode: "eager" });
-		await api.slothlet.api.add("isolated", "./api_tests/api_test_self_assign", { moduleID: "isolated-mod" });
+		await api.slothlet.api.add("isolated", "./api_tests/api_test_self_assign", { id: "isolated-mod" });
 
 		// Ownership decides writes only while the permission system is on (#625).
 		expect(api.isolated.owner.writeOutside("landed")).toBe("landed");

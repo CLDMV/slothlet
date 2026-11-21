@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:30-07:00 (1791091710)
+ *	@Last modified time: 2026-11-16T16:16:51-08:00 (1794874611)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -26,7 +26,7 @@ import {
 	propagateInstanceQuery,
 	installInstanceImportHooks,
 	slothletInstanceImports
-} from "@cldmv/slothlet/helpers/instance-imports";
+} from "#helpers/instance-imports";
 
 const LEAF = "file:///app/api/tally/tally.mjs?slothlet_instance=abc";
 const OWN_LIB = new URL("../../../../src/lib/", import.meta.url).href;
@@ -151,6 +151,12 @@ describe("Helpers > instance-imports (#518)", () => {
 			const registry = {};
 			expect(installInstanceImportHooks({}, registry)).toBe(false);
 			expect(installInstanceImportHooks(undefined, registry)).toBe(false);
+		});
+
+		it("returns false on a host with neither API for the process's own registration too", () => {
+			// No test of this file registers the hooks with Node itself, so the process has none yet.
+			expect(installInstanceImportHooks({})).toBe(false);
+			expect(installInstanceImportHooks(undefined)).toBe(false);
 		});
 	});
 

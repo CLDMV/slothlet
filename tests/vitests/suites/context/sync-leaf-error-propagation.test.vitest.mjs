@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:02-07:00 (1791090902)
+ *	@Last modified time: 2026-11-16T18:29:44-08:00 (1794882584)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -156,7 +156,7 @@ describe.each(getMatrixConfigs())("Context > leaf throws propagate untouched (#2
 });
 
 describe("Context > the retained manager-level wrap chains and renders its cause (#252)", () => {
-	it("sets the standard `cause` and keeps `originalError` for compatibility", () => {
+	it("sets the standard `cause`", () => {
 		// Direct manager use is the boundary the wrap still guards; the wrap itself must follow
 		// ES2022 chaining so util.inspect / serializers / lint walkers reach the original.
 		const cm = new AsyncContextManager();
@@ -172,7 +172,6 @@ describe("Context > the retained manager-level wrap chains and renders its cause
 		}
 		expect(caught.code).toBe("CONTEXT_EXECUTION_FAILED");
 		expect(caught.cause, "standard chaining channel").toEqual(PAYLOAD);
-		expect(caught.originalError, "compat channel").toEqual(PAYLOAD);
 	});
 
 	it("renders a non-Error thrown value in the message instead of an empty slot", () => {
@@ -307,7 +306,7 @@ describe("Context > error hooks unwrap an application-thrown SlothletError (#252
 				 * @returns {never} Always throws.
 				 */
 				packedThrow() {
-					throw new SlothletError("CONTEXT_EXECUTION_FAILED", { instanceID: "app-made" }, rootCause);
+					throw new SlothletError("CONTEXT_EXECUTION_FAILED", { instanceID: "app-made" }, { cause: rootCause });
 				}
 			}
 		});

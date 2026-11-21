@@ -61,7 +61,7 @@ export class ApiCacheManager extends ComponentBase {
      *   endpoint: ".",
      *   moduleID: "base_abc123",
      *   api: apiTree,
-     *   folderPath: this.____config.dir,
+     *   folderPath: this.____config.base,
      *   mode: "lazy",
      *   sanitizeOptions: {},
      *   collisionMode: "merge",
@@ -130,9 +130,8 @@ export class ApiCacheManager extends ComponentBase {
      * @example
      * const diag = cacheManager.getCacheDiagnostics();
      * // {
-     * //   totalCaches: 3,
      * //   caches: [
-     * //     { moduleID: "base_abc123", endpoint: ".", pathCount: 42, timestamp: ... },
+     * //     { module: "base_abc123", path: [], folder: "/app/api", mode: "eager", count: 42, at: 1708012345 },
      * //     ...
      * //   ]
      * // }

@@ -47,7 +47,7 @@ describe.each(getMatrixConfigs())("Context > Nested protection (#207) > $name", 
 		let message = "";
 		let unchanged = false;
 		await withSuppressedSlothletErrorOutput(async () => {
-			await api.slothlet.scope({
+			await api.slothlet.context.scope({
 				context: { auth: { userId: "real" } },
 				protect: ["auth"],
 				fn: async () => {
@@ -70,7 +70,7 @@ describe.each(getMatrixConfigs())("Context > Nested protection (#207) > $name", 
 		api = await slothlet({ ...config, base: BASE });
 
 		let value;
-		await api.slothlet.scope({
+		await api.slothlet.context.scope({
 			context: { auth: { userId: "real" } },
 			protect: ["auth"],
 			fn: async () => {
@@ -86,7 +86,7 @@ describe.each(getMatrixConfigs())("Context > Nested protection (#207) > $name", 
 		let threw = false;
 		let message = "";
 		await withSuppressedSlothletErrorOutput(async () => {
-			await api.slothlet.scope({
+			await api.slothlet.context.scope({
 				context: { auth: { userId: "real" } },
 				protect: ["auth"],
 				fn: async () => {
@@ -111,7 +111,7 @@ describe.each(getMatrixConfigs())("Context > Nested protection (#207) > $name", 
 		let threw = false;
 		let message = "";
 		await withSuppressedSlothletErrorOutput(async () => {
-			await api.slothlet.scope({
+			await api.slothlet.context.scope({
 				context: { auth: { profile: { name: "real" } } },
 				protect: ["auth"],
 				fn: async () => {
@@ -134,7 +134,7 @@ describe.each(getMatrixConfigs())("Context > Nested protection (#207) > $name", 
 		let deleteThrew = false;
 		let defineThrew = false;
 		await withSuppressedSlothletErrorOutput(async () => {
-			await api.slothlet.scope({
+			await api.slothlet.context.scope({
 				context: { auth: { userId: "real" } },
 				protect: ["auth"],
 				fn: async () => {
@@ -162,7 +162,7 @@ describe.each(getMatrixConfigs())("Context > Nested protection (#207) > $name", 
 		let pushThrew = false;
 		let unchanged = false;
 		await withSuppressedSlothletErrorOutput(async () => {
-			await api.slothlet.scope({
+			await api.slothlet.context.scope({
 				context: { roles: ["user"] },
 				protect: ["roles"],
 				fn: async () => {
@@ -196,7 +196,7 @@ describe.each(getMatrixConfigs())("Context > Nested protection (#207) > $name", 
 		let dateRaw = false;
 		let dateMethodWorks = false;
 		await withSuppressedSlothletErrorOutput(async () => {
-			await api.slothlet.scope({
+			await api.slothlet.context.scope({
 				context: { pObj: { a: 1 }, arr: [1], str: "s", nul: null, at: new Date(t) },
 				protect: ["pObj", "arr", "str", "nul", "at"],
 				fn: async () => {
@@ -229,7 +229,7 @@ describe.each(getMatrixConfigs())("Context > Nested protection (#207) > $name", 
 		api = await slothlet({ ...config, base: BASE });
 
 		let stable = false;
-		await api.slothlet.scope({
+		await api.slothlet.context.scope({
 			context: { auth: { userId: "real" } },
 			protect: ["auth"],
 			fn: async () => {
@@ -247,7 +247,7 @@ describe.each(getMatrixConfigs())("Context > Nested protection (#207) > $name", 
 		let ownerDefined = false;
 		let wrongThrew = false;
 		await withSuppressedSlothletErrorOutput(async () => {
-			await api.slothlet.scope({
+			await api.slothlet.context.scope({
 				context: { cfg: { timeout: 1, drop: "x" } },
 				owners: { cfg: "callers.dataReader" },
 				fn: async () => {
@@ -278,7 +278,7 @@ describe.each(getMatrixConfigs())("Context > Nested protection (#207) > $name", 
 		let threw = false;
 		let intact = false;
 		await withSuppressedSlothletErrorOutput(async () => {
-			await api.slothlet.scope({
+			await api.slothlet.context.scope({
 				context: { auth: Object.assign(Object.create(null), { userId: "real" }) },
 				protect: ["auth"],
 				fn: async () => {
@@ -309,7 +309,7 @@ describe.each(getMatrixConfigs())("Context > Nested protection (#207) > $name", 
 		let crossMsg = "";
 		await withSuppressedSlothletErrorOutput(async () => {
 			const shared = { v: "init" };
-			await api.slothlet.scope({
+			await api.slothlet.context.scope({
 				context: { a: shared, b: shared },
 				owners: { a: "callers.dataReader", b: "callers.dataReaderB" },
 				fn: async () => {
@@ -342,7 +342,7 @@ describe.each(getMatrixConfigs())("Context > Nested protection (#207) > $name", 
 		let threw = false;
 		let message = "";
 		await withSuppressedSlothletErrorOutput(async () => {
-			await api.slothlet.scope({
+			await api.slothlet.context.scope({
 				context: { cfg: { timeout: 1 } },
 				owners: { cfg: "callers.dataReader" },
 				fn: async () => {
@@ -366,7 +366,7 @@ describe.each(getMatrixConfigs())("Context > Nested protection (#207) > $name", 
 		api = await slothlet({ ...config, base: BASE });
 
 		let leaked;
-		await api.slothlet.scope({
+		await api.slothlet.context.scope({
 			context: { auth: { userId: "real" } },
 			protect: ["auth"],
 			fn: async () => {
@@ -412,7 +412,7 @@ describe.each(getMatrixConfigs())("Context > Nested protection (#207) > $name", 
 
 		let doubled = false;
 		await withSuppressedSlothletErrorOutput(async () => {
-			await api.slothlet.scope({
+			await api.slothlet.context.scope({
 				context: {
 					cfg: {
 						_v: 0,
@@ -440,7 +440,7 @@ describe.each(getMatrixConfigs())("Context > Nested protection (#207) > $name", 
 		let threw = false;
 		let untouched = false;
 		await withSuppressedSlothletErrorOutput(async () => {
-			await api.slothlet.scope({
+			await api.slothlet.context.scope({
 				context: {
 					cfg: {
 						leaked: null,
@@ -470,7 +470,7 @@ describe.each(getMatrixConfigs())("Context > Nested protection (#207) > $name", 
 		api = await slothlet({ ...config, base: BASE });
 
 		let wrote = false;
-		await api.slothlet.scope({
+		await api.slothlet.context.scope({
 			context: { open: { x: 1 }, locked: { y: 1 } },
 			protect: ["locked"],
 			fn: async () => {

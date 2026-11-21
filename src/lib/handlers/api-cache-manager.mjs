@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-12T09:16:40-07:00 (1791821800)
+ *	@Last modified time: 2026-11-16T18:28:45-08:00 (1794882525)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -34,8 +34,22 @@
  * });
  * const baseApi = cache.get("base_abc123").api; // Get API from cache
  */
+import { segmentsOf } from "#helpers/segments";
 import { ComponentBase } from "#factories/component-base";
-import { isFrameworkReservedKey } from "@cldmv/slothlet/helpers/reserved-keys";
+import { isFrameworkReservedKey } from "#helpers/reserved-keys";
+import {
+	ArrayMethods,
+	Dates,
+	listPush,
+	Map,
+	mapEntries,
+	mapKeysToArray,
+	MapMethods,
+	Objects,
+	splitText,
+	WeakSet,
+	WeakSetMethods
+} from "#helpers/intrinsics";
 
 /**
  * Cache entry structure for API tree storage and rebuild parameters.
@@ -106,7 +120,7 @@ export class ApiCacheManager extends ComponentBase {
 	 *   endpoint: ".",
 	 *   moduleID: "base_abc123",
 	 *   api: apiTree,
-	 *   folderPath: this.____config.dir,
+	 *   folderPath: this.____config.base,
 	 *   mode: "lazy",
 	 *   sanitizeOptions: {},
 	 *   collisionMode: "merge",
@@ -119,8 +133,7 @@ export class ApiCacheManager extends ComponentBase {
 			throw new this.SlothletError("INVALID_ARGUMENT", {
 				argument: "moduleID",
 				expected: "non-empty string",
-				received: typeof moduleID,
-				validationError: true
+				received: typeof moduleID
 			});
 		}
 
@@ -128,21 +141,19 @@ export class ApiCacheManager extends ComponentBase {
 			throw new this.SlothletError("INVALID_ARGUMENT", {
 				argument: "entry.api",
 				expected: "API tree object",
-				received: typeof entry?.api,
-				validationError: true
+				received: typeof entry?.api
 			});
 		}
 
 		// Ensure moduleID matches entry
 		if (entry.moduleID && entry.moduleID !== moduleID) {
-			throw new this.SlothletError("CACHE_MODULEID_MISMATCH", {
-				cacheKey: moduleID,
-				entryModuleID: entry.moduleID,
-				validationError: true
+			throw new this.SlothletError("CACHE_MODULE_ID_MISMATCH", {
+				expected: moduleID,
+				received: entry.moduleID
 			});
 		}
 
-		this.caches.set(moduleID, entry);
+		MapMethods.set(this.caches, moduleID, entry);
 		this.version++;
 
 		this.slothlet.debug("cache", {
@@ -167,7 +178,7 @@ export class ApiCacheManager extends ComponentBase {
 	 * }
 	 */
 	get(moduleID) {
-		return this.caches.get(moduleID);
+		return MapMethods.get(this.caches, moduleID);
 	}
 
 	/**
@@ -182,7 +193,7 @@ export class ApiCacheManager extends ComponentBase {
 	 * }
 	 */
 	has(moduleID) {
-		return this.caches.has(moduleID);
+		return MapMethods.has(this.caches, moduleID);
 	}
 
 	/**
@@ -198,7 +209,7 @@ export class ApiCacheManager extends ComponentBase {
 	 * cacheManager.delete("plugins_abc123");
 	 */
 	delete(moduleID) {
-		const deleted = this.caches.delete(moduleID);
+		const deleted = MapMethods.delete(this.caches, moduleID);
 		if (deleted) this.version++;
 
 		if (deleted) {
@@ -221,7 +232,7 @@ export class ApiCacheManager extends ComponentBase {
 	 * // ["base_abc123", "plugins_xyz789", ...]
 	 */
 	getAllModuleIDs() {
-		return Array.from(this.caches.keys());
+		return mapKeysToArray(this.caches);
 	}
 
 	/**
@@ -236,9 +247,8 @@ export class ApiCacheManager extends ComponentBase {
 	 * @example
 	 * const diag = cacheManager.getCacheDiagnostics();
 	 * // {
-	 * //   totalCaches: 3,
 	 * //   caches: [
-	 * //     { moduleID: "base_abc123", endpoint: ".", pathCount: 42, timestamp: ... },
+	 * //     { module: "base_abc123", path: [], folder: "/app/api", mode: "eager", count: 42, at: 1708012345 },
 	 * //     ...
 	 * //   ]
 	 * // }
@@ -246,24 +256,23 @@ export class ApiCacheManager extends ComponentBase {
 	getCacheDiagnostics() {
 		const caches = [];
 
-		for (const [moduleID, entry] of this.caches.entries()) {
+		for (const ofEntry of mapEntries(this.caches)) {
+			const moduleID = ofEntry[0],
+				entry = ofEntry[1];
 			// Count paths in API tree
 			const pathCount = this._countPaths(entry.api);
 
-			caches.push({
-				moduleID,
-				endpoint: entry.endpoint,
-				folderPath: entry.folderPath,
+			listPush(caches, {
+				module: moduleID,
+				path: segmentsOf(entry.endpoint),
+				folder: entry.folderPath,
 				mode: entry.mode,
-				pathCount,
-				timestamp: entry.timestamp
+				count: pathCount,
+				at: entry.timestamp
 			});
 		}
 
-		return {
-			totalCaches: this.caches.size,
-			caches
-		};
+		return { caches };
 	}
 
 	/**
@@ -274,14 +283,17 @@ export class ApiCacheManager extends ComponentBase {
 	 * @private
 	 */
 	_countPaths(api, visited = new WeakSet()) {
-		if (!api || typeof api !== "object" || visited.has(api)) {
+		if (!api || typeof api !== "object" || WeakSetMethods.has(visited, api)) {
 			return 0;
 		}
 
-		visited.add(api);
+		WeakSetMethods.add(visited, api);
 		let count = 0;
 
-		for (const [key, value] of Object.entries(api)) {
+		for (let ofIndex = 0, ofList = Objects.entries(api); ofIndex < ofList.length; ofIndex++) {
+			const ofEntry = ofList[ofIndex],
+				key = ofEntry[0],
+				value = ofEntry[1];
 			// Skip the framework's reserved names; a module's `_`/`__`-prefixed export is a member and counts.
 			if (isFrameworkReservedKey(key)) {
 				continue;
@@ -309,7 +321,7 @@ export class ApiCacheManager extends ComponentBase {
 	 * cacheManager.clear();
 	 */
 	clear() {
-		this.caches.clear();
+		MapMethods.clear(this.caches);
 		this.version++;
 
 		this.slothlet.debug("cache", {
@@ -336,9 +348,8 @@ export class ApiCacheManager extends ComponentBase {
 
 		if (!entry) {
 			throw new this.SlothletError("CACHE_NOT_FOUND", {
-				moduleID,
-				operation: "rebuild",
-				validationError: true
+				module: moduleID,
+				operation: ["slothlet", "api", "reload"]
 			});
 		}
 
@@ -366,8 +377,11 @@ export class ApiCacheManager extends ComponentBase {
 		// used by the live API, and applyRootContributor's Object.assign overwrites the live
 		// API's properties with fresh wrappers (destroying custom properties and proxy identity).
 		// The moduleID itself must remain unchanged for ownership/metadata consistency.
+		// A single-file add is rebuilt as the add built it: its folder, filtered to that one file, its exports at the
+		// mount path.
+		const file = entry.file ?? null;
 		const freshApi = await this.slothlet.builders.builder.buildAPI({
-			dir: entry.folderPath,
+			dir: file ? file.dir : entry.folderPath,
 			// #471: the base entry of an instance with no base directory rebuilds to an empty root.
 			noBase: entry.folderPath === null,
 			mode: entry.mode,
@@ -376,9 +390,9 @@ export class ApiCacheManager extends ComponentBase {
 			apiPathPrefix: entry.endpoint === "." ? "" : entry.endpoint,
 			collisionMode: entry.collisionMode,
 			hidden: entry.hidden ?? null,
-			scanHiddenFolders: entry.scanHiddenFolders === true,
 			collisionContext: entry.endpoint === "." ? "initial" : "api",
-			cacheBust: Date.now(),
+			cacheBust: Dates.now(),
+			...(file ? { fileFilter: (fileName) => fileName === file.name, rootUnwrap: true } : {}),
 			// Synthetic / in-memory leaf (#117): re-build from the stored exports — there's no file
 			// to re-read. buildAPI ignores `dir` when syntheticExports is set; syntheticName mirrors
 			// the add-time intermediate key (last endpoint segment) so the flatten matches the add.
@@ -387,7 +401,7 @@ export class ApiCacheManager extends ComponentBase {
 						syntheticExports: entry.syntheticExports,
 						// Mirror the add-time syntheticName (parts.length ? last segment : "synthetic")
 						// so the flatten matches: a root synthetic (endpoint "") uses "synthetic".
-						syntheticName: entry.endpoint ? entry.endpoint.split(".").pop() : "synthetic"
+						syntheticName: entry.endpoint ? ArrayMethods.pop(splitText(entry.endpoint, ".")) : "synthetic"
 					}
 				: {})
 		});
@@ -395,7 +409,7 @@ export class ApiCacheManager extends ComponentBase {
 		this.slothlet.debug("cache", {
 			key: "DEBUG_MODE_CACHE_REBUILT_SUCCESSFULLY",
 			moduleID,
-			timestamp: Date.now()
+			timestamp: this.clock.now()
 		});
 
 		return freshApi;

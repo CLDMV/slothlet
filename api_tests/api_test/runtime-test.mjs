@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:30-07:00 (1791090870)
+ *	@Last modified time: 2026-11-16T18:24:48-08:00 (1794882288)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -23,7 +23,7 @@
  * @memberof module:api_test
  */
 
-import { self, context, instanceID } from "@cldmv/slothlet/runtime";
+import { self, context, instance } from "@cldmv/slothlet/runtime";
 
 /**
  * Comprehensive runtime verification that tests all aspects of the runtime system.
@@ -122,7 +122,7 @@ export function verifyRuntime() {
 		results.referenceTest.error = error.message;
 	}
 
-	// Test 4: Runtime type detection using instanceId availability (accessed via self.slothlet.diag.inspect().instanceID)
+	// Test 4: Runtime type detection using instanceId availability (accessed via self.slothlet.diag.inspect().instance)
 	try {
 		// Try to access instanceId and detect if it's really available
 		let instanceIdValue = "undefined";
@@ -131,7 +131,7 @@ export function verifyRuntime() {
 		try {
 			// Try to coerce instanceId to string to see if it exists
 			const diagData = self?.slothlet?.diag?.inspect ? self.slothlet.diag.inspect() : null;
-			instanceIdValue = diagData?.instanceID ? String(diagData.instanceID) : "undefined";
+			instanceIdValue = diagData?.instance ? String(diagData.instance) : "undefined";
 			// Check if it's actually available (not "undefined" or empty proxy)
 			hasInstanceId = instanceIdValue && instanceIdValue !== "undefined" && instanceIdValue !== "" && instanceIdValue !== "null";
 		} catch (_) {
@@ -474,14 +474,13 @@ export function testSelfAndReference() {
 }
 
 /**
- * Exercise all proxy traps on the `instanceID` export from the async runtime.
- * Must be called within an active slothlet async-runtime context so the in-context
- * branches of the get/has traps are reached.
+ * Read `instance.id` from the runtime inside a call: a real string, the running instance's id.
+ * Must be called within an active slothlet call.
  * @function getAsyncInstanceID
- * @returns {{ id: string, coerced: string, length: number, hasProp: boolean }} Proxy trap results
+ * @returns {{ id: string, type: string, frozen: boolean }} The id, its type, and whether `instance` is frozen
  * @example
  * const result = api.runtimeTest.getAsyncInstanceID();
- * // result.id === api.slothlet.instanceID
+ * // result.id === api.slothlet.instance.id
  *
  * @example // ESM usage via slothlet API
  * import slothlet from "@cldmv/slothlet";
@@ -509,23 +508,8 @@ export function testSelfAndReference() {
  * api_test.runtime-test.getAsyncInstanceID();
  */
 export function getAsyncInstanceID() {
-	// get trap — prop === "toString" branch: inside context returns () => ctx.instanceID
-	const toStringFn = instanceID.toString;
-	const id = typeof toStringFn === "function" ? toStringFn() : "";
-
-	// get trap — Symbol.toPrimitive branch: String() coercion
-	const coerced = String(instanceID);
-
-	// get trap — ctx.instanceID[prop] fallback: normal string property
-	const length = instanceID.length;
-
-	// has trap — "length" exists on any string (via Object wrapping in the proxy)
-	const hasProp = "length" in instanceID;
-
-	// has trap — undefined prop should be false
-	const missingProp = "__nonexistent__" in instanceID;
-
-	return { id, coerced, length, hasProp, missingProp };
+	const id = instance.id;
+	return { id, type: typeof id, frozen: Object.isFrozen(instance) };
 }
 
 /**
@@ -583,11 +567,10 @@ export function exerciseContextDispatcherTraps() {
 }
 
 /**
- * Exercise the instanceID proxy traps on the dispatcher (runtime.mjs).
- * Must be called while a live-runtime context is active so getCurrentRuntime()
- * resolves to liveRuntimeModule and instanceID is a non-null string.
+ * Read `instance.id` through the dispatcher (runtime.mjs) while a live-runtime call runs, so getCurrentRuntime()
+ * resolves to the live runtime.
  * @function exerciseInstanceIDDispatcherTraps
- * @returns {{ id: string|undefined, hasProp: boolean, hasMissing: boolean }} Trap results
+ * @returns {{ id: string|undefined, type: string }} The id and its type
  * @example
  * const result = api.runtimeTest.exerciseInstanceIDDispatcherTraps();
  * expect(result.id).toBeTruthy();
@@ -618,24 +601,15 @@ export function exerciseContextDispatcherTraps() {
  * api_test.runtime-test.exerciseInstanceIDDispatcherTraps();
  */
 export function exerciseInstanceIDDispatcherTraps() {
-	// get trap (lines 128-130 in runtime.mjs): instanceID[prop]
-	// When live runtime is active, liveRuntimeModule.instanceID is undefined,
-	// so the trap returns undefined for any prop access.
-	const id = instanceID.toString;
-
-	// has trap (lines 131-133): prop in instanceID
-	// When liveRuntimeModule.instanceID is undefined, the trap returns false.
-	const hasProp = "length" in instanceID;
-	const hasMissing = "__nonexistent__" in instanceID;
-
-	return { id, hasProp, hasMissing };
+	const id = instance.id;
+	return { id, type: typeof id };
 }
 
 /**
  * Exercise the async runtime context proxy traps that require an active ALS context:
  * `set` (write to context) and `getOwnPropertyDescriptor`.
  * MUST be called within `api.slothlet.context.run()` so ALS is active — otherwise
- * the set trap throws RUNTIME_NO_ACTIVE_CONTEXT_CONTEXT.
+ * the set trap throws CONTEXT_NOT_ACTIVE_WRITE.
  * @function exerciseAsyncContextWriteTraps
  * @returns {{ setWorked: boolean, setError: string|null, descriptor: PropertyDescriptor|null }} Trap exercise results
  * @example

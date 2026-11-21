@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:10-07:00 (1791090910)
+ *	@Last modified time: 2026-11-16T18:30:06-08:00 (1794882606)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -31,22 +31,9 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import slothlet from "@cldmv/slothlet";
-import { SlothletWarning } from "@cldmv/slothlet/errors";
 import { TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
 const BASE_TMP = join(process.cwd(), "tmp", `impl-diagnostic-events-${process.pid}`);
-
-// Keep the console clean during the run via the static `suppressConsole` flag: these tests don't pass
-// `silent`, so the init-time warning sites would otherwise print. Console suppression — whether via
-// `silent` or this flag — never affects event emission; that is the whole point of the feature.
-// (The `silent: true` gating of those console warnings is covered by its own describe block below.)
-beforeEach(() => {
-	SlothletWarning.suppressConsole = true;
-	SlothletWarning.clearCaptured();
-});
-afterEach(() => {
-	SlothletWarning.suppressConsole = false;
-});
 
 // ─── Runtime diagnostics (eager + lazy) ─────────────────────────────────────
 
@@ -64,7 +51,7 @@ describe.each([["eager"], ["lazy"]])("impl:warning / impl:error — runtime (%s 
 			base: dir,
 			mode,
 			runtime: "async",
-			api: { mutations: { add: true, remove: true, reload: true }, collision: { initial: "merge", api: "merge" } }
+			api: { mutations: { add: true, remove: true, reload: true }, collision: { mode: { initial: "merge", api: "merge" } } }
 		});
 		for (const ev of ["impl:warning", "impl:error"]) {
 			api.slothlet.lifecycle.on(ev, (payload) => events.push({ event: ev, payload }));
@@ -85,14 +72,14 @@ describe.each([["eager"], ["lazy"]])("impl:warning / impl:error — runtime (%s 
 		// An anonymous / `default`-keyed default has no name to key onto at root: it is dropped (#136).
 		await api.slothlet.api.add("", { exports: { default: () => "x" } });
 
-		const [payload] = warningsOfCode("WARN_SYNTHETIC_ROOT_UNNAMED");
+		const [payload] = warningsOfCode("WARNING_INLINE_ROOT_UNNAMED");
 		expect(payload).toBeDefined();
-		expect(payload.apiPath).toBe("");
-		expect(payload.code).toBe("WARN_SYNTHETIC_ROOT_UNNAMED");
+		expect(payload.path).toEqual([]);
+		expect(payload.code).toBe("WARNING_INLINE_ROOT_UNNAMED");
 		expect(typeof payload.message).toBe("string");
 		expect(payload.message.length).toBeGreaterThan(0);
-		expect(payload.source).toBe("addApi");
-		expect(payload.context).toEqual({});
+		expect(payload.source).toBe("add");
+		expect(payload.details).toEqual({});
 	});
 
 	it("fires impl:warning when a root default's name collides with a named export", async () => {
@@ -107,22 +94,22 @@ describe.each([["eager"], ["lazy"]])("impl:warning / impl:error — runtime (%s 
 		// Named export wins; the diagnostic is still emitted.
 		expect(await api.greet()).toBe("named");
 
-		const [payload] = warningsOfCode("WARN_SYNTHETIC_ROOT_COLLISION");
+		const [payload] = warningsOfCode("WARNING_INLINE_ROOT_COLLISION");
 		expect(payload).toBeDefined();
-		expect(payload.apiPath).toBe("");
-		expect(payload.source).toBe("addApi");
-		expect(payload.context).toEqual({ name: "greet" });
+		expect(payload.path).toEqual([]);
+		expect(payload.source).toBe("add");
+		expect(payload.details).toEqual({ name: "greet" });
 		expect(typeof payload.message).toBe("string");
 	});
 
 	it("fires impl:warning for a no-op root add that contributes no keys", async () => {
 		await api.slothlet.api.add("", { exports: {} });
 
-		const [payload] = warningsOfCode("WARN_SYNTHETIC_ROOT_EMPTY");
+		const [payload] = warningsOfCode("WARNING_INLINE_ROOT_EMPTY");
 		expect(payload).toBeDefined();
-		expect(payload.apiPath).toBe("");
-		expect(payload.source).toBe("addApi");
-		expect(payload.context).toEqual({ apiPath: "(root)" });
+		expect(payload.path).toEqual([]);
+		expect(payload.source).toBe("add");
+		expect(payload.details).toEqual({ path: [] });
 		expect(typeof payload.message).toBe("string");
 	});
 
@@ -140,9 +127,9 @@ describe.each([["eager"], ["lazy"]])("impl:warning / impl:error — runtime (%s 
 
 		await api.slothlet.api.add("", { exports: {} });
 
-		const empty = silentEvents.find((p) => p.code === "WARN_SYNTHETIC_ROOT_EMPTY");
+		const empty = silentEvents.find((p) => p.code === "WARNING_INLINE_ROOT_EMPTY");
 		expect(empty).toBeDefined();
-		expect(empty.source).toBe("addApi");
+		expect(empty.source).toBe("add");
 	});
 
 	it("fires impl:warning for a root default/name collision under silent: true (console gated off, event delivered)", async () => {
@@ -171,11 +158,11 @@ describe.each([["eager"], ["lazy"]])("impl:warning / impl:error — runtime (%s 
 		// Named export still wins even with the console warning suppressed.
 		expect(await api.greet()).toBe("named");
 
-		const collision = silentEvents.find((p) => p.code === "WARN_SYNTHETIC_ROOT_COLLISION");
+		const collision = silentEvents.find((p) => p.code === "WARNING_INLINE_ROOT_COLLISION");
 		expect(collision).toBeDefined();
-		expect(collision.apiPath).toBe("");
-		expect(collision.source).toBe("addApi");
-		expect(collision.context).toEqual({ name: "greet" });
+		expect(collision.path).toEqual([]);
+		expect(collision.source).toBe("add");
+		expect(collision.details).toEqual({ name: "greet" });
 	});
 
 	it("fires impl:error for a handled hot-reload merge-primitives failure (not thrown)", async () => {
@@ -183,18 +170,20 @@ describe.each([["eager"], ["lazy"]])("impl:warning / impl:error — runtime (%s 
 		// mutation is rejected and the command continues without throwing — a handled runtime error.
 		api.primitiveKey = 42;
 		await api.slothlet.api.add("primitiveKey", TEST_DIRS.API_TEST_MIXED, {
-			collisionMode: "merge",
-			moduleID: "prim-merge"
+			collision: {
+				mode: "merge"
+			},
+			id: "prim-merge"
 		});
 
 		const errors = events.filter((e) => e.event === "impl:error").map((e) => e.payload);
 		expect(errors.length).toBeGreaterThanOrEqual(1);
 		const [payload] = errors;
-		expect(payload.code).toBe("WARNING_HOT_RELOAD_MERGE_PRIMITIVES");
-		expect(payload.apiPath).toBe("primitiveKey");
-		expect(payload.source).toBe("addApi");
+		expect(payload.code).toBe("WARNING_COLLISION_MERGE_PRIMITIVES");
+		expect(payload.path).toEqual(["primitiveKey"]);
+		expect(payload.source).toBe("add");
 		expect(payload.error).toBeInstanceOf(Error);
-		expect(payload.error.code).toBe("WARNING_HOT_RELOAD_MERGE_PRIMITIVES");
+		expect(payload.error.code).toBe("WARNING_COLLISION_MERGE_PRIMITIVES");
 		expect(typeof payload.message).toBe("string");
 		// The existing primitive is preserved (mutation rejected).
 		expect(api.primitiveKey).toBe(42);
@@ -219,7 +208,7 @@ describe("lifecycle config option — construction-time subscription", () => {
 		try {
 			const init = initEvents.find((p) => p.code === "WARNING_MULTIPLE_ROOT_CONTRIBUTORS");
 			expect(init).toBeDefined();
-			expect(init.source).toBe("buildAPI");
+			expect(init.source).toBe("build");
 			expect(typeof init.message).toBe("string");
 		} finally {
 			await api.shutdown().catch(() => {});
@@ -241,8 +230,8 @@ describe("lifecycle config option — construction-time subscription", () => {
 		try {
 			const reserved = initEvents.find((p) => p.code === "WARNING_RESERVED_PROPERTY_CONFLICT");
 			expect(reserved).toBeDefined();
-			expect(reserved.source).toBe("buildAPI");
-			expect(reserved.context).toEqual({ properties: "slothlet" });
+			expect(reserved.source).toBe("build");
+			expect(reserved.details).toEqual({ properties: "slothlet" });
 		} finally {
 			await api.shutdown().catch(() => {});
 		}
@@ -265,7 +254,7 @@ describe("lifecycle config option — construction-time subscription", () => {
 		});
 		try {
 			await api.slothlet.api.add("", { exports: {} });
-			const empties = seen.filter(([, code]) => code === "WARN_SYNTHETIC_ROOT_EMPTY");
+			const empties = seen.filter(([, code]) => code === "WARNING_INLINE_ROOT_EMPTY");
 			// Both array handlers fire for the runtime event.
 			expect(empties.map(([tag]) => tag).sort()).toEqual(["a", "b"]);
 		} finally {
@@ -328,13 +317,13 @@ describe("lifecycle config option — construction-time subscription", () => {
 
 	it("init-time invalid config (empty base) still THROWS — not an event", async () => {
 		// An absent base is a valid no-base instance since #471; a present-but-empty one is invalid.
-		await expect(slothlet({ base: "" })).rejects.toMatchObject({ code: "INVALID_CONFIG_DIR_MISSING" });
+		await expect(slothlet({ base: "" })).rejects.toMatchObject({ code: "INVALID_CONFIG_BASE_MISSING" });
 	});
 });
 
 // ─── silent gates init-time console warnings (but never events) ──────────────
 // #196 review follow-up: the init-time warning sites (WARNING_RESERVED_PROPERTY_CONFLICT,
-// WARNING_MULTIPLE_ROOT_CONTRIBUTORS, WARN_DIRECTORY_EMPTY) now honor `silent` like every other
+// WARNING_MULTIPLE_ROOT_CONTRIBUTORS, WARNING_FOLDER_EMPTY) now honor `silent` like every other
 // SlothletWarning site, so `silent: true` suppresses their console output — while the additive
 // impl:warning EVENT still fires regardless of `silent`.
 describe("silent gates init-time console warnings, not events", () => {
@@ -344,18 +333,19 @@ describe("silent gates init-time console warnings, not events", () => {
 			base: TEST_DIRS.API_TEST_RESERVED_NAME,
 			mode: "eager",
 			silent: true,
+			diagnostics: true,
 			lifecycle: { "impl:warning": (payload) => events.push(payload) }
 		});
-		// Console warning is silent-gated → never constructed → not captured.
-		expect(SlothletWarning.captured.some((w) => w.code === "WARNING_RESERVED_PROPERTY_CONFLICT")).toBe(false);
+		// `silent` only keeps the warning off the console: it is still raised and recorded on this instance (#819, #838).
+		expect(api.slothlet.warnings.get().some((w) => w.code === "WARNING_RESERVED_PROPERTY_CONFLICT")).toBe(true);
 		// The event is additive → fires even under silent.
 		expect(events.some((p) => p.code === "WARNING_RESERVED_PROPERTY_CONFLICT")).toBe(true);
 		await api.shutdown().catch(() => {});
 	});
 
 	it("without silent, the reserved-property console warning IS emitted (control)", async () => {
-		const api = await slothlet({ base: TEST_DIRS.API_TEST_RESERVED_NAME, mode: "eager" });
-		expect(SlothletWarning.captured.some((w) => w.code === "WARNING_RESERVED_PROPERTY_CONFLICT")).toBe(true);
+		const api = await slothlet({ base: TEST_DIRS.API_TEST_RESERVED_NAME, mode: "eager", diagnostics: true });
+		expect(api.slothlet.warnings.get().some((w) => w.code === "WARNING_RESERVED_PROPERTY_CONFLICT")).toBe(true);
 		await api.shutdown().catch(() => {});
 	});
 });

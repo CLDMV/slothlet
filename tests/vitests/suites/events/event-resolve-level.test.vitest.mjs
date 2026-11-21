@@ -7,14 +7,14 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:28-07:00 (1791091708)
+ *	@Last modified time: 2026-11-16T18:29:03-08:00 (1794882543)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
  */
 
 /**
- * @fileoverview `api.slothlet.event.resolveLevel(subscriberPath, event)` — the host-only query a
+ * @fileoverview `api.slothlet.event.level(subscriberPath, event)` — the host-only query a
  * trusted boundary layer (e.g. `@cldmv/slothlet-vine`) uses to resolve a SUPPLIED subscriber
  * identity's delivery level on the serving side, without subscribing, so it can strip the payload
  * before it crosses a boundary.
@@ -51,9 +51,9 @@ describe.each(getMatrixConfigs())("Events > resolveLevel (host-side level query)
 		...config,
 		base: BASE,
 		permissions: {
-			defaultPolicy: "allow",
+			policy: "allow",
 			events: {
-				default: "notify",
+				policy: "notify",
 				rules: [
 					{ caller: "reporting.**", event: "orders.*", effect: "allow" },
 					{ caller: "blocked.**", event: "orders.*", effect: "deny" },
@@ -66,22 +66,22 @@ describe.each(getMatrixConfigs())("Events > resolveLevel (host-side level query)
 	it("resolves a supplied identity to the level it would be granted, without subscribing", async () => {
 		api = await slothlet(withRules());
 		const ev = api.slothlet.event;
-		expect(ev.resolveLevel("reporting.dash", "orders.created")).toBe("allow"); // matched allow
-		expect(ev.resolveLevel("blocked.x", "orders.created")).toBe("deny"); // matched deny
-		expect(ev.resolveLevel("other.mod", "orders.created")).toBe("notify"); // no rule → default
-		expect(ev.resolveLevel("reporting.dash", "audit.write")).toBe("notify"); // event does not match the allow rule
+		expect(ev.level("reporting.dash", "orders.created")).toBe("allow"); // matched allow
+		expect(ev.level("blocked.x", "orders.created")).toBe("deny"); // matched deny
+		expect(ev.level("other.mod", "orders.created")).toBe("notify"); // no rule → default
+		expect(ev.level("reporting.dash", "audit.write")).toBe("notify"); // event does not match the allow rule
 	});
 
 	it("a null subscriberPath (host subscription) always resolves allow, even under a blanket deny", async () => {
 		api = await slothlet(withRules([{ caller: "**", event: "**", effect: "deny" }]));
-		expect(api.slothlet.event.resolveLevel(null, "orders.created")).toBe("allow");
-		expect(api.slothlet.event.resolveLevel("some.module", "orders.created")).toBe("deny"); // a real path still hits the deny
+		expect(api.slothlet.event.level(null, "orders.created")).toBe("allow");
+		expect(api.slothlet.event.level("some.module", "orders.created")).toBe("deny"); // a real path still hits the deny
 	});
 
-	it("registers nothing — resolveLevel does not create a subscription", async () => {
+	it("registers nothing — event.level does not create a subscription", async () => {
 		api = await slothlet(withRules());
-		api.slothlet.event.resolveLevel("reporting.dash", "orders.created");
-		// If resolveLevel had subscribed, this emit would have a listener to deliver to; there is none, so it settles as a no-op.
+		api.slothlet.event.level("reporting.dash", "orders.created");
+		// If event.level had subscribed, this emit would have a listener to deliver to; there is none, so it settles as a no-op.
 		await expect(api.slothlet.event.emit("orders.created", { id: 1 })).resolves.toBeUndefined();
 	});
 
@@ -89,15 +89,15 @@ describe.each(getMatrixConfigs())("Events > resolveLevel (host-side level query)
 		api = await slothlet(withRules([{ caller: "subscriber.**", event: "grant.*", effect: "allow" }]));
 		const actual = await api.subscriber.subscribe("grant.me");
 		expect(actual).toBe("allow");
-		// The subscriber's identity matches `subscriber.**`; resolveLevel for a path under it agrees.
-		expect(api.slothlet.event.resolveLevel("subscriber.subscribe", "grant.me")).toBe("allow");
+		// The subscriber's identity matches `subscriber.**`; event.level for a path under it agrees.
+		expect(api.slothlet.event.level("subscriber.subscribe", "grant.me")).toBe("allow");
 	});
 
 	it("throws INVALID_ARGUMENT for an empty event or a non-string, non-null path", async () => {
 		api = await slothlet(withRules());
 		const ev = api.slothlet.event;
-		expect(() => ev.resolveLevel("x", "")).toThrow(/INVALID_ARGUMENT/);
-		expect(() => ev.resolveLevel(7, "evt")).toThrow(/INVALID_ARGUMENT/);
+		expect(() => ev.level("x", "")).toThrow(/INVALID_ARGUMENT/);
+		expect(() => ev.level(7, "evt")).toThrow(/INVALID_ARGUMENT/);
 	});
 
 	it("is host-only: a module caller is refused (PERMISSION_DENIED), never answered", async () => {

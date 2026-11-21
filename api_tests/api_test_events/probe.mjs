@@ -16,7 +16,7 @@
 import { self } from "@cldmv/slothlet/runtime";
 
 /**
- * Attempt the host-only `event.resolveLevel` from a MODULE context, so a test can assert a module
+ * Attempt the host-only `event.level` from a MODULE context, so a test can assert a module
  * caller is REFUSED (host-only) rather than answered. Returns the outcome instead of throwing.
  * @param {string|null} subscriberPath - Identity to resolve for.
  * @param {string} eventName - Event name.
@@ -25,7 +25,7 @@ import { self } from "@cldmv/slothlet/runtime";
  */
 export function attempt(subscriberPath, eventName) {
 	try {
-		return { ok: true, level: self.slothlet.event.resolveLevel(subscriberPath, eventName) };
+		return { ok: true, level: self.slothlet.event.level(subscriberPath, eventName) };
 	} catch (error) {
 		return { ok: false, code: error.code || error.name };
 	}

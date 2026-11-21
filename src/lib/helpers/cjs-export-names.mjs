@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:12-07:00 (1791091692)
+ *	@Last modified time: 2026-11-16T16:16:11-08:00 (1794874571)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -40,6 +40,27 @@
  * while a missing one would turn an import that links natively into a SyntaxError.
  */
 
+import {
+	ArrayMethods,
+	filterList,
+	listPush,
+	matchAllOf,
+	Math,
+	Objects,
+	parseInt,
+	RegExp,
+	RegExpMethods,
+	regExpReplace,
+	Set,
+	setFrom,
+	SetMethods,
+	setToArray,
+	setValues,
+	String,
+	StringMethods,
+	Strings
+} from "#helpers/intrinsics";
+
 /**
  * Characters after which a `/` starts a regular-expression literal rather than a division.
  * @type {string}
@@ -52,7 +73,7 @@ const REGEX_PREFIX_CHARS = "(,=:[!&|?{};+-*%<>~^";
  * @type {Set<string>}
  * @private
  */
-const REGEX_PREFIX_WORDS = new Set([
+const REGEX_PREFIX_WORDS = setFrom([
 	"return",
 	"typeof",
 	"instanceof",
@@ -110,7 +131,7 @@ function stripComments(src) {
 		while (i < src.length) {
 			const ch = src[i];
 			if (ch === "\\") {
-				out += src.slice(i, i + 2);
+				out += StringMethods.slice(src, i, i + 2);
 				i += 2;
 			} else if (ch === "`") {
 				out += ch;
@@ -120,7 +141,7 @@ function stripComments(src) {
 			} else if (ch === "$" && src[i + 1] === "{") {
 				out += "${";
 				i += 2;
-				templates.push(depth);
+				listPush(templates, depth);
 				depth++;
 				last = "{";
 				return;
@@ -139,13 +160,13 @@ function stripComments(src) {
 				i++;
 			}
 		} else if (ch === "/" && next === "*") {
-			const end = src.indexOf("*/", i + 2);
+			const end = StringMethods.indexOf(src, "*/", i + 2);
 			const stop = end === -1 ? src.length : end + 2;
-			out += src.slice(i, stop).replace(/[^\n]/g, " ");
+			out += regExpReplace(/[^\n]/g, StringMethods.slice(src, i, stop), " ");
 			i = stop;
 		} else if (ch === "'" || ch === '"') {
 			const end = skipString(src, i);
-			out += src.slice(i, end);
+			out += StringMethods.slice(src, i, end);
 			i = end;
 			last = ch;
 		} else if (ch === "`") {
@@ -153,8 +174,9 @@ function stripComments(src) {
 			i++;
 			templateText();
 		} else if (ch === "/") {
-			const word = /([A-Za-z_$][\w$]*)\s*$/.exec(out);
-			const isRegex = last === "" || REGEX_PREFIX_CHARS.includes(last) || (word !== null && REGEX_PREFIX_WORDS.has(word[1]));
+			const word = RegExpMethods.exec(/([A-Za-z_$][\w$]*)\s*$/, out);
+			const isRegex =
+				last === "" || StringMethods.includes(REGEX_PREFIX_CHARS, last) || (word !== null && SetMethods.has(REGEX_PREFIX_WORDS, word[1]));
 			if (isRegex) {
 				let j = i + 1;
 				let inClass = false;
@@ -168,7 +190,7 @@ function stripComments(src) {
 				}
 				// A regular expression's body never names an export; blank it so a bracket or quote in it
 				// cannot unbalance the object-literal walk.
-				out += "/" + " ".repeat(Math.max(0, j - i - 1)) + "/";
+				out += "/" + StringMethods.repeat(" ", Math.max(0, j - i - 1)) + "/";
 				i = j + 1;
 				last = "/";
 			} else {
@@ -181,7 +203,7 @@ function stripComments(src) {
 			else if (ch === "}") {
 				depth--;
 				if (templates.length && templates[templates.length - 1] === depth) {
-					templates.pop();
+					ArrayMethods.pop(templates);
 					out += ch;
 					i++;
 					templateText();
@@ -190,7 +212,7 @@ function stripComments(src) {
 			}
 			out += ch;
 			i++;
-			if (!/\s/.test(ch)) last = /[\w$]/.test(ch) ? "a" : ch;
+			if (!(RegExpMethods.exec(/\s/, ch) !== null)) last = RegExpMethods.exec(/[\w$]/, ch) !== null ? "a" : ch;
 		}
 	}
 	return out;
@@ -201,7 +223,7 @@ function stripComments(src) {
  * @type {Readonly<Record<string, string>>}
  * @private
  */
-const SIMPLE_ESCAPES = Object.freeze({ b: "\b", f: "\f", n: "\n", r: "\r", t: "\t", v: "\v", 0: "\0" });
+const SIMPLE_ESCAPES = Objects.freeze({ b: "\b", f: "\f", n: "\n", r: "\r", t: "\t", v: "\v", 0: "\0" });
 
 /**
  * Decode the body of a quoted JavaScript string literal (without its quotes), the way the language
@@ -213,9 +235,9 @@ const SIMPLE_ESCAPES = Object.freeze({ b: "\b", f: "\f", n: "\n", r: "\r", t: "\
  * @private
  */
 function decodeStringBody(body) {
-	if (/\\(?:x(?![\da-f]{2})|u(?![\da-f]{4}|\{[\da-f]{1,6}\}))/i.test(body.replace(/\\\\/g, ""))) return body;
+	if (RegExpMethods.exec(/\\(?:x(?![\da-f]{2})|u(?![\da-f]{4}|\{[\da-f]{1,6}\}))/i, regExpReplace(/\\\\/g, body, "")) !== null) return body;
 	// A line continuation is `\` + any line terminator; CRLF and CR count as one, so fold them to LF.
-	body = body.replace(/\r\n?/g, "\n");
+	body = regExpReplace(/\r\n?/g, body, "\n");
 	let out = "";
 	for (let i = 0; i < body.length; i++) {
 		const ch = body[i];
@@ -225,18 +247,18 @@ function decodeStringBody(body) {
 		}
 		const next = body[++i];
 		if (next in SIMPLE_ESCAPES) out += SIMPLE_ESCAPES[next];
-		else if (next === "x" && /^[\da-f]{2}$/i.test(body.slice(i + 1, i + 3))) {
-			out += String.fromCharCode(parseInt(body.slice(i + 1, i + 3), 16));
+		else if (next === "x" && RegExpMethods.exec(/^[\da-f]{2}$/i, StringMethods.slice(body, i + 1, i + 3)) !== null) {
+			out += Strings.fromCharCode(parseInt(StringMethods.slice(body, i + 1, i + 3), 16));
 			i += 2;
 		} else if (next === "u" && body[i + 1] === "{") {
-			const close = body.indexOf("}", i + 2);
-			const codePoint = parseInt(body.slice(i + 2, close), 16);
+			const close = StringMethods.indexOf(body, "}", i + 2);
+			const codePoint = parseInt(StringMethods.slice(body, i + 2, close), 16);
 			// An out-of-range code point is a syntax error in JavaScript: keep the raw body.
 			if (codePoint > 0x10ffff) return body;
-			out += String.fromCodePoint(codePoint);
+			out += Strings.fromCodePoint(codePoint);
 			i = close;
-		} else if (next === "u" && /^[\da-f]{4}$/i.test(body.slice(i + 1, i + 5))) {
-			out += String.fromCharCode(parseInt(body.slice(i + 1, i + 5), 16));
+		} else if (next === "u" && RegExpMethods.exec(/^[\da-f]{4}$/i, StringMethods.slice(body, i + 1, i + 5)) !== null) {
+			out += Strings.fromCharCode(parseInt(StringMethods.slice(body, i + 1, i + 5), 16));
 			i += 4;
 		} else if (next !== "\n" && next !== "\u2028" && next !== "\u2029") out += next; // else a line continuation
 	}
@@ -250,7 +272,7 @@ function decodeStringBody(body) {
  * @private
  */
 function escapeRegExp(text) {
-	return text.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&");
+	return regExpReplace(/[.*+?^${}()|[\]\\/]/g, text, "\\$&");
 }
 
 /**
@@ -288,7 +310,7 @@ function skipBalanced(src, start) {
  * @private
  */
 function leadingRequire(text) {
-	const m = /^require\s*\(\s*(["'])((?:\\.|(?!\1)[^\\\n])*)\1\s*\)/.exec(text);
+	const m = RegExpMethods.exec(/^require\s*\(\s*(["'])((?:\\.|(?!\1)[^\\\n])*)\1\s*\)/, text);
 	return m ? decodeStringBody(m[2]) : null;
 }
 
@@ -309,7 +331,7 @@ function readObjectKeys(src, start, names, reexports) {
 	 * @returns {void}
 	 */
 	const ws = () => {
-		while (i < end && /\s/.test(src[i])) i++;
+		while (i < end && RegExpMethods.exec(/\s/, src[i]) !== null) i++;
 	};
 	/**
 	 * Read one property-name token at `i` (identifier, string or number), or null.
@@ -320,22 +342,22 @@ function readObjectKeys(src, start, names, reexports) {
 		const ch = src[i];
 		if (ch === "'" || ch === '"') {
 			const stop = skipString(src, i);
-			const name = decodeStringBody(src.slice(i + 1, stop - 1));
+			const name = decodeStringBody(StringMethods.slice(src, i + 1, stop - 1));
 			i = stop;
 			return name;
 		}
-		const m = /^(?:[A-Za-z_$\u0080-\uffff][\w$\u0080-\uffff]*|\d[\w.]*)/.exec(src.slice(i, end));
+		const m = RegExpMethods.exec(/^(?:[A-Za-z_$\u0080-\uffff][\w$\u0080-\uffff]*|\d[\w.]*)/, StringMethods.slice(src, i, end));
 		if (!m) return null;
 		i += m[0].length;
 		return m[0];
 	};
 	while (i < end) {
 		ws();
-		if (src.startsWith("...", i)) {
+		if (StringMethods.startsWith(src, "...", i)) {
 			i += 3;
 			ws();
-			const spec = leadingRequire(src.slice(i, end));
-			if (spec !== null) reexports.push(spec);
+			const spec = leadingRequire(StringMethods.slice(src, i, end));
+			if (spec !== null) listPush(reexports, spec);
 		} else if (src[i] === "[") {
 			// Computed key: not statically known.
 			i = skipBalanced(src, i);
@@ -347,17 +369,17 @@ function readObjectKeys(src, start, names, reexports) {
 			}
 			ws();
 			// `get x()`, `set x(v)`, `async x()`, `async *x()`: the modifier is followed by the real key.
-			if ((name === "get" || name === "set" || name === "async") && i < end && !",:(}".includes(src[i])) {
+			if ((name === "get" || name === "set" || name === "async") && i < end && !StringMethods.includes(",:(}", src[i])) {
 				if (src[i] === "*") i++;
 				name = token();
 			}
-			if (name !== null) names.add(name);
+			if (name !== null) SetMethods.add(names, name);
 			// Node's lexer also follows a `key: require("./x")` value as a re-export of `./x`.
 			if (src[i] === ":") {
 				i++;
 				ws();
-				const spec = leadingRequire(src.slice(i, end));
-				if (spec !== null) reexports.push(spec);
+				const spec = leadingRequire(StringMethods.slice(src, i, end));
+				if (spec !== null) listPush(reexports, spec);
 			}
 		}
 		// Skip the value (or method body) up to the next top-level comma.
@@ -376,7 +398,7 @@ function readObjectKeys(src, start, names, reexports) {
  * scanCommonJSExports('exports.a = 1; module.exports.b = 2;').names; // Set { "a", "b" }
  */
 export function scanCommonJSExports(source) {
-	const src = stripComments(String(source).replace(/^#!.*/, ""));
+	const src = stripComments(regExpReplace(/^#!.*/, String(source), ""));
 	const names = new Set();
 	const reexports = [];
 	/**
@@ -388,36 +410,40 @@ export function scanCommonJSExports(source) {
 
 	// exports.x = / exports["x"] = / module.exports.x = (not `==`/`===`, not `foo.exports`).
 	const assign = new RegExp(
-		String.raw`(?<![\w$.])(?:module\s*\.\s*)?exports\s*(?:\.\s*([A-Za-z_$\u0080-\uffff][\w$\u0080-\uffff]*)|\[\s*${str(2)}\s*\])\s*=(?!=)`,
+		Strings.raw`(?<![\w$.])(?:module\s*\.\s*)?exports\s*(?:\.\s*([A-Za-z_$\u0080-\uffff][\w$\u0080-\uffff]*)|\[\s*${str(2)}\s*\])\s*=(?!=)`,
 		"g"
 	);
-	for (const m of src.matchAll(assign)) names.add(m[1] ?? decodeStringBody(m[3]));
+	for (let i = 0, found = matchAllOf(src, assign); i < found.length; i++)
+		SetMethods.add(names, found[i][1] ?? decodeStringBody(found[i][3]));
 
-	const define = new RegExp(String.raw`Object\s*\.\s*defineProperty\s*\(\s*(?:module\s*\.\s*)?exports\s*,\s*${str(1)}`, "g");
-	for (const m of src.matchAll(define)) names.add(decodeStringBody(m[2]));
+	const define = new RegExp(Strings.raw`Object\s*\.\s*defineProperty\s*\(\s*(?:module\s*\.\s*)?exports\s*,\s*${str(1)}`, "g");
+	for (let i = 0, found = matchAllOf(src, define); i < found.length; i++) SetMethods.add(names, decodeStringBody(found[i][2]));
 
 	// module.exports = { … } / module.exports = require("x").
 	const whole = /(?<![\w$.])module\s*\.\s*exports\s*=(?!=)\s*/g;
-	for (const m of src.matchAll(whole)) {
+	for (let i = 0, found = matchAllOf(src, whole); i < found.length; i++) {
+		const m = found[i];
 		const at = m.index + m[0].length;
 		if (src[at] === "{") readObjectKeys(src, at, names, reexports);
 		else {
-			const spec = leadingRequire(src.slice(at));
-			if (spec !== null) reexports.push(spec);
+			const spec = leadingRequire(StringMethods.slice(src, at));
+			if (spec !== null) listPush(reexports, spec);
 		}
 	}
 
 	// TypeScript / Babel star re-exports.
-	const star = new RegExp(String.raw`__export(?:Star)?\s*\(\s*require\s*\(\s*${str(1)}\s*\)`, "g");
-	for (const m of src.matchAll(star)) reexports.push(decodeStringBody(m[2]));
+	const star = new RegExp(Strings.raw`__export(?:Star)?\s*\(\s*require\s*\(\s*${str(1)}\s*\)`, "g");
+	for (let i = 0, found = matchAllOf(src, star); i < found.length; i++) listPush(reexports, decodeStringBody(found[i][2]));
 
 	// Babel's star re-export: `var _x = require("x"); Object.keys(_x).forEach(function (key) { … exports[key] … })`.
 	const forEachKeys = /Object\s*\.\s*keys\s*\(\s*([A-Za-z_$][\w$]*)\s*\)\s*\.\s*forEach\s*\(/g;
-	for (const m of src.matchAll(forEachKeys)) {
-		const binding = new RegExp(
-			String.raw`(?<![\w$.])${escapeRegExp(m[1])}\s*=\s*(?:[A-Za-z_$][\w$]*\s*\(\s*)?require\s*\(\s*${str(1)}\s*\)`
-		).exec(src);
-		if (binding) reexports.push(decodeStringBody(binding[2]));
+	for (let i = 0, found = matchAllOf(src, forEachKeys); i < found.length; i++) {
+		const m = found[i];
+		const binding = RegExpMethods.exec(
+			new RegExp(Strings.raw`(?<![\w$.])${escapeRegExp(m[1])}\s*=\s*(?:[A-Za-z_$][\w$]*\s*\(\s*)?require\s*\(\s*${str(1)}\s*\)`),
+			src
+		);
+		if (binding) listPush(reexports, decodeStringBody(binding[2]));
 	}
 
 	return { names, reexports };
@@ -440,24 +466,27 @@ export function scanCommonJSExports(source) {
  */
 export function commonJSExportNames(filePath, source, io) {
 	const names = new Set();
-	const visited = new Set([filePath]);
+	const visited = setFrom([filePath]);
 	const queue = [[filePath, source]];
 	while (queue.length) {
-		const [file, text] = queue.shift();
+		const unpacked1 = ArrayMethods.shift(queue),
+			file = unpacked1[0],
+			text = unpacked1[1];
 		const scan = scanCommonJSExports(text);
-		for (const name of scan.names) names.add(name);
-		for (const spec of scan.reexports) {
+		for (const name of setValues(scan.names)) SetMethods.add(names, name);
+		for (let ofIndex = 0, ofList = scan.reexports; ofIndex < ofList.length; ofIndex++) {
+			const spec = ofList[ofIndex];
 			let target;
 			try {
 				target = io.resolve(spec, file);
-				if (visited.has(target) || !/\.(?:c?js)$/.test(target)) continue;
-				visited.add(target);
-				queue.push([target, io.readFile(target)]);
+				if (SetMethods.has(visited, target) || !(RegExpMethods.exec(/\.(?:c?js)$/, target) !== null)) continue;
+				SetMethods.add(visited, target);
+				listPush(queue, [target, io.readFile(target)]);
 			} catch {
 				// An unresolvable or unreadable re-export contributes no names (Node's lexer skips it too).
 			}
 		}
 	}
-	names.delete("default");
-	return [...names].filter((name) => typeof name === "string" && name.isWellFormed());
+	SetMethods.delete(names, "default");
+	return filterList(setToArray(names), (name) => typeof name === "string" && StringMethods.isWellFormed(name));
 }

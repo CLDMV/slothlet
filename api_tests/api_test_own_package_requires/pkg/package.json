@@ -1,0 +1,14 @@
+{
+	"name": "own-package-requires",
+	"version": "1.0.0",
+	"private": true,
+	"type": "module",
+	"imports": {
+		"#h": "./lib/h.mjs",
+		"#c": "./lib/c.cjs"
+	},
+	"exports": {
+		"./h": "./lib/h.mjs",
+		"./c": "./lib/c.cjs"
+	}
+}

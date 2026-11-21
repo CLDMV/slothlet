@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:27-07:00 (1791090927)
+ *	@Last modified time: 2026-11-16T18:30:44-08:00 (1794882644)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -46,16 +46,19 @@ describe.each(getMatrixConfigs())("Versioning > No Default > $name", ({ config }
 		api = await slothlet({
 			...config,
 			base: `${BASE}/callers`,
-			versionDispatcher: () => null // always fall through
+			versioning: {
+				dispatcher: () => null
+			}
+			// always fall through
 		});
 
-		await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1" });
+		await api.slothlet.api.add("auth", `${BASE}/v1`, { version: { tag: "v1" } });
 
 		// Dispatcher exists while the version is registered
 		expect(api.auth).toBeDefined();
 
 		// Remove the only version — VersionManager calls teardownDispatcher()
-		await api.slothlet.versioning.unregister("auth", "v1");
+		await api.slothlet.versioning.remove("auth", "v1");
 
 		// Dispatcher is removed from the API tree; api.auth is now undefined.
 		// (VERSION_NO_DEFAULT is a defensive guard inside the dispatcher's get trap
@@ -67,11 +70,14 @@ describe.each(getMatrixConfigs())("Versioning > No Default > $name", ({ config }
 		api = await slothlet({
 			...config,
 			base: `${BASE}/callers`,
-			versionDispatcher: () => "v99" // returns a non-existent tag
+			versioning: {
+				dispatcher: () => "v99"
+			}
+			// returns a non-existent tag
 		});
 
-		await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1", default: true });
-		await api.slothlet.api.add("auth", `${BASE}/v2`, {}, { version: "v2" });
+		await api.slothlet.api.add("auth", `${BASE}/v1`, { version: { tag: "v1", default: true } });
+		await api.slothlet.api.add("auth", `${BASE}/v2`, { version: { tag: "v2" } });
 
 		// v99 doesn't exist → falls to explicit default v1
 		const result = api.unversionedCaller.callLogin("testUser");

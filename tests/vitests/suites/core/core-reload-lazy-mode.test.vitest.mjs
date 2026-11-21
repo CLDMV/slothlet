@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:02-07:00 (1791090902)
+ *	@Last modified time: 2026-11-16T18:28:59-08:00 (1794882539)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -51,8 +51,10 @@ for (const { config, name } of lazyConfigs) {
 				base: TEST_DIRS.API_TEST,
 				api: {
 					collision: {
-						initial: "replace",
-						api: "replace"
+						mode: {
+							initial: "replace",
+							api: "replace"
+						}
 					},
 					mutations: {
 						add: true,
@@ -77,8 +79,8 @@ for (const { config, name } of lazyConfigs) {
 		 * @returns {{ materialized: boolean, inFlight: boolean }|null}
 		 */
 		function getWrapperState(proxyValue) {
-			if (!proxyValue || proxyValue.__mode === undefined) return null;
-			return { materialized: proxyValue.__materialized, inFlight: proxyValue.__inFlight };
+			if (!proxyValue || api.slothlet.node(proxyValue).mode === undefined) return null;
+			return { materialized: api.slothlet.node(proxyValue).materialized, inFlight: api.slothlet.node(proxyValue).loading };
 		}
 
 		// ─── 1. Materialized path resets to un-materialized after reload ───

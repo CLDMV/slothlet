@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-08T00:00:00-07:00 (1791442800)
+ *	@Last modified time: 2026-11-16T18:30:32-08:00 (1794882632)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -57,7 +57,7 @@ describe.each(getMatrixConfigs())("root file vs same-named folder callable colli
 	});
 
 	it.each(Object.entries(EXPECTED))("collision.initial %s", async (initial, { call, shared, keys }) => {
-		api = await slothlet({ ...config, base: BASE, collision: { initial } });
+		api = await slothlet({ ...config, base: BASE, api: { collision: { mode: { initial } } } });
 		await api.services;
 		expect(await api.services()).toBe(call);
 		expect(await api.services.shared()).toBe(shared);
@@ -90,7 +90,11 @@ describe.each(getMatrixConfigs())("root callable file vs same-named plain folder
 		api = await slothlet({
 			...config,
 			base: path.join(TEST_DIRS.SMART_FLATTEN, "api_smart_flatten_callable_file_plain_folder"),
-			collision: { initial }
+			api: {
+				collision: {
+					mode: { initial }
+				}
+			}
 		});
 		await api.services;
 		if (call === null) {

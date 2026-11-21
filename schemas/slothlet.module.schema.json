@@ -5,12 +5,12 @@
 	"description": "Manifest shipped by a slothlet module package at `slothlet.module.json` (default) or via an override locator. Describes how the module mounts into a host slothlet api tree.",
 	"type": "object",
 	"additionalProperties": false,
-	"required": ["schemaVersion", "mountPath", "apiDir"],
+	"required": ["schema", "mount", "base"],
 	"properties": {
-		"schemaVersion": {
-			"description": "Manifest schema version. Only `1` is supported in this release.",
+		"schema": {
+			"description": "Manifest format version. Must be `2`. Format 1 manifests (`schemaVersion: 1`, `mountPath`, `apiDir`) are still read and mapped to these names, with a deprecation warning (`WARNING_MODULE_MANIFEST_FORMAT_1`); a manifest must not mix the two sets of names.",
 			"type": "integer",
-			"const": 1
+			"const": 2
 		},
 		"name": {
 			"description": "Package identity. Optional in the manifest — slothlet always reads this from package.json. If present, MUST match package.json's `name` exactly; mismatch throws MODULE_MANIFEST_NAME_MISMATCH and the module does not load.",
@@ -26,8 +26,8 @@
 			"description": "Free-form human-readable description. Optional. Falls back to package.json's `description` if absent. If present, overrides package.json silently (no mismatch error, unlike `name` and `version`).",
 			"type": "string"
 		},
-		"mountPath": {
-			"description": "Where the module mounts in the api tree. Same shape `api.add()` accepts. Reserved roots (`slothlet`, `shutdown`, `destroy`) are rejected with MODULE_RESERVED_MOUNTPATH.",
+		"mount": {
+			"description": "Where the module mounts in the api tree. Same shape `api.add()` accepts. Reserved roots (`slothlet`, `shutdown`, `destroy`) are rejected with MODULE_RESERVED_MOUNT.",
 			"oneOf": [
 				{
 					"type": "string",
@@ -43,7 +43,7 @@
 				}
 			]
 		},
-		"apiDir": {
+		"base": {
 			"description": "Path inside the package to the slothlet folder. Resolved relative to the package root. Path traversal (resolving outside the package root) is rejected with MODULE_PATH_TRAVERSAL.",
 			"type": "string",
 			"minLength": 1
@@ -65,7 +65,7 @@
 			}
 		},
 		"permissions": {
-			"description": "Module's declared access expectations. Integrates with slothlet's permission system (see permission-system docs). The discovery + mount pipeline reads these entries into per-module metadata under `_module.manifest.permissions` (retrievable via `api.slothlet.metadata.getFor(mountPath)._module.manifest.permissions`); the host applies them to the live permission system by passing each entry to `api.slothlet.permissions.addRule()` manually.",
+			"description": "Module's declared access expectations. Integrates with slothlet's permission system (see permission-system docs). The discovery + mount pipeline reads these entries into per-module metadata under `_module.manifest.permissions` (retrievable via `api.slothlet.metadata.getFor(mount)._module.manifest.permissions`); the host applies them to the live permission system by passing each entry to `api.slothlet.permissions.addRule()` manually.",
 			"type": "array",
 			"items": {
 				"type": "object",
@@ -90,8 +90,34 @@
 				}
 			}
 		},
+		"events": {
+			"description": "Event rules the module declares: which callers may receive which events, and whether a denied delivery is silent (`deny`) or reported (`notify`).",
+			"type": "array",
+			"items": {
+				"type": "object",
+				"additionalProperties": false,
+				"required": ["caller", "event", "effect"],
+				"properties": {
+					"caller": {
+						"description": "Glob pattern matching caller api path.",
+						"type": "string",
+						"minLength": 1
+					},
+					"event": {
+						"description": "Event name the rule applies to.",
+						"type": "string",
+						"minLength": 1
+					},
+					"effect": {
+						"description": "Rule effect.",
+						"type": "string",
+						"enum": ["deny", "notify", "allow"]
+					}
+				}
+			}
+		},
 		"metadata": {
-			"description": "Dedicated opt-in block for developer-defined extras. The only place arbitrary project-specific data goes — unknown top-level fields are NOT auto-passed through (they throw MODULE_MANIFEST_UNKNOWN_FIELD). Round-tripped via metadata.getFor(mountPath)._module.manifest.metadata.",
+			"description": "Dedicated opt-in block for developer-defined extras. The only place arbitrary project-specific data goes — unknown top-level fields are NOT auto-passed through (they throw MODULE_MANIFEST_UNKNOWN_FIELD). Round-tripped via metadata.getFor(mount)._module.manifest.metadata.",
 			"type": "object"
 		}
 	}

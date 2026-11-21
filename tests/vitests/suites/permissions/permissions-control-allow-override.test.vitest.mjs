@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:16-07:00 (1791090916)
+ *	@Last modified time: 2026-11-16T18:29:46-08:00 (1794882586)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -32,25 +32,25 @@ describe.each(getMatrixConfigs())("Permissions > Control Allow Override > $name"
 			...config,
 			base: `${BASE}/callers`,
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				rules: [{ caller: "callers.**", target: "slothlet.permissions.control.**", effect: "allow" }]
 			}
 		});
 
 		// The allow rule has higher specificity or later registration than built-in deny
-		// control.enable/disable should be callable
-		api.slothlet.permissions.control.disable();
-		api.slothlet.permissions.control.enable();
+		// control.mode("on"/"off") should be callable
+		api.slothlet.permissions.control.mode("off");
+		api.slothlet.permissions.control.mode("on");
 	});
 
-	it("explicit allow rule permits inter-module control.enable() via self.* (callerWrapper path)", async () => {
+	it("explicit allow rule permits inter-module control.mode('on') via self.* (callerWrapper path)", async () => {
 		// Exact-match allow rule (specificity 3) beats built-in deny (specificity 1).
 		// This test exercises the callerWrapper enforcement path in the control functions.
 		api = await slothlet({
 			...config,
 			base: `${BASE}/callers`,
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				rules: [{ caller: "controlCaller.*", target: "slothlet.permissions.control.**", effect: "allow" }]
 			}
 		});
@@ -59,23 +59,23 @@ describe.each(getMatrixConfigs())("Permissions > Control Allow Override > $name"
 		await api.controlCaller.callEnable();
 	});
 
-	it("explicit allow rule permits inter-module control.disable() via self.* (callerWrapper false-branch)", async () => {
+	it("explicit allow rule permits inter-module control.mode('off') via self.* (callerWrapper false-branch)", async () => {
 		// Same setup as the enable test — the allow rule (specificity 3) beats built-in deny.
-		// Exercises the else (false) branch of `if (!checkAccess(...))` inside control.disable(),
+		// Exercises the else (false) branch of `if (!checkAccess(...))` inside control.mode("off"),
 		// i.e. the path where checkAccess returns true (access granted) and we do NOT throw.
 		api = await slothlet({
 			...config,
 			base: `${BASE}/callers`,
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				rules: [{ caller: "controlCaller.*", target: "slothlet.permissions.control.**", effect: "allow" }]
 			}
 		});
 
-		// controlCaller.callDisable uses self.slothlet.permissions.control.disable() — inter-module
+		// controlCaller.callDisable uses self.slothlet.permissions.control.mode("off") — inter-module
 		// call with callerWrapper set. checkAccess returns true → !true = false → no throw.
 		await api.controlCaller.callDisable();
 		// Re-enable so shutdown and subsequent operations work cleanly.
-		api.slothlet.permissions.control.enable();
+		api.slothlet.permissions.control.mode("on");
 	});
 });

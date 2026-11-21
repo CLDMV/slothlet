@@ -106,8 +106,8 @@ for (const { config, name } of getMatrixConfigs()) {
 		 */
 		async function mount(launcherDir = LAUNCHER_DIR) {
 			api = await createInstance(config);
-			await api.slothlet.api.add("launcher", launcherDir, { moduleID: "launcher" });
-			await api.slothlet.api.add("launcher.session", SHADOW_DIR, { moduleID: "shadow", forceOverwrite: true });
+			await api.slothlet.api.add("launcher", launcherDir, { id: "launcher" });
+			await api.slothlet.api.add("launcher.session", SHADOW_DIR, { id: "shadow", collision: { force: true } });
 			expect(await api.launcher.session.create()).toBe("shadow:create");
 			expect(await api.launcher.session.peek()).toBe("shadow:peek");
 			expect(api.launcher.session.close).toBeUndefined();
@@ -182,8 +182,8 @@ for (const { config, name } of getMatrixConfigs()) {
 
 		it("an overwrite of the reloaded module's whole mount keeps its outcome across the reload", async () => {
 			api = await createInstance(config);
-			await api.slothlet.api.add("leaf", REVERT_A_DIR, { moduleID: "A" });
-			await api.slothlet.api.add("leaf", REVERT_B_DIR, { moduleID: "B", forceOverwrite: true });
+			await api.slothlet.api.add("leaf", REVERT_A_DIR, { id: "A" });
+			await api.slothlet.api.add("leaf", REVERT_B_DIR, { id: "B", collision: { force: true } });
 			expect(api.leaf.am).toBeUndefined();
 
 			await api.slothlet.api.reload("A");
@@ -201,8 +201,8 @@ for (const { config, name } of getMatrixConfigs()) {
 
 		it("a module mounted inside the reloaded module's own subfolder keeps its leaves", async () => {
 			api = await createInstance(config);
-			await api.slothlet.api.add("launcher", LAUNCHER_DIR, { moduleID: "launcher" });
-			await api.slothlet.api.add("launcher.session.extra", SHADOW_DIR, { moduleID: "shadow" });
+			await api.slothlet.api.add("launcher", LAUNCHER_DIR, { id: "launcher" });
+			await api.slothlet.api.add("launcher.session.extra", SHADOW_DIR, { id: "shadow" });
 			const extraBefore = api.launcher.session.extra;
 
 			await api.slothlet.api.reload("launcher");

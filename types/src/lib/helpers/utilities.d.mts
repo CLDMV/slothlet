@@ -49,11 +49,17 @@ export class Utilities extends ComponentBase {
      */
     public deepClone(obj: unknown): unknown;
     /**
-     * Generate unique ID
+     * Generate a unique ID: the prefix, the time, and a random part. The random part comes from the platform's
+     * cryptographic generator where there is one, so an ID cannot be worked out from the IDs and random numbers code
+     * running in the process has seen (an instance's reload IDs are made here).
+     * @param {string} [prefix="slothlet"] - What the ID starts with.
      * @returns {string} Unique identifier
      * @public
+     * @example
+     * utilities.generateId(); // "slothlet_1790000000000_k3j9x2m1q"
+     * utilities.generateId("slothlet_1790000000000_k3j9x2m1q_reload"); // "slothlet_..._reload_1790000000123_7fz0c1a9d"
      */
-    public generateId(): string;
+    public generateId(prefix?: string): string;
 }
 import { ComponentBase } from "#factories/component-base";
 //# sourceMappingURL=utilities.d.mts.map

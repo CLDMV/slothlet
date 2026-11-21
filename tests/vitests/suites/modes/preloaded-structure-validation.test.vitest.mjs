@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:12-07:00 (1791090912)
+ *	@Last modified time: 2026-11-16T18:30:11-08:00 (1794882611)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -21,15 +21,15 @@
  * already-validated synthetic exports). The mode builders consume `structure.files` /
  * `structure.directories` directly, so a non-null value with the wrong shape would throw a confusing
  * TypeError deep in processFiles. Both modes now fail fast with a structured
- * INVALID_CONFIG_PRELOADED_STRUCTURE instead. This suite reaches that guard by instantiating the mode
+ * FILES_STRUCTURE_INVALID instead. This suite reaches that guard by instantiating the mode
  * classes with a minimal mock (the guard fires before any real slothlet wiring is needed).
  *
  * @module tests/vitests/suites/modes/preloaded-structure-validation.test.vitest
  */
 
 import { describe, it, expect } from "vitest";
-import { EagerMode } from "@cldmv/slothlet/modes/eager";
-import { LazyMode } from "@cldmv/slothlet/modes/lazy";
+import { EagerMode } from "#modes/eager";
+import { LazyMode } from "#modes/lazy";
 import { SlothletError, SlothletWarning } from "@cldmv/slothlet/errors";
 
 /**
@@ -64,10 +64,10 @@ for (const [ModeName, Mode] of [
 ]) {
 	describe(`${ModeName}.buildAPI - preloadedStructure shape validation (#136 review)`, () => {
 		for (const [label, value] of malformed) {
-			it(`rejects ${label} with INVALID_CONFIG_PRELOADED_STRUCTURE`, async () => {
+			it(`rejects ${label} with FILES_STRUCTURE_INVALID`, async () => {
 				const mode = new Mode(mockSlothlet);
 				await expect(mode.buildAPI({ dir: "/x", preloadedStructure: value })).rejects.toMatchObject({
-					code: "INVALID_CONFIG_PRELOADED_STRUCTURE"
+					code: "FILES_STRUCTURE_INVALID"
 				});
 			});
 		}
@@ -77,7 +77,7 @@ for (const [ModeName, Mode] of [
 			// has no real processor), proving the guard's false branch is taken rather than the throw.
 			const mode = new Mode(mockSlothlet);
 			await expect(mode.buildAPI({ dir: "/x", preloadedStructure: { files: [], directories: [] } })).rejects.not.toMatchObject({
-				code: "INVALID_CONFIG_PRELOADED_STRUCTURE"
+				code: "FILES_STRUCTURE_INVALID"
 			});
 		});
 	});

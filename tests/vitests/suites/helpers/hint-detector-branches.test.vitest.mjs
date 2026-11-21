@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:05-07:00 (1791090905)
+ *	@Last modified time: 2026-11-16T16:16:50-08:00 (1794874610)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -28,8 +28,8 @@
  * @module tests/vitests/suites/helpers/hint-detector-branches.test.vitest
  */
 
-import { describe, it, expect } from "vitest";
-import { detectHint } from "@cldmv/slothlet/helpers/hint-detector";
+import { describe, it, expect, vi } from "vitest";
+import { detectHint } from "#helpers/hint-detector";
 
 describe("HintDetector.detectHint — HINT_RULES pattern-match returns rule hintKey (line 62)", () => {
 	it("returns HINT_MODULE_NOT_FOUND for an error matching /Cannot find module/i (line 62)", () => {
@@ -57,17 +57,18 @@ describe("HintDetector.detectHint — HINT_RULES pattern-match returns rule hint
 		expect(result).toBe("HINT_MY_CODE");
 	});
 
-	it("uses error.toString() when error has no .message (line 59 — toString fallback)", () => {
-		// error.message is undefined (falsy) → error.message || error.toString() hits toString path
-		const fakeError = { toString: () => "Cannot find module 'missing'" };
-		const result = detectHint(fakeError, "SOME_CODE");
-		expect(result).toBe("HINT_MODULE_NOT_FOUND");
+	it("does not run a thrown object's own toString (no message)", () => {
+		const toString = vi.fn(() => "Cannot find module 'missing'");
+		const result = detectHint({ toString }, "SOME_CODE");
+		// no rule matches, so it falls back to the convention key rather than the toString text
+		expect(result).toBe("HINT_SOME_CODE");
+		expect(toString).not.toHaveBeenCalled();
 	});
 
-	it("uses error.toString() for a matching pattern when .message is empty string (line 59)", () => {
-		const fakeError = { message: "", toString: () => "Unexpected token '}' in JSON" };
-		const result = detectHint(fakeError, "PARSE_CODE");
-		// Empty string is falsy → falls back to toString()
-		expect(result).toBe("HINT_SYNTAX_ERROR");
+	it("does not run a thrown object's own toString (empty message)", () => {
+		const toString = vi.fn(() => "Unexpected token '}' in JSON");
+		const result = detectHint({ message: "", toString }, "PARSE_CODE");
+		expect(result).toBe("HINT_PARSE_CODE");
+		expect(toString).not.toHaveBeenCalled();
 	});
 });

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-01T09:22:52-08:00 (1793553772)
+ *	@Last modified time: 2026-11-04T20:46:22-08:00 (1793853982)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -92,7 +92,7 @@ const resolveConditions = useSourceCondition
 	? [slothletCondition, "module", "browser", "development|production"]
 	: ["module", "browser", "development|production"];
 const ssrConditions = useSourceCondition ? [slothletCondition, "node", "development|production"] : ["node", "development|production"];
-const workerNodeOptions = useSourceCondition
+const workerExecArgv = useSourceCondition
 	? [`--conditions=${slothletCondition}`, "--import=./tests/vitests/setup/env-preload.mjs"]
 	: ["--import=./tests/vitests/setup/env-preload.mjs"];
 
@@ -127,7 +127,8 @@ export default defineConfig({
 		environment: "node",
 		globals: true,
 		setupFiles: ["./tests/vitests/setup/vitest.setup.mjs"],
-		nodeOptions: workerNodeOptions,
+		// `test.nodeOptions` is not a Vitest option (it passes nothing to workers); `execArgv` is (#710).
+		execArgv: workerExecArgv,
 		env: {
 			NODE_ENV: "development",
 			// Propagate the runner's "i18n pack staged" signal to workers so pack-dependent suites can assert

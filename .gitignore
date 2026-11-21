@@ -69,6 +69,8 @@ jspm_packages/
 # so those fixture packages travel with the repo.
 !api_tests/**/node_modules/
 !api_tests/**/node_modules/**
+# The shared-helper fixture links its package in at run time, as a pnpm workspace does (#715).
+api_tests/api_test_shared_helper_import_split/node_modules/
 
 # Snowpack dependency directory (https://snowpack.dev/)
 web_modules/

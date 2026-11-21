@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:12-07:00 (1791090912)
+ *	@Last modified time: 2026-11-16T18:29:29-08:00 (1794882569)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -17,7 +17,7 @@
  * @fileoverview The documented collision table, pinned against real file+directory collisions.
  *
  * @description
- * MIGRATION.md's collision-mode table is the specification: under the default `merge`, on a
+ * docs/migration/v2-to-v3.md's collision-mode table is the specification: under the default `merge`, on a
  * conflict the FIRST loaded wins and non-conflicting keys from both sources are added; files load
  * before directories at every level. Pinned against both composition branches of the fixture base:
  *
@@ -93,7 +93,7 @@ describe("Modes > documented collision table (merge: first loaded wins, both sou
 	});
 
 	it("merge-replace: the second loaded wins conflicts, both sources still added", async () => {
-		api = await slothlet({ mode: "eager", base: BASE, collision: "merge-replace" });
+		api = await slothlet({ mode: "eager", base: BASE, api: { collision: "merge-replace" } });
 
 		// Same shape, inverted conflict outcome per the table row: the directory (second) wins
 		// `level`; the file's non-conflicting `origin` still carries across.
@@ -141,7 +141,7 @@ describe("Modes > documented collision table (merge: first loaded wins, both sou
 	});
 
 	it("merge-replace hands the slot to the second-loaded callable", async () => {
-		api = await slothlet({ mode: "eager", base: BASE, collision: "merge-replace" });
+		api = await slothlet({ mode: "eager", base: BASE, api: { collision: "merge-replace" } });
 
 		expect(api.pair.crog("x")).toBe("crog:x");
 		expect(api.pair.crog.origin).toBe("dir");
@@ -243,13 +243,12 @@ describe("Modes > documented collision table (merge: first loaded wins, both sou
 		}
 	});
 
-	it("merges adoption-skipped members from the losing folder's snapshot, identically in both modes", async () => {
-		// `_state` / `_invalid` sit on child adoption's PRIVATE skip list without being
-		// framework-reserved: they are never adopted as child wrappers, so the losing folder's live
-		// children cannot supply them and the merge must take them from the extracted snapshot — the
-		// snapshot arm of the collision merge. A module is entitled to export these names, so losing
-		// them in a collision (or in one mode only) would be the same silent data loss this suite
-		// exists to prevent.
+	it("keeps a folder module's _state/_invalid exports through a collision, identically in both modes", async () => {
+		// `_state` / `_invalid` are ordinary export names: the framework's own state lives on `____state` /
+		// `____invalid`, so the losing folder's exports of these names are adopted as children like any
+		// other member and reach the merged slot through the ordinary child merge. A module is entitled to
+		// export them, so losing them in a collision (or in one mode only) would be the same silent data
+		// loss this suite exists to prevent.
 		const eager = await slothlet({ mode: "eager", base: BASE });
 		api = await slothlet({ mode: "lazy", base: BASE });
 
@@ -261,11 +260,72 @@ describe("Modes > documented collision table (merge: first loaded wins, both sou
 			]) {
 				expect(frog("x"), `${label} slot keeps the file callable`).toBe("file-frog");
 				expect(frog.origin, `${label} ordinary folder member`).toBe("dir");
-				expect(frog._state, `${label} adoption-skipped _state`).toBe("folder-_state");
-				expect(frog._invalid, `${label} adoption-skipped _invalid`).toBe("folder-_invalid");
+				expect(frog._state, `${label} exported _state`).toBe("folder-_state");
+				expect(frog._invalid, `${label} exported _invalid`).toBe("folder-_invalid");
 			}
 			expect(await api.pair.frog.extra.ping, "sibling module composes").toBe("extra");
 			expect(eager.pair.frog.extra.ping).toBe("extra");
+		} finally {
+			await eager.shutdown();
+		}
+	});
+
+	it("merges a losing folder callable's own function members, identically in both modes", async () => {
+		// `pair/fnprop/fnprop.mjs` sets `folderFnprop.tag` on its function instead of exporting it by name.
+		// A callable impl keeps its function's own properties on the function, where the traps serve them,
+		// so `tag` is never a child of the folder's wrapper: lazy carries it across from the extracted
+		// impl (the snapshot arm of the collision merge), eager from the losing impl's own members.
+		const eager = await slothlet({ mode: "eager", base: BASE });
+		api = await slothlet({ mode: "lazy", base: BASE });
+
+		try {
+			await api.pair.fnprop.extra.ping;
+			const lazySlot = await api.pair.fnprop;
+			for (const [label, slot] of [
+				["eager", eager.pair.fnprop],
+				["lazy", lazySlot]
+			]) {
+				expect(slot("x"), `${label} slot keeps the file callable`).toBe("file-fnprop");
+				expect(slot.origin, `${label} named export`).toBe("dir");
+				expect(slot.tag, `${label} function's own member`).toBe("folder-fn-tag");
+				expect(Object.keys(slot).sort(), `${label} surface`).toEqual(["extra", "live", "me", "origin", "tag"]);
+			}
+		} finally {
+			await eager.shutdown();
+		}
+	});
+
+	it("adopts a losing folder callable's function members as live members and nodes, as the same folder composes alone (#874)", async () => {
+		// `pair/fnprop/fnprop.mjs` loses its slot to `pair/fnprop.mjs`; `pair/fnsolo/fnsolo.mjs` is the same
+		// module with nothing beside it. Both put a getter (`live`, counting its reads) and a self-reference
+		// (`me = fn`) on the function. Alone, the getter runs on every read and `me` is a node at `<slot>.me`;
+		// the collision must compose the same, in both modes, rather than a snapshot of the folder's function
+		// (a getter frozen at its first value, `me` the bare function with no path).
+		const { resolveWrapper } = await import("#handlers/unified-wrapper");
+		const pathOf = (value) => resolveWrapper(value)?.____slothletInternal.apiPath ?? null;
+		const eager = await slothlet({ mode: "eager", base: BASE });
+		api = await slothlet({ mode: "lazy", base: BASE });
+
+		try {
+			await api.pair.fnprop.extra.ping;
+			await api.pair.fnsolo.extra.ping;
+			const rows = [
+				["eager alone", eager.pair.fnsolo, "pair.fnsolo", "folder-fnsolo"],
+				["eager collision", eager.pair.fnprop, "pair.fnprop", "folder-fnprop"],
+				["lazy alone", await api.pair.fnsolo, "pair.fnsolo", "folder-fnsolo"],
+				["lazy collision", await api.pair.fnprop, "pair.fnprop", "folder-fnprop"]
+			];
+			for (const [label, slot, path] of rows) {
+				const first = slot.live;
+				expect(slot.live, `${label}: the getter runs on every read`).toBe(first + 1);
+				expect(typeof Object.getOwnPropertyDescriptor(slot, "live").get, `${label}: live is an accessor`).toBe("function");
+				// `fn.me = fn` is the function itself in plain JS, so `me` reads as the slot standing for it.
+				expect(slot.me, `${label}: me is the slot itself`).toBe(slot);
+				expect(pathOf(slot.me), `${label}: me is at the slot's path`).toBe(path);
+				expect(slot.me(), `${label}: me answers as the slot does`).toBe(slot("x"));
+				expect(slot.me.me, `${label}: me.me is the slot too`).toBe(slot);
+				expect(Object.keys(slot.me).sort(), `${label}: me's members are the slot's`).toEqual(Object.keys(slot).sort());
+			}
 		} finally {
 			await eager.shutdown();
 		}
@@ -295,7 +355,7 @@ describe("Modes > documented collision table (merge: first loaded wins, both sou
 
 		try {
 			// Surface parity is enumeration parity too: the same slot lists the same members in both
-			// modes, and framework metadata (`__childFilePaths` and friends, carried on lazy impls)
+			// modes, and framework metadata (`____childFilePaths` and friends, carried on lazy impls)
 			// never leaks into the public key set.
 			for (const slot of ["tool", "clog", "math"]) {
 				const eagerKeys = Object.keys(eager[slot]).sort();
@@ -309,7 +369,7 @@ describe("Modes > documented collision table (merge: first loaded wins, both sou
 	});
 
 	it("skip: the first loaded is kept and the second discarded silently", async () => {
-		api = await slothlet({ mode: "eager", base: BASE, collision: "skip" });
+		api = await slothlet({ mode: "eager", base: BASE, api: { collision: "skip" } });
 
 		// The root file (first) holds the slot as-is; the directory's callable and members are
 		// discarded — the exact behaviour merge was wrongly exhibiting before this fix.

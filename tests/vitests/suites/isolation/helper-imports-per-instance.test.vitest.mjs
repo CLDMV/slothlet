@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-30T23:04:13-07:00 (1793426653)
+ *	@Last modified time: 2026-11-16T02:47:20-08:00 (1794826040)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -122,7 +122,8 @@ describe.each(CONFIGS)("Isolation > helper imports per instance (#518) > '$name'
 		const b = await create();
 		const refsA = await a.shared.refs();
 		const refsB = await b.shared.refs();
-		expect(refsA.runtime).toBe(refsB.runtime);
+		// Each instance's api files get a runtime module of their own (#803), whose members are the runtime's own.
+		for (const key of ["context", "instanceID", "SlothletSelf"]) expect(refsA.runtime[key]).toBe(refsB.runtime[key]);
 		expect(refsA.EventEmitter).toBe(refsB.EventEmitter);
 		// Compared inside each instance's copy of the leaf: handed out, the package's class is each instance's stand-in.
 		expect(await a.shared.sameParser()).toBe(true);

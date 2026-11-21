@@ -195,45 +195,35 @@ describe("EventManager — conditional level re-resolution and deny-downgrade at
 
 describe("EventManager.emit — async listener error isolation", () => {
 	it("awaits async listeners and isolates a rejecting one behind a warning", async () => {
-		SlothletWarning.suppressConsole = true;
-		try {
-			const em = new EventManager(makeSlothlet());
-			const good = vi.fn();
-			em.on("evt", async () => {
-				throw new Error("async boom");
-			});
-			em.on("evt", async () => {
-				good("ok");
-			});
-			await expect(em.emit("evt", {})).resolves.toBeUndefined();
-			expect(good).toHaveBeenCalledWith("ok");
-		} finally {
-			SlothletWarning.suppressConsole = false;
-		}
+		const em = new EventManager(makeSlothlet());
+		const good = vi.fn();
+		em.on("evt", async () => {
+			throw new Error("async boom");
+		});
+		em.on("evt", async () => {
+			good("ok");
+		});
+		await expect(em.emit("evt", {})).resolves.toBeUndefined();
+		expect(good).toHaveBeenCalledWith("ok");
 	});
 
 	it("isolates a synchronously-throwing listener and still runs the others (non-silent → warns)", async () => {
-		SlothletWarning.suppressConsole = true;
-		try {
-			const em = new EventManager(makeSlothlet());
-			const after = vi.fn();
-			em.on("evt", () => {
-				throw new Error("sync boom");
-			});
-			em.on("evt", () => after("ran"));
-			await em.emit("evt", {});
-			expect(after).toHaveBeenCalledWith("ran");
-		} finally {
-			SlothletWarning.suppressConsole = false;
-		}
+		const em = new EventManager(makeSlothlet());
+		const after = vi.fn();
+		em.on("evt", () => {
+			throw new Error("sync boom");
+		});
+		em.on("evt", () => after("ran"));
+		await em.emit("evt", {});
+		expect(after).toHaveBeenCalledWith("ran");
 	});
 });
 
 // ── Silent instance suppresses the listener-error warning ───────────────────
 
 describe("EventManager.#warnListener — silent instance", () => {
-	it("does not surface a warning for a throwing listener when the instance is silent", async () => {
-		// silent:true → #warnListener returns before constructing the warning; a second listener still runs.
+	it("keeps running listeners after a throwing one when the instance is silent", async () => {
+		// silent:true → the warning is still raised (recorded, unprinted, #838); a second listener still runs.
 		const em = new EventManager(makeSlothlet({ silent: true }));
 		const after = vi.fn();
 		em.on("evt", () => {

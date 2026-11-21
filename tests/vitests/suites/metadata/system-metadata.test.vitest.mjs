@@ -49,38 +49,39 @@ describe.each(getMatrixConfigs())("System Metadata > Config: '$name'", ({ config
 	describe("Base API System Metadata", () => {
 		it("should have moduleID on base API functions", async () => {
 			await materialize(api, "rootMath.add", 1, 2);
-			const meta = api.rootMath.add.__metadata;
+			const meta = api.slothlet.metadata.get(api.rootMath.add);
+			const metaNode = api.slothlet.node(api.rootMath.add);
 
 			expect(meta).toBeDefined();
-			expect(meta.moduleID).toBeDefined();
-			expect(typeof meta.moduleID).toBe("string");
-			expect(meta.moduleID).toMatch(new RegExp(`^base_[a-z0-9]+${MODULE_ID_SEPARATOR}rootMath/add$`));
+			expect(metaNode.module).toBeDefined();
+			expect(typeof metaNode.module).toBe("string");
+			expect(metaNode.module).toMatch(new RegExp(`^base_[a-z0-9]+$`));
 		});
 
 		it("should have correct filePath for base API", async () => {
 			await materialize(api, "rootMath.add", 1, 2);
-			const meta = api.rootMath.add.__metadata;
+			const metaNode = api.slothlet.node(api.rootMath.add);
 
-			expect(meta.filePath).toBeDefined();
-			expect(typeof meta.filePath).toBe("string");
-			expect(meta.filePath).toContain("root-math.mjs");
-			expect(meta.filePath).toContain("api_test");
+			expect(metaNode.file).toBeDefined();
+			expect(typeof metaNode.file).toBe("string");
+			expect(metaNode.file).toContain("root-math.mjs");
+			expect(metaNode.file).toContain("api_test");
 		});
 
 		it("should have correct apiPath for base API", async () => {
 			await materialize(api, "rootMath.add", 1, 2);
-			const meta = api.rootMath.add.__metadata;
+			const metaNode = api.slothlet.node(api.rootMath.add);
 
-			expect(meta.apiPath).toBe("rootMath.add");
+			expect(metaNode.path.join(".")).toBe("rootMath.add");
 		});
 
 		it("should have sourceFolder matching base dir for base API", async () => {
 			await materialize(api, "rootMath.add", 1, 2);
-			const meta = api.rootMath.add.__metadata;
+			const metaNode = api.slothlet.node(api.rootMath.add);
 
-			expect(meta.sourceFolder).toBeDefined();
-			expect(meta.sourceFolder).toContain("api_test");
-			expect(meta.sourceFolder).not.toContain("api_test_mixed");
+			expect(metaNode.folder).toBeDefined();
+			expect(metaNode.folder).toContain("api_test");
+			expect(metaNode.folder).not.toContain("api_test_mixed");
 		});
 	});
 
@@ -88,95 +89,95 @@ describe.each(getMatrixConfigs())("System Metadata > Config: '$name'", ({ config
 		it("should have moduleID on added API functions", async () => {
 			await api.slothlet.api.add("plugins", TEST_DIRS.API_SMART_FLATTEN);
 			await materialize(api, "plugins.config.settings.getPluginConfig");
-			const meta = api.plugins.config.settings.getPluginConfig.__metadata;
+			const metaNode = api.slothlet.node(api.plugins.config.settings.getPluginConfig);
 
-			expect(meta.moduleID).toBeDefined();
-			expect(typeof meta.moduleID).toBe("string");
-			expect(meta.moduleID).toMatch(new RegExp(`^plugins_[a-z0-9]+${MODULE_ID_SEPARATOR}plugins/config/settings/getPluginConfig$`));
+			expect(metaNode.module).toBeDefined();
+			expect(typeof metaNode.module).toBe("string");
+			expect(metaNode.module).toMatch(new RegExp(`^plugins_[a-z0-9]+$`));
 		});
 
 		it("should have sourceFolder matching added dir", async () => {
 			await api.slothlet.api.add("plugins", TEST_DIRS.API_SMART_FLATTEN);
 			await materialize(api, "plugins.config.settings.getPluginConfig");
-			const meta = api.plugins.config.settings.getPluginConfig.__metadata;
+			const metaNode = api.slothlet.node(api.plugins.config.settings.getPluginConfig);
 
-			expect(meta.sourceFolder).toBeDefined();
-			expect(meta.sourceFolder).toContain("api_smart_flatten_addapi_with_folders");
+			expect(metaNode.folder).toBeDefined();
+			expect(metaNode.folder).toContain("api_smart_flatten_addapi_with_folders");
 		});
 
 		it("should have correct filePath for added API", async () => {
 			await api.slothlet.api.add("plugins", TEST_DIRS.API_SMART_FLATTEN);
 			await materialize(api, "plugins.config.settings.getPluginConfig");
-			const meta = api.plugins.config.settings.getPluginConfig.__metadata;
+			const metaNode = api.slothlet.node(api.plugins.config.settings.getPluginConfig);
 
-			expect(meta.filePath).toContain("settings.mjs");
-			expect(meta.filePath).toContain("api_smart_flatten_addapi_with_folders");
+			expect(metaNode.file).toContain("settings.mjs");
+			expect(metaNode.file).toContain("api_smart_flatten_addapi_with_folders");
 		});
 
 		it("should have correct apiPath for added API", async () => {
 			await api.slothlet.api.add("plugins", TEST_DIRS.API_SMART_FLATTEN);
 			await materialize(api, "plugins.config.settings.getPluginConfig");
-			const meta = api.plugins.config.settings.getPluginConfig.__metadata;
+			const metaNode = api.slothlet.node(api.plugins.config.settings.getPluginConfig);
 
-			expect(meta.apiPath).toBe("plugins.config.settings.getPluginConfig");
+			expect(metaNode.path.join(".")).toBe("plugins.config.settings.getPluginConfig");
 		});
 	});
 
 	describe("System Metadata Immutability", () => {
 		it("should prevent modification of moduleID", async () => {
 			await materialize(api, "rootMath.add", 1, 2);
-			const meta = api.rootMath.add.__metadata;
-			const originalModuleID = meta.moduleID;
+			const metaNode = api.slothlet.node(api.rootMath.add);
+			const originalModuleID = metaNode.module;
 
 			try {
-				meta.moduleID = "hacked_id";
+				metaNode.module = "hacked_id";
 			} catch (_) {
 				// Expected - frozen object
 			}
 
-			expect(meta.moduleID).toBe(originalModuleID);
+			expect(metaNode.module).toBe(originalModuleID);
 		});
 
 		it("should prevent modification of filePath", async () => {
 			await materialize(api, "rootMath.add", 1, 2);
-			const meta = api.rootMath.add.__metadata;
-			const originalFilePath = meta.filePath;
+			const metaNode = api.slothlet.node(api.rootMath.add);
+			const originalFilePath = metaNode.file;
 
 			try {
-				meta.filePath = "/fake/path.mjs";
+				metaNode.file = "/fake/path.mjs";
 			} catch (_) {
 				// Expected
 			}
 
-			expect(meta.filePath).toBe(originalFilePath);
+			expect(metaNode.file).toBe(originalFilePath);
 		});
 
 		it("should prevent modification of apiPath", async () => {
 			await materialize(api, "rootMath.add", 1, 2);
-			const meta = api.rootMath.add.__metadata;
-			const originalApiPath = meta.apiPath;
+			const metaNode = api.slothlet.node(api.rootMath.add);
+			const originalApiPath = metaNode.path.join(".");
 
 			try {
-				meta.apiPath = "hacked.path";
+				metaNode.path = ["hacked", "path"];
 			} catch (_) {
 				// Expected
 			}
 
-			expect(meta.apiPath).toBe(originalApiPath);
+			expect(metaNode.path.join(".")).toBe(originalApiPath);
 		});
 
 		it("should prevent modification of sourceFolder", async () => {
 			await materialize(api, "rootMath.add", 1, 2);
-			const meta = api.rootMath.add.__metadata;
-			const originalSourceFolder = meta.sourceFolder;
+			const metaNode = api.slothlet.node(api.rootMath.add);
+			const originalSourceFolder = metaNode.folder;
 
 			try {
-				meta.sourceFolder = "/fake/folder";
+				metaNode.folder = "/fake/folder";
 			} catch (_) {
 				// Expected
 			}
 
-			expect(meta.sourceFolder).toBe(originalSourceFolder);
+			expect(metaNode.folder).toBe(originalSourceFolder);
 		});
 	});
 
@@ -189,15 +190,16 @@ describe.each(getMatrixConfigs())("System Metadata > Config: '$name'", ({ config
 			// Before materialization - access __type to trigger lazy loading
 			// The __type getter will trigger materialization, then return symbol if in-flight or typeof if complete
 			const wrapper = api.lazyTest.config.settings.getPluginConfig;
-			const typeBefore = wrapper.__type;
+			const typeBefore = api.slothlet.node(wrapper).type;
 
 			// Also get metadata
-			const metaBefore = wrapper.__metadata;
+			const metaBefore = api.slothlet.metadata.get(wrapper);
 			await materialize(api, "lazyTest.config.settings.getPluginConfig");
 
 			// After materialization - metadata comes from function wrapper
-			const metaAfter = api.lazyTest.config.settings.getPluginConfig.__metadata;
-			const typeAfter = api.lazyTest.config.settings.getPluginConfig.__type;
+			const metaAfter = api.slothlet.metadata.get(api.lazyTest.config.settings.getPluginConfig);
+			const metaAfterNode = api.slothlet.node(api.lazyTest.config.settings.getPluginConfig);
+			const typeAfter = api.slothlet.node(api.lazyTest.config.settings.getPluginConfig).type;
 
 			// Both metadata should be defined
 			expect(metaBefore).toBeDefined();
@@ -214,9 +216,9 @@ describe.each(getMatrixConfigs())("System Metadata > Config: '$name'", ({ config
 			}
 
 			// After explicit materialization, metadata comes from specific function
-			expect(metaAfter.apiPath).toBe("lazyTest.config.settings.getPluginConfig");
-			expect(metaAfter.moduleID).toMatch(new RegExp(`^lazyTest_[a-z0-9]+${MODULE_ID_SEPARATOR}lazyTest/config/settings/getPluginConfig$`));
-			expect(metaAfter.filePath).toContain("settings.mjs");
+			expect(metaAfterNode.path.join(".")).toBe("lazyTest.config.settings.getPluginConfig");
+			expect(metaAfterNode.module).toMatch(new RegExp(`^lazyTest_[a-z0-9]+$`));
+			expect(metaAfterNode.file).toContain("settings.mjs");
 
 			// After materialization, __type should return "function" (the typeof the impl)
 			expect(typeAfter).toBe("function");
@@ -231,105 +233,102 @@ describe.each(getMatrixConfigs())("System Metadata > Config: '$name'", ({ config
 
 			// Test function-level metadata
 			await materialize(api, "nested.config.settings.getPluginConfig");
-			const meta = api.nested.config.settings.getPluginConfig.__metadata;
-			expect(meta.apiPath).toBe("nested.config.settings.getPluginConfig");
-			expect(meta.moduleID).toContain("nested/config/settings/getPluginConfig");
+			const metaNode = api.slothlet.node(api.nested.config.settings.getPluginConfig);
+			expect(metaNode.path.join(".")).toBe("nested.config.settings.getPluginConfig");
+			expect(metaNode.module).toMatch(/^nested_[a-z0-9]+$/);
 		});
 
 		it("should maintain sourceFolder through all nesting levels", async () => {
 			await api.slothlet.api.add("deep", TEST_DIRS.API_SMART_FLATTEN);
 			await materialize(api, "deep.config.settings.getPluginConfig");
 
-			const meta = api.deep.config.settings.getPluginConfig.__metadata;
-			expect(meta.sourceFolder).toContain("api_smart_flatten_addapi_with_folders");
+			const metaNode = api.slothlet.node(api.deep.config.settings.getPluginConfig);
+			expect(metaNode.folder).toContain("api_smart_flatten_addapi_with_folders");
 		});
 	});
 
 	describe("moduleID Format Validation", () => {
 		it("should use base_ prefix for base API", async () => {
 			await materialize(api, "rootMath.add", 1, 2);
-			const meta = api.rootMath.add.__metadata;
+			const metaNode = api.slothlet.node(api.rootMath.add);
 
-			expect(meta.moduleID).toMatch(new RegExp(`^base_[a-z0-9]+${MODULE_ID_SEPARATOR}`));
+			expect(metaNode.module).toMatch(new RegExp(`^base_[a-z0-9]+$`));
 		});
 
 		it("should use custom prefix for added API", async () => {
 			await api.slothlet.api.add("custom", TEST_DIRS.API_SMART_FLATTEN);
 			await materialize(api, "custom.config.settings.getPluginConfig");
-			const meta = api.custom.config.settings.getPluginConfig.__metadata;
+			const metaNode = api.slothlet.node(api.custom.config.settings.getPluginConfig);
 
-			expect(meta.moduleID).toMatch(new RegExp(`^custom_[a-z0-9]+${MODULE_ID_SEPARATOR}`));
+			expect(metaNode.module).toMatch(new RegExp(`^custom_[a-z0-9]+$`));
 		});
 
-		it("should include full apiPath after the separator", async () => {
+		it("reports the raw module id, never the internal composite", async () => {
 			await materialize(api, "rootMath.add", 1, 2);
-			const meta = api.rootMath.add.__metadata;
+			const metaNode = api.slothlet.node(api.rootMath.add);
 
-			const [prefix, path] = meta.moduleID.split(MODULE_ID_SEPARATOR);
-			expect(prefix).toMatch(/^base_[a-z0-9]+$/);
-			expect(path).toBe("rootMath/add");
+			expect(metaNode.module).not.toContain(MODULE_ID_SEPARATOR);
+			expect(metaNode.module).toMatch(/^base_[a-z0-9]+$/);
+			expect(metaNode.path).toEqual(["rootMath", "add"]);
 		});
 	});
 
-	describe("Internal API Access to System Metadata (self.slothlet.metadata.*)", () => {
-		it("should access system metadata via self.slothlet.metadata.get() from within API", async () => {
+	describe("Internal API Access to node reports (self.slothlet.node)", () => {
+		it("reads a node's report via self.slothlet.node() from within the API", async () => {
 			await materialize(api, "rootMath.add", 1, 2);
 
-			// Use helper that calls self.slothlet.metadata.get() internally
-			const metadata = await api.metadataTestHelper.getMetadata("rootMath.add");
+			const report = await api.metadataTestHelper.getNode("rootMath.add");
 
-			// Should retrieve system metadata
-			expect(metadata).toBeDefined();
-			expect(metadata.moduleID).toBeDefined();
-			expect(metadata.moduleID).toMatch(new RegExp(`^base_[a-z0-9]+${MODULE_ID_SEPARATOR}rootMath/add$`));
-			expect(metadata.filePath).toContain("root-math.mjs");
-			expect(metadata.apiPath).toBe("rootMath.add");
-			expect(metadata.sourceFolder).toContain("api_test");
+			expect(report).toBeDefined();
+			expect(report.module).toMatch(/^base_[a-z0-9]+$/);
+			expect(report.file).toContain("root-math.mjs");
+			expect(report.path).toEqual(["rootMath", "add"]);
+			expect(report.folder).toContain("api_test");
 		});
 
-		it("should access nested function system metadata internally", async () => {
+		it("reads a nested function's report internally", async () => {
 			await api.slothlet.api.add("internal", TEST_DIRS.API_SMART_FLATTEN);
 			await materialize(api, "internal.config.settings.getPluginConfig");
 
-			// Access via internal API
-			const metadata = await api.metadataTestHelper.getMetadata("internal.config.settings.getPluginConfig");
+			const report = await api.metadataTestHelper.getNode("internal.config.settings.getPluginConfig");
 
-			expect(metadata.apiPath).toBe("internal.config.settings.getPluginConfig");
-			expect(metadata.moduleID).toContain("internal/config/settings/getPluginConfig");
-			expect(metadata.filePath).toContain("settings.mjs");
+			expect(report.path).toEqual(["internal", "config", "settings", "getPluginConfig"]);
+			expect(report.module).toMatch(/^internal_[a-z0-9]+$/);
+			expect(report.file).toContain("settings.mjs");
 		});
 
-		it("should return undefined for non-existent paths via internal API", async () => {
-			const metadata = await api.metadataTestHelper.getMetadata("nonExistent.path");
-			expect(metadata).toBeUndefined();
+		it("returns undefined for non-existent paths via internal API", async () => {
+			expect(await api.metadataTestHelper.getNode("nonExistent.path")).toBeUndefined();
 		});
 
-		it("should access own system metadata via self.slothlet.metadata.self()", async () => {
-			const selfMetadata = await api.metadataTestHelper.getSelfMetadata();
+		it("reads its own node's report", async () => {
+			const report = await api.metadataTestHelper.getNode();
 
-			// Should return metadata of the helper function itself
-			expect(selfMetadata).toBeDefined();
-			expect(selfMetadata.apiPath).toContain("metadataTestHelper");
-			expect(selfMetadata.moduleID).toBeDefined();
+			expect(report).toBeDefined();
+			expect(report.path).toContain("metadataTestHelper");
+			expect(typeof report.module).toBe("string");
 		});
 
-		it("should track system metadata immutability via internal API", async () => {
+		it("the report read internally is frozen", async () => {
 			await materialize(api, "rootMath.add", 1, 2);
 
-			// Get metadata via internal API
+			const report = await api.metadataTestHelper.getNode("rootMath.add");
+			const originalModule = report.module;
+			expect(() => {
+				report.module = "hacked";
+			}).toThrow(TypeError);
+
+			const after = await api.metadataTestHelper.getNode("rootMath.add");
+			expect(after.module).toBe(originalModule);
+		});
+
+		it("self.slothlet.metadata.get() returns user metadata only", async () => {
+			await materialize(api, "rootMath.add", 1, 2);
+
 			const metadata = await api.metadataTestHelper.getMetadata("rootMath.add");
-			const originalModuleID = metadata.moduleID;
-
-			// Attempt to modify (should fail silently due to freeze)
-			try {
-				metadata.moduleID = "hacked";
-			} catch (_) {
-				// Expected
-			}
-
-			// Verify still immutable
-			const metadataAfter = await api.metadataTestHelper.getMetadata("rootMath.add");
-			expect(metadataAfter.moduleID).toBe(originalModuleID);
+			expect(metadata.moduleID).toBeUndefined();
+			expect(metadata.filePath).toBeUndefined();
+			expect(metadata.apiPath).toBeUndefined();
 		});
 	});
 });

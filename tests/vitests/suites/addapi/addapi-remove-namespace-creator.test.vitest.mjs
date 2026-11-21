@@ -126,7 +126,7 @@ for (const { config, name } of getMatrixConfigs()) {
 					silent: true,
 					api: {
 						...config.api,
-						collision: { ...(config.api?.collision ?? {}), api: collisionApi },
+						collision: { mode: { initial: "merge", api: collisionApi } },
 						mutations: { add: true, remove: true, reload: true }
 					}
 				});
@@ -140,13 +140,13 @@ for (const { config, name } of getMatrixConfigs()) {
 			])("%s created by the first of %j", async (_label, [creator, survivor]) => {
 				// The key order the survivor's namespace has on its own.
 				const alone = await createInstance();
-				await alone.slothlet.api.add("plugins", MODULES[survivor].dir, { moduleID: survivor });
+				await alone.slothlet.api.add("plugins", MODULES[survivor].dir, { id: survivor });
 				const survivorOrder = Object.keys(alone.plugins);
 				await alone.shutdown();
 
 				api = await createInstance();
-				await api.slothlet.api.add("plugins", MODULES[creator].dir, { moduleID: creator });
-				await api.slothlet.api.add("plugins", MODULES[survivor].dir, { moduleID: survivor });
+				await api.slothlet.api.add("plugins", MODULES[creator].dir, { id: creator });
+				await api.slothlet.api.add("plugins", MODULES[survivor].dir, { id: survivor });
 
 				// Call every surviving leaf once (materializing it under lazy mode), then hold its reference.
 				const survivorLeaves = MODULES[survivor].leaves;
@@ -206,7 +206,7 @@ describe("invalidateSpeculativeWrappers with a live-kept list (#555)", () => {
 			silent: true,
 			api: { mutations: { add: true, remove: true } }
 		});
-		await api.slothlet.api.add("plugins", MODULES.other.dir, { moduleID: "other" });
+		await api.slothlet.api.add("plugins", MODULES.other.dir, { id: "other" });
 		const slothletInstance = resolveWrapper(api.plugins).slothlet;
 		const UnifiedWrapper = resolveWrapper(api.plugins).constructor;
 		const gamma = api.plugins.gamma;

@@ -88,7 +88,7 @@ describe.each(getMatrixConfigs())("Runtime Verification > Config: '$name'", ({ c
 		// Verify instanceId is available and matches between runtime test and actual API
 		expect(results.instanceIdTest.available).toBe(true);
 		// Verify instanceId from inside runtime-test.mjs matches the actual instanceId
-		expect(results.instanceIdTest.value).toBe(api.slothlet.instanceID);
+		expect(results.instanceIdTest.value).toBe(api.slothlet.instance.id);
 	});
 
 	it("should pass comprehensive runtime verification", async () => {
@@ -220,7 +220,7 @@ describe("Runtime Implementation Verification", () => {
 		expect(liveResults.contextTest.userData).toBe("live-user");
 
 		// Verify different instanceIds
-		expect(asyncApi.slothlet.instanceID).not.toBe(liveApi.slothlet.instanceID);
+		expect(asyncApi.slothlet.instance.id).not.toBe(liveApi.slothlet.instance.id);
 	});
 
 	it("should exercise context dispatcher proxy traps via live runtime", async () => {
@@ -254,14 +254,11 @@ describe("Runtime Implementation Verification", () => {
 		});
 		instances.push(api);
 
-		// exerciseInstanceIDDispatcherTraps accesses instanceID from @cldmv/slothlet/runtime
-		// dispatcher, covering the get and has traps at lines 128-133.
-		// Live runtime has no instanceID export so the falsy branch fires (returns undefined/false).
+		// exerciseInstanceIDDispatcherTraps reads instance.id from the @cldmv/slothlet/runtime dispatcher; the live
+		// runtime answers it as the async runtime does (#764): inside a call it is the id, a real string.
 		const result = api.runtimeTest.exerciseInstanceIDDispatcherTraps();
 
-		expect(result.id).toBeUndefined();
-		expect(result.hasProp).toBe(false);
-		expect(result.hasMissing).toBe(false);
+		expect(result).toEqual({ id: api.slothlet.instance.id, type: "string" });
 	});
 
 	it("should exercise async context set and getOwnPropertyDescriptor traps within context.run", async () => {

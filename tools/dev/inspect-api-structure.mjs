@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-01T09:25:30-08:00 (1793553930)
+ *	@Last modified time: 2026-11-16T18:30:47-08:00 (1794882647)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -51,9 +51,8 @@
  * | `--eager` | | Use eager loading mode |
  * | `--raw` | | Print raw `util.inspect` output only |
  * | `--runtime <type>` | `async` | Context runtime: `async` or `live` |
- * | `--apiDepth <n>` | unlimited | Slothlet `apiDepth` config option |
+ * | `--apiDepth <n>` | unlimited | Slothlet `depth` config option |
  * | `--debug` | | Enable Slothlet debug output |
- * | `--allowMutation` | | Allow runtime API mutation |
  * | `--hooks` | | Enable lifecycle hooks |
  * | `--help` / `-h` | | Show usage information |
  */
@@ -135,6 +134,50 @@ function ensureDevEnvFlags() {
 }
 
 /**
+ * Api paths whose contents the tool never prints, relative to the api root. `slothlet.env` is the process
+ * environment: printing it writes every environment variable (a CI job's included) to the output and, through
+ * the structures test's failure message, to the test log (#759). The node is shown as present, its contents not.
+ * @type {Set<string>}
+ * @internal
+ */
+const WITHHELD_PATHS = new Set(["slothlet.env"]);
+
+/**
+ * Whether a displayed path (the api folder's name, then the api path) names a node whose contents are withheld.
+ * @param {string} displayPath - The path as the structure display builds it, e.g. `api_test.slothlet.env`.
+ * @returns {boolean} True for a withheld node.
+ * @internal
+ */
+function isWithheldDisplayPath(displayPath) {
+	const dot = displayPath.indexOf(".");
+	return dot !== -1 && WITHHELD_PATHS.has(displayPath.slice(dot + 1));
+}
+
+/**
+ * The api as the tool prints it with `util.inspect`: the root's members as they are, each withheld path's contents
+ * replaced by a marker. `util.inspect(api)` shows the root's members (`slothlet.env` included) as the host reads them,
+ * so the printed api is built from them rather than the api itself.
+ * @param {object|Function} api - The api.
+ * @returns {object} What the tool prints.
+ * @internal
+ */
+function printableApi(api) {
+	const withheld = { [util.inspect.custom]: () => "[withheld]" };
+	const shown = { ...api };
+	for (const withheldPath of WITHHELD_PATHS) {
+		const parts = withheldPath.split(".");
+		let holder = shown;
+		for (const part of parts.slice(0, -1)) {
+			if (holder[part] === null || typeof holder[part] !== "object") break;
+			holder = holder[part] = { ...holder[part] };
+		}
+		const last = parts[parts.length - 1];
+		if (Object.hasOwn(holder, last)) holder[last] = withheld;
+	}
+	return shown;
+}
+
+/**
  * Display the structure of an object or function recursively.
  * @param {any} obj - Object to inspect
  * @param {string} [path=""] - Current path for display
@@ -189,7 +232,8 @@ function inspectApiStructure(obj, path = "", depth = 0, maxDepth = 8, visited = 
 					const value = obj[prop];
 					const newPath = path ? `${path}.${prop}` : prop;
 					results.push(`${indent}  ${chalk.yellow(prop)}:`);
-					results.push(...inspectApiStructure(value, newPath, depth + 2, maxDepth, visited));
+					if (isWithheldDisplayPath(newPath)) results.push(`${indent}    ${chalk.gray("[contents not shown]")}`);
+					else results.push(...inspectApiStructure(value, newPath, depth + 2, maxDepth, visited));
 				} catch (_) {
 					results.push(`${indent}  ${chalk.yellow(prop)}: ${chalk.red("[error accessing]")}`);
 				}
@@ -221,7 +265,9 @@ function inspectApiStructure(obj, path = "", depth = 0, maxDepth = 8, visited = 
 
 					results.push(`${indent}${chalk.yellow(key)}: ${typeInfo}`);
 
-					if (depth < maxDepth) {
+					if (isWithheldDisplayPath(newPath)) {
+						results.push(`${indent}  ${chalk.gray("[contents not shown]")}`);
+					} else if (depth < maxDepth) {
 						results.push(...inspectApiStructure(value, newPath, depth + 1, maxDepth, visited));
 					}
 				} catch (_) {
@@ -258,6 +304,14 @@ function inspectApiStructure(obj, path = "", depth = 0, maxDepth = 8, visited = 
 }
 
 /**
+ * How deep the load and materialize walks go. A function can hold itself as a member (`fn.me = fn`), and each read of
+ * it is a node one level deeper (`me.me…`, as plain JavaScript reads it), so a walk keyed on node identity alone
+ * never ends.
+ * @type {number}
+ */
+const WALK_DEPTH = 24;
+
+/**
  * Load every node of a lazy api, so it is inspected as eager composes it: once loaded, a lazy node is
  * what eager builds. An unloaded lazy node is a thenable function proxy, and awaiting it loads it; a
  * loaded node is not thenable. A node that fails to load (a module refused at load, say) throws here,
@@ -270,7 +324,8 @@ async function forceMaterializeLazyFolders(api) {
 	if (!api) return;
 	console.log(chalk.gray("  Loading every lazy node..."));
 	const seen = new Set();
-	const load = async (node, isRoot) => {
+	const load = async (node, isRoot, depth) => {
+		if (depth > WALK_DEPTH) return;
 		for (const key of Object.keys(node)) {
 			if (isRoot && (key === "slothlet" || key === "shutdown" || key === "destroy")) continue;
 			let child;
@@ -284,10 +339,10 @@ async function forceMaterializeLazyFolders(api) {
 			if (child === null || (typeof child !== "object" && typeof child !== "function") || seen.has(child)) continue;
 			seen.add(child);
 			if (typeof child === "function" && typeof child.then === "function") child = await child;
-			if (child !== null && (typeof child === "object" || typeof child === "function")) await load(child, false);
+			if (child !== null && (typeof child === "object" || typeof child === "function")) await load(child, false, depth + 1);
 		}
 	};
-	await load(api, true);
+	await load(api, true, 0);
 }
 
 /**
@@ -328,7 +383,7 @@ async function inspectApi(apiName, options = {}) {
 
 		// Build slothlet configuration (both v2 and v3 use 'mode' now)
 		const config = {
-			dir: apiPath,
+			base: apiPath,
 			mode: lazy ? "lazy" : "eager",
 			...(slothletConfig.runtime ? { runtime: slothletConfig.runtime } : {}),
 			...slothletConfig
@@ -338,6 +393,7 @@ async function inspectApi(apiName, options = {}) {
 
 		// Load the API
 		const api = await slothlet(config);
+		nodeOf = api.slothlet.node;
 
 		console.log(chalk.green("✅ API loaded successfully"));
 
@@ -355,7 +411,7 @@ async function inspectApi(apiName, options = {}) {
 			// console.log(api.utilities.helpers);
 			// process.exit(0);
 			const inspectDepth = Number.isFinite(maxDepth) ? maxDepth : null;
-			console.log(util.inspect(api, { depth: inspectDepth, colors: true }));
+			console.log(util.inspect(printableApi(api), { depth: inspectDepth, colors: true }));
 			if (typeof api.shutdown === "function") {
 				await api.shutdown();
 			}
@@ -363,7 +419,7 @@ async function inspectApi(apiName, options = {}) {
 		}
 
 		const inspectDepth = Number.isFinite(maxDepth) ? maxDepth : null;
-		console.log(util.inspect(api, { depth: inspectDepth, colors: true }));
+		console.log(util.inspect(printableApi(api), { depth: inspectDepth, colors: true }));
 
 		// Display basic info
 		console.log(chalk.bold("API Type:"), typeof api);
@@ -399,9 +455,10 @@ async function inspectApi(apiName, options = {}) {
 
 		// Mode-neutral shape of the whole api, for comparing eager and lazy composition (#583). It is not cut
 		// at the display depth, which would make every subtree below it compare equal (#585 review), so
-		// every lazy node is loaded first, at any depth.
-		await findCallablePaths(api, "api", new WeakSet(), false, 0, Infinity);
-		console.log(`\nAPI Shape: ${JSON.stringify(describeApiShape(api, 0, Infinity))}`);
+		// every lazy node is loaded first, down to WALK_DEPTH: past any real api's depth, and where a node that
+		// holds itself (`fn.me = fn`, read as `me.me…`) stops, the same in both modes.
+		await findCallablePaths(api, "api", new WeakSet(), false, 0, WALK_DEPTH);
+		console.log(`\nAPI Shape: ${JSON.stringify(describeApiShape(api, 0, WALK_DEPTH))}`);
 
 		// Shutdown the API instance to clean up resources
 		if (typeof api.shutdown === "function") {
@@ -417,30 +474,26 @@ async function inspectApi(apiName, options = {}) {
 }
 
 /**
- * Recursively materializes lazy proxy structures by calling their _materialize methods.
+ * Recursively materializes lazy proxy structures by calling their ___materialize methods.
  * @param {any} obj - Object to materialize
  * @param {WeakSet} [visited] - Visited objects tracker to prevent infinite recursion
+ * @param {number} [depth=0] - How deep this node is below where the walk started (see {@link WALK_DEPTH}).
  * @returns {Promise<void>}
  * @internal
  */
-async function materializeLazyStructure(obj, visited = new WeakSet()) {
+async function materializeLazyStructure(obj, visited = new WeakSet(), depth = 0) {
 	// Avoid infinite recursion
-	if (!obj || visited.has(obj)) return;
+	if (!obj || visited.has(obj) || depth > WALK_DEPTH) return;
 
 	// Only process objects and functions
 	if (typeof obj !== "object" && typeof obj !== "function") return;
 
 	visited.add(obj);
 
-	// Check if this is a lazy proxy with a _materialize method
-	if (typeof obj === "function" && obj._materialize && typeof obj._materialize === "function") {
+	// Check if this is a lazy proxy with a ___materialize method
+	if (typeof obj === "function" && obj.___materialize && typeof obj.___materialize === "function") {
 		try {
-			await obj._materialize();
-			// After materialization, get the materialized value and recurse into it
-			const materialized = obj.__materialized;
-			if (materialized && materialized !== obj) {
-				await materializeLazyStructure(materialized, visited);
-			}
+			await obj.___materialize();
 		} catch (_) {
 			// Silently ignore materialization errors
 		}
@@ -448,13 +501,14 @@ async function materializeLazyStructure(obj, visited = new WeakSet()) {
 
 	// Recursively materialize all properties
 	if (typeof obj === "object" || typeof obj === "function") {
-		// Use Object.getOwnPropertyNames to get all properties including non-enumerable ones
-		const propNames = [...new Set([...Object.getOwnPropertyNames(obj), ...Object.keys(obj)])];
+		// The api's own members: every one is enumerable. Walking non-enumerable names too (a function's `prototype`,
+		// its `constructor`) only multiplies the walk below each node.
+		const propNames = Object.keys(obj);
 		for (const prop of propNames) {
 			try {
 				const value = obj[prop];
 				if (value && (typeof value === "object" || typeof value === "function")) {
-					await materializeLazyStructure(value, visited);
+					await materializeLazyStructure(value, visited, depth + 1);
 				}
 			} catch {
 				// Ignore property access errors (getters that throw, etc.)
@@ -475,21 +529,31 @@ async function materializeLazyStructure(obj, visited = new WeakSet()) {
  * @internal
  */
 /**
+ * The loaded api's `slothlet.node`, set once the api is built; null before.
+ * @type {((target: unknown) => ({callable: boolean}|undefined))|null}
+ */
+let nodeOf = null;
+
+/**
  * Whether an api node can be called. A lazy folder is a function-typed proxy even when it is a plain
  * namespace (its callability is unknown until it loads), so `typeof` alone listed every lazy folder as
  * a callable path and the eager/lazy comparison could not match (#583). A slothlet node reports its
- * own callability through `__isCallable` (the tool loads every lazy node before asking); anything
- * else is callable when it is a function.
+ * own callability through `api.slothlet.node(node).callable` (the tool loads every lazy node before
+ * asking); anything else is callable when it is a function.
  * @param {unknown} value - Node to test.
  * @returns {boolean} True when the node is callable.
  * @internal
  */
 function isCallableNode(value) {
 	if (typeof value !== "function") return false;
-	// A loaded lazy namespace reports `null` (its callability was never set), eager reports `false`;
-	// only a non-slothlet function has no flag at all.
-	const flag = value.__isCallable;
-	return flag === undefined ? true : flag === true;
+	let report;
+	try {
+		report = nodeOf ? nodeOf(value) : undefined;
+	} catch {
+		report = undefined;
+	}
+	// Only a non-slothlet function has no report at all.
+	return report === undefined ? true : report.callable === true;
 }
 
 /**
@@ -502,10 +566,13 @@ function isCallableNode(value) {
  * @param {number} depth - Current depth.
  * @param {number} maxDepth - Depth past which a node is reported as `max-depth`.
  * @param {Set<unknown>} [ancestors] - Nodes on the current path, to report cycles.
+ * @param {string} [apiPath] - The node's api path (`""` for the root), to withhold the nodes {@link WITHHELD_PATHS} names.
  * @returns {object} The node's shape.
  * @internal
  */
-function describeApiShape(value, depth, maxDepth, ancestors = new Set()) {
+function describeApiShape(value, depth, maxDepth, ancestors = new Set(), apiPath = "") {
+	// A withheld node keeps its type and nothing else, as the structures test blanks a volatile value (#759).
+	if (WITHHELD_PATHS.has(apiPath)) return { type: value === null ? "null" : typeof value, withheld: true };
 	if (value === null || (typeof value !== "object" && typeof value !== "function")) {
 		// JSON writes NaN and both infinities as null and -0 as 0, so they are kept as strings: two apis
 		// differing only in them would otherwise print the same shape (#585 review).
@@ -529,7 +596,7 @@ function describeApiShape(value, depth, maxDepth, ancestors = new Set()) {
 	const members = {};
 	for (const key of Object.keys(value).sort()) {
 		try {
-			members[key] = describeApiShape(value[key], depth + 1, maxDepth, ancestors);
+			members[key] = describeApiShape(value[key], depth + 1, maxDepth, ancestors, apiPath ? `${apiPath}.${key}` : key);
 		} catch (error) {
 			members[key] = { type: "error", message: error?.message };
 		}
@@ -553,7 +620,7 @@ async function findCallablePaths(obj, basePath = "api", visited = new WeakSet(),
 		visited.add(obj);
 	}
 
-	// Force materialization of lazy proxies using the exposed _materialize method
+	// Force materialization of lazy proxies using the exposed ___materialize method
 	await materializeLazyStructure(obj);
 
 	// If the object itself is callable, add it (unless skipSelf is true)
@@ -607,7 +674,7 @@ async function main() {
 		console.log("\nExamples:");
 		console.log("  node tools/inspect-api-structure.mjs api_test");
 		console.log("  node tools/inspect-api-structure.mjs api_test --eager");
-		console.log("  node tools/inspect-api-structure.mjs api_test --eager --allowMutation --runtime live");
+		console.log("  node tools/inspect-api-structure.mjs api_test --eager --runtime live");
 		console.log("\nOptions:");
 		console.log("  --depth <n>           Maximum depth to traverse (default: 3)");
 		console.log("  --show-methods        Show available methods for functions");
@@ -617,8 +684,7 @@ async function main() {
 		console.log("  --runtime <type>      Runtime type: 'async' or 'live' (default: async)");
 		console.log("  --apiDepth <n>        Set API depth limit (default: no limit)");
 		console.log("  --debug               Enable debug mode");
-		console.log("\nV3 Options:");
-		console.log("  --allowMutation       Allow runtime mutation of API properties");
+		console.log("\nOther options:");
 		console.log("  --hooks               Enable lifecycle hooks");
 		return;
 	}
@@ -633,7 +699,7 @@ async function main() {
 			options.maxDepth = parseInt(args[i + 1], 10);
 			i++; // Skip next arg
 		} else if (args[i] === "--apiDepth" && i + 1 < args.length) {
-			slothletConfig.apiDepth = parseInt(args[i + 1], 10);
+			slothletConfig.depth = parseInt(args[i + 1], 10);
 			i++; // Skip next arg
 		} else if (args[i] === "--runtime" && i + 1 < args.length) {
 			slothletConfig.runtime = args[i + 1];
@@ -646,12 +712,6 @@ async function main() {
 			options.lazy = false;
 		} else if (args[i] === "--raw") {
 			options.raw = true;
-		} else if (args[i] === "--allowApiOverwrite") {
-			slothletConfig.allowApiOverwrite = true;
-		} else if (args[i] === "--hotReload") {
-			slothletConfig.hotReload = true;
-		} else if (args[i] === "--allowMutation") {
-			slothletConfig.allowMutation = true;
 		} else if (args[i] === "--hooks") {
 			// The option is `hook`; a `hooks` key is not read, so this flag used to enable nothing (#583).
 			slothletConfig.hook = true;

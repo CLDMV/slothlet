@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:53-07:00 (1791090893)
+ *	@Last modified time: 2026-11-19T08:57:47-08:00 (1795107467)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -21,6 +21,20 @@
  */
 
 import { ComponentBase } from "#factories/component-base";
+import {
+	Arrays,
+	Date,
+	DateMethods,
+	FunctionMethods,
+	mapList,
+	Math,
+	NumberMethods,
+	Objects,
+	StringMethods,
+	Uint32Array
+} from "#helpers/intrinsics";
+import { cloneTakingViews } from "#helpers/clone-context";
+import { asNoRunWork } from "#helpers/flow-stores";
 
 /**
  * General utility functions
@@ -39,8 +53,8 @@ export class Utilities extends ComponentBase {
 	 */
 	isPlainObject(obj) {
 		if (typeof obj !== "object" || obj === null) return false;
-		const proto = Object.getPrototypeOf(obj);
-		return proto === null || proto === Object.prototype;
+		const proto = Objects.getPrototypeOf(obj);
+		return proto === null || proto === Objects.prototype;
 	}
 
 	/**
@@ -68,7 +82,7 @@ export class Utilities extends ComponentBase {
 		const result = { ...target };
 
 		for (const key in source) {
-			if (Object.prototype.hasOwnProperty.call(source, key)) {
+			if (Objects.hasOwn(source, key)) {
 				if (this.isPlainObject(source[key])) {
 					// Recurse: start from target[key] if it's a plain object, otherwise {}
 					// so new nested keys in source always produce a fresh copy.
@@ -100,19 +114,19 @@ export class Utilities extends ComponentBase {
 	 */
 	deepClone(obj) {
 		try {
-			return structuredClone(obj);
+			// Copied as the platform's `structuredClone` copies it, taking slothlet's views as the installed wrapper does.
+			return cloneTakingViews(obj);
 		} catch {
 			// Fallback for Proxy / function / symbol values that structuredClone rejects.
-			// Use .__type for Slothlet-wrapped objects, otherwise fall back to typeof.
-			const objType = obj?.__type || typeof obj;
+			const objType = typeof obj;
 			if (obj === null || (objType !== "object" && objType !== "function")) return obj;
 			// Callables (plain functions AND callable Proxies) cannot be reconstructed from a
 			// property copy — retain them BY REFERENCE. A live reference in context (an rpc
 			// transport, a service handle) is meant to be shared, not cloned (#408). Without
 			// this a bare function fell through to the key-copy loop below and became `{}`.
 			if (typeof obj === "function") return obj;
-			if (obj instanceof Date) return new Date(obj.getTime());
-			if (Array.isArray(obj)) return obj.map((item) => this.deepClone(item));
+			if (obj instanceof Date) return new Date(DateMethods.getTime(obj));
+			if (Arrays.isArray(obj)) return mapList(obj, (item) => this.deepClone(item));
 			// For callable Proxies and plain objects: clone all enumerable keys.
 			const cloned = {};
 			for (const key in obj) {
@@ -128,11 +142,41 @@ export class Utilities extends ComponentBase {
 	}
 
 	/**
-	 * Generate unique ID
+	 * Generate a unique ID: the prefix, the time, and a random part. The random part comes from the platform's
+	 * cryptographic generator where there is one, so an ID cannot be worked out from the IDs and random numbers code
+	 * running in the process has seen (an instance's reload IDs are made here).
+	 * @param {string} [prefix="slothlet"] - What the ID starts with.
 	 * @returns {string} Unique identifier
 	 * @public
+	 * @example
+	 * utilities.generateId(); // "slothlet_1790000000000_k3j9x2m1q"
+	 * utilities.generateId("slothlet_1790000000000_k3j9x2m1q_reload"); // "slothlet_..._reload_1790000000123_7fz0c1a9d"
 	 */
-	generateId() {
-		return `slothlet_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+	generateId(prefix = "slothlet") {
+		return `${prefix}_${this.clock.now()}_${randomPart()}`;
 	}
+}
+
+/**
+ * The platform's cryptographic random generator (`crypto.getRandomValues`), taken when slothlet loads, before any api
+ * file runs; null where there is none.
+ * @type {?Function}
+ * @private
+ */
+const RANDOM_VALUES = (() => {
+	const crypto = globalThis.crypto;
+	return typeof crypto?.getRandomValues === "function" ? FunctionMethods.bind(crypto.getRandomValues, crypto) : null;
+})();
+
+/**
+ * The random part of an ID: lowercase letters and digits.
+ * @returns {string} The random part.
+ * @private
+ */
+function randomPart() {
+	if (RANDOM_VALUES === null) return StringMethods.substr(NumberMethods.toString(Math.random(), 36), 2, 9);
+	// The platform makes a job for the draw that it reports done only once the job is collected: slothlet's own draw is
+	// no work of a run it happens in (an ID made by reload() inside a run).
+	const words = asNoRunWork(() => RANDOM_VALUES(new Uint32Array(2)));
+	return `${NumberMethods.toString(words[0], 36)}${NumberMethods.toString(words[1], 36)}`;
 }

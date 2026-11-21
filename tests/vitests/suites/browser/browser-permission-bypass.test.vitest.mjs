@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:59-07:00 (1791090899)
+ *	@Last modified time: 2026-11-16T18:28:44-08:00 (1794882524)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -57,7 +57,7 @@ function denyRogue(matrixConfig) {
 	return {
 		...makeBrowserConfig(matrixConfig, FIXTURE_DIR, BROWSER_MANIFEST),
 		permissions: {
-			defaultPolicy: "deny",
+			policy: "deny",
 			rules: [
 				{ caller: "probe.**", target: "math.**", effect: "allow" },
 				{ caller: "**", target: "{probe,rogue}.**", effect: "allow" }

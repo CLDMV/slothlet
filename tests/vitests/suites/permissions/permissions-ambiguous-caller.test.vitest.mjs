@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:14-07:00 (1791090914)
+ *	@Last modified time: 2026-11-16T18:29:39-08:00 (1794882579)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -65,7 +65,7 @@ describe.each(getMatrixConfigs())("Permissions > ambiguous caller > $name", ({ c
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "deny",
+				policy: "deny",
 				rules: [
 					// Permits exactly one of the two racing functions, so the pair cannot both pass or both fail
 					// by accident — the rule only holds if each is attributed to itself.
@@ -87,7 +87,7 @@ describe.each(getMatrixConfigs())("Permissions > ambiguous caller > $name", ({ c
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "deny",
+				policy: "deny",
 				rules: [
 					{ caller: "callers.untrustedCaller.**", target: "slothlet.**", effect: "allow" },
 					{ caller: "**", target: "callers.**", effect: "allow" }
@@ -111,7 +111,7 @@ describe.each(getMatrixConfigs())("Permissions > ambiguous caller > $name", ({ c
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				rules: [{ caller: "callers.dataReader.**", target: "db.secrets.**", effect: "deny" }]
 			}
 		});
@@ -150,7 +150,7 @@ describe.each(getMatrixConfigs())("Permissions > ambiguous caller > $name", ({ c
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "deny",
+				policy: "deny",
 				rules: [
 					{ caller: "callers.untrustedCaller.gatedDbWrite", target: "db.write.**", effect: "allow" },
 					{ caller: "**", target: "callers.**", effect: "allow" }

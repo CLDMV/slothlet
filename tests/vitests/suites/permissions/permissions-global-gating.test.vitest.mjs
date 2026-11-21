@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:17-07:00 (1791090917)
+ *	@Last modified time: 2026-11-16T18:29:52-08:00 (1794882592)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -32,7 +32,7 @@ describe.each(getMatrixConfigs())("Permissions > Global Gating > $name", ({ conf
 			...config,
 			base: `${BASE}/callers`,
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				rules: [{ caller: "untrusted.**", target: "slothlet.permissions.global.**", effect: "deny" }]
 			}
 		});
@@ -40,7 +40,7 @@ describe.each(getMatrixConfigs())("Permissions > Global Gating > $name", ({ conf
 		await api.slothlet.api.add("untrusted", `${BASE}/untrusted`);
 
 		// Global methods are still accessible from the test context (no caller module)
-		const result = api.slothlet.permissions.global.checkAccess("payments", "db");
+		const result = api.slothlet.permissions.global.check.access("payments", "db");
 		expect(result).toBeTypeOf("boolean");
 	});
 
@@ -49,7 +49,7 @@ describe.each(getMatrixConfigs())("Permissions > Global Gating > $name", ({ conf
 			...config,
 			base: `${BASE}/callers`,
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				rules: [{ caller: "untrusted.**", target: "slothlet.permissions.global.**", effect: "deny" }]
 			}
 		});

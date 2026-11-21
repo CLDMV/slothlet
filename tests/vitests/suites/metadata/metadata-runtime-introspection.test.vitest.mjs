@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:11-07:00 (1791090911)
+ *	@Last modified time: 2026-11-16T18:30:09-08:00 (1794882609)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -24,7 +24,7 @@
  * Tests verify:
  * - caller() returns null when no tracked slothlet caller is in context
  * - caller() returns the caller's system metadata in a slothlet→slothlet call chain
- * - self() throws RUNTIME_NO_ACTIVE_CONTEXT when called outside any slothlet context
+ * - self() throws CONTEXT_NOT_ACTIVE when called outside any slothlet context
  *
  * @module tests/vitests/suites/metadata/metadata-runtime-introspection.test.vitest
  */
@@ -62,23 +62,23 @@ describe.each(getMatrixConfigs())("Metadata Runtime Introspection > Config: '$na
 	});
 
 	describe("caller() - with tracked slothlet caller", () => {
-		it("returns the calling function's system metadata", async () => {
+		it("returns the calling function as a caller object", async () => {
 			// invokeCallerTest() is a slothlet function that calls self.callerTest.getCallerMeta()
 			// When getCallerMeta executes, callerWrapper = invokeCallerTest's wrapper
 			// So caller() returns metadata of invokeCallerTest (from metadata-test-helper.mjs)
 			const result = await api.metadataTestHelper.invokeCallerTest();
 
 			expect(result).not.toBeNull();
-			expect(result.moduleID).toBeDefined();
-			expect(result.filePath).toContain("metadata-test-helper");
+			expect(Object.keys(result).sort()).toEqual(["metadata", "module", "path", "version"]);
+			expect(typeof result.module).toBe("string");
+			expect(result.version).toBeNull();
 		});
 
 		it("caller metadata contains apiPath pointing to the invoking function", async () => {
 			const result = await api.metadataTestHelper.invokeCallerTest();
 
 			expect(result).not.toBeNull();
-			expect(result.apiPath).toBeDefined();
-			expect(result.apiPath).toContain("metadataTestHelper");
+			expect(result.path).toEqual(["metadataTestHelper", "invokeCallerTest"]);
 		});
 
 		it("caller metadata is distinct from the callee's own metadata", async () => {
@@ -87,35 +87,32 @@ describe.each(getMatrixConfigs())("Metadata Runtime Introspection > Config: '$na
 			const result = await api.metadataTestHelper.invokeCallerTest();
 
 			expect(result).not.toBeNull();
-			expect(result.filePath).not.toContain("caller-test");
+			expect(result.path).not.toContain("callerTest");
 		});
 	});
 
 	// ─── get() edge cases ────────────────────────────────────────────────────
 
-	describe("get() - non-string path throws INVALID_ARGUMENT", () => {
-		it("throws when passed a number", async () => {
-			await expect(api.slothlet.metadata.get(123)).rejects.toThrow();
+	describe("get() - a target that is no function, node, path or module id throws METADATA_TARGET_INVALID", () => {
+		it("throws when passed a number", () => {
+			expect(() => api.slothlet.metadata.get(123)).toThrow(/METADATA_TARGET_INVALID/);
 		});
 
-		it("throws when passed null", async () => {
-			await expect(api.slothlet.metadata.get(null)).rejects.toThrow();
+		it("throws when passed null", () => {
+			expect(() => api.slothlet.metadata.get(null)).toThrow(/METADATA_TARGET_INVALID/);
 		});
 	});
 
-	describe("get() - returns null for non-function resolved target", () => {
-		it("returns null when path resolves to undefined (unknown property)", async () => {
-			// rootMath.nonExistent is undefined in all modes — neither a function
-			// nor a wrapper with impl, so get() returns null at the final guard
-			const result = await api.slothlet.metadata.get("rootMath.nonExistent");
-			expect(result).toBeNull();
+	describe("get() - a path nothing is mounted at", () => {
+		it("returns the path's metadata, empty when none was set (sync, no lookup of the node)", () => {
+			expect(api.slothlet.metadata.get("rootMath.nonExistent")).toEqual({});
 		});
 	});
 
 	// ─── self() ────────────────────────────────────────────────────────────────
 
 	describe("self() - called outside any slothlet context", () => {
-		it("throws RUNTIME_NO_ACTIVE_CONTEXT when called from test scope", () => {
+		it("throws CONTEXT_NOT_ACTIVE when called from test scope", () => {
 			// api.slothlet.metadata.self() is a plain closure — not a slothlet wrapper
 			// Calling it from outside any execution context must throw
 			withSuppressedSlothletErrorOutputSync(() => {

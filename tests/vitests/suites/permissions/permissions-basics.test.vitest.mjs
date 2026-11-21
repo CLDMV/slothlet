@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:14-07:00 (1791090914)
+ *	@Last modified time: 2026-11-16T18:29:40-08:00 (1794882580)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -32,13 +32,13 @@ describe.each(getMatrixConfigs())("Permissions > Basics > $name", ({ config }) =
 			...config,
 			base: `${BASE}/payments`,
 			permissions: {
-				defaultPolicy: "allow"
+				policy: "allow"
 			}
 		});
 
 		expect(api.slothlet.permissions).toBeDefined();
-		expect(api.slothlet.permissions.addRule).toBeTypeOf("function");
-		expect(api.slothlet.permissions.removeRule).toBeTypeOf("function");
+		expect(api.slothlet.permissions.rules.add).toBeTypeOf("function");
+		expect(api.slothlet.permissions.rules.remove).toBeTypeOf("function");
 		expect(api.slothlet.permissions.self).toBeDefined();
 		expect(api.slothlet.permissions.global).toBeDefined();
 		expect(api.slothlet.permissions.control).toBeDefined();
@@ -49,12 +49,12 @@ describe.each(getMatrixConfigs())("Permissions > Basics > $name", ({ config }) =
 			...config,
 			base: `${BASE}/payments`,
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				rules: [{ caller: "untrusted.**", target: "admin.**", effect: "deny" }]
 			}
 		});
 
-		const rules = api.slothlet.permissions.global.rulesForPath("admin.manage");
+		const rules = api.slothlet.permissions.global.rules.path("admin.manage");
 		expect(rules.length).toBeGreaterThan(0);
 		expect(rules.some((r) => r.caller === "untrusted.**" && r.effect === "deny")).toBe(true);
 	});
@@ -64,8 +64,8 @@ describe.each(getMatrixConfigs())("Permissions > Basics > $name", ({ config }) =
 			...config,
 			base: BASE,
 			permissions: {
-				defaultPolicy: "deny",
-				enabled: false
+				policy: "deny",
+				mode: false
 			}
 		});
 

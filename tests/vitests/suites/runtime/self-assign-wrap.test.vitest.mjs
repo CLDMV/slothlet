@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:22-07:00 (1791090922)
+ *	@Last modified time: 2026-11-18T06:51:46-08:00 (1795013506)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -45,9 +45,9 @@ describe("self.X = ... (Stage 3: wrap-on-set)", () => {
 	});
 
 	it("wraps an assigned function in a UnifiedWrapper", async () => {
-		api = await slothlet({ base: "./api_tests/api_test", mode: "eager" });
+		api = await slothlet({ base: "./api_tests/api_test", mode: "eager", scope: { isolation: "partial" } });
 
-		await api.slothlet.run({}, () => {
+		await api.slothlet.context.run({}, () => {
 			self.computeBase = (a, b) => a + b;
 		});
 
@@ -60,9 +60,9 @@ describe("self.X = ... (Stage 3: wrap-on-set)", () => {
 	});
 
 	it("wraps an assigned plain object in a UnifiedWrapper", async () => {
-		api = await slothlet({ base: "./api_tests/api_test", mode: "eager" });
+		api = await slothlet({ base: "./api_tests/api_test", mode: "eager", scope: { isolation: "partial" } });
 
-		await api.slothlet.run({}, () => {
+		await api.slothlet.context.run({}, () => {
 			self.config = { timeout: 5000, retries: 3 };
 		});
 
@@ -72,9 +72,9 @@ describe("self.X = ... (Stage 3: wrap-on-set)", () => {
 	});
 
 	it("stores primitives verbatim (no wrapping)", async () => {
-		api = await slothlet({ base: "./api_tests/api_test", mode: "eager" });
+		api = await slothlet({ base: "./api_tests/api_test", mode: "eager", scope: { isolation: "partial" } });
 
-		await api.slothlet.run({}, () => {
+		await api.slothlet.context.run({}, () => {
 			self.maxRetries = 5;
 			self.appName = "demo";
 			self.flags = null;

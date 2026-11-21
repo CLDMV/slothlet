@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-16T19:27:02-07:00 (1792204022)
+ *	@Last modified time: 2026-11-16T16:16:19-08:00 (1794874579)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -25,7 +25,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { util } from "@cldmv/slothlet/helpers/platform";
+import { util } from "#helpers/platform";
 
 describe("browser platform shim > util.types.isPromise", () => {
 	it("detects a native promise of this realm and of an iframe's", () => {

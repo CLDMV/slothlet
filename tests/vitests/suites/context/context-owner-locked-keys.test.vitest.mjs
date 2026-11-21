@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:01-07:00 (1791090901)
+ *	@Last modified time: 2026-11-16T18:29:43-08:00 (1794882583)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -42,7 +42,7 @@ describe.each(getMatrixConfigs())("Context > Owner-locked keys (H5) > $name", ({
 		let protectedThrew = false;
 		let openWrote = false;
 		await withSuppressedSlothletErrorOutput(async () => {
-			await api.slothlet.scope({
+			await api.slothlet.context.scope({
 				context: { locked: "init", open: "x" },
 				protect: ["locked"],
 				fn: async () => {
@@ -70,7 +70,7 @@ describe.each(getMatrixConfigs())("Context > Owner-locked keys (H5) > $name", ({
 		let hostThrew = false;
 		let message = "";
 		await withSuppressedSlothletErrorOutput(async () => {
-			await api.slothlet.scope({
+			await api.slothlet.context.scope({
 				context: { locked: "init" },
 				protect: ["locked"],
 				fn: async () => {
@@ -95,7 +95,7 @@ describe.each(getMatrixConfigs())("Context > Owner-locked keys (H5) > $name", ({
 		let hostThrew = false;
 		let message = "";
 		await withSuppressedSlothletErrorOutput(async () => {
-			await api.slothlet.scope({
+			await api.slothlet.context.scope({
 				context: { secret: "s" },
 				owners: { secret: "callers.dataReader" },
 				fn: async () => {
@@ -120,7 +120,7 @@ describe.each(getMatrixConfigs())("Context > Owner-locked keys (H5) > $name", ({
 		let ownerWrote = false;
 		let wrongThrew = false;
 		await withSuppressedSlothletErrorOutput(async () => {
-			await api.slothlet.scope({
+			await api.slothlet.context.scope({
 				context: { secret: "s" },
 				owners: { secret: "callers.dataReader" },
 				fn: async () => {
@@ -143,11 +143,11 @@ describe.each(getMatrixConfigs())("Context > Owner-locked keys (H5) > $name", ({
 		let reownThrew = false;
 		await withSuppressedSlothletErrorOutput(async () => {
 			try {
-				await api.slothlet.scope({
+				await api.slothlet.context.scope({
 					context: { k: 1 },
 					owners: { k: "callers.dataReader" },
 					fn: async () => {
-						await api.slothlet.scope({ context: {}, owners: { k: "callers.dataReaderB" }, fn: () => {} });
+						await api.slothlet.context.scope({ context: {}, owners: { k: "callers.dataReaderB" }, fn: () => {} });
 					}
 				});
 			} catch (err) {
@@ -164,12 +164,12 @@ describe.each(getMatrixConfigs())("Context > Owner-locked keys (H5) > $name", ({
 		let emptyStringThrew = false;
 		await withSuppressedSlothletErrorOutput(async () => {
 			try {
-				await api.slothlet.scope({ context: { secret: "s" }, owners: { secret: 123 }, fn: () => {} });
+				await api.slothlet.context.scope({ context: { secret: "s" }, owners: { secret: 123 }, fn: () => {} });
 			} catch (err) {
 				nonStringThrew = /INVALID_ARGUMENT/.test(err.message);
 			}
 			try {
-				await api.slothlet.scope({ context: { secret: "s" }, owners: { secret: "" }, fn: () => {} });
+				await api.slothlet.context.scope({ context: { secret: "s" }, owners: { secret: "" }, fn: () => {} });
 			} catch (err) {
 				emptyStringThrew = /INVALID_ARGUMENT/.test(err.message);
 			}
@@ -184,7 +184,7 @@ describe.each(getMatrixConfigs())("Context > Owner-locked keys (H5) > $name", ({
 		let collisionThrew = false;
 		await withSuppressedSlothletErrorOutput(async () => {
 			try {
-				await api.slothlet.scope({
+				await api.slothlet.context.scope({
 					context: { k: 1 },
 					protect: ["k"],
 					owners: { k: "callers.dataReader" },
@@ -209,7 +209,7 @@ describe.each(getMatrixConfigs())("Context > Owner-locked keys (H5) > $name", ({
 			let claimedCleanly = false;
 			let protectedAsSentinel = false;
 			await withSuppressedSlothletErrorOutput(async () => {
-				await api.slothlet.scope({
+				await api.slothlet.context.scope({
 					context: { [trickyKey]: "init" },
 					protect: [trickyKey],
 					fn: async () => {
@@ -245,7 +245,7 @@ describe.each(getMatrixConfigs())("Context > Owner-locked keys (H5) > $name", ({
 			let ownerWrote = false;
 			let wrongThrew = false;
 			await withSuppressedSlothletErrorOutput(async () => {
-				await api.slothlet.scope({
+				await api.slothlet.context.scope({
 					context: { [trickyKey]: "init" },
 					owners: { [trickyKey]: "callers.dataReader" },
 					fn: async () => {
@@ -266,68 +266,68 @@ describe.each(getMatrixConfigs())("Context > Owner-locked keys (H5) > $name", ({
 		expect(Object.prototype.constructor).toBe(Object);
 	});
 
-	// PR #195 review (C2, DX): SCOPE_INVALID_PROTECT / SCOPE_INVALID_OWNERS used to report a bare
+	// PR #195 review (C2, DX): SCOPE_PROTECTED_KEYS_INVALID / SCOPE_KEY_OWNERS_INVALID used to report a bare
 	// `typeof`, which is "object" for both an array and an array holding a non-string entry — useless
 	// for the two most common mistakes. `received` is now a descriptive string instead.
-	it('SCOPE_INVALID_OWNERS reports a descriptive `received` for an array, not the bare "object"', async () => {
+	it('SCOPE_KEY_OWNERS_INVALID reports a descriptive `received` for an array, not the bare "object"', async () => {
 		api = await slothlet({ ...config, base: BASE });
 
 		let message = "";
 		await withSuppressedSlothletErrorOutput(async () => {
 			try {
-				await api.slothlet.scope({ context: {}, owners: ["not", "a", "plain", "object"], fn: () => {} });
+				await api.slothlet.context.scope({ context: {}, owners: ["not", "a", "plain", "object"], fn: () => {} });
 			} catch (err) {
 				message = err.message;
 			}
 		});
-		expect(message).toMatch(/SCOPE_INVALID_OWNERS/);
+		expect(message).toMatch(/SCOPE_KEY_OWNERS_INVALID/);
 		expect(message).toContain("Received: array.");
 		expect(message).not.toContain("Received: object.");
 	});
 
-	it('SCOPE_INVALID_PROTECT reports a descriptive `received` for an array with a non-string entry, not the bare "object"', async () => {
+	it('SCOPE_PROTECTED_KEYS_INVALID reports a descriptive `received` for an array with a non-string entry, not the bare "object"', async () => {
 		api = await slothlet({ ...config, base: BASE });
 
 		let message = "";
 		await withSuppressedSlothletErrorOutput(async () => {
 			try {
-				await api.slothlet.scope({ context: {}, protect: ["ok", 123], fn: () => {} });
+				await api.slothlet.context.scope({ context: {}, protect: ["ok", 123], fn: () => {} });
 			} catch (err) {
 				message = err.message;
 			}
 		});
-		expect(message).toMatch(/SCOPE_INVALID_PROTECT/);
+		expect(message).toMatch(/SCOPE_PROTECTED_KEYS_INVALID/);
 		expect(message).toContain("Received: array with non-string entry (number at index 1).");
 	});
 
 	// describeScopeReceived's non-array branch: a bare (non-array) value falls through to `typeof value`.
-	it("SCOPE_INVALID_PROTECT reports the bare `typeof` for a non-array value (e.g. a string)", async () => {
+	it("SCOPE_PROTECTED_KEYS_INVALID reports the bare `typeof` for a non-array value (e.g. a string)", async () => {
 		api = await slothlet({ ...config, base: BASE });
 
 		let message = "";
 		await withSuppressedSlothletErrorOutput(async () => {
 			try {
-				await api.slothlet.scope({ context: {}, protect: "not-an-array", fn: () => {} });
+				await api.slothlet.context.scope({ context: {}, protect: "not-an-array", fn: () => {} });
 			} catch (err) {
 				message = err.message;
 			}
 		});
-		expect(message).toMatch(/SCOPE_INVALID_PROTECT/);
+		expect(message).toMatch(/SCOPE_PROTECTED_KEYS_INVALID/);
 		expect(message).toContain("Received: string.");
 	});
 
-	it("SCOPE_INVALID_OWNERS reports the bare `typeof` for a non-array, non-object value (e.g. a number)", async () => {
+	it("SCOPE_KEY_OWNERS_INVALID reports the bare `typeof` for a non-array, non-object value (e.g. a number)", async () => {
 		api = await slothlet({ ...config, base: BASE });
 
 		let message = "";
 		await withSuppressedSlothletErrorOutput(async () => {
 			try {
-				await api.slothlet.scope({ context: {}, owners: 42, fn: () => {} });
+				await api.slothlet.context.scope({ context: {}, owners: 42, fn: () => {} });
 			} catch (err) {
 				message = err.message;
 			}
 		});
-		expect(message).toMatch(/SCOPE_INVALID_OWNERS/);
+		expect(message).toMatch(/SCOPE_KEY_OWNERS_INVALID/);
 		expect(message).toContain("Received: number.");
 	});
 
@@ -344,11 +344,11 @@ describe.each(getMatrixConfigs())("Context > Owner-locked keys (H5) > $name", ({
 		let newOwnerWrote = false;
 		let newWrongThrew = false;
 		await withSuppressedSlothletErrorOutput(async () => {
-			await api.slothlet.scope({
+			await api.slothlet.context.scope({
 				context: { a: "outer", b: "inner" },
 				owners: { a: "callers.dataReader" },
 				fn: async () => {
-					await api.slothlet.scope({
+					await api.slothlet.context.scope({
 						context: {},
 						owners: { b: "callers.dataReaderB" },
 						fn: async () => {
@@ -390,7 +390,7 @@ describe.each(getMatrixConfigs())("Context > Owner-locked keys (H5) > $name", ({
 		let protectedThrew = false;
 		let wrongOwnerThrew = false;
 		await withSuppressedSlothletErrorOutput(async () => {
-			await api.slothlet.scope({
+			await api.slothlet.context.scope({
 				context: { locked: "init", secret: "s" },
 				protect: ["locked"], // first claim → allocates the map (child === base)
 				owners: { secret: "callers.dataReader" }, // second, distinct claim → child !== base

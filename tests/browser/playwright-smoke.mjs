@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:54-07:00 (1791090894)
+ *	@Last modified time: 2026-11-16T18:28:08-08:00 (1794882488)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -36,10 +36,12 @@ import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { resolve, dirname, join, extname } from "node:path";
 import { chromium } from "playwright";
-import { generateBrowserAssets } from "@cldmv/slothlet/helpers/generate-manifest";
+import { generateBrowserAssets, generateManifest } from "#helpers/generate-manifest";
 
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const FIXTURE_REL = "api_tests/api_test_browser";
+const HELD_REL = "api_tests/api_test_browser_internal";
+const HELPER_REL = "api_tests/api_test_browser_internal_helper/api";
 const PORT = 8123;
 
 const MIME = {
@@ -51,25 +53,27 @@ const MIME = {
 };
 
 // slothlet's own browser importmap is produced by generateBrowserAssets (#123) — the smoke test
-// no longer hand-rolls it. The repo is served at "/", so slothletBase is "/"; under
+// no longer hand-rolls it. The repo is served at "/", so base is "/"; under
 // --conditions=slothlet-dev the importmap resolves to /src/* (matching how this test serves the
 // package), and for a real install it would resolve to /dist/* under the consumer's base.
 
 /**
  * Build the smoke HTML page (importmap + browser-mode compose + result beacon).
- * @param {Record<string,string>} importmap
+ * @param {{imports: Record<string,string>, scopes: Record<string, Record<string,string>>}} importmap
  * @param {object} manifest
  * @returns {string}
  */
-function smokeHtml(importmap, manifest) {
+function smokeHtml(importmap, manifest, heldManifest, helperManifest) {
 	const base = `http://localhost:${PORT}/${FIXTURE_REL}/`;
+	const heldBase = `http://localhost:${PORT}/${HELD_REL}/`;
+	const helperBase = `http://localhost:${PORT}/${HELPER_REL}/`;
 	return `<!doctype html><meta charset="utf-8"><title>slothlet browser smoke</title>
-<script type="importmap">${JSON.stringify({ imports: importmap })}</script>
-<script>window.__MANIFEST__ = ${JSON.stringify(manifest)};</script>
+<script type="importmap">${JSON.stringify(importmap)}</script>
+<script>window.__MANIFEST__ = ${JSON.stringify(manifest)}; window.__HELD_MANIFEST__ = ${JSON.stringify(heldManifest)}; window.__HELPER_MANIFEST__ = ${JSON.stringify(helperManifest)};</script>
 <script type="module">
-const out = { loaded: false, composed: false, value: null, self: null, hook: null, metadataType: null, metadataGetFor: null, i18n: null, events: null, added: null, perm: null, keys: null, advanced: null, error: null };
+const out = { loaded: false, composed: false, value: null, self: null, hook: null, metadataType: null, metadataGetFor: null, i18n: null, events: null, added: null, perm: null, keys: null, advanced: null, internal: null, runtime: null, exports: null, hostExports: null, helperExports: null, error: null };
 const BASE = ${JSON.stringify(base)};
-const cfg = (extra) => ({ platform: "browser", base: BASE, manifest: window.__MANIFEST__, resolveModuleSpecifier: ({ path }) => new URL(path, BASE).href, mode: "eager", ...extra });
+const cfg = (extra, loader) => ({ base: BASE, mode: "eager", ...extra, loader: { platform: "browser", files: window.__MANIFEST__, resolve: ({ path }) => new URL(path, BASE).href, ...loader } });
 // calc may smart-flatten to a function or to an object exposing addViaSelf — handle both.
 const callCalc = (node, a, b) => (typeof node === "function" ? node(a, b) : node.addViaSelf(a, b));
 try {
@@ -93,12 +97,12 @@ try {
 
 	// metadata: both the namespace presence (typeof) AND a real getFor() read (merged metadata for a path).
 	out.metadataType = typeof api.slothlet.metadata; // "object" | "function"
-	const meta = api.slothlet.metadata.getFor("math.add");
+	const meta = api.slothlet.metadata.get("math.add");
 	out.metadataGetFor = meta && typeof meta === "object" ? "ok" : "bad:" + typeof meta;
 
 	// i18n: switch locale via the async dynamic-import path (real browser fetch of the locale JSON).
-	await api.slothlet.i18n.setLanguageAsync("es-mx");
-	out.i18n = api.slothlet.i18n.getLanguage(); // "es-mx"
+	await api.slothlet.i18n.language.set("es-mx");
+	out.i18n = api.slothlet.i18n.language.get(); // "es-mx"
 
 	// lifecycle events: subscribe, then trigger via api.add — a live mutation on the SAME instance, so
 	// the subscription stays valid (reload would re-create the lifecycle handler and orphan it).
@@ -115,7 +119,7 @@ try {
 
 	// ── Compose #2: permissions gate the INTERNAL self.math.add call (external calls are exempt) ──
 	const api2 = await slothlet(cfg({
-		permissions: { defaultPolicy: "allow", rules: [{ caller: "advanced.calc.**", target: "math.**", effect: "deny" }] }
+		permissions: { policy: "allow", rules: [{ caller: "advanced.calc.**", target: "math.**", effect: "deny" }] }
 	}));
 	try {
 		await callCalc(api2.advanced?.calc ?? api2.advanced, 2, 3);
@@ -125,6 +129,36 @@ try {
 		out.perm = msg.includes("PERMISSION") ? "denied" : "other:" + msg;
 	}
 	if (typeof api2.shutdown === "function") await api2.shutdown();
+
+	// slothlet's own files are slothlet's: a script outside them resolves the main entry and the runtime, and none of
+	// slothlet's other specifiers.
+	const tried = [];
+	for (const spec of ["#helpers/instance-imports", "#handlers/context-async", "@cldmv/slothlet/i18n"]) {
+		try {
+			await import(spec);
+			tried.push("loaded:" + spec);
+		} catch {
+			tried.push("refused");
+		}
+	}
+	out.internal = tried.join(",");
+	out.runtime = typeof (await import("@cldmv/slothlet/runtime")).self;
+
+	// A file served is importable by its URL, but slothlet's internal exports answer only slothlet's own files and the
+	// page's own code: an api leaf importing them by URL is refused every use, and the page's script is answered.
+	const lib = new URL("/src/lib/", location.href).href;
+	const api3 = await slothlet(cfg({ base: ${JSON.stringify(heldBase)} }, { files: window.__HELD_MANIFEST__, resolve: ({ path }) => new URL(path, ${JSON.stringify(heldBase)}).href }));
+	out.exports = await api3.held.tryInternals(lib);
+	const hostWrapper = await import(new URL("handlers/unified-wrapper.mjs", lib).href);
+	const hostContext = await import(new URL("factories/context.mjs", lib).href);
+	out.hostExports = [hostWrapper.resolveWrapper(api3.held) !== null, hostContext.getContextManager("live").instances.has(api3.slothlet.instance.id)].join(",");
+	await api3.shutdown();
+
+	// A helper file a leaf imports from the module's folder is the module's code too; one outside every module's folder
+	// cannot be told from the page's own code.
+	const api4 = await slothlet(cfg({ base: ${JSON.stringify(helperBase)} }, { files: window.__HELPER_MANIFEST__, resolve: ({ path }) => new URL(path, ${JSON.stringify(helperBase)}).href }));
+	out.helperExports = [await api4.porter.viaInside(lib), await api4.porter.viaOutside(lib)].join(",");
+	await api4.shutdown();
 } catch (e) {
 	out.error = String((e && e.stack) || e);
 }
@@ -135,10 +169,12 @@ window.__SMOKE__ = out;
 async function main() {
 	// One call yields both halves of the browser setup: the API manifest and slothlet's own
 	// importmap. Here slothlet IS the workspace served at "/", so we override the default
-	// slothletBase ("/node_modules/@cldmv/slothlet/") with "/"; under --conditions=slothlet-dev the
+	// base ("/node_modules/@cldmv/slothlet/") with "/"; under --conditions=slothlet-dev the
 	// importmap resolves to /src/*. A real consumer installs slothlet and uses the default.
-	const { manifest, importmap } = await generateBrowserAssets(join(REPO, FIXTURE_REL), { slothletBase: "/" });
-	const html = smokeHtml(importmap.imports, manifest);
+	const { manifest, importmap } = await generateBrowserAssets(join(REPO, FIXTURE_REL), { base: "/" });
+	const heldManifest = await generateManifest(join(REPO, HELD_REL));
+	const helperManifest = await generateManifest(join(REPO, HELPER_REL));
+	const html = smokeHtml(importmap, manifest, heldManifest, helperManifest);
 
 	const server = createServer(async (req, res) => {
 		try {
@@ -201,11 +237,16 @@ async function main() {
 		"self=5": smoke?.self === 5,
 		"hook=7": smoke?.hook === 7,
 		"metadata(typeof)": smoke?.metadataType === "object" || smoke?.metadataType === "function",
-		"metadata.getFor": smoke?.metadataGetFor === "ok",
+		"metadata.get": smoke?.metadataGetFor === "ok",
 		"i18n=es-mx": smoke?.i18n === "es-mx",
 		events: String(smoke?.events).startsWith("fired"),
 		"api.add": smoke?.added === "mounted",
 		"perm=denied": smoke?.perm === "denied",
+		"internal=refused": smoke?.internal === "refused,refused,refused",
+		"runtime=loaded": smoke?.runtime === "function" || smoke?.runtime === "object",
+		"exports=refused": smoke?.exports === Array(8).fill("MODULE_INTERNAL_NOT_IMPORTABLE").join(","),
+		"helper exports=refused in the module's folder": smoke?.helperExports === "MODULE_INTERNAL_NOT_IMPORTABLE,used",
+		"host exports=answered": smoke?.hostExports === "true,true",
 		"0 errors": errors.length === 0
 	};
 	const pass = Object.values(checks).every(Boolean);

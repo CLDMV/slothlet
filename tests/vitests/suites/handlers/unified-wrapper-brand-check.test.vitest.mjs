@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:04-07:00 (1791090904)
+ *	@Last modified time: 2026-11-15T21:01:12-08:00 (1794805272)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -100,11 +100,11 @@ describe.each(getMatrixConfigs())(
 			}).not.toThrow();
 		});
 
-		test("Object.getPrototypeOf on a real proxy returns null without throwing", () => {
-			// The createProxy() getPrototypeOf trap returns null.
+		test("Object.getPrototypeOf on a real proxy returns a plain object's prototype without throwing", () => {
+			// The createProxy() getPrototypeOf trap reports the prototype a plain object has (#802).
 			// Confirms the trap fires correctly without hitting the brand-check crash.
 			const proto = Object.getPrototypeOf(api.math);
-			expect(proto).toBeNull();
+			expect(proto).toBe(Object.getPrototypeOf({}));
 		});
 	}
 );

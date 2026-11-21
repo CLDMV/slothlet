@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-09T21:00:00-07:00 (1791604800)
+ *	@Last modified time: 2026-11-17T13:33:20-08:00 (1794951200)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -29,9 +29,10 @@
  */
 
 import { EventEmitter } from "node:events";
+import fs from "node:fs";
 import { pathToFileURL } from "node:url";
 import { describe, it, expect, afterEach } from "vitest";
-import { setApiCallerPinner } from "@cldmv/slothlet/helpers/caller-pinning";
+import { setApiCallerPinner } from "#helpers/caller-pinning";
 import { internalLibPath } from "../../setup/internal-resolve.mjs";
 
 /**
@@ -40,7 +41,7 @@ import { internalLibPath } from "../../setup/internal-resolve.mjs";
  * @returns {Promise<[object, object]>} Copy A and copy B.
  */
 async function twoCopies(name) {
-	const a = await import(`@cldmv/slothlet/helpers/${name}`);
+	const a = await import(`#helpers/${name}`);
 	// The active tree's file (src before the build, dist after), so the copy is the code under test.
 	const b = await import(`${pathToFileURL(internalLibPath(`helpers/${name}.mjs`)).href}?copy=b`);
 	expect(b).not.toBe(a);
@@ -111,6 +112,14 @@ const BOUNDARIES = [
 		disable: "disableEventTargetPropertyPatching",
 		read: () => Object.getOwnPropertyDescriptor(AbortSignal.prototype, "onabort").get,
 		register: (cb) => void (new AbortController().signal.onabort = cb)
+	},
+	{
+		label: "fs.stat",
+		module: "node-callback-context",
+		enable: "enableNodeCallbackPatching",
+		disable: "disableNodeCallbackPatching",
+		read: () => fs.stat,
+		register: (cb) => fs.stat(".", cb)
 	},
 	{
 		label: "EventEmitter.prototype.on",

@@ -77,18 +77,18 @@ export function keepHook(path, type) {
 export function keepLifecycle(event, prefix) {
 	const kept = [];
 	self.slothlet.lifecycle.on(event, (data) => {
-		if (String(data.apiPath).startsWith(prefix)) kept.push(data.impl);
+		if ((data.path ?? []).join(".").startsWith(prefix)) kept.push(data.impl);
 	});
 	return { get: () => kept };
 }
 
 /**
  * Take another module's node from the diagnostics namespace and write it later.
- * @param {"describe"|"getAPI"} how - Diagnostics member to take it from.
+ * @param {"describe"|"api"} how - Diagnostics member to take it from.
  * @returns {Function} Writes the node.
  */
 export function keepDiag(how) {
-	const node = how === "describe" ? self.slothlet.diag.describe(true).callee.ops : self.slothlet.diag.getAPI().callee.ops;
+	const node = how === "describe" ? self.slothlet.diag.describe(true).callee.ops : self.slothlet.diag.api().callee.ops;
 	return () => {
 		node.useSecret = () => "pwned-by-diag";
 	};
@@ -138,7 +138,7 @@ export function subscribeWriter() {
 }
 
 /**
- * Register a hook of `type` on `path` whose handler carries a `_slothletOriginal` of its own, as a pinned
+ * Register a hook of `type` on `path` whose handler carries a `____slothletOriginal` of its own, as a pinned
  * handler does, and writes another module's member when it runs.
  * @param {string} path - Api path to hook.
  * @param {string} type - Hook type.
@@ -150,7 +150,7 @@ export function forgedHook(path, type) {
 		tryReplace(self, out);
 		return type === "around" ? payload.next() : undefined;
 	};
-	handler._slothletOriginal = () => {};
+	handler.____slothletOriginal = () => {};
 	self.slothlet.hook.on(`${path}:${type}`, handler);
 	return { get: () => out };
 }
@@ -174,12 +174,12 @@ export function dispatcherLeak(how) {
 
 /**
  * Keep a function of the framework's namespace and call it later.
- * @param {"getAPI"|"describe"|"hook"|"lifecycle"} how - Which function.
+ * @param {"api"|"describe"|"hook"|"lifecycle"} how - Which function.
  * @returns {{ later: Function, get: Function }} The deferred call, and what any handler it registered recorded.
  */
 export function keepFrameworkFn(how) {
 	const out = [];
-	if (how === "getAPI" || how === "describe") {
+	if (how === "api" || how === "describe") {
 		const fn = self.slothlet.diag[how];
 		return {
 			later: () => {
@@ -232,12 +232,12 @@ export function keepErrorHook(path) {
 }
 
 /**
- * Keep `self.slothlet.lockCaller.caller` and hand back a function that, called later, pins a callback
+ * Keep `self.slothlet.pin.caller` and hand back a function that, called later, pins a callback
  * with it and runs it: the callback replaces a member of `callee`.
  * @returns {Function} The deferred pin-and-run.
  */
 export function keepCallerPin() {
-	const pin = self.slothlet.lockCaller.caller;
+	const pin = self.slothlet.pin.caller;
 	return () =>
 		pin(() => {
 			self.callee.ops.useSecret = () => "pwned-through-caller-pin";
@@ -258,5 +258,5 @@ export function keepContextRun() {
  * @returns {{ job: Function }} The pinned job.
  */
 export function pinForCaller(job) {
-	return { job: self.slothlet.lockCaller.caller(job) };
+	return { job: self.slothlet.pin.caller(job) };
 }

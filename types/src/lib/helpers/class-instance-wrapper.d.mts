@@ -40,6 +40,41 @@ export function runtime_shouldWrapMethod(value: any, prop: string | symbol): boo
  */
 export function runtime_isClassInstance(val: any): boolean;
 /**
+ * This file's internal bindings, for the files of slothlet's own that use them: each of those files takes them once, as
+ * it loads, and anyone else is refused (see `ownBindingsRefusal` in `helpers/instance-imports`).
+ * @param {string} consumer - The file asking: its path in slothlet's code folder, without its extension.
+ * @returns {object} The bindings.
+ * @internal
+ */
+export function internals(consumer: string): object;
+/** @type {typeof setModuleInstanceCheck} */
+declare const guarded_setModuleInstanceCheck: typeof setModuleInstanceCheck;
+/** @type {typeof runtime_classInstanceCreator} */
+declare const guarded_runtime_classInstanceCreator: typeof runtime_classInstanceCreator;
+/** @type {typeof runtime_wrapClassInstance} */
+declare const guarded_runtime_wrapClassInstance: typeof runtime_wrapClassInstance;
+/** @type {typeof runtime_unwrapClassInstance} */
+declare const guarded_runtime_unwrapClassInstance: typeof runtime_unwrapClassInstance;
+/**
+ * Set how an instance of a module's own class is told from one of the language's or Node's own (a `URL`, a
+ * `Response`, an `Intl.NumberFormat`), which needs no context and whose methods work only on the object itself.
+ * @package
+ * @param {function(object): boolean} check - Answers true for an instance of a class a module wrote.
+ * @returns {void}
+ * @example
+ * setModuleInstanceCheck((value) => hasModuleWrittenPrototype(value));
+ */
+declare function setModuleInstanceCheck(check: (arg0: object) => boolean): void;
+/**
+ * The wrapper of the module that created the instance behind a Proxy {@link runtime_wrapClassInstance} produced.
+ * @package
+ * @param {*} value - Any value.
+ * @returns {object|null} The creating module's wrapper, or null for any other value or when none is known.
+ * @example
+ * runtime_classInstanceCreator(wrappedInstance); // the wrapper of the leaf that returned it
+ */
+declare function runtime_classInstanceCreator(value: any): object | null;
+/**
  * @function runtime_wrapClassInstance
  * @package
  * @param {object} instance - The class instance to wrap
@@ -63,7 +98,7 @@ export function runtime_isClassInstance(val: any): boolean;
  * // Wrap a class instance to preserve context
  * const wrappedInstance = runtime_wrapClassInstance(instance, contextManager, instanceID, instanceCache, creatingWrapper);
  */
-export function runtime_wrapClassInstance(instance: object, contextManager: object, instanceID: string, instanceCache: WeakMap<any, any>, capturedWrapper?: object): ProxyConstructor;
+declare function runtime_wrapClassInstance(instance: object, contextManager: object, instanceID: string, instanceCache: WeakMap<any, any>, capturedWrapper?: object): ProxyConstructor;
 /**
  * @function runtime_unwrapClassInstance
  * @package
@@ -77,5 +112,6 @@ export function runtime_wrapClassInstance(instance: object, contextManager: obje
  * @example
  * runtime_unwrapClassInstance(runtime_wrapClassInstance(instance, manager, id, new WeakMap())) === instance; // true
  */
-export function runtime_unwrapClassInstance(value: any): any;
+declare function runtime_unwrapClassInstance(value: any): any;
+export { guarded_setModuleInstanceCheck as setModuleInstanceCheck, guarded_runtime_classInstanceCreator as runtime_classInstanceCreator, guarded_runtime_wrapClassInstance as runtime_wrapClassInstance, guarded_runtime_unwrapClassInstance as runtime_unwrapClassInstance };
 //# sourceMappingURL=class-instance-wrapper.d.mts.map

@@ -78,12 +78,12 @@ describe.each(CONFIGS)("module mount lifecycle (#625) — $mode / $runtime", ({ 
 				]
 			}
 		});
-		await api.slothlet.api.add("guest", GUEST, { moduleID: "guest" });
-		await api.slothlet.api.add("other", GUEST, { moduleID: "other" });
-		expect(await api.guest.x.addAt("shared.kid", GUEST, { moduleID: "kid" })).toBe("done");
+		await api.slothlet.api.add("guest", GUEST, { id: "guest" });
+		await api.slothlet.api.add("other", GUEST, { id: "other" });
+		expect(await api.guest.x.addAt("shared.kid", GUEST, { id: "kid" })).toBe("done");
 		await api.slothlet.api.remove("guest");
 		expect(typeof api.shared.kid.x.listSelf).toBe("function");
-		expect(await api.other.x.addAt("other.imp", GUEST, { moduleID: "guest" })).toBe("done");
+		expect(await api.other.x.addAt("other.imp", GUEST, { id: "guest" })).toBe("done");
 		expect(await withSuppressedSlothletErrorOutput(() => api.other.imp.x.removeAt("shared.kid"))).toBe("LOOSE_SET_NOT_OWNED");
 		await api.slothlet.reload();
 		expect(await withSuppressedSlothletErrorOutput(() => api.other.imp.x.removeAt("shared.kid"))).toBe("LOOSE_SET_NOT_OWNED");
@@ -99,9 +99,9 @@ describe.each(CONFIGS)("module mount lifecycle (#625) — $mode / $runtime", ({ 
 	 */
 	async function nestKid() {
 		await boot();
-		await api.slothlet.api.add("guest", GUEST, { moduleID: "g1" });
-		await api.slothlet.api.add("other", GUEST, { moduleID: "other" });
-		expect(await api.guest.x.addAt("guest.kid", GUEST, { moduleID: "kid" })).toBe("done");
+		await api.slothlet.api.add("guest", GUEST, { id: "g1" });
+		await api.slothlet.api.add("other", GUEST, { id: "other" });
+		expect(await api.guest.x.addAt("guest.kid", GUEST, { id: "kid" })).toBe("done");
 		expect(await api.guest.kid.x.addRuleFor({ caller: "other.**", target: "guest.kid.**:write", effect: "allow" })).toMatch(/^perm-/);
 		return api;
 	}
@@ -110,20 +110,18 @@ describe.each(CONFIGS)("module mount lifecycle (#625) — $mode / $runtime", ({ 
 		await nestKid();
 		await api.slothlet.api.remove("g1");
 		expect(typeof api.guest.kid.x.listSelf).toBe("function");
-		expect(api.slothlet.permissions.global.rulesByModule("kid")).toHaveLength(1);
+		expect(api.slothlet.permissions.global.rules.module("kid")).toHaveLength(1);
 		const granted = await api.other.x.writeAt("guest.kid.x");
 		expect(granted).toEqual(every(granted, "done"));
-		expect(await withSuppressedSlothletErrorOutput(() => api.other.x.addAt("other.k", GUEST, { moduleID: "kid" }))).toBe(
-			"MODULE_ID_IN_USE"
-		);
+		expect(await withSuppressedSlothletErrorOutput(() => api.other.x.addAt("other.k", GUEST, { id: "kid" }))).toBe("MODULE_ID_IN_USE");
 	});
 
 	it("takes both modules when the path they are mounted under is removed", async () => {
 		await nestKid();
 		await api.slothlet.api.remove("guest");
-		expect(api.slothlet.permissions.global.rulesByModule("kid")).toEqual([]);
-		expect(await api.other.x.addAt("other.k", GUEST, { moduleID: "kid" })).toBe("done");
-		expect(await api.other.x.addAt("other.g", GUEST, { moduleID: "g1" })).toBe("done");
+		expect(api.slothlet.permissions.global.rules.module("kid")).toEqual([]);
+		expect(await api.other.x.addAt("other.k", GUEST, { id: "kid" })).toBe("done");
+		expect(await api.other.x.addAt("other.g", GUEST, { id: "g1" })).toBe("done");
 	});
 
 	describe("a container the removed module owns", () => {
@@ -134,8 +132,8 @@ describe.each(CONFIGS)("module mount lifecycle (#625) — $mode / $runtime", ({ 
 		 */
 		async function holder() {
 			await boot();
-			await api.slothlet.api.add("guest", HOLDER, { moduleID: "g1" });
-			await api.slothlet.api.add("guest.kid", GUEST, { moduleID: "kid", collisionMode: "merge" });
+			await api.slothlet.api.add("guest", HOLDER, { id: "g1" });
+			await api.slothlet.api.add("guest.kid", GUEST, { id: "kid", collision: { mode: "merge" } });
 			return api;
 		}
 
@@ -171,21 +169,21 @@ describe.each(CONFIGS)("module mount lifecycle (#625) — $mode / $runtime", ({ 
 
 	it("keeps a moduleID the host mounted at two paths whole until its last mount is removed", async () => {
 		await boot();
-		await api.slothlet.api.add("other", GUEST, { moduleID: "other" });
-		await api.slothlet.api.add("p1", GUEST, { moduleID: "m" });
-		await api.slothlet.api.add("p2", GUEST, { moduleID: "m" });
+		await api.slothlet.api.add("other", GUEST, { id: "other" });
+		await api.slothlet.api.add("p1", GUEST, { id: "m" });
+		await api.slothlet.api.add("p2", GUEST, { id: "m" });
 		expect(await api.p1.x.addRuleFor({ caller: "other.**", target: "p1.**:write", effect: "allow" })).toMatch(/^perm-/);
-		expect(api.slothlet.permissions.global.rulesByModule("m")).toHaveLength(1);
+		expect(api.slothlet.permissions.global.rules.module("m")).toHaveLength(1);
 		expect(await api.slothlet.api.remove("p2")).toBe(true);
 		expect(api.p2).toBeUndefined();
-		expect(api.slothlet.permissions.global.rulesByModule("m")).toHaveLength(1);
+		expect(api.slothlet.permissions.global.rules.module("m")).toHaveLength(1);
 		const own = await api.p1.x.writeAt("p1.x");
 		expect(own).toEqual(every(own, "done"));
 		const granted = await api.other.x.writeAt("p1.x");
 		expect(granted).toEqual(every(granted, "done"));
 		expect(await api.slothlet.api.remove("p1")).toBe(true);
-		expect(api.slothlet.permissions.global.rulesByModule("m")).toEqual([]);
-		expect(await api.other.x.addAt("other.m", GUEST, { moduleID: "m" })).toBe("done");
+		expect(api.slothlet.permissions.global.rules.module("m")).toEqual([]);
+		expect(await api.other.x.addAt("other.m", GUEST, { id: "m" })).toBe("done");
 	});
 
 	const GONE = { guest: "gone", kid: "gone", kidRules: 0, g1Rules: 0, kidFree: "done" };
@@ -195,12 +193,12 @@ describe.each(CONFIGS)("module mount lifecycle (#625) — $mode / $runtime", ({ 
 	it.each([
 		["by moduleID", (a) => a.slothlet.api.remove("g1"), KID_STAYS],
 		["by path", (a) => a.slothlet.api.remove("guest"), GONE],
-		["scoped", (a) => a.slothlet.api.remove("g1", "guest"), KID_STAYS]
+		["scoped", (a) => a.slothlet.api.remove("guest", "g1"), KID_STAYS]
 	])("leaves the same state after a removal %s as a reload then produces", async (_label, remove, expected) => {
 		await boot();
-		await api.slothlet.api.add("guest", GUEST, { moduleID: "g1" });
-		await api.slothlet.api.add("other", GUEST, { moduleID: "other" });
-		await api.guest.x.addAt("guest.kid", GUEST, { moduleID: "kid" });
+		await api.slothlet.api.add("guest", GUEST, { id: "g1" });
+		await api.slothlet.api.add("other", GUEST, { id: "other" });
+		await api.guest.x.addAt("guest.kid", GUEST, { id: "kid" });
 		await api.guest.kid.x.addRuleFor({ caller: "other.**", target: "guest.kid.**:write", effect: "allow" });
 		await remove(api);
 		/**
@@ -210,9 +208,9 @@ describe.each(CONFIGS)("module mount lifecycle (#625) — $mode / $runtime", ({ 
 		const state = async () => ({
 			guest: api.guest === undefined ? "gone" : typeof api.guest,
 			kid: api.guest?.kid === undefined ? "gone" : typeof api.guest.kid,
-			kidRules: api.slothlet.permissions.global.rulesByModule("kid").length,
-			g1Rules: api.slothlet.permissions.global.rulesByModule("g1").length,
-			kidFree: await withSuppressedSlothletErrorOutput(() => api.other.x.addAt("other.free", GUEST, { moduleID: "kid" }))
+			kidRules: api.slothlet.permissions.global.rules.module("kid").length,
+			g1Rules: api.slothlet.permissions.global.rules.module("g1").length,
+			kidFree: await withSuppressedSlothletErrorOutput(() => api.other.x.addAt("other.free", GUEST, { id: "kid" }))
 		});
 		const live = await state();
 		if (live.kidFree === "done") await api.slothlet.api.remove("other.free");

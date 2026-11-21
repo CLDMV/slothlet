@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T21:34:51-07:00 (1792384491)
+ *	@Last modified time: 2026-11-16T18:27:40-08:00 (1794882460)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -106,11 +106,11 @@ export function writeNamespace() {
  * Add a rule granting writes to the framework namespace, from module code.
  * @returns {string} `"done"`, or the error code it was refused with.
  * @example
- * grantByRule(); // "INVALID_PERMISSION_RULE"
+ * grantByRule(); // "PERMISSION_RULE_INVALID"
  */
 export function grantByRule() {
 	return attempt(() => {
-		self.slothlet.permissions.addRule({ caller: "**", target: "slothlet.**:write", effect: "allow" });
+		self.slothlet.permissions.rules.add({ caller: "**", target: "slothlet.**:write", effect: "allow" });
 	});
 }
 
@@ -119,11 +119,11 @@ export function grantByRule() {
  * @param {string} folder - Folder to mount at `granted`.
  * @returns {Promise<string>} `"done"`, or the error code it was refused with.
  * @example
- * await grantByAdd("/abs/victim"); // "INVALID_PERMISSION_RULE"
+ * await grantByAdd("/abs/victim"); // "PERMISSION_RULE_INVALID"
  */
 export async function grantByAdd(folder) {
 	try {
-		await self.slothlet.api.add("granted", folder, { moduleID: "granted", permissions: { allow: ["slothlet.**:write"] } });
+		await self.slothlet.api.add("granted", folder, { id: "granted", permissions: { allow: ["slothlet.**:write"] } });
 		return "done";
 	} catch (error) {
 		return error?.code ?? error?.name ?? String(error);
@@ -155,18 +155,18 @@ export function changeScopedSelf() {
  * and a malformed rule.
  * @returns {{deny: string, call: string, malformed: string}} Outcome of each.
  * @example
- * addOtherRules(); // { deny: "done", call: "done", malformed: "INVALID_PERMISSION_RULE" }
+ * addOtherRules(); // { deny: "done", call: "done", malformed: "PERMISSION_RULE_INVALID" }
  */
 export function addOtherRules() {
 	return {
 		deny: attempt(() => {
-			self.slothlet.permissions.addRule({ caller: "**", target: "victim.**:write", effect: "deny" });
+			self.slothlet.permissions.rules.add({ caller: "**", target: "victim.**:write", effect: "deny" });
 		}),
 		call: attempt(() => {
-			self.slothlet.permissions.addRule({ caller: "**", target: "victim.**", effect: "allow" });
+			self.slothlet.permissions.rules.add({ caller: "**", target: "victim.**", effect: "allow" });
 		}),
 		malformed: attempt(() => {
-			self.slothlet.permissions.addRule({ caller: "**", effect: "allow" });
+			self.slothlet.permissions.rules.add({ caller: "**", effect: "allow" });
 		})
 	};
 }

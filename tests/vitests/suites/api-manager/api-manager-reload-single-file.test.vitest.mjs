@@ -1,0 +1,360 @@
+/**
+ *
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /tests/vitests/suites/api-manager/api-manager-reload-single-file.test.vitest.mjs
+ *	@Date: 2026-11-14T23:40:00-08:00 (1794728400)
+ *	@Author: Nate Corcoran <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-11-16T18:28:37-08:00 (1794882517)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ *
+ */
+
+/**
+ * @fileoverview A scoped reload of an add whose source is a single file.
+ *
+ * @description
+ * `api.slothlet.api.add("calc", "/abs/calc.mjs", { moduleID: "calc-mod" })` mounts the file's exports at `calc`
+ * (RELOAD.md: "Mount a single file — its exports mount AT the apiPath"). `api.slothlet.api.reload("calc-mod")` and
+ * `api.slothlet.api.reload("calc")` re-read that file from disk and leave the add where it was: same path, same
+ * members, same moduleID and ownership, a held reference that now runs the new code, hooks and permission rules on
+ * the path still in force, and a sibling add under the same parent untouched. For each shape the result is compared
+ * with what a full `api.slothlet.reload()` gives for the same add, which replays the add from its history.
+ *
+ * Each test writes its own copy of the files under `tmp/test-fixtures/` and rewrites them between the add and the
+ * reload, so the reload has new content to pick up.
+ *
+ * @module tests/vitests/suites/api-manager/api-manager-reload-single-file
+ */
+
+import { describe, it, expect, afterEach } from "vitest";
+import fs from "node:fs";
+import path from "node:path";
+import slothlet from "@cldmv/slothlet";
+import { TEST_MATRIX } from "../../setup/vitest-helper.mjs";
+import { makeTestTmpDirSync } from "../../setup/test-fixtures-tmp.mjs";
+
+// A cold build on a loaded runner can be slow; each test builds one or two instances.
+const TIMEOUT = 60_000;
+
+/**
+ * Write the fixture files at version `n`.
+ * @param {string} root - Scratch directory.
+ * @param {number} n - Version written into every file.
+ * @returns {void}
+ */
+function writeFixture(root, n) {
+	const put = (rel, text) => {
+		fs.mkdirSync(path.dirname(path.join(root, rel)), { recursive: true });
+		fs.writeFileSync(path.join(root, rel), text);
+	};
+	put("base/secret.mjs", `export function get() { return "secret"; }\n`);
+	put("base/root.mjs", `export function hello() { return "hi"; }\n`);
+	put(
+		"calc.mjs",
+		`import { self } from "@cldmv/slothlet/runtime";\n` +
+			`export default function calc(x) { return x * ${n}; }\n` +
+			`export function half(x) { return x / 2 + ${n} * 0; }\n` +
+			`export function peek() { return self.secret.get(); }\n` +
+			`export const ver = ${n};\n`
+	);
+	put("plain.mjs", `export function ping() { return "plain${n}"; }\nexport const ver = ${n};\n`);
+	put("c.cjs", `module.exports = { ping() { return "cjs${n}"; }, ver: ${n} };\n`);
+	put(
+		"cdef.cjs",
+		`module.exports = function cdef() { return "cdef${n}"; };\nmodule.exports.extra = function extra() { return "extra${n}"; };\n`
+	);
+	put("more.mjs", `export function extra() { return "more${n}"; }\n`);
+	put("sib.mjs", `export function ping() { return "sib${n}"; }\n`);
+}
+
+/**
+ * The single-file adds. `read` returns what the add shows at its path; `expected(n)` is that for file version `n`,
+ * as plain JavaScript gives it for the same exports.
+ * @type {Array<{ name: string, at: string, src: string, id: string, read: (api: object) => Promise<unknown>, expected: (n: number) => unknown }>}
+ */
+const SHAPES = [
+	{
+		name: "an .mjs file with a default function and named exports",
+		at: "calc",
+		src: "calc.mjs",
+		id: "calc-mod",
+		read: async (api) => ({
+			call: await api.calc(4),
+			half: await api.calc.half(4),
+			ver: await api.calc.ver,
+			members: Object.keys(api.calc).sort()
+		}),
+		expected: (n) => ({ call: 4 * n, half: 2, ver: n, members: ["half", "peek", "ver"] })
+	},
+	{
+		name: "an .mjs file named differently from its nested path",
+		at: "a.b",
+		src: "plain.mjs",
+		id: "plain-mod",
+		read: async (api) => ({ ping: await api.a.b.ping(), ver: await api.a.b.ver, keys: Object.keys(api.a.b).sort() }),
+		expected: (n) => ({ ping: `plain${n}`, ver: n, keys: ["ping", "ver"] })
+	},
+	{
+		name: "a .cjs file exporting an object",
+		at: "tools.c",
+		src: "c.cjs",
+		id: "c-mod",
+		read: async (api) => ({ ping: await api.tools.c.ping(), ver: await api.tools.c.ver }),
+		expected: (n) => ({ ping: `cjs${n}`, ver: n })
+	},
+	{
+		name: "a .cjs file exporting a function with a member",
+		at: "cdef",
+		src: "cdef.cjs",
+		id: "cdef-mod",
+		read: async (api) => ({ call: await api.cdef(), extra: await api.cdef.extra() }),
+		expected: (n) => ({ call: `cdef${n}`, extra: `extra${n}` })
+	},
+	{
+		name: "an .mjs file merged onto a path the base already has",
+		at: "root",
+		src: "more.mjs",
+		id: "more-mod",
+		read: async (api) => ({ hello: await api.root.hello(), extra: await api.root.extra() }),
+		expected: (n) => ({ hello: "hi", extra: `more${n}` })
+	}
+];
+
+describe.each(TEST_MATRIX)("scoped reload of a single-file add > $name", ({ config }) => {
+	let api;
+	let root;
+
+	afterEach(async () => {
+		if (api) await api.shutdown();
+		api = null;
+		if (root) fs.rmSync(root, { recursive: true, force: true });
+		root = null;
+	});
+
+	/**
+	 * Build an instance over the scratch base, add `shape` and the sibling, at file version 1.
+	 * @param {object} shape - One of SHAPES.
+	 * @param {object} [extra] - Extra instance config.
+	 * @returns {Promise<object>} The api.
+	 */
+	async function setup(shape, extra = {}) {
+		root = makeTestTmpDirSync("reload-single-file");
+		writeFixture(root, 1);
+		api = await slothlet({ ...config, base: path.join(root, "base"), silent: true, ...extra });
+		await api.slothlet.api.add(shape.at, path.join(root, shape.src), { id: shape.id });
+		await api.slothlet.api.add("tools.sib", path.join(root, "sib.mjs"), { id: "sib-mod" });
+		return api;
+	}
+
+	for (const shape of SHAPES) {
+		for (const by of ["moduleID", "path"]) {
+			it(
+				`re-reads ${shape.name} when reloaded by its ${by}`,
+				async () => {
+					await setup(shape);
+					expect(await shape.read(api)).toEqual(shape.expected(1));
+					writeFixture(root, 2);
+					await api.slothlet.api.reload(by === "moduleID" ? shape.id : shape.at);
+					expect(await shape.read(api)).toEqual(shape.expected(2));
+					expect([...api.slothlet.diag.owner.get(shape.at)]).toContain(shape.id);
+					// The sibling under the same parent was not reloaded: still the code it was added with.
+					expect(await api.tools.sib.ping()).toBe("sib1");
+				},
+				TIMEOUT
+			);
+		}
+
+		it(
+			`gives ${shape.name} the same api as a full reload`,
+			async () => {
+				await setup(shape);
+				writeFixture(root, 2);
+				await api.slothlet.reload();
+				const full = await shape.read(api);
+				await api.shutdown();
+				fs.rmSync(root, { recursive: true, force: true });
+
+				await setup(shape);
+				writeFixture(root, 2);
+				await api.slothlet.api.reload(shape.id);
+				expect(await shape.read(api)).toEqual(full);
+			},
+			TIMEOUT
+		);
+	}
+
+	it(
+		"keeps a held reference, the moduleID and the metadata, across two reloads in a row",
+		async () => {
+			const shape = SHAPES[0];
+			await setup(shape);
+			const held = api.calc;
+			const beforeNode = api.slothlet.node(api.calc.half);
+			writeFixture(root, 2);
+			await api.slothlet.api.reload("calc-mod");
+			writeFixture(root, 3);
+			await api.slothlet.api.reload("calc-mod");
+			expect(api.calc).toBe(held);
+			expect(await held(4)).toBe(12);
+			expect(await held.half(4)).toBe(2);
+			const afterNode = api.slothlet.node(api.calc.half);
+			expect(afterNode.module).toBe(beforeNode.module);
+			expect(afterNode.path.join(".")).toBe("calc.half");
+			expect(afterNode.file).toBe(path.join(root, "calc.mjs"));
+			expect(api.slothlet.node(api.calc).path.join(".")).toBe("calc");
+		},
+		TIMEOUT
+	);
+
+	it.skipIf(!config.hook?.enabled)(
+		"still runs the hooks registered on the path after the reload",
+		async () => {
+			const shape = SHAPES[0];
+			await setup(shape);
+			const seen = [];
+			api.slothlet.hook.on("calc.half:before", ({ path: p }) => void seen.push(p), { id: "reload-single-file" });
+			writeFixture(root, 2);
+			await api.slothlet.api.reload("calc");
+			expect(await api.calc.half(4)).toBe(2);
+			expect(seen).toEqual(["calc.half"]);
+		},
+		TIMEOUT
+	);
+
+	for (const attribution of ["precise", "fast"]) {
+		it(
+			`still applies a rule on the path after the reload (attribution "${attribution}")`,
+			async () => {
+				const shape = SHAPES[0];
+				await setup(shape, {
+					permissions: { caller: { attribution }, rules: [{ caller: "calc.**", target: "secret.**", effect: "deny" }] }
+				});
+				await expect(Promise.resolve().then(() => api.calc.peek())).rejects.toMatchObject({ code: "PERMISSION_DENIED" });
+				writeFixture(root, 2);
+				await api.slothlet.api.reload("calc-mod");
+				expect(await api.calc(4)).toBe(8);
+				await expect(Promise.resolve().then(() => api.calc.peek())).rejects.toMatchObject({ code: "PERMISSION_DENIED" });
+				expect(await api.secret.get()).toBe("secret");
+			},
+			TIMEOUT
+		);
+	}
+});
+
+/**
+ * The root-level adds: a single file and a folder, each added at the api root (`""` / `null`). `key` is the root key
+ * the add mounts (a root add keeps each file as a key of the root), `reloadPath` the path a reload by path names.
+ * @type {Array<{ name: string, at: string|null, src: string, id: string, key: string }>}
+ */
+const ROOT_ADDS = [
+	{ name: "a single file", at: "", src: "one.mjs", id: "one-mod", key: "one" },
+	{ name: "a folder", at: null, src: "fold", id: "fold-mod", key: "three" }
+];
+
+describe.each(TEST_MATRIX)("scoped reload of an add at the api root > $name", ({ config }) => {
+	let api;
+	let root;
+
+	afterEach(async () => {
+		if (api) await api.shutdown();
+		api = null;
+		if (root) fs.rmSync(root, { recursive: true, force: true });
+		root = null;
+	});
+
+	/**
+	 * Write the root-level sources at version `n`: `one.mjs`, the sibling `two.mjs`, and `fold/three.mjs`.
+	 * @param {number} n - Version written into every file.
+	 * @returns {void}
+	 */
+	function writeRootFixture(n) {
+		const leaf = (name) =>
+			`import { self } from "@cldmv/slothlet/runtime";\n` +
+			`export function ping() { return "${name}${n}"; }\n` +
+			`export function peek() { return self.secret.get(); }\n`;
+		fs.mkdirSync(path.join(root, "fold"), { recursive: true });
+		fs.writeFileSync(path.join(root, "one.mjs"), leaf("one"));
+		fs.writeFileSync(path.join(root, "fold", "three.mjs"), leaf("three"));
+		fs.writeFileSync(path.join(root, "two.mjs"), `export function ping() { return "two${n}"; }\n`);
+	}
+
+	/**
+	 * Build an instance over the scratch base and add `target` and the sibling root add `two.mjs`, at version 1. A host
+	 * rule keeps the target's code from calling `secret`.
+	 * @param {object} target - One of ROOT_ADDS.
+	 * @returns {Promise<object>} The api.
+	 */
+	async function setup(target) {
+		root = makeTestTmpDirSync("reload-root-add");
+		writeFixture(root, 1);
+		writeRootFixture(1);
+		api = await slothlet({
+			...config,
+			base: path.join(root, "base"),
+			silent: true,
+			permissions: { rules: [{ caller: `${target.key}.**`, target: "secret.**", effect: "deny" }] }
+		});
+		await api.slothlet.api.add(target.at, path.join(root, target.src), { id: target.id });
+		await api.slothlet.api.add("", path.join(root, "two.mjs"), { id: "two-mod" });
+		return api;
+	}
+
+	for (const target of ROOT_ADDS) {
+		for (const by of ["moduleID", "path"]) {
+			it(
+				`re-reads ${target.name} added at the root when reloaded by its ${by}`,
+				async () => {
+					await setup(target);
+					const node = () => api[target.key];
+					expect(await node().ping()).toBe(`${target.key}1`);
+					const held = node();
+					const keys = Object.keys(api);
+					const metadataNode = api.slothlet.node(node().ping);
+					const seen = [];
+					if (config.hook?.enabled) {
+						api.slothlet.hook.on(`${target.key}.ping:before`, ({ path: p }) => void seen.push(p), { id: "reload-root-add" });
+					}
+
+					writeRootFixture(2);
+					await api.slothlet.api.reload(by === "moduleID" ? target.id : target.key);
+
+					expect(await node().ping()).toBe(`${target.key}2`);
+					expect(node()).toBe(held);
+					expect(Object.keys(api)).toEqual(keys);
+					expect("" in api).toBe(false);
+					// The sibling root add and the base were not reloaded.
+					expect(await api.two.ping()).toBe("two1");
+					expect(await api.root.hello()).toBe("hi");
+					expect([...api.slothlet.diag.owner.get(target.key)]).toContain(target.id);
+					expect(api.slothlet.node(node().ping).module).toBe(metadataNode.module);
+					expect(api.slothlet.node(node().ping).file).toBe(metadataNode.file);
+					if (config.hook?.enabled) expect(seen).toEqual([`${target.key}.ping`]);
+					await expect(Promise.resolve().then(() => node().peek())).rejects.toMatchObject({ code: "PERMISSION_DENIED" });
+				},
+				TIMEOUT
+			);
+		}
+
+		it(
+			`gives ${target.name} added at the root the same api as a full reload`,
+			async () => {
+				await setup(target);
+				writeRootFixture(2);
+				await api.slothlet.reload();
+				const full = { ping: await api[target.key].ping(), keys: Object.keys(api).sort() };
+				await api.shutdown();
+				fs.rmSync(root, { recursive: true, force: true });
+
+				await setup(target);
+				writeRootFixture(2);
+				await api.slothlet.api.reload(target.id);
+				expect({ ping: await api[target.key].ping(), keys: Object.keys(api).sort() }).toEqual(full);
+			},
+			TIMEOUT
+		);
+	}
+});

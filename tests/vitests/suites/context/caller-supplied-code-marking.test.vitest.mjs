@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-31T15:24:33-07:00 (1793485473)
+ *	@Last modified time: 2026-11-16T18:28:53-08:00 (1794882533)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -19,8 +19,8 @@
  * @description
  * A call is checked only when it is handed a receiver or an argument that can carry its caller's code: an
  * object or a function that is not one of slothlet's own api nodes. Deciding that must never run the value's
- * code, and a call that is not checked never reads the stack. The stack reads are counted through the
- * `prepareStackTrace` hook every capture sets and restores.
+ * code, and a call that is not checked never reads the stack. The stack reads are counted by slothlet's own
+ * count of the stacks it reads.
  *
  * @module tests/vitests/suites/context/caller-supplied-code-marking
  */
@@ -28,6 +28,7 @@
 import { describe, it, expect, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
 import { carriesCallerCode, resolveSupplier } from "#handlers/frame-placement";
+import { stackReadCount } from "#helpers/stack-read";
 import { TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
 /**
@@ -43,30 +44,14 @@ function deepFreeze(value) {
 }
 
 /**
- * Count stack captures made while `fn` runs: every capture installs its own `prepareStackTrace` for its
- * duration, so the setter sees each one.
+ * Count stack reads made while `fn` runs: slothlet counts every stack it reads (`stackReadCount`).
  * @param {function(): Promise<*>} fn - Work to measure.
  * @returns {Promise<{captures: number, result: *}>} The count and the work's result.
  */
 async function countCaptures(fn) {
-	const original = Object.getOwnPropertyDescriptor(Error, "prepareStackTrace");
-	let current = original?.value;
-	let captures = 0;
-	Object.defineProperty(Error, "prepareStackTrace", {
-		configurable: true,
-		get: () => current,
-		set: (value) => {
-			if (typeof value === "function" && value.name === "runtime_structuredFrames") captures++;
-			current = value;
-		}
-	});
-	try {
-		const result = await fn();
-		return { captures, result };
-	} finally {
-		if (original) Object.defineProperty(Error, "prepareStackTrace", original);
-		else delete Error.prepareStackTrace;
-	}
+	const before = stackReadCount();
+	const result = await fn();
+	return { captures: stackReadCount() - before, result };
 }
 
 describe("Caller-supplied code (#597) > marking a call", () => {
@@ -179,7 +164,7 @@ describe("Caller-supplied code (#597) > stack reads", () => {
 	it("a host call with primitives, and the module calls it makes with primitives, never read the stack (provenance off)", async () => {
 		api = await slothlet({
 			base: TEST_DIRS.API_TEST_CALLER_SUPPLIED_CODE,
-			permissions: { defaultPolicy: "deny", provenance: false, rules: RULES }
+			permissions: { policy: "deny", caller: { provenance: false }, rules: RULES }
 		});
 		// Load everything first, so the count below sees only the calls.
 		await api.supplier.probe.direct("whoami");
@@ -191,7 +176,7 @@ describe("Caller-supplied code (#597) > stack reads", () => {
 	it("a call handed a frozen plain options object never reads the stack (provenance off)", async () => {
 		api = await slothlet({
 			base: TEST_DIRS.API_TEST_CALLER_SUPPLIED_CODE,
-			permissions: { defaultPolicy: "deny", provenance: false, rules: RULES }
+			permissions: { policy: "deny", caller: { provenance: false }, rules: RULES }
 		});
 		await api.supplier.probe.withPlainOptions();
 		const { captures, result } = await countCaptures(() => api.supplier.probe.withPlainOptions());
@@ -200,7 +185,7 @@ describe("Caller-supplied code (#597) > stack reads", () => {
 	});
 
 	it("with provenance on, the same calls read the stack and keep their identities (#597)", async () => {
-		api = await slothlet({ base: TEST_DIRS.API_TEST_CALLER_SUPPLIED_CODE, permissions: { defaultPolicy: "deny", rules: RULES } });
+		api = await slothlet({ base: TEST_DIRS.API_TEST_CALLER_SUPPLIED_CODE, permissions: { policy: "deny", rules: RULES } });
 		await api.supplier.probe.direct("whoami");
 		await api.supplier.probe.withPlainOptions();
 		const direct = await countCaptures(() => api.supplier.probe.direct("whoami"));
@@ -212,7 +197,7 @@ describe("Caller-supplied code (#597) > stack reads", () => {
 	});
 
 	it("a call handed a plain options object that can still change reads the stack, and the leaf is still itself", async () => {
-		api = await slothlet({ base: TEST_DIRS.API_TEST_CALLER_SUPPLIED_CODE, permissions: { defaultPolicy: "deny", rules: RULES } });
+		api = await slothlet({ base: TEST_DIRS.API_TEST_CALLER_SUPPLIED_CODE, permissions: { policy: "deny", rules: RULES } });
 		await api.supplier.probe.withUnfrozenOptions();
 		const { captures, result } = await countCaptures(() => api.supplier.probe.withUnfrozenOptions());
 		expect(result).toEqual({ ok: true, value: "callee.ops.whoamiWith" });
@@ -220,7 +205,7 @@ describe("Caller-supplied code (#597) > stack reads", () => {
 	});
 
 	it("a call handed a callback reads the stack when the callback makes a call", async () => {
-		api = await slothlet({ base: TEST_DIRS.API_TEST_CALLER_SUPPLIED_CODE, permissions: { defaultPolicy: "deny", rules: RULES } });
+		api = await slothlet({ base: TEST_DIRS.API_TEST_CALLER_SUPPLIED_CODE, permissions: { policy: "deny", rules: RULES } });
 		await api.supplier.probe.viaCallback("whoami");
 		const { captures, result } = await countCaptures(() => api.supplier.probe.viaCallback("whoami"));
 		expect(result).toEqual({ ok: true, value: "supplier.probe.viaCallback" });
@@ -228,7 +213,7 @@ describe("Caller-supplied code (#597) > stack reads", () => {
 	});
 
 	it("a call handed code reads the stack when that code makes a call", async () => {
-		api = await slothlet({ base: TEST_DIRS.API_TEST_CALLER_SUPPLIED_CODE, permissions: { defaultPolicy: "deny", rules: RULES } });
+		api = await slothlet({ base: TEST_DIRS.API_TEST_CALLER_SUPPLIED_CODE, permissions: { policy: "deny", rules: RULES } });
 		await api.supplier.probe.viaToString("whoami");
 		const { captures, result } = await countCaptures(() => api.supplier.probe.viaToString("whoami"));
 		expect(result).toEqual({ ok: true, value: "supplier.probe.viaToString" });

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:54-07:00 (1791090894)
+ *	@Last modified time: 2026-11-16T18:28:07-08:00 (1794882487)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -43,13 +43,15 @@ describe("browser permission bypass routes", () => {
 		const slothlet = mod.default ?? mod.slothlet;
 		const BASE = new URL("/" + fixtureRel + "/", location.origin).href;
 		return slothlet({
-			platform: "browser",
 			base: BASE,
-			manifest,
-			resolveModuleSpecifier: ({ path }) => new URL(path, BASE).href,
+			loader: {
+				platform: "browser",
+				files: manifest,
+				resolve: ({ path }) => new URL(path, BASE).href
+			},
 			mode: "eager",
 			permissions: {
-				defaultPolicy: "deny",
+				policy: "deny",
 				rules: [
 					{ caller: "probe.**", target: "math.**", effect: "allow" },
 					{ caller: "**", target: "{probe,rogue}.**", effect: "allow" }
@@ -123,6 +125,83 @@ describe("browser permission bypass routes", () => {
 
 			expect(rogue).toBe("denied");
 			expect(probe).toBe(3);
+		} finally {
+			await api.shutdown();
+		}
+	});
+});
+
+describe("browser: a module denied a root file's value is refused it", () => {
+	const FIXTURE = "api_tests/api_test_browser_root_primitive";
+	// `numval.mjs` (`export default 42`) sits at the api root next to the two reading modules.
+	const MANIFEST = {
+		files: [
+			{ path: "allowed.mjs", name: "allowed", full: "allowed.mjs" },
+			{ path: "denied.mjs", name: "denied", full: "denied.mjs" },
+			{ path: "numval.mjs", name: "numval", full: "numval.mjs" }
+		],
+		directories: []
+	};
+	const configs = ["eager", "lazy"].flatMap((mode) =>
+		["async", "live"].flatMap((runtime) => ["precise", "fast"].map((attribution) => ({ mode, runtime, attribution })))
+	);
+
+	/**
+	 * Compose the fixture in browser mode.
+	 * @param {object} options - Mode, runtime and permissions.
+	 * @returns {Promise<object>} A bound browser-mode api.
+	 */
+	const build = async (options) => {
+		const mod = await import("@cldmv/slothlet");
+		const slothlet = mod.default ?? mod.slothlet;
+		const BASE = new URL("/" + FIXTURE + "/", location.origin).href;
+		return slothlet({
+			base: BASE,
+			loader: {
+				platform: "browser",
+				files: MANIFEST,
+				resolve: ({ path }) => new URL(path, BASE).href
+			},
+			...options
+		});
+	};
+
+	const DENY = [{ caller: "denied.**", target: "numval", effect: "deny" }];
+
+	describe.each(configs)("$mode / $runtime / $attribution", ({ mode, runtime, attribution }) => {
+		it("the denied module is refused the value, awaited or not, and does not see it listed; the host reads it", async () => {
+			const api = await build({ mode, runtime, permissions: { policy: "allow", caller: { attribution }, rules: DENY } });
+			try {
+				expect(await api.denied.read("numval")).toEqual({ threw: "PERMISSION_DENIED" });
+				expect(await api.denied.settle("numval")).toEqual({ threw: "PERMISSION_DENIED" });
+				const listed = await api.denied.keys();
+				expect(listed).toEqual(expect.arrayContaining(["allowed", "denied"]));
+				expect(listed).not.toContain("numval");
+				expect(api.numval).toBe(42);
+			} finally {
+				await api.shutdown();
+			}
+		});
+
+		it("a module no rule names reads the value and sees it listed", async () => {
+			const api = await build({ mode, runtime, permissions: { policy: "allow", caller: { attribution }, rules: DENY } });
+			try {
+				expect(await api.allowed.read("numval")).toBe(42);
+				expect(await api.allowed.settle("numval")).toBe(42);
+				expect(await api.allowed.keys()).toContain("numval");
+			} finally {
+				await api.shutdown();
+			}
+		});
+	});
+
+	it.each(["eager", "lazy"])("with permissions off the module the rule names reads the value and sees it listed (%s)", async (mode) => {
+		const api = await build({ mode, permissions: { mode: "off", rules: DENY } });
+		try {
+			expect(await api.denied.read("numval")).toBe(42);
+			expect(await api.denied.settle("numval")).toBe(42);
+			expect(await api.denied.keys()).toContain("numval");
+			expect(api.numval).toBe(42);
 		} finally {
 			await api.shutdown();
 		}

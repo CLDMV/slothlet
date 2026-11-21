@@ -32,6 +32,6 @@ import { self } from "@cldmv/slothlet/runtime";
  */
 export async function addFrom(folder, name) {
 	globalThis.__slothletRound7Vault = self.vault;
-	await self.slothlet.api.add(name, folder, { moduleID: `${name}-mod` });
+	await self.slothlet.api.add(name, folder, { id: `${name}-mod` });
 	return self.vault.secret.secret();
 }

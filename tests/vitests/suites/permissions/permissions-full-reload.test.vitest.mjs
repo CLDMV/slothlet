@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:17-07:00 (1791090917)
+ *	@Last modified time: 2026-11-16T18:29:50-08:00 (1794882590)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -32,7 +32,7 @@ describe.each(getMatrixConfigs())("Permissions > Full Reload > $name", ({ config
 			...config,
 			base: `${BASE}/callers`,
 			permissions: {
-				defaultPolicy: "allow",
+				policy: "allow",
 				rules: [{ caller: "untrusted.**", target: "admin.**", effect: "deny" }]
 			}
 		});
@@ -41,7 +41,7 @@ describe.each(getMatrixConfigs())("Permissions > Full Reload > $name", ({ config
 		await api.slothlet.api.add("admin", `${BASE}/admin`);
 
 		// Config rule should be present
-		const rules = api.slothlet.permissions.global.rulesForPath("admin.manage");
+		const rules = api.slothlet.permissions.global.rules.path("admin.manage");
 		expect(rules.length).toBeGreaterThan(0);
 
 		// Reload
@@ -51,7 +51,7 @@ describe.each(getMatrixConfigs())("Permissions > Full Reload > $name", ({ config
 		await api.slothlet.api.add("admin", `${BASE}/admin`);
 
 		// Config rules should be re-applied after reload
-		const rulesAfter = api.slothlet.permissions.global.rulesForPath("admin.manage");
+		const rulesAfter = api.slothlet.permissions.global.rules.path("admin.manage");
 		expect(rulesAfter.length).toBeGreaterThan(0);
 	});
 });

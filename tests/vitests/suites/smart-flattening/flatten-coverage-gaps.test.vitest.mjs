@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:46-07:00 (1791091726)
+ *	@Last modified time: 2026-11-16T18:30:27-08:00 (1794882627)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -286,7 +286,7 @@ describe("flatten.mjs — line 301: collisionMode falls back to 'merge' when no 
 
 		// Verify the slothlet instance has no collision config (required for this test)
 		const slInstance = flatten.slothlet;
-		const hasCollision = Boolean(slInstance.config?.api?.collision || slInstance.config?.collision);
+		const hasCollision = Boolean(slInstance.config?.api?.collision?.mode);
 
 		const mainFn = function myService() {
 			return "service";

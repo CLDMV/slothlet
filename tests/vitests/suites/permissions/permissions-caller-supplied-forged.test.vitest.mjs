@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-17T00:00:00-07:00 (1792220400)
+ *	@Last modified time: 2026-11-16T18:30:23-08:00 (1794882623)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -38,6 +38,8 @@ const DIR = TEST_DIRS.API_TEST_CALLER_SUPPLIED_FORGED;
 
 /** Deny by default; the vault's secret is the victim's alone. */
 const RULES = [
+	// Code from strings is a built-in capability (D4 ruling part 1); this suite is about where such code is placed.
+	{ caller: "**", target: "capability:code", effect: "allow" },
 	{ caller: "victim.**", target: "vault.secret.secret", effect: "allow" },
 	{ caller: "victim.**", target: "attacker.**", effect: "allow" },
 	{ caller: "victim.**", target: "slothlet.permissions.principal.**", effect: "allow" },
@@ -47,7 +49,7 @@ const RULES = [
 
 /** The victim receives `vault.leak` in full; the attacker is refused it. */
 const EVENTS = {
-	default: "notify",
+	policy: "notify",
 	rules: [
 		{ caller: "victim.**", event: "vault.leak", effect: "allow" },
 		{ caller: "attacker.**", event: "vault.leak", effect: "deny" }
@@ -71,9 +73,9 @@ describe.each(getMatrixConfigs())("Permissions > code placed on a caller keeps t
 			...config,
 			base: path.join(DIR, "base"),
 			hook: true,
-			permissions: { defaultPolicy: "deny", rules: RULES, events: EVENTS }
+			permissions: { policy: "deny", rules: RULES, events: EVENTS }
 		});
-		await api.slothlet.api.add("attacker", path.join(DIR, "attacker"), { moduleID: "attacker-mod" });
+		await api.slothlet.api.add("attacker", path.join(DIR, "attacker"), { id: "attacker-mod" });
 		return api;
 	};
 
@@ -100,7 +102,7 @@ describe.each(getMatrixConfigs())("Permissions > code placed on a caller keeps t
 		await build();
 		expect(await api.victim.caller.registerRoles()).toBe(true);
 		const outcome = await withSuppressedSlothletErrorOutput(() => api.victim.caller.callAttacker("unregisterRoles"));
-		expect(outcome).toEqual({ ok: false, code: "PRINCIPAL_NOT_OWNER" });
+		expect(outcome).toEqual({ ok: false, code: "PERMISSION_PRINCIPAL_NOT_OWNER" });
 		expect(await api.victim.caller.hasRoles()).toBe(true);
 	});
 

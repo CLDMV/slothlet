@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:57-07:00 (1791090897)
+ *	@Last modified time: 2026-11-16T18:29:27-08:00 (1794882567)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -18,7 +18,7 @@
  * from the public API but must be exercised to verify correct error handling.
  *
  * Covers:
- *   - Line 1851/1854: reloadApiComponent while isLoaded=false → INVALID_CONFIG_NOT_LOADED
+ *   - Line 1851/1854: reloadApiComponent while isLoaded=false → INSTANCE_NOT_LOADED
  *   - Line 1869:      reloadApiComponent({}) with no moduleID/apiPath → INVALID_ARGUMENT
  *   - Line 1891/1894: _reloadByModuleID when cacheManager is null → CACHE_MANAGER_NOT_AVAILABLE
  *   - Line 1899/1902: _reloadByModuleID with non-existent moduleID → CACHE_NOT_FOUND
@@ -67,28 +67,28 @@ describe("reloadApiComponent — isLoaded=false guard", () => {
 		api = null;
 	});
 
-	it("throws INVALID_CONFIG_NOT_LOADED when isLoaded is false before reload (apiPath variant)", async () => {
+	it("throws INSTANCE_NOT_LOADED when isLoaded is false before reload (apiPath variant)", async () => {
 		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", silent: true });
 		const sl = getSlInstance(api);
 		const orig = sl.isLoaded;
 		sl.isLoaded = false;
 		try {
 			await expect(sl.handlers.apiManager.reloadApiComponent({ apiPath: "math" })).rejects.toMatchObject({
-				code: "INVALID_CONFIG_NOT_LOADED"
+				code: "INSTANCE_NOT_LOADED"
 			});
 		} finally {
 			sl.isLoaded = orig;
 		}
 	});
 
-	it("throws INVALID_CONFIG_NOT_LOADED when isLoaded is false before reload (moduleID variant)", async () => {
+	it("throws INSTANCE_NOT_LOADED when isLoaded is false before reload (moduleID variant)", async () => {
 		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", silent: true });
 		const sl = getSlInstance(api);
 		const orig = sl.isLoaded;
 		sl.isLoaded = false;
 		try {
 			await expect(sl.handlers.apiManager.reloadApiComponent({ moduleID: "some-module" })).rejects.toMatchObject({
-				code: "INVALID_CONFIG_NOT_LOADED"
+				code: "INSTANCE_NOT_LOADED"
 			});
 		} finally {
 			sl.isLoaded = orig;
@@ -158,7 +158,7 @@ describe("_reloadByModuleID — cacheManager null guard", () => {
 	it("throws CACHE_MANAGER_NOT_AVAILABLE regardless of moduleID when cacheManager is null", async () => {
 		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", silent: true });
 		const sl = getSlInstance(api);
-		await api.slothlet.api.add("extra", TEST_DIRS.API_TEST_MIXED, { moduleID: "extra-guard-mod" });
+		await api.slothlet.api.add("extra", TEST_DIRS.API_TEST_MIXED, { id: "extra-guard-mod" });
 		const origCM = sl.handlers.apiCacheManager;
 		sl.handlers.apiCacheManager = null;
 		try {
@@ -193,7 +193,7 @@ describe("_reloadByModuleID — CACHE_NOT_FOUND guard", () => {
 	it("throws CACHE_NOT_FOUND after manually deleting the cache entry", async () => {
 		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", silent: true });
 		const sl = getSlInstance(api);
-		await api.slothlet.api.add("guard_extra", TEST_DIRS.API_TEST_MIXED, { moduleID: "guard-del-mod" });
+		await api.slothlet.api.add("guard_extra", TEST_DIRS.API_TEST_MIXED, { id: "guard-del-mod" });
 		// Manually remove from cache (simulating a corrupted state)
 		sl.handlers.apiCacheManager.delete("guard-del-mod");
 		await expect(sl.handlers.apiManager._reloadByModuleID("guard-del-mod")).rejects.toMatchObject({ code: "CACHE_NOT_FOUND" });
@@ -224,7 +224,7 @@ describe("_restoreApiTree — no-wrapper else branch", () => {
 		const sl = getSlInstance(api);
 
 		const mid = await api.slothlet.api.add("restoreTarget", TEST_DIRS.API_TEST_MIXED, {
-			moduleID: "restore-guard-mod"
+			id: "restore-guard-mod"
 		});
 
 		// Confirm it was added as a wrapper
@@ -246,7 +246,7 @@ describe("_restoreApiTree — no-wrapper else branch", () => {
 		const sl = getSlInstance(api);
 
 		const mid = await api.slothlet.api.add("plainReplace", TEST_DIRS.API_TEST_MIXED, {
-			moduleID: "plain-replace-mod"
+			id: "plain-replace-mod"
 		});
 
 		sl.api.plainReplace = { plain: true };
@@ -259,7 +259,7 @@ describe("_restoreApiTree — no-wrapper else branch", () => {
 		const sl = getSlInstance(api);
 
 		const mid = await api.slothlet.api.add("deep.nested.guard", TEST_DIRS.API_TEST_MIXED, {
-			moduleID: "deep-plain-mod"
+			id: "deep-plain-mod"
 		});
 
 		// Replace entire deep path with plain value
@@ -294,7 +294,7 @@ describe("_restoreApiTree — dedup-mirror non-wrapper dup-key guard", () => {
 		const sl = getSlInstance(api);
 
 		// Add a nested endpoint whose last segment ("dedup") will match a freshApi own key.
-		const mid = await api.slothlet.api.add("dedup.dedup", TEST_DIRS.API_TEST_MIXED, { moduleID: "dedup-mirror-mod" });
+		const mid = await api.slothlet.api.add("dedup.dedup", TEST_DIRS.API_TEST_MIXED, { id: "dedup-mirror-mod" });
 		expect(resolveWrapper(api.dedup?.dedup)).not.toBeNull();
 
 		// freshApi.dedup is a PLAIN object — not a UnifiedWrapper — so resolveWrapper(dupValue) is
@@ -308,7 +308,7 @@ describe("_restoreApiTree — dedup-mirror non-wrapper dup-key guard", () => {
 		api = await slothlet({ base: TEST_DIRS.API_TEST, mode: "eager", silent: true });
 		const sl = getSlInstance(api);
 
-		const mid = await api.slothlet.api.add("zone.zone", TEST_DIRS.API_TEST_MIXED, { moduleID: "dedup-fn-mod" });
+		const mid = await api.slothlet.api.add("zone.zone", TEST_DIRS.API_TEST_MIXED, { id: "dedup-fn-mod" });
 		expect(resolveWrapper(api.zone?.zone)).not.toBeNull();
 
 		// freshApi.zone is a plain function (resolveWrapper → null): FALSE arm again.
@@ -362,12 +362,10 @@ describe("removeApiComponent — apiPath+moduleID delete branch, hasDispatcher T
 		//     it creates has a resolvable default (v1) — this mounts a LIVE dispatcher at
 		//     "dispGuard" without raising VERSION_NO_DEFAULT. The versioned module owns
 		//     "v1.dispGuard"; the logical "dispGuard" path itself has no ownership owner yet.
-		await api.slothlet.api.add(
-			"dispGuard",
-			`${TEST_DIRS.API_TEST_VERSIONED}/v1`,
-			{ moduleID: "verSeedGuard" },
-			{ version: "v1", default: true }
-		);
+		await api.slothlet.api.add("dispGuard", `${TEST_DIRS.API_TEST_VERSIONED}/v1`, {
+			id: "verSeedGuard",
+			version: { tag: "v1", default: true }
+		});
 		expect(vm.hasDispatcher("dispGuard")).toBe(true);
 
 		// (b) Make a PLAIN (non-versioned) module the SOLE current owner of the logical path
@@ -501,7 +499,7 @@ describe("deletePath — permanently invalidates a removed wrapper's still-in-fl
 		api = null;
 	});
 
-	it("blocks a stale backgroundMaterialize result from applying after the module is removed", async () => {
+	it("blocks a stale background-materialization result from applying after the module is removed", async () => {
 		// A lazy wrapper's materializeFunc can still be running when the api path it lives at is
 		// removed (api.remove()/deletePath). ___materialize()'s own guard re-checks `invalid` both
 		// before starting and immediately after its awaited work resolves — but only deletePath can
@@ -526,7 +524,7 @@ describe("deletePath — permanently invalidates a removed wrapper's still-in-fl
 		});
 		const root = { thing: wrapper.createProxy() };
 
-		const matPromise = wrapper._materialize();
+		const matPromise = wrapper.___materialize();
 		expect(wrapper.____slothletInternal.state.inFlight).toBe(true);
 
 		const deleted = await apiManager.deletePath(root, ["thing"]);

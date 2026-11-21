@@ -17,7 +17,7 @@
  * @fileoverview #462 — a lazy-mode `api.slothlet.api.add()` must return with the mounted subtree in
  * the same settled state an initial lazy build produces: top-level folder wrappers unmaterialized
  * and NOT mid-materialization. Ownership registration used to walk the new subtree through the
- * wrappers' get traps, which starts a fire-and-forget `_materialize()` on every child it touched;
+ * wrappers' get traps, which starts a fire-and-forget `___materialize()` on every child it touched;
  * `add()` then resolved while those were still in flight, so what `add()` returned depended on
  * timing (and the eager/lazy parity check in tests/debug-slothlet.mjs read a half-built tree).
  */
@@ -81,7 +81,7 @@ describe.each(getMatrixConfigs({ mode: "lazy" }))("api.add() in lazy mode return
 
 	it("the mounted modules still resolve and stay owned by the added module", async () => {
 		api = await slothlet({ ...config, base: TEST_DIRS.API_TEST });
-		const moduleID = await api.slothlet.api.add("mounted", TEST_DIRS.API_TEST_COLLISIONS, { moduleID: "collisions-mod" });
+		const moduleID = await api.slothlet.api.add("mounted", TEST_DIRS.API_TEST_COLLISIONS, { id: "collisions-mod" });
 
 		expect(await api.mounted.lazybase.sub.testFunc()).toBe("from-lazybase-sub");
 		expect(await api.mounted.lazyfuncbase.sub(1)).toBe("from-lazyfuncbase-sub:1");
@@ -125,6 +125,5 @@ describe.each(getMatrixConfigs({ mode: "eager" }))("api.add() ownership records 
 		// difference): the walk must record what the proxy hands out.
 		const owner = ownership.getCurrentOwner("mounted.math.collisionVersion");
 		expect(owner.value).toBe("math-collision-v1");
-		expect(owner.source).not.toBe("subtree-confirm");
 	});
 });

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:07-07:00 (1791090907)
+ *	@Last modified time: 2026-11-16T18:29:15-08:00 (1794882555)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -76,8 +76,12 @@ describe("unified-wrapper line 2644 — suppressed async after-hook error", () =
 		_api = await slothlet({
 			mode: "eager",
 			runtime: "async",
-			hook: { enabled: true, pattern: "**", suppressErrors: false },
-			collision: { initial: "replace", api: "replace" },
+			hook: { enabled: true, pattern: "**", errors: false },
+			api: {
+				collision: {
+					mode: { initial: "replace", api: "replace" }
+				}
+			},
 			silent: true,
 			base: TEST_DIRS.API_TEST
 		});
@@ -89,9 +93,9 @@ describe("unified-wrapper line 2644 — suppressed async after-hook error", () =
 		expect(wrapper).not.toBeNull();
 		const liveHookConfig = wrapper.slothlet.config.hook;
 
-		// Mutate live config: hookManager still has suppressErrors=false but config now says true
-		const savedSuppressErrors = liveHookConfig.suppressErrors;
-		liveHookConfig.suppressErrors = true;
+		// Mutate live config: hookManager still has suppressErrors=false but config now says errors: "suppress"
+		const savedErrors = liveHookConfig.errors;
+		liveHookConfig.errors = "suppress";
 
 		let errorHookCalled = false;
 		_api.slothlet.hook.on(
@@ -104,7 +108,7 @@ describe("unified-wrapper line 2644 — suppressed async after-hook error", () =
 
 		// Register an after-hook that throws.
 		// hookManager.suppressErrors=false → executeAfterHooks re-throws.
-		// catch: liveConfig.suppressErrors=true → line 2644: return undefined.
+		// catch: liveConfig.errors="suppress" → line 2644: return undefined.
 		_api.slothlet.hook.on(
 			"asyncTest.asyncAdd:after",
 			() => {
@@ -115,12 +119,12 @@ describe("unified-wrapper line 2644 — suppressed async after-hook error", () =
 
 		try {
 			const result = await _api.asyncTest.asyncAdd(2, 3);
-			// suppressErrors=true in live config → undefined returned (line 2644)
+			// errors: "suppress" in live config → undefined returned (line 2644)
 			expect(result).toBeUndefined();
 			expect(errorHookCalled).toBe(true);
 		} finally {
 			// Restore original config to avoid affecting other tests
-			liveHookConfig.suppressErrors = savedSuppressErrors;
+			liveHookConfig.errors = savedErrors;
 		}
 	});
 
@@ -129,8 +133,12 @@ describe("unified-wrapper line 2644 — suppressed async after-hook error", () =
 		_api = await slothlet({
 			mode: "eager",
 			runtime: "async",
-			hook: { enabled: true, pattern: "**", suppressErrors: false },
-			collision: { initial: "replace", api: "replace" },
+			hook: { enabled: true, pattern: "**", errors: false },
+			api: {
+				collision: {
+					mode: { initial: "replace", api: "replace" }
+				}
+			},
 			silent: true,
 			base: TEST_DIRS.API_TEST
 		});

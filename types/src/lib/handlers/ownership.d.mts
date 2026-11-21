@@ -2,7 +2,8 @@
  * Summary result of an unregister operation.
  * @typedef {Object} UnregisterResult
  * @property {string[]} removed - API paths that were removed.
- * @property {Object[]} rolledBack - Entries that were rolled back to a previous owner.
+ * @property {Array<{apiPath: string, restoredTo: string, wasCurrent: boolean}>} rolledBack - Entries that were rolled back
+ *   to a previous owner; `wasCurrent` says whether the removed module's value was the live one there.
  */
 /**
  * Tracks which modules own which API paths for hot reload and rollback
@@ -17,12 +18,16 @@ export class OwnershipManager extends ComponentBase {
      * @param {object} slothlet - Slothlet class instance.
      */
     constructor(slothlet: object);
-    moduleToPath: Map<any, any>;
-    pathToModule: Map<any, any>;
+    /** @type {Map<string, Set<string>>} */
+    moduleToPath: Map<string, Set<string>>;
+    /** @type {Map<string, Array<object>>} */
+    pathToModule: Map<string, Array<object>>;
     _unregisteredModules: Set<any>;
     moduleEndpoints: Map<any, any>;
-    moduleMounts: Map<any, any>;
-    placementModes: Map<any, any>;
+    /** @type {Map<string, Set<string>>} */
+    moduleMounts: Map<string, Set<string>>;
+    /** @type {Map<string, Map<string, string>>} */
+    placementModes: Map<string, Map<string, string>>;
     exportIndex: Map<any, any>;
     cloneSources: WeakMap<object, any>;
     /**
@@ -268,7 +273,6 @@ export class OwnershipManager extends ComponentBase {
      * @param {*} options.value - The actual function/object being registered
      * @param {string} [options.source="core"] - Source of registration
      * @param {string} [options.collisionMode="error"] - Collision mode: skip, warn, error, merge, replace
-     * @param {Object} [options.config] - Config object for silent mode check
      * @param {string} [options.filePath=null] - File path of the module source (for metadata tracking)
      * @param {string[]|null} [options.exportPath=null] - Access path within `filePath`'s module namespace
      *   that produced `value` (`["add"]`, `["default"]`, `["default", "member"]`); `null` when the value
@@ -278,19 +282,47 @@ export class OwnershipManager extends ComponentBase {
      * @returns {Object|null} Registration entry or null if skipped
      * @public
      */
-    public register({ moduleID, apiPath, value, source, collisionMode, config, filePath, exportPath, memberExportPaths }: {
+    public register({ moduleID, apiPath, value, source, collisionMode, filePath, exportPath, memberExportPaths }: {
         moduleID: string;
         apiPath: string;
         value: any;
         source?: string | undefined;
         collisionMode?: string | undefined;
-        config?: Object | undefined;
         filePath?: string | undefined;
         exportPath?: string[] | null | undefined;
         memberExportPaths?: {
             [x: string]: string[];
         } | null | undefined;
     }): Object | null;
+    /**
+     * Mark every entry at `apiPath` and below as taken off the api by a cross-module `replace`.
+     * @param {string} apiPath - The member the replace removed from the live api; `""` for every path.
+     * @param {string} byModuleID - The module whose `replace` removed it.
+     * @returns {void}
+     * @public
+     *
+     * @description
+     * A `replace` swaps a namespace's surface for the incoming module's: a member only the earlier module
+     * provides leaves the api, but its entries stay on record so removing the replacing module can put it back.
+     * While it is off the api nobody owns the path — whoever's value is live owns it, and none is — so the
+     * entries are flagged and skipped as current until {@link OwnershipManager#unshadowSubtree}.
+     *
+     * @example
+     * ownership.shadowSubtree("p.shared.count", "b");
+     */
+    public shadowSubtree(apiPath: string, byModuleID: string): void;
+    /**
+     * Clear the flag {@link OwnershipManager#shadowSubtree} set for `byModuleID` at `apiPath` and below: the member
+     * is back on the api.
+     * @param {string} apiPath - The member put back; `""` for every path.
+     * @param {string} byModuleID - The module whose `replace` had removed it.
+     * @returns {void}
+     * @public
+     *
+     * @example
+     * ownership.unshadowSubtree("p.shared.count", "b");
+     */
+    public unshadowSubtree(apiPath: string, byModuleID: string): void;
     /**
      * @param {string} moduleID - Module to unregister.
      * @returns {UnregisterResult} Removal summary.
@@ -356,7 +388,8 @@ export class OwnershipManager extends ComponentBase {
      * @param {string} apiPath - API path to modify.
      * @param {string|null} [moduleID=null] - Module to remove (defaults to current owner).
      * @returns {{ action: "delete"|"none"|"restore", removedModuleId: string|null,
-     * restoreModuleId: string|null }} Action taken for the path.
+     * restoreModuleId: string|null, wasCurrent: (boolean|undefined) }} Action taken for the path; `wasCurrent` says whether the
+     * removed entry was the path's current one.
      * @public
      *
      * @description
@@ -370,7 +403,40 @@ export class OwnershipManager extends ComponentBase {
         action: "delete" | "none" | "restore";
         removedModuleId: string | null;
         restoreModuleId: string | null;
+        wasCurrent: (boolean | undefined);
     };
+    /**
+     * Drop every module's entries for the paths strictly below `apiPath` (#799).
+     * @param {string} apiPath - The path whose subtree left the api.
+     * @returns {void}
+     * @public
+     *
+     * @description
+     * `remove(apiPath)` takes the whole live subtree off the api, whoever owns each node, while
+     * {@link OwnershipManager#removePath} drops only the entry at the path itself. Without this, the entries below
+     * stay recorded: a later add at the path stacks over them, and removing that add reverts its members to the
+     * removed module's values instead of removing them.
+     *
+     * @example
+     * ownership.removePath("extra", "base");
+     * ownership.removeSubtree("extra"); // "extra.ping" is no longer anyone's
+     */
+    public removeSubtree(apiPath: string): void;
+    /**
+     * Drop every module's entries at `apiPath` and below: the namespace left the api because nothing was left in it.
+     * @param {string} apiPath - The pruned namespace's path.
+     * @returns {void}
+     * @public
+     *
+     * @description
+     * A removal that empties a namespace prunes it from the api. The owner of a path is whoever's value is live there,
+     * and nothing is, so no module owns it any more. A module that later puts something there again (a reload or an
+     * add) creates the namespace anew and owns it.
+     *
+     * @example
+     * ownership.forgetPath("p"); // "p" is no longer anyone's
+     */
+    public forgetPath(apiPath: string): void;
     /**
      * Get current owner of API path
      * @param {string} apiPath - API path to check
@@ -408,11 +474,23 @@ export class OwnershipManager extends ComponentBase {
      */
     public ownsPath(moduleID: string, apiPath: string): boolean;
     /**
-     * Get diagnostic info about ownership
-     * @returns {Object} Diagnostic information
+     * Diagnostic summary of ownership: how many api paths are registered, how many each module owns, and the paths
+     * more than one module holds (their owners, oldest first).
+     * @returns {{ count: number, modules: Array<{ module: string, count: number }>, conflicts: Array<{ path: string[], owners: string[] }> }}
+     *   The summary.
      * @public
      */
-    public getDiagnostics(): Object;
+    public getDiagnostics(): {
+        count: number;
+        modules: Array<{
+            module: string;
+            count: number;
+        }>;
+        conflicts: Array<{
+            path: string[];
+            owners: string[];
+        }>;
+    };
     /**
      * Get ownership info for a specific API path
      * @param {string} apiPath - API path to check
@@ -680,9 +758,14 @@ export type UnregisterResult = {
      */
     removed: string[];
     /**
-     * - Entries that were rolled back to a previous owner.
+     * - Entries that were rolled back
+     * to a previous owner; `wasCurrent` says whether the removed module's value was the live one there.
      */
-    rolledBack: Object[];
+    rolledBack: Array<{
+        apiPath: string;
+        restoredTo: string;
+        wasCurrent: boolean;
+    }>;
 };
 import { ComponentBase } from "#factories/component-base";
 //# sourceMappingURL=ownership.d.mts.map

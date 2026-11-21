@@ -7,14 +7,14 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:02-07:00 (1791091682)
+ *	@Last modified time: 2026-11-16T17:22:02-08:00 (1794878522)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
  */
 
 /**
- * @fileoverview Sibling leaf so the module's apiDir has more than one file and does not root-unwrap
+ * @fileoverview Sibling leaf so the module's base has more than one file and does not root-unwrap
  * onto the mount itself — keeping `initialize` at its own `<mount>.initialize` composed path.
  * @module api_test_routines_module.routine-widget.ping
  */

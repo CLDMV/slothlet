@@ -64,9 +64,9 @@ describe("lazy ___materialize – in-flight deduplication", () => {
 		api = await makeLazyApi();
 
 		// api.math is the real math wrapper proxy (lazy, unmaterialized)
-		// Call _materialize() twice synchronously - second call should detect in-flight
-		const p1 = api.math._materialize();
-		const p2 = api.math._materialize(); // second call hits in-flight deduplication
+		// Call ___materialize() twice synchronously - second call should detect in-flight
+		const p1 = api.math.___materialize();
+		const p2 = api.math.___materialize(); // second call hits in-flight deduplication
 
 		// Both promises resolve to same value (deduplication means same work, same result)
 		await Promise.all([p1, p2]);
@@ -79,11 +79,11 @@ describe("lazy ___materialize – in-flight deduplication", () => {
 		api = await makeLazyApi();
 
 		// Materialize once
-		await api.math._materialize();
+		await api.math.___materialize();
 		expect(typeof api.math.add).toBe("function");
 
 		// Re-materialize – should return immediately (early return on materialized=true)
-		const result = api.math._materialize();
+		const result = api.math.___materialize();
 		await result; // resolves immediately
 		expect(typeof api.math.add).toBe("function");
 	});
@@ -141,7 +141,7 @@ describe("lazy ___materialize – invalid wrapper early-return", () => {
 		api = await makeLazyApi();
 
 		// Standard materialization with an active lazy API does not throw
-		await expect(api.math._materialize()).resolves.toBeUndefined();
+		await expect(api.math.___materialize()).resolves.toBeUndefined();
 	});
 });
 
@@ -159,7 +159,7 @@ describe("___resetLazy via reload (line 606)", () => {
 		api = await makeLazyApi();
 
 		// Materialize math first
-		await api.math._materialize();
+		await api.math.___materialize();
 		const addResult = await api.math.add(1, 2);
 		expect(addResult).toBe(1003);
 

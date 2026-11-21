@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:59-07:00 (1791090899)
+ *	@Last modified time: 2026-11-16T18:28:45-08:00 (1794882525)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -38,7 +38,7 @@
 process.env.SLOTHLET_INTERNAL_TEST_MODE = "true";
 
 import { describe, it, expect, afterEach } from "vitest";
-import { ApiAssignment } from "@cldmv/slothlet/builders/api-assignment";
+import { ApiAssignment } from "#builders/api-assignment";
 import slothlet from "@cldmv/slothlet";
 import { resolveWrapper, UnifiedWrapper } from "#handlers/unified-wrapper";
 import { TEST_DIRS } from "../../setup/vitest-helper.mjs";
@@ -269,7 +269,7 @@ describe("ApiAssignment.mergeApiObjects", () => {
 // ─────────────────────────────────────────────────────────────────────────────────────────
 describe("ApiAssignment.assignToApiPath collision-detection – both-plain path (lines 541-543)", () => {
 	it("merges two plain-object values into existing via Object.assign (lines 541-543)", async () => {
-		const { ApiAssignment } = await import("@cldmv/slothlet/builders/api-assignment");
+		const { ApiAssignment } = await import("#builders/api-assignment");
 		const mockSlothlet = {
 			debug: () => {},
 			SlothletError: class extends Error {
@@ -304,7 +304,7 @@ describe("ApiAssignment.assignToApiPath collision-detection – both-plain path 
 			{ env: "prod", debug: true },
 			{
 				useCollisionDetection: true,
-				config: { collision: { initial: "merge" } },
+				config: { api: { collision: { mode: { initial: "merge" } } } },
 				collisionContext: "initial"
 			}
 		);
@@ -317,7 +317,7 @@ describe("ApiAssignment.assignToApiPath collision-detection – both-plain path 
 	});
 
 	it("same-reference check: existing object is mutated in-place (not replaced) (lines 541-543)", async () => {
-		const { ApiAssignment } = await import("@cldmv/slothlet/builders/api-assignment");
+		const { ApiAssignment } = await import("#builders/api-assignment");
 		const mockSlothlet = { debug: () => {}, SlothletError: Error, SlothletWarning: class {} };
 		const assignment = new ApiAssignment(mockSlothlet);
 
@@ -331,7 +331,7 @@ describe("ApiAssignment.assignToApiPath collision-detection – both-plain path 
 			{ c: 3 },
 			{
 				useCollisionDetection: true,
-				config: { collision: { initial: "merge" } },
+				config: { api: { collision: { mode: { initial: "merge" } } } },
 				collisionContext: "initial"
 			}
 		);
@@ -343,7 +343,7 @@ describe("ApiAssignment.assignToApiPath collision-detection – both-plain path 
 	});
 
 	it("skip mode returns false without modifying existing (collision.initial='skip') for plain-plain", async () => {
-		const { ApiAssignment } = await import("@cldmv/slothlet/builders/api-assignment");
+		const { ApiAssignment } = await import("#builders/api-assignment");
 		const mockSlothlet = { debug: () => {}, SlothletError: Error, SlothletWarning: class {} };
 		const assignment = new ApiAssignment(mockSlothlet);
 
@@ -355,7 +355,7 @@ describe("ApiAssignment.assignToApiPath collision-detection – both-plain path 
 			{ x: 99 },
 			{
 				useCollisionDetection: true,
-				config: { collision: { initial: "skip" } },
+				config: { api: { collision: { mode: { initial: "skip" } } } },
 				collisionContext: "initial"
 			}
 		);
@@ -399,8 +399,10 @@ describe("api-assignment – wrapper+wrapper syncWrapper path via nested folder 
 		// First add: create a nested wrapper structure at 'plugins'.
 		// API_SMART_FLATTEN has config/ + services/ + utils/ subdirs → child wrapper proxies.
 		await api.slothlet.api.add("plugins", TEST_DIRS.API_SMART_FLATTEN, {
-			collisionMode: "replace",
-			moduleID: "plugins_v1"
+			collision: {
+				mode: "replace"
+			},
+			id: "plugins_v1"
 		});
 
 		expect(api.plugins).toBeDefined();
@@ -413,8 +415,10 @@ describe("api-assignment – wrapper+wrapper syncWrapper path via nested folder 
 		// → for key 'config': assignToApiPath(existingPlugins, 'config', newPlugins.config, {mutateExisting:true, syncWrapper})
 		// → existingPlugins.config is a wrapper AND newPlugins.config is a wrapper → lines 133-134
 		await api.slothlet.api.add("plugins", TEST_DIRS.API_SMART_FLATTEN, {
-			collisionMode: "replace",
-			moduleID: "plugins_v2"
+			collision: {
+				mode: "replace"
+			},
+			id: "plugins_v2"
 		});
 
 		// API should remain intact after sync
@@ -432,16 +436,20 @@ describe("api-assignment – wrapper+wrapper syncWrapper path via nested folder 
 		});
 
 		await api.slothlet.api.add("ns", TEST_DIRS.API_SMART_FLATTEN, {
-			collisionMode: "merge",
-			moduleID: "ns_v1"
+			collision: {
+				mode: "merge"
+			},
+			id: "ns_v1"
 		});
 		expect(api.ns).toBeDefined();
 
 		// With merge mode, the second add also triggers mutateApiValue
 		// → syncWrapper → mergeApiObjects → assignToApiPath with both sub-wrappers
 		await api.slothlet.api.add("ns", TEST_DIRS.API_SMART_FLATTEN, {
-			collisionMode: "merge",
-			moduleID: "ns_v2"
+			collision: {
+				mode: "merge"
+			},
+			id: "ns_v2"
 		});
 
 		expect(api.ns).toBeDefined();

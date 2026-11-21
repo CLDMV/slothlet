@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-07T19:05:58-07:00 (1791425158)
+ *	@Last modified time: 2026-11-16T18:31:20-08:00 (1794882680)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -16,7 +16,7 @@
 /**
  * @fileoverview Analyzes all SlothletError and SlothletWarning usage across the codebase and
  * validates against translations. Checks for:
- * proper error construction, hint availability, stub vs real error classification,
+ * proper error construction (`(code, details, { cause })`), hint availability,
  * translation coverage, unused translations, and placeholder consistency.
  * @module @cldmv/slothlet/tools/analyze-errors
  * @title npm run analyze
@@ -511,9 +511,22 @@ function parseBareNewErrors(content, filePath) {
 		// fails this check, so adding one stays a deliberate, reviewed edit here.
 		if (filePath.includes("context-live.mjs") && /^\(\s*\)\s*\.\s*stack\b/.test(afterNew)) continue;
 
+		// instance-imports.mjs builds the statement `slothletInstanceImports()` appends to a file, and the code of the virtual
+		// module that records who loaded it, as strings: their `new Error(` is text emitted into that code, whose stack
+		// slothlet reads, not an error slothlet throws (#714). Scoped to that file AND to the `const SCRIPT_REGISTRATION = `
+		// template and the virtual module's `return \`const registry = ` template (its fallback for a registry slothlet has
+		// not fixed yet pushes a frozen `new Error(`): any other `new Error(` in it is reported.
+		if (
+			filePath.includes("instance-imports.mjs") &&
+			/^\s*(?:const SCRIPT_REGISTRATION = `|return `const registry = \$\{registry\};\\nif \(typeof registry\?\.record === "function"\) registry\.record\(\$\{json\}\);\\nelse \(\$\{registry\} \?\?= \[\]\)\.push\(Object\.freeze\(new Error\()/.test(
+				currentLine
+			)
+		)
+			continue;
+
 		// Skip new Error() that is passed as a direct argument to SlothletError/SlothletWarning.
 		// This is the legitimate pattern for wrapping an external string payload (e.g. IPC message)
-		// into an Error object for use as the originalError 3rd param.
+		// into an Error object for use as the `{ cause }` option.
 		// Walk backwards to find the enclosing unclosed '(' and check if it belongs to a Slothlet call.
 		{
 			let depth = 0;
@@ -603,12 +616,13 @@ function parseErrorThrows(content, filePath) {
 	//   new this.slothlet.SlothletError(...)    - via double-hop (handler/builder classes)
 	//   new slothlet.SlothletError(...)         - closure variable (api_builder.mjs)
 	//   new wrapper.slothlet.SlothletError(...) - via proxy wrapper (unified-wrapper.mjs)
+	//   (`instanceof slothlet.SlothletError` is a type check, not a throw site, and is excluded)
 	// Same patterns for SlothletWarning.
 	// NOTE: the non-throw SlothletError alternative may produce duplicate allErrors entries
 	// for throw-sites already matched by the first alternative; this is harmless since
 	// usedErrorCodes is a Set (deduplicates) and Total Errors display uses a separate filter.
 	const throwPattern =
-		/(?:throw\s+(?:await\s+)?(?:new\s+)?(?:(?:wrapper|this)(?:\.slothlet)?\.)?SlothletError|new\s+(?:(?:wrapper|this)(?:\.slothlet)?\.)?SlothletWarning|new\s+(?:(?:wrapper|this)(?:\.slothlet)?\.)?SlothletError|(?:throw\s+new\s+)?slothlet\.SlothletError)(?:\.create)?/g;
+		/(?:throw\s+(?:await\s+)?(?:new\s+)?(?:(?:wrapper|this)(?:\.slothlet)?\.)?SlothletError|new\s+(?:(?:wrapper|this)(?:\.slothlet)?\.)?SlothletWarning|new\s+(?:(?:wrapper|this)(?:\.slothlet)?\.)?SlothletError|(?<!instanceof\s)(?:throw\s+new\s+)?slothlet\.SlothletError)(?:\.create)?/g;
 
 	const throwStarts = [];
 	let match;
@@ -672,27 +686,17 @@ function parseErrorThrows(content, filePath) {
 		const beforeMatch = content.substring(0, startIndex);
 		const lineNumber = beforeMatch.split("\n").length;
 
-		// Check if it has stub: true in context (not just in options parameter)
-		const isStub = /stub:\s*true/.test(fullMatch);
+		// The construction flags v3 took (`validationError` / `stub`) are gone in v4: the hint is the cause's detected
+		// hint, else HINT_<code>, else none. A flag or a `hint` in the details is now a mistake.
+		const removedFlags = [...new Set([...fullMatch.matchAll(/\b(validationError|stub)\s*:/g)].map((m) => m[1]))];
+		const hasHardcodedHint = /\bhint\s*:/.test(fullMatch);
 
-		// Check if it has validationError: true in context (not just in options parameter)
-		const isValidation = /validationError:\s*true/.test(fullMatch);
-
-		// Check if context has hardcoded hint
-		const hasHardcodedHint = /hint:\s*"/.test(fullMatch);
-
-		// Count commas at depth 1 to determine parameters (inside main SlothletError call only)
-		let paramCount = 1; // At least error code
-		depth = 0;
-		for (let i = parenStart; i <= parenEnd; i++) {
-			const char = content[i];
-			if (char === "(") depth++;
-			else if (char === ")") depth--;
-			else if (char === "," && depth === 1) paramCount++;
-		}
-
-		// Has originalError if 3+ params and 3rd param isn't { stub: true }
-		const hasOriginalError = paramCount >= 3 && !isStub;
+		// The third parameter is the options object; a cause is passed as `{ cause }`.
+		// Counted on the top-level arguments: the comma count above also counts commas inside an object literal.
+		const topParams = getTopLevelParams(fullMatch);
+		const thirdParam = (topParams[2] ?? "").trim();
+		const hasCause = /^\{\s*cause\b/.test(thirdParam);
+		const badSignature = topParams.length > 3 || (topParams.length === 3 && !hasCause);
 
 		// SlothletWarning takes its message from `context.key` when one is given (a message variant
 		// under the same warning code), so that key is the translation the context must match.
@@ -706,10 +710,10 @@ function parseErrorThrows(content, filePath) {
 			errorCode,
 			messageKey,
 			fullMatch,
-			isStub,
-			isValidation,
+			removedFlags,
 			hasHardcodedHint,
-			hasOriginalError
+			hasCause,
+			badSignature
 		});
 	}
 
@@ -988,24 +992,18 @@ function analyzeError(error) {
 		return { status: "❌ DEPRECATED PATTERN", issues };
 	}
 
-	// Stub errors should be tracked for replacement
-	if (error.isStub) {
-		const stubHint = error.hasHardcodedHint
-			? "Has custom hint - preserve this when implementing the feature"
-			: "No custom hint - add proper hint when implementing";
-		return {
-			status: "⚠️  STUB (Needs Implementation)",
-			issues: [`📝 ${stubHint}. Remove stub:true and add proper error handling when feature is implemented.`],
-			isStubWarning: true
-		};
+	// v4 signature: (code, details, { cause }); the v3 flags and a `hint` detail are gone.
+	if (error.badSignature) {
+		issues.push("❌ Takes (code, details, { cause }): the third argument must be `{ cause }` and there is no fourth");
+	}
+	if (error.removedFlags.length > 0) {
+		issues.push(`❌ Removed construction flag(s) in the details: ${error.removedFlags.join(", ")}`);
+	}
+	if (error.hasHardcodedHint) {
+		issues.push("❌ `hint` is not a detail: the hint is the cause's detected hint, else HINT_<code>, else none");
 	}
 
-	// Validation errors don't need originalError
-	if (error.isValidation) {
-		return { status: "✅ OK (Validation)", issues: [] };
-	}
-
-	// Warnings don't need originalError (they're informational, not wrapping errors)
+	// Warnings are informational, not wrapping errors
 	if (error.errorCode.startsWith("WARNING_") || error.fullMatch.includes("SlothletWarning")) {
 		// Still check for translation and hint
 		const hasTranslation = checkTranslationExists(error.errorCode);
@@ -1030,25 +1028,16 @@ function analyzeError(error) {
 		return { status: "✅ OK (Rethrow)", issues: [] };
 	}
 
-	// Real errors with underlying failures need originalError
-	if (!error.hasOriginalError) {
-		issues.push("Missing originalError parameter");
-	}
-
-	// Check if hardcoded hint exists (only allowed for stubs)
-	if (error.hasHardcodedHint && !error.isStub) {
-		issues.push("Has hardcoded hint - should use i18n instead (hint only allowed in stub errors)");
-	}
-
 	// Check if error code translation exists
 	const hasTranslation = checkTranslationExists(error.errorCode);
-	if (!hasTranslation && !error.isStub) {
+	if (!hasTranslation) {
 		issues.push("❌ Missing error translation (needs error code key in translations)");
 	}
 
-	// Check if a hint exists in translations
+	// An error that wraps a failure (a cause) needs its own HINT_<code>: the cause-pattern rules only match a few
+	// messages, and HINT_<code> is the fallback. An error with no cause shows HINT_<code> when it has one, else none.
 	const hasHint = checkHintExists(error.errorCode);
-	if (!hasHint && !error.hasHardcodedHint && !error.isStub) {
+	if (error.hasCause && !hasHint) {
 		issues.push("❌ No hint in translations (needs HINT_ key)");
 	}
 
@@ -1167,11 +1156,8 @@ const errorsToShow = VERBOSE
 	? allErrors
 	: allErrors.filter((e) => {
 			const analysis = analyzeError(e);
-			return analysis.issues.length > 0 && !analysis.isStubWarning;
+			return analysis.issues.length > 0;
 		});
-
-// Separate stub warnings for summary
-const stubErrors = allErrors.filter((e) => analyzeError(e).isStubWarning);
 
 if (errorsToShow.length > 0) {
 	console.log(`Showing first ${Math.min(LIMIT, errorsToShow.length)} of ${errorsToShow.length} errors\n`);
@@ -1214,31 +1200,13 @@ if (!VERBOSE && errorsWithIssues.length > LIMIT) {
 }
 
 // Summary stats
-const stubCount = allErrors.filter((e) => e.isStub).length;
-
 console.log(`\nSummary:`);
 console.log(`  Total Errors: ${allErrors.length}`);
-console.log(`  Stubs: ${stubCount}`);
 console.log(`  With Issues: ${errorsWithIssues.length}`);
 console.log(`  OK: ${allErrors.length - errorsWithIssues.length}`);
 
-if (stubCount > 0) {
-	console.log(`\n⚠️  ${stubCount} stub error(s) need implementation:`);
-	stubErrors.slice(0, 5).forEach((error) => {
-		const analysis = analyzeError(error);
-		const relPath = relative(rootDir, error.filePath);
-		console.log(`  - ${error.errorCode} (${relPath}:${error.lineNumber})`);
-		console.log(`    ${analysis.issues[0]}`);
-	});
-	if (stubCount > 5) {
-		console.log(`  ... and ${stubCount - 5} more. Use --verbose to see all.`);
-	}
-}
-
-if (!VERBOSE && errorsWithIssues.length === 0 && stubCount === 0) {
+if (!VERBOSE && errorsWithIssues.length === 0) {
 	console.log(`\n✅ All errors are properly configured!`);
-} else if (!VERBOSE && errorsWithIssues.length === 0 && stubCount > 0) {
-	console.log(`\n✅ All non-stub errors are properly configured!`);
 }
 
 // ===== TRANSLATION ANALYSIS =====
@@ -1273,10 +1241,20 @@ for (const error of allErrors) {
 	if (!translation) continue;
 
 	// Extract placeholders from translation (e.g., {apiPath}, {error})
-	const translationPlaceholders = (translation.match(/\{([^}]+)\}/g) || []).map((p) => p.slice(1, -1)).sort();
+	// `{name.N}` (one element of an array) and `{name|list}` (an array as a list) read the detail `name`.
+	const translationPlaceholders = [
+		...new Set(
+			(translation.match(/\{([^}]+)\}/g) || []).map((p) =>
+				p
+					.slice(1, -1)
+					.replace(/\.\d+$/, "")
+					.replace(/\|list$/, "")
+			)
+		)
+	].sort();
 
 	// Extract context keys from error usage
-	// SlothletError signature: new SlothletError(code, context = {}, originalError = null, options = { validationError, stub })
+	// SlothletError signature: new SlothletError(code, details = {}, { cause })
 	let usedPlaceholders = [];
 
 	// Try to extract the full parameter list by finding balanced parentheses
@@ -1395,18 +1373,6 @@ for (const error of allErrors) {
 				}
 			}
 
-			// Check 4th parameter (options) for new API (rare, code is migrating)
-			if (params.length >= 4) {
-				// New API: options object in 4th param
-				// Remove validationError and stub from usedPlaceholders if in options
-				usedPlaceholders = usedPlaceholders.filter((p) => p !== "validationError" && p !== "stub");
-			}
-
-			// Special handling for metadata/system parameters:
-			// - stub: Flag extracted from context, marks placeholder errors needing work
-			// - validationError: Flag extracted from context, skips hint detection
-			// Note: 'hint' CAN be passed to override auto-detection, so don't filter it
-			usedPlaceholders = usedPlaceholders.filter((p) => p !== "stub" && p !== "validationError");
 			// A SlothletWarning `key` names the message variant; it is not interpolated.
 			if (error.messageKey !== error.errorCode) {
 				usedPlaceholders = usedPlaceholders.filter((p) => p !== "key");
@@ -1420,22 +1386,14 @@ for (const error of allErrors) {
 	const translationSet = new Set(translationPlaceholders);
 	const usedSet = new Set(usedPlaceholders);
 
-	// Special handling for {error} placeholder:
-	// - Non-validation errors: {error} is auto-added from originalError param, so ignore if missing from usage
-	// - Validation errors: Should NOT have {error} in translation (no originalError)
-	let missingInUsage = translationPlaceholders.filter((p) => !usedSet.has(p));
-	let validationErrorIssue = null;
-
-	if (error.isValidation && translationPlaceholders.includes("error")) {
-		validationErrorIssue = "Validation error should not have {error} in translation (no originalError param)";
-	} else if (!error.isValidation) {
-		// Filter out 'error' from missing - it's auto-added from originalError
-		missingInUsage = missingInUsage.filter((p) => p !== "error");
-	}
+	// Special handling for {error} placeholder: it is filled from the `{ cause }` option, so the details never supply
+	// it (a code shared by sites with and without a cause leaves it empty where there is none).
+	const missingInUsage = translationPlaceholders.filter((p) => !usedSet.has(p) && p !== "error");
+	const validationErrorIssue = null;
 
 	const extraInUsage = usedPlaceholders.filter((p) => !translationSet.has(p));
 
-	// Check for forbidden placeholders (error/message should be in originalError param, not context)
+	// Check for forbidden placeholders (error/message come from the { cause } option, not the details)
 	const forbiddenInContext = usedPlaceholders.filter((p) => p === "error" || p === "message");
 
 	if (missingInUsage.length > 0 || extraInUsage.length > 0 || forbiddenInContext.length > 0 || validationErrorIssue) {
@@ -1461,7 +1419,7 @@ if (placeholderIssues.length > 0) {
 			console.log(`    🚫 ${issue.validationErrorIssue}`);
 		}
 		if (issue.forbiddenInContext && issue.forbiddenInContext.length > 0) {
-			console.log(`    🚫 FORBIDDEN in context (use 3rd param originalError instead): ${issue.forbiddenInContext.join(", ")}`);
+			console.log(`    🚫 FORBIDDEN in context (pass the failure as { cause } instead): ${issue.forbiddenInContext.join(", ")}`);
 		}
 		if (issue.missingInUsage.length > 0) {
 			console.log(`    ⚠️  Translation expects but usage missing: ${issue.missingInUsage.join(", ")}`);
@@ -2035,42 +1993,28 @@ if (allFragileEscapeChecks.length > 0) {
 	console.log(`✅ No fragile single-neighbor escape checks found in src + tools\n`);
 }
 
-// ===== VALIDATION ERROR WITH DROPPED originalError DETECTION (SRC FOLDER) =====
-// A `validationError: true` throw must NOT also pass a real originalError (3rd arg) cause.
-// Validation errors describe bad input and have no upstream cause; their translated templates
-// intentionally omit the {error} placeholder (it is the only thing that surfaces a cause). So a
-// caught error passed here is silently dropped from the message — the exact regression #136 flagged
-// in generate-manifest (a `new Error(\`...: ${err.message}\`)` became a validation SlothletError that
-// lost err.message). Fix: drop `validationError: true` (it is a wrapping error — surface {error}),
-// or don't pass the cause.
+// ===== v3 CONSTRUCTION FORM DETECTION (SRC FOLDER) =====
+// v4 constructs SlothletError / SlothletWarning as (code, details, { cause }). The v3 forms are gone: a positional
+// original error, a fourth options argument, the `validationError` / `stub` flags, and a `hint` detail (the hint is the
+// cause's detected hint, else HINT_<code>, else none). Any of them left in src is a MUST-FIX.
 console.log("\n" + "=".repeat(80));
-console.log("=== Validation Error With Dropped `originalError` Detection - src folder ===");
+console.log("=== v3 Construction Form Detection - src folder ===");
 console.log("=".repeat(80) + "\n");
 
-const validationErrorsWithCause = [];
-for (const error of allErrors) {
-	if (!error.isValidation) continue;
-	const params = getTopLevelParams(error.fullMatch);
-	if (params.length < 3) continue;
-	const third = params[2].trim();
-	// A real cause is a non-null 3rd arg that is not an options/context object literal ({ ... }).
-	if (third && third !== "null" && third !== "undefined" && !third.startsWith("{")) {
-		validationErrorsWithCause.push({ ...error, cause: third });
-	}
-}
+const v3ConstructionForms = allErrors.filter((error) => error.badSignature || error.removedFlags.length > 0 || error.hasHardcodedHint);
 
-if (validationErrorsWithCause.length > 0) {
-	console.log(`❌ Found ${validationErrorsWithCause.length} validation error(s) that pass an originalError cause:\n`);
-	console.log(`   These drop the cause's message (validation templates have no {error} placeholder).`);
-	console.log(`   Drop \`validationError: true\` and surface {error}, or don't pass the cause.\n`);
-	validationErrorsWithCause.forEach((error, idx) => {
+if (v3ConstructionForms.length > 0) {
+	console.log(`❌ Found ${v3ConstructionForms.length} construction(s) in a v3 form:\n`);
+	v3ConstructionForms.forEach((error, idx) => {
 		const relPath = relative(rootDir, error.filePath);
 		console.log(`[${idx + 1}] ${error.errorCode} (${relPath}:${error.lineNumber})`);
-		console.log(`    Passes cause: ${error.cause}`);
+		analyzeError(error)
+			.issues.filter((issue) => issue.startsWith("❌ Takes") || issue.startsWith("❌ Removed") || issue.startsWith("❌ `hint`"))
+			.forEach((issue) => console.log(`    ${issue}`));
 		console.log();
 	});
 } else {
-	console.log(`✅ No validation errors pass a dropped originalError cause\n`);
+	console.log(`✅ Every construction uses (code, details, { cause })\n`);
 }
 
 // ===== UNBALANCED v8 ignore start/stop DETECTION (SRC FOLDER) =====
@@ -2338,11 +2282,11 @@ if (allFragileEscapeChecks.length > 0) {
 	console.log(`✅ Fragile escape checks:        0`);
 }
 
-if (validationErrorsWithCause.length > 0) {
-	console.log(`❌ Validation Err w/ cause:      ${validationErrorsWithCause.length} - MUST drop validationError or surface {error}`);
+if (v3ConstructionForms.length > 0) {
+	console.log(`❌ v3 construction forms:        ${v3ConstructionForms.length} - MUST use (code, details, { cause })`);
 	hasIssues = true;
 } else {
-	console.log(`✅ Validation Err w/ cause:      0`);
+	console.log(`✅ v3 construction forms:        0`);
 }
 
 if (allUnbalancedV8Ignores.length > 0) {
@@ -2417,7 +2361,7 @@ const mustFixCount =
 	allConsoleErrors.length +
 	allBareNewErrors.length +
 	allFragileEscapeChecks.length +
-	validationErrorsWithCause.length +
+	v3ConstructionForms.length +
 	allUnbalancedV8Ignores.length +
 	syntaxErrors.length;
 

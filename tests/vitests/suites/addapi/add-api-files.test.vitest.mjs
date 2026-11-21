@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:55-07:00 (1791090895)
+ *	@Last modified time: 2026-11-16T18:28:28-08:00 (1794882508)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -174,7 +174,11 @@ describe("File-based api.add() Functionality", () => {
 			const config = await slothlet({
 				base: TEST_DIRS.API_TEST,
 				mode: "eager",
-				collision: { api: "merge" }
+				api: {
+					collision: {
+						mode: { api: "merge" }
+					}
+				}
 			});
 
 			const mathPath = join(TEST_DIRS.API_TEST, "math/math.mjs");
@@ -192,7 +196,11 @@ describe("File-based api.add() Functionality", () => {
 			const config = await slothlet({
 				base: TEST_DIRS.API_TEST,
 				mode: "eager",
-				collision: { api: "replace" }
+				api: {
+					collision: {
+						mode: { api: "replace" }
+					}
+				}
 			});
 
 			const mathPath = join(TEST_DIRS.API_TEST, "math/math.mjs");

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-11T09:26:14-07:00 (1791735974)
+ *	@Last modified time: 2026-11-16T18:28:29-08:00 (1794882509)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -102,12 +102,12 @@ async function expectLeaves(node, leaves) {
 /**
  * Create an instance with add/remove/reload enabled.
  * @param {object} config - Matrix config.
- * @param {string} [collisionApi] - `api.collision.api` to use; the matrix config's when omitted.
+ * @param {string} [collisionApi] - `api.collision.mode.api` to use; the matrix config's when omitted.
  * @returns {Promise<object>} Slothlet API proxy.
  */
 function createInstance(config, collisionApi) {
-	const apiConfig = { ...config.api, mutations: { add: true, remove: true, reload: true, allowCollisionOverride: true } };
-	if (collisionApi) apiConfig.collision = { ...(config.api?.collision ?? {}), api: collisionApi };
+	const apiConfig = { ...config.api, mutations: { add: true, remove: true, reload: true }, collision: { override: true } };
+	if (collisionApi) apiConfig.collision = { ...apiConfig.collision, mode: { ...(config.api?.collision?.mode ?? {}), api: collisionApi } };
 	// allowCollisionOverride lets a per-call `collisionMode` take effect.
 	return slothlet({ ...config, base: TEST_DIRS.API_TEST, silent: true, api: apiConfig });
 }
@@ -139,11 +139,11 @@ for (const { config, name } of getMatrixConfigs()) {
 		 */
 		async function namespaceThenCallable() {
 			api = await createInstance(config);
-			await api.slothlet.api.add("plugins", OTHER_DIR, { moduleID: "other" });
+			await api.slothlet.api.add("plugins", OTHER_DIR, { id: "other" });
 			const held = api.plugins;
 			expect(typeof held).toBe("object");
 			await expectLeaves(held, OTHER_LEAVES);
-			await api.slothlet.api.add("plugins", CALLABLE_DIR, { moduleID: "callable" });
+			await api.slothlet.api.add("plugins", CALLABLE_DIR, { id: "callable" });
 			return held;
 		}
 
@@ -183,10 +183,10 @@ for (const { config, name } of getMatrixConfigs()) {
 			["replace", { extra: "callable:extra" }]
 		])("becomes callable when the function arrives under collisionMode %s", async (collisionMode, leaves) => {
 			api = await createInstance(config);
-			await api.slothlet.api.add("plugins", OTHER_DIR, { moduleID: "other" });
+			await api.slothlet.api.add("plugins", OTHER_DIR, { id: "other" });
 			const held = api.plugins;
 			expect(typeof held).toBe("object");
-			await api.slothlet.api.add("plugins", CALLABLE_DIR, { moduleID: "callable", collisionMode });
+			await api.slothlet.api.add("plugins", CALLABLE_DIR, { id: "callable", collision: { mode: collisionMode } });
 
 			expect(typeof api.plugins).toBe("function");
 			expect(await api.plugins()).toBe("callable:main");
@@ -203,8 +203,8 @@ for (const { config, name } of getMatrixConfigs()) {
 			writeFileSync(mainFile, `export function extra() {\n\treturn "callable:extra";\n}\n`);
 
 			api = await createInstance(config);
-			await api.slothlet.api.add("plugins", OTHER_DIR, { moduleID: "other" });
-			await api.slothlet.api.add("plugins", scratchDir, { moduleID: "callable" });
+			await api.slothlet.api.add("plugins", OTHER_DIR, { id: "other" });
+			await api.slothlet.api.add("plugins", scratchDir, { id: "callable" });
 			const held = api.plugins;
 			expect(typeof held).toBe("object");
 			// Without a default export the file does not flatten onto the mount.
@@ -224,8 +224,8 @@ for (const { config, name } of getMatrixConfigs()) {
 
 		it("is callable whichever module is added first", async () => {
 			api = await createInstance(config);
-			await api.slothlet.api.add("plugins", CALLABLE_DIR, { moduleID: "callable" });
-			await api.slothlet.api.add("plugins", OTHER_DIR, { moduleID: "other" });
+			await api.slothlet.api.add("plugins", CALLABLE_DIR, { id: "callable" });
+			await api.slothlet.api.add("plugins", OTHER_DIR, { id: "other" });
 
 			expect(typeof api.plugins).toBe("function");
 			expect(await api.plugins()).toBe("callable:main");
@@ -234,7 +234,7 @@ for (const { config, name } of getMatrixConfigs()) {
 
 		it("stays callable when a third, plain module is added afterwards", async () => {
 			await namespaceThenCallable();
-			await api.slothlet.api.add("plugins", EXT_DIR, { moduleID: "ext" });
+			await api.slothlet.api.add("plugins", EXT_DIR, { id: "ext" });
 
 			expect(typeof api.plugins).toBe("function");
 			expect(await api.plugins()).toBe("callable:main");
@@ -268,7 +268,7 @@ for (const { config, name } of getMatrixConfigs()) {
 		it("becomes callable again when the removed module is added back", async () => {
 			await namespaceThenCallable();
 			await api.slothlet.api.remove("callable");
-			await api.slothlet.api.add("plugins", CALLABLE_DIR, { moduleID: "callable" });
+			await api.slothlet.api.add("plugins", CALLABLE_DIR, { id: "callable" });
 
 			expect(typeof api.plugins).toBe("function");
 			expect(await api.plugins()).toBe("callable:main");
@@ -277,7 +277,7 @@ for (const { config, name } of getMatrixConfigs()) {
 
 		it("swapping the proxy in the parent leaves a node the path no longer leads to alone", async () => {
 			api = await createInstance(config);
-			await api.slothlet.api.add("plugins", OTHER_DIR, { moduleID: "other" });
+			await api.slothlet.api.add("plugins", OTHER_DIR, { id: "other" });
 			const gear = api.plugins.gear;
 			const gearWrapper = resolveWrapper(gear);
 			const stranger = {};
@@ -295,9 +295,9 @@ for (const { config, name } of getMatrixConfigs()) {
 
 		it("a namespace no module makes callable stays typeof object", async () => {
 			api = await createInstance(config);
-			await api.slothlet.api.add("plugins", OTHER_DIR, { moduleID: "other" });
+			await api.slothlet.api.add("plugins", OTHER_DIR, { id: "other" });
 			const held = api.plugins;
-			await api.slothlet.api.add("plugins", EXT_DIR, { moduleID: "ext" });
+			await api.slothlet.api.add("plugins", EXT_DIR, { id: "ext" });
 
 			expect(typeof api.plugins).toBe("object");
 			expect(api.plugins).toBe(held);
@@ -327,7 +327,7 @@ for (const { config, name } of getMatrixConfigs()) {
 			 */
 			async function addInOrder(order) {
 				api = await createInstance(config, collisionApi);
-				for (const moduleID of order) await api.slothlet.api.add("plugins", DIRS[moduleID], { moduleID });
+				for (const moduleID of order) await api.slothlet.api.add("plugins", DIRS[moduleID], { id: moduleID });
 			}
 
 			it.each([[["other", "callable"]], [["callable", "other"]]])("a namespace and a function: %j", async (order) => {
@@ -399,7 +399,7 @@ describe("UnifiedWrapper callable-impl helpers (#533)", () => {
 
 	it("_isCallableImpl recognizes a function and a default-exported function, and nothing else", async () => {
 		api = await createInstance(getMatrixConfigs()[0].config);
-		await api.slothlet.api.add("plugins", OTHER_DIR, { moduleID: "other" });
+		await api.slothlet.api.add("plugins", OTHER_DIR, { id: "other" });
 		const UnifiedWrapper = resolveWrapper(api.plugins).constructor;
 
 		expect(UnifiedWrapper._isCallableImpl(() => {})).toBe(true);
@@ -412,7 +412,7 @@ describe("UnifiedWrapper callable-impl helpers (#533)", () => {
 
 	it("a namespace adopts a default-exported function impl and calls it", async () => {
 		api = await createInstance(getMatrixConfigs()[0].config);
-		await api.slothlet.api.add("plugins", OTHER_DIR, { moduleID: "other" });
+		await api.slothlet.api.add("plugins", OTHER_DIR, { id: "other" });
 		const wrapper = resolveWrapper(api.plugins);
 
 		expect(wrapper.___adoptCallableImpl({ default: () => "from-default" })).toBe(true);
@@ -429,8 +429,8 @@ describe("UnifiedWrapper callable-impl helpers (#533)", () => {
 
 	it("a merge loser's function is never restored as the namespace's function", async () => {
 		api = await createInstance(getMatrixConfigs()[0].config, "merge");
-		await api.slothlet.api.add("plugins", OTHER_DIR, { moduleID: "other" });
-		await api.slothlet.api.add("plugins", EXT_DIR, { moduleID: "ext" });
+		await api.slothlet.api.add("plugins", OTHER_DIR, { id: "other" });
+		await api.slothlet.api.add("plugins", EXT_DIR, { id: "ext" });
 		// Two functions recorded at the namespace under merge: the first owns it, the second loses (O08).
 		const ownership = resolveWrapper(api.plugins).slothlet.handlers.ownership;
 		const register = (moduleID, value) =>
@@ -448,7 +448,7 @@ describe("UnifiedWrapper callable-impl helpers (#533)", () => {
 
 	it("pinLiveEntries leaves a path with no ownership stack, and entries for other wrappers, alone", async () => {
 		api = await createInstance(getMatrixConfigs()[0].config);
-		await api.slothlet.api.add("plugins", OTHER_DIR, { moduleID: "other" });
+		await api.slothlet.api.add("plugins", OTHER_DIR, { id: "other" });
 		const wrapper = resolveWrapper(api.plugins);
 		const ownership = wrapper.slothlet.handlers.ownership;
 		const before = ownership.getPathHistory("plugins").map((entry) => entry.value);

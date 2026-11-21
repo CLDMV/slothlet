@@ -33,6 +33,7 @@
 		"../api_tests",
 		"../api_test",
 		"../tests",
+		"../packaging",
 		"../tools",
 		"../coverage",
 		"../tmp",

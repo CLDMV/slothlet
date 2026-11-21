@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-11T22:04:28-07:00 (1791781468)
+ *	@Last modified time: 2026-11-16T18:30:32-08:00 (1794882632)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -30,8 +30,9 @@
  * stamp/stamp.mjs default stamp(x) → "stamp:x", prototype / name / length named exports
  * stamp/side.mjs  side() → "stamp.side"
  * ```
- * A named export sharing a name with the default function's own member resolves by collision mode
- * (#421): under merge the function keeps its member, under replace the named export takes the slot.
+ * A named export called prototype, name or length beside a default function is a member like any other:
+ * the function's language-given prototype / name / length don't collide with it, so the export takes the
+ * slot under merge and under replace alike, as the module's namespace gives it.
  * @module tests/vitests/suites/smart-flattening/smart-flattening-function-default-layer
  */
 
@@ -71,19 +72,19 @@ describe.each(getMatrixConfigs())("function default with named exports > $name",
 		["mark", null],
 		["stamp", "stamp.side"]
 	])("a %s default function whose own members share names with its named exports", (folder, side) => {
-		it("keeps the function's own prototype, name and length under merge", async () => {
-			api = await slothlet({ ...config, base: BASE, collision: { initial: "merge", api: "merge" } });
+		it("gives the named prototype, name and length exports the slots under merge", async () => {
+			api = await slothlet({ ...config, base: BASE, api: { collision: { mode: { initial: "merge", api: "merge" } } } });
 			await api[folder];
 			expect(await api[folder](2)).toBe(`${folder}:2`);
-			expect(typeof api[folder].prototype).toBe("object");
-			expect(api[folder].name).toBe(folder);
-			expect(api[folder].length).toBe(1);
+			expect(api[folder].prototype).toBe(`${folder}.prototype`);
+			expect(api[folder].name).toBe(`${folder}.name`);
+			expect(api[folder].length).toBe(9);
 			if (side) expect(await api[folder].side()).toBe(side);
 		});
 
 		// Under replace the module also replaces what an earlier sibling composed (`side.mjs` sorts first).
 		it("gives the named exports the slots under replace", async () => {
-			api = await slothlet({ ...config, base: BASE, collision: { initial: "replace", api: "replace" } });
+			api = await slothlet({ ...config, base: BASE, api: { collision: { mode: { initial: "replace", api: "replace" } } } });
 			await api[folder];
 			expect(await api[folder](2)).toBe(`${folder}:2`);
 			expect(api[folder].prototype).toBe(`${folder}.prototype`);

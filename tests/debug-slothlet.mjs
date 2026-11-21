@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:54-07:00 (1791090894)
+ *	@Last modified time: 2026-11-19T16:07:50-08:00 (1795133270)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -134,6 +134,11 @@ function md5(str) {
  * @param {Set} [checkedPaths] - Internal: set to track all checked paths for verification.
  * @param {WeakSet} [visitedA] - Internal: set to track visited objects in A for circular reference detection.
  * @param {WeakSet} [visitedB] - Internal: set to track visited objects in B for circular reference detection.
+ * @param {Map<unknown, string>} [ancestorsA] - Internal: raw (un-normalized) values on the current path in A, mapped to their
+ *   path. Covers functions too, so a member that points back at an ancestor (`fn.me = fn`) is seen as a loop.
+ * @param {Map<unknown, string>} [ancestorsB] - Internal: the same for B.
+ * @param {unknown} [publicA] - Internal: this node as the api hands it out in A (the view `a` is built from it).
+ * @param {unknown} [publicB] - Internal: the same for B.
  * @returns {object} Report of differences: { onlyInA, onlyInB, differingFunctions, differingValues, nestedDifferences, checkedPaths }
  * @example
  * compareApiShapes(obj1, obj2);
@@ -146,7 +151,11 @@ export function compareApiShapes(
 	currentDepth = 0,
 	checkedPaths = null,
 	visitedA = null,
-	visitedB = null
+	visitedB = null,
+	ancestorsA = null,
+	ancestorsB = null,
+	publicA = undefined,
+	publicB = undefined
 ) {
 	const { maxDepth = 10 } = options;
 
@@ -227,8 +236,18 @@ export function compareApiShapes(
 		return value;
 	};
 
+	// Keep the values the api hands out: normalizing builds a fresh view per call, so loops must be
+	// matched on what a caller actually gets back, not on the views.
+	const rawA = publicA === undefined ? a : publicA;
+	const rawB = publicB === undefined ? b : publicB;
 	a = normalizeForCompare(a);
 	b = normalizeForCompare(b);
+	if (ancestorsA === null) {
+		ancestorsA = new Map();
+	}
+	if (ancestorsB === null) {
+		ancestorsB = new Map();
+	}
 
 	// Initialize checkedPaths set on first call
 	if (checkedPaths === null) {
@@ -290,6 +309,17 @@ export function compareApiShapes(
 		};
 	}
 
+	// Record this node's raw values as ancestors of everything below it (removed again on the way out).
+	const isRef = (value) => value !== null && (typeof value === "object" || typeof value === "function");
+	const ownsA = isRef(rawA) && !ancestorsA.has(rawA);
+	const ownsB = isRef(rawB) && !ancestorsB.has(rawB);
+	if (ownsA) {
+		ancestorsA.set(rawA, currentPath);
+	}
+	if (ownsB) {
+		ancestorsB.set(rawB, currentPath);
+	}
+
 	/**
 	 * Collects keys for comparison without traversing noisy function prototype helpers.
 	 * @param {unknown} obj - Value to inspect for keys.
@@ -346,9 +376,45 @@ export function compareApiShapes(
 		if (shouldSkipKey(key, a)) {
 			continue;
 		}
-		const valA = a[key];
-		const valB = b[key];
+		const viewValA = a[key];
+		const viewValB = b[key];
 		const fullPath = currentPath ? `${currentPath}.${key}` : key;
+
+		// A member that points back at a node above it (`fn.me = fn`) is a loop, not more depth. The
+		// same loop in both modes is the same shape; a loop in one mode only, or to a different
+		// place, is a real difference.
+		// The member as a caller reads it off the public node. An accessor was already read once into
+		// viewValA/viewValB above; its result is a computed value, never a loop, so it is not read again.
+		const publicChild = (raw, view, viewValue) => {
+			const desc = Object.getOwnPropertyDescriptor(view, key);
+			if (desc && !("value" in desc)) return viewValue;
+			try {
+				return raw[key];
+			} catch (____error) {
+				return viewValue;
+			}
+		};
+		const pubA = isRef(rawA) ? publicChild(rawA, a, viewValA) : viewValA;
+		const pubB = isRef(rawB) ? publicChild(rawB, b, viewValB) : viewValB;
+		const loopA = ancestorsA.get(pubA);
+		const loopB = ancestorsB.get(pubB);
+		if (loopA !== undefined || loopB !== undefined) {
+			checkedPaths.add(fullPath);
+			if (loopA !== loopB) {
+				differingValues.push({
+					path: fullPath,
+					reason: "Loop differs",
+					aValue: loopA === undefined ? "[no loop]" : `[loop to ${loopA || "root"}]`,
+					bValue: loopB === undefined ? "[no loop]" : `[loop to ${loopB || "root"}]`
+				});
+			}
+			continue;
+		}
+
+		// Compare what a caller gets back. The view's own entry for a child can still be the wrapper
+		// of a lazy node that has since loaded to a primitive (a module whose default is `null`).
+		const valA = pubA;
+		const valB = pubB;
 		const normalizedValA = normalizeForCompare(valA);
 		const normalizedValB = normalizeForCompare(valB);
 
@@ -399,7 +465,11 @@ export function compareApiShapes(
 				currentDepth + 1,
 				checkedPaths,
 				visitedA,
-				visitedB
+				visitedB,
+				ancestorsA,
+				ancestorsB,
+				pubA,
+				pubB
 			);
 			nestedDifferences.push(...funcComparison.onlyInA.map((p) => ({ type: "onlyInA", path: p })));
 			nestedDifferences.push(...funcComparison.onlyInB.map((p) => ({ type: "onlyInB", path: p })));
@@ -421,7 +491,11 @@ export function compareApiShapes(
 				currentDepth + 1,
 				checkedPaths,
 				visitedA,
-				visitedB
+				visitedB,
+				ancestorsA,
+				ancestorsB,
+				pubA,
+				pubB
 			);
 			nestedDifferences.push(...nestedComparison.onlyInA.map((p) => ({ type: "onlyInA", path: p })));
 			nestedDifferences.push(...nestedComparison.onlyInB.map((p) => ({ type: "onlyInB", path: p })));
@@ -441,6 +515,12 @@ export function compareApiShapes(
 	}
 
 	// Clean up visited sets before returning (remove current objects)
+	if (ownsA) {
+		ancestorsA.delete(rawA);
+	}
+	if (ownsB) {
+		ancestorsB.delete(rawB);
+	}
 	if (a !== null && typeof a === "object") {
 		visitedA.delete(a);
 	}
@@ -547,61 +627,6 @@ export function compareSurfaceShapes(a, b, pathPrefix = "", out = [], seen = new
 		compareSurfaceShapes(valueA, valueB, childPath, out, seen, depth + 1);
 	}
 	return out;
-}
-
-/**
- * Materializes all lazy wrappers reachable from a root value to normalize comparisons.
- * @param {unknown} root - Root value to traverse for lazy wrapper materialization.
- * @returns {Promise<void>} Resolves after traversal and materialization.
- */
-async function materializeLazyWrappers(root) {
-	const visited = new WeakSet();
-	const queue = [root];
-
-	while (queue.length > 0) {
-		const current = queue.pop();
-		if (current === null || current === undefined) {
-			continue;
-		}
-		const currentType = typeof current;
-		if (currentType !== "object" && currentType !== "function") {
-			continue;
-		}
-		if (visited.has(current)) {
-			continue;
-		}
-		visited.add(current);
-
-		const currentWrapper = resolveWrapper(current);
-		if (currentWrapper && typeof current._materialize === "function") {
-			const state = currentWrapper.____slothletInternal.state;
-			// Await an in-flight materialization too (`_materialize()` returns the pending promise).
-			// Skipping it read the wrapper's children before they existed, so the parity passes
-			// compared a half-built tree whenever something else had already started loading it (#462).
-			if (state && !state.materialized) {
-				await current._materialize();
-			}
-		}
-
-		const keys = new Set([...Object.getOwnPropertyNames(current), ...Object.keys(current)]);
-		for (const key of keys) {
-			if (typeof key === "string") {
-				// Exact reserved names, not an underscore prefix: a `_x`-named folder is a real module,
-				// and skipping it here would leave that subtree unmaterialized and thus uncompared.
-				if (isFrameworkReservedKey(key)) {
-					continue;
-				}
-				if (currentType === "function" && ["toString", "valueOf", "apply", "bind", "call", "prototype", "name", "length"].includes(key)) {
-					continue;
-				}
-			}
-			try {
-				queue.push(current[key]);
-			} catch (____error) {
-				// Ignore getter errors during traversal
-			}
-		}
-	}
 }
 
 // Error tracking arrays (global to collect errors from both runs)
@@ -1150,7 +1175,7 @@ async function runDebug(config, modeLabel, awaitCalls = false) {
 	if (lazyOnly) {
 		console.log("\n" + chalk.yellowBright.bold("===== LAZY MODE TEST ONLY ====="));
 		console.log(chalk.cyanBright("Running LAZY mode tests...\n"));
-		await runDebug({ mode: "lazy" }, "LAZY", true);
+		await runDebug({ mode: "lazy", loader: { materialize: true } }, "LAZY", true);
 		console.log(chalk.cyanBright("FINISHED LAZY mode tests...\n"));
 		console.log("\n" + chalk.yellowBright.bold("===== COMPLETED LAZY MODE TEST ====="));
 		return;
@@ -1166,22 +1191,25 @@ async function runDebug(config, modeLabel, awaitCalls = false) {
 
 	label = "LAZY";
 	awaitCalls = true;
-	const _lazyBound = await runDebug({ mode: "lazy" }, label, awaitCalls);
+	const _lazyBound = await runDebug({ mode: "lazy", loader: { materialize: true } }, label, awaitCalls);
 	console.log(chalk.cyanBright("FINISHED LAZY mode tests...\n"));
 
 	console.log("\n" + chalk.yellowBright.bold("===== COMPLETED EAGER & LAZY MODE TEST ====="));
 
-	await materializeLazyWrappers(_lazyBound);
+	// Load the whole lazy tree through slothlet's own background materialization before comparing.
+	// Walking the tree here instead would read every property, running module getters on the lazy
+	// side only and skewing any value a getter computes per read.
+	await _lazyBound.slothlet.materialize.wait();
 
 	const compared = compareApiShapes(_eagerBound, _lazyBound);
 
 	// Second parity pass over the collision fixture base: api_test carries no same-name
 	// file+directory pairs, so mode drift on collision composition was invisible to the main
 	// compare — that is exactly how the eager/lazy collision divergence fixed against the
-	// documented MIGRATION.md table went unnoticed. Booting both modes over the dedicated
+	// documented v2-to-v3.md table went unnoticed. Booting both modes over the dedicated
 	// collision base keeps that family under comparison permanently.
 	// The framework's own control tree (api.slothlet, shutdown, destroy) carries mode-varying
-	// STATUS fields (e.g. materialize.materialized) — legitimate differences, not composition
+	// STATUS fields (e.g. materialize.complete) — legitimate differences, not composition
 	// drift. Parity passes compare the composed USER surface only.
 	const pickUserSurface = (apiObj) => {
 		const view = {};
@@ -1195,8 +1223,8 @@ async function runDebug(config, modeLabel, awaitCalls = false) {
 	{
 		const collisionBase = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../api_tests/api_test_collisions");
 		const eagerCollisions = await slothlet({ mode: "eager", base: collisionBase });
-		const lazyCollisions = await slothlet({ mode: "lazy", base: collisionBase });
-		await materializeLazyWrappers(lazyCollisions);
+		const lazyCollisions = await slothlet({ mode: "lazy", base: collisionBase, loader: { materialize: true } });
+		await lazyCollisions.slothlet.materialize.wait();
 		const collisionCompared = compareApiShapes(pickUserSurface(eagerCollisions), pickUserSurface(lazyCollisions));
 		const collisionDiffs =
 			collisionCompared.onlyInA.length +
@@ -1224,10 +1252,10 @@ async function runDebug(config, modeLabel, awaitCalls = false) {
 		const collisionBase = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../api_tests/api_test_collisions");
 		const neutralBase = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../api_tests/api_test");
 		const eagerHost = await slothlet({ mode: "eager", base: neutralBase });
-		const lazyHost = await slothlet({ mode: "lazy", base: neutralBase });
+		const lazyHost = await slothlet({ mode: "lazy", base: neutralBase, loader: { materialize: true } });
 		await eagerHost.slothlet.api.add("mounted", collisionBase);
 		await lazyHost.slothlet.api.add("mounted", collisionBase);
-		await materializeLazyWrappers(lazyHost);
+		await lazyHost.slothlet.materialize.wait();
 		const mountCompared = compareApiShapes(pickUserSurface(eagerHost.mounted), pickUserSurface(lazyHost.mounted));
 		const mountDiffs =
 			mountCompared.onlyInA.length +
@@ -1258,8 +1286,8 @@ async function runDebug(config, modeLabel, awaitCalls = false) {
 	{
 		const underscoreBase = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../api_tests/api_test_underscore");
 		const eagerUnderscore = await slothlet({ mode: "eager", base: underscoreBase });
-		const lazyUnderscore = await slothlet({ mode: "lazy", base: underscoreBase });
-		await materializeLazyWrappers(lazyUnderscore);
+		const lazyUnderscore = await slothlet({ mode: "lazy", base: underscoreBase, loader: { materialize: true } });
+		await lazyUnderscore.slothlet.materialize.wait();
 		const underscoreDiffs = compareSurfaceShapes(pickUserSurface(eagerUnderscore), pickUserSurface(lazyUnderscore));
 		if (underscoreDiffs.length > 0) {
 			console.log(chalk.redBright(`❌ Underscore-export surface parity: ${underscoreDiffs.length} difference(s) between eager and lazy`));
@@ -1384,8 +1412,10 @@ async function runDebug(config, modeLabel, awaitCalls = false) {
 	// Filter out expected nested differences (mode configs naturally differ between eager and lazy)
 	const significantNestedDifferences = compared.nestedDifferences.filter(
 		(diff) =>
-			// __childFilePaths is lazy-mode only metadata for file path tracking (expected difference)
-			!diff.path.includes("__childFilePaths")
+			// ____childFilePaths is lazy-mode only metadata for file path tracking (expected difference)
+			!diff.path.includes("____childFilePaths") &&
+			// Each instance has its own id (v4: api.slothlet.instance.id; was instanceID)
+			diff.path !== "slothlet.instance.id"
 	);
 
 	if (significantNestedDifferences.length > 0) {

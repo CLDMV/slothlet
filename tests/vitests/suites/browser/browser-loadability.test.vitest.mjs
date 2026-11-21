@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:59-07:00 (1791090899)
+ *	@Last modified time: 2026-11-16T16:16:37-08:00 (1794874597)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -24,7 +24,7 @@
  *
  *   1. No top-level static `node:*` imports anywhere in the statically-reachable
  *      graph rooted at the `.` entry (`index.mjs`) and the slothlet class
- *      (`@cldmv/slothlet/slothlet`, dynamically imported by the entry). Browsers
+ *      (`#slothlet`, dynamically imported by the entry). Browsers
  *      resolve every static import at module-graph-construction time, before any
  *      code runs, so a single top-level `import ... from "node:fs"` fails the whole
  *      graph regardless of `platform: "browser"`. Dynamic `await import("node:*")`
@@ -151,7 +151,7 @@ function collectNodeImports(rootFiles) {
 describe("Browser loadability (#123)", () => {
 	// The `.` entry dynamically imports the class; the class's *static* graph is what
 	// the browser must parse once that dynamic import fires.
-	const classFile = fileURLToPath(import.meta.resolve("@cldmv/slothlet/slothlet"));
+	const classFile = fileURLToPath(import.meta.resolve("#slothlet"));
 	const indexFile = presolve(REPO_ROOT, "index.mjs");
 
 	it("statically-reachable graph from the entry + class has no top-level node:* imports", () => {

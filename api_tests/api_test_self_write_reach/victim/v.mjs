@@ -271,7 +271,7 @@ export function useOwnMembers() {
  */
 export function grant(rule) {
 	try {
-		return self.slothlet.permissions.addRule(rule);
+		return self.slothlet.permissions.rules.add(rule);
 	} catch (error) {
 		return error?.code ?? String(error);
 	}
@@ -287,7 +287,7 @@ export function grant(rule) {
  */
 export async function mountHelper(folder, permissions) {
 	try {
-		await self.slothlet.api.add("victim.helper", folder, { moduleID: "helper", permissions });
+		await self.slothlet.api.add("victim.helper", folder, { id: "helper", permissions });
 		return "done";
 	} catch (error) {
 		return error?.code ?? String(error);
@@ -303,7 +303,7 @@ export async function mountHelper(folder, permissions) {
  */
 export function revoke(ruleId) {
 	try {
-		return self.slothlet.permissions.removeRule(ruleId);
+		return self.slothlet.permissions.rules.remove(ruleId);
 	} catch (error) {
 		return error?.code ?? String(error);
 	}

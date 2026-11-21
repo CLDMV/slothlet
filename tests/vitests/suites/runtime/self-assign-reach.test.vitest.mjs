@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-26T16:16:16-07:00 (1793056576)
+ *	@Last modified time: 2026-11-18T19:30:38-08:00 (1795059038)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -46,6 +46,24 @@ const REFUSALS = ["LOOSE_SET_NOT_OWNED", "PERMISSION_DENIED"];
 // What the victim's frozen members hold while no other module has changed them.
 const FROZEN_UNCHANGED = { shelf: '{"n":1}', inner: '{"n":1}', deep: '{"n":1}', box: '{"n":1}' };
 
+/**
+ * What the same members hold once every change the guest tries has been made, as the changes leave plain objects: the
+ * guest's `frozenMemberWrites` run here on objects of the same shape. With the permission system off the changes go
+ * through, and a write through the api reaches the victim's own objects (#746).
+ */
+const FROZEN_CHANGED = (() => {
+	const [element, inner, deep, box] = [{ n: 1 }, { n: 1 }, { n: 1 }, { n: 1 }];
+	element.planted = 1;
+	Object.defineProperty(element, "defined", { value: 1, configurable: true, writable: true, enumerable: true });
+	delete element.n;
+	inner.planted = 1;
+	delete inner.n;
+	deep.planted = 1;
+	delete deep.n;
+	box.planted = 1;
+	return { shelf: JSON.stringify(element), inner: JSON.stringify(inner), deep: JSON.stringify(deep), box: JSON.stringify(box) };
+})();
+
 const CONFIGS = [
 	{ mode: "eager", runtime: "async" },
 	{ mode: "lazy", runtime: "async" },
@@ -57,12 +75,16 @@ const CONFIGS = [
 const READ_RULES = [
 	{ caller: "**", target: "victim.**", effect: "allow" },
 	{ caller: "**", target: "guest.**", effect: "allow" },
-	{ caller: "**", target: "root.**", effect: "allow" }
+	{ caller: "**", target: "root.**", effect: "allow" },
+	// The member `root.changeSelf` defines on the api root and reads back is data at the root, read under a rule for that leaf.
+	{ caller: "root.changeSelf", target: "baseDefined", effect: "allow" },
+	// So is the member `root.changeScopedSelf` defines and reads back inside a fully isolated scope.
+	{ caller: "root.changeScopedSelf", target: "scoped", effect: "allow" }
 ];
 const PERMISSIONS = [
 	{ label: "no permissions config", options: {} },
 	{ label: "permissions with defaults", options: { permissions: {} } },
-	{ label: "permissions defaultPolicy deny", options: { permissions: { defaultPolicy: "deny", rules: READ_RULES } } }
+	{ label: "permissions defaultPolicy deny", options: { permissions: { policy: "deny", rules: READ_RULES } } }
 ];
 
 /**
@@ -105,8 +127,8 @@ describe.each(CONFIGS)("what a module reaches through self (#625) — $mode / $r
 		async function load() {
 			const api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, ...options });
 			instances.push(api);
-			await api.slothlet.api.add("victim", path.join(FIXTURE, "victim"), { moduleID: "victim" });
-			await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { moduleID: "guest" });
+			await api.slothlet.api.add("victim", path.join(FIXTURE, "victim"), { id: "victim" });
+			await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { id: "guest" });
 			return api;
 		}
 
@@ -188,7 +210,7 @@ describe.each(CONFIGS)("what a module reaches through self (#625) — $mode / $r
 			expect(markRefused(report)).toEqual(off ? allDone(report) : allRefused(report));
 			// Freezing a list leaves its elements open, so a change that goes through lands on the element.
 			expect(api.victim.v.shelf[0].planted).toBe(off ? 1 : undefined);
-			expect(await api.victim.v.frozenState()).toEqual(FROZEN_UNCHANGED);
+			expect(await api.victim.v.frozenState()).toEqual(off ? FROZEN_CHANGED : FROZEN_UNCHANGED);
 		});
 
 		it("holds a write through members another module holds frozen a module kept, made later from outside any call, to ownership", async () => {
@@ -197,7 +219,7 @@ describe.each(CONFIGS)("what a module reaches through self (#625) — $mode / $r
 			const report = withSuppressedSlothletErrorOutputSync(() => later());
 			expect(report).toEqual(off ? allDone(report) : Object.fromEntries(Object.keys(report).map((key) => [key, "LOOSE_SET_NOT_OWNED"])));
 			expect(api.victim.v.shelf[0].planted).toBe(off ? 1 : undefined);
-			expect(await api.victim.v.frozenState()).toEqual(FROZEN_UNCHANGED);
+			expect(await api.victim.v.frozenState()).toEqual(off ? FROZEN_CHANGED : FROZEN_UNCHANGED);
 		});
 
 		it("refuses a later write through members another module holds frozen with captured references off", async () => {
@@ -206,11 +228,11 @@ describe.each(CONFIGS)("what a module reaches through self (#625) — $mode / $r
 				mode,
 				runtime,
 				silent: true,
-				permissions: { ...options.permissions, references: { capture: false } }
+				permissions: { ...options.permissions, caller: { capture: false } }
 			});
 			instances.push(api);
-			await api.slothlet.api.add("victim", path.join(FIXTURE, "victim"), { moduleID: "victim" });
-			await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { moduleID: "guest" });
+			await api.slothlet.api.add("victim", path.join(FIXTURE, "victim"), { id: "victim" });
+			await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { id: "guest" });
 			const later = await api.guest.x.keepVictimFrozenMembers();
 			const report = withSuppressedSlothletErrorOutputSync(() => later());
 			expect(report).toEqual(Object.fromEntries(Object.keys(report).map((key) => [key, "LOOSE_SET_NOT_OWNED"])));
@@ -232,7 +254,7 @@ describe.each(CONFIGS)("what a module reaches through self (#625) — $mode / $r
 			withSuppressedSlothletErrorOutputSync(() => {
 				expect(() => {
 					api.guest.x.keptElement.hostNote = 1;
-				}).toThrow(/RUNTIME_NO_ACTIVE_CONTEXT_SELF/);
+				}).toThrow(/CONTEXT_NOT_ACTIVE_SELF/);
 			});
 			api.victim.v.shelf[0].hostNote = 1;
 			expect(api.victim.v.shelf[0].hostNote).toBe(1);
@@ -258,10 +280,13 @@ describe.each(CONFIGS)("what a module reaches through self (#625) — $mode / $r
 			expect(api.victim.v.Account.prototype.bonus).toBeUndefined();
 		});
 
-		it("leaves the prototype of an instance another module returned to the module it was handed to (#597)", async () => {
+		it("keeps the prototype of an instance another module returned to the module whose class it is", async () => {
 			const api = await load();
-			expect(await api.guest.x.changeReturnedInstancePrototype()).toBe("done");
-			expect(api.victim.v.Account.prototype.shared).toBe(1);
+			// The instance is what the victim handed over; its class is not. While the permission system is on the prototype
+			// reaches the guest as reading `victim.v.Account.prototype` would, where the guest may not write; with it off
+			// nothing is checked and the write lands, as in plain JavaScript.
+			expect(await api.guest.x.changeReturnedInstancePrototype()).toBe(off ? "done" : "LOOSE_SET_NOT_OWNED");
+			expect(api.victim.v.Account.prototype.shared).toBe(off ? 1 : undefined);
 			delete api.victim.v.Account.prototype.shared;
 		});
 
@@ -355,11 +380,12 @@ describe.each(CONFIGS)("what a module reaches through self (#625) — $mode / $r
 			});
 			instances.push(isolated);
 			let report;
-			await isolated.slothlet.run({}, async () => {
+			await isolated.slothlet.context.run({}, async () => {
 				report = await isolated.root.changeScopedSelf();
 			});
-			expect(report).toEqual({ define: "done", read: 3, accessor: "TypeError", remove: "done", gone: true });
+			expect(report).toEqual({ define: "done", read: 3, accessor: "done", remove: "done", gone: true });
 			expect(isolated.scoped).toBeUndefined();
+			expect(isolated.scopedGetter).toBeUndefined();
 		});
 
 		it("hands a module the framework's view of the framework namespace stored on another module's class", async () => {
@@ -377,17 +403,24 @@ describe.each(CONFIGS)("what a module reaches through self (#625) — $mode / $r
 		it.runIf(off)("leaves the framework namespace stored on another module's class to a module with the system disabled", async () => {
 			const api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, permissions: { mode: "disabled" } });
 			instances.push(api);
-			await api.slothlet.api.add("victim", path.join(FIXTURE, "victim"), { moduleID: "victim" });
-			await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { moduleID: "guest" });
+			await api.slothlet.api.add("victim", path.join(FIXTURE, "victim"), { id: "victim" });
+			await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { id: "guest" });
 			api.victim.v.Account.prototype.namespace = api.slothlet;
 			expect(api.guest.x.changeStoredNamespace()).toBe("done");
 			expect(api.slothlet.planted).toBe(1);
 		});
 
-		it("hands the host, inside a run() it opened, a module's class prototype itself", async () => {
+		it("hands the host, inside a run() it opened, the run's own copy of a module's class prototype", async () => {
 			const api = await load();
 			const proto = api.victim.v.Account.prototype;
-			expect(await api.slothlet.context.run({}, () => self.victim.v.Account.prototype === proto)).toBe(true);
+			const seen = await api.slothlet.context.run({}, () => {
+				const inRun = self.victim.v.Account.prototype;
+				inRun.inRunOnly = 1;
+				return { same: inRun === proto, readBack: inRun.inRunOnly };
+			});
+			// A full-isolation run reads a copy: its prototype is not the instance's, and what it writes there stays in the run.
+			expect(seen).toEqual({ same: false, readBack: 1 });
+			expect(Object.hasOwn(api.victim.v.Account.prototype, "inRunOnly")).toBe(false);
 		});
 
 		it.each([
@@ -412,11 +445,107 @@ describe.each(CONFIGS)("what a module reaches through self (#625) — $mode / $r
 				setPrototypeOf: outcome(() => Object.setPrototypeOf(self, null)),
 				preventExtensions: outcome(() => Object.preventExtensions(self))
 			}).toEqual({
-				remove: "RUNTIME_NO_ACTIVE_CONTEXT_SELF",
-				define: "RUNTIME_NO_ACTIVE_CONTEXT_SELF",
+				remove: "CONTEXT_NOT_ACTIVE_SELF",
+				define: "CONTEXT_NOT_ACTIVE_SELF",
 				setPrototypeOf: "TypeError",
 				preventExtensions: "TypeError"
 			});
 		});
+	});
+});
+
+/**
+ * A member a module defines or assigns on a folder (the api root, or a mount) is data at that folder's path. Reading it
+ * back is decided as any read of data is: by the rules for the reading leaf at the member's path. Having made the
+ * member gives a leaf no read of it. The mount `zz` is the same folder mounted again, and answers as the root does.
+ */
+const MADE = path.join(FIXTURE, "made");
+// Under `defaultPolicy: "deny"` these keep the leaves callable from each other; they say nothing about the made members.
+const MADE_BASE_RULES = [
+	{ caller: "**", target: "maker.**", effect: "allow" },
+	{ caller: "**", target: "other.**", effect: "allow" },
+	{ caller: "**", target: "zz.maker.**", effect: "allow" },
+	{ caller: "**", target: "zz.other.**", effect: "allow" }
+];
+const MADE_MEMBERS = [
+	{ how: "define", name: "baseDefined", value: 7 },
+	{ how: "assign", name: "baseAssigned", value: 8 }
+];
+// The folder a member is made on, the leaf prefix of the module making it there, and the member's path prefix.
+const MADE_PLACES = [
+	{ where: "root", leaf: "", at: "" },
+	{ where: "zz", leaf: "zz.", at: "zz." }
+];
+
+describe.each(CONFIGS)("reading back a member a module made on a folder — $mode / $runtime", ({ mode, runtime }) => {
+	const instances = [];
+
+	afterEach(async () => {
+		for (const api of instances.splice(0)) await api.slothlet.shutdown();
+	});
+
+	/**
+	 * Load the folder as the base and mount it again at `zz`, under `defaultPolicy: "deny"`.
+	 * @param {object[]} rules - Rules added to the base rules.
+	 * @returns {Promise<object>} The composed api.
+	 */
+	async function load(rules) {
+		const api = await slothlet({
+			base: MADE,
+			mode,
+			runtime,
+			silent: true,
+			permissions: { policy: "deny", rules: [...MADE_BASE_RULES, ...rules] }
+		});
+		instances.push(api);
+		await api.slothlet.api.add("zz", MADE, { id: "zz" });
+		return api;
+	}
+
+	describe.each(MADE_PLACES)("on $where", ({ where, leaf, at }) => {
+		/**
+		 * The module that makes the member: the base module for the root, the mounted one for `zz`.
+		 * @param {object} api - The composed api.
+		 * @returns {object} That module's node.
+		 */
+		const maker = (api) => (where === "root" ? api : api.zz);
+		/**
+		 * The other module, which reaches the same folder through `self`.
+		 * @param {object} api - The composed api.
+		 * @returns {object} That module's node.
+		 */
+		const stranger = (api) => (where === "root" ? api.zz : api);
+
+		it.each(MADE_MEMBERS)(
+			"refuses the leaf that made a member by $how the read of it, and lists it none, with no rule for it",
+			async ({ how, name }) => {
+				const api = await load([]);
+				const report = await withSuppressedSlothletErrorOutputSync(() => maker(api).maker[how](where));
+				expect(report.change).toBe("done");
+				expect(report.read.code).toBe("PERMISSION_DENIED");
+				expect(report.read.message).toContain(`caller '${leaf}maker.${how}'`);
+				expect(report.read.message).toContain(`'${at}${name}'`);
+				expect(report.listed).toBe(false);
+			}
+		);
+
+		it.each(MADE_MEMBERS)(
+			"gives the leaf that made a member by $how its value and lists it under a rule for that leaf, and refuses every other leaf",
+			async ({ how, name, value }) => {
+				const api = await load([{ caller: `${leaf}maker.${how}`, target: `${at}${name}`, effect: "allow" }]);
+				expect(await maker(api).maker[how](where)).toEqual({ change: "done", read: value, listed: true });
+				// Another leaf of the same module, and a leaf of another module: the rule names neither.
+				for (const [module, prefix] of [
+					[maker(api), leaf],
+					[stranger(api), leaf === "" ? "zz." : ""]
+				]) {
+					const report = await withSuppressedSlothletErrorOutputSync(() => module.other.read(where, name));
+					expect(report.read.code).toBe("PERMISSION_DENIED");
+					expect(report.read.message).toContain(`caller '${prefix}other.read'`);
+					expect(report.read.message).toContain(`'${at}${name}'`);
+					expect(report.listed).toBe(false);
+				}
+			}
+		);
 	});
 });

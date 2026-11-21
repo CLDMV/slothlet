@@ -39,11 +39,11 @@ export class ComponentBase {
      *   - Determining whether a set(trap) write should be silently absorbed (`setTrap`)
      *   - Filtering what getTrap exposes externally on wrapper proxies
      *
-     * Note: `_materialize` is included here (skip for collection/extraction) but
+     * Note: `___materialize` is included here (skip for collection/extraction) but
      * setTrap exempts it since the framework needs to write it directly.
      *
-     * The Set itself is defined in `@cldmv/slothlet/helpers/reserved-keys`, a module with no
-     * imports, so `slothlet.defaults.reservedExports` can be built without loading this class.
+     * The Set itself is defined in `#helpers/reserved-keys`, a module with no
+     * imports, so `slothlet.defaults.reserved` can be built without loading this class.
      *
      * @type {Set<string>}
      * @static
@@ -100,9 +100,18 @@ export class ComponentBase {
      * Named with ____ prefix to avoid shadowing user API names like 'config'.
      *
      * @example
-     * const collisionMode = this.____config.collision.api;
+     * const collisionMode = this.____config.api.collision.mode.api;
      */
     get ____config(): object;
+    /**
+     * The clock of the instance: where components read the time and schedule their deferred work (the `clock` option).
+     * @returns {import("#helpers/clock").Clock} The instance's frozen clock, or the one slothlet loaded with
+     *   for an instance (a test's stand-in) that has none.
+     * @internal
+     * @example
+     * const stamp = this.clock.now();
+     */
+    get clock(): import("#helpers/clock").Clock;
     /**
      * Get Slothlet instance ID.
      * @returns {string} Slothlet instance identifier.
@@ -139,7 +148,7 @@ export class ComponentBase {
      * Emit a non-throwing diagnostic lifecycle event (`impl:warning` or `impl:error`).
      * @param {"warning"|"error"} level - Diagnostic level → `impl:warning` or `impl:error`.
      * @param {object} data - Diagnostic payload.
-     * @param {string} data.code - i18n code (e.g. "WARN_SYNTHETIC_ROOT_COLLISION") used to translate `message`.
+     * @param {string} data.code - i18n code (e.g. "WARNING_INLINE_ROOT_COLLISION") used to translate `message`.
      * @param {object} data.context - Structured context object passed to the diagnostic (also the i18n interpolation params).
      * @param {string} [data.apiPath] - API path where the mutation was attempted ("" / "(root)" for root).
      * @param {string} [data.source] - Command family that produced the diagnostic (addApi | reload | buildAPI | module-mount).
@@ -163,7 +172,7 @@ export class ComponentBase {
      *
      * @example
      * await this.emitImplDiagnostic("warning", {
-     *   apiPath: "", code: "WARN_SYNTHETIC_ROOT_EMPTY", context: { apiPath: "(root)" }, source: "addApi"
+     *   apiPath: "", code: "WARNING_INLINE_ROOT_EMPTY", context: { apiPath: "(root)" }, source: "addApi"
      * });
      */
     emitImplDiagnostic(level: "warning" | "error", data: {
@@ -181,7 +190,7 @@ export class ComponentBase {
      * @param {"dropped"|"replaced"|"merged"|"stacked"} data.resolution - What became of the two
      *   writers: `dropped` (incoming discarded, `owner` retained), `replaced` (incoming won, `owner`
      *   shadowed), `merged` (namespace nodes combined, both retained), `stacked` (both run as a
-     *   routine stack under `stackRoutines`).
+     *   routine stack under `routines.stack`).
      * @param {string|null} data.incoming - moduleID of the arriving writer (`null` when unknown).
      * @param {string|null} data.owner - moduleID of the writer that already held the path (`null`
      *   when unknown).

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:03-07:00 (1791090903)
+ *	@Last modified time: 2026-11-16T18:29:03-08:00 (1794882543)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -48,7 +48,7 @@ describe.each(getMatrixConfigs())("Events > manifest precedence layer (#407) > $
 			...config,
 			base: TEST_DIRS.API_TEST_EVENTS,
 			silent: true,
-			permissions: { defaultPolicy: "allow", events: { default: "notify" } }
+			permissions: { policy: "allow", events: { policy: "notify" } }
 		});
 		expect(await api.subscriber.subscribe("manifest.data")).toBe("notify");
 	});
@@ -58,9 +58,9 @@ describe.each(getMatrixConfigs())("Events > manifest precedence layer (#407) > $
 			...config,
 			base: TEST_DIRS.API_TEST_EVENTS,
 			silent: true,
-			permissions: { defaultPolicy: "allow", events: { default: "notify" } }
+			permissions: { policy: "allow", events: { policy: "notify" } }
 		});
-		await api.slothlet.api.modules.addModule("@local/evt-plugin", { discover: { scanRoot: FIX_EVT_MODULE } });
+		await api.slothlet.api.modules.add("@local/evt-plugin", { discover: { root: FIX_EVT_MODULE } });
 
 		// Manifest: { caller: subscriber.**, event: manifest.*, effect: allow } — registered at mount.
 		expect(await api.subscriber.subscribe("manifest.data")).toBe("allow");
@@ -80,11 +80,11 @@ describe.each(getMatrixConfigs())("Events > manifest precedence layer (#407) > $
 			silent: true,
 			// Same specificity as the manifest's { subscriber.**, manifest.* } → instance layer wins.
 			permissions: {
-				defaultPolicy: "allow",
-				events: { default: "notify", rules: [{ caller: "subscriber.**", event: "manifest.*", effect: "notify" }] }
+				policy: "allow",
+				events: { policy: "notify", rules: [{ caller: "subscriber.**", event: "manifest.*", effect: "notify" }] }
 			}
 		});
-		await api.slothlet.api.modules.addModule("@local/evt-plugin", { discover: { scanRoot: FIX_EVT_MODULE } });
+		await api.slothlet.api.modules.add("@local/evt-plugin", { discover: { root: FIX_EVT_MODULE } });
 
 		// Manifest says allow; instance says notify at equal specificity → instance wins.
 		expect(await api.subscriber.subscribe("manifest.data")).toBe("notify");

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:54-07:00 (1791090894)
+ *	@Last modified time: 2026-11-16T16:16:21-08:00 (1794874581)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -23,7 +23,7 @@ process.env.NODE_OPTIONS = "--conditions=slothlet-dev --conditions=development";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 import util from "util";
-import { slothlet as rawSlothlet } from "@cldmv/slothlet/slothlet";
+import { slothlet as rawSlothlet } from "#slothlet";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -43,7 +43,7 @@ async function main() {
 	console.log("typeof api.math.add:", typeof eager.math.add);
 	console.log("Function name:", eager.math.add.name);
 	console.log("Has __slothletPath?", "__slothletPath" in eager.math.add);
-	console.log("__slothletPath value:", eager.math.add.__slothletPath);
+	console.log("__slothletPath value:", eager.slothlet.node(eager.math.add).path.join("."));
 	console.log("Function toString:", eager.math.add.toString().substring(0, 200));
 	console.log("Own properties:", Object.getOwnPropertyNames(eager.math.add));
 	console.log("Prototype:", Object.getPrototypeOf(eager.math.add));

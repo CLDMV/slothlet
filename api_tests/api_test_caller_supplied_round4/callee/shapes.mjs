@@ -46,7 +46,7 @@ function read(dotted) {
  * @returns {boolean} True.
  * @public
  * @example
- * api.callee.shapes.keep("scope");
+ * api.callee.shapes.keep("context.scope");
  */
 export function keep(dotted) {
 	kept.set(dotted, read(dotted));
@@ -60,7 +60,7 @@ export function keep(dotted) {
  * @returns {object} The report.
  * @public
  * @example
- * api.callee.shapes.report("scope");
+ * api.callee.shapes.report("context.scope");
  */
 export function report(dotted, key) {
 	return describeFunction(kept.get(dotted) ?? read(dotted), key);
@@ -73,7 +73,7 @@ export function report(dotted, key) {
  * @returns {object} The function's report for the member.
  * @public
  * @example
- * api.callee.shapes.define("scope", "extra");
+ * api.callee.shapes.define("context.scope", "extra");
  */
 export function define(dotted, key) {
 	const fn = read(dotted);
@@ -87,7 +87,7 @@ export function define(dotted, key) {
  * @returns {boolean} Whether the prototype was set.
  * @public
  * @example
- * api.callee.shapes.reparent("scope");
+ * api.callee.shapes.reparent("context.scope");
  */
 export function reparent(dotted) {
 	return Reflect.setPrototypeOf(read(dotted), Function.prototype);

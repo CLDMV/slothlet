@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:51-07:00 (1791090891)
+ *	@Last modified time: 2026-11-16T16:16:10-08:00 (1794874570)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -38,12 +38,15 @@
  * @package
  */
 
+import { Symbol, WeakMap, WeakMapMethods } from "#helpers/intrinsics";
+
 /**
  * Module-private map of Slothlet instance → per-instance capability token.
  * Never exported — the only way to interact with it is through the three functions below.
  *
  * @type {WeakMap<object, symbol>}
  */
+
 const instanceTokens = new WeakMap();
 
 /**
@@ -62,12 +65,12 @@ const instanceTokens = new WeakMap();
  * registerInstance(this);
  */
 function registerInstance(slothlet) {
-	if (instanceTokens.has(slothlet)) {
+	if (WeakMapMethods.has(instanceTokens, slothlet)) {
 		// Already registered — reload path calls load() again on the same instance.
 		// The existing token remains valid; nothing to do.
 		return;
 	}
-	instanceTokens.set(slothlet, Symbol("@cldmv/slothlet/lifecycle.tagToken"));
+	WeakMapMethods.set(instanceTokens, slothlet, Symbol("@cldmv/slothlet/lifecycle.tagToken"));
 }
 
 /**
@@ -85,7 +88,7 @@ function registerInstance(slothlet) {
  * handler(data, getInstanceToken(this.slothlet));
  */
 function getInstanceToken(slothlet) {
-	return instanceTokens.get(slothlet);
+	return WeakMapMethods.get(instanceTokens, slothlet);
 }
 
 /**
@@ -105,7 +108,7 @@ function getInstanceToken(slothlet) {
  * }
  */
 function verifyToken(slothlet, token) {
-	return token === instanceTokens.get(slothlet);
+	return token === WeakMapMethods.get(instanceTokens, slothlet);
 }
 
 export { registerInstance, getInstanceToken, verifyToken };

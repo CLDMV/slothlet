@@ -171,6 +171,8 @@ function rewriteType(type) {
 	// Intersection has no Closure equivalent — collapse to Object. Done before other
 	// transforms so a mixin like `A & B & { … }` doesn't get partially rewritten.
 	if (/\s&\s/.test(t)) return "Object";
+	// A type query (`typeof enterCall`) has no Closure equivalent: any type.
+	t = t.replace(/\btypeof\s+[\w$.]+/g, "*");
 	t = convertArrows(t);
 	t = convertTuples(t);
 	// Optional record property marker `name?:` → `name:` (catharsis parses record types,

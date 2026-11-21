@@ -41,6 +41,40 @@ export function identityCeilings(identity: {
     ceiling?: object | ReadonlyArray<object> | null;
 } | null | undefined): ReadonlyArray<object>;
 /**
+ * This file's internal bindings, for the files of slothlet's own that use them: each of those files takes them once, as
+ * it loads, and anyone else is refused (see `ownBindingsRefusal` in `helpers/instance-imports`).
+ * @param {string} consumer - The file asking: its path in slothlet's code folder, without its extension.
+ * @returns {object} The bindings.
+ * @internal
+ */
+export function internals(consumer: string): object;
+/** @type {typeof genuineWrappers} */
+declare const guarded_genuineWrappers: typeof genuineWrappers;
+/** @type {typeof implWrappers} */
+declare const guarded_implWrappers: typeof implWrappers;
+/** @type {typeof enforceContextKeyWrite} */
+declare const guarded_enforceContextKeyWrite: typeof enforceContextKeyWrite;
+/** @type {typeof writersOf} */
+declare const guarded_writersOf: typeof writersOf;
+/** @type {typeof readProtectedContextValue} */
+declare const guarded_readProtectedContextValue: typeof readProtectedContextValue;
+/** @type {typeof buildCapturedFlowStore} */
+declare const guarded_buildCapturedFlowStore: typeof buildCapturedFlowStore;
+/**
+ * Registry of every genuine `UnifiedWrapper` instance. A caller identity absent from this set is a
+ * forged object and is denied by permission enforcement.
+ * @type {WeakSet<object>}
+ * @internal
+ */
+declare const genuineWrappers: WeakSet<object>;
+/**
+ * Each leaf function slothlet wraps, to the wrapper it is the function of (#597): a leaf's function handed to another
+ * call as a value — imported raw from its file rather than read from `self` — is recognised as that api node.
+ * @type {WeakMap<Function, object>}
+ * @internal
+ */
+declare const implWrappers: WeakMap<Function, object>;
+/**
  * Enforce owner-locking on a top-level runtime `context` set-trap write. If `prop` is an owner-locked
  * key on the active store, the write is allowed only when the writing caller matches the declared
  * owner: a `PROTECT_SENTINEL` owner is write-once/unowned (never writable via the set trap), and a
@@ -52,7 +86,7 @@ export function identityCeilings(identity: {
  * @throws {SlothletError} CONTEXT_KEY_PROTECTED when the write is not permitted by the key's owner.
  * @internal
  */
-export function enforceContextKeyWrite(ctx: object, prop: string | symbol): void;
+declare function enforceContextKeyWrite(ctx: object, prop: string | symbol): void;
 /**
  * Who writes from a store: the identity executing in it, as the context manager resolves it, followed by every call
  * of the ceiling it runs under (#597). Empty for the host. A store with no instance to ask (a view used after its
@@ -63,7 +97,7 @@ export function enforceContextKeyWrite(ctx: object, prop: string | symbol): void
  * @throws {SlothletError} PERMISSION_DENIED when who is executing cannot be told.
  * @internal
  */
-export function writersOf(store: object): Array<object>;
+declare function writersOf(store: object): Array<object>;
 /**
  * Resolve a runtime `context` get-trap read. For an owner-locked key (declared via
  * `scope({ protect, owners })`) whose value is a plain object or array, returns a recursive protected
@@ -77,7 +111,7 @@ export function writersOf(store: object): Array<object>;
  * @returns {*} The raw value, or a protected view when the key is owner-locked and wrappable.
  * @internal
  */
-export function readProtectedContextValue(ctx: object, prop: string | symbol, getContext: () => object | null): any;
+declare function readProtectedContextValue(ctx: object, prop: string | symbol, getContext: () => object | null): any;
 /**
  * Build the context store a {@link snapshotFlow}-snapshotted flow is replayed in (#497), shared by the
  * async and live context managers. The store is a `run()`/`scope()`-style child of the instance's
@@ -93,31 +127,6 @@ export function readProtectedContextValue(ctx: object, prop: string | symbol, ge
  * @throws {SlothletError} CONTEXT_NOT_FOUND when the instance has no base store.
  * @internal
  */
-export function buildCapturedFlowStore(instances: Map<string, object>, instanceID: string, captured: object): object;
-/**
- * Marker set on a slothlet instance's base context store to identify host-initiated calls.
- * @type {symbol}
- * @internal
- */
-export const TRUSTED_ROOT: symbol;
-/**
- * Registry of every genuine `UnifiedWrapper` instance. A caller identity absent from this set is a
- * forged object and is denied by permission enforcement.
- * @type {WeakSet<object>}
- * @internal
- */
-export const genuineWrappers: WeakSet<object>;
-/**
- * Each leaf function slothlet wraps, to the wrapper it is the function of (#597): a leaf's function handed to another
- * call as a value — imported raw from its file rather than read from `self` — is recognised as that api node.
- * @type {WeakMap<Function, object>}
- * @internal
- */
-export const implWrappers: WeakMap<Function, object>;
-/**
- * Sentinel owner for write-once/unowned ("protected") context keys.
- * @type {symbol}
- * @internal
- */
-export const PROTECT_SENTINEL: symbol;
+declare function buildCapturedFlowStore(instances: Map<string, object>, instanceID: string, captured: object): object;
+export { guarded_genuineWrappers as genuineWrappers, guarded_implWrappers as implWrappers, guarded_enforceContextKeyWrite as enforceContextKeyWrite, guarded_writersOf as writersOf, guarded_readProtectedContextValue as readProtectedContextValue, guarded_buildCapturedFlowStore as buildCapturedFlowStore };
 //# sourceMappingURL=trusted-root.d.mts.map

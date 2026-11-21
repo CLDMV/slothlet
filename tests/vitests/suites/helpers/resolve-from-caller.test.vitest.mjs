@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:05-07:00 (1791090905)
+ *	@Last modified time: 2026-11-16T16:16:52-08:00 (1794874612)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -35,7 +35,7 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, it, expect } from "vitest";
-import { Resolver } from "@cldmv/slothlet/helpers/resolve-from-caller";
+import { Resolver } from "#helpers/resolve-from-caller";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);

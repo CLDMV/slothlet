@@ -111,12 +111,12 @@ async function expectLeaves(api, leaves) {
 /**
  * Create an instance with the api collision mode set and every mutation enabled.
  * @param {object} config - Matrix config.
- * @param {string} [collisionApi] - `api.collision.api` to use; the matrix config's when omitted.
+ * @param {string} [collisionApi] - `api.collision.mode.api` to use; the matrix config's when omitted.
  * @returns {Promise<object>} Slothlet API proxy.
  */
 async function createInstance(config, collisionApi) {
 	const apiConfig = { ...config.api, mutations: { add: true, remove: true, reload: true } };
-	if (collisionApi) apiConfig.collision = { ...(config.api?.collision ?? {}), api: collisionApi };
+	if (collisionApi) apiConfig.collision = { ...apiConfig.collision, mode: { ...(config.api?.collision?.mode ?? {}), api: collisionApi } };
 	return slothlet({ ...config, base: TEST_DIRS.API_TEST, api: apiConfig });
 }
 
@@ -127,13 +127,13 @@ async function createInstance(config, collisionApi) {
  * @param {string} extID - moduleID for that folder.
  * @param {object} [options] - Options.
  * @param {string} [options.otherDir] - Folder to mount as `other`.
- * @param {string} [options.collisionApi] - `api.collision.api` to use.
+ * @param {string} [options.collisionApi] - `api.collision.mode.api` to use.
  * @returns {Promise<object>} Slothlet API proxy.
  */
 async function createComounted(config, extDir = EXT_DIR, extID = "ext", { otherDir = OTHER_DIR, collisionApi } = {}) {
 	const api = await createInstance(config, collisionApi);
-	await api.slothlet.api.add("plugins", extDir, { moduleID: extID });
-	await api.slothlet.api.add("plugins", otherDir, { moduleID: "other" });
+	await api.slothlet.api.add("plugins", extDir, { id: extID });
+	await api.slothlet.api.add("plugins", otherDir, { id: "other" });
 	return api;
 }
 
@@ -355,11 +355,11 @@ for (const { config, name } of getMatrixConfigs()) {
 		it.skipIf(config.mode !== "lazy")("does not materialize the other module's untouched lazy subtrees", async () => {
 			api = await createComounted(config);
 			const untouched = ["gear", "tools.kit"].map((p) => resolveWrapper(at(api, p)));
-			const spies = untouched.map((w) => vi.spyOn(w, "_materialize"));
+			const spies = untouched.map((w) => vi.spyOn(w, "___materialize"));
 
 			await api.slothlet.api.reload("ext");
 
-			spies.forEach((spy, i) => expect(spy, `${["gear", "tools.kit"][i]}._materialize`).not.toHaveBeenCalled());
+			spies.forEach((spy, i) => expect(spy, `${["gear", "tools.kit"][i]}.___materialize`).not.toHaveBeenCalled());
 			await expectLeaves(api, { ...EXT_LEAVES, ...OTHER_LEAVES });
 		});
 
@@ -370,8 +370,8 @@ for (const { config, name } of getMatrixConfigs()) {
 			["forceOverwrite", ["A"]]
 		])("with B overriding A's leaf (%s), reloading %j then removing B reverts the leaf to A's code", async (how, reloads) => {
 			api = await createInstance(config, how === "merge-replace" ? "merge-replace" : undefined);
-			await api.slothlet.api.add("leaf", REVERT_A_DIR, { moduleID: "A" });
-			await api.slothlet.api.add("leaf", REVERT_B_DIR, { moduleID: "B", ...(how === "forceOverwrite" ? { forceOverwrite: true } : {}) });
+			await api.slothlet.api.add("leaf", REVERT_A_DIR, { id: "A" });
+			await api.slothlet.api.add("leaf", REVERT_B_DIR, { id: "B", ...(how === "forceOverwrite" ? { collision: { force: true } } : {}) });
 			expect(await api.leaf.an()).toBe("B:an");
 
 			for (const id of reloads) await api.slothlet.api.reload(id);

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:14:56-07:00 (1791090896)
+ *	@Last modified time: 2026-11-16T18:29:22-08:00 (1794882562)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -24,23 +24,19 @@
 
 import { describe, it, expect, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
-import { SlothletWarning } from "@cldmv/slothlet/errors";
 import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
 const BASE = TEST_DIRS.API_TEST;
 const ADDDIR = TEST_DIRS.API_TEST_MIXED;
 
-/** Run `fn` while capturing SlothletWarnings; return the captured warning codes. */
-async function withCapturedWarnings(fn) {
-	const prev = SlothletWarning.suppressConsole;
-	SlothletWarning.suppressConsole = true;
-	SlothletWarning.clearCaptured();
+/** Run `fn` and return the codes of the warnings it raised on the instance (per instance, #819). */
+async function withCapturedWarnings(api, fn) {
+	api.slothlet.warnings.clear();
 	try {
 		await fn();
-		return SlothletWarning.captured.map((w) => w.code);
+		return api.slothlet.warnings.get().map((w) => w.code);
 	} finally {
-		SlothletWarning.clearCaptured();
-		SlothletWarning.suppressConsole = prev;
+		api.slothlet.warnings.clear();
 	}
 }
 
@@ -53,39 +49,39 @@ describe.each(getMatrixConfigs())("api.add collision-override policy (#380) > $n
 	});
 
 	it("locked by default: a per-call collisionMode warns and is ignored, but the add still succeeds (no throw)", async () => {
-		api = await slothlet({ ...config, base: BASE });
-		const codes = await withCapturedWarnings(() => api.slothlet.api.add("extLocked", ADDDIR, { collisionMode: "replace" }));
+		api = await slothlet({ ...config, diagnostics: true, base: BASE });
+		const codes = await withCapturedWarnings(api, () => api.slothlet.api.add("extLocked", ADDDIR, { collision: { mode: "replace" } }));
 		expect(api.extLocked).toBeDefined(); // add succeeded despite the ignored override
-		expect(codes).toContain("WARNING_API_ADD_OPTION_LOCKED");
+		expect(codes).toContain("WARNING_COLLISION_OPTION_LOCKED");
 	});
 
 	it("mutateExisting and recordHistory are locked the same way", async () => {
-		api = await slothlet({ ...config, base: BASE });
-		const codes = await withCapturedWarnings(() =>
-			api.slothlet.api.add("extInternal", ADDDIR, { mutateExisting: true, recordHistory: false })
+		api = await slothlet({ ...config, diagnostics: true, base: BASE });
+		const codes = await withCapturedWarnings(api, () =>
+			api.slothlet.api.add("extInternal", ADDDIR, { collision: { mutate: true }, replay: false })
 		);
 		expect(api.extInternal).toBeDefined();
-		expect(codes).toContain("WARNING_API_ADD_OPTION_LOCKED");
+		expect(codes).toContain("WARNING_COLLISION_OPTION_LOCKED");
 	});
 
-	it("silent suppresses the warning (still ignored, still succeeds)", async () => {
-		api = await slothlet({ ...config, base: BASE, silent: true });
-		const codes = await withCapturedWarnings(() => api.slothlet.api.add("extSilent", ADDDIR, { collisionMode: "replace" }));
+	it("silent still records the warning, only unprinted (still ignored, still succeeds) (#838)", async () => {
+		api = await slothlet({ ...config, diagnostics: true, base: BASE, silent: true });
+		const codes = await withCapturedWarnings(api, () => api.slothlet.api.add("extSilent", ADDDIR, { collision: { mode: "replace" } }));
 		expect(api.extSilent).toBeDefined();
-		expect(codes).not.toContain("WARNING_API_ADD_OPTION_LOCKED");
+		expect(codes).toContain("WARNING_COLLISION_OPTION_LOCKED");
 	});
 
 	it("unlocked (allowCollisionOverride:true): collisionMode is honored with no warning", async () => {
-		api = await slothlet({ ...config, base: BASE, api: { mutations: { allowCollisionOverride: true } } });
-		const codes = await withCapturedWarnings(() => api.slothlet.api.add("extOverride", ADDDIR, { collisionMode: "replace" }));
+		api = await slothlet({ ...config, diagnostics: true, base: BASE, api: { collision: { override: true } } });
+		const codes = await withCapturedWarnings(api, () => api.slothlet.api.add("extOverride", ADDDIR, { collision: { mode: "replace" } }));
 		expect(api.extOverride).toBeDefined();
-		expect(codes).not.toContain("WARNING_API_ADD_OPTION_LOCKED");
+		expect(codes).not.toContain("WARNING_COLLISION_OPTION_LOCKED");
 	});
 
 	it("forceOverwrite is always honored regardless of the flag (never warns)", async () => {
-		api = await slothlet({ ...config, base: BASE });
-		const codes = await withCapturedWarnings(() => api.slothlet.api.add("extForce", ADDDIR, { forceOverwrite: true }));
+		api = await slothlet({ ...config, diagnostics: true, base: BASE });
+		const codes = await withCapturedWarnings(api, () => api.slothlet.api.add("extForce", ADDDIR, { collision: { force: true } }));
 		expect(api.extForce).toBeDefined();
-		expect(codes).not.toContain("WARNING_API_ADD_OPTION_LOCKED");
+		expect(codes).not.toContain("WARNING_COLLISION_OPTION_LOCKED");
 	});
 });

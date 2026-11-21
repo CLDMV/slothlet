@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-26T17:07:44-07:00 (1793059664)
+ *	@Last modified time: 2026-11-19T05:14:42-08:00 (1795094082)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -22,41 +22,66 @@
  * @internal
  */
 
-import { path, util } from "@cldmv/slothlet/helpers/platform";
+import { fileParts, util } from "#helpers/platform";
 import { ComponentBase } from "#factories/component-base";
-import { compilePattern } from "@cldmv/slothlet/helpers/pattern-matcher";
-import { translate } from "@cldmv/slothlet/i18n";
+import { compilePattern, expandBraces } from "#helpers/pattern-matcher";
+import { namesSlothletMember } from "#helpers/slothlet-tree";
+import { translate } from "#i18n";
 import { MODULE_ID_SEPARATOR } from "#handlers/metadata";
-import { DEFAULT_ROUTINES } from "@cldmv/slothlet/helpers/defaults";
+import { DEFAULT_ROUTINES } from "#helpers/defaults";
+import { segmentsOf } from "#helpers/segments";
+import { runBaseline } from "#helpers/permission-baseline";
+import { assertOptionKeys } from "#helpers/config-schema";
+import { FORK, writeTarget } from "#helpers/flow-stores";
+import { isFrameworkWriteTarget, writeTargetLiteralPrefix, internals as reservedKeysInternals } from "#helpers/reserved-keys";
+import { internals as unifiedWrapperInternals } from "#handlers/unified-wrapper";
+import { internals as frameworkInternalsInternals } from "#handlers/framework-internals";
 import {
-	WRAPPER_INTERNAL_KEYS,
-	IMPL_METADATA_KEYS,
-	isFrameworkWriteTarget,
-	writeTargetLiteralPrefix
-} from "@cldmv/slothlet/helpers/reserved-keys";
-import { runtime_selfModuleCeilings, runtime_selfModuleReader } from "#handlers/unified-wrapper";
-import { markSlothletProxy } from "#handlers/framework-internals";
+	ArrayMethods,
+	Arrays,
+	Boolean,
+	concatLists,
+	copyList,
+	filterList,
+	listPush,
+	Map,
+	mapEntries,
+	mapEntriesToArray,
+	mapFrom,
+	mapKeysToArray,
+	mapList,
+	MapMethods,
+	mapValues,
+	NativeProxy,
+	Numbers,
+	Objects,
+	promiseAll,
+	PromiseMethods,
+	Promises,
+	Reflect,
+	RegExpMethods,
+	Set,
+	setFrom,
+	SetMethods,
+	setToArray,
+	setValues,
+	splitText,
+	String,
+	StringMethods,
+	Symbol,
+	WeakMap,
+	WeakMapMethods
+} from "#helpers/intrinsics";
+const reservedKeysOwn = reservedKeysInternals("lib/handlers/permission-manager");
+const { runtime_selfModuleCeilings, runtime_selfModuleReader } = unifiedWrapperInternals("lib/handlers/permission-manager");
+const { markSlothletProxy } = frameworkInternalsInternals("lib/handlers/permission-manager");
 
 /**
- * Cache size above which a principal with a `maxAge` sweeps its expired identities on the next
+ * Cache size above which a principal with a `ttl` sweeps its expired identities on the next
  * resolve (#459), so a long-lived process serving many identities does not grow without bound.
  * @type {number}
  */
 const PRINCIPAL_PRUNE_THRESHOLD = 1024;
-
-/**
- * Auto-incrementing counter for rule IDs.
- * @type {number}
- */
-let ruleIdCounter = 0;
-
-/**
- * Monotonic registration sequence for rules. Used as the final tiebreak (last-registered wins
- * WITHIN a layer) so it is robust against `Date.now()` collisions when several rules register in
- * the same millisecond (e.g. the config-rules loop). Strictly increasing across the process.
- * @type {number}
- */
-let ruleRegistrationSeq = 0;
 
 /**
  * Hook types that may appear as a permission-target suffix in the `pattern:type` form.
@@ -64,26 +89,84 @@ let ruleRegistrationSeq = 0;
  * rule that gates it read identically (e.g. `hook.on("db.*:error")` ↔ `target: "db.*:error"`).
  * @type {Set<string>}
  */
-const HOOK_TARGET_TYPES = new Set(["before", "after", "always", "error", "around", "hook"]);
+const HOOK_TARGET_TYPES = setFrom(["before", "after", "always", "error", "around", "hook"]);
 
 /**
- * Suffix that makes a rule target a write target (#625): `pattern:write` gates a module assigning, defining,
- * or deleting a member at a matching api path, or changing the prototype or extensibility of the node there.
+ * Suffix of the built-in write targets (#625): `pattern:write` gates a module assigning, defining, or deleting a member
+ * at a matching api path, or changing the prototype or extensibility of the node there.
  * @type {string}
  * @private
  */
 const WRITE_TARGET_SUFFIX = ":write";
 
 /**
+ * The access levels a rule target's suffix names (`pattern:<level>`), each with the operations it governs. A target
+ * with no level suffix is {@link DEFAULT_RULE_LEVEL}. An allow grants the operations of its level; a deny takes them
+ * away, except that a `:write` deny takes away the write alone. A write needs the read, so a deny taking the read away
+ * refuses the write as well: the write gate holds the read rules on top of the write rules.
+ * @type {Map<string, Readonly<{call: boolean, read: boolean, write: boolean}>>}
+ * @private
+ */
+const RULE_LEVELS = mapFrom([
+	["call", Objects.freeze({ call: true, read: false, write: false })],
+	["read", Objects.freeze({ call: false, read: true, write: false })],
+	["access", Objects.freeze({ call: true, read: true, write: false })],
+	["write", Objects.freeze({ call: false, read: true, write: true })],
+	["full", Objects.freeze({ call: true, read: true, write: true })]
+]);
+
+/**
+ * The level of a rule target with no level suffix: calls and reads, no write.
+ * @type {string}
+ * @private
+ */
+const DEFAULT_RULE_LEVEL = "access";
+
+/**
+ * The operations a call or read gate decides (see {@link PermissionManager#checkAccess}): `"access"` asks for both.
+ * @type {Set<string>}
+ * @private
+ */
+const ACCESS_OPERATIONS = setFrom(["call", "read", "access"]);
+
+/**
+ * The prefix of a rule target naming one of the built-in capabilities module code is refused by default while the
+ * permission system is on (`capability:code`, …): see {@link CAPABILITIES}.
+ * @type {string}
+ */
+const CAPABILITY_PREFIX = "capability:";
+
+/**
+ * The built-in capabilities, in the order they are reported: what each covers is listed in PERMISSIONS.md.
+ * - `code`: turning a string into code (the function constructors, a string timer, `vm`, `Module#_compile`, Node's
+ *   `contextify` binding);
+ * - `imports`: importing a `data:` or `blob:` URL;
+ * - `loader`: registering module hooks (`module.registerHooks()`, `module.register()`).
+ * @type {ReadonlyArray<string>}
+ */
+const CAPABILITIES = Objects.freeze(["code", "imports", "loader"]);
+
+/**
+ * Why a capability is refused, by the `reasonCode` a refusal carries: the translation key of each reason.
+ * @type {Readonly<Record<string, string>>}
+ */
+const CAPABILITY_REASONS = Objects.freeze({
+	"not-opened": "PERMISSION_CAPABILITY_REASON_NOT_OPENED",
+	unattributed: "PERMISSION_CAPABILITY_REASON_UNATTRIBUTED",
+	"foreign-filename": "PERMISSION_CAPABILITY_REASON_FOREIGN_FILENAME",
+	binding: "PERMISSION_CAPABILITY_REASON_BINDING"
+});
+
+/**
  * The global metadata setter, the host's unless an allow lifts the built-in deny for a module (#625).
  * @type {string}
  */
-const GLOBAL_METADATA_TARGET = "slothlet.metadata.setGlobal";
+const GLOBAL_METADATA_TARGET = "slothlet.metadata.global";
 
 /**
  * Precedence layers used to break ties when two matching rules have EQUAL specificity.
- * Most-specific-wins is always the primary rule; only among equally-specific rules does the
- * higher layer win, so the composing host (instance config / gated runtime) overrides a module's
+ * Most-specific-wins is always the primary rule (a pattern's kind, then its literal segments); only among
+ * equally-specific rules does the higher layer win, so the composing host (instance config / gated runtime) overrides a module's
  * manifest, which overrides the framework built-in default. Within a single layer, last-registered
  * wins. Higher number = higher precedence.
  *
@@ -97,7 +180,7 @@ const GLOBAL_METADATA_TARGET = "slothlet.metadata.setGlobal";
  * @type {ReadonlyArray<string>}
  * @private
  */
-const RULE_FIELDS = Object.freeze(["caller", "target", "effect", "condition", "requires"]);
+const RULE_FIELDS = Objects.freeze(["caller", "target", "effect", "condition", "requires"]);
 
 /**
  * The pin a module's function condition carries (#625): `{ moduleID, live }`, the registering module's base id, and
@@ -107,18 +190,29 @@ const RULE_FIELDS = Object.freeze(["caller", "target", "effect", "condition", "r
 const CONDITION_PIN = Symbol("slothlet.permissions.conditionPin");
 
 /** The data fields of an event rule (#407), read once when it is registered (#625). */
-const EVENT_RULE_FIELDS = Object.freeze(["caller", "event", "effect", "condition"]);
+const EVENT_RULE_FIELDS = Objects.freeze(["caller", "event", "effect", "condition"]);
 
-const RULE_LAYER_RANK = Object.freeze({ builtin: 0, manifest: 1, module: 1, manager: 1, instance: 2, runtime: 3 });
+const RULE_LAYER_RANK = Objects.freeze({ builtin: 0, manifest: 1, module: 1, manager: 1, instance: 2, runtime: 3 });
 
 /**
  * Enforcement options for the call-gate query {@link PermissionManager#checkCall} (#508): the supplied
  * caller is a module (never the host), the audit payload names the query as its origin, and — as for a
  * promoted call whose stale-principal scan has just run — principals count as current under grace.
- * @type {Readonly<{ moduleCaller: true, via: "checkCall", principalGrace: true }>}
+ * @type {Readonly<{ moduleCaller: true, via: ReadonlyArray<string>, principalGrace: true }>}
  * @private
  */
-const CHECK_CALL_OPTIONS = Object.freeze({ moduleCaller: true, via: "checkCall", principalGrace: true });
+const CHECK_CALL_OPTIONS = Objects.freeze({
+	moduleCaller: true,
+	via: Objects.freeze(["slothlet", "permissions", "global", "check", "call"]),
+	principalGrace: true
+});
+
+/**
+ * The method an audit event's `via` names, as its path from `api` (segments), by the internal marker.
+ * @type {Readonly<Record<string, ReadonlyArray<string>>>}
+ * @private
+ */
+const VIA_PATHS = Objects.freeze({ __proto__: null, checkCall: Objects.freeze(["slothlet", "permissions", "global", "check", "call"]) });
 
 /**
  * Resolve a rule's precedence layer from an explicit layer or the owning module id.
@@ -128,7 +222,7 @@ const CHECK_CALL_OPTIONS = Object.freeze({ moduleCaller: true, via: "checkCall",
  * @internal
  */
 function resolveRuleLayer(layer, ownerModuleID) {
-	if (layer && Object.prototype.hasOwnProperty.call(RULE_LAYER_RANK, layer)) return layer;
+	if (layer && Objects.hasOwn(RULE_LAYER_RANK, layer)) return layer;
 	if (ownerModuleID === "__builtin__") return "builtin";
 	return "instance";
 }
@@ -154,9 +248,9 @@ function resolveRuleLayer(layer, ownerModuleID) {
  */
 function runtime_isPrivateName(targetPath) {
 	if (typeof targetPath !== "string" || targetPath.length === 0) return false;
-	const cut = targetPath.lastIndexOf(".");
+	const cut = StringMethods.lastIndexOf(targetPath, ".");
 	if (cut < 0) return false;
-	return targetPath.charCodeAt(cut + 1) === 95; // "_"
+	return StringMethods.charCodeAt(targetPath, cut + 1) === 95; // "_"
 }
 
 /**
@@ -165,17 +259,18 @@ function runtime_isPrivateName(targetPath) {
  * @type {ReadonlySet<string>}
  * @internal
  */
-const FRAMEWORK_ROOTS = Object.freeze(new Set(["slothlet", "shutdown", "destroy"]));
+const FRAMEWORK_ROOTS = Objects.freeze(setFrom(["slothlet", "shutdown", "destroy"]));
 
 /**
  * The framework's own keys on api nodes the built-in write rules keep from module code.
  * @type {ReadonlySet<string>}
  * @private
  */
-const FRAMEWORK_WRITE_KEYS = new Set([...WRAPPER_INTERNAL_KEYS, ...IMPL_METADATA_KEYS]);
+const FRAMEWORK_WRITE_KEYS = setFrom([...reservedKeysOwn.WRAPPER_INTERNAL_KEYS, ...reservedKeysOwn.IMPL_METADATA_KEYS]);
 
 /**
- * Whether two source files belong to the same module — the same directory of files (#260).
+ * Whether two source files share a folder, the module a private member belongs to under
+ * `permissions.private.scope: "folder"` (#260).
  *
  * @param {string} callerFilePath - Absolute path of the caller's source file.
  * @param {string} targetFilePath - Absolute path of the target's source file.
@@ -183,14 +278,14 @@ const FRAMEWORK_WRITE_KEYS = new Set([...WRAPPER_INTERNAL_KEYS, ...IMPL_METADATA
  * @internal
  *
  * @description
- * A slothlet module IS a directory of files, so same-directory is the module-identity encoding
- * that survives every composition shape — the api path is lossy in both directions, but
- * enforcement receives both REAL file paths, and `dirname` equality needs no new assigned
- * identity, no cache-key change, and no mode-dependent normalization. A subdirectory is its own
- * module: nesting expresses a boundary, exactly as it does for the api surface.
+ * Under the `"folder"` scope a module is a directory of files: the api path is lossy in both
+ * directions, but enforcement receives both real file paths, and folder equality needs no
+ * assigned identity, no cache-key change, and no mode-dependent normalization. A subdirectory is
+ * its own module. The folders come from `fileParts`, so a browser, where both files are URLs,
+ * compares them the same way. The default `"module"` scope compares owning module IDs instead.
  */
 function runtime_sameModuleDir(callerFilePath, targetFilePath) {
-	return path.dirname(callerFilePath) === path.dirname(targetFilePath);
+	return fileParts(callerFilePath).dir === fileParts(targetFilePath).dir;
 }
 
 /**
@@ -208,6 +303,20 @@ function runtime_sameModuleDir(callerFilePath, targetFilePath) {
  * @property {Array<*>|null} args - Arguments the target leaf was called/constructed with, or null.
  * @property {string|null} target - Concrete (post-glob) target api path of the gated call.
  */
+
+/**
+ * Whether a principal's cached value is still inside its `ttl`, given how long ago it was resolved on the
+ * instance's clock. A clock that went backwards (a negative age) or answered something that is not a number is not
+ * evidence the value is fresh, so it is not current: it fails closed.
+ *
+ * @param {number} age - Milliseconds since the value was resolved.
+ * @param {number} ttl - The principal's `ttl`.
+ * @returns {boolean} True when the value is current.
+ * @private
+ */
+function runtime_withinTtl(age, ttl) {
+	return typeof age === "number" && age >= 0 && age <= ttl;
+}
 
 /**
  * Whether a value is a thenable — the shape an async function or a Promise-returning condition
@@ -234,9 +343,9 @@ function runtime_isThenable(value) {
  */
 function runtime_isViewablePrincipalValue(value) {
 	if (value === null || typeof value !== "object") return false;
-	if (Array.isArray(value)) return true;
-	const proto = Object.getPrototypeOf(value);
-	return proto === Object.prototype || proto === null;
+	if (Arrays.isArray(value)) return true;
+	const proto = Objects.getPrototypeOf(value);
+	return proto === Objects.prototype || proto === null;
 }
 
 /**
@@ -249,7 +358,100 @@ function runtime_isViewablePrincipalValue(value) {
  */
 function runtime_moduleIDList(moduleIDs) {
 	if (moduleIDs === null || moduleIDs === undefined) return [];
-	return Array.isArray(moduleIDs) ? moduleIDs.filter((id) => id !== null && id !== undefined) : [moduleIDs];
+	return Arrays.isArray(moduleIDs) ? filterList(moduleIDs, (id) => id !== null && id !== undefined) : [moduleIDs];
+}
+
+/**
+ * No paths: the answer when no rule names a path above a target exactly.
+ * @type {ReadonlyArray<string>}
+ * @private
+ */
+const NO_PREFIXES = Objects.freeze([]);
+
+/**
+ * How many paths the per-epoch records of exact deny rules above a path keep before starting over.
+ * @type {number}
+ * @private
+ */
+const PREFIX_CACHE_LIMIT = 1024;
+
+/**
+ * The matcher of one segment of a write pattern, kept per segment.
+ * @type {Map<string, function(string): boolean>}
+ * @private
+ */
+const SEGMENT_MATCHERS = new Map();
+
+/**
+ * Whether one segment of a write pattern matches a path segment.
+ * @param {string} segment - The pattern's segment (`*`, `?`, `!(a|b)` and literals).
+ * @param {string} name - The path's segment.
+ * @returns {boolean} Whether it matches.
+ * @private
+ */
+function runtime_segmentMatches(segment, name) {
+	let matcher = MapMethods.get(SEGMENT_MATCHERS, segment);
+	if (!matcher) MapMethods.set(SEGMENT_MATCHERS, segment, (matcher = compilePattern(segment)));
+	return matcher(name);
+}
+
+/**
+ * Whether a write pattern can match the path `target` or one beneath it (#667). It answers for what a pattern could
+ * reach, so it errs toward yes: a segment holding `**` stands for any number of segments, and a pattern negated whole
+ * (`!pattern`) reaches everything.
+ * @param {string} pattern - The write pattern, without `:write`.
+ * @param {string[]} target - The path's segments.
+ * @param {boolean} [beneath=false] - Whether only a path strictly beneath `target` counts.
+ * @returns {boolean} Whether it can.
+ * @private
+ * @example
+ * runtime_patternReaches("owner.Foo.prototype.hi", ["owner", "Foo", "prototype"]); // true
+ * runtime_patternReaches("owner.Foo.prototype", ["owner", "Foo", "prototype"], true); // false
+ */
+function runtime_patternReaches(pattern, target, beneath = false) {
+	if (StringMethods.startsWith(pattern, "!") && !StringMethods.startsWith(pattern, "!(")) return true;
+	for (let ofIndex = 0, ofList = expandBraces(pattern); ofIndex < ofList.length; ofIndex++) {
+		const alternative = ofList[ofIndex];
+		const segments = splitText(alternative, ".");
+		const seen = new Set();
+		const reaches = (i, j) => {
+			// The whole path matched: what is left of the pattern matches the path itself, or something beneath it.
+			if (j === target.length) return !beneath || i < segments.length;
+			if (i === segments.length) return false;
+			const key = i * (target.length + 1) + j;
+			if (SetMethods.has(seen, key)) return false;
+			SetMethods.add(seen, key);
+			if (StringMethods.includes(segments[i], "**")) return reaches(i + 1, j) || reaches(i, j + 1);
+			return runtime_segmentMatches(segments[i], target[j]) && reaches(i + 1, j + 1);
+		};
+		if (reaches(0, 0)) return true;
+	}
+	return false;
+}
+
+/**
+ * Whether a write pattern matches the path `target` and every path beneath it (#667): one of its alternatives ends in
+ * `.**` (or is `**`), and what comes before matches the path or a path above it. It answers yes only when sure.
+ * @param {string} pattern - The write pattern, without `:write`.
+ * @param {string[]} target - The path's segments.
+ * @param {function(string): function(string): boolean} compiled - The compiled matcher of a pattern.
+ * @returns {boolean} Whether it does.
+ * @private
+ * @example
+ * runtime_patternCovers("owner.**", ["owner", "Foo", "prototype"], compilePattern); // true
+ */
+function runtime_patternCovers(pattern, target, compiled) {
+	if (StringMethods.startsWith(pattern, "!") && !StringMethods.startsWith(pattern, "!(")) return false;
+	for (let ofIndex = 0, ofList = expandBraces(pattern); ofIndex < ofList.length; ofIndex++) {
+		const alternative = ofList[ofIndex];
+		if (alternative === "**") return true;
+		if (!StringMethods.endsWith(alternative, ".**")) continue;
+		const above = compiled(StringMethods.slice(alternative, 0, -3));
+		// `above.**` matches `x.` and anything after it, so a path at or below `x` is matched once `above` matches `x`;
+		// the path itself needs `x` strictly above it.
+		for (let length = 1; length < target.length; length++) if (above(ArrayMethods.join(copyList(target, 0, length), "."))) return true;
+	}
+	return false;
 }
 
 /**
@@ -260,6 +462,31 @@ function runtime_moduleIDList(moduleIDs) {
  * @class PermissionManager
  * @extends ComponentBase
  */
+/**
+ * The last epoch handed out to any permission manager (see {@link nextEpoch}).
+ * @type {number}
+ * @private
+ */
+let lastEpoch = 0;
+
+/**
+ * A rule or event-rule epoch no permission manager has had: what is cached against an epoch elsewhere (a wrapper's
+ * view decisions, a subscription's level) can then never be taken for the same rules by another manager, a run's
+ * fork (see {@link FORK}) and the handler it was forked from among them.
+ * @returns {number} The epoch.
+ * @private
+ */
+function nextEpoch() {
+	return ++lastEpoch;
+}
+
+/**
+ * The manager {@link PermissionManager#[FORK]} is copying, read once by the constructor it calls; null otherwise.
+ * @type {PermissionManager|null}
+ * @private
+ */
+let forkingFrom = null;
+
 export class PermissionManager extends ComponentBase {
 	/**
 	 * Property name for auto-discovery by _initializeComponents.
@@ -284,6 +511,23 @@ export class PermissionManager extends ComponentBase {
 	#callRules = new Map();
 
 	/**
+	 * Counter behind this instance's auto-generated rule ids (`perm-N`, `evt-N`). Per instance (#822), so a second
+	 * instance numbers its rules from the same start rather than from where the first one left off.
+	 * @type {number}
+	 * @private
+	 */
+	#ruleIdCounter = 0;
+
+	/**
+	 * This instance's monotonic registration sequence for rules. It is the final tiebreak (last-registered wins
+	 * WITHIN a layer), robust against `Date.now()` collisions when several rules register in the same millisecond
+	 * (the config-rules loop). Per instance (#822): it only ever orders this instance's rules.
+	 * @type {number}
+	 * @private
+	 */
+	#ruleRegistrationSeq = 0;
+
+	/**
 	 * The write rules (`pattern:write`, #625), scanned only for a module's write.
 	 * @type {Map<string, object>}
 	 * @private
@@ -291,14 +535,14 @@ export class PermissionManager extends ComponentBase {
 	#writeRules = new Map();
 
 	/**
-	 * Id of the built-in reach default (`slothlet.permissions.addRule` for rules beyond a module's own subtree, #625).
+	 * Id of the built-in reach default (`slothlet.permissions.rules.add` for rules beyond a module's own subtree, #625).
 	 * @type {string|null}
 	 * @private
 	 */
 	#reachRuleId = null;
 
 	/**
-	 * Id of the built-in deny on `slothlet.metadata.setGlobal` for modules (#625), which
+	 * Id of the built-in deny on `slothlet.metadata.global` for modules (#625), which
 	 * {@link PermissionManager#assertGlobalMetadataWrite} applies rather than the call gate.
 	 * @type {string|null}
 	 * @private
@@ -321,12 +565,36 @@ export class PermissionManager extends ComponentBase {
 	#enabled = false;
 
 	/**
+	 * Whether the system was on when the instance shut down. What a module was handed as a view while it was on stays
+	 * a view, and what it could not write then it cannot write through a view it kept: the instance ending grants
+	 * nothing.
+	 * @type {boolean}
+	 * @private
+	 */
+	#endedOn = false;
+
+	/**
 	 * Whether the permission system is disabled outright (`mode: "disabled"`): not even the built-in rules that keep
 	 * module code off the framework's own namespace apply. Off (`mode: "off"`, the default) evaluates those alone.
 	 * @type {boolean}
 	 * @private
 	 */
 	#disabled = false;
+
+	/**
+	 * Whether the mode is `"strict"`: as on, chosen in the config only, so `control.mode(value)` refuses.
+	 * @type {boolean}
+	 * @private
+	 */
+	#strict = false;
+
+	/**
+	 * What the permission baseline found when the instance started (see {@link runBaseline}), or null when no check ran
+	 * (the mode was off or disabled).
+	 * @type {{met: boolean, checks: Array<{id: string, met: boolean, reason: string|null}>}|null}
+	 * @private
+	 */
+	#baseline = null;
 
 	/**
 	 * Audit level: "default" or "verbose".
@@ -337,7 +605,7 @@ export class PermissionManager extends ComponentBase {
 
 	/**
 	 * Whether terminal data-value property reads are permission-gated.
-	 * On by default when permissions are configured — opt out via `permissions.readGating: false`.
+	 * On by default when permissions are configured — opt out via `permissions.gating.read: false`.
 	 * @type {boolean}
 	 * @private
 	 */
@@ -346,7 +614,7 @@ export class PermissionManager extends ComponentBase {
 	/**
 	 * Whether a function read out of the api keeps the identity of the module that read it.
 	 *
-	 * On by default when permissions are configured — opt out via `permissions.references.capture: false`.
+	 * On by default when permissions are configured — opt out via `permissions.caller.capture: false`.
 	 * Without it, a reference captured inside a module and invoked later from a boundary that carries no
 	 * caller is treated as host-initiated, which is more authority than the capturing module has.
 	 * @type {boolean}
@@ -360,6 +628,13 @@ export class PermissionManager extends ComponentBase {
 	 * @type {"deny"|"allow"}
 	 */
 	#privateHost = "deny";
+
+	/**
+	 * What a `_`/`__`-prefixed member is private to: "module" (default) — the module ID that owns its path, so every
+	 * leaf that module owns reads it, wherever its file sits; "folder" — the folder of files that exports it.
+	 * @type {"module"|"folder"}
+	 */
+	#privateScope = "module";
 
 	/**
 	 * Owner grant (#509): when true, a caller leaf may access any target leaf whose CURRENT owner
@@ -388,7 +663,7 @@ export class PermissionManager extends ComponentBase {
 
 	/**
 	 * Base event level applied when no event rule matches a subscriber/event pair. Built-in default
-	 * "notify" (open subscription, payload opt-in); overridable via `permissions.events.default`.
+	 * "notify" (open subscription, payload opt-in); overridable via `permissions.events.policy`.
 	 * @type {"deny"|"notify"|"allow"}
 	 * @private
 	 */
@@ -400,7 +675,14 @@ export class PermissionManager extends ComponentBase {
 	 * @type {number}
 	 * @private
 	 */
-	#eventRulesEpoch = 0;
+	#eventRulesEpoch = nextEpoch();
+
+	/**
+	 * Monotonic epoch that changes whenever a call, read or write rule's outcome may have changed (see
+	 * {@link ruleEpoch}).
+	 * @type {number}
+	 */
+	#ruleEpoch = nextEpoch();
 
 	/**
 	 * Whether the control surface is sealed. When true, policy-mutating methods (`enable`,
@@ -411,6 +693,29 @@ export class PermissionManager extends ComponentBase {
 	 * @private
 	 */
 	#sealed = false;
+
+	/**
+	 * The paths a deny call rule names exactly (no glob), kept for the rule epoch: an exact deny on an object member a
+	 * module's data holds covers what the member holds (see {@link enforceAccess}'s `dataMember` option). Null until
+	 * asked for in the current epoch.
+	 * @type {Set<string>|null}
+	 * @private
+	 */
+	#exactDenyTargets = null;
+
+	/**
+	 * The paths above an api path that a deny call rule names exactly, by the path, for the rule epoch.
+	 * @type {Map<string, string[]>}
+	 * @private
+	 */
+	#exactDenyPrefixes = new Map();
+
+	/**
+	 * Whether an allow call rule for a caller can name something beneath a path, by `caller::path`, for the rule epoch.
+	 * @type {Map<string, boolean>}
+	 * @private
+	 */
+	#allowsBeneath = new Map();
 
 	/**
 	 * Cache of resolved caller::target decision records.
@@ -432,6 +737,38 @@ export class PermissionManager extends ComponentBase {
 	#writeCache = new Map();
 
 	/**
+	 * Write-rule verdicts over a whole subtree ({@link writeSubtree}), keyed by caller path and the subtree's root.
+	 * Cleared on every rule change.
+	 * @type {Map<string, "deny"|"grant"|null>}
+	 * @private
+	 */
+	#subtreeCache = new Map();
+
+	/**
+	 * Whether a call or read rule could refuse a caller something at a path or beneath it ({@link readMayRefuseBeneath}),
+	 * keyed by caller path and the path. Cleared on every rule change.
+	 * @type {Map<string, boolean>}
+	 * @private
+	 */
+	#readSubtreeCache = new Map();
+
+	/**
+	 * The write rules naming each caller path ({@link writeRulesFor}), keyed by caller path. Cleared on every rule change.
+	 * @type {Map<string, string>}
+	 * @private
+	 */
+	#writeRulesForCache = new Map();
+
+	/**
+	 * Ids of the built-in rules keeping module code off the framework's own keys on api nodes (`**.<key>:write`). They
+	 * match a key at any depth, so {@link writeSubtree} leaves them out: they guard what an api node carries, and a
+	 * value beneath a node's path is no node.
+	 * @type {Set<string>}
+	 * @private
+	 */
+	#nodeKeyRuleIds = new Set();
+
+	/**
 	 * Cache of compiled glob patterns → matcher functions.
 	 * @type {Map<string, function>}
 	 * @private
@@ -442,7 +779,7 @@ export class PermissionManager extends ComponentBase {
 	 * Registered principals (#459): named, owned resolvers that turn a caller identity into
 	 * authorization facts for synchronous rule conditions. Keyed by principal name.
 	 *
-	 * Each record: `{ name, ownerModuleID, key, resolve, maxAge, epoch, cache, inflight }`, where
+	 * Each record: `{ name, ownerModuleID, key, resolve, ttl, epoch, cache, inflight }`, where
 	 * `cache` maps an identity key to `{ value, view, epoch, resolvedAt }` and `inflight` maps an
 	 * identity key to the pending resolve so concurrent calls for one identity share it.
 	 * @type {Map<string, object>}
@@ -460,8 +797,8 @@ export class PermissionManager extends ComponentBase {
 
 	/**
 	 * True only for the duration of a promoted call's post-resolve enforcement (#459). A principal
-	 * resolved for that call is accepted even if its `maxAge` has since elapsed, as long as its epoch
-	 * still matches — without this a `maxAge: 0` principal could never be satisfied. An epoch bump
+	 * resolved for that call is accepted even if its `ttl` has since elapsed, as long as its epoch
+	 * still matches — without this a `ttl: 0` principal could never be satisfied. An epoch bump
 	 * (invalidate / re-register / owner reload) during the resolve still fails the rule closed.
 	 * @type {boolean}
 	 * @private
@@ -477,42 +814,55 @@ export class PermissionManager extends ComponentBase {
 	 */
 	constructor(slothlet) {
 		super(slothlet);
+		const from = forkingFrom;
+		if (from !== null) {
+			forkingFrom = null;
+			this.#copyFrom(from);
+			return;
+		}
 
+		// `slothlet.config.permissions` is the normalised section (load() normalises it before the components are built), so
+		// every field below is present and valid.
 		const permConfig = slothlet.config?.permissions;
 		if (permConfig) {
-			// The "allow" fallback in || is uncovered when all tests supply defaultPolicy explicitly.
+			// The "allow" fallback in || is uncovered when all tests supply policy explicitly.
 			/* v8 ignore next */
-			this.#defaultPolicy = permConfig.defaultPolicy || "allow";
-			this.#enabled = permConfig.mode ? permConfig.mode === "on" : permConfig.enabled !== false;
-			this.#disabled = permConfig.mode === "disabled";
+			this.#defaultPolicy = permConfig.policy || "allow";
+			// An absent mode is "on"; `true` and `false` are the boolean forms of "on" and "off".
+			const mode = permConfig.mode === undefined || permConfig.mode === true ? "on" : permConfig.mode === false ? "off" : permConfig.mode;
+			this.#enabled = mode === "on" || mode === "strict";
+			this.#disabled = mode === "disabled";
+			this.#strict = mode === "strict";
 			this.#audit = permConfig.audit || "default";
-			this.#readGating = permConfig.readGating !== false;
-			this.#capture = permConfig.references?.capture !== false;
+			this.#readGating = permConfig.gating?.read !== false;
+			this.#capture = permConfig.caller?.capture !== false;
 			// Module privacy (#260): whether the HOST may read `_`/`__` exports. Secure default deny.
 			this.#privateHost = permConfig.private?.host === "allow" ? "allow" : "deny";
+			// What a private member is private to; normalization guarantees "module" or "folder".
+			this.#privateScope = permConfig.private?.scope === "folder" ? "folder" : "module";
 			// Owner grant (#509): a module may reach every leaf it owns. Opt-in; normalization guarantees a boolean.
 			this.#owner = permConfig.owner === true;
 
 			// Register config-level rules (earliest in stacking order)
-			if (Array.isArray(permConfig.rules)) {
-				for (const rule of permConfig.rules) {
-					this.addRule(rule, null);
+			if (Arrays.isArray(permConfig.rules)) {
+				for (let i = 0; i < permConfig.rules.length; i++) {
+					this.addRule(permConfig.rules[i], null);
 				}
 			}
 
 			// Event rules (#407): base default level + config-level event rules (instance layer).
 			// Config normalization guarantees `events` is present with a valid `default` and array `rules`.
 			if (permConfig.events) {
-				if (permConfig.events.default) this.#eventDefault = permConfig.events.default;
-				if (Array.isArray(permConfig.events.rules)) {
-					for (const rule of permConfig.events.rules) {
-						this.addEventRule(rule, null);
+				if (permConfig.events.policy) this.#eventDefault = permConfig.events.policy;
+				if (Arrays.isArray(permConfig.events.rules)) {
+					for (let i = 0; i < permConfig.events.rules.length; i++) {
+						this.addEventRule(permConfig.events.rules[i], null);
 					}
 				}
 			}
 		}
 
-		// Built-in deny rule: block all modules from calling control.enable/disable by default.
+		// Built-in deny rule: block all modules from the control surface (control.mode, control.gating.read, seal, …) by default.
 		this.addRule({ caller: "**", target: "slothlet.permissions.control.**", effect: "deny" }, "__builtin__");
 
 		// Built-in deny rules (#529): `slothlet.reload` and `slothlet.shutdown` are the framework's own
@@ -531,30 +881,50 @@ export class PermissionManager extends ComponentBase {
 		// trusted module (`{ caller: "admin.**", target: "slothlet.restart", effect: "allow" }`).
 		this.addRule({ caller: "**", target: "slothlet.restart", effect: "deny" }, "__builtin__");
 
-		// Built-in allow rules: the caller-identity utilities `slothlet.lockCaller` and
+		// Built-in deny rule: `slothlet.warnings` holds every warning this instance raised, other modules' among them
+		// (their paths and files), so reading or clearing it is the host's by default. An instance rule on the same
+		// target grants it to a module.
+		this.addRule({ caller: "**", target: "slothlet.warnings.**", effect: "deny" }, "__builtin__");
+
+		// Built-in deny rule: `slothlet.context.set` changes the context every leaf of the instance reads, so a module
+		// that could call it could change what every other module sees. Host-only by default; an instance rule on the
+		// same exact target outranks this one (`{ caller: "session.**", target: "slothlet.context.set", effect: "allow" }`).
+		this.addRule({ caller: "**", target: "slothlet.context.set", effect: "deny" }, "__builtin__");
+
+		// Built-in allow rules: the caller-identity utilities `slothlet.pin` and
 		// `slothlet.bind` grant no security-sensitive access — they only pin a callback's
 		// caller identity, which strengthens enforcement. Allowing them by default means a
-		// `defaultPolicy: "deny"` configuration does not have to allow them explicitly.
+		// `policy: "deny"` configuration does not have to allow them explicitly.
 		// A more specific user rule can still deny them for a particular module.
-		this.addRule({ caller: "**", target: "slothlet.lockCaller", effect: "allow" }, "__builtin__");
+		this.addRule({ caller: "**", target: "slothlet.pin", effect: "allow" }, "__builtin__");
 		this.addRule({ caller: "**", target: "slothlet.bind", effect: "allow" }, "__builtin__");
 
-		// Built-in deny rule (#477): `slothlet.lockCaller.caller` pins the current leaf's CALLER onto
-		// a callback, so the callback acts as another module — a privilege, unlike `lockCaller`, which
+		// Built-in deny rule (#477): `slothlet.pin.caller` pins the current leaf's CALLER onto
+		// a callback, so the callback acts as another module — a privilege, unlike `pin`, which
 		// only pins the module itself. Host-only by default; the host grants it to the service modules
 		// that run callbacks on their callers' behalf (e.g. `{ caller: "scheduler.**", target:
-		// "slothlet.lockCaller.caller", effect: "allow" }`). The exact-path allow on `slothlet.lockCaller`
+		// "slothlet.pin.caller", effect: "allow" }`). The exact-path allow on `slothlet.pin`
 		// above does not match this deeper path.
-		this.addRule({ caller: "**", target: "slothlet.lockCaller.caller", effect: "deny" }, "__builtin__");
+		this.addRule({ caller: "**", target: "slothlet.pin.caller", effect: "deny" }, "__builtin__");
 
 		// Built-in allow rules (#468): `slothlet.metadata.caller` / `slothlet.metadata.self` reveal
 		// identity only — who is calling this module, and which module this is — which is what a module
 		// needs to enforce its own policy (e.g. scoping records by caller). They grant no data or
-		// control access, so like lockCaller/bind a `defaultPolicy: "deny"` host need not re-allow
+		// control access, so like pin/bind a `policy: "deny"` host need not re-allow
 		// them. `slothlet.metadata.get(path)`, which reads arbitrary metadata, stays gated, and a user
 		// rule of equal or higher specificity still overrides these.
 		this.addRule({ caller: "**", target: "slothlet.metadata.caller", effect: "allow" }, "__builtin__");
 		this.addRule({ caller: "**", target: "slothlet.metadata.self", effect: "allow" }, "__builtin__");
+
+		// Built-in allow: `slothlet.node(target)` reports what slothlet knows about a node (its path, file, module, load
+		// state). The call itself grants nothing: whether the caller may reach the target is decided per call, as a
+		// read of the target's own path. So, like metadata.caller, a `defaultPolicy: "deny"` host need not re-allow it.
+		this.addRule({ caller: "**", target: "slothlet.node", effect: "allow" }, "__builtin__");
+
+		// Built-in allow: `slothlet.same(a, b)` answers whether two values stand for the same object once slothlet's own
+		// layers are taken off. It reads nothing the caller does not already hold and grants nothing, so a
+		// `defaultPolicy: "deny"` host need not re-allow it.
+		this.addRule({ caller: "**", target: "slothlet.same", effect: "allow" }, "__builtin__");
 
 		// Principals (#459): registering, replacing, or invalidating a resolver decides what facts every
 		// `requires` rule sees, so the principal management surface is host-only by default. The host
@@ -563,27 +933,35 @@ export class PermissionManager extends ComponentBase {
 
 		// Built-in reach default (#625): module code manages rules (adds and removes them) for its own subtree only. A
 		// rule on any other target, the framework's own among them, takes an explicit allow on this target for the
-		// module — the host's or a manifest's — which outranks this deny. It decides only that reach; calling `addRule`
+		// module — the host's or a manifest's — which outranks this deny. It decides only that reach; calling `rules.add`
 		// for the module's own subtree is not gated by it (see placeModuleRule).
-		this.#reachRuleId = this.addRule({ caller: "**", target: "slothlet.permissions.addRule", effect: "deny" }, "__builtin__");
+		this.#reachRuleId = this.addRule({ caller: "**", target: "slothlet.permissions.rules.add", effect: "deny" }, "__builtin__");
 
-		// Call-gate query (#508): `global.checkCall` answers "may caller X call target Y with these args"
-		// for a SUPPLIED caller identity, exactly like `event.resolveLevel` answers for a supplied
+		// Call-gate query (#508): `global.check.call` answers "may caller X call target Y with these args"
+		// for a SUPPLIED caller identity, exactly like `event.level` answers for a supplied
 		// subscriber — so it is host-only by the same mechanism (a built-in deny), not merely gatable like
 		// the rest of `global.*`. A module that could ask on another module's behalf would learn that
 		// module's rule outcomes, and the query's audit trail would attribute the probe to the wrong
 		// identity. The host grants it to a trusted boundary layer with an instance rule of equal
-		// specificity (an exact target, `slothlet.permissions.global.checkCall`), which outranks this one.
-		this.addRule({ caller: "**", target: "slothlet.permissions.global.checkCall", effect: "deny" }, "__builtin__");
+		// specificity (an exact target, `slothlet.permissions.global.check.call`), which outranks this one.
+		this.addRule({ caller: "**", target: "slothlet.permissions.global.check.call", effect: "deny" }, "__builtin__");
 
-		// Global metadata (#625): `metadata.setGlobal` changes the metadata every node reports, every other module's
+		// Global metadata (#625): `metadata.global` changes the metadata every node reports, every other module's
 		// included, so it is the host's. An allow for a module lifts it. Checked by assertGlobalMetadataWrite once the
 		// call's arguments are valid, never by the call gate.
 		this.#globalMetadataRuleId = this.addRule({ caller: "**", target: GLOBAL_METADATA_TARGET, effect: "deny" }, "__builtin__");
 
+		// Built-in capabilities: refused to module code while the permission system is on. A rule naming the capability as
+		// its target (`{ caller: "ext.render", target: "capability:code", effect: "allow" }`) opens it for the callers it
+		// names, ranked as any rule is. Decided by assertCapability, never by the call gate: no api path is a capability.
+		for (let ofIndex = 0, ofList = CAPABILITIES; ofIndex < ofList.length; ofIndex++) {
+			const name = ofList[ofIndex];
+			this.addRule({ caller: "**", target: `${CAPABILITY_PREFIX}${name}`, effect: "deny" }, "__builtin__");
+		}
+
 		// Built-in hook-management baseline (enforced only when permissions are enabled): modules may
 		// inspect and register hooks (`list`, `on`) but may NOT tamper with other modules' hooks via the
-		// global-effect methods (remove/off/clear, enable/disable, enablePattern/disablePattern/reset).
+		// global-effect methods (remove/off/clear, enable/disable, pattern.enable/disable/reset).
 		// The broad deny is overridden by the two specific allows (most-specific-wins). These are call
 		// targets (no `:type` suffix), so they gate the hook MANAGEMENT surface, not interception.
 		this.addRule({ caller: "**", target: "slothlet.hook.**", effect: "deny" }, "__builtin__");
@@ -598,7 +976,7 @@ export class PermissionManager extends ComponentBase {
 		// coarse call gate. The broad deny keeps runtime rule mutation (`slothlet.event.rules.*`), the
 		// supplied-identity query (`resolveLevel`) and the delivery controls (`strategy`/`deliver`, #497)
 		// host-only — modules cannot override event policy or delivery — while the specific allows keep
-		// on/once/off/emit usable under a `defaultPolicy: "deny"` configuration. A consumer rule of equal
+		// on/once/off/emit usable under a `policy: "deny"` configuration. A consumer rule of equal
 		// specificity still wins (instance layer > builtin), so the host can tighten any of these.
 		this.addRule({ caller: "**", target: "slothlet.event.**", effect: "deny" }, "__builtin__");
 		this.addRule({ caller: "**", target: "slothlet.event.on", effect: "allow" }, "__builtin__");
@@ -613,13 +991,25 @@ export class PermissionManager extends ComponentBase {
 		// state, what a node reports about itself, and impl metadata. They are defaults: the host, a manifest, or a
 		// module allowed to manage rules lifts one with an allow of equal or higher specificity, which grants the write
 		// to the callers it names.
-		for (const root of FRAMEWORK_ROOTS) {
+		for (const root of setValues(FRAMEWORK_ROOTS)) {
 			this.addRule({ caller: "**", target: `${root}${WRITE_TARGET_SUFFIX}`, effect: "deny" }, "__builtin__");
 			this.addRule({ caller: "**", target: `${root}.**${WRITE_TARGET_SUFFIX}`, effect: "deny" }, "__builtin__");
 		}
-		for (const key of [...WRAPPER_INTERNAL_KEYS, ...IMPL_METADATA_KEYS]) {
-			this.addRule({ caller: "**", target: `${key}${WRITE_TARGET_SUFFIX}`, effect: "deny" }, "__builtin__");
-			this.addRule({ caller: "**", target: `**.${key}${WRITE_TARGET_SUFFIX}`, effect: "deny" }, "__builtin__");
+		for (
+			let ofIndex = 0,
+				ofList = concatLists(setToArray(reservedKeysOwn.WRAPPER_INTERNAL_KEYS), setToArray(reservedKeysOwn.IMPL_METADATA_KEYS));
+			ofIndex < ofList.length;
+			ofIndex++
+		) {
+			const key = ofList[ofIndex];
+			SetMethods.add(
+				this.#nodeKeyRuleIds,
+				this.addRule({ caller: "**", target: `${key}${WRITE_TARGET_SUFFIX}`, effect: "deny" }, "__builtin__")
+			);
+			SetMethods.add(
+				this.#nodeKeyRuleIds,
+				this.addRule({ caller: "**", target: `**.${key}${WRITE_TARGET_SUFFIX}`, effect: "deny" }, "__builtin__")
+			);
 		}
 	}
 
@@ -634,24 +1024,29 @@ export class PermissionManager extends ComponentBase {
 	 * @param {string|null} [ruleId=null] - Optional rule ID to reuse (for replay).
 	 * @param {string|null} [layer=null] - Explicit precedence layer; derived from `ownerModuleID` when null.
 	 * @returns {string} The rule ID (generated or reused).
-	 * @throws {SlothletError} INVALID_PERMISSION_RULE if rule is malformed.
+	 * @throws {SlothletError} PERMISSION_RULE_INVALID if rule is malformed.
 	 * @example
 	 * pm.addRule({ caller: "payments.**", target: "db.write", effect: "allow" }, "mod_abc123");
 	 */
 	addRule(rule, ownerModuleID = null, ruleId = null, layer = null) {
+		const written = writeTarget(this);
+		if (written !== this) return written.addRule(rule, ownerModuleID, ruleId, layer);
 		this.#assertNotSealed();
 		// The rule is read once: the copy is what is validated and kept (#625).
 		rule = this.snapshotRule(rule);
 		this.#validateRule(rule);
 		this.#trackConditionPins(rule.condition);
 
-		const id = ruleId || `perm-${++ruleIdCounter}`;
+		const id = ruleId || `perm-${++this.#ruleIdCounter}`;
 		// Detect the hook-target suffix form (`pattern:type`). When present the rule gates hook
 		// registration/execution rather than plain calls; `hookType` is the type or "hook" (any),
 		// `hookPathPattern` is the path-glob portion. Both null for ordinary call-target rules.
 		const hookTarget = this.#parseHookTarget(rule.target);
-		// A write target (`pattern:write`, #625) gates module writes rather than calls; null for any other rule.
-		const writePathPattern = this.#parseWriteTarget(rule.target);
+		// Any other target names an access level (`pattern:<level>`, no suffix being `:access`): which of a call, a read
+		// and a write the rule decides. A rule with the write in its level (`:write`, `:full`, #625) gates module writes.
+		const levelTarget = hookTarget ? null : this.#parseLevelTarget(rule.target);
+		const level = levelTarget ? MapMethods.get(RULE_LEVELS, levelTarget.level) : null;
+		const writePathPattern = level?.write ? levelTarget.pathPattern : null;
 		// Precedence layer (#407): explicit `layer` wins; otherwise "__builtin__" → builtin, else instance.
 		// Used only as the equal-specificity tiebreak (see RULE_LAYER_RANK).
 		const ruleLayer = resolveRuleLayer(layer, ownerModuleID);
@@ -663,19 +1058,29 @@ export class PermissionManager extends ComponentBase {
 			condition: rule.condition ?? null,
 			// #459: principals the rule's condition needs. A frozen copy so a later mutation of the caller's
 			// array cannot change which facts an already-registered rule depends on.
-			requires: rule.requires == null ? null : Object.freeze([...rule.requires]),
+			requires: rule.requires == null ? null : Objects.freeze(copyList(rule.requires)),
 			hookType: hookTarget ? hookTarget.hookType : null,
 			hookPathPattern: hookTarget ? hookTarget.pathPattern : null,
+			// The target's path pattern, its level or hook suffix left off.
+			pathPattern: hookTarget ? hookTarget.pathPattern : levelTarget.pathPattern,
+			level: levelTarget ? levelTarget.level : null,
+			// Which call and read gates the rule takes part in: an allow those of its level, a deny those it takes away
+			// (a `:write` deny takes away the write alone).
+			call: level !== null && level.call,
+			read: level !== null && level.read && !(rule.effect === "deny" && levelTarget.level === "write"),
 			writePathPattern,
 			ownerModuleID: ownerModuleID,
 			layer: ruleLayer,
 			layerRank: RULE_LAYER_RANK[ruleLayer],
-			registeredAt: Date.now(),
-			registrationSeq: ++ruleRegistrationSeq
+			registeredAt: this.clock.now(),
+			registrationSeq: ++this.#ruleRegistrationSeq
 		};
 
-		this.#rules.set(id, entry);
-		(writePathPattern === null ? this.#callRules : this.#writeRules).set(id, entry);
+		MapMethods.set(this.#rules, id, entry);
+		// A rule sits with the call rules when it gates hooks, calls or reads, with the write rules when it gates writes,
+		// and with both for a level that does both (`:write` allows, `:full`).
+		if (hookTarget || entry.call || entry.read) MapMethods.set(this.#callRules, id, entry);
+		if (writePathPattern !== null) MapMethods.set(this.#writeRules, id, entry);
 		if (entry.requires) this.#requiresRuleCount++;
 		this.#clearCache();
 
@@ -704,8 +1109,10 @@ export class PermissionManager extends ComponentBase {
 	 * pm.removeRule("perm-3", "mod_other");
 	 */
 	removeRule(ruleId, callerModuleID = null) {
+		const written = writeTarget(this);
+		if (written !== this) return written.removeRule(ruleId, callerModuleID);
 		this.#assertNotSealed();
-		const entry = this.#rules.get(ruleId);
+		const entry = MapMethods.get(this.#rules, ruleId);
 		if (!entry) return false;
 
 		// Self-modification protection: a module cannot remove the rules registered on its behalf (its manifest's,
@@ -714,19 +1121,19 @@ export class PermissionManager extends ComponentBase {
 		/* v8 ignore start */
 		if (
 			entry.ownerModuleID &&
-			runtime_moduleIDList(callerModuleID).includes(entry.ownerModuleID) &&
+			ArrayMethods.includes(runtime_moduleIDList(callerModuleID), entry.ownerModuleID) &&
 			entry.layer !== "module" &&
 			entry.layer !== "manager"
 		) {
 			throw new this.SlothletError("PERMISSION_SELF_MODIFY", {
-				ruleId,
-				moduleID: entry.ownerModuleID
+				id: ruleId,
+				module: entry.ownerModuleID
 			});
 		}
 		/* v8 ignore stop */
-		this.#rules.delete(ruleId);
-		this.#callRules.delete(ruleId);
-		this.#writeRules.delete(ruleId);
+		MapMethods.delete(this.#rules, ruleId);
+		MapMethods.delete(this.#callRules, ruleId);
+		MapMethods.delete(this.#writeRules, ruleId);
 		if (entry.requires) this.#requiresRuleCount--;
 		this.#clearCache();
 
@@ -755,16 +1162,18 @@ export class PermissionManager extends ComponentBase {
 	 * @param {string|null} [ruleId=null] - Optional rule id to reuse (for reload replay).
 	 * @param {string|null} [layer=null] - Explicit precedence layer; derived from ownerModuleID when null.
 	 * @returns {string} The rule id.
-	 * @throws {SlothletError} INVALID_PERMISSION_RULE if the rule is malformed.
+	 * @throws {SlothletError} PERMISSION_RULE_INVALID if the rule is malformed.
 	 * @example
 	 * pm.addEventRule({ caller: "orders.**", event: "orders.*", effect: "allow" }, "mod_orders", null, "manifest");
 	 */
 	addEventRule(rule, ownerModuleID = null, ruleId = null, layer = null) {
+		const written = writeTarget(this);
+		if (written !== this) return written.addEventRule(rule, ownerModuleID, ruleId, layer);
 		this.#assertNotSealed();
 		this.#validateEventRule(rule);
 		this.#trackConditionPins(rule.condition);
 
-		const id = ruleId || `evt-${++ruleIdCounter}`;
+		const id = ruleId || `evt-${++this.#ruleIdCounter}`;
 		const ruleLayer = resolveRuleLayer(layer, ownerModuleID);
 		const entry = {
 			id,
@@ -775,12 +1184,12 @@ export class PermissionManager extends ComponentBase {
 			ownerModuleID,
 			layer: ruleLayer,
 			layerRank: RULE_LAYER_RANK[ruleLayer],
-			registeredAt: Date.now(),
-			registrationSeq: ++ruleRegistrationSeq
+			registeredAt: this.clock.now(),
+			registrationSeq: ++this.#ruleRegistrationSeq
 		};
 
-		this.#eventRules.set(id, entry);
-		this.#eventRulesEpoch++;
+		MapMethods.set(this.#eventRules, id, entry);
+		this.#eventRulesEpoch = nextEpoch();
 
 		this.debug("permissions", {
 			key: "DEBUG_PERMISSION_RULE_ADDED",
@@ -805,8 +1214,10 @@ export class PermissionManager extends ComponentBase {
 	 * @throws {SlothletError} PERMISSION_SELF_MODIFY if the caller owns the rule.
 	 */
 	removeEventRule(ruleId, callerModuleID = null) {
+		const written = writeTarget(this);
+		if (written !== this) return written.removeEventRule(ruleId, callerModuleID);
 		this.#assertNotSealed();
-		const entry = this.#eventRules.get(ruleId);
+		const entry = MapMethods.get(this.#eventRules, ruleId);
 		if (!entry) return false;
 		// Self-modification protection, mirroring removeRule: a module cannot remove the event rules registered on its
 		// behalf (its manifest's). One its own code added (the module layer, #625) is its to remove. The guarded rules
@@ -814,23 +1225,28 @@ export class PermissionManager extends ComponentBase {
 		/* v8 ignore start */
 		if (
 			entry.ownerModuleID &&
-			runtime_moduleIDList(callerModuleID).includes(entry.ownerModuleID) &&
+			ArrayMethods.includes(runtime_moduleIDList(callerModuleID), entry.ownerModuleID) &&
 			entry.layer !== "module" &&
 			entry.layer !== "manager"
 		) {
-			throw new this.SlothletError("PERMISSION_SELF_MODIFY", { ruleId, moduleID: entry.ownerModuleID });
+			throw new this.SlothletError("PERMISSION_SELF_MODIFY", { id: ruleId, module: entry.ownerModuleID });
 		}
 		/* v8 ignore stop */
-		this.#eventRules.delete(ruleId);
-		this.#eventRulesEpoch++;
+		MapMethods.delete(this.#eventRules, ruleId);
+		this.#eventRulesEpoch = nextEpoch();
 		return true;
 	}
 
 	/**
 	 * Resolve the delivery level for a subscriber/event pair (#407): "deny" | "notify" | "allow".
 	 * Most-specific-wins with the layered tiebreak (see {@link RULE_LAYER_RANK}); falls back to the
-	 * base default (`permissions.events.default`, built-in "notify") when no rule matches. A host
+	 * base default (`permissions.events.policy`, built-in "notify") when no rule matches. A host
 	 * subscription (no module caller) is trusted like a host-initiated call and always resolves "allow".
+	 *
+	 * Event levels are part of the permission system, so the pool follows its mode: while it is not on (`"off"`,
+	 * which is also what no `permissions` config means, and `"disabled"`) no event rule is evaluated and every
+	 * subscription resolves "allow", as call and read rules are not evaluated there. An instance that has shut down
+	 * resolves "deny".
 	 *
 	 * @param {string|null} subscriberPath - The subscribing module's api path, or null for the host.
 	 * @param {string} eventName - The event name being subscribed to / emitted.
@@ -840,26 +1256,26 @@ export class PermissionManager extends ComponentBase {
 	resolveEventLevel(subscriberPath, eventName, runtimeContext = null) {
 		// Host subscription (no module caller) is trusted like a host-initiated call → full payload.
 		if (subscriberPath == null) return "allow";
+		// Not on: the event rules are not evaluated, the built-in base level and `events.default` included.
+		if (!this.#enabled) return this.#endedOn ? "deny" : "allow";
 
 		const matches = [];
-		for (const entry of this.#eventRules.values()) {
+		for (const entry of mapValues(this.#eventRules)) {
 			const callerMatcher = this.#getCompiledPattern(entry.caller);
 			const eventMatcher = this.#getCompiledPattern(entry.event);
-			if (callerMatcher(subscriberPath) && eventMatcher(eventName)) matches.push(entry);
+			if (callerMatcher(subscriberPath) && eventMatcher(eventName)) listPush(matches, entry);
 		}
 
 		// Event delivery has no call/construct arguments — function conditions receive null callMeta.
-		const conditioned = matches.filter((entry) => this.#conditionMatches(entry, runtimeContext, null));
+		const conditioned = filterList(matches, (entry) => this.#conditionMatches(entry, runtimeContext, null));
 		if (conditioned.length === 0) return this.#eventDefault;
 
-		// Most-specific-wins; equal specificity → higher layer; within a layer → last-registered.
-		conditioned.sort((a, b) => {
-			const specA = this.#patternSpecificity(a.caller, subscriberPath) + this.#patternSpecificity(a.event, eventName);
-			const specB = this.#patternSpecificity(b.caller, subscriberPath) + this.#patternSpecificity(b.event, eventName);
-			if (specA !== specB) return specB - specA;
-			if (a.layerRank !== b.layerRank) return b.layerRank - a.layerRank;
-			return b.registrationSeq - a.registrationSeq;
-		});
+		// Most-specific-wins; equal specificity → higher layer; within a layer → last-registered (see #sortBySpecificity).
+		this.#sortBySpecificity(
+			conditioned,
+			(entry) => this.#patternSpecificity(entry.caller, subscriberPath) + this.#patternSpecificity(entry.event, eventName),
+			(entry) => this.#literalSegments(entry.caller) + this.#literalSegments(entry.event)
+		);
 		return conditioned[0].effect;
 	}
 
@@ -879,7 +1295,7 @@ export class PermissionManager extends ComponentBase {
 	 * @returns {boolean} True if at least one event rule has a condition.
 	 */
 	get hasConditionalEventRules() {
-		for (const entry of this.#eventRules.values()) {
+		for (const entry of mapValues(this.#eventRules)) {
 			if (entry.condition != null) return true;
 		}
 		return false;
@@ -890,33 +1306,36 @@ export class PermissionManager extends ComponentBase {
 	 * `{ caller, event, effect(deny/notify/allow), condition? }` construct.
 	 * @param {object} rule - The event rule to validate.
 	 * @returns {void}
-	 * @throws {SlothletError} INVALID_PERMISSION_RULE on a malformed rule.
+	 * @throws {SlothletError} PERMISSION_RULE_INVALID on a malformed rule.
 	 * @private
 	 */
 	#validateEventRule(rule) {
 		if (!rule || typeof rule !== "object") {
-			throw new this.SlothletError("INVALID_PERMISSION_RULE", { reason: translate("PERM_RULE_NOT_OBJECT"), received: typeof rule });
+			throw new this.SlothletError("PERMISSION_RULE_INVALID", {
+				reason: translate("PERMISSION_RULE_REASON_NOT_OBJECT"),
+				received: typeof rule
+			});
 		}
 		if (typeof rule.caller !== "string" || !rule.caller) {
-			throw new this.SlothletError("INVALID_PERMISSION_RULE", {
-				reason: translate("PERM_RULE_CALLER_REQUIRED"),
+			throw new this.SlothletError("PERMISSION_RULE_INVALID", {
+				reason: translate("PERMISSION_RULE_REASON_CALLER_REQUIRED"),
 				received: typeof rule.caller
 			});
 		}
 		if (typeof rule.event !== "string" || !rule.event) {
-			throw new this.SlothletError("INVALID_PERMISSION_RULE", {
-				reason: translate("PERM_EVENT_RULE_EVENT_REQUIRED"),
+			throw new this.SlothletError("PERMISSION_RULE_INVALID", {
+				reason: translate("PERMISSION_EVENT_RULE_REASON_EVENT_REQUIRED"),
 				received: typeof rule.event
 			});
 		}
 		if (rule.effect !== "deny" && rule.effect !== "notify" && rule.effect !== "allow") {
-			throw new this.SlothletError("INVALID_PERMISSION_RULE", {
-				reason: translate("PERM_EVENT_RULE_EFFECT_INVALID"),
+			throw new this.SlothletError("PERMISSION_RULE_INVALID", {
+				reason: translate("PERMISSION_EVENT_RULE_REASON_EFFECT_INVALID"),
 				received: rule.effect
 			});
 		}
 		if (rule.condition !== undefined && rule.condition !== null) {
-			this.#assertValidConditionPayload(rule.condition, "INVALID_PERMISSION_RULE");
+			this.#assertValidConditionPayload(rule.condition, "PERMISSION_RULE_INVALID");
 		}
 	}
 
@@ -936,7 +1355,7 @@ export class PermissionManager extends ComponentBase {
 	 *   key (e.g. `(ctx) => ctx.user?.id`). Synchronous. A `null`/`undefined` key means "no identity":
 	 *   rules requiring this principal do not match for that call.
 	 * @param {function(*): *} definition.resolve - Resolves the facts for an identity key. May be async.
-	 * @param {number} [definition.maxAge] - Optional time-to-live in milliseconds for a resolved value.
+	 * @param {number} [definition.ttl] - Optional time-to-live in milliseconds for a resolved value.
 	 * @param {string|string[]|null} [ownerModuleID=null] - Registering module's id; `null` for the host. A list when the
 	 *   registrant acts for several modules (#597): each has to own an existing name, the first owns a new one.
 	 * @param {function(Function, Array<*>): *} [invoke=null] - Runs the resolver as its registering
@@ -945,28 +1364,30 @@ export class PermissionManager extends ComponentBase {
 	 * @returns {void}
 	 * @throws {SlothletError} PERMISSION_SEALED when the control surface is sealed.
 	 * @throws {SlothletError} INVALID_ARGUMENT when the name or definition is malformed.
-	 * @throws {SlothletError} PRINCIPAL_NAME_OWNED when another module owns the name.
+	 * @throws {SlothletError} PERMISSION_PRINCIPAL_NAME_OWNED when another module owns the name.
 	 * @example
-	 * pm.registerPrincipal("roles", { key: (ctx) => ctx.user?.id, resolve: (id) => loadRoles(id), maxAge: 30_000 }, "roles_mod");
+	 * pm.registerPrincipal("roles", { key: (ctx) => ctx.user?.id, resolve: (id) => loadRoles(id), ttl: 30_000 }, "roles_mod");
 	 */
 	registerPrincipal(name, definition, ownerModuleID = null, invoke = null) {
+		const written = writeTarget(this);
+		if (written !== this) return written.registerPrincipal(name, definition, ownerModuleID, invoke);
 		this.#assertNotSealed();
 		this.#validatePrincipal(name, definition);
 
-		const existing = this.#principals.get(name);
+		const existing = MapMethods.get(this.#principals, name);
 		// Code supplied to another module's call claims for both modules (#597): each has to own an existing name,
 		// and the first — the module whose call it runs inside — owns a new one.
 		const claimants = runtime_moduleIDList(ownerModuleID);
 		ownerModuleID = claimants[0] ?? null;
-		for (const claimant of existing ? claimants : []) {
+		for (let ofIndex = 0, ofList = existing ? claimants : []; ofIndex < ofList.length; ofIndex++) {
+			const claimant = ofList[ofIndex];
 			if (!this.#sameOwner(existing.ownerModuleID, claimant)) {
-				throw new this.SlothletError("PRINCIPAL_NAME_OWNED", { name, owner: existing.ownerModuleID ?? "host", claimant }, null, {
-					validationError: true
-				});
+				throw new this.SlothletError("PERMISSION_PRINCIPAL_NAME_OWNED", { name, owner: existing.ownerModuleID ?? "host", claimant });
 			}
 		}
 
-		this.#principals.set(
+		MapMethods.set(
+			this.#principals,
 			name,
 			this.#newPrincipalRecord(
 				name,
@@ -975,7 +1396,7 @@ export class PermissionManager extends ComponentBase {
 				existing ? existing.ownerModuleID : ownerModuleID,
 				definition,
 				invoke,
-				definition.maxAge ?? null,
+				definition.ttl ?? null,
 				// A replacement continues the epoch sequence so a value resolved by the previous resolver can
 				// never read as current for the new one.
 				existing ? existing.epoch + 1 : 0
@@ -991,22 +1412,24 @@ export class PermissionManager extends ComponentBase {
 
 	/**
 	 * Unregister a principal. Only its owner or the host may do so. Rules that require it stop
-	 * matching (their calls fall to `defaultPolicy`).
+	 * matching (their calls fall to `policy`).
 	 *
 	 * @param {string} name - Principal name.
 	 * @param {string|string[]|null} [callerModuleID=null] - Calling module's id, or a list of them (#597); `null` for the host.
 	 * @returns {boolean} True when a principal was removed.
 	 * @throws {SlothletError} PERMISSION_SEALED when the control surface is sealed.
-	 * @throws {SlothletError} PRINCIPAL_NOT_OWNER when a module other than the owner calls it.
+	 * @throws {SlothletError} PERMISSION_PRINCIPAL_NOT_OWNER when a module other than the owner calls it.
 	 * @example
 	 * pm.unregisterPrincipal("roles");
 	 */
 	unregisterPrincipal(name, callerModuleID = null) {
+		const written = writeTarget(this);
+		if (written !== this) return written.unregisterPrincipal(name, callerModuleID);
 		this.#assertNotSealed();
-		const record = this.#principals.get(name);
+		const record = MapMethods.get(this.#principals, name);
 		if (!record) return false;
-		this.#assertPrincipalOwner(record, callerModuleID, "unregister");
-		this.#principals.delete(name);
+		this.#assertPrincipalOwner(record, callerModuleID, ["slothlet", "permissions", "principal", "unregister"]);
+		MapMethods.delete(this.#principals, name);
 		return true;
 	}
 
@@ -1023,21 +1446,23 @@ export class PermissionManager extends ComponentBase {
 	 * @param {*} [identityKey] - Identity to invalidate; omit (`undefined`) to invalidate all identities.
 	 * @param {string|string[]|null} [callerModuleID=null] - Calling module's id, or a list of them (#597); `null` for the host.
 	 * @returns {boolean} True when the principal exists.
-	 * @throws {SlothletError} PRINCIPAL_NOT_OWNER when a module other than the owner calls it.
+	 * @throws {SlothletError} PERMISSION_PRINCIPAL_NOT_OWNER when a module other than the owner calls it.
 	 * @example
 	 * pm.invalidatePrincipal("roles", "user-42");
 	 */
 	invalidatePrincipal(name, identityKey = undefined, callerModuleID = null) {
-		const record = this.#principals.get(name);
+		// Not a change a run keeps to itself (see `FORK` in `helpers/flow-stores`): it drops cached facts in the copy the
+		// caller answers from, and a copy forked later starts with none cached.
+		const record = MapMethods.get(this.#principals, name);
 		if (!record) return false;
-		this.#assertPrincipalOwner(record, callerModuleID, "invalidate");
+		this.#assertPrincipalOwner(record, callerModuleID, ["slothlet", "permissions", "principal", "invalidate"]);
 		if (identityKey === undefined) {
 			this.#bumpPrincipal(record);
 			return true;
 		}
-		record.cache.delete(identityKey);
+		MapMethods.delete(record.cache, identityKey);
 		// Only an identity with a resolve in flight needs a marker; the marker is dropped when it settles.
-		if (record.inflight.has(identityKey)) record.keyInvalidations.set(identityKey, ++record.seq);
+		if (MapMethods.has(record.inflight, identityKey)) MapMethods.set(record.keyInvalidations, identityKey, ++record.seq);
 		return true;
 	}
 
@@ -1050,7 +1475,7 @@ export class PermissionManager extends ComponentBase {
 	 * pm.hasPrincipal("roles");
 	 */
 	hasPrincipal(name) {
-		return this.#principals.has(name);
+		return MapMethods.has(this.#principals, name);
 	}
 
 	/**
@@ -1065,28 +1490,34 @@ export class PermissionManager extends ComponentBase {
 	onModuleRemoved(moduleID) {
 		// The function conditions it registered stop running, wherever their rules live (a module it mounted keeps
 		// its rules): a later module taking the freed id must not reach them (#625).
-		const base = String(moduleID).split(MODULE_ID_SEPARATOR)[0];
-		for (const pin of this.#conditionPins.get(base) ?? []) pin.live = false;
-		this.#conditionPins.delete(base);
-		for (const [name, record] of this.#principals) {
+		const base = splitText(String(moduleID), MODULE_ID_SEPARATOR)[0];
+		for (const pin of setValues(MapMethods.get(this.#conditionPins, base))) pin.live = false;
+		MapMethods.delete(this.#conditionPins, base);
+		for (const ofEntry of mapEntries(this.#principals)) {
+			const name = ofEntry[0],
+				record = ofEntry[1];
 			if (record.ownerModuleID !== null && this.#sameOwner(record.ownerModuleID, moduleID)) {
-				this.#principals.delete(name);
+				MapMethods.delete(this.#principals, name);
 			}
 		}
 		// So do its rules (#625): its manifest's, its code's, and those registered with its api.add. The host's own
 		// rules (no owner) stay, whatever paths they name.
-		for (const [id, entry] of this.#rules) {
+		for (const ofEntry of mapEntries(this.#rules)) {
+			const id = ofEntry[0],
+				entry = ofEntry[1];
 			if (entry.ownerModuleID === null || entry.layer === "builtin" || !this.#sameOwner(entry.ownerModuleID, moduleID)) continue;
-			this.#rules.delete(id);
-			this.#callRules.delete(id);
-			this.#writeRules.delete(id);
+			MapMethods.delete(this.#rules, id);
+			MapMethods.delete(this.#callRules, id);
+			MapMethods.delete(this.#writeRules, id);
 			if (entry.requires) this.#requiresRuleCount--;
 		}
 		// And its event rules, the same ones (#625).
-		for (const [id, entry] of this.#eventRules) {
+		for (const ofEntry of mapEntries(this.#eventRules)) {
+			const id = ofEntry[0],
+				entry = ofEntry[1];
 			if (entry.ownerModuleID === null || entry.layer === "builtin" || !this.#sameOwner(entry.ownerModuleID, moduleID)) continue;
-			this.#eventRules.delete(id);
-			this.#eventRulesEpoch++;
+			MapMethods.delete(this.#eventRules, id);
+			this.#eventRulesEpoch = nextEpoch();
 		}
 		this.#clearCache();
 	}
@@ -1104,7 +1535,7 @@ export class PermissionManager extends ComponentBase {
 	 * pm.onModuleReloaded("roles_mod");
 	 */
 	onModuleReloaded(moduleID) {
-		for (const record of this.#principals.values()) {
+		for (const record of mapValues(this.#principals)) {
 			if (record.ownerModuleID !== null && this.#sameOwner(record.ownerModuleID, moduleID)) {
 				this.#makeDormant(record);
 			}
@@ -1124,10 +1555,12 @@ export class PermissionManager extends ComponentBase {
 	 * pm.reservePrincipal("roles", "roles_mod");
 	 */
 	reservePrincipal(name, ownerModuleID) {
-		if (this.#principals.has(name)) return;
+		const written = writeTarget(this);
+		if (written !== this) return written.reservePrincipal(name, ownerModuleID);
+		if (MapMethods.has(this.#principals, name)) return;
 		const record = this.#newPrincipalRecord(name, ownerModuleID, null, null, null, 0);
 		this.#makeDormant(record);
-		this.#principals.set(name, record);
+		MapMethods.set(this.#principals, name, record);
 	}
 
 	/**
@@ -1147,32 +1580,33 @@ export class PermissionManager extends ComponentBase {
 	 * const stale = pm.stalePrincipals("callers.a", "project.files.list", "/a.mjs", "/files.mjs", ctx);
 	 */
 	stalePrincipals(callerPath, targetPath, callerFilePath = null, targetFilePath = null, runtimeContext = null) {
-		if (this.#requiresRuleCount === 0 || this.#principals.size === 0) return [];
+		if (this.#requiresRuleCount === 0 || MapMethods.size(this.#principals) === 0) return [];
 		// Mirror #resolveAccess's pre-rule short-circuits: those calls never reach a rule, so resolving
 		// principals for them would be wasted work.
 		if (!this.#enabled) return [];
 		if (callerFilePath && targetFilePath && callerFilePath === targetFilePath) return [];
-		if (runtime_isPrivateName(targetPath) && !targetPath.startsWith("slothlet.")) return [];
+		if (runtime_isPrivateName(targetPath) && !StringMethods.startsWith(targetPath, "slothlet.")) return [];
 
 		const ctx = runtimeContext ?? {};
 		const stale = [];
 		const seen = new Map();
-		for (const entry of this.#callRules.values()) {
-			if (!entry.requires || entry.hookType != null) continue;
-			if (!this.#getCompiledPattern(entry.caller)(callerPath) || !this.#getCompiledPattern(entry.target)(targetPath)) continue;
-			for (const name of entry.requires) {
-				const record = this.#principals.get(name);
+		for (const entry of mapValues(this.#callRules)) {
+			if (!entry.requires || !entry.call) continue;
+			if (!this.#getCompiledPattern(entry.caller)(callerPath) || !this.#getCompiledPattern(entry.pathPattern)(targetPath)) continue;
+			for (let r = 0; r < entry.requires.length; r++) {
+				const name = entry.requires[r];
+				const record = MapMethods.get(this.#principals, name);
 				// Absent or dormant → the rule simply does not match; nothing to resolve.
 				if (!record || record.resolve === null) continue;
 				const identityKey = this.#principalKey(record, ctx);
 				if (identityKey == null) continue; // no identity → no facts; the rule does not match
-				const hit = record.cache.get(identityKey);
+				const hit = MapMethods.get(record.cache, identityKey);
 				if (hit && this.#isPrincipalCurrent(record, hit, false)) continue;
-				let keys = seen.get(name);
-				if (!keys) seen.set(name, (keys = new Set()));
-				if (keys.has(identityKey)) continue;
-				keys.add(identityKey);
-				stale.push({ name, identityKey });
+				let keys = MapMethods.get(seen, name);
+				if (!keys) MapMethods.set(seen, name, (keys = new Set()));
+				if (SetMethods.has(keys, identityKey)) continue;
+				SetMethods.add(keys, identityKey);
+				listPush(stale, { name, identityKey });
 			}
 		}
 		return stale;
@@ -1189,7 +1623,7 @@ export class PermissionManager extends ComponentBase {
 	 * await pm.resolvePrincipals(pm.stalePrincipals(caller, target, cf, tf, ctx));
 	 */
 	async resolvePrincipals(pairs) {
-		await Promise.all(pairs.map(({ name, identityKey }) => this.#resolvePrincipal(name, identityKey)));
+		await promiseAll(mapList(pairs, ({ name, identityKey }) => this.#resolvePrincipal(name, identityKey)));
 	}
 
 	/**
@@ -1201,11 +1635,11 @@ export class PermissionManager extends ComponentBase {
 	 * @private
 	 */
 	#resolvePrincipal(name, identityKey) {
-		const record = this.#principals.get(name);
+		const record = MapMethods.get(this.#principals, name);
 		// Unregistered or gone dormant between the stale scan and the resolve: nothing to do — the rule no
 		// longer matches.
-		if (!record || record.resolve === null) return Promise.resolve();
-		const pending = record.inflight.get(identityKey);
+		if (!record || record.resolve === null) return Promises.resolve();
+		const pending = MapMethods.get(record.inflight, identityKey);
 		if (pending) return pending;
 
 		const epoch = record.epoch;
@@ -1215,10 +1649,10 @@ export class PermissionManager extends ComponentBase {
 				const value = await (record.invoke ? record.invoke(record.resolve, [identityKey]) : record.resolve(identityKey));
 				// Replaced, unregistered, or invalidated (wholesale or for this identity) while resolving: the
 				// answer predates the change, so it must not be cached as current.
-				const invalidatedAt = record.keyInvalidations.get(identityKey) ?? 0;
-				if (this.#principals.get(name) !== record || record.epoch !== epoch || invalidatedAt > startSeq) return;
-				const now = Date.now();
-				record.cache.set(identityKey, { value, view: this.#principalView(record, value), epoch, resolvedAt: now });
+				const invalidatedAt = MapMethods.get(record.keyInvalidations, identityKey) ?? 0;
+				if (MapMethods.get(this.#principals, name) !== record || record.epoch !== epoch || invalidatedAt > startSeq) return;
+				const now = this.clock.now();
+				MapMethods.set(record.cache, identityKey, { value, view: this.#principalView(record, value), epoch, resolvedAt: now });
 				this.#prunePrincipalCache(record, now);
 			} catch (error) {
 				this.debug("permissions", {
@@ -1228,12 +1662,12 @@ export class PermissionManager extends ComponentBase {
 				});
 			}
 		})();
-		record.inflight.set(identityKey, run);
+		MapMethods.set(record.inflight, identityKey, run);
 		// `run` never rejects (the body catches), so this settle handler never surfaces a rejection.
-		run.finally(() => {
-			if (record.inflight.get(identityKey) === run) {
-				record.inflight.delete(identityKey);
-				record.keyInvalidations.delete(identityKey);
+		PromiseMethods.finally(run, () => {
+			if (MapMethods.get(record.inflight, identityKey) === run) {
+				MapMethods.delete(record.inflight, identityKey);
+				MapMethods.delete(record.keyInvalidations, identityKey);
 			}
 		});
 		return run;
@@ -1255,9 +1689,10 @@ export class PermissionManager extends ComponentBase {
 	 */
 	#currentPrincipals(requires, runtimeContext, target) {
 		const ctx = runtimeContext ?? {};
-		const principals = Object.create(null);
-		for (const name of requires) {
-			const record = this.#principals.get(name);
+		const principals = Objects.create(null);
+		for (let ofIndex = 0, ofList = requires; ofIndex < ofList.length; ofIndex++) {
+			const name = ofList[ofIndex];
+			const record = MapMethods.get(this.#principals, name);
 			let reason = null;
 			let hit = null;
 			if (!record) {
@@ -1269,7 +1704,7 @@ export class PermissionManager extends ComponentBase {
 				if (identityKey == null) {
 					reason = "no-identity";
 				} else {
-					hit = record.cache.get(identityKey);
+					hit = MapMethods.get(record.cache, identityKey);
 					if (!hit || !this.#isPrincipalCurrent(record, hit, this.#principalGrace)) reason = "stale";
 				}
 			}
@@ -1279,7 +1714,7 @@ export class PermissionManager extends ComponentBase {
 			}
 			principals[name] = hit.view;
 		}
-		return Object.freeze(principals);
+		return Objects.freeze(principals);
 	}
 
 	/**
@@ -1313,18 +1748,18 @@ export class PermissionManager extends ComponentBase {
 	}
 
 	/**
-	 * Whether a cached principal value is current: same epoch, and within `maxAge` unless `grace`.
+	 * Whether a cached principal value is current: same epoch, and within `ttl` unless `grace`.
 	 *
 	 * @param {object} record - Principal record.
 	 * @param {{ epoch: number, resolvedAt: number }} hit - Cached entry.
-	 * @param {boolean} grace - Ignore `maxAge` (a promoted call re-enforcing right after its resolve).
+	 * @param {boolean} grace - Ignore `ttl` (a promoted call re-enforcing right after its resolve).
 	 * @returns {boolean} True when current.
 	 * @private
 	 */
 	#isPrincipalCurrent(record, hit, grace) {
 		if (hit.epoch !== record.epoch) return false;
-		if (grace || record.maxAge === null) return true;
-		return Date.now() - hit.resolvedAt <= record.maxAge;
+		if (grace || record.ttl === null) return true;
+		return runtime_withinTtl(this.clock.now() - hit.resolvedAt, record.ttl);
 	}
 
 	/**
@@ -1334,19 +1769,19 @@ export class PermissionManager extends ComponentBase {
 	 * @param {string|null} ownerModuleID - Owning module's id; `null` for the host.
 	 * @param {{ key: Function, resolve: Function }|null} definition - Resolver definition; `null` for a dormant reservation.
 	 * @param {Function|null} invoke - Runs the resolver as its owner (see {@link registerPrincipal}).
-	 * @param {number|null} maxAge - Time-to-live in ms, or `null` for none.
+	 * @param {number|null} ttl - Time-to-live in ms, or `null` for none.
 	 * @param {number} epoch - Starting epoch.
 	 * @returns {object} The record.
 	 * @private
 	 */
-	#newPrincipalRecord(name, ownerModuleID, definition, invoke, maxAge, epoch) {
+	#newPrincipalRecord(name, ownerModuleID, definition, invoke, ttl, epoch) {
 		return {
 			name,
 			ownerModuleID,
 			key: definition?.key ?? null,
 			resolve: definition?.resolve ?? null,
 			invoke,
-			maxAge,
+			ttl,
 			epoch,
 			seq: 0,
 			cache: new Map(),
@@ -1381,12 +1816,12 @@ export class PermissionManager extends ComponentBase {
 	 */
 	#bumpPrincipal(record) {
 		record.epoch++;
-		record.cache.clear();
+		MapMethods.clear(record.cache);
 	}
 
 	/**
 	 * Drop expired entries once a principal's cache grows past a threshold. Only principals with a
-	 * `maxAge` can expire; without one, entries live until invalidated.
+	 * `ttl` can expire; without one, entries live until invalidated.
 	 *
 	 * @param {object} record - Principal record.
 	 * @param {number} now - Current time.
@@ -1394,16 +1829,16 @@ export class PermissionManager extends ComponentBase {
 	 * @private
 	 */
 	#prunePrincipalCache(record, now) {
-		if (record.maxAge === null || record.cache.size <= PRINCIPAL_PRUNE_THRESHOLD) return;
-		for (const [identityKey, hit] of record.cache) {
-			if (now - hit.resolvedAt > record.maxAge) record.cache.delete(identityKey);
+		if (record.ttl === null || MapMethods.size(record.cache) <= PRINCIPAL_PRUNE_THRESHOLD) return;
+		for (const ofEntry of mapEntries(record.cache)) {
+			if (!runtime_withinTtl(now - ofEntry[1].resolvedAt, record.ttl)) MapMethods.delete(record.cache, ofEntry[0]);
 		}
 	}
 
 	/**
 	 * Build (or reuse) a read-only view of a resolved principal value. Reads pass through (nested
 	 * plain objects/arrays are viewed on the way out); every write — set, define, delete, prototype
-	 * change — throws `PRINCIPAL_READ_ONLY`. Only slothlet replaces a principal's value, on re-resolve.
+	 * change — throws `PERMISSION_PRINCIPAL_READ_ONLY`. Only slothlet replaces a principal's value, on re-resolve.
 	 *
 	 * @param {object} record - Principal record (owns the view cache).
 	 * @param {*} value - Raw resolved value, or a nested value inside it.
@@ -1412,13 +1847,13 @@ export class PermissionManager extends ComponentBase {
 	 */
 	#principalView(record, value) {
 		if (!runtime_isViewablePrincipalValue(value)) return value;
-		const cached = record.views.get(value);
+		const cached = WeakMapMethods.get(record.views, value);
 		if (cached) return cached;
 		const refuse = () => {
-			throw new this.SlothletError("PRINCIPAL_READ_ONLY", { name: record.name }, null, { validationError: true });
+			throw new this.SlothletError("PERMISSION_PRINCIPAL_READ_ONLY", { name: record.name });
 		};
 		const view = markSlothletProxy(
-			new Proxy(value, {
+			new NativeProxy(value, {
 				get: (target, prop, receiver) => {
 					const inner = Reflect.get(target, prop, receiver);
 					// Proxy invariant: a non-configurable, non-writable data property must read back as its exact
@@ -1433,7 +1868,7 @@ export class PermissionManager extends ComponentBase {
 				setPrototypeOf: refuse
 			})
 		);
-		record.views.set(value, view);
+		WeakMapMethods.set(record.views, value, view);
 		return view;
 	}
 
@@ -1442,21 +1877,22 @@ export class PermissionManager extends ComponentBase {
 	 *
 	 * @param {object} record - Principal record.
 	 * @param {string|string[]|null} callerModuleID - Calling module's id, or a list of them (#597); `null` for the host.
-	 * @param {string} operation - Operation name, for the error.
+	 * @param {string[]} operation - The method called, as its path from `api` (segments), for the error.
 	 * @returns {void}
-	 * @throws {SlothletError} PRINCIPAL_NOT_OWNER when a non-owner module calls.
+	 * @throws {SlothletError} PERMISSION_PRINCIPAL_NOT_OWNER when a non-owner module calls.
 	 * @private
 	 */
 	#assertPrincipalOwner(record, callerModuleID, operation) {
 		// A caller acting for several modules (#597) has to be the owner as each of them.
-		for (const caller of runtime_moduleIDList(callerModuleID)) {
+		for (let ofIndex = 0, ofList = runtime_moduleIDList(callerModuleID); ofIndex < ofList.length; ofIndex++) {
+			const caller = ofList[ofIndex];
 			if (this.#sameOwner(record.ownerModuleID, caller)) continue;
-			throw new this.SlothletError(
-				"PRINCIPAL_NOT_OWNER",
-				{ name: record.name, operation, owner: record.ownerModuleID ?? "host", caller },
-				null,
-				{ validationError: true }
-			);
+			throw new this.SlothletError("PERMISSION_PRINCIPAL_NOT_OWNER", {
+				name: record.name,
+				operation,
+				owner: record.ownerModuleID ?? "host",
+				caller
+			});
 		}
 	}
 
@@ -1471,7 +1907,7 @@ export class PermissionManager extends ComponentBase {
 	 */
 	#sameOwner(a, b) {
 		if (a === null || b === null) return a === b;
-		return String(a).split(MODULE_ID_SEPARATOR)[0] === String(b).split(MODULE_ID_SEPARATOR)[0];
+		return splitText(String(a), MODULE_ID_SEPARATOR)[0] === splitText(String(b), MODULE_ID_SEPARATOR)[0];
 	}
 
 	/**
@@ -1485,15 +1921,16 @@ export class PermissionManager extends ComponentBase {
 	 */
 	#validatePrincipal(name, definition) {
 		const fail = (argument, expected, received) => {
-			throw new this.SlothletError("INVALID_ARGUMENT", { argument, expected, received, validationError: true });
+			throw new this.SlothletError("INVALID_ARGUMENT", { argument, expected, received });
 		};
 		if (typeof name !== "string" || name.length === 0) fail("name", "non-empty string", typeof name);
 		if (!definition || typeof definition !== "object") fail("definition", "object", definition === null ? "null" : typeof definition);
 		if (typeof definition.key !== "function") fail("definition.key", "function", typeof definition.key);
 		if (typeof definition.resolve !== "function") fail("definition.resolve", "function", typeof definition.resolve);
-		const { maxAge } = definition;
-		if (maxAge !== undefined && maxAge !== null && !(typeof maxAge === "number" && Number.isFinite(maxAge) && maxAge >= 0)) {
-			fail("definition.maxAge", "finite number >= 0", typeof maxAge);
+		assertOptionKeys(definition, "slothlet.permissions.principal.register");
+		const { ttl } = definition;
+		if (ttl !== undefined && ttl !== null && !(typeof ttl === "number" && Numbers.isFinite(ttl) && ttl >= 0)) {
+			fail("definition.ttl", "finite number >= 0", typeof ttl);
 		}
 	}
 
@@ -1507,35 +1944,59 @@ export class PermissionManager extends ComponentBase {
 	 * @param {string|null} [callerFilePath=null] - Caller's source file path (for self-call bypass).
 	 * @param {string|null} [targetFilePath=null] - Target's source file path (for self-call bypass).
 	 * @param {object|null} [runtimeContext=null] - Per-request ALS context for condition evaluation.
-	 * @param {{ useCache?: boolean }|null} [options=null] - Query options.
+	 * @param {{ useCache?: boolean, operation?: "call"|"read"|"access" }|null} [options=null] - Query options.
 	 * @param {boolean} [options.useCache=true] - Read/write resolved decision cache.
+	 * @param {"call"|"read"|"access"} [options.operation="call"] - What is asked: a call, a read, or both (`"access"`,
+	 *   allowed only when the call and the read are). Each is decided by the rules whose level covers it.
 	 * @returns {boolean} True if access is allowed.
 	 * @example
 	 * const allowed = pm.checkAccess("payments.charge", "db.write", "/src/pay.mjs", "/src/db.mjs");
+	 * const readable = pm.checkAccess("payments.charge", "db.rows", null, null, null, { operation: "read" });
 	 */
 	checkAccess(callerPath, targetPath, callerFilePath = null, targetFilePath = null, runtimeContext = null, options = null) {
 		const normalizedOptions = options == null ? {} : options;
-		if (typeof normalizedOptions !== "object" || Array.isArray(normalizedOptions)) {
+		if (typeof normalizedOptions !== "object" || Arrays.isArray(normalizedOptions)) {
 			throw new this.SlothletError("INVALID_ARGUMENT", {
 				argument: "options",
 				expected: "object with optional boolean useCache",
-				received: Array.isArray(normalizedOptions) ? "array" : typeof normalizedOptions,
-				validationError: true
+				received: Arrays.isArray(normalizedOptions) ? "array" : typeof normalizedOptions
 			});
 		}
 
-		const { useCache = true } = normalizedOptions;
+		const { useCache = true, operation = "call" } = normalizedOptions;
 		if (typeof useCache !== "boolean") {
 			throw new this.SlothletError("INVALID_ARGUMENT", {
 				argument: "options.useCache",
 				expected: "boolean",
-				received: typeof useCache,
-				validationError: true
+				received: typeof useCache
+			});
+		}
+		if (!SetMethods.has(ACCESS_OPERATIONS, operation)) {
+			throw new this.SlothletError("INVALID_ARGUMENT", {
+				argument: "options.operation",
+				expected: '"call", "read" or "access"',
+				received: typeof operation === "string" ? operation : typeof operation
 			});
 		}
 
 		// Silent query — no call/construct site, so no callMeta (function conditions receive null).
-		return this.#resolveAccess(callerPath, targetPath, callerFilePath, targetFilePath, runtimeContext, useCache, null).allowed;
+		const resolve = (op) =>
+			this.#resolveAccess(
+				callerPath,
+				targetPath,
+				callerFilePath,
+				targetFilePath,
+				runtimeContext,
+				useCache,
+				null,
+				false,
+				null,
+				false,
+				false,
+				op
+			).allowed;
+		if (operation === "access") return resolve("call") && resolve("read");
+		return resolve(operation);
 	}
 
 	/**
@@ -1571,8 +2032,8 @@ export class PermissionManager extends ComponentBase {
 
 		const ctx = runtimeContext ?? {};
 
-		if (Array.isArray(condition)) {
-			return condition.some((entry) => this.#singleConditionMatches(entry, ctx, callMeta));
+		if (Arrays.isArray(condition)) {
+			return ArrayMethods.some(condition, (entry) => this.#singleConditionMatches(entry, ctx, callMeta));
 		}
 
 		return this.#singleConditionMatches(condition, ctx, callMeta);
@@ -1591,14 +2052,29 @@ export class PermissionManager extends ComponentBase {
 	 * @param {PermissionCallMeta|null} [callMeta=null] - Call/construct metadata (#455): `{ args, target }`
 	 *   from the invocation, forwarded to function conditions as their second argument. Null for reads,
 	 *   hooks, the internal control surface, and silent queries.
-	 * @param {{ principalGrace?: boolean, moduleCaller?: boolean, via?: string }|null} [options=null] - Enforcement options.
+	 * @param {{ principalGrace?: boolean, moduleCaller?: boolean, newMember?: boolean, heldMember?: boolean, operation?: "call"|"read", via?: ReadonlyArray<string> }|null} [options=null] - Enforcement options.
 	 * @param {boolean} [options.principalGrace=false] - Accept a principal whose epoch is current even if its
-	 *   `maxAge` has elapsed (#459). Set only by a promoted call re-enforcing right after its resolve.
+	 *   `ttl` has elapsed (#459). Set only by a promoted call re-enforcing right after its resolve.
 	 * @param {boolean} [options.moduleCaller=false] - The caller is a module even though no source file is
 	 *   known for it (#508). A module-private target is then denied outright instead of being judged by
 	 *   the `permissions.private.host` policy, which is what a null `callerFilePath` otherwise means.
-	 * @param {string} [options.via] - Origin marker added to the audit payload (`via: "checkCall"`), so an
+	 * @param {ReadonlyArray<string>} [options.via] - Origin marker added to the audit payload: the method path as segments
+	 *   (`via: ["slothlet", "permissions", "global", "check", "call"]`), so an
 	 *   audit consumer can tell a query from the gate of a real call.
+	 * @param {boolean} [options.newMember=false] - The target is a member a module is about to create, which will be the
+	 *   caller's own once written: the default policy alone does not refuse it (a matching rule still decides). A
+	 *   private (underscore-prefixed) member belongs to the node that holds it, so module privacy refuses creating one on
+	 *   a node of another module's, as it refuses reading one there; `targetFilePath` is then the holding node's source
+	 *   file.
+	 * @param {boolean} [options.heldMember=false] - The target is a member a value beneath a node holds (a class's
+	 *   prototype, an instance's): a private one is the node's, so module privacy decides it by the module owning the
+	 *   nearest path above it that has an owner; `targetFilePath` is then that node's source file.
+	 * @param {"call"|"read"} [options.operation="call"] - The operation gated: a call (or construct), or a read. Each
+	 *   is decided by the rules whose level covers it; a write is held to the read.
+	 * @param {function(string): boolean} [options.dataMember] - Given for a read of data: whether a path above the
+	 *   target is an object member of a module's data. A deny rule naming such a member's path exactly then covers the
+	 *   target too, as a rule on `path.**` would, so what the member holds is denied with it unless a more specific rule
+	 *   allows it.
 	 * @returns {boolean} True if access is allowed.
 	 * @example
 	 * if (!pm.enforceAccess("payments.charge", "db.write", "/src/pay.mjs", "/src/db.mjs")) {
@@ -1615,7 +2091,7 @@ export class PermissionManager extends ComponentBase {
 		options = null
 	) {
 		// #459: a promoted call re-enforces right after resolving its stale principals; `principalGrace`
-		// lets those just-resolved values count as current even when `maxAge` has elapsed meanwhile.
+		// lets those just-resolved values count as current even when `ttl` has elapsed meanwhile.
 		// Evaluation is synchronous, so the flag cannot leak into another call's enforcement; it is saved
 		// and restored rather than cleared so a nested enforcement cannot end an outer one's grace early.
 		const priorGrace = this.#principalGrace;
@@ -1630,28 +2106,32 @@ export class PermissionManager extends ComponentBase {
 				runtimeContext,
 				true,
 				callMeta,
-				options?.moduleCaller === true
+				options?.moduleCaller === true,
+				options?.dataMember ?? null,
+				options?.newMember === true,
+				options?.heldMember === true,
+				options?.operation === "read" ? "read" : "call"
 			);
 		} finally {
 			this.#principalGrace = priorGrace;
 		}
 		if (result.event) {
 			// The decision record may be the cached entry itself — spread rather than mutate it.
-			const via = typeof options?.via === "string" ? options.via : null;
+			const via = Arrays.isArray(options?.via) ? copyList(options.via) : null;
 			this.#emitAuditEvent(result.event, via ? { ...result.payload, via } : result.payload);
 		}
 		return result.allowed;
 	}
 
 	/**
-	 * Place a rule module code is registering — through `slothlet.permissions.addRule` / `removeRule`, or the
+	 * Place a rule module code is registering — through `slothlet.permissions.rules.add` / `rules.remove`, or the
 	 * `permissions` option of an `api.add` it makes (#625) — and refuse it when the module may not.
 	 *
 	 * By default a module manages rules only for its own subtree: the rule's target pattern (a call, hook, or
 	 * write target alike) must have a non-empty literal prefix (the segments before the first glob segment)
 	 * inside the subtree the module owns, and must not name the framework's namespace, root functions, or
 	 * internal keys. Reaching any other target is the built-in default `{ caller: "**", target:
-	 * "slothlet.permissions.addRule", effect: "deny" }`, which decides only that reach (calling `addRule` for the
+	 * "slothlet.permissions.rules.add", effect: "deny" }`, which decides only that reach (calling `rules.add` for the
 	 * module's own subtree is not gated by it): an explicit allow on that target for the module — the host's, or
 	 * a manifest's — lifts it, and the module then manages rules for any target, as the host does.
 	 *
@@ -1665,7 +2145,7 @@ export class PermissionManager extends ComponentBase {
 	 *   lost it; read now when omitted. Null is host code.
 	 * @returns {{ownerModuleID: string|null, layer: string|null, writer: object|null}} Owner and layer to register the
 	 *   rule with, and the module code registering it (see {@link pinConditions}); all null for host code.
-	 * @throws {SlothletError} `INVALID_PERMISSION_RULE` when module code may not manage a rule on that target.
+	 * @throws {SlothletError} `PERMISSION_RULE_INVALID` when module code may not manage a rule on that target.
 	 * @example
 	 * const { ownerModuleID, layer } = pm.placeModuleRule(rule);
 	 * pm.addRule(rule, ownerModuleID, null, layer);
@@ -1675,10 +2155,9 @@ export class PermissionManager extends ComponentBase {
 		if (module === null) return { ownerModuleID: null, layer: null, writer: null };
 		const internal = module.____slothletInternal;
 		const refuse = () => {
-			throw new this.SlothletError("INVALID_PERMISSION_RULE", {
-				reason: translate("PERM_RULE_TARGET_NOT_OWNED"),
-				received: typeof rule?.target === "string" ? rule.target : typeof rule?.target,
-				validationError: true
+			throw new this.SlothletError("PERMISSION_RULE_INVALID", {
+				reason: translate("PERMISSION_RULE_REASON_TARGET_NOT_OWNED"),
+				received: typeof rule?.target === "string" ? rule.target : typeof rule?.target
 			});
 		};
 		// Code the live runtime cannot attribute has no module to register for. Unreachable through the routes that
@@ -1687,7 +2166,7 @@ export class PermissionManager extends ComponentBase {
 		if (!internal) refuse();
 		// A malformed rule is left to the rule validation, which refuses it.
 		if (typeof rule?.target !== "string") return { ownerModuleID: internal.moduleID, layer: "module", writer: module };
-		const pattern = this.#parseWriteTarget(rule.target) ?? this.#parseHookTarget(rule.target)?.pathPattern ?? rule.target;
+		const pattern = this.#parseHookTarget(rule.target)?.pathPattern ?? this.#parseLevelTarget(rule.target).pathPattern;
 		const prefix = writeTargetLiteralPrefix(pattern);
 		const framework = isFrameworkWriteTarget(pattern);
 		// Whether a module may manage the rule within its own subtree; refused when it may not manage it at all.
@@ -1698,7 +2177,8 @@ export class PermissionManager extends ComponentBase {
 		};
 		// Code a caller supplied to another module's call manages only what every module it acts for may (#597).
 		let own = ownsTarget(module);
-		for (const ceiling of runtime_selfModuleCeilings(this.slothlet, module)) own = ownsTarget(ceiling) && own;
+		for (let i = 0, ceilings = runtime_selfModuleCeilings(this.slothlet, module); i < ceilings.length; i++)
+			own = ownsTarget(ceilings[i]) && own;
 		return { ownerModuleID: internal.moduleID, layer: own ? "module" : "manager", writer: module };
 	}
 
@@ -1721,8 +2201,8 @@ export class PermissionManager extends ComponentBase {
 	pinConditions(condition, writer) {
 		if (!writer) return condition;
 		if (typeof condition === "function") return this.#pinCondition(condition, writer);
-		if (Array.isArray(condition) && condition.some((entry) => typeof entry === "function")) {
-			return Object.freeze(condition.map((entry) => (typeof entry === "function" ? this.#pinCondition(entry, writer) : entry)));
+		if (Arrays.isArray(condition) && ArrayMethods.some(condition, (entry) => typeof entry === "function")) {
+			return Objects.freeze(mapList(condition, (entry) => (typeof entry === "function" ? this.#pinCondition(entry, writer) : entry)));
 		}
 		return condition;
 	}
@@ -1737,7 +2217,7 @@ export class PermissionManager extends ComponentBase {
 	 */
 	#pinCondition(fn, writer) {
 		const slothlet = this.slothlet;
-		const pin = { moduleID: String(writer.____slothletInternal?.moduleID).split(MODULE_ID_SEPARATOR)[0], live: true };
+		const pin = { moduleID: splitText(String(writer.____slothletInternal?.moduleID), MODULE_ID_SEPARATOR)[0], live: true };
 		// instanceID and contextManager are read when the condition runs, so a rule replayed after a reload runs in
 		// the current instance. rawErrors: a throw reaches the condition matcher unchanged, which treats it as no match.
 		// Once its module is removed the condition no longer matches.
@@ -1745,7 +2225,7 @@ export class PermissionManager extends ComponentBase {
 			if (!pin.live) return false;
 			return slothlet.contextManager.runInContext(slothlet.instanceID, fn, null, [ctx, callMeta], writer, true);
 		};
-		Object.defineProperty(pinned, CONDITION_PIN, { value: pin });
+		Objects.defineProperty(pinned, CONDITION_PIN, { __proto__: null, value: pin });
 		return pinned;
 	}
 
@@ -1758,11 +2238,12 @@ export class PermissionManager extends ComponentBase {
 	 * @private
 	 */
 	#trackConditionPins(condition) {
-		for (const entry of Array.isArray(condition) ? condition : [condition]) {
+		for (let ofIndex = 0, ofList = Arrays.isArray(condition) ? condition : [condition]; ofIndex < ofList.length; ofIndex++) {
+			const entry = ofList[ofIndex];
 			const pin = typeof entry === "function" ? entry[CONDITION_PIN] : undefined;
 			if (!pin) continue;
-			if (!this.#conditionPins.has(pin.moduleID)) this.#conditionPins.set(pin.moduleID, new Set());
-			this.#conditionPins.get(pin.moduleID).add(pin);
+			if (!MapMethods.has(this.#conditionPins, pin.moduleID)) MapMethods.set(this.#conditionPins, pin.moduleID, new Set());
+			SetMethods.add(MapMethods.get(this.#conditionPins, pin.moduleID), pin);
 		}
 	}
 
@@ -1777,12 +2258,12 @@ export class PermissionManager extends ComponentBase {
 	 *
 	 * @param {string} ruleId - The rule about to be removed.
 	 * @returns {void}
-	 * @throws {SlothletError} `INVALID_PERMISSION_RULE` when module code may not remove the rule.
+	 * @throws {SlothletError} `PERMISSION_RULE_INVALID` when module code may not remove the rule.
 	 * @example
 	 * pm.assertModuleRuleRemoval("perm-12");
 	 */
 	assertModuleRuleRemoval(ruleId) {
-		this.#assertModuleRemoval(this.#rules.get(ruleId), ruleId);
+		this.#assertModuleRemoval(MapMethods.get(this.#rules, ruleId), ruleId);
 	}
 
 	/**
@@ -1791,12 +2272,12 @@ export class PermissionManager extends ComponentBase {
 	 *
 	 * @param {string} ruleId - The event rule about to be removed.
 	 * @returns {void}
-	 * @throws {SlothletError} `INVALID_PERMISSION_RULE` when module code may not remove the event rule.
+	 * @throws {SlothletError} `PERMISSION_RULE_INVALID` when module code may not remove the event rule.
 	 * @example
 	 * pm.assertModuleEventRuleRemoval("evt-12");
 	 */
 	assertModuleEventRuleRemoval(ruleId) {
-		this.#assertModuleRemoval(this.#eventRules.get(ruleId), ruleId);
+		this.#assertModuleRemoval(MapMethods.get(this.#eventRules, ruleId), ruleId);
 	}
 
 	/**
@@ -1806,7 +2287,7 @@ export class PermissionManager extends ComponentBase {
 	 * @param {object|undefined} entry - The rule entry; nothing to check when absent.
 	 * @param {string} ruleId - The rule's id, for the error.
 	 * @returns {void}
-	 * @throws {SlothletError} `INVALID_PERMISSION_RULE` when module code may not remove the rule.
+	 * @throws {SlothletError} `PERMISSION_RULE_INVALID` when module code may not remove the rule.
 	 * @private
 	 */
 	#assertModuleRemoval(entry, ruleId) {
@@ -1817,10 +2298,9 @@ export class PermissionManager extends ComponentBase {
 		if (internal && entry.ownerModuleID !== null && this.#sameOwner(entry.ownerModuleID, internal.moduleID)) return;
 		const moduleOwned = entry.ownerModuleID !== null && entry.layer !== "builtin" && entry.layerRank < RULE_LAYER_RANK.instance;
 		if (internal && moduleOwned && this.#mayReachBeyondOwn(String(internal.apiPath))) return;
-		throw new this.SlothletError("INVALID_PERMISSION_RULE", {
-			reason: translate("PERM_RULE_REMOVAL_NOT_OWNED"),
-			received: String(ruleId),
-			validationError: true
+		throw new this.SlothletError("PERMISSION_RULE_INVALID", {
+			reason: translate("PERMISSION_RULE_REASON_REMOVAL_NOT_OWNED"),
+			received: String(ruleId)
 		});
 	}
 
@@ -1833,7 +2313,7 @@ export class PermissionManager extends ComponentBase {
 	 *
 	 * @param {*} rule - The rule handed in.
 	 * @returns {*} The frozen copy, or `rule` when it is no object.
-	 * @throws {SlothletError} `INVALID_PERMISSION_RULE` when a field is an accessor.
+	 * @throws {SlothletError} `PERMISSION_RULE_INVALID` when a field is an accessor.
 	 * @example
 	 * const rule = pm.snapshotRule(input);
 	 */
@@ -1847,7 +2327,7 @@ export class PermissionManager extends ComponentBase {
 	 *
 	 * @param {*} rule - The event rule handed in.
 	 * @returns {*} The frozen copy, or `rule` when it is no object.
-	 * @throws {SlothletError} `INVALID_PERMISSION_RULE` when a field is an accessor.
+	 * @throws {SlothletError} `PERMISSION_RULE_INVALID` when a field is an accessor.
 	 * @example
 	 * const rule = pm.snapshotEventRule(input);
 	 */
@@ -1856,31 +2336,59 @@ export class PermissionManager extends ComponentBase {
 	}
 
 	/**
+	 * Check a call or write rule as {@link addRule} would, without registering it, so a caller that registers rules
+	 * after other work can refuse a bad one before doing that work (#872).
+	 *
+	 * @param {object} rule - The rule, as {@link snapshotRule} copied it.
+	 * @returns {void}
+	 * @throws {SlothletError} `PERMISSION_RULE_INVALID` or `PERMISSION_RULE_UNKNOWN_TARGET` when the rule is refused.
+	 * @example
+	 * pm.assertRuleValid(pm.snapshotRule(input));
+	 */
+	assertRuleValid(rule) {
+		this.#validateRule(rule);
+	}
+
+	/**
+	 * Check an event rule as {@link addEventRule} would, without registering it (#872).
+	 *
+	 * @param {object} rule - The event rule, as {@link snapshotEventRule} copied it.
+	 * @returns {void}
+	 * @throws {SlothletError} `PERMISSION_RULE_INVALID` when the rule is refused.
+	 * @example
+	 * pm.assertEventRuleValid(pm.snapshotEventRule(input));
+	 */
+	assertEventRuleValid(rule) {
+		this.#validateEventRule(rule);
+	}
+
+	/**
 	 * Read `fields` of a rule once into a frozen copy.
 	 *
 	 * @param {*} rule - The rule handed in.
 	 * @param {ReadonlyArray<string>} fields - The data fields to copy.
 	 * @returns {*} The frozen copy, or `rule` when it is no object.
-	 * @throws {SlothletError} `INVALID_PERMISSION_RULE` when a field is an accessor.
+	 * @throws {SlothletError} `PERMISSION_RULE_INVALID` when a field is an accessor.
 	 * @private
 	 */
 	#snapshotFields(rule, fields) {
 		if (rule === null || typeof rule !== "object") return rule;
 		const copy = {};
-		for (const key of fields) {
+		for (let ofIndex = 0, ofList = fields; ofIndex < ofList.length; ofIndex++) {
+			const key = ofList[ofIndex];
 			const descriptor = Reflect.getOwnPropertyDescriptor(rule, key);
 			if (descriptor === undefined) continue;
 			if (!("value" in descriptor)) {
-				throw new this.SlothletError("INVALID_PERMISSION_RULE", {
-					reason: translate("PERM_RULE_FIELD_ACCESSOR"),
-					received: key,
-					validationError: true
+				throw new this.SlothletError("PERMISSION_RULE_INVALID", {
+					reason: translate("PERMISSION_RULE_REASON_FIELD_ACCESSOR"),
+					received: key
 				});
 			}
 			if (key === "condition") copy[key] = this.#snapshotCondition(descriptor.value, new Map());
-			else copy[key] = key === "requires" && Array.isArray(descriptor.value) ? Object.freeze([...descriptor.value]) : descriptor.value;
+			else
+				copy[key] = key === "requires" && Arrays.isArray(descriptor.value) ? Objects.freeze(copyList(descriptor.value)) : descriptor.value;
 		}
-		return Object.freeze(copy);
+		return Objects.freeze(copy);
 	}
 
 	/**
@@ -1893,41 +2401,40 @@ export class PermissionManager extends ComponentBase {
 	 * @param {Map<object, object>} seen - Copies made so far, so a shared or cyclic part is copied once.
 	 * @param {string} [at="condition"] - Where `value` sits in the rule, for the error.
 	 * @returns {*} The frozen copy.
-	 * @throws {SlothletError} `INVALID_PERMISSION_RULE` when a member is an accessor or a Proxy.
+	 * @throws {SlothletError} `PERMISSION_RULE_INVALID` when a member is an accessor or a Proxy.
 	 * @private
 	 */
 	#snapshotCondition(value, seen, at = "condition") {
 		if (value === null || typeof value !== "object") return value;
 		if (util.types.isProxy(value)) {
-			throw new this.SlothletError("INVALID_PERMISSION_RULE", {
-				reason: translate("PERM_RULE_CONDITION_PROXY"),
-				received: at,
-				validationError: true
+			throw new this.SlothletError("PERMISSION_RULE_INVALID", {
+				reason: translate("PERMISSION_RULE_REASON_CONDITION_PROXY"),
+				received: at
 			});
 		}
-		if (seen.has(value)) return seen.get(value);
-		const isArray = Array.isArray(value);
+		if (MapMethods.has(seen, value)) return MapMethods.get(seen, value);
+		const isArray = Arrays.isArray(value);
 		const proto = Reflect.getPrototypeOf(value);
-		if (!isArray && proto !== Object.prototype && proto !== null) return value;
-		const copy = isArray ? [] : Object.create(proto);
-		seen.set(value, copy);
-		for (const key of Reflect.ownKeys(value)) {
+		if (!isArray && proto !== Objects.prototype && proto !== null) return value;
+		const copy = isArray ? [] : Objects.create(proto);
+		MapMethods.set(seen, value, copy);
+		for (let ofIndex = 0, ofList = Reflect.ownKeys(value); ofIndex < ofList.length; ofIndex++) {
+			const key = ofList[ofIndex];
 			const descriptor = Reflect.getOwnPropertyDescriptor(value, key);
 			if (!descriptor.enumerable) continue;
 			if (!("value" in descriptor)) {
-				throw new this.SlothletError("INVALID_PERMISSION_RULE", {
-					reason: translate("PERM_RULE_FIELD_ACCESSOR"),
-					received: `${at}.${String(key)}`,
-					validationError: true
+				throw new this.SlothletError("PERMISSION_RULE_INVALID", {
+					reason: translate("PERMISSION_RULE_REASON_FIELD_ACCESSOR"),
+					received: `${at}.${String(key)}`
 				});
 			}
 			copy[key] = this.#snapshotCondition(descriptor.value, seen, `${at}.${String(key)}`);
 		}
-		return Object.freeze(copy);
+		return Objects.freeze(copy);
 	}
 
 	/**
-	 * Whether a module may manage rules beyond its own subtree: the call rules for `slothlet.permissions.addRule`,
+	 * Whether a module may manage rules beyond its own subtree: the call rules for `slothlet.permissions.rules.add`,
 	 * the built-in reach default among them, decide for its caller path, and the winner allows. The default
 	 * policy plays no part.
 	 *
@@ -1936,11 +2443,11 @@ export class PermissionManager extends ComponentBase {
 	 * @private
 	 */
 	#mayReachBeyondOwn(callerPath) {
-		return this.#defaultWinner(callerPath, "slothlet.permissions.addRule").effect === "allow";
+		return this.#defaultWinner(callerPath, "slothlet.permissions.rules.add").effect === "allow";
 	}
 
 	/**
-	 * Refuse module code changing global metadata (#625): `metadata.setGlobal` changes what every node reports, every
+	 * Refuse module code changing global metadata (#625): `metadata.global` changes what every node reports, every
 	 * other module's included, so it is the host's by a built-in deny an allow for the module lifts. Like the other
 	 * built-in rules it applies only while the permission system is on. It is checked once the call's arguments are
 	 * valid, so a malformed call reports what is wrong with it first; the call gate leaves the built-in deny to this
@@ -1963,7 +2470,114 @@ export class PermissionManager extends ComponentBase {
 			rule: this.#serializeRule(winner),
 			conditionMatched: winner.condition != null
 		});
-		throw new this.SlothletError("PERMISSION_DENIED", { caller: callerPath, target: GLOBAL_METADATA_TARGET });
+		throw new this.SlothletError("PERMISSION_DENIED", { caller: callerPath, target: segmentsOf(GLOBAL_METADATA_TARGET) });
+	}
+
+	/**
+	 * Refuse module code a built-in capability no rule opens for it (see {@link CAPABILITIES}). Only while the permission
+	 * system is on; host code is never checked. The rules whose target is exactly `capability:<name>` decide for the
+	 * caller's path, ranked as any rule is; a broader target (`**`) never names a capability.
+	 *
+	 * @param {object|null} caller - The module code's wrapper (the leaf running, or the file's own node for its top
+	 *   level), the reader standing for code no one accounts for, or null for the host.
+	 * @param {string} name - The capability.
+	 * @param {string} route - What the code used, for the error (`new Function`, `vm.runInThisContext`, …).
+	 * @param {"foreign-filename"|"binding"|null} [refusal=null] - Refuse whatever the rules say, for this reason: code
+	 *   compiled under the name of a real file outside the caller's own folder, or through Node's binding, whose names
+	 *   cannot be read.
+	 * @returns {void}
+	 * @throws {SlothletError} `PERMISSION_CAPABILITY_REFUSED` when no rule opens the capability for the caller, or for `refusal`.
+	 * @example
+	 * pm.assertCapability(leaf, "code", "new Function");
+	 */
+	assertCapability(caller, name, route, refusal = null) {
+		if (caller === null || !this.#enabled) return;
+		const target = `${CAPABILITY_PREFIX}${name}`;
+		const callerPath = caller?.____slothletInternal ? String(caller.____slothletInternal.apiPath ?? "") : null;
+		const winner = callerPath === null ? null : this.#capabilityWinner(callerPath, target);
+		if (winner?.effect === "allow" && refusal === null) return;
+		const reasonCode = refusal ?? (callerPath === null ? "unattributed" : "not-opened");
+		this.#emitAuditEvent("permission:denied", {
+			caller: callerPath,
+			target,
+			rule: winner ? this.#serializeRule(winner) : null,
+			conditionMatched: winner?.condition != null
+		});
+		const reason = translate(CAPABILITY_REASONS[reasonCode]);
+		const error = new this.SlothletError("PERMISSION_CAPABILITY_REFUSED", { caller: callerPath ?? "?", capability: name, route, reason });
+		// Carried for code that branches on why; the message reads the translated `reason`.
+		error.details.reasonCode = reasonCode;
+		throw error;
+	}
+
+	/**
+	 * Refuse a file's top-level code, as it first loads, a built-in capability (see {@link assertCapability}): decided
+	 * for each path the code can run as (its module path, as the loader reads it before the build), all of which have to
+	 * be opened.
+	 *
+	 * @param {ReadonlyArray<string>} paths - The paths.
+	 * @param {string} name - The capability.
+	 * @param {string} route - What the code used.
+	 * @param {"foreign-filename"|"binding"|null} [refusal=null] - Refuse whatever the rules say, for this reason.
+	 * @returns {void}
+	 * @throws {SlothletError} `PERMISSION_CAPABILITY_REFUSED`.
+	 * @example
+	 * pm.assertCapabilityForPaths(["ext.render"], "code", "new Function");
+	 */
+	assertCapabilityForPaths(paths, name, route, refusal = null) {
+		if (!this.#enabled) return;
+		for (let ofIndex = 0, ofList = paths; ofIndex < ofList.length; ofIndex++) {
+			const path = ofList[ofIndex];
+			this.assertCapability({ ____slothletInternal: { apiPath: path } }, name, route, refusal);
+		}
+	}
+
+	/**
+	 * The rule that decides a capability for a caller: among the rules whose target is exactly the capability's (the
+	 * built-in deny always among them), most specific first, then the higher layer, then the last registered.
+	 *
+	 * @param {string} callerPath - The caller's api path.
+	 * @param {string} target - `capability:<name>`.
+	 * @returns {object} The winning rule entry.
+	 * @private
+	 */
+	#capabilityWinner(callerPath, target) {
+		const runtimeContext = this.slothlet.contextManager?.tryGetContext?.(this.slothlet.instanceID)?.context ?? null;
+		const conditioned = [];
+		for (const entry of mapValues(this.#callRules)) {
+			if (entry.target !== target || !this.#getCompiledPattern(entry.caller)(callerPath)) continue;
+			if (this.#conditionMatches(entry, runtimeContext, null)) listPush(conditioned, entry);
+		}
+		this.#sortBySpecificity(
+			conditioned,
+			(entry) => this.#computeSpecificity(entry, callerPath, target),
+			(entry) => this.#literalSegments(entry.caller)
+		);
+		return conditioned[0];
+	}
+
+	/**
+	 * The built-in capabilities and the callers the rules open each for: for each capability, in the order code,
+	 * imports, loader, the `caller` patterns of the allow rules whose target is exactly `capability:<name>`, most
+	 * specific first, then the higher layer, then the newest. The built-in denies are not listed; a rule with a
+	 * condition is listed as it is, its condition not evaluated.
+	 *
+	 * @returns {Array<{name: string, allowed: string[]}>} The report.
+	 * @example
+	 * pm.capabilityReport(); // [{ name: "code", allowed: ["ext.render"] }, { name: "imports", allowed: [] }, …]
+	 */
+	capabilityReport() {
+		return mapList(CAPABILITIES, (name) => {
+			const target = `${CAPABILITY_PREFIX}${name}`;
+			const allows = [];
+			for (const entry of mapValues(this.#callRules)) if (entry.target === target && entry.effect === "allow") listPush(allows, entry);
+			this.#sortBySpecificity(
+				allows,
+				(entry) => this.#patternSpecificity(entry.caller, ""),
+				(entry) => this.#literalSegments(entry.caller)
+			);
+			return { name, allowed: mapList(allows, (entry) => entry.caller) };
+		});
 	}
 
 	/**
@@ -1978,18 +2592,16 @@ export class PermissionManager extends ComponentBase {
 	#defaultWinner(callerPath, targetPath) {
 		const runtimeContext = this.slothlet.contextManager?.tryGetContext?.(this.slothlet.instanceID)?.context ?? null;
 		const conditioned = [];
-		for (const entry of this.#callRules.values()) {
-			if (entry.hookType != null) continue;
-			if (!this.#getCompiledPattern(entry.caller)(callerPath) || !this.#getCompiledPattern(entry.target)(targetPath)) continue;
-			if (this.#conditionMatches(entry, runtimeContext, null)) conditioned.push(entry);
+		for (const entry of mapValues(this.#callRules)) {
+			if (!entry.call) continue;
+			if (!this.#getCompiledPattern(entry.caller)(callerPath) || !this.#getCompiledPattern(entry.pathPattern)(targetPath)) continue;
+			if (this.#conditionMatches(entry, runtimeContext, null)) listPush(conditioned, entry);
 		}
-		conditioned.sort((a, b) => {
-			const specA = this.#computeSpecificity(a, callerPath, targetPath);
-			const specB = this.#computeSpecificity(b, callerPath, targetPath);
-			if (specA !== specB) return specB - specA;
-			if (a.layerRank !== b.layerRank) return b.layerRank - a.layerRank;
-			return b.registrationSeq - a.registrationSeq;
-		});
+		this.#sortBySpecificity(
+			conditioned,
+			(entry) => this.#computeSpecificity(entry, callerPath, targetPath),
+			(entry) => this.#literalSegments(entry.caller) + this.#literalSegments(entry.pathPattern)
+		);
 		// The built-in default always matches, so there is a winner.
 		return conditioned[0];
 	}
@@ -1997,7 +2609,7 @@ export class PermissionManager extends ComponentBase {
 	/**
 	 * The write rule that decides a module's write, with no audit.
 	 *
-	 * Most-specific-wins, then the higher layer, then the last registered, as for call rules. A rule module code
+	 * Most-specific-wins (kind, then literal segments), then the higher layer, then the last registered, as for call rules. A rule module code
 	 * added for its own subtree never lifts a built-in rule, so where a built-in deny matches, such allows are
 	 * left out; the host, a manifest, and a module the host or its manifest let manage rules may lift one.
 	 *
@@ -2009,20 +2621,20 @@ export class PermissionManager extends ComponentBase {
 	 */
 	#decideWrite(callerPath, targetPath, runtimeContext) {
 		const cacheKey = `${callerPath}\u0000${targetPath}${WRITE_TARGET_SUFFIX}`;
-		if (this.#writeCache.has(cacheKey)) return this.#writeCache.get(cacheKey);
+		if (MapMethods.has(this.#writeCache, cacheKey)) return MapMethods.get(this.#writeCache, cacheKey);
 		let conditioned = [];
 		let builtinDenied = false;
 		let conditional = false;
-		for (const entry of this.#writeRules.values()) {
+		for (const entry of mapValues(this.#writeRules)) {
 			if (!this.#getCompiledPattern(entry.caller)(callerPath) || !this.#getCompiledPattern(entry.writePathPattern)(targetPath)) continue;
 			if (entry.condition != null || entry.requires != null) conditional = true;
 			// A write has no call arguments — function conditions receive null callMeta.
 			if (!this.#conditionMatches(entry, runtimeContext, null)) continue;
-			conditioned.push(entry);
+			listPush(conditioned, entry);
 			if (entry.layer === "builtin" && entry.effect === "deny") builtinDenied = true;
 		}
 		const winner = conditioned.length === 0 ? null : this.#pickWrite(conditioned, builtinDenied, callerPath, targetPath);
-		if (!conditional) this.#writeCache.set(cacheKey, winner);
+		if (!conditional) MapMethods.set(this.#writeCache, cacheKey, winner);
 		return winner;
 	}
 
@@ -2037,16 +2649,12 @@ export class PermissionManager extends ComponentBase {
 	 * @private
 	 */
 	#pickWrite(conditioned, builtinDenied, callerPath, targetPath) {
-		if (builtinDenied) conditioned = conditioned.filter((entry) => entry.effect !== "allow" || entry.layer !== "module");
-		const spec = (entry) =>
-			this.#patternSpecificity(entry.caller, callerPath) + this.#patternSpecificity(entry.writePathPattern, targetPath);
-		conditioned.sort((a, b) => {
-			const specA = spec(a);
-			const specB = spec(b);
-			if (specA !== specB) return specB - specA;
-			if (a.layerRank !== b.layerRank) return b.layerRank - a.layerRank;
-			return b.registrationSeq - a.registrationSeq;
-		});
+		if (builtinDenied) conditioned = filterList(conditioned, (entry) => entry.effect !== "allow" || entry.layer !== "module");
+		this.#sortBySpecificity(
+			conditioned,
+			(entry) => this.#patternSpecificity(entry.caller, callerPath) + this.#patternSpecificity(entry.writePathPattern, targetPath),
+			(entry) => this.#literalSegments(entry.caller) + this.#literalSegments(entry.writePathPattern)
+		);
 		return conditioned[0];
 	}
 
@@ -2059,7 +2667,7 @@ export class PermissionManager extends ComponentBase {
 	 * or after {@link disable}) none is evaluated, the built-in ones — the framework's namespace and root functions,
 	 * and the framework's own keys on api nodes — included, and the ownership rule alone decides. An allow is a
 	 * grant, a lift of a built-in rule included: the write goes through whatever the module owns. With no matching
-	 * write rule the rules say nothing — `defaultPolicy` grants nothing here — and the ownership rule alone decides.
+	 * write rule the rules say nothing — `policy` grants nothing here — and the ownership rule alone decides.
 	 * A denial is audited like any other.
 	 *
 	 * @param {string} callerPath - Api path of the module writing.
@@ -2067,7 +2675,7 @@ export class PermissionManager extends ComponentBase {
 	 * @param {object|null} [runtimeContext=null] - Per-request context for condition evaluation.
 	 * @returns {"deny"|"grant"|null} The decision; null when no write rule matches or the system is off.
 	 * @example
-	 * pm.decideWrite("payments.charge", "slothlet.lockCaller"); // "deny" — the built-in rule denies it
+	 * pm.decideWrite("payments.charge", "slothlet.pin"); // "deny" — the built-in rule denies it
 	 */
 	decideWrite(callerPath, targetPath, runtimeContext = null) {
 		if (!this.#enabled && !this.coversWrite(targetPath)) return null;
@@ -2081,6 +2689,101 @@ export class PermissionManager extends ComponentBase {
 			conditionMatched: winner.condition != null
 		});
 		return "deny";
+	}
+
+	/**
+	 * The write rules whose caller pattern matches `callerPath`, as one string of their ids: two callers given the same
+	 * string are answered alike by the write rules for every write either could make. Kept until the rules change.
+	 *
+	 * @param {string} callerPath - Api path of a module's function.
+	 * @returns {string} The ids, in the order the rules were added; empty while the system is off or no rule names it.
+	 * @example
+	 * pm.writeRulesFor("reader.x") === pm.writeRulesFor("reader.y"); // true when no write rule tells the two apart
+	 */
+	writeRulesFor(callerPath) {
+		if (!this.#enabled) return "";
+		const cached = MapMethods.get(this.#writeRulesForCache, callerPath);
+		if (cached !== undefined) return cached;
+		const ids = [];
+		for (const entry of mapValues(this.#writeRules)) if (this.#getCompiledPattern(entry.caller)(callerPath)) listPush(ids, entry.id);
+		const signature = ArrayMethods.join(ids, "\u0000");
+		MapMethods.set(this.#writeRulesForCache, callerPath, signature);
+		return signature;
+	}
+
+	/**
+	 * What the write rules say about every write `callerPath` could make at `targetPath` or anywhere beneath it (#667),
+	 * read from the rule set alone and kept until the rules change: `"deny"` when a rule could refuse one of them (a
+	 * deny whose pattern can reach the subtree, or one with a condition), `"grant"` when allows cover the whole subtree
+	 * and nothing could refuse, and null when the rules leave it to ownership. A value held as itself takes no check of
+	 * its own, so a reader is handed one only when nothing beneath its path would be refused for it. The built-in rules
+	 * on the framework's own keys of api nodes are left out: a value beneath a node is no node.
+	 *
+	 * @param {string} callerPath - Api path of the module writing.
+	 * @param {string} targetPath - Api path of the subtree's root.
+	 * @returns {"deny"|"grant"|null} The verdict; null while the system is off.
+	 * @example
+	 * pm.writeSubtree("reader.x", "owner.Foo.prototype"); // "grant" under { caller: "reader.**", target: "owner.**:write", effect: "allow" }
+	 */
+	writeSubtree(callerPath, targetPath) {
+		if (!this.#enabled) return null;
+		const cacheKey = `${callerPath}\u0000${targetPath}`;
+		if (MapMethods.has(this.#subtreeCache, cacheKey)) return MapMethods.get(this.#subtreeCache, cacheKey);
+		const target = filterList(splitText(targetPath, "."), Boolean);
+		let granted = false;
+		let verdict = null;
+		for (const entry of mapValues(this.#writeRules)) {
+			if (SetMethods.has(this.#nodeKeyRuleIds, entry.id) || !this.#getCompiledPattern(entry.caller)(callerPath)) continue;
+			const conditional = entry.condition != null || entry.requires != null;
+			if (entry.effect === "deny") {
+				if (runtime_patternReaches(entry.writePathPattern, target)) {
+					verdict = "deny";
+					break;
+				}
+			} else if (
+				!conditional &&
+				!granted &&
+				runtime_patternCovers(entry.writePathPattern, target, (pattern) => this.#getCompiledPattern(pattern))
+			) {
+				granted = true;
+			}
+		}
+		if (verdict === null && granted) verdict = "grant";
+		MapMethods.set(this.#subtreeCache, cacheKey, verdict);
+		return verdict;
+	}
+
+	/**
+	 * Whether the call and read rules could refuse `callerPath` a call or read at `targetPath` or anywhere beneath it,
+	 * read from the rule set alone: a deny `policy`, or a deny or conditional rule for the caller whose target
+	 * pattern can reach the subtree. A value held as itself takes no check of its own, so a reader is handed one that
+	 * reaches a node's own members only when no read of them could be refused. Hook-target rules decide no read.
+	 *
+	 * @param {string} callerPath - Api path of the module reading.
+	 * @param {string} targetPath - Api path of the subtree's root (`""` for the api root).
+	 * @returns {boolean} True when some read could be refused; false while the system is off.
+	 * @example
+	 * pm.readMayRefuseBeneath("reader.at", "zz"); // true under { caller: "reader.**", target: "zz.tag", effect: "deny" }
+	 */
+	readMayRefuseBeneath(callerPath, targetPath) {
+		if (!this.#enabled) return false;
+		if (this.#defaultPolicy !== "allow") return true;
+		const cacheKey = `${callerPath}\u0000${targetPath}`;
+		const cached = MapMethods.get(this.#readSubtreeCache, cacheKey);
+		if (cached !== undefined) return cached;
+		const target = filterList(splitText(targetPath, "."), Boolean);
+		let refuses = false;
+		for (const entry of mapValues(this.#callRules)) {
+			if (entry.hookType != null || entry.id === this.#reachRuleId || entry.id === this.#globalMetadataRuleId) continue;
+			if (entry.effect !== "deny" && entry.condition == null && entry.requires == null) continue;
+			if (!this.#getCompiledPattern(entry.caller)(callerPath)) continue;
+			if (runtime_patternReaches(entry.pathPattern, target)) {
+				refuses = true;
+				break;
+			}
+		}
+		MapMethods.set(this.#readSubtreeCache, cacheKey, refuses);
+		return refuses;
 	}
 
 	/**
@@ -2113,7 +2816,7 @@ export class PermissionManager extends ComponentBase {
 	 *   with principal grace, mirroring a promoted call (#459). Only then is the result a Promise; the
 	 *   fast path (nothing stale) answers synchronously.
 	 * - Audit events emit as for a real call (`permission:denied` always, `allowed`/`default` under
-	 *   `audit: "verbose"`), with `via: "checkCall"` in the payload so a probing peer is visible.
+	 *   `audit: "verbose"`), with `via: ["slothlet", "permissions", "global", "check", "call"]` in the payload so a probing peer is visible.
 	 * - Disabled enforcement answers `true`, like {@link checkAccess}.
 	 *
 	 * @param {string} callerPath - The supplied caller's api path (non-empty).
@@ -2132,36 +2835,33 @@ export class PermissionManager extends ComponentBase {
 			throw new this.SlothletError("INVALID_ARGUMENT", {
 				argument: "callerPath",
 				expected: "a non-empty string",
-				received: typeof callerPath,
-				validationError: true
+				received: typeof callerPath
 			});
 		}
 		if (typeof targetPath !== "string" || targetPath.length === 0) {
 			throw new this.SlothletError("INVALID_ARGUMENT", {
 				argument: "targetPath",
 				expected: "a non-empty string",
-				received: typeof targetPath,
-				validationError: true
+				received: typeof targetPath
 			});
 		}
 		// `null`/`undefined` both mean "no arguments", as on every other optional bag in the api.
 		const callArgs = args == null ? [] : args;
-		if (!Array.isArray(callArgs)) {
+		if (!Arrays.isArray(callArgs)) {
 			throw new this.SlothletError("INVALID_ARGUMENT", {
 				argument: "args",
 				expected: "an array",
-				received: typeof callArgs,
-				validationError: true
+				received: typeof callArgs
 			});
 		}
 
 		const callMeta = { args: callArgs, target: targetPath };
 		// Scan-then-enforce, as the promoted call gate does (#459): a stale principal is resolved first,
-		// and the enforcement after the scan runs with principal grace so a `maxAge` expiring between the
+		// and the enforcement after the scan runs with principal grace so a `ttl` expiring between the
 		// two clock reads cannot flip the verdict.
 		const stale = this.stalePrincipals(callerPath, targetPath, null, null, runtimeContext);
 		if (stale.length > 0) {
-			return this.resolvePrincipals(stale).then(() =>
+			return PromiseMethods.then(this.resolvePrincipals(stale), () =>
 				this.enforceAccess(callerPath, targetPath, null, null, runtimeContext, callMeta, CHECK_CALL_OPTIONS)
 			);
 		}
@@ -2231,10 +2931,10 @@ export class PermissionManager extends ComponentBase {
 	 */
 	getRulesForPath(targetPath) {
 		const matching = [];
-		for (const entry of this.#rules.values()) {
+		for (const entry of mapValues(this.#rules)) {
 			const targetMatcher = this.#getCompiledPattern(entry.target);
 			if (targetMatcher(targetPath)) {
-				matching.push(this.#serializeRule(entry));
+				listPush(matching, this.#serializeRule(entry));
 			}
 		}
 		return matching;
@@ -2250,9 +2950,9 @@ export class PermissionManager extends ComponentBase {
 	 */
 	getRulesByModule(moduleID) {
 		const matching = [];
-		for (const entry of this.#rules.values()) {
+		for (const entry of mapValues(this.#rules)) {
 			if (entry.ownerModuleID === moduleID) {
-				matching.push(this.#serializeRule(entry));
+				listPush(matching, this.#serializeRule(entry));
 			}
 		}
 		return matching;
@@ -2269,10 +2969,10 @@ export class PermissionManager extends ComponentBase {
 	 */
 	getRulesForCaller(callerPath) {
 		const matching = [];
-		for (const entry of this.#rules.values()) {
+		for (const entry of mapValues(this.#rules)) {
 			const callerMatcher = this.#getCompiledPattern(entry.caller);
 			if (callerMatcher(callerPath)) {
-				matching.push(this.#serializeRule(entry));
+				listPush(matching, this.#serializeRule(entry));
 			}
 		}
 		return matching;
@@ -2286,10 +2986,27 @@ export class PermissionManager extends ComponentBase {
 	 * pm.enable();
 	 */
 	enable() {
+		const written = writeTarget(this);
+		if (written !== this) return written.enable();
+		this.#assertNotStrict("enable");
 		this.#assertNotSealed();
 		this.#enabled = true;
+		this.#endedOn = false;
 		this.#disabled = false;
+		// The event pool follows the mode: levels resolved under the old one are resolved again.
+		this.#eventRulesEpoch = nextEpoch();
 		this.#clearCache();
+	}
+
+	/**
+	 * Throw if the mode is `"strict"`, which is chosen in the config only and cannot be left or entered at runtime.
+	 * @param {string} method - The control method called.
+	 * @returns {void}
+	 * @throws {SlothletError} PERMISSION_STRICT_FIXED under strict.
+	 * @private
+	 */
+	#assertNotStrict(method) {
+		if (this.#strict) throw new this.SlothletError("PERMISSION_STRICT_FIXED", { method });
 	}
 
 	/**
@@ -2300,7 +3017,7 @@ export class PermissionManager extends ComponentBase {
 	 */
 	#assertNotSealed() {
 		if (this.#sealed) {
-			throw new this.SlothletError("PERMISSION_SEALED", {}, null, { validationError: true });
+			throw new this.SlothletError("PERMISSION_SEALED", {});
 		}
 	}
 
@@ -2314,6 +3031,8 @@ export class PermissionManager extends ComponentBase {
 	 * pm.seal();
 	 */
 	seal() {
+		const written = writeTarget(this);
+		if (written !== this) return written.seal();
 		this.#sealed = true;
 	}
 
@@ -2338,9 +3057,12 @@ export class PermissionManager extends ComponentBase {
 	 * pm.applyDefaultRoutineRules(config.routines);
 	 */
 	applyDefaultRoutineRules(routines) {
-		if (!Array.isArray(routines)) return;
-		for (const fallback of DEFAULT_ROUTINES) {
-			if (!routines.some((routine) => routine?.name === fallback.name && routine?.mode === fallback.mode)) continue;
+		const written = writeTarget(this);
+		if (written !== this) return written.applyDefaultRoutineRules(routines);
+		if (!Arrays.isArray(routines)) return;
+		for (let ofIndex = 0, ofList = DEFAULT_ROUTINES; ofIndex < ofList.length; ofIndex++) {
+			const fallback = ofList[ofIndex];
+			if (!ArrayMethods.some(routines, (routine) => routine?.name === fallback.name && routine?.mode === fallback.mode)) continue;
 			this.addRule({ caller: "**", target: fallback.name, effect: "deny" }, "__builtin__");
 		}
 	}
@@ -2363,10 +3085,56 @@ export class PermissionManager extends ComponentBase {
 	 * pm.disable();
 	 */
 	disable() {
+		const written = writeTarget(this);
+		if (written !== this) return written.disable();
+		this.#assertNotStrict("disable");
 		this.#assertNotSealed();
 		this.#enabled = false;
+		this.#endedOn = false;
 		this.#disabled = false;
+		// The event pool follows the mode: levels resolved under the old one are resolved again.
+		this.#eventRulesEpoch = nextEpoch();
 		this.#clearCache();
+	}
+
+	/**
+	 * Switch the permission system's mode at runtime: `"on"` (or `true`) turns it on, `"off"` (or `false`) off.
+	 * `"strict"` is chosen in the config only, so it can be neither entered nor left here. `"disabled"` is also chosen
+	 * in the config only: an instance started disabled can be switched on or off, but none can be switched to it (asking
+	 * for it while already disabled changes nothing). Refused once the control surface is sealed.
+	 *
+	 * @param {"on"|"off"|"strict"|"disabled"|boolean} value - The mode to switch to.
+	 * @returns {void}
+	 * @throws {SlothletError} PERMISSION_STRICT_FIXED under strict, or when `value` is `"strict"`; PERMISSION_SEALED
+	 *   once sealed; INVALID_ARGUMENT for `"disabled"` (unless already disabled) or any other value.
+	 * @example
+	 * pm.setMode("on");
+	 * pm.setMode(false);
+	 */
+	setMode(value) {
+		const written = writeTarget(this);
+		if (written !== this) return written.setMode(value);
+		const mode = value === true ? "on" : value === false ? "off" : value;
+		if (mode !== "on" && mode !== "off" && mode !== "strict" && mode !== "disabled") {
+			throw new this.SlothletError("INVALID_ARGUMENT", {
+				argument: "value",
+				expected: '"on", "off", true or false',
+				received: typeof value === "string" ? `"${value}"` : typeof value
+			});
+		}
+		this.#assertNotStrict("mode");
+		if (mode === "strict") throw new this.SlothletError("PERMISSION_STRICT_FIXED", { method: "mode" });
+		this.#assertNotSealed();
+		if (mode === "disabled") {
+			if (this.#disabled) return;
+			throw new this.SlothletError("INVALID_ARGUMENT", {
+				argument: "value",
+				expected: '"on", "off", true or false ("disabled" is chosen in the config only)',
+				received: '"disabled"'
+			});
+		}
+		if (mode === "on") this.enable();
+		else this.disable();
 	}
 
 	/**
@@ -2381,16 +3149,78 @@ export class PermissionManager extends ComponentBase {
 	}
 
 	/**
-	 * The permission system's mode: `"on"` (every rule applies), `"off"` (only the built-in rules that keep module
-	 * code off the framework's own namespace, root functions, and keys on api nodes, and the host rules on what they
-	 * cover), or `"disabled"` (nothing applies).
+	 * Whether the permission system was on when the instance shut down. Values handed to modules as views while it
+	 * was on are still held to what their holders could write then.
 	 *
-	 * @returns {"on"|"off"|"disabled"} The mode.
+	 * @returns {boolean} True when it was.
+	 * @example
+	 * if (pm.isEnabled() || pm.wasOnAtShutdown()) { ... }
+	 */
+	wasOnAtShutdown() {
+		return this.#endedOn;
+	}
+
+	/**
+	 * Run the permission baseline as the instance starts (see `helpers/permission-baseline`), when the mode is on or
+	 * strict. Under on, each check not met is one warning; under strict, any check not met refuses the start.
+	 * @param {"node"|"browser"} envTarget - Where the instance runs.
+	 * @param {"async"|"live"} [runtime="async"] - The instance's runtime (see {@link runBaseline}).
+	 * @returns {Promise<void>}
+	 * @throws {SlothletError} PERMISSION_BASELINE_UNMET under strict, naming the checks not met.
+	 * @example
+	 * await pm.checkBaseline("node", "async");
+	 */
+	async checkBaseline(envTarget, runtime = "async") {
+		this.#baseline = null;
+		if (!this.#enabled) return;
+		const baseline = await runBaseline(envTarget, undefined, runtime);
+		this.#baseline = baseline;
+		if (baseline.met) return;
+		const unmet = filterList(baseline.checks, (entry) => !entry.met);
+		if (this.#strict) {
+			throw new this.SlothletError("PERMISSION_BASELINE_UNMET", {
+				checks: ArrayMethods.join(
+					mapList(unmet, (entry) => entry.id),
+					", "
+				)
+			});
+		}
+		for (let ofIndex = 0, ofList = unmet; ofIndex < ofList.length; ofIndex++) {
+			const entry = ofList[ofIndex];
+			new this.SlothletWarning("WARNING_PERMISSION_BASELINE_UNMET", { check: entry.id, reason: entry.reason });
+		}
+	}
+
+	/**
+	 * The mode, what the permission baseline found when the instance started, and the capabilities rules open.
+	 * @returns {{mode: string, baseline: {met: boolean|null, checks: Array<{id: string, met: boolean, reason: string|null}>}, capabilities: Array<{name: string, allowed: string[]}>}}
+	 *   The report; `baseline.met` is null when no check ran (the mode was off or disabled at start).
+	 * @example
+	 * pm.report(); // { mode: "on", baseline: { met: true, checks: [...] }, capabilities: [...] }
+	 */
+	report() {
+		const baseline = this.#baseline;
+		return {
+			mode: this.mode(),
+			baseline: baseline
+				? { met: baseline.met, checks: mapList(baseline.checks, (entry) => ({ id: entry.id, met: entry.met, reason: entry.reason })) }
+				: { met: null, checks: [] },
+			// The capabilities and the callers rules open each to, where this copy has them.
+			capabilities: typeof this.capabilityReport === "function" ? this.capabilityReport() : []
+		};
+	}
+
+	/**
+	 * The permission system's mode: `"on"` (every rule applies), `"strict"` (as on, chosen in the config only, with the
+	 * permission baseline met), `"off"` (only the built-in rules that keep module code off the framework's own namespace,
+	 * root functions, and keys on api nodes, and the host rules on what they cover), or `"disabled"` (nothing applies).
+	 *
+	 * @returns {"on"|"strict"|"off"|"disabled"} The mode.
 	 * @example
 	 * pm.mode(); // "off" with no permissions config
 	 */
 	mode() {
-		if (this.#enabled) return "on";
+		if (this.#enabled) return this.#strict ? "strict" : "on";
 		return this.#disabled ? "disabled" : "off";
 	}
 
@@ -2407,15 +3237,15 @@ export class PermissionManager extends ComponentBase {
 		if (this.#disabled) return false;
 		// The built-in write rules cover `<root>`, `<root>.**` for each framework root, and `<key>`, `**.<key>` for
 		// each framework key on api nodes: decided from the path's first and last segments.
-		const first = targetPath.indexOf(".");
-		if (FRAMEWORK_ROOTS.has(first === -1 ? targetPath : targetPath.slice(0, first))) return true;
-		return FRAMEWORK_WRITE_KEYS.has(targetPath.slice(targetPath.lastIndexOf(".") + 1));
+		const first = StringMethods.indexOf(targetPath, ".");
+		if (SetMethods.has(FRAMEWORK_ROOTS, first === -1 ? targetPath : StringMethods.slice(targetPath, 0, first))) return true;
+		return SetMethods.has(FRAMEWORK_WRITE_KEYS, StringMethods.slice(targetPath, StringMethods.lastIndexOf(targetPath, ".") + 1));
 	}
 
 	/**
 	 * Whether terminal data-value property reads are permission-gated.
 	 * Separate from {@link isEnabled} so call enforcement is unaffected by this default-on
-	 * flag (opt out via `permissions.readGating: false`).
+	 * flag (opt out via `permissions.gating.read: false`).
 	 *
 	 * @returns {boolean} True if read gating is enabled.
 	 * @example
@@ -2457,6 +3287,29 @@ export class PermissionManager extends ComponentBase {
 	}
 
 	/**
+	 * Whether module privacy lets a module reach the private members a value beneath a node holds (a class's prototype),
+	 * as reading or creating one there would be decided: always while the permission system is off, and otherwise only
+	 * for the module the members are private to. Silent: nothing is audited.
+	 *
+	 * @param {string|null} callerPath - The module's api path; null for the host, which this never refuses.
+	 * @param {string} holderPath - The api path of the value holding the members.
+	 * @param {string|null} callerFilePath - The module's source file.
+	 * @param {string|null} holderFilePath - The source file of the node the value is beneath.
+	 * @returns {boolean} True when privacy would refuse none of them.
+	 * @public
+	 * @example
+	 * pm.mayReachPrivate("creator.read", "owned.Box.prototype", "/m/creator.mjs", "/m/owned.mjs"); // false
+	 */
+	mayReachPrivate(callerPath, holderPath, callerFilePath, holderFilePath) {
+		if (!this.#enabled || callerPath === null) return true;
+		if (holderPath === "slothlet" || StringMethods.startsWith(holderPath, "slothlet.")) return true;
+		if (callerFilePath && holderFilePath && callerFilePath === holderFilePath) return true;
+		if (this.#privateScope === "folder")
+			return Boolean(callerFilePath && holderFilePath && runtime_sameModuleDir(callerFilePath, holderFilePath));
+		return this.#privateHolderOwner(callerPath, `${holderPath}._`) !== null;
+	}
+
+	/**
 	 * Enable or disable read-level permission gating at runtime.
 	 * Unlike {@link enable}/{@link disable}, this does not clear the resolved cache —
 	 * the flag only controls whether property reads consult the rule set; it never
@@ -2469,13 +3322,14 @@ export class PermissionManager extends ComponentBase {
 	 * pm.setReadGating(true);
 	 */
 	setReadGating(value) {
+		const written = writeTarget(this);
+		if (written !== this) return written.setReadGating(value);
 		this.#assertNotSealed();
 		if (typeof value !== "boolean") {
 			throw new this.SlothletError("INVALID_ARGUMENT", {
 				argument: "value",
 				expected: "boolean",
-				received: typeof value,
-				validationError: true
+				received: typeof value
 			});
 		}
 		this.#readGating = value;
@@ -2493,8 +3347,8 @@ export class PermissionManager extends ComponentBase {
 	/* v8 ignore start */
 	exportRules() {
 		const rules = [];
-		for (const entry of this.#rules.values()) {
-			rules.push({
+		for (const entry of mapValues(this.#rules)) {
+			listPush(rules, {
 				rule: { caller: entry.caller, target: entry.target, effect: entry.effect },
 				ownerModuleID: entry.ownerModuleID
 			});
@@ -2512,8 +3366,11 @@ export class PermissionManager extends ComponentBase {
 	 * pm.importRules(snapshot);
 	 */
 	importRules(registrations) {
-		if (!Array.isArray(registrations)) return;
-		for (const reg of registrations) {
+		const written = writeTarget(this);
+		if (written !== this) return written.importRules(registrations);
+		if (!Arrays.isArray(registrations)) return;
+		for (let ofIndex = 0, ofList = registrations; ofIndex < ofList.length; ofIndex++) {
+			const reg = ofList[ofIndex];
 			this.addRule(reg.rule, reg.ownerModuleID);
 		}
 	}
@@ -2528,19 +3385,85 @@ export class PermissionManager extends ComponentBase {
 	 * await pm.shutdown();
 	 */
 	async shutdown() {
-		this.#rules.clear();
-		this.#callRules.clear();
-		this.#writeRules.clear();
-		this.#principals.clear();
+		// The instance's teardown of its own handler: the copies that hold it keep theirs.
+		writeTarget(this, true);
+		MapMethods.clear(this.#rules);
+		MapMethods.clear(this.#callRules);
+		MapMethods.clear(this.#writeRules);
+		MapMethods.clear(this.#principals);
 		this.#requiresRuleCount = 0;
-		this.#resolvedCache.clear();
-		this.#compiledCache.clear();
+		MapMethods.clear(this.#resolvedCache);
+		MapMethods.clear(this.#compiledCache);
+		if (this.#enabled) this.#endedOn = true;
 		this.#enabled = false;
 		this.#disabled = false;
+		this.#strict = false;
+		this.#eventRulesEpoch = nextEpoch();
 		this.#defaultPolicy = "allow";
 		this.#audit = "default";
 		this.#readGating = false;
 		this.#owner = false;
+	}
+
+	/**
+	 * A copy of this manager for a `run()` / `scope()` (see `FORK` in `helpers/flow-stores`): its rules, event rules,
+	 * mode, read gating, seal and principals, which later changes to either leave the other as it is. The rule entries
+	 * are shared (neither copy changes an entry once it is registered); each principal gets a record of its own, with
+	 * nothing cached. Caches start empty, and the rule epochs are new ones.
+	 * @returns {PermissionManager} The copy.
+	 * @internal
+	 */
+	[FORK]() {
+		forkingFrom = this;
+		return new PermissionManager(this.slothlet);
+	}
+
+	/**
+	 * Fill a new manager from the one it is a copy of (see {@link PermissionManager#[FORK]}).
+	 * @param {PermissionManager} from - The manager copied.
+	 * @returns {void}
+	 * @private
+	 */
+	#copyFrom(from) {
+		this.#rules = mapFrom(mapEntriesToArray(from.#rules));
+		this.#callRules = mapFrom(mapEntriesToArray(from.#callRules));
+		this.#writeRules = mapFrom(mapEntriesToArray(from.#writeRules));
+		this.#eventRules = mapFrom(mapEntriesToArray(from.#eventRules));
+		this.#ruleIdCounter = from.#ruleIdCounter;
+		this.#ruleRegistrationSeq = from.#ruleRegistrationSeq;
+		this.#reachRuleId = from.#reachRuleId;
+		this.#globalMetadataRuleId = from.#globalMetadataRuleId;
+		this.#defaultPolicy = from.#defaultPolicy;
+		this.#enabled = from.#enabled;
+		this.#endedOn = from.#endedOn;
+		this.#disabled = from.#disabled;
+		this.#strict = from.#strict;
+		this.#baseline = from.#baseline;
+		this.#audit = from.#audit;
+		this.#readGating = from.#readGating;
+		this.#capture = from.#capture;
+		this.#privateHost = from.#privateHost;
+		this.#privateScope = from.#privateScope;
+		this.#owner = from.#owner;
+		this.#eventDefault = from.#eventDefault;
+		this.#sealed = from.#sealed;
+		this.#nodeKeyRuleIds = setFrom(setToArray(from.#nodeKeyRuleIds));
+		this.#compiledCache = mapFrom(mapEntriesToArray(from.#compiledCache));
+		this.#requiresRuleCount = from.#requiresRuleCount;
+		// A condition's pin is the condition's own: the copies share it, so a module's removal revokes it in both.
+		for (const ofEntry of mapEntries(from.#conditionPins)) MapMethods.set(this.#conditionPins, ofEntry[0], setFrom(setToArray(ofEntry[1])));
+		for (const ofEntry of mapEntries(from.#principals)) {
+			const record = ofEntry[1];
+			MapMethods.set(this.#principals, ofEntry[0], {
+				...record,
+				// Resolved again in the copy when needed: a revocation made in either copy then never leaves the other
+				// holding the facts it revoked from before the fork.
+				cache: new Map(),
+				inflight: new Map(),
+				keyInvalidations: new Map(),
+				views: new WeakMap()
+			});
+		}
 	}
 
 	// ──────────────────── Private methods ────────────────────
@@ -2549,46 +3472,76 @@ export class PermissionManager extends ComponentBase {
 	 * Validate a rule object.
 	 *
 	 * @param {object} rule - Rule to validate.
-	 * @throws {SlothletError} INVALID_PERMISSION_RULE if malformed.
+	 * @throws {SlothletError} PERMISSION_RULE_INVALID if malformed.
 	 * @private
 	 */
 	#validateRule(rule) {
 		if (!rule || typeof rule !== "object") {
-			throw new this.SlothletError("INVALID_PERMISSION_RULE", {
-				reason: translate("PERM_RULE_NOT_OBJECT"),
+			throw new this.SlothletError("PERMISSION_RULE_INVALID", {
+				reason: translate("PERMISSION_RULE_REASON_NOT_OBJECT"),
 				received: typeof rule
 			});
 		}
 		if (typeof rule.caller !== "string" || !rule.caller) {
-			throw new this.SlothletError("INVALID_PERMISSION_RULE", {
-				reason: translate("PERM_RULE_CALLER_REQUIRED"),
+			throw new this.SlothletError("PERMISSION_RULE_INVALID", {
+				reason: translate("PERMISSION_RULE_REASON_CALLER_REQUIRED"),
 				received: typeof rule.caller
 			});
 		}
 		if (typeof rule.target !== "string" || !rule.target) {
-			throw new this.SlothletError("INVALID_PERMISSION_RULE", {
-				reason: translate("PERM_RULE_TARGET_REQUIRED"),
+			throw new this.SlothletError("PERMISSION_RULE_INVALID", {
+				reason: translate("PERMISSION_RULE_REASON_TARGET_REQUIRED"),
 				received: typeof rule.target
 			});
 		}
 		if (rule.effect !== "allow" && rule.effect !== "deny") {
-			throw new this.SlothletError("INVALID_PERMISSION_RULE", {
-				reason: translate("PERM_RULE_EFFECT_INVALID"),
+			throw new this.SlothletError("PERMISSION_RULE_INVALID", {
+				reason: translate("PERMISSION_RULE_REASON_EFFECT_INVALID"),
 				received: rule.effect
 			});
 		}
+		// A suffix after the target's last `:` names an access level or a hook type. Any other (a misspelt `:wirte`) would
+		// keep the rule on the literal target, which matches no api path, so a rule meant to apply would silently not. A
+		// `capability:` target takes no suffix check: its `:` is part of its form, and its name is checked below.
+		if (!StringMethods.startsWith(rule.target, CAPABILITY_PREFIX)) {
+			const lastColon = StringMethods.lastIndexOf(rule.target, ":");
+			if (lastColon !== -1) {
+				const suffix = StringMethods.substring(rule.target, lastColon + 1);
+				if (!MapMethods.has(RULE_LEVELS, suffix) && !SetMethods.has(HOOK_TARGET_TYPES, suffix)) {
+					throw new this.SlothletError("PERMISSION_RULE_INVALID", {
+						reason: translate("PERMISSION_RULE_REASON_TARGET_SUFFIX_UNKNOWN", {
+							levels: ArrayMethods.join(mapKeysToArray(RULE_LEVELS), ", "),
+							hookTypes: ArrayMethods.join(setToArray(HOOK_TARGET_TYPES), ", ")
+						}),
+						received: suffix
+					});
+				}
+			}
+		}
+		// A target in slothlet's own space names something that exists: a built-in capability, or a member of the fixed
+		// `slothlet.*` tree. One that names nothing would never match, so a rule meant to deny it would silently not apply.
+		if (
+			StringMethods.startsWith(rule.target, CAPABILITY_PREFIX)
+				? !ArrayMethods.includes(CAPABILITIES, StringMethods.slice(rule.target, CAPABILITY_PREFIX.length))
+				: StringMethods.startsWith(rule.target, "slothlet.") && !namesSlothletMember(rule.target)
+		) {
+			throw new this.SlothletError("PERMISSION_RULE_UNKNOWN_TARGET", {
+				target: rule.target,
+				capabilities: ArrayMethods.join(CAPABILITIES, ", ")
+			});
+		}
 		if (rule.condition !== undefined && rule.condition !== null) {
-			this.#assertValidConditionPayload(rule.condition, "INVALID_PERMISSION_RULE");
+			this.#assertValidConditionPayload(rule.condition, "PERMISSION_RULE_INVALID");
 		}
 		if (rule.requires !== undefined && rule.requires !== null) {
 			const valid =
-				Array.isArray(rule.requires) &&
+				Arrays.isArray(rule.requires) &&
 				rule.requires.length > 0 &&
-				rule.requires.every((name) => typeof name === "string" && name.length > 0);
+				ArrayMethods.every(rule.requires, (name) => typeof name === "string" && name.length > 0);
 			if (!valid) {
-				throw new this.SlothletError("INVALID_PERMISSION_RULE", {
-					reason: translate("PERM_RULE_REQUIRES_INVALID"),
-					received: Array.isArray(rule.requires) ? "array" : typeof rule.requires
+				throw new this.SlothletError("PERMISSION_RULE_INVALID", {
+					reason: translate("PERMISSION_RULE_REASON_PRINCIPALS_INVALID"),
+					received: Arrays.isArray(rule.requires) ? "array" : typeof rule.requires
 				});
 			}
 		}
@@ -2599,7 +3552,7 @@ export class PermissionManager extends ComponentBase {
 	 * Conditions must be a plain object, a function, or a non-empty array of those entries.
 	 *
 	 * @param {unknown} condition - Condition payload to validate.
-	 * @param {"INVALID_ARGUMENT"|"INVALID_PERMISSION_RULE"} errorCode - Error code to throw on invalid input.
+	 * @param {"INVALID_ARGUMENT"|"PERMISSION_RULE_INVALID"} errorCode - Error code to throw on invalid input.
 	 * @returns {void}
 	 * @throws {SlothletError} When the condition shape is invalid.
 	 * @private
@@ -2607,34 +3560,33 @@ export class PermissionManager extends ComponentBase {
 	#assertValidConditionPayload(condition, errorCode) {
 		const getValueType = (value) => {
 			if (value === null) return "null";
-			if (Array.isArray(value)) return "array";
+			if (Arrays.isArray(value)) return "array";
 			return typeof value;
 		};
 
 		const isPlainObject = (value) => {
 			if (value === null || typeof value !== "object") return false;
-			const proto = Object.getPrototypeOf(value);
-			return proto === Object.prototype || proto === null;
+			const proto = Objects.getPrototypeOf(value);
+			return proto === Objects.prototype || proto === null;
 		};
 
 		const isValidConditionEntry = (value) => typeof value === "function" || isPlainObject(value);
-		const entries = Array.isArray(condition) ? condition : [condition];
-		const invalidEntry = entries.length === 0 ? condition : entries.find((entry) => !isValidConditionEntry(entry));
+		const entries = Arrays.isArray(condition) ? condition : [condition];
+		const invalidEntry = entries.length === 0 ? condition : ArrayMethods.find(entries, (entry) => !isValidConditionEntry(entry));
 		if (entries.length > 0 && invalidEntry === undefined) return;
 
 		const received = getValueType(invalidEntry);
-		if (errorCode === "INVALID_PERMISSION_RULE") {
-			throw new this.SlothletError("INVALID_PERMISSION_RULE", {
-				reason: translate("PERM_RULE_CONDITION_INVALID"),
+		if (errorCode === "PERMISSION_RULE_INVALID") {
+			throw new this.SlothletError("PERMISSION_RULE_INVALID", {
+				reason: translate("PERMISSION_RULE_REASON_CONDITION_INVALID"),
 				received
 			});
 		}
 
 		throw new this.SlothletError("INVALID_ARGUMENT", {
 			argument: "condition",
-			expected: translate("PERM_RULE_CONDITION_INVALID"),
-			received,
-			validationError: true
+			expected: translate("PERMISSION_RULE_REASON_CONDITION_INVALID"),
+			received
 		});
 	}
 
@@ -2649,10 +3601,13 @@ export class PermissionManager extends ComponentBase {
 	 */
 	#deepObjectMatches(pattern, ctx) {
 		if (ctx == null || typeof ctx !== "object") return false;
-		for (const [key, val] of Object.entries(pattern)) {
+		for (let ofIndex = 0, ofList = Objects.entries(pattern); ofIndex < ofList.length; ofIndex++) {
+			const ofEntry = ofList[ofIndex],
+				key = ofEntry[0],
+				val = ofEntry[1];
 			// Only recurse into plain objects; treat class instances / Date / etc. as leaves
-			const proto = val !== null && typeof val === "object" ? Object.getPrototypeOf(val) : null;
-			const isPlainNested = proto === Object.prototype || proto === null;
+			const proto = val !== null && typeof val === "object" ? Objects.getPrototypeOf(val) : null;
+			const isPlainNested = proto === Objects.prototype || proto === null;
 			if (val !== null && typeof val === "object" && isPlainNested) {
 				// Recurse into nested plain object
 				if (!this.#deepObjectMatches(val, ctx[key])) return false;
@@ -2751,10 +3706,29 @@ export class PermissionManager extends ComponentBase {
 	 * @param {boolean} [moduleCaller=false] - The caller is a module with no known source file (#508), so a
 	 *   module-private target is denied instead of judged by the host policy. Decided before the cache,
 	 *   so it never affects caching either.
+	 * @param {function(string): boolean|null} [dataMember=null] - For a read of data, whether a path above the target is
+	 *   an object member of a module's data (see {@link enforceAccess}).
+	 * @param {boolean} [newMember=false] - The target is a member the caller's module is about to create (see
+	 *   {@link enforceAccess}).
+	 * @param {boolean} [heldMember=false] - The target is a member a value beneath a node holds (see {@link enforceAccess}).
+	 * @param {"call"|"read"} [operation="call"] - The operation decided: only the rules whose level covers it take part.
 	 * @returns {{ allowed: boolean, event: string|null, payload: object|null, hasConditionalRules?: boolean }} Decision record.
 	 * @private
 	 */
-	#resolveAccess(callerPath, targetPath, callerFilePath, targetFilePath, runtimeContext, useCache, callMeta, moduleCaller = false) {
+	#resolveAccess(
+		callerPath,
+		targetPath,
+		callerFilePath,
+		targetFilePath,
+		runtimeContext,
+		useCache,
+		callMeta,
+		moduleCaller = false,
+		dataMember = null,
+		newMember = false,
+		heldMember = false,
+		operation = "call"
+	) {
 		// Global toggle: when off, everything is allowed (no event to emit).
 		// Exception: slothlet.permissions.control.** is always subject to rule evaluation while the system is off
 		// (not disabled), so the built-in deny rule protects the toggle surface.
@@ -2762,7 +3736,8 @@ export class PermissionManager extends ComponentBase {
 		// cannot register or replace a resolver while enforcement happens to be switched off.
 		const isControlTarget =
 			!this.#disabled &&
-			(targetPath?.startsWith("slothlet.permissions.control.") || targetPath?.startsWith("slothlet.permissions.principal."));
+			((targetPath == null ? undefined : StringMethods.startsWith(targetPath, "slothlet.permissions.control.")) ||
+				(targetPath == null ? undefined : StringMethods.startsWith(targetPath, "slothlet.permissions.principal.")));
 		if (!this.#enabled && !isControlTarget) return { allowed: true, event: null, payload: null };
 
 		// Self-call bypass: same source file always allowed
@@ -2774,20 +3749,29 @@ export class PermissionManager extends ComponentBase {
 			};
 		}
 
-		// Module privacy (#260): a `_`/`__`-prefixed member is private to the directory of files
-		// that exports it. Enforced HERE — before rules and before the cache — deliberately:
-		// the api path is a lossy projection of the module tree, so no rule glob can encode
-		// "same module" (the guarantee is absolute, not overridable by user rules), and the
-		// decision cache is keyed by path pair alone, which cannot distinguish two callers'
-		// module identities. Same-module is same-DIRECTORY of the two source files — the one
-		// identity that survives every composition shape, because enforcement already receives
-		// both real file paths.
+		// Module privacy (#260): a `_`/`__`-prefixed member is private to its module. Enforced HERE —
+		// before rules and before the cache — deliberately: the api path is a lossy projection of the
+		// module tree, so no rule glob can encode "same module" (the guarantee is absolute, not
+		// overridable by user rules), and the decision cache is keyed by path pair alone, which cannot
+		// distinguish two callers' module identities. Under `private.scope: "module"` (the default) the
+		// module is the module ID that currently owns the member's path, read live from the ownership
+		// registry like the owner grant, so it needs no file paths and moves with add/remove/reload.
+		// Under `"folder"` it is the directory of the two source files.
 		// The injected `slothlet.*` control tree is framework surface, not module exports — its
 		// members have no source files and no owning module, and internal machinery probes it with
 		// synthetic `__`-prefixed children (`slothlet.permissions.__probe__`). Module privacy never
 		// applies there.
-		if (runtime_isPrivateName(targetPath) && targetPath !== "slothlet" && !targetPath.startsWith("slothlet.")) {
-			if (callerFilePath && targetFilePath && runtime_sameModuleDir(callerFilePath, targetFilePath)) {
+		if (runtime_isPrivateName(targetPath) && targetPath !== "slothlet" && !StringMethods.startsWith(targetPath, "slothlet.")) {
+			// A private member of a node belongs to the node's owner, so creating one is answered as reading it there would
+			// be: only the module that owns the node may (`targetFilePath` is the holding node's source file). A name with
+			// three or more leading underscores is the framework's, which module code creates on another module's node no
+			// more than a `_`/`__` one. A member a value beneath a node holds (a class's prototype) is the node's the same way.
+			const sameModule =
+				this.#privateScope === "folder"
+					? Boolean(callerFilePath && targetFilePath && runtime_sameModuleDir(callerFilePath, targetFilePath))
+					: (newMember || heldMember ? this.#privateHolderOwner(callerPath, targetPath) : this.#privateOwner(callerPath, targetPath)) !==
+						null;
+			if (sameModule) {
 				return {
 					allowed: true,
 					event: "permission:private-module-bypass",
@@ -2814,17 +3798,26 @@ export class PermissionManager extends ComponentBase {
 			};
 		}
 
-		// Check resolved cache
-		const cacheKey = `${callerPath}::${targetPath}`;
+		// The object members above a data target that a deny rule names exactly: the rule covers what they hold.
+		let inherited = NO_PREFIXES;
+		if (dataMember !== null) {
+			const prefixes = this.#exactDenyPrefixesOf(targetPath);
+			if (prefixes.length !== 0) inherited = filterList(prefixes, (prefix) => dataMember(prefix));
+		}
+
+		// Check resolved cache. A call and a read of one path are decided by different rules (their levels), so a read's
+		// verdict is kept under its own key.
+		const pairKey = operation === "read" ? `${callerPath}::${targetPath}\u0000read` : `${callerPath}::${targetPath}`;
+		const cacheKey = inherited.length === 0 ? pairKey : `${pairKey}::${ArrayMethods.join(inherited, "::")}`;
 		let entry;
-		if (useCache && this.#resolvedCache.has(cacheKey)) {
-			entry = this.#resolvedCache.get(cacheKey);
+		if (useCache && MapMethods.has(this.#resolvedCache, cacheKey)) {
+			entry = MapMethods.get(this.#resolvedCache, cacheKey);
 		} else {
 			// Evaluate rules — returns { allowed, event, payload, hasConditionalRules }
-			entry = this.#evaluate(callerPath, targetPath, runtimeContext, callMeta);
+			entry = this.#evaluate(callerPath, targetPath, runtimeContext, callMeta, inherited, operation);
 			// Do NOT cache when any matching rule has a condition — results vary by runtime context
 			if (useCache && !entry.hasConditionalRules) {
-				this.#resolvedCache.set(cacheKey, entry);
+				MapMethods.set(this.#resolvedCache, cacheKey, entry);
 			}
 		}
 
@@ -2832,8 +3825,11 @@ export class PermissionManager extends ComponentBase {
 		// explicit rule (allow or deny) has already decided, so a deny rule always wins over it. Applied
 		// after the cache, never stored in it: ownership moves with add/remove/reload without touching any
 		// rule, so the cached record stays the rules-only verdict and ownership is read live each time.
-		if (this.#owner && !entry.allowed && entry.event === "permission:default") {
-			const moduleID = this.#sharedOwner(callerPath, targetPath);
+		// A member the caller's module is about to create will be that module's own, and holds nothing of another module's
+		// to keep from it: the default policy alone does not refuse it, whether or not the owner grant is on. A rule that
+		// names the caller and the path still decides.
+		if ((this.#owner || newMember) && !entry.allowed && entry.event === "permission:default") {
+			const moduleID = newMember ? this.#newMemberOwner(callerPath, targetPath) : this.#sharedOwner(callerPath, targetPath);
 			if (moduleID !== null) {
 				return {
 					allowed: true,
@@ -2843,6 +3839,51 @@ export class PermissionManager extends ComponentBase {
 			}
 		}
 		return entry;
+	}
+
+	/**
+	 * The module a private member's reader and the member both belong to, or null (#260).
+	 *
+	 * @param {string|null} callerPath - The reading leaf's api path; null for the host.
+	 * @param {string} targetPath - The private member's api path.
+	 * @returns {string|null} The shared owner's moduleID, or null when either has no owner or they differ.
+	 * @private
+	 *
+	 * @description
+	 * Both owners are the ownership registry's current owner of the exact path, the identity the owner grant reads: the
+	 * base module for the initial load, an `api.add()`'s moduleID (given or generated) for what it composed, and the
+	 * add's moduleID for an in-memory object leaf. A caller with no path (the host) or a path nothing owns has no
+	 * module, so it is refused here and left to the host policy.
+	 */
+	#privateOwner(callerPath, targetPath) {
+		const ownership = this.slothlet.handlers?.ownership;
+		if (!callerPath || !ownership) return null;
+		const callerOwner = ownership.getCurrentOwner(callerPath)?.moduleID ?? null;
+		const targetOwner = ownership.getCurrentOwner(targetPath)?.moduleID ?? null;
+		if (callerOwner === null || targetOwner === null) return null;
+		return this.#sameOwner(callerOwner, targetOwner) ? callerOwner : null;
+	}
+
+	/**
+	 * The module a private member about to be created and its creator both belong to, or null: the member is the holding
+	 * node's, so its owner is the registry's current owner of the nearest path above it that has one.
+	 *
+	 * @param {string|null} callerPath - The creating leaf's api path; null for the host.
+	 * @param {string} targetPath - The api path of the private member to be created.
+	 * @returns {string|null} The shared owner's moduleID, or null when either has no owner or they differ.
+	 * @private
+	 */
+	#privateHolderOwner(callerPath, targetPath) {
+		const ownership = this.slothlet.handlers?.ownership;
+		const callerOwner = this.#callerOwner(callerPath);
+		if (callerOwner === null) return null;
+		let holder = String(targetPath);
+		for (let cut = StringMethods.lastIndexOf(holder, "."); cut > 0; cut = StringMethods.lastIndexOf(holder, ".")) {
+			holder = StringMethods.slice(holder, 0, cut);
+			const holderOwner = ownership.getCurrentOwner(holder)?.moduleID ?? null;
+			if (holderOwner !== null) return this.#sameOwner(callerOwner, holderOwner) ? callerOwner : null;
+		}
+		return null;
 	}
 
 	/**
@@ -2864,17 +3905,43 @@ export class PermissionManager extends ComponentBase {
 	 * the composed tree, but they are framework surface, not module code, so they are never granted.
 	 */
 	#sharedOwner(callerPath, targetPath) {
-		if (FRAMEWORK_ROOTS.has(String(targetPath).split(".", 1)[0])) return null;
-		const ownership = this.slothlet.handlers.ownership;
+		if (SetMethods.has(FRAMEWORK_ROOTS, splitText(String(targetPath), ".", 1)[0])) return null;
+		const callerOwner = this.#callerOwner(callerPath);
+		if (callerOwner === null) return null;
+		return this.slothlet.handlers.ownership.getCurrentOwner(targetPath)?.moduleID === callerOwner ? callerOwner : null;
+	}
+
+	/**
+	 * The module that will own a member the caller's module is about to create at `targetPath`: the caller's own, as the
+	 * owner grant reads it, or null when the caller has no owner or the path is in the framework's reserved roots.
+	 *
+	 * @param {string|null} callerPath - Caller leaf's api path.
+	 * @param {string} targetPath - Api path of the member to be created.
+	 * @returns {string|null} The caller's moduleID, or null.
+	 * @private
+	 */
+	#newMemberOwner(callerPath, targetPath) {
+		if (SetMethods.has(FRAMEWORK_ROOTS, splitText(String(targetPath), ".", 1)[0])) return null;
+		return this.#callerOwner(callerPath);
+	}
+
+	/**
+	 * The module that currently owns a caller leaf's path, from the ownership registry.
+	 *
+	 * @param {string|null} callerPath - Caller leaf's api path.
+	 * @returns {string|null} Its moduleID; null for a path with no ownership entry (null or empty included).
+	 * @private
+	 */
+	#callerOwner(callerPath) {
 		// A caller path with no ownership entry (null/empty, or a path nothing registered) owns nothing.
-		const callerOwner = ownership.getCurrentOwner(callerPath)?.moduleID;
-		if (!callerOwner) return null;
-		return ownership.getCurrentOwner(targetPath)?.moduleID === callerOwner ? callerOwner : null;
+		const ownership = this.slothlet.handlers?.ownership;
+		if (!callerPath || !ownership) return null;
+		return ownership.getCurrentOwner(callerPath)?.moduleID || null;
 	}
 
 	/**
 	 * Evaluate all rules for a caller→target pair.
-	 * Most-specific-wins; tiebreak: last-registered wins.
+	 * Most-specific-wins (kind, then literal segments); tiebreak: higher layer, then last-registered.
 	 * An optional runtimeContext filters rules by their condition field.
 	 *
 	 * @param {string} callerPath - Caller API path.
@@ -2882,33 +3949,46 @@ export class PermissionManager extends ComponentBase {
 	 * @param {object|null} [runtimeContext=null] - Per-request ALS context for condition evaluation.
 	 * @param {PermissionCallMeta|null} callMeta - Call/construct metadata (#455) forwarded to function
 	 *   conditions; `null` off the call/construct path.
+	 * @param {string[]} [inherited] - Object members above the target whose exact deny rules cover it, each taken as a
+	 *   rule on `member.**`.
+	 * @param {"call"|"read"} [operation="call"] - The operation decided: only the rules whose level covers it take part.
 	 * @returns {{ allowed: boolean, event: string, payload: object, hasConditionalRules: boolean }} Decision record (does not emit; caller must emit).
 	 * @private
 	 */
-	#evaluate(callerPath, targetPath, runtimeContext = null, callMeta) {
+	#evaluate(callerPath, targetPath, runtimeContext = null, callMeta, inherited = NO_PREFIXES, operation = "call") {
 		// Collect all path-matching rules
 		const matches = [];
+		const reading = operation === "read";
 
-		for (const entry of this.#callRules.values()) {
-			// Hook-target rules (pattern:type) gate interception, never plain calls — skip them here. So is the built-in
-			// reach default (see placeModuleRule), which decides only what rules module code may add, never the call to
-			// `addRule` itself. Write rules are kept apart and never scanned here.
-			if (entry.hookType != null || entry.id === this.#reachRuleId || entry.id === this.#globalMetadataRuleId) continue;
+		for (const entry of mapValues(this.#callRules)) {
+			// Only the rules whose level covers the operation decide it: a hook-target rule (pattern:type) gates
+			// interception and covers neither, so it is skipped here. So is the built-in reach default (see
+			// placeModuleRule), which decides only what rules module code may add, never the call to `addRule` itself.
+			// Rules that gate writes alone are kept apart and never scanned here.
+			if (!(reading ? entry.read : entry.call) || entry.id === this.#reachRuleId || entry.id === this.#globalMetadataRuleId) continue;
 			const callerMatcher = this.#getCompiledPattern(entry.caller);
-			const targetMatcher = this.#getCompiledPattern(entry.target);
+			const targetMatcher = this.#getCompiledPattern(entry.pathPattern);
 
 			if (callerMatcher(callerPath) && targetMatcher(targetPath)) {
-				matches.push(entry);
+				listPush(matches, entry);
+			} else if (
+				inherited.length !== 0 &&
+				entry.effect === "deny" &&
+				ArrayMethods.includes(inherited, entry.pathPattern) &&
+				callerMatcher(callerPath)
+			) {
+				// A deny naming an object member exactly covers what the member holds, ranked as a rule on `member.**`.
+				listPush(matches, { ...entry, pathPattern: `${entry.pathPattern}.**`, coveredBy: entry });
 			}
 		}
 
 		// Track whether any path-matching rule has a condition (used for cache safety). A `requires` rule
 		// counts too (#459): its verdict depends on principal state, which changes without a rule change.
-		const hasConditionalRules = matches.some((m) => m.condition != null || m.requires != null);
+		const hasConditionalRules = ArrayMethods.some(matches, (m) => m.condition != null || m.requires != null);
 
 		// Filter out rules whose condition does not match the current runtime context. callMeta (#455) is
 		// forwarded so a function condition can also gate on the call's own args + concrete target.
-		const conditioned = matches.filter((entry) => this.#conditionMatches(entry, runtimeContext, callMeta));
+		const conditioned = filterList(matches, (entry) => this.#conditionMatches(entry, runtimeContext, callMeta));
 
 		// No conditioned matches → fall back to default policy
 		if (conditioned.length === 0) {
@@ -2921,15 +4001,13 @@ export class PermissionManager extends ComponentBase {
 			};
 		}
 
-		// Most-specific-wins (primary). Equal specificity → higher precedence layer wins
+		// Most-specific-wins (primary: kind, then literal segments). Equal specificity → higher precedence layer wins
 		// (runtime > instance > manifest > builtin); within a layer → last-registered wins.
-		conditioned.sort((a, b) => {
-			const specA = this.#computeSpecificity(a, callerPath, targetPath);
-			const specB = this.#computeSpecificity(b, callerPath, targetPath);
-			if (specA !== specB) return specB - specA; // higher specificity first
-			if (a.layerRank !== b.layerRank) return b.layerRank - a.layerRank; // higher layer first
-			return b.registrationSeq - a.registrationSeq; // later first → last-registered wins (within a layer)
-		});
+		this.#sortBySpecificity(
+			conditioned,
+			(entry) => this.#computeSpecificity(entry, callerPath, targetPath),
+			(entry) => this.#literalSegments(entry.caller) + this.#literalSegments(entry.pathPattern)
+		);
 		const winner = conditioned[0];
 		const allowed = winner.effect === "allow";
 
@@ -2939,7 +4017,7 @@ export class PermissionManager extends ComponentBase {
 			payload: {
 				caller: callerPath,
 				target: targetPath,
-				rule: this.#serializeRule(winner),
+				rule: this.#serializeRule(winner.coveredBy ?? winner),
 				conditionMatched: winner.condition != null
 			},
 			hasConditionalRules
@@ -2979,8 +4057,8 @@ export class PermissionManager extends ComponentBase {
 	}
 
 	/**
-	 * Evaluate hook-target rules (`pattern:type`) for a caller→hook pair. Most-specific-wins, with a
-	 * specific type outranking the any-type `hook`; equal specificity → higher layer, then
+	 * Evaluate hook-target rules (`pattern:type`) for a caller→hook pair. Most-specific-wins (a
+	 * specific type outranks the any-type `hook`, then literal segments); equal specificity → higher layer, then
 	 * last-registered. Returns `matched: false`
 	 * when no hook-target rule applies (the caller then falls back to the call decision).
 	 *
@@ -2993,40 +4071,31 @@ export class PermissionManager extends ComponentBase {
 	 */
 	#evaluateHook(callerPath, hookPath, hookType, runtimeContext) {
 		const matches = [];
-		for (const entry of this.#callRules.values()) {
+		for (const entry of mapValues(this.#callRules)) {
 			if (entry.hookType == null) continue; // call-target rules don't gate hooks
 			if (entry.hookType !== "hook" && entry.hookType !== hookType) continue;
 			const callerMatcher = this.#getCompiledPattern(entry.caller);
 			const pathMatcher = this.#getCompiledPattern(entry.hookPathPattern);
 			if (callerMatcher(callerPath) && pathMatcher(hookPath)) {
-				matches.push(entry);
+				listPush(matches, entry);
 			}
 		}
 
 		// Hook gating has no call/construct arguments — function conditions receive null callMeta.
-		const conditioned = matches.filter((entry) => this.#conditionMatches(entry, runtimeContext, null));
+		const conditioned = filterList(matches, (entry) => this.#conditionMatches(entry, runtimeContext, null));
 		if (conditioned.length === 0) {
 			return { matched: false, allowed: false, event: null, payload: null };
 		}
 
-		// Specificity: caller + path-pattern specificity, plus a point for a specific type over `hook`.
-		const spec = (e) =>
-			this.#patternSpecificity(e.caller, callerPath) +
-			this.#patternSpecificity(e.hookPathPattern, hookPath) +
-			(e.hookType === "hook" ? 0 : 1);
-		conditioned.sort((a, b) => {
-			const specA = spec(a);
-			const specB = spec(b);
-			if (specA !== specB) return specB - specA;
-			// Different-layer tiebreak: two equal-specificity HOOK rules at distinct precedence layers
-			// matching the same registration. The hook-rule layer sources that could so collide do not
-			// co-occur on an arbitrary hook path via the public API (built-in rules gate only the
-			// `slothlet.hook.*` control surface; manifest rules are module-scoped), so this arm is not
-			// reachable here; the identical layer tiebreak is exercised by the event-rule comparator.
-			/* v8 ignore next */
-			if (a.layerRank !== b.layerRank) return b.layerRank - a.layerRank; // higher layer first
-			return b.registrationSeq - a.registrationSeq; // last-registered wins (within a layer)
-		});
+		// Specificity: caller + path-pattern kind, plus a point for a specific type over `hook`; then literal segments.
+		this.#sortBySpecificity(
+			conditioned,
+			(entry) =>
+				this.#patternSpecificity(entry.caller, callerPath) +
+				this.#patternSpecificity(entry.hookPathPattern, hookPath) +
+				(entry.hookType === "hook" ? 0 : 1),
+			(entry) => this.#literalSegments(entry.caller) + this.#literalSegments(entry.hookPathPattern)
+		);
 		const winner = conditioned[0];
 		const allowed = winner.effect === "allow";
 
@@ -3055,26 +4124,34 @@ export class PermissionManager extends ComponentBase {
 	 * @private
 	 */
 	#parseHookTarget(target) {
-		const lastColon = target.lastIndexOf(":");
+		const lastColon = StringMethods.lastIndexOf(target, ":");
 		if (lastColon === -1) return null;
-		const type = target.substring(lastColon + 1);
-		if (!HOOK_TARGET_TYPES.has(type)) return null;
-		const pathPattern = target.substring(0, lastColon);
+		const type = StringMethods.substring(target, lastColon + 1);
+		if (!SetMethods.has(HOOK_TARGET_TYPES, type)) return null;
+		const pathPattern = StringMethods.substring(target, 0, lastColon);
 		if (!pathPattern) return null;
 		return { pathPattern, hookType: type };
 	}
 
 	/**
-	 * Parse a permission target into its path pattern when it is a write target (`pattern:write`, #625).
+	 * Parse a permission target that is not a hook target into its path pattern and access level (`pattern:<level>`,
+	 * see {@link RULE_LEVELS}). A target with no level suffix, an empty path before one, or a suffix that names no level
+	 * is the whole target at {@link DEFAULT_RULE_LEVEL}, as a target with a colon always was.
 	 *
 	 * @param {string} target - Rule target string.
-	 * @returns {string|null} The path pattern, or null for any other target.
+	 * @returns {{ pathPattern: string, level: string }} Parsed parts.
 	 * @private
+	 * @example
+	 * this.#parseLevelTarget("cache.**:write"); // { pathPattern: "cache.**", level: "write" }
+	 * this.#parseLevelTarget("cache.key"); // { pathPattern: "cache.key", level: "access" }
 	 */
-	#parseWriteTarget(target) {
-		if (!target.endsWith(WRITE_TARGET_SUFFIX)) return null;
-		const pathPattern = target.slice(0, -WRITE_TARGET_SUFFIX.length);
-		return pathPattern ? pathPattern : null;
+	#parseLevelTarget(target) {
+		const lastColon = StringMethods.lastIndexOf(target, ":");
+		if (lastColon > 0) {
+			const level = StringMethods.substring(target, lastColon + 1);
+			if (MapMethods.has(RULE_LEVELS, level)) return { pathPattern: StringMethods.substring(target, 0, lastColon), level };
+		}
+		return { pathPattern: target, level: DEFAULT_RULE_LEVEL };
 	}
 
 	/**
@@ -3089,7 +4166,7 @@ export class PermissionManager extends ComponentBase {
 	 * @private
 	 */
 	#computeSpecificity(entry, callerPath, targetPath) {
-		return this.#patternSpecificity(entry.caller, callerPath) + this.#patternSpecificity(entry.target, targetPath);
+		return this.#patternSpecificity(entry.caller, callerPath) + this.#patternSpecificity(entry.pathPattern, targetPath);
 	}
 
 	/**
@@ -3102,15 +4179,67 @@ export class PermissionManager extends ComponentBase {
 	 */
 	#patternSpecificity(pattern, ___path) {
 		// Exact match (no glob characters)
-		if (!pattern.includes("*") && !pattern.includes("?") && !pattern.includes("{")) {
+		if (!StringMethods.includes(pattern, "*") && !StringMethods.includes(pattern, "?") && !StringMethods.includes(pattern, "{")) {
 			return 3;
 		}
 		// Multi-segment glob (**)
-		if (pattern.includes("**")) {
+		if (StringMethods.includes(pattern, "**")) {
 			return 1;
 		}
 		// Single-segment glob (*, ?, {a,b})
 		return 2;
+	}
+
+	/**
+	 * Order the rules that match one decision, the one that decides first: the more specific rule (a higher `kind`
+	 * score), then among equal kinds the one with more literal segments (`db.write.**` over `db.**` over `**`), then
+	 * the higher layer (runtime over instance over manifest over built-in), then the last registered. The same order
+	 * decides call, write, hook and event rules, so the narrower rule wins whichever was registered last and layer and
+	 * order only break a tie between equally specific rules.
+	 *
+	 * @param {object[]} rules - The matching rules; sorted in place.
+	 * @param {function(object): number} kind - A rule's kind score: its patterns' kinds summed (exact 3, single-segment glob 2, `**` 1).
+	 * @param {function(object): number} literal - A rule's literal segments: its patterns' counts summed.
+	 * @returns {void}
+	 * @private
+	 *
+	 * @example
+	 * this.#sortBySpecificity(matches, (rule) => this.#computeSpecificity(rule, caller, target), (rule) => this.#literalSegments(rule.pathPattern));
+	 */
+	#sortBySpecificity(rules, kind, literal) {
+		ArrayMethods.sort(rules, (a, b) => {
+			const kindA = kind(a);
+			const kindB = kind(b);
+			if (kindA !== kindB) return kindB - kindA;
+			const literalA = literal(a);
+			const literalB = literal(b);
+			if (literalA !== literalB) return literalB - literalA;
+			if (a.layerRank !== b.layerRank) return b.layerRank - a.layerRank;
+			return b.registrationSeq - a.registrationSeq;
+		});
+	}
+
+	/**
+	 * Count a pattern's literal segments: those with no glob character. Rules of the same kind are ranked by this
+	 * (see #sortBySpecificity), so `guest.zz.**` (2) is more specific than `guest.**` (1), and that than `**` (0).
+	 *
+	 * @param {string} pattern - Glob pattern.
+	 * @returns {number} The number of `.`-separated segments with no `*`, `?`, `{` or `}`.
+	 * @private
+	 */
+	#literalSegments(pattern) {
+		let count = 0;
+		for (let ofIndex = 0, ofList = splitText(pattern, "."); ofIndex < ofList.length; ofIndex++) {
+			const segment = ofList[ofIndex];
+			if (
+				!StringMethods.includes(segment, "*") &&
+				!StringMethods.includes(segment, "?") &&
+				!StringMethods.includes(segment, "{") &&
+				!StringMethods.includes(segment, "}")
+			)
+				count++;
+		}
+		return count;
 	}
 
 	/**
@@ -3121,12 +4250,83 @@ export class PermissionManager extends ComponentBase {
 	 * @private
 	 */
 	#getCompiledPattern(pattern) {
-		let matcher = this.#compiledCache.get(pattern);
+		let matcher = MapMethods.get(this.#compiledCache, pattern);
 		if (!matcher) {
+			// `**` matches any number of segments, none included: `x.**` names `x` itself, the module path code outside
+			// every export of `x`'s file runs as (#726).
 			matcher = compilePattern(pattern);
-			this.#compiledCache.set(pattern, matcher);
+			MapMethods.set(this.#compiledCache, pattern, matcher);
 		}
 		return matcher;
+	}
+
+	/**
+	 * The paths above `targetPath` that a deny call rule names exactly, deepest first, for the rule epoch.
+	 * @param {string} targetPath - The api path.
+	 * @returns {string[]} The paths.
+	 * @private
+	 */
+	#exactDenyPrefixesOf(targetPath) {
+		let targets = this.#exactDenyTargets;
+		if (targets === null) {
+			targets = new Set();
+			for (const entry of mapValues(this.#callRules)) {
+				// Only a deny that takes the read away covers what a data member holds.
+				if (!entry.read || entry.id === this.#reachRuleId || entry.id === this.#globalMetadataRuleId) continue;
+				if (entry.effect === "deny" && !(RegExpMethods.exec(/[*?{!]/, entry.pathPattern) !== null))
+					SetMethods.add(targets, entry.pathPattern);
+			}
+			this.#exactDenyTargets = targets;
+		}
+		if (SetMethods.size(targets) === 0) return NO_PREFIXES;
+		let prefixes = MapMethods.get(this.#exactDenyPrefixes, targetPath);
+		if (prefixes !== undefined) return prefixes;
+		prefixes = [];
+		for (let end = StringMethods.lastIndexOf(targetPath, "."); end > 0; end = StringMethods.lastIndexOf(targetPath, ".", end - 1)) {
+			const prefix = StringMethods.slice(targetPath, 0, end);
+			if (SetMethods.has(targets, prefix)) listPush(prefixes, prefix);
+		}
+		if (prefixes.length === 0) prefixes = NO_PREFIXES;
+		// Paths a module's data holds are many; the record is a cache, so it starts over rather than grow without bound.
+		if (MapMethods.size(this.#exactDenyPrefixes) >= PREFIX_CACHE_LIMIT) MapMethods.clear(this.#exactDenyPrefixes);
+		MapMethods.set(this.#exactDenyPrefixes, targetPath, prefixes);
+		return prefixes;
+	}
+
+	/**
+	 * Whether an allow rule for `callerPath` names something beneath `path` that a rule on `probePath`, a member of
+	 * `path` no rule names, does not stand for: a more specific allow, which lets what it names through though the rules
+	 * deny the caller the member's path and what it holds otherwise. It answers for what the rules could allow, so it
+	 * errs toward yes: a condition is taken to match. Kept for the rule epoch.
+	 * @param {string|null} callerPath - The caller's api path; null for a caller with none, which nothing allows.
+	 * @param {string} path - The member's api path.
+	 * @param {string} probePath - The path of a member of it no rule names.
+	 * @returns {boolean} Whether such a rule exists.
+	 * @internal
+	 *
+	 * @example
+	 * // rules: deny reader.** → owner.config.nested, allow reader.** → owner.config.nested.public
+	 * pm.allowsBeneath("reader", "owner.config.nested", probe); // true
+	 */
+	allowsBeneath(callerPath, path, probePath) {
+		if (callerPath == null) return false;
+		const key = `${callerPath}::${path}`;
+		let allows = MapMethods.get(this.#allowsBeneath, key);
+		if (allows !== undefined) return allows;
+		allows = false;
+		const segments = splitText(path, ".");
+		for (const entry of mapValues(this.#callRules)) {
+			if (entry.hookType != null || entry.id === this.#reachRuleId || entry.id === this.#globalMetadataRuleId) continue;
+			if (entry.effect !== "allow" || !this.#getCompiledPattern(entry.caller)(callerPath)) continue;
+			if (this.#getCompiledPattern(entry.pathPattern)(probePath)) continue;
+			if (runtime_patternReaches(entry.pathPattern, segments, true)) {
+				allows = true;
+				break;
+			}
+		}
+		if (MapMethods.size(this.#allowsBeneath) >= PREFIX_CACHE_LIMIT) MapMethods.clear(this.#allowsBeneath);
+		MapMethods.set(this.#allowsBeneath, key, allows);
+		return allows;
 	}
 
 	/**
@@ -3136,8 +4336,29 @@ export class PermissionManager extends ComponentBase {
 	 * @private
 	 */
 	#clearCache() {
-		this.#resolvedCache.clear();
-		this.#writeCache.clear();
+		MapMethods.clear(this.#resolvedCache);
+		this.#exactDenyTargets = null;
+		MapMethods.clear(this.#exactDenyPrefixes);
+		MapMethods.clear(this.#allowsBeneath);
+		MapMethods.clear(this.#writeCache);
+		MapMethods.clear(this.#subtreeCache);
+		MapMethods.clear(this.#readSubtreeCache);
+		MapMethods.clear(this.#writeRulesForCache);
+		this.#ruleEpoch = nextEpoch();
+	}
+
+	/**
+	 * A number that changes whenever the outcome of a rule may have changed: a rule added or removed, the system
+	 * switched on or off, a module's rules dropped. What was decided from the rules and kept beside a value (whether
+	 * a function is handed another module's value itself or a view) is good for the epoch it was decided in.
+	 * @returns {number} The current rule epoch.
+	 * @example
+	 * const before = pm.ruleEpoch;
+	 * pm.addRule(rule);
+	 * pm.ruleEpoch !== before; // true
+	 */
+	get ruleEpoch() {
+		return this.#ruleEpoch;
 	}
 
 	/**
@@ -3170,7 +4391,15 @@ export class PermissionManager extends ComponentBase {
 
 		const lifecycle = this.slothlet.handlers?.lifecycle;
 		if (lifecycle) {
-			lifecycle.emit(event, { ...payload, timestamp: Date.now() });
+			// The public payload: the target as its segments, `at` for the time, `file` / `module` / `via` in the v4
+			// words, and no conditionMatched (it is `rule.condition != null`).
+			const { conditionMatched: ___conditionMatched, filePath, moduleID, via, target, ...rest } = payload;
+			const audit = { ...rest, at: this.clock.now() };
+			if (target !== undefined) audit.target = segmentsOf(target);
+			if (filePath !== undefined) audit.file = filePath;
+			if (moduleID !== undefined) audit.module = moduleID;
+			if (via !== undefined) audit.via = segmentsOf(VIA_PATHS[via] ?? via);
+			lifecycle.emit(event, audit);
 		}
 	}
 

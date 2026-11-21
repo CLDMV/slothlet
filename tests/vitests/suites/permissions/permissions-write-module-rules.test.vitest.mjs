@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-23T23:14:10-07:00 (1792822450)
+ *	@Last modified time: 2026-11-16T18:30:49-08:00 (1794882649)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -18,10 +18,10 @@
  * manifest declares (#625).
  *
  * Permissions, write permission among them, are granted by the host and by modules. Module code registers rules —
- * through `self.slothlet.permissions.addRule` / `removeRule` and the `permissions` option of an `api.add` it
+ * through `self.slothlet.permissions.rules.add` / `rules.remove` and the `permissions` option of an `api.add` it
  * makes — for targets inside its own subtree (checked on the pattern's literal prefix), of any kind: call, hook,
  * or `:write`, allow or deny. Any other target, the framework's own among them, is the built-in default
- * `{ caller: "**", target: "slothlet.permissions.addRule", effect: "deny" }`, which an explicit allow for the
+ * `{ caller: "**", target: "slothlet.permissions.rules.add", effect: "deny" }`, which an explicit allow for the
  * module — the host's or its manifest's — lifts. A manifest is not restricted: mounting it is the consumer's
  * choice. Module rules (a manifest's or module code's) sit below the host's: at equal specificity the host
  * wins, both ways. A write allow is a grant: another module's write goes through whatever it owns.
@@ -69,8 +69,8 @@ describe.each(CONFIGS)("module write rules (#625) — $mode / $runtime", ({ mode
 	 */
 	async function load(options = { permissions: {} }) {
 		api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, ...options });
-		await api.slothlet.api.add("victim", path.join(FIXTURE, "victim"), { moduleID: "victim" });
-		for (const name of ["guest", "other", "mgr"]) await api.slothlet.api.add(name, path.join(FIXTURE, "guest"), { moduleID: name });
+		await api.slothlet.api.add("victim", path.join(FIXTURE, "victim"), { id: "victim" });
+		for (const name of ["guest", "other", "mgr"]) await api.slothlet.api.add(name, path.join(FIXTURE, "guest"), { id: name });
 		return api;
 	}
 
@@ -81,7 +81,7 @@ describe.each(CONFIGS)("module write rules (#625) — $mode / $runtime", ({ mode
 	 */
 	async function mountVault(name) {
 		try {
-			await api.slothlet.api.modules.addModule(`@local/${name}`, { discover: { scanRoot: path.join(FIXTURE, "modules", name) } });
+			await api.slothlet.api.modules.add(`@local/${name}`, { discover: { root: path.join(FIXTURE, "modules", name) } });
 			return "done";
 		} catch (error) {
 			return error?.code ?? String(error);
@@ -140,7 +140,7 @@ describe.each(CONFIGS)("module write rules (#625) — $mode / $runtime", ({ mode
 		});
 	});
 
-	describe("through addRule from the module's code", () => {
+	describe("through rules.add from the module's code", () => {
 		it("lets the module grant another module writes into its subtree, and refuses a third module", async () => {
 			await load();
 			expect(typeof (await api.victim.v.grant(GUEST_ALLOW_VICTIM))).toBe("string");
@@ -164,12 +164,12 @@ describe.each(CONFIGS)("module write rules (#625) — $mode / $runtime", ({ mode
 			expect(report).toEqual(every(report, "PERMISSION_DENIED"));
 		});
 
-		it.each([["other.**:write"], ["**:write"], ["*.x:write"], ["slothlet.**:write"], ["victim.**.__metadata:write"]])(
+		it.each([["other.**:write"], ["**:write"], ["*.x:write"], ["slothlet.**:write"], ["victim.**.____state:write"]])(
 			"refuses the module a write rule on %s",
 			async (target) => {
 				await load();
 				expect(withSuppressedSlothletErrorOutputSync(() => api.victim.v.grant({ caller: "guest.**", target, effect: "allow" }))).toBe(
-					"INVALID_PERMISSION_RULE"
+					"PERMISSION_RULE_INVALID"
 				);
 			}
 		);
@@ -178,14 +178,14 @@ describe.each(CONFIGS)("module write rules (#625) — $mode / $runtime", ({ mode
 			await load({ permissions: { rules: [{ caller: "**", target: "victim.**", effect: "deny" }] } });
 			expect(
 				withSuppressedSlothletErrorOutputSync(() => api.guest.x.addRuleFor({ caller: "guest.**", target: "victim.**", effect: "allow" }))
-			).toBe("INVALID_PERMISSION_RULE");
+			).toBe("PERMISSION_RULE_INVALID");
 			expect(withSuppressedSlothletErrorOutputSync(() => api.guest.x.callVictim())).toBe("PERMISSION_DENIED");
 		});
 
 		it("lets the module remove its own rule, and refuses another module removing it", async () => {
 			await load();
 			const ruleId = await api.victim.v.grant(GUEST_ALLOW_VICTIM);
-			expect(withSuppressedSlothletErrorOutputSync(() => api.guest.x.removeRuleFor(ruleId))).toBe("INVALID_PERMISSION_RULE");
+			expect(withSuppressedSlothletErrorOutputSync(() => api.guest.x.removeRuleFor(ruleId))).toBe("PERMISSION_RULE_INVALID");
 			expect(await api.victim.v.revoke(ruleId)).toBe(true);
 			const refused = withSuppressedSlothletErrorOutputSync(() => api.guest.x.writeAt("victim.v"));
 			expect(refused).toEqual(every(refused, "LOOSE_SET_NOT_OWNED"));
@@ -227,7 +227,7 @@ describe.each(CONFIGS)("module write rules (#625) — $mode / $runtime", ({ mode
 			await load();
 			expect(
 				await withSuppressedSlothletErrorOutput(() => api.victim.v.mountHelper(path.join(FIXTURE, "guest"), { allow: [target] }))
-			).toBe("INVALID_PERMISSION_RULE");
+			).toBe("PERMISSION_RULE_INVALID");
 			expect(api.victim.helper).toBeUndefined();
 		});
 
@@ -247,7 +247,7 @@ describe.each(CONFIGS)("module write rules (#625) — $mode / $runtime", ({ mode
 	});
 
 	describe("a module allowed to manage rules beyond its subtree", () => {
-		const DELEGATE = { caller: "mgr.**", target: "slothlet.permissions.addRule", effect: "allow" };
+		const DELEGATE = { caller: "mgr.**", target: "slothlet.permissions.rules.add", effect: "allow" };
 
 		it("lets the manager grant one module writes into another module's subtree, until the rule is removed", async () => {
 			await load({ permissions: { rules: [DELEGATE] } });
@@ -255,19 +255,19 @@ describe.each(CONFIGS)("module write rules (#625) — $mode / $runtime", ({ mode
 			expect(ruleId).toMatch(/^perm-/);
 			const granted = await api.guest.x.writeAt("victim.v");
 			expect(granted).toEqual(every(granted, "done"));
-			expect(api.slothlet.permissions.removeRule(ruleId)).toBe(true);
+			expect(api.slothlet.permissions.rules.remove(ruleId)).toBe(true);
 			const refused = withSuppressedSlothletErrorOutputSync(() => api.guest.x.writeAt("victim.v"));
 			expect(refused).toEqual(every(refused, "LOOSE_SET_NOT_OWNED"));
 		});
 
 		it("refuses the same rule from a module the host did not delegate to", async () => {
 			await load({ permissions: { rules: [DELEGATE] } });
-			expect(withSuppressedSlothletErrorOutputSync(() => api.other.x.addRuleFor(GUEST_ALLOW_VICTIM))).toBe("INVALID_PERMISSION_RULE");
+			expect(withSuppressedSlothletErrorOutputSync(() => api.other.x.addRuleFor(GUEST_ALLOW_VICTIM))).toBe("PERMISSION_RULE_INVALID");
 		});
 
 		it("refuses a manager under defaultPolicy allow with no explicit host rule", async () => {
-			await load({ permissions: { defaultPolicy: "allow" } });
-			expect(withSuppressedSlothletErrorOutputSync(() => api.mgr.x.addRuleFor(GUEST_ALLOW_VICTIM))).toBe("INVALID_PERMISSION_RULE");
+			await load({ permissions: { policy: "allow" } });
+			expect(withSuppressedSlothletErrorOutputSync(() => api.mgr.x.addRuleFor(GUEST_ALLOW_VICTIM))).toBe("PERMISSION_RULE_INVALID");
 		});
 
 		it("lets the manager add a write rule on the framework namespace, as the host may", async () => {
@@ -297,7 +297,7 @@ describe.each(CONFIGS)("module write rules (#625) — $mode / $runtime", ({ mode
 		it("lets the manager remove another module's rule, and refuses a module that is no manager", async () => {
 			await load({ permissions: { rules: [DELEGATE] } });
 			const ruleId = await api.victim.v.grant(GUEST_ALLOW_VICTIM);
-			expect(withSuppressedSlothletErrorOutputSync(() => api.other.x.removeRuleFor(ruleId))).toBe("INVALID_PERMISSION_RULE");
+			expect(withSuppressedSlothletErrorOutputSync(() => api.other.x.removeRuleFor(ruleId))).toBe("PERMISSION_RULE_INVALID");
 			expect(await api.mgr.x.removeRuleFor(ruleId)).toBe(true);
 		});
 
