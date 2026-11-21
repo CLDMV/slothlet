@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-19T08:57:39-08:00 (1795107459)
+ *	@Last modified time: 2026-11-21T13:05:04-08:00 (1795295104)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -50,6 +50,8 @@ import {
 import {
 	ArrayMethods,
 	concatLists,
+	FinalizationRegistry,
+	FinalizationRegistryMethods,
 	FunctionMethods,
 	Map,
 	mapEntriesToArray,
@@ -681,6 +683,14 @@ export class AsyncContextManager {
 	#work = new Map();
 
 	/**
+	 * Tells {@link AsyncContextManager#workDone} when a counted promise is collected before it was resolved: nothing can
+	 * resolve it then, so nothing it would run can run. Holds the promise's async id; one resolved first has already
+	 * left {@link AsyncContextManager#work}, so its collection does nothing.
+	 * @type {FinalizationRegistry<number>}
+	 */
+	#collectedPromises = new FinalizationRegistry((asyncId) => this.#workDone(asyncId));
+
+	/**
 	 * Whether the manager watches runs (see `watchRuns` in `helpers/flow-stores`).
 	 * @type {boolean}
 	 */
@@ -953,7 +963,7 @@ export class AsyncContextManager {
 		try {
 			hook = createHook({
 				init(asyncId, type, triggerAsyncId, resource) {
-					if (manager.#countingWork) manager.#countWork(asyncId, type);
+					if (manager.#countingWork) manager.#countWork(asyncId, type, resource);
 					manager.#jobMade(resource, type);
 				},
 				before() {
@@ -1034,16 +1044,20 @@ export class AsyncContextManager {
 	 * `helpers/flow-stores`).
 	 * @param {number} asyncId - The resource's async id.
 	 * @param {string} type - The resource's type.
+	 * @param {object} resource - The resource.
 	 * @returns {void}
 	 * @private
 	 */
-	#countWork(asyncId, type) {
+	#countWork(asyncId, type, resource) {
 		// A resource that only carries a store into a callback is no one's work (an observer counts from its observe()).
 		if (type === UNCOUNTED_RESOURCE) return;
 		const record = this.store?.getStore()?.[RUN_COPY];
 		if (record === undefined || !holdRunWork(record)) return;
 		const promise = type === "PROMISE";
 		MapMethods.set(this.#work, asyncId, promise ? record : { record });
+		// A promise is done once it is resolved, or once it is collected unresolved. The destroy hook would tell the
+		// latter too, but only at the cost of tracking every promise in the process.
+		if (promise) FinalizationRegistryMethods.register(this.#collectedPromises, resource, asyncId);
 		if (promise || this.#pendingResources++ !== 0 || this.#watchingDestroy) return;
 		const manager = this;
 		this.#destroyHook ??= createHook({
@@ -1056,7 +1070,7 @@ export class AsyncContextManager {
 	}
 
 	/**
-	 * A counted resource is done: destroyed, or a promise resolved.
+	 * A counted resource is done: destroyed, or a promise resolved or collected.
 	 * @param {number} asyncId - Its async id.
 	 * @returns {void}
 	 * @private

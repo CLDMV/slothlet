@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T21:05:02-08:00 (1794978302)
+ *	@Last modified time: 2026-11-21T13:05:09-08:00 (1795295109)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -53,6 +53,7 @@
 
 import { AsyncResource } from "#helpers/platform";
 import { holdForCurrentFlow, pinToCurrentCaller } from "#helpers/caller-pinning";
+import { releaseWhenCollected, stopReleaseWhenCollected } from "#helpers/flow-stores";
 import { asPlatformRegistration } from "#helpers/eventtarget-context";
 import { openLayer, closeLayer, isActiveLayer, markLayer } from "#helpers/boundary-patch-layers";
 import {
@@ -175,7 +176,10 @@ function runtime_patchHandlerAccessor(proto, propName) {
 		const entry = WeakMapMethods.get(tracked, target);
 		if (entry === undefined) return;
 		WeakMapMethods.delete(tracked, target);
-		if (entry.release !== null) entry.release();
+		if (entry.release !== null) {
+			stopReleaseWhenCollected(entry);
+			entry.release();
+		}
 		if (entry.resource !== null) entry.resource.emitDestroy();
 	};
 
@@ -231,7 +235,10 @@ function runtime_patchHandlerAccessor(proto, propName) {
 			throw error;
 		}
 		forget(this);
-		WeakMapMethods.set(tracked, this, { original: value, wrapper, release, resource });
+		const entry = { original: value, wrapper, release, resource };
+		WeakMapMethods.set(tracked, this, entry);
+		// A target collected with the handler still assigned can never call it: the work it was for the run is done then.
+		releaseWhenCollected(this, release, entry);
 		return result;
 	};
 

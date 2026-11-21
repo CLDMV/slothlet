@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T21:25:52-08:00 (1794979552)
+ *	@Last modified time: 2026-11-21T13:05:11-08:00 (1795295111)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -47,7 +47,13 @@
 import { AsyncResource } from "#helpers/platform";
 import { pinToCurrentCaller, recordOfCurrentFlow } from "#helpers/caller-pinning";
 import { openLayer, closeLayer, holdsValue, markLayer } from "#helpers/boundary-patch-layers";
-import { anyAsyncInstance, holdRunWorkOnce, UNCOUNTED_RESOURCE } from "#helpers/flow-stores";
+import {
+	anyAsyncInstance,
+	holdRunWorkOnce,
+	releaseWhenCollected,
+	stopReleaseWhenCollected,
+	UNCOUNTED_RESOURCE
+} from "#helpers/flow-stores";
 import { concatLists, listPush, Objects, Reflect, Set, SetMethods, TypeError, WeakMap, WeakMapMethods } from "#helpers/intrinsics";
 import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "#helpers/instance-imports";
 
@@ -140,7 +146,12 @@ function runtime_countObserving(proto, originalProto) {
 			const result = Reflect.apply(originalProto.observe, this, concatLists([target], rest));
 			const state = WeakMapMethods.get(observing, this);
 			if (state !== undefined) {
-				if (state.release === null) state.release = runtime_startObserving(state);
+				if (state.release === null) {
+					state.release = runtime_startObserving(state);
+					// An observer collected while it observes can never call its callback: the work it was for the run is
+					// done then.
+					if (state.record !== null) releaseWhenCollected(this, state.release, state);
+				}
 				if (tracksTargets) SetMethods.add((state.targets ??= new Set()), target);
 			}
 			return result;
@@ -202,7 +213,9 @@ function runtime_stopObserving(state) {
 	state.targets = null;
 	const release = state.release;
 	state.release = null;
-	if (release !== null) release();
+	if (release === null) return;
+	if (state.record !== null) stopReleaseWhenCollected(state);
+	release();
 }
 
 /**

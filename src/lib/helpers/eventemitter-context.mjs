@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T20:34:19-08:00 (1794976459)
+ *	@Last modified time: 2026-11-21T13:05:09-08:00 (1795295109)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -32,6 +32,7 @@
 // graph (#123); the exported patching entry points no-op when EventEmitter is null.
 import { EventEmitter, AsyncResource } from "#helpers/platform";
 import { holdForCurrentFlow, pinToCurrentCaller } from "#helpers/caller-pinning";
+import { releaseWhenCollected } from "#helpers/flow-stores";
 import { openLayer, closeLayer, holdsValue, markLayer } from "#helpers/boundary-patch-layers";
 import { internals as sharedValuesInternals } from "../handlers/shared-values.mjs";
 import {
@@ -269,6 +270,8 @@ function runtime_wrapEventListener(listener) {
 			own.emitDestroy();
 		}
 	};
+	// An emitter collected with the listener still on it can never call it: the work it was for the run is done then.
+	releaseWhenCollected(runtime_wrappedListener, release);
 
 	return runtime_wrappedListener;
 }

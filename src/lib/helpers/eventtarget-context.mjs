@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T21:05:02-08:00 (1794978302)
+ *	@Last modified time: 2026-11-21T13:05:09-08:00 (1795295109)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -44,6 +44,7 @@
 
 import { AsyncResource } from "#helpers/platform";
 import { holdForCurrentFlow, pinToCurrentCaller } from "#helpers/caller-pinning";
+import { releaseWhenCollected } from "#helpers/flow-stores";
 import { openLayer, closeLayer, holdsValue, markLayer } from "#helpers/boundary-patch-layers";
 import { Boolean, EventTarget, FunctionMethods, Map, mapEntries, MapMethods, String, WeakMap, WeakMapMethods } from "#helpers/intrinsics";
 import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "#helpers/instance-imports";
@@ -184,6 +185,8 @@ function runtime_wrapListener(listener) {
 			own.emitDestroy();
 		}
 	};
+	// A target collected with the listener still on it can never call it: the work it was for the run is done then.
+	releaseWhenCollected(runtime_wrappedListener, release);
 	return runtime_wrappedListener;
 }
 

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-19T08:57:40-08:00 (1795107460)
+ *	@Last modified time: 2026-11-21T13:05:04-08:00 (1795295104)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -24,7 +24,7 @@ import { internals as eventemitterContextInternals } from "#helpers/eventemitter
 import { pinToCurrentCaller, internals as callerPinningInternals } from "#helpers/caller-pinning";
 import { internals as schedulerContextInternals } from "#helpers/scheduler-context";
 import { combineCeilings, internals as trustedRootInternals } from "#handlers/trusted-root";
-import { holdRunWork, holdRunWorkOnce, releaseRunWork, RUN_COPY, runCopyCounts, watchRuns } from "#helpers/flow-stores";
+import { holdRunWorkOnce, releaseWhenCollected, RUN_COPY, runCopyCounts, watchRuns } from "#helpers/flow-stores";
 import { nativeThen } from "#helpers/promise-context";
 import { util, inheritsFrom } from "#helpers/platform";
 import { runtime_isClassInstance, internals as classInstanceWrapperInternals } from "#helpers/class-instance-wrapper";
@@ -689,22 +689,25 @@ const SCOPE_RESULT = Symbol("slothlet.resourceScope.result");
 const RUN_BODY_FRAMES = 200;
 
 /**
- * The run record each counted promise is work of, until it settles (see {@link countPromise}).
- * @type {WeakMap<Promise<unknown>, object>}
+ * What releases each counted promise as its run's work, until it settles (see {@link countPromise}).
+ * @type {WeakMap<Promise<unknown>, Function>}
  * @private
  */
 const COUNTED_PROMISES = new WeakMap();
 
 /**
- * Count a promise made in a `run()` / `scope()` flow as the run's work until it settles.
+ * Count a promise made in a `run()` / `scope()` flow as the run's work until it settles, or until it is collected
+ * unsettled: nothing can settle it then, so nothing it would run can run.
  * @param {Promise<unknown>} promise - The promise.
  * @param {object|null|undefined} record - The run's record.
  * @returns {void}
  * @private
  */
 function countPromise(promise, record) {
-	if (!holdRunWork(record)) return;
-	WeakMapMethods.set(COUNTED_PROMISES, promise, record);
+	const release = holdRunWorkOnce(record);
+	if (release === null) return;
+	WeakMapMethods.set(COUNTED_PROMISES, promise, release);
+	releaseWhenCollected(promise, release);
 }
 
 /**
@@ -714,10 +717,10 @@ function countPromise(promise, record) {
  * @private
  */
 function promiseSettled(promise) {
-	const record = WeakMapMethods.get(COUNTED_PROMISES, promise);
-	if (record === undefined) return;
+	const release = WeakMapMethods.get(COUNTED_PROMISES, promise);
+	if (release === undefined) return;
 	WeakMapMethods.delete(COUNTED_PROMISES, promise);
-	releaseRunWork(record);
+	release();
 }
 
 export class LiveContextManager {

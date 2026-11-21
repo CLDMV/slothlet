@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-19T08:57:44-08:00 (1795107464)
+ *	@Last modified time: 2026-11-21T13:05:09-08:00 (1795295109)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -405,6 +405,42 @@ export function holdRunWorkOnce(record) {
 		held = null;
 		releaseRunWork(released);
 	};
+}
+
+/**
+ * Calls each release it holds once the object it was registered for is collected (see {@link releaseWhenCollected}).
+ * Null where the platform has no `FinalizationRegistry`.
+ * @type {FinalizationRegistry<Function>|null}
+ * @private
+ */
+const COLLECTED_WORK = typeof FinalizationRegistry === "function" ? new FinalizationRegistry((release) => release()) : null;
+
+/**
+ * Release a piece of a run's work once `target`, the object the work lives on, has been collected: a promise nobody
+ * can settle any more, a listener whose emitter is garbage, an observer nobody holds. Nothing can run that work's code
+ * then, so it no longer keeps the run's record. `release` must release at most once (as a {@link holdRunWorkOnce}
+ * releaser does), so the work ending the usual way first makes the later call a no-op, and must not reach `target`.
+ * @param {object} target - The object the work lives on.
+ * @param {Function|null} release - What releases the work; null when nothing was counted.
+ * @param {object} [token] - For work that ends while `target` lives on (a handler replaced on its target, an observer
+ *   disconnected): {@link stopReleaseWhenCollected} with it then, so a long-lived target does not gather entries.
+ * @returns {void}
+ * @internal
+ */
+export function releaseWhenCollected(target, release, token) {
+	if (release === null || COLLECTED_WORK === null) return;
+	if (token === undefined) FinalizationRegistryMethods.register(COLLECTED_WORK, target, release);
+	else FinalizationRegistryMethods.register(COLLECTED_WORK, target, release, token);
+}
+
+/**
+ * Drop what {@link releaseWhenCollected} registered under `token`: the work ended the usual way.
+ * @param {object} token - The token.
+ * @returns {void}
+ * @internal
+ */
+export function stopReleaseWhenCollected(token) {
+	if (COLLECTED_WORK !== null) FinalizationRegistryMethods.unregister(COLLECTED_WORK, token);
 }
 
 /**
