@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-21T16:31:10-08:00 (1795307470)
+ *	@Last modified time: 2026-11-21T13:38:14-08:00 (1795297094)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -3511,6 +3511,40 @@ function runtime_takeRunWrite(node, prop) {
 }
 
 /**
+ * The module's own accessor a node holds for a member (one it adopted from the module's object), for a full-isolation
+ * run's view to run with the view as `this`: what the getter reads and the setter writes is then what the run reads
+ * and writes (see `makeRunSelf` in `builders/api_builder`). Null for any other member, a forward the node keeps to a
+ * live value among them.
+ * @param {*} node - The node, as the view reads through it.
+ * @param {string|symbol} prop - The member.
+ * @returns {{wrapper: object, get: (Function|undefined), set: (Function|undefined)}|null} The accessor.
+ * @internal
+ */
+function runtime_viewAccessor(node, prop) {
+	if (typeof prop !== "string") return null;
+	const wrapper = runtime_nodeWrapperOf(node);
+	if (wrapper === null || isFrameworkReservedKey(prop)) return null;
+	const held = Reflect.getOwnPropertyDescriptor(wrapper, prop);
+	if (held === undefined || "value" in held) return null;
+	const original = runtime_originalAccessor(held);
+	if (original.get === held.get && original.set === held.set) return null;
+	return { wrapper, get: original.get, set: original.set };
+}
+
+/**
+ * Run one half of an accessor {@link runtime_viewAccessor} found, as the module the node belongs to, on `receiver`.
+ * @param {{wrapper: object}} accessor - The accessor.
+ * @param {Function} half - Its getter or setter.
+ * @param {*} receiver - The `this` it runs with.
+ * @param {Array<*>} args - Its arguments.
+ * @returns {*} What it returned.
+ * @internal
+ */
+function runtime_runViewAccessor(accessor, half, receiver, args) {
+	return runtime_runAccessor(accessor.wrapper, half, receiver, args);
+}
+
+/**
  * What a node stores for a value assigned to it outside a build (wrap-on-set, #329): an object or function becomes a
  * node of its own, wrapped as `api.slothlet.api.add()` wraps one and marked as user-assigned; a primitive, a proxy, a
  * node, and a value the node cannot wrap are stored as they are.
@@ -5690,6 +5724,100 @@ function runtime_prototypeGiven(wrapper) {
  */
 function runtime_inRunTree(wrapper) {
 	return (wrapper.____slothletInternal.epoch ?? 0) < 0;
+}
+
+/**
+ * The arrays a node of a run's tree holds as its own copy of the module's (see {@link runtime_ownRunTreeArray}).
+ * @type {WeakSet<Array<*>>}
+ * @private
+ */
+const RUN_TREE_ARRAYS = new WeakSet();
+
+/**
+ * Before a node of a run's tree changes the array it fronts, give it a copy of its own: the array is the module's,
+ * which the instance's tree fronts too, so what the run changes lands in the copy and is gone with the run.
+ * @param {UnifiedWrapper} wrapper - The node's wrapper.
+ * @returns {void}
+ * @private
+ */
+function runtime_ownRunTreeArray(wrapper) {
+	const internal = wrapper.____slothletInternal;
+	const array = internal.impl;
+	if (!Arrays.isArray(array) || isCompositionLayer(array) || util.types.isProxy(array) || WeakSetMethods.has(RUN_TREE_ARRAYS, array))
+		return;
+	// A closed array takes no change, and the node refuses it as the array would.
+	if (!Reflect.isExtensible(array)) return;
+	const copy = [];
+	for (let index = 0, keys = Reflect.ownKeys(array); index < keys.length; index++) {
+		if (keys[index] !== "length") Reflect.defineProperty(copy, keys[index], Reflect.getOwnPropertyDescriptor(array, keys[index]));
+	}
+	copy.length = array.length;
+	if (Reflect.getPrototypeOf(copy) !== Reflect.getPrototypeOf(array)) Reflect.setPrototypeOf(copy, Reflect.getPrototypeOf(array));
+	WeakSetMethods.add(RUN_TREE_ARRAYS, copy);
+	internal.impl = copy;
+}
+
+/**
+ * Whether a node of a run's tree holds a member it was given in the run on its wrapper, over the live value it fronts
+ * (a class instance, an emitter): the value is the module's, which the instance's tree fronts too.
+ * @param {UnifiedWrapper} wrapper - The node's wrapper.
+ * @param {string|symbol} prop - The member.
+ * @returns {boolean} True when the node's own member answers.
+ * @private
+ */
+function runtime_runTreeHolds(wrapper, prop) {
+	const held = wrapper.____slothletInternal.runHeldKeys;
+	return held !== undefined && SetMethods.has(held, prop);
+}
+
+/**
+ * Record that a node of a run's tree holds a member on its wrapper (see {@link runtime_runTreeHolds}).
+ * @param {UnifiedWrapper} wrapper - The node's wrapper.
+ * @param {string|symbol} prop - The member.
+ * @returns {void}
+ * @private
+ */
+function runtime_markRunTreeHeld(wrapper, prop) {
+	SetMethods.add((wrapper.____slothletInternal.runHeldKeys ??= new Set()), prop);
+	const hidden = wrapper.____slothletInternal.runHiddenKeys;
+	if (hidden !== undefined) SetMethods.delete(hidden, prop);
+}
+
+/**
+ * Whether a node of a run's tree removed, in the run, a member the live value it fronts holds: the value keeps it, and
+ * the node answers as the value would without it.
+ * @param {UnifiedWrapper} wrapper - The node's wrapper.
+ * @param {string|symbol} prop - The member.
+ * @returns {boolean} True when the member is gone from the node.
+ * @private
+ */
+function runtime_runTreeHides(wrapper, prop) {
+	const hidden = wrapper.____slothletInternal.runHiddenKeys;
+	return hidden !== undefined && SetMethods.has(hidden, prop) && !hasOwn(wrapper, prop);
+}
+
+/**
+ * Whether a node fronts a value a module keeps whole and live (a class instance, an emitter, a value grafted at
+ * runtime), whose members the node reads from the value itself.
+ * @param {UnifiedWrapper} wrapper - The node's wrapper.
+ * @returns {boolean} True for such a node.
+ * @private
+ */
+function runtime_frontsLiveValue(wrapper) {
+	const internal = wrapper.____slothletInternal;
+	const impl = internal.impl;
+	if (impl === null || (typeof impl !== "object" && typeof impl !== "function")) return false;
+	return internal.deferChildAdopt || (EventEmitter && runtime_inherits(impl, EventEmitter)) || isClassInstance(impl);
+}
+
+/**
+ * The prototype a node of a run's tree reads a member it removed from (see {@link runtime_runTreeHides}) through.
+ * @param {UnifiedWrapper} wrapper - The node's wrapper.
+ * @returns {object|null} The prototype.
+ * @private
+ */
+function runtime_runTreeHiddenFrom(wrapper) {
+	return Reflect.getPrototypeOf(wrapper.____slothletInternal.proxy ?? wrapper);
 }
 
 /**
@@ -14679,6 +14807,21 @@ function runtime_isFixedOnTarget(target, prop) {
 }
 
 /**
+ * Whether a node holds a member fixed (non-configurable): on its target, on its wrapper, or on the value behind it.
+ * @param {object} wrapper - The node's wrapper.
+ * @param {object} target - The proxy's target.
+ * @param {string|symbol} prop - The member.
+ * @returns {boolean} True when the member cannot be removed.
+ * @private
+ */
+function runtime_holdsFixed(wrapper, target, prop) {
+	if (runtime_isFixedOnTarget(target, prop)) return true;
+	if (target !== wrapper && runtime_isFixedOnTarget(wrapper, prop)) return true;
+	const impl = wrapper.____slothletInternal.impl;
+	return impl !== null && typeof impl === "object" && !util.types.isProxy(impl) && runtime_isFixedOnTarget(impl, prop);
+}
+
+/**
  * Whether `prop` is a canonical non-negative integer key (`"0"`, `"12"`), the keys an array-backed
  * wrapper answers from its current array rather than from the element wrappers it caches (#602).
  * Keys from `"4294967295"` up are not array indices, but the array holds them as ordinary own
@@ -18459,6 +18602,15 @@ class UnifiedWrapper extends ComponentBase {
 		};
 		const changeThroughStandIn = (op, prop, payload) => {
 			assertChange(prop);
+			// A full-isolation run's `self` changing a node that has not loaded yet (see runtime_runWrite): checked as above,
+			// and kept in the run's own record instead of being made on the node as it loads.
+			const runSink = runtime_takeRunWrite(wrapper, op === "setPrototypeOf" ? null : prop);
+			if (runSink !== null) {
+				if (op === "set") return runSink({ op: "set", value: runtime_unwrapSelfView(payload) });
+				if (op === "defineProperty") return runSink({ op: "define", descriptor: payload });
+				if (op === "deleteProperty") return runSink({ op: "delete" });
+				return runSink({ op: "prototype", prototype: payload });
+			}
 			// An object written through the stand-in is data, as one written to the loaded node is (#826).
 			if (op === "set") runtime_markAssignedData(wrapper, runtime_unwrapSelfView(payload));
 			else if (op === "defineProperty" && "value" in payload) runtime_markAssignedData(wrapper, runtime_unwrapSelfView(payload.value));
@@ -20048,7 +20200,11 @@ class UnifiedWrapper extends ComponentBase {
 			// fronting a value the key no longer holds, or a primitive live accessor whose key now holds
 			// an object (the accessor would hand that object back raw, unwrapped).
 			// A class-instance impl is a live view too (#590): its methods change its own fields.
-			if ((wrapper.____slothletInternal.deferChildAdopt || isClassInstance(wrapper.____slothletInternal.impl)) && hasOwn(wrapper, prop)) {
+			if (
+				(wrapper.____slothletInternal.deferChildAdopt || isClassInstance(wrapper.____slothletInternal.impl)) &&
+				hasOwn(wrapper, prop) &&
+				!runtime_runTreeHolds(wrapper, prop)
+			) {
 				const liveImpl = wrapper.____slothletInternal.impl;
 				if (liveImpl !== null && (typeof liveImpl === "object" || typeof liveImpl === "function") && prop in liveImpl) {
 					const cachedDesc = Objects.getOwnPropertyDescriptor(wrapper, prop);
@@ -20458,8 +20614,13 @@ class UnifiedWrapper extends ComponentBase {
 			// the node the method was read from. A view of any other node a caller steers the method onto
 			// (`.call()` / `.apply()`) stays the caller's view, whose writes are held to the caller (#625): the
 			// value itself would let any module write another module's instance through a method of its own.
+			// A node of a run's tree that holds members the run gave it over its live value stays the receiver, so the method
+			// reads and writes the run's copy (see runtime_runTreeHolds), as a method called on a copy works on the copy.
 			const thisArgIsOwnIdentity =
-				thisArgIsLiveIdentity && (!WeakMapMethods.has(SELF_VIEW_NODES, thisArg) || runtime_selfIsMethodNode(thisArg, wrapper));
+				thisArgIsLiveIdentity &&
+				thisArgWrapper.____slothletInternal.runHeldKeys === undefined &&
+				thisArgWrapper.____slothletInternal.runHiddenKeys === undefined &&
+				(!WeakMapMethods.has(SELF_VIEW_NODES, thisArg) || runtime_selfIsMethodNode(thisArg, wrapper));
 			const effectiveThisArg = thisArgIsOwnIdentity ? thisArgImpl : thisArg;
 			// The value stands for its node when it comes back through `self` (#625).
 			if (thisArgIsOwnIdentity) WeakMapMethods.set(SELF_INSTANCE_NODES, thisArgImpl, runtime_unwrapSelfView(thisArg));
@@ -21403,6 +21564,9 @@ class UnifiedWrapper extends ComponentBase {
 			) {
 				wrapper.___materialize();
 			}
+			// A node of a run's tree changes values the instance's tree shares: what it writes stays on the node itself.
+			const runTreeNode = runtime_inRunTree(wrapper);
+			if (runTreeNode) runtime_ownRunTreeArray(wrapper);
 			// Keys that must not be settable from outside — they shadow private state or are
 			// read-only informational accessors whose values come from ____slothletInternal.
 			// Silently absorb the write so no TypeError leaks key existence.
@@ -21458,6 +21622,10 @@ class UnifiedWrapper extends ComponentBase {
 					moved !== null &&
 					(movedPath === arrayPath || (movedPath == null ? undefined : StringMethods.startsWith(movedPath, `${arrayPath}.`))) &&
 					"sourceValue" in moved.____slothletInternal;
+				// A full-isolation run's `self` writing the array (see runtime_runWrite): every check above has passed, and the
+				// write goes to the run's own copy of the array instead of the module's.
+				const runSink = runtime_takeRunWrite(wrapper, prop);
+				if (runSink !== null) return runSink({ op: "set", value });
 				const written = Reflect.set(arrayImpl, prop, isOwnElement ? moved.____slothletInternal.sourceValue : value);
 				// A sealed member reports its elements from its shell (see the preventExtensions trap): a new
 				// `length` takes the shell's configurable elements past it away, as it did the array's. A length
@@ -21508,7 +21676,15 @@ class UnifiedWrapper extends ComponentBase {
 				// (adopted, or merged in from an addapi file or a collision) or a live forward to the impl, and
 				// every one of them sets through its own setter.
 				const ownAccessor = Objects.getOwnPropertyDescriptor(wrapper, prop);
-				if (ownAccessor && !("value" in ownAccessor)) {
+				// A forward a node of a run's tree keeps to its live value would write the module's value: the node holds
+				// the write itself instead. A module's own accessor runs its setter on the node, as anywhere.
+				const forwardsToShared =
+					runTreeNode &&
+					ownAccessor !== undefined &&
+					!("value" in ownAccessor) &&
+					runtime_originalAccessor(ownAccessor).set === ownAccessor.set &&
+					runtime_originalAccessor(ownAccessor).get === ownAccessor.get;
+				if (ownAccessor && !("value" in ownAccessor) && !forwardsToShared) {
 					if (!ownAccessor.set) return false;
 					FunctionMethods.call(ownAccessor.set, wrapper.____slothletInternal.proxy ?? wrapper, value);
 					return true;
@@ -21556,6 +21732,7 @@ class UnifiedWrapper extends ComponentBase {
 						(EventEmitter && runtime_inherits(liveImpl, EventEmitter)) ||
 						isClassInstance(liveImpl);
 					const hasLiveImpl =
+						!runTreeNode &&
 						isLiveIdentityWrapper &&
 						liveImpl !== null &&
 						liveImpl !== undefined &&
@@ -21586,9 +21763,10 @@ class UnifiedWrapper extends ComponentBase {
 						return true;
 					}
 				} else if (
-					wrapper.____slothletInternal.deferChildAdopt ||
-					(isClassInstance(wrapper.____slothletInternal.impl) &&
-						!(EventEmitter && runtime_inherits(wrapper.____slothletInternal.impl, EventEmitter)))
+					!runTreeNode &&
+					(wrapper.____slothletInternal.deferChildAdopt ||
+						(isClassInstance(wrapper.____slothletInternal.impl) &&
+							!(EventEmitter && runtime_inherits(wrapper.____slothletInternal.impl, EventEmitter))))
 				) {
 					// Object/function write against a wrap-on-set LIVE VIEW (#495): land it on the live
 					// impl exactly like the primitive branch above, rather than wrap-on-set onto the
@@ -21613,7 +21791,7 @@ class UnifiedWrapper extends ComponentBase {
 				// changes. The framework's own writes (the build, a sibling file merged onto the node) change only the node:
 				// composing never changes a module's value.
 				const ownWrite = wrapper.slothlet.____buildDepth > 0 || MapMethods.has(FRAMEWORK_WRITES, wrapper);
-				const moduleObject = ownWrite ? null : runtime_moduleObjectOf(wrapper, prop);
+				const moduleObject = ownWrite || runTreeNode ? null : runtime_moduleObjectOf(wrapper, prop);
 				if (moduleObject !== null && !runtime_writeModuleObject(wrapper, moduleObject, prop, value)) return false;
 				// A member defined read-only through the node takes no assignment, as on an object (#749).
 				if (
@@ -21643,6 +21821,7 @@ class UnifiedWrapper extends ComponentBase {
 				const inBuild = wrapper.slothlet.____buildDepth > 0;
 				const stored = inBuild ? value : runtime_wrapOnSet(wrapper, prop, value);
 				Objects.defineProperty(wrapper, prop, { __proto__: null, value: stored, writable: false, enumerable: true, configurable: true });
+				if (runTreeNode) runtime_markRunTreeHeld(wrapper, prop);
 				// Remember a genuine user assignment by key, so adopting a (re)materialized impl never mistakes
 				// it for a stale module child and clears it (#543). Build-time scaffolding is not recorded.
 				if (!inBuild) {
@@ -21741,9 +21920,16 @@ class UnifiedWrapper extends ComponentBase {
 			// and never a framework-reserved key (the built-in write rules).
 			runtime_assertOwnedWrite(wrapper, prop);
 			// A full-isolation run's `self` removing a member of a node of the tree the run does not own yet (see
-			// runtime_runWrite): the removal is kept in the run's own record, and the node keeps the member.
+			// runtime_runWrite): the removal is kept in the run's own record, and the node keeps the member. A member the node
+			// holds fixed refuses it first, as it refuses the removal itself.
+			if (RUN_WRITE !== null && RUN_WRITE.node === wrapper && RUN_WRITE.prop === prop && runtime_holdsFixed(wrapper, target, prop)) {
+				RUN_WRITE = null;
+				return false;
+			}
 			const runSink = runtime_takeRunWrite(wrapper, prop);
 			if (runSink !== null) return runSink({ op: "delete" });
+			// A node of a run's tree changes its own copy of the array it fronts (see runtime_ownRunTreeArray).
+			if (runtime_inRunTree(wrapper)) runtime_ownRunTreeArray(wrapper);
 
 			// An array-backed wrapper's target is the array it was built over: a key fixed there (`length`, a
 			// sealed array's index) stays, as it would on that array, and the current array is left as is. So
@@ -21789,13 +21975,24 @@ class UnifiedWrapper extends ComponentBase {
 			// A node built from a copy of a module's own object deletes the member from that object too, as deleting it
 			// from the object does (#746); a member the object holds non-configurably stays, and so does the node's.
 			// The framework's own removals (a mount taken off the node) change only the node.
-			const moduleObject = isInternal || MapMethods.has(FRAMEWORK_WRITES, wrapper) ? null : runtime_moduleObjectOf(wrapper, prop);
+			const moduleObject =
+				isInternal || MapMethods.has(FRAMEWORK_WRITES, wrapper) || runtime_inRunTree(wrapper)
+					? null
+					: runtime_moduleObjectOf(wrapper, prop);
 			if (moduleObject !== null && hasOwn(moduleObject, prop) && !Reflect.deleteProperty(moduleObject, prop)) return false;
 			// Remove from ____impl if it's an object, before anything is retired: the backing value may refuse (its own
 			// proxy, a frozen/sealed export #485), and the node then reports it the way the object itself would —
 			// `false`, which a strict-mode `delete` turns into the same TypeError — with its child wrapper still live.
 			// A composed array node's own elements are the module's array's: deleting them from its layer only hides them.
 			// A function node's members are its function's (a layer over the module's function, which only hides them).
+			// A node of a run's tree removes a member of the live value it fronts from itself alone: the value is the
+			// module's, which the instance's tree fronts too (see runtime_runTreeHides).
+			if (!isInternal && runtime_inRunTree(wrapper) && runtime_frontsLiveValue(wrapper) && hasOwn(backing, prop)) {
+				SetMethods.add((wrapper.____slothletInternal.runHiddenKeys ??= new Set()), prop);
+				if (wrapper.____slothletInternal.runHeldKeys) SetMethods.delete(wrapper.____slothletInternal.runHeldKeys, prop);
+				if (hasOwn(wrapper, prop) && Objects.getOwnPropertyDescriptor(wrapper, prop).configurable) delete wrapper[prop];
+				return true;
+			}
 			const deleteFrom = Arrays.isArray(backing) ? runtime_arrayKeyHolder(backing, prop) : backing;
 			if (
 				deleteFrom &&
@@ -22146,6 +22343,10 @@ class UnifiedWrapper extends ComponentBase {
 			get: (target, prop, receiver) => {
 				// The access a view is making into this node, taken as the trap starts (see runtime_beginAccess).
 				const access = runtime_takeAccess(wrapper);
+				if (runtime_runTreeHides(wrapper, prop)) {
+					const from = runtime_runTreeHiddenFrom(wrapper);
+					return from === null ? undefined : Reflect.get(from, prop, receiver);
+				}
 				const value = getTrap(target, prop, receiver, access);
 				// A member fixed read-only on a frozen shell must be read as the shell holds it (proxy invariant), so it
 				// carries no view bound to the reader: it is checked against whoever calls or reads it.
@@ -22170,12 +22371,19 @@ class UnifiedWrapper extends ComponentBase {
 				);
 			},
 			construct: constructTrap,
-			has: hasTrap,
+			has: (target, prop) => {
+				if (runtime_runTreeHides(wrapper, prop)) {
+					const from = runtime_runTreeHiddenFrom(wrapper);
+					return from !== null && Reflect.has(from, prop);
+				}
+				return hasTrap(target, prop);
+			},
 			// A member is described holding what reading it hands out, the reading module's identity bound to a node as the
 			// get trap binds it, so its description and a read of it give the same value (#667). A member fixed read-only on
 			// a frozen shell is described as the shell holds it (proxy invariant), as it is read.
 			getOwnPropertyDescriptor: (target, prop) => {
 				const access = runtime_takeAccess(wrapper);
+				if (runtime_runTreeHides(wrapper, prop) && !runtime_isFixedOnTarget(target, prop)) return undefined;
 				const descriptor = getOwnPropertyDescriptorTrap(target, prop, true, access);
 				if (!descriptor || !("value" in descriptor)) return descriptor;
 				const fixed = target !== wrapper ? Reflect.getOwnPropertyDescriptor(target, prop) : undefined;
@@ -22183,7 +22391,11 @@ class UnifiedWrapper extends ComponentBase {
 				const bound = runtime_bindCapturedIdentity(wrapper, prop, descriptor.value, access);
 				return bound === descriptor.value ? descriptor : { __proto__: null, ...descriptor, value: bound };
 			},
-			ownKeys: ownKeysTrap,
+			ownKeys: (target) => {
+				const keys = ownKeysTrap(target);
+				if (wrapper.____slothletInternal.runHiddenKeys === undefined) return keys;
+				return filterList(keys, (key) => !runtime_runTreeHides(wrapper, key) || runtime_isFixedOnTarget(target, key));
+			},
 			// What a module's write stores is owned by the module owning the member, or by the writer for one it creates.
 			set: runtime_placingTrap(wrapper, setTrap, (args) => args[2]),
 			// A callable `then` is refused here, as in the set trap. A callable node's target is a bare function shell
@@ -22224,8 +22436,25 @@ class UnifiedWrapper extends ComponentBase {
 					if (heldNode !== null) descriptor = { __proto__: null, ...descriptor, value: heldNode };
 					// A full-isolation run's `self` defining a member of a node of the tree the run does not own yet (see
 					// runtime_runWrite): checked as above, and kept in the run's own record instead of on the node.
+					// A closed node, or a member it holds fixed, refuses a definition it could not take first.
+					if (
+						RUN_WRITE !== null &&
+						RUN_WRITE.node === wrapper &&
+						RUN_WRITE.prop === prop &&
+						(!Reflect.isExtensible(target) || runtime_isFixedOnTarget(target, prop)) &&
+						!runtime_canDefine(target, prop, descriptor)
+					) {
+						RUN_WRITE = null;
+						return false;
+					}
 					const runSink = runtime_takeRunWrite(wrapper, prop);
 					if (runSink !== null) return runSink({ op: "define", descriptor });
+					// A node of a run's tree defines on its own copy of the array it fronts, and holds what it defines over the
+					// live value it fronts (see runtime_runTreeHolds).
+					if (runtime_inRunTree(wrapper)) {
+						runtime_ownRunTreeArray(wrapper);
+						runtime_markRunTreeHeld(wrapper, prop);
+					}
 					if (target === wrapper) {
 						if (!Reflect.defineProperty(target, prop, descriptor)) return false;
 						if (heldNode !== null) SetMethods.add((wrapper.____slothletInternal.userAssignedKeys ??= new Set()), prop);
@@ -22260,7 +22489,8 @@ class UnifiedWrapper extends ComponentBase {
 					}
 					// A node built from a copy of a module's own object defines the member on that object too, as the same
 					// definition of the object does (#746).
-					const moduleObject = MapMethods.has(FRAMEWORK_WRITES, wrapper) ? null : runtime_moduleObjectOf(wrapper, prop);
+					const moduleObject =
+						MapMethods.has(FRAMEWORK_WRITES, wrapper) || runtime_inRunTree(wrapper) ? null : runtime_moduleObjectOf(wrapper, prop);
 					// All are checked before any changes, so a refusal by one leaves the others as they were.
 					if (
 						(bindsTarget && !runtime_canDefine(target, prop, shellDescriptor)) ||
@@ -22733,6 +22963,8 @@ export function internals(consumer) {
 		runtime_resolvedAccess,
 		runtime_runWrite,
 		runtime_takeRunWrite,
+		runtime_viewAccessor,
+		runtime_runViewAccessor,
 		runtime_isApiNode,
 		runtime_nodeWrapperOf,
 		runtime_rootGate,

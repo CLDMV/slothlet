@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-21T13:09:09-08:00 (1795295349)
+ *	@Last modified time: 2026-11-21T13:38:23-08:00 (1795297103)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -618,6 +618,12 @@ class Slothlet {
 	 * @private
 	 */
 	#fields = null;
+
+	/**
+	 * The prototype each api the root reads holds on a record of its own (a function root's, see the root proxy).
+	 * @type {WeakMap<object, {given: boolean, prototype: (object|null)}>}
+	 */
+	#rootPrototypes = new WeakMap();
 
 	/**
 	 * The token of the copy the instance has, once a `run()` / `scope()` recorded it (see {@link CURRENT_COPY}); null
@@ -1947,26 +1953,33 @@ class Slothlet {
 			// A function root's prototype, on a record of the root's own as a function node's is on its node's: the root
 			// file's function's until the root is given one (`Object.setPrototypeOf(api, …)`), which the record then holds,
 			// so the function is never changed through the root. A load that gives the root a value starts it again.
-			const rootPrototype = { of: null, given: false, prototype: null };
-			const rootPrototypeNow = () => {
-				if (rootPrototype.of !== this.api) {
-					rootPrototype.of = this.api;
-					rootPrototype.given = false;
+			// One record per api the root reads (the instance's, a run's own tree's), so a run's root keeps its own.
+			const rootRecord = () => {
+				let record = WeakMapMethods.get(this.#rootPrototypes, this.api);
+				if (record === undefined) {
+					record = { given: false, prototype: null };
+					WeakMapMethods.set(this.#rootPrototypes, this.api, record);
 				}
+				return record;
+			};
+			const rootPrototypeNow = () => {
+				const rootPrototype = rootRecord();
 				if (!rootPrototype.given) rootPrototype.prototype = Reflect.getPrototypeOf(this.api);
 				return rootPrototype.prototype;
 			};
+			// Whether the root reads a tree a run has of its own: the root's target is shared with the instance.
+			const inRunTree = () => this.api !== this[INSTANCE_FIELD]("api");
 			// Whether a member is read from a prototype the function root was given: one the root does not hold itself.
 			const rootInherits = (prop) => {
 				if (!isCallable) return false;
 				rootPrototypeNow();
-				return rootPrototype.given && !Objects.hasOwn(this.api, prop);
+				return rootRecord().given && !Objects.hasOwn(this.api, prop);
 			};
 			// The prototype the root has now, as the root itself holds it: an object root's is its api's.
 			const rootHeld = () => (isCallable ? rootPrototypeNow() : Reflect.getPrototypeOf(this.api));
 			// Whether the root has a prototype it was given (an object root starts with `Object.prototype`).
 			const rootGiven = () =>
-				isCallable ? (rootPrototypeNow(), rootPrototype.given) : Reflect.getPrototypeOf(this.api) !== Objects.prototype;
+				isCallable ? (rootPrototypeNow(), rootRecord().given) : Reflect.getPrototypeOf(this.api) !== Objects.prototype;
 			// The views module code is handed of a prototype the root was given, kept for as long as the root has it, and
 			// the prototype as whoever reads the root now is handed it: the host the object, a module its own view.
 			const rootViews = { prototypeViews: null };
@@ -1997,7 +2010,7 @@ class Slothlet {
 							// A member a function root inherits from a prototype it was given is read from there, on the root, and
 							// one an object root inherits from one through its api: either under the rules a member of the root is.
 							if (rootInherits(prop)) {
-								const from = rootPrototype.prototype;
+								const from = rootRecord().prototype;
 								if (from === null) return runtime_rootMemberRead(this, prop, undefined);
 								return runtime_rootInheritedRead(this, rootViews, from, prop, Reflect.get(from, prop, this.boundApi));
 							}
@@ -2015,7 +2028,8 @@ class Slothlet {
 						has: (target, prop) => {
 							if (!this.api) return false;
 							if (rootInherits(prop)) {
-								if (rootPrototype.prototype !== null && Reflect.has(rootPrototype.prototype, prop)) return true;
+								const from = rootRecord().prototype;
+								if (from !== null && Reflect.has(from, prop)) return true;
 							} else if (prop in this.api) return true;
 							const fixed = Reflect.getOwnPropertyDescriptor(target, prop);
 							return fixed !== undefined && (!fixed.configurable || !Reflect.isExtensible(target));
@@ -2062,15 +2076,20 @@ class Slothlet {
 							proto = runtime_behindGivenView(runtime_unwrapSelfView(proto));
 							if (isCallable) {
 								rootPrototypeNow();
+								const rootPrototype = rootRecord();
 								rootPrototype.given = proto !== Reflect.getPrototypeOf(this.api);
 								rootPrototype.prototype = proto;
 								return true;
 							}
+							// A run's tree takes it on its own api: the target, which reports it, is the instance's too.
+							if (inRunTree()) return Reflect.setPrototypeOf(this.api, proto);
 							return Reflect.setPrototypeOf(this.api, proto) && Reflect.setPrototypeOf(target, proto);
 						},
 						// Closing the root closes the api (see runtime_rootClose).
 						preventExtensions: (target) => {
 							if (!this.api) return Reflect.preventExtensions(target);
+							// The root's target is the instance's as well: a run reading a tree of its own cannot close it.
+							if (inRunTree()) return false;
 							const closed = runtime_rootClose(
 								this,
 								target,
@@ -3098,6 +3117,7 @@ class Slothlet {
 				this.#retireTree(next);
 				return;
 			}
+			if (kind === "copy") this.#carryRootPrototype(view.api, next.api);
 			this.#adoptTree(holder, next);
 			// A full-isolation run's `self` writes what it kept so far into the run's new tree, as that tree's build, and
 			// from now on reads and writes that tree (see `makeRunSelf` in builders/api_builder).
@@ -3117,6 +3137,26 @@ class Slothlet {
 			holder.treeBusy = null;
 			release();
 		}
+	}
+
+	/**
+	 * Give the root of a copy's new tree the prototype the root of the tree it copies has: one it was given is the copy's
+	 * too.
+	 * @param {object|Function} from - The api copied.
+	 * @param {object|Function} to - The new api.
+	 * @returns {void}
+	 * @private
+	 */
+	#carryRootPrototype(from, to) {
+		if (from === null || from === undefined || to === null || to === undefined || from === to) return;
+		const record = WeakMapMethods.get(this.#rootPrototypes, from);
+		if (record !== undefined) {
+			if (record.given) WeakMapMethods.set(this.#rootPrototypes, to, { given: true, prototype: record.prototype });
+			return;
+		}
+		if (typeof from !== "object" || typeof to !== "object") return;
+		const prototype = Reflect.getPrototypeOf(from);
+		if (prototype !== Reflect.getPrototypeOf(to) && Reflect.isExtensible(to)) Reflect.setPrototypeOf(to, prototype);
 	}
 
 	/**
