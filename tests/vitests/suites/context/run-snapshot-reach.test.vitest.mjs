@@ -178,7 +178,7 @@ for (const mode of ["eager", "lazy"])
 /**
  * Open a run that evaluates expressions in module code (through the probe's `self`) on request, until closed.
  * @param {object} api - The api.
- * @returns {{read: function(string): Promise<*>, reads: function(string[]): Promise<Array<*>>, close: function(): Promise<void>}} The run's handle.
+ * @returns {{read: function(string): Promise<*>, host: function(function(): *): Promise<*>, reads: function(string[]): Promise<Array<*>>, close: function(): Promise<void>}} The run's handle.
  */
 function openRun(api) {
 	const queue = [];
@@ -194,7 +194,7 @@ function openRun(api) {
 			const job = await next();
 			if (job === null) return;
 			try {
-				job.resolve({ value: await api.probe.evalIn(job.src) });
+				job.resolve({ value: job.fn ? await job.fn() : await api.probe.evalIn(job.src) });
 			} catch (error) {
 				job.resolve({ threw: error?.code ?? error?.name ?? String(error) });
 			}
@@ -214,6 +214,11 @@ function openRun(api) {
 		});
 	return {
 		read,
+		host: (fn) =>
+			new Promise((resolve) => push({ fn, resolve })).then((outcome) => {
+				if ("threw" in outcome) throw new Error(`host code in the run threw ${outcome.threw}`);
+				return outcome.value;
+			}),
 		reads: async (list) => {
 			const out = [];
 			for (const src of list) out.push(await read(src));
@@ -422,6 +427,22 @@ describe.each(CONFIGS)("a run's snapshot at its edges — $mode / $runtime / per
 		expect(seen[0]).toEqual(await plainReads(atNestedStart, reads));
 		expect(seen[1]).toEqual(await plainReads(atEnd, reads));
 		expect([api.data.map.get("k"), api.data.cfg.list.join(), await api.data.heldX()]).toEqual([1, "1,2", 1]);
+	});
+
+	it("host code inside the run changing values through api does not reach the run's self", async () => {
+		await load();
+		const run = openRun(api);
+		const reads = ["self.data.getObj().x", "self.data.map.get('k')", "self.data.getObjAsync().then((o) => o.deep.y)"];
+		await run.read("1");
+		await run.host(async () => {
+			(await api.data.getObj()).x = 50;
+			api.data.map.set("k", 50);
+			(await api.data.getObjAsync()).deep.y = 50;
+		});
+		const inRun = await run.reads(reads);
+		await run.close();
+		expect(inRun).toEqual(await plainReads(twin(), reads));
+		expect([await api.data.heldX(), api.data.map.get("k")]).toEqual([50, 50]);
 	});
 
 	it("an object the instance replaced after the run read it reads as of the start", async () => {

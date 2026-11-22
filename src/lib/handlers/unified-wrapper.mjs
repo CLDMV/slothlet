@@ -4097,9 +4097,9 @@ function runtime_runningRecord(slothlet) {
 
 /**
  * Save a value the instance hands out as itself (a `Map`, a `Date`, an object a leaf returned) and what it reaches,
- * once per window while a run is open, when it is handed to code outside every run: that code may change it where
- * slothlet does not see the change, and the runs open read it as it was (see `checkpointDeep` in
- * `helpers/run-snapshot`). Shared live objects are left alone.
+ * once per window while a run is open: the code it is handed to may change it where slothlet does not see the change
+ * (host code calling through `api` inside a run included), and the runs open read it as it was (see `checkpointDeep`
+ * in `helpers/run-snapshot`). Shared live objects are left alone.
  * @param {object} slothlet - The instance.
  * @param {*} value - The value handed out.
  * @returns {void}
@@ -4108,7 +4108,7 @@ function runtime_runningRecord(slothlet) {
 function runtime_checkpointHandout(slothlet, value) {
 	if (value === null || typeof value !== "object") return;
 	const domain = domainOf(slothlet);
-	if (!runsOpen(domain) || savedThisWindow(domain, value) || util.types.isProxy(value) || runtime_runningRecord(slothlet) !== null) return;
+	if (!runsOpen(domain) || savedThisWindow(domain, value) || util.types.isProxy(value)) return;
 	runtime_checkpointBuiltin(domain, value);
 }
 
@@ -4133,16 +4133,16 @@ function runtime_checkpointBuiltin(domain, value) {
 const SETTLED_CHECKPOINTS = new WeakMap();
 
 /**
- * What a caller outside every run is handed for a promise a call returned while a run is open: a promise of the same
- * value, which is saved for the runs open before the caller has it (see {@link runtime_checkpointHandout}), the same
- * one each time for the same promise. A rejection is handed on as it is. Inside a run, the promise is handed on as it is.
+ * What a caller is handed for a promise a call returned while a run is open: a promise of the same value, which is
+ * saved for the runs open before the caller has it (see {@link runtime_checkpointHandout}), the same one each time for
+ * the same promise. A rejection is handed on as it is.
  * @param {object} slothlet - The instance.
  * @param {Promise<*>} promise - The promise.
  * @returns {Promise<*>} The promise the caller is handed.
  * @private
  */
 function runtime_checkpointSettled(slothlet, promise) {
-	if (!runsOpen(domainOf(slothlet)) || runtime_runningRecord(slothlet) !== null) return promise;
+	if (!runsOpen(domainOf(slothlet))) return promise;
 	let handed = WeakMapMethods.get(SETTLED_CHECKPOINTS, promise);
 	if (handed === undefined) {
 		handed = PromiseMethods.then(promise, (value) => {
