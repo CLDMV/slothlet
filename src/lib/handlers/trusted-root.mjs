@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-21T17:00:50-08:00 (1795309250)
+ *	@Last modified time: 2026-11-21T22:20:34-08:00 (1795328434)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -83,6 +83,16 @@ const TRUSTED_ROOT = Symbol("slothlet.trustedRoot");
  * @internal
  */
 const REOPENED_FLOW = Symbol("slothlet.reopenedFlow");
+
+/**
+ * Marker on a store the live runtime opens over an instance's own store to carry one of slothlet's marks (a reload's,
+ * a restart's or a run copy's build, the ID a lazy load runs under). The store stands for the instance's own store: it
+ * carries that store's trust, and like it is no flow the host has open, so code running in it with no module call (a
+ * module's top level or a Proxy's traps while the build loads it) gets no host standing from it.
+ * @type {symbol}
+ * @internal
+ */
+const INSTANCE_FLOW = Symbol("slothlet.instanceFlow");
 
 /**
  * Registry of every genuine `UnifiedWrapper` instance. A caller identity absent from this set is a
@@ -571,6 +581,9 @@ export function internals(consumer) {
 		},
 		get REOPENED_FLOW() {
 			return REOPENED_FLOW;
+		},
+		get INSTANCE_FLOW() {
+			return INSTANCE_FLOW;
 		},
 		get ACTING_FOR() {
 			return ACTING_FOR;

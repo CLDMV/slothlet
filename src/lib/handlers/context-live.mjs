@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-21T17:00:48-08:00 (1795309248)
+ *	@Last modified time: 2026-11-21T22:20:33-08:00 (1795328433)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -87,7 +87,7 @@ const { setApiContextChecker } = eventemitterContextInternals("lib/handlers/cont
 const { setApiCallerPinner } = callerPinningInternals("lib/handlers/context-live");
 const { reinstateSchedulerPatching } = schedulerContextInternals("lib/handlers/context-live");
 const trustedRootOwn = trustedRootInternals("lib/handlers/context-live");
-const { buildCapturedFlowStore, REOPENED_FLOW } = trustedRootOwn;
+const { buildCapturedFlowStore, INSTANCE_FLOW, REOPENED_FLOW } = trustedRootOwn;
 const { runtime_wrapClassInstance } = classInstanceWrapperInternals("lib/handlers/context-live");
 const {
 	attributeResult,
@@ -2715,6 +2715,9 @@ export class LiveContextManager {
 			Objects.defineProperty(store, field, Reflect.getOwnPropertyDescriptor(parent, field));
 		}
 		this.carryMarks(from, store);
+		// Over the instance's own store, the flow stands for that store: no flow the host opened (see INSTANCE_FLOW). A
+		// flow over one that does is copied with its marker above.
+		if (!parent.parentInstanceID) Objects.defineProperty(store, INSTANCE_FLOW, { __proto__: null, value: true, configurable: true });
 		this.#markFlows++;
 		store.instanceID = `${family}__run_mark_${this.#markFlows}`;
 		store.parentInstanceID = family;

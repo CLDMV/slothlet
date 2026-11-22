@@ -740,7 +740,14 @@ function runtime_selfWriteHasStanding(slothlet) {
 	const store = contextManager?.tryGetContext?.(slothlet.instanceID);
 	// A run's store put back for work the run left behind (see `reopenFlowStore` in context-live) is no flow the host
 	// has open: the work keeps the run's context, never its standing.
-	if (!store?.parentInstanceID || store[trustedRootOwn.TRUSTED_ROOT] !== true || store[trustedRootOwn.REOPENED_FLOW] === true) return false;
+	// Nor is a flow slothlet opened over the instance's own store to carry a build's mark (see `markStoreOver` there).
+	if (
+		!store?.parentInstanceID ||
+		store[trustedRootOwn.TRUSTED_ROOT] !== true ||
+		store[trustedRootOwn.REOPENED_FLOW] === true ||
+		store[trustedRootOwn.INSTANCE_FLOW] === true
+	)
+		return false;
 	return !runtime_hostFlowRunsModuleCode(slothlet, store.parentInstanceID);
 }
 

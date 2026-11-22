@@ -139,7 +139,15 @@ function runtime_resolveExecutingContext(resolved = null) {
 	// and is admitted above). This grants nothing extra: reaching `run()` at all means already holding
 	// the `api` object, which carries the host's standing anyway. A run's store put back for work the run left behind
 	// after it returned is not that flow: the work keeps the run's context, never its standing.
-	if (ctx.parentInstanceID && ctx[trustedRootOwn.TRUSTED_ROOT] === true && ctx[trustedRootOwn.REOPENED_FLOW] !== true) return ctx;
+	// A flow slothlet opened over the instance's own store to carry a build's mark stands for that store, which admits no
+	// one here.
+	if (
+		ctx.parentInstanceID &&
+		ctx[trustedRootOwn.TRUSTED_ROOT] === true &&
+		ctx[trustedRootOwn.REOPENED_FLOW] !== true &&
+		ctx[trustedRootOwn.INSTANCE_FLOW] !== true
+	)
+		return ctx;
 
 	return null;
 }
