@@ -468,9 +468,59 @@ export function versionAt(domain, subject, start) {
 	if (list === undefined) return CURRENT;
 	for (let index = 0; index < list.length; index++) {
 		const version = list[index];
-		if (version.from < start && start <= version.to) return version.content;
+		if (version.from < start && start <= version.to) {
+			// A plain function's default prototype is saved as the function only (see saveDefaultPrototype): its content is
+			// made on the first read that needs it. No other version is a function.
+			if (typeof version.content === "function") version.content = defaultPrototypeOf(version.content);
+			return version.content;
+		}
 	}
 	return CURRENT;
+}
+
+/**
+ * Whether `prototype` is the default prototype the language gives `fn`, as it was made: an extensible object inheriting
+ * from `Object.prototype` that holds only `constructor`, naming `fn`, with its default attributes. Read by descriptors.
+ * @param {*} prototype - The prototype.
+ * @param {Function} fn - The function.
+ * @returns {boolean} True for one.
+ * @internal
+ */
+export function isDefaultPrototype(prototype, fn) {
+	if (prototype === null || typeof prototype !== "object" || isProxy(prototype)) return false;
+	if (Reflect.getPrototypeOf(prototype) !== Objects.prototype || !Reflect.isExtensible(prototype)) return false;
+	const keys = Reflect.ownKeys(prototype);
+	if (keys.length !== 1 || keys[0] !== "constructor") return false;
+	const held = Reflect.getOwnPropertyDescriptor(prototype, "constructor");
+	return held !== undefined && held.value === fn && held.writable === true && held.enumerable === false && held.configurable === true;
+}
+
+/**
+ * A default prototype as the language makes it for `fn` (see {@link isDefaultPrototype}).
+ * @param {Function} fn - The function.
+ * @returns {object} The prototype.
+ * @private
+ */
+function defaultPrototypeOf(fn) {
+	const made = {};
+	Reflect.defineProperty(made, "constructor", { __proto__: null, value: fn, writable: true, enumerable: false, configurable: true });
+	return made;
+}
+
+/**
+ * Save a plain function's default prototype that still holds only what the language gave it (see
+ * {@link isDefaultPrototype}), for the runs open, as {@link beforeChange} saves any object: what it holds is known, so
+ * the version is the function itself, and its content is made on the first read of it by a run that started before the
+ * prototype changed (see {@link versionAt}). Nothing is copied for the many plain functions whose prototype nothing
+ * changes.
+ * @param {Domain|null} domain - The domain that owns it.
+ * @param {object} prototype - The prototype.
+ * @param {Function} fn - The function it is the default prototype of.
+ * @returns {boolean} True when a version was saved.
+ * @internal
+ */
+export function saveDefaultPrototype(domain, prototype, fn) {
+	return beforeChange(domain, prototype, () => fn);
 }
 
 /**

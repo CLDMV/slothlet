@@ -47,12 +47,12 @@ import {
 	beforeChange,
 	builtinCopy,
 	CURRENT,
-	declaresPrivate,
 	handOutRaw,
 	handOutSettled,
 	isRawRunView,
 	isSharedLive,
 	rawBehind,
+	rawContent,
 	setViewMarker,
 	shallowCopy,
 	versionAt
@@ -119,6 +119,7 @@ const {
 	runtime_prototypeAtStart,
 	runtime_inheritedAtStart,
 	runtime_classPrototypeOf,
+	runtime_privateCallReceiver,
 	runtime_loadStandIn,
 	runtime_runWriteSinceClosed,
 	runtime_nodeOpen,
@@ -656,9 +657,10 @@ function runViewFunction(fn) {
 
 /**
  * The receiver a method read through a run's view runs with: the view itself, so what it reads and writes is the
- * run's, except for an instance of a class that declares `#private` fields, whose methods run on the instance (the
- * node the view reads through), where the private fields are. Its public members still read as of the run's start
- * through the view; what such a method changes through `this` is the instance's.
+ * run's, except for an instance of a class that declares `#private` fields, whose methods run on the instance itself
+ * (the object the node the view reads through fronts), where the private fields are: whichever version of the method
+ * the run reads, the one it held at the start included. Its public members still read as of the run's start through
+ * the view; what such a method changes through `this` is the instance's.
  * @param {*} thisArg - The receiver the method was called with.
  * @returns {*} The receiver it runs with.
  * @private
@@ -666,10 +668,7 @@ function runViewFunction(fn) {
 function runViewReceiver(thisArg) {
 	if (thisArg === null || (typeof thisArg !== "object" && typeof thisArg !== "function")) return thisArg;
 	if (!WeakMapMethods.has(RUN_VIEW_REALS, thisArg)) return thisArg;
-	const real = WeakMapMethods.get(RUN_VIEW_REALS, thisArg);
-	const impl = runtime_nodeWrapperOf(real)?.____slothletInternal?.impl;
-	// A Proxy is asked nothing: reading its prototype would run its traps.
-	return impl !== null && typeof impl === "object" && !util.types.isProxy(impl) && declaresPrivate(impl) ? real : thisArg;
+	return runtime_privateCallReceiver(WeakMapMethods.get(RUN_VIEW_REALS, thisArg)) ?? thisArg;
 }
 
 /**
@@ -1694,6 +1693,10 @@ function makeRunSelf(slothlet, parentSelf, record) {
 		const closed = () => !Reflect.isExtensible(shell);
 		// A value a node holds is the instance's in the run's tree too: the view keeps reading it and keeping what the run changes.
 		const forked = () => !detached && run.forked && delegatedRunSink === null;
+		// What the view reads of the value: a value a node holds (a class's prototype) as of the run's start, when the
+		// instance changed it since (see helpers/run-snapshot); the framework's own members, and an outer run's view, as they are.
+		const content = () =>
+			detached && snap !== null && !snap.closed && !WeakMapMethods.has(RUN_VIEW_REALS, real) ? rawContent(snap, real) : real;
 		/**
 		 * Check a change to a value a node holds as a write at its path (`prop` below it, or the value itself), as the
 		 * same change is checked outside the run.
@@ -1739,7 +1742,7 @@ function makeRunSelf(slothlet, parentSelf, record) {
 		const attributes = (prop) => {
 			const entry = own(prop);
 			if (entry !== undefined) return entry.op === "delete" ? undefined : entry.descriptor;
-			return Reflect.getOwnPropertyDescriptor(real, prop);
+			return Reflect.getOwnPropertyDescriptor(content(), prop);
 		};
 		/**
 		 * A value read at `prop`, as the view hands it out: an object or function member of the namespace as the run's view
@@ -1756,7 +1759,7 @@ function makeRunSelf(slothlet, parentSelf, record) {
 				// A function's own `prototype` is fixed on it, but no member of the view's target: it is the run's view of it too.
 				if (prop === "prototype" && typeof real === "function") return frameworkViewAt(concatLists(parts, [prop]), value, false, true);
 			}
-			const described = Reflect.getOwnPropertyDescriptor(real, prop);
+			const described = Reflect.getOwnPropertyDescriptor(content(), prop);
 			// A member fixed on the namespace is handed out as it is: a proxy must report a fixed member as the object
 			// holds it.
 			if (!described || !("value" in described) || (!described.configurable && !described.writable)) return value;
@@ -1764,7 +1767,7 @@ function makeRunSelf(slothlet, parentSelf, record) {
 		};
 		// What the member's prototype holds at `prop`: what a member the run deleted reads as, as on an ordinary object.
 		const inherited = (prop, receiver) => {
-			const proto = given !== null ? given.prototype : Reflect.getPrototypeOf(real);
+			const proto = given !== null ? given.prototype : Reflect.getPrototypeOf(content());
 			return proto === null ? undefined : Reflect.get(proto, prop, receiver);
 		};
 		const read = (prop, receiver) => {
@@ -1776,12 +1779,13 @@ function makeRunSelf(slothlet, parentSelf, record) {
 				}
 				return entry.descriptor.value;
 			}
-			const described = Reflect.getOwnPropertyDescriptor(real, prop);
+			const held = content();
+			const described = Reflect.getOwnPropertyDescriptor(held, prop);
 			if (described === undefined && given !== null) return inherited(prop, receiver);
 			if (described && !("value" in described)) {
 				return typeof described.get === "function" ? Reflect.apply(described.get, receiver, []) : undefined;
 			}
-			return handOutMember(prop, Reflect.get(real, prop));
+			return handOutMember(prop, Reflect.get(held, prop));
 		};
 		/**
 		 * Define `prop` in the run as the language defines it on an ordinary object: refused on a closed object or a fixed
@@ -1793,7 +1797,7 @@ function makeRunSelf(slothlet, parentSelf, record) {
 		const define = (prop, descriptor) => {
 			const held = attributes(prop);
 			if (held === undefined) {
-				if (!Reflect.isExtensible(real)) return false;
+				if (!Reflect.isExtensible(content())) return false;
 				const accessor = "get" in descriptor || "set" in descriptor;
 				const made = accessor
 					? { __proto__: null, get: descriptor.get, set: descriptor.set }
@@ -1848,7 +1852,7 @@ function makeRunSelf(slothlet, parentSelf, record) {
 		const inheritedSet = (prop, value, receiver) => {
 			let held = attributes(prop);
 			for (
-				let proto = given !== null ? given.prototype : Reflect.getPrototypeOf(real);
+				let proto = given !== null ? given.prototype : Reflect.getPrototypeOf(content());
 				proto !== null && held === undefined;
 				proto = Reflect.getPrototypeOf(proto)
 			)
@@ -1901,7 +1905,7 @@ function makeRunSelf(slothlet, parentSelf, record) {
 				if (held === undefined) {
 					// Inherited: a setter or a read-only member on the prototype decides it, as on an ordinary object.
 					for (
-						let proto = given !== null ? given.prototype : Reflect.getPrototypeOf(real);
+						let proto = given !== null ? given.prototype : Reflect.getPrototypeOf(content());
 						proto !== null && held === undefined;
 						proto = Reflect.getPrototypeOf(proto)
 					) {
@@ -1944,19 +1948,20 @@ function makeRunSelf(slothlet, parentSelf, record) {
 				if (closed()) return Reflect.has(shell, prop);
 				if (forked()) return prop in current();
 				const entry = own(prop);
+				const held = content();
 				if (entry !== undefined) {
 					if (entry.op !== "delete") return true;
-					const proto = given !== null ? given.prototype : Reflect.getPrototypeOf(real);
+					const proto = given !== null ? given.prototype : Reflect.getPrototypeOf(held);
 					return proto !== null && prop in proto;
 				}
-				if (given !== null && Reflect.getOwnPropertyDescriptor(real, prop) === undefined)
+				if (given !== null && Reflect.getOwnPropertyDescriptor(held, prop) === undefined)
 					return given.prototype !== null && prop in given.prototype;
-				return prop in real;
+				return prop in held;
 			},
 			ownKeys() {
 				if (closed()) return Reflect.ownKeys(shell);
 				if (forked()) return setToArray(setFrom(concatLists(Reflect.ownKeys(current()), Reflect.ownKeys(shell))));
-				const keys = setFrom(Reflect.ownKeys(real));
+				const keys = setFrom(Reflect.ownKeys(content()));
 				const members = MapMethods.get(run.nsEntries, key);
 				if (members !== undefined) {
 					const changed = mapEntriesToArray(members);
@@ -1982,7 +1987,7 @@ function makeRunSelf(slothlet, parentSelf, record) {
 			getPrototypeOf() {
 				if (closed()) return Reflect.getPrototypeOf(shell);
 				if (given !== null) return given.prototype;
-				return Reflect.getPrototypeOf(forked() ? current() : real);
+				return Reflect.getPrototypeOf(forked() ? current() : content());
 			},
 			setPrototypeOf(_t, prototype) {
 				if (closed()) return Reflect.setPrototypeOf(shell, prototype);

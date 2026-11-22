@@ -173,10 +173,13 @@ import {
 	CURRENT,
 	domainOf,
 	handOutRaw,
+	declaresPrivate,
+	isDefaultPrototype,
 	isLanguagePrototype,
 	isRawRunView,
 	rawContent,
 	runsOpen,
+	saveDefaultPrototype,
 	savedThisWindow,
 	setKindCheck,
 	setProxyCheck,
@@ -3978,12 +3981,12 @@ function runtime_captureNode(wrapper) {
 			const keys = Reflect.ownKeys(held);
 			for (let index = 0; index < keys.length; index++) {
 				const key = keys[index];
-				// A function's own `length`, `name` and `prototype` are the language's, answered by the node as they are now.
-				if (
-					typeof held === "function" &&
-					(key === "length" || key === "name" || key === "prototype" || key === "arguments" || key === "caller")
-				)
+				// A function's own `length`, `name`, `arguments` and `caller` are the language's, answered by the node as they
+				// are now. Its `prototype` is the object it held then, which the instance may replace.
+				if (typeof held === "function" && (key === "length" || key === "name" || key === "arguments" || key === "caller")) {
+					if (!MapMethods.has(members, key)) MapMethods.set(members, key, SNAPSHOT_LIVE_MEMBER);
 					continue;
+				}
 				keep(key, Reflect.getOwnPropertyDescriptor(held, key));
 			}
 		}
@@ -4224,11 +4227,34 @@ function runtime_checkpointNodePrototypes(domain, node) {
 	const prototype = runtime_snapshotPrototype(node);
 	if (prototype !== SNAPSHOT_UNKNOWN_PROTOTYPE && !isLanguagePrototype(prototype) && resolveWrapper(prototype) === null)
 		runtime_checkpointBuiltin(domain, prototype);
-	// A function's own prototype is a class's, or holds what the module put on it: a plain function's holds only its
-	// `constructor`, and nothing reads it as of the start until the module gives it more.
+	// A function's own prototype is a class's, or holds what the module put on it, and is saved as any object is. A plain
+	// function's that still holds only its `constructor` is saved as the function only, its content made when a run that
+	// started before the module gave it more reads it (see saveDefaultPrototype).
 	const classPrototype = runtime_wrapperClassPrototype(node);
-	if (classPrototype !== null && !isLanguagePrototype(classPrototype) && Reflect.ownKeys(classPrototype).length > 1)
-		runtime_checkpointBuiltin(domain, classPrototype);
+	if (classPrototype === null || isLanguagePrototype(classPrototype)) return;
+	const fn = layerUnderlying(node.____slothletInternal.impl);
+	if (isDefaultPrototype(classPrototype, fn)) saveDefaultPrototype(domain, classPrototype, fn);
+	else runtime_checkpointBuiltin(domain, classPrototype);
+}
+
+/**
+ * The receiver a function a run's view handed out runs with when it is called on the run's view of a node fronting an
+ * instance of a class that declares `#private` fields: the instance itself, where its private fields are, once the
+ * node's file is saved for the runs open (see {@link runtime_checkpointFile}), as before a call through the node. Null
+ * for any other node.
+ * @param {*} node - The node the view reads through.
+ * @returns {object|null} The instance.
+ * @internal
+ */
+function runtime_privateCallReceiver(node) {
+	const wrapper = runtime_nodeWrapperOf(node);
+	const impl = wrapper?.____slothletInternal?.impl;
+	if (impl === null || impl === undefined || typeof impl !== "object") return null;
+	const instance = layerUnderlying(impl);
+	// A Proxy is asked nothing: reading its prototype would run its traps.
+	if (instance === null || typeof instance !== "object" || util.types.isProxy(instance) || !declaresPrivate(instance)) return null;
+	runtime_checkpointFile(wrapper);
+	return instance;
 }
 
 /**
@@ -24211,6 +24237,7 @@ export function internals(consumer) {
 		runtime_prototypeAtStart,
 		runtime_inheritedAtStart,
 		runtime_classPrototypeOf,
+		runtime_privateCallReceiver,
 		runtime_loadStandIn,
 		runtime_runWriteSinceClosed,
 		runtime_nodeOpen,
