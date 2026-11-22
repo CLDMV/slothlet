@@ -49,7 +49,9 @@ if (extensions.includes(ext)) {
 **Condition Check**:
 
 ```javascript
-if (isHiddenEntry(hiddenMatcher, apiRel(fullPath), entry.name, true)) { continue; }
+if (isHiddenEntry(hiddenMatcher, apiRel(fullPath), entry.name, true)) {
+	continue;
+}
 ```
 
 **Trigger**: no `hidden` glob matches and `isHiddenEntryName(entry.name)`, or the last matching glob hides it
@@ -69,7 +71,9 @@ if (isHiddenEntry(hiddenMatcher, apiRel(fullPath), entry.name, true)) { continue
 **Condition Check**:
 
 ```javascript
-if (isHiddenEntry(hiddenMatcher, apiRel(path.join(dir, nameWithoutExt)), entry.name, false)) { continue; }
+if (isHiddenEntry(hiddenMatcher, apiRel(path.join(dir, nameWithoutExt)), entry.name, false)) {
+	continue;
+}
 ```
 
 **Trigger**: no `hidden` glob matches and `isHiddenEntryName(entry.name)`, or the last matching glob hides it
@@ -89,8 +93,12 @@ if (isHiddenEntry(hiddenMatcher, apiRel(path.join(dir, nameWithoutExt)), entry.n
 **Condition Check**:
 
 ```javascript
-if (hiddenMatcher && hiddenMatcher(apiRel(fullPath))) { continue; }              // folder
-if (hiddenMatcher && hiddenMatcher(apiRel(path.join(dir, nameWithoutExt)))) { continue; } // file
+if (hiddenMatcher && hiddenMatcher(apiRel(fullPath))) {
+	continue;
+} // folder
+if (hiddenMatcher && hiddenMatcher(apiRel(path.join(dir, nameWithoutExt)))) {
+	continue;
+} // file
 ```
 
 **Trigger**: `hiddenMatcher(apiRel(...))` returns true
@@ -111,8 +119,14 @@ if (hiddenMatcher && hiddenMatcher(apiRel(path.join(dir, nameWithoutExt)))) { co
 **Condition Check**:
 
 ```javascript
-if (entry.isDirectory()) { if (fileFilter) { continue; } /* … */ }   // no subdirs in single-file mode
-if (fileFilter && !fileFilter(entry.name)) { continue; }              // non-matching file
+if (entry.isDirectory()) {
+	if (fileFilter) {
+		continue;
+	} /* … */
+} // no subdirs in single-file mode
+if (fileFilter && !fileFilter(entry.name)) {
+	continue;
+} // non-matching file
 ```
 
 **Trigger**: `fileFilter` truthy (dirs) / `fileFilter && !fileFilter(entry.name)` (files)
@@ -133,7 +147,9 @@ if (fileFilter && !fileFilter(entry.name)) { continue; }              // non-mat
 
 ```javascript
 // #156: a folder that yields no files and no kept subfolders must not create a leaf.
-if (subStructure.files.length === 0 && subStructure.directories.length === 0) { continue; }
+if (subStructure.files.length === 0 && subStructure.directories.length === 0) {
+	continue;
+}
 ```
 
 **Trigger**: `subStructure.files.length === 0 && subStructure.directories.length === 0`
@@ -224,7 +240,9 @@ if (RESERVED_MOUNT_ROOTS.has(mountSegments[0])) {
 **Condition Check**:
 
 ```javascript
-if (!pkg || typeof pkg.name !== "string" || typeof pkg.version !== "string") { continue; }
+if (!pkg || typeof pkg.name !== "string" || typeof pkg.version !== "string") {
+	continue;
+}
 const manifestRaw = await loadManifestRaw(manifestPath, manifestSource, pkg.name);
 if (manifestRaw === undefined) continue; // file or subkey missing → not a module
 ```
@@ -246,11 +264,15 @@ if (manifestRaw === undefined) continue; // file or subkey missing → not a mod
 **Condition Check**:
 
 ```javascript
-try { realPath = await fsp.realpath(candidate.path); } catch { continue; } // broken symlink → skip
-if (seenRealPaths.has(realPath)) continue;                                  // dedupe, first wins
+try {
+	realPath = await fsp.realpath(candidate.path);
+} catch {
+	continue;
+} // broken symlink → skip
+if (seenRealPaths.has(realPath)) continue; // dedupe, first wins
 // …
 if (realPathByNameVersion.has(nameVersionKey) && otherRealPath !== realPath) {
-  throw new SlothletError("MODULE_DUPLICATE_NAME_VERSION_MISMATCH", /* … */);
+	throw new SlothletError("MODULE_DUPLICATE_NAME_VERSION_MISMATCH" /* … */);
 }
 ```
 
@@ -271,7 +293,9 @@ if (realPathByNameVersion.has(nameVersionKey) && otherRealPath !== realPath) {
 **Condition Check**:
 
 ```javascript
-if (typeof filterFn === "function" && !filterFn(normalized, pkg.name)) { continue; }
+if (typeof filterFn === "function" && !filterFn(normalized, pkg.name)) {
+	continue;
+}
 ```
 
 **Trigger**: `filterFn` present and returns falsy
