@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-19T08:57:39-08:00 (1795107459)
+ *	@Last modified time: 2026-11-22T11:45:00-08:00 (1795376700)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -1730,10 +1730,32 @@ export class ApiManager extends ComponentBase {
 	isRemovedCaller(callerWrapper) {
 		// A node removed from the tree, its module still mounted elsewhere (a node of the base tree), is gone all the same.
 		if (callerWrapper?.____slothletInternal?.removed === true && callerWrapper.slothlet === this.slothlet) return true;
+		if (callerWrapper?.slothlet === this.slothlet && this.isRestartReplaced(callerWrapper)) return true;
 		if (!callerWrapper?.____slothletInternal?.moduleID) return false;
 		// Code of another instance is not this instance's to judge: this instance holds no record of its module.
 		if (callerWrapper.slothlet !== this.slothlet) return false;
 		return this.#ownedRoot(callerWrapper) === null;
+	}
+
+	/**
+	 * Whether `wrapper` is a node of the instance's tree a `restart()` has since replaced, while the permission system is
+	 * on. A restart starts the instance over: the modules it replaced are gone with the instance they were in, so the
+	 * code they made (a function, a bound function or an object's method they handed out, a snapshot their call took)
+	 * has no standing, and everything it does through `self` is refused. With the permission system off nothing is
+	 * checked, and such code acts on the rebuilt instance. A reload keeps the tree's epoch, and the trees runs keep of
+	 * their own carry epochs of their own (below zero), so neither is affected.
+	 *
+	 * @param {object|null} wrapper - A node's wrapper.
+	 * @returns {boolean} True for a node a restart replaced, with the permission system on.
+	 * @public
+	 *
+	 * @example
+	 * if (apiManager.isRestartReplaced(wrapper)) refuse();
+	 */
+	isRestartReplaced(wrapper) {
+		const epoch = wrapper?.____slothletInternal?.epoch;
+		if (typeof epoch !== "number" || epoch < 0 || epoch >= (this.slothlet._liveEpoch ?? 0)) return false;
+		return this.slothlet.handlers?.permissionManager?.isEnabled?.() === true;
 	}
 
 	/**

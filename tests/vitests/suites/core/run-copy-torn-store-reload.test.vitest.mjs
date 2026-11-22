@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-22T03:31:49-08:00 (1795347109)
+ *	@Last modified time: 2026-11-22T12:42:10-08:00 (1795380130)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -18,7 +18,8 @@
  * the run (an `AsyncLocalStorage.snapshot()`, an `AsyncResource` made in the run, a snapshot a module's call made
  * there), keeps the run's context and answers from the instance. When the instance reloads or restarts after that
  * teardown, the same code still does on the live runtime: `context` reads the run's keys, as the async runtime gives
- * them, and `self.*` / `api.*` reach the rebuilt tree, as the same code made outside any run does.
+ * them, and `self.*` / `api.*` reach the rebuilt tree, as the same code made outside any run does. With the permission
+ * system on, a snapshot a module's call made is refused after a restart: the modules it replaced have no standing.
  *
  * Fixture (written at run time): `calls/calls.mjs`, whose leaf answers the stamp `shared/stamp.mjs` took when the
  * instance's copy of it loaded (one copy per instance ID), and `probe/probe.mjs`, whose `read()` answers that stamp
@@ -161,8 +162,11 @@ describe.each([["reload"], ["restart"]])("live runtime: code in a torn-down run'
 	describe.each([["eager"], ["lazy"]])("%s mode", (mode) => {
 		describe.each([["none"], ["off"], ["on"]])("permissions %s", (permissions) => {
 			// An `AsyncResource` checks the patch it was made under when it runs, which a restart replaces: across a restart
-			// only the snapshots are covered here.
-			it.each(operation === "reload" ? [["snapshot"], ["resource"], ["module snapshot"]] : [["snapshot"], ["module snapshot"]])(
+			// only the snapshots are covered here. With the permission system on, the modules a restart replaced have no
+			// standing, so a snapshot their call took is refused (below).
+			const refused = operation === "restart" && permissions === "on";
+			const kinds = operation === "reload" ? [["snapshot"], ["resource"], ["module snapshot"]] : [["snapshot"], ["module snapshot"]];
+			it.each(refused ? kinds.filter(([kind]) => kind !== "module snapshot") : kinds)(
 				"a %s made in the run reads the run's context and the rebuilt tree",
 				async (kind) => {
 					// What the same host code made outside any run answers: a module's code of the copy a reload replaced has no
@@ -178,6 +182,13 @@ describe.each([["reload"], ["restart"]])("live runtime: code in a torn-down run'
 					expect(actual).toEqual({ copy: outside.copy, who: reference.who });
 				}
 			);
+			if (refused) {
+				it("a module snapshot made in the run is refused", async () => {
+					await expect(
+						scenario({ runtime: "live", mode, permissions, operation, kind: "module snapshot", inRun: true })
+					).rejects.toMatchObject({ code: "PERMISSION_DENIED" });
+				});
+			}
 		});
 	});
 });

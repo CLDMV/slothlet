@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-22T09:55:18-08:00 (1795370118)
+ *	@Last modified time: 2026-11-22T11:46:01-08:00 (1795376761)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -23,7 +23,12 @@
  * Fixture (written at run time): `calls/calls.mjs`, whose leaf answers the stamp `shared/stamp.mjs` took when the
  * instance's copy of it loaded (one copy per instance ID), and `probe/probe.mjs`, whose `read()` answers that stamp
  * through `self` with `context.who`, whose `snap()` takes a snapshot and hands out a function that reads the same inside
- * it, and whose `later()` hands out a function that reads the same wherever it is called.
+ * it, whose `later()` hands out a function that reads the same wherever it is called, whose `bound()` hands out a bound
+ * function doing the same, and whose `holder()` hands out an object whose method does the same.
+ *
+ * With the permission system on, `restart()` starts the instance over: the modules it replaced have no standing, so
+ * everything their code does afterwards through `self` is refused (`PERMISSION_DENIED`), a snapshot their call took,
+ * a function, a bound function and a method they handed out alike (docs/PERMISSIONS.md).
  */
 import path from "node:path";
 import { AsyncLocalStorage, AsyncResource } from "node:async_hooks";
@@ -63,6 +68,19 @@ beforeAll(() => {
 			"export function later() {",
 			"\treturn async () => ({ copy: await self.calls.copyOf(), who: context.who ?? null });",
 			"}",
+			"async function readBound(tag) {",
+			"\treturn { copy: await self.calls.copyOf(), who: context.who ?? null, tag };",
+			"}",
+			"export function bound() {",
+			'\treturn readBound.bind(null, "bound");',
+			"}",
+			"export function holder() {",
+			"\treturn {",
+			"\t\tasync read() {",
+			"\t\t\treturn { copy: await self.calls.copyOf(), who: context.who ?? null };",
+			"\t\t}",
+			"\t};",
+			"}",
 			""
 		].join("\n")
 	);
@@ -87,7 +105,8 @@ async function idle() {
 /**
  * Make a function that later runs code the way `kind` says.
  * @param {object} api - The api.
- * @param {string} kind - "snapshot", "resource", "module snapshot" or "module function".
+ * @param {string} kind - "snapshot", "resource", "module snapshot", "module function", "module bound function" or
+ *   "module method".
  * @returns {Promise<function(): Promise<{copy: *, who: string|null}>>} The function.
  */
 async function handOut(api, kind) {
@@ -105,6 +124,17 @@ async function handOut(api, kind) {
 		return () => resource.runInAsyncScope(body);
 	}
 	if (kind === "module snapshot") return api.probe.snap();
+	if (kind === "module bound function") {
+		const fn = await api.probe.bound();
+		return async () => {
+			const { tag, ...rest } = await fn();
+			return tag === "bound" ? rest : { copy: { tag }, who: null };
+		};
+	}
+	if (kind === "module method") {
+		const object = await api.probe.holder();
+		return () => object.read();
+	}
 	return api.probe.later();
 }
 
@@ -118,9 +148,12 @@ async function handOut(api, kind) {
  * @param {string} options.operation - "reload" or "restart".
  * @param {string} options.kind - See {@link handOut}.
  * @param {boolean} options.inRun - Make it in a run (true) or outside any (false).
+ * @param {object} [options.permissionsConfig] - The `permissions` config to use instead of `{ mode: permissions }`'s
+ *   shorthand (only with `permissions` "on").
+ * @param {boolean} [options.callInRun=false] - Call it in a run the host opens after the reload or restart.
  * @returns {Promise<{copy: *, who: string|null}>} What the function answered, or the error code it threw as `copy`.
  */
-async function scenario({ runtime, mode, permissions, operation, kind, inRun }) {
+async function scenario({ runtime, mode, permissions, operation, kind, inRun, permissionsConfig, callInRun = false }) {
 	globalThis[STAMP] = 1;
 	const api = await slothlet({
 		base: BASE,
@@ -128,7 +161,7 @@ async function scenario({ runtime, mode, permissions, operation, kind, inRun }) 
 		mode,
 		silent: true,
 		context: { who: "instance" },
-		...(permissions === "none" ? {} : { permissions })
+		...(permissions === "none" ? {} : { permissions: permissionsConfig ?? permissions })
 	});
 	try {
 		let handed = null;
@@ -142,6 +175,7 @@ async function scenario({ runtime, mode, permissions, operation, kind, inRun }) 
 		await api.slothlet[operation]();
 		await idle();
 		try {
+			if (callInRun) return await api.slothlet.context.run({ who: "later run" }, () => handed());
 			return await handed();
 		} catch (error) {
 			return { copy: error?.code ?? String(error), who: null };
@@ -156,26 +190,56 @@ describe.each([["async"], ["live"]])("%s runtime: code made before a reload or r
 		describe.each([["eager"], ["lazy"]])("%s mode", (mode) => {
 			describe.each([["none"], ["off"], ["on"]])("permissions %s", (permissions) => {
 				// The modules a restart replaced are gone with the instance they were in: with the permission system on, the code
-				// they made has no standing (docs/PERMISSIONS.md), so a snapshot their call took is left out there.
-				const moduleSnapshot = operation === "restart" && permissions === "on" ? [] : [["module snapshot"]];
-				it.each([["snapshot"], ["resource"], ...moduleSnapshot])(
-					"a %s made in a run reads the run's context and the rebuilt tree",
-					async (kind) => {
-						const answer = await scenario({ runtime, mode, permissions, operation, kind, inRun: true });
-						expect(answer).toEqual({ copy: 2, who: "run" });
-					}
-				);
-				it.each([["snapshot"], ["resource"], ...moduleSnapshot, ["module function"]])(
+				// they made has no standing (docs/PERMISSIONS.md), so everything it does through `self` is refused.
+				const refused = operation === "restart" && permissions === "on";
+				const MODULE_CODE = [["module function"], ["module bound function"], ["module method"]];
+				it.each([["snapshot"], ["resource"]])("a %s made in a run reads the run's context and the rebuilt tree", async (kind) => {
+					const answer = await scenario({ runtime, mode, permissions, operation, kind, inRun: true });
+					expect(answer).toEqual({ copy: 2, who: "run" });
+				});
+				it.each([["snapshot"], ["resource"]])(
 					"a %s made outside any run reads the instance's context and the rebuilt tree",
 					async (kind) => {
 						const answer = await scenario({ runtime, mode, permissions, operation, kind, inRun: false });
 						expect(answer).toEqual({ copy: 2, who: "instance" });
 					}
 				);
-				it("a module function made in a run, called outside any run, reads the instance's context and the rebuilt tree", async () => {
-					const answer = await scenario({ runtime, mode, permissions, operation, kind: "module function", inRun: true });
-					expect(answer).toEqual({ copy: 2, who: "instance" });
+				it(`a module snapshot made in a run ${refused ? "is refused" : "reads the run's context and the rebuilt tree"}`, async () => {
+					const answer = await scenario({ runtime, mode, permissions, operation, kind: "module snapshot", inRun: true });
+					expect(answer).toEqual(refused ? { copy: "PERMISSION_DENIED", who: null } : { copy: 2, who: "run" });
 				});
+				it.each([["module snapshot"], ...MODULE_CODE])(
+					`a %s made outside any run ${refused ? "is refused" : "reads the instance's context and the rebuilt tree"}`,
+					async (kind) => {
+						const answer = await scenario({ runtime, mode, permissions, operation, kind, inRun: false });
+						expect(answer).toEqual(refused ? { copy: "PERMISSION_DENIED", who: null } : { copy: 2, who: "instance" });
+					}
+				);
+				it.each(MODULE_CODE)(
+					`a %s made in a run, called outside any run, ${refused ? "is refused" : "reads the instance's context and the rebuilt tree"}`,
+					async (kind) => {
+						const answer = await scenario({ runtime, mode, permissions, operation, kind, inRun: true });
+						expect(answer).toEqual(refused ? { copy: "PERMISSION_DENIED", who: null } : { copy: 2, who: "instance" });
+					}
+				);
+				it.each(MODULE_CODE)(
+					`a %s called in a run the host opens after it ${refused ? "is refused" : "reads that run's context and the rebuilt tree"}`,
+					async (kind) => {
+						const answer = await scenario({ runtime, mode, permissions, operation, kind, inRun: false, callInRun: true });
+						expect(answer).toEqual(refused ? { copy: "PERMISSION_DENIED", who: null } : { copy: 2, who: "later run" });
+					}
+				);
+			});
+			// The definer is told by the frames alone under `attribution: "fast"`, where nothing is wrapped.
+			describe.each([["precise"], ["fast"]])("permissions on, attribution %s", (attribution) => {
+				const permissionsConfig = { mode: "on", caller: { attribution } };
+				it.each([["module function"], ["module bound function"], ["module method"]])(
+					`a %s made outside any run ${operation === "restart" ? "is refused" : "reads the instance's context and the rebuilt tree"}`,
+					async (kind) => {
+						const answer = await scenario({ runtime, mode, permissions: "on", operation, kind, inRun: false, permissionsConfig });
+						expect(answer).toEqual(operation === "restart" ? { copy: "PERMISSION_DENIED", who: null } : { copy: 2, who: "instance" });
+					}
+				);
 			});
 		});
 	});

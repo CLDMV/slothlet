@@ -487,6 +487,7 @@ See [LIFECYCLE.md](LIFECYCLE.md#instance-events) for the four events and who rec
 | `control.seal()`                                  | preserved                                               | **dropped** — the new instance starts unsealed          |
 | `api.slothlet.env` snapshot                       | kept                                                    | re-captured (a new instance)                            |
 | Instance ID                                       | rotated (`<id>_reload_<ts>_<random>`)                   | new                                                     |
+| Code the replaced modules handed out              | acts on the reloaded instance                           | refused while the permission system is on (below)       |
 | `api` reference                                   | preserved                                               | preserved                                               |
 | Held child references (`const conn = api.conn`)   | see [Reference Preservation](#reference-preservation)   | re-pointed to the new instance's node at the same path  |
 | Lifecycle events                                  | `impl:changed` per replaced leaf                        | `restart` → `shutdown` → `init` → `restarted`           |
@@ -511,6 +512,10 @@ plugin.ping(); // throws SlothletError RESTART_REFERENCE_UNRESOLVED ('plugin' no
 ```
 
 A held reference keeps the `typeof` it had when it was taken (a proxy's callability is fixed at creation), so a path that changed from a namespace object to a function across the restart is best re-read from `api`.
+
+### Code the replaced modules handed out
+
+A restart starts the instance over, so the modules it replaced own nothing afterwards. With the permission system on, everything their code does through `self` after the restart is refused (`PERMISSION_DENIED`): a function, a bound function, a closure or the method of an object a module returned before the restart, and an `AsyncLocalStorage.snapshot()` its call took, whether the host runs it outside any call or inside a `run()` / `scope()` it opens. Read the member again from `api` (or a held reference, which is re-pointed) to reach the new instance's code. With the permission system off, such code keeps working and acts on the rebuilt instance, as code a reload replaced does. A `reload()` is not a restart: code its replaced copy handed out acts on the reloaded instance, with the permission system on or off.
 
 ### Calls in flight and concurrent restarts
 

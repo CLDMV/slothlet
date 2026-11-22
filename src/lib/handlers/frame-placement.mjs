@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-22T09:18:56-08:00 (1795367936)
+ *	@Last modified time: 2026-11-22T11:45:01-08:00 (1795376701)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -4095,6 +4095,9 @@ function runtime_fileModuleOf(leaves) {
 	// A lazy tree's module node was built with no file: found by its path, the same node an eager tree builds for the file.
 	const modulePath = runtime_moduleRootPath(leaves);
 	if (modulePath === null || !ArrayMethods.every(paths, (path) => StringMethods.startsWith(path, modulePath + "."))) return leaves;
+	// Leaves a restart replaced are not stood for by the rebuilt tree's node at their module's path: the code is theirs,
+	// and has no standing (see runtime_taggedLeavesAtFile).
+	if (leaves[0].slothlet.handlers?.apiManager?.isRestartReplaced?.(leaves[0])) return leaves;
 	const node = moduleNodeResolver(leaves[0].slothlet, modulePath);
 	const standing = node && WeakSetMethods.has(trustedRootOwn.genuineWrappers, node) && node.slothlet === leaves[0].slothlet;
 	return standing && (!runtime_isGone(node) || !runtime_checksPermissions(node.slothlet)) ? [node] : leaves;
@@ -5472,7 +5475,12 @@ function runtime_taggedLeavesAtFile(slothlet, path, tag, mount, location, runs) 
 	if (mount && location !== null) leaves = filterList(leaves, (wrapper) => runtime_importedUnder(wrapper, location));
 	const current = slothlet.instanceID;
 	if (leaves.length || !tag || !runs || current === tag) return leaves;
-	if (runtime_checksPermissions(slothlet) && splitText(String(current), "_reload_")[0] !== splitText(tag, "_reload_")[0]) return leaves;
+	// The nodes a restart replaced stand for it: they have no standing, so what the code does through `self` is refused
+	// as their code (see ApiManager#isRestartReplaced), never taken for the host's or for a copy no leaf accounts for.
+	// The loader that imported their files went with them, so the query is not held to its record: placing code on
+	// nodes with no standing grants it nothing.
+	if (runtime_checksPermissions(slothlet) && splitText(String(current), "_reload_")[0] !== splitText(tag, "_reload_")[0])
+		return runtime_leavesAtFile(slothlet, path, tag, mount, true);
 	return runtime_replacedCopyLeaves(slothlet, path, mount);
 }
 
@@ -5486,14 +5494,15 @@ function runtime_taggedLeavesAtFile(slothlet, path, tag, mount, location, runs) 
  * @returns {Array<object>} The leaves.
  * @private
  */
-function runtime_leavesAtFile(slothlet, path, instance, mount) {
+function runtime_leavesAtFile(slothlet, path, instance, mount, restartReplaced = false) {
 	const held =
 		WeakMapMethods.get(LEAF_FILES, slothlet) == null ? undefined : MapMethods.get(WeakMapMethods.get(LEAF_FILES, slothlet), path);
 	if (!held) return [];
 	const leaves = [];
 	// A removed node keeps its place while the permission system is off: nothing is checked, and what it made runs as plain
-	// JavaScript, `self` included (#726).
-	const keepGone = !runtime_checksPermissions(slothlet);
+	// JavaScript, `self` included (#726). The nodes a restart replaced are given only when asked for (see
+	// runtime_taggedLeavesAtFile), and then alone: the code they stand for is refused through them.
+	const keepGone = restartReplaced || !runtime_checksPermissions(slothlet);
 	for (const reference of setValues(held)) {
 		const wrapper = WeakRefMethods.deref(reference);
 		if (!wrapper) {
@@ -5501,6 +5510,9 @@ function runtime_leavesAtFile(slothlet, path, instance, mount) {
 			continue;
 		}
 		if (runtime_isGone(wrapper) && !keepGone) continue;
+		// A node a restart replaced has no standing while the permission system is on, as a removed one has none: it
+		// stands for nothing but code carrying the ID it was built under (see runtime_taggedLeavesAtFile).
+		if (restartReplaced !== (slothlet.handlers?.apiManager?.isRestartReplaced?.(wrapper) === true)) continue;
 		// The tag is the ID the node was built under: code of a copy a reload replaced carries the ID the instance had then.
 		if (instance && runtime_builtUnder(wrapper) !== instance) continue;
 		if (mount && wrapper.____slothletInternal.moduleID !== mount) continue;
