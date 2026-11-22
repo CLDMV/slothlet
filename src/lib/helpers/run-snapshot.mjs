@@ -53,6 +53,7 @@ import {
 	NativeProxy,
 	Objects,
 	Promise,
+	PromiseMethods,
 	PrototypeFunctions,
 	Reflect,
 	RegExp,
@@ -64,9 +65,7 @@ import {
 	Symbol,
 	TypedArrayMethods,
 	WeakMap,
-	WeakMapMethods,
-	WeakSet,
-	WeakSetMethods
+	WeakMapMethods
 } from "#helpers/intrinsics";
 
 /**
@@ -335,8 +334,20 @@ class RunSnapshot extends Domain {
 		this.builtins = new WeakMap();
 		/** The run's own copy → the tick of this run's clock it was made at. */
 		this.created = new WeakMap();
+		/** The run's own copy → the object it is a copy of. */
+		this.origins = new WeakMap();
+		/** The run's own copies of built-ins, which it changes where nothing sees it: saved when a run opens in it. */
+		this.builtinList = [];
+		/** Promise a call handed the run → the promise the run is handed (see {@link handOutSettled}). */
+		this.promises = new WeakMap();
 		this.closed = false;
 		openSnapshots++;
+		// What the run it was opened in holds in its own built-in copies is saved now, as of this run's start: the outer run
+		// changes them as itself, where nothing sees the change.
+		if (parent !== null) {
+			const list = parent.builtinList;
+			for (let index = 0; index < list.length; index++) beforeChange(parent, list[index], shallowCopy);
+		}
 	}
 }
 
@@ -371,6 +382,8 @@ export function closeRunSnapshot(snap) {
 	snap.copies = new WeakMap();
 	snap.views = new WeakMap();
 	snap.builtins = new WeakMap();
+	snap.builtinList = [];
+	snap.promises = new WeakMap();
 }
 
 /**
@@ -755,7 +768,35 @@ export function isRawRunView(value) {
 export function rawContent(snap, raw) {
 	const own = WeakMapMethods.get(snap.copies, raw);
 	if (own !== undefined) return own;
-	return contentIn(snap.parent, snap.instance, raw, snap.start, snap.base);
+	return contentIn(snap.parent, snap.instance, originOf(snap, raw), snap.start, snap.base);
+}
+
+/**
+ * The object a copy an outer run made stands for, followed out to the instance's: what a nested run reads it as is
+ * that object as the outer run read it when the nested run started.
+ * @param {RunSnapshot} snap - The run.
+ * @param {object} value - An object.
+ * @returns {object} The object it stands for, or `value` itself.
+ * @internal
+ */
+export function originOf(snap, value) {
+	for (let domain = snap.parent; domain !== null; domain = domain.parent) {
+		const origin = WeakMapMethods.get(domain.origins, value);
+		if (origin !== undefined) value = origin;
+	}
+	return value;
+}
+
+/**
+ * Whether `outer` is a run `snap` was opened in, at any depth.
+ * @param {RunSnapshot} outer - A run.
+ * @param {RunSnapshot} snap - The run.
+ * @returns {boolean} True when it is.
+ * @private
+ */
+function encloses(outer, snap) {
+	for (let domain = snap.parent; domain !== null; domain = domain.parent) if (domain === outer) return true;
+	return false;
 }
 
 /**
@@ -770,7 +811,7 @@ export function rawContent(snap, raw) {
  */
 function contentIn(domain, instance, raw, start, base) {
 	if (domain !== null) {
-		const copy = WeakMapMethods.get(domain.copies, raw);
+		const copy = WeakMapMethods.get(domain.copies, raw) ?? WeakMapMethods.get(domain.builtins, raw);
 		if (copy !== undefined && WeakMapMethods.get(domain.created, copy) < start) {
 			const held = versionAt(domain, copy, start);
 			return held === CURRENT ? copy : held;
@@ -793,6 +834,7 @@ function ownCopy(snap, raw) {
 	if (copy === undefined) {
 		copy = shallowCopy(rawContent(snap, raw));
 		WeakMapMethods.set(snap.created, copy, snap.clock);
+		WeakMapMethods.set(snap.origins, copy, raw);
 		WeakMapMethods.set(snap.copies, raw, copy);
 	} else beforeChange(snap, copy, shallowCopy);
 	return copy;
@@ -809,19 +851,48 @@ function ownCopy(snap, raw) {
 export function handOutRaw(snap, value) {
 	if (snap === null || snap.closed || value === null || typeof value !== "object") return value;
 	const known = WeakMapMethods.get(RAW_VIEWS, value);
-	if (known !== undefined && known.snap === snap) return value;
-	if (WeakSetMethods.has(OWN_BUILTINS, value) || isProxy(value)) return value;
+	if (known !== undefined) {
+		if (known.snap === snap) return value;
+		// An outer run's view stands for its object, which this run reads as of its own start.
+		if (encloses(known.snap, snap)) value = known.raw;
+	}
+	const madeBy = WeakMapMethods.get(OWN_BUILTINS, value);
+	if (madeBy !== undefined) {
+		if (madeBy === snap || !encloses(madeBy, snap)) return value;
+		value = originOf(snap, value);
+	}
+	if (isProxy(value)) return value;
 	if (isSharedLive(value)) return value;
 	if (builtinKind(value) !== null) return builtinCopy(snap, value);
 	return viewOf(snap, value);
 }
 
 /**
- * The run's own copies of built-ins (see {@link builtinCopy}): handed out as themselves.
- * @type {WeakSet<object>}
+ * What a run is handed for a promise a call handed it: a promise of what the run is handed for the value it settles
+ * with (see {@link handOutRaw}), the same one each time for the same promise. A rejection is handed on as it is.
+ * @param {RunSnapshot|null} snap - The run.
+ * @param {Promise<*>} promise - The promise.
+ * @param {function(*): *} handOut - What the run is handed for the value.
+ * @returns {Promise<*>} The promise the run is handed.
+ * @internal
+ */
+export function handOutSettled(snap, promise, handOut) {
+	if (snap === null || snap.closed) return promise;
+	let handed = WeakMapMethods.get(snap.promises, promise);
+	if (handed === undefined) {
+		handed = PromiseMethods.then(promise, handOut);
+		WeakMapMethods.set(snap.promises, promise, handed);
+	}
+	return handed;
+}
+
+/**
+ * The runs' own copies of built-ins (see {@link builtinCopy}), each with the run that made it: handed out to it as
+ * themselves.
+ * @type {WeakMap<object, RunSnapshot>}
  * @private
  */
-const OWN_BUILTINS = new WeakSet();
+const OWN_BUILTINS = new WeakMap();
 
 /**
  * The run's own copy of a built-in (a `Map`, `Set`, `Date`, `RegExp`, typed array, `ArrayBuffer` or `DataView`), made on
@@ -834,6 +905,7 @@ const OWN_BUILTINS = new WeakSet();
  * @internal
  */
 export function builtinCopy(snap, raw) {
+	raw = originOf(snap, raw);
 	let copy = WeakMapMethods.get(snap.builtins, raw);
 	if (copy !== undefined) return copy;
 	const source = rawContent(snap, raw);
@@ -847,8 +919,11 @@ export function builtinCopy(snap, raw) {
 		for (const member of setValues(source)) SetMethods.add(copy, handOutRaw(snap, member));
 		Reflect.setPrototypeOf(copy, Reflect.getPrototypeOf(source));
 	} else copy = shallowCopy(source);
-	WeakSetMethods.add(OWN_BUILTINS, copy);
+	WeakMapMethods.set(OWN_BUILTINS, copy, snap);
+	WeakMapMethods.set(snap.created, copy, snap.clock);
+	WeakMapMethods.set(snap.origins, copy, raw);
 	WeakMapMethods.set(snap.builtins, raw, copy);
+	listPush(snap.builtinList, copy);
 	return copy;
 }
 
@@ -908,6 +983,7 @@ function privateMethod(view, raw, fn) {
  * @internal
  */
 export function viewOf(snap, raw) {
+	raw = originOf(snap, raw);
 	let view = WeakMapMethods.get(snap.views, raw);
 	if (view !== undefined) return view;
 	const shell = Arrays.isArray(raw) ? [] : Objects.create(Reflect.getPrototypeOf(raw));

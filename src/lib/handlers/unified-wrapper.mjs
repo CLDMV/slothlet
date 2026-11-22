@@ -166,11 +166,13 @@ import { pinToCurrentCaller } from "#helpers/caller-pinning";
 import {
 	anyRunOpen,
 	beforeChange,
+	builtinCopy,
 	builtinKind,
 	checkpointDeep,
 	checkpointOnce,
 	CURRENT,
 	domainOf,
+	handOutRaw,
 	isRawRunView,
 	runsOpen,
 	savedThisWindow,
@@ -3955,10 +3957,13 @@ function runtime_captureNode(wrapper) {
 	// object is read, so a change the module made through its own variable and the node has not followed yet is not
 	// taken for the node's.
 	const object = runtime_moduleObjectOf(wrapper);
+	// Whether the node takes new members and the prototype it holds, as they are now.
+	const open = runtime_nodeOpen(wrapper);
+	const prototype = runtime_snapshotPrototype(wrapper);
 	if (object !== null) {
 		const keys = Reflect.ownKeys(object);
 		for (let index = 0; index < keys.length; index++) keep(keys[index], Reflect.getOwnPropertyDescriptor(object, keys[index]));
-		return { members, extensible: Reflect.isExtensible(object) };
+		return { members, extensible: open && Reflect.isExtensible(object), prototype };
 	}
 	const own = Reflect.ownKeys(wrapper);
 	for (let index = 0; index < own.length; index++) keep(own[index], Reflect.getOwnPropertyDescriptor(wrapper, own[index]));
@@ -3981,7 +3986,96 @@ function runtime_captureNode(wrapper) {
 			}
 		}
 	}
-	return { members, extensible: true };
+	return { members, extensible: open, prototype };
+}
+
+/**
+ * Each node's proxy target, by its wrapper: what tells whether the node was closed, read without running its traps.
+ * @type {WeakMap<object, object>}
+ * @private
+ */
+const NODE_TARGETS = new WeakMap();
+
+/**
+ * Whether a node takes new members now: its proxy target is open. Read without running any trap.
+ * @param {*} node - The node's wrapper, or the node as read.
+ * @returns {boolean} True while it does (or when it cannot be told).
+ * @internal
+ */
+function runtime_nodeOpen(node) {
+	let target = WeakMapMethods.get(NODE_TARGETS, node);
+	if (target === undefined) {
+		const wrapper = runtime_nodeWrapperOf(node);
+		target = wrapper === null ? undefined : WeakMapMethods.get(NODE_TARGETS, wrapper);
+	}
+	return target === undefined || Reflect.isExtensible(target);
+}
+
+/**
+ * Marks a prototype the snapshot cannot tell (see {@link runtime_snapshotPrototype}).
+ * @type {symbol}
+ * @private
+ */
+const SNAPSHOT_UNKNOWN_PROTOTYPE = Symbol("slothlet.snapshot.unknownPrototype");
+
+/**
+ * The prototype a node holds now, as slothlet holds it (no reader's view of it): its array's, its built-in's, its
+ * module object's, the one its record holds, or its value's. Read by the platform only, nothing of the module runs.
+ * @param {UnifiedWrapper} wrapper - The node's wrapper.
+ * @returns {object|null|symbol} The prototype, or {@link SNAPSHOT_UNKNOWN_PROTOTYPE}.
+ * @private
+ */
+function runtime_snapshotPrototype(wrapper) {
+	const internal = wrapper.____slothletInternal;
+	const impl = internal.impl;
+	if (internal.runPrototype !== undefined) return internal.runPrototype.prototype;
+	if (Arrays.isArray(impl)) return Reflect.getPrototypeOf(layerUnderlying(impl));
+	if (impl !== null && typeof impl === "object" && util.types.isProxy(impl) && !isCompositionLayer(impl)) return SNAPSHOT_UNKNOWN_PROTOTYPE;
+	if (runtime_holdsDataKind(impl)) return Reflect.getPrototypeOf(impl);
+	const moduleObject = runtime_moduleObjectOf(wrapper);
+	if (moduleObject !== null) return Reflect.getPrototypeOf(moduleObject);
+	if (runtime_ownsPrototype(wrapper)) return runtime_recordedPrototype(wrapper);
+	if (impl !== null && (typeof impl === "object" || typeof impl === "function")) return Reflect.getPrototypeOf(layerUnderlying(impl));
+	return SNAPSHOT_UNKNOWN_PROTOTYPE;
+}
+
+/**
+ * The prototype a node held when a run started, when the instance set another on it since and the one it held is the
+ * language's own (`Object.prototype`, `Array.prototype`, `Function.prototype`, or none): the run reads the node as
+ * inheriting from it. Undefined when the node holds the same one, or one the snapshot does not hand out as it is.
+ * @param {*} node - The node, as the run's view reads through it.
+ * @param {{prototype?: (object|null|symbol)}} version - The node's saved version.
+ * @returns {{prototype: (object|null)}|undefined} The prototype.
+ * @internal
+ */
+function runtime_prototypeAtStart(node, version) {
+	const held = version.prototype;
+	if (held === undefined || held === SNAPSHOT_UNKNOWN_PROTOTYPE) return undefined;
+	const wrapper = runtime_nodeWrapperOf(node);
+	if (wrapper === null || runtime_snapshotPrototype(wrapper) === held) return undefined;
+	if (held !== null && held !== Objects.prototype && held !== Arrays.prototype && held !== Functions.prototype) return undefined;
+	return { prototype: held };
+}
+
+/**
+ * A change a run's view makes to a node the instance closed (froze, sealed, or made non-extensible) after the run
+ * started: the node took it when the run started, so it is held to the write rules at its path and kept by the run,
+ * without going through the node, which no longer takes it.
+ * @param {*} node - The node, as the run's view reads through it.
+ * @param {string|symbol} prop - The member.
+ * @param {"set"|"define"|"delete"} op - The change.
+ * @param {*} payload - The value or descriptor.
+ * @param {function(object): boolean} sink - Where the run keeps it.
+ * @returns {boolean} Whether it was kept.
+ * @internal
+ */
+function runtime_runWriteSinceClosed(node, prop, op, payload, sink) {
+	const wrapper = runtime_nodeWrapperOf(node);
+	if (wrapper === null) return false;
+	runtime_assertOwnedWrite(wrapper, prop);
+	if (op === "set") return sink({ op, value: runtime_wrapOnSet(wrapper, prop, payload) });
+	if (op === "define") return sink({ op, descriptor: payload });
+	return sink({ op: "delete" });
 }
 
 /**
@@ -4015,7 +4109,49 @@ function runtime_checkpointHandout(slothlet, value) {
 	if (value === null || typeof value !== "object") return;
 	const domain = domainOf(slothlet);
 	if (!runsOpen(domain) || savedThisWindow(domain, value) || util.types.isProxy(value) || runtime_runningRecord(slothlet) !== null) return;
-	checkpointDeep(domain, value, new Set(), (held) => util.types.isProxy(held) || resolveWrapper(held) !== null);
+	runtime_checkpointBuiltin(domain, value);
+}
+
+/**
+ * Save `value` and what it reaches for the runs open, once per window (see `checkpointDeep` in `helpers/run-snapshot`):
+ * the value itself even when a node fronts it, and below it only what no node fronts and no Proxy answers for (a node
+ * is saved by its own barrier, and reading a Proxy would run its code).
+ * @param {object|null} domain - The instance's domain.
+ * @param {object} value - The value.
+ * @returns {void}
+ * @private
+ */
+function runtime_checkpointBuiltin(domain, value) {
+	checkpointDeep(domain, value, new Set(), (held) => held !== value && (util.types.isProxy(held) || resolveWrapper(held) !== null));
+}
+
+/**
+ * The promises {@link runtime_checkpointSettled} handed out, by the promise a call returned.
+ * @type {WeakMap<Promise<*>, Promise<*>>}
+ * @private
+ */
+const SETTLED_CHECKPOINTS = new WeakMap();
+
+/**
+ * What a caller outside every run is handed for a promise a call returned while a run is open: a promise of the same
+ * value, which is saved for the runs open before the caller has it (see {@link runtime_checkpointHandout}), the same
+ * one each time for the same promise. A rejection is handed on as it is. Inside a run, the promise is handed on as it is.
+ * @param {object} slothlet - The instance.
+ * @param {Promise<*>} promise - The promise.
+ * @returns {Promise<*>} The promise the caller is handed.
+ * @private
+ */
+function runtime_checkpointSettled(slothlet, promise) {
+	if (!runsOpen(domainOf(slothlet)) || runtime_runningRecord(slothlet) !== null) return promise;
+	let handed = WeakMapMethods.get(SETTLED_CHECKPOINTS, promise);
+	if (handed === undefined) {
+		handed = PromiseMethods.then(promise, (value) => {
+			runtime_checkpointHandout(slothlet, value);
+			return value;
+		});
+		WeakMapMethods.set(SETTLED_CHECKPOINTS, promise, handed);
+	}
+	return handed;
 }
 
 /**
@@ -4061,6 +4197,8 @@ function runtime_checkpointFile(wrapper) {
 			const internal = node.____slothletInternal;
 			if (internal.invalid || (internal.mode === "lazy" && !internal.state.materialized)) continue;
 			beforeChange(domain, node, runtime_captureNode);
+			// What the file exports as built-ins (a `Map`) its code changes as itself.
+			runtime_checkpointNodeBuiltins(domain, node);
 		}
 	});
 }
@@ -4078,13 +4216,13 @@ function runtime_checkpointLoaded(wrapper) {
 	const domain = domainOf(slothlet);
 	if (!runsOpen(domain)) return;
 	const seen = new Set();
-	const skip = (held) => util.types.isProxy(held) || resolveWrapper(held) !== null;
 	const walk = (node) => {
 		if (SetMethods.has(seen, node) || node.slothlet !== slothlet) return;
 		SetMethods.add(seen, node);
 		const internal = node.____slothletInternal;
 		if (internal.invalid || (internal.mode === "lazy" && !internal.state.materialized)) return;
 		beforeChange(domain, node, runtime_captureNode);
+		runtime_checkpointNodeBuiltins(domain, node);
 		const keys = Reflect.ownKeys(node);
 		for (let index = 0; index < keys.length; index++) {
 			if (isFrameworkReservedKey(keys[index])) continue;
@@ -4094,17 +4232,37 @@ function runtime_checkpointLoaded(wrapper) {
 			const child = resolveWrapper(value);
 			if (child !== null) walk(child);
 		}
-		const impl = internal.impl;
-		if (impl !== null && typeof impl === "object" && !util.types.isProxy(impl)) {
-			const names = Objects.keys(impl);
-			for (let index = 0; index < names.length; index++) {
-				const described = Reflect.getOwnPropertyDescriptor(impl, names[index]);
-				if (described !== undefined && "value" in described && builtinKind(described.value) !== null)
-					checkpointDeep(domain, described.value, new Set(), skip);
-			}
-		}
 	};
 	walk(wrapper);
+}
+
+/**
+ * Save the built-ins a node holds for the runs open (see {@link runtime_checkpointBuiltin}): the one it fronts, the
+ * ones it keeps as values of its own (a `Map` a file exports is kept on the file's node as it is), and the ones its
+ * value holds. Read by descriptors only.
+ * @param {object|null} domain - The instance's domain.
+ * @param {UnifiedWrapper} node - The node's wrapper.
+ * @returns {void}
+ * @private
+ */
+function runtime_checkpointNodeBuiltins(domain, node) {
+	const keys = Reflect.ownKeys(node);
+	for (let index = 0; index < keys.length; index++) {
+		if (isFrameworkReservedKey(keys[index])) continue;
+		const described = Reflect.getOwnPropertyDescriptor(node, keys[index]);
+		if (described !== undefined && "value" in described && builtinKind(described.value) !== null)
+			runtime_checkpointBuiltin(domain, described.value);
+	}
+	const impl = node.____slothletInternal.impl;
+	if (impl === null || typeof impl !== "object" || util.types.isProxy(impl)) return;
+	// A node over a built-in (a `Map` a file exports) holds its entries in the built-in itself.
+	if (builtinKind(impl) !== null) runtime_checkpointBuiltin(domain, impl);
+	const names = Objects.keys(impl);
+	for (let index = 0; index < names.length; index++) {
+		const described = Reflect.getOwnPropertyDescriptor(impl, names[index]);
+		if (described !== undefined && "value" in described && builtinKind(described.value) !== null)
+			runtime_checkpointBuiltin(domain, described.value);
+	}
 }
 
 /**
@@ -4145,6 +4303,10 @@ function runtime_snapshotBarrier(wrapper) {
 	const internal = wrapper.____slothletInternal;
 	if (internal.mode === "lazy" && !internal.state.materialized) return;
 	beforeChange(domain, wrapper, runtime_captureNode);
+	// A node over a built-in (a `Map`) holds its entries in the built-in, which a method running on it changes as itself.
+	const impl = internal.impl;
+	if (impl !== null && typeof impl === "object" && !util.types.isProxy(impl) && builtinKind(impl) !== null)
+		runtime_checkpointBuiltin(domain, impl);
 }
 
 /**
@@ -19501,6 +19663,9 @@ class UnifiedWrapper extends ComponentBase {
 					// This enables seamless consumer access to custom proxy properties (e.g., array indices)
 					// without requiring manual ___materialize() calls or setTimeout hacks
 					return (onFulfilled, onRejected) => {
+						// Read for a run: what the read settles with is handed to it as the run is handed a value it reads
+						// (see helpers/run-snapshot), not as the instance holds it now.
+						const runSnap = anyRunOpen() ? (runtime_runningRecord(wrapper.slothlet)?.snap ?? null) : null;
 						const waitingProxy_thenResolve = async () => {
 							// Ensure materialization completes
 							if (!wrapper.____slothletInternal.state.materialized) {
@@ -19708,7 +19873,7 @@ class UnifiedWrapper extends ComponentBase {
 							PromiseMethods.then(waitingProxy_thenResolve(), (value) => {
 								const refused = runtime_takeRefusedChange(wrapper, propChain);
 								if (refused) throw refused;
-								return value;
+								return runSnap === null || resolveWrapper(value) !== null ? value : handOutRaw(runSnap, value);
 							}),
 							onFulfilled,
 							onRejected
@@ -19986,6 +20151,8 @@ class UnifiedWrapper extends ComponentBase {
 			async apply(___target, ___thisArg, args, invoke = (fn, self) => Reflect.apply(fn, self, args)) {
 				// As get: a kept node's access offered to a stand-in is dropped first (#661).
 				runtime_takeCapturedAccess(wrapper);
+				// Called from a run: a built-in the chain ends on is the run's own copy of it (see helpers/run-snapshot).
+				const ___runSnap = anyRunOpen() ? (runtime_runningRecord(wrapper.slothlet)?.snap ?? null) : null;
 				// Capture caller context synchronously before any await.
 				// In LAZY_LIVE mode, the outer runInContext's finally block restores
 				// context before this Promise settles, losing caller identity.
@@ -20204,6 +20371,10 @@ class UnifiedWrapper extends ComponentBase {
 							runtime_onImpl(currentWrapper, (impl) => prop in impl)
 						) {
 							lastObject = currentWrapper.____slothletInternal.impl; // Track parent object
+							// A built-in whose method the chain is about to call on it as itself is saved first for the runs open, as
+							// one handed out as itself is (see helpers/run-snapshot).
+							if (anyRunOpen() && typeof lastObject === "object" && builtinKind(lastObject) !== null)
+								runtime_checkpointHandout(wrapper.slothlet, lastObject);
 							// An accessor or a Proxy of the module's runs as that module (#597).
 							current = runtime_readImplMember(currentWrapper, prop);
 							// A built-in handed out as itself is saved first for the runs open (see helpers/run-snapshot).
@@ -20230,6 +20401,16 @@ class UnifiedWrapper extends ComponentBase {
 					isFunction: typeof current === "function"
 				});
 
+				// A method of a built-in called from a run runs on the run's own copy of the built-in, as it would through the run's
+				// view of the node.
+				if (
+					___runSnap !== null &&
+					!___runSnap.closed &&
+					lastObject !== null &&
+					typeof lastObject === "object" &&
+					builtinKind(lastObject) !== null
+				)
+					lastObject = builtinCopy(___runSnap, lastObject);
 				if (typeof current === "function") {
 					// A function the walk reached as a member of a node rather than as a node of its own — a static method, a
 					// method of a function's `prototype` — carries no gate of its own: running it is a call of the last node
@@ -23168,7 +23349,11 @@ class UnifiedWrapper extends ComponentBase {
 					// call hands back as itself is saved before the caller has it (see helpers/run-snapshot).
 					runtime_checkpointFile(wrapper);
 					const result = applyTrap(target, thisArg, args);
-					if (result !== null && typeof result === "object") runtime_checkpointHandout(wrapper.slothlet, result);
+					if (result !== null && typeof result === "object") {
+						// What an async call settles with is saved before the caller has it, as what a call returns is.
+						if (util.types.isPromise(result)) return runtime_checkpointSettled(wrapper.slothlet, result);
+						runtime_checkpointHandout(wrapper.slothlet, result);
+					}
 					return result;
 				}
 				const keptAccess = capturedAccess?.wrapper === wrapper ? capturedAccess : null;
@@ -23464,6 +23649,7 @@ class UnifiedWrapper extends ComponentBase {
 		// Once a restart() replaces this wrapper's tree, every trap forwards to the live tree (#504).
 		const proxyTraps = runtime_withRestartForwarding(proxyHandler, wrapper);
 		wrapper.____slothletInternal.proxy = new NativeProxy(proxyTarget, proxyTraps);
+		WeakMapMethods.set(NODE_TARGETS, wrapper, proxyTarget);
 		if (Arrays.isArray(proxyTarget)) runtime_adoptArrayIntegrity(wrapper);
 		else runtime_adoptObjectIntegrity(wrapper);
 		// Kept only for a proxy that is not callable yet: ___upgradeToCallableProxy() builds the callable
@@ -23794,6 +23980,9 @@ export function internals(consumer) {
 		runtime_isApiNode,
 		runtime_nodeWrapperOf,
 		runtime_nodeVersion,
+		runtime_prototypeAtStart,
+		runtime_runWriteSinceClosed,
+		runtime_nodeOpen,
 		runtime_builtinBehind,
 		runtime_sameSnapshotMember,
 		runtime_holdsOwnMember,

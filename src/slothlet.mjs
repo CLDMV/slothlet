@@ -117,7 +117,7 @@ import {
 	whenIdle,
 	WRITE_TARGET
 } from "#helpers/flow-stores";
-import { closeRunSnapshot } from "#helpers/run-snapshot";
+import { anyRunOpen, beforeChange, closeRunSnapshot, domainOf, shallowCopy } from "#helpers/run-snapshot";
 import { registerInstance } from "#handlers/lifecycle-token";
 import { isCallableValue, internals as unifiedWrapperInternals } from "#handlers/unified-wrapper";
 import { isFrameworkInternal, internals as frameworkInternalsInternals } from "#handlers/framework-internals";
@@ -2018,6 +2018,11 @@ class Slothlet {
 			};
 			// Whether the root reads a tree a run has of its own: the root's target is shared with the instance.
 			const inRunTree = () => this.api !== this[INSTANCE_FIELD]("api");
+			// A run that started before a change to the root reads the root as it was (see helpers/run-snapshot): the root's
+			// members are saved before every change to it, once per window, while a run is open.
+			const rootBarrier = () => {
+				if (anyRunOpen() && this.api && !inRunTree()) beforeChange(domainOf(this), this.api, shallowCopy);
+			};
 			// Whether a member is read from a prototype the function root was given: one the root does not hold itself.
 			const rootInherits = (prop) => {
 				if (!isCallable) return false;
@@ -2072,6 +2077,7 @@ class Slothlet {
 						// A change to the root is a change to the api, held to the rules the same change at a node is held to.
 						set: (target, prop, value) => {
 							if (!this.api) return true;
+							rootBarrier();
 							return runtime_rootAssign(this, target, prop, value);
 						},
 						has: (target, prop) => {
@@ -2090,9 +2096,14 @@ class Slothlet {
 							if (!Reflect.isExtensible(target)) return Reflect.ownKeys(target);
 							return runtime_rootListing(this, target, Reflect.ownKeys(this.api));
 						},
-						defineProperty: (target, prop, descriptor) => (this.api ? runtime_rootDefine(this, target, prop, descriptor) : false),
+						defineProperty: (target, prop, descriptor) => {
+							if (!this.api) return false;
+							rootBarrier();
+							return runtime_rootDefine(this, target, prop, descriptor);
+						},
 						deleteProperty: (target, prop) => {
 							if (!this.api) return true;
+							rootBarrier();
 							runtime_assertRootChange(this, prop);
 							// A full-isolation run's `self` keeps a removal on the root in its own record (see runtime_runWrite).
 							const runSink = runtime_takeRunWrite(this.boundApi, prop);
@@ -2121,6 +2132,7 @@ class Slothlet {
 						setPrototypeOf: (target, proto) => {
 							if (!this.api) return Reflect.setPrototypeOf(target, proto);
 							runtime_assertRootChange(this, null);
+							rootBarrier();
 							if (!Reflect.isExtensible(target)) return Reflect.getPrototypeOf(target) === proto;
 							proto = runtime_behindGivenView(runtime_unwrapSelfView(proto));
 							if (isCallable) {
@@ -2139,6 +2151,7 @@ class Slothlet {
 							if (!this.api) return Reflect.preventExtensions(target);
 							// The root's target is the instance's as well: a run reading a tree of its own cannot close it.
 							if (inRunTree()) return false;
+							rootBarrier();
 							const closed = runtime_rootClose(
 								this,
 								target,
