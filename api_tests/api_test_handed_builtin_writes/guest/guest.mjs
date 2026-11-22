@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-21T13:27:04-08:00 (1795296424)
+ *	@Last modified time: 2026-11-21T15:06:51-08:00 (1795302411)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -127,6 +127,43 @@ export function direct(name, ownerPath) {
  */
 export function handed(name, ownerPath, runnerPath) {
 	return attempt(() => WRITES[name].handed(at(ownerPath), at(runnerPath)));
+}
+
+/**
+ * Each way of reading a member private to the module through one of its instances.
+ * @type {Record<string, function(object): *>}
+ */
+const PRIVATE_READS = {
+	newData: (owner) => new owner.Box()._pdata,
+	madeData: (owner) => owner.makeBox()._pdata,
+	madeReflect: (owner) => Reflect.get(owner.makeBox(), "_pdata"),
+	newMethod: (owner) => new owner.Box()._priv(),
+	madeMethod: (owner) => owner.makeBox()._priv(),
+	proto: (owner) => owner.Box.prototype._pdata
+};
+
+/**
+ * Read a member private to the module at `ownerPath` through one of its instances.
+ * @param {string} how - The route.
+ * @param {string} ownerPath - The module.
+ * @returns {*} What was read, or `"threw <code>"`.
+ */
+export function readPrivate(how, ownerPath) {
+	try {
+		return PRIVATE_READS[how](at(ownerPath));
+	} catch (error) {
+		return `threw ${error?.code ?? error?.name}`;
+	}
+}
+
+/**
+ * Read a public member through an instance of the module at `ownerPath`.
+ * @param {string} ownerPath - The module.
+ * @returns {string} What its method returned, read through an instance it made and one constructed through its class.
+ */
+export function readPublic(ownerPath) {
+	const owner = at(ownerPath);
+	return `${owner.makeBox().method()},${new owner.Box().method()}`;
 }
 
 /**

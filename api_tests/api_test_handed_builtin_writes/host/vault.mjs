@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-21T13:27:04-08:00 (1795296424)
+ *	@Last modified time: 2026-11-21T15:06:52-08:00 (1795302412)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -25,7 +25,15 @@ export class Box {
 	method() {
 		return "method";
 	}
+
+	/** @returns {string} A member private to the module. */
+	_priv() {
+		return "priv";
+	}
 }
+
+/** A data member of the prototype private to the module. */
+Box.prototype._pdata = "PDATA";
 
 /** A member another module may be refused reading. */
 export const secret = "SECRET";

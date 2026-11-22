@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-21T13:29:12-08:00 (1795296552)
+ *	@Last modified time: 2026-11-21T15:09:21-08:00 (1795302561)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -2243,9 +2243,41 @@ function runtime_selfMemberView(value, reader, slothlet, parts, through) {
 		...runtime_selfViewWriteTraps(raw, shadow, assertWrite, mirror, mirrorClosed)
 	});
 	record.view = view;
+	// A handle's privacy is decided for an instance's reads of what it inherits, too ({@link runtime_inheritedPrivate}).
+	if (handle) {
+		record.refusePrivate = refusePrivate;
+		record.privateHidden = privateHidden;
+	}
 	MapMethods.set(byPath, pathKey, view);
 	WeakMapMethods.set(SELF_MEMBER_VIEWS, view, record);
 	return view;
+}
+
+/**
+ * The privacy of a member an instance of a module's class inherits (`instance._data`, `instance._method()`): a private
+ * member a prototype holds is the module's whichever route reaches it, so an instance another module holds reads it as
+ * the prototype's handle does, decided for the code reading ({@link runtime_selfMemberView}). Found by descriptors along
+ * the value's own chain, so nothing of the module's runs. A member the value holds of its own is not decided here.
+ * @param {object|null} slothlet - The instance.
+ * @param {object|Function} value - The value read, as the module holds it.
+ * @param {string|symbol} prop - The member.
+ * @returns {object|null} The handle's record that decides it, or null when nothing does.
+ * @private
+ */
+function runtime_inheritedPrivate(slothlet, value, prop) {
+	if (typeof prop !== "string" || StringMethods.charCodeAt(prop, 0) !== 95 || !slothlet?.handlers?.permissionManager?.isEnabled?.())
+		return null;
+	if (value === null || (typeof value !== "object" && typeof value !== "function") || util.types.isProxy(value) || hasOwn(value, prop))
+		return null;
+	for (let holder = Reflect.getPrototypeOf(value), depth = 0; holder !== null && depth < 64; depth++) {
+		if (util.types.isProxy(holder) || WeakSetMethods.has(INTRINSICS, holder) || runtime_isSharedValue(holder)) return null;
+		if (hasOwn(holder, prop)) {
+			const record = WeakMapMethods.get(SELF_MEMBER_VIEWS, runtime_prototypeHandleOf(slothlet, holder));
+			return record?.reader === PROTOTYPE_HANDLE_READER && record.refusePrivate ? record : null;
+		}
+		holder = Reflect.getPrototypeOf(holder);
+	}
+	return null;
 }
 
 /**
@@ -8913,6 +8945,8 @@ function runtime_membrane(maker, owner, original, asNode = false, made = maker.m
 				);
 			const own = Reflect.getOwnPropertyDescriptor(original, prop);
 			if (own && !own.configurable) sync(prop, reported(own));
+			// A private member the instance inherits from a module's prototype is read as through that prototype.
+			runtime_inheritedPrivate(owner.slothlet, original, prop)?.refusePrivate(prop);
 			return fixedValue(prop, slotMethod(read(prop, from), null));
 		},
 		set: (_shadow, prop, value, receiver) => {
@@ -8922,7 +8956,10 @@ function runtime_membrane(maker, owner, original, asNode = false, made = maker.m
 			if (from === original) sync(prop, reported(exec(() => Reflect.getOwnPropertyDescriptor(original, prop))));
 			return done;
 		},
-		has: (_shadow, prop) => exec(() => Reflect.has(original, prop)),
+		has: (_shadow, prop) => {
+			if (runtime_inheritedPrivate(owner.slothlet, original, prop)?.privateHidden(prop)) return false;
+			return exec(() => Reflect.has(original, prop));
+		},
 		deleteProperty: (_shadow, prop) => {
 			const done = exec(() => Reflect.deleteProperty(original, prop));
 			if (done) sync(prop, undefined);
@@ -10755,6 +10792,52 @@ function runtime_handedAsItself(slothlet, reader, from) {
 }
 
 /**
+ * {@link runtime_handedAsItself} for a value: a function that runs for the module handing it on
+ * ({@link runtime_runsForHander}) never reaches a module as itself, and nor does an instance inheriting members private to
+ * a module that privacy keeps from the reader ({@link runtime_inheritsPrivateKept}), however much it may write.
+ * @param {*} value - The value.
+ * @param {object} slothlet - The instance.
+ * @param {object} reader - A module's wrapper.
+ * @param {object|null} from - The wrapper of the module the value comes from.
+ * @returns {"writer"|"written"|null} Why it is handed as itself, or `null` when it is viewed.
+ * @private
+ */
+function runtime_handedAsItselfFor(value, slothlet, reader, from) {
+	if (runtime_runsForHander(value, from)) return null;
+	const itself = runtime_handedAsItself(slothlet, reader, from);
+	return itself !== null && runtime_inheritsPrivateKept(slothlet, reader, value) ? null : itself;
+}
+
+/**
+ * Whether a value inherits, from a prototype of a module's class, a member private to that module that privacy keeps
+ * from `reader` ({@link runtime_readerHoldsPrototype}): held as itself, the value would hand it over unchecked. Found by
+ * descriptors alone.
+ * @param {object} slothlet - The instance.
+ * @param {object} reader - A module's wrapper.
+ * @param {*} value - The value, a stand-in or the async runtime's context wrapper standing for the value behind it.
+ * @returns {boolean} True when it does.
+ * @private
+ */
+function runtime_inheritsPrivateKept(slothlet, reader, value) {
+	if (value === null || (typeof value !== "object" && typeof value !== "function")) return false;
+	const subject = runtime_crossSubject(value);
+	if (util.types.isProxy(subject)) return false;
+	for (let holder = Reflect.getPrototypeOf(subject), depth = 0; holder !== null && depth < 64; depth++) {
+		if (util.types.isProxy(holder) || WeakSetMethods.has(INTRINSICS, holder) || runtime_isSharedValue(holder)) return false;
+		if (runtime_knownPrototype(slothlet, holder) !== undefined) {
+			const keys = Reflect.ownKeys(holder);
+			for (let ofIndex = 0; ofIndex < keys.length; ofIndex++) {
+				const key = keys[ofIndex];
+				if (typeof key === "string" && StringMethods.charCodeAt(key, 0) === 95)
+					return !runtime_readerHoldsPrototype(slothlet, reader, holder);
+			}
+		}
+		holder = Reflect.getPrototypeOf(holder);
+	}
+	return false;
+}
+
+/**
  * Whether a write rule refuses `reader` a write somewhere in the subtree of a module of its own module id: modules
  * loaded from one folder share an id and own each other's paths, but a deny rule between them still holds, so what one
  * hands the other is viewed like another module's.
@@ -10889,7 +10972,7 @@ function runtime_crossTo(value, reader, slothlet, from = null) {
 				state.decided = null;
 			}
 			if (state.reader === reader ? state.readerDecided : state.decided ? WeakSetMethods.has(state.decided, reader) : false) return held;
-			const itself = runtime_runsForHander(value, from) ? null : runtime_handedAsItself(slothlet, reader, from);
+			const itself = runtime_handedAsItselfFor(value, slothlet, reader, from);
 			if (itself !== null) {
 				if (itself === "writer") runtime_recordOrigin(value, from);
 				return value;
@@ -10920,7 +11003,7 @@ function runtime_crossTo(value, reader, slothlet, from = null) {
 		// module it came from, the first is that module's own value again.
 		// A function that runs no module's code is the module's that hands it on, however much the reader may write: it
 		// stays a view, so what it writes is that module's to write too ({@link runtime_crossRun}).
-		const itself = isModule && !runtime_runsForHander(value, from) ? runtime_handedAsItself(slothlet, reader, from) : null;
+		const itself = isModule ? runtime_handedAsItselfFor(value, slothlet, reader, from) : null;
 		if (itself !== null) {
 			if (itself === "writer") runtime_recordOrigin(value, from);
 			return value;
@@ -11280,6 +11363,17 @@ function runtime_crossIsOwnersCode(state, descriptor) {
 }
 
 /**
+ * The value a crossing view's members are decided on: a stand-in, and the async runtime's context wrapper, stand for
+ * the value behind them.
+ * @param {object|Function} original - The value behind the view.
+ * @returns {object|Function} The value whose members decide.
+ * @private
+ */
+function runtime_crossSubject(original) {
+	return WeakMapMethods.get(STAND_IN_RECORDS, original)?.original ?? runtime_unwrapClassInstance(original);
+}
+
+/**
  * Refuse a change through a crossing view that would change code of the module the value came from, unless whoever
  * makes it may write that module's path: the view's reader and the module executing both have to be allowed, so a
  * function another module runs for the reader gets it nothing. Data stays the reader's to change. Code is:
@@ -11304,7 +11398,7 @@ function runtime_crossAssertWrite(state, prop, change) {
 	const { original, slothlet } = state;
 	if (!slothlet?.handlers?.apiManager?.ownershipEnforced?.()) return;
 	// A stand-in, and the async runtime's context wrapper, stand for the value whose members decide.
-	const subject = WeakMapMethods.get(STAND_IN_RECORDS, original)?.original ?? runtime_unwrapClassInstance(original);
+	const subject = runtime_crossSubject(original);
 	// A function, and an object some module uses as a prototype, are code whole: every member, new ones included.
 	let held = typeof original === "function" || change === "prototype" || WeakSetMethods.has(MODULE_PROTOTYPES, subject);
 	if (!held && !util.types.isProxy(subject)) {
@@ -11384,6 +11478,8 @@ const CROSSING_HANDLER = {
 		}
 		const { original } = state;
 		const own = receiver === state.view;
+		// A private member the value inherits from a module's prototype is read as through that prototype.
+		runtime_inheritedPrivate(state.slothlet, runtime_crossSubject(original), prop)?.refusePrivate(prop);
 		const value = Reflect.get(original, prop, own ? original : receiver);
 		if (value === null || (typeof value !== "object" && typeof value !== "function")) return value;
 		const fixed = Reflect.getOwnPropertyDescriptor(original, prop);
@@ -11412,6 +11508,7 @@ const CROSSING_HANDLER = {
 	has(shadow, prop) {
 		const state = WeakMapMethods.get(CROSSING_STATES, shadow);
 		if (state.pinned && !Reflect.isExtensible(shadow)) runtime_crossSettle(shadow, state);
+		if (runtime_inheritedPrivate(state.slothlet, runtime_crossSubject(state.original), prop)?.privateHidden(prop)) return false;
 		return Reflect.has(state.original, prop);
 	},
 	deleteProperty(shadow, prop) {

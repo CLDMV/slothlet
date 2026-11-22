@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-21T13:30:50-08:00 (1795296650)
+ *	@Last modified time: 2026-11-21T15:11:04-08:00 (1795302664)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -24,9 +24,10 @@
  * to a module that runs the callback it is handed: the module that owns the target, the base module (which owns the whole
  * tree), or a peer granted `**:full`. Each write ends as the guest's own direct write of it does, refused with the same
  * code, and nothing lands; a member the guest may not read is not written either. A write the guest may make itself,
- * handed to a module that may make it too, lands; reads and built-ins that only compute are unaffected. With the
- * permission system off or disabled every write lands, as in plain JavaScript. Checked in eager and lazy mode, async and
- * live runtime, attribution `"precise"` and `"fast"`.
+ * handed to a module that may make it too, lands; reads and built-ins that only compute are unaffected. A member
+ * private to a module is refused to every other module through an instance as through the prototype. With the permission
+ * system off or disabled every write lands and every member is read, as in plain JavaScript. Checked in eager and lazy
+ * mode, async and live runtime, attribution `"precise"` and `"fast"`.
  * @module tests/vitests/suites/permissions/handed-builtin-writes
  */
 
@@ -54,6 +55,12 @@ const WRITES = [
 	"secretBound",
 	"secretUnbound"
 ];
+
+/** Each route the guest reads a member private to another module through one of its instances by. */
+const PRIVATE_READS = ["newData", "madeData", "madeReflect", "newMethod", "madeMethod", "proto"];
+
+/** The routes the peer reads them by. */
+const PEER_PRIVATE_READS = ["newData", "madeData", "madeMethod"];
 
 /** [module written, module that runs the handed built-in]. */
 const PAIRS = [
@@ -153,6 +160,9 @@ describe("a built-in handed to another module to run writes nothing the handing 
 					for (const [ownerPath, runnerPath] of PAIRS) expect(await api.guest.handedRead(ownerPath, runnerPath)).toBe("open");
 					for (const runnerPath of ["vault", "owner", "peer"]) expect(await api.guest.handedPure(runnerPath)).toBe(5);
 					expect(await api.guest.handedIsReflectSet()).toBe(true);
+					for (const ownerPath of ["vault", "owner"]) {
+						expect(await api.guest.readPublic(ownerPath), `public members of ${ownerPath}'s instance`).toBe("method,method");
+					}
 				} finally {
 					await api.slothlet.shutdown();
 				}
@@ -179,6 +189,44 @@ describe("a built-in handed to another module to run writes nothing the handing 
 					} finally {
 						await api.slothlet.shutdown();
 					}
+				}
+			});
+		}
+	}
+});
+
+describe("a member private to a module is read through its instances only by that module", () => {
+	for (const config of CONFIGS) {
+		for (const attribution of ["precise", "fast"]) {
+			it(`${config.mode}/${config.runtime}/${attribution}: refused to another module as through the class's prototype`, async () => {
+				const api = await mount(config, { mode: "on", policy: "allow", caller: { attribution }, rules: RULES });
+				try {
+					for (const ownerPath of ["vault", "owner"]) {
+						for (const how of PRIVATE_READS)
+							expect(await api.guest.readPrivate(how, ownerPath), `guest ${how} ${ownerPath}`).toBe("threw PERMISSION_DENIED");
+						for (const how of PEER_PRIVATE_READS)
+							expect(await api.peer.readPrivate(how, ownerPath), `peer ${how} ${ownerPath}`).toBe("threw PERMISSION_DENIED");
+						expect(await api.guest.readPublic(ownerPath)).toBe("method,method");
+					}
+				} finally {
+					await api.slothlet.shutdown();
+				}
+			});
+		}
+		for (const mode of ["off", "disabled"]) {
+			it(`${config.mode}/${config.runtime}: permissions ${mode}: read by every module, as in plain JavaScript`, async () => {
+				const api = await mount(config, { mode, rules: RULES });
+				try {
+					for (const ownerPath of ["vault", "owner"]) {
+						for (const how of PRIVATE_READS) {
+							const expected = how === "newMethod" || how === "madeMethod" ? "priv" : "PDATA";
+							expect(await api.guest.readPrivate(how, ownerPath), `guest ${how} ${ownerPath}`).toBe(expected);
+						}
+						expect(await api.peer.readPrivate("madeData", ownerPath)).toBe("PDATA");
+						expect(await api.guest.readPublic(ownerPath)).toBe("method,method");
+					}
+				} finally {
+					await api.slothlet.shutdown();
 				}
 			});
 		}
