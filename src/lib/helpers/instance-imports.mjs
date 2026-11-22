@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-21T22:24:25-08:00 (1795328665)
+ *	@Last modified time: 2026-11-21T23:50:55-08:00 (1795333855)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -641,6 +641,10 @@ const SCRIPTS_READER = Objects.freeze({
  * @typedef {object} InstanceImportState
  * @property {(instanceID: string, parent: string, children: string[]) => void} recordImports - Records a module's
  *   imports; called by the registration the vite plugin appends to each instance module. It only ever adds an importer.
+ * @property {(instanceID: string, importer: string, url: string) => void} noteSelfImporter - Records that an instance's
+ *   file imported `self` through a runtime entry file (see noteSelfImporterHere).
+ * @property {(instanceID: string, file: string) => string[]} selfImporterUrls - The runtime entry files a file imported `self` through.
+ * @property {(instanceID: string) => void} forgetSelfImporters - Forgets an instance's records.
  * @property {{of: function(string): (object|null)}} imports - The reader of the import graphs (see graphView).
  * @property {{lookup: Function, hashes: Function, text: Function, count: Function, packageImporters: Function}} scripts -
  *   The reader of the sources the load hook recorded (#597).
@@ -809,6 +813,9 @@ function sharedState() {
 	if (held !== undefined) return (SHARED = held);
 	OWN_STATE = Objects.freeze({
 		recordImports: recordImportsHere,
+		noteSelfImporter: noteSelfImporterHere,
+		selfImporterUrls: selfImporterUrlsHere,
+		forgetSelfImporters: forgetSelfImportersHere,
 		imports: IMPORTS_READER,
 		scripts: SCRIPTS_READER,
 		commonJS: COMMONJS_READER,
@@ -1196,6 +1203,7 @@ function setInstanceSelfKind(instanceID, callable) {
 	if (callable === null) {
 		MapMethods.delete(SELF_KINDS, instanceID);
 		MapMethods.delete(SELF_BINDINGS, instanceID);
+		sharedState().forgetSelfImporters(instanceID);
 		MapMethods.delete(SELF_CLOSED, instanceID);
 		rebindSharedSelf();
 		return;
@@ -1246,6 +1254,66 @@ function bindInstanceSelf(url, instanceID, assign) {
 }
 
 /**
+ * The runtime entry files each file of an instance imported `self` through, by instance ID, then by the file's path
+ * (query and `file:` prefix dropped): see {@link noteSelfImporterHere}.
+ * @type {Map<string, Map<string, Set<string>>>}
+ * @private
+ */
+const SELF_IMPORTERS = new Map();
+
+/**
+ * A file's path as it is keyed in {@link SELF_IMPORTERS}: a `file:` URL or an absolute path, instance query dropped.
+ * @param {string} ref - The file's URL, module id or path.
+ * @returns {string} The path.
+ * @private
+ */
+function selfImporterKey(ref) {
+	const bare = splitQuery(ref)[0];
+	return NODE !== null && StringMethods.startsWith(bare, "file:") ? NODE.url.fileURLToPath(bare) : bare;
+}
+
+/**
+ * Record that an instance's file imported `self` through a runtime entry file, so `run.self()` / `scope({ self: true })`
+ * opened by that file's code can hand it the `self` binding the file itself holds.
+ * @param {string} instanceID - The instance.
+ * @param {string|undefined} importer - The importing file's URL, module id or path.
+ * @param {string} url - The runtime entry file's URL.
+ * @returns {void}
+ * @private
+ */
+function noteSelfImporterHere(instanceID, importer, url) {
+	if (typeof importer !== "string") return;
+	let byFile = MapMethods.get(SELF_IMPORTERS, instanceID);
+	if (!byFile) MapMethods.set(SELF_IMPORTERS, instanceID, (byFile = new Map()));
+	const key = selfImporterKey(importer);
+	let urls = MapMethods.get(byFile, key);
+	if (!urls) MapMethods.set(byFile, key, (urls = new Set()));
+	SetMethods.add(urls, url);
+}
+
+/**
+ * The runtime entry files a file of an instance imported `self` through, as {@link noteSelfImporterHere} recorded.
+ * @param {string} instanceID - The instance.
+ * @param {string} file - The file's path.
+ * @returns {string[]} Their URLs; empty when none was recorded.
+ * @private
+ */
+function selfImporterUrlsHere(instanceID, file) {
+	const urls = MapMethods.get(MapMethods.get(SELF_IMPORTERS, instanceID) ?? new Map(), selfImporterKey(file));
+	return urls ? setToArray(urls) : [];
+}
+
+/**
+ * Forget what {@link noteSelfImporterHere} recorded for an instance.
+ * @param {string} instanceID - The instance.
+ * @returns {void}
+ * @private
+ */
+function forgetSelfImportersHere(instanceID) {
+	MapMethods.delete(SELF_IMPORTERS, instanceID);
+}
+
+/**
  * The URL of the runtime entry file api files import `self` from by default (`@cldmv/slothlet/runtime`).
  * @type {string}
  * @private
@@ -1253,14 +1321,22 @@ function bindInstanceSelf(url, instanceID, assign) {
 const MAIN_RUNTIME_URL = URLMethods.href(new URL("../runtime/runtime.mjs", import.meta.url));
 
 /**
- * The `self` an instance's files hold now, for `run.self()` / `scope({ self: true })` opened by module code: the form
- * of the runtime file the instance's files bound `self` through, the main entry (`@cldmv/slothlet/runtime`) when they
- * bound it through several. Files loaded with no resolve hook (a browser) hold the main entry's form.
+ * The `self` a file of an instance holds now, for `run.self()` / `scope({ self: true })` opened by that file's code: the
+ * form of the runtime entry file the file imported `self` through (the main entry, `@cldmv/slothlet/runtime`, when it
+ * imported it through several). For code whose file imported none, or when no file is named, the entry the instance's
+ * files bound `self` through, the main entry when they bound it through several. Files loaded with no resolve hook (a
+ * browser) hold the main entry's form.
  * @param {string} instanceID - The instance.
+ * @param {string|null} [filePath] - The path of the file whose code opens the run.
  * @returns {object|Function|undefined} The form, or undefined when no runtime file made one.
  * @internal
  */
-function moduleSelfForm(instanceID) {
+function moduleSelfForm(instanceID, filePath = null) {
+	const own = filePath === null ? [] : sharedState().selfImporterUrls(instanceID, filePath);
+	if (own.length > 0) {
+		if (ArrayMethods.includes(own, MAIN_RUNTIME_URL)) return instanceSelfForm(instanceID, MAIN_RUNTIME_URL);
+		return instanceSelfForm(instanceID, own[0]);
+	}
 	const byURL = MapMethods.get(SELF_BINDINGS, instanceID);
 	if (byURL && MapMethods.size(byURL) > 0 && !MapMethods.has(byURL, MAIN_RUNTIME_URL)) {
 		for (const url of mapKeys(byURL)) return instanceSelfForm(instanceID, url);
@@ -3875,7 +3951,10 @@ const HOOKS = Objects.freeze({
 		// An instance's file asking for a runtime entry file: the module that gives it the instance's own `self` (#803).
 		if (ArrayMethods.includes(SINGLE_COPY_FILES, url) && MapMethods.has(SELF_FORMS, url) && !isOtherCopysFile(context?.parentURL)) {
 			const instanceID = selfInstanceOf(context?.parentURL);
-			if (instanceID !== null) return { url: `${SELF_PREFIX}${instanceID}|${url}`, format: "module", shortCircuit: true };
+			if (instanceID !== null) {
+				sharedState().noteSelfImporter(instanceID, context?.parentURL, url);
+				return { url: `${SELF_PREFIX}${instanceID}|${url}`, format: "module", shortCircuit: true };
+			}
 		}
 		if (MapMethods.has(OWN_MODULES, url) && !SetMethods.has(NODE_LOADED, url) && !isOtherCopysFile(context?.parentURL)) {
 			return { ...resolved, url: OWN_MODULE_PREFIX + url, format: "module" };
@@ -4369,6 +4448,14 @@ export function slothletInstanceImports() {
 					if (isRegisteredFile(resolved.id) || isPackageFile(resolved.id)) SetMethods.add(shared, resolved.id);
 				};
 				const children = [];
+				// The runtime entry files the module takes `self` from: its import of one is already the instance's module for it
+				// (see resolveId), named by the file's path. Recorded where the module runs, as its imports are, since a vite
+				// module graph is resolved in the server and not where it is evaluated.
+				const selfEntries = [];
+				for (let ofIndex = 0, ofList = SINGLE_COPY_FILES; ofIndex < ofList.length; ofIndex++) {
+					const url = ofList[ofIndex];
+					if (StringMethods.includes(code, `${SELF_PREFIX}${instanceID}|${NODE.url.fileURLToPath(url)}`)) listPush(selfEntries, url);
+				}
 				for (let ofIndex = 0, ofList = concatLists(setToArray(bare), setToArray(specifiers)); ofIndex < ofList.length; ofIndex++) {
 					const specifier = ofList[ofIndex];
 					const resolved = await this.resolve(specifier, id);
@@ -4397,7 +4484,15 @@ export function slothletInstanceImports() {
 					}
 					check = `\nimport { checkImport as ${name} } from ${JSON.stringify(IMPORT_CHECK_SPECIFIER)};`;
 				}
-				const tail = `${registration}${loadedBy}${imports}${check}`;
+				const selfNotes = ArrayMethods.join(
+					mapList(
+						selfEntries,
+						(url) =>
+							`\n;globalThis[Symbol.for(${JSON.stringify(SymbolMethods.description(STATE))})]?.noteSelfImporter?.(${JSON.stringify(instanceID)}, import.meta.url, ${JSON.stringify(url)});`
+					),
+					""
+				);
+				const tail = `${registration}${loadedBy}${imports}${selfNotes}${check}`;
 				return tail || body !== code ? { code: `${body}${tail}\n`, map: null } : null;
 			}
 		},

@@ -158,7 +158,7 @@ function ruleTargetFor(permissionManager, target, callerPath) {
  */
 function runViewFor(slothlet, store, identity) {
 	if (identity?.currentWrapper || identity?.unresolved) {
-		const form = moduleSelfForm(slothlet.instanceID);
+		const form = moduleSelfForm(slothlet.instanceID, identity.currentWrapper?.____slothletInternal?.filePath ?? null);
 		if (form) return form;
 	}
 	return store.self;
