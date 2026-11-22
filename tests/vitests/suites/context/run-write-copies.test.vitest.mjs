@@ -15,12 +15,14 @@
 
 /**
  * @fileoverview What a full-isolation run changes through `self` or `api` stays in the run's copy: members set,
- * defined and deleted on plain objects, class instances and emitters, array writes (`[i] =`, `push`, `length =`),
+ * defined and deleted on plain objects and class instances, array writes (`[i] =`, `push`, `length =`),
  * `obj.__proto__ =`, and writes to a function's members. The run reads what it wrote, as plain JS reads it (an array is
  * an array, a method or getter sees the run's write and its own writes stay in the run), and once the run ends the
  * instance, and the module's own values, are as they were. The same holds once the run has a tree of its own
  * (`api.slothlet.api.add()` in the run), and in lazy mode for a node the run is the first to reach. Under
  * `isolation: "partial"` and outside any run the writes are kept, as before.
+ *
+ * Emitters and EventTargets are shared live objects: a run's changes to them reach the instance.
  *
  * @description
  * Every snippet runs once in module code (`writer`, through its `self`) and once on a plain-JS twin of the module's

@@ -376,7 +376,7 @@ describe.each([["async"], ["live"]])("a run's writes fork its own copy — %s ru
 			}
 		});
 
-		it("a full-isolation scope's self sees the instance's later values for what it hasn't written; its own writes stay in the scope", async () => {
+		it("a full-isolation scope's self reads the values as of its start for what it hasn't written; its own writes stay in the scope", async () => {
 			const api = await make();
 			try {
 				const entered = gate();
