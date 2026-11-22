@@ -958,6 +958,9 @@ class Slothlet {
 		// node at the same path in the live tree (see unified-wrapper.mjs).
 		this._buildEpoch = 0;
 		this._liveEpoch = 0;
+		// How many restarts a run() / scope() has made of its own copy: while none has, no run's code is checked against
+		// one (see Slothlet#_runRestart).
+		this._runRestarts = 0;
 		// The epoch of the tree this set answers from: the live one for the instance, a copy's own for a run's tree.
 		this._treeEpoch = 0;
 		// How many api trees copies hold apart from the instance's own (a run that changed its tree, a copy kept for runs
@@ -3244,6 +3247,7 @@ class Slothlet {
 			}
 			if (kind === "copy") this.#carryRootPrototype(view.api, next.api);
 			this.#adoptTree(holder, next);
+			this.#noteRunRestart(holder, kind, next);
 			// A full-isolation run's `self` writes what it kept so far into the run's new tree, as that tree's build, and
 			// from now on reads and writes that tree (see `makeRunSelf` in builders/api_builder).
 			const runSelf = holder[RUN_SELF];
@@ -3262,6 +3266,28 @@ class Slothlet {
 			holder.treeBusy = null;
 			release();
 		}
+	}
+
+	/**
+	 * Keep what tells a run's code apart from the code of the trees it read before its last `restart()` (see
+	 * {@link Slothlet#_runRestart}): a restart starts that record over, and a reload after it adds the stamp it imported
+	 * its files under. A copy imports from the URLs of the tree it copies, so it adds none.
+	 * @param {object} holder - A run's record or a kept token.
+	 * @param {"copy"|"reload"|"restart"} kind - What the build was.
+	 * @param {object} next - The built set.
+	 * @returns {void}
+	 * @private
+	 */
+	#noteRunRestart(holder, kind, next) {
+		if (kind === "copy" || (kind === "reload" && !holder.restart)) return;
+		const bust = MapMethods.get(this.#treeSets, next._treeEpoch)?.bust ?? null;
+		if (kind === "restart") {
+			// The modules of the trees the run read until now are gone with them: their code has no standing in the run (see
+			// ApiManager#isRestartReplaced). Copies take ever lower epochs, so every node of those trees carries a higher one.
+			holder.restart = { epoch: next._treeEpoch, stamps: new Set() };
+			this._runRestarts++;
+		}
+		if (bust !== null) SetMethods.add(holder.restart.stamps, `${bust}`);
 	}
 
 	/**
@@ -3623,6 +3649,22 @@ class Slothlet {
 		await this.#ownTree(record, "restart");
 		await this.handlers.lifecycle.emit("restarted", { instance: this.instanceID, previous: this.instanceID });
 		return this.boundApi;
+	}
+
+	/**
+	 * The last `restart()` the running code's `run()` / `scope()` made of its copy (see {@link Slothlet#restartRun}):
+	 * `epoch`, the epoch of the tree it built, which the nodes of the trees the run read before it are above, and
+	 * `stamps`, the reload stamps the files of the trees built for the run since were imported under. Null when the code
+	 * runs in no run, or in one that restarted nothing.
+	 * @returns {{epoch: number, stamps: Set<string>}|null} The restart.
+	 * @internal
+	 *
+	 * @example
+	 * const floor = slothlet._runRestart()?.epoch;
+	 */
+	_runRestart() {
+		if (this._runRestarts === 0) return null;
+		return this.#runRecord()?.restart ?? null;
 	}
 
 	/**

@@ -40,7 +40,9 @@ import {
 	setImmediate,
 	setTimeout,
 	Set,
+	setFrom,
 	SetMethods,
+	setToArray,
 	setValues,
 	Symbol,
 	WeakMap,
@@ -70,7 +72,11 @@ import { openRunSnapshot } from "#helpers/run-snapshot";
  * write from code in a run forks the written handler into the run's `ns` (see `Slothlet#writeTarget`), which the run
  * then reads first. A nested run starts with its own copy of its parent's `ns`. A run that changes its api tree holds a
  * whole set of its own in `values` (its tree and the handlers that go with it, see `Slothlet#ownTree`), which it reads
- * before anything else; a nested run opened in it reads that tree until either one changes it.
+ * before anything else; a nested run opened in it reads that tree until either one changes it. `restart` tells of the
+ * run's last `restart()` (null when it made none): `epoch` is the epoch of the tree it built, which the nodes of every
+ * tree the run read before it are above (see `ApiManager#isRestartReplaced`), and `stamps` the reload stamps the files
+ * of the trees built for the run since were imported under, which code of those earlier trees does not carry. A nested
+ * run starts with a copy of its parent's.
  * @type {symbol}
  * @internal
  */
@@ -580,7 +586,8 @@ export function newRecord(from, parent, ns, owner) {
 		stores: null,
 		tracked: null,
 		owner: owner ?? null,
-		snap: null
+		snap: null,
+		restart: parent?.restart ? { epoch: parent.restart.epoch, stamps: setFrom(setToArray(parent.restart.stamps)) } : null
 	};
 }
 

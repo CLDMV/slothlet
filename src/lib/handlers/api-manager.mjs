@@ -1743,7 +1743,11 @@ export class ApiManager extends ComponentBase {
 	 * code they made (a function, a bound function or an object's method they handed out, a snapshot their call took)
 	 * has no standing, and everything it does through `self` is refused. With the permission system off nothing is
 	 * checked, and such code acts on the rebuilt instance. A reload keeps the tree's epoch, and the trees runs keep of
-	 * their own carry epochs of their own (below zero), so neither is affected.
+	 * their own carry epochs of their own (below zero), so neither is affected by the instance's restart.
+	 *
+	 * A `restart()` in a `run()` / `scope()` starts the run's copy over the same way, for the run alone: in that run (and
+	 * the runs opened in it afterwards), a node of a tree the run read before it is replaced too. Copies take ever lower
+	 * epochs, so those are the nodes whose epoch is above the restarted tree's. Outside the run nothing changes.
 	 *
 	 * @param {object|null} wrapper - A node's wrapper.
 	 * @returns {boolean} True for a node a restart replaced, with the permission system on.
@@ -1754,7 +1758,11 @@ export class ApiManager extends ComponentBase {
 	 */
 	isRestartReplaced(wrapper) {
 		const epoch = wrapper?.____slothletInternal?.epoch;
-		if (typeof epoch !== "number" || epoch < 0 || epoch >= (this.slothlet._liveEpoch ?? 0)) return false;
+		if (typeof epoch !== "number") return false;
+		if (epoch < 0 || epoch >= (this.slothlet._liveEpoch ?? 0)) {
+			const restart = this.slothlet._runRestart?.() ?? null;
+			if (restart === null || epoch <= restart.epoch) return false;
+		}
 		return this.slothlet.handlers?.permissionManager?.isEnabled?.() === true;
 	}
 

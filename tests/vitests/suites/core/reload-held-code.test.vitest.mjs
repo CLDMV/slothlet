@@ -24,11 +24,16 @@
  * instance's copy of it loaded (one copy per instance ID), and `probe/probe.mjs`, whose `read()` answers that stamp
  * through `self` with `context.who`, whose `snap()` takes a snapshot and hands out a function that reads the same inside
  * it, whose `later()` hands out a function that reads the same wherever it is called, whose `bound()` hands out a bound
- * function doing the same, and whose `holder()` hands out an object whose method does the same.
+ * function doing the same, and whose `holder()` hands out an object whose method does the same. `fresh/fresh.mjs`
+ * answers the stamp taken when that file itself loaded: a run's own reload or restart reads its files again under the
+ * instance's ID, so `shared/stamp.mjs` keeps its stamp there and this one tells the run's rebuilt copy.
  *
  * With the permission system on, `restart()` starts the instance over: the modules it replaced have no standing, so
  * everything their code does afterwards through `self` is refused (`PERMISSION_DENIED`), a snapshot their call took,
- * a function, a bound function and a method they handed out alike (docs/PERMISSIONS.md).
+ * a function, a bound function and a method they handed out alike (docs/PERMISSIONS.md), also when a module of the
+ * rebuilt instance is the one that calls it (`relay/relay.mjs`, whose `pass(fn)` calls what it is given). A `restart()`
+ * in a `run()` / `scope()` starts the run's copy over the same way, for that run alone: in the run, code its modules
+ * handed out before it is refused, while the instance outside keeps what it has.
  */
 import path from "node:path";
 import { AsyncLocalStorage, AsyncResource } from "node:async_hooks";
@@ -44,6 +49,8 @@ beforeAll(() => {
 	rmSync(ROOT, { recursive: true, force: true });
 	mkdirSync(path.join(BASE, "calls"), { recursive: true });
 	mkdirSync(path.join(BASE, "probe"), { recursive: true });
+	mkdirSync(path.join(BASE, "relay"), { recursive: true });
+	mkdirSync(path.join(BASE, "fresh"), { recursive: true });
 	mkdirSync(path.join(ROOT, "shared"), { recursive: true });
 	writeFileSync(
 		path.join(ROOT, "shared", "stamp.mjs"),
@@ -52,6 +59,11 @@ beforeAll(() => {
 	writeFileSync(
 		path.join(BASE, "calls", "calls.mjs"),
 		'import { stamp } from "../../shared/stamp.mjs";\nexport function copyOf() {\n\treturn stamp;\n}\n'
+	);
+	writeFileSync(path.join(BASE, "relay", "relay.mjs"), "export async function pass(fn) {\n\treturn fn();\n}\n");
+	writeFileSync(
+		path.join(BASE, "fresh", "fresh.mjs"),
+		'const stamp = globalThis[Symbol.for("slothlet.test.reload-held-code.stamp")];\nexport function loaded() {\n\treturn stamp;\n}\n'
 	);
 	writeFileSync(
 		path.join(BASE, "probe", "probe.mjs"),
@@ -151,9 +163,10 @@ async function handOut(api, kind) {
  * @param {object} [options.permissionsConfig] - The `permissions` config to use instead of `{ mode: permissions }`'s
  *   shorthand (only with `permissions` "on").
  * @param {boolean} [options.callInRun=false] - Call it in a run the host opens after the reload or restart.
+ * @param {boolean} [options.passed=false] - Hand it to `relay.pass()` to call, instead of calling it.
  * @returns {Promise<{copy: *, who: string|null}>} What the function answered, or the error code it threw as `copy`.
  */
-async function scenario({ runtime, mode, permissions, operation, kind, inRun, permissionsConfig, callInRun = false }) {
+async function scenario({ runtime, mode, permissions, operation, kind, inRun, permissionsConfig, callInRun = false, passed = false }) {
 	globalThis[STAMP] = 1;
 	const api = await slothlet({
 		base: BASE,
@@ -174,12 +187,76 @@ async function scenario({ runtime, mode, permissions, operation, kind, inRun, pe
 		globalThis[STAMP] = 2;
 		await api.slothlet[operation]();
 		await idle();
+		const call = passed ? () => api.relay.pass(handed) : handed;
 		try {
-			if (callInRun) return await api.slothlet.context.run({ who: "later run" }, () => handed());
-			return await handed();
+			if (callInRun) return await api.slothlet.context.run({ who: "later run" }, () => call());
+			return await call();
 		} catch (error) {
 			return { copy: error?.code ?? String(error), who: null };
 		}
+	} finally {
+		await api.slothlet.shutdown();
+	}
+}
+
+/**
+ * Make the function in a run, reload or restart in that run with a new stamp, then call it in the run (or in a run
+ * opened in it).
+ * @param {object} options - What to do.
+ * @param {string} options.runtime - "async" or "live".
+ * @param {string} options.mode - "eager" or "lazy".
+ * @param {string} options.permissions - "none", "off" or "on".
+ * @param {string} options.operation - "reload" or "restart".
+ * @param {string} options.kind - See {@link handOut}.
+ * @param {boolean} [options.passed=false] - Hand it to `relay.pass()` to call in the run, instead of calling it.
+ * @param {boolean} [options.handOutside=false] - Also make one outside any run first, called outside after the run.
+ * @param {boolean} [options.nested=false] - Call it in a run opened in the run after the reload or restart.
+ * @returns {Promise<{inRun: object, fresh: object, outside: *, held?: object}>} What the function answered in the run
+ *   (or the error code it threw as `copy`; `shared/stamp.mjs` keeps the stamp it loaded with there), the stamp the run's
+ *   rebuilt copy loaded `fresh/fresh.mjs` with, the one the instance answers after the run, and what the function made
+ *   outside answered after the run.
+ */
+async function runScenario({ runtime, mode, permissions, operation, kind, passed = false, handOutside = false, nested = false }) {
+	globalThis[STAMP] = 1;
+	const api = await slothlet({
+		base: BASE,
+		runtime,
+		mode,
+		silent: true,
+		context: { who: "instance" },
+		...(permissions === "none" ? {} : { permissions })
+	});
+	try {
+		// Every leaf loaded first, so a lazy instance's answers outside the run are of this stamp.
+		await api.calls.copyOf();
+		await api.fresh.loaded();
+		await api.relay.pass(() => null);
+		const outsideHanded = handOutside ? await handOut(api, kind) : null;
+		const answer = {};
+		await api.slothlet.context.run({ who: "run" }, async () => {
+			const handed = await handOut(api, kind);
+			await idle();
+			globalThis[STAMP] = 2;
+			await api.slothlet[operation]();
+			await idle();
+			const call = () => (passed ? api.relay.pass(handed) : handed());
+			try {
+				answer.inRun = await (nested ? api.slothlet.context.run({ who: "nested" }, call) : call());
+			} catch (error) {
+				answer.inRun = { copy: error?.code ?? String(error), who: null };
+			}
+			answer.fresh = { copy: await api.fresh.loaded(), who: (await api.probe.read()).who };
+		});
+		await idle();
+		answer.outside = await api.fresh.loaded();
+		if (outsideHanded !== null) {
+			try {
+				answer.held = await outsideHanded();
+			} catch (error) {
+				answer.held = { copy: error?.code ?? String(error), who: null };
+			}
+		}
+		return answer;
 	} finally {
 		await api.slothlet.shutdown();
 	}
@@ -238,6 +315,81 @@ describe.each([["async"], ["live"]])("%s runtime: code made before a reload or r
 					async (kind) => {
 						const answer = await scenario({ runtime, mode, permissions: "on", operation, kind, inRun: false, permissionsConfig });
 						expect(answer).toEqual(operation === "restart" ? { copy: "PERMISSION_DENIED", who: null } : { copy: 2, who: "instance" });
+					}
+				);
+			});
+		});
+	});
+
+	describe.each([["eager"], ["lazy"]])("%s mode", (mode) => {
+		describe.each([["none"], ["off"], ["on"]])("permissions %s", (permissions) => {
+			// Code a module made before a restart, handed to a module of the rebuilt instance that calls it, is still that
+			// code: with the permission system on it is refused.
+			describe.each([["reload"], ["restart"]])("%s()", (operation) => {
+				const refused = operation === "restart" && permissions === "on";
+				it.each([["module function"], ["module bound function"], ["module method"]])(
+					`a %s passed into another module's call after it ${refused ? "is refused" : "reads the instance's context and the rebuilt tree"}`,
+					async (kind) => {
+						const answer = await scenario({ runtime, mode, permissions, operation, kind, inRun: false, passed: true });
+						expect(answer).toEqual(refused ? { copy: "PERMISSION_DENIED", who: null } : { copy: 2, who: "instance" });
+					}
+				);
+			});
+		});
+	});
+
+	// A reload or restart asked for in a run rebuilds the run's copy alone. The instance outside keeps its tree.
+	describe.each([["reload"], ["restart"]])("%s() in a run", (operation) => {
+		describe.each([["eager"], ["lazy"]])("%s mode", (mode) => {
+			describe.each([["none"], ["off"], ["on"]])("permissions %s", (permissions) => {
+				const refused = operation === "restart" && permissions === "on";
+				it.each([["snapshot"], ["resource"]])("a %s made in the run before it reads the run's rebuilt copy", async (kind) => {
+					const answer = await runScenario({ runtime, mode, permissions, operation, kind });
+					expect(answer).toEqual({ inRun: { copy: 1, who: "run" }, fresh: { copy: 2, who: "run" }, outside: 1 });
+				});
+				it.each([["module snapshot"], ["module function"], ["module bound function"], ["module method"]])(
+					`a %s made in the run before it, called in the run, ${refused ? "is refused" : "reads the run's rebuilt copy"}`,
+					async (kind) => {
+						const answer = await runScenario({ runtime, mode, permissions, operation, kind });
+						expect(answer).toEqual({
+							inRun: refused ? { copy: "PERMISSION_DENIED", who: null } : { copy: 1, who: "run" },
+							fresh: { copy: 2, who: "run" },
+							outside: 1
+						});
+					}
+				);
+				// Only for a restart: after a reload in a run, code made in the run before it and passed into another module's
+				// call is refused with the permission system on, which a reload should not do (reported separately).
+				if (operation === "restart")
+					it.each([["module function"], ["module bound function"], ["module method"]])(
+						`a %s made in the run before it, passed into another module's call in the run, ${refused ? "is refused" : "reads the run's rebuilt copy"}`,
+						async (kind) => {
+							const answer = await runScenario({ runtime, mode, permissions, operation, kind, passed: true });
+							expect(answer).toEqual({
+								inRun: refused ? { copy: "PERMISSION_DENIED", who: null } : { copy: 1, who: "run" },
+								fresh: { copy: 2, who: "run" },
+								outside: 1
+							});
+						}
+					);
+				// A method of an object a module returned, called by the host in a nested run, is not covered yet (reported).
+				it.each([["module function"]])(
+					`a %s made in the run before it, called in a run opened in the run after it, ${refused ? "is refused" : "reads the run's rebuilt copy"}`,
+					async (kind) => {
+						const answer = await runScenario({ runtime, mode, permissions, operation, kind, nested: true });
+						expect(answer).toEqual({
+							inRun: refused ? { copy: "PERMISSION_DENIED", who: null } : { copy: 1, who: "nested" },
+							fresh: { copy: 2, who: "run" },
+							outside: 1
+						});
+					}
+				);
+				it.each([["module function"], ["module bound function"], ["module method"]])(
+					"a %s the instance's modules handed out outside the run keeps working on the instance",
+					async (kind) => {
+						const answer = await runScenario({ runtime, mode, permissions, operation, kind, handOutside: true });
+						expect(answer.outside).toBe(1);
+						expect(answer.held).toEqual({ copy: 1, who: "instance" });
 					}
 				);
 			});

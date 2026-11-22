@@ -514,6 +514,16 @@ function runtime_frameInstanceTag(line) {
 }
 
 /**
+ * The reload stamp the file a stack line runs was imported under (`&_reload=`, see `Loader`), or null.
+ * @param {string} line - One stack line.
+ * @returns {string|null} The stamp.
+ * @private
+ */
+function runtime_frameReloadStamp(line) {
+	return RegExpMethods.exec(/[?&]_reload=([^&#:)\s]+)/, line)?.[1] ?? null;
+}
+
+/**
  * The mount whose copy of a leaf a stack line runs: each `api.slothlet.api.add()` mount imports its own copy
  * of a leaf under `&module=<moduleID>` (helpers stay one copy per instance, so they carry none).
  * @param {string} line - One stack line.
@@ -5355,7 +5365,36 @@ function runtime_replacedCopyLeaves(slothlet, path, mount) {
 function runtime_leavesAt(slothlet, frame) {
 	// A leaf's file an api file loaded itself is a helper of that file's, and no leaf's.
 	if (runtime_leafFileCopyOf(frame)) return [];
-	return runtime_leavesAtFile(slothlet, frame.path, runtime_frameInstanceTag(frame.line), runtime_frameModuleTag(frame.line));
+	const tag = runtime_frameInstanceTag(frame.line);
+	const mount = runtime_frameModuleTag(frame.line);
+	const location = typeof frame.location === "string" ? frame.location : null;
+	return (
+		runtime_runRestartReplacedLeaves(slothlet, frame.path, tag, mount, location) ?? runtime_leavesAtFile(slothlet, frame.path, tag, mount)
+	);
+}
+
+/**
+ * The nodes a `restart()` of the running code's `run()` / `scope()` replaced that stand for code of a file, when the
+ * code is theirs: the code of the trees the run read before its restart carries none of the reload stamps the files of
+ * the trees built for it since were imported under (see `Slothlet#_runRestart`). As for code an instance's restart
+ * replaced (see {@link runtime_taggedLeavesAtFile}), those nodes stand for it, never the rebuilt copy's nodes of the
+ * same file, and they have no standing. Null when the code is not such code, no such node is left, the permission
+ * system is off, or the frame names no location carrying an instance tag.
+ * @param {object} slothlet - The instance.
+ * @param {string} path - The file, in comparable form.
+ * @param {string|null} tag - The instance tag the frame carries, or null.
+ * @param {string|null} mount - The mount tag the frame carries, or null.
+ * @param {string|null} location - The frame's location, query included, or null.
+ * @returns {Array<object>|null} The nodes, or null.
+ * @private
+ */
+function runtime_runRestartReplacedLeaves(slothlet, path, tag, mount, location) {
+	// A location with no instance tag (a CommonJS file's plain path) carries no stamp either way: nothing tells.
+	if (location === null || runtime_frameInstanceTag(location) === null || !runtime_checksPermissions(slothlet)) return null;
+	const restart = slothlet._runRestart?.() ?? null;
+	if (restart === null || SetMethods.has(restart.stamps, runtime_frameReloadStamp(location) ?? "")) return null;
+	const replaced = runtime_leavesAtFile(slothlet, path, tag, mount, true);
+	return replaced.length ? replaced : null;
 }
 
 /**
@@ -5471,6 +5510,8 @@ function runtime_nodeLeafFileCopyOf(frame) {
  * @private
  */
 function runtime_taggedLeavesAtFile(slothlet, path, tag, mount, location, runs) {
+	const replaced = runtime_runRestartReplacedLeaves(slothlet, path, tag, mount, location);
+	if (replaced !== null) return replaced;
 	let leaves = runtime_leavesAtFile(slothlet, path, tag, mount);
 	if (mount && location !== null) leaves = filterList(leaves, (wrapper) => runtime_importedUnder(wrapper, location));
 	const current = slothlet.instanceID;
