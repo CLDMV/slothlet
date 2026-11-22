@@ -95,6 +95,15 @@ export function isReflectSet(cb) {
 	return self.slothlet.same(cb, Reflect.set);
 }
 
+/**
+ * Run the function a data object holds on the target, key and value it holds.
+ * @param {{fn: Function, target: object, key: string, value: *}} data - The function and what to call it with.
+ * @returns {*} What it returned.
+ */
+export function runData(data) {
+	return data.fn(data.target, data.key, data.value);
+}
+
 /** @returns {{method: string, protoKeys: string[], itemKeys: string[]}} The prototypes as the module holds them. */
 export function protoState() {
 	return {

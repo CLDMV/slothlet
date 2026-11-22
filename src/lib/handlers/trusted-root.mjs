@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-18T07:07:21-08:00 (1795014441)
+ *	@Last modified time: 2026-11-21T17:00:50-08:00 (1795309250)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -502,6 +502,46 @@ function buildCapturedFlowStore(instances, instanceID, captured) {
 }
 
 /**
+ * The modules a function handed over between modules is running for, innermost last: a function of the engine's own,
+ * a bound built-in among them (`Object.assign.bind(null, target, values)`), runs no code of the module that handed it
+ * over, so a write it makes has no frame of that module's, and has to be that module's to make as well as the executing
+ * module's. Pushed while one runs through its crossing view, and again while a callback it registered runs: the live
+ * runtime carries it with the callbacks it pins, the async runtime with the jobs its async hook sees made.
+ * @type {object[]}
+ * @private
+ */
+const ACTING_FOR = [];
+
+/**
+ * Run a function with modules pushed onto {@link ACTING_FOR} for its run.
+ * @param {ReadonlyArray<object>|null} actors - The modules, or null for none.
+ * @param {Function} fn - The function.
+ * @param {*} [thisArg] - Its receiver.
+ * @param {ArrayLike<*>} [args=[]] - Its arguments.
+ * @returns {*} What it returned.
+ * @private
+ */
+function runActingFor(actors, fn, thisArg = undefined, args = []) {
+	if (actors === null || actors.length === 0) return Reflect.apply(fn, thisArg, args);
+	const base = ACTING_FOR.length;
+	for (let i = 0; i < actors.length; i++) listPush(ACTING_FOR, actors[i]);
+	try {
+		return Reflect.apply(fn, thisArg, args);
+	} finally {
+		while (ACTING_FOR.length > base) ArrayMethods.pop(ACTING_FOR);
+	}
+}
+
+/**
+ * {@link ACTING_FOR} as it is now, to carry to a callback registered now: null when it is empty.
+ * @returns {ReadonlyArray<object>|null} A frozen copy, or null.
+ * @private
+ */
+function actingForNow() {
+	return ACTING_FOR.length === 0 ? null : Objects.freeze(concatLists([], ACTING_FOR));
+}
+
+/**
  * This file's internal bindings, for the files of slothlet's own that use them: each of those files takes them once, as
  * it loads, and anyone else is refused (see `ownBindingsRefusal` in `helpers/instance-imports`).
  * @param {string} consumer - The file asking: its path in slothlet's code folder, without its extension.
@@ -532,6 +572,11 @@ export function internals(consumer) {
 		get REOPENED_FLOW() {
 			return REOPENED_FLOW;
 		},
+		get ACTING_FOR() {
+			return ACTING_FOR;
+		},
+		actingForNow,
+		runActingFor,
 		buildCapturedFlowStore,
 		enforceContextKeyWrite,
 		get genuineWrappers() {

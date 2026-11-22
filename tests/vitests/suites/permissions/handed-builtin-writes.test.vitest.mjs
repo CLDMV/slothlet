@@ -20,16 +20,17 @@
  * @description
  * The guest has no write rule. It binds `Object.assign`, `Reflect.set`, `Object.defineProperty` or
  * `Reflect.deleteProperty` to a write of another module's class prototype (read through the class, or through an
- * instance) or of its api node, or hands `Reflect.set` or Node's `util._extend` unbound with the target as an argument,
- * to a module that runs the callback it is handed: the module that owns the target, the base module (which owns the whole
- * tree), or a peer granted `**:full`. Each write ends as the guest's own direct write of it does, refused with the same
- * code, and nothing lands; a member the guest may not read is not written either. The guest's own writes to an instance
- * another module made (its prototype, a method its prototype holds) are refused, the base module's instances included,
- * and so are the same writes handed to another module. A write the guest may make itself, handed to a module that may
- * make it too, lands; reads, data written on an instance and built-ins that only compute are unaffected. A member
- * private to a module is refused to every other module through an instance as through the prototype. With the permission
- * system off or disabled every write lands and every member is read, as in plain JavaScript. Checked in eager and lazy
- * mode, async and live runtime, attribution `"precise"` and `"fast"`.
+ * instance) or of its api node, or hands `Reflect.set` or Node's `util._extend` unbound with the target as an argument
+ * or inside plain data, to a module that runs the callback it is handed: the module that owns the target, the base module
+ * (which owns the whole tree), or a peer granted `**:full`. Each write ends as the guest's own direct write of it does,
+ * refused with the same code, and nothing lands; a member the guest may not read is not written either. The guest's own
+ * writes to an instance another module made (its prototype, a method its prototype holds) are refused, the base module's
+ * instances included, and so are the same writes handed to another module. A promise's `then` bound to a callback bound
+ * to a write runs after the call that ran it returned, and its write is refused all the same. A write the guest may make
+ * itself, handed to a module that may make it too, lands; reads, data written on an instance and built-ins that only
+ * compute are unaffected. A member private to a module is refused to every other module through an instance as through
+ * the prototype. With the permission system off or disabled every write lands and every member is read, as in plain
+ * JavaScript. Checked in eager and lazy mode, async and live runtime, attribution `"precise"` and `"fast"`.
  * @module tests/vitests/suites/permissions/handed-builtin-writes
  */
 
@@ -52,6 +53,8 @@ const WRITES = [
 	"protoUnbound",
 	"protoNodeHelper",
 	"methodBound",
+	"protoInData",
+	"nodeInData",
 	"nodeBound",
 	"nodeUnbound",
 	"fnBound",
@@ -141,6 +144,18 @@ describe("a built-in handed to another module to run writes nothing the handing 
 							expect(direct, `${name}: the guest's own write`).toMatch(/^threw (LOOSE_SET_NOT_OWNED|PERMISSION_DENIED)$/);
 							expect(await api.guest.instanceHanded(name, ownerPath, runnerPath), name).toBe(direct);
 						}
+						const directNode = await api.guest.direct("nodeBound", ownerPath);
+						expect(await api.guest.handedBoundThen("proto", ownerPath, runnerPath), "bound into then").toBe("threw LOOSE_SET_NOT_OWNED");
+						expect(await api.guest.handedBoundThen("node", ownerPath, runnerPath), "bound into then").toBe(directNode);
+						expect(await snapshot(api, ownerPath), "bound into then").toEqual(before);
+						for (const target of ["proto", "node"]) {
+							expect(await api.guest.handedBoundThenDetached(target, ownerPath, runnerPath)).toBe("scheduled");
+							await new Promise((done) => setTimeout(done, 20));
+							expect(await api.guest.deferredResult(), `bound into then, ${target}, after the call ended`).toBe(
+								target === "proto" ? "threw LOOSE_SET_NOT_OWNED" : directNode
+							);
+							expect(await snapshot(api, ownerPath), `bound into then, ${target}, after the call ended`).toEqual(before);
+						}
 						expect(await api.guest.handedDeferred(ownerPath, runnerPath), "called back later").toBe("threw LOOSE_SET_NOT_OWNED");
 						expect(await snapshot(api, ownerPath), "called back later").toEqual(before);
 						expect(await api.guest.handedDeferredDetached(ownerPath, runnerPath)).toBe("scheduled");
@@ -201,6 +216,14 @@ describe("a built-in handed to another module to run writes nothing the handing 
 							expect(await api.guest.instanceDirect(name, ownerPath), name).toBe("done");
 							expect(await api.guest.instanceHanded(name, ownerPath, runnerPath), name).toBe("done");
 						}
+						expect(await api.guest.handedBoundThen("proto", ownerPath, runnerPath)).toBe("done");
+						expect((await api[ownerPath].protoState()).protoKeys).toContain("planted11");
+						expect(await api.guest.handedBoundThenDetached("proto", ownerPath, runnerPath)).toBe("scheduled");
+						await new Promise((done) => setTimeout(done, 20));
+						expect(await api.guest.deferredResult()).toBe("done");
+						expect((await api[ownerPath].protoState()).protoKeys).toContain("planted12");
+						expect(await api.guest.handedBoundThen("node", ownerPath, runnerPath)).toBe("done");
+						expect(api[ownerPath].open).toBe("W5");
 					} finally {
 						await api.slothlet.shutdown();
 					}

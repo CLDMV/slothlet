@@ -1128,19 +1128,20 @@ function runtime_selfMemberOf(value, reader, slothlet, parts, prop, through) {
 }
 
 /**
- * The modules a function handed over between modules is running for, innermost last: a function of the engine's own,
- * a bound built-in among them (`Object.assign.bind(null, target, values)`), runs no code of the module that handed it
- * over, so a write it makes has no frame of that module's. While one runs through its crossing view, a write it makes
- * through a prototype's handle has to be that module's to make as well as the executing module's, as a write through a
- * view the module held would be ({@link runtime_assertReaderWrite}).
+ * The modules a function handed over between modules is running for, innermost last (see `ACTING_FOR` in
+ * `handlers/trusted-root`): while one runs through its crossing view, a write it makes through a prototype's handle or to
+ * an api node has to be that module's to make as well as the executing module's, as a write through a view the module
+ * held would be ({@link runtime_assertReaderWrite}).
  * @type {object[]}
  * @private
  */
-const ACTING_FOR = [];
+const ACTING_FOR = trustedRootOwn.ACTING_FOR;
 
 /**
  * Run a function handed over from another module through its crossing view: a function of the engine's own runs for
- * that module ({@link ACTING_FOR}); any other runs its own module's code, whose frames attribute what it does.
+ * that module ({@link ACTING_FOR}), and so does what it registers to run later (a promise's reaction it was bound to,
+ * `Promise.prototype.then.bind(p, write)`), to which the runtime carries the module; any other runs its own module's
+ * code, whose frames attribute what it does.
  * @param {object} state - The crossing view's state.
  * @param {function(): *} run - The call.
  * @returns {*} What it returned.
@@ -1195,6 +1196,71 @@ function runtime_runsForHander(value, from) {
 	if (typeof value !== "function" || !from?.____slothletInternal || util.types.isProxy(value)) return false;
 	if (runtime_isSlothletValue(value) || isFrameworkInternal(value)) return false;
 	return WeakSetMethods.has(INTRINSICS, value) || isSharedExport(value) || runtime_runsNoModuleCode(value);
+}
+
+/**
+ * Whether a value a module hands on stays a view for every other module, however much the receiver may write: a
+ * function that runs for the module handing it ({@link runtime_runsForHander}), and plain data holding one as a member
+ * of its own at any depth within {@link CODE_SEARCH} (`{ fn: Reflect.set, target }`), whose member reaches the receiver
+ * as that function's view ({@link runtime_crossHandedMember}). Nothing of the value runs to decide: an accessor is passed
+ * over.
+ * @param {*} value - The value handed on.
+ * @param {object|null} from - The wrapper of the module handing it on.
+ * @returns {boolean} True when it stays a view.
+ * @private
+ */
+function runtime_viewedForHander(value, from) {
+	if (runtime_runsForHander(value, from)) return true;
+	if (value === null || typeof value !== "object" || !from?.____slothletInternal || !runtime_isCarrier(value)) return false;
+	try {
+		return runtime_carriesHanded(value, from, CODE_SEARCH.depth, { remaining: CODE_SEARCH.properties });
+	} catch {
+		// A value that refuses to be described is viewed.
+		return true;
+	}
+}
+
+/**
+ * Whether a carrier ({@link runtime_isCarrier}) holds, as a data member at any depth within {@link CODE_SEARCH}, a
+ * function that runs for the module handing it on ({@link runtime_runsForHander}).
+ * @param {object} value - The carrier.
+ * @param {object} from - The wrapper of the module handing it on.
+ * @param {number} depth - Levels still allowed.
+ * @param {{remaining: number}} budget - Properties still allowed.
+ * @returns {boolean} True when it does.
+ * @private
+ */
+function runtime_carriesHanded(value, from, depth, budget) {
+	if (depth <= 0) return false;
+	if (Arrays.isArray(value) && value.length > budget.remaining) return false;
+	const keys = Reflect.ownKeys(value);
+	budget.remaining -= keys.length;
+	if (budget.remaining < 0) return false;
+	for (let ofIndex = 0, ofList = keys; ofIndex < ofList.length; ofIndex++) {
+		const member = Reflect.getOwnPropertyDescriptor(value, ofList[ofIndex])?.value;
+		if (member === null || (typeof member !== "object" && typeof member !== "function")) continue;
+		if (runtime_runsForHander(member, from)) return true;
+		if (typeof member === "object" && runtime_isCarrier(member) && runtime_carriesHanded(member, from, depth - 1, budget)) return true;
+	}
+	return false;
+}
+
+/**
+ * A member of its own a crossing view hands its reader, when it is a function that runs for the module the value came
+ * from ({@link runtime_runsForHander}): its view, which runs it for that module ({@link runtime_handedView}), as when the
+ * module hands it over as an argument. `undefined` for any other member.
+ * @param {object} state - The crossing view's state.
+ * @param {string|symbol} prop - The member.
+ * @param {*} value - What it holds.
+ * @returns {Function|undefined} The view, or `undefined`.
+ * @private
+ */
+function runtime_crossHandedMember(state, prop, value) {
+	if (typeof value !== "function" || WeakMapMethods.has(CROSSINGS, value) || !state.reader?.____slothletInternal) return undefined;
+	if (!runtime_runsForHander(value, state.from) || !runtime_guardOn(state.slothlet)) return undefined;
+	const own = Reflect.getOwnPropertyDescriptor(state.original, prop);
+	if (!own || !("value" in own) || own.value !== value) return undefined;
+	return runtime_handedView(value, state.reader, state.slothlet, state.from);
 }
 
 /**
@@ -10833,8 +10899,8 @@ function runtime_holdsNoCode(value) {
 }
 
 /**
- * {@link runtime_handedAsItself} for a value: a function that runs for the module handing it on
- * ({@link runtime_runsForHander}) never reaches a module as itself, and nor does an instance inheriting members private to
+ * {@link runtime_handedAsItself} for a value: a value that stays a view for every module it is handed to
+ * ({@link runtime_viewedForHander}) never reaches one as itself, and nor does an instance inheriting members private to
  * a module that privacy keeps from the reader ({@link runtime_inheritsPrivateKept}), however much it may write.
  * @param {*} value - The value.
  * @param {object} slothlet - The instance.
@@ -10844,7 +10910,7 @@ function runtime_holdsNoCode(value) {
  * @private
  */
 function runtime_handedAsItselfFor(value, slothlet, reader, from) {
-	if (runtime_runsForHander(value, from)) return null;
+	if (runtime_viewedForHander(value, from)) return null;
 	const itself = runtime_handedAsItself(slothlet, reader, from, value);
 	return itself !== null && runtime_inheritsPrivateKept(slothlet, reader, value) ? null : itself;
 }
@@ -11529,6 +11595,10 @@ const CROSSING_HANDLER = {
 		if (prop === "__proto__" && !fixed) {
 			const prototype = Reflect.getPrototypeOf(original);
 			if (prototype === value || WeakMapMethods.has(STAND_IN_RECORDS, original)) return runtime_crossPrototype(state, prototype);
+		}
+		if (own) {
+			const handed = runtime_crossHandedMember(state, prop, value);
+			if (handed !== undefined) return handed;
 		}
 		return runtime_crossEngineMethod(state, value) ?? runtime_crossOut(state, value);
 	},

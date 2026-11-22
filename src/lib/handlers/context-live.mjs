@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-21T16:31:08-08:00 (1795307468)
+ *	@Last modified time: 2026-11-21T17:00:48-08:00 (1795309248)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -1960,6 +1960,25 @@ export class LiveContextManager {
 		 * @returns {Function[]} Each callback, pinned where there is a caller to pin it to.
 		 */
 		const pinMany = (listeners) => {
+			const pinned = pinManyFor(listeners);
+			// Registered while a function another module handed over runs for that module (see `ACTING_FOR` in
+			// `handlers/trusted-root`): each callback runs for that module too, whenever it is called back.
+			const acting = trustedRootOwn.actingForNow();
+			if (acting === null) return pinned;
+			return mapList(pinned, (listener) =>
+				typeof listener === "function"
+					? function slothlet_actingForListener(...args) {
+							return trustedRootOwn.runActingFor(acting, listener, this, args);
+						}
+					: listener
+			);
+		};
+		/**
+		 * {@link pinMany} for the identity alone.
+		 * @param {Function[]} listeners - Callbacks being registered.
+		 * @returns {Function[]} Each callback, pinned where there is a caller to pin it to.
+		 */
+		const pinManyFor = (listeners) => {
 			// The store of the instance actually executing (#592) — of the run() / scope() flow the registering code is part
 			// of, never one a sibling flow left in the active field — and who on it registered the callbacks.
 			const active = this.tryGetContext();

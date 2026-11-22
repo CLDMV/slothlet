@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-21T15:00:21-08:00 (1795302021)
+ *	@Last modified time: 2026-11-21T17:00:48-08:00 (1795309248)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -71,6 +71,15 @@ import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "#helpers/ins
 const { runtime_wrapClassInstance } = classInstanceWrapperInternals("lib/handlers/context-async");
 const { setApiContextChecker, setListenerFlow } = eventemitterContextInternals("lib/handlers/context-async");
 const trustedRootOwn = trustedRootInternals("lib/handlers/context-async");
+
+/**
+ * The modules a job runs for (see `ACTING_FOR` in `handlers/trusted-root`): what a function another module handed over
+ * made while it ran for that module (a promise's reaction it registered, a timer), by the job's resource, put back while
+ * the job's callback runs.
+ * @type {WeakMap<object, ReadonlyArray<object>>}
+ * @private
+ */
+const JOB_ACTING_FOR = new WeakMap();
 const { buildCapturedFlowStore } = trustedRootOwn;
 const { attributeResult, enterCall, ownReceiver, resolveSupplier, runningOutsideFlow, sampleStoreScripts, scopeEnteredByCode } =
 	framePlacementInternals("lib/handlers/context-async");
@@ -987,15 +996,18 @@ export class AsyncContextManager {
 			hook = createHook({
 				init(asyncId, type, triggerAsyncId, resource) {
 					if (manager.#countingWork) manager.#countWork(asyncId, type, resource);
+					if (trustedRootOwn.ACTING_FOR.length !== 0) WeakMapMethods.set(JOB_ACTING_FOR, resource, trustedRootOwn.actingForNow());
 					manager.#jobMade(resource, type);
 				},
 				before() {
 					manager.#stretch++;
 					manager.#jobBegins();
 					if (manager.#jobsMarked) manager.#jobStarts();
+					manager.#actingJobBegins();
 				},
 				after() {
 					manager.#stretch++;
+					manager.#actingJobEnds();
 					if (manager.#runningJobs.length !== 0) manager.#jobEnds();
 					manager.#jobFinishes();
 				},
@@ -1205,6 +1217,46 @@ export class AsyncContextManager {
 		} catch {
 			// The resource is left unmarked: its callback is told as before, by its frames when it touches slothlet.
 		}
+	}
+
+	/**
+	 * The jobs running now that run for modules ({@link JOB_ACTING_FOR}), innermost last, with how long `ACTING_FOR` was
+	 * before each began.
+	 * @type {Array<{resource: object, base: number}>}
+	 */
+	#actingJobs = [];
+
+	/**
+	 * A resource's callback starts: one made while a function another module handed over ran for that module runs for
+	 * it too, until it ends.
+	 * @returns {void}
+	 * @private
+	 */
+	#actingJobBegins() {
+		try {
+			const resource = executionAsyncResource?.();
+			if (resource === undefined || resource === null) return;
+			const acting = WeakMapMethods.get(JOB_ACTING_FOR, resource);
+			if (acting === undefined) return;
+			const stack = trustedRootOwn.ACTING_FOR;
+			listPush(this.#actingJobs, { resource, base: stack.length });
+			for (let i = 0; i < acting.length; i++) listPush(stack, acting[i]);
+		} catch {
+			// Not pushed: what the callback writes is decided for the module executing alone.
+		}
+	}
+
+	/**
+	 * A resource's callback ends: what {@link AsyncContextManager#actingJobBegins} pushed for it is taken off again.
+	 * @returns {void}
+	 * @private
+	 */
+	#actingJobEnds() {
+		const jobs = this.#actingJobs;
+		if (jobs.length === 0 || jobs[jobs.length - 1].resource !== executionAsyncResource?.()) return;
+		const { base } = ArrayMethods.pop(jobs);
+		const stack = trustedRootOwn.ACTING_FOR;
+		while (stack.length > base) ArrayMethods.pop(stack);
 	}
 
 	/**

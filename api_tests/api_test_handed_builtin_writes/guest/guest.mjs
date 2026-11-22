@@ -73,6 +73,14 @@ const WRITES = {
 		direct: (owner) => Object.assign(owner.Box.prototype, { method: replacement }),
 		handed: (owner, runner) => runner.runCb(Object.assign.bind(null, owner.Box.prototype, { method: replacement }))
 	},
+	protoInData: {
+		direct: (owner) => Reflect.set(owner.Box.prototype, "planted10", replacement),
+		handed: (owner, runner) => runner.runData({ fn: Reflect.set, target: owner.Box.prototype, key: "planted10", value: replacement })
+	},
+	nodeInData: {
+		direct: (owner) => Reflect.set(owner, "open", "W3"),
+		handed: (owner, runner) => runner.runData({ fn: Reflect.set, target: owner, key: "open", value: "W3" })
+	},
 	nodeBound: {
 		direct: (owner) => Reflect.set(owner, "open", "W"),
 		handed: (owner, runner) => runner.runCb(Reflect.set.bind(null, owner, "open", "W"))
@@ -240,6 +248,55 @@ export function readPrivate(how, ownerPath) {
 export function readPublic(ownerPath) {
 	const owner = at(ownerPath);
 	return `${owner.makeBox().method()},${new owner.Box().method()}`;
+}
+
+/**
+ * Hand the module at `runnerPath` a promise's `then` bound to a callback that is itself bound to a write: the callback
+ * runs after the runner's call has returned, and its write is held to the guest when it does.
+ * @param {string} target - `"proto"` for the prototype's member, `"node"` for the node's.
+ * @param {string} ownerPath - The module written.
+ * @param {string} runnerPath - The module that runs it.
+ * @returns {Promise<string>} How it ended.
+ */
+export async function handedBoundThen(target, ownerPath, runnerPath) {
+	const owner = at(ownerPath);
+	const write =
+		target === "proto"
+			? Object.assign.bind(null, owner.Box.prototype, { planted11: replacement })
+			: Object.assign.bind(null, owner, { open: "W5" });
+	try {
+		await at(runnerPath).runCb(Promise.prototype.then.bind(Promise.resolve(), write));
+		return "done";
+	} catch (error) {
+		return `threw ${error?.code ?? error?.name}`;
+	}
+}
+
+/**
+ * {@link handedBoundThen} from a call that returns at once: the callback runs after the guest's call has ended.
+ * @param {string} target - `"proto"` or `"node"`.
+ * @param {string} ownerPath - The module written.
+ * @param {string} runnerPath - The module that runs it.
+ * @returns {string} `"scheduled"`; {@link deferredResult} reads how it ended.
+ */
+export function handedBoundThenDetached(target, ownerPath, runnerPath) {
+	deferredOutcome = "pending";
+	const owner = at(ownerPath);
+	const write =
+		target === "proto"
+			? Object.assign.bind(null, owner.Box.prototype, { planted12: replacement })
+			: Object.assign.bind(null, owner, { open: "W6" });
+	at(runnerPath)
+		.runCb(Promise.prototype.then.bind(Promise.resolve(), write))
+		.then(
+			() => {
+				deferredOutcome = "done";
+			},
+			(error) => {
+				deferredOutcome = `threw ${error?.code ?? error?.name}`;
+			}
+		);
+	return "scheduled";
 }
 
 /**
