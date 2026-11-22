@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-21T15:09:21-08:00 (1795302561)
+ *	@Last modified time: 2026-11-21T21:32:31-08:00 (1795325551)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -388,6 +388,40 @@ const SELF_INSTANCE_NODES = new WeakMap();
  * @private
  */
 const HOST_READER = Objects.freeze({ reader: "host" });
+
+/**
+ * The instances that have shut down ({@link runtime_markInstanceEnded}).
+ * @type {WeakSet<object>}
+ * @private
+ */
+const ENDED_INSTANCES = new WeakSet();
+
+/**
+ * Note that an instance has shut down, or is running again (a load, a reload or a restart after the shutdown).
+ * @param {object} slothlet - The instance.
+ * @param {boolean} ended - Whether it has shut down.
+ * @returns {void}
+ * @internal
+ */
+function runtime_markInstanceEnded(slothlet, ended) {
+	if (ended) WeakSetMethods.add(ENDED_INSTANCES, slothlet);
+	else WeakSetMethods.delete(ENDED_INSTANCES, slothlet);
+}
+
+/**
+ * Refuse an access a module makes through an api node it was handed once its instance has shut down: the node reads,
+ * lists, describes and calls nothing for it then, whatever it was allowed while the instance ran. The host reading its
+ * own `api` is no module's access and is not refused here.
+ * @param {object} slothlet - The instance the node belongs to.
+ * @param {object} reader - Who the node was handed to.
+ * @returns {void}
+ * @throws {SlothletError} CONTEXT_NOT_ACTIVE_SELF once the instance has shut down, as a read of `self` then is.
+ * @private
+ */
+function runtime_refuseEndedAccess(slothlet, reader) {
+	if (reader === HOST_READER || !WeakSetMethods.has(ENDED_INSTANCES, slothlet)) return;
+	throw new slothlet.SlothletError("CONTEXT_NOT_ACTIVE_SELF", {});
+}
 
 /**
  * Reader of a node read through `self` by code the live runtime could not attribute to one call. It owns
@@ -2246,9 +2280,16 @@ function runtime_selfMemberView(value, reader, slothlet, parts, through) {
 		if (handle) return runtime_prototypeHandle(slothlet, proto, classSite);
 		return runtime_selfMemberOf(proto, reader, slothlet, classSite.parts, "prototype");
 	};
+	// Once the instance has shut down, the view reads, lists, describes, calls and changes nothing for a module.
+	const refuseEnded = () => runtime_refuseEndedAccess(slothlet, who());
+	const assertLiveWrite = (prop) => {
+		refuseEnded();
+		assertWrite(prop);
+	};
 	const view = new NativeProxy(shadow, {
 		__proto__: null,
 		get(_, prop, receiver) {
+			refuseEnded();
 			mirrorClosed();
 			// An object's `__proto__` is its prototype, the same view `Object.getPrototypeOf` reports (#667).
 			const engineProto = prop === "__proto__" && receiver === view && typeof raw !== "function" && runtime_readsEngineProto(raw);
@@ -2263,21 +2304,25 @@ function runtime_selfMemberView(value, reader, slothlet, parts, through) {
 			return member(prop, Reflect.get(raw, prop, receiver === view ? raw : receiver));
 		},
 		getOwnPropertyDescriptor(_, prop) {
+			refuseEnded();
 			mirrorClosed();
 			if (privateHidden(prop)) return undefined;
 			return mirror(prop);
 		},
 		has(_, prop) {
+			refuseEnded();
 			mirrorClosed();
 			if (privateHidden(prop)) return false;
 			return Reflect.has(raw, prop);
 		},
 		ownKeys() {
+			refuseEnded();
 			mirrorClosed();
 			if (!handle) return Reflect.ownKeys(raw);
 			return filterList(Reflect.ownKeys(raw), (key) => !privateHidden(key));
 		},
 		getPrototypeOf() {
+			refuseEnded();
 			mirrorClosed();
 			if (Reflect.isExtensible(shadow)) return prototypeOf();
 			// A closed view reports what its shadow holds (proxy invariant), once the reader may have it.
@@ -2285,10 +2330,12 @@ function runtime_selfMemberView(value, reader, slothlet, parts, through) {
 			return Reflect.getPrototypeOf(shadow);
 		},
 		isExtensible() {
+			refuseEnded();
 			mirrorClosed();
 			return Reflect.isExtensible(shadow);
 		},
 		apply(_, thisArg, args) {
+			refuseEnded();
 			// The call runs on the value it was read from: a view of that value as `this` is the value, and a view of any
 			// other value stays the view (#625), so a method cannot be pointed at another value to run on it as is.
 			const record = WeakMapMethods.get(SELF_MEMBER_VIEWS, thisArg);
@@ -2296,9 +2343,11 @@ function runtime_selfMemberView(value, reader, slothlet, parts, through) {
 			return runtime_selfViewResult(Reflect.apply(raw, receiver, args), who());
 		},
 		construct(_, args, newTarget) {
+			refuseEnded();
 			return Reflect.construct(raw, args, newTarget === view ? raw : newTarget);
 		},
 		set(_, prop, written, receiver) {
+			refuseEnded();
 			// A write reaching the view from an object that inherits from it lands on that object, as plain JS has it.
 			if (receiver !== view) return Reflect.set(raw, prop, written, receiver);
 			assertWrite(prop);
@@ -2306,7 +2355,7 @@ function runtime_selfMemberView(value, reader, slothlet, parts, through) {
 			if (done) mirror(prop);
 			return done;
 		},
-		...runtime_selfViewWriteTraps(raw, shadow, assertWrite, mirror, mirrorClosed)
+		...runtime_selfViewWriteTraps(raw, shadow, assertLiveWrite, mirror, mirrorClosed)
 	});
 	record.view = view;
 	// A handle's privacy is decided for an instance's reads of what it inherits, too ({@link runtime_inheritedPrivate}).
@@ -2670,8 +2719,11 @@ function runtime_selfView(node, reader, from = null, access = null) {
 	// A view over a captured view stands over that view's shadow, which holds what the captured view has reported
 	// fixed: the engine checks this view's answers against it, never by asking the captured view again, which
 	// refuses a fixed member its reader may not read. Every trap works on the node itself (#625, #655).
+	// Once the instance has shut down, the view reads, lists, describes, calls and changes nothing for a module.
+	const refuseEnded = () => runtime_refuseEndedAccess(slothlet, reader);
 	const view = new NativeProxy(WeakMapMethods.get(capturedViewShadows, node) ?? node, {
 		get(_, prop) {
+			refuseEnded();
 			// The read, and the description of the member that follows it, are one access by the same code.
 			const access = WeakMapMethods.has(capturedViewShadows, node) ? runtime_beginAccess() : null;
 			try {
@@ -2681,6 +2733,7 @@ function runtime_selfView(node, reader, from = null, access = null) {
 			}
 		},
 		getOwnPropertyDescriptor(_, prop) {
+			refuseEnded();
 			const descriptor = Reflect.getOwnPropertyDescriptor(node, prop);
 			if (!descriptor || isFixed(descriptor)) return descriptor;
 			if (!("value" in descriptor)) {
@@ -2694,6 +2747,7 @@ function runtime_selfView(node, reader, from = null, access = null) {
 			return { __proto__: null, ...descriptor, value: viewMember(prop, descriptor.value) };
 		},
 		ownKeys(_) {
+			refuseEnded();
 			return Reflect.ownKeys(node);
 		},
 		// A call reaches the node as one made on it would. The method runs as its own module: called on the
@@ -2705,6 +2759,7 @@ function runtime_selfView(node, reader, from = null, access = null) {
 		// While the permission system is on, what the call throws or rejects with reaches the reader as values crossing
 		// between modules do (#667).
 		apply(_, thisArg, args) {
+			refuseEnded();
 			const ownThis = inner && runtime_selfIsMethodNode(thisArg, inner) ? runtime_selfViewFor(thisArg, inner) : thisArg;
 			let result;
 			try {
@@ -2715,6 +2770,7 @@ function runtime_selfView(node, reader, from = null, access = null) {
 			return runtime_selfViewResult(result, reader, slothlet, inner);
 		},
 		construct(_, args, newTarget) {
+			refuseEnded();
 			// A class the reader constructs for is its own: what it makes the instance's prototype comes back as it is.
 			if (newTarget !== view && WeakSetMethods.has(trustedRootOwn.genuineWrappers, reader)) {
 				runtime_recordOrigin(newTarget, reader);
@@ -2730,10 +2786,12 @@ function runtime_selfView(node, reader, from = null, access = null) {
 			return runtime_crossTo(made, reader, slothlet, inner);
 		},
 		set(_, prop, value) {
+			refuseEnded();
 			refuseWithoutStanding(prop);
 			return vouched(() => Reflect.set(node, prop, runtime_unwrapSelfView(value)));
 		},
 		defineProperty(_, prop, descriptor) {
+			refuseEnded();
 			// A definition that changes nothing (freezing an already frozen node) is no write of the reader's (#667): it goes
 			// on to the node, which decides whether it changes what the node holds.
 			if (
@@ -2749,28 +2807,34 @@ function runtime_selfView(node, reader, from = null, access = null) {
 			return defined;
 		},
 		deleteProperty(_, prop) {
+			refuseEnded();
 			refuseWithoutStanding(prop);
 			return vouched(() => Reflect.deleteProperty(node, prop));
 		},
 		setPrototypeOf(_, proto) {
+			refuseEnded();
 			refuseWithoutStanding(null);
 			return vouched(() => Reflect.setPrototypeOf(node, proto));
 		},
 		preventExtensions(_) {
+			refuseEnded();
 			// Closing a node already closed is no write of the reader's (#667): the node answers it.
 			if (Reflect.isExtensible(node)) refuseWithoutStanding(null);
 			return vouched(() => Reflect.preventExtensions(node));
 		},
 		has(_, prop) {
+			refuseEnded();
 			return Reflect.has(node, prop);
 		},
 		getPrototypeOf(_) {
+			refuseEnded();
 			const prototype = Reflect.getPrototypeOf(node);
 			// A closed node reports what its target holds (proxy invariant).
 			if (prototype === null || !Reflect.isExtensible(node)) return prototype;
 			return shownPrototype(prototype);
 		},
 		isExtensible(_) {
+			refuseEnded();
 			return Reflect.isExtensible(node);
 		}
 	});
@@ -23263,6 +23327,7 @@ export function internals(consumer) {
 		runtime_isCallerLocked,
 		runtime_isLanguageNameDescriptor,
 		runtime_markCallerLocked,
+		runtime_markInstanceEnded,
 		runtime_nodeBehind,
 		runtime_registerFrameworkMember,
 		runtime_registerFrameworkMemberCopy,

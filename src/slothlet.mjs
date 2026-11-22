@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-21T13:38:23-08:00 (1795297103)
+ *	@Last modified time: 2026-11-21T21:32:38-08:00 (1795325558)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -194,7 +194,8 @@ const {
 	runtime_rootInheritedRead,
 	runtime_behindGivenView,
 	runtime_unwrapSelfView,
-	runtime_assertCapability
+	runtime_assertCapability,
+	runtime_markInstanceEnded
 } = unifiedWrapperInternals("slothlet");
 const { markSlothletProxy } = frameworkInternalsInternals("slothlet");
 const trustedRootOwn = trustedRootInternals("slothlet");
@@ -2163,6 +2164,7 @@ class Slothlet {
 		}
 
 		this.isLoaded = true;
+		runtime_markInstanceEnded(this, false);
 
 		// `loader.materialize` given a function: call it now when everything is already materialized (eager mode, or a lazy
 		// tree that finished during load); otherwise _checkMaterializationComplete() calls it when the last wrapper loads.
@@ -3474,6 +3476,7 @@ class Slothlet {
 			if (kind !== "copy") await handlers.routineManager.runStartupModeRoutines();
 		}
 		this.isLoaded = kind === "copy" ? view.isLoaded : true;
+		if (this.isLoaded) runtime_markInstanceEnded(this, false);
 		if (kind === "restart") await handlers.lifecycle.emit("init", { instance: this.instanceID, restart: true });
 	}
 
@@ -3728,6 +3731,7 @@ class Slothlet {
 			this.reference = kept.reference;
 			this.context = kept.context;
 			this.isLoaded = kept.isLoaded;
+			if (this.isLoaded) runtime_markInstanceEnded(this, false);
 		}
 		this.#carriedContext = null;
 		// The context the instance's code runs in now answers with that copy: a reload that switched IDs set the new ID's
@@ -4504,6 +4508,10 @@ class Slothlet {
 			// last instance shuts down — at which point everything tracked is released together.
 			cleanupEventEmitterResources();
 		}
+
+		// From here on, an api node a module was handed reads nothing for it (see runtime_refuseEndedAccess): the context
+		// and the permission rules its accesses were decided against go now. A restart brings the instance back.
+		runtime_markInstanceEnded(this, true);
 
 		// Cleanup context
 		if (this.instanceID && this.contextManager) {
