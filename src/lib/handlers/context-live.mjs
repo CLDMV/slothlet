@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-22T01:19:19-08:00 (1795339159)
+ *	@Last modified time: 2026-11-22T03:30:33-08:00 (1795347033)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -1210,8 +1210,16 @@ export class LiveContextManager {
 	#reopenFlowStore(store) {
 		const id = store.instanceID;
 		if (MapMethods.has(this.instances, id)) return false;
-		// The instance has shut down: the work runs with no store, as any callback that outlives its instance.
-		if (!MapMethods.has(this.instances, store.parentInstanceID)) return false;
+		if (!MapMethods.has(this.instances, store.parentInstanceID)) {
+			// A reload or restart since gave the instance a new ID. The stores it moves are the ones whose run's copy is still
+			// kept (see trackFlowStore): a store of a run torn down before it still names the old ID, and belongs to the
+			// instance it holds as `slothlet`, under the ID that instance has now, as on the async runtime.
+			const owner = store.slothlet;
+			const current = owner !== null && typeof owner === "object" ? owner.instanceID : undefined;
+			// The instance has shut down: the work runs with no store, as any callback that outlives its instance.
+			if (typeof current !== "string" || !MapMethods.has(this.instances, current)) return false;
+			store.parentInstanceID = current;
+		}
 		Objects.defineProperty(store, REOPENED_FLOW, { __proto__: null, value: true, configurable: true });
 		MapMethods.set(this.instances, id, store);
 		return true;
