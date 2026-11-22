@@ -164,6 +164,7 @@ import {
 	setToArray,
 	splitText,
 	StringMethods,
+	Symbol,
 	URLSearchParams,
 	URLSearchParamsMethods,
 	WeakMap,
@@ -224,77 +225,143 @@ const { getContextManager } = contextInternals("slothlet");
 let typescriptInternals = null;
 
 /**
- * The async flow a full reload builds its new copy in (see {@link Slothlet#reload}): while a reload runs, the build reads
- * and writes the new copy's components, config and api tree, and every other caller reads the copy the instance has.
- * Made on the first reload or restart (see {@link runInReloadBuild}), so a process that never reloads makes none; it
- * stays null where the host has no AsyncLocalStorage (a browser), where a reload cannot keep the two apart.
- * @type {AsyncLocalStorage|null}
+ * The mark of the build a reload, a restart or a run's copy is under way in (see {@link Slothlet#reload}): while a
+ * reload runs, the code of its build reads and writes the new copy's components, config and api tree, and every other
+ * caller reads the copy the instance has. Carried with the running code's flow (see {@link runMarked}).
+ * @type {symbol}
  * @private
  */
-let reloadBuildStorage = null;
+const BUILD_MARK = Symbol("slothlet.buildMark");
 
 /**
- * The instance ID a lazy node's load runs under when it was asked for by code in a run that keeps a copy a reload
- * swapped out (see {@link Slothlet#loadAsCaller}): a load runs apart from the flow that asked for it, so the ID is
- * carried to it here. Made on its first use (see {@link runLoadAs}); null until then and where the host has no
- * AsyncLocalStorage.
- * @type {import("node:async_hooks").AsyncLocalStorage<string>|null}
+ * The mark of the instance ID a lazy node's load runs under when it was asked for by code in a run that keeps a copy a
+ * reload swapped out (see {@link Slothlet#loadAsCaller}): a load runs apart from the flow that asked for it, so the ID
+ * is carried to it here (see {@link runMarked}).
+ * @type {symbol}
  * @private
  */
-let loadAsStorage = null;
+const LOAD_AS_MARK = Symbol("slothlet.loadAs");
 
 /**
- * Run `fn` in a new flow of {@link reloadBuildStorage}, making the storage on its first use: a process whose instances
- * never reload makes no AsyncLocalStorage for it (a live-only process makes none at all).
- * @param {*} mark - The store the flow carries.
+ * The async runtime's flows of {@link BUILD_MARK} and {@link LOAD_AS_MARK}: one AsyncLocalStorage each, made on its
+ * first use, so a process whose instances never reload makes none. The live runtime makes none at all: it carries the
+ * marks with its own flows (see {@link runMarked}).
+ * @type {Map<symbol, AsyncLocalStorage>}
+ * @private
+ */
+const markStorages = new Map();
+
+/**
+ * The live runtime's context manager when the instance runs on it: it carries a mark with the running code's flow, the
+ * way it carries a `run()`'s context and caller, so a mark reaches exactly as far as live context does (see
+ * docs/CONTEXT-PROPAGATION.md).
+ * @param {object} slothlet - The instance.
+ * @returns {object|null} The manager, or null on the async runtime.
+ * @private
+ */
+function liveMarks(slothlet) {
+	const manager = slothlet.contextManager;
+	return manager !== null && manager !== undefined && typeof manager.runMarked === "function" ? manager : null;
+}
+
+/**
+ * Run `fn` in a new flow that carries `value` as the instance's mark `key`: an AsyncLocalStorage flow on the async
+ * runtime, the live context manager's own on the live runtime.
+ * @param {object} slothlet - The instance.
+ * @param {symbol} key - {@link BUILD_MARK} or {@link LOAD_AS_MARK}.
+ * @param {*} value - The mark.
  * @param {function(): *} fn - What runs in the flow.
  * @returns {*} What `fn` returns.
  * @private
  */
-function runInReloadBuild(mark, fn) {
-	reloadBuildStorage ??= new AsyncLocalStorage();
-	return reloadBuildStorage.run(mark, fn);
+function runMarked(slothlet, key, value, fn) {
+	const live = liveMarks(slothlet);
+	if (live !== null) return live.runMarked(slothlet.instanceID, key, value, fn);
+	let storage = MapMethods.get(markStorages, key);
+	if (storage === undefined) {
+		storage = new AsyncLocalStorage();
+		MapMethods.set(markStorages, key, storage);
+	}
+	return storage.run(value, fn);
 }
 
 /**
- * Run a build in a new flow of {@link reloadBuildStorage} (see {@link runInReloadBuild}), and close its mark once the
- * build settles. Work module code begins while the build loads it (a timer, a server's callbacks) keeps the flow, and
- * so the mark, for as long as it lives: once closed, the mark tells that work nothing (see {@link currentBuildMark}),
- * so it runs as code outside the build does.
+ * The instance's mark `key` the running code's flow carries (see {@link runMarked}).
+ * @param {object} slothlet - The instance.
+ * @param {symbol} key - {@link BUILD_MARK} or {@link LOAD_AS_MARK}.
+ * @returns {*} The mark, or undefined.
+ * @private
+ */
+function markOf(slothlet, key) {
+	const live = liveMarks(slothlet);
+	if (live !== null) return live.markOf(slothlet.instanceID, key);
+	return MapMethods.get(markStorages, key)?.getStore();
+}
+
+/**
+ * Whether the instance's runtime can carry marks with its flows: the live runtime always, the async runtime where the
+ * host has AsyncLocalStorage.
+ * @param {object} slothlet - The instance.
+ * @returns {boolean} True when it can.
+ * @private
+ */
+function carriesMarks(slothlet) {
+	return liveMarks(slothlet) !== null || AsyncLocalStorage !== null;
+}
+
+/**
+ * Run `fn` in a new flow carrying `mark` as the instance's build mark (see {@link BUILD_MARK}).
+ * @param {object} slothlet - The instance.
+ * @param {*} mark - The mark.
+ * @param {function(): *} fn - What runs in the flow.
+ * @returns {*} What `fn` returns.
+ * @private
+ */
+function runInReloadBuild(slothlet, mark, fn) {
+	return runMarked(slothlet, BUILD_MARK, mark, fn);
+}
+
+/**
+ * Run a build in a new flow carrying its mark (see {@link runInReloadBuild}), and close the mark once the build
+ * settles. Work module code begins while the build loads it (a timer, a server's callbacks) keeps the flow, and so the
+ * mark, for as long as it lives: once closed, the mark tells that work nothing (see {@link currentBuildMark}), so it
+ * runs as code outside the build does.
+ * @param {object} slothlet - The instance.
  * @param {object} mark - The build's mark.
  * @param {function(): Promise<*>} fn - The build.
  * @returns {Promise<*>} What `fn` resolves to.
  * @private
  */
-async function runInClosingBuild(mark, fn) {
+async function runInClosingBuild(slothlet, mark, fn) {
 	try {
-		return await runInReloadBuild(mark, fn);
+		return await runInReloadBuild(slothlet, mark, fn);
 	} finally {
 		mark.closed = true;
 	}
 }
 
 /**
- * What {@link reloadBuildStorage} holds for the running code, leaving out a mark whose build is over (see
+ * The build mark the running code's flow carries, leaving out a mark whose build is over (see
  * {@link runInClosingBuild}).
+ * @param {object} slothlet - The instance.
  * @returns {*} The mark, or undefined.
  * @private
  */
-function currentBuildMark() {
-	const mark = reloadBuildStorage?.getStore();
+function currentBuildMark(slothlet) {
+	const mark = markOf(slothlet, BUILD_MARK);
 	return mark !== null && typeof mark === "object" && mark.closed === true ? undefined : mark;
 }
 
 /**
- * Run `fn` in a new flow of {@link loadAsStorage}, making the storage on its first use.
+ * Run a lazy node's load in a new flow carrying the instance ID it runs under (see {@link LOAD_AS_MARK}).
+ * @param {object} slothlet - The instance.
  * @param {string} id - The instance ID the load runs under.
  * @param {function(): *} fn - The load.
  * @returns {*} What `fn` returns.
  * @private
  */
-function runLoadAs(id, fn) {
-	loadAsStorage ??= new AsyncLocalStorage();
-	return loadAsStorage.run(id, fn);
+function runLoadAs(slothlet, id, fn) {
+	return runMarked(slothlet, LOAD_AS_MARK, id, fn);
 }
 
 /**
@@ -2124,7 +2191,7 @@ class Slothlet {
 		// One full reload at a time: a reload asked for while another builds starts once that one has finished. One asked
 		// for by the build itself (a startup routine's) could never start, so it is refused.
 		while (this.#reloadWindow !== null) {
-			if (reloadBuildStorage?.getStore() === this.#reloadWindow.mark) {
+			if (markOf(this, BUILD_MARK) === this.#reloadWindow.mark) {
 				throw new SlothletError("RELOAD_IN_PROGRESS", { operation: ["slothlet", "reload"] });
 			}
 			await this.#reloadWindow.settled;
@@ -2172,7 +2239,7 @@ class Slothlet {
 				this.#keepCopyForRuns(kept, token);
 				return built;
 			}
-			return await runInReloadBuild(window.mark, () => this._runAsHost(() => this.#reloadOnto(nextScope, oldInstanceID, window)));
+			return await runInReloadBuild(this, window.mark, () => this._runAsHost(() => this.#reloadOnto(nextScope, oldInstanceID, window)));
 		} catch (error) {
 			this.#pendingScope = null;
 			if (window !== null) this.#closeReloadWindow(window, false);
@@ -2222,14 +2289,14 @@ class Slothlet {
 	 * @private
 	 */
 	async #reloadSettled() {
-		while (this.#reloadWindow !== null && reloadBuildStorage?.getStore() !== this.#reloadWindow.mark) {
+		while (this.#reloadWindow !== null && markOf(this, BUILD_MARK) !== this.#reloadWindow.mark) {
 			await this.#reloadWindow.settled;
 		}
 	}
 
 	/**
 	 * Start a full reload's window: from now until {@link Slothlet#closeReloadWindow}, the instance's component namespaces
-	 * and {@link RELOAD_COPY_FIELDS} answer the reload's build (code running in its {@link reloadBuildStorage} flow) from
+	 * and {@link RELOAD_COPY_FIELDS} answer the reload's build (code whose flow carries its {@link BUILD_MARK}) from
 	 * a set of its own, and everyone else as {@link Slothlet#readField} says. The build's set starts as a copy of the
 	 * current one (each namespace a shallow copy), which load() then replaces piece by piece, as it replaced the
 	 * instance's own before.
@@ -2312,13 +2379,13 @@ class Slothlet {
 			const mark = { copyOf: this, next: entry.values, kind: "materialize", bust: entry.bust, silent: this[SILENT_BUILD]() };
 			const owner = WeakMapMethods.get(this.#treeOwners, entry.values.api);
 			const id = this.#loadIDOf(owner);
-			const inSet = () => runInClosingBuild(mark, load);
+			const inSet = () => runInClosingBuild(this, mark, load);
 			if (id === undefined || id === this.instanceID) return inSet();
-			return runLoadAs(id, inSet);
+			return runLoadAs(this, id, inSet);
 		}
 		const id = this.#heldCopies === 0 ? this.instanceID : this.loadID;
-		if (id === this.instanceID || !AsyncLocalStorage) return load();
-		return runLoadAs(id, load);
+		if (id === this.instanceID || !carriesMarks(this)) return load();
+		return runLoadAs(this, id, load);
 	}
 
 	/**
@@ -2343,9 +2410,9 @@ class Slothlet {
 	 */
 	get loadID() {
 		if (this.#heldCopies !== 0) {
-			const carried = loadAsStorage?.getStore();
+			const carried = markOf(this, LOAD_AS_MARK);
 			if (carried !== undefined && MapMethods.has(this.#keptScopes, carried)) return carried;
-			const mark = reloadBuildStorage?.getStore();
+			const mark = markOf(this, BUILD_MARK);
 			if (mark === undefined || mark !== this.#reloadWindow?.mark) {
 				const id = this.#loadIDOf(this.#runRecord());
 				if (id !== undefined && MapMethods.has(this.#keptScopes, id)) return id;
@@ -2473,7 +2540,7 @@ class Slothlet {
 	 * @private
 	 */
 	#readField(field) {
-		const mark = currentBuildMark();
+		const mark = currentBuildMark(this);
 		if (mark !== undefined) {
 			if (this.#inInstanceWork(mark)) return this.#fields[field];
 			const next = this.#buildNext(mark);
@@ -2501,7 +2568,7 @@ class Slothlet {
 	 * @private
 	 */
 	#writeField(field, value) {
-		const mark = currentBuildMark();
+		const mark = currentBuildMark(this);
 		const instance = mark !== undefined && this.#inInstanceWork(mark);
 		const next = mark === undefined || instance ? null : this.#buildNext(mark);
 		if (next !== null) next[field] = value;
@@ -2516,7 +2583,7 @@ class Slothlet {
 	/**
 	 * The set a build writes and reads: the reload's under way, or a run's copy (see {@link Slothlet#buildCopy}), when
 	 * `mark` is that build's; null otherwise.
-	 * @param {*} mark - What {@link reloadBuildStorage} holds for the running code.
+	 * @param {*} mark - The build mark the running code's flow carries (see {@link currentBuildMark}).
 	 * @returns {object|null} The build's set.
 	 * @private
 	 */
@@ -2825,7 +2892,7 @@ class Slothlet {
 	[WRITE_TARGET](handler, instanceOnly) {
 		if (this.#copy === null && this.#fields === null) return handler;
 		const slot = handler.constructor.slothletProperty;
-		const mark = currentBuildMark();
+		const mark = currentBuildMark(this);
 		const instance = mark !== undefined && this.#inInstanceWork(mark);
 		if (mark !== undefined && !instance && this.#buildNext(mark) !== null) return handler;
 		const own = (this.#fields ?? this).handlers;
@@ -2909,8 +2976,7 @@ class Slothlet {
 	 * @private
 	 */
 	#treeWriter() {
-		if (!AsyncLocalStorage) return undefined;
-		const mark = currentBuildMark();
+		const mark = currentBuildMark(this);
 		if (mark !== undefined) {
 			if (this.#inInstanceWork(mark)) return null;
 			if (this.#buildNext(mark) !== null) return undefined;
@@ -3036,7 +3102,8 @@ class Slothlet {
 			// A full-isolation run's `self` writes what it kept so far into the run's new tree, as that tree's build, and
 			// from now on reads and writes that tree (see `makeRunSelf` in builders/api_builder).
 			const runSelf = holder[RUN_SELF];
-			if (runSelf !== undefined && runSelf !== null) runSelf.adopted(kind, (write) => runInReloadBuild({ copyOf: this, next }, write));
+			if (runSelf !== undefined && runSelf !== null)
+				runSelf.adopted(kind, (write) => runInReloadBuild(this, { copyOf: this, next }, write));
 			if (kept !== null && holder.replaced !== kept) {
 				if (holder.replaced) {
 					const left = holder.replaced;
@@ -3102,8 +3169,8 @@ class Slothlet {
 		MapMethods.delete(this.#treeSets, values._treeEpoch);
 		const handlers = values.handlers;
 		/* v8 ignore next */
-		if (!AsyncLocalStorage || !handlers) return;
-		runInReloadBuild({ copyOf: this, next: values }, () => {
+		if (!carriesMarks(this) || !handlers) return;
+		runInReloadBuild(this, { copyOf: this, next: values }, () => {
 			handlers.ownership?.clear?.();
 			handlers.versionManager?.shutdown?.();
 			handlers.eventManager?.shutdown?.();
@@ -3150,7 +3217,7 @@ class Slothlet {
 		// The tree being built is one apart from the instance's from its first node on.
 		this._treeCopies++;
 		try {
-			await runInClosingBuild(mark, loadID === undefined ? build : () => runLoadAs(loadID, build));
+			await runInClosingBuild(this, mark, loadID === undefined ? build : () => runLoadAs(this, loadID, build));
 		} catch (error) {
 			this.#retireTree(next);
 			throw error;
@@ -3407,7 +3474,7 @@ class Slothlet {
 		const values = record.values;
 		values.isLoaded = false;
 		const handlers = values.handlers;
-		await runInReloadBuild({ copyOf: this, next: values }, async () => {
+		await runInReloadBuild(this, { copyOf: this, next: values }, async () => {
 			handlers.ownership?.clear?.();
 			handlers.versionManager?.shutdown?.();
 			await handlers.permissionManager?.shutdown?.();
@@ -3422,7 +3489,7 @@ class Slothlet {
 	 * @internal
 	 */
 	[SILENT_BUILD]() {
-		const mark = currentBuildMark();
+		const mark = currentBuildMark(this);
 		return mark !== undefined && mark !== null && typeof mark === "object" && mark.copyOf === this && mark.silent === true;
 	}
 
@@ -3434,7 +3501,7 @@ class Slothlet {
 	 * @internal
 	 */
 	[COPY_SOURCE_URL]() {
-		const mark = currentBuildMark();
+		const mark = currentBuildMark(this);
 		if (mark === undefined || mark === null || typeof mark !== "object" || mark.copyOf !== this) return null;
 		if (mark.kind !== "copy") return mark.bust ?? null;
 		return mark.view.processors?.loader ?? null;
@@ -3468,7 +3535,7 @@ class Slothlet {
 	 */
 	[CURRENT_COPY]() {
 		const window = this.#reloadWindow;
-		if (window !== null && !window.closed && reloadBuildStorage?.getStore() === window.mark) {
+		if (window !== null && !window.closed && markOf(this, BUILD_MARK) === window.mark) {
 			window.nextCopy ??= { values: null };
 			return window.nextCopy;
 		}
@@ -4041,7 +4108,7 @@ class Slothlet {
 		// The teardown and rebuild below are the instance's own work, also when a run's code asked for them: they read
 		// and write the instance's own set, never the calling run's copy.
 		this.#keepCurrentCopy();
-		if (!AsyncLocalStorage) return this.#restartOnto();
+		if (!carriesMarks(this)) return this.#restartOnto();
 		// The async runtime counts the work of runs open now while any of its instances lives: the teardown below leaves
 		// it with none until the rebuild starts the new one, so it is held across, or the work those runs finish after the
 		// restart would never be counted done and their copies never torn down.
@@ -4053,9 +4120,9 @@ class Slothlet {
 		try {
 			// Each run open now keeps a tree of its own, built before the teardown below: it keeps the api tree, the
 			// handlers and the modules it started with, and nothing of the rebuilt instance reaches it.
-			await runInReloadBuild(work, () => this.#copyForSharers((this.#fields ?? this).api, null));
+			await runInReloadBuild(this, work, () => this.#copyForSharers((this.#fields ?? this).api, null));
 			this.#keepScopeForCopies();
-			return await runInReloadBuild(work, () => this.#restartOnto());
+			return await runInReloadBuild(this, work, () => this.#restartOnto());
 		} finally {
 			work.closed = true;
 			this.#instanceWork = null;

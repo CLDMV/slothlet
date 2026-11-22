@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-19T05:14:40-08:00 (1795094080)
+ *	@Last modified time: 2026-11-21T16:31:07-08:00 (1795307467)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -5971,6 +5971,9 @@ export class ApiBuilder extends ComponentBase {
 					if (currentStore[trustedRootOwn.TRUSTED_ROOT] === true) {
 						Objects.defineProperty(childStore, trustedRootOwn.TRUSTED_ROOT, { __proto__: null, value: true, configurable: true });
 					}
+
+					// A run opened in a flow that carries slothlet's marks (a reload's build, say) carries them too.
+					contextManager.carryMarks(currentStore, childStore);
 
 					// Register child instance
 					MapMethods.set(contextManager.instances, childInstanceID, childStore);

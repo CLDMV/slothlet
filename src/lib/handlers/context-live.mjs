@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-21T13:05:04-08:00 (1795295104)
+ *	@Last modified time: 2026-11-21T16:31:08-08:00 (1795307468)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -24,7 +24,7 @@ import { internals as eventemitterContextInternals } from "#helpers/eventemitter
 import { pinToCurrentCaller, internals as callerPinningInternals } from "#helpers/caller-pinning";
 import { internals as schedulerContextInternals } from "#helpers/scheduler-context";
 import { combineCeilings, internals as trustedRootInternals } from "#handlers/trusted-root";
-import { holdRunWorkOnce, releaseWhenCollected, RUN_COPY, runCopyCounts, watchRuns } from "#helpers/flow-stores";
+import { holdRunWorkOnce, releaseWhenCollected, RUN_COPY, runCopyCounts, trackFlowStore, watchRuns } from "#helpers/flow-stores";
 import { nativeThen } from "#helpers/promise-context";
 import { util, inheritsFrom } from "#helpers/platform";
 import { runtime_isClassInstance, internals as classInstanceWrapperInternals } from "#helpers/class-instance-wrapper";
@@ -676,6 +676,13 @@ async function slothlet_liveRunBody(fn, args) {
 }
 
 /**
+ * The fields of a store that name the call running on it and its caller, which a flow apart from every call has none of
+ * (see {@link LiveContextManager#runLoadApart}).
+ * @type {ReadonlyArray<string>}
+ */
+const IDENTITY_FIELDS = Objects.freeze(["currentWrapper", "callerWrapper", "currentCeiling", "callerCeiling", "record"]);
+
+/**
  * What a resource scope's callback hands the pin it runs in instead of a promise the pin is not to hold its state for
  * (see {@link LiveContextManager#runScope}): the scope's entry takes the callback's result from the manager.
  * @type {symbol}
@@ -866,6 +873,21 @@ export class LiveContextManager {
 	 * @type {boolean}
 	 */
 	#watchingRuns = false;
+
+	/**
+	 * The marks {@link LiveContextManager#runMarked} has carried, so a store's are found (see
+	 * {@link LiveContextManager#carryMarks}).
+	 * @type {Set<symbol>}
+	 * @private
+	 */
+	#markKeys = new Set();
+
+	/**
+	 * How many flows {@link LiveContextManager#runMarked} has opened, which names each one's store.
+	 * @type {number}
+	 * @private
+	 */
+	#markFlows = 0;
 
 	constructor() {
 		this.instances = new Map(); // instanceID → context data
@@ -2599,6 +2621,163 @@ export class LiveContextManager {
 				manager.#activeID = previous;
 			}
 		})();
+	}
+
+	/**
+	 * Run `fn` in a flow of its own that carries `value` as the mark `key` (slothlet's marks of a reload's, a restart's
+	 * or a run's copy's build, and of the ID a lazy load runs under), as the async runtime carries them in an
+	 * `AsyncLocalStorage`. The flow is a store over the one the running code is part of (see
+	 * {@link LiveContextManager#runParent}): the same instance, context, `self`, caller and run, with the mark added,
+	 * carried as every flow of this manager is (its promise jobs, the patched schedulers, pinned listeners), so a mark
+	 * reaches exactly as far as a `run()`'s context does. The store leaves the instances once `fn` has settled; work it
+	 * left behind runs in it, as work a `run()` left behind runs in the run's (see reopenFlowStore).
+	 * @param {string} instanceID - The instance.
+	 * @param {symbol} key - The mark.
+	 * @param {*} value - Its value.
+	 * @param {function(): *} fn - What runs in the flow.
+	 * @returns {*} What `fn` returned.
+	 * @internal
+	 */
+	runMarked(instanceID, key, value, fn) {
+		const parent = this.runParent(instanceID);
+		// The instance has no store (it is not loaded): there is no flow of it to carry the mark in.
+		if (parent === undefined) return fn();
+		SetMethods.add(this.#markKeys, key);
+		const store = this.#markStoreOver(parent, parent);
+		store[key] = value;
+		return this.#runInMarkStore(store, fn, false);
+	}
+
+	/**
+	 * Run a lazy node's load apart from every flow (see `runtime_loadApart` in unified-wrapper), as
+	 * {@link LiveContextManager#runDetached} runs code, keeping the marks the flow asking for it carries (see
+	 * {@link LiveContextManager#runMarked}): a load into a run's tree runs as that tree's build, with no caller, in a flow
+	 * over the instance's own store, as an eager tree's build does. With no mark to keep, it runs detached.
+	 * @param {function(): *} fn - The load.
+	 * @returns {*} What it returned.
+	 * @internal
+	 */
+	runLoadApart(fn) {
+		const id = this.#activeID;
+		const from = id === null ? undefined : MapMethods.get(this.instances, id);
+		let marked = false;
+		if (from !== undefined) for (const key of setValues(this.#markKeys)) if (Objects.hasOwn(from, key)) marked = true;
+		const base = marked ? MapMethods.get(this.instances, from.parentInstanceID ?? from.instanceID) : undefined;
+		if (base === undefined) return this.runDetached(fn, undefined, []);
+		const store = this.#markStoreOver(base, from);
+		// No call's identity: the load is no call's.
+		for (let ofIndex = 0, ofList = IDENTITY_FIELDS; ofIndex < ofList.length; ofIndex++) delete store[ofList[ofIndex]];
+		return this.#runInMarkStore(store, fn, true);
+	}
+
+	/**
+	 * A store for a flow of its own over `parent` (see {@link LiveContextManager#runMarked}), with the marks `from`
+	 * carries, registered among the instances.
+	 * @param {object} parent - The store the flow is over: its instance, context, `self`, caller and run.
+	 * @param {object} from - The store whose marks the flow carries.
+	 * @returns {object} The store.
+	 * @private
+	 */
+	#markStoreOver(parent, from) {
+		const family = parent.parentInstanceID ?? parent.instanceID;
+		const store = {};
+		for (let ofIndex = 0, ofList = Reflect.ownKeys(parent); ofIndex < ofList.length; ofIndex++) {
+			const field = ofList[ofIndex];
+			// What this manager keeps per store (calls entered and suspended on it, its resting caller, the hooks it holds) is
+			// the parent's own; the context-key records are the flow's.
+			if (typeof field === "string" && StringMethods.startsWith(field, "__") && field !== "__contextOwners" && field !== "__ownKeys")
+				continue;
+			Objects.defineProperty(store, field, Reflect.getOwnPropertyDescriptor(parent, field));
+		}
+		this.carryMarks(from, store);
+		this.#markFlows++;
+		store.instanceID = `${family}__run_mark_${this.#markFlows}`;
+		store.parentInstanceID = family;
+		MapMethods.set(this.instances, store.instanceID, store);
+		// Work the flow leaves behind can outlive it and a reload: the reload moves the store to the new ID.
+		trackFlowStore(store.slothlet, store);
+		return store;
+	}
+
+	/**
+	 * Run `fn` with a store {@link LiveContextManager#markStoreOver} made active, as a `run()`'s callback runs in its
+	 * store, and take the store out of the instances once `fn` has settled.
+	 * @param {object} store - The store.
+	 * @param {function(): *} fn - What runs.
+	 * @param {boolean} held - Whether the synchronous part is held synchronous (see {@link LiveContextManager#runDetached}).
+	 * @returns {*} What `fn` returned.
+	 * @private
+	 */
+	#runInMarkStore(store, fn, held) {
+		const id = store.instanceID;
+		const leave = () => {
+			if (MapMethods.get(this.instances, id) === store) MapMethods.delete(this.instances, id);
+		};
+		// What the flow schedules is carried only through the patched schedulers (see runInContext).
+		reinstateSchedulerPatching();
+		const previous = this.#activeID;
+		this.#activeID = id;
+		if (held) this.#syncDepth++;
+		let result;
+		try {
+			result = fn();
+		} catch (error) {
+			this.#activeID = previous;
+			leave();
+			throw error;
+		} finally {
+			if (held) this.#syncDepth--;
+		}
+		if (!util.types.isPromise(result)) {
+			this.#activeID = previous;
+			leave();
+			return result;
+		}
+		// With each flow carried across its promise jobs, the field is put back once the synchronous part returns; without
+		// (a browser) it names the flow until its promise settles, as a `run()`'s does (see runFlowBody).
+		const carried = this.#carriesAwaits;
+		if (carried) this.#activeID = previous;
+		const done = () => {
+			if (!carried && this.#activeID === id) this.#activeID = previous;
+			leave();
+		};
+		nativeThen(result, done, done);
+		return result;
+	}
+
+	/**
+	 * The mark `key` the flow of an instance's code running now carries (see {@link LiveContextManager#runMarked}).
+	 * @param {string} instanceID - The instance.
+	 * @param {symbol} key - The mark.
+	 * @returns {*} Its value, or undefined.
+	 * @internal
+	 */
+	markOf(instanceID, key) {
+		if (!SetMethods.has(this.#markKeys, key)) return undefined;
+		// The field as it stands, not as the stack tells it: telling it can read the instance's fields, which ask for the
+		// mark again. With each flow carried across its promise jobs it names the code's own flow; without, the last flow
+		// entered, as for a run()'s context (see runFlowBody).
+		const id = this.#activeID;
+		const store = id === null ? undefined : MapMethods.get(this.instances, id);
+		if (store === undefined || !Objects.hasOwn(store, key)) return undefined;
+		// A flow of this instance, also under an ID a reload has moved it from.
+		if (store.parentInstanceID !== instanceID) {
+			const own = MapMethods.get(this.instances, instanceID);
+			if (own === undefined || own.slothlet === undefined || own.slothlet !== store.slothlet) return undefined;
+		}
+		return store[key];
+	}
+
+	/**
+	 * Give a store opened in a flow (a `run()` / `scope()`) the marks that flow carries (see
+	 * {@link LiveContextManager#runMarked}), as an `AsyncLocalStorage` value reaches a run opened in its flow.
+	 * @param {object} from - The store of the flow.
+	 * @param {object} to - The new store.
+	 * @returns {void}
+	 * @internal
+	 */
+	carryMarks(from, to) {
+		for (const key of setValues(this.#markKeys)) if (Objects.hasOwn(from, key)) to[key] = from[key];
 	}
 
 	/**

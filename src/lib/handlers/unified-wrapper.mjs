@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-19T16:09:12-08:00 (1795133352)
+ *	@Last modified time: 2026-11-21T16:31:10-08:00 (1795307470)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -7306,7 +7306,14 @@ function runtime_callAsDefiner(target, call) {
  */
 function runtime_loadApart(slothlet, load, wrapper) {
 	const contextManager = slothlet?.contextManager;
-	const apart = () => (typeof contextManager?.runDetached === "function" ? contextManager.runDetached(load, undefined, []) : load());
+	// The live runtime keeps, apart from every flow, the marks the asking flow carries (a load into a run's tree is that
+	// tree's build): it carries them with its flows, which a detached load would leave.
+	const apart = () =>
+		typeof contextManager?.runLoadApart === "function"
+			? contextManager.runLoadApart(load)
+			: typeof contextManager?.runDetached === "function"
+				? contextManager.runDetached(load, undefined, [])
+				: load();
 	// A node of a copy a run keeps across a reload loads as that copy did (see Slothlet#loadID), and a node of a tree a
 	// run owns loads into that tree's own handlers.
 	return typeof slothlet?.loadAsCaller === "function" ? slothlet.loadAsCaller(apart, wrapper) : apart();
