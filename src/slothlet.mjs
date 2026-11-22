@@ -3652,6 +3652,28 @@ class Slothlet {
 	}
 
 	/**
+	 * The loader of the set a node's tree belongs to: a tree built for a run (see {@link Slothlet#buildCopy}) has a loader
+	 * of its own, which imported its files under the run's own queries, and the instance's tree has the instance's. Read
+	 * through the instance's fields, a node of the instance's tree would be answered with the loader of the run the
+	 * reading code runs in. Any other node (a tree a restart replaced, a copy kept across a reload) gets the loader the
+	 * running code reads.
+	 * @param {object|null|undefined} wrapper - A node's wrapper.
+	 * @returns {object|null} The loader, or null.
+	 * @internal
+	 *
+	 * @example
+	 * slothlet._nodeLoader(wrapper)?.importedUnderQuery(filePath, query);
+	 */
+	_nodeLoader(wrapper) {
+		const epoch = wrapper?.____slothletInternal?.epoch;
+		const entry = typeof epoch === "number" ? MapMethods.get(this.#treeSets, epoch) : undefined;
+		if (entry !== undefined) return entry.values.processors?.loader ?? null;
+		const own = this.#fields ?? this;
+		if (epoch === own._treeEpoch) return own.processors?.loader ?? null;
+		return this.processors?.loader ?? null;
+	}
+
+	/**
 	 * The last `restart()` the running code's `run()` / `scope()` made of its copy (see {@link Slothlet#restartRun}):
 	 * `epoch`, the epoch of the tree it built, which the nodes of the trees the run read before it are above, and
 	 * `stamps`, the reload stamps the files of the trees built for the run since were imported under. Null when the code

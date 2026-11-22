@@ -33,7 +33,8 @@
  * a function, a bound function and a method they handed out alike (docs/PERMISSIONS.md), also when a module of the
  * rebuilt instance is the one that calls it (`relay/relay.mjs`, whose `pass(fn)` calls what it is given). A `restart()`
  * in a `run()` / `scope()` starts the run's copy over the same way, for that run alone: in the run, code its modules
- * handed out before it is refused, while the instance outside keeps what it has.
+ * handed out before it is refused, while the instance outside keeps what it has; a `reload()` there keeps the run on the
+ * same instance, and that code keeps its definer's standing.
  */
 import path from "node:path";
 import { AsyncLocalStorage, AsyncResource } from "node:async_hooks";
@@ -358,20 +359,19 @@ describe.each([["async"], ["live"]])("%s runtime: code made before a reload or r
 						});
 					}
 				);
-				// Only for a restart: after a reload in a run, code made in the run before it and passed into another module's
-				// call is refused with the permission system on, which a reload should not do (reported separately).
-				if (operation === "restart")
-					it.each([["module function"], ["module bound function"], ["module method"]])(
-						`a %s made in the run before it, passed into another module's call in the run, ${refused ? "is refused" : "reads the run's rebuilt copy"}`,
-						async (kind) => {
-							const answer = await runScenario({ runtime, mode, permissions, operation, kind, passed: true });
-							expect(answer).toEqual({
-								inRun: refused ? { copy: "PERMISSION_DENIED", who: null } : { copy: 1, who: "run" },
-								fresh: { copy: 2, who: "run" },
-								outside: 1
-							});
-						}
-					);
+				// A reload keeps the instance: code made in the run before it keeps its definer's standing, also when a module of
+				// the rebuilt copy calls it (#916).
+				it.each([["module function"], ["module bound function"], ["module method"]])(
+					`a %s made in the run before it, passed into another module's call in the run, ${refused ? "is refused" : "reads the run's rebuilt copy"}`,
+					async (kind) => {
+						const answer = await runScenario({ runtime, mode, permissions, operation, kind, passed: true });
+						expect(answer).toEqual({
+							inRun: refused ? { copy: "PERMISSION_DENIED", who: null } : { copy: 1, who: "run" },
+							fresh: { copy: 2, who: "run" },
+							outside: 1
+						});
+					}
+				);
 				// A method of an object a module returned, called by the host in a nested run, is not covered yet (reported).
 				it.each([["module function"]])(
 					`a %s made in the run before it, called in a run opened in the run after it, ${refused ? "is refused" : "reads the run's rebuilt copy"}`,

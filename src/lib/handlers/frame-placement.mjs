@@ -4736,7 +4736,9 @@ function runtime_definerAt(frames, running) {
  * @private
  */
 function runtime_importedUnder(wrapper, location) {
-	const loader = wrapper.slothlet?.processors?.loader;
+	// The loader of the node's own tree: a run that rebuilt its copy imported the files under queries of its own.
+	const slothlet = wrapper.slothlet;
+	const loader = typeof slothlet?._nodeLoader === "function" ? slothlet._nodeLoader(wrapper) : slothlet?.processors?.loader;
 	if (typeof loader?.importedUnderQuery !== "function") return true;
 	const at = StringMethods.indexOf(location, "?");
 	if (at === -1) return false;
