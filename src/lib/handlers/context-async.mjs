@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-21T17:00:48-08:00 (1795309248)
+ *	@Last modified time: 2026-11-22T09:18:56-08:00 (1795367936)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -60,8 +60,10 @@ import {
 	Objects,
 	Promise,
 	Promises,
+	PrototypeFunctions,
 	queueMicrotask,
 	Reflect,
+	StringMethods,
 	Symbol,
 	WeakMap,
 	WeakMapMethods,
@@ -1086,6 +1088,16 @@ export class AsyncContextManager {
 	#countWork(asyncId, type, resource) {
 		// A resource that only carries a store into a callback is no one's work (an observer counts from its observe()).
 		if (type === UNCOUNTED_RESOURCE) return;
+		// An `AsyncResource` someone made (the host, a module, a library, or `AsyncLocalStorage.snapshot()` / `bind()` for
+		// them) only carries the run's flow into code run with it later, and is no work of the run, as on the live runtime:
+		// the run's copy does not wait for it to be collected. Code run through it later keeps the run's context. The
+		// resources slothlet makes for a listener or an observer of the run are its work until they are destroyed.
+		if (
+			AsyncResource !== null &&
+			FunctionMethods.call(PrototypeFunctions.Function.hasInstance, AsyncResource, resource) &&
+			!StringMethods.startsWith(type, "slothlet-")
+		)
+			return;
 		const record = this.store?.getStore()?.[RUN_COPY];
 		if (record === undefined || !holdRunWork(record)) return;
 		const promise = type === "PROMISE";

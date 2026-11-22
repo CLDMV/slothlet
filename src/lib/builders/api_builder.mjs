@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-21T23:50:49-08:00 (1795333849)
+ *	@Last modified time: 2026-11-22T09:18:56-08:00 (1795367936)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -3822,9 +3822,12 @@ export class ApiBuilder extends ComponentBase {
 						}
 
 						// Check if current store belongs to this instance (base or child)
+						// A run's store names the instance by the ID it had when the run started, which a reload or restart
+						// since replaced for a run torn down before it: the store's own instance link says whose it is.
 						const isOurInstance =
 							currentStore.instanceID === slothlet.instanceID ||
 							currentStore.parentInstanceID === slothlet.instanceID ||
+							(currentStore.parentInstanceID && currentStore.slothlet === slothlet) ||
 							StringMethods.startsWith(currentStore.instanceID, slothlet.instanceID + "__run_");
 
 						if (isOurInstance) {
