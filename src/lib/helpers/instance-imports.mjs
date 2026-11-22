@@ -277,7 +277,8 @@ const SCOPE_KEYS = new Map();
 /**
  * The scope a synchronous {@link scopeRequire} is running in (`anchor` is the file it required; `importer` the api
  * file whose own copies are served, under `helpers: "module"`; `fresh` when the anchor is loaded as a leaf), else null.
- * @type {{ instanceID: string, anchor: string, importer?: string|null, mount?: string|null, fresh?: boolean }|null}
+ * The `stamp` is the one a run's own reload or restart loads the leaf under, when it is (see {@link STAMPED_SEALS}).
+ * @type {{ instanceID: string, anchor: string, importer?: string|null, mount?: string|null, fresh?: boolean, stamp?: string|null }|null}
  * @private
  */
 let ACTIVE = null;
@@ -371,6 +372,24 @@ const HELPER_SCRIPTS = new Map();
  * @private
  */
 const HELPER_SEALS = new Map();
+
+/**
+ * The random value a CommonJS leaf's source is sealed with when a run's own reload or restart loads it (see
+ * {@link sealLoadedSource}), by script key and the stamp of that build: each such build's script hashes as no other
+ * load of the file does. A CommonJS file runs under its plain path, which carries no stamp as an ES module's URL does,
+ * so the script is what tells the code of a run's rebuilt copy apart from the code of the copies the run read before.
+ * @type {Map<string, string>}
+ * @private
+ */
+const STAMPED_SEALS = new Map();
+
+/**
+ * The stamp each source in {@link LOADED_SCRIPTS} sealed by {@link STAMPED_SEALS} was loaded under, by script key and
+ * then by hash. Kept and dropped with the hashes.
+ * @type {Map<string, Map<string, string>>}
+ * @private
+ */
+const SCRIPT_STAMPS = new Map();
 
 /**
  * Who loaded each file no instance tags, as this copy's resolve hook saw it resolved (#597): by the file's path (forward
@@ -612,10 +631,12 @@ const SCRIPTS_READER = Objects.freeze({
 		const hashes = MapMethods.get(LOADED_SCRIPTS, key);
 		const helpers = MapMethods.get(HELPER_SCRIPTS, key);
 		const helper = hash !== undefined && Boolean(helpers == null ? undefined : ArrayMethods.includes(helpers, hash));
+		const stamps = MapMethods.get(SCRIPT_STAMPS, key);
 		return {
 			known: Boolean(hashes?.length || helpers?.length),
 			has: helper || (hash !== undefined && Boolean(hashes == null ? undefined : ArrayMethods.includes(hashes, hash))),
-			helper
+			helper,
+			stamp: hash === undefined || stamps === undefined ? null : (MapMethods.get(stamps, hash) ?? null)
 		};
 	},
 	hashes: (key) => concatLists(MapMethods.get(LOADED_SCRIPTS, key) ?? [], MapMethods.get(HELPER_SCRIPTS, key) ?? []),
@@ -2761,10 +2782,12 @@ function splitQuery(ref) {
  *   helper files once per importing api file (`helpers: "module"`): a private cache per api file instead of one per
  *   instance.
  * @param {string|null} [options.mount=null] - That api file's mount, carried onto the ES modules it requires.
+ * @param {string|null} [options.stamp=null] - With `fresh`, the stamp of the run's own reload or restart loading the
+ *   leaf: its source is sealed for that build (see {@link STAMPED_SEALS}).
  * @returns {*} The file's `module.exports`.
  * @private
  */
-function scopeRequire(filePath, instanceID, { fresh = false, importer = null, mount = null } = {}) {
+function scopeRequire(filePath, instanceID, { fresh = false, importer = null, mount = null, stamp = null } = {}) {
 	const requireFn = NODE.module.createRequire(filePath);
 	const resolved = requireFn.resolve(filePath);
 	const cache = requireFn.cache;
@@ -2823,7 +2846,7 @@ function scopeRequire(filePath, instanceID, { fresh = false, importer = null, mo
 		if (!MapMethods.has(LEAVES, instanceID)) MapMethods.set(LEAVES, instanceID, new Set());
 		SetMethods.add(MapMethods.get(LEAVES, instanceID), resolved);
 	}
-	ACTIVE = { instanceID, anchor: resolved, importer, mount, fresh };
+	ACTIVE = { instanceID, anchor: resolved, importer, mount, fresh, stamp: fresh && typeof stamp === "string" ? stamp : null };
 	try {
 		return requireFn(resolved);
 	} finally {
@@ -3618,12 +3641,12 @@ function setScriptKey(keyOf) {
  * @param {string} url - The module URL, query included.
  * @param {{format?: string, source?: string|ArrayBufferView|ArrayBuffer}} result - The load hook's result.
  * @param {boolean} [helper=false] - A helper load of the file (see {@link HELPER_SCRIPTS}): its hash is listed there.
- * @returns {void}
+ * @returns {string|null} The source's hash, or null when the result carries no source text.
  * @private
  */
 function recordLoadedSource(url, result, helper = false) {
 	let text = loadedText(result);
-	if (text === null) return;
+	if (text === null) return null;
 	if (isTypeScriptLoad(result)) {
 		const strip = STRIP_TYPESCRIPT_TYPES;
 		// The stripping Node does to compile the file, done here without the notice the API itself gives on first use. The
@@ -3653,6 +3676,9 @@ function recordLoadedSource(url, result, helper = false) {
 	const helpers = MapMethods.get(HELPER_SCRIPTS, key) ?? [];
 	for (const known of mapKeys(texts))
 		if (!ArrayMethods.includes(own, known) && !ArrayMethods.includes(helpers, known)) MapMethods.delete(texts, known);
+	const stamps = MapMethods.get(SCRIPT_STAMPS, key);
+	if (stamps) for (const known of mapKeys(stamps)) if (!ArrayMethods.includes(own, known)) MapMethods.delete(stamps, known);
+	return hash;
 }
 
 /**
@@ -3679,27 +3705,37 @@ function loadedText(result) {
  * @param {object} result - The load hook's result.
  * @param {boolean} [helper=false] - A helper load of the file (see {@link HELPER_SCRIPTS}), sealed with the key's helper
  *   value.
+ * @param {string|null} [stamp=null] - For a CommonJS leaf a run's own reload or restart loads, the stamp of that build:
+ *   sealed with the value drawn for it (see {@link STAMPED_SEALS}), and its hash kept with the stamp.
  * @returns {object} The result to hand on: the sealed source, or the result as it was when it carries no source text.
  * @private
  */
-function sealLoadedSource(url, result, helper = false) {
+function sealLoadedSource(url, result, helper = false, stamp = null) {
 	const text = loadedText(result);
 	if (text === null) return result;
 	const key = scriptKeyOf(url);
-	const seals = helper ? HELPER_SEALS : SEALS;
-	let seal = MapMethods.get(seals, key);
-	if (seal === undefined) MapMethods.set(seals, key, (seal = HOST.randomUUID()));
+	const stamped = !helper && stamp !== null;
+	const seals = helper ? HELPER_SEALS : stamped ? STAMPED_SEALS : SEALS;
+	const sealKey = stamped ? `${key}\u0000${stamp}` : key;
+	let seal = MapMethods.get(seals, sealKey);
+	if (seal === undefined) MapMethods.set(seals, sealKey, (seal = HOST.randomUUID()));
 	const sealed = { ...result, source: `${text}\n/* ${seal} */\n` };
-	recordLoadedSource(url, sealed, helper);
+	const hash = recordLoadedSource(url, sealed, helper);
+	if (stamped && hash !== null) {
+		let stamps = MapMethods.get(SCRIPT_STAMPS, key);
+		if (!stamps) MapMethods.set(SCRIPT_STAMPS, key, (stamps = new Map()));
+		MapMethods.set(stamps, hash, stamp);
+	}
 	return sealed;
 }
 
 /**
  * Whether sources are recorded for a script key, and whether a given one is among them (see
- * {@link recordLoadedSource}), and, when it is, whether it is a helper load of the file (see {@link HELPER_SCRIPTS}).
+ * {@link recordLoadedSource}), and, when it is, whether it is a helper load of the file (see {@link HELPER_SCRIPTS}) and
+ * the stamp of the run's own reload or restart that loaded it, for a CommonJS leaf (see {@link STAMPED_SEALS}).
  * @param {string} key - The script key.
  * @param {string} [hash] - A script's hash.
- * @returns {{known: boolean, has: boolean, helper?: boolean}} The answer.
+ * @returns {{known: boolean, has: boolean, helper?: boolean, stamp?: string|null}} The answer.
  * @internal
  */
 function loadedScriptLookup(key, hash) {
@@ -3992,7 +4028,8 @@ const HOOKS = Objects.freeze({
 		// A CommonJS file an instance's scope loads is recorded as it loads (#597). A `require()` of the file anywhere else
 		// is another module of the file (#691). A leaf's file an api file requires itself is a helper of that file's.
 		const kind = StringMethods.startsWith(url, "file:") ? scopeLoadKind(url) : null;
-		if (kind !== null && shouldRecordCommonJS(url, result)) return sealLoadedSource(url, result, kind === "helper");
+		if (kind !== null && shouldRecordCommonJS(url, result))
+			return sealLoadedSource(url, result, kind === "helper", kind === "leaf" ? (ACTIVE?.stamp ?? null) : null);
 		return result;
 	}
 });

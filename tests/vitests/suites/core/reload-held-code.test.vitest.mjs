@@ -24,7 +24,8 @@
  * instance's copy of it loaded (one copy per instance ID), and `probe/probe.mjs`, whose `read()` answers that stamp
  * through `self` with `context.who`, whose `snap()` takes a snapshot and hands out a function that reads the same inside
  * it, whose `later()` hands out a function that reads the same wherever it is called, whose `bound()` hands out a bound
- * function doing the same, and whose `holder()` hands out an object whose method does the same. `fresh/fresh.mjs`
+ * function doing the same, and whose `holder()` hands out an object whose method does the same; `cjsprobe/cjsprobe.cjs`
+ * hands out the same `later()` and `holder()` code from a CommonJS file. `fresh/fresh.mjs`
  * answers the stamp taken when that file itself loaded: a run's own reload or restart reads its files again under the
  * instance's ID, so `shared/stamp.mjs` keeps its stamp there and this one tells the run's rebuilt copy.
  *
@@ -52,6 +53,7 @@ beforeAll(() => {
 	mkdirSync(path.join(BASE, "probe"), { recursive: true });
 	mkdirSync(path.join(BASE, "relay"), { recursive: true });
 	mkdirSync(path.join(BASE, "fresh"), { recursive: true });
+	mkdirSync(path.join(BASE, "cjsprobe"), { recursive: true });
 	mkdirSync(path.join(ROOT, "shared"), { recursive: true });
 	writeFileSync(
 		path.join(ROOT, "shared", "stamp.mjs"),
@@ -97,6 +99,27 @@ beforeAll(() => {
 			""
 		].join("\n")
 	);
+	writeFileSync(
+		path.join(BASE, "cjsprobe", "cjsprobe.cjs"),
+		[
+			"let self;",
+			"let context;",
+			"(async () => {",
+			'\t({ self, context } = await import("@cldmv/slothlet/runtime"));',
+			"})();",
+			"exports.later = function later() {",
+			"\treturn async () => ({ copy: await self.calls.copyOf(), who: context.who ?? null });",
+			"};",
+			"exports.holder = function holder() {",
+			"\treturn {",
+			"\t\tasync read() {",
+			"\t\t\treturn { copy: await self.calls.copyOf(), who: context.who ?? null };",
+			"\t\t}",
+			"\t};",
+			"};",
+			""
+		].join("\n")
+	);
 });
 
 afterAll(() => {
@@ -118,8 +141,8 @@ async function idle() {
 /**
  * Make a function that later runs code the way `kind` says.
  * @param {object} api - The api.
- * @param {string} kind - "snapshot", "resource", "module snapshot", "module function", "module bound function" or
- *   "module method".
+ * @param {string} kind - "snapshot", "resource", "module snapshot", "module function", "module bound function",
+ *   "module method", or "CommonJS module function" / "CommonJS module method" (the same from a CommonJS file).
  * @returns {Promise<function(): Promise<{copy: *, who: string|null}>>} The function.
  */
 async function handOut(api, kind) {
@@ -146,6 +169,11 @@ async function handOut(api, kind) {
 	}
 	if (kind === "module method") {
 		const object = await api.probe.holder();
+		return () => object.read();
+	}
+	if (kind === "CommonJS module function") return api.cjsprobe.later();
+	if (kind === "CommonJS module method") {
+		const object = await api.cjsprobe.holder();
 		return () => object.read();
 	}
 	return api.probe.later();
@@ -344,11 +372,19 @@ describe.each([["async"], ["live"]])("%s runtime: code made before a reload or r
 		describe.each([["eager"], ["lazy"]])("%s mode", (mode) => {
 			describe.each([["none"], ["off"], ["on"]])("permissions %s", (permissions) => {
 				const refused = operation === "restart" && permissions === "on";
+				// Code a CommonJS file made is told apart the same way as an ES module's.
+				const RUN_MODULE_CODE = [
+					["module function"],
+					["module bound function"],
+					["module method"],
+					["CommonJS module function"],
+					["CommonJS module method"]
+				];
 				it.each([["snapshot"], ["resource"]])("a %s made in the run before it reads the run's rebuilt copy", async (kind) => {
 					const answer = await runScenario({ runtime, mode, permissions, operation, kind });
 					expect(answer).toEqual({ inRun: { copy: 1, who: "run" }, fresh: { copy: 2, who: "run" }, outside: 1 });
 				});
-				it.each([["module snapshot"], ["module function"], ["module bound function"], ["module method"]])(
+				it.each([["module snapshot"], ...RUN_MODULE_CODE])(
 					`a %s made in the run before it, called in the run, ${refused ? "is refused" : "reads the run's rebuilt copy"}`,
 					async (kind) => {
 						const answer = await runScenario({ runtime, mode, permissions, operation, kind });
@@ -361,7 +397,7 @@ describe.each([["async"], ["live"]])("%s runtime: code made before a reload or r
 				);
 				// A reload keeps the instance: code made in the run before it keeps its definer's standing, also when a module of
 				// the rebuilt copy calls it (#916).
-				it.each([["module function"], ["module bound function"], ["module method"]])(
+				it.each(RUN_MODULE_CODE)(
 					`a %s made in the run before it, passed into another module's call in the run, ${refused ? "is refused" : "reads the run's rebuilt copy"}`,
 					async (kind) => {
 						const answer = await runScenario({ runtime, mode, permissions, operation, kind, passed: true });
@@ -372,7 +408,7 @@ describe.each([["async"], ["live"]])("%s runtime: code made before a reload or r
 						});
 					}
 				);
-				it.each([["module function"], ["module bound function"], ["module method"]])(
+				it.each(RUN_MODULE_CODE)(
 					`a %s made in the run before it, called in a run opened in the run after it, ${refused ? "is refused" : "reads the run's rebuilt copy"}`,
 					async (kind) => {
 						const answer = await runScenario({ runtime, mode, permissions, operation, kind, nested: true });
@@ -383,14 +419,11 @@ describe.each([["async"], ["live"]])("%s runtime: code made before a reload or r
 						});
 					}
 				);
-				it.each([["module function"], ["module bound function"], ["module method"]])(
-					"a %s the instance's modules handed out outside the run keeps working on the instance",
-					async (kind) => {
-						const answer = await runScenario({ runtime, mode, permissions, operation, kind, handOutside: true });
-						expect(answer.outside).toBe(1);
-						expect(answer.held).toEqual({ copy: 1, who: "instance" });
-					}
-				);
+				it.each(RUN_MODULE_CODE)("a %s the instance's modules handed out outside the run keeps working on the instance", async (kind) => {
+					const answer = await runScenario({ runtime, mode, permissions, operation, kind, handOutside: true });
+					expect(answer.outside).toBe(1);
+					expect(answer.held).toEqual({ copy: 1, who: "instance" });
+				});
 			});
 		});
 	});
