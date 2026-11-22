@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-19T05:14:48-08:00 (1795094088)
+ *	@Last modified time: 2026-11-21T22:24:27-08:00 (1795328667)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -50,6 +50,7 @@ export const SLOTHLET_TREE = Objects.freeze([
 	"slothlet.context.diagnostics",
 	"slothlet.context.get",
 	"slothlet.context.run",
+	"slothlet.context.run.self",
 	"slothlet.context.scope",
 	"slothlet.context.set",
 	"slothlet.diag",

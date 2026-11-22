@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-19T16:09:14-08:00 (1795133354)
+ *	@Last modified time: 2026-11-21T22:24:23-08:00 (1795328663)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -139,7 +139,7 @@ export const METHOD_OPTION_SCHEMAS = deepFreeze({
 		sort: true
 	},
 	"slothlet.api.modules.remove": { version: true },
-	"slothlet.context.scope": { args: true, context: OPEN, fn: true, isolation: true, merge: true, owners: OPEN, protect: true },
+	"slothlet.context.scope": { args: true, context: OPEN, fn: true, isolation: true, merge: true, owners: OPEN, protect: true, self: true },
 	"slothlet.event.on": { key: true, once: true },
 	"slothlet.hook.filter": { enabled: true, id: true, pattern: true, type: true },
 	"slothlet.hook.on": {

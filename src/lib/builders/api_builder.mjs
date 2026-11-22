@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-21T13:38:11-08:00 (1795297091)
+ *	@Last modified time: 2026-11-21T22:24:19-08:00 (1795328659)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -40,6 +40,7 @@ import { internals as frameworkInternalsInternals } from "#handlers/framework-in
 import { ceilingMembers, combineCeilings, identityCeilings, internals as trustedRootInternals } from "#handlers/trusted-root";
 import { getLanguage, t, translate, internals as translationsInternals } from "#i18n";
 import { assertOptionKeys } from "#helpers/config-schema";
+import { internals as instanceImportsInternals } from "#helpers/instance-imports";
 import { copyForRun, recordOperation, releaseRunWork, RUN_COPY, RUN_SELF, trackFlowStore, treeWrite } from "#helpers/flow-stores";
 import { pinScopeToCurrentCaller } from "#helpers/caller-pinning";
 import {
@@ -116,6 +117,34 @@ const { runtime_codeWritersOnStack } = framePlacementInternals("lib/builders/api
 const { markSlothletProxy } = frameworkInternalsInternals("lib/builders/api_builder");
 const trustedRootOwn = trustedRootInternals("lib/builders/api_builder");
 const { initI18n, setLanguage } = translationsInternals("lib/builders/api_builder");
+const { moduleSelfForm } = instanceImportsInternals("lib/builders/api_builder");
+
+/**
+ * Members of the control namespace checked under another member's rules: `run.self` is `run` with the run's view
+ * handed to the callback, so a rule on `slothlet.context.run` allows or refuses both.
+ * @type {Readonly<Object<string, string>>}
+ * @private
+ */
+const RULE_TARGET_OF = Objects.freeze({ __proto__: null, "slothlet.context.run.self": "slothlet.context.run" });
+
+/**
+ * The view a `run.self()` / `scope({ self: true })` callback is handed: what module code's `self` resolves to in the
+ * run. Opened by module code, that is the module's own `self`; opened by the host, the run's own `self`, which a write
+ * through stays in the run under `isolation: "full"` and reaches the instance under `"partial"`, as a module's does.
+ * Either way a write through the view is judged by who makes it, not by who was handed the view.
+ * @param {object} slothlet - The instance.
+ * @param {object} store - The run's store.
+ * @param {object|null|undefined} identity - The caller identity of the code that opened the run.
+ * @returns {object|Function} The view.
+ * @private
+ */
+function runViewFor(slothlet, store, identity) {
+	if (identity?.currentWrapper || identity?.unresolved) {
+		const form = moduleSelfForm(slothlet.instanceID);
+		if (form) return form;
+	}
+	return store.self;
+}
 
 /** The key `util.inspect` reads a custom hook from (the platform shim gives the same one in a browser). */
 const INSPECT_KEY = Symbols.for("nodejs.util.inspect.custom");
@@ -1849,14 +1878,16 @@ export class ApiBuilder extends ComponentBase {
 		 * Enforce permission checks for built-in plain-object methods under `api.slothlet.*`.
 		 * These methods bypass UnifiedWrapper.applyTrap and must perform explicit checks.
 		 *
-		 * @param {string} targetPath - Synthetic target path used for rule matching.
+		 * @param {string} named - Synthetic target path used for rule matching (a member checked under another member's
+		 *   rules, see {@link RULE_TARGET_OF}, is matched as that member).
 		 * @returns {object|null|undefined} The module identity the access was allowed for (#597), or null/undefined
 		 *   for the host.
 		 * @throws {SlothletError} When the current caller is denied access to `targetPath`.
 		 * @example
 		 * enforceInternalPermission("slothlet.permissions.rules.add");
 		 */
-		const enforceInternalPermission = (targetPath) => {
+		const enforceInternalPermission = (named) => {
+			const targetPath = RULE_TARGET_OF[named] ?? named;
 			const ctx = slothlet.contextManager?.tryGetContext?.(slothlet.instanceID);
 			// Identity via the context manager, not off the store: under the live runtime
 			// `currentWrapper` is one field shared by every in-flight call, so a call resuming from an
@@ -3896,6 +3927,11 @@ export class ApiBuilder extends ComponentBase {
 				 * @param {...*} args - Additional arguments to pass to callback
 				 * @returns {Promise<*>} Result of callback execution
 				 * @public
+				 *
+				 * @description
+				 * `run.self(contextData, callback, ...args)` is the same, with the run's own view handed to the callback
+				 * first: `callback(view, ...args)`. Inside a run `api` is the instance; a change made through `view` stays
+				 * in the run as one through a module's `self` there does.
 				 */
 				run: this.createRunFunction(),
 
@@ -3914,6 +3950,8 @@ export class ApiBuilder extends ComponentBase {
 				 *   caller apiPath). Only that owner may write the key; other writers throw
 				 *   `CONTEXT_KEY_PROTECTED`. A nested `scope()` cannot re-own a key owned by another owner
 				 *   (`CONTEXT_KEY_OWNED`).
+				 * @param {boolean} [options.self=false] - Call `fn` as `fn(view, ...args)`, where `view` is the run's own
+				 *   view: what module code's `self` resolves to in the run (see `run.self`).
 				 * @returns {Promise<*>} Result of function execution
 				 * @public
 				 */
@@ -5876,32 +5914,53 @@ export class ApiBuilder extends ComponentBase {
 		// Get the scope function reference (created first)
 		const scopeFunc = this.createScopeFunction();
 
-		const runFunction = {
-			run: async (contextData, callback, ...args) => {
-				// Check if per-request context is disabled
-				if (slothlet.config.scope === false) {
-					throw new slothlet.SlothletError("SCOPE_DISABLED", {});
-				}
-
-				// Validate parameters
-				if (!contextData || typeof contextData !== "object") {
-					throw new slothlet.SlothletError("SCOPE_CONTEXT_INVALID", { received: typeof contextData });
-				}
-				if (typeof callback !== "function") {
-					throw new slothlet.SlothletError("SCOPE_CALLBACK_INVALID", { received: typeof callback });
-				}
-
-				// Delegate to scope with structured options
-				// Use defaults from config for merge and isolation (isolation defaults to "full")
-				return scopeFunc({
-					context: contextData,
-					fn: callback,
-					args: args,
-					merge: slothlet.config.scope?.merge || "shallow",
-					isolation: slothlet.config.scope?.isolation || "full"
-				});
+		/**
+		 * Open a run as `run()` does: validate, then delegate to scope with the config's defaults.
+		 * @param {Object} contextData - Context data to merge.
+		 * @param {Function} callback - Function to execute.
+		 * @param {Array} args - Arguments to pass to the callback.
+		 * @param {boolean} self - Whether the callback is handed the run's view first.
+		 * @returns {Promise<*>} Result of callback execution.
+		 */
+		const openRun = (contextData, callback, args, self) => {
+			// Check if per-request context is disabled
+			if (slothlet.config.scope === false) {
+				throw new slothlet.SlothletError("SCOPE_DISABLED", {});
 			}
+
+			// Validate parameters
+			if (!contextData || typeof contextData !== "object") {
+				throw new slothlet.SlothletError("SCOPE_CONTEXT_INVALID", { received: typeof contextData });
+			}
+			if (typeof callback !== "function") {
+				throw new slothlet.SlothletError("SCOPE_CALLBACK_INVALID", { received: typeof callback });
+			}
+
+			// Delegate to scope with structured options
+			// Use defaults from config for merge and isolation (isolation defaults to "full")
+			return scopeFunc({
+				context: contextData,
+				fn: callback,
+				args: args,
+				merge: slothlet.config.scope?.merge || "shallow",
+				isolation: slothlet.config.scope?.isolation || "full",
+				self
+			});
+		};
+
+		const runFunction = {
+			run: async (contextData, callback, ...args) => openRun(contextData, callback, args, false)
 		}.run;
+		// `run.self()`: `run()` with the run's view handed to the callback first (see runViewFor). Checked under the rules
+		// of `slothlet.context.run` (see RULE_TARGET_OF). Configurable (still read-only) so the view a module reads
+		// `self.slothlet` through can hand it over wrapped, as it does every other member.
+		Objects.defineProperty(runFunction, "self", {
+			__proto__: null,
+			value: { self: async (contextData, callback, ...args) => openRun(contextData, callback, args, true) }.self,
+			enumerable: true,
+			writable: false,
+			configurable: true
+		});
 		return runFunction;
 	}
 
@@ -5931,7 +5990,19 @@ export class ApiBuilder extends ComponentBase {
 					throw new slothlet.SlothletError("SCOPE_CONTEXT_OBJECT_INVALID", { received: typeof options?.context });
 				}
 
-				const { context: contextData, fn, args = [], merge = "shallow", isolation, protect, owners } = options;
+				const { context: contextData, fn, args = [], merge = "shallow", isolation, protect, owners, self: handView = false } = options;
+
+				// `self: true` hands the callback the run's view first (see runViewFor).
+				if (typeof handView !== "boolean") {
+					throw new slothlet.SlothletError("INVALID_ARGUMENT", {
+						argument: "self",
+						expected: "boolean",
+						received: describeScopeReceived(handView)
+					});
+				}
+				// Who opens the run, read in the flow that opens it: module code is handed its own `self`, the host the run's.
+				const opener = handView ? slothlet.contextManager?.getCallerIdentity?.(slothlet.instanceID) : null;
+				const callArgs = (store) => (handView ? concatLists([runViewFor(slothlet, store, opener)], args) : args);
 
 				// Validate merge strategy
 				if (merge !== "shallow" && merge !== "deep") {
@@ -6118,7 +6189,7 @@ export class ApiBuilder extends ComponentBase {
 						// Execute callback in the child store, marked on the stack as a run()/scope() callback (see runParent). The
 						// body's promise is slothlet's own, so it is waited for through a promise of slothlet's: `await` on an engine
 						// promise would read `constructor` off `Promise.prototype`, where module code can have put a getter.
-						return await settledWith(contextManager.runFlowBody(childInstanceID, fn, args));
+						return await settledWith(contextManager.runFlowBody(childInstanceID, fn, callArgs(childStore)));
 					} finally {
 						// Cleanup child
 						MapMethods.delete(contextManager.instances, childInstanceID);
@@ -6225,7 +6296,8 @@ export class ApiBuilder extends ComponentBase {
 					try {
 						// Run the callback in the run's store. Its result is taken up there too: a thenable that is no native
 						// promise has its `then` called in a job, which runs in the run only when the job is queued inside it.
-						return await contextManager.als.run(childStore, () => runtime_adoptInStore(Reflect.apply(fn, undefined, args)));
+						const given = callArgs(childStore);
+						return await contextManager.als.run(childStore, () => runtime_adoptInStore(Reflect.apply(fn, undefined, given)));
 					} finally {
 						// Cleanup: Remove temporary child instance
 						MapMethods.delete(contextManager.instances, childInstanceID);

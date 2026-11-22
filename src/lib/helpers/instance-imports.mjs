@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T13:35:20-08:00 (1794951320)
+ *	@Last modified time: 2026-11-21T22:24:25-08:00 (1795328665)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -1243,6 +1243,29 @@ function bindInstanceSelf(url, instanceID, assign) {
 	if (!setters) MapMethods.set(byURL, url, (setters = new Set()));
 	SetMethods.add(setters, assign);
 	assign(instanceSelfForm(instanceID, url));
+}
+
+/**
+ * The URL of the runtime entry file api files import `self` from by default (`@cldmv/slothlet/runtime`).
+ * @type {string}
+ * @private
+ */
+const MAIN_RUNTIME_URL = URLMethods.href(new URL("../runtime/runtime.mjs", import.meta.url));
+
+/**
+ * The `self` an instance's files hold now, for `run.self()` / `scope({ self: true })` opened by module code: the form
+ * of the runtime file the instance's files bound `self` through, the main entry (`@cldmv/slothlet/runtime`) when they
+ * bound it through several. Files loaded with no resolve hook (a browser) hold the main entry's form.
+ * @param {string} instanceID - The instance.
+ * @returns {object|Function|undefined} The form, or undefined when no runtime file made one.
+ * @internal
+ */
+function moduleSelfForm(instanceID) {
+	const byURL = MapMethods.get(SELF_BINDINGS, instanceID);
+	if (byURL && MapMethods.size(byURL) > 0 && !MapMethods.has(byURL, MAIN_RUNTIME_URL)) {
+		for (const url of mapKeys(byURL)) return instanceSelfForm(instanceID, url);
+	}
+	return instanceSelfForm(instanceID, MAIN_RUNTIME_URL);
 }
 
 /**
@@ -4444,6 +4467,7 @@ export function slothletInstanceImports() {
 export function internals(consumer) {
 	if (
 		!mayTakeInternals(consumer, [
+			"lib/builders/api_builder",
 			"lib/builders/modes-processor",
 			"lib/handlers/frame-placement",
 			"lib/helpers/capability-context",
@@ -4471,6 +4495,7 @@ export function internals(consumer) {
 		callableSelfOf,
 		bindInstanceSelf,
 		closeInstanceSelf,
+		moduleSelfForm,
 		SELF_BIND_KEY,
 		setInstanceSelfKind,
 		defaultExportLooksCallable,

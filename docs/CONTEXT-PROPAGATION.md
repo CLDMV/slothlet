@@ -276,6 +276,33 @@ const result = await api.slothlet.context.run(
 // After callback: context reverts to { app: "myApp", version: "1.0" }
 ```
 
+#### api.slothlet.context.run.self(contextData, callback, ...args)
+
+The same as `run()`, with the same defaults, return value, errors and isolation, except that the callback is called as `callback(view, ...args)`, where `view` is the run's own view: exactly what module code's `self` resolves to inside that run.
+
+Inside a run, `api` is the instance's api. A change the host makes through it (a write, `Object.defineProperty`, `delete`, `Object.freeze` and the other closings, `Object.setPrototypeOf`) reaches the instance, by the host's choice; once the run has a tree of its own, a member set on `api` lands in that tree. The view is how a host keeps its own changes in the run: under the default `"full"` isolation a change made through `view` stays in the run, before and after the run gets a tree of its own, exactly as one made through a module's `self` there does (see [Full Isolation](#full-isolation-default)). Under `"partial"` isolation the view is the shared `self`, and a write through it reaches the instance as a module's does.
+
+```javascript
+await api.slothlet.context.run.self(
+	{ requestId: "req-123" },
+	(view, label) => {
+		view.draft = label; // stays in the run
+		view.config.mode = "preview"; // stays in the run
+		api.saved = label; // reaches the instance
+	},
+	"note"
+);
+
+"draft" in api; // false
+api.saved; // "note"
+```
+
+- **Who the view belongs to.** Opened by the host, the view has the host's standing. Opened by module code (`self.slothlet.context.run.self(...)`), the view is that module's own `self`, so `view === self` inside the callback. A view gives nothing to code it is handed: a write through any view is judged by the code making it, so a module the host hands its view to writes only where that module may.
+- **Nested runs.** Each callback gets its own run's view. An inner run starts from what its parent's view shows, and a change made through the inner view stays in the inner run.
+- **After the run.** A view kept after the run follows the rule for a run's nodes held after its copy is torn down (see [RELOAD.md](RELOAD.md#calls-during-a-full-reload-and-after-one-fails)): once the copy is gone it answers from the instance's tree at its path.
+- **Permissions.** `run.self` is checked under the rules of `slothlet.context.run`: a rule that allows or refuses a module `run()` allows or refuses it `run.self()` too.
+- `run()` itself is unchanged: `api.slothlet.context.run({}, api.math.add, 2, 3)` still calls `add(2, 3)`.
+
 #### api.slothlet.context.set(key, value) / set(object)
 
 Changes the instance-level context every leaf reads. Pass one key and its value, or an object of keys and values.
@@ -296,7 +323,7 @@ api.slothlet.context.get(); // { tenant: "globex", region: "us" }
 - **Host only by default.** A built-in rule denies `slothlet.context.set` to module code while the permission system is on; grant it with a rule on that exact target (see [PERMISSIONS.md](PERMISSIONS.md#contextset--host-only-by-default)).
 - A key named `__proto__`, `constructor` or `prototype`, or anything but a key with a value or one plain object, throws `INVALID_ARGUMENT`.
 
-#### api.slothlet.context.scope({ context, fn, args, merge, isolation, protect, owners })
+#### api.slothlet.context.scope({ context, fn, args, merge, isolation, protect, owners, self })
 
 Executes a function with isolated context using structured options.
 
@@ -309,6 +336,7 @@ Executes a function with isolated context using structured options.
 - `isolation` (String, optional) - Isolation mode: `"full"` (default) or `"partial"` - overrides instance default
 - `protect` (String[], optional) - Context keys locked write-once/unowned for this scope — see [Owner-Locked & Write-Protected Keys](#owner-locked--write-protected-keys)
 - `owners` (Object, optional) - Map of `{ key: ownerApiPath }` binding a context key to the module allowed to write it — see [Owner-Locked & Write-Protected Keys](#owner-locked--write-protected-keys)
+- `self` (Boolean, optional) - When `true`, `fn` is called as `fn(view, ...args)` with the run's own view, as [`run.self()`](#apislothletcontextrunselfcontextdata-callback-args) does. `false` (the default) changes nothing. Any other value throws `INVALID_ARGUMENT`.
 
 > **Note:** `protect` / `owners` are only accepted as `scope()` / `run()` **options**. `run()`'s positional arguments after the callback are forwarded to the callback, not read as options.
 
