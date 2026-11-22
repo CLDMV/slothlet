@@ -65,7 +65,6 @@ const WRITES = {
 		"(delete self.data.inst.size, ['size' in self.data.inst, self.data.inst.size, self.data.inst.label()])",
 		"self.data.inst.size"
 	],
-	emitterMember: ["(self.data.bus.flag = 1, self.data.bus.flag)", "self.data.bus.flag"],
 	isArray: ["Array.isArray(self.data.cfg.list)", "Array.isArray(self.data.cfg.list)"],
 	arrayIndex: ["(self.data.cfg.list[0] = 9, [self.data.cfg.list[0], self.data.cfg.list.length])", "self.data.cfg.list[0]"],
 	arrayPush: [
@@ -191,6 +190,19 @@ describe.each(CONFIGS)("full-isolation run keeps its writes in its own copy — 
 				await api.writer.evalIn("1");
 			});
 			await expectInstanceUnchanged(read);
+		});
+	});
+
+	describe("an emitter is a live object the run shares with the instance", () => {
+		it("a member module code in a run sets on an emitter reaches the instance, as on the shared object in plain JS", async () => {
+			await load();
+			const write = "(self.data.bus.flag = 1, self.data.bus.flag)";
+			const seen = await api.slothlet.context.run({}, () => api.writer.evalIn(write));
+			// One object shared by the run and the instance: the plain-JS twin's answer, and the instance then holds the write.
+			const shared = makeValues();
+			expect(seen).toEqual(new Function("self", `return (${write});`)({ data: shared }));
+			expect(await api.writer.evalIn("self.data.bus.flag")).toBe(shared.bus.flag);
+			expect((await api.data.raw()).busFlag).toBe(shared.bus.flag);
 		});
 	});
 

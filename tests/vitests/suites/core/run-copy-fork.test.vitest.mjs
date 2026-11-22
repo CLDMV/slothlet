@@ -18,7 +18,7 @@
  * permission rule, the mode, the seal, a principal, a hook, metadata, an event or lifecycle subscription) forks that
  * piece into the run, and the write stays there. Sibling runs keep theirs apart, a nested run starts from its parent's
  * copy and neither one's later writes reach the other, and the instance's own changes after a run started (a restart
- * among them) never reach that run. A full-isolation scope's `self` keeps what it first read of each member.
+ * among them) never reach that run. A full-isolation scope's `self` reads the instance as of the scope's start.
  *
  * The api tree is copied too: a module a run adds is the run's alone (see the last test, and run-copy-tree).
  *
@@ -396,7 +396,7 @@ describe.each([["async"], ["live"]])("a run's writes fork its own copy — %s ru
 				await entered.promise;
 				api.data.n = 2;
 				go.release();
-				expect(await scope).toEqual({ first: 1, later: 2, written: 3, after: 3 });
+				expect(await scope).toEqual({ first: 1, later: 1, written: 3, after: 3 });
 				expect(api.calls.selfN()).toBe(2);
 			} finally {
 				await api.slothlet.shutdown();

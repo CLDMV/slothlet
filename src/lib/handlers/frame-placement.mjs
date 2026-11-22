@@ -5525,6 +5525,27 @@ function runtime_leavesAtFile(slothlet, path, instance, mount, restartReplaced =
 }
 
 /**
+ * Every live node of an instance built from a file (see {@link registerLeafFile}): the file's own node and every node
+ * of its values, for a checkpoint of what the file exports (see `helpers/run-snapshot`).
+ * @param {object} slothlet - The instance.
+ * @param {string} filePath - The file.
+ * @returns {object[]} The nodes' wrappers.
+ * @private
+ */
+function fileNodes(slothlet, filePath) {
+	const files = WeakMapMethods.get(LEAF_FILES, slothlet);
+	const held = files === undefined || !filePath ? undefined : MapMethods.get(files, toComparablePath(filePath));
+	const nodes = [];
+	if (held === undefined) return nodes;
+	for (const reference of setValues(held)) {
+		const wrapper = WeakRefMethods.deref(reference);
+		if (wrapper === undefined) SetMethods.delete(held, reference);
+		else listPush(nodes, wrapper);
+	}
+	return nodes;
+}
+
+/**
  * Whose code is running while no call of an instance's is (#597): the code nearest the stack's top that is not
  * slothlet's own or Node's decides. Code written in a file a module's leaves were built from is those leaves'; code of
  * the instance no leaf accounts for (a helper file of a module's, code compiled by someone) is no one's, and is refused
@@ -5973,6 +5994,7 @@ export function internals(consumer) {
 		createModuleLoad,
 		describeCall,
 		enterCall,
+		fileNodes,
 		forgetInstanceScripts,
 		frameDefiner,
 		handedLeafFunctions,

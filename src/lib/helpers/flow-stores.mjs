@@ -48,6 +48,7 @@ import {
 	WeakRef,
 	WeakRefMethods
 } from "#helpers/intrinsics";
+import { openRunSnapshot } from "#helpers/run-snapshot";
 
 /**
  * The key a `run()` / `scope()` store records its copy of the instance under. Every run gets a record of its own (see
@@ -532,11 +533,26 @@ export function copyForRun(slothlet, parentStore) {
 	if (parent !== null && parent.torn) parent = null;
 	if (parent !== null) {
 		if (parent.ns === null || typeof slothlet?.[INHERIT_COPY] !== "function")
-			return openRun(newRecord(parent.from, parent, null, slothlet));
-		return openRun(slothlet[INHERIT_COPY](parent));
+			return withSnapshot(openRun(newRecord(parent.from, parent, null, slothlet)), slothlet, parent);
+		return withSnapshot(openRun(slothlet[INHERIT_COPY](parent)), slothlet, parent);
 	}
 	if (typeof slothlet?.[CURRENT_COPY] !== "function") return null;
-	return openRun(newRecord(slothlet[CURRENT_COPY](), null, null, slothlet));
+	return withSnapshot(openRun(newRecord(slothlet[CURRENT_COPY](), null, null, slothlet)), slothlet, null);
+}
+
+/**
+ * Give a new run record its snapshot (see `helpers/run-snapshot`): the tick of the instance's clock it reads the
+ * instance at, taken now, and, for a nested run, its start on the run it was opened in. It is closed when the run's
+ * copy is torn down.
+ * @param {object} record - The record.
+ * @param {object} slothlet - The instance object.
+ * @param {object|null} parent - The record of the run it was opened in.
+ * @returns {object} The record.
+ * @private
+ */
+function withSnapshot(record, slothlet, parent) {
+	record.snap = openRunSnapshot(slothlet, parent?.snap ?? null);
+	return record;
 }
 
 /**
@@ -563,7 +579,8 @@ export function newRecord(from, parent, ns, owner) {
 		retired: 0,
 		stores: null,
 		tracked: null,
-		owner: owner ?? null
+		owner: owner ?? null,
+		snap: null
 	};
 }
 

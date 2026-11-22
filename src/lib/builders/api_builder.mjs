@@ -43,6 +43,16 @@ import { assertOptionKeys } from "#helpers/config-schema";
 import { compilePattern } from "#helpers/pattern-matcher";
 import { internals as instanceImportsInternals } from "#helpers/instance-imports";
 import { copyForRun, recordOperation, releaseRunWork, RUN_COPY, RUN_SELF, trackFlowStore, treeWrite } from "#helpers/flow-stores";
+import {
+	beforeChange,
+	builtinCopy,
+	CURRENT,
+	declaresPrivate,
+	handOutRaw,
+	isSharedLive,
+	shallowCopy,
+	versionAt
+} from "#helpers/run-snapshot";
 import { pinScopeToCurrentCaller } from "#helpers/caller-pinning";
 import {
 	ArrayMethods,
@@ -56,6 +66,7 @@ import {
 	listUnshift,
 	Map,
 	mapEntriesToArray,
+	mapKeys,
 	mapKeysToArray,
 	mapList,
 	MapMethods,
@@ -99,6 +110,10 @@ const {
 	runtime_runWrite,
 	runtime_isApiNode,
 	runtime_nodeWrapperOf,
+	runtime_nodeVersion,
+	runtime_builtinBehind,
+	runtime_sameSnapshotMember,
+	runtime_holdsOwnMember,
 	runtime_rootGate,
 	runtime_enforceReadGate,
 	runtime_registerRunView,
@@ -547,6 +562,14 @@ const RUN_DESCRIPTOR_FIELDS = ["value", "writable", "get", "set", "enumerable", 
 let delegatedRunSink = null;
 
 /**
+ * The run whose view is being read by a run opened in it, and the nested run's start on it, while it is (see
+ * `readThroughOuter` in {@link makeRunSelf}).
+ * @type {{run: object, start: number}|null}
+ * @private
+ */
+let outerReadAt = null;
+
+/**
  * What each view a run's `self` hands out reads through: a function read through a view and called with the view as
  * its receiver runs on that node, as it would on the node itself.
  * @type {WeakMap<object, *>}
@@ -610,11 +633,42 @@ function runViewFunction(fn) {
 		// and what it writes stays in the run, as a method called on a copy of an object works on the copy.
 		handed = new NativeProxy(fn, {
 			__proto__: null,
-			apply: (target, thisArg, args) => Reflect.apply(target, thisArg, args)
+			apply: (target, thisArg, args) => Reflect.apply(target, runViewReceiver(thisArg), args)
 		});
 		WeakMapMethods.set(RUN_VIEW_FUNCTIONS, fn, handed);
 	}
 	return handed;
+}
+
+/**
+ * The receiver a method read through a run's view runs with: the view itself, so what it reads and writes is the
+ * run's, except for an instance of a class that declares `#private` fields, whose methods run on the instance (the
+ * node the view reads through), where the private fields are. Its public members still read as of the run's start
+ * through the view; what such a method changes through `this` is the instance's.
+ * @param {*} thisArg - The receiver the method was called with.
+ * @returns {*} The receiver it runs with.
+ * @private
+ */
+function runViewReceiver(thisArg) {
+	if (thisArg === null || (typeof thisArg !== "object" && typeof thisArg !== "function")) return thisArg;
+	if (!WeakMapMethods.has(RUN_VIEW_REALS, thisArg)) return thisArg;
+	const real = WeakMapMethods.get(RUN_VIEW_REALS, thisArg);
+	const impl = runtime_nodeWrapperOf(real)?.____slothletInternal?.impl;
+	return impl !== null && typeof impl === "object" && declaresPrivate(impl) ? real : thisArg;
+}
+
+/**
+ * Whether a node fronts a live object a run shares with the instance (an `EventEmitter`, an `EventTarget`): a run is
+ * handed the node itself, so its listeners and what it emits or sets work both ways (see `isSharedLive` in
+ * `helpers/run-snapshot`).
+ * @param {*} value - The node, as read.
+ * @returns {boolean} True for one.
+ * @private
+ */
+function frontsSharedLive(value) {
+	if (typeof value !== "object" || value === null) return false;
+	const impl = runtime_nodeWrapperOf(value)?.____slothletInternal?.impl;
+	return impl !== null && typeof impl === "object" && isSharedLive(impl);
 }
 
 /**
@@ -678,6 +732,8 @@ function runViewShell(shell, parentSelf) {
  * @private
  */
 function makeRunSelf(slothlet, parentSelf, record) {
+	// The run's snapshot (see helpers/run-snapshot): what it reads of the instance is the instance as of its start.
+	const snap = record?.snap ?? null;
 	const run = {
 		// parent path key → (member → the change the run made there)
 		entries: new Map(),
@@ -704,6 +760,23 @@ function makeRunSelf(slothlet, parentSelf, record) {
 		forked: false,
 		parent: WeakMapMethods.get(RUN_OF_VIEW, parentSelf) ?? null
 	};
+	/**
+	 * Read through an outer run's view as of this run's start on it: what the outer run writes after this one opened
+	 * does not reach this one.
+	 * @template T
+	 * @param {function(): T} read - The read.
+	 * @returns {T} What it read.
+	 */
+	const readThroughOuter = (read) => {
+		if (run.parent === null || snap === null || snap.parent === null) return read();
+		const previous = outerReadAt;
+		outerReadAt = { run: run.parent, start: snap.start };
+		try {
+			return read();
+		} finally {
+			outerReadAt = previous;
+		}
+	};
 	const keyOf = (parts) => ArrayMethods.join(parts, RUN_PATH_SEPARATOR);
 	/**
 	 * Keep a change the run made.
@@ -724,6 +797,8 @@ function makeRunSelf(slothlet, parentSelf, record) {
 			MapMethods.set(run.entries, key, members);
 		}
 		const entry = { __proto__: null, ...change, parts, prop };
+		// A run opened in this one reads what this one had written when it opened: what it held here is kept first.
+		if (snap !== null) beforeChange(snap, members, shallowCopy);
 		MapMethods.set(members, prop, entry);
 		listPush(run.log, entry);
 		for (let index = 0; index < parts.length; index++) {
@@ -793,8 +868,14 @@ function makeRunSelf(slothlet, parentSelf, record) {
 		const arrayView = !callable && Arrays.isArray(real);
 		const shell = runViewShell(callable ? FunctionMethods.bind(function () {}) : arrayView ? [] : {}, real ?? {});
 		const own = (prop) => {
-			const members = MapMethods.get(run.entries, key);
-			return members === undefined ? undefined : MapMethods.get(members, prop);
+			let members = MapMethods.get(run.entries, key);
+			if (members === undefined) return undefined;
+			// A run opened in this one reads what this one had written when it opened (see readThroughOuter).
+			if (outerReadAt !== null && outerReadAt.run === run && snap !== null) {
+				const held = versionAt(snap, members, outerReadAt.start);
+				if (held !== CURRENT) members = held;
+			}
+			return MapMethods.get(members, prop);
 		};
 		const below = (prop) => {
 			const names = typeof prop === "string" ? MapMethods.get(run.below, key) : undefined;
@@ -813,10 +894,18 @@ function makeRunSelf(slothlet, parentSelf, record) {
 			let copy = MapMethods.get(run.arrays, key);
 			if (copy === undefined) {
 				copy = [];
-				const length = Reflect.get(real, "length");
+				// Copied from what the run reads: the array as of the run's start, when the instance changed it since.
+				const version = snapshotOf();
+				const heldAt = (name) => {
+					const held = version === null ? undefined : MapMethods.get(version.members, name);
+					return held === undefined || held.live ? undefined : held;
+				};
+				const length = heldAt("length")?.value ?? Reflect.get(real, "length");
 				for (let index = 0; index < length; index++) {
 					const name = String(index);
-					if (Reflect.getOwnPropertyDescriptor(real, name) !== undefined) copy[index] = Reflect.get(real, name);
+					const held = heldAt(name);
+					if (held !== undefined) copy[index] = snapshotValue(held.value);
+					else if (version === null && Reflect.getOwnPropertyDescriptor(real, name) !== undefined) copy[index] = Reflect.get(real, name);
 				}
 				copy.length = length;
 				MapMethods.set(run.arrays, key, copy);
@@ -832,6 +921,15 @@ function makeRunSelf(slothlet, parentSelf, record) {
 			return node;
 		};
 		const forked = () => run.forked && delegatedRunSink === null;
+		// The node's content as of the run's start, when the instance changed it since (see helpers/run-snapshot); null
+		// while it is as it was, and for what the view does not read of the instance (a node the run wrote, the root, an
+		// outer run's view, the run's own tree).
+		const snapshotOf = () =>
+			snap === null || local || real === undefined || real === null || atInstanceRoot || run.forked || WeakMapMethods.has(RUN_OF_VIEW, real)
+				? null
+				: runtime_nodeVersion(real, snap);
+		// What a saved member is handed out as: a node as `self` hands it to the reader.
+		const snapshotValue = (value) => (runtime_isApiNode(value) ? runtime_selfView(value) : value);
 		/**
 		 * A value read at `prop`, as the view hands it out.
 		 * @param {string|symbol} prop - The member.
@@ -849,9 +947,19 @@ function makeRunSelf(slothlet, parentSelf, record) {
 			// `instanceof` against the class holds for an instance inheriting through the run's view of its prototype.
 			if (prop === Symbol.hasInstance && callable && typeof value === "function") return hasInstanceOf(value);
 			if (typeof prop === "symbol" || (atRoot && SetMethods.has(RUN_FRAMEWORK_ROOTS, prop))) return value;
+			// An emitter or `EventTarget` is a live object the run shares with the instance: its node, as read.
+			if (!childLocal && runtime_isApiNode(value) && frontsSharedLive(value)) return value;
+			// A built-in data object (a `Map`, a `Set`, a `Date`, a typed array), or a node fronting one, is the run's own copy
+			// of it, made on the run's first read from what it held when the run started: a real object of its kind, whose
+			// changes stay in the run.
+			if (snap !== null && !childLocal && member) {
+				const builtin = runtime_builtinBehind(value);
+				if (builtin !== null) return builtinCopy(snap, builtin);
+			}
 			if (WeakMapMethods.has(RUN_OF_VIEW, value) || runtime_isApiNode(value)) {
 				return viewAt(concatLists(parts, [prop]), value, childLocal || WeakSetMethods.has(run.local, value));
 			}
+
 			// A class's prototype is no node: it is handed out as the run's view of it, so a change made to it stays in the run.
 			if (prop === "prototype" && callable && !childLocal && value !== null && typeof value === "object") {
 				return frameworkViewAt(concatLists(parts, [prop]), value, false, true);
@@ -867,6 +975,18 @@ function makeRunSelf(slothlet, parentSelf, record) {
 				return frameworkViewAt([prop], value, true);
 			}
 			return runViewFunction(value);
+		};
+		/**
+		 * What a call through the view hands back, as the run is handed it: an object the function returned as itself (one
+		 * its module keeps, say) is the run's view of it, read as of the run's start, and a built-in the run's own copy.
+		 * Nodes, views and shared live objects are handed back as they are.
+		 * @param {*} result - What the call returned.
+		 * @returns {*} What the run is handed.
+		 */
+		const runResult = (result) => {
+			if (snap === null || result === null || typeof result !== "object") return result;
+			if (runtime_isApiNode(result) || WeakMapMethods.has(RUN_OF_VIEW, result) || util.types.isProxy(result)) return result;
+			return handOutRaw(snap, result);
 		};
 		let hasInstance = null;
 		/**
@@ -957,7 +1077,25 @@ function makeRunSelf(slothlet, parentSelf, record) {
 					? handOut(prop, runtime_runViewAccessor(accessor, accessor.get, receiver, []), local)
 					: undefined;
 			}
-			let value = Reflect.get(real, prop);
+			// What the instance changed since the run started reads as it was then. The read is made through the node all the
+			// same, so the node's own read gate decides it for the reader, against the rules the run holds.
+			const version = snapshotOf();
+			if (version !== null) {
+				const held = MapMethods.get(version.members, prop);
+				if (held === undefined) {
+					if (runtime_holdsOwnMember(real, prop)) {
+						gateShadow(prop, undefined);
+						return undefined;
+					}
+				} else if (!held.live) {
+					const live = Reflect.get(real, prop);
+					if (runtime_sameSnapshotMember(live, held.value)) return handOut(prop, live, local);
+					const gate = runtime_nodeWrapperOf(real);
+					if (gate) runtime_enforceReadGate(gate, prop, runtime_unwrapSelfView(held.value));
+					return handOut(prop, snapshotValue(held.value), local);
+				}
+			}
+			let value = WeakMapMethods.has(RUN_OF_VIEW, real) ? readThroughOuter(() => Reflect.get(real, prop)) : Reflect.get(real, prop);
 			// A member of the instance's root is handed to a reader as `self` hands it: a view keeping who read it.
 			if (atInstanceRoot && typeof prop === "string" && !SetMethods.has(RUN_FRAMEWORK_ROOTS, prop)) value = runtime_selfView(value);
 			if (value === undefined && below(prop)) return viewAt(concatLists(parts, [prop]), undefined, true);
@@ -1089,7 +1227,7 @@ function makeRunSelf(slothlet, parentSelf, record) {
 		const callTraps = callable
 			? {
 					// Called with one of the run's views as its receiver, the function runs on that view (see runViewFunction).
-					apply: (_t, thisArg, args) => Reflect.apply(forked() ? current() : real, thisArg, args),
+					apply: (_t, thisArg, args) => runResult(Reflect.apply(forked() ? current() : real, runViewReceiver(thisArg), args)),
 					// The view is the new target, so an instance inherits through the run's view of the class's prototype, as an
 					// instance of a copy of the class inherits from the copy's prototype; a subclass's own is its own.
 					construct: (_t, args, newTarget) => Reflect.construct(forked() ? current() : real, args, newTarget)
@@ -1142,6 +1280,11 @@ function makeRunSelf(slothlet, parentSelf, record) {
 					if (entry !== undefined) return entry.op !== "delete";
 					if (below(prop)) return true;
 					if (real === undefined || real === null) return false;
+					const version = snapshotOf();
+					if (version !== null) {
+						if (MapMethods.has(version.members, prop)) return true;
+						if (runtime_holdsOwnMember(real, prop)) return false;
+					}
 					const gave = given();
 					if (gave !== null && Reflect.getOwnPropertyDescriptor(real, prop) === undefined)
 						return gave.prototype !== null && prop in gave.prototype;
@@ -1159,7 +1302,18 @@ function makeRunSelf(slothlet, parentSelf, record) {
 						}
 						return setToArray(listed);
 					}
-					const keys = setFrom(node === undefined || node === null ? [] : Reflect.ownKeys(node));
+					let keys = setFrom(node === undefined || node === null ? [] : Reflect.ownKeys(node));
+					const version = forked() ? null : snapshotOf();
+					if (version !== null) {
+						// The members the node held when the run started, in their order, then what else it lists that it does not
+						// hold itself.
+						const listed = new Set();
+						for (const name of mapKeys(version.members))
+							if (SetMethods.has(keys, name) || !runtime_holdsOwnMember(real, name)) SetMethods.add(listed, name);
+						for (const name of setValues(keys))
+							if (!SetMethods.has(listed, name) && !runtime_holdsOwnMember(real, name)) SetMethods.add(listed, name);
+						keys = listed;
+					}
 					if (!forked()) {
 						const members = MapMethods.get(run.entries, key);
 						if (members !== undefined) {
@@ -1203,6 +1357,21 @@ function makeRunSelf(slothlet, parentSelf, record) {
 						}
 						if ((real === undefined || real === null) && below(prop))
 							return { __proto__: null, value: readMember(prop, view), writable: true, enumerable: true, configurable: true };
+						const version = snapshotOf();
+						if (version !== null) {
+							const held = MapMethods.get(version.members, prop);
+							if (held === undefined) {
+								if (runtime_holdsOwnMember(real, prop)) return undefined;
+							} else if (!held.live) {
+								return {
+									__proto__: null,
+									value: readMember(prop, view),
+									writable: held.writable,
+									enumerable: held.enumerable,
+									configurable: true
+								};
+							}
+						}
 					}
 					const node = forked() ? current() : real;
 					if (node === undefined || node === null) return undefined;
@@ -3920,16 +4089,8 @@ export class ApiBuilder extends ComponentBase {
 					if (slothlet.context !== baseContext && slothlet.context) {
 						for (let i = 0; i < entries.length; i++) slothlet.context[entries[i][0]] = entries[i][1];
 					}
-					// Every run()/scope() in progress took a copy of the context when it started: give it the new value for
-					// each key it did not supply itself.
-					for (const store of mapValues(instances)) {
-						if (store === base || !ours(store) || store.context === baseContext) continue;
-						for (let i = 0; i < entries.length; i++) {
-							const key = entries[i][0];
-							if (store.__ownKeys && SetMethods.has(store.__ownKeys, key)) continue;
-							store.context[key] = entries[i][1];
-						}
-					}
+					// A run()/scope() in progress keeps the context it started with: its copy, taken when it opened, is the
+					// instance's context as of that moment, and a change made after it does not reach it.
 				},
 
 				/**

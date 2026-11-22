@@ -117,6 +117,7 @@ import {
 	whenIdle,
 	WRITE_TARGET
 } from "#helpers/flow-stores";
+import { closeRunSnapshot } from "#helpers/run-snapshot";
 import { registerInstance } from "#handlers/lifecycle-token";
 import { isCallableValue, internals as unifiedWrapperInternals } from "#handlers/unified-wrapper";
 import { isFrameworkInternal, internals as frameworkInternalsInternals } from "#handlers/framework-internals";
@@ -2845,6 +2846,9 @@ class Slothlet {
 		if (record.torn) return;
 		record.torn = true;
 		untrackRunStores(record);
+		// The run's snapshot goes with its copy: its own copies, and the versions the instance kept only for it.
+		closeRunSnapshot(record.snap);
+		record.snap = null;
 		this.#releaseCopy(record);
 		record.ns = null;
 		record.values = null;

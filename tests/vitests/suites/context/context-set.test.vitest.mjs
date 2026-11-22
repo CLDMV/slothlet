@@ -61,13 +61,13 @@ describe.each(getMatrixConfigs({}))("context.set > Config: '$name'", ({ config }
 		expect(passed.tenant).toBe("changed");
 	});
 
-	test("a run()'s own keys win inside it; other keys follow set()", async () => {
+	test("a run()'s own keys win inside it; a run keeps the context it started with", async () => {
 		api = await slothlet({ ...config, base: BASE, context: { tenant: "acme", region: "eu" } });
 		const seen = await api.slothlet.context.run({ tenant: "request" }, async () => {
 			api.slothlet.context.set({ tenant: "globex", region: "us" });
 			return [await api.reader.read("tenant"), await api.reader.read("region")];
 		});
-		expect(seen).toEqual(["request", "us"]);
+		expect(seen).toEqual(["request", "eu"]);
 		expect(api.slothlet.context.get("tenant")).toBe("globex");
 		// A run started after set() starts from the new value.
 		const after = await api.slothlet.context.run({}, async () => api.reader.read("tenant"));

@@ -163,6 +163,19 @@ import {
 	WeakSetMethods
 } from "#helpers/intrinsics";
 import { pinToCurrentCaller } from "#helpers/caller-pinning";
+import {
+	anyRunOpen,
+	beforeChange,
+	builtinKind,
+	checkpointDeep,
+	checkpointOnce,
+	CURRENT,
+	domainOf,
+	isRawRunView,
+	runsOpen,
+	versionAt
+} from "#helpers/run-snapshot";
+import { RUN_COPY } from "#helpers/flow-stores";
 import { isEngineStackAccessor, runUnformatted } from "#helpers/stack-read";
 import { namesForeignFile, BINDING_NAME, hasCapabilityCheck } from "#helpers/capability-context";
 import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "#helpers/instance-imports";
@@ -172,6 +185,7 @@ const { runtime_unwrapClassInstance, runtime_classInstanceCreator, setModuleInst
 	classInstanceWrapperInternals("lib/handlers/unified-wrapper");
 const trustedRootOwn = trustedRootInternals("lib/handlers/unified-wrapper");
 const {
+	fileNodes,
 	handedLeafFunctions,
 	registerLeafFile,
 	setModuleNodeResolver,
@@ -3896,6 +3910,277 @@ function runtime_nodeWrapperOf(value) {
 	if (value === null || (typeof value !== "object" && typeof value !== "function")) return null;
 	const node = WeakMapMethods.get(SELF_VIEW_NODES, value) ?? value;
 	return resolveWrapper(node) ?? WeakMapMethods.get(capturedViewChildren, node) ?? null;
+}
+
+/**
+ * Marks a member a node's saved version leaves to the node as it is now (an accessor, a member of a module's own Proxy):
+ * a read of it in a run reads it live.
+ * @type {{live: true}}
+ * @private
+ */
+const SNAPSHOT_LIVE_MEMBER = Objects.freeze({ __proto__: null, live: true });
+
+/**
+ * What a node holds now, as a run that started before its next change reads it (see `helpers/run-snapshot`): each
+ * member the node holds on itself (a child node, or a value it keeps) and each its value holds, with the attributes it
+ * has, as the node's own traps would find it. Accessors and the members of a module's own Proxy are left to be read
+ * live. Nothing runs: only the node's own store and its value are read, by their descriptors.
+ * @param {UnifiedWrapper} wrapper - The node's wrapper.
+ * @returns {{members: Map<PropertyKey, (object|symbol)>, extensible: boolean}} The content.
+ * @private
+ */
+function runtime_captureNode(wrapper) {
+	const members = new Map();
+	const keep = (key, described) => {
+		if (described === undefined || isFrameworkReservedKey(key) || MapMethods.has(members, key)) return;
+		if (!("value" in described)) {
+			MapMethods.set(members, key, SNAPSHOT_LIVE_MEMBER);
+			return;
+		}
+		// A child node answering a value in its place (a primitive a file exports) is kept as that value.
+		let value = described.value;
+		const child = value !== null && (typeof value === "object" || typeof value === "function") ? resolveWrapper(value) : null;
+		if (child !== null && runtime_holdsValue(child)) value = runtime_heldValue(child);
+		MapMethods.set(members, key, {
+			__proto__: null,
+			value,
+			enumerable: described.enumerable === true,
+			writable: described.writable !== false
+		});
+	};
+	// A node fronting a module's own object holds what that object holds (the node follows it on its next read): the
+	// object is read, so a change the module made through its own variable and the node has not followed yet is not
+	// taken for the node's.
+	const object = runtime_moduleObjectOf(wrapper);
+	if (object !== null) {
+		const keys = Reflect.ownKeys(object);
+		for (let index = 0; index < keys.length; index++) keep(keys[index], Reflect.getOwnPropertyDescriptor(object, keys[index]));
+		return { members, extensible: Reflect.isExtensible(object) };
+	}
+	const own = Reflect.ownKeys(wrapper);
+	for (let index = 0; index < own.length; index++) keep(own[index], Reflect.getOwnPropertyDescriptor(wrapper, own[index]));
+	const impl = wrapper.____slothletInternal.impl;
+	if (impl !== null && (typeof impl === "object" || typeof impl === "function")) {
+		if (util.types.isProxy(impl) && !isCompositionLayer(impl)) {
+			// A module's own Proxy answers for itself: its members are read live.
+		} else {
+			const held = layerUnderlying(impl);
+			const keys = Reflect.ownKeys(held);
+			for (let index = 0; index < keys.length; index++) {
+				const key = keys[index];
+				// A function's own `length`, `name` and `prototype` are the language's, answered by the node as they are now.
+				if (
+					typeof held === "function" &&
+					(key === "length" || key === "name" || key === "prototype" || key === "arguments" || key === "caller")
+				)
+					continue;
+				keep(key, Reflect.getOwnPropertyDescriptor(held, key));
+			}
+		}
+	}
+	return { members, extensible: true };
+}
+
+/**
+ * The `run()` / `scope()` record of the code running now for an instance (see `RUN_COPY` in `helpers/flow-stores`), or
+ * null outside any run.
+ * @param {object} slothlet - The instance.
+ * @returns {object|null} The record.
+ * @private
+ */
+function runtime_runningRecord(slothlet) {
+	const contextManager = slothlet?.contextManager;
+	let record = contextManager?.tryGetContext?.(slothlet.instanceID)?.[RUN_COPY];
+	if (record === undefined || record === null) {
+		const active = contextManager?.tryGetContext?.();
+		record = active?.slothlet === slothlet ? (active[RUN_COPY] ?? null) : null;
+	}
+	return record === null || record.torn ? null : record;
+}
+
+/**
+ * Save a value the instance hands out as itself (a `Map`, a `Date`, an object a leaf returned) and what it reaches,
+ * once per window while a run is open, when it is handed to code outside every run: that code may change it where
+ * slothlet does not see the change, and the runs open read it as it was (see `checkpointDeep` in
+ * `helpers/run-snapshot`). Shared live objects are left alone.
+ * @param {object} slothlet - The instance.
+ * @param {*} value - The value handed out.
+ * @returns {void}
+ * @private
+ */
+function runtime_checkpointHandout(slothlet, value) {
+	if (value === null || typeof value !== "object") return;
+	const domain = domainOf(slothlet);
+	if (!runsOpen(domain) || util.types.isProxy(value) || runtime_runningRecord(slothlet) !== null) return;
+	checkpointDeep(domain, value, new Set(), (held) => util.types.isProxy(held) || resolveWrapper(held) !== null);
+}
+
+/**
+ * The built-in data object a value is, or a node of one fronts (a node over a `Map` a module exports): what a run
+ * copies and what the instance saves before handing it out. Null for anything else.
+ * @param {*} value - The value, as read.
+ * @returns {object|null} The built-in.
+ * @internal
+ */
+function runtime_builtinBehind(value) {
+	if (value === null || (typeof value !== "object" && typeof value !== "function")) return null;
+	const behind = runtime_unwrapSelfView(value);
+	if (behind !== null && typeof behind === "object" && !util.types.isProxy(behind) && builtinKind(behind) !== null) return behind;
+	const wrapper = runtime_nodeWrapperOf(value);
+	if (wrapper === null) return null;
+	const impl = wrapper.____slothletInternal.impl;
+	if (impl === null || typeof impl !== "object") return null;
+	const held = layerUnderlying(impl);
+	return held !== null && typeof held === "object" && !util.types.isProxy(held) && builtinKind(held) !== null ? held : null;
+}
+
+/**
+ * Before a file's code runs outside every run while a run is open: save every node of the file once per window (see
+ * `checkpointOnce` in `helpers/run-snapshot`), so a change the code makes to what the file exports through its own
+ * variables does not reach the runs open.
+ * @param {UnifiedWrapper} wrapper - The leaf about to run.
+ * @returns {void}
+ * @private
+ */
+function runtime_checkpointFile(wrapper) {
+	const slothlet = wrapper.slothlet;
+	const domain = domainOf(slothlet);
+	if (!runsOpen(domain)) return;
+	const filePath = wrapper.____slothletInternal.filePath;
+	if (!filePath || runtime_runningRecord(slothlet) !== null) return;
+	checkpointOnce(domain, filePath, () => {
+		const nodes = fileNodes(slothlet, filePath);
+		for (let index = 0; index < nodes.length; index++) {
+			const node = nodes[index];
+			if (node.slothlet !== slothlet) continue;
+			const internal = node.____slothletInternal;
+			if (internal.invalid || (internal.mode === "lazy" && !internal.state.materialized)) continue;
+			beforeChange(domain, node, runtime_captureNode);
+		}
+	});
+}
+
+/**
+ * Save a lazy node that has just loaded, and every node and built-in below it, for the runs open (see
+ * `helpers/run-snapshot`): a change made through a stand-in for it while it loaded, which is made once it has, then
+ * does not reach a run that started before the change.
+ * @param {UnifiedWrapper} wrapper - The node that loaded.
+ * @returns {void}
+ * @private
+ */
+function runtime_checkpointLoaded(wrapper) {
+	const slothlet = wrapper.slothlet;
+	const domain = domainOf(slothlet);
+	if (!runsOpen(domain)) return;
+	const seen = new Set();
+	const skip = (held) => util.types.isProxy(held) || resolveWrapper(held) !== null;
+	const walk = (node) => {
+		if (SetMethods.has(seen, node) || node.slothlet !== slothlet) return;
+		SetMethods.add(seen, node);
+		const internal = node.____slothletInternal;
+		if (internal.invalid || (internal.mode === "lazy" && !internal.state.materialized)) return;
+		beforeChange(domain, node, runtime_captureNode);
+		const keys = Reflect.ownKeys(node);
+		for (let index = 0; index < keys.length; index++) {
+			if (isFrameworkReservedKey(keys[index])) continue;
+			const described = Reflect.getOwnPropertyDescriptor(node, keys[index]);
+			const value = described !== undefined && "value" in described ? described.value : undefined;
+			if (value === null || (typeof value !== "object" && typeof value !== "function")) continue;
+			const child = resolveWrapper(value);
+			if (child !== null) walk(child);
+		}
+		const impl = internal.impl;
+		if (impl !== null && typeof impl === "object" && !util.types.isProxy(impl)) {
+			const names = Objects.keys(impl);
+			for (let index = 0; index < names.length; index++) {
+				const described = Reflect.getOwnPropertyDescriptor(impl, names[index]);
+				if (described !== undefined && "value" in described && builtinKind(described.value) !== null)
+					checkpointDeep(domain, described.value, new Set(), skip);
+			}
+		}
+	};
+	walk(wrapper);
+}
+
+/**
+ * The traps of a node that change it (see {@link runtime_snapshotBarrier}).
+ * @type {string[]}
+ * @private
+ */
+const SNAPSHOT_TRAPS = ["set", "defineProperty", "deleteProperty", "setPrototypeOf", "preventExtensions"];
+
+/**
+ * Save a node as it is before the instance changes it, for the runs that started since it last changed (see
+ * `beforeChange` in `helpers/run-snapshot`): called by every trap that changes a node. A change a run's `self` is making
+ * (kept in the run), a build, the framework's own bookkeeping, a node of a run's own tree, and a lazy node not loaded
+ * yet are left alone.
+ * @param {UnifiedWrapper} wrapper - The node's wrapper.
+ * @returns {void}
+ * @private
+ */
+function runtime_snapshotBarrier(wrapper) {
+	const slothlet = wrapper.slothlet;
+	const domain = domainOf(slothlet);
+	if (!runsOpen(domain)) return;
+	if (RUN_WRITE !== null && RUN_WRITE.node === wrapper) return;
+	if (slothlet.____buildDepth > 0 || MapMethods.has(FRAMEWORK_WRITES, wrapper) || runtime_inRunTree(wrapper)) return;
+	const internal = wrapper.____slothletInternal;
+	if (internal.mode === "lazy" && !internal.state.materialized) return;
+	beforeChange(domain, wrapper, runtime_captureNode);
+}
+
+/**
+ * The content a node had when a run started, when the instance has changed it since (see {@link runtime_captureNode}),
+ * or null when the node is as it was.
+ * @param {*} node - The node, as the run's view reads through it.
+ * @param {object|null|undefined} snap - The run's snapshot (see `helpers/run-snapshot`).
+ * @returns {{members: Map<PropertyKey, (object|symbol)>}|null} The content.
+ * @internal
+ */
+function runtime_nodeVersion(node, snap) {
+	if (snap === null || snap === undefined || snap.closed) return null;
+	const wrapper = runtime_nodeWrapperOf(node);
+	if (wrapper === null) return null;
+	const held = versionAt(snap.instance, wrapper, snap.base);
+	return held === CURRENT ? null : held;
+}
+
+/**
+ * Whether a value read through a node now is the member a node's saved version holds: the same child node (or a view of
+ * it), the node fronting the same object, or the same value.
+ * @param {*} live - What the node hands out now.
+ * @param {*} held - What the version holds.
+ * @returns {boolean} True when they are one.
+ * @internal
+ */
+function runtime_sameSnapshotMember(live, held) {
+	if (live === held) return true;
+	if (live === null || (typeof live !== "object" && typeof live !== "function")) return false;
+	if (held === null || (typeof held !== "object" && typeof held !== "function")) return false;
+	const liveWrapper = runtime_nodeWrapperOf(live);
+	if (liveWrapper === null) return false;
+	const heldWrapper = runtime_nodeWrapperOf(held);
+	if (heldWrapper !== null) return heldWrapper === liveWrapper;
+	const internal = liveWrapper.____slothletInternal;
+	return internal.impl === held || internal.sourceValue === held || internal.moduleObject === held;
+}
+
+/**
+ * Whether a node holds `prop` as a member of its own now (as its own store or its value holds it), read by
+ * descriptors only: a member a run's snapshot does not hold, which the node holds now, was added after the run started.
+ * @param {*} node - The node, as the run's view reads through it.
+ * @param {PropertyKey} prop - The member.
+ * @returns {boolean} True when it does.
+ * @internal
+ */
+function runtime_holdsOwnMember(node, prop) {
+	const wrapper = runtime_nodeWrapperOf(node);
+	if (wrapper === null || isFrameworkReservedKey(prop)) return false;
+	if (hasOwn(wrapper, prop)) return true;
+	const impl = wrapper.____slothletInternal.impl;
+	if (impl === null || (typeof impl !== "object" && typeof impl !== "function") || (util.types.isProxy(impl) && !isCompositionLayer(impl)))
+		return false;
+	return hasOwn(layerUnderlying(impl), prop);
 }
 
 /**
@@ -10632,6 +10917,10 @@ function runtime_holdsSlottedData(value) {
 // The platform's cloning functions copy an api node's data too (#751): member by member through the node (or the view
 // of it the caller holds), so each read is the node's own, with its checks, and the module's object is never handed over.
 setCloneNodeReader((value) => {
+	// A run's view (of a node, or of an object it reached as itself) is copied member by member through the view: what
+	// the run reads, as of its start, with what it wrote. A callable one is a function, which the platform refuses.
+	if (WeakMapMethods.has(RUN_VIEWS, value) || isRawRunView(value))
+		return typeof value === "function" ? { value } : { list: Arrays.isArray(value) };
 	// A view `self` handed a module over a built-in data object or an error a module holds: while the permission system is
 	// on it is copied from reads of it (see `runtime_slotCopy` in clone-context), off it is the platform's to clone.
 	const record = WeakMapMethods.get(SELF_MEMBER_VIEWS, value);
@@ -17425,6 +17714,8 @@ class UnifiedWrapper extends ComponentBase {
 	 * @private
 	 */
 	___setImpl(newImpl, moduleID = null, forceReuseChildren = false, attributeChildren = false) {
+		// A run that started before this change reads the node as it was (see helpers/run-snapshot).
+		runtime_snapshotBarrier(this);
 		// Debug block only fires when wrapperDebugEnabled AND apiPath === "string"; neither condition is met in tests.
 		/* v8 ignore start */
 		if ((wrapperDebugEnabled || this.____config?.debug?.wrapper) && this.____slothletInternal.apiPath === "string") {
@@ -17666,6 +17957,8 @@ class UnifiedWrapper extends ComponentBase {
 
 						// Notify Slothlet that this lazy wrapper has materialized (counted once, #588).
 						this.___trackLazyLoad("loaded");
+						// A run open now reads the node as it loaded: saved before the changes made through stand-ins for it are made.
+						if (anyRunOpen()) runtime_checkpointLoaded(this);
 						// Changes made through stand-ins for it while it loaded, now that it has (#653).
 						runtime_replayStandInChanges(this, changeGeneration);
 
@@ -19889,6 +20182,9 @@ class UnifiedWrapper extends ComponentBase {
 							lastObject = currentWrapper.____slothletInternal.impl; // Track parent object
 							// An accessor or a Proxy of the module's runs as that module (#597).
 							current = runtime_readImplMember(currentWrapper, prop);
+							// A built-in handed out as itself is saved first for the runs open (see helpers/run-snapshot).
+							if (anyRunOpen() && current !== null && typeof current === "object" && builtinKind(current) !== null)
+								runtime_checkpointHandout(wrapper.slothlet, current);
 							continue;
 						}
 					}
@@ -21097,6 +21393,9 @@ class UnifiedWrapper extends ComponentBase {
 				thisArgWrapper.____slothletInternal.runHiddenKeys === undefined &&
 				(!WeakMapMethods.has(SELF_VIEW_NODES, thisArg) || runtime_selfIsMethodNode(thisArg, wrapper));
 			const effectiveThisArg = thisArgIsOwnIdentity ? thisArgImpl : thisArg;
+			// A method running on the value itself changes it where no trap sees it: the node is saved first for the runs
+			// open (see helpers/run-snapshot).
+			if (thisArgIsOwnIdentity && anyRunOpen()) runtime_snapshotBarrier(thisArgWrapper);
 			// The value stands for its node when it comes back through `self` (#625).
 			if (thisArgIsOwnIdentity) WeakMapMethods.set(SELF_INSTANCE_NODES, thisArgImpl, runtime_unwrapSelfView(thisArg));
 
@@ -22823,6 +23122,11 @@ class UnifiedWrapper extends ComponentBase {
 					return from === null ? undefined : Reflect.get(from, prop, receiver);
 				}
 				const value = getTrap(target, prop, receiver, access);
+				// A built-in handed out as itself (a `Map`, a `Date`) is saved first for the runs open (see helpers/run-snapshot).
+				if (anyRunOpen() && value !== null && (typeof value === "object" || typeof value === "function")) {
+					const held = runtime_builtinBehind(value);
+					if (held !== null) runtime_checkpointHandout(wrapper.slothlet, held);
+				}
 				// A member fixed read-only on a frozen shell must be read as the shell holds it (proxy invariant), so it
 				// carries no view bound to the reader: it is checked against whoever calls or reads it.
 				const fixed = target !== wrapper ? Reflect.getOwnPropertyDescriptor(target, prop) : undefined;
@@ -22834,8 +23138,15 @@ class UnifiedWrapper extends ComponentBase {
 				// held to the rules at that node's path and each member's name, as the node's own members are.
 				const path = wrapper.____slothletInternal.apiPath;
 				const dot = typeof path === "string" ? StringMethods.lastIndexOf(path, ".") : -1;
-				if (dot < 0 || (typeof path === "string" ? StringMethods.slice(path, dot + 1) : copyList(path, dot + 1)) !== "toJSON")
-					return applyTrap(target, thisArg, args);
+				if (dot < 0 || (typeof path === "string" ? StringMethods.slice(path, dot + 1) : copyList(path, dot + 1)) !== "toJSON") {
+					if (!anyRunOpen()) return applyTrap(target, thisArg, args);
+					// While a run is open, the file's exports are saved before its code runs outside every run, and what the
+					// call hands back as itself is saved before the caller has it (see helpers/run-snapshot).
+					runtime_checkpointFile(wrapper);
+					const result = applyTrap(target, thisArg, args);
+					if (result !== null && typeof result === "object") runtime_checkpointHandout(wrapper.slothlet, result);
+					return result;
+				}
 				const keptAccess = capturedAccess?.wrapper === wrapper ? capturedAccess : null;
 				return runtime_redactToJSONResult(
 					wrapper,
@@ -23113,6 +23424,16 @@ class UnifiedWrapper extends ComponentBase {
 			},
 			getPrototypeOf: (target) => reportedPrototype(target, () => runtime_takeCapturedAccess(wrapper))
 		};
+		// A run that started before a change reads the node as it was (see helpers/run-snapshot): every trap that changes
+		// the node saves it first, once per window, while a run is open.
+		for (let index = 0; index < SNAPSHOT_TRAPS.length; index++) {
+			const name = SNAPSHOT_TRAPS[index];
+			const trap = proxyHandler[name];
+			proxyHandler[name] = (...args) => {
+				runtime_snapshotBarrier(wrapper);
+				return Reflect.apply(trap, proxyHandler, args);
+			};
+		}
 		// Once a restart() replaces this wrapper's tree, every trap forwards to the live tree (#504).
 		const proxyTraps = runtime_withRestartForwarding(proxyHandler, wrapper);
 		wrapper.____slothletInternal.proxy = new NativeProxy(proxyTarget, proxyTraps);
@@ -23445,6 +23766,10 @@ export function internals(consumer) {
 		runtime_protoAssignSetsPrototype,
 		runtime_isApiNode,
 		runtime_nodeWrapperOf,
+		runtime_nodeVersion,
+		runtime_builtinBehind,
+		runtime_sameSnapshotMember,
+		runtime_holdsOwnMember,
 		runtime_rootGate,
 		runtime_registerRunView,
 		runtime_enforceReadGate,
