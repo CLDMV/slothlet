@@ -4106,10 +4106,35 @@ function runtime_runningRecord(slothlet) {
  * @private
  */
 function runtime_checkpointHandout(slothlet, value) {
-	if (value === null || typeof value !== "object") return;
+	if (value === null || typeof value !== "object" || RUN_VIEW_ACCESS !== 0) return;
 	const domain = domainOf(slothlet);
 	if (!runsOpen(domain) || savedThisWindow(domain, value) || util.types.isProxy(value)) return;
 	runtime_checkpointBuiltin(domain, value);
+}
+
+/**
+ * How deep in reads and calls a run's `self` makes through a node the code running is (see
+ * {@link runtime_throughRunView}): what such a read or call hands back reaches the run as its own copy or view, never
+ * as itself, so it is not saved for the other runs.
+ * @type {number}
+ * @private
+ */
+let RUN_VIEW_ACCESS = 0;
+
+/**
+ * Make a read or call a run's `self` makes through a node (see {@link RUN_VIEW_ACCESS}).
+ * @template T
+ * @param {function(): T} access - The read or call.
+ * @returns {T} What it returns.
+ * @internal
+ */
+function runtime_throughRunView(access) {
+	RUN_VIEW_ACCESS++;
+	try {
+		return access();
+	} finally {
+		RUN_VIEW_ACCESS--;
+	}
 }
 
 /**
@@ -4142,7 +4167,7 @@ const SETTLED_CHECKPOINTS = new WeakMap();
  * @private
  */
 function runtime_checkpointSettled(slothlet, promise) {
-	if (!runsOpen(domainOf(slothlet))) return promise;
+	if (!runsOpen(domainOf(slothlet)) || RUN_VIEW_ACCESS !== 0) return promise;
 	let handed = WeakMapMethods.get(SETTLED_CHECKPOINTS, promise);
 	if (handed === undefined) {
 		handed = PromiseMethods.then(promise, (value) => {
@@ -4302,7 +4327,8 @@ function runtime_snapshotBarrier(wrapper) {
 	if (slothlet.____buildDepth > 0 || MapMethods.has(FRAMEWORK_WRITES, wrapper) || runtime_inRunTree(wrapper)) return;
 	const internal = wrapper.____slothletInternal;
 	if (internal.mode === "lazy" && !internal.state.materialized) return;
-	beforeChange(domain, wrapper, runtime_captureNode);
+	// Once per window: later changes in the same window find the node saved already.
+	if (!beforeChange(domain, wrapper, runtime_captureNode)) return;
 	// A node over a built-in (a `Map`) holds its entries in the built-in, which a method running on it changes as itself.
 	const impl = internal.impl;
 	if (impl !== null && typeof impl === "object" && !util.types.isProxy(impl) && builtinKind(impl) !== null)
@@ -23983,6 +24009,7 @@ export function internals(consumer) {
 		runtime_prototypeAtStart,
 		runtime_runWriteSinceClosed,
 		runtime_nodeOpen,
+		runtime_throughRunView,
 		runtime_builtinBehind,
 		runtime_sameSnapshotMember,
 		runtime_holdsOwnMember,

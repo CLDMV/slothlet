@@ -118,6 +118,7 @@ const {
 	runtime_prototypeAtStart,
 	runtime_runWriteSinceClosed,
 	runtime_nodeOpen,
+	runtime_throughRunView,
 	runtime_builtinBehind,
 	runtime_sameSnapshotMember,
 	runtime_holdsOwnMember,
@@ -1175,14 +1176,16 @@ function makeRunSelf(slothlet, parentSelf, record) {
 						return inherited.prototype === null ? undefined : handOut(prop, Reflect.get(inherited.prototype, prop, receiver), local);
 					}
 				} else if (!held.live) {
-					const live = Reflect.get(real, prop);
+					const live = runtime_throughRunView(() => Reflect.get(real, prop));
 					if (runtime_sameSnapshotMember(live, held.value)) return handOut(prop, live, local);
 					const gate = runtime_nodeWrapperOf(real);
 					if (gate) runtime_enforceReadGate(gate, prop, runtime_unwrapSelfView(held.value));
 					return handOut(prop, snapshotValue(held.value), local);
 				}
 			}
-			let value = WeakMapMethods.has(RUN_OF_VIEW, real) ? readThroughOuter(() => Reflect.get(real, prop)) : Reflect.get(real, prop);
+			let value = WeakMapMethods.has(RUN_OF_VIEW, real)
+				? readThroughOuter(() => Reflect.get(real, prop))
+				: runtime_throughRunView(() => Reflect.get(real, prop));
 			// A member of the instance's root is handed to a reader as `self` hands it: a view keeping who read it.
 			if (atInstanceRoot && typeof prop === "string" && !SetMethods.has(RUN_FRAMEWORK_ROOTS, prop)) value = runtime_selfView(value);
 			if (value === undefined && below(prop)) return viewAt(concatLists(parts, [prop]), undefined, true);
@@ -1328,7 +1331,8 @@ function makeRunSelf(slothlet, parentSelf, record) {
 		const callTraps = callable
 			? {
 					// Called with one of the run's views as its receiver, the function runs on that view (see runViewFunction).
-					apply: (_t, thisArg, args) => runResult(Reflect.apply(forked() ? current() : real, runViewReceiver(thisArg), args)),
+					apply: (_t, thisArg, args) =>
+						runResult(runtime_throughRunView(() => Reflect.apply(forked() ? current() : real, runViewReceiver(thisArg), args))),
 					// The view is the new target, so an instance inherits through the run's view of the class's prototype, as an
 					// instance of a copy of the class inherits from the copy's prototype; a subclass's own is its own.
 					construct: (_t, args, newTarget) => Reflect.construct(forked() ? current() : real, args, newTarget)
