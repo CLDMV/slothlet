@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-21T21:32:31-08:00 (1795325551)
+ *	@Last modified time: 2026-11-21T22:26:11-08:00 (1795328771)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -409,6 +409,16 @@ function runtime_markInstanceEnded(slothlet, ended) {
 }
 
 /**
+ * Whether an instance has shut down and is not running again yet ({@link runtime_markInstanceEnded}).
+ * @param {object} slothlet - The instance.
+ * @returns {boolean} True once it has shut down.
+ * @internal
+ */
+function runtime_instanceEnded(slothlet) {
+	return WeakSetMethods.has(ENDED_INSTANCES, slothlet);
+}
+
+/**
  * Refuse an access a module makes through an api node it was handed once its instance has shut down: the node reads,
  * lists, describes and calls nothing for it then, whatever it was allowed while the instance ran. The host reading its
  * own `api` is no module's access and is not refused here.
@@ -420,6 +430,13 @@ function runtime_markInstanceEnded(slothlet, ended) {
  */
 function runtime_refuseEndedAccess(slothlet, reader) {
 	if (reader === HOST_READER || !WeakSetMethods.has(ENDED_INSTANCES, slothlet)) return;
+	// A prototype's handle is the same object to every reader, and no call runs once the instance has shut down: whose
+	// code makes the access is read from the stack, as for a capability (see runtime_assertCapability). The host's own
+	// code (and a package's it runs) goes on as before; a module's code, and code no one accounts for, is refused.
+	if (reader === PROTOTYPE_HANDLE_READER) {
+		const writers = runtime_codeWritersOnStack(slothlet);
+		if (writers !== null && writers.length === 0) return;
+	}
 	throw new slothlet.SlothletError("CONTEXT_NOT_ACTIVE_SELF", {});
 }
 
@@ -2280,8 +2297,9 @@ function runtime_selfMemberView(value, reader, slothlet, parts, through) {
 		if (handle) return runtime_prototypeHandle(slothlet, proto, classSite);
 		return runtime_selfMemberOf(proto, reader, slothlet, classSite.parts, "prototype");
 	};
-	// Once the instance has shut down, the view reads, lists, describes, calls and changes nothing for a module.
-	const refuseEnded = () => runtime_refuseEndedAccess(slothlet, who());
+	// Once the instance has shut down, the view reads, lists, describes, calls and changes nothing for a module; a
+	// handle tells a module's code from the host's by the code making the access.
+	const refuseEnded = () => runtime_refuseEndedAccess(slothlet, reader);
 	const assertLiveWrite = (prop) => {
 		refuseEnded();
 		assertWrite(prop);
@@ -3135,8 +3153,12 @@ function runtime_frameworkViewOf(member, slothlet, reader, path) {
 		}
 		return writer;
 	};
+	// Once the instance has shut down, the view reads, lists, describes, calls and changes nothing: it is only ever handed
+	// to module code.
+	const refuseEnded = () => runtime_refuseEndedAccess(slothlet, reader);
 	const view = new NativeProxy(member, {
 		get(target, prop) {
+			refuseEnded();
 			return asReader(() => {
 				// An accessor a module placed on the namespace runs with the view as `this`, never the member behind it,
 				// which acts for no reader at all (#625).
@@ -3150,6 +3172,7 @@ function runtime_frameworkViewOf(member, slothlet, reader, path) {
 			});
 		},
 		getOwnPropertyDescriptor(target, prop) {
+			refuseEnded();
 			return asReader(() => {
 				const descriptor = Reflect.getOwnPropertyDescriptor(target, prop);
 				if (!descriptor || !descriptor.configurable) return descriptor;
@@ -3167,32 +3190,54 @@ function runtime_frameworkViewOf(member, slothlet, reader, path) {
 			});
 		},
 		apply(target, thisArg, args) {
+			refuseEnded();
 			// The receiver is passed as given: a view of the namespace stays the view, so a function a module placed on
 			// it never gets the member behind it, which acts for no reader at all (#625).
 			return asReader(() => Reflect.apply(target, thisArg, args));
 		},
 		construct(target, args, newTarget) {
+			refuseEnded();
 			return asReader(() => Reflect.construct(target, args, newTarget === view ? target : newTarget));
 		},
 		set(target, prop, value) {
+			refuseEnded();
 			refuseChange(prop);
 			return asReader(() => Reflect.set(target, prop, unwrap(value)));
 		},
 		defineProperty(target, prop, descriptor) {
+			refuseEnded();
 			refuseChange(prop);
 			return asReader(() => Reflect.defineProperty(target, prop, descriptor));
 		},
 		deleteProperty(target, prop) {
+			refuseEnded();
 			refuseChange(prop);
 			return asReader(() => Reflect.deleteProperty(target, prop));
 		},
 		setPrototypeOf(target, proto) {
+			refuseEnded();
 			refuseChange(null);
 			return asReader(() => Reflect.setPrototypeOf(target, proto));
 		},
 		preventExtensions(target) {
+			refuseEnded();
 			refuseChange(null);
 			return asReader(() => Reflect.preventExtensions(target));
+		},
+		// `in`, and asking for the prototype or extensibility, answer as the member does while the instance runs. A bare
+		// list of its names has no trap: with one the engine checks each fixed member against the member itself, which the
+		// built-in rules refuse module code (a function's `prototype`). Listing with descriptors is refused above.
+		has(target, prop) {
+			refuseEnded();
+			return Reflect.has(target, prop);
+		},
+		getPrototypeOf(target) {
+			refuseEnded();
+			return Reflect.getPrototypeOf(target);
+		},
+		isExtensible(target) {
+			refuseEnded();
+			return Reflect.isExtensible(target);
 		}
 	});
 	WeakMapMethods.set(byReader, reader, view);
@@ -23327,6 +23372,7 @@ export function internals(consumer) {
 		runtime_isCallerLocked,
 		runtime_isLanguageNameDescriptor,
 		runtime_markCallerLocked,
+		runtime_instanceEnded,
 		runtime_markInstanceEnded,
 		runtime_nodeBehind,
 		runtime_registerFrameworkMember,

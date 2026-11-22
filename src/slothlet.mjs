@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-21T21:32:38-08:00 (1795325558)
+ *	@Last modified time: 2026-11-21T22:26:18-08:00 (1795328778)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -195,7 +195,8 @@ const {
 	runtime_behindGivenView,
 	runtime_unwrapSelfView,
 	runtime_assertCapability,
-	runtime_markInstanceEnded
+	runtime_markInstanceEnded,
+	runtime_instanceEnded
 } = unifiedWrapperInternals("slothlet");
 const { markSlothletProxy } = frameworkInternalsInternals("slothlet");
 const trustedRootOwn = trustedRootInternals("slothlet");
@@ -2253,6 +2254,9 @@ class Slothlet {
 		// build replaces the instance's own, and what it had is kept to put back if the reload fails.
 		const window = AsyncLocalStorage ? this.#openReloadWindow() : null;
 		const kept = window === null ? this.#keepForFailedReload() : null;
+		// A reload of an instance that has shut down loads a new copy before it knows whether the rest of the rebuild works;
+		// one that fails leaves the instance shut down, and what its modules kept refuses them again.
+		const endedBefore = runtime_instanceEnded(this);
 		this.#pendingScope = nextScope;
 		try {
 			// The build is framework work, run as the host even when a module's call asked for the reload (as restart()'s is,
@@ -2277,6 +2281,7 @@ class Slothlet {
 			this.#pendingScope = null;
 			if (window !== null) this.#closeReloadWindow(window, false);
 			this.#restoreFailedReload(kept);
+			runtime_markInstanceEnded(this, endedBefore);
 			// The fresh scope was claimed but never taken: let the ID go again.
 			if (nextScope !== null && this.#importScope !== nextScope) nextScope.release();
 			if (nextScope !== null) this.#settleFailedReload(oldInstanceID);
@@ -3731,7 +3736,6 @@ class Slothlet {
 			this.reference = kept.reference;
 			this.context = kept.context;
 			this.isLoaded = kept.isLoaded;
-			if (this.isLoaded) runtime_markInstanceEnded(this, false);
 		}
 		this.#carriedContext = null;
 		// The context the instance's code runs in now answers with that copy: a reload that switched IDs set the new ID's

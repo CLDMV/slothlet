@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-21T21:34:31-08:00 (1795325671)
+ *	@Last modified time: 2026-11-21T22:28:20-08:00 (1795328900)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -24,9 +24,18 @@
  * call, listing, `in` and describing a member. That holds from a function the module handed out and from a timer it
  * left behind, under both runtimes, eager and lazy, permissions on and off. The host reading its own `api` after the
  * shutdown is not affected.
+ *
+ * A second guest (`api_test_shutdown_kept_handles`) keeps the framework's namespace (`self.slothlet`), a class node and
+ * the class's prototype. Once the instance has shut down, every use of them from the module's code is refused: reading,
+ * listing, describing and calling through the namespace, adding a folder and reloading through it, every access through
+ * the prototype's handle (the one object every reader is handed), and constructing through the kept class. With
+ * permissions off the module holds the prototype itself, as plain JS hands it, and it reads as a plain object reads. The
+ * host's own uses, and its reads through a prototype a module handed it, are as before. A reload after the shutdown
+ * that fails leaves the instance shut down, and the uses refused.
  */
 
 import path from "node:path";
+import { cpSync, mkdirSync, rmSync } from "node:fs";
 import { describe, it, expect, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
 import { TEST_DIRS } from "../../setup/vitest-helper.mjs";
@@ -175,3 +184,214 @@ describe.each(COMBOS)("Permissions > api nodes a module kept read nothing once i
 		});
 	});
 });
+
+const KEPT_ROOT = path.join(path.dirname(TEST_DIRS.API_TEST), "api_test_shutdown_kept_handles");
+
+/**
+ * What one attempt gave: its value as a string, or `!` and the code of what it threw.
+ * @param {Function} fn - The attempt.
+ * @returns {string} The outcome.
+ */
+function outcome(fn) {
+	try {
+		const value = fn();
+		if (value !== null && typeof value === "object" && typeof value.then === "function") {
+			value.then(
+				() => {},
+				() => {}
+			);
+			return "promise";
+		}
+		return String(value);
+	} catch (error) {
+		return `!${error?.code ?? error?.name ?? String(error)}`;
+	}
+}
+
+/** Every use the guest makes of what it kept (see the fixture's `reads()` and `calls()`). */
+const KEPT_USES = [
+	"nsContextGet",
+	"nsMetadata",
+	"nsApiAdd",
+	"nsReload",
+	"nsListKeys",
+	"nsHasApi",
+	"nsDescribeApi",
+	"protoRead",
+	"protoCall",
+	"protoListKeys",
+	"protoHas",
+	"protoDescribe",
+	"protoPrototype",
+	"protoConstructor",
+	"constructKept",
+	"constructFromProto",
+	"nsContextGetCall",
+	"nsApiAddCall",
+	"nsReloadCall"
+];
+
+/** The guest's uses of the class's prototype as plain JS answers them on the object itself. */
+const HELD_PROTOTYPE_USES = {
+	protoRead: "function",
+	protoCall: "y",
+	protoListKeys: "constructor,read",
+	protoHas: "true",
+	protoDescribe: "function",
+	protoPrototype: "true",
+	protoConstructor: "function",
+	constructFromProto: "w"
+};
+
+describe.each(COMBOS)(
+	"Permissions > the framework namespace, a class node and its prototype a module kept use nothing once its instance has shut down > $name",
+	(combo) => {
+		let api;
+
+		afterEach(async () => {
+			const gate = globalThis.__slothletShutdownKeptHandlesGate;
+			if (gate) gate.stop = true;
+			await api?.slothlet.shutdown().catch(() => {});
+			api = undefined;
+			await new Promise((resolve) => {
+				setTimeout(resolve, 5);
+			});
+			delete globalThis.__slothletShutdownKeptHandlesGate;
+			delete globalThis.__slothletShutdownKeptHandles;
+		});
+
+		/**
+		 * Load the instance with the guest mounted, and have the guest keep what it reads.
+		 * @returns {Promise<Object<string, string>>} The guest's reads through what it kept, from its own call.
+		 */
+		async function loadAndHold() {
+			globalThis.__slothletShutdownKeptHandlesGate = { go: false, stop: false };
+			api = await slothlet({
+				base: path.join(KEPT_ROOT, "base"),
+				mode: combo.mode,
+				runtime: combo.runtime,
+				silent: true,
+				permissions: combo.permissions === "on" ? { mode: "on", policy: "allow" } : { mode: "off" }
+			});
+			await api.slothlet.api.add("guest", path.join(KEPT_ROOT, "guest"), { id: "guest" });
+			return api.guest.keep.hold(path.join(KEPT_ROOT, "extra"));
+		}
+
+		it("while the instance runs, the module uses what it kept as plain JS has it", async () => {
+			const now = await loadAndHold();
+			expect(now).toEqual({
+				nsContextGet: "function",
+				nsMetadata: "object",
+				nsApiAdd: "function",
+				// Reading `reload` is refused a module by the built-in rules while permissions are on.
+				nsReload: combo.permissions === "on" ? "!PERMISSION_DENIED" : "function",
+				nsListKeys: "true",
+				nsHasApi: "true",
+				nsDescribeApi: "object",
+				protoRead: "function",
+				protoCall: "y",
+				protoListKeys: "constructor,read",
+				protoHas: "true",
+				protoDescribe: "function",
+				protoPrototype: "true",
+				protoConstructor: "function",
+				constructKept: "z",
+				constructFromProto: "w"
+			});
+		});
+
+		it("after shutdown, every use of what it kept is refused, from a function the module handed out and from a timer it left", async () => {
+			await loadAndHold();
+			await api.slothlet.shutdown();
+			api = undefined;
+
+			const record = globalThis.__slothletShutdownKeptHandles;
+			const handedOut = { ...record.reads(), ...record.calls() };
+			const gate = globalThis.__slothletShutdownKeptHandlesGate;
+			gate.go = true;
+			expect(await until(() => record.timer.length > 0)).toBe(true);
+			gate.stop = true;
+			for (const [source, outcomes] of [
+				["handed-out function", handedOut],
+				["timer", record.timer[0]]
+			]) {
+				// Every use is refused as a read of `self` itself is once the instance has gone. With permissions off the module
+				// holds the class's prototype itself, as plain JS hands it (no handle stands between them), and reads it as a plain
+				// object reads.
+				expect(outcomes, source).toEqual({
+					...Object.fromEntries(KEPT_USES.map((use) => [use, "!CONTEXT_NOT_ACTIVE_SELF"])),
+					...(combo.permissions === "off" ? HELD_PROTOTYPE_USES : {})
+				});
+			}
+		});
+
+		it("after shutdown, the host uses its own api, and a prototype a module handed it, as it did before this change", async () => {
+			await loadAndHold();
+			const host = api;
+			const handed = globalThis.__slothletShutdownKeptHandles.proto;
+			await api.slothlet.shutdown();
+			api = undefined;
+			expect({
+				nsContextGet: outcome(() => typeof host.slothlet.context.get),
+				nsMetadata: outcome(() => typeof host.slothlet.metadata),
+				nsApiAdd: outcome(() => typeof host.slothlet.api.add),
+				nsListKeys: outcome(() => Object.keys(host.slothlet).includes("api")),
+				nsContextGetCall: outcome(() => host.slothlet.context.get()),
+				protoCall: outcome(() => host.vault.Thing.prototype.read.call({ v: "h" })),
+				construct: outcome(() => new host.vault.Thing("h").read()),
+				handedRead: outcome(() => typeof handed.read),
+				handedCall: outcome(() => handed.read.call({ v: "g" })),
+				handedKeys: outcome(() => Reflect.ownKeys(handed).sort().join(",")),
+				handedHas: outcome(() => "read" in handed),
+				handedIsPrototype: outcome(() => handed === host.vault.Thing.prototype)
+			}).toEqual({
+				// The module was handed the prototype itself only while permissions are off.
+				handedIsPrototype: combo.permissions === "off" ? "true" : "false",
+				nsContextGet: "function",
+				nsMetadata: "object",
+				nsApiAdd: "function",
+				nsListKeys: "true",
+				nsContextGetCall: "[object Object]",
+				protoCall: "h",
+				construct: "h",
+				handedRead: "function",
+				handedCall: "g",
+				handedKeys: "constructor,read",
+				handedHas: "true"
+			});
+		});
+
+		it("a reload after shutdown that fails leaves the instance shut down: what the module kept still uses nothing", async () => {
+			// The guest is mounted from a copy that is gone by the time the reload replays the mount, so the reload fails
+			// after its new copy has loaded.
+			const copy = path.join(process.cwd(), "tmp", "shutdown-kept-handles", `${combo.mode}-${combo.runtime}-${combo.permissions}`);
+			rmSync(copy, { recursive: true, force: true });
+			mkdirSync(copy, { recursive: true });
+			cpSync(path.join(KEPT_ROOT, "guest"), copy, { recursive: true });
+			try {
+				globalThis.__slothletShutdownKeptHandlesGate = { go: false, stop: false };
+				api = await slothlet({
+					base: path.join(KEPT_ROOT, "base"),
+					mode: combo.mode,
+					runtime: combo.runtime,
+					silent: true,
+					permissions: combo.permissions === "on" ? { mode: "on", policy: "allow" } : { mode: "off" }
+				});
+				await api.slothlet.api.add("guest", copy, { id: "guest" });
+				await api.guest.keep.hold(path.join(KEPT_ROOT, "extra"));
+				const host = api;
+				await host.slothlet.shutdown();
+				rmSync(copy, { recursive: true, force: true });
+				await expect(host.slothlet.reload()).rejects.toThrow();
+
+				const record = globalThis.__slothletShutdownKeptHandles;
+				expect({ ...record.reads(), ...record.calls() }).toEqual({
+					...Object.fromEntries(KEPT_USES.map((use) => [use, "!CONTEXT_NOT_ACTIVE_SELF"])),
+					...(combo.permissions === "off" ? HELD_PROTOTYPE_USES : {})
+				});
+			} finally {
+				rmSync(copy, { recursive: true, force: true });
+			}
+		});
+	}
+);
