@@ -300,7 +300,7 @@ api.saved; // "note"
 - **Who the view belongs to.** Opened by the host, the view has the host's standing. Opened by module code (`self.slothlet.context.run.self(...)`), the view is that module's own `self`, so `view === self` inside the callback. A view gives nothing to code it is handed: a write through any view is judged by the code making it, so a module the host hands its view to writes only where that module may.
 - **Nested runs.** Each callback gets its own run's view. An inner run starts from what its parent's view shows, and a change made through the inner view stays in the inner run.
 - **After the run.** A view kept after the run follows the rule for a run's nodes held after its copy is torn down (see [RELOAD.md](RELOAD.md#calls-during-a-full-reload-and-after-one-fails)): once the copy is gone it answers from the instance's tree at its path.
-- **Permissions.** `run.self` is checked under the rules of `slothlet.context.run`: a rule that allows or refuses a module `run()` allows or refuses it `run.self()` too.
+- **Permissions.** `run.self` is a path under `run`, so rules match as for any dotted target: a rule on `slothlet.context.run` covers `run()` and `run.self()`, a rule on `slothlet.context.run.self` applies to `run.self()` only, and the more specific rule wins for the call it names (a deny on `run` with an allow on `run.self` refuses `run()` and allows `run.self()`).
 - `run()` itself is unchanged: `api.slothlet.context.run({}, api.math.add, 2, 3)` still calls `add(2, 3)`.
 
 #### api.slothlet.context.set(key, value) / set(object)

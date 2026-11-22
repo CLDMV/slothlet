@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-21T22:24:19-08:00 (1795328659)
+ *	@Last modified time: 2026-11-21T23:50:49-08:00 (1795333849)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -40,6 +40,7 @@ import { internals as frameworkInternalsInternals } from "#handlers/framework-in
 import { ceilingMembers, combineCeilings, identityCeilings, internals as trustedRootInternals } from "#handlers/trusted-root";
 import { getLanguage, t, translate, internals as translationsInternals } from "#i18n";
 import { assertOptionKeys } from "#helpers/config-schema";
+import { compilePattern } from "#helpers/pattern-matcher";
 import { internals as instanceImportsInternals } from "#helpers/instance-imports";
 import { copyForRun, recordOperation, releaseRunWork, RUN_COPY, RUN_SELF, trackFlowStore, treeWrite } from "#helpers/flow-stores";
 import { pinScopeToCurrentCaller } from "#helpers/caller-pinning";
@@ -119,13 +120,30 @@ const trustedRootOwn = trustedRootInternals("lib/builders/api_builder");
 const { initI18n, setLanguage } = translationsInternals("lib/builders/api_builder");
 const { moduleSelfForm } = instanceImportsInternals("lib/builders/api_builder");
 
+/** The rule targets of `run` and of its member `run.self`. */
+const RUN_TARGET = "slothlet.context.run";
+const RUN_SELF_TARGET = "slothlet.context.run.self";
+
 /**
- * Members of the control namespace checked under another member's rules: `run.self` is `run` with the run's view
- * handed to the callback, so a rule on `slothlet.context.run` allows or refuses both.
- * @type {Readonly<Object<string, string>>}
+ * The target a check of `target` is decided under for one caller. `run.self` is a path under `run`: a rule written for
+ * it (one that matches `run.self` and not `run`) is judged beside the rules on `run` and the more specific wins, as for
+ * any dotted target; with none for this caller, the rules on `run` decide it, so allowing or refusing `run` allows or
+ * refuses `run.self` as well.
+ * @param {object} permissionManager - The instance's PermissionManager.
+ * @param {string} target - The target being checked.
+ * @param {string} callerPath - The caller's api path.
+ * @returns {string} The target to decide under.
  * @private
  */
-const RULE_TARGET_OF = Objects.freeze({ __proto__: null, "slothlet.context.run.self": "slothlet.context.run" });
+function ruleTargetFor(permissionManager, target, callerPath) {
+	if (target !== RUN_SELF_TARGET) return target;
+	const rules = permissionManager.getRulesForCaller(callerPath);
+	for (let i = 0; i < rules.length; i++) {
+		const matcher = compilePattern(rules[i].target);
+		if (matcher(RUN_SELF_TARGET) && !matcher(RUN_TARGET)) return target;
+	}
+	return RUN_TARGET;
+}
 
 /**
  * The view a `run.self()` / `scope({ self: true })` callback is handed: what module code's `self` resolves to in the
@@ -1878,16 +1896,16 @@ export class ApiBuilder extends ComponentBase {
 		 * Enforce permission checks for built-in plain-object methods under `api.slothlet.*`.
 		 * These methods bypass UnifiedWrapper.applyTrap and must perform explicit checks.
 		 *
-		 * @param {string} named - Synthetic target path used for rule matching (a member checked under another member's
-		 *   rules, see {@link RULE_TARGET_OF}, is matched as that member).
+		 * @param {string} named - Synthetic target path used for rule matching (`slothlet.context.run.self` is decided
+		 *   under the rules on `slothlet.context.run` unless a rule names `run.self` itself, see {@link ruleTargetFor}).
 		 * @returns {object|null|undefined} The module identity the access was allowed for (#597), or null/undefined
 		 *   for the host.
-		 * @throws {SlothletError} When the current caller is denied access to `targetPath`.
+		 * @throws {SlothletError} When the current caller is denied access to `named`.
 		 * @example
 		 * enforceInternalPermission("slothlet.permissions.rules.add");
 		 */
 		const enforceInternalPermission = (named) => {
-			const targetPath = RULE_TARGET_OF[named] ?? named;
+			let targetPath = named;
 			const ctx = slothlet.contextManager?.tryGetContext?.(slothlet.instanceID);
 			// Identity via the context manager, not off the store: under the live runtime
 			// `currentWrapper` is one field shared by every in-flight call, so a call resuming from an
@@ -1926,6 +1944,7 @@ export class ApiBuilder extends ComponentBase {
 			const runtimeContext = ctx?.context ?? null;
 			/* v8 ignore stop */
 
+			targetPath = ruleTargetFor(permissionManager, named, callerPath);
 			if (!permissionManager.enforceAccess(callerPath, targetPath, callerFilePath, null, runtimeContext)) {
 				throw new slothlet.SlothletError("PERMISSION_DENIED", {
 					caller: callerPath,
@@ -1939,11 +1958,12 @@ export class ApiBuilder extends ComponentBase {
 				const ceilingPath = ceiling.____slothletInternal?.apiPath ?? "";
 				const ceilingFilePath = ceiling.____slothletInternal?.filePath ?? null;
 				/* v8 ignore stop */
+				const ceilingTarget = ruleTargetFor(permissionManager, named, ceilingPath);
 				if (
 					!WeakSetMethods.has(trustedRootOwn.genuineWrappers, ceiling) ||
-					!permissionManager.enforceAccess(ceilingPath, targetPath, ceilingFilePath, null, runtimeContext)
+					!permissionManager.enforceAccess(ceilingPath, ceilingTarget, ceilingFilePath, null, runtimeContext)
 				) {
-					throw new slothlet.SlothletError("PERMISSION_DENIED", { caller: ceilingPath, target: segmentsOf(targetPath) });
+					throw new slothlet.SlothletError("PERMISSION_DENIED", { caller: ceilingPath, target: segmentsOf(ceilingTarget) });
 				}
 			}
 			return identity;
@@ -2490,7 +2510,22 @@ export class ApiBuilder extends ComponentBase {
 						(typeof descriptorValue !== "object" && typeof descriptorValue !== "function") ||
 						typeof descriptorValue === "function"
 					) {
-						const reader = enforceInternalPermission(childRoutePath);
+						let reader;
+						try {
+							reader = enforceInternalPermission(childRoutePath);
+						} catch (error) {
+							// A function a rule refuses is still reached, as the `get` trap reaches it, when an allow rule on a member
+							// below it opens that member (`run` refused, `run.self` allowed): a call of the function itself is
+							// checked again at the call.
+							if (
+								error?.code !== "PERMISSION_DENIED" ||
+								typeof descriptorValue !== "function" ||
+								descriptor.configurable !== true ||
+								!canTraverseInternalNamespace(childRoutePath)
+							)
+								throw error;
+							reader = slothlet.contextManager?.getCallerIdentity?.(slothlet.instanceID);
+						}
 
 						if (typeof descriptorValue === "function" && descriptor.configurable === true) {
 							return {
@@ -5951,8 +5986,8 @@ export class ApiBuilder extends ComponentBase {
 		const runFunction = {
 			run: async (contextData, callback, ...args) => openRun(contextData, callback, args, false)
 		}.run;
-		// `run.self()`: `run()` with the run's view handed to the callback first (see runViewFor). Checked under the rules
-		// of `slothlet.context.run` (see RULE_TARGET_OF). Configurable (still read-only) so the view a module reads
+		// `run.self()`: `run()` with the run's view handed to the callback first (see runViewFor). A path under `run`, so
+		// a rule on `slothlet.context.run` covers it and one on `slothlet.context.run.self` is its own. Configurable (still read-only) so the view a module reads
 		// `self.slothlet` through can hand it over wrapped, as it does every other member.
 		Objects.defineProperty(runFunction, "self", {
 			__proto__: null,
