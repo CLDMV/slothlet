@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-18T07:07:26-08:00 (1795014446)
+ *	@Last modified time: 2026-11-22T12:49:53-08:00 (1795380593)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -386,7 +386,18 @@ function runtime_selfUse(use) {
  * @type {Proxy}
  * @private
  */
-const objectSelf = new NativeProxy({}, selfTraps);
+const objectSelf = new NativeProxy(
+	{},
+	{
+		...selfTraps,
+		// The prototype the running call's api root reports, as `api` reports it to the host (#914); with no call running,
+		// the target's own.
+		getPrototypeOf(target) {
+			const ctx = runtime_resolveExecutingContext();
+			return ctx?.self ? Reflect.getPrototypeOf(ctx.self) : Reflect.getPrototypeOf(target);
+		}
+	}
+);
 
 /**
  * The target of {@link callableSelf}: a bound function, as the api root's own target is when its root is a function,

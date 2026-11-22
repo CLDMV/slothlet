@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:16:15-08:00 (1794874575)
+ *	@Last modified time: 2026-11-22T12:49:54-08:00 (1795380594)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -194,7 +194,13 @@ const selfTraps = {
  * @type {Proxy}
  * @private
  */
-const objectSelf = new NativeProxy(runtime_selfShell(), selfTraps);
+const objectSelf = new NativeProxy(runtime_selfShell(), {
+	...selfTraps,
+	// The prototype the api root reports now, as `api` reports it to the host (#914).
+	getPrototypeOf() {
+		return Reflect.getPrototypeOf(getCurrentRuntime().self);
+	}
+});
 
 /**
  * `self` for an api whose root is a function (#803): a call or construction goes to the active runtime's callable

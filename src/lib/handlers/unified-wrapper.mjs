@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-21T22:26:11-08:00 (1795328771)
+ *	@Last modified time: 2026-11-22T12:49:46-08:00 (1795380586)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -6228,6 +6228,47 @@ function runtime_implHas(wrapper, impl, prop) {
 	if (prototype === undefined) return prop in impl;
 	return prototype !== null && Reflect.has(prototype, prop);
 }
+
+/**
+ * The nodes a node made for members its value inherits, by key, each with the value it was made for (#913). Such a node
+ * is never kept as a member of the node's own, which would list it and keep it after the prototype changed; it is kept
+ * here so the same inherited member reads as the same node each time, as the same function does in plain JavaScript.
+ * @type {WeakMap<object, Map<PropertyKey, {value: *, node: *}>>}
+ * @private
+ */
+const INHERITED_MEMBER_NODES = new WeakMap();
+
+/**
+ * The node a node made before for a member it inherits, while that member still has the same value.
+ * @param {object} wrapper - The node's wrapper.
+ * @param {PropertyKey} prop - The member's key.
+ * @param {*} value - The member's value now.
+ * @returns {*} The node, or `undefined`.
+ * @private
+ */
+function runtime_inheritedMemberNode(wrapper, prop, value) {
+	const held = MapMethods.get(WeakMapMethods.get(INHERITED_MEMBER_NODES, wrapper) ?? EMPTY_INHERITED_NODES, prop);
+	return held !== undefined && held.value === value ? held.node : undefined;
+}
+
+/**
+ * Keep the node made for a member a node inherits (see {@link runtime_inheritedMemberNode}).
+ * @param {object} wrapper - The node's wrapper.
+ * @param {PropertyKey} prop - The member's key.
+ * @param {*} value - The member's value.
+ * @param {*} node - The node made for it.
+ * @returns {*} `node`.
+ * @private
+ */
+function runtime_keepInheritedMemberNode(wrapper, prop, value, node) {
+	let byKey = WeakMapMethods.get(INHERITED_MEMBER_NODES, wrapper);
+	if (byKey === undefined) WeakMapMethods.set(INHERITED_MEMBER_NODES, wrapper, (byKey = new Map()));
+	MapMethods.set(byKey, prop, { value, node });
+	return node;
+}
+
+/** An empty map, read when a node has made no node for an inherited member. @type {Map} @private */
+const EMPTY_INHERITED_NODES = new Map();
 
 /**
  * Read a member of a wrapper's impl, running an accessor it holds or inherits as the module the node belongs to (see
@@ -20834,9 +20875,14 @@ class UnifiedWrapper extends ComponentBase {
 			// An accessor the impl holds that adoption did not put on the wrapper — one on an object assigned through
 			// the api, or inherited — runs as the module the node belongs to, never as whoever reads it (#597).
 			let value = arrayElement ? arrayElement.value : wrapper.____slothletInternal.impl ? runtime_readImplMember(wrapper, prop) : undefined;
-			// A member the node inherits from its own prototype stays inherited: read as a member of the node is, and
-			// never kept as one of the node's own.
-			const isInherited = value !== undefined && !arrayElement && runtime_inheritsFrom(wrapper, prop) !== undefined;
+			// A member the node inherits from its own prototype, or the module's object inherits from its, stays inherited:
+			// read as a member of the node is, and never kept as one of the node's own (#913).
+			const inheritedImpl = wrapper.____slothletInternal.impl;
+			const isInherited =
+				value !== undefined &&
+				!arrayElement &&
+				(runtime_inheritsFrom(wrapper, prop) !== undefined ||
+					(inheritedImpl !== null && typeof inheritedImpl === "object" && !hasOwn(inheritedImpl, prop) && !hasOwn(target, prop)));
 
 			// Fallback: value lives directly on the proxy target rather than on impl.
 			// Reached only when impl doesn't have the key but target does (e.g., a property
@@ -20935,6 +20981,12 @@ class UnifiedWrapper extends ComponentBase {
 			const cycle = runtime_cycleNode(wrapper, value);
 			if (cycle !== null) return cycle.createProxy();
 
+			// An inherited member read before with the same value is the node made for it then (#913).
+			if (isInherited) {
+				const held = runtime_inheritedMemberNode(wrapper, prop, value);
+				if (held !== undefined) return held;
+			}
+
 			// Propagate lazy adoption so a wrap-on-set subtree stays lazy on deep access (#329).
 			const wrapped = wrapper.___createChildWrapper(prop, value, null, wrapper.____slothletInternal.deferChildAdopt);
 			// `___createChildWrapper` wraps ordinary object/function values — the only outcome reachable
@@ -20952,7 +21004,8 @@ class UnifiedWrapper extends ComponentBase {
 			// cycle-guard set through here.
 			// A value a getter returned is not cached: the getter runs again on the next read, as it would in
 			// plain JavaScript, so a member it reads stays live (#590).
-			if (wrapped && (isInherited || typeof Objects.getOwnPropertyDescriptor(currentImpl, prop)?.get === "function")) return wrapped;
+			if (wrapped && isInherited) return runtime_keepInheritedMemberNode(wrapper, prop, value, wrapped);
+			if (wrapped && typeof Objects.getOwnPropertyDescriptor(currentImpl, prop)?.get === "function") return wrapped;
 			/* v8 ignore start */
 			if (wrapped) {
 				Objects.defineProperty(wrapper, prop, { __proto__: null, value: wrapped, writable: false, enumerable: true, configurable: true });
