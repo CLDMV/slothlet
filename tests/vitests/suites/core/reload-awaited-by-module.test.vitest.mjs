@@ -16,7 +16,8 @@
 /**
  * @fileoverview A module's own function that awaits `self.slothlet.reload()` / `restart()` and goes on after it, as a
  * plain async function awaiting any other call would: the call settles with what the function returns, and the reload
- * has happened (the instance is on its new copy). Inside a run the reload acts on the run's copy and leaves the
+ * has happened (the instance is on its new copy), and code after the `await` reads the new copy through `self`, or no
+ * instance once the instance has shut down while that code waited. Inside a run the reload acts on the run's copy and leaves the
  * instance as it is. A module's function that opens a run of its own and mounts a module under its own path there
  * mounts it in the run. Eager and lazy, async and live, with no permission config and with the permission system on.
  *
@@ -35,6 +36,7 @@ const BASE = path.join(ROOT, "api");
 const GUEST = path.join(ROOT, "guest");
 const EXTRA = path.join(ROOT, "extra");
 const COPY = Symbol.for("slothlet.test.reload-awaited-by-module.copy");
+const GATE = Symbol.for("slothlet.test.reload-awaited-by-module.gate");
 
 beforeAll(() => {
 	rmSync(ROOT, { recursive: true, force: true });
@@ -63,6 +65,11 @@ beforeAll(() => {
 			"}",
 			"export async function reloadThenSelf() {",
 			"\tawait self.slothlet.reload();",
+			"\treturn self.calls.copyOf();",
+			"}",
+			"export async function reloadThenWait() {",
+			"\tawait self.slothlet.reload();",
+			'\tawait new Promise((resolve) => { globalThis[Symbol.for("slothlet.test.reload-awaited-by-module.gate")] = resolve; });',
 			"\treturn self.calls.copyOf();",
 			"}",
 			"export async function restartAwait() {",
@@ -97,6 +104,7 @@ afterAll(() => {
 
 afterEach(() => {
 	delete globalThis[COPY];
+	delete globalThis[GATE];
 });
 
 /**
@@ -155,11 +163,7 @@ describe.each([["async"], ["live"]])("a module awaiting its own reload — %s ru
 				}
 			});
 
-			// The live runtime refuses this read (CONTEXT_NOT_ACTIVE_SELF), as v3.24.0 did: the code of the replaced copy
-			// that goes on after the swap finds no context to read `self` in. Kept to the async runtime until that is fixed.
-			const itSelfAfter = runtime === "live" ? it.skip : it;
-
-			itSelfAfter("reload(): code after the await reads the new copy through self", async () => {
+			it("reload(): code after the await reads the new copy through self", async () => {
 				const api = await load();
 				try {
 					expect(await outcome(() => api.admin.reloadThenSelf())).toBe(2);
@@ -167,6 +171,16 @@ describe.each([["async"], ["live"]])("a module awaiting its own reload — %s ru
 				} finally {
 					await api.slothlet.shutdown();
 				}
+			});
+
+			it("shutdown() while code after the awaited reload still waits: it reads no instance once it goes on", async () => {
+				const api = await load();
+				const pending = outcome(() => api.admin.reloadThenWait());
+				while (typeof globalThis[GATE] !== "function") await new Promise((done) => setTimeout(done, 5));
+				expect(await api.calls.copyOf()).toBe(2);
+				await api.slothlet.shutdown();
+				globalThis[GATE]();
+				expect(await pending).toBe("CONTEXT_NOT_ACTIVE_SELF");
 			});
 
 			it("restart(): the call settles with what the function returns, and the instance is on the new copy", async () => {

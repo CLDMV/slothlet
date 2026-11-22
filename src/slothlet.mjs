@@ -3919,7 +3919,10 @@ class Slothlet {
 			oldInstanceID !== this.instanceID &&
 			(this.contextManager.instances == null ? undefined : MapMethods.has(this.contextManager.instances, oldInstanceID))
 		) {
-			this.contextManager.cleanup(oldInstanceID);
+			// The live runtime keeps it while a call made before the swap still waits in it (a module awaiting this reload),
+			// so that call goes on as its module with `self` the instance's api, as an async-runtime flow keeps its store.
+			if (typeof this.contextManager.retire === "function") this.contextManager.retire(oldInstanceID);
+			else this.contextManager.cleanup(oldInstanceID);
 		}
 
 		return this.boundApi;

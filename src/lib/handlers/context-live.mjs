@@ -217,6 +217,12 @@ const HOST_ENTRY = Symbol("slothlet.callerIdentity.host");
 const UNATTRIBUTED_ENTRY = Symbol("slothlet.callerIdentity.unattributed");
 
 /**
+ * Marks the base store a full reload left behind while calls made before the swap still wait in it (see
+ * {@link LiveContextManager#retire}): cleaned up once the last of them settles.
+ */
+const RETIRE_WHEN_IDLE = Symbol("slothlet.context.retireWhenIdle");
+
+/**
  * A class whose constructor hands back the object it is given, so a subclass can put a private field on an object it did
  * not make (see {@link promiseFlowStamp}).
  * @private
@@ -2993,6 +2999,7 @@ export class LiveContextManager {
 			if (SetMethods.delete(suspended, entry)) this.#suspendedVersion++;
 			if (SetMethods.size(suspended) === 0) SetMethods.delete(this.#busyStores, store);
 			restore();
+			this.#retireIfIdle(store);
 		};
 		return nativeThen(
 			result,
@@ -3314,6 +3321,7 @@ export class LiveContextManager {
 					if (SetMethods.delete(suspended, entry)) this.#suspendedVersion++;
 					if (SetMethods.size(suspended) === 0) SetMethods.delete(this.#busyStores, store);
 					restore();
+					this.#retireIfIdle(store);
 				};
 				// A pinned callback's promise is its own: followed to settle the call, never reacted to (#597).
 				if (!follow && runtime_followSettled(result, settle, store.parentInstanceID ?? store.instanceID)) return result;
@@ -3652,6 +3660,47 @@ export class LiveContextManager {
 	}
 
 	/**
+	 * Retire the base store a full reload leaves behind when it moves the instance to a new ID. A call made before the
+	 * swap that is still waiting (a module's function awaiting the instance's own `reload()`) goes on in this store once
+	 * its `await` resumes, as the module it is, with `self` the instance's api: the store stays until the last such call
+	 * has settled, and is cleaned up then. With no module's call waiting it is cleaned up at once.
+	 * @param {string} instanceID - The ID the instance left.
+	 * @returns {void}
+	 * @public
+	 */
+	retire(instanceID) {
+		const store = MapMethods.get(this.instances, instanceID);
+		if (store !== undefined && this.#moduleCallWaits(store)) {
+			Objects.defineProperty(store, RETIRE_WHEN_IDLE, { __proto__: null, value: true, configurable: true });
+			return;
+		}
+		this.cleanup(instanceID);
+	}
+
+	/**
+	 * Clean up a store {@link LiveContextManager#retire} kept for the calls waiting in it, once none is left.
+	 * @param {object} store - The store a call settled on.
+	 * @returns {void}
+	 * @private
+	 */
+	#retireIfIdle(store) {
+		if (store[RETIRE_WHEN_IDLE] !== true || this.#moduleCallWaits(store)) return;
+		if (MapMethods.get(this.instances, store.instanceID) === store) this.cleanup(store.instanceID);
+	}
+
+	/**
+	 * Whether a call of a module waits on a store: a call pinned to the host (the reload itself) or code running as no
+	 * module is no such call.
+	 * @param {object} store - The store.
+	 * @returns {boolean} True when one does.
+	 * @private
+	 */
+	#moduleCallWaits(store) {
+		for (const entry of setValues(this.#suspendedFor(store))) if (entry.currentWrapper) return true;
+		return false;
+	}
+
+	/**
 	 * Cleanup instance context
 	 * @param {string} instanceID - Instance to cleanup
 	 * @param {{keepFlows?: boolean}} [options] - `keepFlows`: leave the instance's run() / scope() stores in place (a
@@ -3673,6 +3722,19 @@ export class LiveContextManager {
 
 		// Remove from instances map
 		MapMethods.delete(this.instances, instanceID);
+		// A store an earlier full reload of the instance left for calls still waiting in it (see retire) goes with it.
+		const owner = store.slothlet;
+		if (!keepFlows && owner !== null && typeof owner === "object") {
+			for (let ofIndex = 0, ofList = mapValuesToArray(this.instances); ofIndex < ofList.length; ofIndex++) {
+				const retired = ofList[ofIndex];
+				if (
+					retired[RETIRE_WHEN_IDLE] === true &&
+					retired.slothlet === owner &&
+					MapMethods.get(this.instances, retired.instanceID) === retired
+				)
+					this.cleanup(retired.instanceID);
+			}
+		}
 		// Its run() / scope() stores go too, including one put back for work a finished run left behind that is running
 		// now (see reopenFlowStore): the shutdown can come from that work, and when it releases the last instance the
 		// promise hooks are gone before the job's `after` would have taken the store out again.
