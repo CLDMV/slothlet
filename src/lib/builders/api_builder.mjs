@@ -1404,7 +1404,13 @@ function makeRunSelf(slothlet, parentSelf, record) {
 					if (closed()) return Reflect.get(shell, prop, receiver);
 					if (forked()) {
 						const node = current();
-						return node === null || node === undefined ? undefined : Reflect.get(node, prop);
+						if (node === null || node === undefined) return undefined;
+						const value = Reflect.get(node, prop);
+						// A member of the root is handed to a reader as `self` hands it, as before the run had a tree of its own: a
+						// view keeping who read it, also for a run opened in this one, which reads it through this view.
+						return parts.length === 0 && typeof prop === "string" && !SetMethods.has(RUN_FRAMEWORK_ROOTS, prop)
+							? runtime_selfView(value)
+							: value;
 					}
 					return readMember(prop, receiver);
 				},

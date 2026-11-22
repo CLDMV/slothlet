@@ -372,8 +372,7 @@ describe.each([["async"], ["live"]])("%s runtime: code made before a reload or r
 						});
 					}
 				);
-				// A method of an object a module returned, called by the host in a nested run, is not covered yet (reported).
-				it.each([["module function"]])(
+				it.each([["module function"], ["module bound function"], ["module method"]])(
 					`a %s made in the run before it, called in a run opened in the run after it, ${refused ? "is refused" : "reads the run's rebuilt copy"}`,
 					async (kind) => {
 						const answer = await runScenario({ runtime, mode, permissions, operation, kind, nested: true });
@@ -393,6 +392,42 @@ describe.each([["async"], ["live"]])("%s runtime: code made before a reload or r
 					}
 				);
 			});
+		});
+	});
+
+	// A run that rebuilt its copy reads its own tree; a run opened in it reads through it. Code of the rebuilt copy's
+	// modules running there is still held to its module's rules.
+	describe.each([["eager"], ["lazy"]])("%s mode, a rule denying probe calls", (mode) => {
+		describe.each([["reload"], ["restart"]])("%s() in a run", (operation) => {
+			it.each([["module function"], ["module bound function"], ["module method"]])(
+				"a %s the rebuilt copy handed out, called in a run opened in the run, is refused",
+				async (kind) => {
+					globalThis[STAMP] = 1;
+					const api = await slothlet({
+						base: BASE,
+						runtime,
+						mode,
+						silent: true,
+						context: { who: "instance" },
+						permissions: { mode: "on", rules: [{ caller: "probe.**", target: "calls.**", effect: "deny" }] }
+					});
+					try {
+						let answer = null;
+						await api.slothlet.context.run({ who: "run" }, async () => {
+							await api.slothlet[operation]();
+							const handed = await handOut(api, kind);
+							try {
+								answer = await api.slothlet.context.run({ who: "nested" }, () => handed());
+							} catch (error) {
+								answer = { copy: error?.code ?? String(error), who: null };
+							}
+						});
+						expect(answer).toEqual({ copy: "PERMISSION_DENIED", who: null });
+					} finally {
+						await api.slothlet.shutdown();
+					}
+				}
+			);
 		});
 	});
 
