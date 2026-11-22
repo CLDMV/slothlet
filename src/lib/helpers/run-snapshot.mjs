@@ -52,6 +52,7 @@ import {
 	mapEntries,
 	NativeProxy,
 	Objects,
+	Promise,
 	PrototypeFunctions,
 	Reflect,
 	RegExp,
@@ -143,6 +144,42 @@ export function instanceDomain(owner) {
 export function domainOf(owner) {
 	if (owner === null || owner === undefined || (typeof owner !== "object" && typeof owner !== "function")) return null;
 	return WeakMapMethods.get(INSTANCE_DOMAINS, owner) ?? null;
+}
+
+/**
+ * Tells a Proxy apart without running its traps (the platform's own check, set by the handlers that make nodes): a
+ * Proxy is handed out and saved as it is, never inspected.
+ * @type {function(*): boolean}
+ * @private
+ */
+let isProxy = () => false;
+
+/**
+ * Set how a Proxy is told apart (see {@link isProxy}).
+ * @param {function(*): boolean} check - The check.
+ * @returns {void}
+ * @internal
+ */
+export function setProxyCheck(check) {
+	isProxy = check;
+}
+
+/**
+ * Marks a view as slothlet's own (set by the builder of runs' views), so code that tells slothlet's values from a
+ * module's hands it on as it is.
+ * @type {function(object): object}
+ * @private
+ */
+let markView = (view) => view;
+
+/**
+ * Set how a run's views are marked as slothlet's own (see {@link markView}).
+ * @param {function(object): object} mark - The marker.
+ * @returns {void}
+ * @internal
+ */
+export function setViewMarker(mark) {
+	markView = mark;
 }
 
 /**
@@ -530,7 +567,8 @@ function scanPrivate(source) {
 export function isSharedLive(value) {
 	if (value === null || (typeof value !== "object" && typeof value !== "function")) return false;
 	if (typeof value === "function") return true;
-	if (brand(PrototypeFunctions.Promise.then, value, [undefined, undefined])) return true;
+	// Told by its prototype chain: calling `then` to ask would make a promise that rejects with it, unhandled.
+	if (inherits(value, Promise)) return true;
 	if (brand(PrototypeFunctions.WeakMap.has, value, [{}])) return true;
 	if (brand(PrototypeFunctions.WeakSet.has, value, [{}])) return true;
 	if (PrototypeFunctions.WeakRef.deref !== undefined && brand(PrototypeFunctions.WeakRef.deref, value)) return true;
@@ -631,7 +669,7 @@ export function shallowCopy(raw) {
  */
 export function checkpointDeep(domain, raw, seen = new Set(), skip = null) {
 	if (domain === null || domain.live === 0 || raw === null || typeof raw !== "object") return;
-	if (SetMethods.has(seen, raw) || (skip !== null && skip(raw)) || isSharedLive(raw)) return;
+	if (SetMethods.has(seen, raw) || isProxy(raw) || (skip !== null && skip(raw)) || isSharedLive(raw)) return;
 	SetMethods.add(seen, raw);
 	// Saved in this window already: so was what it reaches, or it has changed since through a path that saves it.
 	if (!beforeChange(domain, raw, shallowCopy)) return;
@@ -742,7 +780,7 @@ export function handOutRaw(snap, value) {
 	if (snap === null || snap.closed || value === null || typeof value !== "object") return value;
 	const known = WeakMapMethods.get(RAW_VIEWS, value);
 	if (known !== undefined && known.snap === snap) return value;
-	if (WeakSetMethods.has(OWN_BUILTINS, value)) return value;
+	if (WeakSetMethods.has(OWN_BUILTINS, value) || isProxy(value)) return value;
 	if (isSharedLive(value)) return value;
 	if (builtinKind(value) !== null) return builtinCopy(snap, value);
 	return viewOf(snap, value);
@@ -879,6 +917,7 @@ export function viewOf(snap, raw) {
 		getPrototypeOf: () => Reflect.getPrototypeOf(rawContent(snap, raw)),
 		setPrototypeOf: (_t, prototype) => Reflect.setPrototypeOf(ownCopy(snap, raw), prototype)
 	});
+	view = markView(view);
 	WeakMapMethods.set(RAW_VIEWS, view, { snap, raw });
 	WeakMapMethods.set(snap.views, raw, view);
 	return view;

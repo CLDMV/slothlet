@@ -173,6 +173,7 @@ import {
 	domainOf,
 	isRawRunView,
 	runsOpen,
+	setProxyCheck,
 	versionAt
 } from "#helpers/run-snapshot";
 import { RUN_COPY } from "#helpers/flow-stores";
@@ -10858,6 +10859,9 @@ function runtime_isCrossing(value) {
 function runtime_uncross(value) {
 	return runtime_isCrossing(value) ? WeakMapMethods.get(CROSSINGS, value).original : value;
 }
+
+// The run snapshot hands out and saves a Proxy as it is, never reading through its traps (see helpers/run-snapshot).
+setProxyCheck((value) => value !== null && (typeof value === "object" || typeof value === "function") && util.types.isProxy(value));
 
 // The platform's cloning functions copy the data behind a crossing view (see helpers/clone-context): the value a
 // stand-in or the async runtime's context wrapper stands for, where the view is of one.

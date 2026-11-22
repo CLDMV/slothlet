@@ -50,6 +50,7 @@ import {
 	declaresPrivate,
 	handOutRaw,
 	isSharedLive,
+	setViewMarker,
 	shallowCopy,
 	versionAt
 } from "#helpers/run-snapshot";
@@ -131,6 +132,8 @@ const {
 } = unifiedWrapperInternals("lib/builders/api_builder");
 const { runtime_codeWritersOnStack } = framePlacementInternals("lib/builders/api_builder");
 const { markSlothletProxy } = frameworkInternalsInternals("lib/builders/api_builder");
+// A run's views of raw objects are slothlet's own, as its views of nodes are: handed on as they are wherever they go.
+setViewMarker(markSlothletProxy);
 const trustedRootOwn = trustedRootInternals("lib/builders/api_builder");
 const { initI18n, setLanguage } = translationsInternals("lib/builders/api_builder");
 const { moduleSelfForm } = instanceImportsInternals("lib/builders/api_builder");
@@ -654,7 +657,8 @@ function runViewReceiver(thisArg) {
 	if (!WeakMapMethods.has(RUN_VIEW_REALS, thisArg)) return thisArg;
 	const real = WeakMapMethods.get(RUN_VIEW_REALS, thisArg);
 	const impl = runtime_nodeWrapperOf(real)?.____slothletInternal?.impl;
-	return impl !== null && typeof impl === "object" && declaresPrivate(impl) ? real : thisArg;
+	// A Proxy is asked nothing: reading its prototype would run its traps.
+	return impl !== null && typeof impl === "object" && !util.types.isProxy(impl) && declaresPrivate(impl) ? real : thisArg;
 }
 
 /**
@@ -668,7 +672,7 @@ function runViewReceiver(thisArg) {
 function frontsSharedLive(value) {
 	if (typeof value !== "object" || value === null) return false;
 	const impl = runtime_nodeWrapperOf(value)?.____slothletInternal?.impl;
-	return impl !== null && typeof impl === "object" && isSharedLive(impl);
+	return impl !== null && typeof impl === "object" && !util.types.isProxy(impl) && isSharedLive(impl);
 }
 
 /**
