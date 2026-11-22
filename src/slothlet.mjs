@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-21T23:50:59-08:00 (1795333859)
+ *	@Last modified time: 2026-11-21T23:27:18-08:00 (1795332438)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -93,8 +93,10 @@ import { warnIfCoverageWithoutImporter } from "#processors/loader";
 import { SlothletError, SlothletWarning } from "#errors";
 import { SlothletDebug } from "#helpers/debug";
 import {
+	afterCurrentWork,
 	countHeldCopy,
 	countReadThrough,
+	countRetiring,
 	CURRENT_COPY,
 	endRun,
 	FORK,
@@ -111,6 +113,7 @@ import {
 	SILENT_BUILD,
 	TREE_WRITE,
 	RUN_SELF,
+	untrackRunStores,
 	whenIdle,
 	WRITE_TARGET
 } from "#helpers/flow-stores";
@@ -422,6 +425,14 @@ const COPIED_HANDLERS = ["permissionManager", "hookManager", "metadata", "eventM
  * @private
  */
 const TORN_DOWN = Objects.freeze({ __proto__: null, values: null, users: 0 });
+
+/**
+ * How many finished runs wait for an idle macrotask before the rest are drained on a microtask (see
+ * `Slothlet#drainRetiring`): code awaiting runs back to back never lets one pass.
+ * @type {number}
+ * @private
+ */
+const RETIRE_BATCH = 128;
 
 /**
  * Instances currently relying on the globally-patched boundaries.
@@ -738,11 +749,34 @@ class Slothlet {
 	#retiring = [];
 
 	/**
+	 * Records of runs whose work was done before the last batch drain (see {@link Slothlet#drainRetiring}): torn down
+	 * at the next one, or when the instance is idle, whichever comes first.
+	 * @type {Array<object>}
+	 * @private
+	 */
+	#settled = [];
+
+	/**
+	 * The batch drain {@link Slothlet#retiring} is in (see {@link Slothlet#drainRetiring}): stamped on each record as it
+	 * joins, so a drain tears down only records that joined before the previous one.
+	 * @type {number}
+	 * @private
+	 */
+	#retireBatch = 1;
+
+	/**
 	 * Whether a teardown of {@link Slothlet#retiring} is scheduled.
 	 * @type {boolean}
 	 * @private
 	 */
 	#teardownScheduled = false;
+
+	/**
+	 * Whether a batch drain (see {@link Slothlet#drainRetiring}) is queued.
+	 * @type {boolean}
+	 * @private
+	 */
+	#drainQueued = false;
 
 	/**
 	 * The import scopes of IDs a reload left that kept copies still load from, by ID (see
@@ -2727,15 +2761,45 @@ class Slothlet {
 
 	/**
 	 * [RUN_DONE] - A run's work is done (see `releaseRunWork` in `helpers/flow-stores`): its copy is torn down once the
-	 * instance is idle, never in the middle of the work that finished it.
+	 * instance is idle, or at the second batch drain after it (see {@link Slothlet#drainRetiring}), whichever comes
+	 * first; never in the middle of the work that finished it.
 	 * @param {object} record - The record.
 	 * @returns {void}
 	 * @internal
 	 */
 	[RUN_DONE](record) {
 		SetMethods.delete(this.#runs, record);
+		record.retired = this.#retireBatch;
 		listPush(this.#retiring, record);
+		countRetiring(1);
 		this.#teardownWhenIdle();
+		// Code that awaits runs one after another without ever letting a macrotask pass would keep every finished copy
+		// until it does: past a batch, drain on a microtask too.
+		if (this.#retiring.length >= RETIRE_BATCH && !this.#drainQueued) {
+			this.#drainQueued = true;
+			afterCurrentWork(() => this.#drainRetiring());
+		}
+	}
+
+	/**
+	 * Tear down the copies of the runs that were already done at the previous batch drain, and keep the ones done since
+	 * for the next: a record is torn down only after the code that finished it has returned and a whole batch of runs
+	 * has been made since, the same as an idle macrotask would find.
+	 * @returns {void}
+	 * @private
+	 */
+	#drainRetiring() {
+		this.#drainQueued = false;
+		const settled = this.#settled;
+		const batch = this.#retireBatch++;
+		this.#settled = this.#retiring;
+		this.#retiring = [];
+		countRetiring(-settled.length);
+		for (let index = 0; index < settled.length; index++) {
+			const record = settled[index];
+			// A record that took on new work and finished it again since joined a later batch, which tears it down.
+			if (record.done && record.retired < batch) this.#teardownRun(record);
+		}
 	}
 
 	/**
@@ -2754,14 +2818,18 @@ class Slothlet {
 	}
 
 	/**
-	 * Tear down the copies of every run waiting in {@link Slothlet#retiring}.
+	 * Tear down the copies of every run waiting in {@link Slothlet#settled} and {@link Slothlet#retiring}.
 	 * @returns {void}
 	 * @private
 	 */
 	#teardownRetiring() {
+		const settled = this.#settled;
 		const retiring = this.#retiring;
+		this.#settled = [];
 		this.#retiring = [];
+		countRetiring(-(settled.length + retiring.length));
 		// A run that took on new work since (its last piece of work began more) is live again, and stays.
+		for (let index = 0; index < settled.length; index++) if (settled[index].done) this.#teardownRun(settled[index]);
 		for (let index = 0; index < retiring.length; index++) if (retiring[index].done) this.#teardownRun(retiring[index]);
 	}
 
@@ -2776,6 +2844,7 @@ class Slothlet {
 	#teardownRun(record) {
 		if (record.torn) return;
 		record.torn = true;
+		untrackRunStores(record);
 		this.#releaseCopy(record);
 		record.ns = null;
 		record.values = null;

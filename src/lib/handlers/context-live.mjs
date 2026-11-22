@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-21T22:20:33-08:00 (1795328433)
+ *	@Last modified time: 2026-11-22T01:19:19-08:00 (1795339159)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -24,7 +24,15 @@ import { internals as eventemitterContextInternals } from "#helpers/eventemitter
 import { pinToCurrentCaller, internals as callerPinningInternals } from "#helpers/caller-pinning";
 import { internals as schedulerContextInternals } from "#helpers/scheduler-context";
 import { combineCeilings, internals as trustedRootInternals } from "#handlers/trusted-root";
-import { holdRunWorkOnce, releaseWhenCollected, RUN_COPY, runCopyCounts, trackFlowStore, watchRuns } from "#helpers/flow-stores";
+import {
+	holdRunWorkOnce,
+	releaseWhenCollected,
+	RUN_COPY,
+	runCopyCounts,
+	stopReleaseWhenCollected,
+	trackFlowStore,
+	watchRuns
+} from "#helpers/flow-stores";
 import { nativeThen } from "#helpers/promise-context";
 import { util, inheritsFrom } from "#helpers/platform";
 import { runtime_isClassInstance, internals as classInstanceWrapperInternals } from "#helpers/class-instance-wrapper";
@@ -720,7 +728,8 @@ function countPromise(promise, record) {
 	const release = holdRunWorkOnce(record);
 	if (release === null) return;
 	WeakMapMethods.set(COUNTED_PROMISES, promise, release);
-	releaseWhenCollected(promise, release);
+	// The release is the registration's token too, so settling unregisters it (see promiseSettled).
+	releaseWhenCollected(promise, release, release);
 }
 
 /**
@@ -733,6 +742,9 @@ function promiseSettled(promise) {
 	const release = WeakMapMethods.get(COUNTED_PROMISES, promise);
 	if (release === undefined) return;
 	WeakMapMethods.delete(COUNTED_PROMISES, promise);
+	// What waits for the promise to be collected goes now: it would stay until a macrotask, which code awaiting runs back
+	// to back never lets pass.
+	stopReleaseWhenCollected(release);
 	release();
 }
 
