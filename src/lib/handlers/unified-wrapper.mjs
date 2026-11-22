@@ -10471,13 +10471,29 @@ function runtime_moduleKey(wrapper) {
 
 /**
  * What the views made for a reader are kept under: its module's record (see {@link runtime_makerOf}), one per module of
- * an instance, or the reader itself when it is no module's wrapper.
+ * an instance, or the reader itself when it is no module's wrapper, or one of a module removed since (its removal under
+ * way included), whose record is gone and is not made again for it.
  * @param {object} reader - Who a view is for.
  * @returns {object} The key.
  * @private
  */
 function runtime_crossKey(reader) {
-	return reader?.____slothletInternal && reader.slothlet ? runtime_viewGroup(reader) : reader;
+	if (!reader?.____slothletInternal || !reader.slothlet) return reader;
+	if (!runtime_hasMaker(reader) && reader.slothlet.handlers?.apiManager?.isRemovedCaller?.(reader) === true) return reader;
+	return runtime_viewGroup(reader);
+}
+
+/**
+ * Whether a module's record (see {@link runtime_makerOf}) is held for a wrapper, without making one.
+ * @param {object} wrapper - A module's wrapper.
+ * @returns {boolean} True when it is.
+ * @private
+ */
+function runtime_hasMaker(wrapper) {
+	const makers = WeakMapMethods.get(MAKERS, wrapper.slothlet);
+	if (!makers) return false;
+	const moduleID = wrapper.____slothletInternal?.moduleID;
+	return moduleID ? MapMethods.has(makers.byID, moduleID) : WeakMapMethods.has(makers.byWrapper, wrapper);
 }
 
 /**
@@ -10774,21 +10790,46 @@ function runtime_mayWriteFrom(slothlet, reader, from) {
 /**
  * Whether, and why, a value reaches `reader` as itself by write rights. `"writer"`: the reader may make every write at
  * the path the value comes from ({@link runtime_mayWriteFrom}), as the owner may. `"written"`: the module the value
- * comes from may make every write at the reader's path, so it has nothing to keep from the reader, and what the reader
- * hands back stays the value. Neither holds across a write rule that refuses the other side: a module refused a write
- * to the other is handed views of the other's values and has its own handed on as views, since what the other stores
- * into a value it holds as itself comes back.
+ * comes from may make every write at the reader's path, and the value holds none of that module's code
+ * ({@link runtime_holdsNoCode}): what the reader hands back, or stores where that module reads it as itself, stays the
+ * value, and there is no code of the module's in it for the reader to change. Neither holds across a write rule that
+ * refuses the other side: a module refused a write to the other is handed views of the other's values and has its own
+ * handed on as views, since what the other stores into a value it holds as itself comes back.
  * @param {object} slothlet - The instance.
  * @param {object} reader - A module's wrapper.
  * @param {object|null} from - The wrapper of the module the value comes from.
+ * @param {*} value - The value.
  * @returns {"writer"|"written"|null} Why it is handed as itself, or `null` when it is viewed.
  * @private
  */
-function runtime_handedAsItself(slothlet, reader, from) {
+function runtime_handedAsItself(slothlet, reader, from, value) {
 	if (!from?.____slothletInternal) return null;
 	if (runtime_mayWriteFrom(slothlet, reader, from)) return runtime_writeDeniedWithin(slothlet, from, reader) ? null : "writer";
-	if (runtime_mayWriteFrom(slothlet, from, reader)) return runtime_writeDeniedWithin(slothlet, reader, from) ? null : "written";
+	if (runtime_mayWriteFrom(slothlet, from, reader) && runtime_holdsNoCode(value))
+		return runtime_writeDeniedWithin(slothlet, reader, from) ? null : "written";
 	return null;
+}
+
+/**
+ * Whether a value holds none of a module's code, as far as {@link CODE_SEARCH} reaches: no function, no Proxy, no class
+ * instance, no prototype a module wrote, at any depth. A stand-in and the async runtime's context wrapper stand for the
+ * value behind them. Nothing of the value runs to decide.
+ * @param {*} value - The value.
+ * @returns {boolean} True for plain data.
+ * @private
+ */
+function runtime_holdsNoCode(value) {
+	if (value === null || (typeof value !== "object" && typeof value !== "function")) return true;
+	const subject = runtime_crossSubject(value);
+	if (typeof subject === "function" || util.types.isProxy(subject)) return false;
+	try {
+		return (
+			!runtime_isCodeObject(subject) && !runtime_memberHoldsCode(subject, CODE_SEARCH.depth + 1, { remaining: CODE_SEARCH.properties })
+		);
+	} catch {
+		// A value that refuses to be described is taken to hold code.
+		return false;
+	}
 }
 
 /**
@@ -10804,7 +10845,7 @@ function runtime_handedAsItself(slothlet, reader, from) {
  */
 function runtime_handedAsItselfFor(value, slothlet, reader, from) {
 	if (runtime_runsForHander(value, from)) return null;
-	const itself = runtime_handedAsItself(slothlet, reader, from);
+	const itself = runtime_handedAsItself(slothlet, reader, from, value);
 	return itself !== null && runtime_inheritsPrivateKept(slothlet, reader, value) ? null : itself;
 }
 
@@ -10998,9 +11039,9 @@ function runtime_crossTo(value, reader, slothlet, from = null) {
 				return runtime_writtenPrototypeFor(plain, reader, slothlet, from);
 		}
 		if (!runtime_needsCrossing(value, slothlet)) return value;
-		// A module that may write everything at the path the value comes from gets the value itself, as the owner does,
-		// and so does a module handed a value by one that may write everything at its own path. Handed back to the
-		// module it came from, the first is that module's own value again.
+		// A module that may write everything at the path the value comes from gets the value itself, as the owner does.
+		// Handed back to the module it came from, it is that module's own value again. A module the value's module may
+		// write gets a view all the same: the value's code is still its module's.
 		// A function that runs no module's code is the module's that hands it on, however much the reader may write: it
 		// stays a view, so what it writes is that module's to write too ({@link runtime_crossRun}).
 		const itself = isModule ? runtime_handedAsItselfFor(value, slothlet, reader, from) : null;

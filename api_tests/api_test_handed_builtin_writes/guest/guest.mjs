@@ -49,6 +49,18 @@ const WRITES = {
 		direct: (owner) => Object.assign(Object.getPrototypeOf(owner.makeBox()), { planted2: replacement }),
 		handed: (owner, runner) => runner.runCb(Object.assign.bind(null, Object.getPrototypeOf(owner.makeBox()), { planted2: replacement }))
 	},
+	itemProtoBound: {
+		direct: (owner) => Object.assign(Object.getPrototypeOf(owner.makeItem()), { planted13: replacement }),
+		handed: (owner, runner) => runner.runCb(Object.assign.bind(null, Object.getPrototypeOf(owner.makeItem()), { planted13: replacement }))
+	},
+	itemDunderBound: {
+		direct: (owner) => Object.assign(owner.makeItem().__proto__, { planted8: replacement }),
+		handed: (owner, runner) => runner.runCb(Object.assign.bind(null, owner.makeItem().__proto__, { planted8: replacement }))
+	},
+	newItemProtoBound: {
+		direct: (owner) => Object.assign(Object.getPrototypeOf(new owner.Item()), { planted9: replacement }),
+		handed: (owner, runner) => runner.runCb(Object.assign.bind(null, Object.getPrototypeOf(new owner.Item()), { planted9: replacement }))
+	},
 	protoUnbound: {
 		direct: (owner) => Reflect.set(owner.Box.prototype, "planted3", replacement),
 		handed: (owner, runner) => runner.runCb(Reflect.set, owner.Box.prototype, "planted3", replacement)
@@ -95,6 +107,33 @@ const WRITES = {
 };
 
 /**
+ * Writes to an instance another module made that are its code: replacing a method its prototype holds, and replacing its
+ * prototype. Each is made on a fresh instance of a class with no private member, so it changes nothing another write
+ * sees and is decided as a write, never as a read of a private member.
+ * @type {Record<string, {direct: function(object): *, handed: function(object, object): *}>}
+ */
+const INSTANCE_WRITES = {
+	instanceMethod: {
+		direct: (owner) => {
+			owner.makeItem().method = replacement;
+		},
+		handed: (owner, runner) => runner.runCb(Reflect.set.bind(null, owner.makeItem(), "method", replacement))
+	},
+	newInstanceMethod: {
+		direct: (owner) => {
+			new owner.Item().method = replacement;
+		},
+		handed: (owner, runner) => runner.runCb(Reflect.set, new owner.Item(), "method", replacement)
+	},
+	instanceSetProto: {
+		direct: (owner) => {
+			Object.setPrototypeOf(owner.makeItem(), {});
+		},
+		handed: (owner, runner) => runner.runCb(Object.setPrototypeOf.bind(null, owner.makeItem(), {}))
+	}
+};
+
+/**
  * Make a write and report how it ended.
  * @param {function(): *} write - The write.
  * @returns {string} `"done"`, or `"threw <code>"`.
@@ -127,6 +166,43 @@ export function direct(name, ownerPath) {
  */
 export function handed(name, ownerPath, runnerPath) {
 	return attempt(() => WRITES[name].handed(at(ownerPath), at(runnerPath)));
+}
+
+/**
+ * Make one of the instance writes itself.
+ * @param {string} name - The write.
+ * @param {string} ownerPath - The module whose instance is written.
+ * @returns {string} How it ended.
+ */
+export function instanceDirect(name, ownerPath) {
+	return attempt(() => INSTANCE_WRITES[name].direct(at(ownerPath)));
+}
+
+/**
+ * Hand one of the instance writes, as a built-in, to the module at `runnerPath` to run.
+ * @param {string} name - The write.
+ * @param {string} ownerPath - The module whose instance is written.
+ * @param {string} runnerPath - The module that runs it.
+ * @returns {string} How it ended.
+ */
+export function instanceHanded(name, ownerPath, runnerPath) {
+	return attempt(() => INSTANCE_WRITES[name].handed(at(ownerPath), at(runnerPath)));
+}
+
+/**
+ * Data written on an instance another module made stays the writer's to change.
+ * @param {string} ownerPath - The module whose instance is written.
+ * @returns {*} The member as read back, or `"threw <code>"`.
+ */
+export function instanceData(ownerPath) {
+	try {
+		const item = at(ownerPath).makeItem();
+		item.extra = 1;
+		item.v = 2;
+		return `${item.extra},${item.v}`;
+	} catch (error) {
+		return `threw ${error?.code ?? error?.name}`;
+	}
 }
 
 /**

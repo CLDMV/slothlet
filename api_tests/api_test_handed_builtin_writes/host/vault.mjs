@@ -35,6 +35,19 @@ export class Box {
 /** A data member of the prototype private to the module. */
 Box.prototype._pdata = "PDATA";
 
+/** A class whose instances inherit none of the module's private members. */
+export class Item {
+	/** @returns {string} Marker. */
+	method() {
+		return "method";
+	}
+}
+
+/** @returns {Item} A fresh instance. */
+export function makeItem() {
+	return new Item();
+}
+
 /** A member another module may be refused reading. */
 export const secret = "SECRET";
 
@@ -61,7 +74,11 @@ export function runCb(cb, ...args) {
 	return cb(...args);
 }
 
-/** @returns {{method: string, protoKeys: string[]}} The prototype as the module holds it. */
+/** @returns {{method: string, protoKeys: string[], itemKeys: string[]}} The prototypes as the module holds them. */
 export function protoState() {
-	return { method: new Box().method(), protoKeys: Object.getOwnPropertyNames(Box.prototype).sort() };
+	return {
+		method: new Box().method(),
+		protoKeys: Object.getOwnPropertyNames(Box.prototype).sort(),
+		itemKeys: Object.getOwnPropertyNames(Item.prototype).sort()
+	};
 }

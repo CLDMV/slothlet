@@ -23,8 +23,10 @@
  * instance) or of its api node, or hands `Reflect.set` or Node's `util._extend` unbound with the target as an argument,
  * to a module that runs the callback it is handed: the module that owns the target, the base module (which owns the whole
  * tree), or a peer granted `**:full`. Each write ends as the guest's own direct write of it does, refused with the same
- * code, and nothing lands; a member the guest may not read is not written either. A write the guest may make itself,
- * handed to a module that may make it too, lands; reads and built-ins that only compute are unaffected. A member
+ * code, and nothing lands; a member the guest may not read is not written either. The guest's own writes to an instance
+ * another module made (its prototype, a method its prototype holds) are refused, the base module's instances included,
+ * and so are the same writes handed to another module. A write the guest may make itself, handed to a module that may
+ * make it too, lands; reads, data written on an instance and built-ins that only compute are unaffected. A member
  * private to a module is refused to every other module through an instance as through the prototype. With the permission
  * system off or disabled every write lands and every member is read, as in plain JavaScript. Checked in eager and lazy
  * mode, async and live runtime, attribution `"precise"` and `"fast"`.
@@ -44,6 +46,9 @@ for (const mode of ["eager", "lazy"]) for (const runtime of ["async", "live"]) C
 const WRITES = [
 	"protoBound",
 	"instanceProtoBound",
+	"itemProtoBound",
+	"itemDunderBound",
+	"newItemProtoBound",
 	"protoUnbound",
 	"protoNodeHelper",
 	"methodBound",
@@ -55,6 +60,9 @@ const WRITES = [
 	"secretBound",
 	"secretUnbound"
 ];
+
+/** Each write to a fresh instance of another module's class that is that module's code. */
+const INSTANCE_WRITES = ["instanceMethod", "newInstanceMethod", "instanceSetProto"];
 
 /** Each route the guest reads a member private to another module through one of its instances by. */
 const PRIVATE_READS = ["newData", "madeData", "madeReflect", "newMethod", "madeMethod", "proto"];
@@ -123,13 +131,15 @@ describe("a built-in handed to another module to run writes nothing the handing 
 					try {
 						const before = await snapshot(api, ownerPath);
 						for (const name of WRITES) {
-							// Under "fast" an instance the base module hands out reaches the guest with its prototype as is, so the
-							// guest's own write through it lands; that route is no handed built-in's and is left out here.
-							if (name === "instanceProtoBound" && ownerPath === "vault" && attribution === "fast") continue;
 							const direct = await api.guest.direct(name, ownerPath);
 							expect(direct, `${name}: the guest's own write`).toMatch(/^threw (LOOSE_SET_NOT_OWNED|PERMISSION_DENIED)$/);
 							expect(await api.guest.handed(name, ownerPath, runnerPath), name).toBe(direct);
 							expect(await snapshot(api, ownerPath), name).toEqual(before);
+						}
+						for (const name of INSTANCE_WRITES) {
+							const direct = await api.guest.instanceDirect(name, ownerPath);
+							expect(direct, `${name}: the guest's own write`).toMatch(/^threw (LOOSE_SET_NOT_OWNED|PERMISSION_DENIED)$/);
+							expect(await api.guest.instanceHanded(name, ownerPath, runnerPath), name).toBe(direct);
 						}
 						expect(await api.guest.handedDeferred(ownerPath, runnerPath), "called back later").toBe("threw LOOSE_SET_NOT_OWNED");
 						expect(await snapshot(api, ownerPath), "called back later").toEqual(before);
@@ -161,6 +171,7 @@ describe("a built-in handed to another module to run writes nothing the handing 
 					for (const runnerPath of ["vault", "owner", "peer"]) expect(await api.guest.handedPure(runnerPath)).toBe(5);
 					expect(await api.guest.handedIsReflectSet()).toBe(true);
 					for (const ownerPath of ["vault", "owner"]) {
+						expect(await api.guest.instanceData(ownerPath), `data on ${ownerPath}'s instance`).toBe("1,2");
 						expect(await api.guest.readPublic(ownerPath), `public members of ${ownerPath}'s instance`).toBe("method,method");
 					}
 				} finally {
@@ -186,6 +197,10 @@ describe("a built-in handed to another module to run writes nothing the handing 
 						expect((await api[ownerPath].protoState()).protoKeys).toContain("planted7");
 						expect(await api.guest.handedOnOwnProto("owner")).toBe("done");
 						expect((await api.owner.protoState()).protoKeys).toContain("planted5");
+						for (const name of INSTANCE_WRITES) {
+							expect(await api.guest.instanceDirect(name, ownerPath), name).toBe("done");
+							expect(await api.guest.instanceHanded(name, ownerPath, runnerPath), name).toBe("done");
+						}
 					} finally {
 						await api.slothlet.shutdown();
 					}
@@ -224,6 +239,7 @@ describe("a member private to a module is read through its instances only by tha
 						}
 						expect(await api.peer.readPrivate("madeData", ownerPath)).toBe("PDATA");
 						expect(await api.guest.readPublic(ownerPath)).toBe("method,method");
+						expect(await api.guest.instanceData(ownerPath)).toBe("1,2");
 					}
 				} finally {
 					await api.slothlet.shutdown();
