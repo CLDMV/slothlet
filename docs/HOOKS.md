@@ -868,7 +868,7 @@ self.scheduler.service.every(60_000, () => self.reports.refresh());
 
 ### `self.slothlet.bind(fn)` — freeze the whole async context
 
-`bind` is a convenience re-export of Node's `AsyncResource.bind`. Unlike `pin`, it freezes the **entire** async context captured at registration time — every `AsyncLocalStorage`, including slothlet's caller and request context:
+Unlike `pin`, `bind` freezes the **entire** context captured at registration time: slothlet's caller and request context, the running `run()` / `scope()` included. On the **async** runtime it is Node's `AsyncResource.bind`, so every `AsyncLocalStorage` is frozen with it. On the **live** runtime, which uses no `node:async_hooks`, the live context manager binds the flow and caller the callback was bound in, as it does for a function an `AsyncResource` runs; another library's `AsyncLocalStorage` is not part of what it binds there:
 
 ```javascript
 server.addHook("onRequest", self.slothlet.bind(handler));
@@ -876,7 +876,7 @@ server.addHook("onRequest", self.slothlet.bind(handler));
 
 Reach for `pin` when you want the caller pinned but request-scoped context live; reach for `bind` when you want the whole context snapshot frozen.
 
-Both utilities share the same live-mode limitation: `AsyncResource.bind` only meaningfully captures slothlet's caller/context in **async** runtime mode. In live mode the slothlet store is kept off the `AsyncLocalStorage`, so `bind` degrades to binding whatever other async context exists and does **not** preserve slothlet caller identity past an `await`. `bind` is therefore not a workaround for the live-mode `pin` caveat above — if an `async` callback must keep slothlet identity across awaits, run the instance in **async** runtime mode.
+On the live runtime `bind` carries what the live runtime carries for any callback, with the same reach: the bound callback's synchronous code and what it schedules run in the bound flow and as the module that bound it, and the code after an `await` follows the rules in [CONTEXT-PROPAGATION.md](CONTEXT-PROPAGATION.md#concurrent-run-and-scope-flows-in-the-live-runtime). It is not a workaround for the live-mode `pin` caveat above: if an `async` callback must keep slothlet identity across awaits while other calls are suspended, run the instance in **async** runtime mode.
 
 > `slothlet.pin`, `slothlet.pin.caller`, and `slothlet.bind` are permission-gated routes like every other `slothlet.*` member — see [Permissions](PERMISSIONS.md#other-slothlet-routes-are-gated-too). `pin.caller` is denied to modules by default.
 

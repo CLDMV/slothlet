@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-21T16:31:07-08:00 (1795307467)
+ *	@Last modified time: 2026-11-21T16:48:06-08:00 (1795308486)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -41,6 +41,7 @@ import { ceilingMembers, combineCeilings, identityCeilings, internals as trusted
 import { getLanguage, t, translate, internals as translationsInternals } from "#i18n";
 import { assertOptionKeys } from "#helpers/config-schema";
 import { copyForRun, recordOperation, releaseRunWork, RUN_COPY, RUN_SELF, trackFlowStore, treeWrite } from "#helpers/flow-stores";
+import { pinScopeToCurrentCaller } from "#helpers/caller-pinning";
 import {
 	ArrayMethods,
 	Arrays,
@@ -3523,21 +3524,19 @@ export class ApiBuilder extends ComponentBase {
 			},
 
 			/**
-			 * Freeze the entire async context onto a callback (re-export of `AsyncResource.bind`).
+			 * Freeze the entire async context onto a callback (re-export of `AsyncResource.bind` on the async runtime).
 			 * @param {Function} fn - The callback to bind.
 			 * @returns {Function} The bound callback.
 			 * @throws {SlothletError} INVALID_ARGUMENT when `fn` is not a function.
 			 * @public
 			 *
 			 * @description
-			 * Convenience re-export of Node's `AsyncResource.bind`. Unlike {@link pin},
-			 * which overrides only the caller identity and leaves the request-scoped context
-			 * live, `bind` freezes the **entire** async context captured at registration time —
-			 * every `AsyncLocalStorage`, including slothlet's caller and request context.
-			 *
-			 * `AsyncResource.bind` only meaningfully captures slothlet's caller/context in
-			 * **async** runtime mode; in live mode the slothlet store is kept off the ALS, so
-			 * `bind` degrades to binding whatever other async context exists.
+			 * Unlike {@link pin}, which overrides only the caller identity and leaves the request-scoped context live,
+			 * `bind` freezes the **entire** context captured at registration time: slothlet's caller and request context
+			 * (the running `run()` / `scope()` included). On the **async** runtime it is Node's `AsyncResource.bind`, so
+			 * every `AsyncLocalStorage` is frozen with it. On the **live** runtime, which uses no `node:async_hooks`, the
+			 * live context manager binds the flow and caller the callback was bound in, as it does for a function an
+			 * `AsyncResource` runs.
 			 *
 			 * @example
 			 * server.addHook("onRequest", self.slothlet.bind(handler));
@@ -3550,11 +3549,13 @@ export class ApiBuilder extends ComponentBase {
 						received: typeof fn
 					});
 				}
-				// Browser host: no AsyncResource (live context), so bind is identity (`: fn`). This nested
+				// The live runtime binds through its own manager: the flow and caller bound in are what the callback runs in.
+				if (slothlet.contextManager?.constructor?.name === "LiveContextManager") return pinScopeToCurrentCaller(fn);
+				// No AsyncResource where there is no node:async_hooks, so bind is identity (`: fn`). This nested
 				// method lives outside api_builder's instrumented coverage region (the v8 map stops inside
 				// createSlothletNamespace, before its returned object's methods), so neither the node run nor
-				// the browser merge can count this arm — mark the browser-only `: fn` honestly.
-				/* v8 ignore next - browser-only: `: fn` identity bind; outside the file's instrumented region */
+				// the browser merge can count this arm — mark the `: fn` honestly.
+				/* v8 ignore next - no node:async_hooks: `: fn` identity bind; outside the file's instrumented region */
 				return AsyncResource ? AsyncResource.bind(fn, "slothlet-bound") : fn;
 			},
 

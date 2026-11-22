@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-21T16:33:15-08:00 (1795307595)
+ *	@Last modified time: 2026-11-21T16:50:20-08:00 (1795308620)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -16,13 +16,13 @@
 /**
  * @fileoverview A process whose instances all use the live runtime makes no `AsyncLocalStorage` and no `AsyncResource`
  * through a whole cycle: calls, `reload()`, `restart()`, a `run()` that adds a module and reloads and restarts its own
- * copy.
+ * copy, and `slothlet.bind()`.
  *
  * A child process replaces `AsyncResource` and `AsyncLocalStorage` on `node:async_hooks` with counting versions before
  * it imports slothlet (slothlet takes the members of Node's built-in modules as it loads), then runs the cycle on a
  * live-runtime instance, with permissions off and on. Every step answers as it should (what a run does stays in the
- * run), and nothing was constructed. An async-runtime instance taken through the same cycle afterwards in the same
- * process does make storages, so the counter is in place.
+ * run, a bound function runs in the run and as the module that bound it), and nothing was constructed. An async-runtime
+ * instance taken through the same cycle afterwards in the same process does make them, so the check is not vacuous.
  */
 
 import path from "node:path";
@@ -48,6 +48,12 @@ function write(file, lines) {
 beforeAll(() => {
 	rmSync(ROOT, { recursive: true, force: true });
 	write("api/math/math.mjs", ["export function add(a, b) {", "\treturn a + b;", "}"]);
+	write("api/binder/binder.mjs", [
+		'import { self, context } from "@cldmv/slothlet/runtime";',
+		"export function make() {",
+		"\treturn self.slothlet.bind(() => ({ user: context.user, sum: self.math.add(2, 3) }));",
+		"}"
+	]);
 	write("extra/extra.mjs", ["export function hello() {", '\treturn "hello";', "}"]);
 	write("probe.mjs", [
 		'import { syncBuiltinESMExports } from "node:module";',
@@ -59,6 +65,11 @@ beforeAll(() => {
 		"\tconstructor(...args) {",
 		"\t\tsuper(...args);",
 		"\t\tcounts.resources++;",
+		"\t}",
+		"\t// Node's static bind makes its resource with its own class: counted here.",
+		"\tstatic bind(...args) {",
+		"\t\tcounts.resources++;",
+		"\t\treturn Reflect.apply(OriginalResource.bind, this, args);",
 		"\t}",
 		"}",
 		"const OriginalStorage = asyncHooks.AsyncLocalStorage;",
@@ -88,15 +99,18 @@ beforeAll(() => {
 		"\tgot.afterReload = await api.math.add(1, 2);",
 		"\tawait api.slothlet.restart();",
 		"\tgot.afterRestart = await api.math.add(1, 2);",
+		"\tlet bound;",
 		"\tgot.run = await api.slothlet.context.run({ user: 'r' }, async () => {",
 		"\t\tawait api.slothlet.api.add('extra', EXTRA, { id: 'extra' });",
 		"\t\tconst hello = await api.extra.hello();",
 		"\t\tawait null;",
 		"\t\tawait api.slothlet.reload();",
 		"\t\tawait api.slothlet.restart();",
+		"\t\tbound = await api.binder.make();",
 		"\t\treturn { hello, extraAfterRestart: typeof api.extra };",
 		"\t});",
 		"\tgot.extraOutside = typeof api.extra;",
+		"\tgot.bound = await bound();",
 		"\tawait api.slothlet.shutdown();",
 		"\treturn got;",
 		"};",
@@ -128,20 +142,22 @@ function probe(permissions) {
 
 describe("Runtime > the live runtime makes no AsyncLocalStorage and no AsyncResource through a cycle", () => {
 	for (const permissions of ["off", "on"]) {
-		it(`calls, reload, restart, and a run that adds, reloads and restarts its copy, permissions ${permissions}`, () => {
+		it(`calls, reload, restart, a run that adds, reloads and restarts its copy, and bind, permissions ${permissions}`, () => {
 			const out = probe(permissions);
 			const answers = {
 				call: 3,
 				afterReload: 3,
 				afterRestart: 3,
 				run: { hello: "hello", extraAfterRestart: "undefined" },
-				extraOutside: "undefined"
+				extraOutside: "undefined",
+				bound: { user: "r", sum: 5 }
 			};
 			expect(out.live).toEqual(answers);
 			expect(out.liveCounts).toEqual({ resources: 0, storages: 0 });
-			// The same cycle on the async runtime does make storages: the counter sees them.
+			// The same cycle on the async runtime does make them: the counters see them.
 			expect(out.async).toEqual(answers);
 			expect(out.asyncCounts.storages).toBeGreaterThan(0);
+			expect(out.asyncCounts.resources).toBeGreaterThan(0);
 		});
 	}
 });
