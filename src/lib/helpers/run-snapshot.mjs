@@ -469,6 +469,10 @@ export function versionAt(domain, subject, start) {
  */
 export function builtinKind(value) {
 	if (value === null || typeof value !== "object") return null;
+	if (kindCheck !== null) {
+		const kind = kindCheck(value);
+		return kind === "weak" || kind === "promise" ? null : kind;
+	}
 	if (brand(PrototypeFunctions.Map.size, value)) return "map";
 	if (brand(PrototypeFunctions.Set.size, value)) return "set";
 	if (brand(PrototypeFunctions.Date.getTime, value)) return "date";
@@ -477,6 +481,25 @@ export function builtinKind(value) {
 	if (brand(PrototypeFunctions.ArrayBuffer.byteLength, value)) return "buffer";
 	if (brand(PrototypeFunctions.DataView.byteLength, value)) return "dataview";
 	return null;
+}
+
+/**
+ * The platform's own brand checks, when the handlers set them (see {@link setKindCheck}): they tell the kinds apart
+ * without throwing, where calling a built-in's method to ask throws for every other object.
+ * @type {function(object): (string|null)|null}
+ * @private
+ */
+let kindCheck = null;
+
+/**
+ * Set how a built-in's kind is told (see {@link builtinKind}).
+ * @param {function(object): (string|null)} check - Answers `"map"`, `"set"`, `"date"`, `"regexp"`, `"typed"`,
+ *   `"buffer"`, `"dataview"`, `"weak"` (a weak collection or reference), `"promise"`, or null.
+ * @returns {void}
+ * @internal
+ */
+export function setKindCheck(check) {
+	kindCheck = check;
 }
 
 /**
@@ -567,6 +590,13 @@ function scanPrivate(source) {
 export function isSharedLive(value) {
 	if (value === null || (typeof value !== "object" && typeof value !== "function")) return false;
 	if (typeof value === "function") return true;
+	if (kindCheck !== null) {
+		const kind = kindCheck(value);
+		if (kind === "weak" || kind === "promise") return true;
+		if (kind !== null) return false;
+		if (typeof EventTarget === "function" && inherits(value, EventTarget)) return true;
+		return isEmitterLike(value);
+	}
 	// Told by its prototype chain: calling `then` to ask would make a promise that rejects with it, unhandled.
 	if (inherits(value, Promise)) return true;
 	if (brand(PrototypeFunctions.WeakMap.has, value, [{}])) return true;

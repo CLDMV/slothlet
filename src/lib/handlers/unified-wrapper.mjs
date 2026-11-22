@@ -173,6 +173,8 @@ import {
 	domainOf,
 	isRawRunView,
 	runsOpen,
+	savedThisWindow,
+	setKindCheck,
 	setProxyCheck,
 	versionAt
 } from "#helpers/run-snapshot";
@@ -4012,7 +4014,7 @@ function runtime_runningRecord(slothlet) {
 function runtime_checkpointHandout(slothlet, value) {
 	if (value === null || typeof value !== "object") return;
 	const domain = domainOf(slothlet);
-	if (!runsOpen(domain) || util.types.isProxy(value) || runtime_runningRecord(slothlet) !== null) return;
+	if (!runsOpen(domain) || savedThisWindow(domain, value) || util.types.isProxy(value) || runtime_runningRecord(slothlet) !== null) return;
 	checkpointDeep(domain, value, new Set(), (held) => util.types.isProxy(held) || resolveWrapper(held) !== null);
 }
 
@@ -4036,7 +4038,7 @@ function runtime_builtinBehind(value) {
 }
 
 /**
- * Before a file's code runs outside every run while a run is open: save every node of the file once per window (see
+ * Before a file's code runs while a run is open: save every node of the file once per window (see
  * `checkpointOnce` in `helpers/run-snapshot`), so a change the code makes to what the file exports through its own
  * variables does not reach the runs open.
  * @param {UnifiedWrapper} wrapper - The leaf about to run.
@@ -4048,7 +4050,9 @@ function runtime_checkpointFile(wrapper) {
 	const domain = domainOf(slothlet);
 	if (!runsOpen(domain)) return;
 	const filePath = wrapper.____slothletInternal.filePath;
-	if (!filePath || runtime_runningRecord(slothlet) !== null) return;
+	if (!filePath) return;
+	// Once per file per window, whichever flow calls first: a call from a run saves what the instance holds then too,
+	// which is what the runs open read, and it spares every later call the work of telling whether it runs in one.
 	checkpointOnce(domain, filePath, () => {
 		const nodes = fileNodes(slothlet, filePath);
 		for (let index = 0; index < nodes.length; index++) {
@@ -4104,11 +4108,24 @@ function runtime_checkpointLoaded(wrapper) {
 }
 
 /**
- * The traps of a node that change it (see {@link runtime_snapshotBarrier}).
- * @type {string[]}
+ * The kinds of built-in a run copies, by the name {@link runtime_dataKind} gives them, as `helpers/run-snapshot` names them.
+ * @type {Record<string, string>}
  * @private
  */
-const SNAPSHOT_TRAPS = ["set", "defineProperty", "deleteProperty", "setPrototypeOf", "preventExtensions"];
+const SNAPSHOT_KINDS = Objects.freeze({
+	__proto__: null,
+	map: "map",
+	set: "set",
+	date: "date",
+	regexp: "regexp",
+	typedarray: "typed",
+	arraybuffer: "buffer",
+	dataview: "dataview",
+	weakmap: "weak",
+	weakset: "weak",
+	weakref: "weak",
+	promise: "promise"
+});
 
 /**
  * Save a node as it is before the instance changes it, for the runs that started since it last changed (see
@@ -10859,6 +10876,9 @@ function runtime_isCrossing(value) {
 function runtime_uncross(value) {
 	return runtime_isCrossing(value) ? WeakMapMethods.get(CROSSINGS, value).original : value;
 }
+
+// The run snapshot tells the built-ins it copies apart by the same checks the handlers use (see helpers/run-snapshot).
+setKindCheck((value) => SNAPSHOT_KINDS[runtime_dataKind(value) ?? ""] ?? null);
 
 // The run snapshot hands out and saves a Proxy as it is, never reading through its traps (see helpers/run-snapshot).
 setProxyCheck((value) => value !== null && (typeof value === "object" || typeof value === "function") && util.types.isProxy(value));
@@ -23430,13 +23450,16 @@ class UnifiedWrapper extends ComponentBase {
 		};
 		// A run that started before a change reads the node as it was (see helpers/run-snapshot): every trap that changes
 		// the node saves it first, once per window, while a run is open.
-		for (let index = 0; index < SNAPSHOT_TRAPS.length; index++) {
-			const name = SNAPSHOT_TRAPS[index];
-			const trap = proxyHandler[name];
-			proxyHandler[name] = (...args) => {
-				runtime_snapshotBarrier(wrapper);
-				return Reflect.apply(trap, proxyHandler, args);
+		{
+			const { set, defineProperty, deleteProperty, setPrototypeOf, preventExtensions } = proxyHandler;
+			const save = () => {
+				if (anyRunOpen()) runtime_snapshotBarrier(wrapper);
 			};
+			proxyHandler.set = (target, prop, value, receiver) => (save(), set(target, prop, value, receiver));
+			proxyHandler.defineProperty = (target, prop, descriptor) => (save(), defineProperty(target, prop, descriptor));
+			proxyHandler.deleteProperty = (target, prop) => (save(), deleteProperty(target, prop));
+			proxyHandler.setPrototypeOf = (target, prototype) => (save(), setPrototypeOf(target, prototype));
+			proxyHandler.preventExtensions = (target) => (save(), preventExtensions(target));
 		}
 		// Once a restart() replaces this wrapper's tree, every trap forwards to the live tree (#504).
 		const proxyTraps = runtime_withRestartForwarding(proxyHandler, wrapper);
