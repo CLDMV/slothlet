@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T13:35:17-08:00 (1794951317)
+ *	@Last modified time: 2026-11-22T09:18:56-08:00 (1795367936)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -286,7 +286,9 @@ function enableAsyncResourcePatching() {
 			 * @returns {*} What it returns.
 			 */
 			runInAsyncScope(fn, thisArg, ...args) {
-				const pinned = layer.active ? WeakMapMethods.get(RESOURCE_PINS, this) : undefined;
+				// While the patches are on, whichever layer of them is in place: a restart takes them off and puts a new layer
+				// on, and a resource made before it keeps the caller that made it, as a snapshot made then does.
+				const pinned = isPatchingEnabled ? WeakMapMethods.get(RESOURCE_PINS, this) : undefined;
 				if (!pinned || typeof fn !== "function") return Reflect.apply(belowRun, this, concatLists([fn, thisArg], args));
 				return runtime_armed(fn, () => Reflect.apply(belowRun, this, [pinned, undefined, fn, thisArg, args]));
 			}
