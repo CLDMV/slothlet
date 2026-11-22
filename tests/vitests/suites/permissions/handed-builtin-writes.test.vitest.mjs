@@ -124,6 +124,31 @@ async function snapshot(api, path) {
 	};
 }
 
+/**
+ * Run something, collecting the errors left uncaught or unhandled while the work it scheduled runs.
+ * @param {function(): Promise<void>} run - What to run.
+ * @returns {Promise<Array<string>>} Their codes.
+ */
+async function uncaughtDuring(run) {
+	const previous = { rejection: process.listeners("unhandledRejection"), exception: process.listeners("uncaughtException") };
+	const reported = [];
+	const listener = (reason) => reported.push(reason?.code ?? reason?.message ?? String(reason));
+	process.removeAllListeners("unhandledRejection");
+	process.removeAllListeners("uncaughtException");
+	process.on("unhandledRejection", listener);
+	process.on("uncaughtException", listener);
+	try {
+		await run();
+		await new Promise((done) => setTimeout(done, 20));
+	} finally {
+		process.removeListener("unhandledRejection", listener);
+		process.removeListener("uncaughtException", listener);
+		for (const handler of previous.rejection) process.on("unhandledRejection", handler);
+		for (const handler of previous.exception) process.on("uncaughtException", handler);
+	}
+	return reported;
+}
+
 describe("a built-in handed to another module to run writes nothing the handing module could not", () => {
 	for (const config of CONFIGS) {
 		for (const attribution of ["precise", "fast"]) {
@@ -266,6 +291,58 @@ describe("a member private to a module is read through its instances only by tha
 					}
 				} finally {
 					await api.slothlet.shutdown();
+				}
+			});
+		}
+	}
+});
+
+describe("a scheduler handed to another module, bound to a write, runs the write for the handing module", () => {
+	const SCHEDULERS = ["timeout", "microtask"];
+	for (const config of CONFIGS) {
+		for (const attribution of ["precise", "fast"]) {
+			const label = `${config.mode}/${config.runtime}/${attribution}`;
+			for (const [ownerPath, runnerPath] of PAIRS) {
+				it(`${label}: written ${ownerPath}, run by ${runnerPath}: refused when the callback runs, nothing lands`, async () => {
+					const api = await mount(config, { mode: "on", policy: "allow", caller: { attribution }, rules: RULES });
+					try {
+						const before = await snapshot(api, ownerPath);
+						const directNode = await api.guest.direct("nodeBound", ownerPath);
+						for (const scheduler of SCHEDULERS) {
+							for (const target of ["proto", "node"]) {
+								const reported = await uncaughtDuring(async () => {
+									expect(await api.guest.handedScheduled(scheduler, target, ownerPath, runnerPath)).toBe("done");
+								});
+								expect(reported, `${scheduler}, ${target}`).toEqual([
+									target === "proto" ? "LOOSE_SET_NOT_OWNED" : directNode.slice("threw ".length)
+								]);
+								expect(await snapshot(api, ownerPath), `${scheduler}, ${target}`).toEqual(before);
+							}
+						}
+					} finally {
+						await api.slothlet.shutdown();
+					}
+				});
+			}
+		}
+		for (const mode of ["off", "disabled"]) {
+			it(`${config.mode}/${config.runtime}: permissions ${mode}: every scheduled write lands, as in plain JavaScript`, async () => {
+				for (const [ownerPath, runnerPath] of PAIRS) {
+					const api = await mount(config, { mode, rules: RULES });
+					try {
+						for (const scheduler of SCHEDULERS) {
+							for (const target of ["proto", "node"]) {
+								const reported = await uncaughtDuring(async () => {
+									expect(await api.guest.handedScheduled(scheduler, target, ownerPath, runnerPath)).toBe("done");
+								});
+								expect(reported, `${scheduler}, ${target} ${ownerPath}/${runnerPath}`).toEqual([]);
+							}
+						}
+						expect((await api[ownerPath].protoState()).protoKeys).toEqual(expect.arrayContaining(["planted14", "planted15"]));
+						expect(api[ownerPath].open).toBe("W8");
+					} finally {
+						await api.slothlet.shutdown();
+					}
 				}
 			});
 		}

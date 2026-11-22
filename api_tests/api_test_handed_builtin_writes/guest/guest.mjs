@@ -300,6 +300,26 @@ export function handedBoundThenDetached(target, ownerPath, runnerPath) {
 }
 
 /**
+ * Hand the module at `runnerPath` a scheduler, `setTimeout` or `queueMicrotask`, bound to a callback that is itself bound
+ * to a write: the callback runs after the runner's call has returned, and its write is held to the guest when it does. A
+ * write refused there is thrown from the callback and left uncaught.
+ * @param {string} scheduler - `"timeout"` or `"microtask"`.
+ * @param {string} target - `"proto"` for the prototype's member, `"node"` for the node's.
+ * @param {string} ownerPath - The module written.
+ * @param {string} runnerPath - The module that runs it.
+ * @returns {string} How handing it over ended (`"done"` once it is scheduled).
+ */
+export function handedScheduled(scheduler, target, ownerPath, runnerPath) {
+	const owner = at(ownerPath);
+	const write =
+		target === "proto"
+			? Object.assign.bind(null, owner.Box.prototype, { [scheduler === "timeout" ? "planted14" : "planted15"]: replacement })
+			: Object.assign.bind(null, owner, { open: scheduler === "timeout" ? "W7" : "W8" });
+	const schedule = scheduler === "timeout" ? setTimeout.bind(globalThis, write, 0) : queueMicrotask.bind(globalThis, write);
+	return attempt(() => at(runnerPath).runCb(schedule));
+}
+
+/**
  * Hand the owner `Reflect.set` to run on its own prototype.
  * @param {string} ownerPath - The module written.
  * @returns {string} How it ended.
