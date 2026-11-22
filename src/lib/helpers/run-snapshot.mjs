@@ -728,6 +728,54 @@ export function checkpointDeep(domain, raw, seen = new Set(), skip = null) {
 			if (described !== undefined && "value" in described) checkpointDeep(domain, described.value, seen, skip);
 		}
 	}
+	// A prototype of a module's own (a class's, or an object another inherits from) is changed as itself too: it is
+	// saved with what inherits from it, up to the language's own.
+	const prototype = Reflect.getPrototypeOf(raw);
+	if (prototype !== null && !isLanguagePrototype(prototype)) checkpointDeep(domain, prototype, seen, skip);
+}
+
+/**
+ * Whether a prototype is one the language or the platform gives (`Object.prototype`, `Map.prototype`, an emitter's):
+ * one no snapshot keeps versions of. A module's own (a class's prototype, an object made to be inherited from) is not.
+ * @type {WeakMap<object, boolean>}
+ * @private
+ */
+const LANGUAGE_PROTOTYPES = new WeakMap();
+
+/**
+ * Whether `prototype` is the language's own (see {@link LANGUAGE_PROTOTYPES}): null, the prototype of a native class
+ * (its own `constructor` is native code), or an emitter's, which a run shares live.
+ * @param {object|null} prototype - The prototype.
+ * @returns {boolean} True for one.
+ * @internal
+ */
+export function isLanguagePrototype(prototype) {
+	if (prototype === null || (typeof prototype !== "object" && typeof prototype !== "function")) return true;
+	let held = WeakMapMethods.get(LANGUAGE_PROTOTYPES, prototype);
+	if (held === undefined) {
+		held = false;
+		if (isProxy(prototype)) held = true;
+		else {
+			const described = Reflect.getOwnPropertyDescriptor(prototype, "constructor");
+			const ctor = described !== undefined && "value" in described ? described.value : undefined;
+			if (typeof ctor === "function") {
+				let source;
+				try {
+					source = functionSource(ctor);
+				} catch {
+					source = "";
+				}
+				held = RegExpMethods.exec(/\{\s*\[native code\]\s*\}\s*$/, source) !== null;
+			}
+			if (!held) {
+				const on = Reflect.getOwnPropertyDescriptor(prototype, "on");
+				const emit = Reflect.getOwnPropertyDescriptor(prototype, "emit");
+				held = on !== undefined && emit !== undefined && typeof on.value === "function" && typeof emit.value === "function";
+			}
+		}
+		WeakMapMethods.set(LANGUAGE_PROTOTYPES, prototype, held);
+	}
+	return held;
 }
 
 /**

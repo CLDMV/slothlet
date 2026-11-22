@@ -52,6 +52,7 @@ import {
 	handOutSettled,
 	isRawRunView,
 	isSharedLive,
+	rawBehind,
 	setViewMarker,
 	shallowCopy,
 	versionAt
@@ -116,6 +117,9 @@ const {
 	runtime_nodeWrapperOf,
 	runtime_nodeVersion,
 	runtime_prototypeAtStart,
+	runtime_inheritedAtStart,
+	runtime_classPrototypeOf,
+	runtime_loadStandIn,
 	runtime_runWriteSinceClosed,
 	runtime_nodeOpen,
 	runtime_throughRunView,
@@ -952,7 +956,8 @@ function makeRunSelf(slothlet, parentSelf, record) {
 		 * @returns {Promise<*>} The promise `then` makes.
 		 */
 		const standInThen = (onFulfilled, onRejected) => {
-			const loaded = new Promise((resolve, reject) => Reflect.apply(Reflect.get(real, "then"), real, [() => resolve(), reject]));
+			// Only the node loads here: the member is read once, through the run's views, below.
+			const loaded = runtime_loadStandIn(runtime_unwrapSelfView(real));
 			const read = PromiseMethods.then(loaded, () => {
 				let value = root;
 				for (let index = 0; index < parts.length && value !== null && value !== undefined; index++) value = value[parts[index]];
@@ -977,6 +982,17 @@ function makeRunSelf(slothlet, parentSelf, record) {
 			if (api === null || api === undefined || (typeof api !== "object" && typeof api !== "function")) return null;
 			const held = versionAt(snap.instance, api, snap.base);
 			return held === CURRENT ? null : held;
+		};
+		/**
+		 * The prototype the root had when the run started, from its saved version, when the instance gave it another since.
+		 * @param {object} atStart - The root's saved version (see rootVersion).
+		 * @returns {object|null|undefined} The prototype, or undefined while the root has the same one.
+		 */
+		const rootStartPrototype = (atStart) => {
+			const roots = slothlet.____rootPrototypes;
+			if (roots === undefined) return undefined;
+			const from = Reflect.getPrototypeOf(atStart);
+			return from === roots.held() ? undefined : from;
 		};
 		// Whether a member of the root is one the snapshot answers for: a member of the api, not one of the framework's.
 		const rootMember = (prop) => typeof prop === "string" && !SetMethods.has(RUN_FRAMEWORK_ROOTS, prop);
@@ -1061,8 +1077,11 @@ function makeRunSelf(slothlet, parentSelf, record) {
 				if (Reflect.apply(own, real, [instance])) return true;
 				if (instance === null || (typeof instance !== "object" && typeof instance !== "function")) return false;
 				const prototype = Reflect.get(view, "prototype");
+				// The run's view of the class's own prototype (read as of the run's start) stands for it too.
+				const classPrototype = runtime_classPrototypeOf(real);
 				for (let proto = Reflect.getPrototypeOf(instance); proto !== null; proto = Reflect.getPrototypeOf(proto)) {
 					if (proto === prototype) return true;
+					if (classPrototype !== null && isRawRunView(proto) && rawBehind(proto) === classPrototype) return true;
 				}
 				return false;
 			};
@@ -1086,6 +1105,31 @@ function makeRunSelf(slothlet, parentSelf, record) {
 			Reflect.get(real, prop);
 			const gate = atInstanceRoot ? runtime_rootGate(slothlet) : runtime_nodeWrapperOf(real);
 			if (gate) runtime_enforceReadGate(gate, prop, runtime_unwrapSelfView(value));
+		};
+		// Whether the view reads the node's prototypes as of the run's start (see runtime_inheritedAtStart): what it reads
+		// of the instance, as snapshotOf() does.
+		const startable = () =>
+			snap !== null &&
+			!local &&
+			real !== undefined &&
+			real !== null &&
+			!atInstanceRoot &&
+			!run.forked &&
+			!WeakMapMethods.has(RUN_OF_VIEW, real);
+		/**
+		 * Read a member the node inherits, from where the run reads it as of its start (see runtime_inheritedAtStart):
+		 * checked by the node's read gate for the reader, with the view as the receiver, so a getter runs once, on it.
+		 * @param {string|symbol} prop - The member.
+		 * @param {object|null} from - Where it is read.
+		 * @param {*} receiver - The receiver of the read.
+		 * @returns {*} The value.
+		 */
+		const inheritedRead = (prop, from, receiver) => {
+			const value = from === null ? undefined : Reflect.get(from, prop, receiver);
+			const gate = typeof prop === "string" ? runtime_nodeWrapperOf(real) : null;
+			if (gate) runtime_enforceReadGate(gate, prop, value);
+			if (value !== null && typeof value === "object" && !runtime_isApiNode(value)) return handOutRaw(snap, value);
+			return handOut(prop, value, local);
 		};
 		/**
 		 * Read a member before the run has a tree of its own.
@@ -1145,6 +1189,13 @@ function makeRunSelf(slothlet, parentSelf, record) {
 						gateShadow(prop, undefined);
 						return undefined;
 					}
+					// A member the root held neither then nor now is inherited from the prototype the root had then.
+					const from = rootStartPrototype(atStart);
+					if (from !== undefined) {
+						const value = from === null ? undefined : Reflect.get(from, prop, receiver);
+						runtime_enforceReadGate(runtime_rootGate(slothlet), prop, runtime_unwrapSelfView(value));
+						return handOut(prop, value, local);
+					}
 				} else if ("value" in held && held.value !== Reflect.getOwnPropertyDescriptor(slothlet.api, prop)?.value) {
 					runtime_enforceReadGate(runtime_rootGate(slothlet), prop, runtime_unwrapSelfView(held.value));
 					return handOut(prop, runtime_selfView(held.value), local);
@@ -1165,15 +1216,13 @@ function makeRunSelf(slothlet, parentSelf, record) {
 			if (version !== null) {
 				const held = MapMethods.get(version.members, prop);
 				if (held === undefined) {
-					if (runtime_holdsOwnMember(real, prop)) {
+					// What the node did not hold itself it inherited from the prototypes it inherited from then: read there when
+					// that answers otherwise now, and through the node when it answers the same.
+					const inherited = runtime_inheritedAtStart(real, version, snap, prop, true);
+					if (inherited !== undefined && !inherited.same) return inheritedRead(prop, inherited.from, receiver);
+					if ((inherited === undefined || !inherited.found) && runtime_holdsOwnMember(real, prop)) {
 						gateShadow(prop, undefined);
 						return undefined;
-					}
-					// What the node did not hold itself it inherited from the prototype it held then.
-					const inherited = runtime_prototypeAtStart(real, version);
-					if (inherited !== undefined) {
-						gateShadow(prop, undefined);
-						return inherited.prototype === null ? undefined : handOut(prop, Reflect.get(inherited.prototype, prop, receiver), local);
 					}
 				} else if (!held.live) {
 					const live = runtime_throughRunView(() => Reflect.get(real, prop));
@@ -1182,6 +1231,11 @@ function makeRunSelf(slothlet, parentSelf, record) {
 					if (gate) runtime_enforceReadGate(gate, prop, runtime_unwrapSelfView(held.value));
 					return handOut(prop, snapshotValue(held.value), local);
 				}
+			} else if (startable()) {
+				// A member the node inherits from a prototype of a module's own the instance changed since the run started
+				// reads as it was then.
+				const inherited = runtime_inheritedAtStart(real, null, snap, prop, false);
+				if (inherited !== undefined && !inherited.same) return inheritedRead(prop, inherited.from, receiver);
 			}
 			let value = WeakMapMethods.has(RUN_OF_VIEW, real)
 				? readThroughOuter(() => Reflect.get(real, prop))
@@ -1317,6 +1371,11 @@ function makeRunSelf(slothlet, parentSelf, record) {
 			if (atInstanceRoot) return op === "close" ? sink({ op }) : Reflect.getPrototypeOf(view) === prototype;
 			const node = runtime_nodeWrapperOf(real);
 			if (node === null) return false;
+			// A node the instance closed after the run started took either change when the run started: the run keeps it as
+			// the node took it then, checked as a write at the node's path.
+			const version = snapshotOf();
+			if (version !== null && version.extensible === true && !runtime_nodeOpen(real))
+				return runtime_runWriteSinceClosed(real, null, op, prototype, sink);
 			// Both changes are checked as the node checks a prototype set on it (closing is the same write): the views
 			// between the reader and the node each decide it as they decide one, and the node hands it to the sink.
 			// Closing goes that way too, as no view between may answer a close it did not make itself.
@@ -1388,14 +1447,19 @@ function makeRunSelf(slothlet, parentSelf, record) {
 					const version = snapshotOf();
 					if (version !== null) {
 						if (MapMethods.has(version.members, prop)) return true;
+						const inherited = runtime_inheritedAtStart(real, version, snap, prop, true);
+						if (inherited !== undefined && (inherited.found || !inherited.same)) return inherited.from !== null && prop in inherited.from;
 						if (runtime_holdsOwnMember(real, prop)) return false;
-						const inherited = runtime_prototypeAtStart(real, version);
-						if (inherited !== undefined) return inherited.prototype !== null && prop in inherited.prototype;
+					} else if (startable()) {
+						const inherited = runtime_inheritedAtStart(real, null, snap, prop, false);
+						if (inherited !== undefined && !inherited.same) return inherited.from !== null && prop in inherited.from;
 					}
 					const atStart = rootMember(prop) ? rootVersion() : null;
 					if (atStart !== null) {
 						if (Objects.hasOwn(atStart, prop)) return true;
 						if (Objects.hasOwn(slothlet.api, prop)) return false;
+						const from = rootStartPrototype(atStart);
+						if (from !== undefined) return from !== null && prop in from;
 					}
 					const gave = given();
 					if (gave !== null && Reflect.getOwnPropertyDescriptor(real, prop) === undefined)
@@ -1527,10 +1591,13 @@ function makeRunSelf(slothlet, parentSelf, record) {
 					if (closed()) return Reflect.getPrototypeOf(shell);
 					const gave = given();
 					if (gave !== null) return gave.prototype;
+					// The root reports the prototype it had when the run started, when the instance gave it another since.
+					const atStart = atInstanceRoot && !forked() ? rootVersion() : null;
+					const from = atStart === null ? undefined : rootStartPrototype(atStart);
+					if (from !== undefined) return slothlet.____rootPrototypes.reported(from);
 					const node = forked() ? current() : real;
 					if (node === undefined || node === null) return Objects.prototype;
-					const version = forked() ? null : snapshotOf();
-					const inherited = version === null ? undefined : runtime_prototypeAtStart(real, version);
+					const inherited = startable() ? runtime_prototypeAtStart(real, snapshotOf(), snap) : undefined;
 					if (inherited !== undefined) return inherited.prototype;
 					return WeakMapMethods.has(RUN_OF_VIEW, node)
 						? readThroughOuter(() => Reflect.getPrototypeOf(node))

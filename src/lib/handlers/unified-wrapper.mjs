@@ -173,7 +173,9 @@ import {
 	CURRENT,
 	domainOf,
 	handOutRaw,
+	isLanguagePrototype,
 	isRawRunView,
+	rawContent,
 	runsOpen,
 	savedThisWindow,
 	setKindCheck,
@@ -4040,21 +4042,193 @@ function runtime_snapshotPrototype(wrapper) {
 }
 
 /**
- * The prototype a node held when a run started, when the instance set another on it since and the one it held is the
- * language's own (`Object.prototype`, `Array.prototype`, `Function.prototype`, or none): the run reads the node as
- * inheriting from it. Undefined when the node holds the same one, or one the snapshot does not hand out as it is.
+ * The prototype a node holds as a run reads it, as of the run's start: the one its saved version holds (when the
+ * instance changed the node since), else the one it holds now. Undefined when the snapshot cannot tell it.
+ * @param {UnifiedWrapper} wrapper - The node's wrapper.
+ * @param {{prototype?: (object|null|symbol)}|null} version - The node's saved version, if any.
+ * @returns {{start: (object|null), now: (object|null)}|undefined} The prototype at the start and the one now.
+ * @private
+ */
+function runtime_startPrototypes(wrapper, version) {
+	const now = runtime_snapshotPrototype(wrapper);
+	const start = version !== null && version !== undefined && version.prototype !== undefined ? version.prototype : now;
+	if (start === SNAPSHOT_UNKNOWN_PROTOTYPE || now === SNAPSHOT_UNKNOWN_PROTOTYPE) return undefined;
+	return { start, now };
+}
+
+/**
+ * The prototype a run reads a node as inheriting from, when that differs from what the node reports now: the one it
+ * held when the run started, when the instance set another on it since, or the run's view of it, when the instance
+ * changed that prototype of a module's own since (see {@link runtime_inheritedAtStart}). Undefined when the run reads
+ * the node's prototype as the node reports it.
  * @param {*} node - The node, as the run's view reads through it.
- * @param {{prototype?: (object|null|symbol)}} version - The node's saved version.
+ * @param {{prototype?: (object|null|symbol)}|null} version - The node's saved version, if any.
+ * @param {object} snap - The run's snapshot.
  * @returns {{prototype: (object|null)}|undefined} The prototype.
  * @internal
  */
-function runtime_prototypeAtStart(node, version) {
-	const held = version.prototype;
-	if (held === undefined || held === SNAPSHOT_UNKNOWN_PROTOTYPE) return undefined;
+function runtime_prototypeAtStart(node, version, snap) {
 	const wrapper = runtime_nodeWrapperOf(node);
-	if (wrapper === null || runtime_snapshotPrototype(wrapper) === held) return undefined;
-	if (held !== null && held !== Objects.prototype && held !== Arrays.prototype && held !== Functions.prototype) return undefined;
-	return { prototype: held };
+	if (wrapper === null || snap === null || snap === undefined || snap.closed) return undefined;
+	const held = runtime_startPrototypes(wrapper, version);
+	if (held === undefined) return undefined;
+	const { start, now } = held;
+	if (start === null || isLanguagePrototype(start) || resolveWrapper(start) !== null)
+		return start === now ? undefined : { prototype: start };
+	if (start === now && !runtime_contentChanged(rawContent(snap, start), start)) return undefined;
+	return { prototype: handOutRaw(snap, start) };
+}
+
+/**
+ * Whether a saved version of an object holds other than the object does now: other members, other attributes, or
+ * another prototype. Read by descriptors only.
+ * @param {object} content - The version (or the object itself).
+ * @param {object} raw - The object.
+ * @returns {boolean} True when it does.
+ * @private
+ */
+function runtime_contentChanged(content, raw) {
+	if (content === raw) return false;
+	if (Reflect.getPrototypeOf(content) !== Reflect.getPrototypeOf(raw)) return true;
+	const keys = Reflect.ownKeys(raw);
+	if (Reflect.ownKeys(content).length !== keys.length) return true;
+	for (let index = 0; index < keys.length; index++) {
+		const now = Reflect.getOwnPropertyDescriptor(raw, keys[index]);
+		const then = Reflect.getOwnPropertyDescriptor(content, keys[index]);
+		if (then === undefined || !runtime_sameLookup({ from: content, described: then }, { from: raw, described: now })) return true;
+	}
+	return false;
+}
+
+/**
+ * Where a run reads a member a node inherits (one its value does not hold itself), as of the run's start: along the
+ * prototype the node held then, each prototype of a module's own read as it was then (a class's prototype, an object
+ * made with `Object.create()`; see `helpers/run-snapshot`), to the language's own prototype the chain ends on. The
+ * member is read from `from` (the version of the prototype holding it, or that end), with the run's view as the
+ * receiver. `same` tells whether the node answers the same now (its value holds no member by that key, and its chain
+ * answers as it did), `found` whether a prototype holds the member.
+ * Undefined for a member the node's value holds itself, and for a chain the snapshot cannot follow.
+ * @param {*} node - The node, as the run's view reads through it.
+ * @param {{prototype?: (object|null|symbol)}|null} version - The node's saved version, if any.
+ * @param {object} snap - The run's snapshot.
+ * @param {PropertyKey} prop - The member.
+ * @param {boolean} inherited - Whether the node is known not to have held the member itself at the start (its version
+ *   holds none); otherwise its value is asked.
+ * @returns {{from: (object|null), found: boolean, same: boolean}|undefined} Where to read it.
+ * @internal
+ */
+function runtime_inheritedAtStart(node, version, snap, prop, inherited) {
+	if (snap === null || snap === undefined || snap.closed || isFrameworkReservedKey(prop)) return undefined;
+	const wrapper = runtime_nodeWrapperOf(node);
+	if (wrapper === null) return undefined;
+	// A node fronting a module's own object holds what the object holds itself; what the node took on from its
+	// prototype (a method read through it) is still the prototype's.
+	const object = runtime_moduleObjectOf(wrapper);
+	const ownNow = object !== null ? hasOwn(object, prop) : runtime_holdsOwnMember(node, prop);
+	if (!inherited && ownNow) return undefined;
+	const held = runtime_startPrototypes(wrapper, version);
+	if (held === undefined) return undefined;
+	const atStart = runtime_inheritedLookup(held.start, prop, (proto) => rawContent(snap, proto));
+	if (atStart === undefined) return undefined;
+	return {
+		from: atStart.from,
+		found: atStart.described !== undefined,
+		same: !ownNow && runtime_sameLookup(atStart, runtime_inheritedLookup(held.now, prop, null))
+	};
+}
+
+/**
+ * Look a member up along a prototype chain of a module's own, to the language's own prototype it ends on: where it is
+ * found (a node or Proxy in the chain answers for itself, and ends it).
+ * @param {object|null} proto - The first prototype.
+ * @param {PropertyKey} prop - The member.
+ * @param {function(object): object|null} contentOf - The content each prototype is read as (null: as it is).
+ * @returns {{from: (object|null), described: (object|undefined)}|undefined} Where it is read and its descriptor there,
+ *   or undefined for a chain the lookup can't follow.
+ * @private
+ */
+function runtime_inheritedLookup(proto, prop, contentOf) {
+	for (let depth = 0; depth < 1000; depth++) {
+		if (proto === null || isLanguagePrototype(proto) || resolveWrapper(proto) !== null) return { from: proto, described: undefined };
+		const content = contentOf === null ? proto : contentOf(proto);
+		const described = Reflect.getOwnPropertyDescriptor(content, prop);
+		if (described !== undefined) return { from: content, described };
+		proto = Reflect.getPrototypeOf(content);
+	}
+	return undefined;
+}
+
+/**
+ * Whether two lookups (see {@link runtime_inheritedLookup}) answer the same: the same member found, or the same end.
+ * @param {{from: (object|null), described: (object|undefined)}} a - One.
+ * @param {{from: (object|null), described: (object|undefined)}|undefined} b - The other.
+ * @returns {boolean} True when they do.
+ * @private
+ */
+function runtime_sameLookup(a, b) {
+	if (b === undefined) return false;
+	if (a.described === undefined || b.described === undefined) return a.described === b.described && a.from === b.from;
+	const x = a.described;
+	const y = b.described;
+	return Objects.is(x.value, y.value) && x.get === y.get && x.set === y.set && "value" in x === "value" in y;
+}
+
+/**
+ * The prototype of a class a function node fronts (its function's own `prototype`), as the module holds it, or null.
+ * @param {*} node - The node.
+ * @returns {object|null} The prototype.
+ * @internal
+ */
+function runtime_classPrototypeOf(node) {
+	const wrapper = runtime_nodeWrapperOf(node);
+	return wrapper === null ? null : runtime_wrapperClassPrototype(wrapper);
+}
+
+/**
+ * {@link runtime_classPrototypeOf}, by the node's wrapper.
+ * @param {UnifiedWrapper} wrapper - The node's wrapper.
+ * @returns {object|null} The prototype.
+ * @private
+ */
+function runtime_wrapperClassPrototype(wrapper) {
+	const impl = wrapper.____slothletInternal.impl;
+	if (typeof impl !== "function") return null;
+	const described = Reflect.getOwnPropertyDescriptor(layerUnderlying(impl), "prototype");
+	const value = described !== undefined && "value" in described ? described.value : null;
+	return value !== null && typeof value === "object" ? value : null;
+}
+
+/**
+ * Save a prototype of a module's own a node hands out as itself (its class's, or the one it inherits from), for the
+ * runs open (see {@link runtime_checkpointHandout}). The language's own prototypes, nodes and Proxies are left alone.
+ * @param {UnifiedWrapper} wrapper - The node's wrapper.
+ * @param {*} prototype - The prototype.
+ * @returns {void}
+ * @private
+ */
+function runtime_checkpointPrototypeHandout(wrapper, prototype) {
+	if (prototype === null || typeof prototype !== "object" || prototype === SNAPSHOT_UNKNOWN_PROTOTYPE) return;
+	if (isLanguagePrototype(prototype) || resolveWrapper(prototype) !== null) return;
+	runtime_checkpointHandout(wrapper.slothlet, prototype);
+}
+
+/**
+ * Save the prototypes of a module's own a node inherits from (and its class's prototype, for a class), for the runs
+ * open (see {@link runtime_checkpointBuiltin}): the module's code changes them as themselves.
+ * @param {object|null} domain - The instance's domain.
+ * @param {UnifiedWrapper} node - The node's wrapper.
+ * @returns {void}
+ * @private
+ */
+function runtime_checkpointNodePrototypes(domain, node) {
+	const prototype = runtime_snapshotPrototype(node);
+	if (prototype !== SNAPSHOT_UNKNOWN_PROTOTYPE && !isLanguagePrototype(prototype) && resolveWrapper(prototype) === null)
+		runtime_checkpointBuiltin(domain, prototype);
+	// A function's own prototype is a class's, or holds what the module put on it: a plain function's holds only its
+	// `constructor`, and nothing reads it as of the start until the module gives it more.
+	const classPrototype = runtime_wrapperClassPrototype(node);
+	if (classPrototype !== null && !isLanguagePrototype(classPrototype) && Reflect.ownKeys(classPrototype).length > 1)
+		runtime_checkpointBuiltin(domain, classPrototype);
 }
 
 /**
@@ -4063,8 +4237,9 @@ function runtime_prototypeAtStart(node, version) {
  * without going through the node, which no longer takes it.
  * @param {*} node - The node, as the run's view reads through it.
  * @param {string|symbol} prop - The member.
- * @param {"set"|"define"|"delete"} op - The change.
- * @param {*} payload - The value or descriptor.
+ * @param {"set"|"define"|"delete"|"prototype"|"close"} op - The change (a member's, or the node's own: its prototype, or
+ *   closing it, with a null `prop`).
+ * @param {*} payload - The value, descriptor or prototype.
  * @param {function(object): boolean} sink - Where the run keeps it.
  * @returns {boolean} Whether it was kept.
  * @internal
@@ -4075,6 +4250,8 @@ function runtime_runWriteSinceClosed(node, prop, op, payload, sink) {
 	runtime_assertOwnedWrite(wrapper, prop);
 	if (op === "set") return sink({ op, value: runtime_wrapOnSet(wrapper, prop, payload) });
 	if (op === "define") return sink({ op, descriptor: payload });
+	if (op === "prototype") return sink({ op, prototype: payload });
+	if (op === "close") return sink({ op });
 	return sink({ op: "delete" });
 }
 
@@ -4222,8 +4399,9 @@ function runtime_checkpointFile(wrapper) {
 			const internal = node.____slothletInternal;
 			if (internal.invalid || (internal.mode === "lazy" && !internal.state.materialized)) continue;
 			beforeChange(domain, node, runtime_captureNode);
-			// What the file exports as built-ins (a `Map`) its code changes as itself.
+			// What the file exports as built-ins (a `Map`) and the prototypes of its own its code changes as themselves.
 			runtime_checkpointNodeBuiltins(domain, node);
+			runtime_checkpointNodePrototypes(domain, node);
 		}
 	});
 }
@@ -4248,6 +4426,7 @@ function runtime_checkpointLoaded(wrapper) {
 		if (internal.invalid || (internal.mode === "lazy" && !internal.state.materialized)) return;
 		beforeChange(domain, node, runtime_captureNode);
 		runtime_checkpointNodeBuiltins(domain, node);
+		runtime_checkpointNodePrototypes(domain, node);
 		const keys = Reflect.ownKeys(node);
 		for (let index = 0; index < keys.length; index++) {
 			if (isFrameworkReservedKey(keys[index])) continue;
@@ -4409,6 +4588,23 @@ const STAND_INS = new WeakSet();
  */
 export function isLazyStandIn(value) {
 	return WeakSetMethods.has(STAND_INS, value);
+}
+
+/**
+ * Load the node a stand-in stands for (see {@link isLazyStandIn}), without reading the member it stands for: a run's view
+ * over a stand-in reads that member through its own views once the node has loaded, so a getter on the path runs once
+ * (see `makeRunSelf` in `builders/api_builder`). A change queued through a stand-in that the node refused fails it, as
+ * awaiting the stand-in does.
+ * @param {object} standIn - The stand-in.
+ * @returns {Promise<void>} Settles once the node has loaded.
+ * @internal
+ */
+async function runtime_loadStandIn(standIn) {
+	const wrapper = resolveWrapper(standIn);
+	if (wrapper === null) return;
+	if (!wrapper.____slothletInternal.state.materialized) await wrapper.___materialize();
+	const refused = runtime_takeRefusedChange(wrapper, WeakMapMethods.get(WAITING_CHAINS, standIn) ?? []);
+	if (refused) throw refused;
 }
 
 /**
@@ -23357,6 +23553,8 @@ class UnifiedWrapper extends ComponentBase {
 				if (anyRunOpen() && value !== null && (typeof value === "object" || typeof value === "function")) {
 					const held = runtime_builtinBehind(value);
 					if (held !== null) runtime_checkpointHandout(wrapper.slothlet, held);
+					// So is a class's prototype, which a module's code and the host change as itself.
+					else if (prop === "prototype") runtime_checkpointPrototypeHandout(wrapper, runtime_wrapperClassPrototype(wrapper));
 				}
 				// A member fixed read-only on a frozen shell must be read as the shell holds it (proxy invariant), so it
 				// carries no view bound to the reader: it is checked against whoever calls or reads it.
@@ -23657,7 +23855,11 @@ class UnifiedWrapper extends ComponentBase {
 				internal.prototype = given;
 				return true;
 			},
-			getPrototypeOf: (target) => reportedPrototype(target, () => runtime_takeCapturedAccess(wrapper))
+			getPrototypeOf: (target) => {
+				// A prototype of a module's own handed out is saved first for the runs open (see helpers/run-snapshot).
+				if (anyRunOpen()) runtime_checkpointPrototypeHandout(wrapper, runtime_snapshotPrototype(wrapper));
+				return reportedPrototype(target, () => runtime_takeCapturedAccess(wrapper));
+			}
 		};
 		// A run that started before a change reads the node as it was (see helpers/run-snapshot): every trap that changes
 		// the node saves it first, once per window, while a run is open.
@@ -24007,6 +24209,9 @@ export function internals(consumer) {
 		runtime_nodeWrapperOf,
 		runtime_nodeVersion,
 		runtime_prototypeAtStart,
+		runtime_inheritedAtStart,
+		runtime_classPrototypeOf,
+		runtime_loadStandIn,
 		runtime_runWriteSinceClosed,
 		runtime_nodeOpen,
 		runtime_throughRunView,

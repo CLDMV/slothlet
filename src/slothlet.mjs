@@ -148,6 +148,7 @@ import {
 	copyList,
 	filterList,
 	FunctionMethods,
+	Functions,
 	listPush,
 	listSplice,
 	Map,
@@ -2021,7 +2022,14 @@ class Slothlet {
 			// A run that started before a change to the root reads the root as it was (see helpers/run-snapshot): the root's
 			// members are saved before every change to it, once per window, while a run is open.
 			const rootBarrier = () => {
-				if (anyRunOpen() && this.api && !inRunTree()) beforeChange(domainOf(this), this.api, shallowCopy);
+				if (anyRunOpen() && this.api && !inRunTree()) beforeChange(domainOf(this), this.api, rootCapture);
+			};
+			// The root's members as they are, inheriting from the prototype the root has (a function root's is on its record).
+			const rootCapture = (api) => {
+				const copy = shallowCopy(api);
+				const held = rootHeld();
+				if (Reflect.getPrototypeOf(copy) !== held) Reflect.setPrototypeOf(copy, held);
+				return copy;
 			};
 			// Whether a member is read from a prototype the function root was given: one the root does not hold itself.
 			const rootInherits = (prop) => {
@@ -2040,6 +2048,18 @@ class Slothlet {
 			const rootReported = (target) => {
 				if (!this.api || !Reflect.isExtensible(target)) return Reflect.getPrototypeOf(target);
 				return rootGiven() ? runtime_rootPrototypeFor(this, rootViews, rootHeld()) : rootHeld();
+			};
+			// A run's view of the root reads the prototype the root had when the run started (see makeRunSelf): the one the root
+			// has now, as the root holds it, and a prototype as whoever reads the root is handed it.
+			this.____rootPrototypes = {
+				held: () => (this.api ? rootHeld() : null),
+				reported: (held) =>
+					held === null ||
+					held === Objects.prototype ||
+					held === Functions.prototype ||
+					(isCallable && held === Reflect.getPrototypeOf(this.api))
+						? held
+						: runtime_rootPrototypeFor(this, rootViews, held)
 			};
 			// Node inspects a Proxy's target: the target shows the root as a node's shows the node.
 			runtime_defineRootInspect(this, proxyTarget);
