@@ -15,7 +15,7 @@
 		"INVALID_CONFIG_FILES_REQUIRED": "Erreur de configuration : 'loader.files' est requis quand loader.platform est 'browser'. Fournissez un objet manifest prégénéré avec les tableaux 'files' et 'directories'.",
 		"INVALID_CONFIG_FILES_INVALID": "Erreur de configuration : 'loader.files' doit être un objet simple avec les tableaux 'files' et 'directories'. Reçu : {received}",
 		"INVALID_CONFIG_RESOLVER_INVALID": "Erreur de configuration : 'loader.resolve' doit être une fonction quand loader.platform est 'browser'. Reçu : {received}",
-		"FOLDER_INVALID": "Erreur de configuration : 'dir' doit être une chaîne de caractères non vide. Reçu : {folder}",
+		"FOLDER_INVALID": "Erreur de configuration : le chemin doit être une chaîne non vide qui désigne un dossier existant. Reçu : {folder}",
 		"HINT_FOLDER_INVALID": "Assurez-vous que le chemin du répertoire est une chaîne valide et pointe vers un répertoire existant.",
 		"INVALID_CONFIG_MODE_INVALID": "Erreur de configuration : 'mode' doit être soit 'eager' soit 'lazy'. Reçu : {value}",
 		"HINT_INVALID_CONFIG_MODE_INVALID": "Le mode doit être soit 'eager' soit 'lazy'.",

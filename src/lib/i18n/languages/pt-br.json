@@ -15,7 +15,7 @@
 		"INVALID_CONFIG_FILES_REQUIRED": "Erro de configuração: 'loader.files' é obrigatório quando loader.platform é 'browser'. Forneça um objeto manifest pré-gerado com os arrays 'files' e 'directories'.",
 		"INVALID_CONFIG_FILES_INVALID": "Erro de configuração: 'loader.files' deve ser um objeto simples com os arrays 'files' e 'directories'. Recebido: {received}",
 		"INVALID_CONFIG_RESOLVER_INVALID": "Erro de configuração: 'loader.resolve' deve ser uma função quando loader.platform é 'browser'. Recebido: {received}",
-		"FOLDER_INVALID": "Erro de configuração: 'dir' deve ser um caminho de string não vazio. Recebido: {folder}",
+		"FOLDER_INVALID": "Erro de configuração: o caminho deve ser uma string não vazia que aponte para uma pasta existente. Recebido: {folder}",
 		"HINT_FOLDER_INVALID": "Certifique-se de que o caminho do diretório é uma string válida e aponta para um diretório existente.",
 		"INVALID_CONFIG_MODE_INVALID": "Erro de configuração: 'mode' deve ser 'eager' ou 'lazy'. Recebido: {value}",
 		"HINT_INVALID_CONFIG_MODE_INVALID": "O modo deve ser 'eager' ou 'lazy'.",

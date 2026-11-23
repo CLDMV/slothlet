@@ -15,7 +15,7 @@
 		"INVALID_CONFIG_FILES_REQUIRED": "設定エラー: loader.platform が 'browser' の場合、'loader.files' が必要です。'files' と 'directories' 配列を含む事前生成された manifest オブジェクトを提供してください。",
 		"INVALID_CONFIG_FILES_INVALID": "設定エラー: 'loader.files' は 'files' と 'directories' 配列を持つプレーンオブジェクトでなければなりません。受け取った値: {received}",
 		"INVALID_CONFIG_RESOLVER_INVALID": "設定エラー: loader.platform が 'browser' の場合、'loader.resolve' は関数でなければなりません。受け取った値: {received}",
-		"FOLDER_INVALID": "構成エラー: 'dir' は空でない文字列パスである必要があります。受信した値: {folder}",
+		"FOLDER_INVALID": "構成エラー: パスは既存のフォルダーを指す空でない文字列である必要があります。受信した値: {folder}",
 		"HINT_FOLDER_INVALID": "ディレクトリパスが有効な文字列であり、既存のディレクトリを指していることを確認してください。",
 		"INVALID_CONFIG_MODE_INVALID": "構成エラー: 'mode' は 'eager' または 'lazy' のいずれかである必要があります。受信した値: {value}",
 		"HINT_INVALID_CONFIG_MODE_INVALID": "モードは 'eager' または 'lazy' である必要があります。",

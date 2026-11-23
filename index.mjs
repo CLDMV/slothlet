@@ -32,16 +32,13 @@ const __slothletUncaughtHandler = (error) => {
 		console.error(`ERROR [${error.code}]: ${error.message}`);
 
 		// Extract and show file/line from original error stack if available
-		const stackToUse = error.originalError?.stack || error.stack;
+		const stackToUse = error.cause?.stack || error.stack;
 		if (stackToUse) {
 			const stackLines = stackToUse.split("\n");
 			// For import errors, try to extract from the error message first (more accurate)
-			if (
-				error.originalError?.message?.includes("does not provide an export") ||
-				error.originalError?.message?.includes("Cannot find module")
-			) {
-				// Extract file path from context (modulePath is the file that failed to import)
-				const failedFile = error.context?.modulePath;
+			if (error.cause?.message?.includes("does not provide an export") || error.cause?.message?.includes("Cannot find module")) {
+				// The file that failed to import is in the error details (`file`)
+				const failedFile = error.details?.file;
 				if (failedFile) {
 					console.error(`\n📍 Location: ${failedFile} (import statement)`);
 				}
@@ -63,19 +60,19 @@ const __slothletUncaughtHandler = (error) => {
 			console.error(`  ${error.hint}`);
 		}
 
-		// Show minimal context (filter out error/hint/originalError which are already shown)
-		const contextKeys = Object.keys(error.context || {}).filter((k) => k !== "error" && k !== "hint" && k !== "originalError");
+		// Show the error details (filter out error/hint/cause which are already shown)
+		const contextKeys = Object.keys(error.details || {}).filter((k) => k !== "error" && k !== "hint" && k !== "cause");
 		if (contextKeys.length > 0) {
 			console.error("\nDetails:");
 			for (const key of contextKeys) {
-				const value = error.context[key];
+				const value = error.details[key];
 				const displayValue = typeof value === "string" ? value : JSON.stringify(value, null, 2);
 				console.error(`  ${key}: ${displayValue}`);
 			}
 		}
 
-		// Show clean stack trace (prefer original error's stack)
-		const stackForDisplay = error.originalError?.stack || error.stack;
+		// Show clean stack trace (prefer the cause's stack)
+		const stackForDisplay = error.cause?.stack || error.stack;
 		if (stackForDisplay) {
 			console.error("\nStack Trace:");
 			const stackLines = stackForDisplay.split("\n").slice(1); // Skip first line (error message)

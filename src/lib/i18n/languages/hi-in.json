@@ -15,7 +15,7 @@
 		"INVALID_CONFIG_FILES_REQUIRED": "कॉन्फ़िगरेशन त्रुटि: जब loader.platform 'browser' हो तो 'loader.files' आवश्यक है। 'files' और 'directories' arrays के साथ एक पूर्व-निर्मित manifest ऑब्जेक्ट प्रदान करें।",
 		"INVALID_CONFIG_FILES_INVALID": "कॉन्फ़िगरेशन त्रुटि: 'loader.files' 'files' और 'directories' arrays वाला एक सादा object होना चाहिए। प्राप्त: {received}",
 		"INVALID_CONFIG_RESOLVER_INVALID": "कॉन्फ़िगरेशन त्रुटि: जब loader.platform 'browser' हो तो 'loader.resolve' एक function होनी चाहिए। प्राप्त: {received}",
-		"FOLDER_INVALID": "कॉन्फ़िगरेशन त्रुटि: 'dir' एक गैर-रिक्त स्ट्रिंग पथ होना चाहिए। प्राप्त: {folder}",
+		"FOLDER_INVALID": "कॉन्फ़िगरेशन त्रुटि: पथ एक गैर-रिक्त स्ट्रिंग होना चाहिए जो किसी मौजूदा फ़ोल्डर की ओर इशारा करे। प्राप्त: {folder}",
 		"HINT_FOLDER_INVALID": "सुनिश्चित करें कि निर्देशिका पथ एक मान्य स्ट्रिंग है और एक मौजूदा निर्देशिका की ओर इशारा करता है।",
 		"INVALID_CONFIG_MODE_INVALID": "कॉन्फ़िगरेशन त्रुटि: 'mode' या तो 'eager' या 'lazy' होना चाहिए। प्राप्त: {value}",
 		"HINT_INVALID_CONFIG_MODE_INVALID": "मोड या तो 'eager' या 'lazy' होना चाहिए।",
