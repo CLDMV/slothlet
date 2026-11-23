@@ -1876,7 +1876,9 @@ export class LiveContextManager {
 	 * function a call ran, or a helper's a leaf handed out, resuming inside a call whose file does not import it. Which
 	 * call ran it the stack does not say (the call awaiting a promise need not be the call that started it), so it is
 	 * held to every suspended call there is (see {@link LiveContextManager#tiedIdentity}), and whose code it is is told
-	 * when the access is checked, by its frames, as in the async runtime.
+	 * when the access is checked, by its frames, as in the async runtime. Such a function with no awaiting frame placed
+	 * (a call that returned its promise without awaiting it) is held the same way to the suspended calls that were handed
+	 * a function, when there are any (#917).
 	 *
 	 * @param {Array<{frame: object, matches: Array<object>, byFile: boolean}>} running - Placed frames of the synchronous
 	 *   part, innermost first.
@@ -1899,7 +1901,14 @@ export class LiveContextManager {
 			if (ArrayMethods.some(awaiting, (placed) => placed.matches.length))
 				return SetMethods.size(waiting) === 1 ? setToArray(waiting)[0] : { tied: setToArray(waiting) };
 			// The flows awaiting it may lie past the frames read.
-			return truncated ? undefined : UNACCOUNTED;
+			if (truncated) return undefined;
+			// No frame of a waiting call is below it, but waiting calls were handed functions to run: a function passed into
+			// a call that returned its promise without awaiting it picks up there with nothing of the call on the stack
+			// (#917). It is held to every such call, and whose code it is is told by its frames when the access is checked,
+			// as the async runtime's store has it. With no waiting call handed a function, it is code no call accounts for.
+			const handed = filterList(setToArray(waiting), (entry) => entry.record?.handed === true);
+			if (handed.length) return handed.length === 1 ? handed[0] : { tied: handed };
+			return UNACCOUNTED;
 		}
 		if (oneCall(agreed)) return agreed[0];
 		// Different functions of one file: a frame in a candidate's own file names the function as well.
@@ -3184,6 +3193,8 @@ export class LiveContextManager {
 						entryIdentity.record ??
 						(entryCaller ? { wrapper: entryCaller, parent: null, flagged: false, ceiling: entryIdentity.ceiling ?? null } : null),
 					flagged: madeCode || carriesCallerCode(thisArg, args),
+					// Handed a function to run, which may pick up after an `await` with nothing of the call on the stack (#917).
+					handed: Arrays.isArray(args) && ArrayMethods.some(args, (arg) => typeof arg === "function"),
 					ceiling,
 					// Entered by code no call accounts for (a node a module kept, used from a timer): code it runs that
 					// cannot be placed is that code's, and refused (#661).
