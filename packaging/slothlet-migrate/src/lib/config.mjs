@@ -377,11 +377,16 @@ export function applyConfigRules(model, prefix, ctx, isRoot) {
 	}
 	const mode = at("permissions.mode");
 	if (mode && mode.prop.node) result.info("config|permissions.mode", mode.prop.node.start);
-	const isolation = at("scope.isolation");
-	if (isolation && isolation.prop.node) result.info("config|scope.isolation", isolation.prop.node.start);
 
 	// v4 default changes the config does not override
 	if (isRoot && !model.hasOpaque() && model.node) {
+		if (!locate(model, ["scope", "isolation"])) {
+			result.info(
+				"config|scope.isolation",
+				model.node.start,
+				'scope.isolation now defaults to "full" (v3: "partial"): a self write made in run() / scope() stays in the run. Set scope: { isolation: "partial" } to let it reach the instance again.'
+			);
+		}
 		if (!locate(model, ["routines", "auto"])) {
 			result.info(
 				"config|autoRoutines",
