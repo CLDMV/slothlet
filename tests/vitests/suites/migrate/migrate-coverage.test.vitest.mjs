@@ -65,6 +65,8 @@ function probe(e) {
 	switch (e.kind) {
 		case "config": {
 			if (e.old === "manifest.files[].fullName") return { code: `${IMPORT}await slothlet({ manifest: { files: [{ fullName: "a" }] } });` };
+			// scope.isolation is reported for a config that does not set it (the v4 default applies only then)
+			if (e.old === "scope.isolation") return { code: `${IMPORT}await slothlet({ scope: { merge: "shallow" } });` };
 			const value = CONFIG_VALUES[e.old] ?? "1";
 			return { code: `${IMPORT}await slothlet(${nest(e.old.split("."), value)});` };
 		}
