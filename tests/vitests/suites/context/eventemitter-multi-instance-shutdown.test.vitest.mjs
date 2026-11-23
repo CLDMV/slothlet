@@ -36,10 +36,12 @@ import { BASIC_MATRIX, TEST_DIRS } from "../../setup/vitest-helper.mjs";
  * @returns {number} Wrapped listeners still attached.
  */
 const stillWrapped = (emitter) =>
-	["connect", "query", "error", "disconnect"].reduce(
-		(sum, event) => sum + emitter.rawListeners(event).filter((fn) => fn.____slothletOriginal !== undefined).length,
-		0
-	);
+	["connect", "query", "error", "disconnect"].reduce((sum, event) => {
+		// The emitter's own table: rawListeners() reports the registered function, not the wrapper standing in for it.
+		const entry = emitter._events?.[event];
+		const table = entry === undefined ? [] : typeof entry === "function" ? [entry] : entry;
+		return sum + table.filter((fn) => fn.____slothletOriginal !== undefined).length;
+	}, 0);
 
 describe.each(BASIC_MATRIX)("EventEmitter multi-instance shutdown > Config: '$name'", ({ config }) => {
 	let apiA;

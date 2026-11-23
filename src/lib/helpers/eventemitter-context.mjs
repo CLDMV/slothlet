@@ -776,6 +776,38 @@ function runtime_patchRemoveListener() {
 }
 
 /**
+ * Patch EventEmitter.prototype.rawListeners
+ *
+ * Node's `rawListeners()` returns the function the code registered for an `on` listener (and its own once wrapper for a
+ * `once` one). A listener of slothlet's own wrapping stands in for the registered function in the emitter's table, so
+ * it is reported as that function here; a once wrapper is returned as it is, as Node's is, because calling it is how the
+ * one-shot listener fires and it reports the registered function through `.listener`.
+ * @private
+ */
+function runtime_patchRawListeners() {
+	const layer = openLayer(EventEmitter.prototype.rawListeners);
+	const original = layer.below;
+
+	// Not gated on the layer: a listener this copy wrapped while active must keep reporting what was registered.
+	const patch = function (event) {
+		const raw = FunctionMethods.call(original, this, event);
+		for (let ofIndex = 0; ofIndex < raw.length; ofIndex++) {
+			const entry = raw[ofIndex];
+			if (
+				typeof entry === "function" &&
+				entry.____slothletOriginal !== undefined &&
+				entry.____slothletOnce !== true &&
+				entry.listener === entry.____slothletOriginal
+			) {
+				raw[ofIndex] = entry.____slothletOriginal;
+			}
+		}
+		return raw;
+	};
+	runtime_installPatch("rawListeners", layer, patch);
+}
+
+/**
  * Patch EventEmitter.prototype.removeAllListeners
  * @private
  */
@@ -858,6 +890,7 @@ function enableEventEmitterPatching() {
 	runtime_patchPrependOnceListener();
 	runtime_patchRemoveListener();
 	runtime_patchRemoveAllListeners();
+	runtime_patchRawListeners();
 
 	isPatchingEnabled = true;
 }
