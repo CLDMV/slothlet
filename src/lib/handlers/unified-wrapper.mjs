@@ -17297,8 +17297,10 @@ class UnifiedWrapper extends ComponentBase {
 		// the proxy traps forward to the node at this wrapper's path in the live tree instead.
 		internal.epoch = slothlet._buildEpoch ?? 0;
 		// The instance ID the node was built under: the tag its file's code carries in a stack frame. A full reload gives
-		// the instance a new ID, and code of the copy it replaced still carries this one.
-		internal.builtUnder = slothlet.instanceID ?? null;
+		// the instance a new ID, and code of the copy it replaced still carries this one. A node a kept copy loads later
+		// (a lazy node a run reaches after the instance reloaded or restarted) loads its file under the ID the copy was
+		// loaded under (see Slothlet#loadID), so it is built under that ID too.
+		internal.builtUnder = slothlet.loadID ?? slothlet.instanceID ?? null;
 		internal.state = {
 			materialized: initialImpl !== null,
 			inFlight: false,
