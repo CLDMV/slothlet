@@ -463,6 +463,8 @@
 		"PERMISSION_RULE_REASON_CALLER_REQUIRED": "rule.caller muss eine nicht-leere Zeichenkette sein",
 		"PERMISSION_RULE_REASON_TARGET_REQUIRED": "rule.target muss eine nicht-leere Zeichenkette sein",
 		"PERMISSION_RULE_REASON_TARGET_SUFFIX_UNKNOWN": "rule.target endet mit einem Suffix, das weder eine Zugriffsstufe ({levels}) noch einen Hook-Typ ({hookTypes}) benennt",
+		"PERMISSION_RULE_REASON_TARGET_PATH_INVALID": "rule.target enthält vor seinem Suffix ein ':' im API-Pfad; ein API-Pfad enthält keines",
+		"PERMISSION_RULE_REASON_TARGET_PATH_EMPTY": "rule.target hat vor seinem Suffix keinen API-Pfad; ein Suffix braucht einen Pfad davor",
 		"PERMISSION_RULE_REASON_TARGET_NOT_OWNED": "Modulcode verwaltet Regeln nur für den Teilbaum, der seinem Modul gehört, nie für den Namensraum, die Wurzelfunktionen oder die internen Schlüssel des Frameworks, es sei denn, eine ausdrückliche Erlaubnis auf \"slothlet.permissions.rules.add\" hebt diese Vorgabe auf",
 		"PERMISSION_RULE_REASON_REMOVAL_NOT_OWNED": "Modulcode entfernt nur die Regeln, die seinem eigenen Modul gehören; ein Modul, das Regeln verwalten darf, entfernt auch die Regeln anderer Module, nie die des Hosts oder des Frameworks",
 		"PERMISSION_RULE_REASON_FIELD_ACCESSOR": "Regelfelder müssen einfache Dateneigenschaften sein, keine Accessoren",

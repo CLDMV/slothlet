@@ -263,6 +263,16 @@ const SCOPES = new Map();
 const COPIES = new Map();
 
 /**
+ * Per instance ID: the URLs this copy's load hook loaded the instance's ES modules under, by file (forward-slash
+ * path), with how many there are in all. A file one module's code imports is loaded under a URL of its own (see
+ * {@link propagateInstanceQuery}), so the function a leaf's file exports there is not the function its node was built
+ * from: these are where {@link instanceCopyExports} finds that copy's exports.
+ * @type {Map<string, {count: number, files: Map<string, Set<string>>}>}
+ * @private
+ */
+const INSTANCE_ESM_URLS = new Map();
+
+/**
  * Per instance ID: the CommonJS leaves it loaded, which its private cache does not keep (each load evaluates the leaf
  * anew).
  * @type {Map<string, Set<string>>}
@@ -2022,8 +2032,19 @@ const MODULE_FILES = new Set();
  * @internal
  */
 function noteModuleFile(ref) {
-	if (typeof ref === "string" && ref !== "") SetMethods.add(MODULE_FILES, packageKey(ref));
+	if (typeof ref !== "string" || ref === "") return;
+	SetMethods.add(MODULE_FILES, packageKey(ref));
+	// The URL slothlet's loader imports a leaf under: the module its node is built from, never another module's copy.
+	if (StringMethods.includes(ref, MARKER)) SetMethods.add(LEAF_URLS, ref);
 }
+
+/**
+ * The URLs slothlet's loader imported leaves under (see {@link noteModuleFile}): {@link instanceCopyExports} leaves
+ * them out, since a node was built from what each exports.
+ * @type {Set<string>}
+ * @private
+ */
+const LEAF_URLS = new Set();
 
 /**
  * The folders a browser loaded api files from (see {@link noteModuleRoot}), each as a URL path ending in `/`.
@@ -3127,6 +3148,12 @@ function instanceCommonJSVersion(instanceID) {
  */
 function releaseScope(instanceID) {
 	MapMethods.delete(SCOPES, instanceID);
+	MapMethods.delete(INSTANCE_ESM_URLS, instanceID);
+	for (let ofIndex = 0, ofList = setToArray(LEAF_URLS); ofIndex < ofList.length; ofIndex++) {
+		const url = ofList[ofIndex];
+		if (URLSearchParamsMethods.get(new URLSearchParams(splitQuery(url)[1] ?? ""), "slothlet_instance") === instanceID)
+			SetMethods.delete(LEAF_URLS, url);
+	}
 	MapMethods.delete(COPIES, instanceID);
 	MapMethods.delete(LEAVES, instanceID);
 	MapMethods.delete(SCOPE_KEYS, instanceID);
@@ -3321,6 +3348,119 @@ function releaseInstanceScope(instanceID) {
 		return;
 	}
 	if (isKeeper() && !MapMethods.has(CLAIMS, instanceID)) releaseScope(instanceID);
+}
+
+/**
+ * Record a URL the load hook loaded one of an instance's ES modules under (see {@link INSTANCE_ESM_URLS}).
+ * @param {string} instanceID - The instance.
+ * @param {string} base - The module's URL without its query.
+ * @param {string} url - The module's URL.
+ * @returns {void}
+ * @private
+ */
+function noteInstanceModule(instanceID, base, url) {
+	let held = MapMethods.get(INSTANCE_ESM_URLS, instanceID);
+	if (!held) MapMethods.set(INSTANCE_ESM_URLS, instanceID, (held = { count: 0, files: new Map() }));
+	const path = toSlashPath(base);
+	let urls = MapMethods.get(held.files, path);
+	if (!urls) MapMethods.set(held.files, path, (urls = new Set()));
+	if (SetMethods.has(urls, url)) return;
+	SetMethods.add(urls, url);
+	held.count++;
+}
+
+/**
+ * How many copies of files an instance holds in this copy's records: the ES module URLs its load hook loaded (see
+ * {@link INSTANCE_ESM_URLS}) and the CommonJS modules its private caches keep. Copies are only ever added while the
+ * instance lives, so an equal count means nothing was loaded since.
+ * @param {string} instanceID - The instance.
+ * @returns {number} The count.
+ * @internal
+ */
+function instanceCopyCount(instanceID) {
+	let count = MapMethods.get(INSTANCE_ESM_URLS, instanceID)?.count ?? 0;
+	const scope = MapMethods.get(SCOPES, instanceID);
+	if (scope) count += MapMethods.size(scope);
+	const copies = MapMethods.get(COPIES, instanceID);
+	if (copies) for (const held of mapValues(copies)) count += MapMethods.size(held);
+	return count;
+}
+
+/**
+ * What the copies of one file an instance loaded export, as this copy's records hold them: the `module.exports` of the
+ * file kept in the instance's private CommonJS caches, and the namespace of each ES module URL its load hook loaded the
+ * file under (taken from Node's module cache, so no module is evaluated for it). A copy whose namespace cannot be had
+ * yet (its module is still being evaluated) is reported as pending. Nothing of the copies' code runs: `module.exports`
+ * is read from its descriptor, and a namespace's bindings are the module's own data.
+ * @param {string} instanceID - The instance.
+ * @param {string} filePath - The file.
+ * @returns {Array<{commonJS: boolean, value: *}|{pending: true}>} The copies' exports.
+ * @internal
+ */
+function instanceCopyExports(instanceID, filePath) {
+	const found = [];
+	const path = toSlashPath(filePath);
+	const scopes = [];
+	const scope = MapMethods.get(SCOPES, instanceID);
+	if (scope) listPush(scopes, scope);
+	const copies = MapMethods.get(COPIES, instanceID);
+	if (copies) for (const held of mapValues(copies)) listPush(scopes, held);
+	for (let ofIndex = 0, ofList = scopes; ofIndex < ofList.length; ofIndex++) {
+		for (const ofEntry of mapEntries(ofList[ofIndex])) {
+			if (toSlashPath(ofEntry[0]) !== path || ofEntry[1] === null || typeof ofEntry[1] !== "object") continue;
+			const descriptor = Reflect.getOwnPropertyDescriptor(ofEntry[1], "exports");
+			if (descriptor && "value" in descriptor) listPush(found, { commonJS: true, value: descriptor.value });
+		}
+	}
+	const urls = MapMethods.get(MapMethods.get(INSTANCE_ESM_URLS, instanceID)?.files ?? EMPTY_FILES, path);
+	if (urls) {
+		for (const url of setValues(urls)) {
+			if (SetMethods.has(UNREADABLE_NAMESPACES, url) || SetMethods.has(LEAF_URLS, url)) continue;
+			try {
+				listPush(found, { commonJS: false, value: loadedNamespace(url) });
+			} catch (error) {
+				// A module still being evaluated has no namespace to read yet; one `require()` cannot take (a graph with a
+				// top-level await) is not asked again.
+				if (error?.code === "ERR_REQUIRE_CYCLE_MODULE") listPush(found, { pending: true });
+				else SetMethods.add(UNREADABLE_NAMESPACES, url);
+			}
+		}
+	}
+	return found;
+}
+
+/**
+ * The ES module URLs whose namespace {@link loadedNamespace} cannot read.
+ * @type {Set<string>}
+ * @private
+ */
+const UNREADABLE_NAMESPACES = new Set();
+
+/**
+ * An empty map, for a lookup with nothing recorded.
+ * @type {Map<string, Set<string>>}
+ * @private
+ */
+const EMPTY_FILES = new Map();
+
+/**
+ * The namespace of an ES module Node has loaded under a URL, from Node's module cache: a `require()` of a module that
+ * imports it, which evaluates nothing the module did not already evaluate.
+ * @param {string} url - The module's URL.
+ * @returns {object} Its namespace.
+ * @throws {Error} When the module is still being evaluated.
+ * @private
+ */
+function loadedNamespace(url) {
+	const requireFn = NODE.module.createRequire(import.meta.url);
+	const id = ESM_PREFIX + url;
+	let namespace;
+	try {
+		namespace = requireFn(id);
+	} finally {
+		delete requireFn.cache[id];
+	}
+	return namespace !== null && typeof namespace === "object" && "module.exports" in namespace ? namespace["module.exports"] : namespace;
 }
 
 /**
@@ -3671,7 +3811,10 @@ function loadInstanceModule(url, context, nextLoad) {
 		};
 	}
 	const instanceID = URLSearchParamsMethods.get(params, "slothlet_instance");
-	if ((result?.format === "module" || result?.format === "module-typescript") && instanceID !== null) return sealLoadedSource(url, result);
+	if ((result?.format === "module" || result?.format === "module-typescript") && instanceID !== null) {
+		noteInstanceModule(instanceID, base, url);
+		return sealLoadedSource(url, result);
+	}
 	if (result?.format !== "commonjs" || instanceID === null) return result;
 	const filePath = NODE.url.fileURLToPath(base);
 	const importer = helperCopyImporter(params);
@@ -4789,6 +4932,8 @@ export function internals(consumer) {
 		installInstanceImportHooks,
 		instanceCommonJSFiles,
 		instanceCommonJSVersion,
+		instanceCopyCount,
+		instanceCopyExports,
 		instanceImporters,
 		loadedScriptLookup,
 		loadedScriptText,

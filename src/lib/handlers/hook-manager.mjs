@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T19:49:35-08:00 (1794973775)
+ *	@Last modified time: 2026-11-22T23:40:25-08:00 (1795419625)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -2022,13 +2022,17 @@ export class HookManager extends ComponentBase {
 	}
 
 	/**
-	 * Generate a unique hook ID.
+	 * Generate a unique hook ID: one no hook or version group holds. A reload carries hooks into a new manager under
+	 * the ids they had, and a caller may pick an id of the generated form, so the counter alone does not ensure that.
 	 *
 	 * @returns {string} Generated ID
 	 * @private
 	 */
 	#generateId() {
-		return `hook-${++this.#idCounter}`;
+		let id;
+		do id = `hook-${++this.#idCounter}`;
+		while (MapMethods.has(this.#byId, id) || this.#isGroupId(id));
+		return id;
 	}
 
 	/**

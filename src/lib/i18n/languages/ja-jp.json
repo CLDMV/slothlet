@@ -463,6 +463,8 @@
 		"PERMISSION_RULE_REASON_CALLER_REQUIRED": "rule.callerは空でない文字列である必要があります",
 		"PERMISSION_RULE_REASON_TARGET_REQUIRED": "rule.targetは空でない文字列である必要があります",
 		"PERMISSION_RULE_REASON_TARGET_SUFFIX_UNKNOWN": "rule.targetの末尾の接尾辞が、アクセスレベル（{levels}）にもフックの種類（{hookTypes}）にも該当しません",
+		"PERMISSION_RULE_REASON_TARGET_PATH_INVALID": "rule.targetの接尾辞の前のAPIパスに':'が含まれています。APIパスには含められません",
+		"PERMISSION_RULE_REASON_TARGET_PATH_EMPTY": "rule.targetの接尾辞の前にAPIパスがありません。接尾辞の前にはパスが必要です",
 		"PERMISSION_RULE_REASON_TARGET_NOT_OWNED": "モジュールのコードが管理できるのは、そのモジュールが所有するサブツリーのルールだけです。フレームワークの名前空間、ルート関数、内部キーのルールは管理できません。\"slothlet.permissions.rules.add\" への明示的な許可があれば、この既定は解除されます",
 		"PERMISSION_RULE_REASON_REMOVAL_NOT_OWNED": "モジュールのコードが削除できるのは自分のモジュールが所有するルールだけです。ルールの管理を許可されたモジュールは他のモジュールのルールも削除できますが、ホストやフレームワークのルールは削除できません",
 		"PERMISSION_RULE_REASON_FIELD_ACCESSOR": "ルールのフィールドはアクセサーではなく単純なデータプロパティでなければなりません",
