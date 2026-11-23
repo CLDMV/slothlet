@@ -661,7 +661,9 @@ export class PermissionManager extends ComponentBase {
      */
     checkHookAccess(callerPath: string | null, hookPath: string, hookType: string, callerFilePath?: string | null, targetFilePath?: string | null, runtimeContext?: object | null): boolean;
     /**
-     * Get all rules that match a given target path.
+     * Get all rules that match a given target path: a rule's target is matched by its path pattern, its level suffix
+     * (`:call`, `:read`, `:access`, `:write`, `:full`) or hook-type suffix left off, so every rule deciding an access at
+     * the path is listed.
      *
      * @param {string} targetPath - Target API path to check.
      * @returns {Array<object>} Array of matching rule objects (serialized).

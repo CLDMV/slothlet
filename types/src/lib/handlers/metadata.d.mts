@@ -253,6 +253,29 @@ export class Metadata extends ComponentBase {
         userMetadataStore: Map<any, any>;
     }): any;
     /**
+     * Start keeping which user metadata is written to this handler, for a full reload that has just read its state
+     * ({@link Metadata#exportUserState}) and builds its new copy while this handler keeps answering calls: what those
+     * calls write is handed to the new copy at the swap ({@link Metadata#takeUserChanges}).
+     * @returns {void}
+     * @package
+     */
+    trackUserChanges(): void;
+    /**
+     * Stop keeping which user metadata is written here (a reload that ended without taking it).
+     * @returns {void}
+     * @package
+     */
+    endUserChanges(): void;
+    /**
+     * Take the user metadata written to `from` since its {@link Metadata#trackUserChanges}: each key written there has
+     * here the value it has there, and one removed there is removed here. Written later than anything this handler has,
+     * it wins over it. Ends `from`'s tracking.
+     * @param {Metadata} from - The handler of the copy a full reload replaces.
+     * @returns {void}
+     * @package
+     */
+    takeUserChanges(from: Metadata): void;
+    /**
      * The currently-executing API function, as a caller object ({ path, module, metadata, version }).
      *
      * Reads `currentWrapper` from the active context-manager store — the same

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-22T23:48:43-08:00 (1795420123)
+ *	@Last modified time: 2026-11-23T03:21:38-08:00 (1795432898)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -2891,12 +2891,16 @@ export class LiveContextManager {
 
 	/**
 	 * Whether the code running now is part of a `run()` / `scope()` store's flow: a call of the instance is executing on
-	 * it, a call waiting on it is the code that picked up, or a `run()` / `scope()` callback is on the stack.
+	 * it, a call waiting on it is the code that picked up, a `run()` / `scope()` callback is on the stack, or the store is
+	 * back for work its finished run left behind (see {@link LiveContextManager#reopenFlowStore}).
 	 * @param {object} store - The store.
 	 * @returns {boolean} True when it is.
 	 * @private
 	 */
 	#partOfFlow(store) {
+		// A store put back for work its finished run left behind is among the instances only while that work runs (see
+		// reopenFlowStore): the code running now is that work, so what it schedules, and a run() it opens, are the run's.
+		if (store[REOPENED_FLOW] === true) return true;
 		if (store.__authoritativeWrapper || ArrayMethods.some(this.#enteredFor(store), (entry) => entry !== null)) return true;
 		const suspended = this.#suspendedFor(store);
 		if (SetMethods.size(suspended)) {

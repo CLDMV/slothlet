@@ -304,6 +304,19 @@ export type InstanceImportState = {
      */
     recordImports: (instanceID: string, parent: string, children: string[]) => void;
     /**
+     * - Records that an instance's
+     * file imported `self` through a runtime entry file (see noteSelfImporterHere).
+     */
+    noteSelfImporter: (instanceID: string, importer: string, url: string) => void;
+    /**
+     * - The runtime entry files a file imported `self` through.
+     */
+    selfImporterUrls: (instanceID: string, file: string) => string[];
+    /**
+     * - Forgets an instance's records.
+     */
+    forgetSelfImporters: (instanceID: string) => void;
+    /**
      * - The reader of the import graphs (see graphView).
      */
     imports: {
@@ -533,16 +546,18 @@ declare function setCallerCheck(check: (arg0: Error) => (string | null)): void;
 declare function setScriptKey(keyOf: (arg0: string) => string): void;
 /**
  * Whether sources are recorded for a script key, and whether a given one is among them (see
- * {@link recordLoadedSource}), and, when it is, whether it is a helper load of the file (see {@link HELPER_SCRIPTS}).
+ * {@link recordLoadedSource}), and, when it is, whether it is a helper load of the file (see {@link HELPER_SCRIPTS}) and
+ * the stamp of the run's own restart that loaded it, for a CommonJS leaf a run build sealed (see {@link SEALED_BUILDS}).
  * @param {string} key - The script key.
  * @param {string} [hash] - A script's hash.
- * @returns {{known: boolean, has: boolean, helper?: boolean}} The answer.
+ * @returns {{known: boolean, has: boolean, helper?: boolean, stamp?: string|null}} The answer.
  * @internal
  */
 declare function loadedScriptLookup(key: string, hash?: string): {
     known: boolean;
     has: boolean;
     helper?: boolean;
+    stamp?: string | null;
 };
 /**
  * The text of a source recorded for a script key (see {@link recordLoadedSource}): the one with the given hash, or the

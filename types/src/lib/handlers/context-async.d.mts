@@ -336,9 +336,13 @@ export class AsyncContextManager {
     /**
      * Cleanup instance context
      * @param {string} instanceID - Instance to cleanup
+     * @param {{keepFlows?: boolean}} [options] - `keepFlows`: the instance comes back on the flows it has (a restart),
+     *   so they stay its.
      * @public
      */
-    public cleanup(instanceID: string): void;
+    public cleanup(instanceID: string, { keepFlows }?: {
+        keepFlows?: boolean;
+    }): void;
     /**
      * Diagnostics for one instance (#837): what this manager holds for that instance only, never the other instances
      * the process-wide manager also serves.

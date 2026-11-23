@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T19:49:36-08:00 (1794973776)
+ *	@Last modified time: 2026-11-22T23:44:23-08:00 (1795419863)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -101,8 +101,16 @@ function copyMetadataValue(value) {
 	const proto = Objects.getPrototypeOf(value);
 	if (proto !== null && proto !== Objects.prototype) return value;
 	const copy = Objects.create(proto);
+	// Defined, not assigned: an own `__proto__` key (as `JSON.parse` makes) stays an own key of the copy, where an
+	// assignment would set the copy's prototype.
 	for (let ofIndex = 0, keys = Objects.keys(value); ofIndex < keys.length; ofIndex++)
-		copy[keys[ofIndex]] = copyMetadataValue(value[keys[ofIndex]]);
+		Objects.defineProperty(copy, keys[ofIndex], {
+			__proto__: null,
+			value: copyMetadataValue(value[keys[ofIndex]]),
+			writable: true,
+			enumerable: true,
+			configurable: true
+		});
 	return copy;
 }
 
@@ -475,7 +483,7 @@ export class Metadata extends ComponentBase {
 	 * owning module, so what is set, read or removed through the stand-in is the loaded node's own entry. Any other value
 	 * is looked up with `lookup`.
 	 * @param {Function|Object} target - Wrapper, proxy or function.
-	 * @param {function(Function|Object): (Object|null|undefined)} lookup - How the facts of a node are found.
+	 * @param {function((Function|Object)): (Object|null|undefined)} lookup - How the facts of a node are found.
 	 * @returns {Object|null|undefined} The facts.
 	 * @private
 	 * @example

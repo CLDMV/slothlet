@@ -3,7 +3,7 @@
  *	@Project: @cldmv/slothlet
  *	@Filename: /api_tests/api_test_lifecycle_results/vault/vault.mjs
  *	@Date: 2026-11-08T15:47:43-08:00 (1794181663)
- *	@Author: Shinrai
+ *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)

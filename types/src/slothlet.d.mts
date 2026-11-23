@@ -336,7 +336,7 @@ export type SlothletOptions = {
             directories: any[];
         } | undefined;
         /**
-         * - When `mode: "lazy"`, immediately begins materializing all paths in the background after init and emits `materialized:complete` once everything has loaded (the v3 `tracking: { materialization: true }` option is folded into it). A function turns it on and is called once with `{ total, timestamp }` when everything has materialized — at once when that is already so when the instance finishes loading (always in eager mode). What it throws or rejects with is reported as a `WARNING_LIFECYCLE_HANDLER_ERROR` warning.
+         * - When `mode: "lazy"`, immediately begins materializing all paths in the background after init and emits `materialized:complete` once everything has loaded (the v3 `tracking: { materialization: true }` option is folded into it). A function turns it on and is called once with `{ total, at }` (the `materialized:complete` event's payload) when everything has materialized — at once when that is already so when the instance finishes loading (always in eager mode). What it throws or rejects with is reported as a `WARNING_LIFECYCLE_HANDLER_ERROR` warning.
          */
         materialize?: boolean | Function | undefined;
         /**

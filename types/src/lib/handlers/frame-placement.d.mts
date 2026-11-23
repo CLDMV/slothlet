@@ -760,8 +760,9 @@ declare function ownReceiver(parent: {
  * runtime_outerCallers), which have to be allowed as well.
  * @param {string|null} [running=null] - The instance whose flow is running, when something names one (see the
  *   context managers' `runningInstanceID`): a file several running instances load untold apart is then that one's.
- * @returns {{wrapper: object, callers: Array<object>}|{leaves: Array<object>, callers: Array<object>}|{unplaced: true, shared?: true}|null} The
- *   definer. `shared` marks code of a file more than one running instance holds, with nothing naming which.
+ * @returns {{wrapper: object, callers: Array<object>}|{leaves: Array<object>, callers: Array<object>}|{unplaced: true, shared?: true, foreign?: true}|null} The
+ *   definer. `shared` marks code of a file more than one running instance holds, with nothing naming which; `foreign`
+ *   code at an instance's file running in a script that is not the file's (see {@link isForeignScript}).
  * @internal
  */
 declare function frameDefiner(running?: string | null): {
@@ -773,6 +774,7 @@ declare function frameDefiner(running?: string | null): {
 } | {
     unplaced: true;
     shared?: true;
+    foreign?: true;
 } | null;
 /**
  * Whether a function a leaf hands out is written in a leaf's own file and in no helper file of its instance (#726), as
