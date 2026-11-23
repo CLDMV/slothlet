@@ -1969,7 +1969,17 @@ export class LiveContextManager {
 		if (!currentID) return false;
 		if (currentID === instanceID) return true;
 		if (StringMethods.startsWith(currentID, instanceID + "__run_")) return true;
-		return MapMethods.get(this.instances, currentID)?.parentInstanceID === instanceID;
+		const store = MapMethods.get(this.instances, currentID);
+		const parent = store?.parentInstanceID;
+		if (!parent) return false;
+		if (parent === instanceID) return true;
+		// A flow of this instance under the ID a full reload is moving it from: the reload switches the instance to its new
+		// ID before its new copy loads, and moves the instance's run() / scope() stores over only once that copy is built.
+		// In between, a call a run makes is still the run's, not one on the instance's own new store.
+		const own = MapMethods.get(this.instances, instanceID);
+		if (own === undefined || own.parentInstanceID) return false;
+		const owner = own.slothlet;
+		return owner !== null && typeof owner === "object" && store.slothlet === owner;
 	}
 
 	/**
