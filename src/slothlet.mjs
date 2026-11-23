@@ -2024,11 +2024,13 @@ class Slothlet {
 				}
 				return record;
 			};
-			const rootPrototypeNow = () => {
+			// The root's record, its prototype brought up to date: the root file's function's until the root is given one.
+			const rootRecordNow = () => {
 				const rootPrototype = rootRecord();
 				if (!rootPrototype.given) rootPrototype.prototype = Reflect.getPrototypeOf(this.api);
-				return rootPrototype.prototype;
+				return rootPrototype;
 			};
+			const rootPrototypeNow = () => rootRecordNow().prototype;
 			// Whether the root reads a tree a run has of its own: the root's target is shared with the instance.
 			const inRunTree = () => this.api !== this[INSTANCE_FIELD]("api");
 			// A run that started before a change to the root reads the root as it was (see helpers/run-snapshot): the root's
@@ -2046,14 +2048,12 @@ class Slothlet {
 			// Whether a member is read from a prototype the function root was given: one the root does not hold itself.
 			const rootInherits = (prop) => {
 				if (!isCallable) return false;
-				rootPrototypeNow();
-				return rootRecord().given && !Objects.hasOwn(this.api, prop);
+				return rootRecordNow().given && !Objects.hasOwn(this.api, prop);
 			};
 			// The prototype the root has now, as the root itself holds it: an object root's is its api's.
 			const rootHeld = () => (isCallable ? rootPrototypeNow() : Reflect.getPrototypeOf(this.api));
 			// Whether the root has a prototype it was given (an object root starts with `Object.prototype`).
-			const rootGiven = () =>
-				isCallable ? (rootPrototypeNow(), rootRecord().given) : Reflect.getPrototypeOf(this.api) !== Objects.prototype;
+			const rootGiven = () => (isCallable ? rootRecordNow().given : Reflect.getPrototypeOf(this.api) !== Objects.prototype);
 			// The views module code is handed of a prototype the root was given, kept for as long as the root has it, and
 			// the prototype as whoever reads the root now is handed it: the host the object, a module its own view.
 			const rootViews = { prototypeViews: null };
