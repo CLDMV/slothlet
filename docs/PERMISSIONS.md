@@ -1700,6 +1700,21 @@ Like every built-in call rule, it is enforced only while the permission system i
 { caller: "session.**", target: "slothlet.context.set", effect: "allow" }
 ```
 
+### `run.self` and `scope({ self: true })`
+
+[`run.self()`](CONTEXT-PROPAGATION.md#apislothletcontextrunselfcontextdata-callback-args) hands its callback the run's own view, and `scope({ self: true })` hands over the same view, so both are decided under the rules on `slothlet.context.run.self`. That target is a path under `slothlet.context.run`: with no call rule naming `run.self` itself for the caller, the rules on `run` decide it, so allowing or refusing `run` allows or refuses `run.self()` and `scope({ self: true })` with it. A rule naming `run.self` is matched by its path, whatever level it carries, as any target is ([Access levels](#access-levels)): `slothlet.context.run.self`, `…:call`, `…:access` and `…:full` all decide the call, while a `:read` or `:write` rule decides no call and leaves it to the rules on `run`.
+
+`scope({ self: true })` is decided under the rules on `slothlet.context.scope` as well, as any `scope()` call is; a plain `scope()` hands over no view and is decided under the rules on `scope` alone.
+
+```javascript
+// mod may open runs, but not hand itself the run's view:
+{ caller: "mod.**", target: "slothlet.context.run.self:call", effect: "deny" }
+// self.slothlet.context.run(...)                 → runs
+// self.slothlet.context.scope({ context, fn })   → runs
+// self.slothlet.context.run.self(...)            → PERMISSION_DENIED
+// self.slothlet.context.scope({ ..., self: true }) → PERMISSION_DENIED
+```
+
 ### Lifecycle methods and default routines — Host-Only
 
 Reloading or shutting the instance down is a host decision, so built-in rules deny it to modules.
