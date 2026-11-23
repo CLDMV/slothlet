@@ -1737,7 +1737,7 @@ class Slothlet {
 		// (#529) — decided here, per load, once the effective list is known.
 		this.handlers.permissionManager?.applyDefaultRoutineRules(this.config.routines.entries);
 
-		// A reload in a host with no AsyncLocalStorage: the new components take the instance's permission state, hooks and
+		// A reload with no window (a runtime that cannot carry marks): the new components take the instance's permission state, hooks and
 		// metadata now, as calls made while the reload runs reach them.
 		if (this.#carryOnLoad !== null) this.#carryOnLoad();
 
@@ -2338,9 +2338,11 @@ class Slothlet {
 		const nextScope = keepInstanceID ? null : this.#claimFreshScope(`${splitText(`${oldInstanceID}`, "_reload_")[0]}_reload`);
 		// Until the new copy is built and swapped in, every call is answered by the copy the instance has, with its
 		// components (permission rules and mode, hooks, metadata, ownership), config and api tree: the build works on a
-		// set of its own (see openReloadWindow). A host with no AsyncLocalStorage cannot keep the two apart: there the
-		// build replaces the instance's own, and what it had is kept to put back if the reload fails.
-		const window = AsyncLocalStorage ? this.#openReloadWindow() : null;
+		// set of its own (see openReloadWindow). The build is told apart by the mark its flow carries: the live runtime
+		// carries it with its own flows, so it needs no AsyncLocalStorage for it (a browser). Only a runtime that cannot
+		// carry the mark keeps nothing apart: there the build replaces the instance's own, and what it had is kept to put
+		// back if the reload fails.
+		const window = carriesMarks(this) ? this.#openReloadWindow() : null;
 		const kept = window === null ? this.#keepForFailedReload() : null;
 		// A reload of an instance that has shut down loads a new copy before it knows whether the rest of the rebuild works;
 		// one that fails leaves the instance shut down, and what its modules kept refuses them again.
@@ -2390,7 +2392,7 @@ class Slothlet {
 	}
 
 	/**
-	 * After a reload with no window (a host with no AsyncLocalStorage, where the build replaced the instance's own set),
+	 * After a reload with no window (a runtime that cannot carry marks, where the build replaced the instance's own set),
 	 * the runs that recorded the instance's copy token keep the set the instance had before the reload: the token takes
 	 * it, and the fields answer through {@link Slothlet#readField} until no such token is left.
 	 * @param {object} kept - What {@link Slothlet#keepForFailedReload} took before the build.
@@ -3163,7 +3165,7 @@ class Slothlet {
 	/**
 	 * Which copy a change to the api tree made now is made in: null for the instance's own (code outside any run, and
 	 * the instance's own work), the run's record for code in a `run()` / `scope()`, and `undefined` for a build, which
-	 * changes the set it builds, or a host with no AsyncLocalStorage, which cannot tell runs apart from the instance.
+	 * changes the set it builds, or a runtime that cannot carry marks, which cannot tell runs apart from the instance.
 	 * @returns {object|null|undefined} The writer.
 	 * @private
 	 */
@@ -4029,7 +4031,7 @@ class Slothlet {
 	 * @param {{instanceID: string, require: Function, release: Function}|null} nextScope - The claimed scope a normal
 	 *   reload switches to, or null for `instance: "keep"`.
 	 * @param {string} oldInstanceID - The instance's ID when the reload started.
-	 * @param {object|null} window - The reload's window, or null where the host has no AsyncLocalStorage.
+	 * @param {object|null} window - The reload's window, or null where the runtime cannot carry marks.
 	 * @returns {Promise<Object>} The bound API.
 	 * @private
 	 */
@@ -4305,7 +4307,7 @@ class Slothlet {
 	}
 
 	/**
-	 * Without a window (a host with no AsyncLocalStorage), the new copy's freshly made components take, before any of its
+	 * Without a window (a runtime that cannot carry marks), the new copy's freshly made components take, before any of its
 	 * modules load, the permission state (rules, event rules, principals, mode), hooks, metadata and event-delivery
 	 * strategy the instance has, so a call made while the reload runs, which reaches them, is held to the same rules and
 	 * hooks as before it. Called from load() once the components exist. The seal goes on at the end of the reload, as the
