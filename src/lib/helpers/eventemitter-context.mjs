@@ -252,6 +252,10 @@ function runtime_wrapEventListener(listener) {
 
 	// Attach metadata for cleanup and identification
 	runtime_wrappedListener.____slothletOriginal = listener;
+	// Node reports a listener through `.listener` when the function in its table stands in for it (its own once wrapper
+	// does): `listeners()`, `listenerCount(event, listener)` and the `newListener` / `removeListener` events then give the
+	// function the code registered, as they do without slothlet, and `removeListener(event, listener)` finds it.
+	runtime_wrappedListener.listener = listener;
 	runtime_wrappedListener.____slothletResource = resource;
 	// Drops the captured context at the last shutdown (#605 review), whether or not the wrapper can be
 	// taken off its emitter: a released wrapper calls its listener directly and needs neither capture.
@@ -462,6 +466,42 @@ function runtime_untrackSpecificWrapper(emitter, event, originalListener, wrappe
 }
 
 /**
+ * The entry Node's `removeListener(event, listener)` takes off: the last one in the emitter's table that is `listener`
+ * or reports it through `.listener`.
+ * @param {EventEmitter} emitter - EventEmitter instance
+ * @param {string|symbol} event - Event name
+ * @param {Function} listener - The function handed to `removeListener`
+ * @returns {Function|undefined} The entry, or undefined when the table has none.
+ * @private
+ */
+function runtime_lastEntryFor(emitter, event, listener) {
+	const events = emitter._events;
+	if (events === null || typeof events !== "object") return undefined;
+	const entry = events[event];
+	if (typeof entry === "function") return entry === listener || entry.listener === listener ? entry : undefined;
+	if (!Arrays.isArray(entry)) return undefined;
+	for (let index = entry.length - 1; index >= 0; index--) {
+		const candidate = entry[index];
+		if (candidate === listener || candidate.listener === listener) return candidate;
+	}
+	return undefined;
+}
+
+/**
+ * Whether `candidate` is one of the wrappers this copy tracks for `listener` on the emitter's event.
+ * @param {EventEmitter} emitter - EventEmitter instance
+ * @param {string|symbol} event - Event name
+ * @param {Function} listener - The registered function
+ * @param {Function} candidate - The entry
+ * @returns {boolean} True when it is.
+ * @private
+ */
+function runtime_isTrackedWrapper(emitter, event, listener, candidate) {
+	const wrappers = MapMethods.get(MapMethods.get(WeakMapMethods.get(wrappedListeners, emitter), event), listener);
+	return ArrayMethods.indexOf(wrappers, candidate) !== -1;
+}
+
+/**
  * Check if a listener should be wrapped
  * @param {Function} listener - Listener function to check
  * @returns {boolean} True if listener should be wrapped
@@ -601,6 +641,7 @@ function runtime_patchOnce() {
 			runtime_onceWrapper.____slothletResource = null;
 		};
 		runtime_onceWrapper.____slothletDone = wrapped.____slothletDone;
+		runtime_onceWrapper.____slothletOnce = true;
 		runtime_onceWrapper.listener = listener;
 
 		runtime_trackListener(this, event, listener, runtime_onceWrapper);
@@ -684,6 +725,7 @@ function runtime_patchPrependOnceListener() {
 			runtime_onceWrapper.____slothletResource = null;
 		};
 		runtime_onceWrapper.____slothletDone = wrapped.____slothletDone;
+		runtime_onceWrapper.____slothletOnce = true;
 		runtime_onceWrapper.listener = listener;
 
 		runtime_trackListener(this, event, listener, runtime_onceWrapper);
@@ -707,7 +749,18 @@ function runtime_patchRemoveListener() {
 		// Look up the wrapped listener
 		const wrapped = runtime_getWrappedListener(this, event, listener);
 		if (wrapped) {
-			// Remove the wrapped version
+			// Node takes off the last entry that is `listener` or reports it through `.listener` (as every wrapper here
+			// does), and tells `removeListener` handlers the function it was handed. Handed the registered function, it
+			// does both as without slothlet; the tracking follows the entry it took.
+			const taken = runtime_lastEntryFor(this, event, listener);
+			if (taken !== undefined) {
+				// Read before Node runs any `removeListener` handler, which can change the tracking.
+				const ours = runtime_isTrackedWrapper(this, event, listener, taken);
+				const result = FunctionMethods.call(original, this, event, listener);
+				if (ours) runtime_untrackSpecificWrapper(this, event, listener, taken);
+				return result;
+			}
+			// Not in the emitter's table as Node keeps it (a table edited by hand): the tracked wrapper is taken off.
 			const result = FunctionMethods.call(original, this, event, wrapped);
 			// Cleanup tracking
 			runtime_untrackListener(this, event, listener);
@@ -918,10 +971,10 @@ function cleanupEventEmitterResources() {
 							wrappers = ofEntry[1];
 						for (let ofIndex = 0, ofList = wrappers; ofIndex < ofList.length; ofIndex++) {
 							const wrapper = ofList[ofIndex];
-							// A once wrapper carries `.listener`. It is replaced by a plain one-shot wrapper that
-							// holds nothing of slothlet's (no captured resource, no pinned caller), so one that never
-							// fires keeps no instance alive; it reports the listener as Node's own once wrapper does.
-							MapMethods.set(restore, wrapper, wrapper.listener === undefined ? original : runtime_plainOnce(emitter, event, original));
+							// A once wrapper is replaced by a plain one-shot wrapper that holds nothing of slothlet's (no
+							// captured resource, no pinned caller), so one that never fires keeps no instance alive; it
+							// reports the listener as Node's own once wrapper does.
+							MapMethods.set(restore, wrapper, wrapper.____slothletOnce === true ? runtime_plainOnce(emitter, event, original) : original);
 						}
 					}
 					const entry = events[event];
