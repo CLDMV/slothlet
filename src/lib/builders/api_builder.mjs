@@ -6023,11 +6023,6 @@ export class ApiBuilder extends ComponentBase {
 			}
 		};
 
-		// Remove the `hook` namespace when hooks are disabled (unless diagnostics mode)
-		if (!config.hook?.enabled && config.diagnostics !== true) {
-			delete namespace.hook;
-		}
-
 		// Add diagnostics if enabled
 		if (config.diagnostics === true) {
 			namespace.diag = {

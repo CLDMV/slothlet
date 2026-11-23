@@ -99,16 +99,15 @@ const ALWAYS_PRESENT_KEYS = [
 ];
 
 /**
- * `hook` is present only when hooks are enabled or `diagnostics` is true (#821).
- * @param {{ diagnostics: boolean, hook: { enabled: boolean } }} cfg - Matrix config.
+ * `hook` is on every instance (#821); the `hook` option only sets whether hooks start enabled.
  * @returns {boolean} Whether `api.slothlet.hook` is expected.
  */
-const hookExpected = ({ diagnostics, hook }) => hook.enabled === true || diagnostics === true;
+const hookExpected = () => true;
 
 /**
  * Keys that must NEVER be present on `api.slothlet` regardless of any config.
  * `hooks` (plural) is never assigned to the namespace. The actual hook API is `hook`
- * (singular), present only when hooks are enabled or diagnostics is on.
+ * (singular), present on every instance.
  * @type {string[]}
  */
 const NEVER_PRESENT_KEYS = ["hooks"];
@@ -172,7 +171,7 @@ const MATRIX = [
 
 describe("api.slothlet - diagnostics endpoint availability", () => {
 	describe.each(MATRIX)("$label", ({ diagnostics, hook }) => {
-		const withHook = hookExpected({ diagnostics, hook });
+		const withHook = hookExpected();
 		let api;
 
 		beforeEach(async () => {
@@ -251,19 +250,12 @@ describe("api.slothlet - diagnostics endpoint availability", () => {
 				expectKeysPresent(api.slothlet.context, EXPECTED_CONTEXT_SUBKEYS, "api.slothlet.context");
 			});
 
-			if (withHook) {
-				it("api.slothlet.hook should have on, remove, clear, off, enable, disable, list", () => {
-					expectKeysPresent(api.slothlet.hook, EXPECTED_HOOK_SUBKEYS, "api.slothlet.hook");
-					for (const key of EXPECTED_HOOK_SUBKEYS) {
-						expect(typeof api.slothlet.hook[key], `api.slothlet.hook.${key} should be a function`).toBe("function");
-					}
-				});
-			} else {
-				it("api.slothlet.hook should be absent when hook is off and diagnostics is not true (#821)", () => {
-					expect(api.slothlet.hook).toBeUndefined();
-					expect(Object.keys(api.slothlet)).not.toContain("hook");
-				});
-			}
+			it("api.slothlet.hook should have on, remove, clear, off, enable, disable, list (on every instance, #821)", () => {
+				expectKeysPresent(api.slothlet.hook, EXPECTED_HOOK_SUBKEYS, "api.slothlet.hook");
+				for (const key of EXPECTED_HOOK_SUBKEYS) {
+					expect(typeof api.slothlet.hook[key], `api.slothlet.hook.${key} should be a function`).toBe("function");
+				}
+			});
 
 			it("api.slothlet.metadata should have global, set, remove", () => {
 				expectKeysPresent(api.slothlet.metadata, EXPECTED_METADATA_SUBKEYS, "api.slothlet.metadata");

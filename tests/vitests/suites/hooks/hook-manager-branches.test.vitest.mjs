@@ -66,10 +66,9 @@ describe("HookManager.getHooksForPath — hooks disabled fast-path (line 377)", 
 		expect(result).toBe(5);
 	});
 
-	it("api.slothlet.hook is absent when hook:false, and API calls still return their results (#821)", async () => {
-		// With hook off (and diagnostics not true) the hook namespace is not exposed at all,
-		// so there is nothing to register; calls run straight through.
-		expect(api.slothlet.hook).toBeUndefined();
+	it("api.slothlet.hook is present when hook:false, and API calls still return their results (#821)", async () => {
+		// The namespace is on every instance so hooks can be enabled at runtime; with hook off, calls run straight through.
+		expect(typeof api.slothlet.hook.on).toBe("function");
 		expect(await api.math.add(2, 3)).toBe(5);
 	});
 });
