@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-23T08:13:14-08:00 (1795450394)
+ *	@Last modified time: 2026-11-23T14:42:46-08:00 (1795473766)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -26,7 +26,7 @@
  * @internal
  */
 import { segmentsOf } from "#helpers/segments";
-import { AsyncResource, isNode, util } from "#helpers/platform";
+import { AsyncResource, isNode, scheduleMacrotask, util } from "#helpers/platform";
 import {
 	rememberNewest,
 	LOADED_BY_SPECIFIER,
@@ -60,6 +60,9 @@ import {
 	Math,
 	Objects,
 	Processes,
+	Promise,
+	promiseAll,
+	PromiseMethods,
 	PrototypeFunctions,
 	Reflect,
 	RegExp,
@@ -95,6 +98,8 @@ const {
 	instanceCommonJSVersion,
 	instanceCopyCount,
 	instanceCopyExports,
+	instanceCopyFiles,
+	instanceCopyReads,
 	instanceImporters,
 	loadedScriptLookup,
 	loadedScriptText,
@@ -5811,6 +5816,161 @@ function leafOfCopy(slothlet, fn) {
 }
 
 /**
+ * The most rounds {@link settleLeafCopies} builds folders in: each round builds the folders one level further down
+ * toward the files copies were loaded of.
+ * @type {number}
+ * @private
+ */
+const SETTLE_ROUNDS = 32;
+
+/**
+ * Per instance: the counts {@link settleLeafCopies} last found nothing to build at, so a settle with nothing loaded
+ * since returns at once.
+ * @type {WeakMap<object, string>}
+ * @private
+ */
+const SETTLED_AT = new WeakMap();
+
+/**
+ * The lazy folders of an instance not built yet, by the location {@link LEAF_FILES} indexes each at: a folder whose
+ * load is out is left to that load, which settles the copies of its own files when it ends.
+ * @param {object} slothlet - The instance.
+ * @returns {Array<{at: string, wrapper: object}>} The folders.
+ * @private
+ */
+function runtime_unbuiltFolders(slothlet) {
+	const files = WeakMapMethods.get(LEAF_FILES, slothlet);
+	const found = [];
+	if (files === undefined) return found;
+	for (const ofEntry of mapEntries(files)) {
+		for (const reference of setValues(ofEntry[1])) {
+			const wrapper = WeakRefMethods.deref(reference);
+			const internal = wrapper?.____slothletInternal;
+			if (
+				!internal ||
+				internal.mode !== "lazy" ||
+				typeof internal.materializeFunc !== "function" ||
+				internal.state?.materialized ||
+				internal.state?.inFlight ||
+				runtime_isGone(wrapper)
+			)
+				continue;
+			listPush(found, { at: ofEntry[0], wrapper });
+		}
+	}
+	return found;
+}
+
+/**
+ * Per instance: the files vitest's module runner loaded a module of carrying the instance's query, with the instance ID
+ * and the size of the runner's module record they were read at (see {@link runtime_runnerCopyFiles}).
+ * @type {WeakMap<object, {instanceID: string, size: number, files: Array<string>}>}
+ * @private
+ */
+const RUNNER_COPY_FILES = new WeakMap();
+
+/**
+ * The comparable paths of the files vitest's module runner loaded a module of carrying an instance's query: read again
+ * only when the runner has loaded modules since.
+ * @param {object} slothlet - The instance.
+ * @param {string} instanceID - Its ID.
+ * @returns {Array<string>} The files.
+ * @private
+ */
+function runtime_runnerCopyFiles(slothlet, instanceID) {
+	if (RUNNER_MAPS.files === null) return [];
+	const size = RUNNER_MAPS.ids === null ? MapMethods.size(RUNNER_MAPS.files) : MapMethods.size(RUNNER_MAPS.ids);
+	const held = WeakMapMethods.get(RUNNER_COPY_FILES, slothlet);
+	if (held !== undefined && held.instanceID === instanceID && held.size === size) return held.files;
+	const files = [];
+	for (const file of mapKeys(RUNNER_MAPS.files)) {
+		if (typeof file === "string" && runtime_runnerCopies(instanceID, file).length) listPush(files, toComparablePath(file));
+	}
+	WeakMapMethods.set(RUNNER_COPY_FILES, slothlet, { instanceID, size, files });
+	return files;
+}
+
+/**
+ * The lazy folders of {@link runtime_unbuiltFolders} that hold a file an instance's modules loaded a copy of (see
+ * {@link leafOfCopy}): under Node's loader and in its private CommonJS caches, and under vitest's module runner a file a
+ * module carrying the instance's query was evaluated from.
+ * @param {object} slothlet - The instance.
+ * @param {string} instanceID - Its ID.
+ * @param {Array<{at: string, wrapper: object}>} folders - The folders.
+ * @returns {Array<object>} The folders' wrappers.
+ * @private
+ */
+function runtime_foldersHoldingCopies(slothlet, instanceID, folders) {
+	const due = [];
+	const files = concatLists(mapList(instanceCopyFiles(instanceID), toComparablePath), runtime_runnerCopyFiles(slothlet, instanceID));
+	if (!files.length) return due;
+	for (let ofIndex = 0, ofList = folders; ofIndex < ofList.length; ofIndex++) {
+		const folder = ofList[ofIndex];
+		const prefix = StringMethods.endsWith(folder.at, "/") ? folder.at : folder.at + "/";
+		for (let index = 0; index < files.length; index++) {
+			if (!StringMethods.startsWith(files[index], prefix)) continue;
+			if (!ArrayMethods.includes(due, folder.wrapper)) listPush(due, folder.wrapper);
+			break;
+		}
+	}
+	return due;
+}
+
+/**
+ * Build the nodes of an instance's leaf files that its modules loaded copies of before the nodes were built, and read
+ * the copies Node can only give asynchronously, so a call of a copy is checked as a call of its node from the start (see
+ * {@link leafOfCopy}). A lazy tree builds a folder's nodes only once something reaches the folder; a module that imports
+ * a file of the folder itself reaches it, so the folders down to that file are built, and no other. A copy whose module
+ * graph has a top-level await is read once its evaluation has finished (see `instanceCopyReads` in
+ * `helpers/instance-imports`). Awaited where the instance finishes loading something: its build, an `api.add()`, a lazy
+ * folder's load. Only while the instance's permission system is on: otherwise no call of a copy is checked, and a lazy
+ * tree builds what something reaches, as ever. A folder that fails to load is left to fail where it is reached.
+ * @param {object} slothlet - The instance.
+ * @returns {Promise<void>} Settles once done.
+ * @internal
+ */
+async function settleLeafCopies(slothlet) {
+	if (!runtime_checksPermissions(slothlet)) return;
+	const instanceID = slothlet.instanceID;
+	if (typeof instanceID !== "string") return;
+	const waited = new WeakSet();
+	for (let round = 0; round < SETTLE_ROUNDS; round++) {
+		// Reading the copies of the files built so far starts the reads a top-level await needs.
+		runtime_indexLeafCopies(slothlet);
+		const reads = filterList(instanceCopyReads(instanceID), (read) => !WeakSetMethods.has(waited, read));
+		if (reads.length) {
+			// A copy whose module has finished evaluating is read within the turn; one still evaluating (imported by a
+			// call that has not finished) is not waited for: it is read when its evaluation ends, and the check of a call
+			// of it reads it again until then.
+			for (let index = 0; index < reads.length; index++) WeakSetMethods.add(waited, reads[index]);
+			await new Promise((resolve) => {
+				PromiseMethods.then(promiseAll(reads), resolve, resolve);
+				scheduleMacrotask(resolve);
+			});
+			continue;
+		}
+		const folders = runtime_unbuiltFolders(slothlet);
+		if (!folders.length) return;
+		const signature =
+			instanceID +
+			"\u0000" +
+			instanceCopyCount(instanceID) +
+			"\u0000" +
+			(RUNNER_MAPS.ids === null ? 0 : MapMethods.size(RUNNER_MAPS.ids)) +
+			"\u0000" +
+			folders.length;
+		if (WeakMapMethods.get(SETTLED_AT, slothlet) === signature) return;
+		const due = runtime_foldersHoldingCopies(slothlet, instanceID, folders);
+		if (!due.length) {
+			WeakMapMethods.set(SETTLED_AT, slothlet, signature);
+			return;
+		}
+		await promiseAll(mapList(due, (wrapper) => PromiseMethods.catch(wrapper.___materialize(), () => {})));
+	}
+	runtime_indexLeafCopies(slothlet);
+}
+
+/**
  * Whose code is running while no call of an instance's is (#597): the code nearest the stack's top that is not
  * slothlet's own or Node's decides. Code written in a file a module's leaves were built from is those leaves'; code of
  * the instance no leaf accounts for (a helper file of a module's, code compiled by someone) is no one's, and is refused
@@ -6284,6 +6444,7 @@ export function internals(consumer) {
 		setInboundOriginal,
 		setModuleNodeResolver,
 		setResultAttributor,
+		settleLeafCopies,
 		stackHoldsInstanceCode,
 		supplierChainCeiling
 	};

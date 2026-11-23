@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-22T23:50:49-08:00 (1795420249)
+ *	@Last modified time: 2026-11-23T14:42:49-08:00 (1795473769)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -93,6 +93,7 @@ import {
 	NativeProxy,
 	Objects,
 	Processes,
+	PromiseMethods,
 	PrototypeFunctions,
 	Reflect,
 	RegExpMethods,
@@ -3148,6 +3149,13 @@ function instanceCommonJSVersion(instanceID) {
  */
 function releaseScope(instanceID) {
 	MapMethods.delete(SCOPES, instanceID);
+	const released = MapMethods.get(INSTANCE_ESM_URLS, instanceID);
+	if (released)
+		for (const urls of mapValues(released.files))
+			for (const url of setValues(urls)) {
+				MapMethods.delete(ASYNC_NAMESPACES, url);
+				MapMethods.delete(NAMESPACE_READS, url);
+			}
 	MapMethods.delete(INSTANCE_ESM_URLS, instanceID);
 	for (let ofIndex = 0, ofList = setToArray(LEAF_URLS); ofIndex < ofList.length; ofIndex++) {
 		const url = ofList[ofIndex];
@@ -3416,13 +3424,26 @@ function instanceCopyExports(instanceID, filePath) {
 	if (urls) {
 		for (const url of setValues(urls)) {
 			if (SetMethods.has(UNREADABLE_NAMESPACES, url) || SetMethods.has(LEAF_URLS, url)) continue;
+			if (MapMethods.has(ASYNC_NAMESPACES, url)) {
+				listPush(found, { commonJS: false, value: MapMethods.get(ASYNC_NAMESPACES, url) });
+				continue;
+			}
+			if (MapMethods.has(NAMESPACE_READS, url)) {
+				listPush(found, { pending: true });
+				continue;
+			}
 			try {
 				listPush(found, { commonJS: false, value: loadedNamespace(url) });
 			} catch (error) {
-				// A module still being evaluated has no namespace to read yet; one `require()` cannot take (a graph with a
-				// top-level await) is not asked again.
+				// A module still being evaluated has no namespace to read yet. One whose graph has a top-level await
+				// cannot be had by `require()` at all: it is read by an `import()` of the same URL, which evaluates
+				// nothing again and settles once the module has (see readNamespaceLater). Any other failure is not asked
+				// again.
 				if (error?.code === "ERR_REQUIRE_CYCLE_MODULE") listPush(found, { pending: true });
-				else SetMethods.add(UNREADABLE_NAMESPACES, url);
+				else if (error?.code === "ERR_REQUIRE_ASYNC_MODULE") {
+					readNamespaceLater(instanceID, url);
+					listPush(found, { pending: true });
+				} else SetMethods.add(UNREADABLE_NAMESPACES, url);
 			}
 		}
 	}
@@ -3435,6 +3456,96 @@ function instanceCopyExports(instanceID, filePath) {
  * @private
  */
 const UNREADABLE_NAMESPACES = new Set();
+
+/**
+ * The namespaces of copies whose module graph has a top-level await, read by {@link readNamespaceLater}, by URL.
+ * @type {Map<string, object>}
+ * @private
+ */
+const ASYNC_NAMESPACES = new Map();
+
+/**
+ * The reads {@link readNamespaceLater} has not finished yet, by URL, each with the instance it is for.
+ * @type {Map<string, {instanceID: string, done: Promise<void>}>}
+ * @private
+ */
+const NAMESPACE_READS = new Map();
+
+/**
+ * Read the namespace of a copy `require()` cannot take (its module graph has a top-level await) by an `import()` of its
+ * URL: Node hands back the module it already loaded under that URL, once its evaluation has finished, and evaluates
+ * nothing again. The namespace is kept in {@link ASYNC_NAMESPACES}; a read that fails leaves the URL unreadable.
+ * @param {string} instanceID - The instance the copy is of.
+ * @param {string} url - The copy's URL.
+ * @returns {void}
+ * @private
+ */
+function readNamespaceLater(instanceID, url) {
+	if (MapMethods.has(NAMESPACE_READS, url)) return;
+	let done;
+	try {
+		done = PromiseMethods.then(
+			import(url),
+			(namespace) => {
+				const value =
+					namespace !== null && typeof namespace === "object" && "module.exports" in namespace ? namespace["module.exports"] : namespace;
+				// An instance shut down while the read was out has released its records: nothing is kept for it.
+				if (MapMethods.has(NAMESPACE_READS, url)) MapMethods.set(ASYNC_NAMESPACES, url, value);
+				MapMethods.delete(NAMESPACE_READS, url);
+			},
+			() => {
+				if (MapMethods.has(NAMESPACE_READS, url)) SetMethods.add(UNREADABLE_NAMESPACES, url);
+				MapMethods.delete(NAMESPACE_READS, url);
+			}
+		);
+	} catch {
+		SetMethods.add(UNREADABLE_NAMESPACES, url);
+		return;
+	}
+	MapMethods.set(NAMESPACE_READS, url, { instanceID, done });
+}
+
+/**
+ * The namespace reads {@link readNamespaceLater} has out for an instance, each settling once its read has finished.
+ * @param {string} instanceID - The instance.
+ * @returns {Array<Promise<void>>} The reads.
+ * @internal
+ */
+function instanceCopyReads(instanceID) {
+	const waits = [];
+	for (const read of mapValues(NAMESPACE_READS)) if (read.instanceID === instanceID) listPush(waits, read.done);
+	return waits;
+}
+
+/**
+ * The files an instance holds copies of in this copy's records (see {@link instanceCopyCount}), as forward-slash paths:
+ * the files its load hook loaded an ES module of under a URL slothlet's loader did not import a leaf under, and the
+ * CommonJS files its private caches keep.
+ * @param {string} instanceID - The instance.
+ * @returns {Array<string>} The files.
+ * @internal
+ */
+function instanceCopyFiles(instanceID) {
+	const files = new Set();
+	const held = MapMethods.get(INSTANCE_ESM_URLS, instanceID);
+	if (held) {
+		for (const ofEntry of mapEntries(held.files)) {
+			for (const url of setValues(ofEntry[1])) {
+				if (SetMethods.has(LEAF_URLS, url)) continue;
+				SetMethods.add(files, ofEntry[0]);
+				break;
+			}
+		}
+	}
+	const scopes = [];
+	const scope = MapMethods.get(SCOPES, instanceID);
+	if (scope) listPush(scopes, scope);
+	const copies = MapMethods.get(COPIES, instanceID);
+	if (copies) for (const kept of mapValues(copies)) listPush(scopes, kept);
+	for (let ofIndex = 0, ofList = scopes; ofIndex < ofList.length; ofIndex++)
+		for (const file of mapKeys(ofList[ofIndex])) if (typeof file === "string") SetMethods.add(files, toSlashPath(file));
+	return setToArray(files);
+}
 
 /**
  * An empty map, for a lookup with nothing recorded.
@@ -4934,6 +5045,8 @@ export function internals(consumer) {
 		instanceCommonJSVersion,
 		instanceCopyCount,
 		instanceCopyExports,
+		instanceCopyFiles,
+		instanceCopyReads,
 		instanceImporters,
 		loadedScriptLookup,
 		loadedScriptText,

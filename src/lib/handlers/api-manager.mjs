@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-22T23:31:44-08:00 (1795419104)
+ *	@Last modified time: 2026-11-23T14:42:45-08:00 (1795473765)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -4675,6 +4675,10 @@ export class ApiManager extends ComponentBase {
 				});
 			}
 		}
+
+		// The nodes of files the mounted modules imported copies of, and those of files of this mount's lazy folders an
+		// earlier module imported, are built now while permissions are on (see settleLeafCopies in handlers/frame-placement).
+		if (anyAssignmentSucceeded) await unifiedWrapperOwn.settleLeafCopies(this.slothlet);
 
 		return moduleID;
 	}
