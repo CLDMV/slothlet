@@ -2065,6 +2065,9 @@ class Slothlet {
 						? held
 						: runtime_rootPrototypeFor(this, rootViews, held)
 			};
+			// The framework's own changes to the root object (an add() or remove() placing or dropping a member on it, not
+			// through the proxy) save it the same way first (see ApiManager#beforeRootChange).
+			this.____rootBarrier = rootBarrier;
 			// Node inspects a Proxy's target: the target shows the root as a node's shows the node.
 			runtime_defineRootInspect(this, proxyTarget);
 

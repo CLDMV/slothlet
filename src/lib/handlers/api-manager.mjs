@@ -655,6 +655,18 @@ export class ApiManager extends ComponentBase {
 	}
 
 	/**
+	 * Before the framework changes the instance's api root object itself (a member placed on or removed from it, not
+	 * through its proxy): a `run()` / `scope()` that started before reads the root as it was then (see
+	 * helpers/run-snapshot), as it does after a change made through the proxy.
+	 * @param {*} container - The object about to be changed.
+	 * @returns {void}
+	 * @private
+	 */
+	#beforeRootChange(container) {
+		if (container === this.slothlet.api) this.slothlet.____rootBarrier?.();
+	}
+
+	/**
 	 * Ensure parent path exists and return the parent object.
 	 * @param {function|object} root - API root object.
 	 * @param {string[]} parts - Path segments.
@@ -688,6 +700,7 @@ export class ApiManager extends ComponentBase {
 				// Set impl to empty object so it acts as a namespace container
 				containerWrapper.___setImpl({}, moduleID);
 				const container = current;
+				this.#beforeRootChange(container);
 				runtime_frameworkWrite(container, () => {
 					container[part] = containerWrapper.createProxy();
 				});
@@ -2748,6 +2761,7 @@ export class ApiManager extends ComponentBase {
 						this.____config
 					);
 					if (mutated !== undefined) {
+						this.#beforeRootChange(parent);
 						runtime_frameworkWrite(parent, () => {
 							parent[finalKey] = mutated;
 						});
@@ -2755,6 +2769,7 @@ export class ApiManager extends ComponentBase {
 					return true;
 				} else {
 					// Primitives - just replace
+					this.#beforeRootChange(parent);
 					runtime_frameworkWrite(parent, () => {
 						parent[finalKey] = value;
 					});
@@ -2783,6 +2798,7 @@ export class ApiManager extends ComponentBase {
 						this.____config
 					);
 					if (mutated !== undefined) {
+						this.#beforeRootChange(parent);
 						runtime_frameworkWrite(parent, () => {
 							parent[finalKey] = mutated;
 						});
@@ -2813,6 +2829,7 @@ export class ApiManager extends ComponentBase {
 			key: "DEBUG_MODE_SET_VALUE_AT_PATH_ASSIGN",
 			finalKey
 		});
+		this.#beforeRootChange(parent);
 		runtime_frameworkWrite(parent, () => {
 			parent[finalKey] = value;
 		});
@@ -2920,6 +2937,7 @@ export class ApiManager extends ComponentBase {
 		// export reports the key as non-deletable (`false`); Reflect.deleteProperty takes that answer
 		// instead of throwing, so one frozen constant table cannot abort the rest of the removal (#485).
 		// The removed node's wrapper is invalidated below regardless.
+		this.#beforeRootChange(current);
 		runtime_frameworkWrite(current, () => Reflect.deleteProperty(current, finalKey));
 
 		// AFTER deletion, clean up wrapper state for removed proxy
@@ -2987,6 +3005,7 @@ export class ApiManager extends ComponentBase {
 			if (holdsHidden(value)) break;
 			if (value && (typeof value === "object" || typeof value === "function") && Objects.keys(value).length === 0) {
 				// Same as the detach above: a frozen parent answers `false` rather than throwing (#485).
+				this.#beforeRootChange(parent);
 				runtime_frameworkWrite(parent, () => Reflect.deleteProperty(parent, key));
 				// Pruned from the api, so nobody owns it any more: the owner of a path is whoever's value is live there.
 				if (root === this.slothlet.api) {
