@@ -146,6 +146,53 @@ export class Metadata extends ComponentBase {
 	#manifests = new Map(); // raw moduleID → parsed slothlet.module.json of a package mount
 
 	/**
+	 * Which user metadata was written here since a full reload read this handler's state (see
+	 * {@link Metadata#trackUserChanges}): global keys, and per store key the keys written or `true` for the whole entry.
+	 * Null while no reload reads it.
+	 * @type {{global: Set<string>, store: Map<string, Set<string>|true>}|null}
+	 */
+	#changes = null;
+
+	/**
+	 * Note a write of user metadata for {@link Metadata#takeUserChanges}, while a reload tracks this handler.
+	 * @param {string|null} storeKey - The store key written, or null for global metadata.
+	 * @param {string} [key] - The metadata key written; omitted for the whole entry.
+	 * @returns {void}
+	 * @private
+	 */
+	#noteChange(storeKey, key) {
+		const changes = this.#changes;
+		if (changes === null) return;
+		if (storeKey === null) {
+			SetMethods.add(changes.global, key);
+			return;
+		}
+		const keys = MapMethods.get(changes.store, storeKey);
+		if (keys === true) return;
+		if (key === undefined) MapMethods.set(changes.store, storeKey, true);
+		else if (keys === undefined) MapMethods.set(changes.store, storeKey, setFrom([key]));
+		else SetMethods.add(keys, key);
+	}
+
+	/**
+	 * Note a removal of user metadata (see {@link Metadata#noteChange}), with the key argument a remove takes.
+	 * @param {string} storeKey - The store key.
+	 * @param {string|string[]|Object<string, string[]>} [key] - The key(s) removed; omitted for the whole entry.
+	 * @returns {void}
+	 * @private
+	 */
+	#noteRemoval(storeKey, key) {
+		if (this.#changes === null) return;
+		if (key === undefined) this.#noteChange(storeKey);
+		else if (typeof key === "string") this.#noteChange(storeKey, key);
+		else if (Arrays.isArray(key)) {
+			for (let ofIndex = 0; ofIndex < key.length; ofIndex++) if (typeof key[ofIndex] === "string") this.#noteChange(storeKey, key[ofIndex]);
+		} else if (key !== null && typeof key === "object") {
+			for (let ofIndex = 0, keys = Objects.keys(key); ofIndex < keys.length; ofIndex++) this.#noteChange(storeKey, keys[ofIndex]);
+		}
+	}
+
+	/**
 	 * A copy of this handler for a `run()` / `scope()` (see `FORK` in `helpers/flow-stores`): its user metadata (by
 	 * module and by path) and global metadata, which later changes to either leave the other as it is. The system
 	 * metadata nodes carry is the api tree's, and stays shared with it, as do the mounted manifests.
@@ -547,6 +594,7 @@ export class Metadata extends ComponentBase {
 		const written = writeTarget(this);
 		if (written !== this) return written.setGlobalMetadata(key, value);
 		this.#globalUserMetadata[key] = this.#mergeMetadataValue(this.#globalUserMetadata[key], value, "metadata", key);
+		this.#noteChange(null, key);
 	}
 
 	/**
@@ -591,6 +639,7 @@ export class Metadata extends ComponentBase {
 
 		// Set the metadata key
 		entry.metadata[key] = this.#mergeMetadataValue(entry.metadata[key], value, "metadata", key);
+		this.#noteChange(moduleID, key);
 
 		// ALSO store by apiPath so path-based lookups survive moduleID changes after reload.
 		// collectMetadataFromParents() in getMetadata() traverses the path hierarchy and
@@ -604,6 +653,7 @@ export class Metadata extends ComponentBase {
 			}
 			pathEntry.metadata[key] = this.#mergeMetadataValue(pathEntry.metadata[key], value, "metadata", key);
 			SetMethods.add(pathEntry.apiPaths, apiPath);
+			this.#noteChange(apiPath, key);
 		}
 	}
 
@@ -643,6 +693,7 @@ export class Metadata extends ComponentBase {
 		const applyRemoval = (storeKey) => {
 			const storeEntry = MapMethods.get(this.#userMetadataStore, storeKey);
 			if (!storeEntry) return;
+			this.#noteRemoval(storeKey, key);
 
 			if (key === undefined) {
 				MapMethods.delete(this.#userMetadataStore, storeKey);
@@ -740,6 +791,9 @@ export class Metadata extends ComponentBase {
 		entry.metadata = this.#mergeMetadataValue(entry.metadata, metadata, "metadata");
 		// Track identifier in apiPaths so cleanup via removeUserMetadataByApiPath() works
 		SetMethods.add(entry.apiPaths, identifier);
+		if (this.#changes !== null) {
+			for (let ofIndex = 0, keys = Objects.keys(metadata); ofIndex < keys.length; ofIndex++) this.#noteChange(identifier, keys[ofIndex]);
+		}
 	}
 
 	/**
@@ -755,6 +809,7 @@ export class Metadata extends ComponentBase {
 	removeUserMetadataByApiPath(apiPath) {
 		if (!apiPath) return;
 		MapMethods.delete(this.#userMetadataStore, apiPath);
+		this.#noteChange(apiPath);
 	}
 
 	/**
@@ -837,6 +892,7 @@ export class Metadata extends ComponentBase {
 
 		const entry = MapMethods.get(this.#userMetadataStore, apiPath);
 		if (!entry) return;
+		this.#noteRemoval(apiPath, key);
 
 		if (key === undefined) {
 			MapMethods.delete(this.#userMetadataStore, apiPath);
@@ -941,6 +997,71 @@ export class Metadata extends ComponentBase {
 					for (const p of setValues(savedEntry.apiPaths)) SetMethods.add(existing.apiPaths, p);
 				}
 			}
+		}
+	}
+
+	/**
+	 * Start keeping which user metadata is written to this handler, for a full reload that has just read its state
+	 * ({@link Metadata#exportUserState}) and builds its new copy while this handler keeps answering calls: what those
+	 * calls write is handed to the new copy at the swap ({@link Metadata#takeUserChanges}).
+	 * @returns {void}
+	 * @package
+	 */
+	trackUserChanges() {
+		this.#changes = { global: new Set(), store: new Map() };
+	}
+
+	/**
+	 * Stop keeping which user metadata is written here (a reload that ended without taking it).
+	 * @returns {void}
+	 * @package
+	 */
+	endUserChanges() {
+		this.#changes = null;
+	}
+
+	/**
+	 * Take the user metadata written to `from` since its {@link Metadata#trackUserChanges}: each key written there has
+	 * here the value it has there, and one removed there is removed here. Written later than anything this handler has,
+	 * it wins over it. Ends `from`'s tracking.
+	 * @param {Metadata} from - The handler of the copy a full reload replaces.
+	 * @returns {void}
+	 * @package
+	 */
+	takeUserChanges(from) {
+		const written = writeTarget(this);
+		if (written !== this) return written.takeUserChanges(from);
+		// Defensive: a reload always hands the old copy's own handler, which it set tracking on.
+		/* v8 ignore next */
+		if (!(from instanceof Metadata) || from === this || from.#changes === null) return;
+		const changes = from.#changes;
+		from.#changes = null;
+		// Global metadata is only ever set, never removed: each key noted is there.
+		for (const key of setValues(changes.global)) this.#globalUserMetadata[key] = copyMetadataValue(from.#globalUserMetadata[key]);
+		for (const ofEntry of mapEntries(changes.store)) {
+			const storeKey = ofEntry[0],
+				keys = ofEntry[1];
+			const source = MapMethods.get(from.#userMetadataStore, storeKey);
+			if (keys === true) {
+				if (source) {
+					MapMethods.set(this.#userMetadataStore, storeKey, {
+						metadata: copyMetadataValue(source.metadata),
+						apiPaths: setFrom(setToArray(source.apiPaths))
+					});
+				} else MapMethods.delete(this.#userMetadataStore, storeKey);
+				continue;
+			}
+			let entry = MapMethods.get(this.#userMetadataStore, storeKey);
+			for (const key of setValues(keys)) {
+				if (source && Objects.hasOwn(source.metadata, key)) {
+					if (!entry) {
+						entry = { metadata: {}, apiPaths: new Set() };
+						MapMethods.set(this.#userMetadataStore, storeKey, entry);
+					}
+					entry.metadata[key] = copyMetadataValue(source.metadata[key]);
+				} else if (entry) delete entry.metadata[key];
+			}
+			if (source && entry) for (const apiPath of setValues(source.apiPaths)) SetMethods.add(entry.apiPaths, apiPath);
 		}
 	}
 

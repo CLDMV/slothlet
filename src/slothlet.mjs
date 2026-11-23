@@ -807,6 +807,14 @@ class Slothlet {
 	#carryOnLoad = null;
 
 	/**
+	 * The metadata handler of the copy a full reload replaces, noting what calls write to it while the reload builds,
+	 * for the new copy to take at the swap (see {@link Slothlet#reloadOnto}); null otherwise.
+	 * @type {object|null}
+	 * @private
+	 */
+	#metadataTracked = null;
+
+	/**
 	 * The context a reload carries into the instance it rebuilds, so values `context.set()` made survive it.
 	 * @type {object|null}
 	 * @private
@@ -2364,6 +2372,9 @@ class Slothlet {
 			throw error;
 		} finally {
 			this.#pendingScope = null;
+			// A reload that failed leaves the instance's metadata handler as it was, with nothing noted.
+			this.#metadataTracked?.endUserChanges();
+			this.#metadataTracked = null;
 			if (window !== null) {
 				// A reload that ended any other way (it cannot, but nothing is left half-split) answers from the copy it had.
 				this.#closeReloadWindow(window, false);
@@ -4024,10 +4035,13 @@ class Slothlet {
 		// 4b. Restore the user-managed metadata (metadata.global() and metadata.set() values) into the new Metadata
 		//     instance, BEFORE replay so that registerUserMetadata() from replay merges over it correctly.
 		// savedMetadataState is always truthy (metadata always exports state); metadata handler always present.
+		//     From here the old handler notes what calls write to it until the swap, which hands that over too (step 10).
 		const savedMetadataState = oldHandlers.metadata?.exportUserState?.();
 		/* v8 ignore next */
 		if (savedMetadataState && this.handlers.metadata) {
 			this.handlers.metadata.importUserState(savedMetadataState);
+			oldHandlers.metadata.trackUserChanges();
+			this.#metadataTracked = oldHandlers.metadata;
 		}
 
 		// 4c. The host's event-delivery strategy (#497) — host configuration, like hooks. Subscriptions themselves are not
@@ -4115,7 +4129,12 @@ class Slothlet {
 
 		// 10. The swap: from here every call, whoever makes it, is answered by the new copy. The old base context store goes
 		//     last, once the files of the copy it served are retired. Guard with .has() because shutdown() may have already
-		//     removed the store.
+		//     removed the store. The metadata calls wrote to the instance while the reload built goes into the new copy
+		//     first: nothing awaits between that and the swap, so no write falls between the two.
+		// Defensive: step 4b always sets the tracked handler, and the metadata handler is always present.
+		/* v8 ignore next */
+		if (this.#metadataTracked !== null && this.handlers.metadata) this.handlers.metadata.takeUserChanges(this.#metadataTracked);
+		this.#metadataTracked = null;
 		if (window !== null) {
 			this.#closeReloadWindow(window, true);
 			await this.#retireReplacedScope(window);
