@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-22T12:49:46-08:00 (1795380586)
+ *	@Last modified time: 2026-11-22T23:31:46-08:00 (1795419106)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -17329,6 +17329,9 @@ class UnifiedWrapper extends ComponentBase {
 		// Restart epoch (#504): the tree this wrapper belongs to. Once a restart() swaps in a newer tree,
 		// the proxy traps forward to the node at this wrapper's path in the live tree instead.
 		internal.epoch = slothlet._buildEpoch ?? 0;
+		// The lazy-load count of the tree this wrapper belongs to (see Slothlet#_lazyTally): a full reload starts a new
+		// one without a new epoch.
+		internal.lazyTally = slothlet._lazyTally;
 		// The instance ID the node was built under: the tag its file's code carries in a stack frame. A full reload gives
 		// the instance a new ID, and code of the copy it replaced still carries this one. A node a kept copy loads later
 		// (a lazy node a run reaches after the instance reloaded or restarted) loads its file under the ID the copy was
@@ -18185,6 +18188,37 @@ class UnifiedWrapper extends ComponentBase {
 	}
 
 	/**
+	 * Put this wrapper's current proxy in `container[key]` where that slot still holds one of its earlier proxies.
+	 *
+	 * @description
+	 * A node that loads while the build that made it still runs (a file+folder collision slot the build loads to settle
+	 * its surface) is rebuilt on another proxy (see {@link UnifiedWrapper#___settleLazyProxy},
+	 * {@link UnifiedWrapper#___upgradeToCallableProxy}) before its tree is the instance's api, so
+	 * {@link UnifiedWrapper#___replaceInParent}, which walks from the api root, finds nothing to swap. The build calls
+	 * this on the object it assigned the node to, so the node it hands on is the one eager builds. A slot that holds
+	 * anything else, or an accessor, is left alone.
+	 *
+	 * @param {object} container - The object the node was assigned to: a raw object or a wrapper's proxy.
+	 * @param {string} key - The node's key there.
+	 * @returns {void}
+	 * @private
+	 *
+	 * @example
+	 * wrapper.___settleInHolder(targetApi, "math");
+	 */
+	___settleInHolder(container, key) {
+		const current = this.____slothletInternal.proxy;
+		const holder = resolveWrapper(container) ?? container;
+		const descriptor = Reflect.getOwnPropertyDescriptor(holder, key);
+		// The callers read this wrapper from the same slot before the load, so it holds one of its proxies as data; the
+		// slot can still change while the node loads (code the load runs writes it), which the suite does not drive.
+		/* v8 ignore next */
+		if (!descriptor || !("value" in descriptor) || resolveWrapper(descriptor.value) !== this) return;
+		if (descriptor.value === current) return;
+		Objects.defineProperty(holder, key, { __proto__: null, ...descriptor, value: current });
+	}
+
+	/**
 	 * Swap the proxy the parent node holds for this wrapper at its apiPath (#533).
 	 *
 	 * @description
@@ -18612,7 +18646,7 @@ class UnifiedWrapper extends ComponentBase {
 	 * Keep the instance's lazy materialization count in step with this wrapper (#588). The wrapper
 	 * records whether it is counted as unloaded (`pending`), counted and loaded (`settled`), or never
 	 * counted, so each wrapper moves the count exactly once per transition no matter which path loads,
-	 * re-arms or discards it. A wrapper from a tree a restart replaced leaves the new tree's count alone.
+	 * re-arms or discards it. A wrapper from a tree a restart or a full reload replaced leaves the new tree's count alone.
 	 * A member a forced replace hides from the api is `parked`: nothing can reach it to load it, so it is
 	 * not counted until it is put back (`unpark`), and loading or re-arming it meanwhile leaves it parked.
 	 * One hidden after it loaded is `parked-loaded`: out of the total while hidden, and back in it, loaded,
@@ -18627,7 +18661,7 @@ class UnifiedWrapper extends ComponentBase {
 	___trackLazyLoad(event) {
 		const internal = this.____slothletInternal;
 		const slothlet = this.slothlet;
-		if (internal.epoch !== (slothlet._buildEpoch ?? 0)) return;
+		if (internal.epoch !== (slothlet._buildEpoch ?? 0) || internal.lazyTally !== slothlet._lazyTally) return;
 		const tracked = internal.lazyCount;
 		if (event === "register") {
 			// Called once, from the constructor of a lazy wrapper.

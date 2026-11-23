@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-22T22:10:17-08:00 (1795414217)
+ *	@Last modified time: 2026-11-22T23:31:53-08:00 (1795419113)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -391,6 +391,7 @@ const RELOAD_COPY_FIELDS = [
 	"_ownBuiltins",
 	"_moduleIncarnations",
 	"_retiredIncarnations",
+	"_lazyTally",
 	"_totalLazyCount",
 	"_unmaterializedLazyCount",
 	"_materializationComplete",
@@ -991,6 +992,10 @@ class Slothlet {
 		this._restarting = false;
 
 		// Lazy materialization tracking (for api.slothlet.materialize)
+		// The count a lazy wrapper joins: every wrapper records the one its tree's set has at construction, and moves only
+		// that count. A full reload, a restart and a run's copy of the tree start a new one, so a node of the tree they
+		// replaced (a reference held from before, or a run kept across the change) leaves the new tree's count alone.
+		this._lazyTally = {};
 		this._totalLazyCount = 0; // Total lazy wrappers created
 		this._unmaterializedLazyCount = 0; // Currently unmaterialized lazy wrappers
 		this._materializationComplete = false; // Set to true when all lazy wrappers materialized
@@ -3441,6 +3446,7 @@ class Slothlet {
 		const epoch = --this.#copyEpochs;
 		next._buildEpoch = epoch;
 		next._treeEpoch = epoch;
+		next._lazyTally = {};
 		next._totalLazyCount = 0;
 		next._unmaterializedLazyCount = 0;
 		next._materializationComplete = false;
@@ -3944,7 +3950,11 @@ class Slothlet {
 			envTarget: this.envTarget,
 			reference: this.reference,
 			context: this.context,
-			isLoaded: this.isLoaded
+			isLoaded: this.isLoaded,
+			_lazyTally: this._lazyTally,
+			_totalLazyCount: this._totalLazyCount,
+			_unmaterializedLazyCount: this._unmaterializedLazyCount,
+			_materializationComplete: this._materializationComplete
 		};
 	}
 
@@ -3972,6 +3982,10 @@ class Slothlet {
 			this.reference = kept.reference;
 			this.context = kept.context;
 			this.isLoaded = kept.isLoaded;
+			this._lazyTally = kept._lazyTally;
+			this._totalLazyCount = kept._totalLazyCount;
+			this._unmaterializedLazyCount = kept._unmaterializedLazyCount;
+			this._materializationComplete = kept._materializationComplete;
 		}
 		this.#carriedContext = null;
 		// The context the instance's code runs in now answers with that copy: a reload that switched IDs set the new ID's
@@ -4049,7 +4063,13 @@ class Slothlet {
 		const carried = window === null ? { history: null } : null;
 		if (carried !== null) this.#carryOnLoad = () => this.#carryIntoBuild(oldHandlers, oldApiState, carried);
 
-		// 4. Do a FRESH load() with the new permanent instanceID
+		// 4. Do a FRESH load() with the new permanent instanceID. The new tree's lazy nodes are counted from zero, as a
+		//    fresh instance's are, in a count of their own: the replaced tree's nodes keep moving the count they joined.
+		//    wait() callers queued before the reload stay queued, and settle once the new tree has loaded.
+		this._lazyTally = {};
+		this._totalLazyCount = 0;
+		this._unmaterializedLazyCount = 0;
+		this._materializationComplete = false;
 		this.#carriedContext = this.context;
 		try {
 			await this.load(this.config, loadInstanceID);
@@ -4488,6 +4508,7 @@ class Slothlet {
 			await this._clearModuleCaches();
 			this.envSnapshot = null;
 			this._typesGenerated = false;
+			this._lazyTally = {};
 			this._totalLazyCount = 0;
 			this._unmaterializedLazyCount = 0;
 			this._materializationComplete = false;
