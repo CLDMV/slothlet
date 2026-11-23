@@ -18188,6 +18188,37 @@ class UnifiedWrapper extends ComponentBase {
 	}
 
 	/**
+	 * Put this wrapper's current proxy in `container[key]` where that slot still holds one of its earlier proxies.
+	 *
+	 * @description
+	 * A node that loads while the build that made it still runs (a file+folder collision slot the build loads to settle
+	 * its surface) is rebuilt on another proxy (see {@link UnifiedWrapper#___settleLazyProxy},
+	 * {@link UnifiedWrapper#___upgradeToCallableProxy}) before its tree is the instance's api, so
+	 * {@link UnifiedWrapper#___replaceInParent}, which walks from the api root, finds nothing to swap. The build calls
+	 * this on the object it assigned the node to, so the node it hands on is the one eager builds. A slot that holds
+	 * anything else, or an accessor, is left alone.
+	 *
+	 * @param {object} container - The object the node was assigned to: a raw object or a wrapper's proxy.
+	 * @param {string} key - The node's key there.
+	 * @returns {void}
+	 * @private
+	 *
+	 * @example
+	 * wrapper.___settleInHolder(targetApi, "math");
+	 */
+	___settleInHolder(container, key) {
+		const current = this.____slothletInternal.proxy;
+		const holder = resolveWrapper(container) ?? container;
+		const descriptor = Reflect.getOwnPropertyDescriptor(holder, key);
+		// The callers read this wrapper from the same slot before the load, so it holds one of its proxies as data; the
+		// slot can still change while the node loads (code the load runs writes it), which the suite does not drive.
+		/* v8 ignore next */
+		if (!descriptor || !("value" in descriptor) || resolveWrapper(descriptor.value) !== this) return;
+		if (descriptor.value === current) return;
+		Objects.defineProperty(holder, key, { __proto__: null, ...descriptor, value: current });
+	}
+
+	/**
 	 * Swap the proxy the parent node holds for this wrapper at its apiPath (#533).
 	 *
 	 * @description

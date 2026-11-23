@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-19T16:09:10-08:00 (1795133350)
+ *	@Last modified time: 2026-11-22T23:31:43-08:00 (1795419103)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -2695,6 +2695,8 @@ export class ModesProcessor extends ComponentBase {
 					const modes_assignedCollision = resolveWrapper(targetApi[subDirName]);
 					if (modes_assignedCollision?.____slothletInternal.needsImmediateChildAdoption) {
 						await modes_assignedCollision.___materialize();
+						// Loaded here, before its tree is the api, the node may be on a new proxy: the slot takes it.
+						modes_assignedCollision.___settleInHolder(targetApi, subDirName);
 					}
 					// Callable-vs-callable under merge: the slot kept the first-loaded callable and the folder
 					// composed off-slot. The assignment chains this same merge onto the folder's materialization
@@ -2705,6 +2707,7 @@ export class ModesProcessor extends ComponentBase {
 					if (modes_offSlotFolder) {
 						await modes_offSlotFolder.___materialize();
 						this.slothlet.builders.apiAssignment.mergeOffSlotCollisionFolder(modes_keptCallable);
+						modes_keptCallable.___settleInHolder(targetApi, subDirName);
 					}
 				}
 			}
@@ -2851,6 +2854,7 @@ export class ModesProcessor extends ComponentBase {
 					if (modes_rootOffSlot) {
 						await modes_rootOffSlot.___materialize();
 						this.slothlet.builders.apiAssignment.mergeOffSlotCollisionFolder(modes_rootKept);
+						modes_rootKept.___settleInHolder(targetApi, moduleName);
 					}
 					// Under merge a lazy folder kept the slot; once it has loaded, it takes this root file's
 					// function only if it has none of its own (O09), matching eager (#584).
@@ -2859,6 +2863,7 @@ export class ModesProcessor extends ComponentBase {
 						delete modes_rootKept.____slothletInternal.pendingCollisionCallable;
 						await modes_rootKept.___materialize();
 						modes_rootKept.___adoptCallableImpl(modes_rootPendingCallable, false);
+						modes_rootKept.___settleInHolder(targetApi, moduleName);
 					}
 				}
 			}
