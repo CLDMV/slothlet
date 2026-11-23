@@ -2179,6 +2179,32 @@ function runtime_selfMemberView(value, reader, slothlet, parts, through) {
 		"value" in descriptor
 			? { __proto__: null, ...descriptor, value: member(prop, descriptor.value) }
 			: { __proto__: null, ...descriptor, get: member(prop, descriptor.get), set: member(prop, descriptor.set) };
+	// A handle's shadow is every reader's, and a closed one must describe each member as it holds it, so a private member
+	// a handle holds fixed holds a stand-in for its value, every use of which is checked as reading the member is: the
+	// description can go to anyone, and listing a closed prototype (`Object.keys`, `for…in`, `Object.isFrozen`, which read
+	// each description) refuses no one. One stand-in per member and value, so a member is the same object each time.
+	const privateName = (prop) => handle && typeof prop === "string" && StringMethods.charCodeAt(prop, 0) === 95;
+	const standIns = new Map();
+	const standIn = (prop, value) => {
+		if (value === null || (typeof value !== "object" && typeof value !== "function")) return value;
+		const known = MapMethods.get(standIns, prop);
+		if (known !== undefined && known.value === value) return known.standIn;
+		const made = runtime_checkedStandIn(() => refusePrivate(prop), value);
+		MapMethods.set(standIns, prop, { value, standIn: made });
+		return made;
+	};
+	const heldDescriptor = (prop, descriptor) => {
+		if (!privateName(prop)) return shownDescriptor(prop, descriptor);
+		return "value" in descriptor
+			? { __proto__: null, ...descriptor, value: standIn(prop, descriptor.value) }
+			: { __proto__: null, ...descriptor, get: standIn(prop, descriptor.get), set: standIn(prop, descriptor.set) };
+	};
+	// Whether a description of a member hands out nothing of its value: each value it holds is a stand-in, or absent.
+	const standsIn = (held) => held === undefined || WeakMapMethods.has(PINNED_CODE_MEMBERS, held);
+	const withholds = (descriptor) =>
+		"value" in descriptor
+			? WeakMapMethods.has(PINNED_CODE_MEMBERS, descriptor.value)
+			: standsIn(descriptor.get) && standsIn(descriptor.set);
 	// A member the value holds fixed is mirrored onto the shadow as the view reports it, and reported from there.
 	const mirror = (prop) => {
 		const descriptor = Reflect.getOwnPropertyDescriptor(raw, prop);
@@ -2189,9 +2215,12 @@ function runtime_selfMemberView(value, reader, slothlet, parts, through) {
 		}
 		const held = Reflect.getOwnPropertyDescriptor(shadow, prop);
 		if (held && !held.configurable && "value" in held && !held.writable) return held;
-		const shown = shownDescriptor(prop, descriptor);
-		if (!descriptor.configurable || !Reflect.isExtensible(shadow)) Reflect.defineProperty(shadow, prop, shown);
-		return shown;
+		if (!descriptor.configurable || !Reflect.isExtensible(shadow)) {
+			const fixed = heldDescriptor(prop, descriptor);
+			Reflect.defineProperty(shadow, prop, fixed);
+			return fixed;
+		}
+		return shownDescriptor(prop, descriptor);
 	};
 	// A value closed to extension is mirrored whole, the shadow closed with it, as the engine checks a proxy's
 	// answers about a non-extensible target against that target.
@@ -2205,7 +2234,7 @@ function runtime_selfMemberView(value, reader, slothlet, parts, through) {
 			const descriptors = Objects.getOwnPropertyDescriptors(raw);
 			for (let ofIndex = 0, ofList = Reflect.ownKeys(descriptors); ofIndex < ofList.length; ofIndex++) {
 				const key = ofList[ofIndex];
-				Reflect.defineProperty(shadow, key, shownDescriptor(key, descriptors[key]));
+				Reflect.defineProperty(shadow, key, heldDescriptor(key, descriptors[key]));
 			}
 			Reflect.setPrototypeOf(shadow, prototypeOf(false));
 			Reflect.preventExtensions(shadow);
@@ -2272,15 +2301,14 @@ function runtime_selfMemberView(value, reader, slothlet, parts, through) {
 			target: segmentsOf(`${ArrayMethods.join(baseParts(), ".")}.${prop}`)
 		});
 	};
-	// A private member left out of what the handle lists, describes and reports holding: one the prototype holds open,
-	// so the engine's checks of a proxy's answers against its target allow leaving it out. One it holds fixed, or on a
-	// closed prototype, is described to no one privacy keeps it from: describing it is refused as reading it is.
+	// A private member left out of what the handle lists, describes and reports holding, for code privacy keeps it from:
+	// one the prototype holds open, so the engine's checks of a proxy's answers against its target allow leaving it out.
+	// One it holds fixed, or on a closed prototype, has to be listed and reported held (proxy invariants): it is described
+	// holding a stand-in for its value (heldDescriptor), and reading it is refused.
 	const privateHidden = (prop) => {
 		if (privateRefused(prop, false) === null) return false;
 		const descriptor = Reflect.getOwnPropertyDescriptor(raw, prop);
-		if (!descriptor || (descriptor.configurable && Reflect.isExtensible(raw))) return true;
-		refusePrivate(prop);
-		return false;
+		return !descriptor || (descriptor.configurable && Reflect.isExtensible(raw));
 	};
 	const assertWrite = (prop) => {
 		const accessor = who();
@@ -2356,7 +2384,11 @@ function runtime_selfMemberView(value, reader, slothlet, parts, through) {
 			refuseEnded();
 			mirrorClosed();
 			if (privateHidden(prop)) return undefined;
-			return mirror(prop);
+			const described = mirror(prop);
+			// A fixed private member whose value no stand-in can hold (a primitive while data reads are gated) is described
+			// as it is held, so describing it is refused as reading it is.
+			if (described !== undefined && privateName(prop) && !withholds(described)) refusePrivate(prop);
+			return described;
 		},
 		has(_, prop) {
 			refuseEnded();
@@ -2410,7 +2442,8 @@ function runtime_selfMemberView(value, reader, slothlet, parts, through) {
 	// A handle's privacy is decided for an instance's reads of what it inherits, too ({@link runtime_inheritedPrivate}).
 	if (handle) {
 		record.refusePrivate = refusePrivate;
-		record.privateHidden = privateHidden;
+		// A member an instance only inherits is no own member of the instance, so it can always be left out.
+		record.privateHidden = (prop) => privateRefused(prop, false) !== null;
 	}
 	MapMethods.set(byPath, pathKey, view);
 	WeakMapMethods.set(SELF_MEMBER_VIEWS, view, record);
@@ -6296,10 +6329,27 @@ const PINNED_CODE_MEMBERS = new WeakMap();
  * self.math.Calc.prototype; // still refused
  */
 function runtime_pinnedCodeMember(gate, value) {
+	return runtime_checkedStandIn(() => runtime_enforceCodeMember(gate, value), value);
+}
+
+/**
+ * A stand-in for a value a closed object holds fixed, every use of which (a read, call, listing or change made through
+ * it) runs a check first, for whoever makes it: what {@link runtime_pinnedCodeMember} holds for a closed node's code, and
+ * what a closed prototype's handle holds for a private member (see {@link runtime_selfMemberView}). The stand-in can be
+ * described to anyone; the value behind it is reached only by code the check lets through.
+ * @param {Function} check - Throws when the code making the access may not have the value.
+ * @param {object|Function} value - The value.
+ * @returns {object|Function} The stand-in.
+ * @private
+ *
+ * @example
+ * const standIn = runtime_checkedStandIn(() => refusePrivate("_hidden"), proto._hidden);
+ */
+function runtime_checkedStandIn(check, value) {
 	const checked =
 		(trap) =>
 		(...args) => {
-			runtime_enforceCodeMember(gate, value);
+			check();
 			return Reflect.apply(Reflect[trap], undefined, args);
 		};
 	const handler = {};
