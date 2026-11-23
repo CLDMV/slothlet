@@ -859,7 +859,8 @@ export function shallowCopy(raw) {
 /**
  * Save a value the instance is about to hand out as itself, and what it reaches, once per window: a `Map`, a `Date`, an
  * object a leaf returned. The instance's code may then change it where slothlet does not see the change, and the runs
- * open read it as it was. Shared live objects are left alone.
+ * open read it as it was. Shared live objects are left alone. Walked with a list of its own, not the call stack, so a
+ * structure of any depth is saved.
  * @param {Domain|null} domain - The instance's domain.
  * @param {*} raw - The value.
  * @param {Set<object>} [seen] - Objects already walked.
@@ -869,26 +870,42 @@ export function shallowCopy(raw) {
  */
 export function checkpointDeep(domain, raw, seen = new Set(), skip = null) {
 	if (domain === null || domain.live === 0 || raw === null || typeof raw !== "object") return;
-	if (SetMethods.has(seen, raw) || isProxy(raw) || (skip !== null && skip(raw)) || isSharedLive(raw)) return;
-	SetMethods.add(seen, raw);
-	// Saved in this window already: so was what it reaches, or it has changed since through a path that saves it.
-	if (!beforeChange(domain, raw, shallowCopy)) return;
-	const kind = builtinKind(raw);
-	if (kind === "map") {
-		for (const entry of mapEntries(raw)) checkpointDeep(domain, entry[1], seen, skip);
-	} else if (kind === "set") {
-		for (const member of setValues(raw)) checkpointDeep(domain, member, seen, skip);
-	} else if (kind === null) {
-		const keys = Objects.keys(raw);
-		for (let index = 0; index < keys.length; index++) {
-			const described = Reflect.getOwnPropertyDescriptor(raw, keys[index]);
-			if (described !== undefined && "value" in described) checkpointDeep(domain, described.value, seen, skip);
+	const work = [raw];
+	while (work.length !== 0) {
+		const value = work[work.length - 1];
+		work.length--;
+		if (SetMethods.has(seen, value) || isProxy(value) || (skip !== null && skip(value)) || isSharedLive(value)) continue;
+		SetMethods.add(seen, value);
+		// Saved in this window already: so was what it reaches, or it has changed since through a path that saves it.
+		if (!beforeChange(domain, value, shallowCopy)) continue;
+		const kind = builtinKind(value);
+		if (kind === "map") {
+			for (const entry of mapEntries(value)) pushObject(work, entry[1]);
+		} else if (kind === "set") {
+			for (const member of setValues(value)) pushObject(work, member);
+		} else if (kind === null) {
+			const keys = Objects.keys(value);
+			for (let index = 0; index < keys.length; index++) {
+				const described = Reflect.getOwnPropertyDescriptor(value, keys[index]);
+				if (described !== undefined && "value" in described) pushObject(work, described.value);
+			}
 		}
+		// A prototype of a module's own (a class's, or an object another inherits from) is changed as itself too: it is
+		// saved with what inherits from it, up to the language's own.
+		const prototype = Reflect.getPrototypeOf(value);
+		if (prototype !== null && !isLanguagePrototype(prototype)) pushObject(work, prototype);
 	}
-	// A prototype of a module's own (a class's, or an object another inherits from) is changed as itself too: it is
-	// saved with what inherits from it, up to the language's own.
-	const prototype = Reflect.getPrototypeOf(raw);
-	if (prototype !== null && !isLanguagePrototype(prototype)) checkpointDeep(domain, prototype, seen, skip);
+}
+
+/**
+ * Add a value to a walk's list when it is an object.
+ * @param {Array<object>} work - The list.
+ * @param {*} value - The value.
+ * @returns {void}
+ * @private
+ */
+function pushObject(work, value) {
+	if (value !== null && typeof value === "object") listPush(work, value);
 }
 
 /**
