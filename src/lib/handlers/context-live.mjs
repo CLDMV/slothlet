@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-22T03:30:33-08:00 (1795347033)
+ *	@Last modified time: 2026-11-22T23:48:43-08:00 (1795420123)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -1627,7 +1627,10 @@ export class LiveContextManager {
 		const supplier = resolveSupplier(record, capture);
 		// Code that is accounted for and refused (a leaf's own function entered by a caller that may not call it).
 		if (supplier?.refused) return { currentWrapper: null, callerWrapper, unresolved: true };
-		if (supplier?.unaccounted) return { currentWrapper: null, callerWrapper, unresolved: true, unaccounted: true };
+		// Code no one is named for, run inside a module's call: the call's leaf comes with it, so code a gone module (one
+		// removed, or replaced by a restart) made is refused as that module's code is (see runtime_refuseUnknownCaller).
+		if (supplier?.unaccounted)
+			return { currentWrapper: null, callerWrapper, unresolved: true, unaccounted: true, inCallOf: record.wrapper };
 		return {
 			currentWrapper: supplier ? supplier.wrapper : record.wrapper,
 			callerWrapper,
