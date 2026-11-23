@@ -36,7 +36,8 @@
  * on what the live runtime does and does not bound.
  */
 
-import { holdForCurrentFlow, pinToCurrentCaller, releaseAfterCall } from "#helpers/caller-pinning";
+import { holdForCurrentFlow, pinToCurrentCaller, recordOfCurrentFlow } from "#helpers/caller-pinning";
+import { holdRunWorkOnce } from "#helpers/flow-stores";
 import { checkCapability } from "#helpers/capability-context";
 import { openLayer, closeLayer, holdsValue, markLayer, matchShape } from "#helpers/boundary-patch-layers";
 import {
@@ -187,6 +188,25 @@ function runtime_takeHandle(family, handle) {
 }
 
 /**
+ * What counts a one-shot timer as its run's work again when `timer.refresh()` arms it once more (see
+ * {@link runtime_patchHandleRefresh}), by the timer's handle. Kept weakly: a collected handle can be armed no more.
+ * @type {WeakMap<object, Function>}
+ * @private
+ */
+const REARM = new WeakMap();
+
+/**
+ * Remember what counts a timer as its run's work again when it is re-armed.
+ * @param {*} handle - The timer's handle.
+ * @param {Function} rearm - Counts it again.
+ * @returns {void}
+ * @private
+ */
+function runtime_onRearm(handle, rearm) {
+	if (handle !== null && typeof handle === "object") WeakMapMethods.set(REARM, handle, rearm);
+}
+
+/**
  * Release a `scheduler.postTask()` callback's work when its signal aborts the task, which then never runs. Reads the
  * signal after the platform accepted the call, and listens with `EventTarget`'s own method, below slothlet's patch.
  * @param {*} options - The options the task was posted with.
@@ -302,23 +322,52 @@ function runtime_patchScheduler(host, name) {
 		let handle;
 		let stopListening = null;
 		let pinned = pinToCurrentCaller(callback);
+		// What releases the run's count of this work now; null once it is released.
+		let held = release;
+		const releaseHeld = () => {
+			const current = held;
+			held = null;
+			if (current !== null) current();
+		};
 		if (!repeats) {
-			pinned = releaseAfterCall(pinned, () => {
-				if (family !== undefined) runtime_takeHandle(family, handle);
-				if (stopListening !== null) stopListening();
-				release();
-			});
+			const inner = pinned;
+			// Released once the callback has run, whether it returns or throws: the count it took as it began, so a timer
+			// it re-armed (`timer.refresh()`) keeps the count that took.
+			pinned = function slothlet_releasedAfterCall(...args) {
+				const current = held;
+				held = null;
+				try {
+					return Reflect.apply(inner, this, args);
+				} finally {
+					if (family !== undefined && held === null) runtime_takeHandle(family, handle);
+					if (stopListening !== null) stopListening();
+					if (current !== null) current();
+				}
+			};
 		}
 		try {
 			handle = Reflect.apply(original.call, original, concatLists([host, pinned], rest));
 		} catch (error) {
-			release();
+			releaseHeld();
 			throw error;
 		}
 		if (family !== undefined) {
-			runtime_holdHandle(family, handle, release);
+			runtime_holdHandle(family, handle, releaseHeld);
 			runtime_patchHandleType(family, handle);
-		} else if (abortable) stopListening = runtime_releaseOnAbort(rest[0], release);
+			// A one-shot timer re-armed after (or while) its callback runs is the run's work again until it fires.
+			if (!repeats && family === "timer") {
+				const record = recordOfCurrentFlow();
+				if (record !== null) {
+					runtime_onRearm(handle, () => {
+						if (held !== null) return;
+						const again = holdRunWorkOnce(record);
+						if (again === null) return;
+						held = again;
+						runtime_holdHandle(family, handle, releaseHeld);
+					});
+				}
+			}
+		} else if (abortable) stopListening = runtime_releaseOnAbort(rest[0], releaseHeld);
 		return handle;
 	};
 
@@ -390,6 +439,35 @@ function runtime_patchHandleMethod(proto, key, family) {
 	markLayer(wrapper, layer);
 	proto[key] = wrapper;
 	listPush(patched, { host: proto, name: key, layer, wrapper });
+}
+
+/**
+ * Replace a handle prototype's `refresh()` (Node's `Timeout`: it arms the timer again, also after it has fired) with a
+ * wrapper that, when the timer is armed again, counts it as its run's work once more (see {@link REARM}): the callback
+ * runs again, in the run that set it, which keeps the run's copy until then. Node leaves a cleared timer as it is, and
+ * says so on the handle (`_destroyed` stays true). Everything else is the original's.
+ *
+ * @param {object} proto - The prototype.
+ * @returns {void}
+ * @private
+ */
+function runtime_patchHandleRefresh(proto) {
+	const descriptor = Objects.getOwnPropertyDescriptor(proto, "refresh");
+	if (typeof descriptor?.value !== "function" || descriptor.writable !== true) return;
+	const layer = openLayer(descriptor.value);
+	const original = layer.below;
+	const wrapper = {
+		refresh(...args) {
+			const result = Reflect.apply(original, this, args);
+			if (layer.active && this._destroyed === false) WeakMapMethods.get(REARM, this)?.();
+			return result;
+		}
+	}.refresh;
+	runtime_carryOwnExtras(wrapper, original);
+	matchShape(wrapper, original);
+	markLayer(wrapper, layer);
+	proto.refresh = wrapper;
+	listPush(patched, { host: proto, name: "refresh", layer, wrapper });
 }
 
 /**
@@ -465,7 +543,10 @@ function runtime_patchHandleType(family, handle) {
 	const keys = HANDLE_METHODS[family];
 	if (keys === undefined) return;
 	for (let index = 0; index < keys.length; index++) runtime_patchHandleMethod(proto, keys[index], family);
-	if (family === "timer") runtime_patchHandleId(proto, family);
+	if (family === "timer") {
+		runtime_patchHandleId(proto, family);
+		runtime_patchHandleRefresh(proto);
+	}
 }
 
 /**
