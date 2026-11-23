@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:15:28-07:00 (1791090928)
+ *	@Last modified time: 2026-11-22T23:46:52-08:00 (1795420012)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -268,6 +268,37 @@ function findHintAdjacencyIssues(translations, automaticHints, usedCodes) {
 	return issues;
 }
 
+/**
+ * The `{name}` placeholders a message is formatted with, sorted and without repeats.
+ * @param {*} value - The message.
+ * @returns {string[]} The placeholder names.
+ */
+function placeholderNames(value) {
+	const names = new Set();
+	for (const match of String(value ?? "").matchAll(/\{([A-Za-z_][A-Za-z0-9_]*)\}/g)) names.add(match[1]);
+	return [...names].sort();
+}
+
+/**
+ * Find messages whose placeholders differ from the base locale's: a translation that drops one hides the value from
+ * everyone reading that locale, and one with a name the base does not have prints it literally.
+ * @param {object} baseTranslations - The base locale's `translations` object.
+ * @param {object} translations - The locale's `translations` object.
+ * @returns {Array<{key:string, missing:string[], extra:string[]}>} Violations.
+ */
+function findPlaceholderIssues(baseTranslations, translations) {
+	const issues = [];
+	for (const [key, baseValue] of Object.entries(baseTranslations || {})) {
+		if (!Object.hasOwn(translations || {}, key)) continue;
+		const want = placeholderNames(baseValue);
+		const got = placeholderNames(translations[key]);
+		const missing = want.filter((name) => !got.includes(name));
+		const extra = got.filter((name) => !want.includes(name));
+		if (missing.length > 0 || extra.length > 0) issues.push({ key, missing, extra });
+	}
+	return issues;
+}
+
 const args = parseArgs(process.argv.slice(2));
 const repoRoot = resolveRepoRoot();
 const automaticHints = loadAutomaticHintKeys(repoRoot);
@@ -384,7 +415,8 @@ try {
 			extra: extra,
 			duplicates: [],
 			scriptPurityIssues: [],
-			hintAdjacencyIssues: findHintAdjacencyIssues(langJson.translations || {}, automaticHints, usedCodes)
+			hintAdjacencyIssues: findHintAdjacencyIssues(langJson.translations || {}, automaticHints, usedCodes),
+			placeholderIssues: findPlaceholderIssues(baseJson.translations, langJson.translations)
 		};
 
 		// Script-purity check: for non-Latin-script locales, flag values containing
@@ -430,7 +462,8 @@ try {
 			extra.length === 0 &&
 			localeReport.duplicates.length === 0 &&
 			localeReport.scriptPurityIssues.length === 0 &&
-			localeReport.hintAdjacencyIssues.length === 0
+			localeReport.hintAdjacencyIssues.length === 0 &&
+			localeReport.placeholderIssues.length === 0
 		) {
 			console.log(`${locale}: OK`);
 			console.log("-");
@@ -477,6 +510,18 @@ try {
 				console.log(`  ! ${issue.hintKey}: ${issue.problem}`);
 			}
 			console.log("  → a HINT_<KEY> must sit immediately after its <KEY>; move it (or the keys inserted between them).");
+		}
+
+		if (localeReport.placeholderIssues.length > 0) {
+			hasFailures = true;
+			console.log(`${locale}: PLACEHOLDERS ${localeReport.placeholderIssues.length}`);
+			for (const issue of localeReport.placeholderIssues) {
+				const parts = [];
+				if (issue.missing.length > 0) parts.push(`missing {${issue.missing.join("}, {")}}`);
+				if (issue.extra.length > 0) parts.push(`unknown {${issue.extra.join("}, {")}}`);
+				console.log(`  ! ${issue.key}: ${parts.join("; ")}`);
+			}
+			console.log(`  → use exactly the placeholders the ${baseLocale} message has.`);
 		}
 
 		console.log("-");
