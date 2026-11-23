@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-22T00:00:00-08:00 (1795334400)
+ *	@Last modified time: 2026-11-23T00:08:30-08:00 (1795421310)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -30,8 +30,9 @@
  * Versions are kept only while a run that can still read them is open: when a run ends, the version its start fell in
  * goes unless another open run's start falls in it too, and once the last run of an instance has ended its versions are
  * dropped as a whole. A run that never ends keeps the one version per object it can read, however many other runs come
- * and go. Opening and closing a run, saving a version and reading one cost a lookup in the open runs' starts, not a pass
- * over them, so many runs open at once cost no more each than one.
+ * and go. A version lives with its object: an object the instance drops while a run is open is collected with its
+ * versions. Opening a run, saving a version and reading one cost a lookup in the open runs' starts, not a pass over them,
+ * and closing one costs the versions it was the newest reader of, so many runs open at once cost no more each than one.
  *
  * Nothing here is asynchronous, and nothing uses the platform's async context: it works the same on both runtimes and
  * in a browser.
@@ -109,8 +110,12 @@ class Domain {
 		this.count = 0;
 		/** Key → the window (newest start) it was last checkpointed in (see {@link checkpointOnce}). */
 		this.windows = new Map();
-		/** The objects it keeps versions of, while a run is open: pruned as runs end. */
-		this.subjects = new Set();
+		/**
+		 * The groups of versions it keeps, by who reads them (see {@link keep}): the newest open start that reads a
+		 * version → the oldest open start that did when it was counted → the group. A group holds a count, not the
+		 * versions: a version goes with the object it is a version of.
+		 */
+		this.readers = new Map();
 	}
 }
 
@@ -263,10 +268,12 @@ function addStart(domain, start) {
  */
 function dropStart(domain, start) {
 	const held = MapMethods.get(domain.starts, start) ?? 0;
+	let below = 0;
 	if (held <= 1) {
 		MapMethods.delete(domain.starts, start);
 		const at = lowerBound(domain.sorted, start);
 		if (domain.sorted[at] === start) removeAt(domain.sorted, at);
+		if (at > 0) below = domain.sorted[at - 1];
 	} else MapMethods.set(domain.starts, start, held - 1);
 	domain.live--;
 	if (domain.live === 0) {
@@ -277,29 +284,111 @@ function dropStart(domain, start) {
 		domain.versions = new WeakMap();
 		domain.sorted = [];
 		MapMethods.clear(domain.windows);
-		SetMethods.clear(domain.subjects);
+		MapMethods.clear(domain.readers);
 		return;
 	}
 	// Another run still started on it: every version it reads is still read.
 	if (held > 1) return;
 	domain.newest = domain.sorted.length === 0 ? 0 : domain.sorted[domain.sorted.length - 1];
-	// What only the run that ended could read goes now, so a run that never ends keeps no more than it reads. An
-	// object's versions cover spans that follow each other without overlapping, so the start falls in one at most, and
-	// that one is the only version whether any open run reads it can have changed.
-	for (const subject of setValues(domain.subjects)) {
-		const list = WeakMapMethods.get(domain.versions, subject);
-		if (list === undefined) {
-			SetMethods.delete(domain.subjects, subject);
-			continue;
+	// Only the versions the start that went was the newest reader of can have lost their last reader: the rest have a
+	// newer one still open. A group whose oldest reader is at or below the open start just below it is read by that start
+	// now, whole; the others are read by no open run any more, and go (see keep).
+	const groups = MapMethods.get(domain.readers, start);
+	if (groups === undefined) return;
+	MapMethods.delete(domain.readers, start);
+	for (const entry of mapEntries(groups)) {
+		const oldest = entry[0];
+		const group = entry[1];
+		if (below !== 0 && below >= oldest) {
+			let target = MapMethods.get(domain.readers, below);
+			if (target === undefined) {
+				target = new Map();
+				MapMethods.set(domain.readers, below, target);
+			}
+			const present = MapMethods.get(target, oldest);
+			if (present === undefined) MapMethods.set(target, oldest, group);
+			else {
+				group.into = present;
+				present.size += group.size;
+			}
+		} else {
+			group.released = true;
+			domain.count -= group.size;
+			keptVersions -= group.size;
 		}
-		const at = lowerBound(list, start, toOf);
-		if (at < list.length && list[at].from < start && !needed(domain, list[at].from, list[at].to)) {
-			removeAt(list, at);
-			domain.count--;
-			keptVersions--;
-		}
-		if (list.length === 0) SetMethods.delete(domain.subjects, subject);
 	}
+}
+
+/**
+ * The versions a domain keeps that the same open runs read (see {@link keep}): how many there are, and whether they have
+ * gone. Each version knows its group, and the group knows nothing of its versions: a version lives in its object's own
+ * list and goes with the object, and one whose group has gone is read by no open run, and is cleared out of its list
+ * when the object is next saved (see {@link beforeChange}).
+ * @typedef {{size: number, released: boolean, into: ReaderGroup|null}} ReaderGroup
+ * @private
+ */
+
+/**
+ * A new, empty group of versions (see {@link ReaderGroup}): an object of no prototype, so nothing a module put on the
+ * shared prototypes is read or run when it is made or read.
+ * @returns {ReaderGroup} The group.
+ * @private
+ */
+function newGroup() {
+	return { __proto__: null, size: 0, released: false, into: null };
+}
+
+/**
+ * The group a version is in now, following merges.
+ * @param {{group: ReaderGroup}} version - The version.
+ * @returns {ReaderGroup} Its group.
+ * @private
+ */
+function groupOf(version) {
+	let group = version.group;
+	if (group.into === null) return group;
+	while (group.into !== null) group = group.into;
+	version.group = group;
+	return group;
+}
+
+/**
+ * Count a version under its readers (the open starts in its span): grouped by the newest of them and the oldest, so
+ * closing a run touches only the groups it was the newest reader of, never the versions themselves. A version is read
+ * by an open run while its group has not gone.
+ * @param {Domain} domain - The domain.
+ * @param {{from: number, to: number, group: ReaderGroup|null}} version - The version.
+ * @returns {void}
+ * @private
+ */
+function keep(domain, version) {
+	const list = domain.sorted;
+	const newest = list[lowerBound(list, version.to + 1) - 1];
+	const oldest = list[lowerBound(list, version.from + 1)];
+	let groups = MapMethods.get(domain.readers, newest);
+	if (groups === undefined) {
+		groups = new Map();
+		MapMethods.set(domain.readers, newest, groups);
+	}
+	let group = MapMethods.get(groups, oldest);
+	if (group === undefined) {
+		group = newGroup();
+		MapMethods.set(groups, oldest, group);
+	}
+	group.size++;
+	version.group = group;
+	domain.count++;
+	keptVersions++;
+}
+
+/**
+ * Whether a version is still read by an open run of its domain.
+ * @param {{group: ReaderGroup}} version - The version.
+ * @returns {boolean} True while it is.
+ * @private
+ */
+function isKept(version) {
+	return !groupOf(version).released;
 }
 
 /**
@@ -310,20 +399,6 @@ function dropStart(domain, start) {
  */
 function toOf(version) {
 	return version.to;
-}
-
-/**
- * Whether an open run's start falls in `(from, to]`: such a run reads the version kept for that span.
- * @param {Domain} domain - The domain.
- * @param {number} from - Exclusive.
- * @param {number} to - Inclusive.
- * @returns {boolean} True when one does.
- * @private
- */
-function needed(domain, from, to) {
-	const list = domain.sorted;
-	const low = lowerBound(list, from + 1);
-	return low < list.length && list[low] <= to;
 }
 
 /**
@@ -399,6 +474,7 @@ export function closeRunSnapshot(snap) {
 	} else dropStart(snap.instance, snap.start);
 	keptVersions -= snap.count;
 	snap.count = 0;
+	MapMethods.clear(snap.readers);
 	snap.copies = new WeakMap();
 	snap.views = new WeakMap();
 	snap.builtins = new WeakMap();
@@ -420,17 +496,28 @@ export function beforeChange(domain, subject, capture) {
 	const stamp = WeakMapMethods.get(domain.stamps, subject) ?? 0;
 	if (stamp >= domain.newest) return false;
 	let list = WeakMapMethods.get(domain.versions, subject);
-	// Its versions hold only the ones an open run reads: each is read when saved, and goes once its last reader ends.
+	// Its versions hold the ones an open run reads, and ones no open run reads any more until they are cleared out here.
 	if (list === undefined) {
 		list = [];
 		WeakMapMethods.set(domain.versions, subject, list);
-	}
-	SetMethods.add(domain.subjects, subject);
-	listPush(list, { __proto__: null, from: stamp, to: domain.clock, content: capture(subject) });
-	domain.count++;
-	keptVersions++;
+	} else prune(list);
+	const version = { __proto__: null, from: stamp, to: domain.clock, content: capture(subject), group: null };
+	listPush(list, version);
+	keep(domain, version);
 	WeakMapMethods.set(domain.stamps, subject, domain.clock);
 	return true;
+}
+
+/**
+ * Clear the versions no open run reads any more out of an object's list, in place.
+ * @param {Array<{group: ReaderGroup}>} list - The list.
+ * @returns {void}
+ * @private
+ */
+function prune(list) {
+	let kept = 0;
+	for (let index = 0; index < list.length; index++) if (isKept(list[index])) list[kept++] = list[index];
+	list.length = kept;
 }
 
 /**
