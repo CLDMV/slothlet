@@ -1,16 +1,19 @@
-/**
- * Manages versioned API paths and their dispatcher proxies.
- *
- * Allows the same logical API path (e.g. `auth`) to be registered under multiple
- * version tags (e.g. `v1`, `v2`). A dispatcher proxy lives at the logical path and
- * routes property accesses to the correct versioned namespace at call time.
- *
- * @class VersionManager
- * @extends ComponentBase
- * @package
- */
 export class VersionManager extends ComponentBase {
+    [x: symbol]: () => VersionManager;
     static slothletProperty: string;
+    /**
+     * Create a VersionManager, or a copy of one for a run (see {@link VersionManager#[FORK]}).
+     * @param {object} slothlet - The instance.
+     */
+    constructor(slothlet: object);
+    /**
+     * Take the versioning state of the manager a tree was copied from (which version is the default, each version's
+     * metadata) for the same versions this one registered while the copy was built.
+     * @param {VersionManager} from - The copied tree's manager, as the code the copy is for sees it.
+     * @returns {void}
+     * @internal
+     */
+    carryState(from: VersionManager): void;
     /**
      * Register a new version for a logical path and rebuild the dispatcher.
      *

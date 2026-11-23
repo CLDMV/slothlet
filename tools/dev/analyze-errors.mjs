@@ -298,6 +298,72 @@ function parseConsoleWarns(content, filePath) {
 }
 
 /**
+ * Mark every character of `content` that sits inside a string or template literal (the text of the
+ * literal, not the `${ ... }` expressions embedded in a template, which are code). Comments are skipped
+ * so a quote inside one does not open a literal. Used so a `console.log(` that is only text in a string
+ * (for example a script source a test writes out and runs as a child process) is not counted as a call.
+ * Regex literals are not tracked; a quote inside one can mis-open a literal, which only hides hits.
+ * @param {string} content - File content
+ * @returns {Uint8Array} One byte per character: 1 inside a string/template literal's text, otherwise 0
+ * @internal
+ */
+function buildStringLiteralMask(content) {
+	const mask = new Uint8Array(content.length);
+	// Stack of open template literals; each entry is the brace depth of its current `${` expression.
+	const templates = [];
+	let quote = null;
+	let i = 0;
+	while (i < content.length) {
+		const ch = content[i];
+		const next = content[i + 1];
+		if (quote) {
+			mask[i] = 1;
+			if (ch === "\\") {
+				if (i + 1 < content.length) mask[i + 1] = 1;
+				i += 2;
+				continue;
+			}
+			if (quote === "`" && ch === "$" && next === "{") {
+				// Enter an embedded expression: back to code until its closing brace.
+				mask[i] = 1;
+				templates.push(0);
+				quote = null;
+				i += 2;
+				continue;
+			}
+			if (ch === quote || (ch === "\n" && quote !== "`")) quote = null;
+			i++;
+			continue;
+		}
+		if (ch === "/" && next === "/") {
+			const end = content.indexOf("\n", i);
+			i = end === -1 ? content.length : end;
+			continue;
+		}
+		if (ch === "/" && next === "*") {
+			const end = content.indexOf("*/", i + 2);
+			i = end === -1 ? content.length : end + 2;
+			continue;
+		}
+		if (ch === '"' || ch === "'" || ch === "`") {
+			quote = ch;
+			mask[i] = 1;
+		} else if (templates.length > 0) {
+			if (ch === "{") templates[templates.length - 1]++;
+			else if (ch === "}") {
+				if (templates[templates.length - 1] === 0) {
+					templates.pop();
+					quote = "`";
+					mask[i] = 1;
+				} else templates[templates.length - 1]--;
+			}
+		}
+		i++;
+	}
+	return mask;
+}
+
+/**
  * Parse console.log statements and check if they're inside SlothletDebug class
  * @param {string} content - File content
  * @param {string} filePath - File path
@@ -309,9 +375,15 @@ function parseConsoleLogs(content, filePath) {
 
 	// Find console.log statements
 	const logPattern = /console\.log\s*\(/g;
+	const inString = buildStringLiteralMask(content);
 
 	let match;
 	while ((match = logPattern.exec(content)) !== null) {
+		// Skip text inside a string or template literal: it is source code held as data, not a call.
+		if (inString[match.index]) {
+			continue;
+		}
+
 		// Check if this match is inside a comment
 		const beforeMatch = content.substring(0, match.index);
 		const lastLineStart = beforeMatch.lastIndexOf("\n") + 1;

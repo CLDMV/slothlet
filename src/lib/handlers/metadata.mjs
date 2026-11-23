@@ -475,7 +475,7 @@ export class Metadata extends ComponentBase {
 	 * owning module, so what is set, read or removed through the stand-in is the loaded node's own entry. Any other value
 	 * is looked up with `lookup`.
 	 * @param {Function|Object} target - Wrapper, proxy or function.
-	 * @param {function(Function|Object): (Object|null|undefined)} lookup - How the facts of a node are found.
+	 * @param {function((Function|Object)): (Object|null|undefined)} lookup - How the facts of a node are found.
 	 * @returns {Object|null|undefined} The facts.
 	 * @private
 	 * @example
