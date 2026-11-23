@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-22T23:40:26-08:00 (1795419626)
+ *	@Last modified time: 2026-11-23T08:13:15-08:00 (1795450395)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -204,6 +204,7 @@ const {
 	runtime_codeWritersOnStack,
 	runtime_loadingFileRunning,
 	isLeafFileFunction,
+	leafOfCopy,
 	outerCallerCeiling,
 	setApiValueCheck,
 	setHandedOutCheck,
@@ -9186,6 +9187,9 @@ function runtime_handOutValue(maker, owner, value) {
 			const leaf = WeakMapMethods.get(trustedRootOwn.implWrappers, value);
 			// Handed out as it is, it is that leaf's node: running it is a call of the node, which whoever runs it has
 			// to be allowed, and it runs with the leaf's rights, as it does when the node is read from `self` (#726).
+			// The node's rules decide its function however it is reached: a module that imports the leaf's file itself
+			// holds a copy of the function, whose stand-in below is checked as a call of the node each time it runs (see
+			// runtime_gateLeafCopy).
 			const node =
 				leaf && WeakSetMethods.has(trustedRootOwn.genuineWrappers, leaf) && leaf.slothlet === owner.slothlet
 					? leaf.____slothletInternal.proxy
@@ -9203,7 +9207,11 @@ function runtime_handOutValue(maker, owner, value) {
 		// objects — passes as itself however deep it nests, unsearched, and code nested in it is told by its frames when
 		// it runs (#726).
 		if (owner.slothlet?.config?.permissions?.caller?.provenance !== false) {
-			if (!runtime_isCodeObject(value)) return value;
+			if (!runtime_isCodeObject(value)) {
+				// Data holding a node's own function, or a module's copy of it, is handed out as a view, so a call of the
+				// function read from it is the node's call (see runtime_gateLeafCopy) and not a call of the bare function.
+				if (!runtime_dataHoldsLeafFunction(owner.slothlet, value, CODE_SEARCH.depth, { remaining: CODE_SEARCH.properties })) return value;
+			}
 			return runtime_membrane(maker, owner, value);
 		}
 		// With `provenance` off no frames are read, so nothing would tell code nested in data from its caller's: the
@@ -9214,6 +9222,109 @@ function runtime_handOutValue(maker, owner, value) {
 		// A value that refuses to be described is handed out as it is.
 		return value;
 	}
+}
+
+/**
+ * Refuse a call of a stand-in whose function is a module's copy of a node's own function (see `leafOfCopy` in
+ * `handlers/frame-placement`) when the node's rules refuse the caller: a module that imports or requires a leaf's file
+ * itself holds the file's function under a module of its own, and running it is a call of the node however it was
+ * reached. Checked as a call of the node is, for the live caller and every call it runs inside; nothing is checked
+ * while the permission system is off or disabled, or for any other function.
+ * A view over a node's own function itself (a crossing view another module was handed) is checked the same way, with
+ * `ownToo`; a stand-in never stands for one (handing it out gives the node).
+ * @param {object} slothlet - The instance.
+ * @param {*} original - The function the stand-in stands for.
+ * @param {ArrayLike<*>} args - The call's arguments, as the caller passed them.
+ * @param {*} thisArg - The call's receiver.
+ * @param {boolean} [ownToo=false] - Check a node's own function as well.
+ * @returns {void}
+ * @throws {SlothletError} `PERMISSION_DENIED` when the node's rules refuse the call.
+ * @private
+ */
+function runtime_gateLeafCopy(slothlet, original, args, thisArg, ownToo = false) {
+	if (typeof original !== "function" || !slothlet?.handlers?.permissionManager?.isEnabled?.()) return;
+	const leaf = WeakMapMethods.get(trustedRootOwn.implWrappers, original);
+	if (leaf !== undefined) {
+		if (ownToo && WeakSetMethods.has(trustedRootOwn.genuineWrappers, leaf) && leaf.slothlet === slothlet)
+			enforcePermission(leaf, args, false, null, null, null, thisArg);
+		return;
+	}
+	const node = leafOfCopy(slothlet, original);
+	if (node === null) return;
+	enforcePermission(node, args, false, null, null, null, thisArg);
+}
+
+/**
+ * What a module is handed for a node's own function, or a module's copy of one (see {@link runtime_gateLeafCopy}),
+ * another module passes it: the node, for the node's own function (as handing it out gives, #726), and for a copy a
+ * stand-in checked as a call of the node each time it runs. Null when the function is neither, belongs to the
+ * receiving module itself, or the permission system is off or disabled: the function is then handed in as it is.
+ * @param {object} maker - The receiving module's record.
+ * @param {object} owner - The wrapper of the module's leaf it is handed to.
+ * @param {Function} value - The function.
+ * @returns {Function|null} What the module gets, or null.
+ * @private
+ */
+function runtime_leafFunctionHandedIn(maker, owner, value) {
+	const slothlet = owner?.slothlet ?? maker?.owner?.slothlet;
+	if (!slothlet?.handlers?.permissionManager?.isEnabled?.() || util.types.isProxy(value)) return null;
+	const leaf = WeakMapMethods.get(trustedRootOwn.implWrappers, value);
+	if (leaf !== undefined) {
+		if (!WeakSetMethods.has(trustedRootOwn.genuineWrappers, leaf) || leaf.slothlet !== slothlet || runtime_makerOf(leaf) === maker)
+			return null;
+		const node = leaf.____slothletInternal.proxy;
+		return typeof node === "function" ? node : null;
+	}
+	const node = leafOfCopy(slothlet, value);
+	if (node === null) return null;
+	const nodeMaker = runtime_makerOf(node);
+	if (nodeMaker === maker) return null;
+	if (util.types.isGeneratorFunction(value) || util.types.isAsyncFunction(value)) return runtime_kindStandIn(nodeMaker, node, value);
+	return runtime_membrane(nodeMaker, node, value);
+}
+
+/**
+ * Whether plain data a module hands out holds a node's own function, or a module's copy of one (see
+ * {@link runtime_gateLeafCopy}), within the bounds given: plain objects and arrays are looked into, by their
+ * descriptors, so nothing of the data runs. Only while the instance's permission system is on: otherwise no call is
+ * refused, and the data passes as itself.
+ * @param {object} slothlet - The instance.
+ * @param {object} value - The data.
+ * @param {number} depth - Levels still allowed, this one included.
+ * @param {{remaining: number}} budget - Properties still allowed.
+ * @returns {boolean} True when it holds such a function.
+ * @private
+ */
+function runtime_dataHoldsLeafFunction(slothlet, value, depth, budget) {
+	if (depth <= 0 || !slothlet?.handlers?.permissionManager?.isEnabled?.()) return false;
+	try {
+		if (util.types.isProxy(value)) return false;
+		const prototype = Reflect.getPrototypeOf(value);
+		if (prototype !== null && prototype !== Objects.prototype && prototype !== Arrays.prototype) return false;
+		if (Arrays.isArray(value) && value.length > budget.remaining) return false;
+		const keys = Reflect.ownKeys(value);
+		budget.remaining -= keys.length;
+		if (budget.remaining < 0) return false;
+		for (let ofIndex = 0, ofList = keys; ofIndex < ofList.length; ofIndex++) {
+			const descriptor = Reflect.getOwnPropertyDescriptor(value, ofList[ofIndex]);
+			if (!descriptor || !("value" in descriptor)) continue;
+			const member = descriptor.value;
+			if (typeof member === "function") {
+				if (util.types.isProxy(member)) continue;
+				const leaf = WeakMapMethods.get(trustedRootOwn.implWrappers, member);
+				if (
+					(leaf && WeakSetMethods.has(trustedRootOwn.genuineWrappers, leaf) && leaf.slothlet === slothlet) ||
+					leafOfCopy(slothlet, member) !== null
+				)
+					return true;
+				continue;
+			}
+			if (member !== null && typeof member === "object" && runtime_dataHoldsLeafFunction(slothlet, member, depth - 1, budget)) return true;
+		}
+	} catch {
+		// Data that refuses to be described is handed out as it is.
+	}
+	return false;
 }
 
 /**
@@ -9505,6 +9616,11 @@ function runtime_handIn(maker, value, owner = maker.owner) {
 	if (record) return value;
 	if (runtime_isSlothletValue(value) || WeakSetMethods.has(INTRINSICS, value)) return value;
 	if (WeakMapMethods.has(maker.made, value)) return value;
+	// A node's own function, or a module's copy of it, reaches another module as a call of the node.
+	if (typeof value === "function") {
+		const asNode = runtime_leafFunctionHandedIn(maker, owner, value);
+		if (asNode !== null) return asNode;
+	}
 	// A prototype of a module's, or plain data holding one, reaches this one as reading it would (#667).
 	const carried = runtime_carryTo(value, owner, owner?.slothlet ?? null);
 	if (carried !== value) return carried;
@@ -9939,10 +10055,12 @@ function runtime_membrane(maker, owner, original, asNode = false, made = maker.m
 	const handler = {
 		apply: (_shadow, thisArg, args) => {
 			const receiver = receiverOf(thisArg);
+			runtime_gateLeafCopy(owner.slothlet, original, args, receiver);
 			const handed = runtime_handInAll(maker, args);
 			return runtime_runAsMaker(owner, original, receiver, handed, true, asNode, runtime_callOrigin(standIn, receiver));
 		},
 		construct: (_shadow, args, newTarget) => {
+			runtime_gateLeafCopy(owner.slothlet, original, args, undefined);
 			const target = newTarget === standIn ? original : runtime_handIn(maker, newTarget);
 			// A subclass's prototype is the subclass's, never the module's.
 			if (target !== original && typeof target === "function") {
@@ -10070,6 +10188,7 @@ function runtime_kindStandIn(maker, owner, original, made = maker.made) {
 	if (existing) return existing;
 	const run = (thisArg, args) => {
 		const receiver = runtime_handIn(maker, thisArg);
+		runtime_gateLeafCopy(owner.slothlet, original, args, receiver);
 		const handed = runtime_handInAll(maker, args);
 		return runtime_runAsMaker(owner, original, receiver, handed, true, false, runtime_callOrigin(standIn, receiver));
 	};
@@ -12660,6 +12779,8 @@ const CROSSING_HANDLER = {
 		let result;
 		try {
 			const receiver = runtime_crossIn(state, thisArg);
+			// A node's own function, or a module's copy of it, is a call of the node whoever runs it.
+			runtime_gateLeafCopy(state.slothlet, state.original, args, receiver, true);
 			// A function of the engine's own the runner gives one that runs for the module that handed it (a scheduler, a
 			// promise's `then`) runs for that module too, whenever it is called back.
 			const forHander = runtime_crossRunsForHander(state);
@@ -12677,6 +12798,7 @@ const CROSSING_HANDLER = {
 	},
 	construct(shadow, args, newTarget) {
 		const state = WeakMapMethods.get(CROSSING_STATES, shadow);
+		runtime_gateLeafCopy(state.slothlet, state.original, args, undefined, true);
 		let target = state.original;
 		if (newTarget !== state.view) {
 			// A class the reader constructs for is its own: what it makes the instance's prototype is the reader's.
@@ -14415,7 +14537,7 @@ function enforcePermission(wrapper, callArgs, promote = false, kept = null, reso
 	const runtimeContext = ctx?.context ?? null;
 	// A leaf's own function handed over as a value (imported raw from its file) is gated for the caller as though
 	// it had called it through `self` (#597): the call it is handed to would otherwise run it with its own rights.
-	const handed = handedLeafFunctions(thisArg, callArgs);
+	const handed = handedLeafFunctions(thisArg, callArgs, wrapper.slothlet);
 	if (handed) {
 		for (let h = 0; h < handed.length; h++) {
 			const leaf = handed[h];
