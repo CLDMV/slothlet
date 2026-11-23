@@ -20,11 +20,12 @@
  * Every other route to a denied target was closed by making sure the *invocation* is attributed: the
  * runtime carries identity across `await`, and the scheduling boundaries capture it at registration.
  * One route survives all of that, because it never asks who is calling. A module reads an api function
- * into a variable while it holds it, and invokes that variable later from a boundary the patches do not
- * reach — `node:timers`, whose ESM named exports are a snapshot taken at first link and so cannot be
- * patched after the fact. At the moment of the call nothing reads `self`, so the executing-module guard
- * has nothing to refuse, and the call arrives with no caller at all. An absent caller reads as
- * host-initiated and exempt.
+ * into a variable while it holds it, and leaves it to be invoked later by code that is not its own — the
+ * host calling a reference the module handed out. At the moment of the call nothing reads `self`, so the
+ * executing-module guard has nothing to refuse, and no module code is on the stack, so the call arrives
+ * with no caller at all. An absent caller reads as host-initiated and exempt. A callback the module
+ * defines itself is a different case: even from a boundary slothlet does not patch (an `fs` completion
+ * callback), its frames are the module's file, so the module is still the caller.
  *
  * The fix records the reader at the point the reference is taken, which is the one moment its identity
  * is known — the same principle the boundary patches use, applied one step earlier, at acquisition
@@ -110,37 +111,60 @@ describe.each(getMatrixConfigs())("Permissions > captured references > $name", (
 	});
 
 	it("is on without being asked for, and can be turned off for compatibility", async () => {
-		api = await slothlet({
-			...config,
-			base: BASE,
-			permissions: {
-				policy: "deny",
-				rules: [
-					{ caller: "callers.paymentsCaller.**", target: "db.write.**", effect: "allow" },
-					{ caller: "**", target: "callers.**", effect: "allow" }
-				],
-				caller: {
-					capture: false
-				}
-			}
-		});
-
 		// The opt-out exists for code written against earlier versions, which could stash a reference and
-		// call it from host context expecting the host's standing. Turning it off restores exactly that,
-		// so the escape hatch has to be demonstrably an escape hatch — otherwise it is dead config.
-		expect(await api.callers.untrustedCaller.stashInsertRef()).toBe("stashed");
-		expect(await api.callers.untrustedCaller.invokeStashedFromUnpatched()).toBe("armed");
+		// have the host call it later expecting the host's standing. The host calls the reference here, so no
+		// module code is running and nothing but the captured identity can refuse it.
+		const build = async (caller) =>
+			await slothlet({
+				...config,
+				base: BASE,
+				permissions: {
+					policy: "deny",
+					rules: [
+						{ caller: "callers.paymentsCaller.**", target: "db.write.**", effect: "allow" },
+						{ caller: "**", target: "callers.**", effect: "allow" }
+					],
+					...(caller ? { caller } : {})
+				}
+			});
 
+		/**
+		 * Stash the reference in the unprivileged module, hand it to the host and call it there.
+		 * @returns {Promise<{ok: boolean, code?: string}>} Outcome of the host's call.
+		 */
+		const hostCallsStashed = async () => {
+			expect(await api.callers.untrustedCaller.stashInsertRef()).toBe("stashed");
+			const ref = await api.callers.untrustedCaller.handOutStashed();
+			try {
+				return { ok: true, value: await ref({ x: 1 }) };
+			} catch (err) {
+				return { ok: false, code: err.code ?? String(err.message).slice(0, 40) };
+			}
+		};
+
+		// Not asked for: the reference still enforces as the module that read it.
+		api = await build(null);
+		const byDefault = await hostCallsStashed();
+		expect(byDefault.ok).toBe(false);
+		expect(byDefault.code).toMatch(/PERMISSION_DENIED/);
+		await api.shutdown();
+
+		// Turned off: only the live caller is checked, and there is none, so the host's standing applies, in
+		// both runtimes. That is the whole effect of the switch — otherwise it is dead config.
+		api = await build({ capture: false });
+		expect(await hostCallsStashed()).toMatchObject({ ok: true });
+
+		// It does not reopen the route through the module's own code. A callback the module defined, run from
+		// a boundary slothlet does not patch, is still the module's own call and is still refused.
+		expect(await api.callers.untrustedCaller.invokeStashedFromUnpatched()).toBe("armed");
 		let outcome = null;
 		for (let attempt = 0; attempt < 200 && !outcome; attempt++) {
 			outcome = await api.callers.untrustedCaller.readStashedOutcome();
 			if (!outcome) await new Promise((resolve) => setTimeout(resolve, 20));
 		}
-
-		// Only the live-caller check applies now, and a callback off an unpatched boundary has no caller,
-		// so under the live runtime this is the old fail-open result. The async runtime never inherited it.
 		expect(outcome).not.toBeNull();
-		expect(outcome.ok).toBe(config.runtime === "live");
+		expect(outcome.ok).toBe(false);
+		expect(outcome.code).toMatch(/PERMISSION_DENIED/);
 	});
 
 	it("keeps reference equality across repeated reads", async () => {
