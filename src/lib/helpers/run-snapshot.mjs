@@ -27,9 +27,11 @@
  * A nested run is a run of the run it was opened in: that run is its domain, with a clock of its own, and the outer
  * run's changes to its own copies are saved for the nested run the same way.
  *
- * Versions are kept only while a run that can still read them is open: each change prunes the versions no open run's
- * start falls in, and once the last run of an instance has ended its versions are dropped as a whole. A run that never
- * ends keeps the one version per object it can read, however many other runs come and go.
+ * Versions are kept only while a run that can still read them is open: when a run ends, the version its start fell in
+ * goes unless another open run's start falls in it too, and once the last run of an instance has ended its versions are
+ * dropped as a whole. A run that never ends keeps the one version per object it can read, however many other runs come
+ * and go. Opening and closing a run, saving a version and reading one cost a lookup in the open runs' starts, not a pass
+ * over them, so many runs open at once cost no more each than one.
  *
  * Nothing here is asynchronous, and nothing uses the platform's async context: it works the same on both runtimes and
  * in a browser.
@@ -97,8 +99,8 @@ class Domain {
 		this.live = 0;
 		/** The newest open run's start (0 with none open). */
 		this.newest = 0;
-		/** The open runs' starts, ascending; null while it has to be made again. */
-		this.sorted = null;
+		/** The open runs' starts, ascending and each once: kept in step with `starts`. */
+		this.sorted = [];
 		/** Object → the tick its current content dates from. */
 		this.stamps = new WeakMap();
 		/** Object → its saved versions `{from, to, content}`, oldest first. */
@@ -201,6 +203,37 @@ export function runsOpen(domain) {
 }
 
 /**
+ * The index of the first entry of an ascending list that is not below `value`.
+ * @param {Array<*>} list - The list.
+ * @param {number} value - The value.
+ * @param {function(*): number} [key] - What an entry is ordered by.
+ * @returns {number} The index (the list's length when every entry is below it).
+ * @private
+ */
+function lowerBound(list, value, key) {
+	let low = 0;
+	let high = list.length;
+	while (low < high) {
+		const middle = (low + high) >> 1;
+		if ((key === undefined ? list[middle] : key(list[middle])) < value) low = middle + 1;
+		else high = middle;
+	}
+	return low;
+}
+
+/**
+ * Take the entry at `index` out of a list, in place.
+ * @param {Array<*>} list - The list.
+ * @param {number} index - The entry's index.
+ * @returns {void}
+ * @private
+ */
+function removeAt(list, index) {
+	for (let at = index + 1; at < list.length; at++) list[at - 1] = list[at];
+	list.length--;
+}
+
+/**
  * Count a start in on a domain.
  * @param {Domain} domain - The domain.
  * @param {number} start - The start.
@@ -208,10 +241,17 @@ export function runsOpen(domain) {
  * @private
  */
 function addStart(domain, start) {
-	MapMethods.set(domain.starts, start, (MapMethods.get(domain.starts, start) ?? 0) + 1);
+	const held = MapMethods.get(domain.starts, start) ?? 0;
+	MapMethods.set(domain.starts, start, held + 1);
 	domain.live++;
 	if (start > domain.newest) domain.newest = start;
-	domain.sorted = null;
+	if (held !== 0) return;
+	// A new start is the newest nearly always (the clock only goes up): it goes at the end.
+	const list = domain.sorted;
+	const at = list.length === 0 || list[list.length - 1] < start ? list.length : lowerBound(list, start);
+	listPush(list, start);
+	for (let index = list.length - 1; index > at; index--) list[index] = list[index - 1];
+	list[at] = start;
 }
 
 /**
@@ -223,67 +263,53 @@ function addStart(domain, start) {
  */
 function dropStart(domain, start) {
 	const held = MapMethods.get(domain.starts, start) ?? 0;
-	if (held <= 1) MapMethods.delete(domain.starts, start);
-	else MapMethods.set(domain.starts, start, held - 1);
+	if (held <= 1) {
+		MapMethods.delete(domain.starts, start);
+		const at = lowerBound(domain.sorted, start);
+		if (domain.sorted[at] === start) removeAt(domain.sorted, at);
+	} else MapMethods.set(domain.starts, start, held - 1);
 	domain.live--;
-	domain.sorted = null;
 	if (domain.live === 0) {
 		domain.newest = 0;
 		keptVersions -= domain.count;
 		domain.count = 0;
 		domain.stamps = new WeakMap();
 		domain.versions = new WeakMap();
+		domain.sorted = [];
 		MapMethods.clear(domain.windows);
 		SetMethods.clear(domain.subjects);
 		return;
 	}
-	if (start === domain.newest) {
-		let newest = 0;
-		for (const entry of mapEntries(domain.starts)) if (entry[0] > newest) newest = entry[0];
-		domain.newest = newest;
-	}
-	// What only the run that ended could read goes now, so a run that never ends keeps no more than it reads.
+	// Another run still started on it: every version it reads is still read.
+	if (held > 1) return;
+	domain.newest = domain.sorted.length === 0 ? 0 : domain.sorted[domain.sorted.length - 1];
+	// What only the run that ended could read goes now, so a run that never ends keeps no more than it reads. An
+	// object's versions cover spans that follow each other without overlapping, so the start falls in one at most, and
+	// that one is the only version whether any open run reads it can have changed.
 	for (const subject of setValues(domain.subjects)) {
 		const list = WeakMapMethods.get(domain.versions, subject);
-		if (list === undefined || prune(domain, list) === 0) SetMethods.delete(domain.subjects, subject);
+		if (list === undefined) {
+			SetMethods.delete(domain.subjects, subject);
+			continue;
+		}
+		const at = lowerBound(list, start, toOf);
+		if (at < list.length && list[at].from < start && !needed(domain, list[at].from, list[at].to)) {
+			removeAt(list, at);
+			domain.count--;
+			keptVersions--;
+		}
+		if (list.length === 0) SetMethods.delete(domain.subjects, subject);
 	}
 }
 
 /**
- * Drop the versions in `list` no open run reads any more.
- * @param {Domain} domain - The domain.
- * @param {Array<{from: number, to: number}>} list - An object's versions.
- * @returns {number} How many are left.
+ * The end of a version's span.
+ * @param {{to: number}} version - The version.
+ * @returns {number} Its `to`.
  * @private
  */
-function prune(domain, list) {
-	let kept = 0;
-	for (let index = 0; index < list.length; index++) {
-		const version = list[index];
-		if (needed(domain, version.from, version.to)) list[kept++] = version;
-	}
-	const dropped = list.length - kept;
-	if (dropped !== 0) {
-		list.length = kept;
-		domain.count -= dropped;
-		keptVersions -= dropped;
-	}
-	return kept;
-}
-
-/**
- * The open runs' starts on a domain, ascending.
- * @param {Domain} domain - The domain.
- * @returns {number[]} The starts.
- * @private
- */
-function sortedStarts(domain) {
-	if (domain.sorted === null) {
-		const list = [];
-		for (const entry of mapEntries(domain.starts)) listPush(list, entry[0]);
-		domain.sorted = ArrayMethods.sort(list, (a, b) => a - b);
-	}
-	return domain.sorted;
+function toOf(version) {
+	return version.to;
 }
 
 /**
@@ -295,14 +321,8 @@ function sortedStarts(domain) {
  * @private
  */
 function needed(domain, from, to) {
-	const list = sortedStarts(domain);
-	let low = 0;
-	let high = list.length;
-	while (low < high) {
-		const middle = (low + high) >> 1;
-		if (list[middle] <= from) low = middle + 1;
-		else high = middle;
-	}
+	const list = domain.sorted;
+	const low = lowerBound(list, from + 1);
 	return low < list.length && list[low] <= to;
 }
 
@@ -363,8 +383,8 @@ export function openRunSnapshot(owner, parent) {
 }
 
 /**
- * Close a run's snapshot: its copies go with it, and the versions kept only for it are pruned on the next change (or
- * dropped as a whole once no run of the instance is open).
+ * Close a run's snapshot: its copies go with it, and the versions kept only for it go now (as a whole once no run of the
+ * instance is open).
  * @param {RunSnapshot|null|undefined} snap - The snapshot.
  * @returns {void}
  * @internal
@@ -400,13 +420,10 @@ export function beforeChange(domain, subject, capture) {
 	const stamp = WeakMapMethods.get(domain.stamps, subject) ?? 0;
 	if (stamp >= domain.newest) return false;
 	let list = WeakMapMethods.get(domain.versions, subject);
+	// Its versions hold only the ones an open run reads: each is read when saved, and goes once its last reader ends.
 	if (list === undefined) {
 		list = [];
 		WeakMapMethods.set(domain.versions, subject, list);
-	} else {
-		// Versions no open run reads any more go: pruned by what each open run can read, so a run that never ends keeps
-		// only the one it needs.
-		prune(domain, list);
 	}
 	SetMethods.add(domain.subjects, subject);
 	listPush(list, { __proto__: null, from: stamp, to: domain.clock, content: capture(subject) });
@@ -466,9 +483,12 @@ export function versionAt(domain, subject, start) {
 	if (stamp === undefined || start > stamp) return CURRENT;
 	const list = WeakMapMethods.get(domain.versions, subject);
 	if (list === undefined) return CURRENT;
-	for (let index = 0; index < list.length; index++) {
+	// The spans follow each other without overlapping: the first that ends at or after the start is the one it falls in,
+	// if any.
+	const index = lowerBound(list, start, toOf);
+	if (index < list.length) {
 		const version = list[index];
-		if (version.from < start && start <= version.to) {
+		if (version.from < start) {
 			// A plain function's default prototype is saved as the function only (see saveDefaultPrototype): its content is
 			// made on the first read that needs it. No other version is a function.
 			if (typeof version.content === "function") version.content = defaultPrototypeOf(version.content);
