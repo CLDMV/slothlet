@@ -14,15 +14,15 @@
  */
 
 /**
- * @fileoverview #821 — `api.slothlet.hook` exists only when hooks are enabled (or `diagnostics: true` is set).
- * The builder removed a key named `hooks` while the namespace is `hook`, so it was there with hooks off.
+ * @fileoverview `api.slothlet.hook` exists on every instance (#821). The `hook` option only sets whether hooks start
+ * enabled; `api.slothlet.hook.enable()` turns them on at runtime, so the namespace can't depend on the starting state.
  */
 
 import { describe, it, expect, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
 import { TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
-describe.each(["eager", "lazy"])("api.slothlet.hook follows the hook config (#821) > %s", (mode) => {
+describe.each(["eager", "lazy"])("api.slothlet.hook is on every instance (#821) > %s", (mode) => {
 	let api;
 
 	afterEach(async () => {
@@ -30,14 +30,35 @@ describe.each(["eager", "lazy"])("api.slothlet.hook follows the hook config (#82
 		api = null;
 	});
 
-	it("is absent when hooks are off", async () => {
+	it("is present when hooks are off", async () => {
 		api = await slothlet({ base: TEST_DIRS.API_TEST, mode });
-		expect(api.slothlet.hook).toBeUndefined();
+		expect(typeof api.slothlet.hook.on).toBe("function");
 	});
 
-	it("is absent for hook: false", async () => {
+	it("is present for hook: false", async () => {
 		api = await slothlet({ base: TEST_DIRS.API_TEST, mode, hook: false });
-		expect(api.slothlet.hook).toBeUndefined();
+		expect(typeof api.slothlet.hook.on).toBe("function");
+	});
+
+	describe.each([
+		["no hook option", undefined],
+		["hook: false", false],
+		["hook: { enabled: false }", { enabled: false }]
+	])("enabling at runtime with %s", (_label, hook) => {
+		it("fires registered hooks only after enable()", async () => {
+			const options = { base: TEST_DIRS.API_TEST, mode };
+			if (hook !== undefined) options.hook = hook;
+			api = await slothlet(options);
+			let fired = 0;
+			api.slothlet.hook.on("math.add:before", () => {
+				fired++;
+			});
+			const expected = await api.math.add(2, 3);
+			expect(fired).toBe(0);
+			api.slothlet.hook.enable();
+			expect(await api.math.add(2, 3)).toBe(expected);
+			expect(fired).toBe(1);
+		});
 	});
 
 	it("is present when hooks are enabled", async () => {
