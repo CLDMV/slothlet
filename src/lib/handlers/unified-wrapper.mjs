@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-22T12:49:46-08:00 (1795380586)
+ *	@Last modified time: 2026-11-22T23:40:26-08:00 (1795419626)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -14599,7 +14599,8 @@ function runtime_applyWithEntry(wrapper, entry, apply) {
 }
 
 /**
- * Record a wrapper's function as its leaf function (#597; see {@link implWrappers}): the function itself, or the
+ * Record a wrapper's function as its leaf function (#597; see {@link implWrappers}): the function itself (and the
+ * module's function under it when it is a composition layer), or the
  * `default` export of a namespace, read from its descriptor so no getter runs.
  * @param {object} wrapper - The wrapper.
  * @param {*} impl - Its implementation.
@@ -14609,6 +14610,9 @@ function runtime_applyWithEntry(wrapper, entry, apply) {
 function runtime_registerLeafFunction(wrapper, impl) {
 	if (typeof impl === "function") {
 		WeakMapMethods.set(trustedRootOwn.implWrappers, impl, wrapper);
+		// A composition layer stands over the module's own function, which is what the module's code holds and hands out.
+		const underlying = layerUnderlying(impl);
+		if (underlying !== impl && typeof underlying === "function") WeakMapMethods.set(trustedRootOwn.implWrappers, underlying, wrapper);
 		return;
 	}
 	if (!isNode) return;
@@ -22713,6 +22717,9 @@ class UnifiedWrapper extends ComponentBase {
 					const value = runtime_prototypeForReader(wrapper, runtime_exposePrototype(wrapper, implDescriptor.value), "prototype");
 					return virtualizeDescriptor({ __proto__: null, ...implDescriptor, value });
 				}
+				// A member that is the node's own function, or an ancestor's, is described holding that node, as reading it gives.
+				const cycle = implDescriptor && "value" in implDescriptor ? runtime_cycleNode(wrapper, implDescriptor.value) : null;
+				if (cycle !== null) return virtualizeDescriptor({ __proto__: null, ...implDescriptor, value: cycle.createProxy() });
 				if (implDescriptor !== null) return virtualizeDescriptor(runtime_describeImplMember(wrapper, implDescriptor));
 			}
 
