@@ -191,9 +191,17 @@ describe.each(getMatrixConfigs())("Config > clock > $name", ({ config }) => {
 	it("runs a deferred background step on the host's setTimeout when it supplies one", async () => {
 		vi.useFakeTimers();
 		const scheduled = [];
+		let fired = 0;
 		const recording = (fn, ms, ...rest) => {
 			scheduled.push(ms);
-			return setTimeout(fn, ms, ...rest);
+			return setTimeout(
+				(...args) => {
+					fired++;
+					return fn(...args);
+				},
+				ms,
+				...rest
+			);
 		};
 		api = await slothlet({
 			...config,
@@ -206,10 +214,11 @@ describe.each(getMatrixConfigs())("Config > clock > $name", ({ config }) => {
 		// Installed before the instance existed: slothlet's own deferred work waits for the fake clock to move.
 		expect(scheduled.length).toBeGreaterThan(0);
 		expect(scheduled.every((ms) => ms === 0)).toBe(true);
-		const pending = vi.getTimerCount();
-		expect(pending).toBeGreaterThan(0);
+		// Only the timers scheduled before the advance are counted: work that fires may schedule more, and other
+		// code in the process may hold timers of its own, so a total before and after would not say it.
+		const built = scheduled.length;
 		await vi.advanceTimersByTimeAsync(1);
-		expect(vi.getTimerCount()).toBeLessThan(pending);
+		expect(fired).toBeGreaterThanOrEqual(built);
 	});
 
 	it("with no clock, fake timers installed after slothlet loaded do not move it", async () => {
