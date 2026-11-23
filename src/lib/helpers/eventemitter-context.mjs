@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-21T13:37:26-08:00 (1795297046)
+ *	@Last modified time: 2026-11-22T23:44:26-08:00 (1795419866)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -34,7 +34,7 @@ import { EventEmitter, AsyncResource } from "#helpers/platform";
 import { anyAsyncInstance } from "#helpers/flow-stores";
 import { holdForCurrentFlow, pinToCurrentCaller } from "#helpers/caller-pinning";
 import { releaseWhenCollected } from "#helpers/flow-stores";
-import { openLayer, closeLayer, holdsValue, markLayer } from "#helpers/boundary-patch-layers";
+import { openLayer, closeLayer, holdsValue, markLayer, matchShape } from "#helpers/boundary-patch-layers";
 import { internals as sharedValuesInternals } from "../handlers/shared-values.mjs";
 import {
 	ArrayMethods,
@@ -115,6 +115,8 @@ const originalMethods = new Map();
  * @private
  */
 function runtime_installPatch(name, layer, patch) {
+	// Looks like the method it replaces: its `name` and `length` (see matchShape).
+	matchShape(patch, layer.below);
 	markLayer(patch, layer);
 	// The patch is slothlet's own, made by no module: `EventEmitter` handed on by a module stays the class itself (#597).
 	recordSharedExports(patch);

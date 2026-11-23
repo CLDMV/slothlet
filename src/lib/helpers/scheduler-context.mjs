@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-22T17:54:41-08:00 (1795398881)
+ *	@Last modified time: 2026-11-22T23:44:29-08:00 (1795419869)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -38,7 +38,7 @@
 
 import { holdForCurrentFlow, pinToCurrentCaller, releaseAfterCall } from "#helpers/caller-pinning";
 import { checkCapability } from "#helpers/capability-context";
-import { openLayer, closeLayer, holdsValue, markLayer } from "#helpers/boundary-patch-layers";
+import { openLayer, closeLayer, holdsValue, markLayer, matchShape } from "#helpers/boundary-patch-layers";
 import {
 	concatLists,
 	EventTargetMethods,
@@ -219,8 +219,9 @@ function runtime_releaseOnAbort(options, release) {
  * Node hangs promisify support off `setTimeout`/`setImmediate` as a well-known symbol, and callers
  * reach it through the global they were given. A wrapper that dropped it would break
  * `util.promisify(setTimeout)` for everything in the process, so carry every own property across by
- * descriptor — accessors stay accessors and non-enumerable keys stay non-enumerable. `length`, `name`,
- * and `prototype` are deliberately left alone — they belong to the wrapper.
+ * descriptor — accessors stay accessors and non-enumerable keys stay non-enumerable. `prototype` is
+ * deliberately left alone, it belongs to the wrapper; `name` and `length` are the original's, set by
+ * `matchShape` (see helpers/boundary-patch-layers).
  *
  * @param {Function} wrapper - Replacement function.
  * @param {Function} original - Function being replaced.
@@ -243,6 +244,29 @@ function runtime_carryOwnExtras(wrapper, original) {
 }
 
 /**
+ * Install on `node:timers` the very wrapper the global has, when the function there is the one the global's wrapper
+ * replaced: Node exports one function as both `globalThis.setTimeout` and `require("node:timers").setTimeout` (and so
+ * for each timer function), and code that compares them keeps finding them equal. A `node:timers` function that is not
+ * the global's (a host replaced one of them) gets a wrapper of its own.
+ * @param {object} host - Object carrying the entry point.
+ * @param {string} name - Property name to patch.
+ * @param {Function} installed - The function there now.
+ * @returns {boolean} True when the global's wrapper was installed.
+ * @private
+ */
+function runtime_shareGlobalWrapper(host, name, installed) {
+	if (host === globalThis) return false;
+	for (let index = 0; index < patched.length; index++) {
+		const entry = patched[index];
+		if (entry.host !== globalThis || entry.name !== name || entry.layer.below !== installed) continue;
+		host[name] = entry.wrapper;
+		listPush(patched, { host, name, layer: entry.layer, wrapper: entry.wrapper });
+		return true;
+	}
+	return false;
+}
+
+/**
  * Replace one scheduler entry point with a wrapper that pins its callback.
  *
  * @param {object} host - Object carrying the entry point (`globalThis` or `process`).
@@ -255,6 +279,7 @@ function runtime_patchScheduler(host, name) {
 	// Absent or non-callable in this host: `setImmediate` and `process.nextTick` are Node-only, and a
 	// browser reaches here with neither. Exercised by the vitest browser compose.
 	if (typeof installed !== "function") return;
+	if (runtime_shareGlobalWrapper(host, name, installed)) return;
 	// Shared with any other copy of slothlet in the realm (see boundary-patch-layers).
 	const layer = openLayer(installed);
 	const original = layer.below;
@@ -298,6 +323,7 @@ function runtime_patchScheduler(host, name) {
 	};
 
 	runtime_carryOwnExtras(wrapper, original);
+	matchShape(wrapper, original);
 	markLayer(wrapper, layer);
 	host[name] = wrapper;
 	listPush(patched, { host, name, layer, wrapper });
@@ -316,10 +342,10 @@ function runtime_patchScheduler(host, name) {
 function runtime_patchClear(host, name) {
 	const installed = host?.[name];
 	if (typeof installed !== "function") return;
+	if (runtime_shareGlobalWrapper(host, name, installed)) return;
 	const layer = openLayer(installed);
 	const original = layer.below;
 	const family = FAMILY[name];
-	// The same function on the builtin `node:timers` as on the global (Node): one wrapper of its own on each.
 	// Not gated on the layer: work a run held while this copy was active is still released when it is cleared.
 	const wrapper = function (handle, ...rest) {
 		const result = Reflect.apply(original.call, original, concatLists([host, handle], rest));
@@ -328,6 +354,7 @@ function runtime_patchClear(host, name) {
 		return result;
 	};
 	runtime_carryOwnExtras(wrapper, original);
+	matchShape(wrapper, original);
 	markLayer(wrapper, layer);
 	host[name] = wrapper;
 	listPush(patched, { host, name, layer, wrapper });
@@ -359,6 +386,7 @@ function runtime_patchHandleMethod(proto, key, family) {
 		}
 	}[key];
 	runtime_carryOwnExtras(wrapper, original);
+	matchShape(wrapper, original);
 	markLayer(wrapper, layer);
 	proto[key] = wrapper;
 	listPush(patched, { host: proto, name: key, layer, wrapper });
@@ -400,6 +428,7 @@ function runtime_patchHandleId(proto, family) {
 		}
 	}[key];
 	runtime_carryOwnExtras(wrapper, original);
+	matchShape(wrapper, original);
 	markLayer(wrapper, layer);
 	proto[key] = wrapper;
 	listPush(patched, { host: proto, name: key, layer, wrapper });

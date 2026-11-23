@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-21T13:37:26-08:00 (1795297046)
+ *	@Last modified time: 2026-11-22T23:44:26-08:00 (1795419866)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -46,7 +46,7 @@ import { AsyncResource } from "#helpers/platform";
 import { anyAsyncInstance } from "#helpers/flow-stores";
 import { holdForCurrentFlow, pinToCurrentCaller } from "#helpers/caller-pinning";
 import { releaseWhenCollected } from "#helpers/flow-stores";
-import { openLayer, closeLayer, holdsValue, markLayer } from "#helpers/boundary-patch-layers";
+import { openLayer, closeLayer, holdsValue, markLayer, matchShape } from "#helpers/boundary-patch-layers";
 import { Boolean, EventTarget, FunctionMethods, Map, mapEntries, MapMethods, String, WeakMap, WeakMapMethods } from "#helpers/intrinsics";
 import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "#helpers/instance-imports";
 
@@ -315,6 +315,7 @@ function runtime_patchAdd() {
 		return result;
 	};
 
+	matchShape(patch, original);
 	markLayer(patch, layer);
 	EventTarget.prototype.addEventListener = patch;
 	MapMethods.set(originalMethods, "addEventListener", { layer, patch });
@@ -343,6 +344,7 @@ function runtime_patchRemove() {
 		return result;
 	};
 
+	matchShape(patch, original);
 	markLayer(patch, layer);
 	EventTarget.prototype.removeEventListener = patch;
 	MapMethods.set(originalMethods, "removeEventListener", { layer, patch });
