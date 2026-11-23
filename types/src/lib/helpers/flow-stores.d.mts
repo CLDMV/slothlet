@@ -50,6 +50,14 @@ export function holdRunWork(record: object | null | undefined): boolean;
  */
 export function whenIdle(fn: Function): void;
 /**
+ * Run `fn` on a microtask, once the code running now has returned: with the host's own `queueMicrotask` as it was when
+ * slothlet loaded. The microtask is no run's work.
+ * @param {Function} fn - What to run.
+ * @returns {void}
+ * @internal
+ */
+export function afterCurrentWork(fn: Function): void;
+/**
  * Uncount one piece of a run's work (see {@link holdRunWork}), or the run's callback once it has settled. The last
  * one makes the record `done` and tells the instance, which tears the copy down once it is idle.
  * @param {object} record - The run's record.
@@ -74,12 +82,46 @@ export function endRun(record: object): void;
  */
 export function holdRunWorkOnce(record: object | null | undefined): Function | null;
 /**
+ * Release a piece of a run's work once `target`, the object the work lives on, has been collected: a promise nobody
+ * can settle any more, a listener whose emitter is garbage, an observer nobody holds. Nothing can run that work's code
+ * then, so it no longer keeps the run's record. `release` must release at most once (as a {@link holdRunWorkOnce}
+ * releaser does), so the work ending the usual way first makes the later call a no-op, and must not reach `target`.
+ * @param {object} target - The object the work lives on.
+ * @param {Function|null} release - What releases the work; null when nothing was counted.
+ * @param {object} [token] - For work that ends while `target` lives on (a handler replaced on its target, an observer
+ *   disconnected): {@link stopReleaseWhenCollected} with it then, so a long-lived target does not gather entries.
+ * @returns {void}
+ * @internal
+ */
+export function releaseWhenCollected(target: object, release: Function | null, token?: object): void;
+/**
+ * Drop what {@link releaseWhenCollected} registered under `token`: the work ended the usual way.
+ * @param {object} token - The token.
+ * @returns {void}
+ * @internal
+ */
+export function stopReleaseWhenCollected(token: object): void;
+/**
  * Count a copy an instance holds apart from what it has now, or uncount one.
  * @param {number} delta - +1 or -1.
  * @returns {void}
  * @internal
  */
 export function countHeldCopy(delta: number): void;
+/**
+ * Count records waiting for their instance to tear their copies down, or uncount them.
+ * @param {number} delta - How many more (or, negative, fewer).
+ * @returns {void}
+ * @internal
+ */
+export function countRetiring(delta: number): void;
+/**
+ * How many records of runs whose work is done are waiting for their instance to tear their copies down, across every
+ * instance: for the suite.
+ * @returns {number} The count.
+ * @internal
+ */
+export function retiringRunCount(): number;
 /**
  * Count an instance whose copy fields became accessors, or plain fields again.
  * @param {number} delta - +1 or -1.
@@ -165,8 +207,16 @@ export function treeWrite(slothlet: object | null | undefined): Promise<void> | 
  */
 export function recordOperation(slothlet: object, operation: object): void;
 /**
+ * Let go of the stores a run's record holds for a reload to move (see {@link trackFlowStore}): its copy is torn down.
+ * @param {object} record - The record.
+ * @returns {void}
+ * @internal
+ */
+export function untrackRunStores(record: object): void;
+/**
  * Record a `run()` / `scope()` store against the instance object that opened it, so a reload can move it to the
- * instance's new ID (see {@link reparentFlowStores}).
+ * instance's new ID (see {@link reparentFlowStores}): on its run's record while the run's copy is not torn down (the
+ * work the run left behind keeps it so), else weakly.
  * @param {object|null|undefined} slothlet - The instance object (the store's `slothlet`).
  * @param {object} store - The store.
  * @returns {void}
@@ -193,7 +243,8 @@ export function forgetFlowStores(slothlet: object): void;
  * The key a `run()` / `scope()` store records its copy of the instance under. Every run gets a record of its own (see
  * {@link copyForRun}): `from` is the token of the copy that was current when the run started, shared with every run
  * that started on that copy, `parent` is the record of the run it was opened in (null for a run opened outside any),
- * and `ns` is the run's own handlers namespace once it holds a fork (null until then). The stores of the run's calls
+ * and `ns` is the run's own handlers namespace once it holds a fork (null until then). `stores` lists the run's stores
+ * a reload moves to the instance's new ID until the copy is torn down (see {@link trackFlowStore}). The stores of the run's calls
  * and of work it left behind carry the run's record with the rest of the store.
  *
  * A record lives while its run's work does (see {@link holdRunWork}): `work` counts the run's callback until it has
@@ -208,7 +259,11 @@ export function forgetFlowStores(slothlet: object): void;
  * write from code in a run forks the written handler into the run's `ns` (see `Slothlet#writeTarget`), which the run
  * then reads first. A nested run starts with its own copy of its parent's `ns`. A run that changes its api tree holds a
  * whole set of its own in `values` (its tree and the handlers that go with it, see `Slothlet#ownTree`), which it reads
- * before anything else; a nested run opened in it reads that tree until either one changes it.
+ * before anything else; a nested run opened in it reads that tree until either one changes it. `restart` tells of the
+ * run's last `restart()` (null when it made none): `epoch` is the epoch of the tree it built, which the nodes of every
+ * tree the run read before it are above (see `ApiManager#isRestartReplaced`), and `stamps` the reload stamps the files
+ * of the trees built for the run since were imported under, which code of those earlier trees does not carry. A nested
+ * run starts with a copy of its parent's.
  * @type {symbol}
  * @internal
  */
@@ -297,6 +352,14 @@ export const SILENT_BUILD: symbol;
  * @internal
  */
 export const COPY_SOURCE_URL: symbol;
+/**
+ * The key of the instance's method that hands a run's own build the seal its CommonJS leaves' scripts are sealed for:
+ * one per `restart()` of the run, shared by the reloads in the run after it (see `SEALED_BUILDS` in
+ * helpers/instance-imports).
+ * @type {symbol}
+ * @internal
+ */
+export const RUN_BUILD_SEAL: symbol;
 /**
  * The type of an `AsyncResource` slothlet makes only to carry the store active where it is made into a callback that
  * runs later (an observer's), which is no run's work by itself: the async runtime does not count it (see `#countWork` in

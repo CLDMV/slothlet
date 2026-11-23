@@ -180,6 +180,49 @@ export class LiveContextManager {
      */
     runFlowBody(flowID: string, fn: Function, args: Array<any>): Promise<any>;
     /**
+     * Run `fn` in a flow of its own that carries `value` as the mark `key` (slothlet's marks of a reload's, a restart's
+     * or a run's copy's build, and of the ID a lazy load runs under), as the async runtime carries them in an
+     * `AsyncLocalStorage`. The flow is a store over the one the running code is part of (see
+     * {@link LiveContextManager#runParent}): the same instance, context, `self`, caller and run, with the mark added,
+     * carried as every flow of this manager is (its promise jobs, the patched schedulers, pinned listeners), so a mark
+     * reaches exactly as far as a `run()`'s context does. The store leaves the instances once `fn` has settled; work it
+     * left behind runs in it, as work a `run()` left behind runs in the run's (see reopenFlowStore).
+     * @param {string} instanceID - The instance.
+     * @param {symbol} key - The mark.
+     * @param {*} value - Its value.
+     * @param {function(): *} fn - What runs in the flow.
+     * @returns {*} What `fn` returned.
+     * @internal
+     */
+    runMarked(instanceID: string, key: symbol, value: any, fn: () => any): any;
+    /**
+     * Run a lazy node's load apart from every flow (see `runtime_loadApart` in unified-wrapper), as
+     * {@link LiveContextManager#runDetached} runs code, keeping the marks the flow asking for it carries (see
+     * {@link LiveContextManager#runMarked}): a load into a run's tree runs as that tree's build, with no caller, in a flow
+     * over the instance's own store, as an eager tree's build does. With no mark to keep, it runs detached.
+     * @param {function(): *} fn - The load.
+     * @returns {*} What it returned.
+     * @internal
+     */
+    runLoadApart(fn: () => any): any;
+    /**
+     * The mark `key` the flow of an instance's code running now carries (see {@link LiveContextManager#runMarked}).
+     * @param {string} instanceID - The instance.
+     * @param {symbol} key - The mark.
+     * @returns {*} Its value, or undefined.
+     * @internal
+     */
+    markOf(instanceID: string, key: symbol): any;
+    /**
+     * Give a store opened in a flow (a `run()` / `scope()`) the marks that flow carries (see
+     * {@link LiveContextManager#runMarked}), as an `AsyncLocalStorage` value reaches a run opened in its flow.
+     * @param {object} from - The store of the flow.
+     * @param {object} to - The new store.
+     * @returns {void}
+     * @internal
+     */
+    carryMarks(from: object, to: object): void;
+    /**
      * The store a new `run()` / `scope()` of an instance takes its context and caller from. The active-instance field
      * names the store of the last `run()` / `scope()` entered until it returns, so a `run()` that is still waiting at an
      * `await` would hand its context to a sibling `run()` opened meanwhile from elsewhere. That store is the parent only
@@ -394,6 +437,16 @@ export class LiveContextManager {
      * @internal
      */
     runInSnapshotFlowSync(instanceID: string, captured: object, fn: () => any): any;
+    /**
+     * Retire the base store a full reload leaves behind when it moves the instance to a new ID. A call made before the
+     * swap that is still waiting (a module's function awaiting the instance's own `reload()`) goes on in this store once
+     * its `await` resumes, as the module it is, with `self` the instance's api: the store stays until the last such call
+     * has settled, and is cleaned up then. With no module's call waiting it is cleaned up at once.
+     * @param {string} instanceID - The ID the instance left.
+     * @returns {void}
+     * @public
+     */
+    public retire(instanceID: string): void;
     /**
      * Cleanup instance context
      * @param {string} instanceID - Instance to cleanup
