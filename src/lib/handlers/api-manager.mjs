@@ -3679,7 +3679,9 @@ export class ApiManager extends ComponentBase {
 					ofIndex++
 				) {
 					const entry = ofList[ofIndex];
-					const { target } = this.#normalizePermissionShorthandEntry(entry);
+					const { target, condition } = this.#normalizePermissionShorthandEntry(entry);
+					// The rule is checked as it will be registered, before anything is mounted, so a refused one leaves the api as it was.
+					this.slothlet.handlers.permissionManager.assertRuleValid({ caller: `${normalizedPath}.**`, target, effect, condition });
 					// Placed for the module code making the add, read before the build ran as no module (#597).
 					listPush(ruleLayers[effect], this.slothlet.handlers.permissionManager.placeModuleRule({ target, effect }, writer));
 				}

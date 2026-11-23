@@ -92,7 +92,30 @@ describe.each(getMatrixConfigs())("Permissions > a rule target whose path names 
 			api.slothlet.api.add("emptyp", { exports: { ping: () => "pong" } }, { permissions: { deny: [":write"] } })
 		);
 		expect(code).toBe("PERMISSION_RULE_INVALID");
+		expect(api.emptyp).toBeUndefined();
 	});
+
+	it.each(["deny", "allow"])(
+		"a refused api.add (%s rule) leaves nothing mounted and the path can be added again with valid rules",
+		async (effect) => {
+			api = await slothlet({ ...config, base: BASE, permissions: { policy: "allow" } });
+			for (const target of [":before", "a:b:write"]) {
+				expect(
+					await codeOf(() =>
+						api.slothlet.api.add("refused", { exports: { ping: () => "pong" } }, { permissions: { [effect]: ["ok.thing", target] } })
+					)
+				).toBe("PERMISSION_RULE_INVALID");
+				expect(api.refused).toBeUndefined();
+				expect(Object.keys(api)).not.toContain("refused");
+			}
+			expect(
+				await codeOf(() =>
+					api.slothlet.api.add("refused", { exports: { ping: () => "pong" } }, { permissions: { [effect]: ["refused.ping:write"] } })
+				)
+			).toBe("ok");
+			expect(api.refused.ping()).toBe("pong");
+		}
+	);
 
 	it("names the target in the error", async () => {
 		api = await slothlet({ ...config, base: BASE, permissions: { policy: "allow" } });
