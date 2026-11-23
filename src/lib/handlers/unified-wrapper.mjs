@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-22T12:49:46-08:00 (1795380586)
+ *	@Last modified time: 2026-11-22T23:31:46-08:00 (1795419106)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -17329,6 +17329,9 @@ class UnifiedWrapper extends ComponentBase {
 		// Restart epoch (#504): the tree this wrapper belongs to. Once a restart() swaps in a newer tree,
 		// the proxy traps forward to the node at this wrapper's path in the live tree instead.
 		internal.epoch = slothlet._buildEpoch ?? 0;
+		// The lazy-load count of the tree this wrapper belongs to (see Slothlet#_lazyTally): a full reload starts a new
+		// one without a new epoch.
+		internal.lazyTally = slothlet._lazyTally;
 		// The instance ID the node was built under: the tag its file's code carries in a stack frame. A full reload gives
 		// the instance a new ID, and code of the copy it replaced still carries this one. A node a kept copy loads later
 		// (a lazy node a run reaches after the instance reloaded or restarted) loads its file under the ID the copy was
@@ -18612,7 +18615,7 @@ class UnifiedWrapper extends ComponentBase {
 	 * Keep the instance's lazy materialization count in step with this wrapper (#588). The wrapper
 	 * records whether it is counted as unloaded (`pending`), counted and loaded (`settled`), or never
 	 * counted, so each wrapper moves the count exactly once per transition no matter which path loads,
-	 * re-arms or discards it. A wrapper from a tree a restart replaced leaves the new tree's count alone.
+	 * re-arms or discards it. A wrapper from a tree a restart or a full reload replaced leaves the new tree's count alone.
 	 * A member a forced replace hides from the api is `parked`: nothing can reach it to load it, so it is
 	 * not counted until it is put back (`unpark`), and loading or re-arming it meanwhile leaves it parked.
 	 * One hidden after it loaded is `parked-loaded`: out of the total while hidden, and back in it, loaded,
@@ -18627,7 +18630,7 @@ class UnifiedWrapper extends ComponentBase {
 	___trackLazyLoad(event) {
 		const internal = this.____slothletInternal;
 		const slothlet = this.slothlet;
-		if (internal.epoch !== (slothlet._buildEpoch ?? 0)) return;
+		if (internal.epoch !== (slothlet._buildEpoch ?? 0) || internal.lazyTally !== slothlet._lazyTally) return;
 		const tracked = internal.lazyCount;
 		if (event === "register") {
 			// Called once, from the constructor of a lazy wrapper.
