@@ -176,7 +176,8 @@ describe("a run open across a reload or a restart (plain Node)", () => {
 			// Lazy mode loads the failing file only once something reaches it, so its rebuild goes through.
 			expect(restart).toBe(mode === "lazy" ? "restarted" : "failed");
 			expect({ user: seen.user, later: seen.later }).toEqual({ user: "r", later: "r" });
-			if (mode === "lazy") expect(seen.viaSelf).toBe(1);
+			// An eager restart that fails leaves the instance shut down, and the run's kept copy belongs to the instance that ended.
+			expect(seen.viaSelf).toBe(mode === "lazy" ? 1 : "ERR:CONTEXT_NOT_ACTIVE_SELF");
 			// A second restart, with the module loading again, puts the instance back.
 			expect(after).toEqual({ viaSelf: 1, user: "base" });
 		}

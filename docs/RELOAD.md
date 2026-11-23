@@ -526,7 +526,7 @@ A `restart()` called inside a `run()` / `scope()` starts the run's copy over, fo
 ### Errors
 
 - A throwing `mode: "shutdown"` routine or root `shutdown` hook does not stop the restart; the old instance is still torn down, the new one is built, and the error is re-thrown once `restarted` has been emitted.
-- If building the new instance fails (for example a module that no longer parses), the old instance is already shut down and the error propagates; fix the cause and call `restart()` again — the original config is still retained.
+- If building the new instance fails (for example a module that no longer parses), the old instance is already shut down and the error propagates; fix the cause and call `restart()` again — the original config is still retained. A `run()` / `scope()` open across the failed restart is refused as well, as after `shutdown()`: the copy it kept belongs to the instance that ended, so its modules' calls through `self` throw `CONTEXT_NOT_ACTIVE_SELF`.
 - `restart()` throws `API_MUTATION_DISABLED` when `api.mutations.reload` is `false`.
 - `restart()`, like `api.slothlet.reload()`, throws `API_ROOT_CLOSED` when the host has sealed, frozen or closed the api root to new members (`Object.seal(api)` and the like): a closed root keeps the members it holds, as a closed object does, so it cannot take the ones a rebuild makes. `api.slothlet.api.add()` of a new member at the root is refused the same way; members below the root still reload and take adds.
 

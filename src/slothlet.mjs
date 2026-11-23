@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-21T23:27:18-08:00 (1795332438)
+ *	@Last modified time: 2026-11-22T22:10:17-08:00 (1795414217)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -2507,9 +2507,34 @@ class Slothlet {
 			if (id === undefined || id === this.instanceID) return inSet();
 			return runLoadAs(this, id, inSet);
 		}
-		const id = this.#heldCopies === 0 ? this.instanceID : this.loadID;
-		if (id === this.instanceID || !carriesMarks(this)) return load();
-		return runLoadAs(this, id, load);
+		if (this.#heldCopies === 0) return load();
+		const id = this.loadID;
+		if (!carriesMarks(this)) return load();
+		// A node of the copy a run reads through its token (a copy a reload swapped out, with no tree of its own) loads
+		// into that copy's set: run apart from the run's flow, the load would otherwise read the instance's new set, and
+		// make the node's children with the new metadata, which knows nothing of the copy's nodes and so of their module.
+		const values = this.#keptValuesOf(this.#runRecord());
+		const inSet =
+			values === null
+				? load
+				: () =>
+						runInClosingBuild(this, { copyOf: this, next: values, kind: "materialize", bust: null, silent: this[SILENT_BUILD]() }, load);
+		if (id === this.instanceID) return inSet();
+		return runLoadAs(this, id, inSet);
+	}
+
+	/**
+	 * The set a run reads through the token it recorded, once the instance no longer has that copy (see
+	 * {@link Slothlet#readField}): null for no run, a run with a tree of its own, or a run whose copy is still the
+	 * instance's.
+	 * @param {object|null} record - The run's copy record.
+	 * @returns {object|null} The set.
+	 * @private
+	 */
+	#keptValuesOf(record) {
+		if (record === null || record.values !== null) return null;
+		const values = record.from?.values;
+		return values === null || values === undefined ? null : values;
 	}
 
 	/**
