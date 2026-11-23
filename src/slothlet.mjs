@@ -4488,16 +4488,20 @@ class Slothlet {
 			//    in the new tree (or throws RESTART_REFERENCE_UNRESOLVED if the path is gone).
 			this._liveEpoch = this._buildEpoch;
 			this._treeEpoch = this._liveEpoch;
-			// The runs open across the restart, kept by the teardown, run on under the new ID.
-			const flows = this.contextManager?.instances;
-			if (flows) {
-				for (const ofEntry of mapEntries(flows)) {
-					if (ofEntry[1].parentInstanceID === previousInstanceID) ofEntry[1].parentInstanceID = this.instanceID;
-				}
-			}
-			reparentFlowStores(this, [previousInstanceID], this.instanceID);
 		} finally {
 			this._restarting = false;
+			// The runs open across the restart, kept by the teardown, run on under the instance's ID now. A rebuild that
+			// failed has moved the instance to its new ID too (load() claims it before any module loads): without the move,
+			// those runs would name an ID with no store, and be read as no flow of the instance.
+			if (typeof this.instanceID === "string" && this.instanceID !== previousInstanceID) {
+				const flows = this.contextManager?.instances;
+				if (flows) {
+					for (const ofEntry of mapEntries(flows)) {
+						if (ofEntry[1].parentInstanceID === previousInstanceID) ofEntry[1].parentInstanceID = this.instanceID;
+					}
+				}
+				reparentFlowStores(this, [previousInstanceID], this.instanceID);
+			}
 		}
 
 		// 6. `restarted` — on the new instance.
