@@ -779,8 +779,9 @@ function runtime_selfWriteHasStanding(slothlet) {
  * Whether the code running now inside a flow the host opened is a module's rather than the host's: its frames place
  * it in a module's file, as {@link runtime_selfReadAsDefiner} reads them for a `self` read made there. Evaluated code
  * whose definer the frames cannot tell stays the host's, as it does for that read; code of a file several running
- * instances hold untold apart is not the host's. With the permission system on and `provenance` or `capture` off, no
- * code is told by its frames and the flow's code is the host's.
+ * instances hold untold apart, or code at an instance's file running in a script that is not the file's, is not the
+ * host's. With the permission system on and `provenance` or `capture` off, no code is told by its frames and the
+ * flow's code is the host's.
  *
  * @param {object} slothlet - Instance the flow belongs to.
  * @param {string} hostFlowInstanceID - The instance whose flow the host opened.
@@ -794,7 +795,7 @@ function runtime_hostFlowRunsModuleCode(slothlet, hostFlowInstanceID) {
 	}
 	const definer = frameDefiner(hostFlowInstanceID);
 	if (definer === null) return false;
-	return !(definer.unplaced && !definer.shared);
+	return !(definer.unplaced && !definer.shared && !definer.foreign);
 }
 
 /**
@@ -8282,8 +8283,9 @@ function runtime_selfReadAsDefiner(selfProxy, prop, loadingInstanceID = null, ho
 	const definer = frameDefiner(loadingInstanceID ?? hostFlowInstanceID);
 	if (definer === null) return null;
 	// In a flow the host opened, code whose definer the frames cannot tell for want of a file (evaluated code) is
-	// the host's as before: only a file several running instances hold untold apart is refused there.
-	if (hostFlowInstanceID !== null && definer.unplaced && !definer.shared) return null;
+	// the host's as before: only a file several running instances hold untold apart, and code at a file of theirs
+	// running in a script that is not the file's, are refused there.
+	if (hostFlowInstanceID !== null && definer.unplaced && !definer.shared && !definer.foreign) return null;
 	if (loadingInstanceID !== null) {
 		const owner = (definer.wrapper ?? definer.leaves?.[0])?.slothlet;
 		if (!owner || owner.instanceID === loadingInstanceID) return null;
@@ -8473,9 +8475,9 @@ function runtime_hostRunDefiner(slothlet, unaccounted = false, resolved = null, 
 	}
 	if (identity?.currentWrapper || (identity?.unresolved && !(unaccounted && identity.unaccounted))) return null;
 	const definer = frameDefiner(contextManager.runningInstanceID?.() ?? null);
-	// Code of a file several running instances hold, with nothing naming which of them is running: it is some
-	// module's, so it is not run as the host's.
-	if (definer?.shared) throw new SlothletError("PERMISSION_DENIED", { caller: null, target: segmentsOf("self") });
+	// Code of a file several running instances hold, with nothing naming which of them is running, or code at a file of
+	// theirs running in a script that is not the file's: it names some module's file, so it is not run as the host's.
+	if (definer?.shared || definer?.foreign) throw new SlothletError("PERMISSION_DENIED", { caller: null, target: segmentsOf("self") });
 	const leaf = definer?.wrapper;
 	if (!leaf || leaf.slothlet !== slothlet) return null;
 	// The others the code is held to as well: the leaves further out on the stack, and, for a helper file's own code,

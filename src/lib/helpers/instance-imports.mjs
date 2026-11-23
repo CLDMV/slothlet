@@ -76,6 +76,8 @@ import {
 	decodeURIComponent,
 	Error,
 	filterList,
+	FinalizationRegistry,
+	FinalizationRegistryMethods,
 	FunctionMethods,
 	JSON,
 	listPush,
@@ -116,6 +118,8 @@ import {
 	URLSearchParamsMethods,
 	WeakMap,
 	WeakMapMethods,
+	WeakRef,
+	WeakRefMethods,
 	WeakSet,
 	WeakSetMethods
 } from "#helpers/intrinsics";
@@ -277,8 +281,9 @@ const SCOPE_KEYS = new Map();
 /**
  * The scope a synchronous {@link scopeRequire} is running in (`anchor` is the file it required; `importer` the api
  * file whose own copies are served, under `helpers: "module"`; `fresh` when the anchor is loaded as a leaf), else null.
- * The `stamp` is the one a run's own reload or restart loads the leaf under, when it is (see {@link STAMPED_SEALS}).
- * @type {{ instanceID: string, anchor: string, importer?: string|null, mount?: string|null, fresh?: boolean, stamp?: string|null }|null}
+ * The `seal` is the run build seal a run's own restart, or a reload in the run after it, loads the leaf under, when it
+ * is (see {@link SEALED_BUILDS}).
+ * @type {{ instanceID: string, anchor: string, importer?: string|null, mount?: string|null, fresh?: boolean, seal?: {stamp: string}|null }|null}
  * @private
  */
 let ACTIVE = null;
@@ -374,22 +379,63 @@ const HELPER_SCRIPTS = new Map();
 const HELPER_SEALS = new Map();
 
 /**
- * The random value a CommonJS leaf's source is sealed with when a run's own reload or restart loads it (see
- * {@link sealLoadedSource}), by script key and the stamp of that build: each such build's script hashes as no other
- * load of the file does. A CommonJS file runs under its plain path, which carries no stamp as an ES module's URL does,
- * so the script is what tells the code of a run's rebuilt copy apart from the code of the copies the run read before.
- * @type {Map<string, string>}
+ * The CommonJS leaf sources a run's own `restart()`, and the reloads in the run after it, load (see
+ * {@link sealLoadedSource}), by script key and then by hash: the text, the stamp of the restart, and the run's build seal
+ * the source was sealed for, held weakly. A CommonJS file runs under its plain path, which carries no stamp as an ES
+ * module's URL does, so the script is what tells the code of a run's rebuilt copy apart from the code of the copies the
+ * run read before its restart. Every build of the run since that restart seals a file with one value, so each such
+ * restart adds one script per file. The run's record holds the seals of all its restarts, so the record goes when the
+ * run's record does, and with the instance's other records when it shuts down. No fixed number is kept: a script
+ * still in use is never forgotten for newer ones.
+ * @type {Map<string, Map<string, {stamp: string, text: string, seal: WeakRef<object>}>>}
  * @private
  */
-const STAMPED_SEALS = new Map();
+const SEALED_BUILDS = new Map();
 
 /**
- * The stamp each source in {@link LOADED_SCRIPTS} sealed by {@link STAMPED_SEALS} was loaded under, by script key and
- * then by hash. Kept and dropped with the hashes.
- * @type {Map<string, Map<string, string>>}
+ * The random value each run build seal (see {@link SEALED_BUILDS}) seals a script key's source with, by seal and then
+ * script key: drawn the first time a build under the seal loads the file, and gone with the seal.
+ * @type {WeakMap<object, Map<string, string>>}
  * @private
  */
-const SCRIPT_STAMPS = new Map();
+const BUILD_SEALS = new WeakMap();
+
+/**
+ * Drops a script of {@link SEALED_BUILDS} once its seal is collected. Null where the platform has no
+ * `FinalizationRegistry` or `WeakRef`; a run's builds are then sealed as the instance's own loads are.
+ * @type {FinalizationRegistry<{key: string, hash: string}>|null}
+ * @private
+ */
+const COLLECTED_BUILDS =
+	typeof FinalizationRegistry === "function" && typeof WeakRef === "function" ? new FinalizationRegistry(forgetSealedBuild) : null;
+
+/**
+ * Forget a script of {@link SEALED_BUILDS} whose seal is gone.
+ * @param {{key: string, hash: string}} held - The script.
+ * @returns {void}
+ * @private
+ */
+function forgetSealedBuild({ key, hash }) {
+	const builds = MapMethods.get(SEALED_BUILDS, key);
+	const entry = builds === undefined ? undefined : MapMethods.get(builds, hash);
+	if (entry === undefined || WeakRefMethods.deref(entry.seal) !== undefined) return;
+	MapMethods.delete(builds, hash);
+	if (MapMethods.size(builds) === 0) MapMethods.delete(SEALED_BUILDS, key);
+}
+
+/**
+ * A script of {@link SEALED_BUILDS} whose seal is still held.
+ * @param {string} key - The script key.
+ * @param {string|undefined|null} hash - The script's hash.
+ * @returns {{stamp: string, text: string}|null} The script, or null.
+ * @private
+ */
+function liveSealedBuild(key, hash) {
+	if (hash === undefined || hash === null) return null;
+	const builds = MapMethods.get(SEALED_BUILDS, key);
+	const entry = builds === undefined ? undefined : MapMethods.get(builds, hash);
+	return entry !== undefined && WeakRefMethods.deref(entry.seal) !== undefined ? entry : null;
+}
 
 /**
  * Who loaded each file no instance tags, as this copy's resolve hook saw it resolved (#597): by the file's path (forward
@@ -631,16 +677,24 @@ const SCRIPTS_READER = Objects.freeze({
 		const hashes = MapMethods.get(LOADED_SCRIPTS, key);
 		const helpers = MapMethods.get(HELPER_SCRIPTS, key);
 		const helper = hash !== undefined && Boolean(helpers == null ? undefined : ArrayMethods.includes(helpers, hash));
-		const stamps = MapMethods.get(SCRIPT_STAMPS, key);
+		const build = liveSealedBuild(key, hash);
 		return {
-			known: Boolean(hashes?.length || helpers?.length),
-			has: helper || (hash !== undefined && Boolean(hashes == null ? undefined : ArrayMethods.includes(hashes, hash))),
+			// A run build's script whose seal is gone is still a script of the key's: a frame running it is told apart.
+			known: Boolean(hashes?.length || helpers?.length) || MapMethods.has(SEALED_BUILDS, key),
+			has: helper || build !== null || (hash !== undefined && Boolean(hashes == null ? undefined : ArrayMethods.includes(hashes, hash))),
 			helper,
-			stamp: hash === undefined || stamps === undefined ? null : (MapMethods.get(stamps, hash) ?? null)
+			stamp: build === null ? null : build.stamp
 		};
 	},
-	hashes: (key) => concatLists(MapMethods.get(LOADED_SCRIPTS, key) ?? [], MapMethods.get(HELPER_SCRIPTS, key) ?? []),
+	hashes: (key) => {
+		const hashes = concatLists(MapMethods.get(LOADED_SCRIPTS, key) ?? [], MapMethods.get(HELPER_SCRIPTS, key) ?? []);
+		const builds = MapMethods.get(SEALED_BUILDS, key);
+		if (builds !== undefined) for (const hash of mapKeys(builds)) if (liveSealedBuild(key, hash) !== null) listPush(hashes, hash);
+		return hashes;
+	},
 	text: (key, hash) => {
+		const build = liveSealedBuild(key, hash);
+		if (build !== null) return build.text;
 		const texts = MapMethods.get(LOADED_TEXTS, key);
 		if (!texts) return undefined;
 		if (hash !== undefined && hash !== null) return MapMethods.get(texts, hash);
@@ -650,7 +704,10 @@ const SCRIPTS_READER = Objects.freeze({
 			(MapMethods.get(HELPER_SCRIPTS, key) == null ? undefined : ArrayMethods.at(MapMethods.get(HELPER_SCRIPTS, key), -1));
 		return newest === undefined ? undefined : MapMethods.get(texts, newest);
 	},
-	count: () => SetMethods.size(setFrom(concatLists(mapKeysToArray(LOADED_SCRIPTS), mapKeysToArray(HELPER_SCRIPTS)))),
+	count: () =>
+		SetMethods.size(
+			setFrom(concatLists(concatLists(mapKeysToArray(LOADED_SCRIPTS), mapKeysToArray(HELPER_SCRIPTS)), mapKeysToArray(SEALED_BUILDS)))
+		),
 	packageImporters: (path) => setToArray(MapMethods.get(PACKAGE_IMPORTERS, packageKey(path)))
 });
 
@@ -2782,12 +2839,12 @@ function splitQuery(ref) {
  *   helper files once per importing api file (`helpers: "module"`): a private cache per api file instead of one per
  *   instance.
  * @param {string|null} [options.mount=null] - That api file's mount, carried onto the ES modules it requires.
- * @param {string|null} [options.stamp=null] - With `fresh`, the stamp of the run's own reload or restart loading the
- *   leaf: its source is sealed for that build (see {@link STAMPED_SEALS}).
+ * @param {{stamp: string}|null} [options.seal=null] - With `fresh`, the run build seal of a run's own restart, or of a
+ *   reload in the run after it, loading the leaf: its source is sealed for it (see {@link SEALED_BUILDS}).
  * @returns {*} The file's `module.exports`.
  * @private
  */
-function scopeRequire(filePath, instanceID, { fresh = false, importer = null, mount = null, stamp = null } = {}) {
+function scopeRequire(filePath, instanceID, { fresh = false, importer = null, mount = null, seal = null } = {}) {
 	const requireFn = NODE.module.createRequire(filePath);
 	const resolved = requireFn.resolve(filePath);
 	const cache = requireFn.cache;
@@ -2846,7 +2903,14 @@ function scopeRequire(filePath, instanceID, { fresh = false, importer = null, mo
 		if (!MapMethods.has(LEAVES, instanceID)) MapMethods.set(LEAVES, instanceID, new Set());
 		SetMethods.add(MapMethods.get(LEAVES, instanceID), resolved);
 	}
-	ACTIVE = { instanceID, anchor: resolved, importer, mount, fresh, stamp: fresh && typeof stamp === "string" ? stamp : null };
+	ACTIVE = {
+		instanceID,
+		anchor: resolved,
+		importer,
+		mount,
+		fresh,
+		seal: fresh && seal !== null && typeof seal === "object" && typeof seal.stamp === "string" ? seal : null
+	};
 	try {
 		return requireFn(resolved);
 	} finally {
@@ -3003,13 +3067,15 @@ function releaseScope(instanceID) {
 	}
 	// The scripts this copy recorded for the instance's own copies of its files go with it (#597).
 	for (
-		let ofIndex = 0, ofList = concatLists(mapKeysToArray(LOADED_SCRIPTS), mapKeysToArray(HELPER_SCRIPTS));
+		let ofIndex = 0,
+			ofList = concatLists(concatLists(mapKeysToArray(LOADED_SCRIPTS), mapKeysToArray(HELPER_SCRIPTS)), mapKeysToArray(SEALED_BUILDS));
 		ofIndex < ofList.length;
 		ofIndex++
 	) {
 		const key = ofList[ofIndex];
 		if (scriptKeyInstance(key) !== String(instanceID)) continue;
 		MapMethods.delete(LOADED_SCRIPTS, key);
+		MapMethods.delete(SEALED_BUILDS, key);
 		MapMethods.delete(LOADED_TEXTS, key);
 		MapMethods.delete(SEALS, key);
 		MapMethods.delete(HELPER_SCRIPTS, key);
@@ -3641,10 +3707,58 @@ function setScriptKey(keyOf) {
  * @param {string} url - The module URL, query included.
  * @param {{format?: string, source?: string|ArrayBufferView|ArrayBuffer}} result - The load hook's result.
  * @param {boolean} [helper=false] - A helper load of the file (see {@link HELPER_SCRIPTS}): its hash is listed there.
- * @returns {string|null} The source's hash, or null when the result carries no source text.
+ * @returns {void}
  * @private
  */
 function recordLoadedSource(url, result, helper = false) {
+	const text = compiledText(result);
+	if (text === null) return;
+	const hash = HOST.sha256(text);
+	const key = scriptKeyOf(url);
+	// A helper load is listed apart from the file's own loads (see HELPER_SCRIPTS).
+	const lists = helper ? HELPER_SCRIPTS : LOADED_SCRIPTS;
+	let hashes = MapMethods.get(lists, key);
+	if (!hashes) MapMethods.set(lists, key, (hashes = []));
+	rememberNewest(hashes, hash);
+	// The text itself, for where each leaf's function sits in it (see LOADED_TEXTS); only the sources still listed.
+	let texts = MapMethods.get(LOADED_TEXTS, key);
+	if (!texts) MapMethods.set(LOADED_TEXTS, key, (texts = new Map()));
+	MapMethods.set(texts, hash, text);
+	const own = MapMethods.get(LOADED_SCRIPTS, key) ?? [];
+	const helpers = MapMethods.get(HELPER_SCRIPTS, key) ?? [];
+	for (const known of mapKeys(texts))
+		if (!ArrayMethods.includes(own, known) && !ArrayMethods.includes(helpers, known)) MapMethods.delete(texts, known);
+}
+
+/**
+ * Record a CommonJS leaf's source a run build sealed (see {@link SEALED_BUILDS}), as {@link recordLoadedSource} records
+ * another, kept for as long as the seal is held.
+ * @param {string} url - The module URL.
+ * @param {object} result - The sealed load result.
+ * @param {{stamp: string}} seal - The run build seal.
+ * @returns {void}
+ * @private
+ */
+function recordSealedBuild(url, result, seal) {
+	const text = compiledText(result);
+	if (text === null) return;
+	const hash = HOST.sha256(text);
+	const key = scriptKeyOf(url);
+	let builds = MapMethods.get(SEALED_BUILDS, key);
+	if (!builds) MapMethods.set(SEALED_BUILDS, key, (builds = new Map()));
+	if (liveSealedBuild(key, hash) !== null) return;
+	MapMethods.set(builds, hash, { stamp: seal.stamp, text, seal: new WeakRef(seal) });
+	FinalizationRegistryMethods.register(COLLECTED_BUILDS, seal, { key, hash });
+}
+
+/**
+ * The text the engine compiles a load result's source into, as V8 hashes it: decoded (see {@link loadedText}), and for
+ * TypeScript with its types stripped as Node strips them.
+ * @param {{format?: string, source?: string|ArrayBufferView|ArrayBuffer}} result - The load hook's result.
+ * @returns {string|null} The text, or null when the result carries none.
+ * @private
+ */
+function compiledText(result) {
 	let text = loadedText(result);
 	if (text === null) return null;
 	if (isTypeScriptLoad(result)) {
@@ -3661,24 +3775,7 @@ function recordLoadedSource(url, result, helper = false) {
 			globalThis.process.emitWarning = emitWarning;
 		}
 	}
-	const hash = HOST.sha256(text);
-	const key = scriptKeyOf(url);
-	// A helper load is listed apart from the file's own loads (see HELPER_SCRIPTS).
-	const lists = helper ? HELPER_SCRIPTS : LOADED_SCRIPTS;
-	let hashes = MapMethods.get(lists, key);
-	if (!hashes) MapMethods.set(lists, key, (hashes = []));
-	rememberNewest(hashes, hash);
-	// The text itself, for where each leaf's function sits in it (see LOADED_TEXTS); only the sources still listed.
-	let texts = MapMethods.get(LOADED_TEXTS, key);
-	if (!texts) MapMethods.set(LOADED_TEXTS, key, (texts = new Map()));
-	MapMethods.set(texts, hash, text);
-	const own = MapMethods.get(LOADED_SCRIPTS, key) ?? [];
-	const helpers = MapMethods.get(HELPER_SCRIPTS, key) ?? [];
-	for (const known of mapKeys(texts))
-		if (!ArrayMethods.includes(own, known) && !ArrayMethods.includes(helpers, known)) MapMethods.delete(texts, known);
-	const stamps = MapMethods.get(SCRIPT_STAMPS, key);
-	if (stamps) for (const known of mapKeys(stamps)) if (!ArrayMethods.includes(own, known)) MapMethods.delete(stamps, known);
-	return hash;
+	return text;
 }
 
 /**
@@ -3705,34 +3802,35 @@ function loadedText(result) {
  * @param {object} result - The load hook's result.
  * @param {boolean} [helper=false] - A helper load of the file (see {@link HELPER_SCRIPTS}), sealed with the key's helper
  *   value.
- * @param {string|null} [stamp=null] - For a CommonJS leaf a run's own reload or restart loads, the stamp of that build:
- *   sealed with the value drawn for it (see {@link STAMPED_SEALS}), and its hash kept with the stamp.
+ * @param {{stamp: string}|null} [seal=null] - For a CommonJS leaf a run's own restart, or a reload in the run after it,
+ *   loads, the run build seal: the source is sealed with the value drawn for it and recorded with it (see
+ *   {@link SEALED_BUILDS}).
  * @returns {object} The result to hand on: the sealed source, or the result as it was when it carries no source text.
  * @private
  */
-function sealLoadedSource(url, result, helper = false, stamp = null) {
+function sealLoadedSource(url, result, helper = false, seal = null) {
 	const text = loadedText(result);
 	if (text === null) return result;
 	const key = scriptKeyOf(url);
-	const stamped = !helper && stamp !== null;
-	const seals = helper ? HELPER_SEALS : stamped ? STAMPED_SEALS : SEALS;
-	const sealKey = stamped ? `${key}\u0000${stamp}` : key;
-	let seal = MapMethods.get(seals, sealKey);
-	if (seal === undefined) MapMethods.set(seals, sealKey, (seal = HOST.randomUUID()));
-	const sealed = { ...result, source: `${text}\n/* ${seal} */\n` };
-	const hash = recordLoadedSource(url, sealed, helper);
-	if (stamped && hash !== null) {
-		let stamps = MapMethods.get(SCRIPT_STAMPS, key);
-		if (!stamps) MapMethods.set(SCRIPT_STAMPS, key, (stamps = new Map()));
-		MapMethods.set(stamps, hash, stamp);
+	const build = !helper && seal !== null && COLLECTED_BUILDS !== null;
+	let seals;
+	if (!build) seals = helper ? HELPER_SEALS : SEALS;
+	else {
+		seals = WeakMapMethods.get(BUILD_SEALS, seal);
+		if (seals === undefined) WeakMapMethods.set(BUILD_SEALS, seal, (seals = new Map()));
 	}
+	let value = MapMethods.get(seals, key);
+	if (value === undefined) MapMethods.set(seals, key, (value = HOST.randomUUID()));
+	const sealed = { ...result, source: `${text}\n/* ${value} */\n` };
+	if (build) recordSealedBuild(url, sealed, seal);
+	else recordLoadedSource(url, sealed, helper);
 	return sealed;
 }
 
 /**
  * Whether sources are recorded for a script key, and whether a given one is among them (see
  * {@link recordLoadedSource}), and, when it is, whether it is a helper load of the file (see {@link HELPER_SCRIPTS}) and
- * the stamp of the run's own reload or restart that loaded it, for a CommonJS leaf (see {@link STAMPED_SEALS}).
+ * the stamp of the run's own restart that loaded it, for a CommonJS leaf a run build sealed (see {@link SEALED_BUILDS}).
  * @param {string} key - The script key.
  * @param {string} [hash] - A script's hash.
  * @returns {{known: boolean, has: boolean, helper?: boolean, stamp?: string|null}} The answer.
@@ -4029,7 +4127,7 @@ const HOOKS = Objects.freeze({
 		// is another module of the file (#691). A leaf's file an api file requires itself is a helper of that file's.
 		const kind = StringMethods.startsWith(url, "file:") ? scopeLoadKind(url) : null;
 		if (kind !== null && shouldRecordCommonJS(url, result))
-			return sealLoadedSource(url, result, kind === "helper", kind === "leaf" ? (ACTIVE?.stamp ?? null) : null);
+			return sealLoadedSource(url, result, kind === "helper", kind === "leaf" ? (ACTIVE?.seal ?? null) : null);
 		return result;
 	}
 });

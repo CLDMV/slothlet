@@ -179,6 +179,15 @@ export const SILENT_BUILD = Symbol("slothlet.silentBuild");
 export const COPY_SOURCE_URL = Symbol("slothlet.copySourceURL");
 
 /**
+ * The key of the instance's method that hands a run's own build the seal its CommonJS leaves' scripts are sealed for:
+ * one per `restart()` of the run, shared by the reloads in the run after it (see `SEALED_BUILDS` in
+ * helpers/instance-imports).
+ * @type {symbol}
+ * @internal
+ */
+export const RUN_BUILD_SEAL = Symbol("slothlet.runBuildSeal");
+
+/**
  * How many run records are not yet `done`, across every instance.
  * @type {number}
  * @private
@@ -587,7 +596,14 @@ export function newRecord(from, parent, ns, owner) {
 		tracked: null,
 		owner: owner ?? null,
 		snap: null,
-		restart: parent?.restart ? { epoch: parent.restart.epoch, stamps: setFrom(setToArray(parent.restart.stamps)) } : null
+		restart: parent?.restart
+			? {
+					epoch: parent.restart.epoch,
+					stamps: setFrom(setToArray(parent.restart.stamps)),
+					seal: parent.restart.seal ?? null,
+					seals: parent.restart.seals ?? []
+				}
+			: null
 	};
 }
 

@@ -109,6 +109,7 @@ import {
 	RUN_DONE,
 	RUN_OPENED,
 	COPY_SOURCE_URL,
+	RUN_BUILD_SEAL,
 	RECORD_OPERATION,
 	SILENT_BUILD,
 	TREE_WRITE,
@@ -3240,7 +3241,9 @@ class Slothlet {
 			const history = this.#historyOf(holder, view);
 			// A copy of a tree loaded under an ID the instance has left loads under that ID too (see Slothlet#loadID).
 			const kept = kind === "copy" ? this.#keptScopeOf(holder) : null;
-			const next = await this.#buildCopy(view, history, kind, kept?.instanceID);
+			// A reload after a restart of the run seals its CommonJS leaves as that restart did (see `RUN_BUILD_SEAL`).
+			const seal = kind === "reload" ? (holder.restart?.seal ?? null) : null;
+			const next = await this.#buildCopy(view, history, kind, kept?.instanceID, seal);
 			if (holder.torn === true) {
 				this.#retireTree(next);
 				return;
@@ -3284,7 +3287,12 @@ class Slothlet {
 		if (kind === "restart") {
 			// The modules of the trees the run read until now are gone with them: their code has no standing in the run (see
 			// ApiManager#isRestartReplaced). Copies take ever lower epochs, so every node of those trees carries a higher one.
-			holder.restart = { epoch: next._treeEpoch, stamps: new Set() };
+			// The seal its CommonJS leaves were sealed for is held here, and its scripts are recognised while it is. The seals
+			// of the run's earlier restarts stay held with it, so the code of those copies is still recognised, and refused.
+			const seal = MapMethods.get(this.#treeSets, next._treeEpoch)?.seal ?? null;
+			const seals = holder.restart ? copyList(holder.restart.seals) : [];
+			if (seal !== null) listPush(seals, seal);
+			holder.restart = { epoch: next._treeEpoch, stamps: new Set(), seal, seals };
 			this._runRestarts++;
 		}
 		if (bust !== null) SetMethods.add(holder.restart.stamps, `${bust}`);
@@ -3384,10 +3392,12 @@ class Slothlet {
 	 * @param {Array<object>} history - Its operation history.
 	 * @param {"copy"|"reload"|"restart"} kind - What the build is.
 	 * @param {string} [loadID] - The ID the copied tree's files were loaded under, when the instance has left it.
+	 * @param {{stamp: string}|null} [seal=null] - For a reload, the seal of the run's last restart (see
+	 *   `RUN_BUILD_SEAL`); a restart draws its own.
 	 * @returns {Promise<object>} The new set.
 	 * @private
 	 */
-	async #buildCopy(view, history, kind, loadID) {
+	async #buildCopy(view, history, kind, loadID, seal = null) {
 		const next = this.#copyOfFields(view);
 		const epoch = --this.#copyEpochs;
 		next._buildEpoch = epoch;
@@ -3403,7 +3413,8 @@ class Slothlet {
 		next._moduleIncarnations = kind === "restart" ? new Map() : this.#copyMap(view._moduleIncarnations);
 		next._retiredIncarnations = kind === "restart" ? new Map() : this.#copyMap(view._retiredIncarnations);
 		const mark = { copyOf: this, next, view, kind, silent: kind === "copy", bust: kind === "copy" ? null : this.#clock.now() };
-		MapMethods.set(this.#treeSets, epoch, { values: next, bust: mark.bust });
+		mark.seal = kind === "restart" ? Objects.freeze({ stamp: `${mark.bust}` }) : kind === "reload" ? seal : null;
+		MapMethods.set(this.#treeSets, epoch, { values: next, bust: mark.bust, seal: mark.seal });
 		const build = () => this._runAsHost(() => this.#buildCopyOnto(mark, history));
 		// The tree being built is one apart from the instance's from its first node on.
 		this._treeCopies++;
@@ -3676,9 +3687,10 @@ class Slothlet {
 	/**
 	 * The last `restart()` the running code's `run()` / `scope()` made of its copy (see {@link Slothlet#restartRun}):
 	 * `epoch`, the epoch of the tree it built, which the nodes of the trees the run read before it are above, and
-	 * `stamps`, the reload stamps the files of the trees built for the run since were imported under. Null when the code
-	 * runs in no run, or in one that restarted nothing.
-	 * @returns {{epoch: number, stamps: Set<string>}|null} The restart.
+	 * `stamps`, the reload stamps the files of the trees built for the run since were imported under; `seal`, the seal its
+	 * CommonJS leaves were sealed for (see `RUN_BUILD_SEAL`), and `seals`, those of every restart of the run, held so the
+	 * scripts sealed for them stay recognised. Null when the code runs in no run, or in one that restarted nothing.
+	 * @returns {{epoch: number, stamps: Set<string>, seal: object|null, seals: Array<object>}|null} The restart.
 	 * @internal
 	 *
 	 * @example
@@ -3737,6 +3749,21 @@ class Slothlet {
 		if (mark === undefined || mark === null || typeof mark !== "object" || mark.copyOf !== this) return null;
 		if (mark.kind !== "copy") return mark.bust ?? null;
 		return mark.view.processors?.loader ?? null;
+	}
+
+	/**
+	 * [RUN_BUILD_SEAL] - The seal a build for a run seals its CommonJS leaves' scripts for (see `SEALED_BUILDS` in
+	 * helpers/instance-imports): drawn by a `restart()` of the run, and taken by the reloads in the run after it, so the
+	 * code of every copy the run built since its last restart runs in one script per file, told apart from the code of
+	 * the copies it read before. Null for any other build (a copy, a reload in a run that restarted nothing): their
+	 * leaves are sealed as the instance's own loads are.
+	 * @returns {{stamp: string}|null} The seal, or null.
+	 * @internal
+	 */
+	[RUN_BUILD_SEAL]() {
+		const mark = currentBuildMark(this);
+		if (mark === undefined || mark === null || typeof mark !== "object" || mark.copyOf !== this) return null;
+		return mark.seal ?? null;
 	}
 
 	/**

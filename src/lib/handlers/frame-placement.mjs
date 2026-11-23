@@ -1194,6 +1194,9 @@ function runtime_learnEntered(frames) {
 		const entering = ENTERING[ENTERING.length - 1 - depth++];
 		const own = frames[index - 1];
 		if (!entering?.learnable || frame.gap || !own?.hash || !own.key || StringMethods.startsWith(own.path, FRAMEWORK_DIR + "/")) continue;
+		// A run build's script is recognised for as long as its seal is held (see `SEALED_BUILDS` in
+		// helpers/instance-imports): learning it too would keep it past that, and push the location's other scripts out.
+		if (loadedScriptLookup(own.key, own.hash).stamp != null) continue;
 		if (runtime_isOwnModuleLocation(entering.wrapper, own.path)) runtime_rememberScript(own.key, own.hash);
 	}
 }
@@ -4462,8 +4465,9 @@ function runtime_leavesAtLocation(path, line, running = null, location = null, f
  * runtime_outerCallers), which have to be allowed as well.
  * @param {string|null} [running=null] - The instance whose flow is running, when something names one (see the
  *   context managers' `runningInstanceID`): a file several running instances load untold apart is then that one's.
- * @returns {{wrapper: object, callers: Array<object>}|{leaves: Array<object>, callers: Array<object>}|{unplaced: true, shared?: true}|null} The
- *   definer. `shared` marks code of a file more than one running instance holds, with nothing naming which.
+ * @returns {{wrapper: object, callers: Array<object>}|{leaves: Array<object>, callers: Array<object>}|{unplaced: true, shared?: true, foreign?: true}|null} The
+ *   definer. `shared` marks code of a file more than one running instance holds, with nothing naming which; `foreign`
+ *   code at an instance's file running in a script that is not the file's (see {@link isForeignScript}).
  * @internal
  */
 function frameDefiner(running = null) {
@@ -4692,7 +4696,10 @@ function runtime_definerAt(frames, running) {
 		// files that import it stand for it, all of them.
 		if (frame.async || isRunnerFrame(frame)) return helper ? (runtime_leafOfHelper(helper) ?? null) : null;
 		// With no permission system on, nothing is refused: such code runs as plain JavaScript (#726).
-		if (frame.evaluated || isForeignScript(frame)) return runtime_anyInstanceChecks() ? { unplaced: true } : null;
+		if (frame.evaluated) return runtime_anyInstanceChecks() ? { unplaced: true } : null;
+		// Code at an instance's file running in a script slothlet does not recognise as the file's (code compiled under
+		// its name, or a copy whose record is gone): it names a module's file, so it is no host's code either (#597).
+		if (isForeignScript(frame)) return runtime_anyInstanceChecks() ? { unplaced: true, foreign: true } : null;
 		// An untagged frame at an ES module file an instance loaded under its tag runs in another module of the file (a raw
 		// `import` of it by a module, the host or a package), which slothlet loaded for no leaf: code no one accounts for,
 		// as frame placement reads it inside a call (#691).
@@ -5384,8 +5391,9 @@ function runtime_leavesAt(slothlet, frame) {
  * The nodes a `restart()` of the running code's `run()` / `scope()` replaced that stand for code of a file, when the
  * code is theirs: the code of the trees the run read before its restart carries none of the reload stamps the files of
  * the trees built for it since were loaded under (see `Slothlet#_runRestart`). An ES module carries its stamp in its
- * URL; a CommonJS file runs under its plain path, and its script tells the stamp instead: a run's own reload or restart
- * seals the leaf's source for its build (see `STAMPED_SEALS` in helpers/instance-imports). As for code an instance's
+ * URL; a CommonJS file runs under its plain path, and its script tells the stamp instead: a run's own restart, and the
+ * reloads in the run after it, seal the leaf's source for it (see `SEALED_BUILDS` in helpers/instance-imports), and a
+ * script sealed for no restart, or for one whose seal is gone, carries none of the stamps. As for code an instance's
  * restart replaced (see {@link runtime_taggedLeavesAtFile}), those nodes stand for it, never the rebuilt copy's nodes of
  * the same file, and they have no standing. Null when the code is not such code, no such node is left, the permission
  * system is off, or the frame tells neither (an ES module's location with no instance tag, a script slothlet did not
@@ -5409,8 +5417,11 @@ function runtime_runRestartReplacedLeaves(slothlet, path, tag, mount, location, 
 		// A CommonJS leaf's own load, told by its script.
 		if (!frame?.hash || !frame.key) return null;
 		const script = loadedScriptLookup(frame.key, frame.hash);
-		if (!script.has || script.helper) return null;
-		stamp = script.stamp ?? null;
+		// A script of no load slothlet recorded for the file says nothing either way; a helper load is a helper file's.
+		if (!script.known || script.helper) return null;
+		// A script of the file slothlet no longer recognises is no copy the run built since its restart: it carries
+		// none of the stamps, and is never taken for the rebuilt copy's code.
+		stamp = script.has ? (script.stamp ?? null) : null;
 	}
 	if (SetMethods.has(restart.stamps, stamp ?? "")) return null;
 	const replaced = runtime_leavesAtFile(slothlet, path, tag, mount, true);
