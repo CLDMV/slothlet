@@ -22,7 +22,13 @@
  * folder `calls` or on a sibling. The expected values are eager mode's, for every case, with no reload, after one, and
  * inside a `run()`.
  *
- * Fixture (written at run time): `api/calls/calls.mjs` with the leaves `ping` and `other`.
+ * The same holds for a member another module mounts under `calls` with `api.add()` while `calls` has not loaded, from a
+ * folder or an inline object: the member is the adding module's node, and its metadata, set through it before or after
+ * it is first called, stays its own and lands on neither `calls` nor a sibling. (The add loads `calls` before it places
+ * the member, so no stand-in of `calls` names a member of another module.)
+ *
+ * Fixture (written at run time): `api/calls/calls.mjs` with the leaves `ping` and `other`, and `extra/tools.mjs` with the
+ * leaves `hello` and `bye` for the add.
  */
 import path from "node:path";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
@@ -31,6 +37,7 @@ import slothlet from "@cldmv/slothlet";
 
 const ROOT = path.join(process.cwd(), "tmp", "metadata-lazy-unloaded-node");
 const BASE = path.join(ROOT, "api");
+const EXTRA = path.join(ROOT, "extra");
 
 beforeAll(() => {
 	rmSync(ROOT, { recursive: true, force: true });
@@ -38,6 +45,11 @@ beforeAll(() => {
 	writeFileSync(
 		path.join(BASE, "calls", "calls.mjs"),
 		`export function ping() {\n\treturn "pong";\n}\nexport function other() {\n\treturn "other";\n}\n`
+	);
+	mkdirSync(EXTRA, { recursive: true });
+	writeFileSync(
+		path.join(EXTRA, "tools.mjs"),
+		`export function hello() {\n\treturn "hi";\n}\nexport function bye() {\n\treturn "bye";\n}\n`
 	);
 });
 
@@ -182,6 +194,113 @@ describe.each(CONFIGS)(
 			const outside = api.slothlet.metadata.get(api.calls.ping);
 			expect(outside).toMatchObject({ host: 1 });
 			expect(outside).not.toHaveProperty("own");
+		});
+	}
+);
+
+/**
+ * The members an add mounts under `calls`: how to mount them, the path of one member, how to read it and its sibling, and
+ * what calling it returns.
+ */
+const ADDED = [
+	{
+		source: "folder",
+		mount: (api) => api.slothlet.api.add("calls.extra", EXTRA),
+		path: "calls.extra.tools.hello",
+		member: (api) => api.calls.extra.tools.hello,
+		sibling: (api) => api.calls.extra.tools.bye,
+		result: "hi"
+	},
+	{
+		source: "inline object",
+		mount: (api) =>
+			api.slothlet.api.add("calls.inline", {
+				greet() {
+					return "hey";
+				},
+				wave() {
+					return "wave";
+				}
+			}),
+		path: "calls.inline.greet",
+		member: (api) => api.calls.inline.greet,
+		sibling: (api) => api.calls.inline.wave,
+		result: "hey"
+	}
+];
+
+const ADDED_CONFIGS = [];
+for (const added of ADDED) for (const config of CONFIGS) ADDED_CONFIGS.push({ ...config, added, source: added.source });
+
+describe.each(ADDED_CONFIGS)(
+	"metadata of a member an add mounts under a lazy folder not loaded yet — $source / $mode / $runtime / permissions $permissions",
+	({ mode, runtime, permissions, added }) => {
+		let api;
+
+		afterEach(async () => {
+			await api?.slothlet.shutdown();
+			api = null;
+		});
+
+		/**
+		 * Make the instance and mount the added member while `calls` has not loaded.
+		 * @returns {Promise<object>} The api.
+		 */
+		async function make() {
+			api = await slothlet({
+				base: BASE,
+				mode,
+				runtime,
+				silent: true,
+				...(permissions === "on" ? { permissions: { mode: "on", policy: "allow", rules: [] } } : {})
+			});
+			if (mode === "lazy") expect(api.slothlet.node(api.calls.ping).materialized).toBe(false);
+			await added.mount(api);
+			return api;
+		}
+
+		it("metadata set on the member before its first call is its own after it", async () => {
+			await make();
+			api.slothlet.metadata.set(added.member(api), { own: 1 });
+			expect(api.slothlet.metadata.get(added.member(api))).toMatchObject({ own: 1 });
+			expect(await added.member(api)()).toBe(added.result);
+			expect(api.slothlet.metadata.get(added.member(api))).toMatchObject({ own: 1 });
+			expect(api.slothlet.metadata.get(added.path)).toMatchObject({ own: 1 });
+			expect(api.slothlet.metadata.get(added.sibling(api))).not.toHaveProperty("own");
+			expect(api.slothlet.metadata.get(api.calls.ping)).not.toHaveProperty("own");
+			expect(api.slothlet.metadata.get("calls")).not.toHaveProperty("own");
+		});
+
+		it("metadata set on the member before its first call is removed by it after it", async () => {
+			await make();
+			api.slothlet.metadata.set(added.member(api), { own: 1, all: 2 });
+			expect(await added.member(api)()).toBe(added.result);
+			api.slothlet.metadata.remove(added.member(api), "own");
+			const meta = api.slothlet.metadata.get(added.member(api));
+			expect(meta).not.toHaveProperty("own");
+			expect(meta).toMatchObject({ all: 2 });
+			api.slothlet.metadata.remove(added.member(api));
+			expect(api.slothlet.metadata.get(added.member(api))).not.toHaveProperty("all");
+		});
+
+		it("a reference held from before the first call sets and removes the member's own metadata after it", async () => {
+			await make();
+			const held = added.member(api);
+			api.slothlet.metadata.set(held, { early: 1 });
+			expect(await added.member(api)()).toBe(added.result);
+			api.slothlet.metadata.set(added.member(api), { late: 2 });
+			expect(api.slothlet.metadata.get(held)).toMatchObject({ early: 1, late: 2 });
+			api.slothlet.metadata.remove(held, "late");
+			expect(api.slothlet.metadata.get(added.member(api))).not.toHaveProperty("late");
+			expect(api.slothlet.metadata.get(added.member(api))).toMatchObject({ early: 1 });
+		});
+
+		it("a read before the first call sees the metadata set on the member's path", async () => {
+			await make();
+			api.slothlet.metadata.set(added.path, { onPath: 1 });
+			expect(api.slothlet.metadata.get(added.member(api))).toMatchObject({ onPath: 1 });
+			expect(await added.member(api)()).toBe(added.result);
+			expect(api.slothlet.metadata.get(added.member(api))).toMatchObject({ onPath: 1 });
 		});
 	}
 );
