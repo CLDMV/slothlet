@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T17:16:26-08:00 (1794964586)
+ *	@Last modified time: 2026-11-22T11:45:01-08:00 (1795376701)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -511,6 +511,16 @@ export function runtime_namesEntry(head, entry) {
  */
 function runtime_frameInstanceTag(line) {
 	return RegExpMethods.exec(/[?&]slothlet_instance=([^&#:)\s]+)/, line)?.[1] ?? null;
+}
+
+/**
+ * The reload stamp the file a stack line runs was imported under (`&_reload=`, see `Loader`), or null.
+ * @param {string} line - One stack line.
+ * @returns {string|null} The stamp.
+ * @private
+ */
+function runtime_frameReloadStamp(line) {
+	return RegExpMethods.exec(/[?&]_reload=([^&#:)\s]+)/, line)?.[1] ?? null;
 }
 
 /**
@@ -1112,6 +1122,63 @@ function slothlet_enterCall(fn, thisArg, args) {
 }
 
 /**
+ * The flows framework work runs in as the host (see {@link runAsHostWork}), each with the instance it is for: the store
+ * of the flow, which only the context manager makes and no module code can reach.
+ * @type {WeakMap<object, object>}
+ * @private
+ */
+const HOST_WORK_STORES = new WeakMap();
+
+/**
+ * This file, in comparable form: where the frame of {@link slothlet_hostWork} runs.
+ * @type {string}
+ * @private
+ */
+const OWN_FILE = toComparablePath(URLMethods.href(new URL(import.meta.url)));
+
+/**
+ * Run framework work an instance does as the host (a reload's build, a restart's load, a run's copy) in the flow the
+ * context manager opened for it: the flow's store is marked as that work's, and the work runs inside a frame of
+ * {@link slothlet_hostWork}. Whose code makes a change while no call runs is read from the stack (see
+ * {@link runtime_codeWritersOnStack}); in that flow, the frames past that one are the code that asked for the work, a
+ * module's own function awaiting `self.slothlet.reload()` among them, and the work is not theirs. Code running inside the
+ * work, nearer the stack's top, is still read as whoever's it is.
+ * @param {object} slothlet - The instance.
+ * @param {object|undefined} store - The flow's store, as the context manager reads it inside the flow.
+ * @param {Function} fn - The work.
+ * @returns {Promise<unknown>} Whatever `fn` resolves to.
+ * @internal
+ */
+function runAsHostWork(slothlet, store, fn) {
+	if (store && typeof store === "object") WeakMapMethods.set(HOST_WORK_STORES, store, slothlet);
+	return slothlet_hostWork(fn);
+}
+
+/**
+ * The frame framework work an instance does as the host runs inside ({@link runAsHostWork}): awaited, so it stays on
+ * the stack (as an async frame) for as long as the work runs.
+ * @param {Function} fn - The work.
+ * @returns {Promise<unknown>} Whatever `fn` resolves to.
+ * @private
+ */
+async function slothlet_hostWork(fn) {
+	return await fn();
+}
+
+/**
+ * Whether a frame is the one framework work runs inside ({@link slothlet_hostWork}): a frame of that function, in this
+ * file, running this file's own source. A frame that only names the function, in code compiled by someone, is not.
+ * @param {{head?: string, path: string, evaluated?: boolean, hash: string|null, key: string|null}} frame - A frame.
+ * @returns {boolean} True when it is.
+ * @private
+ */
+function runtime_isHostWorkFrame(frame) {
+	if (frame.path !== OWN_FILE || frame.evaluated || !frame.head) return false;
+	if (RegExpMethods.exec(/\bslothlet_hostWork$/, frame.head) === null) return false;
+	return !isForeignScript(frame) && (runtime_runsFileSource(frame) || runtime_runsRunnerTransform(frame));
+}
+
+/**
  * Learn the scripts of the leaves whose entry frames a capture holds (#597): the frame directly inside a
  * {@link slothlet_enterLeaf} frame is the entered leaf's own function, so the script it runs in is that location's —
  * when the location is the leaf's own module's and nothing (a builtin) ran in between.
@@ -1127,6 +1194,9 @@ function runtime_learnEntered(frames) {
 		const entering = ENTERING[ENTERING.length - 1 - depth++];
 		const own = frames[index - 1];
 		if (!entering?.learnable || frame.gap || !own?.hash || !own.key || StringMethods.startsWith(own.path, FRAMEWORK_DIR + "/")) continue;
+		// A run build's script is recognised for as long as its seal is held (see `SEALED_BUILDS` in
+		// helpers/instance-imports): learning it too would keep it past that, and push the location's other scripts out.
+		if (loadedScriptLookup(own.key, own.hash).stamp != null) continue;
 		if (runtime_isOwnModuleLocation(entering.wrapper, own.path)) runtime_rememberScript(own.key, own.hash);
 	}
 }
@@ -4038,6 +4108,9 @@ function runtime_fileModuleOf(leaves) {
 	// A lazy tree's module node was built with no file: found by its path, the same node an eager tree builds for the file.
 	const modulePath = runtime_moduleRootPath(leaves);
 	if (modulePath === null || !ArrayMethods.every(paths, (path) => StringMethods.startsWith(path, modulePath + "."))) return leaves;
+	// Leaves a restart replaced are not stood for by the rebuilt tree's node at their module's path: the code is theirs,
+	// and has no standing (see runtime_taggedLeavesAtFile).
+	if (leaves[0].slothlet.handlers?.apiManager?.isRestartReplaced?.(leaves[0])) return leaves;
 	const node = moduleNodeResolver(leaves[0].slothlet, modulePath);
 	const standing = node && WeakSetMethods.has(trustedRootOwn.genuineWrappers, node) && node.slothlet === leaves[0].slothlet;
 	return standing && (!runtime_isGone(node) || !runtime_checksPermissions(node.slothlet)) ? [node] : leaves;
@@ -4193,6 +4266,20 @@ function runtime_builtUnder(wrapper) {
 }
 
 /**
+ * Whether one of the calls of a flow ran a node built under an instance ID (see {@link runtime_builtUnder}).
+ * @param {ReadonlyArray<object>} owners - The calls' wrappers.
+ * @param {string} id - The ID.
+ * @returns {boolean} True when one did.
+ * @private
+ */
+function runtime_builtUnderAny(owners, id) {
+	for (let i = 0; i < owners.length; i++) {
+		if (WeakSetMethods.has(trustedRootOwn.genuineWrappers, owners[i]) && runtime_builtUnder(owners[i]) === id) return true;
+	}
+	return false;
+}
+
+/**
  * Whether an instance's permission system is on: only then does what a removed node or a shut-down instance made lose
  * its standing. With it off nothing is checked, and code runs as plain JavaScript (#726).
  * @param {object|null|undefined} slothlet - The instance.
@@ -4315,10 +4402,12 @@ function runtime_instanceRuns(slothlet) {
  * @param {string|null} [running=null] - The instance whose flow is running, when one is.
  * @param {string|null} [location=null] - The location as the frame names it, query included: a frame carrying a mount's
  *   tag is held to the queries the instance's loader imported the file under.
+ * @param {{hash?: string|null, key?: string|null}|null} [frame=null] - The frame, for the script it runs (see
+ *   {@link runtime_runRestartReplacedLeaves}).
  * @returns {Array<object>|null} Leaves of one instance.
  * @private
  */
-function runtime_leavesAtLocation(path, line, running = null, location = null) {
+function runtime_leavesAtLocation(path, line, running = null, location = null, frame = null) {
 	const tag = runtime_frameInstanceTag(line);
 	const mount = runtime_frameModuleTag(line);
 	let found = null;
@@ -4341,11 +4430,7 @@ function runtime_leavesAtLocation(path, line, running = null, location = null) {
 		// still told apart, and runs as plain JavaScript, with no context to read `self` from (#726).
 		const runs = runtime_instanceRuns(slothlet);
 		if (!runs && runtime_checksPermissions(slothlet)) continue;
-		let leaves = runtime_leavesAtFile(slothlet, path, tag, mount);
-		// A frame carrying a mount's tag runs in a copy slothlet's loader imported for it only when the loader imported the
-		// file under that exact query: one some module wrote out for it (another parameter added) is a module of its own
-		// making (#691).
-		if (mount && location !== null) leaves = filterList(leaves, (wrapper) => runtime_importedUnder(wrapper, location));
+		const leaves = runtime_taggedLeavesAtFile(slothlet, path, tag, mount, location, runs, frame);
 		if (!leaves.length) continue;
 		if (!runs) {
 			// A file no tag tells apart (a CommonJS file) that a running instance loads is that instance's: the copy an
@@ -4380,8 +4465,9 @@ function runtime_leavesAtLocation(path, line, running = null, location = null) {
  * runtime_outerCallers), which have to be allowed as well.
  * @param {string|null} [running=null] - The instance whose flow is running, when something names one (see the
  *   context managers' `runningInstanceID`): a file several running instances load untold apart is then that one's.
- * @returns {{wrapper: object, callers: Array<object>}|{leaves: Array<object>, callers: Array<object>}|{unplaced: true, shared?: true}|null} The
- *   definer. `shared` marks code of a file more than one running instance holds, with nothing naming which.
+ * @returns {{wrapper: object, callers: Array<object>}|{leaves: Array<object>, callers: Array<object>}|{unplaced: true, shared?: true, foreign?: true}|null} The
+ *   definer. `shared` marks code of a file more than one running instance holds, with nothing naming which; `foreign`
+ *   code at an instance's file running in a script that is not the file's (see {@link isForeignScript}).
  * @internal
  */
 function frameDefiner(running = null) {
@@ -4447,9 +4533,14 @@ function runningOutsideFlow(instanceID, owners, making = false) {
 	const kindOf = (frame) => {
 		if (frame.evaluated || isForeignScript(frame)) return "foreign";
 		// The copy of a call's own file the instance's loader imported: the call's code, as the frame placement below says.
-		if (runtime_frameInstanceTag(frame.line) === instanceID && runtime_ownsPath(frame.path)) return "own";
+		// A call's file carries the ID its node was built under, which a reload or restart since replaced for a call whose
+		// flow outlives that copy (a snapshot it took): the copy the call ran is the call's code all the same.
+		const tag = runtime_frameInstanceTag(frame.line);
+		if (tag !== null && (tag === instanceID || runtime_builtUnderAny(owners, tag)) && runtime_ownsPath(frame.path)) return "own";
 		const leaves =
-			runtime_leafFileCopyOf(frame) !== null ? null : runtime_leavesAtLocation(frame.path, frame.line, instanceID, frame.location ?? null);
+			runtime_leafFileCopyOf(frame) !== null
+				? null
+				: runtime_leavesAtLocation(frame.path, frame.line, instanceID, frame.location ?? null, frame);
 		if (leaves?.length) {
 			for (let i = 0; i < leaves.length; i++) if (ArrayMethods.includes(owners, leaves[i]) || ownsFile(leaves[i])) return "own";
 			return "foreign";
@@ -4605,14 +4696,17 @@ function runtime_definerAt(frames, running) {
 		// files that import it stand for it, all of them.
 		if (frame.async || isRunnerFrame(frame)) return helper ? (runtime_leafOfHelper(helper) ?? null) : null;
 		// With no permission system on, nothing is refused: such code runs as plain JavaScript (#726).
-		if (frame.evaluated || isForeignScript(frame)) return runtime_anyInstanceChecks() ? { unplaced: true } : null;
+		if (frame.evaluated) return runtime_anyInstanceChecks() ? { unplaced: true } : null;
+		// Code at an instance's file running in a script slothlet does not recognise as the file's (code compiled under
+		// its name, or a copy whose record is gone): it names a module's file, so it is no host's code either (#597).
+		if (isForeignScript(frame)) return runtime_anyInstanceChecks() ? { unplaced: true, foreign: true } : null;
 		// An untagged frame at an ES module file an instance loaded under its tag runs in another module of the file (a raw
 		// `import` of it by a module, the host or a package), which slothlet loaded for no leaf: code no one accounts for,
 		// as frame placement reads it inside a call (#691).
 		if (runtime_isUntaggedCopy(frame)) return { unplaced: true };
 		// A leaf's file an api file loaded itself runs as a helper file of that api file's, below.
 		const copy = runtime_leafFileCopyOf(frame) !== null;
-		const leaves = copy ? null : runtime_leavesAtLocation(frame.path, frame.line, running, frame.location ?? null);
+		const leaves = copy ? null : runtime_leavesAtLocation(frame.path, frame.line, running, frame.location ?? null, frame);
 		if (leaves === null) {
 			if (!copy && runtime_isInstanceFile(frame.path)) return { unplaced: true, shared: true };
 			// A helper file of an instance that is no api file (one a leaf imports): its code runs for the leaf whose code
@@ -4653,7 +4747,9 @@ function runtime_definerAt(frames, running) {
  * @private
  */
 function runtime_importedUnder(wrapper, location) {
-	const loader = wrapper.slothlet?.processors?.loader;
+	// The loader of the node's own tree: a run that rebuilt its copy imported the files under queries of its own.
+	const slothlet = wrapper.slothlet;
+	const loader = typeof slothlet?._nodeLoader === "function" ? slothlet._nodeLoader(wrapper) : slothlet?.processors?.loader;
 	if (typeof loader?.importedUnderQuery !== "function") return true;
 	const at = StringMethods.indexOf(location, "?");
 	if (at === -1) return false;
@@ -5205,12 +5301,69 @@ function registerLeafFile(wrapper, at = undefined) {
 	// the compiled copy slothlet wrote for it, so that copy's frames are the leaf's.
 	const locations = setFrom([toComparablePath(filePath), runtime_realComparablePath(filePath)]);
 	for (const imported of setValues(runtime_importedLocations(wrapper, filePath))) SetMethods.add(locations, imported);
+	let paths = WeakMapMethods.get(LEAF_FILE_PATHS, slothlet);
+	if (!paths) WeakMapMethods.set(LEAF_FILE_PATHS, slothlet, (paths = new Map()));
+	const internal = wrapper.____slothletInternal;
+	const record = { apiPath: String(internal.apiPath ?? ""), root: runtime_moduleRootPath([wrapper]), moduleID: internal.moduleID ?? null };
 	for (const location of setValues(locations)) {
 		if (!location) continue;
 		let held = MapMethods.get(files, location);
 		if (!held) MapMethods.set(files, location, (held = new Set()));
 		SetMethods.add(held, reference);
+		let known = MapMethods.get(paths, location);
+		if (!known) MapMethods.set(paths, location, (known = new Map()));
+		MapMethods.set(known, record.apiPath + "\0" + (record.moduleID ?? ""), record);
 	}
+}
+
+/**
+ * Each instance's api paths of the nodes built from each file, by the same locations {@link LEAF_FILES} indexes the nodes
+ * at, kept as paths: the nodes go with the copy a reload or restart replaces, and in a lazy tree the copy the instance
+ * has now builds the file's nodes only once something reaches them (see {@link runtime_replacedCopyLeaves}).
+ * @type {WeakMap<object, Map<string, Map<string, {apiPath: string, root: string|null, moduleID: string|null}>>>}
+ * @private
+ */
+const LEAF_FILE_PATHS = new WeakMap();
+
+/**
+ * The instance's nodes that stand now for code of a file's copy a reload or restart replaced (see
+ * {@link runtime_taggedLeavesAtFile}): its nodes built from the same file, of the same mount, or, where a lazy tree has
+ * not built them yet, the node at the api path one of them had, or at that file's module path.
+ * @param {object} slothlet - The instance.
+ * @param {string} path - The file, in comparable form.
+ * @param {string|null} mount - The mount tag the code carries, or null.
+ * @returns {Array<object>} The nodes.
+ * @private
+ */
+function runtime_replacedCopyLeaves(slothlet, path, mount) {
+	const current = slothlet.instanceID;
+	const built = runtime_leavesAtFile(slothlet, path, current, mount);
+	if (built.length) return built;
+	const paths = WeakMapMethods.get(LEAF_FILE_PATHS, slothlet);
+	const known = paths === undefined ? undefined : MapMethods.get(paths, path);
+	if (!known) return [];
+	const found = [];
+	for (let ofIndex = 0, ofList = mapValues(known); ofIndex < ofList.length; ofIndex++) {
+		const record = ofList[ofIndex];
+		if ((record.moduleID ?? null) !== (mount ?? null)) continue;
+		const candidates = [record.apiPath, record.root];
+		for (let index = 0; index < candidates.length; index++) {
+			const at = candidates[index];
+			if (at === null) continue;
+			const node = moduleNodeResolver(slothlet, at);
+			if (
+				!node ||
+				!WeakSetMethods.has(trustedRootOwn.genuineWrappers, node) ||
+				node.slothlet !== slothlet ||
+				runtime_isGone(node) ||
+				runtime_builtUnder(node) !== current
+			)
+				continue;
+			if (!ArrayMethods.includes(found, node)) listPush(found, node);
+			break;
+		}
+	}
+	return found;
 }
 
 /**
@@ -5225,7 +5378,54 @@ function registerLeafFile(wrapper, at = undefined) {
 function runtime_leavesAt(slothlet, frame) {
 	// A leaf's file an api file loaded itself is a helper of that file's, and no leaf's.
 	if (runtime_leafFileCopyOf(frame)) return [];
-	return runtime_leavesAtFile(slothlet, frame.path, runtime_frameInstanceTag(frame.line), runtime_frameModuleTag(frame.line));
+	const tag = runtime_frameInstanceTag(frame.line);
+	const mount = runtime_frameModuleTag(frame.line);
+	const location = typeof frame.location === "string" ? frame.location : null;
+	return (
+		runtime_runRestartReplacedLeaves(slothlet, frame.path, tag, mount, location, frame) ??
+		runtime_leavesAtFile(slothlet, frame.path, tag, mount)
+	);
+}
+
+/**
+ * The nodes a `restart()` of the running code's `run()` / `scope()` replaced that stand for code of a file, when the
+ * code is theirs: the code of the trees the run read before its restart carries none of the reload stamps the files of
+ * the trees built for it since were loaded under (see `Slothlet#_runRestart`). An ES module carries its stamp in its
+ * URL; a CommonJS file runs under its plain path, and its script tells the stamp instead: a run's own restart, and the
+ * reloads in the run after it, seal the leaf's source for it (see `SEALED_BUILDS` in helpers/instance-imports), and a
+ * script sealed for no restart, or for one whose seal is gone, carries none of the stamps. As for code an instance's
+ * restart replaced (see {@link runtime_taggedLeavesAtFile}), those nodes stand for it, never the rebuilt copy's nodes of
+ * the same file, and they have no standing. Null when the code is not such code, no such node is left, the permission
+ * system is off, or the frame tells neither (an ES module's location with no instance tag, a script slothlet did not
+ * load as a CommonJS leaf).
+ * @param {object} slothlet - The instance.
+ * @param {string} path - The file, in comparable form.
+ * @param {string|null} tag - The instance tag the frame carries, or null.
+ * @param {string|null} mount - The mount tag the frame carries, or null.
+ * @param {string|null} location - The frame's location, query included, or null.
+ * @param {{hash?: string|null, key?: string|null}|null} [frame=null] - The frame, for the script it runs.
+ * @returns {Array<object>|null} The nodes, or null.
+ * @private
+ */
+function runtime_runRestartReplacedLeaves(slothlet, path, tag, mount, location, frame = null) {
+	if (location === null || !runtime_checksPermissions(slothlet)) return null;
+	const restart = slothlet._runRestart?.() ?? null;
+	if (restart === null) return null;
+	let stamp;
+	if (runtime_frameInstanceTag(location) !== null) stamp = runtime_frameReloadStamp(location);
+	else {
+		// A CommonJS leaf's own load, told by its script.
+		if (!frame?.hash || !frame.key) return null;
+		const script = loadedScriptLookup(frame.key, frame.hash);
+		// A script of no load slothlet recorded for the file says nothing either way; a helper load is a helper file's.
+		if (!script.known || script.helper) return null;
+		// A script of the file slothlet no longer recognises is no copy the run built since its restart: it carries
+		// none of the stamps, and is never taken for the rebuilt copy's code.
+		stamp = script.has ? (script.stamp ?? null) : null;
+	}
+	if (SetMethods.has(restart.stamps, stamp ?? "")) return null;
+	const replaced = runtime_leavesAtFile(slothlet, path, tag, mount, true);
+	return replaced.length ? replaced : null;
 }
 
 /**
@@ -5307,11 +5507,8 @@ function runtime_nodeLeafFileCopyOf(frame) {
 			if (!slothlet || !runtime_instanceRuns(slothlet)) continue;
 			if (!runtime_leavesAtFile(slothlet, frame.path, null, null).length) continue;
 			if (tag) {
-				const mount = runtime_frameModuleTag(frame.line);
-				let leaves = runtime_leavesAtFile(slothlet, frame.path, tag, mount);
-				if (mount && typeof frame.location === "string")
-					leaves = filterList(leaves, (wrapper) => runtime_importedUnder(wrapper, frame.location));
-				if (leaves.length) continue;
+				const location = typeof frame.location === "string" ? frame.location : null;
+				if (runtime_taggedLeavesAtFile(slothlet, frame.path, tag, runtime_frameModuleTag(frame.line), location, true).length) continue;
 			} else if (!SetMethods.has(runtime_commonJSLocations(id), frame.path)) continue;
 			// A CommonJS file two running instances load carries nothing to tell them apart: still no leaf's, and no one
 			// instance's helper either, as a CommonJS helper they both load is not (#735).
@@ -5326,6 +5523,42 @@ function runtime_nodeLeafFileCopyOf(frame) {
 }
 
 /**
+ * The leaves of an instance a frame's code at a file stands for, by the instance and mount tags the frame carries
+ * (see {@link runtime_leavesAtFile}). A frame carrying a mount's tag runs in a copy slothlet's loader imported for it
+ * only when the loader imported the file under that exact query: one some module wrote out for it (another parameter
+ * added) is a module of its own making (#691). Code of the copy a reload or restart replaced carries the ID the
+ * instance had then, and its nodes are gone with that copy: the instance's nodes built from the same file, of the same
+ * mount, stand for it now, so a function that copy handed out keeps reading `self` as its definer. With the permission
+ * system on that holds for a reload only: the modules a restart replaced are removed with the instance they were in,
+ * and what they made has no standing (#726).
+ * @param {object} slothlet - The instance.
+ * @param {string} path - The file, in comparable form.
+ * @param {string|null} tag - The instance tag the frame carries, or null.
+ * @param {string|null} mount - The mount tag the frame carries, or null.
+ * @param {string|null} location - The frame's location, query included, or null.
+ * @param {boolean} runs - Whether the instance runs (see {@link runtime_instanceRuns}).
+ * @param {{hash?: string|null, key?: string|null}|null} [frame=null] - The frame, for the script it runs (see
+ *   {@link runtime_runRestartReplacedLeaves}).
+ * @returns {Array<object>} The leaves.
+ * @private
+ */
+function runtime_taggedLeavesAtFile(slothlet, path, tag, mount, location, runs, frame = null) {
+	const replaced = runtime_runRestartReplacedLeaves(slothlet, path, tag, mount, location, frame);
+	if (replaced !== null) return replaced;
+	let leaves = runtime_leavesAtFile(slothlet, path, tag, mount);
+	if (mount && location !== null) leaves = filterList(leaves, (wrapper) => runtime_importedUnder(wrapper, location));
+	const current = slothlet.instanceID;
+	if (leaves.length || !tag || !runs || current === tag) return leaves;
+	// The nodes a restart replaced stand for it: they have no standing, so what the code does through `self` is refused
+	// as their code (see ApiManager#isRestartReplaced), never taken for the host's or for a copy no leaf accounts for.
+	// The loader that imported their files went with them, so the query is not held to its record: placing code on
+	// nodes with no standing grants it nothing.
+	if (runtime_checksPermissions(slothlet) && splitText(String(current), "_reload_")[0] !== splitText(tag, "_reload_")[0])
+		return runtime_leavesAtFile(slothlet, path, tag, mount, true);
+	return runtime_replacedCopyLeaves(slothlet, path, mount);
+}
+
+/**
  * The leaves of an instance built from a file, of the instance and mount given when they are (see
  * {@link runtime_leavesAt}): with its permission system on, only those still in the tree.
  * @param {object} slothlet - The instance.
@@ -5335,14 +5568,15 @@ function runtime_nodeLeafFileCopyOf(frame) {
  * @returns {Array<object>} The leaves.
  * @private
  */
-function runtime_leavesAtFile(slothlet, path, instance, mount) {
+function runtime_leavesAtFile(slothlet, path, instance, mount, restartReplaced = false) {
 	const held =
 		WeakMapMethods.get(LEAF_FILES, slothlet) == null ? undefined : MapMethods.get(WeakMapMethods.get(LEAF_FILES, slothlet), path);
 	if (!held) return [];
 	const leaves = [];
 	// A removed node keeps its place while the permission system is off: nothing is checked, and what it made runs as plain
-	// JavaScript, `self` included (#726).
-	const keepGone = !runtime_checksPermissions(slothlet);
+	// JavaScript, `self` included (#726). The nodes a restart replaced are given only when asked for (see
+	// runtime_taggedLeavesAtFile), and then alone: the code they stand for is refused through them.
+	const keepGone = restartReplaced || !runtime_checksPermissions(slothlet);
 	for (const reference of setValues(held)) {
 		const wrapper = WeakRefMethods.deref(reference);
 		if (!wrapper) {
@@ -5350,6 +5584,9 @@ function runtime_leavesAtFile(slothlet, path, instance, mount) {
 			continue;
 		}
 		if (runtime_isGone(wrapper) && !keepGone) continue;
+		// A node a restart replaced has no standing while the permission system is on, as a removed one has none: it
+		// stands for nothing but code carrying the ID it was built under (see runtime_taggedLeavesAtFile).
+		if (restartReplaced !== (slothlet.handlers?.apiManager?.isRestartReplaced?.(wrapper) === true)) continue;
 		// The tag is the ID the node was built under: code of a copy a reload replaced carries the ID the instance had then.
 		if (instance && runtime_builtUnder(wrapper) !== instance) continue;
 		if (mount && wrapper.____slothletInternal.moduleID !== mount) continue;
@@ -5359,6 +5596,27 @@ function runtime_leavesAtFile(slothlet, path, instance, mount) {
 		listPush(leaves, wrapper);
 	}
 	return leaves;
+}
+
+/**
+ * Every live node of an instance built from a file (see {@link registerLeafFile}): the file's own node and every node
+ * of its values, for a checkpoint of what the file exports (see `helpers/run-snapshot`).
+ * @param {object} slothlet - The instance.
+ * @param {string} filePath - The file.
+ * @returns {object[]} The nodes' wrappers.
+ * @private
+ */
+function fileNodes(slothlet, filePath) {
+	const files = WeakMapMethods.get(LEAF_FILES, slothlet);
+	const held = files === undefined || !filePath ? undefined : MapMethods.get(files, toComparablePath(filePath));
+	const nodes = [];
+	if (held === undefined) return nodes;
+	for (const reference of setValues(held)) {
+		const wrapper = WeakRefMethods.deref(reference);
+		if (wrapper === undefined) SetMethods.delete(held, reference);
+		else listPush(nodes, wrapper);
+	}
+	return nodes;
 }
 
 /**
@@ -5374,8 +5632,16 @@ function runtime_leavesAtFile(slothlet, path, instance, mount) {
 function runtime_codeWritersOnStack(slothlet) {
 	const family = slothlet.instanceID;
 	const sources = [{ family, slothlet, roots: [] }];
+	// In the flow of framework work the instance does as the host, the code past the frame that work runs in asked for
+	// it, and the change is the work's own.
+	const store = slothlet.contextManager?.als?.getStore?.();
+	const hostWork = store !== undefined && WeakMapMethods.get(HOST_WORK_STORES, store) === slothlet;
 	for (const frame of framesOf(runtime_captureFrames(48))) {
-		if (StringMethods.startsWith(frame.path, FRAMEWORK_DIR + "/") || StringMethods.startsWith(frame.path, "node:")) continue;
+		if (StringMethods.startsWith(frame.path, FRAMEWORK_DIR + "/")) {
+			if (hostWork && runtime_isHostWorkFrame(frame)) return [];
+			continue;
+		}
+		if (StringMethods.startsWith(frame.path, "node:")) continue;
 		if (frame.evaluated || isForeignScript(frame)) return stackHoldsInstanceCode(sources) ? null : [];
 		const leaves = runtime_leavesAt(slothlet, frame);
 		if (leaves.length) return leaves;
@@ -5802,6 +6068,7 @@ export function internals(consumer) {
 		createModuleLoad,
 		describeCall,
 		enterCall,
+		fileNodes,
 		forgetInstanceScripts,
 		frameDefiner,
 		handedLeafFunctions,
@@ -5811,6 +6078,7 @@ export function internals(consumer) {
 		ownReceiver,
 		recordInstanceOwner,
 		registerLeafFile,
+		runAsHostWork,
 		resolveSupplier,
 		runningOutsideFlow,
 		runtime_captureFrames,

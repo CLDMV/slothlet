@@ -15,7 +15,7 @@
 		"INVALID_CONFIG_FILES_REQUIRED": "구성 오류: loader.platform가 'browser'일 때 'loader.files'가 필요합니다. 'files' 및 'directories' 배열이 포함된 사전 생성된 manifest 객체를 제공하세요.",
 		"INVALID_CONFIG_FILES_INVALID": "구성 오류: 'loader.files'는 'files' 및 'directories' 배열이 있는 일반 객체여야 합니다. 수신됨: {received}",
 		"INVALID_CONFIG_RESOLVER_INVALID": "구성 오류: loader.platform가 'browser'일 때 'loader.resolve'는 함수여야 합니다. 수신됨: {received}",
-		"FOLDER_INVALID": "설정 오류: 'dir'은 비어 있지 않은 문자열 경로여야 합니다. 받은 값: {folder}",
+		"FOLDER_INVALID": "설정 오류: 경로는 기존 폴더를 가리키는 비어 있지 않은 문자열이어야 합니다. 받은 값: {folder}",
 		"HINT_FOLDER_INVALID": "디렉토리 경로가 유효한 문자열이고 존재하는 디렉토리를 가리키는지 확인하십시오.",
 		"INVALID_CONFIG_MODE_INVALID": "설정 오류: 'mode'는 'eager' 또는 'lazy'여야 합니다. 받은 값: {value}",
 		"HINT_INVALID_CONFIG_MODE_INVALID": "모드는 'eager' 또는 'lazy'여야 합니다.",

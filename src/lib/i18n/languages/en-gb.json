@@ -12,7 +12,7 @@
 		"HINT_FILES_STRUCTURE_INVALID": "preloadedStructure is built internally; pass an object with files and directories arrays, or omit it to scan a directory.",
 		"INVALID_CONFIG_BASE_MISSING": "Configuration error: 'base' option is required. Provide a directory path to load API from.",
 		"HINT_INVALID_CONFIG_BASE_MISSING": "The directory path is required but was not provided.",
-		"FOLDER_INVALID": "Configuration error: 'dir' must be a non-empty string path. Received: {folder}",
+		"FOLDER_INVALID": "Configuration error: the path must be a non-empty string that points to an existing folder. Received: {folder}",
 		"HINT_FOLDER_INVALID": "Ensure the directory path is a valid string and points to an existing directory.",
 		"INVALID_CONFIG_FILES_REQUIRED": "Configuration error: 'loader.files' is required when loader.platform is 'browser'. Provide a pre-generated manifest object with 'files' and 'directories' arrays.",
 		"INVALID_CONFIG_FILES_INVALID": "Configuration error: 'loader.files' must be a plain object with 'files' and 'directories' arrays. Received: {received}",

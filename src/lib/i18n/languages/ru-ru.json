@@ -15,7 +15,7 @@
 		"INVALID_CONFIG_FILES_REQUIRED": "Ошибка конфигурации: 'loader.files' обязателен, когда loader.platform равно 'browser'. Предоставьте заранее сгенерированный объект манифеста с массивами 'files' и 'directories'.",
 		"INVALID_CONFIG_FILES_INVALID": "Ошибка конфигурации: 'loader.files' должен быть простым объектом с массивами 'files' и 'directories'. Получено: {received}",
 		"INVALID_CONFIG_RESOLVER_INVALID": "Ошибка конфигурации: 'loader.resolve' должен быть функцией, когда loader.platform равно 'browser'. Получено: {received}",
-		"FOLDER_INVALID": "Ошибка конфигурации: 'dir' должен быть непустой строкой-путем. Получено: {folder}",
+		"FOLDER_INVALID": "Ошибка конфигурации: путь должен быть непустой строкой, указывающей на существующую папку. Получено: {folder}",
 		"HINT_FOLDER_INVALID": "Убедитесь, что путь к директории является корректной строкой и указывает на существующую директорию.",
 		"INVALID_CONFIG_MODE_INVALID": "Ошибка конфигурации: 'mode' должен быть либо 'eager', либо 'lazy'. Получено: {value}",
 		"HINT_INVALID_CONFIG_MODE_INVALID": "Режим должен быть 'eager' или 'lazy'.",

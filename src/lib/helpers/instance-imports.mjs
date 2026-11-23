@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T13:35:20-08:00 (1794951320)
+ *	@Last modified time: 2026-11-21T23:50:55-08:00 (1795333855)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -76,6 +76,8 @@ import {
 	decodeURIComponent,
 	Error,
 	filterList,
+	FinalizationRegistry,
+	FinalizationRegistryMethods,
 	FunctionMethods,
 	JSON,
 	listPush,
@@ -116,6 +118,8 @@ import {
 	URLSearchParamsMethods,
 	WeakMap,
 	WeakMapMethods,
+	WeakRef,
+	WeakRefMethods,
 	WeakSet,
 	WeakSetMethods
 } from "#helpers/intrinsics";
@@ -277,7 +281,9 @@ const SCOPE_KEYS = new Map();
 /**
  * The scope a synchronous {@link scopeRequire} is running in (`anchor` is the file it required; `importer` the api
  * file whose own copies are served, under `helpers: "module"`; `fresh` when the anchor is loaded as a leaf), else null.
- * @type {{ instanceID: string, anchor: string, importer?: string|null, mount?: string|null, fresh?: boolean }|null}
+ * The `seal` is the run build seal a run's own restart, or a reload in the run after it, loads the leaf under, when it
+ * is (see {@link SEALED_BUILDS}).
+ * @type {{ instanceID: string, anchor: string, importer?: string|null, mount?: string|null, fresh?: boolean, seal?: {stamp: string}|null }|null}
  * @private
  */
 let ACTIVE = null;
@@ -371,6 +377,65 @@ const HELPER_SCRIPTS = new Map();
  * @private
  */
 const HELPER_SEALS = new Map();
+
+/**
+ * The CommonJS leaf sources a run's own `restart()`, and the reloads in the run after it, load (see
+ * {@link sealLoadedSource}), by script key and then by hash: the text, the stamp of the restart, and the run's build seal
+ * the source was sealed for, held weakly. A CommonJS file runs under its plain path, which carries no stamp as an ES
+ * module's URL does, so the script is what tells the code of a run's rebuilt copy apart from the code of the copies the
+ * run read before its restart. Every build of the run since that restart seals a file with one value, so each such
+ * restart adds one script per file. The run's record holds the seals of all its restarts, so the record goes when the
+ * run's record does, and with the instance's other records when it shuts down. No fixed number is kept: a script
+ * still in use is never forgotten for newer ones.
+ * @type {Map<string, Map<string, {stamp: string, text: string, seal: WeakRef<object>}>>}
+ * @private
+ */
+const SEALED_BUILDS = new Map();
+
+/**
+ * The random value each run build seal (see {@link SEALED_BUILDS}) seals a script key's source with, by seal and then
+ * script key: drawn the first time a build under the seal loads the file, and gone with the seal.
+ * @type {WeakMap<object, Map<string, string>>}
+ * @private
+ */
+const BUILD_SEALS = new WeakMap();
+
+/**
+ * Drops a script of {@link SEALED_BUILDS} once its seal is collected. Null where the platform has no
+ * `FinalizationRegistry` or `WeakRef`; a run's builds are then sealed as the instance's own loads are.
+ * @type {FinalizationRegistry<{key: string, hash: string}>|null}
+ * @private
+ */
+const COLLECTED_BUILDS =
+	typeof FinalizationRegistry === "function" && typeof WeakRef === "function" ? new FinalizationRegistry(forgetSealedBuild) : null;
+
+/**
+ * Forget a script of {@link SEALED_BUILDS} whose seal is gone.
+ * @param {{key: string, hash: string}} held - The script.
+ * @returns {void}
+ * @private
+ */
+function forgetSealedBuild({ key, hash }) {
+	const builds = MapMethods.get(SEALED_BUILDS, key);
+	const entry = builds === undefined ? undefined : MapMethods.get(builds, hash);
+	if (entry === undefined || WeakRefMethods.deref(entry.seal) !== undefined) return;
+	MapMethods.delete(builds, hash);
+	if (MapMethods.size(builds) === 0) MapMethods.delete(SEALED_BUILDS, key);
+}
+
+/**
+ * A script of {@link SEALED_BUILDS} whose seal is still held.
+ * @param {string} key - The script key.
+ * @param {string|undefined|null} hash - The script's hash.
+ * @returns {{stamp: string, text: string}|null} The script, or null.
+ * @private
+ */
+function liveSealedBuild(key, hash) {
+	if (hash === undefined || hash === null) return null;
+	const builds = MapMethods.get(SEALED_BUILDS, key);
+	const entry = builds === undefined ? undefined : MapMethods.get(builds, hash);
+	return entry !== undefined && WeakRefMethods.deref(entry.seal) !== undefined ? entry : null;
+}
 
 /**
  * Who loaded each file no instance tags, as this copy's resolve hook saw it resolved (#597): by the file's path (forward
@@ -612,14 +677,24 @@ const SCRIPTS_READER = Objects.freeze({
 		const hashes = MapMethods.get(LOADED_SCRIPTS, key);
 		const helpers = MapMethods.get(HELPER_SCRIPTS, key);
 		const helper = hash !== undefined && Boolean(helpers == null ? undefined : ArrayMethods.includes(helpers, hash));
+		const build = liveSealedBuild(key, hash);
 		return {
-			known: Boolean(hashes?.length || helpers?.length),
-			has: helper || (hash !== undefined && Boolean(hashes == null ? undefined : ArrayMethods.includes(hashes, hash))),
-			helper
+			// A run build's script whose seal is gone is still a script of the key's: a frame running it is told apart.
+			known: Boolean(hashes?.length || helpers?.length) || MapMethods.has(SEALED_BUILDS, key),
+			has: helper || build !== null || (hash !== undefined && Boolean(hashes == null ? undefined : ArrayMethods.includes(hashes, hash))),
+			helper,
+			stamp: build === null ? null : build.stamp
 		};
 	},
-	hashes: (key) => concatLists(MapMethods.get(LOADED_SCRIPTS, key) ?? [], MapMethods.get(HELPER_SCRIPTS, key) ?? []),
+	hashes: (key) => {
+		const hashes = concatLists(MapMethods.get(LOADED_SCRIPTS, key) ?? [], MapMethods.get(HELPER_SCRIPTS, key) ?? []);
+		const builds = MapMethods.get(SEALED_BUILDS, key);
+		if (builds !== undefined) for (const hash of mapKeys(builds)) if (liveSealedBuild(key, hash) !== null) listPush(hashes, hash);
+		return hashes;
+	},
 	text: (key, hash) => {
+		const build = liveSealedBuild(key, hash);
+		if (build !== null) return build.text;
 		const texts = MapMethods.get(LOADED_TEXTS, key);
 		if (!texts) return undefined;
 		if (hash !== undefined && hash !== null) return MapMethods.get(texts, hash);
@@ -629,7 +704,10 @@ const SCRIPTS_READER = Objects.freeze({
 			(MapMethods.get(HELPER_SCRIPTS, key) == null ? undefined : ArrayMethods.at(MapMethods.get(HELPER_SCRIPTS, key), -1));
 		return newest === undefined ? undefined : MapMethods.get(texts, newest);
 	},
-	count: () => SetMethods.size(setFrom(concatLists(mapKeysToArray(LOADED_SCRIPTS), mapKeysToArray(HELPER_SCRIPTS)))),
+	count: () =>
+		SetMethods.size(
+			setFrom(concatLists(concatLists(mapKeysToArray(LOADED_SCRIPTS), mapKeysToArray(HELPER_SCRIPTS)), mapKeysToArray(SEALED_BUILDS)))
+		),
 	packageImporters: (path) => setToArray(MapMethods.get(PACKAGE_IMPORTERS, packageKey(path)))
 });
 
@@ -641,6 +719,10 @@ const SCRIPTS_READER = Objects.freeze({
  * @typedef {object} InstanceImportState
  * @property {(instanceID: string, parent: string, children: string[]) => void} recordImports - Records a module's
  *   imports; called by the registration the vite plugin appends to each instance module. It only ever adds an importer.
+ * @property {(instanceID: string, importer: string, url: string) => void} noteSelfImporter - Records that an instance's
+ *   file imported `self` through a runtime entry file (see noteSelfImporterHere).
+ * @property {(instanceID: string, file: string) => string[]} selfImporterUrls - The runtime entry files a file imported `self` through.
+ * @property {(instanceID: string) => void} forgetSelfImporters - Forgets an instance's records.
  * @property {{of: function(string): (object|null)}} imports - The reader of the import graphs (see graphView).
  * @property {{lookup: Function, hashes: Function, text: Function, count: Function, packageImporters: Function}} scripts -
  *   The reader of the sources the load hook recorded (#597).
@@ -809,6 +891,9 @@ function sharedState() {
 	if (held !== undefined) return (SHARED = held);
 	OWN_STATE = Objects.freeze({
 		recordImports: recordImportsHere,
+		noteSelfImporter: noteSelfImporterHere,
+		selfImporterUrls: selfImporterUrlsHere,
+		forgetSelfImporters: forgetSelfImportersHere,
 		imports: IMPORTS_READER,
 		scripts: SCRIPTS_READER,
 		commonJS: COMMONJS_READER,
@@ -1196,6 +1281,7 @@ function setInstanceSelfKind(instanceID, callable) {
 	if (callable === null) {
 		MapMethods.delete(SELF_KINDS, instanceID);
 		MapMethods.delete(SELF_BINDINGS, instanceID);
+		sharedState().forgetSelfImporters(instanceID);
 		MapMethods.delete(SELF_CLOSED, instanceID);
 		rebindSharedSelf();
 		return;
@@ -1243,6 +1329,97 @@ function bindInstanceSelf(url, instanceID, assign) {
 	if (!setters) MapMethods.set(byURL, url, (setters = new Set()));
 	SetMethods.add(setters, assign);
 	assign(instanceSelfForm(instanceID, url));
+}
+
+/**
+ * The runtime entry files each file of an instance imported `self` through, by instance ID, then by the file's path
+ * (query and `file:` prefix dropped): see {@link noteSelfImporterHere}.
+ * @type {Map<string, Map<string, Set<string>>>}
+ * @private
+ */
+const SELF_IMPORTERS = new Map();
+
+/**
+ * A file's path as it is keyed in {@link SELF_IMPORTERS}: a `file:` URL or an absolute path, instance query dropped.
+ * @param {string} ref - The file's URL, module id or path.
+ * @returns {string} The path.
+ * @private
+ */
+function selfImporterKey(ref) {
+	const bare = splitQuery(ref)[0];
+	return NODE !== null && StringMethods.startsWith(bare, "file:") ? NODE.url.fileURLToPath(bare) : bare;
+}
+
+/**
+ * Record that an instance's file imported `self` through a runtime entry file, so `run.self()` / `scope({ self: true })`
+ * opened by that file's code can hand it the `self` binding the file itself holds.
+ * @param {string} instanceID - The instance.
+ * @param {string|undefined} importer - The importing file's URL, module id or path.
+ * @param {string} url - The runtime entry file's URL.
+ * @returns {void}
+ * @private
+ */
+function noteSelfImporterHere(instanceID, importer, url) {
+	if (typeof importer !== "string") return;
+	let byFile = MapMethods.get(SELF_IMPORTERS, instanceID);
+	if (!byFile) MapMethods.set(SELF_IMPORTERS, instanceID, (byFile = new Map()));
+	const key = selfImporterKey(importer);
+	let urls = MapMethods.get(byFile, key);
+	if (!urls) MapMethods.set(byFile, key, (urls = new Set()));
+	SetMethods.add(urls, url);
+}
+
+/**
+ * The runtime entry files a file of an instance imported `self` through, as {@link noteSelfImporterHere} recorded.
+ * @param {string} instanceID - The instance.
+ * @param {string} file - The file's path.
+ * @returns {string[]} Their URLs; empty when none was recorded.
+ * @private
+ */
+function selfImporterUrlsHere(instanceID, file) {
+	const urls = MapMethods.get(MapMethods.get(SELF_IMPORTERS, instanceID) ?? new Map(), selfImporterKey(file));
+	return urls ? setToArray(urls) : [];
+}
+
+/**
+ * Forget what {@link noteSelfImporterHere} recorded for an instance.
+ * @param {string} instanceID - The instance.
+ * @returns {void}
+ * @private
+ */
+function forgetSelfImportersHere(instanceID) {
+	MapMethods.delete(SELF_IMPORTERS, instanceID);
+}
+
+/**
+ * The URL of the runtime entry file api files import `self` from by default (`@cldmv/slothlet/runtime`).
+ * @type {string}
+ * @private
+ */
+const MAIN_RUNTIME_URL = URLMethods.href(new URL("../runtime/runtime.mjs", import.meta.url));
+
+/**
+ * The `self` a file of an instance holds now, for `run.self()` / `scope({ self: true })` opened by that file's code: the
+ * form of the runtime entry file the file imported `self` through (the main entry, `@cldmv/slothlet/runtime`, when it
+ * imported it through several). For code whose file imported none, or when no file is named, the entry the instance's
+ * files bound `self` through, the main entry when they bound it through several. Files loaded with no resolve hook (a
+ * browser) hold the main entry's form.
+ * @param {string} instanceID - The instance.
+ * @param {string|null} [filePath] - The path of the file whose code opens the run.
+ * @returns {object|Function|undefined} The form, or undefined when no runtime file made one.
+ * @internal
+ */
+function moduleSelfForm(instanceID, filePath = null) {
+	const own = filePath === null ? [] : sharedState().selfImporterUrls(instanceID, filePath);
+	if (own.length > 0) {
+		if (ArrayMethods.includes(own, MAIN_RUNTIME_URL)) return instanceSelfForm(instanceID, MAIN_RUNTIME_URL);
+		return instanceSelfForm(instanceID, own[0]);
+	}
+	const byURL = MapMethods.get(SELF_BINDINGS, instanceID);
+	if (byURL && MapMethods.size(byURL) > 0 && !MapMethods.has(byURL, MAIN_RUNTIME_URL)) {
+		for (const url of mapKeys(byURL)) return instanceSelfForm(instanceID, url);
+	}
+	return instanceSelfForm(instanceID, MAIN_RUNTIME_URL);
 }
 
 /**
@@ -2662,10 +2839,12 @@ function splitQuery(ref) {
  *   helper files once per importing api file (`helpers: "module"`): a private cache per api file instead of one per
  *   instance.
  * @param {string|null} [options.mount=null] - That api file's mount, carried onto the ES modules it requires.
+ * @param {{stamp: string}|null} [options.seal=null] - With `fresh`, the run build seal of a run's own restart, or of a
+ *   reload in the run after it, loading the leaf: its source is sealed for it (see {@link SEALED_BUILDS}).
  * @returns {*} The file's `module.exports`.
  * @private
  */
-function scopeRequire(filePath, instanceID, { fresh = false, importer = null, mount = null } = {}) {
+function scopeRequire(filePath, instanceID, { fresh = false, importer = null, mount = null, seal = null } = {}) {
 	const requireFn = NODE.module.createRequire(filePath);
 	const resolved = requireFn.resolve(filePath);
 	const cache = requireFn.cache;
@@ -2724,7 +2903,14 @@ function scopeRequire(filePath, instanceID, { fresh = false, importer = null, mo
 		if (!MapMethods.has(LEAVES, instanceID)) MapMethods.set(LEAVES, instanceID, new Set());
 		SetMethods.add(MapMethods.get(LEAVES, instanceID), resolved);
 	}
-	ACTIVE = { instanceID, anchor: resolved, importer, mount, fresh };
+	ACTIVE = {
+		instanceID,
+		anchor: resolved,
+		importer,
+		mount,
+		fresh,
+		seal: fresh && seal !== null && typeof seal === "object" && typeof seal.stamp === "string" ? seal : null
+	};
 	try {
 		return requireFn(resolved);
 	} finally {
@@ -2881,13 +3067,15 @@ function releaseScope(instanceID) {
 	}
 	// The scripts this copy recorded for the instance's own copies of its files go with it (#597).
 	for (
-		let ofIndex = 0, ofList = concatLists(mapKeysToArray(LOADED_SCRIPTS), mapKeysToArray(HELPER_SCRIPTS));
+		let ofIndex = 0,
+			ofList = concatLists(concatLists(mapKeysToArray(LOADED_SCRIPTS), mapKeysToArray(HELPER_SCRIPTS)), mapKeysToArray(SEALED_BUILDS));
 		ofIndex < ofList.length;
 		ofIndex++
 	) {
 		const key = ofList[ofIndex];
 		if (scriptKeyInstance(key) !== String(instanceID)) continue;
 		MapMethods.delete(LOADED_SCRIPTS, key);
+		MapMethods.delete(SEALED_BUILDS, key);
 		MapMethods.delete(LOADED_TEXTS, key);
 		MapMethods.delete(SEALS, key);
 		MapMethods.delete(HELPER_SCRIPTS, key);
@@ -3523,22 +3711,8 @@ function setScriptKey(keyOf) {
  * @private
  */
 function recordLoadedSource(url, result, helper = false) {
-	let text = loadedText(result);
+	const text = compiledText(result);
 	if (text === null) return;
-	if (isTypeScriptLoad(result)) {
-		const strip = STRIP_TYPESCRIPT_TYPES;
-		// The stripping Node does to compile the file, done here without the notice the API itself gives on first use. The
-		// notice goes through the current `process.emitWarning`, so that is the one silenced here.
-		const emitWarning = globalThis.process.emitWarning;
-		globalThis.process.emitWarning = () => {};
-		try {
-			if (typeof strip === "function") text = strip(text);
-		} catch {
-			// Source Node cannot strip fails to load anyway; its text is recorded as it is.
-		} finally {
-			globalThis.process.emitWarning = emitWarning;
-		}
-	}
 	const hash = HOST.sha256(text);
 	const key = scriptKeyOf(url);
 	// A helper load is listed apart from the file's own loads (see HELPER_SCRIPTS).
@@ -3554,6 +3728,54 @@ function recordLoadedSource(url, result, helper = false) {
 	const helpers = MapMethods.get(HELPER_SCRIPTS, key) ?? [];
 	for (const known of mapKeys(texts))
 		if (!ArrayMethods.includes(own, known) && !ArrayMethods.includes(helpers, known)) MapMethods.delete(texts, known);
+}
+
+/**
+ * Record a CommonJS leaf's source a run build sealed (see {@link SEALED_BUILDS}), as {@link recordLoadedSource} records
+ * another, kept for as long as the seal is held.
+ * @param {string} url - The module URL.
+ * @param {object} result - The sealed load result.
+ * @param {{stamp: string}} seal - The run build seal.
+ * @returns {void}
+ * @private
+ */
+function recordSealedBuild(url, result, seal) {
+	const text = compiledText(result);
+	if (text === null) return;
+	const hash = HOST.sha256(text);
+	const key = scriptKeyOf(url);
+	let builds = MapMethods.get(SEALED_BUILDS, key);
+	if (!builds) MapMethods.set(SEALED_BUILDS, key, (builds = new Map()));
+	if (liveSealedBuild(key, hash) !== null) return;
+	MapMethods.set(builds, hash, { stamp: seal.stamp, text, seal: new WeakRef(seal) });
+	FinalizationRegistryMethods.register(COLLECTED_BUILDS, seal, { key, hash });
+}
+
+/**
+ * The text the engine compiles a load result's source into, as V8 hashes it: decoded (see {@link loadedText}), and for
+ * TypeScript with its types stripped as Node strips them.
+ * @param {{format?: string, source?: string|ArrayBufferView|ArrayBuffer}} result - The load hook's result.
+ * @returns {string|null} The text, or null when the result carries none.
+ * @private
+ */
+function compiledText(result) {
+	let text = loadedText(result);
+	if (text === null) return null;
+	if (isTypeScriptLoad(result)) {
+		const strip = STRIP_TYPESCRIPT_TYPES;
+		// The stripping Node does to compile the file, done here without the notice the API itself gives on first use. The
+		// notice goes through the current `process.emitWarning`, so that is the one silenced here.
+		const emitWarning = globalThis.process.emitWarning;
+		globalThis.process.emitWarning = () => {};
+		try {
+			if (typeof strip === "function") text = strip(text);
+		} catch {
+			// Source Node cannot strip fails to load anyway; its text is recorded as it is.
+		} finally {
+			globalThis.process.emitWarning = emitWarning;
+		}
+	}
+	return text;
 }
 
 /**
@@ -3580,27 +3802,38 @@ function loadedText(result) {
  * @param {object} result - The load hook's result.
  * @param {boolean} [helper=false] - A helper load of the file (see {@link HELPER_SCRIPTS}), sealed with the key's helper
  *   value.
+ * @param {{stamp: string}|null} [seal=null] - For a CommonJS leaf a run's own restart, or a reload in the run after it,
+ *   loads, the run build seal: the source is sealed with the value drawn for it and recorded with it (see
+ *   {@link SEALED_BUILDS}).
  * @returns {object} The result to hand on: the sealed source, or the result as it was when it carries no source text.
  * @private
  */
-function sealLoadedSource(url, result, helper = false) {
+function sealLoadedSource(url, result, helper = false, seal = null) {
 	const text = loadedText(result);
 	if (text === null) return result;
 	const key = scriptKeyOf(url);
-	const seals = helper ? HELPER_SEALS : SEALS;
-	let seal = MapMethods.get(seals, key);
-	if (seal === undefined) MapMethods.set(seals, key, (seal = HOST.randomUUID()));
-	const sealed = { ...result, source: `${text}\n/* ${seal} */\n` };
-	recordLoadedSource(url, sealed, helper);
+	const build = !helper && seal !== null && COLLECTED_BUILDS !== null;
+	let seals;
+	if (!build) seals = helper ? HELPER_SEALS : SEALS;
+	else {
+		seals = WeakMapMethods.get(BUILD_SEALS, seal);
+		if (seals === undefined) WeakMapMethods.set(BUILD_SEALS, seal, (seals = new Map()));
+	}
+	let value = MapMethods.get(seals, key);
+	if (value === undefined) MapMethods.set(seals, key, (value = HOST.randomUUID()));
+	const sealed = { ...result, source: `${text}\n/* ${value} */\n` };
+	if (build) recordSealedBuild(url, sealed, seal);
+	else recordLoadedSource(url, sealed, helper);
 	return sealed;
 }
 
 /**
  * Whether sources are recorded for a script key, and whether a given one is among them (see
- * {@link recordLoadedSource}), and, when it is, whether it is a helper load of the file (see {@link HELPER_SCRIPTS}).
+ * {@link recordLoadedSource}), and, when it is, whether it is a helper load of the file (see {@link HELPER_SCRIPTS}) and
+ * the stamp of the run's own restart that loaded it, for a CommonJS leaf a run build sealed (see {@link SEALED_BUILDS}).
  * @param {string} key - The script key.
  * @param {string} [hash] - A script's hash.
- * @returns {{known: boolean, has: boolean, helper?: boolean}} The answer.
+ * @returns {{known: boolean, has: boolean, helper?: boolean, stamp?: string|null}} The answer.
  * @internal
  */
 function loadedScriptLookup(key, hash) {
@@ -3852,7 +4085,10 @@ const HOOKS = Objects.freeze({
 		// An instance's file asking for a runtime entry file: the module that gives it the instance's own `self` (#803).
 		if (ArrayMethods.includes(SINGLE_COPY_FILES, url) && MapMethods.has(SELF_FORMS, url) && !isOtherCopysFile(context?.parentURL)) {
 			const instanceID = selfInstanceOf(context?.parentURL);
-			if (instanceID !== null) return { url: `${SELF_PREFIX}${instanceID}|${url}`, format: "module", shortCircuit: true };
+			if (instanceID !== null) {
+				sharedState().noteSelfImporter(instanceID, context?.parentURL, url);
+				return { url: `${SELF_PREFIX}${instanceID}|${url}`, format: "module", shortCircuit: true };
+			}
 		}
 		if (MapMethods.has(OWN_MODULES, url) && !SetMethods.has(NODE_LOADED, url) && !isOtherCopysFile(context?.parentURL)) {
 			return { ...resolved, url: OWN_MODULE_PREFIX + url, format: "module" };
@@ -3890,7 +4126,8 @@ const HOOKS = Objects.freeze({
 		// A CommonJS file an instance's scope loads is recorded as it loads (#597). A `require()` of the file anywhere else
 		// is another module of the file (#691). A leaf's file an api file requires itself is a helper of that file's.
 		const kind = StringMethods.startsWith(url, "file:") ? scopeLoadKind(url) : null;
-		if (kind !== null && shouldRecordCommonJS(url, result)) return sealLoadedSource(url, result, kind === "helper");
+		if (kind !== null && shouldRecordCommonJS(url, result))
+			return sealLoadedSource(url, result, kind === "helper", kind === "leaf" ? (ACTIVE?.seal ?? null) : null);
 		return result;
 	}
 });
@@ -4346,6 +4583,14 @@ export function slothletInstanceImports() {
 					if (isRegisteredFile(resolved.id) || isPackageFile(resolved.id)) SetMethods.add(shared, resolved.id);
 				};
 				const children = [];
+				// The runtime entry files the module takes `self` from: its import of one is already the instance's module for it
+				// (see resolveId), named by the file's path. Recorded where the module runs, as its imports are, since a vite
+				// module graph is resolved in the server and not where it is evaluated.
+				const selfEntries = [];
+				for (let ofIndex = 0, ofList = SINGLE_COPY_FILES; ofIndex < ofList.length; ofIndex++) {
+					const url = ofList[ofIndex];
+					if (StringMethods.includes(code, `${SELF_PREFIX}${instanceID}|${NODE.url.fileURLToPath(url)}`)) listPush(selfEntries, url);
+				}
 				for (let ofIndex = 0, ofList = concatLists(setToArray(bare), setToArray(specifiers)); ofIndex < ofList.length; ofIndex++) {
 					const specifier = ofList[ofIndex];
 					const resolved = await this.resolve(specifier, id);
@@ -4374,7 +4619,15 @@ export function slothletInstanceImports() {
 					}
 					check = `\nimport { checkImport as ${name} } from ${JSON.stringify(IMPORT_CHECK_SPECIFIER)};`;
 				}
-				const tail = `${registration}${loadedBy}${imports}${check}`;
+				const selfNotes = ArrayMethods.join(
+					mapList(
+						selfEntries,
+						(url) =>
+							`\n;globalThis[Symbol.for(${JSON.stringify(SymbolMethods.description(STATE))})]?.noteSelfImporter?.(${JSON.stringify(instanceID)}, import.meta.url, ${JSON.stringify(url)});`
+					),
+					""
+				);
+				const tail = `${registration}${loadedBy}${imports}${selfNotes}${check}`;
 				return tail || body !== code ? { code: `${body}${tail}\n`, map: null } : null;
 			}
 		},
@@ -4444,6 +4697,7 @@ export function slothletInstanceImports() {
 export function internals(consumer) {
 	if (
 		!mayTakeInternals(consumer, [
+			"lib/builders/api_builder",
 			"lib/builders/modes-processor",
 			"lib/handlers/frame-placement",
 			"lib/helpers/capability-context",
@@ -4471,6 +4725,7 @@ export function internals(consumer) {
 		callableSelfOf,
 		bindInstanceSelf,
 		closeInstanceSelf,
+		moduleSelfForm,
 		SELF_BIND_KEY,
 		setInstanceSelfKind,
 		defaultExportLooksCallable,

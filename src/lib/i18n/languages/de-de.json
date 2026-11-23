@@ -15,7 +15,7 @@
 		"INVALID_CONFIG_FILES_REQUIRED": "Konfigurationsfehler: 'loader.files' ist erforderlich, wenn loader.platform auf 'browser' gesetzt ist. Stellen Sie ein vorgeneriertes Manifest-Objekt mit den Arrays 'files' und 'directories' bereit.",
 		"INVALID_CONFIG_FILES_INVALID": "Konfigurationsfehler: 'loader.files' muss ein einfaches Objekt mit den Arrays 'files' und 'directories' sein. Empfangen: {received}",
 		"INVALID_CONFIG_RESOLVER_INVALID": "Konfigurationsfehler: 'loader.resolve' muss eine Funktion sein, wenn loader.platform auf 'browser' gesetzt ist. Empfangen: {received}",
-		"FOLDER_INVALID": "Konfigurationsfehler: 'dir' muss ein nicht leerer Pfad sein. Erhalten: {folder}",
+		"FOLDER_INVALID": "Konfigurationsfehler: Der Pfad muss ein nicht leerer String sein, der auf einen vorhandenen Ordner zeigt. Erhalten: {folder}",
 		"HINT_FOLDER_INVALID": "Stellen Sie sicher, dass der Verzeichnispfad ein gültiger String ist und auf ein existierendes Verzeichnis zeigt.",
 		"INVALID_CONFIG_MODE_INVALID": "Konfigurationsfehler: 'mode' muss entweder 'eager' oder 'lazy' sein. Erhalten: {value}",
 		"HINT_INVALID_CONFIG_MODE_INVALID": "Der Modus muss entweder 'eager' oder 'lazy' sein.",

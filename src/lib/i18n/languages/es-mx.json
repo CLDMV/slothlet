@@ -15,7 +15,7 @@
 		"INVALID_CONFIG_FILES_REQUIRED": "Error de configuración: 'loader.files' es requerido cuando loader.platform es 'browser'. Proporciona un objeto manifest pregenerado con los arreglos 'files' y 'directories'.",
 		"INVALID_CONFIG_FILES_INVALID": "Error de configuración: 'loader.files' debe ser un objeto plano con los arreglos 'files' y 'directories'. Recibido: {received}",
 		"INVALID_CONFIG_RESOLVER_INVALID": "Error de configuración: 'loader.resolve' debe ser una función cuando loader.platform es 'browser'. Recibido: {received}",
-		"FOLDER_INVALID": "Error de configuración: 'dir' debe ser una ruta de cadena no vacía. Recibido: {folder}",
+		"FOLDER_INVALID": "Error de configuración: la ruta debe ser una cadena no vacía que apunte a una carpeta existente. Recibido: {folder}",
 		"HINT_FOLDER_INVALID": "Asegúrese de que la ruta del directorio es una cadena válida y apunta a un directorio existente.",
 		"INVALID_CONFIG_MODE_INVALID": "Error de configuración: 'mode' debe ser 'eager' o 'lazy'. Recibido: {value}",
 		"HINT_INVALID_CONFIG_MODE_INVALID": "El modo debe ser 'eager' o 'lazy'.",

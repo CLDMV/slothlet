@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-18T07:07:26-08:00 (1795014446)
+ *	@Last modified time: 2026-11-22T12:49:53-08:00 (1795380593)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -139,7 +139,15 @@ function runtime_resolveExecutingContext(resolved = null) {
 	// and is admitted above). This grants nothing extra: reaching `run()` at all means already holding
 	// the `api` object, which carries the host's standing anyway. A run's store put back for work the run left behind
 	// after it returned is not that flow: the work keeps the run's context, never its standing.
-	if (ctx.parentInstanceID && ctx[trustedRootOwn.TRUSTED_ROOT] === true && ctx[trustedRootOwn.REOPENED_FLOW] !== true) return ctx;
+	// A flow slothlet opened over the instance's own store to carry a build's mark stands for that store, which admits no
+	// one here.
+	if (
+		ctx.parentInstanceID &&
+		ctx[trustedRootOwn.TRUSTED_ROOT] === true &&
+		ctx[trustedRootOwn.REOPENED_FLOW] !== true &&
+		ctx[trustedRootOwn.INSTANCE_FLOW] !== true
+	)
+		return ctx;
 
 	return null;
 }
@@ -378,7 +386,18 @@ function runtime_selfUse(use) {
  * @type {Proxy}
  * @private
  */
-const objectSelf = new NativeProxy({}, selfTraps);
+const objectSelf = new NativeProxy(
+	{},
+	{
+		...selfTraps,
+		// The prototype the running call's api root reports, as `api` reports it to the host (#914); with no call running,
+		// the target's own.
+		getPrototypeOf(target) {
+			const ctx = runtime_resolveExecutingContext();
+			return ctx?.self ? Reflect.getPrototypeOf(ctx.self) : Reflect.getPrototypeOf(target);
+		}
+	}
+);
 
 /**
  * The target of {@link callableSelf}: a bound function, as the api root's own target is when its root is a function,

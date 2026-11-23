@@ -15,7 +15,7 @@
 		"INVALID_CONFIG_FILES_REQUIRED": "配置错误：当 loader.platform 为 'browser' 时，必须提供 'loader.files'。请提供包含 'files' 和 'directories' 数组的预生成 manifest 对象。",
 		"INVALID_CONFIG_FILES_INVALID": "配置错误：'loader.files' 必须是包含 'files' 和 'directories' 数组的普通对象。收到：{received}",
 		"INVALID_CONFIG_RESOLVER_INVALID": "配置错误：当 loader.platform 为 'browser' 时，'loader.resolve' 必须是一个函数。收到：{received}",
-		"FOLDER_INVALID": "配置错误：'dir' 必须是非空字符串路径。接收到：{folder}",
+		"FOLDER_INVALID": "配置错误：路径必须是指向现有文件夹的非空字符串。接收到：{folder}",
 		"HINT_FOLDER_INVALID": "请确保目录路径是有效的字符串，并指向一个现有的目录。",
 		"INVALID_CONFIG_MODE_INVALID": "配置错误：'mode' 必须是 'eager' 或 'lazy'。接收到：{value}",
 		"HINT_INVALID_CONFIG_MODE_INVALID": "模式必须是 'eager' 或 'lazy' 之一。",

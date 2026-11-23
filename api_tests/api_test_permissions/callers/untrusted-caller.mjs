@@ -15,13 +15,14 @@
 
 import { self } from "@cldmv/slothlet/runtime";
 
-// Stash an api function while holding it, then invoke that stashed reference from a boundary slothlet
-// does not patch, so the invocation carries no caller of its own. Nothing reads `self` at call time —
-// the reference is already in hand — so the executing-module guard has nothing to refuse. What has to
-// stop it is the identity captured when the reference was taken.
+// Stash an api function while holding it, then invoke that stashed reference later. Nothing reads
+// `self` at call time — the reference is already in hand — so the executing-module guard has nothing
+// to refuse. What has to stop it is the identity captured when the reference was taken.
 //
-// `node:timers` is the unpatched boundary here because its ESM named exports are a snapshot taken at
-// first link, which no patch applied later can reach.
+// `invokeStashedFromUnpatched` calls it from an `fs` completion callback, a boundary slothlet does not
+// patch (see docs/PERMISSIONS.md). The callback is this file's own code, so the stack still names this
+// module as the caller. `handOutStashed` gives the reference to the host instead, so that when the host
+// calls it no module code is running at all and the only identity on the call is the captured one.
 let stashed = null;
 let stashedOutcome = null;
 export const stashInsertRef = () => {
@@ -29,17 +30,19 @@ export const stashInsertRef = () => {
 	return "stashed";
 };
 export const invokeStashedFromUnpatched = async () => {
-	const timers = await import("node:timers");
-	timers.setTimeout(async () => {
+	const fs = await import("node:fs");
+	stashedOutcome = null;
+	fs.stat(".", async () => {
 		try {
 			stashedOutcome = { ok: true, value: await stashed({ x: 1 }) };
 		} catch (err) {
 			stashedOutcome = { ok: false, code: err.code ?? String(err.message).slice(0, 40) };
 		}
-	}, 5);
+	});
 	return "armed";
 };
 export const readStashedOutcome = () => stashedOutcome;
+export const handOutStashed = () => stashed;
 
 // Invoke a reference a DIFFERENT module captured and handed over. Binding the captured identity onto
 // a reference must not become a way to lend authority — this module is unprivileged, and calling it

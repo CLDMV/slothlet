@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-19T08:57:44-08:00 (1795107464)
+ *	@Last modified time: 2026-11-21T23:27:12-08:00 (1795332432)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -35,11 +35,14 @@ import {
 	FinalizationRegistry,
 	FinalizationRegistryMethods,
 	listPush,
+	queueMicrotask,
 	Reflect,
 	setImmediate,
 	setTimeout,
 	Set,
+	setFrom,
 	SetMethods,
+	setToArray,
 	setValues,
 	Symbol,
 	WeakMap,
@@ -47,12 +50,14 @@ import {
 	WeakRef,
 	WeakRefMethods
 } from "#helpers/intrinsics";
+import { openRunSnapshot } from "#helpers/run-snapshot";
 
 /**
  * The key a `run()` / `scope()` store records its copy of the instance under. Every run gets a record of its own (see
  * {@link copyForRun}): `from` is the token of the copy that was current when the run started, shared with every run
  * that started on that copy, `parent` is the record of the run it was opened in (null for a run opened outside any),
- * and `ns` is the run's own handlers namespace once it holds a fork (null until then). The stores of the run's calls
+ * and `ns` is the run's own handlers namespace once it holds a fork (null until then). `stores` lists the run's stores
+ * a reload moves to the instance's new ID until the copy is torn down (see {@link trackFlowStore}). The stores of the run's calls
  * and of work it left behind carry the run's record with the rest of the store.
  *
  * A record lives while its run's work does (see {@link holdRunWork}): `work` counts the run's callback until it has
@@ -67,7 +72,11 @@ import {
  * write from code in a run forks the written handler into the run's `ns` (see `Slothlet#writeTarget`), which the run
  * then reads first. A nested run starts with its own copy of its parent's `ns`. A run that changes its api tree holds a
  * whole set of its own in `values` (its tree and the handlers that go with it, see `Slothlet#ownTree`), which it reads
- * before anything else; a nested run opened in it reads that tree until either one changes it.
+ * before anything else; a nested run opened in it reads that tree until either one changes it. `restart` tells of the
+ * run's last `restart()` (null when it made none): `epoch` is the epoch of the tree it built, which the nodes of every
+ * tree the run read before it are above (see `ApiManager#isRestartReplaced`), and `stamps` the reload stamps the files
+ * of the trees built for the run since were imported under, which code of those earlier trees does not carry. A nested
+ * run starts with a copy of its parent's.
  * @type {symbol}
  * @internal
  */
@@ -170,6 +179,15 @@ export const SILENT_BUILD = Symbol("slothlet.silentBuild");
 export const COPY_SOURCE_URL = Symbol("slothlet.copySourceURL");
 
 /**
+ * The key of the instance's method that hands a run's own build the seal its CommonJS leaves' scripts are sealed for:
+ * one per `restart()` of the run, shared by the reloads in the run after it (see `SEALED_BUILDS` in
+ * helpers/instance-imports).
+ * @type {symbol}
+ * @internal
+ */
+export const RUN_BUILD_SEAL = Symbol("slothlet.runBuildSeal");
+
+/**
  * How many run records are not yet `done`, across every instance.
  * @type {number}
  * @private
@@ -182,6 +200,14 @@ let liveRuns = 0;
  * @private
  */
 let heldCopies = 0;
+
+/**
+ * How many records of runs whose work is done are waiting for their instance to tear their copies down, across every
+ * instance.
+ * @type {number}
+ * @private
+ */
+let retiringRuns = 0;
 
 /**
  * How many instances have their copy fields as accessors (read through the run's copy) rather than plain fields.
@@ -362,6 +388,17 @@ export function whenIdle(fn) {
 }
 
 /**
+ * Run `fn` on a microtask, once the code running now has returned: with the host's own `queueMicrotask` as it was when
+ * slothlet loaded. The microtask is no run's work.
+ * @param {Function} fn - What to run.
+ * @returns {void}
+ * @internal
+ */
+export function afterCurrentWork(fn) {
+	asNoRunWork(() => queueMicrotask(fn));
+}
+
+/**
  * Uncount one piece of a run's work (see {@link holdRunWork}), or the run's callback once it has settled. The last
  * one makes the record `done` and tells the instance, which tears the copy down once it is idle.
  * @param {object} record - The run's record.
@@ -408,6 +445,42 @@ export function holdRunWorkOnce(record) {
 }
 
 /**
+ * Calls each release it holds once the object it was registered for is collected (see {@link releaseWhenCollected}).
+ * Null where the platform has no `FinalizationRegistry`.
+ * @type {FinalizationRegistry<Function>|null}
+ * @private
+ */
+const COLLECTED_WORK = typeof FinalizationRegistry === "function" ? new FinalizationRegistry((release) => release()) : null;
+
+/**
+ * Release a piece of a run's work once `target`, the object the work lives on, has been collected: a promise nobody
+ * can settle any more, a listener whose emitter is garbage, an observer nobody holds. Nothing can run that work's code
+ * then, so it no longer keeps the run's record. `release` must release at most once (as a {@link holdRunWorkOnce}
+ * releaser does), so the work ending the usual way first makes the later call a no-op, and must not reach `target`.
+ * @param {object} target - The object the work lives on.
+ * @param {Function|null} release - What releases the work; null when nothing was counted.
+ * @param {object} [token] - For work that ends while `target` lives on (a handler replaced on its target, an observer
+ *   disconnected): {@link stopReleaseWhenCollected} with it then, so a long-lived target does not gather entries.
+ * @returns {void}
+ * @internal
+ */
+export function releaseWhenCollected(target, release, token) {
+	if (release === null || COLLECTED_WORK === null) return;
+	if (token === undefined) FinalizationRegistryMethods.register(COLLECTED_WORK, target, release);
+	else FinalizationRegistryMethods.register(COLLECTED_WORK, target, release, token);
+}
+
+/**
+ * Drop what {@link releaseWhenCollected} registered under `token`: the work ended the usual way.
+ * @param {object} token - The token.
+ * @returns {void}
+ * @internal
+ */
+export function stopReleaseWhenCollected(token) {
+	if (COLLECTED_WORK !== null) FinalizationRegistryMethods.unregister(COLLECTED_WORK, token);
+}
+
+/**
  * Count a copy an instance holds apart from what it has now, or uncount one.
  * @param {number} delta - +1 or -1.
  * @returns {void}
@@ -415,6 +488,26 @@ export function holdRunWorkOnce(record) {
  */
 export function countHeldCopy(delta) {
 	heldCopies += delta;
+}
+
+/**
+ * Count records waiting for their instance to tear their copies down, or uncount them.
+ * @param {number} delta - How many more (or, negative, fewer).
+ * @returns {void}
+ * @internal
+ */
+export function countRetiring(delta) {
+	retiringRuns += delta;
+}
+
+/**
+ * How many records of runs whose work is done are waiting for their instance to tear their copies down, across every
+ * instance: for the suite.
+ * @returns {number} The count.
+ * @internal
+ */
+export function retiringRunCount() {
+	return retiringRuns;
 }
 
 /**
@@ -455,11 +548,26 @@ export function copyForRun(slothlet, parentStore) {
 	if (parent !== null && parent.torn) parent = null;
 	if (parent !== null) {
 		if (parent.ns === null || typeof slothlet?.[INHERIT_COPY] !== "function")
-			return openRun(newRecord(parent.from, parent, null, slothlet));
-		return openRun(slothlet[INHERIT_COPY](parent));
+			return withSnapshot(openRun(newRecord(parent.from, parent, null, slothlet)), slothlet, parent);
+		return withSnapshot(openRun(slothlet[INHERIT_COPY](parent)), slothlet, parent);
 	}
 	if (typeof slothlet?.[CURRENT_COPY] !== "function") return null;
-	return openRun(newRecord(slothlet[CURRENT_COPY](), null, null, slothlet));
+	return withSnapshot(openRun(newRecord(slothlet[CURRENT_COPY](), null, null, slothlet)), slothlet, null);
+}
+
+/**
+ * Give a new run record its snapshot (see `helpers/run-snapshot`): the tick of the instance's clock it reads the
+ * instance at, taken now, and, for a nested run, its start on the run it was opened in. It is closed when the run's
+ * copy is torn down.
+ * @param {object} record - The record.
+ * @param {object} slothlet - The instance object.
+ * @param {object|null} parent - The record of the run it was opened in.
+ * @returns {object} The record.
+ * @private
+ */
+function withSnapshot(record, slothlet, parent) {
+	record.snap = openRunSnapshot(slothlet, parent?.snap ?? null);
+	return record;
 }
 
 /**
@@ -474,7 +582,29 @@ export function copyForRun(slothlet, parentStore) {
  */
 export function newRecord(from, parent, ns, owner) {
 	from.users = (from.users ?? 0) + 1;
-	return { __proto__: null, from, parent, ns, values: null, work: 1, done: false, torn: false, owner: owner ?? null };
+	return {
+		__proto__: null,
+		from,
+		parent,
+		ns,
+		values: null,
+		work: 1,
+		done: false,
+		torn: false,
+		retired: 0,
+		stores: null,
+		tracked: null,
+		owner: owner ?? null,
+		snap: null,
+		restart: parent?.restart
+			? {
+					epoch: parent.restart.epoch,
+					stamps: setFrom(setToArray(parent.restart.stamps)),
+					seal: parent.restart.seal ?? null,
+					seals: parent.restart.seals ?? []
+				}
+			: null
+	};
 }
 
 /**
@@ -534,6 +664,27 @@ export function recordOperation(slothlet, operation) {
 const STORES = new WeakMap();
 
 /**
+ * Each instance object's records of runs whose copies are not torn down yet and that hold stores of theirs (see
+ * {@link trackFlowStore}).
+ * @type {WeakMap<object, Set<object>>}
+ * @private
+ */
+const RUN_STORES = new WeakMap();
+
+/**
+ * Let go of the stores a run's record holds for a reload to move (see {@link trackFlowStore}): its copy is torn down.
+ * @param {object} record - The record.
+ * @returns {void}
+ * @internal
+ */
+export function untrackRunStores(record) {
+	if ((record.stores ?? null) === null) return;
+	SetMethods.delete(record.tracked, record);
+	record.stores = null;
+	record.tracked = null;
+}
+
+/**
  * Drops a collected store's reference from its instance's set.
  * @type {FinalizationRegistry<{stores: Set<WeakRef<object>>, ref: WeakRef<object>}>|null}
  * @private
@@ -545,14 +696,33 @@ const COLLECTED =
 
 /**
  * Record a `run()` / `scope()` store against the instance object that opened it, so a reload can move it to the
- * instance's new ID (see {@link reparentFlowStores}).
+ * instance's new ID (see {@link reparentFlowStores}): on its run's record while the run's copy is not torn down (the
+ * work the run left behind keeps it so), else weakly.
  * @param {object|null|undefined} slothlet - The instance object (the store's `slothlet`).
  * @param {object} store - The store.
  * @returns {void}
  * @internal
  */
 export function trackFlowStore(slothlet, store) {
-	if (COLLECTED === null || slothlet === null || typeof slothlet !== "object") return;
+	if (slothlet === null || typeof slothlet !== "object") return;
+	const record = store[RUN_COPY];
+	// A store of a run whose copy is not torn down yet is held by its record, which the instance holds until then: a
+	// reference of its own would be a WeakRef, whose target the engine keeps until the microtask queue is empty, which
+	// code awaiting runs back to back never lets it be.
+	if (record !== null && record !== undefined && !record.torn) {
+		if ((record.stores ?? null) === null) {
+			let records = WeakMapMethods.get(RUN_STORES, slothlet);
+			if (records === undefined) {
+				records = new Set();
+				WeakMapMethods.set(RUN_STORES, slothlet, records);
+			}
+			SetMethods.add(records, record);
+			record.stores = [store];
+			record.tracked = records;
+		} else listPush(record.stores, store);
+		return;
+	}
+	if (COLLECTED === null) return;
 	let stores = WeakMapMethods.get(STORES, slothlet);
 	if (stores === undefined) {
 		stores = new Set();
@@ -572,7 +742,14 @@ export function trackFlowStore(slothlet, store) {
  * @internal
  */
 export function reparentFlowStores(slothlet, fromIDs, toID) {
-	const stores = slothlet === null || typeof slothlet !== "object" ? undefined : WeakMapMethods.get(STORES, slothlet);
+	if (slothlet === null || typeof slothlet !== "object") return;
+	const records = WeakMapMethods.get(RUN_STORES, slothlet);
+	if (records !== undefined) {
+		for (const record of setValues(records)) {
+			for (let index = 0; index < record.stores.length; index++) reparentStore(record.stores[index], fromIDs, toID);
+		}
+	}
+	const stores = WeakMapMethods.get(STORES, slothlet);
 	if (stores === undefined) return;
 	for (const ref of setValues(stores)) {
 		const store = WeakRefMethods.deref(ref);
@@ -580,13 +757,25 @@ export function reparentFlowStores(slothlet, fromIDs, toID) {
 			SetMethods.delete(stores, ref);
 			continue;
 		}
-		const parent = store.parentInstanceID;
-		if (parent === toID) continue;
-		for (let index = 0; index < fromIDs.length; index++) {
-			if (fromIDs[index] !== null && fromIDs[index] !== undefined && parent === fromIDs[index]) {
-				store.parentInstanceID = toID;
-				break;
-			}
+		reparentStore(store, fromIDs, toID);
+	}
+}
+
+/**
+ * Move one store whose `parentInstanceID` is one of `fromIDs` to `toID` (see {@link reparentFlowStores}).
+ * @param {object} store - The store.
+ * @param {ReadonlyArray<string|null|undefined>} fromIDs - The IDs the instance had before.
+ * @param {string} toID - Its ID now.
+ * @returns {void}
+ * @private
+ */
+function reparentStore(store, fromIDs, toID) {
+	const parent = store.parentInstanceID;
+	if (parent === toID) return;
+	for (let index = 0; index < fromIDs.length; index++) {
+		if (fromIDs[index] !== null && fromIDs[index] !== undefined && parent === fromIDs[index]) {
+			store.parentInstanceID = toID;
+			return;
 		}
 	}
 }
@@ -598,5 +787,7 @@ export function reparentFlowStores(slothlet, fromIDs, toID) {
  * @internal
  */
 export function forgetFlowStores(slothlet) {
-	if (slothlet !== null && typeof slothlet === "object") WeakMapMethods.delete(STORES, slothlet);
+	if (slothlet === null || typeof slothlet !== "object") return;
+	WeakMapMethods.delete(STORES, slothlet);
+	WeakMapMethods.delete(RUN_STORES, slothlet);
 }

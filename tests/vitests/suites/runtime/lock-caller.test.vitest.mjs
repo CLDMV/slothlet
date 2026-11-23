@@ -203,7 +203,8 @@ describe.each(getMatrixConfigs())("Runtime > lockCaller/bind > $name", ({ config
 		expect(error.code).toBe("INVALID_ARGUMENT");
 	});
 
-	it("bind restores the async context captured at registration time", async () => {
+	// The live runtime has no async_hooks, so it cannot carry a host AsyncLocalStorage value.
+	it.skipIf(config.runtime === "live")("bind restores the async context captured at registration time", async () => {
 		await makeApi();
 		const als = new AsyncLocalStorage();
 		let bound;
@@ -214,12 +215,12 @@ describe.each(getMatrixConfigs())("Runtime > lockCaller/bind > $name", ({ config
 		expect(bound()).toBe(7);
 	});
 
-	it.skipIf(config.runtime === "live")("bind freezes the slothlet caller identity captured inside the registering module", async () => {
+	it("bind freezes the slothlet caller identity captured inside the registering module", async () => {
 		await makeApi();
 		// Built as consumer code → bind freezes the consumer's slothlet caller identity.
 		const boundProbe = await api.consumer.probe.makeBoundIdentityProbe();
 		// Invoked while the producer is the ambient caller; bind restores the consumer.
-		// AsyncResource.bind only meaningfully captures slothlet context in async mode.
+		// On the live runtime bind keeps the identity through its own caller tracking.
 		expect(await api.producer.relay.viaDirect(boundProbe)).toBe("consumer");
 	});
 

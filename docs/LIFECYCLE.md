@@ -789,7 +789,7 @@ const result = await api.math.add(2, 3); // Fast - no loading delay
 
 ### A callback when everything is loaded
 
-Give `loader.materialize` a function instead of `true`. It turns background materialization on and is called once, with `{ total, timestamp }` (the `materialized:complete` event data), when every lazy module has loaded. The `materialized:complete` event fires as well.
+Give `loader.materialize` a function instead of `true`. It turns background materialization on and is called once, with `{ total, at }` (the `materialized:complete` event data), when every lazy module has loaded. The `materialized:complete` event fires as well.
 
 ```javascript
 const api = await slothlet({

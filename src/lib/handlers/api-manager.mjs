@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-19T08:57:39-08:00 (1795107459)
+ *	@Last modified time: 2026-11-22T11:45:00-08:00 (1795376700)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -655,6 +655,18 @@ export class ApiManager extends ComponentBase {
 	}
 
 	/**
+	 * Before the framework changes the instance's api root object itself (a member placed on or removed from it, not
+	 * through its proxy): a `run()` / `scope()` that started before reads the root as it was then (see
+	 * helpers/run-snapshot), as it does after a change made through the proxy.
+	 * @param {*} container - The object about to be changed.
+	 * @returns {void}
+	 * @private
+	 */
+	#beforeRootChange(container) {
+		if (container === this.slothlet.api) this.slothlet.____rootBarrier?.();
+	}
+
+	/**
 	 * Ensure parent path exists and return the parent object.
 	 * @param {function|object} root - API root object.
 	 * @param {string[]} parts - Path segments.
@@ -688,6 +700,7 @@ export class ApiManager extends ComponentBase {
 				// Set impl to empty object so it acts as a namespace container
 				containerWrapper.___setImpl({}, moduleID);
 				const container = current;
+				this.#beforeRootChange(container);
 				runtime_frameworkWrite(container, () => {
 					container[part] = containerWrapper.createProxy();
 				});
@@ -1730,10 +1743,40 @@ export class ApiManager extends ComponentBase {
 	isRemovedCaller(callerWrapper) {
 		// A node removed from the tree, its module still mounted elsewhere (a node of the base tree), is gone all the same.
 		if (callerWrapper?.____slothletInternal?.removed === true && callerWrapper.slothlet === this.slothlet) return true;
+		if (callerWrapper?.slothlet === this.slothlet && this.isRestartReplaced(callerWrapper)) return true;
 		if (!callerWrapper?.____slothletInternal?.moduleID) return false;
 		// Code of another instance is not this instance's to judge: this instance holds no record of its module.
 		if (callerWrapper.slothlet !== this.slothlet) return false;
 		return this.#ownedRoot(callerWrapper) === null;
+	}
+
+	/**
+	 * Whether `wrapper` is a node of the instance's tree a `restart()` has since replaced, while the permission system is
+	 * on. A restart starts the instance over: the modules it replaced are gone with the instance they were in, so the
+	 * code they made (a function, a bound function or an object's method they handed out, a snapshot their call took)
+	 * has no standing, and everything it does through `self` is refused. With the permission system off nothing is
+	 * checked, and such code acts on the rebuilt instance. A reload keeps the tree's epoch, and the trees runs keep of
+	 * their own carry epochs of their own (below zero), so neither is affected by the instance's restart.
+	 *
+	 * A `restart()` in a `run()` / `scope()` starts the run's copy over the same way, for the run alone: in that run (and
+	 * the runs opened in it afterwards), a node of a tree the run read before it is replaced too. Copies take ever lower
+	 * epochs, so those are the nodes whose epoch is above the restarted tree's. Outside the run nothing changes.
+	 *
+	 * @param {object|null} wrapper - A node's wrapper.
+	 * @returns {boolean} True for a node a restart replaced, with the permission system on.
+	 * @public
+	 *
+	 * @example
+	 * if (apiManager.isRestartReplaced(wrapper)) refuse();
+	 */
+	isRestartReplaced(wrapper) {
+		const epoch = wrapper?.____slothletInternal?.epoch;
+		if (typeof epoch !== "number") return false;
+		if (epoch < 0 || epoch >= (this.slothlet._liveEpoch ?? 0)) {
+			const restart = this.slothlet._runRestart?.() ?? null;
+			if (restart === null || epoch <= restart.epoch) return false;
+		}
+		return this.slothlet.handlers?.permissionManager?.isEnabled?.() === true;
 	}
 
 	/**
@@ -2718,6 +2761,7 @@ export class ApiManager extends ComponentBase {
 						this.____config
 					);
 					if (mutated !== undefined) {
+						this.#beforeRootChange(parent);
 						runtime_frameworkWrite(parent, () => {
 							parent[finalKey] = mutated;
 						});
@@ -2725,6 +2769,7 @@ export class ApiManager extends ComponentBase {
 					return true;
 				} else {
 					// Primitives - just replace
+					this.#beforeRootChange(parent);
 					runtime_frameworkWrite(parent, () => {
 						parent[finalKey] = value;
 					});
@@ -2753,6 +2798,7 @@ export class ApiManager extends ComponentBase {
 						this.____config
 					);
 					if (mutated !== undefined) {
+						this.#beforeRootChange(parent);
 						runtime_frameworkWrite(parent, () => {
 							parent[finalKey] = mutated;
 						});
@@ -2783,6 +2829,7 @@ export class ApiManager extends ComponentBase {
 			key: "DEBUG_MODE_SET_VALUE_AT_PATH_ASSIGN",
 			finalKey
 		});
+		this.#beforeRootChange(parent);
 		runtime_frameworkWrite(parent, () => {
 			parent[finalKey] = value;
 		});
@@ -2890,6 +2937,7 @@ export class ApiManager extends ComponentBase {
 		// export reports the key as non-deletable (`false`); Reflect.deleteProperty takes that answer
 		// instead of throwing, so one frozen constant table cannot abort the rest of the removal (#485).
 		// The removed node's wrapper is invalidated below regardless.
+		this.#beforeRootChange(current);
 		runtime_frameworkWrite(current, () => Reflect.deleteProperty(current, finalKey));
 
 		// AFTER deletion, clean up wrapper state for removed proxy
@@ -2957,6 +3005,7 @@ export class ApiManager extends ComponentBase {
 			if (holdsHidden(value)) break;
 			if (value && (typeof value === "object" || typeof value === "function") && Objects.keys(value).length === 0) {
 				// Same as the detach above: a frozen parent answers `false` rather than throwing (#485).
+				this.#beforeRootChange(parent);
 				runtime_frameworkWrite(parent, () => Reflect.deleteProperty(parent, key));
 				// Pruned from the api, so nobody owns it any more: the owner of a path is whoever's value is live there.
 				if (root === this.slothlet.api) {

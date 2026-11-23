@@ -17,7 +17,7 @@
  * @fileoverview `loader.materialize` given a function.
  *
  * @description
- * A function turns background materialization on and is called once, with `{ total, timestamp }`, when everything has
+ * A function turns background materialization on and is called once, with `{ total, at }`, when everything has
  * materialized — at once when that is already so as the instance finishes loading (always in eager mode).
  */
 
@@ -43,7 +43,7 @@ const until = async (check) => {
 };
 
 describe.each(["eager", "lazy"])("loader.materialize callback - %s", (mode) => {
-	it("is called once when everything has materialized, with { total, timestamp }", async () => {
+	it("is called once when everything has materialized, with { total, at }", async () => {
 		const calls = [];
 		api = await slothlet({ base: TEST_DIRS.API_TEST, mode, silent: true, loader: { materialize: (info) => calls.push(info) } });
 
@@ -56,7 +56,7 @@ describe.each(["eager", "lazy"])("loader.materialize callback - %s", (mode) => {
 			expect(calls[0].total).toBeGreaterThan(0);
 			expect(calls[0].total).toBe(api.slothlet.materialize.get().total);
 		}
-		expect(typeof calls[0].timestamp).toBe("number");
+		expect(typeof calls[0].at).toBe("number");
 		expect(api.slothlet.materialize.complete).toBe(true);
 
 		// Once per instance.

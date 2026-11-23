@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-19T08:57:39-08:00 (1795107459)
+ *	@Last modified time: 2026-11-22T09:18:56-08:00 (1795367936)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -50,6 +50,8 @@ import {
 import {
 	ArrayMethods,
 	concatLists,
+	FinalizationRegistry,
+	FinalizationRegistryMethods,
 	FunctionMethods,
 	Map,
 	mapEntriesToArray,
@@ -58,8 +60,10 @@ import {
 	Objects,
 	Promise,
 	Promises,
+	PrototypeFunctions,
 	queueMicrotask,
 	Reflect,
+	StringMethods,
 	Symbol,
 	WeakMap,
 	WeakMapMethods,
@@ -69,6 +73,15 @@ import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "#helpers/ins
 const { runtime_wrapClassInstance } = classInstanceWrapperInternals("lib/handlers/context-async");
 const { setApiContextChecker, setListenerFlow } = eventemitterContextInternals("lib/handlers/context-async");
 const trustedRootOwn = trustedRootInternals("lib/handlers/context-async");
+
+/**
+ * The modules a job runs for (see `ACTING_FOR` in `handlers/trusted-root`): what a function another module handed over
+ * made while it ran for that module (a promise's reaction it registered, a timer), by the job's resource, put back while
+ * the job's callback runs.
+ * @type {WeakMap<object, ReadonlyArray<object>>}
+ * @private
+ */
+const JOB_ACTING_FOR = new WeakMap();
 const { buildCapturedFlowStore } = trustedRootOwn;
 const { attributeResult, enterCall, ownReceiver, resolveSupplier, runningOutsideFlow, sampleStoreScripts, scopeEnteredByCode } =
 	framePlacementInternals("lib/handlers/context-async");
@@ -681,6 +694,14 @@ export class AsyncContextManager {
 	#work = new Map();
 
 	/**
+	 * Tells {@link AsyncContextManager#workDone} when a counted promise is collected before it was resolved: nothing can
+	 * resolve it then, so nothing it would run can run. Holds the promise's async id; one resolved first has already
+	 * left {@link AsyncContextManager#work}, so its collection does nothing.
+	 * @type {FinalizationRegistry<number>}
+	 */
+	#collectedPromises = new FinalizationRegistry((asyncId) => this.#workDone(asyncId));
+
+	/**
 	 * Whether the manager watches runs (see `watchRuns` in `helpers/flow-stores`).
 	 * @type {boolean}
 	 */
@@ -726,6 +747,26 @@ export class AsyncContextManager {
 	#lastTold = null;
 
 	/**
+	 * The instances that have shut down (see {@link AsyncContextManager#cleanup}).
+	 * @type {WeakMap<object, true>}
+	 * @private
+	 */
+	#ended = new WeakMap();
+
+	/**
+	 * Whether a store belongs to an instance that has shut down and has no context under its ID now (an instance
+	 * reloaded after a shutdown has one again).
+	 * @param {object} store - A context store.
+	 * @returns {boolean} True when it does.
+	 * @private
+	 */
+	#ofEndedInstance(store) {
+		const owner = store.slothlet;
+		if (owner === null || typeof owner !== "object" || !WeakMapMethods.has(this.#ended, owner)) return false;
+		return !MapMethods.has(this.instances, storeInstanceID(store));
+	}
+
+	/**
 	 * The store the code running now acts in. Node's async context gives a flow's store to any code holding an async
 	 * resource of that flow (an `AsyncResource`, a function `AsyncLocalStorage.snapshot()` or `bind()` made there, the
 	 * context a timer keeps, copied onto a timer of its own), so a module could run its own code in another call's flow,
@@ -740,6 +781,9 @@ export class AsyncContextManager {
 	 */
 	activeStore() {
 		const store = this.als.getStore();
+		// Code still running in a flow of an instance that has shut down (a timer, a listener, a promise chain its code
+		// left behind) runs in no store, as it does on the live runtime, whose stores go with the instance.
+		if (store !== undefined && store !== null && this.#ofEndedInstance(store)) return undefined;
 		if (store === undefined || this.#telling || this.store === null) return store;
 		if (this.store.entered() === store) return store;
 		// Code that entered a flow by itself put the rest of its run outside the flow: told again against that flow.
@@ -953,16 +997,19 @@ export class AsyncContextManager {
 		try {
 			hook = createHook({
 				init(asyncId, type, triggerAsyncId, resource) {
-					if (manager.#countingWork) manager.#countWork(asyncId, type);
+					if (manager.#countingWork) manager.#countWork(asyncId, type, resource);
+					if (trustedRootOwn.ACTING_FOR.length !== 0) WeakMapMethods.set(JOB_ACTING_FOR, resource, trustedRootOwn.actingForNow());
 					manager.#jobMade(resource, type);
 				},
 				before() {
 					manager.#stretch++;
 					manager.#jobBegins();
 					if (manager.#jobsMarked) manager.#jobStarts();
+					manager.#actingJobBegins();
 				},
 				after() {
 					manager.#stretch++;
+					manager.#actingJobEnds();
 					if (manager.#runningJobs.length !== 0) manager.#jobEnds();
 					manager.#jobFinishes();
 				},
@@ -1034,16 +1081,30 @@ export class AsyncContextManager {
 	 * `helpers/flow-stores`).
 	 * @param {number} asyncId - The resource's async id.
 	 * @param {string} type - The resource's type.
+	 * @param {object} resource - The resource.
 	 * @returns {void}
 	 * @private
 	 */
-	#countWork(asyncId, type) {
+	#countWork(asyncId, type, resource) {
 		// A resource that only carries a store into a callback is no one's work (an observer counts from its observe()).
 		if (type === UNCOUNTED_RESOURCE) return;
+		// An `AsyncResource` someone made (the host, a module, a library, or `AsyncLocalStorage.snapshot()` / `bind()` for
+		// them) only carries the run's flow into code run with it later, and is no work of the run, as on the live runtime:
+		// the run's copy does not wait for it to be collected. Code run through it later keeps the run's context. The
+		// resources slothlet makes for a listener or an observer of the run are its work until they are destroyed.
+		if (
+			AsyncResource !== null &&
+			FunctionMethods.call(PrototypeFunctions.Function.hasInstance, AsyncResource, resource) &&
+			!StringMethods.startsWith(type, "slothlet-")
+		)
+			return;
 		const record = this.store?.getStore()?.[RUN_COPY];
 		if (record === undefined || !holdRunWork(record)) return;
 		const promise = type === "PROMISE";
 		MapMethods.set(this.#work, asyncId, promise ? record : { record });
+		// A promise is done once it is resolved, or once it is collected unresolved. The destroy hook would tell the
+		// latter too, but only at the cost of tracking every promise in the process.
+		if (promise) FinalizationRegistryMethods.register(this.#collectedPromises, resource, asyncId);
 		if (promise || this.#pendingResources++ !== 0 || this.#watchingDestroy) return;
 		const manager = this;
 		this.#destroyHook ??= createHook({
@@ -1056,7 +1117,7 @@ export class AsyncContextManager {
 	}
 
 	/**
-	 * A counted resource is done: destroyed, or a promise resolved.
+	 * A counted resource is done: destroyed, or a promise resolved or collected.
 	 * @param {number} asyncId - Its async id.
 	 * @returns {void}
 	 * @private
@@ -1168,6 +1229,46 @@ export class AsyncContextManager {
 		} catch {
 			// The resource is left unmarked: its callback is told as before, by its frames when it touches slothlet.
 		}
+	}
+
+	/**
+	 * The jobs running now that run for modules ({@link JOB_ACTING_FOR}), innermost last, with how long `ACTING_FOR` was
+	 * before each began.
+	 * @type {Array<{resource: object, base: number}>}
+	 */
+	#actingJobs = [];
+
+	/**
+	 * A resource's callback starts: one made while a function another module handed over ran for that module runs for
+	 * it too, until it ends.
+	 * @returns {void}
+	 * @private
+	 */
+	#actingJobBegins() {
+		try {
+			const resource = executionAsyncResource?.();
+			if (resource === undefined || resource === null) return;
+			const acting = WeakMapMethods.get(JOB_ACTING_FOR, resource);
+			if (acting === undefined) return;
+			const stack = trustedRootOwn.ACTING_FOR;
+			listPush(this.#actingJobs, { resource, base: stack.length });
+			for (let i = 0; i < acting.length; i++) listPush(stack, acting[i]);
+		} catch {
+			// Not pushed: what the callback writes is decided for the module executing alone.
+		}
+	}
+
+	/**
+	 * A resource's callback ends: what {@link AsyncContextManager#actingJobBegins} pushed for it is taken off again.
+	 * @returns {void}
+	 * @private
+	 */
+	#actingJobEnds() {
+		const jobs = this.#actingJobs;
+		if (jobs.length === 0 || jobs[jobs.length - 1].resource !== executionAsyncResource?.()) return;
+		const { base } = ArrayMethods.pop(jobs);
+		const stack = trustedRootOwn.ACTING_FOR;
+		while (stack.length > base) ArrayMethods.pop(stack);
 	}
 
 	/**
@@ -2032,9 +2133,11 @@ export class AsyncContextManager {
 	/**
 	 * Cleanup instance context
 	 * @param {string} instanceID - Instance to cleanup
+	 * @param {{keepFlows?: boolean}} [options] - `keepFlows`: the instance comes back on the flows it has (a restart),
+	 *   so they stay its.
 	 * @public
 	 */
-	cleanup(instanceID) {
+	cleanup(instanceID, { keepFlows = false } = {}) {
 		const store = MapMethods.get(this.instances, instanceID);
 		if (!store) {
 			throw new SlothletError("CONTEXT_NOT_FOUND", {
@@ -2042,6 +2145,11 @@ export class AsyncContextManager {
 				instances: ArrayMethods.join(mapKeysToArray(this.instances), ", ") || "none"
 			});
 		}
+		// The instance shuts down on the ID it holds (a reload leaves an old ID, a restart keeps the flows open across it):
+		// the flows its code left behind are no longer its (see activeStore).
+		const owner = store.slothlet;
+		if (!keepFlows && owner !== null && typeof owner === "object" && owner.instanceID === instanceID)
+			WeakMapMethods.set(this.#ended, owner, true);
 
 		// Clear the store data
 		store.self = {};

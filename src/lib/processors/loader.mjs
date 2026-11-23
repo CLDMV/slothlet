@@ -42,7 +42,7 @@ import { isFrameworkReservedKey, isAwaitableThen, thenableExportError } from "#h
 import { SlothletError, SlothletWarning } from "#errors";
 import { translate } from "#i18n";
 import { HELPERS_PARAM, HELPERS_PER_MODULE, internals as instanceImportsInternals } from "#helpers/instance-imports";
-import { COPY_SOURCE_URL } from "#helpers/flow-stores";
+import { COPY_SOURCE_URL, RUN_BUILD_SEAL } from "#helpers/flow-stores";
 import { internals as framePlacementInternals, toComparablePath } from "#handlers/frame-placement";
 import {
 	ArrayMethods,
@@ -659,6 +659,9 @@ export class Loader extends ComponentBase {
 			if (typeof source === "number") cacheBust ??= source;
 			else if (source !== null && source !== this) copyFrom = source;
 		}
+		// The seal of a run's own restart, which a CommonJS leaf's script is sealed for (see Loader#loadCJSIsolated).
+		const buildSeal = this.slothlet?.[RUN_BUILD_SEAL];
+		const runSeal = typeof buildSeal === "function" ? Reflect.apply(buildSeal, this.slothlet, []) : null;
 		// Slothlet's runtime is loaded before any api file is, from outside every file's load (see ensureRuntimeLoaded).
 		if (!runtimeLoaded) {
 			// The hooks first, under Node: they see whether Node itself loads the runtime (#760).
@@ -668,9 +671,9 @@ export class Loader extends ComponentBase {
 		// The file's top level runs as the file's module (#726): what it starts while it loads carries that identity.
 		const contextManager = this.slothlet.contextManager;
 		if (typeof contextManager?.runModuleLoad !== "function")
-			return this.#loadModuleFile(filePath, instanceID, moduleID, cacheBust, copyFrom);
+			return this.#loadModuleFile(filePath, instanceID, moduleID, cacheBust, copyFrom, runSeal);
 		return contextManager.runModuleLoad(createModuleLoad(this.slothlet, filePath, moduleID), () =>
-			this.#loadModuleFile(filePath, instanceID, moduleID, cacheBust, copyFrom)
+			this.#loadModuleFile(filePath, instanceID, moduleID, cacheBust, copyFrom, runSeal)
 		);
 	}
 
@@ -680,10 +683,12 @@ export class Loader extends ComponentBase {
 	 * @param {string} [instanceID] - Slothlet instance ID for cache busting
 	 * @param {string} [moduleID] - Module ID for additional cache busting
 	 * @param {number|null} [cacheBust=null] - Timestamp for reload cache busting
+	 * @param {object|null} [copyFrom=null] - The loader of the tree a run's copy copies, whose modules it takes.
+	 * @param {{stamp: string}|null} [runSeal=null] - The seal of a run's own restart (see {@link Loader#loadCJSIsolated}).
 	 * @returns {Promise<Object>} Loaded module
 	 * @private
 	 */
-	async #loadModuleFile(filePath, instanceID, moduleID, cacheBust = null, copyFrom = null) {
+	async #loadModuleFile(filePath, instanceID, moduleID, cacheBust = null, copyFrom = null, runSeal = null) {
 		try {
 			// Browser mode: filesystem paths and pathToFileURL are not available.
 			// Delegate to the callback the user supplied via config.loader.resolve.
@@ -704,7 +709,7 @@ export class Loader extends ComponentBase {
 					MapMethods.set(this.#commonJSLoaded, `${filePath}\u0000${moduleID ?? ""}`, copied);
 					return copied;
 				}
-				return this.#loadCJSIsolated(filePath, instanceID, moduleID);
+				return this.#loadCJSIsolated(filePath, instanceID, moduleID, runSeal);
 			}
 
 			// Relative helpers a leaf imports must follow the leaf's per-instance query (#518): the
@@ -980,16 +985,26 @@ export class Loader extends ComponentBase {
 	 * the instance's copy of that module (see scopeRequire in helpers/instance-imports).
 	 * @param {string} filePath - Absolute path to the .cjs file
 	 * @param {string} scopeKey - The instance ID whose helper copies the leaf's requires are served from
+	 * @param {string|null} [moduleID=null] - The mount the leaf is loaded for.
+	 * @param {{stamp: string}|null} [runSeal=null] - The seal of a run's own restart (shared by the reloads in the run
+	 *   after it) loading the leaf, which its script is sealed for (see `SEALED_BUILDS` in helpers/instance-imports).
 	 * @returns {Object} Synthetic ESM namespace: { default, ...namedExports }
 	 * @example
 	 * const ns = this.#loadCJSIsolated("/path/to/module.cjs", "inst");
 	 * ns.default; // module.exports
 	 * @private
 	 */
-	#loadCJSIsolated(filePath, scopeKey, moduleID = null) {
+	#loadCJSIsolated(filePath, scopeKey, moduleID = null, runSeal = null) {
 		// With `helpers: "module"` the files the leaf requires are its own copies, not the instance's.
 		const perModule = this.slothlet.config?.helpers === "module";
-		const options = { fresh: true, importer: perModule ? filePath : null, mount: perModule ? (moduleID ?? null) : null };
+		// A run's own restart has the leaf's script sealed for it: the leaf runs under its plain path, and its script is
+		// what tells the code of the run's copies since from the code of the copies the run read before.
+		const options = {
+			fresh: true,
+			importer: perModule ? filePath : null,
+			mount: perModule ? (moduleID ?? null) : null,
+			seal: runSeal
+		};
 		// The instance's own files load through the handle the instance holds for its ID; a load under another ID (a
 		// caller driving the loader directly) goes through the cache of an ID no instance holds.
 		// A kept copy's lazy node loads under the ID that copy was loaded under, which the instance still holds.

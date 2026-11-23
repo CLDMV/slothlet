@@ -412,7 +412,9 @@ export type SlothletAPI = {
         };
         context: {
             get: Function;
-            run: Function;
+            run: Function & {
+                self: (contextData: object, callback: Function, ...args: any[]) => Promise<any>;
+            };
             scope: Function;
             set: Function;
         };

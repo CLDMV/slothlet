@@ -222,7 +222,7 @@ correctly; unset, slothlet imports natively. See <a href="../docs/TESTING.md"><c
 
 #### api.loader.materialize()
 
-When <code>mode: &quot;lazy&quot;</code>, immediately begins materializing all paths in the background after init and emits <code>materialized:complete</code> once everything has loaded (the v3 <code>tracking: { materialization: true }</code> option is folded into it). A function turns it on and is called once with <code>{ total, timestamp }</code> when everything has materialized — at once when that is already so when the instance finishes loading (always in eager mode). What it throws or rejects with is reported as a <code>WARNING_LIFECYCLE_HANDLER_ERROR</code> warning.
+When <code>mode: &quot;lazy&quot;</code>, immediately begins materializing all paths in the background after init and emits <code>materialized:complete</code> once everything has loaded (the v3 <code>tracking: { materialization: true }</code> option is folded into it). A function turns it on and is called once with <code>{ total, at }</code> (the <code>materialized:complete</code> event's payload) when everything has materialized — at once when that is already so when the instance finishes loading (always in eager mode). What it throws or rejects with is reported as a <code>WARNING_LIFECYCLE_HANDLER_ERROR</code> warning.
 
 **Kind**: function property of [<code>SlothletOptions</code>](#typedef_module_at_cldmv_slash_slothlet_SlothletOptions)
 

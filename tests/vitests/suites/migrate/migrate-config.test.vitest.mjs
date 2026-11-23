@@ -210,13 +210,13 @@ describe("slothlet-migrate: config values defined elsewhere", () => {
 describe("slothlet-migrate: v4 behaviour notes", () => {
 	it("notes the routines default changes on a config that does not set them", () => {
 		const r = run(`await slothlet({ base: "a" });`);
-		expect(r.ids("info")).toEqual(["config|autoRoutines", "config|stackRoutines"]);
-		expect(run(`await slothlet({ base: "a", routines: { auto: false, stack: false } });`).ids("info")).toEqual([]);
+		expect(r.ids("info")).toEqual(["config|autoRoutines", "config|scope.isolation", "config|stackRoutines"]);
+		expect(run(`await slothlet({ base: "a", routines: { auto: false, stack: false } });`).ids("info")).toEqual(["config|scope.isolation"]);
 	});
 
 	it("notes hidden patterns and the init context copy", () => {
 		const r = run(`await slothlet({ hidden: ["x"], context: { user: 1 }, routines: { auto: true, stack: true } });`);
-		expect(r.ids("info")).toEqual(["config|hidden", "config|context"]);
+		expect(r.ids("info")).toEqual(["config|scope.isolation", "config|hidden", "config|context"]);
 	});
 
 	it("is idempotent: a migrated config migrates to itself", () => {
