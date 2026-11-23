@@ -3521,6 +3521,13 @@ export class PermissionManager extends ComponentBase {
 				// What comes before the suffix is the api path pattern. An api path holds no `:`, so one with a `:` of its own
 				// (`vault.secret:read:write`) would match nothing, and the rule would silently not apply.
 				const pathPattern = StringMethods.substring(rule.target, 0, lastColon);
+				// A suffix with nothing before it (`:before`, `:write`, `:call`, `:hook`) names no api path either.
+				if (pathPattern.length === 0) {
+					throw new this.SlothletError("PERMISSION_RULE_INVALID", {
+						reason: translate("PERMISSION_RULE_REASON_TARGET_PATH_EMPTY"),
+						received: rule.target
+					});
+				}
 				if (StringMethods.includes(pathPattern, ":")) {
 					throw new this.SlothletError("PERMISSION_RULE_INVALID", {
 						reason: translate("PERMISSION_RULE_REASON_TARGET_PATH_INVALID"),

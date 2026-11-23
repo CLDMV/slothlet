@@ -34,7 +34,8 @@ import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
 const BASE = TEST_DIRS.API_TEST_PERMISSIONS;
 
-const NO_PATH = ["vault.secret:read:write", "a:b:write", "a:b:before", "db.read:call:hook"];
+const EMPTY_PATH = [":call", ":read", ":access", ":write", ":full", ":before", ":after", ":always", ":error", ":around", ":hook"];
+const NO_PATH = ["vault.secret:read:write", "a:b:write", "a:b:before", "db.read:call:hook", ...EMPTY_PATH];
 const KEPT = ["vault.secret:read", "db.**:write", "db.read:before", "**:hook", "db.read", "capability:code"];
 
 /**
@@ -64,6 +65,33 @@ describe.each(getMatrixConfigs())("Permissions > a rule target whose path names 
 		const add = (target) => codeOf(() => api.slothlet.permissions.rules.add({ caller: "callers.**", target, effect: "deny" }));
 		for (const target of NO_PATH) expect({ target, code: await add(target) }).toEqual({ target, code: "PERMISSION_RULE_INVALID" });
 		for (const target of KEPT) expect({ target, code: await add(target) }).toEqual({ target, code: "ok" });
+	});
+
+	it.each(EMPTY_PATH)("rules.add refuses the empty-path target %s with PERMISSION_RULE_INVALID naming it", async (target) => {
+		api = await slothlet({ ...config, base: BASE, permissions: { policy: "allow" } });
+		let error;
+		try {
+			api.slothlet.permissions.rules.add({ caller: "**", target, effect: "deny" });
+		} catch (thrown) {
+			error = thrown;
+		}
+		expect(error.code).toBe("PERMISSION_RULE_INVALID");
+		expect(error.details.received).toBe(target);
+	});
+
+	it.each(EMPTY_PATH)("a config rule with the empty-path target %s refuses the instance", async (target) => {
+		const code = await codeOf(async () => {
+			api = await slothlet({ ...config, base: BASE, permissions: { policy: "allow", rules: [{ caller: "**", target, effect: "deny" }] } });
+		});
+		expect(code).toBe("PERMISSION_RULE_INVALID");
+	});
+
+	it("api.add's permissions option refuses an empty-path target", async () => {
+		api = await slothlet({ ...config, base: BASE, permissions: { policy: "allow" } });
+		const code = await codeOf(() =>
+			api.slothlet.api.add("emptyp", { exports: { ping: () => "pong" } }, { permissions: { deny: [":write"] } })
+		);
+		expect(code).toBe("PERMISSION_RULE_INVALID");
 	});
 
 	it("names the target in the error", async () => {
