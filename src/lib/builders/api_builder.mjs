@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-22T09:18:56-08:00 (1795367936)
+ *	@Last modified time: 2026-11-22T23:40:24-08:00 (1795419624)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -526,6 +526,24 @@ function runtime_readAddOptions(slothlet, source, options) {
 		versionConfig = { version: version.tag };
 		if (version.default !== undefined) versionConfig.default = version.default;
 		if (version.metadata !== undefined) versionConfig.metadata = version.metadata;
+	}
+	// `permissions` is `{ allow: [...], deny: [...] }`: any other shape would be ignored, so the rules it was meant to
+	// register would silently not apply. Read by descriptor, so no getter runs here; an accessor is refused where the
+	// option is read.
+	if (read.permissions != null) {
+		objectArgument(read.permissions, "options.permissions");
+		for (let ofIndex = 0, ofList = ["allow", "deny"]; ofIndex < ofList.length; ofIndex++) {
+			const effect = ofList[ofIndex];
+			const descriptor = Reflect.getOwnPropertyDescriptor(read.permissions, effect);
+			if (descriptor && "value" in descriptor && descriptor.value !== undefined && !Arrays.isArray(descriptor.value)) {
+				const value = descriptor.value;
+				throw new slothlet.SlothletError("INVALID_ARGUMENT", {
+					argument: `options.permissions.${effect}`,
+					expected: "array",
+					received: value === null ? "null" : typeof value
+				});
+			}
+		}
 	}
 	return { source: content, options: read, versionConfig };
 }

@@ -463,6 +463,7 @@
 		"PERMISSION_RULE_REASON_CALLER_REQUIRED": "rule.caller एक गैर-रिक्त स्ट्रिंग होना चाहिए",
 		"PERMISSION_RULE_REASON_TARGET_REQUIRED": "rule.target एक गैर-रिक्त स्ट्रिंग होना चाहिए",
 		"PERMISSION_RULE_REASON_TARGET_SUFFIX_UNKNOWN": "rule.target ऐसे प्रत्यय पर समाप्त होता है जो न किसी पहुँच स्तर ({levels}) का नाम है न किसी हुक प्रकार ({hookTypes}) का",
+		"PERMISSION_RULE_REASON_TARGET_PATH_INVALID": "rule.target के प्रत्यय से पहले के API पथ में ':' है; API पथ में यह नहीं हो सकता",
 		"PERMISSION_RULE_REASON_TARGET_NOT_OWNED": "मॉड्यूल का कोड केवल अपने मॉड्यूल के उप-वृक्ष के नियम प्रबंधित करता है, फ़्रेमवर्क के नेमस्पेस, मूल फ़ंक्शन या आंतरिक कुंजियों के कभी नहीं, जब तक कि \"slothlet.permissions.rules.add\" पर स्पष्ट अनुमति यह डिफ़ॉल्ट न हटा दे",
 		"PERMISSION_RULE_REASON_REMOVAL_NOT_OWNED": "मॉड्यूल का कोड केवल अपने मॉड्यूल के नियम हटाता है; नियम प्रबंधित करने की अनुमति वाला मॉड्यूल अन्य मॉड्यूल के नियम भी हटाता है, होस्ट या फ़्रेमवर्क के कभी नहीं",
 		"PERMISSION_RULE_REASON_FIELD_ACCESSOR": "नियम के फ़ील्ड सामान्य डेटा गुण होने चाहिए, एक्सेसर नहीं",

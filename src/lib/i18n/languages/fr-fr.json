@@ -463,6 +463,7 @@
 		"PERMISSION_RULE_REASON_CALLER_REQUIRED": "rule.caller doit être une chaîne non vide",
 		"PERMISSION_RULE_REASON_TARGET_REQUIRED": "rule.target doit être une chaîne non vide",
 		"PERMISSION_RULE_REASON_TARGET_SUFFIX_UNKNOWN": "rule.target se termine par un suffixe qui ne nomme aucun niveau d'accès ({levels}) ni type de hook ({hookTypes})",
+		"PERMISSION_RULE_REASON_TARGET_PATH_INVALID": "rule.target contient un ':' dans son chemin d'API avant son suffixe ; un chemin d'API n'en contient aucun",
 		"PERMISSION_RULE_REASON_TARGET_NOT_OWNED": "le code d'un module ne gère des règles que pour le sous-arbre qui appartient à son module, jamais pour l'espace de noms, les fonctions racines ou les clés internes du framework, sauf si une autorisation explicite sur \"slothlet.permissions.rules.add\" lève ce comportement par défaut",
 		"PERMISSION_RULE_REASON_REMOVAL_NOT_OWNED": "le code d'un module ne supprime que les règles qui appartiennent à son propre module ; un module autorisé à gérer les règles supprime aussi celles d'autres modules, jamais celles de l'hôte ou du framework",
 		"PERMISSION_RULE_REASON_FIELD_ACCESSOR": "les champs d'une règle doivent être de simples propriétés de données, pas des accesseurs",

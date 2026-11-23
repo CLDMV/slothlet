@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-19T05:14:42-08:00 (1795094082)
+ *	@Last modified time: 2026-11-22T23:40:25-08:00 (1795419625)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -3516,6 +3516,15 @@ export class PermissionManager extends ComponentBase {
 							hookTypes: ArrayMethods.join(setToArray(HOOK_TARGET_TYPES), ", ")
 						}),
 						received: suffix
+					});
+				}
+				// What comes before the suffix is the api path pattern. An api path holds no `:`, so one with a `:` of its own
+				// (`vault.secret:read:write`) would match nothing, and the rule would silently not apply.
+				const pathPattern = StringMethods.substring(rule.target, 0, lastColon);
+				if (StringMethods.includes(pathPattern, ":")) {
+					throw new this.SlothletError("PERMISSION_RULE_INVALID", {
+						reason: translate("PERMISSION_RULE_REASON_TARGET_PATH_INVALID"),
+						received: rule.target
 					});
 				}
 			}
