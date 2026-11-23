@@ -33,6 +33,8 @@
  * and go. A version lives with its object: an object the instance drops while a run is open is collected with its
  * versions. Opening a run, saving a version and reading one cost a lookup in the open runs' starts, not a pass over them,
  * and closing one costs the versions it was the newest reader of, so many runs open at once cost no more each than one.
+ * An object that still holds what its last version holds is not saved again for a new window: that version answers the
+ * new run too.
  *
  * Nothing here is asynchronous, and nothing uses the platform's async context: it works the same on both runtimes and
  * in a browser.
@@ -49,6 +51,7 @@ import {
 	EventTarget,
 	FunctionMethods,
 	functionSource,
+	IteratorMethods,
 	listPush,
 	Map,
 	MapMethods,
@@ -860,7 +863,9 @@ export function shallowCopy(raw) {
  * Save a value the instance is about to hand out as itself, and what it reaches, once per window: a `Map`, a `Date`, an
  * object a leaf returned. The instance's code may then change it where slothlet does not see the change, and the runs
  * open read it as it was. Shared live objects are left alone. Walked with a list of its own, not the call stack, so a
- * structure of any depth is saved.
+ * structure of any depth is saved. An object that holds just what its last version holds keeps that version for the
+ * runs that started since (see {@link keepUnchanged}): a large value handed out again in every new window is compared,
+ * not copied again.
  * @param {Domain|null} domain - The instance's domain.
  * @param {*} raw - The value.
  * @param {Set<object>} [seen] - Objects already walked.
@@ -874,20 +879,21 @@ export function checkpointDeep(domain, raw, seen = new Set(), skip = null) {
 	while (work.length !== 0) {
 		const value = work[work.length - 1];
 		work.length--;
-		if (SetMethods.has(seen, value) || isProxy(value) || (skip !== null && skip(value)) || isSharedLive(value)) continue;
+		if (SetMethods.has(seen, value)) continue;
 		SetMethods.add(seen, value);
 		// Saved in this window already: so was what it reaches, or it has changed since through a path that saves it.
-		if (!beforeChange(domain, value, shallowCopy)) continue;
-		const kind = builtinKind(value);
-		if (kind === "map") {
-			for (const entry of mapEntries(value)) pushObject(work, entry[1]);
-		} else if (kind === "set") {
-			for (const member of setValues(value)) pushObject(work, member);
-		} else if (kind === null) {
-			const keys = Objects.keys(value);
-			for (let index = 0; index < keys.length; index++) {
-				const described = Reflect.getOwnPropertyDescriptor(value, keys[index]);
-				if (described !== undefined && "value" in described) pushObject(work, described.value);
+		const stamp = WeakMapMethods.get(domain.stamps, value);
+		if (stamp !== undefined && stamp >= domain.newest) continue;
+		if (isProxy(value) || (skip !== null && skip(value))) continue;
+		const known = knownKind(value);
+		if (known === "weak" || known === "promise" || (known === null && isLiveObject(value))) continue;
+		if (known === null) saveMembers(domain, value, work);
+		else {
+			if (!keepUnchanged(domain, value, known)) beforeChange(domain, value, shallowCopy);
+			if (known === "map") {
+				for (const entry of mapEntries(value)) pushObject(work, entry[1]);
+			} else if (known === "set") {
+				for (const member of setValues(value)) pushObject(work, member);
 			}
 		}
 		// A prototype of a module's own (a class's, or an object another inherits from) is changed as itself too: it is
@@ -895,6 +901,43 @@ export function checkpointDeep(domain, raw, seen = new Set(), skip = null) {
 		const prototype = Reflect.getPrototypeOf(value);
 		if (prototype !== null && !isLanguagePrototype(prototype)) pushObject(work, prototype);
 	}
+}
+
+/**
+ * The kinds {@link knownKind} found, by object: an object's kind is fixed when it is made, and telling some apart costs
+ * a thrown error each time (a `WeakRef`'s check), which a large value saved again in every window would pay per member.
+ * @type {WeakMap<object, string>}
+ * @private
+ */
+const KNOWN_KINDS = new WeakMap();
+
+/**
+ * An object's kind as the platform's checks tell it (see {@link setKindCheck}): `"map"`, `"set"`, `"date"`, `"regexp"`,
+ * `"typed"`, `"buffer"`, `"dataview"`, `"weak"`, `"promise"`, or null; asked of the platform once per object.
+ * @param {object} value - The object.
+ * @returns {string|null} Its kind.
+ * @private
+ */
+function knownKind(value) {
+	// Without the platform's checks, a shared live object is answered as a weak one: either is left alone.
+	if (kindCheck === null) return isSharedLive(value) ? "weak" : builtinKind(value);
+	let kind = WeakMapMethods.get(KNOWN_KINDS, value);
+	if (kind === undefined) {
+		kind = kindCheck(value) ?? "";
+		WeakMapMethods.set(KNOWN_KINDS, value, kind);
+	}
+	return kind === "" ? null : kind;
+}
+
+/**
+ * Whether an object of no built-in kind is one a run shares live (see {@link isSharedLive}): an `EventTarget` or an
+ * emitter.
+ * @param {object} value - The object.
+ * @returns {boolean} True for one.
+ * @private
+ */
+function isLiveObject(value) {
+	return (typeof EventTarget === "function" && inherits(value, EventTarget)) || isEmitterLike(value);
 }
 
 /**
@@ -906,6 +949,151 @@ export function checkpointDeep(domain, raw, seen = new Set(), skip = null) {
  */
 function pushObject(work, value) {
 	if (value !== null && typeof value === "object") listPush(work, value);
+}
+
+/**
+ * The last version of an object a run may read, when it still answers for the object's content as of now unless the
+ * object changed where slothlet did not see it: the version saved when the object was last saved, as a copy of its
+ * members (see {@link shallowCopy}). Null when there is none.
+ * @param {Domain} domain - The domain.
+ * @param {object} raw - The object.
+ * @returns {{from: number, to: number, content: object}|null} The version.
+ * @private
+ */
+function lastCopy(domain, raw) {
+	const list = WeakMapMethods.get(domain.versions, raw);
+	if (list === undefined || list.length === 0) return null;
+	const last = list[list.length - 1];
+	if (last.to !== (WeakMapMethods.get(domain.stamps, raw) ?? 0) || last.content === null || typeof last.content !== "object") return null;
+	return last;
+}
+
+/**
+ * Have an object's last version answer the runs that started since too, its content being the object's still: its span
+ * reaches to now, and it is counted under the runs that read it now.
+ * @param {Domain} domain - The domain.
+ * @param {object} raw - The object.
+ * @param {{from: number, to: number, group: ReaderGroup}} last - Its last version (see {@link lastCopy}).
+ * @returns {void}
+ * @private
+ */
+function extendVersion(domain, raw, last) {
+	const group = groupOf(last);
+	if (!group.released) {
+		group.size--;
+		domain.count--;
+		keptVersions--;
+	}
+	last.to = domain.clock;
+	keep(domain, last);
+	WeakMapMethods.set(domain.stamps, raw, domain.clock);
+}
+
+/**
+ * Save an object of no built-in kind (a plain object, an array, a class instance) for the runs open, and add the
+ * objects its own enumerable data members hold to the walk: one pass over its members, which also tells whether it
+ * still holds just what its last version holds (see {@link sameMembers}), in which case that version answers the runs
+ * that started since too, instead of the same content saved again.
+ * @param {Domain} domain - The domain.
+ * @param {object} raw - The object.
+ * @param {Array<object>} work - The walk's list.
+ * @returns {void}
+ * @private
+ */
+function saveMembers(domain, raw, work) {
+	const keys = Reflect.ownKeys(raw);
+	const last = lastCopy(domain, raw);
+	let content = last === null ? null : last.content;
+	let others = null;
+	if (content !== null) {
+		if (Reflect.getPrototypeOf(raw) !== Reflect.getPrototypeOf(content) || Arrays.isArray(raw) !== Arrays.isArray(content)) content = null;
+		else {
+			others = Reflect.ownKeys(content);
+			if (others.length !== keys.length) content = null;
+		}
+	}
+	for (let index = 0; index < keys.length; index++) {
+		const key = keys[index];
+		const mine = Reflect.getOwnPropertyDescriptor(raw, key);
+		if (mine === undefined) {
+			content = null;
+			continue;
+		}
+		if (content !== null && (key !== others[index] || !sameMember(mine, Reflect.getOwnPropertyDescriptor(content, key)))) content = null;
+		if (mine.enumerable && typeof key === "string" && "value" in mine) pushObject(work, mine.value);
+	}
+	if (content !== null) extendVersion(domain, raw, last);
+	else beforeChange(domain, raw, shallowCopy);
+}
+
+/**
+ * Whether two own members are one: the same value or accessors, with the same attributes (all but `configurable`,
+ * which a version's copy always has).
+ * @param {PropertyDescriptor} mine - The object's member.
+ * @param {PropertyDescriptor|undefined} theirs - The version's.
+ * @returns {boolean} True when they are.
+ * @private
+ */
+function sameMember(mine, theirs) {
+	if (theirs === undefined || mine.enumerable !== theirs.enumerable) return false;
+	if ("value" in mine) return "value" in theirs && mine.writable === theirs.writable && Objects.is(mine.value, theirs.value);
+	return !("value" in theirs) && mine.get === theirs.get && mine.set === theirs.set;
+}
+
+/**
+ * When a `Map`, a `Set` or a `Date` a run may read holds just what its last version holds, have that version answer the
+ * runs that started since too, instead of saving the same content again (see {@link extendVersion}).
+ * @param {Domain} domain - The domain.
+ * @param {object} raw - The object.
+ * @param {string} kind - Its built-in kind (see {@link builtinKind}).
+ * @returns {boolean} True when the version now answers the runs open.
+ * @private
+ */
+function keepUnchanged(domain, raw, kind) {
+	if (kind !== "map" && kind !== "set" && kind !== "date") return false;
+	const last = lastCopy(domain, raw);
+	if (last === null || !sameContent(raw, last.content, kind)) return false;
+	extendVersion(domain, raw, last);
+	return true;
+}
+
+/**
+ * Whether a `Map`, a `Set` or a `Date` holds just what `content` (a version {@link shallowCopy} made of it) holds: the
+ * same prototype, the same entries in the same order or the same time, and the same own members.
+ * @param {object} raw - The object.
+ * @param {object} content - The version's content.
+ * @param {string} kind - The object's built-in kind.
+ * @returns {boolean} True when it does.
+ * @private
+ */
+function sameContent(raw, content, kind) {
+	if (Reflect.getPrototypeOf(raw) !== Reflect.getPrototypeOf(content)) return false;
+	if (Arrays.isArray(raw) !== Arrays.isArray(content) || knownKind(content) !== kind) return false;
+	if (kind === "map") {
+		if (MapMethods.size(raw) !== MapMethods.size(content)) return false;
+		const held = MapMethods.entries(content);
+		for (const entry of mapEntries(raw)) {
+			const other = IteratorMethods.mapNext(held).value;
+			if (!Objects.is(entry[0], other[0]) || !Objects.is(entry[1], other[1])) return false;
+		}
+	} else if (kind === "set") {
+		if (SetMethods.size(raw) !== SetMethods.size(content)) return false;
+		const held = SetMethods.values(content);
+		for (const member of setValues(raw)) if (!Objects.is(member, IteratorMethods.setNext(held).value)) return false;
+	} else if (kind === "date") {
+		const time = FunctionMethods.call(PrototypeFunctions.Date.getTime, raw);
+		if (!Objects.is(time, FunctionMethods.call(PrototypeFunctions.Date.getTime, content))) return false;
+	}
+	const keys = Reflect.ownKeys(raw);
+	const others = Reflect.ownKeys(content);
+	if (keys.length !== others.length) return false;
+	for (let index = 0; index < keys.length; index++) {
+		const key = keys[index];
+		if (key !== others[index]) return false;
+		const mine = Reflect.getOwnPropertyDescriptor(raw, key);
+		if (mine === undefined || !sameMember(mine, Reflect.getOwnPropertyDescriptor(content, key))) return false;
+	}
+	return true;
 }
 
 /**
