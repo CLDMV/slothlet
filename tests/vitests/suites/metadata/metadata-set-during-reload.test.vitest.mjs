@@ -167,9 +167,7 @@ describe.each(CONFIGS)(
 		});
 
 		it("removes by key list, by nested key and of a whole path while the reload builds stay removed", async () => {
-			const reload = await loadAndStartReload(async (api) => {
-				// Loaded before its metadata is set: a lazy node set before it loads keys its metadata elsewhere, reload or not.
-				expect(await api.calls.ping()).toBe("pong");
+			const reload = await loadAndStartReload((api) => {
 				api.slothlet.metadata.set("calls", { a: 1, b: 2, keep: 3, nested: { x: 1, y: 2 } });
 				api.slothlet.metadata.set("extra", { gone: 1 });
 				api.slothlet.metadata.set(api.calls.ping, { own: 1, ownNested: { x: 1, y: 2 } });
@@ -179,8 +177,6 @@ describe.each(CONFIGS)(
 			api.slothlet.metadata.remove(api.calls.ping, ["own"]);
 			api.slothlet.metadata.remove("extra");
 			await reload.finish();
-			// Read once the node has loaded again: a lazy node not yet loaded answers without its own metadata, reload or not.
-			expect(await api.calls.ping()).toBe("pong");
 			const meta = api.slothlet.metadata.get(api.calls.ping);
 			expect(meta).toMatchObject({ keep: 3, nested: { x: 1, y: 2 }, ownNested: { y: 2 } });
 			expect(meta).not.toHaveProperty("a");

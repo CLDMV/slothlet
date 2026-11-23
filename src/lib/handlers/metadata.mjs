@@ -48,7 +48,7 @@ import {
 	WeakSet,
 	WeakSetMethods
 } from "#helpers/intrinsics";
-const { resolveWrapper } = unifiedWrapperInternals("lib/handlers/metadata");
+const { resolveWrapper, runtime_metadataNodeOf } = unifiedWrapperInternals("lib/handlers/metadata");
 
 /**
  * Internal delimiter joining a module's id and apiPath in the composite `moduleID` metadata key
@@ -451,6 +451,54 @@ export class Metadata extends ComponentBase {
 	}
 
 	/**
+	 * The system facts tagged on a node itself or on its impl, without the read-through a reload's window adds.
+	 * @param {Function|Object} target - Wrapper, proxy or function.
+	 * @returns {Object|undefined} The facts.
+	 * @private
+	 * @example
+	 * this.#ownFacts(api.math.add).apiPath; // "math.add"
+	 */
+	#ownFacts(target) {
+		const actualTarget = resolveWrapper(target) ?? target;
+		return (
+			WeakMapMethods.get(this.#secureMetadata, actualTarget) ||
+			WeakMapMethods.get(this.#secureMetadata, actualTarget.____slothletInternal?.impl)
+		);
+	}
+
+	/**
+	 * The system facts a metadata call keys a node's user metadata by (#918).
+	 *
+	 * @description
+	 * A stand-in a lazy node handed out for a member it had not loaded means the node it stands for: once that node has
+	 * loaded, its own facts; until then, the facts it will have, its api path and the composite id built from it and the
+	 * owning module, so what is set, read or removed through the stand-in is the loaded node's own entry. Any other value
+	 * is looked up with `lookup`.
+	 * @param {Function|Object} target - Wrapper, proxy or function.
+	 * @param {function(Function|Object): (Object|null|undefined)} lookup - How the facts of a node are found.
+	 * @returns {Object|null|undefined} The facts.
+	 * @private
+	 * @example
+	 * this.#nodeFacts(api.calls.ping, (node) => this.getSystemMetadata(node)).apiPath; // "calls.ping", loaded or not
+	 */
+	#nodeFacts(target, lookup) {
+		const node = target && (typeof target === "object" || typeof target === "function") ? runtime_metadataNodeOf(target) : null;
+		if (node === null || node.chain === null) return lookup(node === null ? target : node.wrapper);
+		const holder = lookup(node.wrapper);
+		if (!holder) return holder;
+		const tail = ArrayMethods.join(node.chain, ".");
+		const apiPath = holder.apiPath ? `${holder.apiPath}.${tail}` : tail;
+		const baseModuleID = holder.baseModuleID;
+		return {
+			filePath: holder.filePath,
+			sourceFolder: holder.sourceFolder,
+			apiPath,
+			moduleID: baseModuleID ? `${baseModuleID}${MODULE_ID_SEPARATOR}${regExpReplace(/\./g, apiPath, "/")}` : holder.moduleID,
+			baseModuleID
+		};
+	}
+
+	/**
 	 * The system facts slothlet recorded for a node: its file, folder, api path and owning module.
 	 *
 	 * @description
@@ -506,7 +554,7 @@ export class Metadata extends ComponentBase {
 	 */
 	getMetadata(target) {
 		if (!target) return this.#deepFreeze({ ...this.#globalUserMetadata });
-		const systemData = this.getSystemMetadata(target) ?? {};
+		const systemData = this.#nodeFacts(target, (node) => this.getSystemMetadata(node)) ?? {};
 
 		// Lookup user metadata by BOTH moduleID AND rootApiPath
 		// - registerUserMetadata() stores by root apiPath (for api.add())
@@ -614,16 +662,10 @@ export class Metadata extends ComponentBase {
 			});
 		}
 
-		// Normalize target: if it's a proxy, get the underlying wrapper
-		const actualTarget = resolveWrapper(target) ?? target;
-
-		// Get system metadata to find moduleID - wrapper-first (same lookup order as getMetadata)
-		// so that set() and get() always resolve to the same moduleID, even after reload
-		// (the wrapper retains a stable moduleID while impl gets a new one after each reload).
-		const systemData =
-			WeakMapMethods.get(this.#secureMetadata, actualTarget) ||
-			WeakMapMethods.get(this.#secureMetadata, actualTarget.____slothletInternal?.impl) ||
-			{};
+		// The node's system facts, wrapper-first (the lookup order getMetadata uses), so set() and get() resolve to the same
+		// moduleID even after a reload (the wrapper keeps its moduleID while the impl gets a new one), and a stand-in for a
+		// lazy member not loaded yet to the entry the loaded node has (#918).
+		const systemData = this.#nodeFacts(target, (node) => this.#ownFacts(node)) || {};
 		const moduleID = systemData.moduleID;
 
 		if (!moduleID) {
@@ -676,14 +718,8 @@ export class Metadata extends ComponentBase {
 			});
 		}
 
-		// Normalize target: if it's a proxy, get the underlying wrapper
-		const actualTarget = resolveWrapper(target) ?? target;
-
-		// Get system metadata to find moduleID and apiPath - wrapper-first (same lookup order as getMetadata)
-		const systemData =
-			WeakMapMethods.get(this.#secureMetadata, actualTarget) ||
-			WeakMapMethods.get(this.#secureMetadata, actualTarget.____slothletInternal?.impl) ||
-			{};
+		// The node's moduleID and apiPath, as setUserMetadata() resolves them.
+		const systemData = this.#nodeFacts(target, (node) => this.#ownFacts(node)) || {};
 		const moduleID = systemData.moduleID;
 		const apiPath = systemData.apiPath;
 

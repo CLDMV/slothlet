@@ -5551,6 +5551,39 @@ function runtime_wrapperReport(wrapper, path = null, held = null) {
 }
 
 /**
+ * The node a metadata call on a value means (#918): for a stand-in a lazy node handed out for a member it had not loaded,
+ * the node the stand-in reaches once that node has loaded, or while it has not, the node's wrapper with the chain below
+ * it, so the call keys the metadata where the loaded node keeps it. Any other value is its own wrapper.
+ * @param {*} value - A function or node, as the metadata api is handed it.
+ * @returns {{wrapper: UnifiedWrapper, chain: string[]|null}|null} The wrapper, with the chain below it for a stand-in
+ *   that reaches no loaded node, or null when the value is no node.
+ * @internal
+ *
+ * @example
+ * runtime_metadataNodeOf(api.calls.ping); // { wrapper: <calls>, chain: ["ping"] } before calls has loaded
+ */
+function runtime_metadataNodeOf(value) {
+	const wrapper = resolveWrapper(value);
+	if (wrapper === null) return null;
+	const chain = WeakMapMethods.get(WAITING_CHAINS, value) ?? WeakMapMethods.get(WAITING_CHAINS, runtime_reportedNode(value));
+	if (!chain || chain.length === 0) return { wrapper, chain: null };
+	let reached;
+	try {
+		reached = runtime_standInNode(wrapper, chain);
+	} catch {
+		// A reader the rules deny what the chain reaches: the path names the node all the same.
+		reached = STAND_IN_UNLOADED;
+	}
+	if (reached !== STAND_IN_UNLOADED && reached !== null && (typeof reached === "object" || typeof reached === "function")) {
+		const reachedNode = runtime_reportedNode(reached);
+		const reachedWrapper = resolveWrapper(reachedNode);
+		if (reachedWrapper !== null && !WeakSetMethods.has(STAND_INS, reachedNode) && !WeakMapMethods.has(WAITING_CHAINS, reachedNode))
+			return { wrapper: reachedWrapper, chain: null };
+	}
+	return { wrapper, chain: mapList(chain, String) };
+}
+
+/**
  * `slothlet.node(target)`: one frozen report of what slothlet knows about an api node.
  *
  * @description
@@ -24260,6 +24293,7 @@ export function internals(consumer) {
 		runtime_assertCapability,
 		runtime_hasInternalSlots,
 		runtime_nodeReport,
+		runtime_metadataNodeOf,
 		runtime_assertFrameworkRootChange,
 		runtime_codeLabel,
 		runtime_contextRead,

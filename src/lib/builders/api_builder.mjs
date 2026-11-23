@@ -103,6 +103,7 @@ import {
 } from "#helpers/intrinsics";
 const {
 	resolveWrapper,
+	runtime_metadataNodeOf,
 	runtime_sameValue,
 	runtime_selfModuleCeilings,
 	runtime_selfModuleReader,
@@ -278,6 +279,25 @@ function _resolvePathOrModuleId(slothlet, pathOrModuleId) {
 function _metadataNode(slothlet, target) {
 	const dispatcher = slothlet.handlers?.versionManager?.dispatcherOf?.(runtime_nodeBehind(target));
 	return dispatcher ? (dispatcher.resolve() ?? target) : target;
+}
+
+/**
+ * The api path of the node a metadata call on a node acts on, for the write check: a stand-in a lazy node handed out for
+ * a member it had not loaded names that member's path, not its node's (#918).
+ *
+ * @param {*} target - A function or node.
+ * @returns {string|null} The dotted api path, or null when the target is no node.
+ * @private
+ * @example
+ * _metadataNodePath(api.calls.ping); // "calls.ping", whether calls has loaded or not
+ */
+function _metadataNodePath(target) {
+	const node = runtime_metadataNodeOf(target);
+	if (node === null) return null;
+	const base = String(node.wrapper.____slothletInternal.apiPath);
+	if (node.chain === null) return base;
+	const tail = ArrayMethods.join(node.chain, ".");
+	return base ? base + "." + tail : tail;
 }
 
 /**
@@ -4816,8 +4836,8 @@ export class ApiBuilder extends ComponentBase {
 					if (path === null) {
 						target = _metadataNode(slothlet, target);
 						// Module code sets a node's metadata only where it may write (#625).
-						const node = resolveWrapper(target);
-						if (node) slothlet.handlers.apiManager.assertModuleWrite(String(node.____slothletInternal.apiPath));
+						const nodePath = _metadataNodePath(target);
+						if (nodePath !== null) slothlet.handlers.apiManager.assertModuleWrite(nodePath);
 						if (keyOrObj && typeof keyOrObj === "object" && !Arrays.isArray(keyOrObj)) {
 							for (let ofIndex = 0, ofList = Objects.entries(keyOrObj); ofIndex < ofList.length; ofIndex++) {
 								slothlet.handlers.metadata.setUserMetadata(target, ofList[ofIndex][0], ofList[ofIndex][1]);
@@ -4852,8 +4872,8 @@ export class ApiBuilder extends ComponentBase {
 					if (path === null) {
 						target = _metadataNode(slothlet, target);
 						// Module code removes a node's metadata only where it may write (#625).
-						const node = resolveWrapper(target);
-						if (node) slothlet.handlers.apiManager.assertModuleWrite(String(node.____slothletInternal.apiPath));
+						const nodePath = _metadataNodePath(target);
+						if (nodePath !== null) slothlet.handlers.apiManager.assertModuleWrite(nodePath);
 						return slothlet.handlers.metadata.removeUserMetadata(target, key);
 					}
 					/* v8 ignore next */
