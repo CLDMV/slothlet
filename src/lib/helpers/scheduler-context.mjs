@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T21:25:53-08:00 (1794979553)
+ *	@Last modified time: 2026-11-22T17:54:41-08:00 (1795398881)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -467,9 +467,13 @@ function enableSchedulerPatching() {
 	runtime_patchClear(globalThis, "clearImmediate");
 	runtime_patchClear(globalThis, "cancelAnimationFrame");
 	runtime_patchClear(globalThis, "cancelIdleCallback");
-	// A timer cleared through the functions `node:timers` exports ends the work as the global ones do. ES modules read a
-	// builtin's exports through bindings Node refreshes on request.
+	// The functions `node:timers` exports schedule and clear as the global ones do: `import { setTimeout } from
+	// "node:timers"` (or `require("node:timers").setTimeout`) keeps the flow and the caller it was scheduled in, and a
+	// timer cleared there ends the work. ES modules read a builtin's exports through bindings Node refreshes on request.
 	if (TIMERS !== null) {
+		runtime_patchScheduler(TIMERS, "setTimeout");
+		runtime_patchScheduler(TIMERS, "setInterval");
+		runtime_patchScheduler(TIMERS, "setImmediate");
 		runtime_patchClear(TIMERS, "clearTimeout");
 		runtime_patchClear(TIMERS, "clearInterval");
 		runtime_patchClear(TIMERS, "clearImmediate");
