@@ -31,18 +31,37 @@
  *   is Node's own `node:internal/child_process`, which is how a message the server sent arrives. A message module code
  *   emits itself, or one passed through code that replaced `process.emit` again, has another frame there and is not
  *   recorded.
- * - From each such reply (`{t: "s", i, r}`) it records, by module id, the code: `r.code`, or the file `r.tmp` names,
- *   read there and then; the warm snapshot's entries the same way. Only own data properties are read.
+ * - From each such reply (`{t: "s", i, r}`) it records, by module id, the code and its source map: `r.code` and
+ *   `r.sourceMap`, or the file `r.tmp` names, read there and then; the warm snapshot's entries the same way. Only own
+ *   data properties are read. Since vitest 5.1.1 that file holds the code with its source map after it
+ *   (`<code>\n//# vitestSourceMap=<map>`, the last such marker), and the worker compiles only the code; a file with no
+ *   marker (vitest 5.1.0 and earlier) is the code itself.
  * - The record is kept in this file's closure. Slothlet reaches it only through a frozen `verify(filename, code)` put
  *   on a fixed, non-writable global slot (`Symbol.for("@cldmv/slothlet.vitestFetched")`), which the first run of this
- *   file claims. `verify` answers true when `code` is vitest's wrapper around the code recorded for `filename`, and
- *   then drops the record: each reply from the server permits one compile.
+ *   file claims. `verify` answers true when `code` is vitest's wrapper around the code recorded for `filename` (or,
+ *   while vitest inlines source maps for an attached debugger, around that code followed by exactly the recorded source
+ *   map as an inline `sourceMappingURL` comment), and then drops the record: each reply from the server permits one
+ *   compile.
  *
  * Under the threads pool messages do not pass through `process.emit`, so nothing is published and the compile stays
  * refused. Setup files run again before every test file; a later run finds the slot taken and changes nothing.
  */
 
-import { Map, MapMethods, Objects, Reflect, RegExpMethods, StringMethods, Symbols } from "#helpers/intrinsics";
+import { Buffers, Map, MapMethods, Objects, Reflect, RegExpMethods, StringMethods, Symbols } from "#helpers/intrinsics";
+
+/**
+ * What vitest 5.1.1 puts between a module's code and its source map in the file a reply's `tmp` names.
+ * @type {string}
+ * @private
+ */
+const SOURCE_MAP_SEPARATOR = "\n//# vitestSourceMap=";
+
+/**
+ * What vitest puts before the base64 source map it appends to the code when it inlines the map.
+ * @type {string}
+ * @private
+ */
+const INLINE_SOURCE_MAP = "\n//# sourceMappingURL=data:application/json;base64,";
 
 const SLOT = Symbols.for("@cldmv/slothlet.vitestFetched");
 const G = globalThis;
@@ -111,25 +130,49 @@ function install() {
 	if (read === null) return;
 	const readFileSync = fs.readFileSync;
 	const realEmit = P.emit;
-	/** @type {Map<string, string>} */
+	const bufferToString = typeof G.Buffer?.prototype?.toString === "function" ? G.Buffer.prototype.toString : null;
+	/** @type {Map<string, {code: string, map: string|null}>} */
 	const records = new Map();
+
+	const record = (id, code, map) => {
+		MapMethods.set(records, id, { __proto__: null, code, map: typeof map === "string" && map !== "" ? map : null });
+	};
 
 	const take = (result) => {
 		const id = own(result, "id");
 		if (typeof id !== "string") return;
 		const code = own(result, "code");
 		if (typeof code === "string") {
-			MapMethods.set(records, id, code);
+			record(id, code, own(result, "sourceMap"));
 			return;
 		}
 		const tmp = own(result, "tmp");
 		if (typeof tmp !== "string") return;
+		let content;
 		try {
-			MapMethods.set(records, id, Reflect.apply(readFileSync, fs, [tmp, "utf-8"]));
+			content = Reflect.apply(readFileSync, fs, [tmp, "utf-8"]);
 		} catch {
 			// A file that cannot be read records nothing: the compile is refused.
 			MapMethods.delete(records, id);
+			return;
 		}
+		// The map is JSON without line breaks, so the last marker is the separator.
+		const index = StringMethods.lastIndexOf(content, SOURCE_MAP_SEPARATOR);
+		if (index === -1) record(id, content, null);
+		else record(id, StringMethods.slice(content, 0, index), StringMethods.slice(content, index + SOURCE_MAP_SEPARATOR.length));
+	};
+
+	/**
+	 * Whether `body` is the recorded code followed by exactly its recorded source map, inlined as vitest inlines it.
+	 * @param {string} body - The code inside vitest's wrapper.
+	 * @param {{code: string, map: string|null}} recorded - The record.
+	 * @returns {boolean} True for that code.
+	 */
+	const inlined = (body, recorded) => {
+		if (recorded.map === null || bufferToString === null) return false;
+		if (!StringMethods.startsWith(body, recorded.code)) return false;
+		const base64 = Reflect.apply(bufferToString, Buffers.from(recorded.map, "utf8"), ["base64"]);
+		return StringMethods.slice(body, recorded.code.length) === `${INLINE_SOURCE_MAP}${base64}\n`;
 	};
 
 	const emit = function emit(event, message) {
@@ -168,7 +211,8 @@ function install() {
 			if (head === null || !StringMethods.endsWith(code, "\n}}")) return false;
 			const recorded = MapMethods.get(records, filename);
 			if (recorded === undefined) return false;
-			if (StringMethods.slice(code, head[0].length, code.length - 3) !== recorded) return false;
+			const body = StringMethods.slice(code, head[0].length, code.length - 3);
+			if (body !== recorded.code && !inlined(body, recorded)) return false;
 			MapMethods.delete(records, filename);
 			return true;
 		}
