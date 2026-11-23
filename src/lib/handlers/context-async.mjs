@@ -82,6 +82,33 @@ const trustedRootOwn = trustedRootInternals("lib/handlers/context-async");
  * @private
  */
 const JOB_ACTING_FOR = new WeakMap();
+/**
+ * Whether {@link JOB_ACTING_FOR} has ever been given an entry: until then no job runs for a module, and a callback's
+ * start skips the lookup.
+ * @type {boolean}
+ * @private
+ */
+let jobActingForFilled = false;
+/**
+ * What {@link currentJobResource} answers when the async resource running now cannot be read.
+ * @type {object}
+ * @private
+ */
+const NO_JOB_RESOURCE = Objects.freeze({ __proto__: null });
+
+/**
+ * The async resource whose callback is running now, read once per `before` / `after` of the job hook and handed to each
+ * step there.
+ * @returns {object} The resource, or {@link NO_JOB_RESOURCE} when the platform has no way to read it or reading it threw.
+ * @private
+ */
+function currentJobResource() {
+	try {
+		return executionAsyncResource === null ? NO_JOB_RESOURCE : executionAsyncResource();
+	} catch {
+		return NO_JOB_RESOURCE;
+	}
+}
 const { buildCapturedFlowStore } = trustedRootOwn;
 const { attributeResult, enterCall, ownReceiver, resolveSupplier, runningOutsideFlow, sampleStoreScripts, scopeEnteredByCode } =
 	framePlacementInternals("lib/handlers/context-async");
@@ -998,20 +1025,28 @@ export class AsyncContextManager {
 			hook = createHook({
 				init(asyncId, type, triggerAsyncId, resource) {
 					if (manager.#countingWork) manager.#countWork(asyncId, type, resource);
-					if (trustedRootOwn.ACTING_FOR.length !== 0) WeakMapMethods.set(JOB_ACTING_FOR, resource, trustedRootOwn.actingForNow());
+					if (trustedRootOwn.ACTING_FOR.length !== 0) {
+						WeakMapMethods.set(JOB_ACTING_FOR, resource, trustedRootOwn.actingForNow());
+						jobActingForFilled = true;
+					}
 					manager.#jobMade(resource, type);
 				},
 				before() {
 					manager.#stretch++;
-					manager.#jobBegins();
-					if (manager.#jobsMarked) manager.#jobStarts();
-					manager.#actingJobBegins();
+					const resource = currentJobResource();
+					manager.#jobBegins(resource);
+					if (manager.#jobsMarked) manager.#jobStarts(resource);
+					manager.#actingJobBegins(resource);
 				},
 				after() {
 					manager.#stretch++;
-					manager.#actingJobEnds();
-					if (manager.#runningJobs.length !== 0) manager.#jobEnds();
-					manager.#jobFinishes();
+					const resource =
+						manager.#actingJobs.length !== 0 || manager.#runningJobs.length !== 0 || manager.#jobStack.length !== 0
+							? currentJobResource()
+							: NO_JOB_RESOURCE;
+					manager.#actingJobEnds(resource);
+					if (manager.#runningJobs.length !== 0) manager.#jobEnds(resource);
+					manager.#jobFinishes(resource);
 				},
 				// Part of this hook rather than one enabled while a run is live: Node's `enable()` and `disable()` add the hook
 				// to an array of its own, through any index setter module code has put on `Array.prototype` by then.
@@ -1241,13 +1276,13 @@ export class AsyncContextManager {
 	/**
 	 * A resource's callback starts: one made while a function another module handed over ran for that module runs for
 	 * it too, until it ends.
+	 * @param {object} resource - The resource whose callback starts (see {@link currentJobResource}).
 	 * @returns {void}
 	 * @private
 	 */
-	#actingJobBegins() {
+	#actingJobBegins(resource) {
+		if (!jobActingForFilled || resource === NO_JOB_RESOURCE || resource === undefined || resource === null) return;
 		try {
-			const resource = executionAsyncResource?.();
-			if (resource === undefined || resource === null) return;
 			const acting = WeakMapMethods.get(JOB_ACTING_FOR, resource);
 			if (acting === undefined) return;
 			const stack = trustedRootOwn.ACTING_FOR;
@@ -1260,12 +1295,13 @@ export class AsyncContextManager {
 
 	/**
 	 * A resource's callback ends: what {@link AsyncContextManager#actingJobBegins} pushed for it is taken off again.
+	 * @param {object} resource - The resource whose callback ends (see {@link currentJobResource}).
 	 * @returns {void}
 	 * @private
 	 */
-	#actingJobEnds() {
+	#actingJobEnds(resource) {
 		const jobs = this.#actingJobs;
-		if (jobs.length === 0 || jobs[jobs.length - 1].resource !== executionAsyncResource?.()) return;
+		if (jobs.length === 0 || jobs[jobs.length - 1].resource !== resource) return;
 		const { base } = ArrayMethods.pop(jobs);
 		const stack = trustedRootOwn.ACTING_FOR;
 		while (stack.length > base) ArrayMethods.pop(stack);
@@ -1273,13 +1309,14 @@ export class AsyncContextManager {
 
 	/**
 	 * A resource's callback starts: kept on {@link AsyncContextManager#jobStack} until it ends.
+	 * @param {object} resource - The resource whose callback starts (see {@link currentJobResource}).
 	 * @returns {void}
 	 * @private
 	 */
-	#jobBegins() {
+	#jobBegins(resource) {
+		if (resource === NO_JOB_RESOURCE) return;
 		try {
 			const stack = this.#jobStack;
-			const resource = executionAsyncResource();
 			stack[stack.length] = resource;
 			const made = WeakMapMethods.get(JOB_CALLBACK, resource);
 			if (made !== undefined && (made.slot === null || made.slot === "callback")) made.entries++;
@@ -1290,12 +1327,13 @@ export class AsyncContextManager {
 
 	/**
 	 * A resource's callback ends. Node calls `after` for every `before`, so the innermost entry is its own.
+	 * @param {object} resource - The resource whose callback ends (see {@link currentJobResource}).
 	 * @returns {void}
 	 * @private
 	 */
-	#jobFinishes() {
+	#jobFinishes(resource) {
 		const stack = this.#jobStack;
-		if (stack.length !== 0 && stack[stack.length - 1] === executionAsyncResource()) {
+		if (stack.length !== 0 && stack[stack.length - 1] === resource) {
 			if (stack[stack.length - 1] === this.#scriptBegun) this.#scriptBegun = null;
 			stack.length--;
 		}
@@ -1341,12 +1379,13 @@ export class AsyncContextManager {
 
 	/**
 	 * A resource's callback starts: a marked one runs as the code that made it (see {@link AsyncContextManager#activeStore}).
+	 * @param {object} resource - The resource whose callback starts (see {@link currentJobResource}).
 	 * @returns {void}
 	 * @private
 	 */
-	#jobStarts() {
+	#jobStarts(resource) {
+		if (resource === NO_JOB_RESOURCE) return;
 		try {
-			const resource = executionAsyncResource();
 			const view = WeakMapMethods.get(OUTSIDE_JOBS, resource);
 			if (view !== undefined) listPush(this.#runningJobs, { resource, view });
 		} catch {
@@ -1357,13 +1396,14 @@ export class AsyncContextManager {
 	/**
 	 * A resource's callback ends. Node calls `after` for every `before`, also when the callback threw and the error was
 	 * handled, so the innermost marked job ends with its own `after`.
+	 * @param {object} resource - The resource whose callback ends (see {@link currentJobResource}).
 	 * @returns {void}
 	 * @private
 	 */
-	#jobEnds() {
+	#jobEnds(resource) {
 		try {
 			const jobs = this.#runningJobs;
-			if (jobs[jobs.length - 1].resource === executionAsyncResource()) ArrayMethods.pop(jobs);
+			if (jobs[jobs.length - 1].resource === resource) ArrayMethods.pop(jobs);
 		} catch {
 			// Left as it is: the next `after` of that job takes it off.
 		}

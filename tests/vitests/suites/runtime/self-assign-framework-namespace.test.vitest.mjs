@@ -85,7 +85,7 @@ describe.each(CONFIGS)("module writes to the framework namespace (#625) — $mod
 		 * @returns {Promise<object>} The composed api.
 		 */
 		async function load() {
-			api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, hook: true, ...options });
+			api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, ...options });
 			await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { id: "guest" });
 			return api;
 		}
@@ -302,7 +302,7 @@ describe.each(CONFIGS)("module writes to the framework namespace, permission sys
 	 * @returns {Promise<object>} The composed api.
 	 */
 	async function load(options = {}) {
-		api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, hook: true, ...options });
+		api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, ...options });
 		await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { id: "guest" });
 		return api;
 	}

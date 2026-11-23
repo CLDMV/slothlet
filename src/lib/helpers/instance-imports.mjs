@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-23T08:13:18-08:00 (1795450398)
+ *	@Last modified time: 2026-11-22T23:50:49-08:00 (1795420249)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -901,9 +901,9 @@ function sharedState() {
 	if (held !== undefined) return (SHARED = held);
 	OWN_STATE = Objects.freeze({
 		recordImports: recordImportsHere,
-		noteSelfImporter: noteSelfImporterHere,
-		selfImporterUrls: selfImporterUrlsHere,
-		forgetSelfImporters: forgetSelfImportersHere,
+		noteSelfImporter: noteSelfImporterForCopy,
+		selfImporterUrls: selfImporterUrlsForCopy,
+		forgetSelfImporters: forgetSelfImportersForCopy,
 		imports: IMPORTS_READER,
 		scripts: SCRIPTS_READER,
 		commonJS: COMMONJS_READER,
@@ -1291,7 +1291,8 @@ function setInstanceSelfKind(instanceID, callable) {
 	if (callable === null) {
 		MapMethods.delete(SELF_KINDS, instanceID);
 		MapMethods.delete(SELF_BINDINGS, instanceID);
-		sharedState().forgetSelfImporters(instanceID);
+		if (isKeeper()) forgetSelfImportersHere(instanceID);
+		else sharedState().forgetSelfImporters(instanceID);
 		MapMethods.delete(SELF_CLOSED, instanceID);
 		rebindSharedSelf();
 		return;
@@ -1370,13 +1371,82 @@ function selfImporterKey(ref) {
  * @private
  */
 function noteSelfImporterHere(instanceID, importer, url) {
-	if (typeof importer !== "string") return;
+	if (typeof importer !== "string" || !isRuntimeEntryURL(url)) return;
 	let byFile = MapMethods.get(SELF_IMPORTERS, instanceID);
 	if (!byFile) MapMethods.set(SELF_IMPORTERS, instanceID, (byFile = new Map()));
 	const key = selfImporterKey(importer);
 	let urls = MapMethods.get(byFile, key);
 	if (!urls) MapMethods.set(byFile, key, (urls = new Set()));
-	SetMethods.add(urls, url);
+	// This copy's own entries always; another copy's while the file holds fewer than the most kept.
+	if (ArrayMethods.includes(SINGLE_COPY_FILES, url) || SetMethods.size(urls) < SELF_IMPORTER_URLS_PER_FILE) SetMethods.add(urls, url);
+}
+
+/**
+ * The most runtime entry files kept for one file of an instance beside this copy's own: each of the three entries, of
+ * two other copies of slothlet.
+ * @type {number}
+ * @private
+ */
+const SELF_IMPORTER_URLS_PER_FILE = 6;
+
+/**
+ * Whether a URL is that of one of slothlet's runtime entry files, this copy's or another's: a `file:` URL of
+ * `runtime/runtime.mjs`, `runtime/runtime-asynclocalstorage.mjs` or `runtime/runtime-livebindings.mjs`.
+ * @param {*} url - The URL.
+ * @returns {boolean} True for such a URL.
+ * @private
+ */
+function isRuntimeEntryURL(url) {
+	if (typeof url !== "string") return false;
+	if (ArrayMethods.includes(SINGLE_COPY_FILES, url)) return true;
+	return RegExpMethods.exec(/^file:\/\/[^?#]*\/runtime\/runtime(?:-asynclocalstorage|-livebindings)?\.mjs$/, url) !== null;
+}
+
+/**
+ * The `noteSelfImporter` of the shared object. The object is on the global object, where a module's code can reach it
+ * too, so a record is taken only from slothlet's own code (another copy's resolve hook), or from the note the vite
+ * plugin appends to an instance file, which has to come from the top level of the module vitest's or vite's runner is
+ * evaluating for that very file under that instance's query (see {@link setCallerCheck}): no module records anything
+ * for another module's file, or for another instance. Anything else is ignored.
+ * @param {string} instanceID - The instance.
+ * @param {string} importer - The importing file's URL, module id or path.
+ * @param {string} url - The runtime entry file's URL.
+ * @returns {void}
+ * @private
+ */
+function noteSelfImporterForCopy(instanceID, importer, url) {
+	if (typeof instanceID !== "string" || instanceID === "" || typeof importer !== "string") return;
+	if (!calledBySlothlet(noteSelfImporterForCopy)) {
+		const entry = unreadError(64);
+		const location = entry === null ? null : (CALLER_CHECK?.(entry) ?? null);
+		if (typeof location !== "string") return;
+		const unpacked = splitQuery(location);
+		const params = new URLSearchParams(unpacked[1] ?? "");
+		if (URLSearchParamsMethods.get(params, "slothlet_instance") !== instanceID) return;
+		if (toSlashPath(selfImporterKey(unpacked[0])) !== toSlashPath(selfImporterKey(importer))) return;
+	}
+	noteSelfImporterHere(instanceID, importer, url);
+}
+
+/**
+ * The `selfImporterUrls` of the shared object: read by another copy of slothlet alone; module code gets nothing.
+ * @param {string} instanceID - The instance.
+ * @param {string} file - The file's path.
+ * @returns {string[]} Their URLs; empty when none was recorded, or for code that is not slothlet's.
+ * @private
+ */
+function selfImporterUrlsForCopy(instanceID, file) {
+	return calledBySlothlet(selfImporterUrlsForCopy) ? selfImporterUrlsHere(instanceID, file) : [];
+}
+
+/**
+ * The `forgetSelfImporters` of the shared object: taken from another copy of slothlet alone.
+ * @param {string} instanceID - The instance.
+ * @returns {void}
+ * @private
+ */
+function forgetSelfImportersForCopy(instanceID) {
+	if (calledBySlothlet(forgetSelfImportersForCopy)) forgetSelfImportersHere(instanceID);
 }
 
 /**
@@ -1420,10 +1490,14 @@ const MAIN_RUNTIME_URL = URLMethods.href(new URL("../runtime/runtime.mjs", impor
  * @internal
  */
 function moduleSelfForm(instanceID, filePath = null) {
-	const own = filePath === null ? [] : sharedState().selfImporterUrls(instanceID, filePath);
+	const own =
+		filePath === null ? [] : isKeeper() ? selfImporterUrlsHere(instanceID, filePath) : sharedState().selfImporterUrls(instanceID, filePath);
 	if (own.length > 0) {
 		if (ArrayMethods.includes(own, MAIN_RUNTIME_URL)) return instanceSelfForm(instanceID, MAIN_RUNTIME_URL);
-		return instanceSelfForm(instanceID, own[0]);
+		for (let ofIndex = 0; ofIndex < own.length; ofIndex++) {
+			const form = instanceSelfForm(instanceID, own[ofIndex]);
+			if (form !== undefined) return form;
+		}
 	}
 	const byURL = MapMethods.get(SELF_BINDINGS, instanceID);
 	if (byURL && MapMethods.size(byURL) > 0 && !MapMethods.has(byURL, MAIN_RUNTIME_URL)) {
@@ -4229,7 +4303,8 @@ const HOOKS = Objects.freeze({
 		if (ArrayMethods.includes(SINGLE_COPY_FILES, url) && MapMethods.has(SELF_FORMS, url) && !isOtherCopysFile(context?.parentURL)) {
 			const instanceID = selfInstanceOf(context?.parentURL);
 			if (instanceID !== null) {
-				sharedState().noteSelfImporter(instanceID, context?.parentURL, url);
+				if (isKeeper()) noteSelfImporterHere(instanceID, context?.parentURL, url);
+				else sharedState().noteSelfImporter(instanceID, context?.parentURL, url);
 				return { url: `${SELF_PREFIX}${instanceID}|${url}`, format: "module", shortCircuit: true };
 			}
 		}

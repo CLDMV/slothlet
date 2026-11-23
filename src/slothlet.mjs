@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-22T22:10:17-08:00 (1795414217)
+ *	@Last modified time: 2026-11-22T23:31:53-08:00 (1795419113)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -391,6 +391,7 @@ const RELOAD_COPY_FIELDS = [
 	"_ownBuiltins",
 	"_moduleIncarnations",
 	"_retiredIncarnations",
+	"_lazyTally",
 	"_totalLazyCount",
 	"_unmaterializedLazyCount",
 	"_materializationComplete",
@@ -991,6 +992,10 @@ class Slothlet {
 		this._restarting = false;
 
 		// Lazy materialization tracking (for api.slothlet.materialize)
+		// The count a lazy wrapper joins: every wrapper records the one its tree's set has at construction, and moves only
+		// that count. A full reload, a restart and a run's copy of the tree start a new one, so a node of the tree they
+		// replaced (a reference held from before, or a run kept across the change) leaves the new tree's count alone.
+		this._lazyTally = {};
 		this._totalLazyCount = 0; // Total lazy wrappers created
 		this._unmaterializedLazyCount = 0; // Currently unmaterialized lazy wrappers
 		this._materializationComplete = false; // Set to true when all lazy wrappers materialized
@@ -2024,11 +2029,13 @@ class Slothlet {
 				}
 				return record;
 			};
-			const rootPrototypeNow = () => {
+			// The root's record, its prototype brought up to date: the root file's function's until the root is given one.
+			const rootRecordNow = () => {
 				const rootPrototype = rootRecord();
 				if (!rootPrototype.given) rootPrototype.prototype = Reflect.getPrototypeOf(this.api);
-				return rootPrototype.prototype;
+				return rootPrototype;
 			};
+			const rootPrototypeNow = () => rootRecordNow().prototype;
 			// Whether the root reads a tree a run has of its own: the root's target is shared with the instance.
 			const inRunTree = () => this.api !== this[INSTANCE_FIELD]("api");
 			// A run that started before a change to the root reads the root as it was (see helpers/run-snapshot): the root's
@@ -2046,14 +2053,12 @@ class Slothlet {
 			// Whether a member is read from a prototype the function root was given: one the root does not hold itself.
 			const rootInherits = (prop) => {
 				if (!isCallable) return false;
-				rootPrototypeNow();
-				return rootRecord().given && !Objects.hasOwn(this.api, prop);
+				return rootRecordNow().given && !Objects.hasOwn(this.api, prop);
 			};
 			// The prototype the root has now, as the root itself holds it: an object root's is its api's.
 			const rootHeld = () => (isCallable ? rootPrototypeNow() : Reflect.getPrototypeOf(this.api));
 			// Whether the root has a prototype it was given (an object root starts with `Object.prototype`).
-			const rootGiven = () =>
-				isCallable ? (rootPrototypeNow(), rootRecord().given) : Reflect.getPrototypeOf(this.api) !== Objects.prototype;
+			const rootGiven = () => (isCallable ? rootRecordNow().given : Reflect.getPrototypeOf(this.api) !== Objects.prototype);
 			// The views module code is handed of a prototype the root was given, kept for as long as the root has it, and
 			// the prototype as whoever reads the root now is handed it: the host the object, a module its own view.
 			const rootViews = { prototypeViews: null };
@@ -3441,6 +3446,7 @@ class Slothlet {
 		const epoch = --this.#copyEpochs;
 		next._buildEpoch = epoch;
 		next._treeEpoch = epoch;
+		next._lazyTally = {};
 		next._totalLazyCount = 0;
 		next._unmaterializedLazyCount = 0;
 		next._materializationComplete = false;
@@ -3944,7 +3950,11 @@ class Slothlet {
 			envTarget: this.envTarget,
 			reference: this.reference,
 			context: this.context,
-			isLoaded: this.isLoaded
+			isLoaded: this.isLoaded,
+			_lazyTally: this._lazyTally,
+			_totalLazyCount: this._totalLazyCount,
+			_unmaterializedLazyCount: this._unmaterializedLazyCount,
+			_materializationComplete: this._materializationComplete
 		};
 	}
 
@@ -3972,6 +3982,10 @@ class Slothlet {
 			this.reference = kept.reference;
 			this.context = kept.context;
 			this.isLoaded = kept.isLoaded;
+			this._lazyTally = kept._lazyTally;
+			this._totalLazyCount = kept._totalLazyCount;
+			this._unmaterializedLazyCount = kept._unmaterializedLazyCount;
+			this._materializationComplete = kept._materializationComplete;
 		}
 		this.#carriedContext = null;
 		// The context the instance's code runs in now answers with that copy: a reload that switched IDs set the new ID's
@@ -4049,7 +4063,13 @@ class Slothlet {
 		const carried = window === null ? { history: null } : null;
 		if (carried !== null) this.#carryOnLoad = () => this.#carryIntoBuild(oldHandlers, oldApiState, carried);
 
-		// 4. Do a FRESH load() with the new permanent instanceID
+		// 4. Do a FRESH load() with the new permanent instanceID. The new tree's lazy nodes are counted from zero, as a
+		//    fresh instance's are, in a count of their own: the replaced tree's nodes keep moving the count they joined.
+		//    wait() callers queued before the reload stay queued, and settle once the new tree has loaded.
+		this._lazyTally = {};
+		this._totalLazyCount = 0;
+		this._unmaterializedLazyCount = 0;
+		this._materializationComplete = false;
 		this.#carriedContext = this.context;
 		try {
 			await this.load(this.config, loadInstanceID);
@@ -4488,6 +4508,7 @@ class Slothlet {
 			await this._clearModuleCaches();
 			this.envSnapshot = null;
 			this._typesGenerated = false;
+			this._lazyTally = {};
 			this._totalLazyCount = 0;
 			this._unmaterializedLazyCount = 0;
 			this._materializationComplete = false;
@@ -5172,7 +5193,7 @@ export default slothlet;
  * @property {Function} [slothlet.diag.owner.get] - Get the owning moduleIDs for a specific API path. Only available when `diagnostics: true`. %%sig: (apiPath: string): string[]%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', diagnostics: true });|const owners = api.slothlet.diag.owner.get('math.add');|// ['utils/math.mjs']%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ base: './api', diagnostics: true });|  const owners = api.slothlet.diag.owner.get('math.add');|  // ['utils/math.mjs']|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ base: './api', diagnostics: true });|  const owners = api.slothlet.diag.owner.get('math.add');|  // ['utils/math.mjs']|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ base: './api', diagnostics: true });|const owners = api.slothlet.diag.owner.get('math.add');|// ['utils/math.mjs']%%
  * @property {function(): Object} [slothlet.diag.owner.list] - Return ownership diagnostics for all registered API paths. Only available when `diagnostics: true`. %%sig: (): Object%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', diagnostics: true });|const ownership = api.slothlet.diag.owner.list();%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ base: './api', diagnostics: true });|  const ownership = api.slothlet.diag.owner.list();|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ base: './api', diagnostics: true });|  const ownership = api.slothlet.diag.owner.list();|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ base: './api', diagnostics: true });|const ownership = api.slothlet.diag.owner.list();%%
  * @property {object} [slothlet.diag.reference] - The `reference` config value as passed to `slothlet()`.
- * @property {object} slothlet.hook - Hook registration surface — only present when the `hook` option is enabled.
+ * @property {object} slothlet.hook - Hook registration surface — present on every instance; the `hook` option only sets whether hooks start enabled, and `slothlet.hook.enable()` turns them on at runtime.
  * @property {Function} slothlet.hook.clear - Alias for `remove()`. %%sig: ([filter]: Object): void%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', hook: true });|api.slothlet.hook.clear({ type: 'before' });%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ base: './api', hook: true });|  api.slothlet.hook.clear({ type: 'before' });|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ base: './api', hook: true });|  api.slothlet.hook.clear({ type: 'before' });|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ base: './api', hook: true });|api.slothlet.hook.clear({ type: 'before' });%%
  * @property {Function} slothlet.hook.disable - Disable hooks matching a filter (empty = disable all). %%sig: ([filter]: Object): void%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', hook: true });|api.slothlet.hook.disable(); // disable all|api.slothlet.hook.disable({ type: 'before' }); // disable only before hooks%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ base: './api', hook: true });|  api.slothlet.hook.disable(); // disable all|  api.slothlet.hook.disable({ type: 'before' }); // disable only before hooks|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ base: './api', hook: true });|  api.slothlet.hook.disable(); // disable all|  api.slothlet.hook.disable({ type: 'before' }); // disable only before hooks|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ base: './api', hook: true });|api.slothlet.hook.disable(); // disable all|api.slothlet.hook.disable({ type: 'before' }); // disable only before hooks%%
  * @property {Function} slothlet.hook.enable - Enable hooks matching a filter (empty = enable all). %%sig: ([filter]: Object): void%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ base: './api', hook: true });|api.slothlet.hook.disable();|// later...|api.slothlet.hook.enable(); // re-enable all%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ base: './api', hook: true });|  api.slothlet.hook.disable();|  // later...|  api.slothlet.hook.enable(); // re-enable all|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ base: './api', hook: true });|  api.slothlet.hook.disable();|  // later...|  api.slothlet.hook.enable(); // re-enable all|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ base: './api', hook: true });|api.slothlet.hook.disable();|// later...|api.slothlet.hook.enable(); // re-enable all%%

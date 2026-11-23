@@ -372,7 +372,7 @@
 		"HINT_TYPESCRIPT_TYPES_NAME_MISSING": "'types' 構成に 'name' を追加してください (例: types: { output: './types/api.d.ts', name: 'MyAPI' })。",
 		"TYPESCRIPT_TYPE_GENERATION_FAILED": "型生成に失敗しました: {error}",
 		"HINT_TYPESCRIPT_TYPE_GENERATION_FAILED": "TypeScript 宣言を生成する子プロセスでエラーが発生しました。エラーメッセージで詳細を確認し、TypeScript ソースファイルが有効であることを確認してください。",
-		"TYPESCRIPT_TYPE_GENERATION_FORK_FAILED": "型生成ワーカープロセスを開始できませんでした。 Node.js に子プロセスをフォークする権限があること、および lib/processors/type-generation-worker.mjs スクリプトが存在することを確認してください。",
+		"TYPESCRIPT_TYPE_GENERATION_FORK_FAILED": "型生成プロセスをフォークできませんでした: {error}",
 		"HINT_TYPESCRIPT_TYPE_GENERATION_FORK_FAILED": "Node.js がプロセスをフォークできること、および lib/processors/type-generation-worker.mjs が存在することを確認してください。",
 		"TYPESCRIPT_TYPE_GENERATION_WORKER_NO_CONFIG": "型生成ワーカーが設定なしで起動されました（SLOTHLET_CONFIG が設定されていません）。",
 		"HINT_TYPESCRIPT_TYPE_GENERATION_WORKER_NO_CONFIG": "このワーカーは TypeScript の strict モードが SLOTHLET_CONFIG 環境変数に設定を入れて起動します。ファイルを直接実行せず、slothlet にフォークさせてください。",
