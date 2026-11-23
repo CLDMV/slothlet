@@ -146,6 +146,55 @@ await api.slothlet.context.scope({ context: {}, isolation: "partial", fn: () => 
 
 State a run needs to hand back belongs in its return value, not in `self`.
 
+### A run reads a snapshot of the instance as of its start
+
+- v3: a `run()` / `scope()` read the instance live. A change the host or a module made after the run started (`api.x = …`, a member or a `Map` changed through the api) reached the open run, and data objects such as a `Map` or a `Date` were the instance's own objects inside it.
+- v4: a run reads the api tree, every value reachable through it, the permission rules, hooks, metadata, versioning and the context as they were when it started. A run opened afterwards reads the new value. What a run writes stays in the run. Nothing is copied when a run opens; the instance saves an object just before it first changes it while a run is open.
+
+```javascript
+// api/settings.mjs
+import { self, context } from "@cldmv/slothlet/runtime";
+export const cfg = { n: 1 };
+export function read() {
+	return [context.region, self.settings.cfg.n];
+}
+
+// host
+const api = await slothlet({ base: "./api", context: { region: "eu" } });
+let release;
+const gate = new Promise((resolve) => (release = resolve));
+const pending = api.slothlet.context.run({ user: "alice" }, async () => {
+	await gate;
+	return api.settings.read();
+});
+api.slothlet.context.set({ region: "us" }); // after the run started
+api.settings.cfg.n = 5; // after the run started
+release();
+await pending; // ["eu", 1]: the run reads the instance as of its start
+api.settings.read(); // ["us", 5]
+```
+
+What to check:
+
+- **Code that expects a run to see later changes.** A long-running run, such as a server's `listen()` called inside `run()`, keeps reading the instance as it was when the run opened, so it doesn't see later config. Open the server outside the run and open a run per request, or keep changing values in something the snapshot doesn't cover (a module's own variables, a live resource).
+- **Identity checks on built-ins.** A `Map`, `Set`, `Date`, typed array and the like read in a run is the run's own copy, so `===` against the instance's object is `false`. Compare by content, or by key: a copied `Map` keeps the same key objects.
+- **Emitters are shared.** An `EventEmitter` or `EventTarget` is the live object in every run: listeners, events and plain properties a run sets on it reach the instance.
+- **Promises.** While a run of the instance is open, a promise a call returns is a new promise object that settles one microtask later with the same value. Code that compares a returned promise with `===`, or counts microtasks, sees the difference.
+- **Outside the snapshot.** A module's own variables, `#private` methods, live resources and references kept from before the run are the objects themselves. The full list is in [CONTEXT-PROPAGATION.md](./CONTEXT-PROPAGATION.md#what-a-runs-snapshot-covers-and-what-it-doesnt).
+
+### The host's `api` inside a run, and `run.self()`
+
+Inside a run, `api` is the instance's api: a change the host makes through it in the run (a write, `Object.defineProperty`, `delete`, a closing, `Object.setPrototypeOf`) reaches the instance. To keep the host's changes in the run, use the run's own view, which `run.self()` and `scope({ self: true })` hand to the callback:
+
+```javascript
+await api.slothlet.context.run.self({ requestId: "req-123" }, (view) => {
+	view.draft = "note"; // stays in the run
+	api.saved = "note"; // reaches the instance
+});
+```
+
+The view is what module code's `self` resolves to in that run. See [CONTEXT-PROPAGATION.md](./CONTEXT-PROPAGATION.md#apislothletcontextrunselfcontextdata-callback-args).
+
 ### `run()` and `scope()` are isolated in every permission mode
 
 Every `run()` / `scope()` keeps its context and its callers to itself, on both runtimes, whatever `permissions.mode` says (no `permissions` config, `"off"`, `"disabled"`, `"on"` or `"strict"`). The permission mode decides only what code is allowed to do, not which flow it sees.
@@ -173,14 +222,53 @@ A process with only live instances still makes no `async_hooks` hook and no `Asy
 - v3.24.0: a value a module made could come back as a Proxy with the permission system off, and nested data lost its identity ([#726](https://github.com/CLDMV/slothlet/issues/726)).
 - v4: a function read through the api is the same value inside and outside a `run()` and in every run, so `emitter.off(fn)`, `Set` / `Map` keys and memoised lookups find it. Under `permissions.caller.attribution: "precise"` it is its module's one stand-in, the same in every run. A job a flow's own code hands Node (a promise reaction, a timer, an immediate, a microtask, a listener) still runs in that flow.
 
-### Writing a member needs the access a read or call of it would
+### There is no write without the read
 
-With the permission system on, every module write that passes the ownership and write rules is also held to the access the module would need to call or read the member it changes: assignment, `defineProperty`, `delete`, `Reflect.set`, writes through a held node or view, class prototype members, data objects, and `api.add` / `api.remove` from module code.
+With the permission system on, every module write that passes the ownership and write rules is also held to the read of the member it changes, as the read gate decides it: assignment, `defineProperty`, `delete`, `Reflect.set`, writes through a held node or view, class prototype members, data objects, and `api.add` / `api.remove` from module code.
 
-- v3: a module could replace, redefine or delete a member it was refused a call or read of, and an explicit write grant passed a write without the read and call rules.
-- v4: replacing a node is held to the access of every member beneath it; a deny on an object member of a module's data covers writes beneath it as it covers reads; giving a value a member it inherits or one the language reads by itself (`toJSON`, `toString`, `valueOf`, …) is held to the access of the value's path; and an explicit write grant also needs the read or call. A member that does not exist yet takes over nothing, and an accessor keeps the write rules alone. Permissions off or disabled are unchanged. See [PERMISSIONS.md](./PERMISSIONS.md#write-permissions).
+- v3: a module could replace, redefine or delete a member it was refused a read of, and an explicit write grant passed a write without the read rules.
+- v4: replacing a node is held to the read of every member beneath it; a deny on an object member of a module's data covers writes beneath it as it covers reads; giving a value a member it inherits or one the language reads by itself (`toJSON`, `toString`, `valueOf`, …) is held to the access of the value's path. A function member is held to the read too, so a `:call` deny keeps a module from calling a function, not from replacing it where a write rule grants that. A member that does not exist yet takes over nothing, and an accessor keeps the write rules alone. Permissions off or disabled are unchanged. See [PERMISSIONS.md](./PERMISSIONS.md#write-permissions).
 
-If a module legitimately rewrites members it may not call, add the matching call or read rule for it.
+If a module legitimately rewrites members it may not read, grant it with a `:write` rule, which grants the read as well (next section).
+
+### Rule access levels: `:call`, `:read`, `:access`, `:write`, `:full`
+
+A rule target's suffix now names which of a call, a read and a write the rule decides.
+
+| Suffix    | Call | Read | Write |
+| --------- | ---- | ---- | ----- |
+| `:call`   | ✓    |      |       |
+| `:read`   |      | ✓    |       |
+| `:access` | ✓    | ✓    |       |
+| `:write`  |      | ✓    | ✓     |
+| `:full`   | ✓    | ✓    | ✓     |
+
+- v3: a target without a suffix decided calls and reads, and `:write` decided writes alone.
+- v4: a target with no suffix is `:access`, so call and read rules keep their meaning. A `:write` allow now grants the read as well as the write, so under `policy: "deny"` a `:write` grant alone lets its callers read and write those members; add a deny on the read where a writer must not read. A `:write` deny refuses the write alone, and a deny that takes the read away refuses the write too. `self.access()` and `global.check.access()` answer whether both the call and the read are allowed. See [PERMISSIONS.md](./PERMISSIONS.md#access-levels).
+
+### A rule target with an unknown suffix is refused
+
+- v3: a target whose suffix named no level and no hook type (`secret.**:wirte`) was kept as a rule on the literal target and matched no api path.
+- v4: it throws `PERMISSION_RULE_INVALID` wherever a rule comes in: the config's `permissions.rules`, `rules.add`, a manifest, the `permissions` option of `api.add`, and rules module code registers. A `capability:` target takes no suffix check. Fix the spelling; an instance whose config carries such a rule does not start.
+
+### Code from before `restart()` is refused after it, with permissions on
+
+- v3: a function, bound function, closure or method a module returned before `restart()` kept working afterwards with the rebuilt instance's rights.
+- v4: while the permission system is on, everything such code does through `self` after the restart is refused with `PERMISSION_DENIED`, and so is a snapshot its call took, whether the host runs it outside any call or inside a `run()` / `scope()`. A `restart()` inside a run does the same for that run's copy. Read the member from `api` again (a held reference is re-pointed) to reach the new instance's code. `reload()` is not a restart: code from before a reload keeps working. With the permission system off, such code keeps working after a restart too.
+
+A `run()` / `scope()` open across a `restart()` that fails is refused as after `shutdown()`: its modules' calls through `self` throw `CONTEXT_NOT_ACTIVE_SELF`. See [RELOAD.md](./RELOAD.md).
+
+### `caller.capture: false` covers only code no module runs
+
+`permissions.caller.capture: false` still turns off the reader identity a function read out of the api carries.
+
+- v3: a reference invoked with no active caller was treated as the host's, wherever the call came from.
+- v4: the opt-out restores host standing only for a reference invoked with no module code running, as when the host calls a reference a module handed it. A reference a module's own code invokes, a callback the module defined included, is still enforced as that module, and the async runtime treats a host call outside every flow as the live runtime does. See [PERMISSIONS.md](./PERMISSIONS.md#captured-references-remember-who-captured-them).
+
+### `FOLDER_INVALID` text and the uncaught-error output
+
+- The `FOLDER_INVALID` message no longer names v3's `dir`. It reads "Configuration error: the path must be a non-empty string that points to an existing folder. Received: …", in every language. Match on `err.code`, not on the text.
+- The handler the package entry installs for an uncaught slothlet error prints the error's `cause` and `details` instead of v3's `originalError` and `context`. Update anything that parses that output.
 
 ### A member a module creates at runtime is owned by that module
 
