@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-24T14:47:56-08:00 (1795560476)
+ *	@Last modified time: 2026-11-24T15:41:50-08:00 (1795563710)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -17,19 +17,27 @@
  * @fileoverview `permissions.search` bounds how far a value handed into a call, or returned out of one, is searched.
  *
  * @description
- * `cyc.fnmod` is a node built from `cyc/fnmod.mjs`, and a rule denies `reader` that node. `reader` hands `friend` a
- * function it defines itself (`() => self.cyc.fnmod("x")`), nested inside objects (`{ v: { v: fn } }`) or beside
- * filler properties (`{ p0: 0, …, fn }`). `friend` reaches it and calls it, then calls `self.cyc.fnmod("own")` itself.
- * A call handed a function marks the call as handed the caller's code, and so does one handed plain data that nests
- * deeper or wider than the search reaches (it fails closed). So at every depth and width the handed function runs as
- * `reader`, its supplier, and is refused, while `friend`'s own call is allowed: past the limit the call is still marked.
- * `maker.make(n)` returns plain data `n` objects deep; with `caller.provenance: false` returned data is searched when it
- * is handed out, and data deeper than the search reaches comes back as a stand-in (a Proxy) instead of as itself.
+ * Handed data. `cyc.fnmod` is a node built from `cyc/fnmod.mjs`, and a rule denies `reader` that node. `reader` hands
+ * `friend` deeply frozen plain data, nested inside objects (`{ v: { v: 1 } }`) or with properties side by side
+ * (`{ p0: 0, … }`). `friend` then runs a function nested in data `bag.box` returns, which calls `self.cyc.fnmod("x")`.
+ * Deeply frozen plain data within the search leaves the call unmarked, so `bag`'s function runs under `friend` alone and
+ * is allowed (`"fn:x"`). Data nesting deeper or wider than the search reaches marks the call as handed `reader`'s code
+ * (it fails closed), so `bag`'s function runs under `reader` too and is refused.
  *
- * Levels count the objects around a value, the outermost included: `{ v: fn }` holds `fn` one level deep.
+ * Handed node functions. `owner/box.mjs` exports `secret` (a node, `owner.box.secret`) and `deep`/`wide`, which hand
+ * the module's own `secret` to `friend` nested in data. A rule denies `friend` that node. Within the search the
+ * function is found and `friend`'s call of it is a call of the node, refused; past the search it is not found, and
+ * `friend` runs it as a bare function (`"secret:x"`), the documented limit.
+ *
+ * Returned data. `maker.make(n)` returns plain data `n` objects deep; with `caller.provenance: false` returned data is
+ * searched when it is handed out, and data deeper than the search reaches comes back as a stand-in (a Proxy) instead of
+ * as itself.
+ *
+ * Levels count the objects around a value, the outermost included: `{ v: 1 }` holds `1` one level deep. Properties
+ * count every own property read, all levels together.
  *
  * Fixtures (written to tmp/): `base/root.mjs`, `cyc/fnmod.mjs` + `cyc/dn.mjs`, `reader/reader.mjs`, `friend/friend.mjs`,
- * `maker/maker.mjs`.
+ * `bag/bag.mjs`, `owner/box.mjs` + `owner/other.mjs`, `maker/maker.mjs`.
  * @module tests/vitests/suites/permissions/permissions-search-limits
  */
 
@@ -69,36 +77,77 @@ beforeAll(() => {
 		"\t}",
 		"};",
 		"export function deep(levels) {",
-		'\tlet value = () => self.cyc.fnmod("x");',
-		"\tfor (let i = 0; i < levels; i++) value = { v: value };",
-		"\treturn at(() => self.friend.dig(value, levels));",
+		"\tlet value = 1;",
+		"\tfor (let i = 0; i < levels; i++) value = Object.freeze({ v: value });",
+		"\treturn at(() => self.friend.look(value));",
 		"}",
-		"export function wide(filler) {",
+		"export function wide(count) {",
 		"\tconst value = {};",
-		"\tfor (let i = 0; i < filler; i++) value[`p${i}`] = 0;",
-		'\tvalue.fn = () => self.cyc.fnmod("x");',
-		"\treturn at(() => self.friend.pick(value));",
+		"\tfor (let i = 0; i < count; i++) value[`p${i}`] = 0;",
+		"\treturn at(() => self.friend.look(Object.freeze(value)));",
 		"}"
 	]);
 	write("friend/friend.mjs", [
 		'import { self } from "@cldmv/slothlet/runtime";',
-		"const both = async (handed) => {",
-		"\tlet outcome;",
+		"export async function look() {",
+		"\tconst box = await self.bag.box();",
 		"\ttry {",
-		"\t\toutcome = await handed();",
+		"\t\treturn await box.run();",
 		"\t} catch (error) {",
-		'\t\toutcome = "!" + (error?.code ?? error?.name);',
+		'\t\treturn "!" + (error?.code ?? error?.name);',
 		"\t}",
-		'\treturn (await self.cyc.fnmod("own")) + "|" + outcome;',
-		"};",
-		"export function dig(value, levels) {",
-		"\tfor (let i = 0; i < levels; i++) value = value.v;",
-		"\treturn both(value);",
 		"}",
-		"export function pick(value) {",
-		"\treturn both(value.fn);",
+		"export async function dig(value, levels) {",
+		"\tfor (let i = 0; i < levels; i++) value = value.v;",
+		"\ttry {",
+		'\t\treturn await value("x");',
+		"\t} catch (error) {",
+		'\t\treturn "!" + (error?.code ?? error?.name);',
+		"\t}",
+		"}",
+		"export async function pick(value) {",
+		"\ttry {",
+		'\t\treturn await value.fn("x");',
+		"\t} catch (error) {",
+		'\t\treturn "!" + (error?.code ?? error?.name);',
+		"\t}",
 		"}"
 	]);
+	write("bag/bag.mjs", [
+		'import { self } from "@cldmv/slothlet/runtime";',
+		'export const box = () => ({ run: () => self.cyc.fnmod("x") });'
+	]);
+	write("owner/box.mjs", [
+		"export function secret(x) {",
+		'\treturn "secret:" + x;',
+		"}",
+		"export function share(key) {",
+		"\tglobalThis[key] = secret;",
+		"}"
+	]);
+	write("carrier/carrier.mjs", [
+		'import { self } from "@cldmv/slothlet/runtime";',
+		"const at = async (step) => {",
+		"\ttry {",
+		"\t\treturn await step();",
+		"\t} catch (error) {",
+		'\t\treturn "!" + (error?.code ?? error?.name);',
+		"\t}",
+		"};",
+		"export function deep(key, levels) {",
+		"\tlet value = globalThis[key];",
+		"\tfor (let i = 0; i < levels; i++) value = { v: value };",
+		"\treturn at(() => self.friend.dig(value, levels));",
+		"}",
+		"export function wide(key, filler) {",
+		"\tconst value = {};",
+		"\tfor (let i = 0; i < filler; i++) value[`p${i}`] = 0;",
+		"\tvalue.fn = globalThis[key];",
+		"\treturn at(() => self.friend.pick(value));",
+		"}"
+	]);
+	// A second file keeps `owner.box` a file of nodes, so `owner.box.secret` is a node of its own.
+	write("owner/other.mjs", ["export function other() {", '\treturn "other";', "}"]);
 	write("maker/maker.mjs", [
 		"export function make(levels) {",
 		"\tlet value = 1;",
@@ -109,17 +158,74 @@ beforeAll(() => {
 });
 
 afterAll(() => {
+	delete globalThis.__slothletSearchLimitsSecret;
 	rmSync(ROOT, { recursive: true, force: true });
 });
 
 const DENY_READER = { policy: "allow", rules: [{ caller: "reader.**", target: "cyc.fnmod", effect: "deny" }] };
 
 /**
- * What `friend` reports for a call marked as handed `reader`'s code: its own call of `cyc.fnmod` runs, and the handed
- * function runs as `reader` and is refused.
+ * Both rules at once: `reader` is denied `cyc.fnmod`, `carrier` is denied the node `owner.box.secret`.
+ * @type {object}
+ */
+const DENY_BOTH = {
+	policy: "allow",
+	rules: [...DENY_READER.rules, { caller: "carrier.**", target: "owner.box.secret", effect: "deny" }]
+};
+
+/**
+ * What `friend` reports when the call `reader` made was not marked: `bag`'s function runs under `friend` alone.
  * @type {string}
  */
-const MARKED = "fn:own|!PERMISSION_DENIED";
+const UNMARKED = "fn:x";
+
+/**
+ * What `friend` reports when the call `reader` made was marked: `bag`'s function runs under `reader` too, and is refused.
+ * @type {string}
+ */
+const MARKED = "!PERMISSION_DENIED";
+
+/**
+ * What `carrier` gets when `owner.box.secret` is found in what it hands `friend`: handing it is checked as `carrier`'s
+ * call of the node, and refused.
+ * @type {string}
+ */
+const FOUND = "!PERMISSION_DENIED";
+
+/**
+ * What `carrier` gets when `owner.box.secret` is nested past the search: it is not found, the call is not checked as
+ * `carrier`'s call of the node, and `friend` (which the rules allow the node) runs it.
+ * @type {string}
+ */
+const NOT_FOUND = "secret:x";
+
+/**
+ * The global `owner.box.share` puts its own `secret` in, outside slothlet, for `carrier` to read.
+ * @type {string}
+ */
+const SHARED = "__slothletSearchLimitsSecret";
+
+/**
+ * Have `carrier` hand `friend` the node's own function nested `levels` objects deep.
+ * @param {object} instance - The api.
+ * @param {number} levels - How deep.
+ * @returns {Promise<string>} What `carrier` gets.
+ */
+async function handDeep(instance, levels) {
+	await instance.owner.box.share(SHARED);
+	return instance.carrier.deep(SHARED, levels);
+}
+
+/**
+ * Have `carrier` hand `friend` the node's own function beside `filler` other properties.
+ * @param {object} instance - The api.
+ * @param {number} filler - How many other properties.
+ * @returns {Promise<string>} What `carrier` gets.
+ */
+async function handWide(instance, filler) {
+	await instance.owner.box.share(SHARED);
+	return instance.carrier.wide(SHARED, filler);
+}
 
 /**
  * Build an instance with every fixture module mounted.
@@ -127,10 +233,12 @@ const MARKED = "fn:own|!PERMISSION_DENIED";
  * @param {object} [permissions] - The permissions config.
  * @returns {Promise<object>} The api.
  */
-async function build(config, permissions = DENY_READER) {
+async function build(config, permissions = DENY_BOTH) {
 	const api = await slothlet({ ...config, base: path.join(ROOT, "base"), silent: true, permissions });
-	for (const name of ["cyc", "reader", "friend", "maker"]) await api.slothlet.api.add(name, path.join(ROOT, name), { id: name });
+	for (const name of ["cyc", "reader", "friend", "bag", "owner", "carrier", "maker"])
+		await api.slothlet.api.add(name, path.join(ROOT, name), { id: name });
 	await api.cyc.fnmod;
+	await api.owner.box.secret;
 	return api;
 }
 
@@ -156,46 +264,90 @@ describe.each(getMatrixConfigs())("Permissions > search limits > $name", ({ conf
 		other = null;
 	});
 
-	it("by default finds the caller's function four levels deep in an argument, and past that still marks the call", async () => {
+	it("by default deeply frozen data four levels deep leaves the call unmarked, and five levels marks it", async () => {
 		api = await build(config);
-		expect(await api.reader.deep(1)).toBe(MARKED);
-		expect(await api.reader.deep(4)).toBe(MARKED);
+		expect(await api.reader.deep(1)).toBe(UNMARKED);
+		expect(await api.reader.deep(4)).toBe(UNMARKED);
 		expect(await api.reader.deep(5)).toBe(MARKED);
 	});
 
-	it("a raised depth searches six levels deep and still marks the call past them, leaving properties at their default", async () => {
-		api = await build(config, { ...DENY_READER, search: { depth: 6 } });
-		expect(await api.reader.deep(5)).toBe(MARKED);
-		expect(await api.reader.deep(6)).toBe(MARKED);
+	it("a raised depth leaves six levels unmarked and marks seven, leaving properties at their default", async () => {
+		api = await build(config, { ...DENY_BOTH, search: { depth: 6 } });
+		expect(await api.reader.deep(5)).toBe(UNMARKED);
+		expect(await api.reader.deep(6)).toBe(UNMARKED);
 		expect(await api.reader.deep(7)).toBe(MARKED);
-		expect(await api.reader.wide(500)).toBe(MARKED);
-		expect(await api.reader.wide(600)).toBe(MARKED);
+		expect(await api.reader.wide(512)).toBe(UNMARKED);
+		expect(await api.reader.wide(513)).toBe(MARKED);
 	});
 
-	it("a lowered depth stops sooner and still marks the call past it", async () => {
-		api = await build(config, { ...DENY_READER, search: { depth: 1 } });
-		expect(await api.reader.deep(1)).toBe(MARKED);
+	it("a lowered depth leaves one level unmarked and marks two", async () => {
+		api = await build(config, { ...DENY_BOTH, search: { depth: 1 } });
+		expect(await api.reader.deep(1)).toBe(UNMARKED);
 		expect(await api.reader.deep(2)).toBe(MARKED);
 	});
 
-	it("by default searches 512 properties and still marks the call past them", async () => {
+	it("by default 512 properties leave the call unmarked and 513 mark it", async () => {
 		api = await build(config);
-		expect(await api.reader.wide(10)).toBe(MARKED);
-		expect(await api.reader.wide(500)).toBe(MARKED);
-		expect(await api.reader.wide(600)).toBe(MARKED);
+		expect(await api.reader.wide(10)).toBe(UNMARKED);
+		expect(await api.reader.wide(512)).toBe(UNMARKED);
+		expect(await api.reader.wide(513)).toBe(MARKED);
 	});
 
-	it("raised properties search past 512 and leave depth at its default", async () => {
-		api = await build(config, { ...DENY_READER, search: { properties: 1024 } });
-		expect(await api.reader.wide(600)).toBe(MARKED);
-		expect(await api.reader.deep(4)).toBe(MARKED);
+	it("raised properties leave 1024 unmarked and mark 1025, leaving depth at its default", async () => {
+		api = await build(config, { ...DENY_BOTH, search: { properties: 1024 } });
+		expect(await api.reader.wide(1024)).toBe(UNMARKED);
+		expect(await api.reader.wide(1025)).toBe(MARKED);
+		expect(await api.reader.deep(4)).toBe(UNMARKED);
 		expect(await api.reader.deep(5)).toBe(MARKED);
 	});
 
-	it("lowered properties stop sooner and still mark the call past them", async () => {
-		api = await build(config, { ...DENY_READER, search: { properties: 8 } });
-		expect(await api.reader.wide(10)).toBe(MARKED);
-		expect(await api.reader.wide(5)).toBe(MARKED);
+	it("lowered properties leave 8 unmarked and mark 9", async () => {
+		api = await build(config, { ...DENY_BOTH, search: { properties: 8 } });
+		expect(await api.reader.wide(8)).toBe(UNMARKED);
+		expect(await api.reader.wide(9)).toBe(MARKED);
+	});
+
+	it("by default finds a node's function four levels deep in an argument and not five", async () => {
+		api = await build(config);
+		expect(await handDeep(api, 0)).toBe(FOUND);
+		expect(await handDeep(api, 1)).toBe(FOUND);
+		expect(await handDeep(api, 4)).toBe(FOUND);
+		expect(await handDeep(api, 5)).toBe(NOT_FOUND);
+	});
+
+	it("a raised depth finds a node's function six levels deep and not seven, leaving properties at their default", async () => {
+		api = await build(config, { ...DENY_BOTH, search: { depth: 6 } });
+		expect(await handDeep(api, 6)).toBe(FOUND);
+		expect(await handDeep(api, 7)).toBe(NOT_FOUND);
+		expect(await handWide(api, 511)).toBe(FOUND);
+		expect(await handWide(api, 512)).toBe(NOT_FOUND);
+	});
+
+	it("a lowered depth finds a node's function one level deep and not two", async () => {
+		api = await build(config, { ...DENY_BOTH, search: { depth: 1 } });
+		expect(await handDeep(api, 1)).toBe(FOUND);
+		expect(await handDeep(api, 2)).toBe(NOT_FOUND);
+	});
+
+	it("by default finds a node's function among 512 properties and not past them", async () => {
+		api = await build(config);
+		expect(await handWide(api, 10)).toBe(FOUND);
+		expect(await handWide(api, 511)).toBe(FOUND);
+		expect(await handWide(api, 512)).toBe(NOT_FOUND);
+	});
+
+	it("raised properties find a node's function among 1024 and not past them, leaving depth at its default", async () => {
+		api = await build(config, { ...DENY_BOTH, search: { properties: 1024 } });
+		expect(await handWide(api, 1023)).toBe(FOUND);
+		expect(await handWide(api, 1024)).toBe(NOT_FOUND);
+		expect(await handDeep(api, 4)).toBe(FOUND);
+		expect(await handDeep(api, 5)).toBe(NOT_FOUND);
+	});
+
+	it("lowered properties find a node's function among 8 and not past them", async () => {
+		api = await build(config, { ...DENY_BOTH, search: { properties: 8 } });
+		expect(await handWide(api, 7)).toBe(FOUND);
+		expect(await handWide(api, 8)).toBe(NOT_FOUND);
 	});
 
 	it("with provenance off, returned data within the depth comes back as itself and deeper as a stand-in", async () => {
@@ -218,11 +370,14 @@ describe.each(getMatrixConfigs())("Permissions > search limits > $name", ({ conf
 
 	it("two instances keep their own limits", async () => {
 		api = await build(config);
-		other = await build(config, { ...DENY_READER, search: { depth: 6 } });
+		other = await build(config, { ...DENY_BOTH, search: { depth: 6 } });
 		expect(await api.reader.deep(5)).toBe(MARKED);
-		expect(await other.reader.deep(5)).toBe(MARKED);
+		expect(await other.reader.deep(5)).toBe(UNMARKED);
 		expect(await other.reader.deep(7)).toBe(MARKED);
 		expect(await api.reader.deep(5)).toBe(MARKED);
+		expect(await handDeep(api, 5)).toBe(NOT_FOUND);
+		expect(await handDeep(other, 5)).toBe(FOUND);
+		expect(await handDeep(other, 7)).toBe(NOT_FOUND);
 	});
 
 	it("an api.add cannot change the instance's limit", async () => {
@@ -230,7 +385,10 @@ describe.each(getMatrixConfigs())("Permissions > search limits > $name", ({ conf
 		await expect(
 			api.slothlet.api.add("extra", path.join(ROOT, "friend"), { id: "extra", permissions: { search: { depth: 6 } } })
 		).rejects.toMatchObject({ code: "INVALID_CONFIG_UNKNOWN_KEY" });
+		expect(await api.reader.deep(4)).toBe(UNMARKED);
 		expect(await api.reader.deep(5)).toBe(MARKED);
+		expect(await handDeep(api, 4)).toBe(FOUND);
+		expect(await handDeep(api, 5)).toBe(NOT_FOUND);
 	});
 });
 
