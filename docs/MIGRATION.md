@@ -162,6 +162,8 @@ export const report = (x) => self.point.make(x);
 
 The host's own imports of leaf files are unchanged. See [MODULE-STRUCTURE.md](./MODULE-STRUCTURE.md#leaf-files-are-not-imported).
 
+In the browser no import is seen, so the refusal does not apply there: a module that imports a leaf file still gets a copy of the file of its own, as in v3, and that copy is never the leaf. The same code is refused under Node and under vite or vitest, so move it to `self` or a lib folder even when the browser build works.
+
 ### Lazy mode under vitest needs the plugin
 
 Under vitest, api files are loaded by vite, not by Node. Add the plugin from `@cldmv/slothlet/vite` to the vitest config so each instance gets its own copy of every api file and slothlet can tell which module loaded which file. Without it a test using lazy mode, or a module's helper outside its api folder, is refused, and `permissions.mode: "strict"` reports the `vitest-plugin` baseline check as unmet. The plugin is supported with the forks pool; the threads pool is refused. The setup is in [TESTING.md](./TESTING.md#per-instance-helpers-under-vitest-the-cldmvslothletvite-plugin).

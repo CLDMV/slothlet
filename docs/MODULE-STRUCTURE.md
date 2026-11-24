@@ -618,7 +618,7 @@ Which files are leaf files is read from slothlet's folder scan of each tree, the
 
 - **Source read and compiled.** A module that reads a leaf file's source and compiles it (`vm`, `new Function`, `eval`) is not importing it. That code is evaluated code, which slothlet attributes to the module that compiled it, never to the leaf (see [PERMISSIONS.md](PERMISSIONS.md#file-level-code-has-its-own-permission-path)), and with permissions on it needs `capability:code`.
 - **A bare name only known as it runs, under vite's module runner.** An `import()` whose specifier is computed as it runs and is a bare name vite resolves (a package subpath, an `#imports` entry) is not checked there; a literal one is, and under Node's own loader both are.
-- **In the browser** no import is seen; leaves load from the manifest without the hooks.
+- **In the browser** no import is seen; leaves load from the manifest without the hooks. A module that imports a leaf file there (a sibling, say) is not refused: it gets a copy of the file of its own, whose URL carries none of the tags slothlet imports a leaf under, so the copy is never the leaf and its module state is not the leaf's. Under Node's loader and under vite's module runner (vitest included) the same import is refused with `MODULE_LEAF_IMPORT_REFUSED`, so a tree that loads in the browser can still fail there; reach the leaf through `self` in both.
 
 A function of a leaf that still reaches module code another way is checked as a call of its node (see [PERMISSIONS.md](PERMISSIONS.md)).
 
