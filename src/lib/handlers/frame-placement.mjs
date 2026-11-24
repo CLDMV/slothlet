@@ -101,7 +101,6 @@ const {
 	instanceCopyFiles,
 	instanceCopyReads,
 	instanceImporters,
-	isLeafImport,
 	loadedScriptLookup,
 	loadedScriptText,
 	packageImporters,
@@ -5676,8 +5675,7 @@ function runtime_dataOf(holder, key) {
  * as {@link instanceCopyExports} reports copies.
  * @param {string} instanceID - The instance.
  * @param {string} file - The file's path.
- * @returns {Array<{commonJS: boolean, value: *, runner: true, id: string}|{pending: true, id: string}>} The copies, each with
- *   its module's id.
+ * @returns {Array<{commonJS: boolean, value: *, runner: true}|{pending: true}>} The copies.
  * @private
  */
 function runtime_runnerCopies(instanceID, file) {
@@ -5692,9 +5690,8 @@ function runtime_runnerCopies(instanceID, file) {
 		if (cut === -1) continue;
 		if (URLSearchParamsMethods.get(new URLSearchParams(StringMethods.slice(id, cut + 1)), "slothlet_instance") !== instanceID) continue;
 		const exports = runtime_dataOf(node, "exports");
-		if (runtime_dataOf(node, "evaluated") !== true || exports === null || typeof exports !== "object")
-			listPush(found, { pending: true, id });
-		else listPush(found, { commonJS: false, value: exports, runner: true, id });
+		if (runtime_dataOf(node, "evaluated") !== true || exports === null || typeof exports !== "object") listPush(found, { pending: true });
+		else listPush(found, { commonJS: false, value: exports, runner: true });
 	}
 	return found;
 }
@@ -5835,7 +5832,7 @@ const SETTLE_ROUNDS = 32;
 const SETTLED_AT = new WeakMap();
 
 /**
- * The lazy folders of an instance's tree not built yet, by the location {@link LEAF_FILES} indexes each at: a folder whose
+ * The lazy folders of an instance not built yet, by the location {@link LEAF_FILES} indexes each at: a folder whose
  * load is out is left to that load, which settles the copies of its own files when it ends.
  * @param {object} slothlet - The instance.
  * @returns {Array<{at: string, wrapper: object}>} The folders.
@@ -5855,10 +5852,7 @@ function runtime_unbuiltFolders(slothlet) {
 				typeof internal.materializeFunc !== "function" ||
 				internal.state?.materialized ||
 				internal.state?.inFlight ||
-				runtime_isGone(wrapper) ||
-				// Only the node standing at its path in the instance's tree: a node a reload replaced, or one of a tree a run
-				// owns, is built where something reaches it, as ever.
-				moduleNodeResolver(slothlet, String(internal.apiPath ?? "")) !== wrapper
+				runtime_isGone(wrapper)
 			)
 				continue;
 			listPush(found, { at: ofEntry[0], wrapper });
@@ -5876,8 +5870,8 @@ function runtime_unbuiltFolders(slothlet) {
 const RUNNER_COPY_FILES = new WeakMap();
 
 /**
- * The comparable paths of the files vitest's module runner loaded a module of carrying an instance's query, other than
- * the modules slothlet's loader imported leaves under: read again only when the runner has loaded modules since.
+ * The comparable paths of the files vitest's module runner loaded a module of carrying an instance's query: read again
+ * only when the runner has loaded modules since.
  * @param {object} slothlet - The instance.
  * @param {string} instanceID - Its ID.
  * @returns {Array<string>} The files.
@@ -5890,10 +5884,7 @@ function runtime_runnerCopyFiles(slothlet, instanceID) {
 	if (held !== undefined && held.instanceID === instanceID && held.size === size) return held.files;
 	const files = [];
 	for (const file of mapKeys(RUNNER_MAPS.files)) {
-		if (typeof file !== "string") continue;
-		// The modules slothlet's loader imported a leaf under are the ones its nodes were built from, never a copy.
-		const copies = filterList(runtime_runnerCopies(instanceID, file), (copy) => !isLeafImport(copy.id));
-		if (copies.length) listPush(files, toComparablePath(file));
+		if (typeof file === "string" && runtime_runnerCopies(instanceID, file).length) listPush(files, toComparablePath(file));
 	}
 	WeakMapMethods.set(RUNNER_COPY_FILES, slothlet, { instanceID, size, files });
 	return files;
@@ -5923,22 +5914,6 @@ function runtime_foldersHoldingCopies(slothlet, instanceID, folders) {
 		}
 	}
 	return due;
-}
-
-/**
- * Start a folder's load {@link settleLeafCopies} asks for apart from the flow that is running: a load slothlet starts
- * on its own, no module's call and no run's, as a lazy folder load no call asked for is (see `runtime_loadApart` in
- * handlers/unified-wrapper). Settling can run inside a module's call or a run (an `api.add()` made there, a folder it
- * reached loading), whose flow the load would otherwise take for the one that asked for it.
- * @param {object} slothlet - The instance.
- * @param {object} wrapper - The folder's wrapper.
- * @returns {Promise<void>} Settles once the folder has loaded.
- * @private
- */
-function runtime_buildApart(slothlet, wrapper) {
-	const contextManager = slothlet.contextManager;
-	if (typeof contextManager?.runDetached !== "function") return wrapper.___materialize();
-	return contextManager.runDetached(() => wrapper.___materialize(), undefined, []);
 }
 
 /**
@@ -5990,7 +5965,7 @@ async function settleLeafCopies(slothlet) {
 			WeakMapMethods.set(SETTLED_AT, slothlet, signature);
 			return;
 		}
-		await promiseAll(mapList(due, (wrapper) => PromiseMethods.catch(runtime_buildApart(slothlet, wrapper), () => {})));
+		await promiseAll(mapList(due, (wrapper) => PromiseMethods.catch(wrapper.___materialize(), () => {})));
 	}
 	runtime_indexLeafCopies(slothlet);
 }
