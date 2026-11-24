@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-21T22:24:23-08:00 (1795328663)
+ *	@Last modified time: 2026-11-23T18:13:02-08:00 (1795486382)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -79,7 +79,8 @@ export const CONFIG_SCHEMA = deepFreeze({
 		owner: true,
 		policy: true,
 		private: { host: true, scope: true },
-		rules: OPEN
+		rules: OPEN,
+		search: { depth: true, properties: true }
 	},
 	reference: OPEN,
 	routines: { auto: true, entries: OPEN, stack: true },

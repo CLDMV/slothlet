@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:28:53-08:00 (1794882533)
+ *	@Last modified time: 2026-11-24T08:18:12-08:00 (1795537092)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -109,7 +109,7 @@ describe("Caller-supplied code (#597) > marking a call", () => {
 
 	it("a frozen array longer than the budget is refused before its keys are listed", () => {
 		const listed = [];
-		const wide = Object.freeze(Array.from({ length: 300 }, (_, index) => index));
+		const wide = Object.freeze(Array.from({ length: 1000 }, (_, index) => index));
 		const ownKeys = Reflect.ownKeys;
 		Reflect.ownKeys = (target) => {
 			listed.push(target);

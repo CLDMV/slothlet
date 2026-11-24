@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-22T23:31:53-08:00 (1795419113)
+ *	@Last modified time: 2026-11-23T18:13:07-08:00 (1795486387)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -5104,6 +5104,12 @@ export default slothlet;
  * @property {boolean} [permissions.gating.read=true] - Gate terminal data-value reads the same way calls are gated.
  * @property {object} [permissions.private] - Module privacy (`{ host?: "deny"|"allow", scope?: "module"|"folder" }`): whether the host reads `_`/`__` members, and whether a member is private to its owning module ID (default) or to the folder that exports it.
  * @property {Array<object>} [permissions.rules] - Initial `{ caller, target, effect, condition?, requires? }` rules.
+ * @property {object} [permissions.search] - How far a value handed into a call or returned out of one is searched for
+ *   code: a leaf's function nested in an argument, or code nested in returned data. Host config only. See
+ *   [PERMISSIONS.md](docs/PERMISSIONS.md#how-far-values-are-searched).
+ * @property {number} [permissions.search.depth=4] - Levels of objects searched, the outermost counted (1 to 64).
+ * @property {number} [permissions.search.properties=512] - Own properties read, all values of one search counted
+ *   together (1 to 65536).
  * @property {object} [permissions.events] - Event-rule section (`{ policy?: "deny"|"notify"|"allow", rules?: Array<object> }`).
  * @property {boolean|object} [debug=false] - Enable verbose internal logging. `true` enables all categories.
  *   Pass an object with sub-keys `builder`, `api`, `index`, `modes`, `wrapper`, `ownership`, `context`, `initialization`, `materialize`, `versioning`, `permissions` to target specific subsystems.

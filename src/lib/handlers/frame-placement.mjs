@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-23T08:13:14-08:00 (1795450394)
+ *	@Last modified time: 2026-11-23T18:12:59-08:00 (1795486379)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -26,6 +26,7 @@
  * @internal
  */
 import { segmentsOf } from "#helpers/segments";
+import { DEFAULT_SEARCH_DEPTH, DEFAULT_SEARCH_PROPERTIES } from "#helpers/defaults";
 import { AsyncResource, isNode, util } from "#helpers/platform";
 import {
 	rememberNewest,
@@ -2054,25 +2055,29 @@ let apiValueHarborsCode = () => false;
 
 /**
  * How many levels of objects plain data may nest, the outermost counted, before it is treated as able to carry
- * code (#597).
- * @type {number}
+ * code (#597): the instance's `permissions.search.depth`, or the default for an instance with no `permissions` config.
+ * Read as a plain number on every call.
+ * @param {object|null|undefined} slothlet - The instance.
+ * @returns {number} The levels.
  * @private
  */
-const PLAIN_DATA_DEPTH = 4;
+const searchDepth = (slothlet) => slothlet?.config?.permissions?.search?.depth ?? DEFAULT_SEARCH_DEPTH;
 
 /**
  * How many own properties, all values of one call counted together, plain data may have before it is treated
- * as able to carry code (#597). Bounds what deciding costs for a large argument.
- * @type {number}
+ * as able to carry code (#597): the instance's `permissions.search.properties`, or the default. Bounds what
+ * deciding costs for a large argument.
+ * @param {object|null|undefined} slothlet - The instance.
+ * @returns {number} The properties.
  * @private
  */
-const PLAIN_DATA_PROPERTIES = 256;
+const searchProperties = (slothlet) => slothlet?.config?.permissions?.search?.properties ?? DEFAULT_SEARCH_PROPERTIES;
 
 /**
  * Whether a value is plain data, which can run none of the caller's code when a leaf converts, reads or walks
  * it: a primitive, one of slothlet's own api values, or a frozen non-Proxy object whose prototype is
  * `Object.prototype`, `Array.prototype` or `null` and whose own properties are all data properties holding plain
- * data — within {@link PLAIN_DATA_DEPTH} and {@link PLAIN_DATA_PROPERTIES}.
+ * data — within the instance's `permissions.search` ({@link searchDepth}, {@link searchProperties}).
  *
  * Frozen, because the decision is taken once, when the call is entered, and has to hold for as long as the call
  * runs: an object that can still be changed can be given a getter, a `toString` or a prototype — or have a
@@ -2120,19 +2125,20 @@ function runtime_isPlainData(value, depth, budget) {
 
 /**
  * Whether one value can carry a caller's code into a call.
- * @param {*} value - A receiver or an argument.
+ * @param {*} raw - A receiver or an argument.
  * @param {{remaining: number}} budget - Properties still allowed for the call (see {@link runtime_isPlainData}).
+ * @param {number} depth - Levels of objects allowed (see {@link searchDepth}).
  * @returns {boolean} True for an object or function that is neither slothlet's own nor plain data.
  * @private
  */
-const carriesCode = (raw, budget) => {
+const carriesCode = (raw, budget, depth) => {
 	// A module's view of a caller's value (an inbound or crossing view) stands for what the caller handed.
 	const value = raw !== null && (typeof raw === "object" || typeof raw === "function") ? inboundOriginal(raw) : raw;
 	return (
 		value !== null &&
 		(typeof value === "object" || typeof value === "function") &&
 		!WeakSetMethods.has(trustedRootOwn.genuineWrappers, value) &&
-		!runtime_isPlainData(value, PLAIN_DATA_DEPTH, budget)
+		!runtime_isPlainData(value, depth, budget)
 	);
 };
 
@@ -2144,22 +2150,25 @@ const carriesCode = (raw, budget) => {
  *
  * @param {*} thisArg - The call's receiver.
  * @param {ArrayLike<*>|null|undefined} args - The call's arguments.
+ * @param {object|null} [slothlet=null] - The instance the call is made in, whose `permissions.search` bounds the search.
  * @returns {boolean} True when the call is to be checked for supplied code.
  * @internal
  */
-export function carriesCallerCode(thisArg, args) {
-	const budget = { remaining: PLAIN_DATA_PROPERTIES };
-	if (carriesCode(thisArg, budget)) return true;
+export function carriesCallerCode(thisArg, args, slothlet = null) {
+	const budget = { remaining: searchProperties(slothlet) };
+	const depth = searchDepth(slothlet);
+	if (carriesCode(thisArg, budget, depth)) return true;
 	// The arguments are the trap's own array, never the caller's object, so reading them runs nothing.
 	const count = args?.length ?? 0;
-	for (let index = 0; index < count; index++) if (carriesCode(args[index], budget)) return true;
+	for (let index = 0; index < count; index++) if (carriesCode(args[index], budget, depth)) return true;
 	return false;
 }
 
 /**
  * The api nodes whose own leaf functions a call is handed as values (#597): a receiver or an argument that is a leaf
  * function slothlet wraps — imported raw from its file instead of read from `self` — or one held in plain data the
- * call is handed, within {@link PLAIN_DATA_DEPTH} and {@link PLAIN_DATA_PROPERTIES}. Each is gated for the caller as
+ * call is handed, within the instance's `permissions.search` ({@link searchDepth}, {@link searchProperties}). A leaf
+ * function nested deeper than that, or past the property budget, is not found. Each is gated for the caller as
  * though it had called it through `self`.
  *
  * Decided from `typeof`, a registry lookup and property descriptors, so nothing of the caller's runs: a Proxy is not
@@ -2169,13 +2178,13 @@ export function carriesCallerCode(thisArg, args) {
  * @param {*} thisArg - The call's receiver.
  * @param {ArrayLike<*>|null|undefined} args - The call's arguments.
  * @param {object|null} [slothlet=null] - The instance whose modules' copies of its leaf files count as well (see
- *   {@link leafOfCopy}).
+ *   {@link leafOfCopy}), and whose `permissions.search` bounds the search.
  * @returns {Array<object>|null} The wrappers, or null when there are none.
  * @internal
  */
 function handedLeafFunctions(thisArg, args, slothlet = null) {
 	let found = null;
-	const budget = { remaining: PLAIN_DATA_PROPERTIES };
+	const budget = { remaining: searchProperties(slothlet) };
 	const visit = (value, depth) => {
 		if (value === null || (typeof value !== "object" && typeof value !== "function")) return;
 		// A module's view of a caller's value holds what the caller handed: that is what is looked into.
@@ -2211,9 +2220,10 @@ function handedLeafFunctions(thisArg, args, slothlet = null) {
 			// An exotic object that refuses to be read holds nothing that can be found without running its code.
 		}
 	};
-	visit(thisArg, PLAIN_DATA_DEPTH);
+	const depth = searchDepth(slothlet);
+	visit(thisArg, depth);
 	const count = args?.length ?? 0;
-	for (let index = 0; index < count; index++) visit(args[index], PLAIN_DATA_DEPTH);
+	for (let index = 0; index < count; index++) visit(args[index], depth);
 	return found;
 }
 

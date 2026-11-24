@@ -195,10 +195,11 @@ export function isHandedOut(value: any): boolean;
  *
  * @param {*} thisArg - The call's receiver.
  * @param {ArrayLike<*>|null|undefined} args - The call's arguments.
+ * @param {object|null} [slothlet=null] - The instance the call is made in, whose `permissions.search` bounds the search.
  * @returns {boolean} True when the call is to be checked for supplied code.
  * @internal
  */
-export function carriesCallerCode(thisArg: any, args: ArrayLike<any> | null | undefined): boolean;
+export function carriesCallerCode(thisArg: any, args: ArrayLike<any> | null | undefined, slothlet?: object | null): boolean;
 /**
  * Whether what a module hands out and is handed is set up as that module's code (#597, #726): only while the
  * permission system of the wrapper's instance is on and `permissions.caller.attribution` is `"precise"` (the default). Then a
@@ -530,7 +531,8 @@ declare function setInboundOriginal(unwrap: (arg0: any) => any): void;
 /**
  * The api nodes whose own leaf functions a call is handed as values (#597): a receiver or an argument that is a leaf
  * function slothlet wraps — imported raw from its file instead of read from `self` — or one held in plain data the
- * call is handed, within {@link PLAIN_DATA_DEPTH} and {@link PLAIN_DATA_PROPERTIES}. Each is gated for the caller as
+ * call is handed, within the instance's `permissions.search` ({@link searchDepth}, {@link searchProperties}). A leaf
+ * function nested deeper than that, or past the property budget, is not found. Each is gated for the caller as
  * though it had called it through `self`.
  *
  * Decided from `typeof`, a registry lookup and property descriptors, so nothing of the caller's runs: a Proxy is not
@@ -539,10 +541,12 @@ declare function setInboundOriginal(unwrap: (arg0: any) => any): void;
  *
  * @param {*} thisArg - The call's receiver.
  * @param {ArrayLike<*>|null|undefined} args - The call's arguments.
+ * @param {object|null} [slothlet=null] - The instance whose modules' copies of its leaf files count as well (see
+ *   {@link leafOfCopy}), and whose `permissions.search` bounds the search.
  * @returns {Array<object>|null} The wrappers, or null when there are none.
  * @internal
  */
-declare function handedLeafFunctions(thisArg: any, args: ArrayLike<any> | null | undefined): Array<object> | null;
+declare function handedLeafFunctions(thisArg: any, args: ArrayLike<any> | null | undefined, slothlet?: object | null): Array<object> | null;
 /**
  * The calls that handed code down to a call (#726): its parent when the call was handed anything that can carry code,
  * that call's parent when it was too, and so on up, each with the ceiling it already carried. Another module's code

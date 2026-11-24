@@ -54,7 +54,7 @@ const api = await slothlet({
 	hook: false, // boolean | string | object
 
 	// Permissions (off without this block) — see PERMISSIONS.md
-	permissions: { policy: "allow", caller: { attribution: "precise" } }, // attribution: "precise" | "fast"
+	permissions: { policy: "allow", caller: { attribution: "precise" }, search: { depth: 4, properties: 512 } }, // attribution: "precise" | "fast"
 
 	// Routines
 	routines: { auto: true, entries: slothlet.defaults.routines, stack: true },
@@ -466,7 +466,7 @@ See [SANITIZATION.md](SANITIZATION.md) for pattern matching, rule precedence and
 
 ## Permissions
 
-The `permissions` block turns the permission system on; every option it takes is listed in [PERMISSIONS.md](./PERMISSIONS.md#configuration-options). Two of them change what a module is handed, so they are described here too.
+The `permissions` block turns the permission system on; every option it takes is listed in [PERMISSIONS.md](./PERMISSIONS.md#configuration-options). A few of them change what a module is handed, or how far slothlet looks into it, so they are described here too.
 
 `permissions` may also be a bare mode: `"on"`, `"strict"`, `"off"` or `"disabled"` is the same as `{ mode }`, `true` is `"on"` and `false` is no block. Inside the block, `mode: true` and `mode: false` mean `"on"` and `"off"`. Any other string or non-object value is an `INVALID_CONFIG`.
 
@@ -503,6 +503,29 @@ Anything else is rejected with `INVALID_CONFIG`.
 ```javascript
 const api = await slothlet({ base: "./api", permissions: { policy: "deny", gating: { buffers: 64 }, rules } });
 ```
+
+### `permissions.search`
+
+**Type**: `{ depth?: number, properties?: number }`
+**Default**: `{ depth: 4, properties: 512 }`
+
+How far a value handed into a call, or returned out of one, is searched for code: a leaf's function another module imported from the leaf's file and passes as an argument, and, with `caller.provenance: false`, code nested in returned data. `depth` counts levels of objects, the outermost included; `properties` counts the own properties one search reads, all levels (and, for a call, the receiver and every argument) together.
+
+| Option       | Accepts                        | Default |
+| ------------ | ------------------------------ | ------- |
+| `depth`      | a whole number from 1 to 64    | `4`     |
+| `properties` | a whole number from 1 to 65536 | `512`   |
+
+A group that leaves one out takes its default for it. Anything else is rejected with `INVALID_CONFIG`. Past the limit, returned data comes back as a stand-in (it fails closed), while a leaf's function nested in an argument past it is not found (a documented limit). Raising either value searches further, at a cost on every call handed such a value. The setting is per instance and host only: an `api.add`'s `permissions` option cannot carry it.
+
+```javascript
+const api = await slothlet({
+	base: "./api",
+	permissions: { policy: "deny", search: { depth: 6, properties: 1024 }, rules }
+});
+```
+
+See [How far values are searched](./PERMISSIONS.md#how-far-values-are-searched).
 
 ### `permissions.caller.attribution`
 
