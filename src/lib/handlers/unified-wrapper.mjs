@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-24T11:20:17-08:00 (1795548017)
+ *	@Last modified time: 2026-11-24T12:25:58-08:00 (1795551958)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -628,9 +628,9 @@ const RUNNER_COMPILED_HELPERS = new WeakMap();
 /**
  * Whether a name code is compiled under is a copy of a helper file this instance judges: tagged with this instance's
  * id, or with an id no instance that is up holds (an unknown instance, or one that has shut down or taken a new id,
- * whose copies are no running instance's), and naming a file the loader is not loading as a leaf. The loader imports only leaves; every
- * other file under an instance's tag is a file a leaf imports, directly or through other helpers (see
- * `helpers/instance-imports`).
+ * whose copies are no running instance's), and naming a file the loader is not loading as a leaf and, for the instance's
+ * own tag, no file its leaves were built from. The loader imports only leaves; every other file under an instance's tag
+ * is a file a leaf imports, directly or through other helpers (see `helpers/instance-imports`).
  * @param {object} slothlet - The instance.
  * @param {*} filename - The name the code is compiled under.
  * @returns {"own"|"orphan"|null} "own" for a copy of a helper file of the instance's, "orphan" for a copy under an id no
@@ -645,7 +645,12 @@ function runtime_namesHelperCopy(slothlet, filename) {
 	if (kind === null) return null;
 	const loader = slothlet?.processors?.loader;
 	if (typeof loader?.loadsOfFile !== "function") return null;
-	return loader.loadsOfFile(toComparablePath(filename)).length === 0 ? kind : null;
+	if (loader.loadsOfFile(toComparablePath(filename)).length !== 0) return null;
+	// A file the instance built leaves from is a leaf file, not a helper, once its load is over: code compiled under its
+	// name is placed by the frames it runs in, as any code is (a supplier's code under a leaf's name runs as the supplier,
+	// with the leaf's call as its ceiling).
+	if (kind === "own" && fileNodes(slothlet, filename).length !== 0) return null;
+	return kind;
 }
 
 /**
