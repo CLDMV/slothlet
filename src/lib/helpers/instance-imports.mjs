@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-23T20:09:41-08:00 (1795493381)
+ *	@Last modified time: 2026-11-24T11:20:19-08:00 (1795548019)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -3484,6 +3484,21 @@ function claimForCopy(instanceID) {
 }
 
 /**
+ * Whether an instance ID is held by an instance that is up, whatever its permission mode: claimed in this copy's state
+ * (see {@link claimInstanceScope}) and not released. With another copy of slothlet keeping the record, this copy cannot
+ * read the claims, and every ID counts as held.
+ * @param {*} instanceID - The instance ID.
+ * @returns {boolean} False only for an ID no instance holds (an unknown one, or one released at shutdown or reload).
+ * @internal
+ * @example
+ * instanceClaimed("slothlet_1795547077450_1jzr3p2ht5tet"); // true while that instance is up
+ */
+function instanceClaimed(instanceID) {
+	if (!isKeeper()) return true;
+	return typeof instanceID === "string" && MapMethods.has(CLAIMS, instanceID);
+}
+
+/**
  * Claim an instance ID for the instance that carries it, before any of its files load. The handle is how the instance
  * loads its CommonJS files ({@link scopeRequire}) and, when it shuts down or takes a new ID, releases what slothlet
  * keeps about its files. The instance keeps the handle to itself: nothing else can load a file as the instance's code
@@ -5196,6 +5211,7 @@ export function internals(consumer) {
 	return {
 		claimInstanceScope,
 		installInstanceImportHooks,
+		instanceClaimed,
 		instanceCommonJSFiles,
 		instanceCommonJSVersion,
 		instanceCopyCount,

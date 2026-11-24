@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T07:26:21-08:00 (1794929181)
+ *	@Last modified time: 2026-11-24T11:19:44-08:00 (1795547984)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -24,7 +24,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import slothlet from "@cldmv/slothlet";
 
-const BASE = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "api_test_vitest_runner_compile");
+const BASE = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "api_test_vitest_runner_compile", "api");
 
 it("reports every config", async () => {
 	const out = {};

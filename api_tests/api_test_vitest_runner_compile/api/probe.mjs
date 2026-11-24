@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /api_tests/api_test_vitest_runner_compile/probe.mjs
+ *	@Filename: /api_tests/api_test_vitest_runner_compile/api/probe.mjs
  *	@Date: 2026-11-16T00:00:00-08:00 (1794816000)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T00:00:00-08:00 (1794816000)
+ *	@Last modified time: 2026-11-24T10:22:35-08:00 (1795544555)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -17,15 +17,17 @@
  * @fileoverview A module file whose top-level code, as it loads under vitest, tries to compile code under its own name
  * the way vitest's module runner compiles the file, and reports how each try went.
  *
- * @module api_tests/api_test_vitest_runner_compile/probe
+ * @module api_tests/api_test_vitest_runner_compile/api/probe
  */
 
 import vm from "node:vm";
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
 import { self } from "@cldmv/slothlet/runtime";
+import "../lib/probe-twin.mjs";
 
 const OWN_PATH = fileURLToPath(import.meta.url);
+const COPY_PATH = fileURLToPath(new URL("../lib/probe-twin.mjs", import.meta.url));
 const FORGED_FLAG = Symbol.for("slothlet.test.vitestRunnerCompile.forgedRan");
 const REPLAY_FLAG = Symbol.for("slothlet.test.vitestRunnerCompile.replayRan");
 
@@ -73,6 +75,19 @@ function ownNode() {
 	if (!modules) return null;
 	for (const node of modules.values()) {
 		if (node?.file === OWN_PATH && node.evaluated !== true && String(node.id).includes("slothlet_instance=")) return node;
+	}
+	return null;
+}
+
+/**
+ * vitest's record of the lib file's copy this file imported under its instance's tag.
+ * @returns {object|null} The node, or null outside vitest.
+ */
+function copyNode() {
+	const modules = globalThis.__vitest_mocker__?.moduleRunner?.evaluatedModules?.idToModuleMap;
+	if (!modules) return null;
+	for (const node of modules.values()) {
+		if (node?.file === COPY_PATH && String(node.id).includes("slothlet_instance=")) return node;
 	}
 	return null;
 }
@@ -125,10 +140,9 @@ const outcomes = {
 			}
 		);
 	}),
-	// A reply to vitest's pending fetch of another copy of this file, its code changed before vitest's runner reads it.
+	// A reply to vitest's pending fetch of a lib file's copy of this file, its code changed before vitest's runner reads it.
 	forged: await attempt(async () => {
-		// Outside vitest's runner there is no pending fetch to forge, and the copy below would import itself: a copy
-		// waiting on its own evaluation never settles, and neither would this file's load.
+		// Outside vitest's runner there is no pending fetch to forge.
 		if (ownId === null) throw new Error("no runner");
 		const set = Map.prototype.set;
 		Map.prototype.set = function (key, value) {
@@ -144,10 +158,11 @@ const outcomes = {
 			return Reflect.apply(set, this, [key, value]);
 		};
 		try {
-			// Another copy of this file under this instance's tag, so the copy's compile is one of a file the instance is
-			// loading.
-			const query = ownId === null ? "" : String(ownId).slice(String(ownId).indexOf("?") + 1);
-			const specifier = OWN_PATH + "?" + query + "&forged=1";
+			// A lib file's copy of this file under this instance's tag, so the copy's compile is one of a file the instance
+			// is loading. (A copy of this file itself would be a leaf file's, which module code may not import.)
+			const copyId = String(copyNode()?.id ?? ownId);
+			const query = copyId.slice(copyId.indexOf("?") + 1);
+			const specifier = COPY_PATH + "?" + query + "&forged=1";
 			await import(/* @vite-ignore */ specifier);
 		} finally {
 			Map.prototype.set = set;

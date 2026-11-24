@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-22T23:31:46-08:00 (1795419106)
+ *	@Last modified time: 2026-11-24T11:20:17-08:00 (1795548017)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -187,7 +187,7 @@ import {
 } from "#helpers/run-snapshot";
 import { RUN_COPY } from "#helpers/flow-stores";
 import { isEngineStackAccessor, runUnformatted } from "#helpers/stack-read";
-import { namesForeignFile, BINDING_NAME, hasCapabilityCheck } from "#helpers/capability-context";
+import { namesForeignFile, BINDING_NAME, hasCapabilityCheck, instanceIsUp } from "#helpers/capability-context";
 import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "#helpers/instance-imports";
 const { setApiNodeCheck } = compositionInternals("lib/handlers/unified-wrapper");
 const reservedKeysOwn = reservedKeysInternals("lib/handlers/unified-wrapper");
@@ -203,6 +203,7 @@ const {
 	frameDefiner,
 	runtime_codeWritersOnStack,
 	runtime_loadingFileRunning,
+	runtime_loadingHelper,
 	isLeafFileFunction,
 	leafOfCopy,
 	outerCallerCeiling,
@@ -616,11 +617,75 @@ function runtime_runnerCompilesLoad(slothlet, filename) {
 }
 
 /**
+ * The helper files of this instance's whose first compile shaped as vitest's runner makes one, with no worker setup to
+ * verify it, was left to the code making it (see {@link runtime_runnerCompilesHelper}): by instance, each file as its
+ * instance id and comparable path.
+ * @type {WeakMap<object, Set<string>>}
+ * @private
+ */
+const RUNNER_COMPILED_HELPERS = new WeakMap();
+
+/**
+ * Whether a name code is compiled under is a copy of a helper file this instance judges: tagged with this instance's
+ * id, or with an id no instance that is up holds (an unknown instance, or one that has shut down or taken a new id,
+ * whose copies are no running instance's), and naming a file the loader is not loading as a leaf. The loader imports only leaves; every
+ * other file under an instance's tag is a file a leaf imports, directly or through other helpers (see
+ * `helpers/instance-imports`).
+ * @param {object} slothlet - The instance.
+ * @param {*} filename - The name the code is compiled under.
+ * @returns {"own"|"orphan"|null} "own" for a copy of a helper file of the instance's, "orphan" for a copy under an id no
+ *   instance that is up holds, null otherwise.
+ * @private
+ */
+function runtime_namesHelperCopy(slothlet, filename) {
+	if (typeof filename !== "string") return null;
+	const tag = RegExpMethods.exec(/[?&]slothlet_instance=([^&#]+)/, filename)?.[1] ?? null;
+	if (tag === null) return null;
+	const kind = tag === String(slothlet.instanceID) ? "own" : instanceIsUp(tag) ? null : "orphan";
+	if (kind === null) return null;
+	const loader = slothlet?.processors?.loader;
+	if (typeof loader?.loadsOfFile !== "function") return null;
+	return loader.loadsOfFile(toComparablePath(filename)).length === 0 ? kind : null;
+}
+
+/**
+ * Whether a compile vitest's module runner would make of a copy of a helper file of this instance's is left to the code
+ * making it, as any other code's is, rather than placed as the helper's code. A verified compile (`runnerCompile` true:
+ * exactly the code vitest's server sent for the name, one compile per reply) always is. An unverified one (no worker
+ * setup records what the server sent) is so only for the name slothlet gives the instance's copy of a helper file (the
+ * file's path with the instance's id as its only query parameter), while the helper is evaluated for the first time
+ * inside a load of a file importing it, as the instance's import record has it (see `runtime_loadingHelper` in
+ * `frame-placement`), and only for the first compile of the helper file: an instance has one copy of each helper file,
+ * which vitest compiles once, and every other compile under a name of a copy of the file is placed as the helper's, as
+ * every later compile of a loading file is.
+ * @param {object} slothlet - The instance.
+ * @param {*} filename - The name the code is compiled under (the module's id).
+ * @param {boolean|null} runnerCompile - See {@link runtime_assertCapability}.
+ * @returns {boolean} True for such a compile.
+ * @private
+ */
+function runtime_runnerCompilesHelper(slothlet, filename, runnerCompile) {
+	if (runnerCompile === false || runtime_namesHelperCopy(slothlet, filename) !== "own") return false;
+	if (runnerCompile === true) return true;
+	if (RegExpMethods.exec(/^[^?#]*\?slothlet_instance=[^&#]+$/, filename) === null) return false;
+	if (!runtime_loadingHelper(slothlet, toComparablePath(filename))?.paths?.length) return false;
+	let compiled = WeakMapMethods.get(RUNNER_COMPILED_HELPERS, slothlet);
+	if (compiled === undefined) WeakMapMethods.set(RUNNER_COMPILED_HELPERS, slothlet, (compiled = new Set()));
+	const key = `${String(slothlet.instanceID)}\u0000${toComparablePath(filename)}`;
+	if (SetMethods.has(compiled, key)) return false;
+	SetMethods.add(compiled, key);
+	return true;
+}
+
+/**
  * Refuse code compiled under the name of a file this instance is loading now (every load of it) a capability that no
- * rule opens for that load's module path; a load whose paths are not known yet is refused it. A name tagged with
- * another instance's id is that instance's to judge while it is up with a check of its own registered (two instances
- * load the same file under their own tags, and the compile hooks are shared by the process); a name tagged with an id
- * no registered check holds (an unknown instance, or one that has shut down) is judged here as any other.
+ * rule opens for that load's module path; a load whose paths are not known yet is refused it. Code compiled under the
+ * name of a copy of one of the instance's helper files is placed as that helper's code: decided as the paths of the
+ * api files importing it while one of them loads, and refused otherwise; under the name of a helper copy tagged with an
+ * id no instance that is up holds, it is refused. A name tagged with another instance's id is
+ * that instance's to judge while it is up with a check of its own registered (two instances load the same file under
+ * their own tags, and the compile hooks are shared by the process); a name tagged with an id no registered check holds
+ * (an unknown instance, or one that has shut down) is judged here as any other.
  * @param {object} slothlet - The instance.
  * @param {object} permissionManager - Its permission manager.
  * @param {string} name - The capability.
@@ -642,6 +707,12 @@ function runtime_assertNamedLoads(slothlet, permissionManager, name, route, file
 		if (paths?.length) permissionManager.assertCapabilityForPaths(paths, name, route);
 		else permissionManager.assertCapability(UNATTRIBUTED_READER, name, route);
 	}
+	if (loads.length) return;
+	const copy = runtime_namesHelperCopy(slothlet, filename);
+	if (copy === null) return;
+	const helper = copy === "own" ? runtime_loadingHelper(slothlet, toComparablePath(filename)) : null;
+	if (helper?.paths?.length) permissionManager.assertCapabilityForPaths(helper.paths, name, route);
+	else permissionManager.assertCapability(UNATTRIBUTED_READER, name, route);
 }
 
 /**
@@ -680,9 +751,13 @@ function runtime_assertCapability(slothlet, name, route, moduleFile = null, file
 	// module's code, and a module's own code compiling under the name is still its own and refused. Every later compile
 	// under the name is placed as the file's code.
 	const unverifiedRunnerCompile = runnerCompile === null && runtime_runnerCompilesLoad(slothlet, filename);
-	// Any other code compiled under the name of a file this instance is loading now is placed as that file's code,
-	// whoever compiles it: decided as the file's module path, as its own top-level code is.
-	if (!unverifiedRunnerCompile) runtime_assertNamedLoads(slothlet, permissionManager, name, route, filename);
+	// vitest's runner compiling a copy of one of the instance's helper files: decided by the code making it, as below
+	// (vitest's runner is no module's code). A helper is no load, so the verified compile is not answered above.
+	const runnerHelperCompile = runtime_runnerCompilesHelper(slothlet, filename, runnerCompile);
+	// Any other code compiled under the name of a file this instance is loading now, or of a copy of one of its helper
+	// files, is placed as that file's code, whoever compiles it: decided as the file's module path, as its own top-level
+	// code is.
+	if (!unverifiedRunnerCompile && !runnerHelperCompile) runtime_assertNamedLoads(slothlet, permissionManager, name, route, filename);
 	const contextManager = slothlet.contextManager;
 	let caller = null;
 	const identity = contextManager?.getCallerIdentity?.(slothlet.instanceID);
