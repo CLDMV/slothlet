@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-23T18:14:43-08:00 (1795486483)
+ *	@Last modified time: 2026-11-24T14:47:56-08:00 (1795560476)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -17,10 +17,12 @@
  * @fileoverview `permissions.search` bounds how far a value handed into a call, or returned out of one, is searched.
  *
  * @description
- * `cyc.fnmod` is a node built from `cyc/fnmod.mjs`. `reader` imports that file itself, so it holds a copy of the
- * node's function, and hands it to `friend.dig()` nested inside objects (`{ v: { v: fn } }`) or beside filler
- * properties (`{ p0: 0, …, fn }`). A rule denies `reader` the node, so a copy the search finds in the argument is
- * refused like `self.cyc.fnmod()`, and one past the search's reach is not found and runs (a documented limit).
+ * `cyc.fnmod` is a node built from `cyc/fnmod.mjs`, and a rule denies `reader` that node. `reader` hands `friend` a
+ * function it defines itself (`() => self.cyc.fnmod("x")`), nested inside objects (`{ v: { v: fn } }`) or beside
+ * filler properties (`{ p0: 0, …, fn }`). `friend` reaches it and calls it, then calls `self.cyc.fnmod("own")` itself.
+ * A call handed a function marks the call as handed the caller's code, and so does one handed plain data that nests
+ * deeper or wider than the search reaches (it fails closed). So at every depth and width the handed function runs as
+ * `reader`, its supplier, and is refused, while `friend`'s own call is allowed: past the limit the call is still marked.
  * `maker.make(n)` returns plain data `n` objects deep; with `caller.provenance: false` returned data is searched when it
  * is handed out, and data deeper than the search reaches comes back as a stand-in (a Proxy) instead of as itself.
  *
@@ -59,7 +61,6 @@ beforeAll(() => {
 	write("cyc/dn.mjs", ["export default function dn(x) {", '\treturn "dn:" + x;', "}"]);
 	write("reader/reader.mjs", [
 		'import { self } from "@cldmv/slothlet/runtime";',
-		'import fnmod from "../cyc/fnmod.mjs";',
 		"const at = async (step) => {",
 		"\ttry {",
 		"\t\treturn await step();",
@@ -68,24 +69,34 @@ beforeAll(() => {
 		"\t}",
 		"};",
 		"export function deep(levels) {",
-		"\tlet value = fnmod;",
+		'\tlet value = () => self.cyc.fnmod("x");',
 		"\tfor (let i = 0; i < levels; i++) value = { v: value };",
 		"\treturn at(() => self.friend.dig(value, levels));",
 		"}",
 		"export function wide(filler) {",
 		"\tconst value = {};",
 		"\tfor (let i = 0; i < filler; i++) value[`p${i}`] = 0;",
-		"\tvalue.fn = fnmod;",
+		'\tvalue.fn = () => self.cyc.fnmod("x");',
 		"\treturn at(() => self.friend.pick(value));",
 		"}"
 	]);
 	write("friend/friend.mjs", [
+		'import { self } from "@cldmv/slothlet/runtime";',
+		"const both = async (handed) => {",
+		"\tlet outcome;",
+		"\ttry {",
+		"\t\toutcome = await handed();",
+		"\t} catch (error) {",
+		'\t\toutcome = "!" + (error?.code ?? error?.name);',
+		"\t}",
+		'\treturn (await self.cyc.fnmod("own")) + "|" + outcome;',
+		"};",
 		"export function dig(value, levels) {",
 		"\tfor (let i = 0; i < levels; i++) value = value.v;",
-		'\treturn value("x");',
+		"\treturn both(value);",
 		"}",
 		"export function pick(value) {",
-		'\treturn value.fn("x");',
+		"\treturn both(value.fn);",
 		"}"
 	]);
 	write("maker/maker.mjs", [
@@ -102,6 +113,13 @@ afterAll(() => {
 });
 
 const DENY_READER = { policy: "allow", rules: [{ caller: "reader.**", target: "cyc.fnmod", effect: "deny" }] };
+
+/**
+ * What `friend` reports for a call marked as handed `reader`'s code: its own call of `cyc.fnmod` runs, and the handed
+ * function runs as `reader` and is refused.
+ * @type {string}
+ */
+const MARKED = "fn:own|!PERMISSION_DENIED";
 
 /**
  * Build an instance with every fixture module mounted.
@@ -138,46 +156,46 @@ describe.each(getMatrixConfigs())("Permissions > search limits > $name", ({ conf
 		other = null;
 	});
 
-	it("by default finds a leaf's function four levels deep in an argument, and not five", async () => {
+	it("by default finds the caller's function four levels deep in an argument, and past that still marks the call", async () => {
 		api = await build(config);
-		expect(await api.reader.deep(1)).toBe("!PERMISSION_DENIED");
-		expect(await api.reader.deep(4)).toBe("!PERMISSION_DENIED");
-		expect(await api.reader.deep(5)).toBe("fn:x");
+		expect(await api.reader.deep(1)).toBe(MARKED);
+		expect(await api.reader.deep(4)).toBe(MARKED);
+		expect(await api.reader.deep(5)).toBe(MARKED);
 	});
 
-	it("a raised depth finds it five levels deep, and leaves properties at their default", async () => {
+	it("a raised depth searches six levels deep and still marks the call past them, leaving properties at their default", async () => {
 		api = await build(config, { ...DENY_READER, search: { depth: 6 } });
-		expect(await api.reader.deep(5)).toBe("!PERMISSION_DENIED");
-		expect(await api.reader.deep(6)).toBe("!PERMISSION_DENIED");
-		expect(await api.reader.deep(7)).toBe("fn:x");
-		expect(await api.reader.wide(500)).toBe("!PERMISSION_DENIED");
-		expect(await api.reader.wide(600)).toBe("fn:x");
+		expect(await api.reader.deep(5)).toBe(MARKED);
+		expect(await api.reader.deep(6)).toBe(MARKED);
+		expect(await api.reader.deep(7)).toBe(MARKED);
+		expect(await api.reader.wide(500)).toBe(MARKED);
+		expect(await api.reader.wide(600)).toBe(MARKED);
 	});
 
-	it("a lowered depth stops sooner", async () => {
+	it("a lowered depth stops sooner and still marks the call past it", async () => {
 		api = await build(config, { ...DENY_READER, search: { depth: 1 } });
-		expect(await api.reader.deep(1)).toBe("!PERMISSION_DENIED");
-		expect(await api.reader.deep(2)).toBe("fn:x");
+		expect(await api.reader.deep(1)).toBe(MARKED);
+		expect(await api.reader.deep(2)).toBe(MARKED);
 	});
 
-	it("by default does not find one past 512 properties, and finds it within them", async () => {
+	it("by default searches 512 properties and still marks the call past them", async () => {
 		api = await build(config);
-		expect(await api.reader.wide(10)).toBe("!PERMISSION_DENIED");
-		expect(await api.reader.wide(500)).toBe("!PERMISSION_DENIED");
-		expect(await api.reader.wide(600)).toBe("fn:x");
+		expect(await api.reader.wide(10)).toBe(MARKED);
+		expect(await api.reader.wide(500)).toBe(MARKED);
+		expect(await api.reader.wide(600)).toBe(MARKED);
 	});
 
-	it("raised properties find it past 512, and leave depth at its default", async () => {
+	it("raised properties search past 512 and leave depth at its default", async () => {
 		api = await build(config, { ...DENY_READER, search: { properties: 1024 } });
-		expect(await api.reader.wide(600)).toBe("!PERMISSION_DENIED");
-		expect(await api.reader.deep(4)).toBe("!PERMISSION_DENIED");
-		expect(await api.reader.deep(5)).toBe("fn:x");
+		expect(await api.reader.wide(600)).toBe(MARKED);
+		expect(await api.reader.deep(4)).toBe(MARKED);
+		expect(await api.reader.deep(5)).toBe(MARKED);
 	});
 
-	it("lowered properties stop sooner", async () => {
+	it("lowered properties stop sooner and still mark the call past them", async () => {
 		api = await build(config, { ...DENY_READER, search: { properties: 8 } });
-		expect(await api.reader.wide(10)).toBe("fn:x");
-		expect(await api.reader.wide(5)).toBe("!PERMISSION_DENIED");
+		expect(await api.reader.wide(10)).toBe(MARKED);
+		expect(await api.reader.wide(5)).toBe(MARKED);
 	});
 
 	it("with provenance off, returned data within the depth comes back as itself and deeper as a stand-in", async () => {
@@ -201,9 +219,10 @@ describe.each(getMatrixConfigs())("Permissions > search limits > $name", ({ conf
 	it("two instances keep their own limits", async () => {
 		api = await build(config);
 		other = await build(config, { ...DENY_READER, search: { depth: 6 } });
-		expect(await api.reader.deep(5)).toBe("fn:x");
-		expect(await other.reader.deep(5)).toBe("!PERMISSION_DENIED");
-		expect(await api.reader.deep(5)).toBe("fn:x");
+		expect(await api.reader.deep(5)).toBe(MARKED);
+		expect(await other.reader.deep(5)).toBe(MARKED);
+		expect(await other.reader.deep(7)).toBe(MARKED);
+		expect(await api.reader.deep(5)).toBe(MARKED);
 	});
 
 	it("an api.add cannot change the instance's limit", async () => {
@@ -211,7 +230,7 @@ describe.each(getMatrixConfigs())("Permissions > search limits > $name", ({ conf
 		await expect(
 			api.slothlet.api.add("extra", path.join(ROOT, "friend"), { id: "extra", permissions: { search: { depth: 6 } } })
 		).rejects.toMatchObject({ code: "INVALID_CONFIG_UNKNOWN_KEY" });
-		expect(await api.reader.deep(5)).toBe("fn:x");
+		expect(await api.reader.deep(5)).toBe(MARKED);
 	});
 });
 
