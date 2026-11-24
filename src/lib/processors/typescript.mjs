@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T14:44:13-08:00 (1794955453)
+ *	@Last modified time: 2026-11-23T20:09:45-08:00 (1795493385)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -793,10 +793,12 @@ export function rewriteRelativeSpecifiers(code, sourcePath, resolve) {
  * @param {string} instanceID - Slothlet instance ID (used as cache namespace)
  * @param {(filePath: string) => Promise<string>} [transform] - Transpiles a `.ts`/`.mts`
  *   file to JavaScript; enables following relative `.ts`/`.mts` imports.
+ * @param {(from: string, to: string) => void} [checkEdge] - Asked for each relative import of the graph, by the
+ *   importing file's and the imported file's paths; throws to refuse it (a leaf file, see the loader).
  * @returns {Promise<{url: string, cacheDir: string}>} Entry file URL and the cache directory for this instance
  * @public
  */
-export async function writeTransformedToCache(originalPath, code, instanceID, transform) {
+export async function writeTransformedToCache(originalPath, code, instanceID, transform, checkEdge) {
 	// Normalize to an absolute path up front. The hash below must use the SAME
 	// absolute form: hashing a relative `originalPath` would make the cache key —
 	// and the resulting file:// URL and Node's module identity — depend on
@@ -813,7 +815,7 @@ export async function writeTransformedToCache(originalPath, code, instanceID, tr
 		await sweepStaleSlothletCache(projectRoot);
 		const cacheDir = path.join(projectRoot, ".slothlet-cache", `${NativeProcess.pid}-${cacheDirKey(instanceID)}`);
 		await mkdir(cacheDir, { recursive: true });
-		return await writeTransformedGraph(absolutePath, code, cacheDir, transform);
+		return await writeTransformedGraph(absolutePath, code, cacheDir, transform, checkEdge);
 	} finally {
 		if (usesFallback) pendingFallbackWrites--;
 	}
@@ -840,10 +842,11 @@ function cacheDirKey(instanceID) {
  * @param {string} code - Transformed JavaScript for `absolutePath`.
  * @param {string} cacheDir - Existing cache directory for this instance.
  * @param {(filePath: string) => Promise<string>} [transform] - Transpiles a `.ts`/`.mts` file.
+ * @param {(from: string, to: string) => void} [checkEdge] - Asked for each relative import of the graph.
  * @returns {Promise<{url: string, cacheDir: string}>} Entry file URL and the cache directory.
  * @private
  */
-async function writeTransformedGraph(absolutePath, code, cacheDir, transform) {
+async function writeTransformedGraph(absolutePath, code, cacheDir, transform, checkEdge) {
 	// Phase 1 — transpile the transitive graph of relative `.ts`/`.mts` imports.
 	// `transformed` maps each absolute TS source path to its transpiled (pre-rewrite)
 	// code; `deps` records the relative-`.ts`/`.mts` edges used for closure hashing.
@@ -858,6 +861,7 @@ async function writeTransformedGraph(absolutePath, code, cacheDir, transform) {
 			// Discovery pass: collect relative `.ts`/`.mts` targets without rewriting.
 			rewriteRelativeSpecifiers(MapMethods.get(transformed, file), file, (absoluteTarget, _suffix, specifier) => {
 				const resolved = resolveModuleFile(absoluteTarget);
+				if (checkEdge) checkEdge(file, resolved.path);
 				if (resolved.isTS) SetMethods.add(fileDeps, resolved.path);
 				return specifier;
 			});

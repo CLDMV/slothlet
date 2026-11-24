@@ -19,6 +19,7 @@ Slothlet's module loader automatically transforms your file structure into a cle
 - [Hidden Entries](#hidden-entries)
 - [Utility Modules](#utility-modules)
 - [Helper Modules Are Per Instance](#helper-modules-are-per-instance)
+- [Leaf Files Are Not Imported](#leaf-files-are-not-imported)
 - [What a Module Imports From slothlet](#what-a-module-imports-from-slothlet)
 - [Smart Function Naming](#smart-function-naming)
 - [TypeScript Modules](#typescript-modules)
@@ -585,6 +586,41 @@ Limits of the rule:
 - **Requires that run after a CommonJS module has loaded.** The per-instance `require` cache is in place only while a CommonJS leaf or helper is being loaded. A `require()` — or `import()` — that a CommonJS module makes later, inside a function the api calls, reaches the shared copy. Require helpers at the top of the file.
 - **ES modules required under vitest.** A `.cjs` leaf always loads natively, so an ES module it `require()`s is Node's per-instance copy, while the instance's ES module leaves import their copy through vite's module graph — two copies within one instance (each still separate from other instances). `.cjs` helpers do not have this split: the plugin serves them through the same per-instance CommonJS cache.
 - Browser mode loads leaves from the manifest without a per-instance query, so neither leaves nor their helpers are per instance there.
+
+---
+
+## Leaf Files Are Not Imported
+
+Module code imports lib files, never a leaf file. A leaf file is any file slothlet composes into an api tree: a loadable file (`.mjs`, `.cjs`, `.js`, and `.ts` / `.mts` with TypeScript on) under an instance's base folder or under an `api.slothlet.api.add()` mount, that the hidden rules (`.` / `__` prefixes, `hidden` globs) and the depth limit leave in the tree. Module code is the code slothlet loads for an instance: its leaf files, and every file they load in turn. An import, re-export or `require()` module code makes of a leaf file is refused with `MODULE_LEAF_IMPORT_REFUSED`, whose message names the importing file and the leaf file. A leaf is reached through `self`, at the api path slothlet composes it to; code two leaves share goes in a lib folder outside the api tree.
+
+```text
+project/
+├── lib/
+│   └── shape.mjs      export const shape = (x) => ({ x });
+└── api/
+    ├── point/
+    │   └── point.mjs  import { shape } from "../../lib/shape.mjs";  // loads: a lib file
+    └── report/
+        └── report.mjs import { make } from "../point/point.mjs";   // refused: a leaf file
+```
+
+```javascript
+// api/report/report.mjs, reaching the leaf through self instead
+import { self } from "@cldmv/slothlet/runtime";
+export const report = async (x) => self.point(x);
+```
+
+The rule holds always: with permissions on, off or `"disabled"`, and whatever the rules say. It holds for a sibling in the same folder, a file in a subfolder, another folder of the tree and another mount, by every route: a static `import`, `export … from`, `import()`, `import.meta.resolve()`, a `require()` or `require.resolve()` (also one made by `createRequire`), and a TypeScript leaf's relative imports. A lib file is held to it too once module code has loaded it, so a lib file cannot pass a leaf file on. The host's own imports are unchanged: the host and its tests import leaf files as before, and a file no live instance composes is a lib file.
+
+The refusal is made as the import resolves, so the leaf file's copy is never evaluated. An eager build of a tree whose file imports a leaf file fails with that file's `MODULE_IMPORT_FAILED`, the refusal as its cause; in a lazy tree the folder holding the file fails as it loads, and no other folder is built for it. An `import()` or `require()` made inside a function fails when it runs.
+
+Which files are leaf files is read from slothlet's folder scan of each tree, the same walk that composes it; a lazy tree is scanned without being built. Where slothlet cannot see the import:
+
+- **Source read and compiled.** A module that reads a leaf file's source and compiles it (`vm`, `new Function`, `eval`) is not importing it. That code is evaluated code, which slothlet attributes to the module that compiled it, never to the leaf (see [PERMISSIONS.md](PERMISSIONS.md#file-level-code-has-its-own-permission-path)), and with permissions on it needs `capability:code`.
+- **A bare name only known as it runs, under vite's module runner.** An `import()` whose specifier is computed as it runs and is a bare name vite resolves (a package subpath, an `#imports` entry) is not checked there; a literal one is, and under Node's own loader both are.
+- **In the browser** no import is seen; leaves load from the manifest without the hooks.
+
+A function of a leaf that still reaches module code another way is checked as a call of its node (see [PERMISSIONS.md](PERMISSIONS.md)).
 
 ---
 

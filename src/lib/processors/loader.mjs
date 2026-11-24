@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T21:24:22-08:00 (1794979462)
+ *	@Last modified time: 2026-11-23T20:09:44-08:00 (1795493384)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -82,8 +82,16 @@ import {
 	URLMethods,
 	URLSearchParamsMethods
 } from "#helpers/intrinsics";
-const { installInstanceImportHooks, requireInInstance, setImportRefusal, noteModuleFile, noteModuleRoot } =
-	instanceImportsInternals("lib/processors/loader");
+const {
+	installInstanceImportHooks,
+	requireInInstance,
+	setImportRefusal,
+	setLeafImportRefusal,
+	noteLeafFiles,
+	noteModuleFile,
+	noteModuleRoot,
+	refuseLeafEdge
+} = instanceImportsInternals("lib/processors/loader");
 const { createModuleLoad } = framePlacementInternals("lib/processors/loader");
 
 /**
@@ -99,6 +107,22 @@ const { createModuleLoad } = framePlacementInternals("lib/processors/loader");
  */
 function isHiddenEntryName(name) {
 	return StringMethods.startsWith(name, ".") || StringMethods.startsWith(name, "__");
+}
+
+/**
+ * The paths of the files a folder scan listed, in its folders at every depth: the tree's leaf files.
+ * @param {{files: Array<{path: string}>, directories: Array<{children: object}>}} structure - The scan's structure.
+ * @param {string[]} [into=[]] - The list to add to.
+ * @returns {string[]} The paths.
+ * @private
+ *
+ * @example
+ * leafPaths({ files: [{ path: "/app/api/a.mjs" }], directories: [] }); // ["/app/api/a.mjs"]
+ */
+function leafPaths(structure, into = []) {
+	for (let index = 0; index < structure.files.length; index++) listPush(into, path.resolve(structure.files[index].path));
+	for (let index = 0; index < structure.directories.length; index++) leafPaths(structure.directories[index].children, into);
+	return into;
 }
 
 /**
@@ -478,6 +502,8 @@ function ensureInstanceImportHooks() {
 	if (instanceImportHooksInstalled) return;
 	// A module's import of one of slothlet's own files is refused with slothlet's own error.
 	setImportRefusal(({ specifier, file, allowed }) => new SlothletError("MODULE_INTERNAL_NOT_IMPORTABLE", { specifier, file, allowed }));
+	// Module code's import of a leaf file of an api tree is refused with slothlet's own error.
+	setLeafImportRefusal(({ importer, file }) => new SlothletError("MODULE_LEAF_IMPORT_REFUSED", { importer, file }));
 	instanceImportHooksInstalled = installInstanceImportHooks(createRequire(import.meta.url)("node:module"));
 }
 
@@ -1170,7 +1196,9 @@ export class Loader extends ComponentBase {
 	 * @private
 	 */
 	async #buildTypescriptModuleUrl(writeTransformedToCache, filePath, code, instanceID, moduleID, cacheBust, transform) {
-		const { url, cacheDir } = await writeTransformedToCache(filePath, code, instanceID, transform);
+		// A TypeScript leaf's relative imports are compiled with it: an edge to a leaf file is refused here, as the resolve
+		// hook refuses it for any other module code.
+		const { url, cacheDir } = await writeTransformedToCache(filePath, code, instanceID, transform, refuseLeafEdge);
 		SetMethods.add((this.slothlet._typescriptCacheDirs ??= new Set()), cacheDir);
 		let moduleUrl = `${url}?slothlet_instance=${instanceID}`;
 		// The false (no-moduleID) arm is covered by initial-TS-load tests in isolation but lost in
@@ -1328,6 +1356,10 @@ export class Loader extends ComponentBase {
 				}
 			}
 		}
+
+		// The files the scan composes are the tree's leaf files, which module code may not import (recorded from the walk
+		// alone: nothing is loaded for it, so a lazy tree stays unbuilt).
+		if (currentDepth === 0) noteLeafFiles(this.slothlet.instanceID, leafPaths(structure));
 
 		// Warn if directory is empty or has no loadable modules (only for root scans or add-api workflows).
 		if (isRootScan && structure.files.length === 0 && structure.directories.length === 0) {

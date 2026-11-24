@@ -84,6 +84,8 @@
 		"HINT_INSTANCE_ID_IN_USE": "Chaque instance a besoin de son propre ID. Arrêtez d'abord l'autre instance, ou laissez slothlet générer l'ID.",
 		"MODULE_INTERNAL_NOT_IMPORTABLE": "'{specifier}' ({file}) fait partie des fichiers propres de slothlet, que seuls les fichiers de slothlet et l'hôte peuvent importer ou utiliser. Les fichiers d'un module peuvent importer {allowed}.",
 		"HINT_MODULE_INTERNAL_NOT_IMPORTABLE": "Accédez aux autres modules par self et réservez les fichiers propres de slothlet au code de l'hôte.",
+		"MODULE_LEAF_IMPORT_REFUSED": "'{importer}' importe '{file}', un fichier feuille d'un arbre d'API slothlet. Le code d'un module ne peut importer que des fichiers lib, jamais un fichier que slothlet compose dans un arbre d'API.",
+		"HINT_MODULE_LEAF_IMPORT_REFUSED": "Accédez aux fonctions de ce fichier par self, au chemin d'API où slothlet le compose, ou déplacez le code partagé dans un dossier lib hors de l'arbre d'API.",
 		"CONTEXT_ALREADY_EXISTS": "Le contexte pour l'instance '{instance}' existe déjà. Impossible d'initialiser deux fois.",
 		"HINT_CONTEXT_ALREADY_EXISTS": "Ce contexte existe déjà. Vérifiez si vous essayez d'initialiser la même instance deux fois.",
 		"CONTEXT_NOT_FOUND": "Contexte non trouvé pour l'instance '{instance}'. L'instance a peut-être été arrêtée. Instances disponibles : {instances}",

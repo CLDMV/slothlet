@@ -84,6 +84,8 @@
 		"HINT_INSTANCE_ID_IN_USE": "各インスタンスには固有の ID が必要です。先にもう一方のインスタンスをシャットダウンするか、ID を自動生成させてください。",
 		"MODULE_INTERNAL_NOT_IMPORTABLE": "'{specifier}' ({file}) は slothlet 自身のファイルの一部であり、インポートまたは使用できるのは slothlet 自身のファイルとホストだけです。モジュールのファイルがインポートできるのは {allowed} です。",
 		"HINT_MODULE_INTERNAL_NOT_IMPORTABLE": "他のモジュールには self を通じてアクセスし、内部ファイルはホストのコードだけで使用してください。",
+		"MODULE_LEAF_IMPORT_REFUSED": "'{importer}' が slothlet の API ツリーのリーフファイル '{file}' をインポートしています。モジュールのコードがインポートできるのは lib ファイルだけで、slothlet が API ツリーに組み込むファイルは決してインポートできません。",
+		"HINT_MODULE_LEAF_IMPORT_REFUSED": "そのファイルの関数には、slothlet が組み込む API パスで self を通じてアクセスするか、共有コードを API ツリーの外の lib フォルダーに移してください。",
 		"CONTEXT_ALREADY_EXISTS": "インスタンス '{instance}' のコンテキストは既に存在します。2回初期化することはできません。",
 		"HINT_CONTEXT_ALREADY_EXISTS": "このコンテキストは既に存在します。同じインスタンスを2回初期化しようとしていないか確認してください。",
 		"CONTEXT_NOT_FOUND": "インスタンス '{instance}' のコンテキストが見つかりません。インスタンスが終了した可能性があります。利用可能なインスタンス: {instances}",
