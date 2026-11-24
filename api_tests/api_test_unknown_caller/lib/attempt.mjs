@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /api_tests/api_test_unknown_caller/shared/attempt.mjs
+ *	@Filename: /api_tests/api_test_unknown_caller/lib/attempt.mjs
  *	@Date: 2026-11-09T01:57:53-08:00 (1794218273)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-09T02:12:51-08:00 (1794219171)
+ *	@Last modified time: 2026-11-24T11:38:20-08:00 (1795549100)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -17,11 +17,11 @@
  * @fileoverview Shared test helper for the unknown-caller fixture (#726).
  *
  * @description
- * Lives in a folder the instance hides, so it is never an api leaf — it is plain module code, the
- * way a package's internal helper is. Every fixture leaf reports a gated call through here, so a
+ * Lives in the fixture's lib folder, outside every api tree, so it is never an api leaf — it is plain
+ * module code, the way a package's internal helper is. Every fixture leaf reports a gated call through here, so a
  * permission denial comes back as a value the suite can compare instead of a rejection.
  *
- * @module api_test_unknown_caller.shared.attempt
+ * @module api_test_unknown_caller.lib.attempt
  */
 
 /**

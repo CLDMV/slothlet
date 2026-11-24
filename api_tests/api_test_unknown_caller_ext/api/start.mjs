@@ -1,13 +1,13 @@
 /**
  *
  *	@Project: @cldmv/slothlet
- *	@Filename: /api_tests/api_test_unknown_caller/ext/api/start.mjs
+ *	@Filename: /api_tests/api_test_unknown_caller_ext/api/start.mjs
  *	@Date: 2026-11-09T01:56:06-08:00 (1794218166)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-09T02:12:50-08:00 (1794219170)
+ *	@Last modified time: 2026-11-24T11:38:21-08:00 (1795549101)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -15,10 +15,10 @@
 
 /**
  * @fileoverview The extension's entry (`ext.start`). A plain function on purpose: it hands back the promise of the
- * sibling file, so its own frame is gone when that work resumes.
- * @module api_test_unknown_caller.ext.start
+ * lib file it imports, so its own frame is gone when that work resumes.
+ * @module api_test_unknown_caller_ext.api.start
  */
-import { afterGate } from "./resume.mjs";
+import { afterGate } from "../lib/resume.mjs";
 
 /**
  * Start a scenario.
