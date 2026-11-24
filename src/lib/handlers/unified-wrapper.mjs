@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-23T14:42:47-08:00 (1795473767)
+ *	@Last modified time: 2026-11-22T23:31:46-08:00 (1795419106)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -205,7 +205,6 @@ const {
 	runtime_loadingFileRunning,
 	isLeafFileFunction,
 	leafOfCopy,
-	settleLeafCopies,
 	outerCallerCeiling,
 	setApiValueCheck,
 	setHandedOutCheck,
@@ -18651,9 +18650,6 @@ class UnifiedWrapper extends ComponentBase {
 						if (anyRunOpen()) runtime_checkpointLoaded(this);
 						// Changes made through stand-ins for it while it loaded, now that it has (#653).
 						runtime_replayStandInChanges(this, changeGeneration);
-						// The nodes of files this load's modules imported copies of, while permissions are on (see
-						// settleLeafCopies in handlers/frame-placement): a call of a copy is then a call of its node from the start.
-						await PromiseMethods.catch(settleLeafCopies(this.slothlet), () => {});
 
 						if ((wrapperDebugEnabled || this.____config?.debug?.wrapper) && this.____slothletInternal.apiPath === "string") {
 							this.slothlet.debug("wrapper", {
@@ -24435,10 +24431,6 @@ export function internals(consumer) {
 		releaseModuleMakers,
 		releaseStandInChanges,
 		resolveWrapper,
-		// Read when it is used: a file of slothlet's own can take these before this file's top level has run.
-		get settleLeafCopies() {
-			return settleLeafCopies;
-		},
 		runtime_assertCapability,
 		runtime_hasInternalSlots,
 		runtime_nodeReport,

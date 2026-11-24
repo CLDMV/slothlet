@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-23T14:42:53-08:00 (1795473773)
+ *	@Last modified time: 2026-11-22T23:31:53-08:00 (1795419113)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -221,7 +221,7 @@ const { enableNodeCallbackPatching, disableNodeCallbackPatching, enableAsyncCall
 const { enableFunctionSourcePatching, disableFunctionSourcePatching } = functionSourceContextInternals("slothlet");
 const { registerCapabilityCheck, releaseCapabilityCheck } = capabilityContextInternals("slothlet");
 const { claimInstanceScope, setInstanceSelfKind, closeInstanceSelf } = instanceImportsInternals("slothlet");
-const { forgetInstanceScripts, recordInstanceOwner, runAsHostWork, settleLeafCopies } = framePlacementInternals("slothlet");
+const { forgetInstanceScripts, recordInstanceOwner, runAsHostWork } = framePlacementInternals("slothlet");
 const { getContextManager } = contextInternals("slothlet");
 
 /**
@@ -2240,10 +2240,6 @@ class Slothlet {
 		if (this.reference && typeof this.reference === "object") {
 			runtime_frameworkWrite(this.boundApi, () => Objects.assign(this.boundApi, this.reference));
 		}
-
-		// The nodes of a lazy tree's files its modules imported copies of are built before any module runs, while
-		// permissions are on (see settleLeafCopies in handlers/frame-placement).
-		await settleLeafCopies(this);
 
 		// Stackable lifecycle routines (#341): fold every mounted module's contribution to a
 		// configured routine name into its namespace's stacked callable and each routine's root
