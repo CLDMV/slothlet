@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:30:17-08:00 (1794882617)
+ *	@Last modified time: 2026-11-24T08:08:36-08:00 (1795536516)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -27,6 +27,7 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { resolve, join } from "node:path";
 import slothlet from "@cldmv/slothlet";
+import { apiPart } from "../../setup/vitest-helper.mjs";
 
 const FIXTURE = resolve("api_tests/api_test_crossing_rules");
 
@@ -46,9 +47,9 @@ const ALLOW_WRITER_LEAF = [
  * @returns {Promise<object>} The api.
  */
 async function mount(options) {
-	const api = await slothlet({ base: join(FIXTURE, "host"), silent: true, ...options });
-	await api.slothlet.api.add("owner", join(FIXTURE, "owner"), { id: "owner" });
-	await api.slothlet.api.add("reader", join(FIXTURE, "reader"), { id: "reader" });
+	const api = await slothlet({ base: apiPart(FIXTURE), silent: true, ...options });
+	await api.slothlet.api.add("owner", apiPart(FIXTURE, "owner"), { id: "owner" });
+	await api.slothlet.api.add("reader", apiPart(FIXTURE, "reader"), { id: "reader" });
 	await api.owner;
 	await api.reader;
 	return api;
@@ -138,7 +139,7 @@ describe.each(matrix)("crossing rules > $mode / $runtime / $attribution", ({ mod
 
 	it("keeps a file's class from a file of the same folder a rule refuses the write, by every route", async () => {
 		api = await slothlet({
-			base: join(FIXTURE, "pair"),
+			base: apiPart(FIXTURE, "pair"),
 			silent: true,
 			mode,
 			runtime,
@@ -155,7 +156,7 @@ describe.each(matrix)("crossing rules > $mode / $runtime / $attribution", ({ mod
 
 	it("leaves two files of one folder each other's values where no rule stands between them", async () => {
 		api = await slothlet({
-			base: join(FIXTURE, "pair"),
+			base: apiPart(FIXTURE, "pair"),
 			silent: true,
 			mode,
 			runtime,
@@ -170,7 +171,7 @@ describe.each(matrix)("crossing rules > $mode / $runtime / $attribution", ({ mod
 		"keeps a class a node exports from a file of the same folder a rule refuses the write, by every route (%s)",
 		async (file) => {
 			api = await slothlet({
-				base: join(FIXTURE, "kin"),
+				base: apiPart(FIXTURE, "kin"),
 				silent: true,
 				mode,
 				runtime,
@@ -193,7 +194,7 @@ describe.each(matrix)("crossing rules > $mode / $runtime / $attribution", ({ mod
 		"refuses a write a bound built-in makes through the owner for a file of the same folder a rule refuses the write (%s)",
 		async (file) => {
 			api = await slothlet({
-				base: join(FIXTURE, "kin"),
+				base: apiPart(FIXTURE, "kin"),
 				silent: true,
 				mode,
 				runtime,
@@ -212,7 +213,7 @@ describe.each(matrix)("crossing rules > $mode / $runtime / $attribution", ({ mod
 
 	it("lands a write a bound built-in makes through the owner for a file of the same folder no rule refuses", async () => {
 		api = await slothlet({
-			base: join(FIXTURE, "kin"),
+			base: apiPart(FIXTURE, "kin"),
 			silent: true,
 			mode,
 			runtime,
@@ -225,7 +226,7 @@ describe.each(matrix)("crossing rules > $mode / $runtime / $attribution", ({ mod
 
 	it("leaves a class a node exports to a file of the same folder where no rule stands between them", async () => {
 		api = await slothlet({
-			base: join(FIXTURE, "kin"),
+			base: apiPart(FIXTURE, "kin"),
 			silent: true,
 			mode,
 			runtime,
@@ -249,7 +250,7 @@ describe.each(matrix)("crossing rules > $mode / $runtime / $attribution", ({ mod
 		"holds each file of one folder to its own write rules through a view of another file's class, %s taking it first",
 		async (...order) => {
 			api = await slothlet({
-				base: join(FIXTURE, "split"),
+				base: apiPart(FIXTURE, "split"),
 				silent: true,
 				mode,
 				runtime,
@@ -267,21 +268,21 @@ describe.each(matrix)("crossing rules > $mode / $runtime / $attribution", ({ mod
 		"holds each function of a module to its own write rules through a view of another module's class, %s taking it first",
 		async (...order) => {
 			api = await slothlet({
-				base: join(FIXTURE, "host"),
+				base: apiPart(FIXTURE),
 				silent: true,
 				mode,
 				runtime,
 				permissions: { policy: "allow", caller: { attribution }, rules: SPLIT_RULES }
 			});
-			await api.slothlet.api.add("owner", join(FIXTURE, "split", "owner"), { id: "owner" });
-			await api.slothlet.api.add("readers", join(FIXTURE, "split", "readers"), { id: "readers" });
+			await api.slothlet.api.add("owner", join(apiPart(FIXTURE, "split"), "owner"), { id: "owner" });
+			await api.slothlet.api.add("readers", join(apiPart(FIXTURE, "split"), "readers"), { id: "readers" });
 			expect(await splitWrites(api, order)).toEqual(SPLIT_EXPECTED);
 		}
 	);
 
 	it("lands every write of two files of one folder onto another file's class where no rule stands between them", async () => {
 		api = await slothlet({
-			base: join(FIXTURE, "split"),
+			base: apiPart(FIXTURE, "split"),
 			silent: true,
 			mode,
 			runtime,

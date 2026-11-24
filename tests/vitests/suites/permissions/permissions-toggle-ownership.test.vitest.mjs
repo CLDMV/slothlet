@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:30:47-08:00 (1794882647)
+ *	@Last modified time: 2026-11-24T08:09:00-08:00 (1795536540)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -29,7 +29,6 @@
  * Fixture: `api_tests/api_test_self_write_reach` — `base/`, `victim/`, `guest/`.
  */
 import { describe, it, expect, afterEach } from "vitest";
-import path from "node:path";
 import slothletInstance from "@cldmv/slothlet";
 
 /**
@@ -42,7 +41,12 @@ import slothletInstance from "@cldmv/slothlet";
  */
 const slothlet = (config) =>
 	slothletInstance(config?.permissions ? { ...config, permissions: { caller: { provenance: false }, ...config.permissions } } : config);
-import { TEST_DIRS, withSuppressedSlothletErrorOutput, withSuppressedSlothletErrorOutputSync } from "../../setup/vitest-helper.mjs";
+import {
+	TEST_DIRS,
+	withSuppressedSlothletErrorOutput,
+	withSuppressedSlothletErrorOutputSync,
+	apiPart
+} from "../../setup/vitest-helper.mjs";
 
 const FIXTURE = TEST_DIRS.API_TEST_SELF_WRITE_REACH;
 const PROBE = "slothlet.test.i625.toggle";
@@ -83,9 +87,9 @@ describe.each(CONFIGS)("ownership across a permission toggle (#625) — $mode / 
 	 * @returns {Promise<object>} The composed api.
 	 */
 	async function load(options = {}) {
-		api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, diagnostics: true, ...options });
-		await api.slothlet.api.add("victim", path.join(FIXTURE, "victim"), { id: "victim" });
-		for (const name of ["guest", "other"]) await api.slothlet.api.add(name, path.join(FIXTURE, "guest"), { id: name });
+		api = await slothlet({ base: apiPart(FIXTURE), mode, runtime, silent: true, diagnostics: true, ...options });
+		await api.slothlet.api.add("victim", apiPart(FIXTURE, "victim"), { id: "victim" });
+		for (const name of ["guest", "other"]) await api.slothlet.api.add(name, apiPart(FIXTURE, "guest"), { id: name });
 		return api;
 	}
 
@@ -132,7 +136,7 @@ describe.each(CONFIGS)("ownership across a permission toggle (#625) — $mode / 
 		"refuses a change through the api a module is handed from code it cannot attribute, with the system off",
 		async () => {
 			await load({ permissions: { mode: false } });
-			await api.slothlet.api.add("twin", path.join(FIXTURE, "twin"), { id: "twin" });
+			await api.slothlet.api.add("twin", apiPart(FIXTURE, "twin"), { id: "twin" });
 			/**
 			 * A promise and the function that resolves it.
 			 * @returns {[Promise<void>, function(): void]} The gate and its release.
@@ -390,11 +394,11 @@ describe.each(CONFIGS)("ownership across a permission toggle (#625) — $mode / 
 	});
 
 	it("refuses an unknown mode in the config", async () => {
-		await expect(
-			slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, permissions: { mode: "partial" } })
-		).rejects.toMatchObject({
-			code: "INVALID_CONFIG"
-		});
+		await expect(slothlet({ base: apiPart(FIXTURE), mode, runtime, silent: true, permissions: { mode: "partial" } })).rejects.toMatchObject(
+			{
+				code: "INVALID_CONFIG"
+			}
+		);
 	});
 
 	it("turns a disabled system on and off from the host, the namespace kept from module code once it is", async () => {

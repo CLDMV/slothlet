@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:13:53-08:00 (1794874433)
+ *	@Last modified time: 2026-11-24T08:04:41-08:00 (1795536281)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -39,10 +39,10 @@ const FIXTURE_REL = "api_tests/api_test_browser";
 // A leaf whose helper files use slothlet's internal exports, inside and outside the module's folder.
 const HELPER_REL = "api_tests/api_test_browser_internal_helper/api";
 // A callable api root: its function's own members by every route, and its own code's reads.
-const ROUTES_REL = "api_tests/api_test_function_member_routes/base";
+const ROUTES_REL = "api_tests/api_test_function_member_routes/api";
 const ROOT_LEAF_REL = "api_tests/api_test_root_own_leaf/plain";
-const SELF_FN_REL = "api_tests/api_test_self_parity/fnroot";
-const SELF_OBJ_REL = "api_tests/api_test_self_parity/objroot";
+const SELF_FN_REL = "api_tests/api_test_self_parity/api";
+const SELF_OBJ_REL = "api_tests/api_test_self_parity_objroot/api";
 // A sibling api file that imports a leaf's file itself.
 const LEAF_COPY_REL = "api_tests/api_test_leaf_file_import_browser";
 // A module turning strings into code by every route a browser offers (built-in capabilities).

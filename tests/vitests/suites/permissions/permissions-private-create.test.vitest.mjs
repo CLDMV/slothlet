@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-18T22:00:26-08:00 (1795068026)
+ *	@Last modified time: 2026-11-24T08:08:55-08:00 (1795536535)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -42,7 +42,7 @@ import { HOWS, PROTOTYPE_ROUTES, create, read, list } from "../../../../api_test
 import { withSuppressedSlothletErrorOutputSync } from "../../setup/vitest-helper.mjs";
 
 const FIXTURE = resolve("api_tests/api_test_private_create");
-const BASE = resolve("api_tests/api_test_self_write_reach/base");
+const BASE = resolve("api_tests/api_test_self_write_reach/api");
 
 const MODES = ["eager", "lazy"];
 const RUNTIMES = ["async", "live"];

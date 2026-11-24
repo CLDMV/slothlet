@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T12:09:27-08:00 (1794946167)
+ *	@Last modified time: 2026-11-24T08:07:40-08:00 (1795536460)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -25,7 +25,7 @@
 
 import path from "path";
 import fs from "fs/promises";
-import { readdirSync } from "fs";
+import { readdirSync, statSync } from "fs";
 import { fileURLToPath } from "url";
 import { parse } from "jsonc-parser";
 
@@ -113,6 +113,8 @@ export const TEST_DIRS = {
 	API_TEST_LIFECYCLE_HOOKS_WALK: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_lifecycle_hooks_walk`),
 	// #518 — relative helper imports below a leaf are per instance (the api lives in `api/`, helpers in `lib/`).
 	API_TEST_HELPER_IMPORTS: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_helper_imports/api`),
+	API_TEST_HELPER_IMPORTS_MOUNT: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_helper_imports_mount/api`),
+	API_TEST_HELPER_IMPORTS_MIXED: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_helper_imports_mixed`),
 	API_TEST_NESTED_ISOLATION: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_nested_isolation/outer`),
 	API_TEST_ROUTINES: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_routines`),
 	API_TEST_ROUTINES_AUTH1: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_routines_auth1`),
@@ -139,7 +141,7 @@ export const TEST_DIRS = {
 	API_TEST_ADD_ROOT_BASE: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_add_root_base`),
 	API_TEST_ADD_ROOT_MULTI: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_add_root_multi`),
 	// #625 — nested `self.X.Y = …` writes follow the same ownership rule as top-level ones.
-	API_TEST_NESTED_SELF_ASSIGN: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_nested_self_assign`),
+	API_TEST_NESTED_SELF_ASSIGN: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_nested_self_assign/api`),
 	// #625 — a module cannot change the framework namespace `self.slothlet`.
 	API_TEST_FRAMEWORK_NAMESPACE_GUARD: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_framework_namespace_guard`),
 	// #625 — what a module reaches through another module's node, symbol keys, and `self` itself.
@@ -151,6 +153,21 @@ export const TEST_DIRS = {
 	// A module file compiling code under its own name as vitest's module runner compiles it.
 	API_TEST_VITEST_RUNNER_COMPILE: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_vitest_runner_compile`)
 };
+
+/**
+ * The api folder of a fixture, or of one of its parts. A fixture keeps its api tree in `api/` and its helpers and
+ * host-side files in `lib/` beside it; a fixture whose tests load several trees (a base and the folders they mount)
+ * has one fixture per tree, `<fixture>_<part>/api`.
+ * @param {string} fixture - The fixture folder (a `TEST_DIRS` entry).
+ * @param {string} [part] - The part, or none for the fixture's own tree.
+ * @returns {string} The api folder.
+ * @example
+ * apiPart(TEST_DIRS.API_TEST_CALLER_SUPPLIED_ROUND7); // ".../api_test_caller_supplied_round7/api"
+ * apiPart(TEST_DIRS.API_TEST_CALLER_SUPPLIED_ROUND7, "callee"); // ".../api_test_caller_supplied_round7_callee/api"
+ */
+export function apiPart(fixture, part) {
+	return path.join(part ? `${fixture}_${part}` : fixture, "api");
+}
 
 /**
  * Configuration space definition for automatic matrix generation
@@ -744,10 +761,26 @@ export function getAllApiTestFoldersSync() {
 			.filter((entry) => entry.isDirectory() && !entry.name.startsWith("."))
 			.map((entry) => path.join("smart_flatten", entry.name));
 
-		return [...topLevelFolders, ...smartFlattenFolders].sort();
+		return [...topLevelFolders, ...smartFlattenFolders].map((folder) => apiRootOf(apiTestsDir, folder)).sort();
 	} catch (error) {
 		console.error(`Error reading ${API_TEST_BASE} directories:`, error);
 		return [];
+	}
+}
+
+/**
+ * The api root of a fixture folder: its `api/` subfolder when it has one (the fixture keeps its helpers and host-side
+ * code in a sibling `lib/`, outside the api tree, as docs/MODULE-STRUCTURE.md lays a project out), else the folder.
+ * @param {string} apiTestsDir - The `api_tests` folder.
+ * @param {string} folder - The fixture folder, relative to `apiTestsDir`.
+ * @returns {string} The api root, relative to `apiTestsDir`.
+ */
+function apiRootOf(apiTestsDir, folder) {
+	const api = path.join(folder, "api");
+	try {
+		return statSync(path.join(apiTestsDir, api)).isDirectory() ? api : folder;
+	} catch {
+		return folder;
 	}
 }
 
@@ -772,7 +805,7 @@ export async function getAllApiTestFolders() {
 			.filter((entry) => entry.isDirectory() && !entry.name.startsWith("."))
 			.map((entry) => `smart_flatten/${entry.name}`);
 
-		return [...topLevelFolders, ...smartFlattenFolders].sort();
+		return [...topLevelFolders, ...smartFlattenFolders].map((folder) => apiRootOf(apiTestsDir, folder)).sort();
 	} catch (error) {
 		console.error(`Error reading ${API_TEST_BASE} directories:`, error);
 		return [];

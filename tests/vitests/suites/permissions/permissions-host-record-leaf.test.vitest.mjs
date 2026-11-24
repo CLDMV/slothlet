@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:30:33-08:00 (1794882633)
+ *	@Last modified time: 2026-11-24T08:08:49-08:00 (1795536529)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -27,7 +27,7 @@
  *
  * Rules: `ext.b.** → host.records.**` and `host.records.** → store.**` are allowed (and the same for `records.host`),
  * nothing lets `ext.b` open a store partition. `ext.b.work` makes each call with a mutable and a frozen argument; the
- * record leaves come from a host file (`host/records.mjs`) or are written in this file, and are mounted at
+ * record leaves come from a host file (`lib/host/records.mjs`) or are written in this file, and are mounted at
  * `host.records` or at `records.host`. Every answer is the same in eager and lazy mode, and in both runtimes.
  *
  * @module tests/vitests/suites/permissions/permissions-host-record-leaf
@@ -38,8 +38,8 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import slothlet from "@cldmv/slothlet";
-import { makeRecords, invoke as hostInvoke } from "../../../../api_tests/api_test_host_record_leaf/host/records.mjs";
-import { openPartition } from "../../../../api_tests/api_test_host_record_leaf/host/partition-helper.mjs";
+import { makeRecords, invoke as hostInvoke } from "../../../../api_tests/api_test_host_record_leaf/lib/host/records.mjs";
+import { openPartition } from "../../../../api_tests/api_test_host_record_leaf/lib/host/partition-helper.mjs";
 import { callThrough } from "../../../../api_tests/api_test_host_record_leaf/node_modules/host-pkg/index.mjs";
 import { relay } from "../../../../api_tests/api_test_host_record_leaf/node_modules/c-pkg/index.mjs";
 import { invoke as sharedInvoke } from "../../../../api_tests/api_test_host_record_leaf/node_modules/ext-pkg/index.mjs";
@@ -87,7 +87,7 @@ function tryPartition(getApi) {
 }
 
 /**
- * A helper of this file that opens a partition, as `partitionHere` is `host/records.mjs`'s.
+ * A helper of this file that opens a partition, as `partitionHere` is `lib/host/records.mjs`'s.
  * @param {() => object} getApi - The host's api.
  * @returns {string} The partition.
  */
@@ -194,7 +194,7 @@ const MODULE_NODE_ROWS = [
 ];
 
 /**
- * A function of this file the host hands modules, as `invoke` is `host/records.mjs`'s.
+ * A function of this file the host hands modules, as `invoke` is `lib/host/records.mjs`'s.
  * @param {object} obj - The object.
  * @param {string} name - The method's name.
  * @returns {unknown} What it returned.

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:24:37-08:00 (1794882277)
+ *	@Last modified time: 2026-11-24T08:05:29-08:00 (1795536329)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -16,7 +16,7 @@
 /**
  * @fileoverview The #717 host record leaf table under Node's own loader, run in a child process by
  * `tests/vitests/suites/permissions/permissions-host-record-leaf.test.vitest.mjs`: the host's record leaves of
- * `host/records.mjs`, mounted at `host.records` and at `records.host`, called by `ext.b.work` for every row with a mutable
+ * `lib/host/records.mjs`, mounted at `host.records` and at `records.host`, called by `ext.b.work` for every row with a mutable
  * and a frozen argument, in eager and lazy mode and in both runtimes, after `ext.b.prepare` loaded its own code slothlet
  * does not tag and made its own nodes. Prints one JSON object keyed
  * `<mode>/<runtime>/<mount>/<row>/<kind>`.
@@ -27,7 +27,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import slothlet from "@cldmv/slothlet";
 import { load } from "load-pkg";
-import { makeRecords, invoke } from "./host/records.mjs";
+import { makeRecords, invoke } from "./lib/host/records.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 
@@ -102,7 +102,7 @@ for (const mode of ["eager", "lazy"]) {
 				{ id: "host-records" }
 			);
 			// A leaf whose host file the host loaded through a package ext.b imports too.
-			const loadedByPackage = await load(new URL("./host/loaded-by-package.mjs", import.meta.url));
+			const loadedByPackage = await load(new URL("./lib/host/loaded-by-package.mjs", import.meta.url));
 			await api.slothlet.api.add(
 				[...mount.split("."), "loaded"],
 				{

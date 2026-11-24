@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:28:09-08:00 (1794882489)
+ *	@Last modified time: 2026-11-24T08:07:28-08:00 (1795536448)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -22,7 +22,7 @@
 
 import { describe, it, expect } from "vitest";
 import { routesManifest, routesRel, rootLeafManifest, rootLeafRel } from "virtual:browser-fixture-manifest";
-import plainRoot from "../../api_tests/api_test_function_member_routes/base/root.mjs";
+import plainRoot from "../../api_tests/api_test_function_member_routes/api/root.mjs";
 import { routes } from "../../api_tests/api_test_function_member_routes/lib/routes.mjs";
 
 const DENIED = "threw:PERMISSION_DENIED";

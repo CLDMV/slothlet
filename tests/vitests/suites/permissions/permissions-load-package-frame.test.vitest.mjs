@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:30:01-08:00 (1794882601)
+ *	@Last modified time: 2026-11-24T08:08:52-08:00 (1795536532)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -25,12 +25,12 @@
  * api/runner/runner.mjs  starts a timer's job queue, a chain of promise jobs and microtasks queued from it at its top
  *                        level; later(via, route, depth) runs a route's code there, now(route, depth) inside the call
  * api/crunner.cjs        the same for a CommonJS file, with a timer's job queue
- * api/hrunner/hrunner.mjs runs a route's code from the job queue helpers/queue.mjs started when it loaded
+ * api/hrunner/hrunner.mjs runs a route's code from the job queue lib/queue.mjs started when it loaded
  * api/vault/vault.mjs    get() → "SECRET"
  * ```
  * A route `"own-<route>"` is the running file's own code, written outside every export; any other route is the bag's
  * function. The packages are `callback-walker` and `frame-relay` (which calls `callback-walker`), and `cjs-walker` for
- * the CommonJS file; the host file's function is `host/walk.mjs`.
+ * the CommonJS file; the host file's function is `lib/host/walk.mjs`.
  *
  * Expected values come from the rule for code a file starts while it loads (docs/PERMISSIONS.md): the file's module is
  * the caller and the code doing the access is its definer, and a package's or the host's code acts for the code that
@@ -58,11 +58,11 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import slothlet from "@cldmv/slothlet";
-import { walk } from "../../../../api_tests/api_test_load_package_frame/host/walk.mjs";
+import { walk } from "../../../../api_tests/api_test_load_package_frame/lib/host/walk.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../..");
 const BASE = path.resolve(ROOT, "api_tests/api_test_load_package_frame/api");
-const WALK = path.resolve(ROOT, "api_tests/api_test_load_package_frame/host/walk.mjs");
+const WALK = path.resolve(ROOT, "api_tests/api_test_load_package_frame/lib/host/walk.mjs");
 const DENIED = "PERMISSION_DENIED";
 const SECRET = "SECRET";
 

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-23T20:11:01-08:00 (1795493461)
+ *	@Last modified time: 2026-11-24T08:08:38-08:00 (1795536518)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -17,7 +17,7 @@
  * @fileoverview Module code imports lib files, never a leaf file of an api tree, whatever the permission system's mode.
  *
  * @description
- * Fixture `api_test_leaf_import_refused`. Each folder under `cases/` is a base folder with an `importer/` folder that
+ * Fixture `api_test_leaf_import_refused`. Each folder under `api/cases/` is a base folder with an `importer/` folder that
  * reaches a file one way, and an `unrelated/` folder that nothing reaches. A file slothlet composes into an api tree is
  * a leaf file: an import of one made by module code (a leaf, or a lib file a leaf loaded) is refused with
  * MODULE_LEAF_IMPORT_REFUSED, naming the importing file and the leaf file, by every route (a static `import`, an
@@ -38,7 +38,7 @@ import slothlet from "@cldmv/slothlet";
 import { getMatrixConfigs } from "../../setup/vitest-helper.mjs";
 
 const FIXTURE = path.resolve(process.cwd(), "api_tests/api_test_leaf_import_refused");
-const CASES = path.join(FIXTURE, "cases");
+const CASES = path.join(FIXTURE, "api", "cases");
 const REFUSED = "MODULE_LEAF_IMPORT_REFUSED";
 
 /** One configuration per mode and runtime of the shared matrix. */
@@ -211,7 +211,7 @@ describe.each(MATRIX)("Permissions > module code cannot import a leaf file > $na
 	it("refuses an api.add() mount's file importing a leaf of the base tree", async () => {
 		api = await slothlet(options(config, path.join(CASES, "clean")));
 		const added = await outcome(async () => {
-			await api.slothlet.api.add("added", path.join(FIXTURE, "mounts/reaches-base"));
+			await api.slothlet.api.add("added", path.join(FIXTURE, "api", "mounts/reaches-base"));
 			return api.added.x();
 		});
 		expect(added.refused).toBeTruthy();
@@ -221,7 +221,7 @@ describe.each(MATRIX)("Permissions > module code cannot import a leaf file > $na
 	it("refuses an import of an api.add() mount's file once it is mounted", async () => {
 		api = await slothlet(options(config, path.join(CASES, "dynamic-mount")));
 		expect(await api.importer.run(), "a file no tree composes is a lib file").toBe("m");
-		await api.slothlet.api.add("extra", path.join(FIXTURE, "mounts/extra"));
+		await api.slothlet.api.add("extra", path.join(FIXTURE, "api", "mounts/extra"));
 		const called = await outcome(() => api.importer.run());
 		expect(called.refused).toBeTruthy();
 		expectNames(called.refused, "importer/run.mjs", "extra/m.mjs");
@@ -231,7 +231,10 @@ describe.each(MATRIX)("Permissions > module code cannot import a leaf file > $na
 describe("Permissions > module code cannot import a leaf file > under Node's own loader", () => {
 	it("refuses every route in every mode and runtime, as under vitest's runner", () => {
 		const conditions = process.execArgv.filter((arg) => arg.startsWith("--conditions="));
-		const result = spawnSync(process.execPath, [...conditions, path.join(FIXTURE, "probe.mjs")], { encoding: "utf8", timeout: 240000 });
+		const result = spawnSync(process.execPath, [...conditions, path.join(FIXTURE, "lib", "probe.mjs")], {
+			encoding: "utf8",
+			timeout: 240000
+		});
 		expect(result.stderr).toBe("");
 		const out = JSON.parse(result.stdout);
 		const expected = {};

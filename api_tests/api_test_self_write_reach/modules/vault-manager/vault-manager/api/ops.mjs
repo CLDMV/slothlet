@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-18T21:34:52-07:00 (1792384492)
+ *	@Last modified time: 2026-11-24T08:06:38-08:00 (1795536398)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -16,7 +16,7 @@
 /**
  * @fileoverview The `vault-manager` fixture module's code (#625); see `shared/module-code.mjs`.
  */
-import * as code from "../../../../shared/module-code.mjs";
+import * as code from "../lib/module-code.mjs";
 
 /**
  * @param {object} rule - The rule.

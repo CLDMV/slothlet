@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:28:56-08:00 (1794882536)
+ *	@Last modified time: 2026-11-24T08:07:58-08:00 (1795536478)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -35,9 +35,11 @@
  * interleaved must still each be attributed to themselves, and a stack that cannot tell two api
  * paths of one module apart must fail closed.
  *
- * Fixture (`api_tests/api_test_live_suspended_caller`): the base holds the host's `run.*` and
- * `registry.*`; `ext/api` is mounted as `ext` (the extension, with its per-entity `activate`
- * routine), `rogue/api` as `rogue` (a module permitted nothing on the extension). `run.*` may drive
+ * Fixture (`api_tests/api_test_live_suspended_caller`): the base (`api/`) holds the host's `run.*`
+ * and `registry.*`; `api/ext` is mounted as `ext` (the extension, with its per-entity `activate`
+ * routine), `api/rogue` as `rogue` (a module permitted nothing on the extension). The mounted
+ * folders stay inside the base, hidden from it, so a browser instance's manifest of the base holds
+ * them; the files they import are in `lib/`. `run.*` may drive
  * the extension's routine and entry but not its views; only `run.kick`/`run.quick` are privileged.
  *
  * @module tests/vitests/suites/context/context-live-suspended-caller
@@ -52,8 +54,9 @@ import { getMatrixConfigs, getBrowserMatrixConfigs, getManifest, makeBrowserConf
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "../../../../api_tests/api_test_live_suspended_caller");
-const EXT_DIR = `${ROOT}/ext/api`;
-const ROGUE_DIR = `${ROOT}/rogue/api`;
+const BASE = `${ROOT}/api`;
+const EXT_DIR = `${BASE}/ext`;
+const ROGUE_DIR = `${BASE}/rogue`;
 
 const RULES = [
 	// The extension may reach all of its own leaves, and the host registry.
@@ -86,7 +89,7 @@ const PLATFORMS = [
 let MANIFEST;
 
 beforeAll(async () => {
-	MANIFEST = await getManifest(ROOT);
+	MANIFEST = await getManifest(BASE);
 });
 
 /**
@@ -118,10 +121,10 @@ describe.each(PLATFORMS)("Live runtime > suspended caller attribution (#512) > $
 	 * @returns {Promise<{extID: string, rogueID: string}>} The mounted modules' ids.
 	 */
 	async function boot() {
-		const base = browser ? makeBrowserConfig(config, ROOT, MANIFEST) : { ...config, base: ROOT };
+		const base = browser ? makeBrowserConfig(config, BASE, MANIFEST) : { ...config, base: BASE };
 		api = await slothlet({
 			...base,
-			hidden: ["ext", "rogue", "shared"],
+			hidden: ["ext", "rogue"],
 			routines: {
 				entries: [{ name: "activate", mode: "manual", cascade: false }],
 				stack: true
@@ -492,8 +495,8 @@ describe.each(getMatrixConfigs({ runtime: "live" }))(
 			async function boot() {
 				api = await slothlet({
 					...config,
-					base: ROOT,
-					hidden: ["ext", "rogue", "shared"],
+					base: BASE,
+					hidden: ["ext", "rogue"],
 					routines: {
 						entries: [{ name: "activate", mode: "manual", cascade: false }],
 						stack: true

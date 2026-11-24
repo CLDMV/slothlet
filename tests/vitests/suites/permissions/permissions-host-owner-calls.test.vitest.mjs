@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-06T15:40:35-08:00 (1794008435)
+ *	@Last modified time: 2026-11-24T08:08:49-08:00 (1795536529)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -30,7 +30,7 @@
  *   slothlet does not see": a module's own dependency runs as that module), so it reaches the host leaf the rules let
  *   `ext.**` call.
  *
- * The fixture runs in a child process: `api_tests/api_test_host_owner_code/probe-host-calls.mjs`.
+ * The fixture runs in a child process: `api_tests/api_test_host_owner_code/lib/probe-host-calls.mjs`.
  */
 
 import { describe, it, expect } from "vitest";
@@ -40,7 +40,7 @@ import { fileURLToPath } from "node:url";
 
 const PROBE = path.resolve(
 	path.dirname(fileURLToPath(import.meta.url)),
-	"../../../../api_tests/api_test_host_owner_code/probe-host-calls.mjs"
+	"../../../../api_tests/api_test_host_owner_code/lib/probe-host-calls.mjs"
 );
 const CONFIGS = ["eager/async", "eager/live", "lazy/async", "lazy/live"];
 

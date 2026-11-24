@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-18T06:51:45-08:00 (1795013505)
+ *	@Last modified time: 2026-11-24T08:09:11-08:00 (1795536551)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -24,7 +24,7 @@
  * rule allows untouched: writes under the module's own subtree, host writes, base-module writes, two
  * modules sharing a mount point, and the framework's own `api.add` invoked by a module.
  *
- * Fixture: `api_tests/api_test_nested_self_assign` — `callee/`, `vault/`, `supplier/`, `callee_peer/`, `twin/`, `svc/`, `evil/`, `front/`, `bystander/`.
+ * Fixture: `api_tests/api_test_nested_self_assign/api` — `callee/`, `vault/`, `supplier/`, `callee_peer/`, `twin/`, `svc/`, `evil/`, `front/`, `bystander/`; the files they import are in `lib/`.
  */
 import { describe, it, expect, afterEach } from "vitest";
 import path from "node:path";

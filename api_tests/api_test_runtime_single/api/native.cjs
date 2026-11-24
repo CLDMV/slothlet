@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-12T22:54:52-08:00 (1794552892)
+ *	@Last modified time: 2026-11-24T08:06:34-08:00 (1795536394)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -42,7 +42,7 @@ async function read() {
  * await api.native.viaFile(); // "SECRET"
  */
 async function viaFile() {
-	const reader = await import("../helpers/reader.mjs");
+	const reader = await import("../lib/reader.mjs");
 	return reader.read();
 }
 

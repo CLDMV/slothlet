@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:30:49-08:00 (1794882649)
+ *	@Last modified time: 2026-11-24T08:09:02-08:00 (1795536542)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -32,7 +32,12 @@
 import { describe, it, expect, afterEach } from "vitest";
 import path from "node:path";
 import slothlet from "@cldmv/slothlet";
-import { TEST_DIRS, withSuppressedSlothletErrorOutput, withSuppressedSlothletErrorOutputSync } from "../../setup/vitest-helper.mjs";
+import {
+	TEST_DIRS,
+	withSuppressedSlothletErrorOutput,
+	withSuppressedSlothletErrorOutputSync,
+	apiPart
+} from "../../setup/vitest-helper.mjs";
 
 const FIXTURE = TEST_DIRS.API_TEST_SELF_WRITE_REACH;
 
@@ -68,9 +73,9 @@ describe.each(CONFIGS)("module write rules (#625) — $mode / $runtime", ({ mode
 	 * @returns {Promise<object>} The composed api.
 	 */
 	async function load(options = { permissions: {} }) {
-		api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, ...options });
-		await api.slothlet.api.add("victim", path.join(FIXTURE, "victim"), { id: "victim" });
-		for (const name of ["guest", "other", "mgr"]) await api.slothlet.api.add(name, path.join(FIXTURE, "guest"), { id: name });
+		api = await slothlet({ base: apiPart(FIXTURE), mode, runtime, silent: true, ...options });
+		await api.slothlet.api.add("victim", apiPart(FIXTURE, "victim"), { id: "victim" });
+		for (const name of ["guest", "other", "mgr"]) await api.slothlet.api.add(name, apiPart(FIXTURE, "guest"), { id: name });
 		return api;
 	}
 
@@ -202,7 +207,7 @@ describe.each(CONFIGS)("module write rules (#625) — $mode / $runtime", ({ mode
 	describe("through the permissions option of an api.add the module makes", () => {
 		it("lets the module grant the module it mounts writes into its subtree, and refuses a third module", async () => {
 			await load();
-			expect(await api.victim.v.mountHelper(path.join(FIXTURE, "guest"), { allow: ["victim.**:write"] })).toBe("done");
+			expect(await api.victim.v.mountHelper(apiPart(FIXTURE, "guest"), { allow: ["victim.**:write"] })).toBe("done");
 			const granted = await api.victim.helper.x.writeAt("victim.v");
 			expect(granted).toEqual(every(granted, "done"));
 			const refused = withSuppressedSlothletErrorOutputSync(() => api.guest.x.writeAt("victim.v"));
@@ -211,29 +216,29 @@ describe.each(CONFIGS)("module write rules (#625) — $mode / $runtime", ({ mode
 
 		it("lets the host win over the module's deny with an allow of its own", async () => {
 			await load({ permissions: { rules: [{ caller: "victim.helper.**", target: "victim.**:write", effect: "allow" }] } });
-			expect(await api.victim.v.mountHelper(path.join(FIXTURE, "guest"), { deny: ["victim.**:write"] })).toBe("done");
+			expect(await api.victim.v.mountHelper(apiPart(FIXTURE, "guest"), { deny: ["victim.**:write"] })).toBe("done");
 			const report = await api.victim.helper.x.writeAt("victim.v");
 			expect(report).toEqual(every(report, "done"));
 		});
 
 		it("lets the host win over the module's allow with a deny of its own", async () => {
 			await load({ permissions: { rules: [{ caller: "victim.helper.**", target: "victim.**:write", effect: "deny" }] } });
-			expect(await api.victim.v.mountHelper(path.join(FIXTURE, "guest"), { allow: ["victim.**:write"] })).toBe("done");
+			expect(await api.victim.v.mountHelper(apiPart(FIXTURE, "guest"), { allow: ["victim.**:write"] })).toBe("done");
 			const report = withSuppressedSlothletErrorOutputSync(() => api.victim.helper.x.writeAt("victim.v"));
 			expect(report).toEqual(every(report, "PERMISSION_DENIED"));
 		});
 
 		it.each([["other.**:write"], ["**:write"], ["slothlet.**:write"]])("refuses mounting with a write rule on %s", async (target) => {
 			await load();
-			expect(
-				await withSuppressedSlothletErrorOutput(() => api.victim.v.mountHelper(path.join(FIXTURE, "guest"), { allow: [target] }))
-			).toBe("PERMISSION_RULE_INVALID");
+			expect(await withSuppressedSlothletErrorOutput(() => api.victim.v.mountHelper(apiPart(FIXTURE, "guest"), { allow: [target] }))).toBe(
+				"PERMISSION_RULE_INVALID"
+			);
 			expect(api.victim.helper).toBeUndefined();
 		});
 
 		it("keeps the module's write rule at the module layer across a reload", async () => {
 			await load({ permissions: { rules: [{ caller: "victim.helper.**", target: "victim.**:write", effect: "deny" }] } });
-			await api.victim.v.mountHelper(path.join(FIXTURE, "guest"), { allow: ["victim.**:write"] });
+			await api.victim.v.mountHelper(apiPart(FIXTURE, "guest"), { allow: ["victim.**:write"] });
 			await api.slothlet.reload();
 			const report = withSuppressedSlothletErrorOutputSync(() => api.victim.helper.x.writeAt("victim.v"));
 			expect(report).toEqual(every(report, "PERMISSION_DENIED"));

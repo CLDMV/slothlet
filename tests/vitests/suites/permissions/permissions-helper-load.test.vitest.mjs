@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:29:53-08:00 (1794882593)
+ *	@Last modified time: 2026-11-24T08:08:48-08:00 (1795536528)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -18,8 +18,8 @@
  * import the helper.
  *
  * @description
- * Fixture `api_test_helper_identity`. `helpers/shared.mjs` is imported by `alpha.mjs` and `beta.mjs`;
- * `helpers/solo.mjs` by `alpha.mjs` alone. Each helper starts a job queue at its top level. A helper file is loaded
+ * Fixture `api_test_helper_identity`. `lib/shared.mjs` is imported by `alpha.mjs` and `beta.mjs`;
+ * `lib/solo.mjs` by `alpha.mjs` alone. Each helper starts a job queue at its top level. A helper file is loaded
  * once per instance, inside the load of whichever api file imports it first.
  *
  * The rule the expected values come from: what a helper file starts at its top level is held to the module of every

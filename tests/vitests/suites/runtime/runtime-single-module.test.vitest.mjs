@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:30:24-08:00 (1794882624)
+ *	@Last modified time: 2026-11-24T08:09:10-08:00 (1795536550)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -20,8 +20,8 @@
  * This suite runs slothlet's source through vitest's module runner, while Node itself loads every CommonJS file and
  * whatever such a file imports. Fixture `api_test_runtime_single`:
  * ```
- * api/native.cjs      a CommonJS api file: import("@cldmv/slothlet/runtime"), and import("../helpers/reader.mjs")
- * helpers/reader.mjs  imports { self } from the runtime; read() reads the vault
+ * api/native.cjs      a CommonJS api file: import("@cldmv/slothlet/runtime"), and import("../lib/reader.mjs")
+ * lib/reader.mjs      imports { self } from the runtime; read() reads the vault
  * api/vault.mjs       get() → "SECRET"
  * ```
  * Expected values come from plain module semantics and from the rules as ruled: a specifier names one module, so the
@@ -164,7 +164,7 @@ describe.each(MODES)("Runtime > a second copy of slothlet loaded by Node > $name
 		expect(await settle(() => other.native.read())).toBe(SECRET);
 		expect(await settle(() => own.plain.read())).toBe(SECRET);
 		expect(await settle(() => own.native.read())).toBe(SECRET);
-		// `helpers/reader.mjs` carries no instance's tag, so Node keeps one module of it for both copies, and one module
+		// `lib/reader.mjs` carries no instance's tag, so Node keeps one module of it for both copies, and one module
 		// imports one runtime: the copy whose instance loaded it first. It stays right for that copy.
 		expect(await settle(() => own.native.viaFile())).toBe(SECRET);
 	});

@@ -1,6 +1,6 @@
-import { pingMjs } from "../../external/helper-mjs.mjs";
-import { nestedTag } from "../../external/nested/value.mjs";
-import { sharedTag } from "../../external/ts-shared.mts";
+import { pingMjs } from "../../lib/helper-mjs.mjs";
+import { nestedTag } from "../../lib/nested/value.mjs";
+import { sharedTag } from "../../lib/ts-shared.mts";
 
 /**
  * Combines plain-ESM helpers and a `.mts` TypeScript helper, all relatively

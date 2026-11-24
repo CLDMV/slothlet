@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-14T19:57:21-08:00 (1794715041)
+ *	@Last modified time: 2026-11-24T08:05:56-08:00 (1795536356)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -21,7 +21,7 @@
  */
 import { self } from "@cldmv/slothlet/runtime";
 import { descend } from "callback-walker";
-import { enqueue } from "../../helpers/queue.mjs";
+import { enqueue } from "../../lib/queue.mjs";
 
 /**
  * This file's own code calling the vault, outside every export.

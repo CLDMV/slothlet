@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-13T21:41:54-08:00 (1794634914)
+ *	@Last modified time: 2026-11-24T08:04:40-08:00 (1795536280)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -81,7 +81,7 @@ export default defineConfig([
 		files: [
 			"api_tests/api_test_cjs_js/esm/**/*.js",
 			"api_tests/api_test_cjs_js/untypedesm/**/*.js",
-			"api_tests/api_test_helper_imports/__mixed/lib/esm-plain.js"
+			"api_tests/api_test_helper_imports_mixed/lib/esm-plain.js"
 		],
 		languageOptions: { sourceType: "module" }
 	},

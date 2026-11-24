@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:17:15-08:00 (1794874635)
+ *	@Last modified time: 2026-11-24T08:08:49-08:00 (1795536529)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -34,7 +34,7 @@ import { makeTestTmpDirSync } from "../../setup/test-fixtures-tmp.mjs";
 
 const KEY = Symbol.for(VITE_HOST_SCRIPTS);
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../..");
-const HOST_FILE = path.join(ROOT, "api_tests", "api_test_host_owner_code", "host", "context.mjs");
+const HOST_FILE = path.join(ROOT, "api_tests", "api_test_host_owner_code", "lib", "host", "context.mjs");
 const VITEST_EVALUATOR = path.join(ROOT, "node_modules", "vitest", "dist", "module-evaluator.js");
 const scratch = makeTestTmpDirSync("i714-registry");
 

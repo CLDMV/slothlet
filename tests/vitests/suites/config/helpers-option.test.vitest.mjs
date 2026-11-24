@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:28:50-08:00 (1794882530)
+ *	@Last modified time: 2026-11-24T08:07:53-08:00 (1795536473)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -18,8 +18,8 @@
  * loaded once per instance or once per importing api file.
  *
  * @description
- * Fixture `api_test_helper_copies`. `helpers/tally.mjs` (which imports `helpers/store.mjs`) is imported by `one.mjs`
- * and `two.mjs`; `helpers/tally.cjs` is imported by both and required by `three.cjs` and `four.cjs`. Each helper keeps
+ * Fixture `api_test_helper_copies`. `lib/tally.mjs` (which imports `lib/store.mjs`) is imported by `one.mjs`
+ * and `two.mjs`; `lib/tally.cjs` is imported by both and required by `three.cjs` and `four.cjs`. Each helper keeps
  * a count in module state, has a function of its own reading the vault, and the ES module one starts a job queue when
  * it loads.
  *
@@ -261,7 +261,7 @@ describe("Config > helpers > in a process of its own", () => {
 		120000
 	);
 
-	// two.mjs imports helpers/private.mjs itself, under a URL that says it was loaded for one.mjs. A URL is text any
+	// two.mjs imports lib/private.mjs itself, under a URL that says it was loaded for one.mjs. A URL is text any
 	// code can write: only the instance's own record of imports says whose a helper is, and that is two.mjs.
 	it.each([
 		{ helpers: "instance", rules: "nothing denied", list: [], expected: SECRET },
@@ -280,7 +280,7 @@ describe("Config > helpers > in a process of its own", () => {
 });
 
 describe("Config > helpers > how a copy is named", () => {
-	const HELPERS = path.resolve(DIR, "../helpers");
+	const HELPERS = path.resolve(DIR, "../lib");
 	const leafPath = path.join(DIR, "one.mjs").replace(/\\/g, "/");
 	const leafFile = pathToFileURL(path.join(DIR, "one.mjs")).href;
 	const tally = pathToFileURL(path.join(HELPERS, "tally.mjs")).href;
@@ -288,16 +288,12 @@ describe("Config > helpers > how a copy is named", () => {
 	const params = (url) => Object.fromEntries(new URL(url).searchParams);
 
 	it("a helper of a leaf loaded once per instance carries the instance alone", () => {
-		const child = propagateInstanceQuery("../helpers/tally.mjs", `${leafFile}?slothlet_instance=a&module=m1`, tally);
+		const child = propagateInstanceQuery("../lib/tally.mjs", `${leafFile}?slothlet_instance=a&module=m1`, tally);
 		expect(params(child)).toEqual({ slothlet_instance: "a" });
 	});
 
 	it("a helper of a leaf loaded once per api file names that file and its mount", () => {
-		const child = propagateInstanceQuery(
-			"../helpers/tally.mjs",
-			`${leafFile}?slothlet_instance=a&module=m1&slothlet_helpers=module`,
-			tally
-		);
+		const child = propagateInstanceQuery("../lib/tally.mjs", `${leafFile}?slothlet_instance=a&module=m1&slothlet_helpers=module`, tally);
 		expect(child.startsWith(`${tally}?`)).toBe(true);
 		expect(params(child)).toEqual({ slothlet_instance: "a", slothlet_helpers: "module", slothlet_for: leafPath, slothlet_mount: "m1" });
 		// What that helper imports is the same api file's copy.
@@ -308,7 +304,7 @@ describe("Config > helpers > how a copy is named", () => {
 	it("a leaf with no mount names no mount, and a vite id is tagged as a URL is", () => {
 		const leafID = path.join(DIR, "one.mjs");
 		const child = propagateInstanceQuery(
-			"../helpers/tally.mjs",
+			"../lib/tally.mjs",
 			`${leafID}?slothlet_instance=a&slothlet_helpers=module`,
 			path.join(HELPERS, "tally.mjs")
 		);

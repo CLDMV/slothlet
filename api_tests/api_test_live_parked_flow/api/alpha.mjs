@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-14T08:00:00-08:00 (1794672000)
+ *	@Last modified time: 2026-11-24T08:05:52-08:00 (1795536352)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -17,7 +17,7 @@
  * @fileoverview A module that hands out the helper's async function: returned as it is, and nested in plain data.
  * @module api_test_live_parked_flow.alpha
  */
-import { readLater } from "../helpers/shared.mjs";
+import { readLater } from "../lib/shared.mjs";
 
 /**
  * Hand out the helper's function.
