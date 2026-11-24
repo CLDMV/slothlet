@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-19T16:09:14-08:00 (1795133354)
+ *	@Last modified time: 2026-11-23T18:13:02-08:00 (1795486382)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -27,7 +27,7 @@ import { isNode as IS_NODE } from "#helpers/platform";
 
 // The single source of truth for apiDepth's default — the mode processors + loader read the
 // same constant for their own (defensive, standalone-call-only) parameter defaults.
-import { DEFAULT_API_DEPTH, DEFAULT_ROUTINES } from "#helpers/defaults";
+import { DEFAULT_API_DEPTH, DEFAULT_ROUTINES, DEFAULT_SEARCH_DEPTH, DEFAULT_SEARCH_PROPERTIES } from "#helpers/defaults";
 
 // Validates a routines[] entry's `name` compiles as a real glob pattern at construction time,
 // rather than silently matching nothing forever (see normalizeRoutines()).
@@ -224,6 +224,38 @@ function configChoice(value, allowed, fallback, option, expected) {
 }
 
 /**
+ * Validate one whole-number config value within bounds.
+ * @param {*} value - The value as given (`undefined` takes the default).
+ * @param {number} fallback - The default.
+ * @param {number} min - The smallest accepted value.
+ * @param {number} max - The largest accepted value.
+ * @param {string} option - Its dotted config path, for the error.
+ * @returns {number} The value, or the default.
+ * @throws {SlothletError} INVALID_CONFIG for anything but a whole number from `min` to `max`.
+ * @private
+ */
+function configCount(value, fallback, min, max, option) {
+	if (value === undefined) return fallback;
+	if (Numbers.isSafeInteger(value) && value >= min && value <= max) return value;
+	throw new SlothletError("INVALID_CONFIG", { option, value, expected: `whole number from ${min} to ${max}` });
+}
+
+/**
+ * The largest `permissions.search.depth` accepted. Each level is one more nested call of the search, and the budget of
+ * properties bounds the rest.
+ * @type {number}
+ * @private
+ */
+const MAX_SEARCH_DEPTH = 64;
+
+/**
+ * The largest `permissions.search.properties` accepted: what one search reads is bounded so a call's cost stays bounded.
+ * @type {number}
+ * @private
+ */
+const MAX_SEARCH_PROPERTIES = 65536;
+
+/**
  * Normalize the `permissions` option to its full object form (or `null` for no permissions config).
  *
  * The normalized form has the same shape as the option, every member filled in, so feeding it back in (a reload)
@@ -262,6 +294,12 @@ function configChoice(value, allowed, fallback, option, expected) {
  * @param {boolean} [permissions.owner=false] - When `true`, a caller leaf may access any target leaf currently owned by
  *   the same module, across directories, where the policy would otherwise deny. An explicit deny rule still wins (#509).
  * @param {Array<object>} [permissions.rules=[]] - Initial permission rules.
+ * @param {object} [permissions.search] - How far a value handed into a call or returned out of one is searched for code.
+ *   Set by the host only.
+ * @param {number} [permissions.search.depth=4] - Levels of objects searched, the outermost counted: a whole number from
+ *   1 to 64.
+ * @param {number} [permissions.search.properties=512] - Own properties read, all values of one search counted together:
+ *   a whole number from 1 to 65536.
  * @returns {object|null} Normalized permissions config, or null when permissions is absent or off by shorthand.
  * @public
  *
@@ -363,6 +401,14 @@ export function normalizePermissionsConfig(permissions) {
 	}
 	const eventRules = Arrays.isArray(eventsGroup.rules) ? eventsGroup.rules : [];
 
+	// How far a value handed into a call or returned out of one is searched for code (a leaf's function nested in an
+	// argument, code nested in returned data). Host config only: an `api.add`'s `permissions` takes rules alone.
+	const searchGroup = configGroup(permissions.search, "permissions.search");
+	const search = {
+		depth: configCount(searchGroup.depth, DEFAULT_SEARCH_DEPTH, 1, MAX_SEARCH_DEPTH, "permissions.search.depth"),
+		properties: configCount(searchGroup.properties, DEFAULT_SEARCH_PROPERTIES, 1, MAX_SEARCH_PROPERTIES, "permissions.search.properties")
+	};
+
 	return {
 		policy,
 		mode,
@@ -370,6 +416,7 @@ export function normalizePermissionsConfig(permissions) {
 		owner,
 		caller,
 		gating,
+		search,
 		rules,
 		private: privacy,
 		events: { policy: eventPolicy, rules: eventRules }

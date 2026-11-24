@@ -104,6 +104,12 @@ export function expandPermissionsShorthand(permissions: any): {
  * @param {boolean} [permissions.owner=false] - When `true`, a caller leaf may access any target leaf currently owned by
  *   the same module, across directories, where the policy would otherwise deny. An explicit deny rule still wins (#509).
  * @param {Array<object>} [permissions.rules=[]] - Initial permission rules.
+ * @param {object} [permissions.search] - How far a value handed into a call or returned out of one is searched for code.
+ *   Set by the host only.
+ * @param {number} [permissions.search.depth=4] - Levels of objects searched, the outermost counted: a whole number from
+ *   1 to 64.
+ * @param {number} [permissions.search.properties=512] - Own properties read, all values of one search counted together:
+ *   a whole number from 1 to 65536.
  * @returns {object|null} Normalized permissions config, or null when permissions is absent or off by shorthand.
  * @public
  *

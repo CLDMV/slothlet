@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-23T03:21:38-08:00 (1795432898)
+ *	@Last modified time: 2026-11-23T18:12:59-08:00 (1795486379)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -3209,7 +3209,7 @@ export class LiveContextManager {
 					parent:
 						entryIdentity.record ??
 						(entryCaller ? { wrapper: entryCaller, parent: null, flagged: false, ceiling: entryIdentity.ceiling ?? null } : null),
-					flagged: madeCode || carriesCallerCode(thisArg, args),
+					flagged: madeCode || carriesCallerCode(thisArg, args, currentWrapper.slothlet),
 					// Handed a function to run, which may pick up after an `await` with nothing of the call on the stack (#917).
 					handed: Arrays.isArray(args) && ArrayMethods.some(args, (arg) => typeof arg === "function"),
 					ceiling,

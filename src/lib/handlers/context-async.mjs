@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-22T09:18:56-08:00 (1795367936)
+ *	@Last modified time: 2026-11-23T18:12:59-08:00 (1795486379)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -1694,7 +1694,7 @@ export class AsyncContextManager {
 					(baseStore.currentWrapper
 						? { wrapper: baseStore.currentWrapper, parent: null, flagged: false, ceiling: baseStore.currentCeiling ?? null }
 						: null),
-				flagged: madeCode || carriesCallerCode(thisArg, args),
+				flagged: madeCode || carriesCallerCode(thisArg, args, currentWrapper.slothlet),
 				ceiling,
 				made: madeCode
 			};

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:27:55-08:00 (1794882475)
+ *	@Last modified time: 2026-11-23T18:13:02-08:00 (1795486382)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -46,6 +46,21 @@ const { markSlothletProxy } = frameworkInternalsInternals("lib/helpers/defaults"
  * @type {number}
  */
 export const DEFAULT_API_DEPTH = Infinity;
+
+/**
+ * How many levels of objects, the outermost counted, a value handed into a call or returned out of one is searched
+ * for code when `permissions.search.depth` is not set. Read by the config normalizer and, for an instance with no
+ * `permissions` config, by the searches themselves.
+ * @type {number}
+ */
+export const DEFAULT_SEARCH_DEPTH = 4;
+
+/**
+ * How many own properties, all values of one search counted together, are read when `permissions.search.properties`
+ * is not set. Read where {@link DEFAULT_SEARCH_DEPTH} is.
+ * @type {number}
+ */
+export const DEFAULT_SEARCH_PROPERTIES = 512;
 
 /**
  * The built-in `routines` list applied when a caller omits the `routines` config option entirely.
