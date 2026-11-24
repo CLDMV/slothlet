@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-22T23:31:46-08:00 (1795419106)
+ *	@Last modified time: 2026-11-23T18:13:00-08:00 (1795486380)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -24,6 +24,7 @@
 // Proxy-detection API, so isProxy returns false — slothlet's OWN wrappers are detected via
 // resolveWrapper(), so only arbitrary USER proxies (rare in browser) lose detection.
 import { segmentsOf } from "#helpers/segments";
+import { DEFAULT_SEARCH_DEPTH, DEFAULT_SEARCH_PROPERTIES } from "#helpers/defaults";
 import { isNode, util, EventEmitter, scheduleMacrotask, inheritsFrom } from "#helpers/platform";
 import {
 	copyForComposition,
@@ -1285,7 +1286,7 @@ function runtime_runsForHander(value, from) {
 /**
  * Whether a value a module hands on stays a view for every other module, however much the receiver may write: a
  * function that runs for the module handing it ({@link runtime_runsForHander}), and plain data holding one as a member
- * of its own at any depth within {@link CODE_SEARCH} (`{ fn: Reflect.set, target }`), whose member reaches the receiver
+ * of its own at any depth within the code search ({@link searchDepth}) (`{ fn: Reflect.set, target }`), whose member reaches the receiver
  * as that function's view ({@link runtime_crossHandedMember}). Nothing of the value runs to decide: an accessor is passed
  * over.
  * @param {*} value - The value handed on.
@@ -1297,7 +1298,7 @@ function runtime_viewedForHander(value, from) {
 	if (runtime_runsForHander(value, from)) return true;
 	if (value === null || typeof value !== "object" || !from?.____slothletInternal || !runtime_isCarrier(value)) return false;
 	try {
-		return runtime_carriesHanded(value, from, CODE_SEARCH.depth, { remaining: CODE_SEARCH.properties });
+		return runtime_carriesHanded(value, from, searchDepth(from.slothlet), searchBudget(from.slothlet));
 	} catch {
 		// A value that refuses to be described is viewed.
 		return true;
@@ -1305,7 +1306,7 @@ function runtime_viewedForHander(value, from) {
 }
 
 /**
- * Whether a carrier ({@link runtime_isCarrier}) holds, as a data member at any depth within {@link CODE_SEARCH}, a
+ * Whether a carrier ({@link runtime_isCarrier}) holds, as a data member at any depth within the code search ({@link searchDepth}), a
  * function that runs for the module handing it on ({@link runtime_runsForHander}).
  * @param {object} value - The carrier.
  * @param {object} from - The wrapper of the module handing it on.
@@ -6245,7 +6246,7 @@ function runtime_enforceAccessorReader(wrapper, reader, args) {
 function runtime_enforceCodeMember(wrapper, value, kept = null) {
 	const permissionManager = wrapper.slothlet.handlers?.permissionManager;
 	if (!permissionManager?.isEnabled()) return;
-	if (!runtime_memberHoldsCode(value, CODE_SEARCH.depth + 1, { remaining: CODE_SEARCH.properties })) return;
+	if (!runtime_memberHoldsCode(value, searchDepth(wrapper.slothlet) + 1, searchBudget(wrapper.slothlet))) return;
 	if (accessorReader === undefined) enforcePermission(wrapper, [], false, kept);
 	else if (accessorReader?.currentWrapper) runtime_enforceAccessorReader(wrapper, accessorReader, []);
 }
@@ -6438,14 +6439,15 @@ function runtime_behindPinnedCode(value) {
  * Whether a member a function node or function root is about to hold fixed holds the module's code, and so is held as a
  * stand-in (see {@link runtime_pinnedCodeMember}): an object or function no api node stands for, holding code.
  * @param {*} value - The member's value.
+ * @param {object|null} slothlet - The instance, whose `permissions.search` bounds the search.
  * @returns {boolean} True when it is.
  * @private
  */
-function runtime_pinsAsCode(value) {
+function runtime_pinsAsCode(value, slothlet) {
 	if (value === null || (typeof value !== "object" && typeof value !== "function")) return false;
 	if (WeakMapMethods.has(PINNED_CODE_MEMBERS, value) || resolveWrapper(value) !== null || WeakSetMethods.has(INTRINSICS, value))
 		return false;
-	return runtime_memberHoldsCode(value, CODE_SEARCH.depth + 1, { remaining: CODE_SEARCH.properties });
+	return runtime_memberHoldsCode(value, searchDepth(slothlet) + 1, searchBudget(slothlet));
 }
 
 /**
@@ -8870,16 +8872,27 @@ function runtime_slotHoldsCode(value, depth, budget) {
 }
 
 /**
- * How many levels of objects a returned value is looked into for code, and how many own properties of all of
- * them together, before it is taken to hold code (#597).
- * @type {{depth: number, properties: number}}
+ * How many levels of objects a value is looked into for code before it is taken to hold code (#597): the instance's
+ * `permissions.search.depth`, or the default for an instance with no `permissions` config. Read as a plain number.
+ * Together with {@link searchBudget} this is the code search.
+ * @param {object|null|undefined} slothlet - The instance.
+ * @returns {number} The levels.
  * @private
  */
-const CODE_SEARCH = { depth: 4, properties: 512 };
+const searchDepth = (slothlet) => slothlet?.config?.permissions?.search?.depth ?? DEFAULT_SEARCH_DEPTH;
+
+/**
+ * A fresh budget of the own properties one search reads, all levels together, before the value is taken to hold code
+ * (#597): the instance's `permissions.search.properties`, or the default.
+ * @param {object|null|undefined} slothlet - The instance.
+ * @returns {{remaining: number}} The budget.
+ * @private
+ */
+const searchBudget = (slothlet) => ({ remaining: slothlet?.config?.permissions?.search?.properties ?? DEFAULT_SEARCH_PROPERTIES });
 
 /**
  * Whether an object can hold code of the module that made it — a function, an accessor, a Proxy, a generator, a
- * prototype of its own (a class instance, `Object.create(proto)`) — anywhere within {@link CODE_SEARCH}. Plain data
+ * prototype of its own (a class instance, `Object.create(proto)`) — anywhere within the code search ({@link searchDepth}). Plain data
  * (primitives, the language's own objects, slothlet's own values, values made by no module) holds none. Decided from
  * descriptors, so nothing of the object runs.
  * @param {object} value - An object that is not a Proxy.
@@ -9218,13 +9231,13 @@ function runtime_handOutValue(maker, owner, value) {
 			if (!runtime_isCodeObject(value)) {
 				// Data holding a node's own function, or a module's copy of it, is handed out as a view, so a call of the
 				// function read from it is the node's call (see runtime_gateLeafCopy) and not a call of the bare function.
-				if (!runtime_dataHoldsLeafFunction(owner.slothlet, value, CODE_SEARCH.depth, { remaining: CODE_SEARCH.properties })) return value;
+				if (!runtime_dataHoldsLeafFunction(owner.slothlet, value, searchDepth(owner.slothlet), searchBudget(owner.slothlet))) return value;
 			}
 			return runtime_membrane(maker, owner, value);
 		}
 		// With `provenance` off no frames are read, so nothing would tell code nested in data from its caller's: the
-		// value is searched instead, as far as CODE_SEARCH reaches, and one holding code is handed out as the module's.
-		if (!runtime_holdsCode(value, CODE_SEARCH.depth, { remaining: CODE_SEARCH.properties })) return value;
+		// value is searched instead, as far as the code search reaches, and one holding code is handed out as the module's.
+		if (!runtime_holdsCode(value, searchDepth(owner.slothlet), searchBudget(owner.slothlet))) return value;
 		return runtime_membrane(maker, owner, value);
 	} catch {
 		// A value that refuses to be described is handed out as it is.
@@ -9658,7 +9671,7 @@ function runtime_handInAll(maker, args, owner = maker.owner) {
 }
 
 /**
- * Whether a caller's plain array or object holds a stand-in of the module's own, within {@link CODE_SEARCH}.
+ * Whether a caller's plain array or object holds a stand-in of the module's own, within the code search ({@link searchDepth}).
  * @param {object} maker - The module's record.
  * @param {object} value - The value.
  * @param {number} depth - Levels still allowed.
@@ -9708,7 +9721,7 @@ function runtime_inboundView(maker, value, owner = maker.owner) {
 	const existing = views == null ? undefined : WeakMapMethods.get(views, value);
 	if (existing) return existing;
 	try {
-		if (!runtime_holdsOwnStandIn(maker, value, CODE_SEARCH.depth, { remaining: CODE_SEARCH.properties })) return value;
+		if (!runtime_holdsOwnStandIn(maker, value, searchDepth(owner?.slothlet), searchBudget(owner?.slothlet))) return value;
 	} catch {
 		return value;
 	}
@@ -10872,7 +10885,7 @@ function runtime_functionNodePrototype(wrapper, fn) {
 	// own view of it (see runtime_givenView).
 	if (runtime_prototypeGiven(wrapper)) return runtime_givenPrototypeFor(wrapper, prototype);
 	if (typeof prototype !== "function") {
-		return runtime_memberHoldsCode(prototype, CODE_SEARCH.depth + 1, { remaining: CODE_SEARCH.properties }) ? null : prototype;
+		return runtime_memberHoldsCode(prototype, searchDepth(wrapper.slothlet) + 1, searchBudget(wrapper.slothlet)) ? null : prototype;
 	}
 	return runtime_functionNodeFor(wrapper, prototype) ?? null;
 }
@@ -10988,7 +11001,7 @@ function runtime_prototypeHandle(slothlet, prototype, site) {
 	// its prototype) is data, and is handed out as it is.
 	if (
 		runtime_classPrototypeSites(slothlet, prototype).length === 0 &&
-		!runtime_memberHoldsCode(prototype, CODE_SEARCH.depth + 1, { remaining: CODE_SEARCH.properties })
+		!runtime_memberHoldsCode(prototype, searchDepth(slothlet) + 1, searchBudget(slothlet))
 	)
 		return prototype;
 	if (site === null) return runtime_selfMemberView(prototype, PROTOTYPE_HANDLE_READER, slothlet, null);
@@ -11267,7 +11280,7 @@ function runtime_isCarrier(value) {
 
 /**
  * Whether a carrier ({@link runtime_isCarrier}) holds a prototype of a module's as a data member, at any depth within
- * {@link CODE_SEARCH}. Nothing of the value runs to decide: an accessor is passed over.
+ * the code search ({@link searchDepth}). Nothing of the value runs to decide: an accessor is passed over.
  * @param {object|null} slothlet - The instance it crossed in, when known.
  * @param {object} value - The carrier.
  * @param {number} depth - Levels still allowed.
@@ -11318,7 +11331,7 @@ function runtime_carryTo(value, reader, slothlet) {
 	try {
 		if (runtime_knownPrototype(slothlet, value) !== undefined) return runtime_prototypeHandedTo(value, reader, slothlet);
 		if (!runtime_isCarrier(value)) return value;
-		if (!runtime_carriesPrototype(slothlet, value, CODE_SEARCH.depth, { remaining: CODE_SEARCH.properties })) return value;
+		if (!runtime_carriesPrototype(slothlet, value, searchDepth(slothlet), searchBudget(slothlet))) return value;
 		return runtime_carrierView(value, reader, slothlet);
 	} catch {
 		// A value that refuses to be described is handed on as it is.
@@ -11963,27 +11976,26 @@ function runtime_mayWriteFrom(slothlet, reader, from) {
 function runtime_handedAsItself(slothlet, reader, from, value) {
 	if (!from?.____slothletInternal) return null;
 	if (runtime_mayWriteFrom(slothlet, reader, from)) return runtime_writeDeniedWithin(slothlet, from, reader) ? null : "writer";
-	if (runtime_mayWriteFrom(slothlet, from, reader) && runtime_holdsNoCode(value))
+	if (runtime_mayWriteFrom(slothlet, from, reader) && runtime_holdsNoCode(value, slothlet))
 		return runtime_writeDeniedWithin(slothlet, reader, from) ? null : "written";
 	return null;
 }
 
 /**
- * Whether a value holds none of a module's code, as far as {@link CODE_SEARCH} reaches: no function, no Proxy, no class
+ * Whether a value holds none of a module's code, as far as the code search ({@link searchDepth}) reaches: no function, no Proxy, no class
  * instance, no prototype a module wrote, at any depth. A stand-in and the async runtime's context wrapper stand for the
  * value behind them. Nothing of the value runs to decide.
  * @param {*} value - The value.
+ * @param {object|null} slothlet - The instance, whose `permissions.search` bounds the search.
  * @returns {boolean} True for plain data.
  * @private
  */
-function runtime_holdsNoCode(value) {
+function runtime_holdsNoCode(value, slothlet) {
 	if (value === null || (typeof value !== "object" && typeof value !== "function")) return true;
 	const subject = runtime_crossSubject(value);
 	if (typeof subject === "function" || util.types.isProxy(subject)) return false;
 	try {
-		return (
-			!runtime_isCodeObject(subject) && !runtime_memberHoldsCode(subject, CODE_SEARCH.depth + 1, { remaining: CODE_SEARCH.properties })
-		);
+		return !runtime_isCodeObject(subject) && !runtime_memberHoldsCode(subject, searchDepth(slothlet) + 1, searchBudget(slothlet));
 	} catch {
 		// A value that refuses to be described is taken to hold code.
 		return false;
@@ -13968,7 +13980,12 @@ function runtime_rootShellDescriptor(descriptor, slothlet = null, prop = null) {
 	if (!("value" in descriptor) || value === null || (typeof value !== "object" && typeof value !== "function")) return descriptor;
 	// The root function's own `prototype` or `toString`, fixed read-only, is held as a stand-in every holder may be
 	// described (see runtime_pinnedCodeMember).
-	if (slothlet !== null && descriptor.writable === false && runtime_isRootFunctionAnswer(slothlet, prop) && runtime_pinsAsCode(value))
+	if (
+		slothlet !== null &&
+		descriptor.writable === false &&
+		runtime_isRootFunctionAnswer(slothlet, prop) &&
+		runtime_pinsAsCode(value, slothlet)
+	)
 		return { __proto__: null, ...descriptor, value: runtime_pinnedCodeMember(runtime_rootGate(slothlet), value) };
 	const impl = resolveWrapper(value)?.____slothletInternal.impl;
 	return runtime_isHeldPrimitive(impl) ? { __proto__: null, ...descriptor, value: impl } : descriptor;
@@ -16763,7 +16780,7 @@ function runtime_defineOnSealedShell(wrapper, target, prop, descriptor) {
 			attributes.value = runtime_shellValue(wrapper, prop);
 			// A function node's own member holding the module's code is held as a stand-in every holder may be described
 			// (see runtime_pinnedCodeMember).
-			if (runtime_functionOf(impl) !== null && !hasOwn(wrapper, prop) && runtime_pinsAsCode(attributes.value))
+			if (runtime_functionOf(impl) !== null && !hasOwn(wrapper, prop) && runtime_pinsAsCode(attributes.value, wrapper.slothlet))
 				attributes.value = runtime_pinnedCodeMember(wrapper, attributes.value);
 			if (mirrors) delete mirrored.value;
 		}
@@ -17073,7 +17090,10 @@ function runtime_inspectShown(wrapper, args, forModule = runtime_inspectReaderIs
 	// A function the node composed its members onto is a layer, which `util.inspect` would show as its bare shell: it is
 	// shown by its form and members, as to a module.
 	const layered = isCompositionLayer(internal.impl) && typeof internal.impl === "function";
-	if (!layered && (!forModule || !runtime_memberHoldsCode(internal.impl, CODE_SEARCH.depth + 1, { remaining: CODE_SEARCH.properties })))
+	if (
+		!layered &&
+		(!forModule || !runtime_memberHoldsCode(internal.impl, searchDepth(wrapper.slothlet) + 1, searchBudget(wrapper.slothlet)))
+	)
 		return internal.impl;
 	// The node's own members, read through it as the module reading them may.
 	if (typeof internal.impl !== "function") return runtime_inspectMembers(wrapper);
@@ -17091,11 +17111,12 @@ function runtime_inspectShown(wrapper, args, forModule = runtime_inspectReaderIs
  * @param {*} value - The value.
  * @param {Array<*>} args - The hook's arguments.
  * @param {boolean} forModule - Whether a module is reading.
+ * @param {object|null} slothlet - The instance, whose `permissions.search` bounds the search for code.
  * @returns {*} What is shown.
  * @private
  */
-function runtime_inspectSafe(value, args, forModule) {
-	if (!forModule || !runtime_memberHoldsCode(value, CODE_SEARCH.depth + 1, { remaining: CODE_SEARCH.properties })) return value;
+function runtime_inspectSafe(value, args, forModule, slothlet) {
+	if (!forModule || !runtime_memberHoldsCode(value, searchDepth(slothlet) + 1, searchBudget(slothlet))) return value;
 	return typeof value === "function" ? runtime_codeLabel(value) : "[Object]";
 }
 
@@ -17241,7 +17262,7 @@ function runtime_rootInspectShown(slothlet, args) {
 	for (let ofIndex = 0, ofList = Objects.keys(root); ofIndex < ofList.length; ofIndex++) {
 		const key = ofList[ofIndex];
 		try {
-			shown[key] = reader ? runtime_rootMemberShown(root[key], args) : root[key];
+			shown[key] = reader ? runtime_rootMemberShown(root[key], args, slothlet) : root[key];
 		} catch (error) {
 			if (error?.code !== "PERMISSION_DENIED") throw error;
 		}
@@ -17261,16 +17282,17 @@ function runtime_rootInspectShown(slothlet, args) {
  * and anything else as {@link runtime_inspectSafe} shows it, a form shown unquoted as `util.inspect` shows one.
  * @param {*} value - The member, read through the module's view of the root.
  * @param {Array<*>} args - The hook's arguments.
+ * @param {object} slothlet - The instance.
  * @returns {*} What is shown.
  * @private
  */
-function runtime_rootMemberShown(value, args) {
+function runtime_rootMemberShown(value, args, slothlet) {
 	const behind =
 		value !== null && (typeof value === "object" || typeof value === "function")
 			? WeakMapMethods.get(FRAMEWORK_VIEW_TARGETS, value)
 			: undefined;
 	if (behind !== undefined && typeof value === "object") return value;
-	const safe = runtime_inspectSafe(value, args, true);
+	const safe = runtime_inspectSafe(value, args, true, slothlet);
 	if (typeof safe !== "string" || safe === value) return safe;
 	return runtime_inspectLabel(typeof behind === "function" ? runtime_codeLabel(behind) : safe);
 }
@@ -20440,7 +20462,7 @@ class UnifiedWrapper extends ComponentBase {
 							if (current === null || current === undefined) return undefined;
 							current = current[chainProp];
 						}
-						return runtime_inspectSafe(current, [], runtime_inspectReaderIsModule(wrapper));
+						return runtime_inspectSafe(current, [], runtime_inspectReaderIsModule(wrapper), wrapper.slothlet);
 					}
 					// `impl` is always non-null when `state.materialized` is true; `materialized=true && !impl` is a structurally impossible state.
 					/* v8 ignore next */
@@ -23694,7 +23716,7 @@ class UnifiedWrapper extends ComponentBase {
 					runtime_emitterPrototypeHandle(wrapper, prototype)
 				);
 			}
-			while (runtime_memberHoldsCode(prototype, CODE_SEARCH.depth + 1, { remaining: CODE_SEARCH.properties }))
+			while (runtime_memberHoldsCode(prototype, searchDepth(wrapper.slothlet) + 1, searchBudget(wrapper.slothlet)))
 				prototype = Objects.getPrototypeOf(prototype);
 			return runtime_withheldPrototype(wrapper, prototype);
 		};

@@ -1026,6 +1026,26 @@ declare class UnifiedWrapper extends ComponentBase {
      */
     private ___unsettleLazyProxy;
     /**
+     * Put this wrapper's current proxy in `container[key]` where that slot still holds one of its earlier proxies.
+     *
+     * @description
+     * A node that loads while the build that made it still runs (a file+folder collision slot the build loads to settle
+     * its surface) is rebuilt on another proxy (see {@link UnifiedWrapper#___settleLazyProxy},
+     * {@link UnifiedWrapper#___upgradeToCallableProxy}) before its tree is the instance's api, so
+     * {@link UnifiedWrapper#___replaceInParent}, which walks from the api root, finds nothing to swap. The build calls
+     * this on the object it assigned the node to, so the node it hands on is the one eager builds. A slot that holds
+     * anything else, or an accessor, is left alone.
+     *
+     * @param {object} container - The object the node was assigned to: a raw object or a wrapper's proxy.
+     * @param {string} key - The node's key there.
+     * @returns {void}
+     * @private
+     *
+     * @example
+     * wrapper.___settleInHolder(targetApi, "math");
+     */
+    private ___settleInHolder;
+    /**
      * Swap the proxy the parent node holds for this wrapper at its apiPath (#533).
      *
      * @description
@@ -1098,7 +1118,7 @@ declare class UnifiedWrapper extends ComponentBase {
      * Keep the instance's lazy materialization count in step with this wrapper (#588). The wrapper
      * records whether it is counted as unloaded (`pending`), counted and loaded (`settled`), or never
      * counted, so each wrapper moves the count exactly once per transition no matter which path loads,
-     * re-arms or discards it. A wrapper from a tree a restart replaced leaves the new tree's count alone.
+     * re-arms or discards it. A wrapper from a tree a restart or a full reload replaced leaves the new tree's count alone.
      * A member a forced replace hides from the api is `parked`: nothing can reach it to load it, so it is
      * not counted until it is put back (`unpark`), and loading or re-arming it meanwhile leaves it parked.
      * One hidden after it loaded is `parked-loaded`: out of the total while hidden, and back in it, loaded,
