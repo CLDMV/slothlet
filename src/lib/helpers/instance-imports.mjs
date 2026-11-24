@@ -2036,7 +2036,39 @@ function noteModuleFile(ref) {
 	if (typeof ref !== "string" || ref === "") return;
 	SetMethods.add(MODULE_FILES, packageKey(ref));
 	// The URL slothlet's loader imports a leaf under: the module its node is built from, never another module's copy.
-	if (StringMethods.includes(ref, MARKER)) SetMethods.add(LEAF_URLS, ref);
+	if (StringMethods.includes(ref, MARKER)) {
+		SetMethods.add(LEAF_URLS, ref);
+		SetMethods.add(LEAF_IMPORT_KEYS, leafImportKey(ref));
+	}
+}
+
+/**
+ * {@link LEAF_URLS}' URLs as {@link leafImportKey} spells them, so a vite id (a path with the same query) is matched.
+ * @type {Set<string>}
+ * @private
+ */
+const LEAF_IMPORT_KEYS = new Set();
+
+/**
+ * The key of a module's URL or vite id in {@link LEAF_IMPORT_KEYS}: its file as {@link packageKey} spells it, with the
+ * query as written.
+ * @param {string} ref - The URL or id.
+ * @returns {string} The key.
+ * @private
+ */
+function leafImportKey(ref) {
+	return packageKey(ref) + "?" + (splitQuery(ref)[1] ?? "");
+}
+
+/**
+ * Whether a module, by its URL or vite id, is one slothlet's loader imported a leaf under (see {@link noteModuleFile}):
+ * the module a node was built from, never a copy another module's import loaded.
+ * @param {string} ref - The URL or id.
+ * @returns {boolean} True for such a module.
+ * @internal
+ */
+function isLeafImport(ref) {
+	return typeof ref === "string" && SetMethods.has(LEAF_IMPORT_KEYS, leafImportKey(ref));
 }
 
 /**
@@ -3159,8 +3191,10 @@ function releaseScope(instanceID) {
 	MapMethods.delete(INSTANCE_ESM_URLS, instanceID);
 	for (let ofIndex = 0, ofList = setToArray(LEAF_URLS); ofIndex < ofList.length; ofIndex++) {
 		const url = ofList[ofIndex];
-		if (URLSearchParamsMethods.get(new URLSearchParams(splitQuery(url)[1] ?? ""), "slothlet_instance") === instanceID)
+		if (URLSearchParamsMethods.get(new URLSearchParams(splitQuery(url)[1] ?? ""), "slothlet_instance") === instanceID) {
 			SetMethods.delete(LEAF_URLS, url);
+			SetMethods.delete(LEAF_IMPORT_KEYS, leafImportKey(url));
+		}
 	}
 	MapMethods.delete(COPIES, instanceID);
 	MapMethods.delete(LEAVES, instanceID);
@@ -5048,6 +5082,7 @@ export function internals(consumer) {
 		instanceCopyFiles,
 		instanceCopyReads,
 		instanceImporters,
+		isLeafImport,
 		loadedScriptLookup,
 		loadedScriptText,
 		noteModuleFile,
