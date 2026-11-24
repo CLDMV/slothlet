@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-24T08:04:41-08:00 (1795536281)
+ *	@Last modified time: 2026-11-24T10:20:18-08:00 (1795544418)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -46,7 +46,7 @@ const SELF_OBJ_REL = "api_tests/api_test_self_parity_objroot/api";
 // A sibling api file that imports a leaf's file itself.
 const LEAF_COPY_REL = "api_tests/api_test_leaf_file_import_browser";
 // A module turning strings into code by every route a browser offers (built-in capabilities).
-const CODE_STRINGS_REL = "api_tests/api_test_code_strings_browser";
+const CODE_STRINGS_REL = "api_tests/api_test_code_strings_browser/api";
 
 export default defineConfig(async () => {
 	// Built once in node; the browser can't read the fixture tree to build a manifest itself.

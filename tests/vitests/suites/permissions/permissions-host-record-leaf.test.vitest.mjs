@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-24T08:08:49-08:00 (1795536529)
+ *	@Last modified time: 2026-11-24T10:24:19-08:00 (1795544659)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -45,7 +45,7 @@ import { relay } from "../../../../api_tests/api_test_host_record_leaf/node_modu
 import { invoke as sharedInvoke } from "../../../../api_tests/api_test_host_record_leaf/node_modules/ext-pkg/index.mjs";
 
 const FIXTURE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../../api_tests/api_test_host_record_leaf");
-const PROBE = path.join(FIXTURE, "__probe-records.mjs");
+const PROBE = path.join(FIXTURE, "lib", "__probe-records.mjs");
 
 const RULES = [
 	// Code from strings is a built-in capability (D4 ruling part 1); this suite is about where such code is placed.

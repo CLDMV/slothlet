@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:29:08-08:00 (1794882548)
+ *	@Last modified time: 2026-11-24T10:23:49-08:00 (1795544629)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -18,14 +18,15 @@
  * in every instance built over the folder (#755).
  *
  * @description
- * Fixture `api_test_require_helper`, loaded from two folders:
+ * Fixture `api_test_require_helper`:
  * ```
  * api/alpha.mjs, api/beta.mjs        createRequire(import.meta.url)("../lib/survey.cjs")
  * api/store.mjs                      sealed = { x, hid, obj: { k } }
  * lib/survey.cjs                     bump() counts in module state; survey(node) reads node.hid, node.obj.k and
  *                                    Object.getOwnPropertyDescriptor(node, "obj").value.k
- * inside/…                           the same, with survey.cjs inside the api folder (an api file of its own too)
  * ```
+ * Fixture `api_test_require_helper_inside` holds the same files with `survey.cjs` inside the api folder, a leaf file
+ * of its own: module code may not require a leaf file, so that tree does not load (MODULE_LEAF_IMPORT_REFUSED).
  * Expected values:
  * - What the helper reads comes from the rules: `beta.**` is denied `store.sealed.hid` and nothing else, so through
  *   `alpha` every read answers and through `beta` only `hid` is refused, in every instance, before and after an
@@ -60,16 +61,15 @@ const READS = {
 };
 
 /**
- * Build instances over one folder of the fixture in a process of its own and report what the helper gave in each.
+ * Build instances over the fixture in a process of its own and report what the helper gave in each.
  * @param {{mode: string, runtime: string, attribution: string}} config - The config.
- * @param {string} folder - The fixture's folder (`api` or `inside`).
  * @returns {object} The answers by step.
  */
-function runSteps(config, folder) {
+function runSteps(config) {
 	const script = `
 		import slothlet from "@cldmv/slothlet";
 		import { createRequire } from "node:module";
-		const base = ${JSON.stringify(path.join(FIXTURE, folder))};
+		const base = ${JSON.stringify(path.join(FIXTURE, "api"))};
 		const build = () => slothlet({
 			base, mode: ${JSON.stringify(config.mode)}, runtime: ${JSON.stringify(config.runtime)}, silent: true,
 			permissions: { policy: "allow", rules: [{ caller: "beta.**", target: "store.sealed.hid", effect: "deny" }], caller: { attribution: ${JSON.stringify(config.attribution)} } }
@@ -95,10 +95,45 @@ function runSteps(config, folder) {
 		const third = await build();
 		out.thirdAfterBothShutDown = await use(third);
 		out.thirdCount = await third.beta.bump();
-		out.hostCount = createRequire(import.meta.url)(${JSON.stringify(path.join(FIXTURE, folder === "api" ? "lib" : "inside", "survey.cjs"))}).bump();
+		out.hostCount = createRequire(import.meta.url)(${JSON.stringify(path.join(FIXTURE, "lib", "survey.cjs"))}).bump();
 		await third.shutdown();
 		process.stdout.write("RESULT " + JSON.stringify(out) + "\\n");
 	`;
+	return runScript(script);
+}
+
+/**
+ * Build an instance over the tree whose api file requires a leaf file, in a process of its own, and report the codes
+ * in what it threw.
+ * @param {{mode: string, runtime: string, attribution: string}} config - The config.
+ * @returns {{codes: string[]}} The error's code and its causes' codes.
+ */
+function runInside(config) {
+	const script = `
+		import slothlet from "@cldmv/slothlet";
+		const out = { codes: [] };
+		try {
+			const api = await slothlet({
+				base: ${JSON.stringify(path.resolve(ROOT, "api_tests/api_test_require_helper_inside/api"))},
+				mode: ${JSON.stringify(config.mode)}, runtime: ${JSON.stringify(config.runtime)}, silent: true,
+				permissions: { policy: "allow", caller: { attribution: ${JSON.stringify(config.attribution)} } }
+			});
+			await api.alpha.bump();
+			await api.shutdown();
+		} catch (error) {
+			for (let at = error; at && out.codes.length < 10; at = at.cause) out.codes.push(at.code);
+		}
+		process.stdout.write("RESULT " + JSON.stringify(out) + "\\n");
+	`;
+	return runScript(script);
+}
+
+/**
+ * Run a script in a Node process of its own and parse the result line it writes.
+ * @param {string} script - The ES module source.
+ * @returns {object} The result.
+ */
+function runScript(script) {
 	const child = spawnSync(process.execPath, ["--conditions=slothlet-dev", "--input-type=module", "-e", script], {
 		cwd: ROOT,
 		encoding: "utf8",
@@ -112,13 +147,14 @@ function runSteps(config, folder) {
 }
 
 describe.each(MATRIX)("Helpers > a CommonJS helper loaded with createRequire > $name", (config) => {
-	describe.each([
-		{ folder: "api", where: "the helper outside the api folder" },
-		{ folder: "inside", where: "the helper inside the api folder" }
-	])("$where", ({ folder }) => {
+	it("refuses an api file's require of a file inside the api folder", () => {
+		expect(runInside(config).codes).toContain("MODULE_LEAF_IMPORT_REFUSED");
+	}, 120000);
+
+	describe("the helper outside the api folder", () => {
 		/** @type {ReturnType<typeof runSteps>|null} */
 		let steps = null;
-		const answers = () => (steps ??= runSteps(config, folder));
+		const answers = () => (steps ??= runSteps(config));
 
 		it("answers in the first instance", () => {
 			expect(answers().first).toEqual(READS);
