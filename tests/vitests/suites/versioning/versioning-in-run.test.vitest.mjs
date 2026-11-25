@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-21T00:00:00-08:00 (1795248000)
+ *	@Last modified time: 2026-11-24T08:09:22-08:00 (1795536562)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -27,7 +27,7 @@ import slothlet from "@cldmv/slothlet";
 import { TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
 const BASE = TEST_DIRS.API_TEST_VERSIONED;
-const EXTRA = path.resolve(TEST_DIRS.API_TEST_SELF_WRITE_REACH, "..", "api_test_run_write_copies", "extra");
+const EXTRA = path.resolve(TEST_DIRS.API_TEST_SELF_WRITE_REACH, "..", "api_test_run_write_copies_extra", "api");
 
 const CONFIGS = [
 	{ mode: "eager", runtime: "async" },

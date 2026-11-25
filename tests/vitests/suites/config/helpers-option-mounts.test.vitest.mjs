@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:28:50-08:00 (1794882530)
+ *	@Last modified time: 2026-11-24T08:07:53-08:00 (1795536473)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -19,7 +19,7 @@
  *
  * @description
  * Fixture `api_test_helper_copies`, loaded as the instance's base and mounted a second time under `again`
- * (`api.slothlet.api.add("again", dir)`). `helpers/tally.mjs` is imported by `one.mjs` and `two.mjs`, `helpers/tally.cjs`
+ * (`api.slothlet.api.add("again", dir)`). `lib/tally.mjs` is imported by `one.mjs` and `two.mjs`, `lib/tally.cjs`
  * by those two and required by `three.cjs` and `four.cjs`, so each helper has an importer in the base and one in the
  * mount for every importing file.
  *

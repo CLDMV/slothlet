@@ -84,6 +84,8 @@
 		"HINT_INSTANCE_ID_IN_USE": "Cada instância precisa de um ID próprio. Encerre primeiro a outra instância ou deixe o slothlet gerar o ID.",
 		"MODULE_INTERNAL_NOT_IMPORTABLE": "'{specifier}' ({file}) faz parte dos arquivos próprios do slothlet, que só os arquivos do próprio slothlet e o host podem importar ou usar. Os arquivos de um módulo podem importar {allowed}.",
 		"HINT_MODULE_INTERNAL_NOT_IMPORTABLE": "Acesse outros módulos por meio de self e deixe os arquivos próprios do slothlet para o código do host.",
+		"MODULE_LEAF_IMPORT_REFUSED": "'{importer}' importa '{file}', um arquivo folha de uma árvore de API do slothlet. O código de um módulo só pode importar arquivos lib, nunca um arquivo que o slothlet compõe em uma árvore de API.",
+		"HINT_MODULE_LEAF_IMPORT_REFUSED": "Acesse as funções desse arquivo por meio de self, no caminho de API em que o slothlet o compõe, ou mova o código compartilhado para uma pasta lib fora da árvore de API.",
 		"CONTEXT_ALREADY_EXISTS": "O contexto para a instância '{instance}' já existe. Não é possível inicializar duas vezes.",
 		"HINT_CONTEXT_ALREADY_EXISTS": "Este contexto já existe. Verifique se você está tentando inicializar a mesma instância duas vezes.",
 		"CONTEXT_NOT_FOUND": "Contexto não encontrado para a instância '{instance}'. A instância pode ter sido encerrada. Instâncias disponíveis: {instances}",

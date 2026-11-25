@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:29:42-08:00 (1794882582)
+ *	@Last modified time: 2026-11-24T10:24:13-08:00 (1795544653)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -31,9 +31,8 @@
  */
 
 import { describe, it, expect, afterEach } from "vitest";
-import path from "node:path";
 import slothlet from "@cldmv/slothlet";
-import { getMatrixConfigs, TEST_DIRS, withSuppressedSlothletErrorOutput } from "../../setup/vitest-helper.mjs";
+import { apiPart, getMatrixConfigs, TEST_DIRS, withSuppressedSlothletErrorOutput } from "../../setup/vitest-helper.mjs";
 
 const DIR = TEST_DIRS.API_TEST_CALLER_SUPPLIED_ROUND2;
 
@@ -99,12 +98,12 @@ describe.each(getMatrixConfigs())("Permissions > caller-supplied code, second ro
 	const build = async (permissions = {}) => {
 		api = await slothlet({
 			...config,
-			base: path.join(DIR, "base"),
+			base: apiPart(DIR),
 			hook: true,
 			permissions: { policy: "deny", rules: RULES, events: { policy: "allow" }, ...permissions }
 		});
-		await api.slothlet.api.add("callee", path.join(DIR, "callee"), { id: "callee-mod" });
-		await api.slothlet.api.add("supplier", path.join(DIR, "supplier"), { id: "supplier-mod" });
+		await api.slothlet.api.add("callee", apiPart(DIR, "callee"), { id: "callee-mod" });
+		await api.slothlet.api.add("supplier", apiPart(DIR, "supplier"), { id: "supplier-mod" });
 		return api;
 	};
 
@@ -171,24 +170,27 @@ describe.each(getMatrixConfigs())("Permissions > caller-supplied code, second ro
 	});
 
 	describe("a leaf's own function handed over as a value", () => {
-		it("imported raw and handed to the leaf's module, runs as the supplier", async () => {
+		it("imported raw: the supplier that imports the holder's leaf file is refused", async () => {
 			await build();
-			expect(await withSuppressedSlothletErrorOutput(() => api.supplier.probe.rawLeafHanded())).toEqual(DENIED);
-		});
-
-		it.each([false, true])("imported raw, inside a plain options object (frozen: %s), runs as the supplier", async (frozen) => {
-			await build();
-			expect(await withSuppressedSlothletErrorOutput(() => api.supplier.probe.rawLeafInOptions(frozen))).toEqual(DENIED);
+			// Module code may not import a leaf file: a supplier importing the holder's file to hand it the function raw does
+			// not load (on api.add() in an eager tree, when its folder is built in a lazy one).
+			let thrown = null;
+			try {
+				await withSuppressedSlothletErrorOutput(async () => {
+					await api.slothlet.api.add("rawsupplier", apiPart(DIR, "rawsupplier"), { id: "rawsupplier-mod" });
+					await api.rawsupplier.probe.rawLeafHanded();
+				});
+			} catch (error) {
+				thrown = error;
+			}
+			const causes = [];
+			for (let at = thrown; at && causes.length < 10; at = at.cause) causes.push(at?.code);
+			expect(causes).toContain("MODULE_LEAF_IMPORT_REFUSED");
 		});
 
 		it.each([false, true])("the leaf's very function, handed back (in options: %s), is gated as that leaf", async (inOptions) => {
 			await build();
 			expect(await withSuppressedSlothletErrorOutput(() => api.supplier.probe.sharedLeafHanded(inOptions))).toEqual(DENIED);
-		});
-
-		it("imported raw and called from the supplier's closure, runs as the supplier", async () => {
-			await build();
-			expect(await withSuppressedSlothletErrorOutput(() => api.supplier.probe.rawLeafInClosure())).toEqual(DENIED);
 		});
 
 		it("control: the holder calls it on its own account", async () => {
@@ -227,9 +229,9 @@ describe.each(getMatrixConfigs())("Permissions > caller-supplied code, second ro
 
 		it('ceiling must be "leaf" or "chain", and provenance a boolean', async () => {
 			for (const permissions of [{ caller: { ceiling: "yes" } }, { caller: { ceiling: true } }, { caller: { provenance: "yes" } }]) {
-				await expect(
-					slothlet({ ...config, base: path.join(DIR, "base"), permissions: { policy: "deny", ...permissions } })
-				).rejects.toMatchObject({ code: "INVALID_CONFIG" });
+				await expect(slothlet({ ...config, base: apiPart(DIR), permissions: { policy: "deny", ...permissions } })).rejects.toMatchObject({
+					code: "INVALID_CONFIG"
+				});
 			}
 		});
 
@@ -283,7 +285,7 @@ describe.each(getMatrixConfigs())("Permissions > caller-supplied code on a versi
 	const build = async () => {
 		api = await slothlet({
 			...config,
-			base: path.join(DIR, "base"),
+			base: apiPart(DIR),
 			versioning: {
 				dispatcher: (_allVersions, caller) => {
 					const apiPath = caller?.path?.join(".") ?? "";
@@ -301,10 +303,10 @@ describe.each(getMatrixConfigs())("Permissions > caller-supplied code on a versi
 				]
 			}
 		});
-		await api.slothlet.api.add("auth", path.join(DIR, "auth-v1"), { id: "auth-v1", version: { tag: "v1", default: true } });
-		await api.slothlet.api.add("auth", path.join(DIR, "auth-v2"), { id: "auth-v2", version: { tag: "v2" } });
-		await api.slothlet.api.add("callee", path.join(DIR, "callee"), { id: "callee-mod" });
-		await api.slothlet.api.add("supplier", path.join(DIR, "supplier"), { id: "supplier-mod" });
+		await api.slothlet.api.add("auth", apiPart(DIR, "auth-v1"), { id: "auth-v1", version: { tag: "v1", default: true } });
+		await api.slothlet.api.add("auth", apiPart(DIR, "auth-v2"), { id: "auth-v2", version: { tag: "v2" } });
+		await api.slothlet.api.add("callee", apiPart(DIR, "callee"), { id: "callee-mod" });
+		await api.slothlet.api.add("supplier", apiPart(DIR, "supplier"), { id: "supplier-mod" });
 		return api;
 	};
 

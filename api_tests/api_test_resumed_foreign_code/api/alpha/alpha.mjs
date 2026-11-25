@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-12T23:59:01-08:00 (1794556741)
+ *	@Last modified time: 2026-11-24T08:06:24-08:00 (1795536384)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -20,7 +20,7 @@
  * @memberof module:api_test_resumed_foreign_code
  */
 import { self } from "@cldmv/slothlet/runtime";
-import { readLater } from "../../helpers/later.mjs";
+import { readLater } from "../../lib/later.mjs";
 
 /**
  * The helper's async function, as it is.

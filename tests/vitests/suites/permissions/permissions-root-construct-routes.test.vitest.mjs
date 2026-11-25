@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:30:06-08:00 (1794882606)
+ *	@Last modified time: 2026-11-24T08:08:57-08:00 (1795536537)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -18,8 +18,8 @@
  * function root, so its `constructor` reads the root's own member under the reader's rules, as every other route does.
  *
  * @description
- * Fixture `api_test_function_member_routes` (see permissions-function-member-routes): `base/root.mjs` exports a
- * function with `root.tag = "TAG"`, and `base/reader.mjs`'s `at("")` runs `lib/routes.mjs` on `self`. That file skips
+ * Fixture `api_test_function_member_routes` (see permissions-function-member-routes): `api/root.mjs` exports a
+ * function with `root.tag = "TAG"`, and `api/reader.mjs`'s `at("")` runs `lib/routes.mjs` on `self`. That file skips
  * these routes for the root, as `self` was no constructor before #803. Expected values come from `routes()` run on the
  * plain function.
  * @module tests/vitests/suites/permissions/permissions-root-construct-routes
@@ -29,10 +29,10 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import slothlet from "@cldmv/slothlet";
-import plainRoot from "../../../../api_tests/api_test_function_member_routes/base/root.mjs";
+import plainRoot from "../../../../api_tests/api_test_function_member_routes/api/root.mjs";
 import { routes } from "../../../../api_tests/api_test_function_member_routes/lib/routes.mjs";
 
-const BASE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../../api_tests/api_test_function_member_routes/base");
+const BASE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../../api_tests/api_test_function_member_routes/api");
 const DENIED = "threw:PERMISSION_DENIED";
 const CONSTRUCTING = ["instance", "instanceUsed", "instancePrototype"];
 

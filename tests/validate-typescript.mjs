@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:28:12-08:00 (1794882492)
+ *	@Last modified time: 2026-11-24T08:07:31-08:00 (1795536451)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -222,7 +222,7 @@ async function testSelfRootTypes(tempDir) {
 
 	const fnDir = join(tempDir, "self-fnroot");
 	mkdirSync(fnDir, { recursive: true });
-	await generate({ base: join(fixtures, "fnroot"), output: join(fnDir, "api.d.ts"), name: "FnRootApi" });
+	await generate({ base: join(fixtures, "api"), output: join(fnDir, "api.d.ts"), name: "FnRootApi" });
 	checkSelfProgram(
 		fnDir,
 		[
@@ -242,7 +242,7 @@ async function testSelfRootTypes(tempDir) {
 
 	const objDir = join(tempDir, "self-objroot");
 	mkdirSync(objDir, { recursive: true });
-	await generate({ base: join(fixtures, "objroot"), output: join(objDir, "api.d.ts"), name: "ObjRootApi" });
+	await generate({ base: join(`${fixtures}_objroot`, "api"), output: join(objDir, "api.d.ts"), name: "ObjRootApi" });
 	checkSelfProgram(
 		objDir,
 		[

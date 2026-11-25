@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-21T00:00:00-08:00 (1795248000)
+ *	@Last modified time: 2026-11-24T08:08:04-08:00 (1795536484)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -39,7 +39,7 @@ import { makeValues, stateOf } from "../../../../api_tests/api_test_run_write_co
 
 const FIXTURE = path.resolve(TEST_DIRS.API_TEST_SELF_WRITE_REACH, "..", "api_test_run_write_copies");
 const BASE = path.join(FIXTURE, "api");
-const EXTRA = path.join(FIXTURE, "extra");
+const EXTRA = path.resolve(FIXTURE, "..", "api_test_run_write_copies_extra", "api");
 
 const CONFIGS = [
 	{ mode: "eager", runtime: "async" },

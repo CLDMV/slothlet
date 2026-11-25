@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:29:40-08:00 (1794882580)
+ *	@Last modified time: 2026-11-24T08:08:41-08:00 (1795536521)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -40,11 +40,11 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import slothlet from "@cldmv/slothlet";
-import { walk } from "../../../../api_tests/api_test_load_package_frame/host/walk.mjs";
+import { walk } from "../../../../api_tests/api_test_load_package_frame/lib/host/walk.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../..");
 const BASE = path.resolve(ROOT, "api_tests/api_test_load_package_frame/api");
-const WALK = path.resolve(ROOT, "api_tests/api_test_load_package_frame/host/walk.mjs");
+const WALK = path.resolve(ROOT, "api_tests/api_test_load_package_frame/lib/host/walk.mjs");
 const DENIED = "PERMISSION_DENIED";
 const SECRET = "SECRET";
 const TOO_DEEP = 1100;

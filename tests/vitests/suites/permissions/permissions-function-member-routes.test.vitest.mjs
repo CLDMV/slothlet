@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:29:51-08:00 (1794882591)
+ *	@Last modified time: 2026-11-24T08:08:47-08:00 (1795536527)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -20,11 +20,11 @@
  * @description
  * Fixture `api_test_function_member_routes`:
  * ```
- * base/root.mjs    export default function root(), with root.tag = "TAG"   (the api root, and mounted again at `zz`)
- * base/reader.mjs  at(path): reads `tag` of the node at `path` by every route (lib/routes.mjs)
- * own/own.mjs      export default function own(), with own.tag = "OWNTAG" (mounted at `own`)
- * own/peek.mjs     at(): the same reads of `self.own`, from a leaf of the module mounted at `own`
- * cls/k.mjs        export class K, with K.tag = "KTAG"                     (mounted at `cls`: `api.cls.k.K`)
+ * api/root.mjs     export default function root(), with root.tag = "TAG"   (the api root, and mounted again at `zz`)
+ * api/reader.mjs   at(path): reads `tag` of the node at `path` by every route (lib/routes.mjs)
+ * _own/api/own.mjs export default function own(), with own.tag = "OWNTAG" (mounted at `own`)
+ * _own/api/peek.mjs at(): the same reads of `self.own`, from a leaf of the module mounted at `own`
+ * _cls/api/k.mjs   export class K, with K.tag = "KTAG"                     (mounted at `cls`: `api.cls.k.K`)
  * ```
  * In plain JavaScript `fn.prototype.constructor === fn`, so each route reads the function's own member. A rule
  * refusing the reader the member therefore refuses every route, as it refuses the direct read; where the member is
@@ -37,13 +37,13 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import slothlet from "@cldmv/slothlet";
-import plainRoot from "../../../../api_tests/api_test_function_member_routes/base/root.mjs";
-import plainOwn from "../../../../api_tests/api_test_function_member_routes/own/own.mjs";
-import { K as PlainK } from "../../../../api_tests/api_test_function_member_routes/cls/k.mjs";
+import plainRoot from "../../../../api_tests/api_test_function_member_routes/api/root.mjs";
+import plainOwn from "../../../../api_tests/api_test_function_member_routes_own/api/own.mjs";
+import { K as PlainK } from "../../../../api_tests/api_test_function_member_routes_cls/api/k.mjs";
 import { routes, instanceRoutes } from "../../../../api_tests/api_test_function_member_routes/lib/routes.mjs";
 
 const FIXTURE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../../api_tests/api_test_function_member_routes");
-const BASE = path.join(FIXTURE, "base");
+const BASE = path.join(FIXTURE, "api");
 const DENIED = "threw:PERMISSION_DENIED";
 
 const CONFIGS = ["eager", "lazy"].flatMap((mode) =>
@@ -110,8 +110,8 @@ describe.each(CONFIGS)(
 			beforeAll(async () => {
 				api = await slothlet({ base: BASE, mode, runtime, silent: true, permissions: policy.permissions(attribution) });
 				await api.slothlet.api.add("zz", BASE);
-				await api.slothlet.api.add("own", path.join(FIXTURE, "own"));
-				await api.slothlet.api.add("cls", path.join(FIXTURE, "cls"));
+				await api.slothlet.api.add("own", path.join(`${FIXTURE}_own`, "api"));
+				await api.slothlet.api.add("cls", path.join(`${FIXTURE}_cls`, "api"));
 			}, 60000);
 
 			afterAll(async () => {

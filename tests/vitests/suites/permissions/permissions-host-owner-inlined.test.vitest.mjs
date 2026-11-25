@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:30:32-08:00 (1794882632)
+ *	@Last modified time: 2026-11-24T08:08:49-08:00 (1795536529)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -18,7 +18,7 @@
  * runner (`server.deps.inline`) with no slothlet plugin configured, and attribution comes out as it does under Node's own
  * loader for every file vitest's runner recorded before slothlet loaded.
  * @description
- * The fixture's vitest (`api_tests/api_test_host_owner_code/vitest/`) runs in a child process of its own, with only
+ * The fixture's vitest (`api_tests/api_test_host_owner_code/lib/vitest/`) runs in a child process of its own, with only
  * `server.deps.inline`. Each answer is the one docs/PERMISSIONS.md gives under Node's own loader, as the plain-Node
  * suites (`permissions-host-owner-code`, `permissions-host-owner-calls`) assert it, lazy equal to eager, in both
  * runtimes ("Where the source cannot be checked": slothlet reads vitest's records once, when it loads, and never again):
@@ -46,7 +46,7 @@ import { fileURLToPath } from "node:url";
 import { stripVTControlCharacters } from "node:util";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../..");
-const CONFIG = path.join(ROOT, "api_tests", "api_test_host_owner_code", "vitest", "vitest.config.mjs");
+const CONFIG = path.join(ROOT, "api_tests", "api_test_host_owner_code", "lib", "vitest", "vitest.config.mjs");
 const VITEST = path.join(ROOT, "node_modules", "vitest", "vitest.mjs");
 const CONFIGS = ["eager/async", "eager/live", "lazy/async", "lazy/live"];
 const CALLS = ["pin", "meta", "emit", "hostLeaf"];

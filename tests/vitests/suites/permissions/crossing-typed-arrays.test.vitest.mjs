@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:29:36-08:00 (1794882576)
+ *	@Last modified time: 2026-11-24T08:08:36-08:00 (1795536516)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -27,8 +27,9 @@
  */
 
 import { describe, it, expect, afterEach } from "vitest";
-import { resolve, join } from "node:path";
+import { resolve } from "node:path";
 import slothlet from "@cldmv/slothlet";
+import { apiPart } from "../../setup/vitest-helper.mjs";
 
 const FIXTURE = resolve("api_tests/api_test_crossing_rules");
 
@@ -42,9 +43,9 @@ const matrix = ["eager", "lazy"].flatMap((mode) =>
  * @returns {Promise<object>} The api.
  */
 async function mount(options) {
-	const api = await slothlet({ base: join(FIXTURE, "host"), silent: true, ...options });
-	await api.slothlet.api.add("owner", join(FIXTURE, "owner"), { id: "owner" });
-	await api.slothlet.api.add("reader", join(FIXTURE, "reader"), { id: "reader" });
+	const api = await slothlet({ base: apiPart(FIXTURE), silent: true, ...options });
+	await api.slothlet.api.add("owner", apiPart(FIXTURE, "owner"), { id: "owner" });
+	await api.slothlet.api.add("reader", apiPart(FIXTURE, "reader"), { id: "reader" });
 	await api.owner;
 	await api.reader;
 	return api;
@@ -135,13 +136,13 @@ describe.each(matrix)("typed array members > $mode / $runtime / $attribution", (
 describe("typed array members > configuration", () => {
 	it.each([["yes"], [-1], [1.5], [Number.NaN], [Number.POSITIVE_INFINITY], [null], [{}]])("refuses %j", async (value) => {
 		await expect(
-			slothlet({ base: join(FIXTURE, "host"), silent: true, permissions: { policy: "allow", gating: { buffers: value } } })
+			slothlet({ base: apiPart(FIXTURE), silent: true, permissions: { policy: "allow", gating: { buffers: value } } })
 		).rejects.toMatchObject({ code: "INVALID_CONFIG" });
 	});
 
 	it.each([[true], [false], [0], [64]])("accepts %j", async (value) => {
 		const api = await slothlet({
-			base: join(FIXTURE, "host"),
+			base: apiPart(FIXTURE),
 			silent: true,
 			permissions: { policy: "allow", gating: { buffers: value } }
 		});

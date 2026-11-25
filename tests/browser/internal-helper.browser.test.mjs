@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:28:05-08:00 (1794882485)
+ *	@Last modified time: 2026-11-24T08:07:25-08:00 (1795536445)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -22,7 +22,7 @@
  * ```
  * api/porter.mjs     viaInside(lib) / viaOutside(lib): have a helper use one of slothlet's internal exports
  * api/__door.mjs     the helper inside the module's folder (left out of the manifest by its `__` prefix)
- * shared/door.mjs    the same helper outside every module's folder
+ * lib/door.mjs       the same helper outside every module's folder
  * ```
  * Each helper imports `factories/context.mjs` by its URL (a browser serves every file) and calls `getContextManager`.
  *

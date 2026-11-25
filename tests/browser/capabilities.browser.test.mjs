@@ -23,7 +23,7 @@
 import { describe, it, expect } from "vitest";
 // Node-built (filesystem) fixture manifest, injected by the browser config.
 import { codeStringsManifest, codeStringsRel } from "virtual:browser-fixture-manifest";
-import { routes } from "../../api_tests/api_test_code_strings_browser/routes.mjs";
+import { routes } from "../../api_tests/api_test_code_strings_browser/lib/routes.mjs";
 
 const ROUTES = Object.keys(routes);
 

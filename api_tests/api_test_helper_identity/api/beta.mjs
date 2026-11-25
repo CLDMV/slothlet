@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-11T23:53:11-08:00 (1794469991)
+ *	@Last modified time: 2026-11-24T08:05:26-08:00 (1795536326)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -17,7 +17,7 @@
  * @fileoverview A second api file importing the helper file `shared.mjs`, which `alpha.mjs` imports too.
  * @module api_test_helper_identity.beta
  */
-import { read, readLater, queued } from "../helpers/shared.mjs";
+import { read, readLater, queued } from "../lib/shared.mjs";
 
 /**
  * Hand out the shared helper's function.

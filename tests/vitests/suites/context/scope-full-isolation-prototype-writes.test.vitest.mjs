@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-18T19:50:32-08:00 (1795060232)
+ *	@Last modified time: 2026-11-24T08:08:04-08:00 (1795536484)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -28,12 +28,12 @@
  *
  * `isolation: "partial"` shares the instance's `self`: the same writes reach the instance, as they do outside a run.
  *
- * Fixture: `api_tests/api_test_self_write_reach/{base,victim}` and `api_tests/api_test_run_prototype_writes/prober`.
+ * Fixture: `api_tests/api_test_self_write_reach/api` and `api_test_self_write_reach_victim/api` and `api_tests/api_test_run_prototype_writes/prober`.
  */
 import path from "node:path";
 import { describe, it, expect, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
-import { TEST_DIRS, withSuppressedSlothletErrorOutputSync } from "../../setup/vitest-helper.mjs";
+import { TEST_DIRS, withSuppressedSlothletErrorOutputSync, apiPart } from "../../setup/vitest-helper.mjs";
 import { classWritesOn, shapeChangesOn } from "../../../../api_tests/api_test_run_prototype_writes/prober/p.mjs";
 
 const FIXTURE = TEST_DIRS.API_TEST_SELF_WRITE_REACH;
@@ -110,8 +110,8 @@ describe.each(CONFIGS)("full-isolation run: prototype and shape writes — $mode
 	 * @returns {Promise<object>} The composed api.
 	 */
 	async function load(options = {}) {
-		api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, ...options });
-		await api.slothlet.api.add("victim", path.join(FIXTURE, "victim"), { id: "victim" });
+		api = await slothlet({ base: apiPart(FIXTURE), mode, runtime, silent: true, ...options });
+		await api.slothlet.api.add("victim", apiPart(FIXTURE, "victim"), { id: "victim" });
 		await api.slothlet.api.add("prober", PROBER, { id: "prober" });
 		return api;
 	}

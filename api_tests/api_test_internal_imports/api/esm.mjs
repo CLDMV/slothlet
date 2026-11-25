@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-13T12:00:00-08:00 (1794600000)
+ *	@Last modified time: 2026-11-24T08:05:32-08:00 (1795536332)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -20,11 +20,11 @@
  */
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
-import { attempt as taggedAttempt } from "../helpers/tagged.mjs";
+import { attempt as taggedAttempt } from "../lib/helpers/tagged.mjs";
 
 /** A `require` made from this file's path, without the query slothlet loads it with. */
 const plainRequire = createRequire(fileURLToPath(import.meta.url));
-const plain = plainRequire("../helpers/plain.cjs");
+const plain = plainRequire("../lib/helpers/plain.cjs");
 
 /**
  * What a load gave: "loaded", or the code of the error it threw.

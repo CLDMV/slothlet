@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-03T22:28:33-07:00 (1791091713)
+ *	@Last modified time: 2026-11-24T08:08:22-08:00 (1795536502)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -37,9 +37,9 @@ import { fileURLToPath } from "node:url";
 import slothlet from "@cldmv/slothlet";
 import { TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
-const FIXTURE = path.resolve(TEST_DIRS.API_TEST_HELPER_IMPORTS, "../__mixed");
+const FIXTURE = TEST_DIRS.API_TEST_HELPER_IMPORTS_MIXED;
 const BASE = path.join(FIXTURE, "api");
-const NATIVE_PROBE = path.join(FIXTURE, "native-probe.mjs");
+const NATIVE_PROBE = path.join(FIXTURE, "lib", "native-probe.mjs");
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../..");
 
 const CONFIGS = [

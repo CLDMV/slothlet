@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-18T00:00:00-08:00 (1794988800)
+ *	@Last modified time: 2026-11-24T08:08:04-08:00 (1795536484)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -24,12 +24,12 @@
  * run's `api`. Each answers as the same change on a plain-JS copy of the object (the reference), with permissions off
  * and on with a host write grant, and the instance's `conf` is unchanged afterwards.
  *
- * Fixture: `api_tests/api_test_self_write_reach/{base,victim,holder}` and `api_tests/api_test_run_prototype_writes/prober`.
+ * Fixture: `api_tests/api_test_self_write_reach/api` and `api_test_self_write_reach_{victim,holder}/api` and `api_tests/api_test_run_prototype_writes/prober`.
  */
 import path from "node:path";
 import { describe, it, expect, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
-import { TEST_DIRS } from "../../setup/vitest-helper.mjs";
+import { TEST_DIRS, apiPart } from "../../setup/vitest-helper.mjs";
 import { shapeOpOn } from "../../../../api_tests/api_test_run_prototype_writes/prober/p.mjs";
 
 const FIXTURE = TEST_DIRS.API_TEST_SELF_WRITE_REACH;
@@ -90,8 +90,8 @@ describe.each(CONFIGS)("full-isolation run with a tree of its own: node shape ch
 	 * @returns {Promise<object>} The composed api.
 	 */
 	async function load(options) {
-		api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, ...options });
-		await api.slothlet.api.add("victim", path.join(FIXTURE, "victim"), { id: "victim" });
+		api = await slothlet({ base: apiPart(FIXTURE), mode, runtime, silent: true, ...options });
+		await api.slothlet.api.add("victim", apiPart(FIXTURE, "victim"), { id: "victim" });
 		await api.slothlet.api.add("prober", PROBER, { id: "prober" });
 		return api;
 	}
@@ -103,7 +103,7 @@ describe.each(CONFIGS)("full-isolation run with a tree of its own: node shape ch
 	 */
 	function inOwnTree(fn) {
 		return api.slothlet.context.run({}, async () => {
-			await api.slothlet.api.add("extra", path.join(FIXTURE, "holder"), { id: "extra" });
+			await api.slothlet.api.add("extra", apiPart(FIXTURE, "holder"), { id: "extra" });
 			return fn();
 		});
 	}

@@ -7,17 +7,17 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-12T22:53:16-08:00 (1794552796)
+ *	@Last modified time: 2026-11-24T08:05:54-08:00 (1795536354)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
  */
 
 /**
- * @fileoverview An api file importing `helpers/queue.mjs`, which waits on a file `early.mjs` started loading.
+ * @fileoverview An api file importing `lib/queue.mjs`, which waits on a file `early.mjs` started loading.
  * @module api_test_load_flow.late
  */
-import { queued } from "../helpers/queue.mjs";
+import { queued } from "../lib/queue.mjs";
 
 /**
  * Read the vault from the queue the helper started when it loaded.

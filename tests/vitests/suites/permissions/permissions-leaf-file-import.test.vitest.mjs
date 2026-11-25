@@ -7,47 +7,43 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:29:58-08:00 (1794882598)
+ *	@Last modified time: 2026-11-24T10:24:21-08:00 (1795544661)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
  */
 
 /**
- * @fileoverview An api file that loads a sibling leaf's file itself loads a helper file of its own: what that load
- * evaluates is held to the api file that loaded it, as a helper file's code is, while slothlet's own load of the file
- * stays the leaf.
+ * @fileoverview An api file that loads a sibling leaf's file is refused: module code imports lib files, never a leaf
+ * file, so the sibling's `require("./keeper.cjs")` or `import "./keeper.mjs"` fails with MODULE_LEAF_IMPORT_REFUSED.
  *
  * @description
- * Each folder holds a `keeper` leaf that may read the vault's secret and a sibling that requires or imports
- * `./keeper` itself while it loads: `alpha` before slothlet loads the keeper leaf, `zulu` after. CommonJS and ES
- * module folders, mounted and in the base tree. Both orders give the same answer, whether the instance loads helper files once or once per importing api file (`helpers: "module"`): the sibling's copy of the file is a
- * helper the sibling imports, so its code reaches the secret only when the sibling may, inside the sibling's call and
- * when the host runs a function the sibling handed out. The keeper leaf itself is unaffected.
+ * Fixture `api_test_leaf_file_import_siblings`: each folder holds a `keeper` leaf and a sibling that requires or
+ * imports `./keeper` while it loads, `alpha` before slothlet loads the keeper leaf, `zulu` after, CommonJS and ES
+ * modules. Each folder is loaded as a base tree of its own and mounted on a tree that is clean; an eager load fails
+ * with the sibling's MODULE_IMPORT_FAILED, the refusal as its cause, and a lazy one when the folder is built (a base
+ * tree's root files as it builds). Fixture
+ * `api_test_leaf_file_import` is a clean tree: its keeper leaves, which nothing imports, read the vault's secret as
+ * themselves.
  *
  * @module tests/vitests/suites/permissions/permissions-leaf-file-import
  */
 
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { describe, it, expect, afterEach } from "vitest";
 import path from "node:path";
 import slothlet from "@cldmv/slothlet";
-import { getMatrixConfigs, TEST_DIRS, withSuppressedSlothletErrorOutput } from "../../setup/vitest-helper.mjs";
+import { apiPart, getMatrixConfigs, TEST_DIRS, withSuppressedSlothletErrorOutput } from "../../setup/vitest-helper.mjs";
 
-const DIR = TEST_DIRS.API_TEST_LEAF_FILE_IMPORT;
+const CLEAN = apiPart(TEST_DIRS.API_TEST_LEAF_FILE_IMPORT);
+const SIBLINGS = apiPart(TEST_DIRS.API_TEST_LEAF_FILE_IMPORT, "siblings");
+const REFUSED = "MODULE_LEAF_IMPORT_REFUSED";
 
-/** The mounted folders; the base tree holds the vault and the same four shapes under a `b` prefix. */
-const MOUNTS = ["cjsearly", "cjslate", "esmearly", "esmlate"];
-
-/** Each folder and its sibling: `alpha` loads the keeper's file before slothlet loads the leaf, `zulu` after. */
+/** Each folder, its sibling and the file extension: `alpha` loads the keeper's file before slothlet loads the leaf, `zulu` after. */
 const SHAPES = [
-	["cjsearly", "alpha"],
-	["cjslate", "zulu"],
-	["esmearly", "alpha"],
-	["esmlate", "zulu"],
-	["bcjsearly", "alpha"],
-	["bcjslate", "zulu"],
-	["besmearly", "alpha"],
-	["besmlate", "zulu"]
+	["cjsearly", "alpha", "cjs"],
+	["cjslate", "zulu", "cjs"],
+	["esmearly", "alpha", "mjs"],
+	["esmlate", "zulu", "mjs"]
 ];
 
 /** Deny by default; the secret is the keeper leaves' alone. */
@@ -57,13 +53,6 @@ const RULES = [
 	{ caller: "**", target: "slothlet.**", effect: "allow" }
 ];
 
-/** The siblings may read the secret too. */
-const SIBLINGS_ALLOWED = [
-	{ caller: "**.alpha.**", target: "vault.secret.secret", effect: "allow" },
-	{ caller: "**.zulu.**", target: "vault.secret.secret", effect: "allow" }
-];
-
-const DENIED = { ok: false, code: "PERMISSION_DENIED" };
 const SECRET = { ok: true, value: "s3cret" };
 
 /**
@@ -80,121 +69,75 @@ async function attempt(invoke) {
 }
 
 /**
- * Build the base tree and mount the folders.
- * @param {object} config - The matrix configuration.
- * @param {string} attribution - The attribution mode.
- * @param {Array<object>} rules - The permission rules.
- * @param {string} [helpers] - The `helpers` option, when one is given.
- * @returns {Promise<object>} The api.
+ * The outcome of a step: its value, or the refusal in what it threw and the code it threw with.
+ * @param {function(): *} fn - The step.
+ * @returns {Promise<{value?: *, refused?: *, top?: string, code?: string}>} The outcome.
  */
-async function build(config, attribution, rules, helpers) {
-	const api = await slothlet({
-		...config,
-		...(helpers ? { helpers } : {}),
-		base: path.join(DIR, "base"),
-		permissions: { policy: "deny", rules, caller: { attribution } }
-	});
-	for (const mount of MOUNTS) await api.slothlet.api.add(mount, path.join(DIR, mount), { id: `${mount}-mod` });
-	// The CommonJS files take the runtime with a dynamic import: let it settle.
-	await new Promise((resolve) => setTimeout(resolve, 20));
-	return api;
+async function outcome(fn) {
+	try {
+		return { value: await withSuppressedSlothletErrorOutput(fn) };
+	} catch (error) {
+		for (let at = error, depth = 0; at && depth < 10; at = at.cause, depth++)
+			if (at?.code === REFUSED) return { refused: at, top: error.code };
+		return { code: error?.code ?? String(error?.message ?? error) };
+	}
 }
 
-describe.each(getMatrixConfigs())("Permissions > a sibling's load of a leaf's file is a helper of the sibling > $name", ({ config }) => {
+/**
+ * Whether a refusal names the sibling and the keeper's file.
+ * @param {*} refused - The refusal.
+ * @param {string} folder - The folder.
+ * @param {string} sibling - The sibling.
+ * @param {string} ext - The files' extension.
+ * @returns {void}
+ */
+function expectNames(refused, folder, sibling, ext) {
+	const message = String(refused.message).replace(/\\/g, "/");
+	expect(message).toContain(`${folder}/${sibling}.${ext}`);
+	expect(message).toContain(`${folder}/keeper.${ext}`);
+}
+
+describe.each(getMatrixConfigs())("Permissions > a sibling's load of a leaf's file is refused > $name", ({ config }) => {
 	describe.each(["precise", "fast"])("attribution %s", (attribution) => {
-		describe.each([undefined, "module"])("helpers %s", (helpers) => {
-			describe("only the keepers may read the secret", () => {
-				let api;
+		const options = (base) => ({ ...config, base, permissions: { policy: "deny", rules: RULES, caller: { attribution } } });
+		let api;
 
-				beforeAll(async () => {
-					api = await build(config, attribution, RULES, helpers);
+		afterEach(async () => {
+			await api?.shutdown?.();
+			api = null;
+		});
+
+		it("a keeper leaf nothing imports is itself", async () => {
+			api = await slothlet(options(CLEAN));
+			for (const folder of ["cjs", "esm"]) {
+				// The CommonJS keeper takes the runtime with a dynamic import: let it settle.
+				await attempt(() => api[folder].keeper.who());
+				await new Promise((resolve) => setTimeout(resolve, 20));
+				expect(await attempt(() => api[folder].keeper.read())).toEqual(SECRET);
+				expect(await attempt(() => api[folder].keeper.who())).toEqual({ ok: true, value: `${folder}.keeper.who` });
+			}
+		});
+
+		describe.each(SHAPES)("%s (sibling %s)", (folder, sibling, ext) => {
+			it("is refused in the base tree", async () => {
+				// The two files sit at the tree's root, which a lazy tree loads as it builds too.
+				const built = await outcome(async () => {
+					api = await slothlet(options(path.join(SIBLINGS, folder)));
+					return api[sibling].whoViaCopy();
 				});
-
-				afterAll(async () => {
-					await api?.shutdown();
-				});
-
-				describe.each(SHAPES)("%s (sibling %s)", (folder, sibling) => {
-					it("the keeper leaf is itself", async () => {
-						expect(await attempt(() => api[folder].keeper.read())).toEqual(SECRET);
-						expect(await attempt(() => api[folder].keeper.who())).toEqual({ ok: true, value: `${folder}.keeper.who` });
-					});
-
-					it("the sibling's copy of the file is not the leaf's module", async () => {
-						expect(await api[folder][sibling].sameAs(api[folder].keeper.read)).toBe(false);
-					});
-
-					it("inside the sibling's call, the copy runs as the sibling", async () => {
-						expect(await attempt(() => api[folder][sibling].whoViaCopy())).toEqual({ ok: true, value: `${folder}.${sibling}.whoViaCopy` });
-						expect(await withSuppressedSlothletErrorOutput(() => attempt(() => api[folder][sibling].viaCopy()))).toEqual(DENIED);
-					});
-
-					it("run by the host, the copy is held to the sibling that loaded it", async () => {
-						const fn = await api[folder][sibling].give();
-						expect(await withSuppressedSlothletErrorOutput(() => attempt(() => fn()))).toEqual(DENIED);
-						const nested = await api[folder][sibling].giveNested();
-						expect(await withSuppressedSlothletErrorOutput(() => attempt(() => nested.fn()))).toEqual(DENIED);
-					});
-				});
+				expect(built.refused, "the build fails with the refusal as a cause").toBeTruthy();
+				if (config.mode === "eager") expect(built.top).toBe("MODULE_IMPORT_FAILED");
+				expectNames(built.refused, folder, sibling, ext);
 			});
 
-			describe("the siblings may read the secret too", () => {
-				let api;
-
-				beforeAll(async () => {
-					api = await build(config, attribution, [...RULES, ...SIBLINGS_ALLOWED], helpers);
+			it("is refused in an api.add() mount", async () => {
+				api = await slothlet(options(CLEAN));
+				const added = await outcome(async () => {
+					await api.slothlet.api.add(folder, path.join(SIBLINGS, folder), { id: `${folder}-mod` });
+					return api[folder][sibling].whoViaCopy();
 				});
-
-				afterAll(async () => {
-					await api?.shutdown();
-				});
-
-				describe.each(SHAPES)("%s (sibling %s)", (folder, sibling) => {
-					it("inside the sibling's call, the copy reaches what the sibling may", async () => {
-						expect(await attempt(() => api[folder][sibling].viaCopy())).toEqual(SECRET);
-					});
-
-					it("run by the host, the copy reaches what the sibling may", async () => {
-						const fn = await api[folder][sibling].give();
-						expect(await attempt(() => fn())).toEqual(SECRET);
-						const nested = await api[folder][sibling].giveNested();
-						expect(await attempt(() => nested.fn())).toEqual(SECRET);
-					});
-				});
-			});
-
-			describe("two running instances load the same CommonJS files", () => {
-				let keepersOnly;
-				let siblingsToo;
-
-				beforeAll(async () => {
-					keepersOnly = await build(config, attribution, RULES, helpers);
-					siblingsToo = await build(config, attribution, [...RULES, ...SIBLINGS_ALLOWED], helpers);
-				});
-
-				afterAll(async () => {
-					await keepersOnly?.shutdown();
-					await siblingsToo?.shutdown();
-				});
-
-				describe.each(SHAPES.filter(([folder]) => folder.includes("cjs")))("%s (sibling %s)", (folder, sibling) => {
-					it("a copy the host runs is never the keeper's, whichever instance's it is", async () => {
-						// Nothing on the stack names the instance (#735): a function handed out as it is runs under the record the
-						// stand-in keeps ("precise") or not at all; one nested in data runs nowhere.
-						const fn = await keepersOnly[folder][sibling].give();
-						const nested = await keepersOnly[folder][sibling].giveNested();
-						const direct = await withSuppressedSlothletErrorOutput(() => attempt(() => fn()));
-						expect(direct).toEqual(attribution === "precise" ? DENIED : { ok: false, code: expect.any(String) });
-						expect((await withSuppressedSlothletErrorOutput(() => attempt(() => nested.fn()))).ok).toBe(false);
-						const allowedFn = await siblingsToo[folder][sibling].give();
-						if (attribution === "precise") expect(await attempt(() => allowedFn())).toEqual(SECRET);
-					});
-
-					it("each instance's keeper leaf is itself", async () => {
-						expect(await attempt(() => keepersOnly[folder].keeper.read())).toEqual(SECRET);
-						expect(await attempt(() => siblingsToo[folder].keeper.read())).toEqual(SECRET);
-					});
-				});
+				expect(added.refused).toBeTruthy();
+				expectNames(added.refused, folder, sibling, ext);
 			});
 		});
 	});

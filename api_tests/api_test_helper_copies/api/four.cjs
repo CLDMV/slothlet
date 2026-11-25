@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-12T00:24:01-08:00 (1794471841)
+ *	@Last modified time: 2026-11-24T08:05:25-08:00 (1795536325)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -17,7 +17,7 @@
  * @fileoverview A CommonJS api file requiring the helper file `tally.cjs`, which other api files load too.
  * @module api_test_helper_copies.four
  */
-const tally = require("../helpers/tally.cjs");
+const tally = require("../lib/tally.cjs");
 
 /**
  * Count one up in the CommonJS helper this file requires.

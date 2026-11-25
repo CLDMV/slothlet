@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-05T17:14:22-08:00 (1793927662)
+ *	@Last modified time: 2026-11-24T08:08:49-08:00 (1795536529)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -38,7 +38,7 @@ describe("Permissions > the package that created an instance (#714)", () => {
 		const instance = {};
 		recordInstanceOwner(instance);
 		expect(isInstanceOwnerFile(instance, `${ROOT}/tests/vitests/suites/permissions/other.mjs`)).toBe(true);
-		expect(isInstanceOwnerFile(instance, `${FIXTURE}/probe.mjs`)).toBe(true);
+		expect(isInstanceOwnerFile(instance, `${FIXTURE}/lib/probe.mjs`)).toBe(true);
 	});
 
 	it("does not count a package installed inside the owner's folder", () => {

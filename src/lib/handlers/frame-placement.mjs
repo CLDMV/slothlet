@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-23T18:12:59-08:00 (1795486379)
+ *	@Last modified time: 2026-11-24T11:20:15-08:00 (1795548015)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -6288,6 +6288,7 @@ export function internals(consumer) {
 		sampleStoreScripts,
 		runtime_codeWritersOnStack,
 		runtime_loadingFileRunning,
+		runtime_loadingHelper,
 		setApiValueCheck,
 		setHandedOutCheck,
 		setHostPrototypeCheck,

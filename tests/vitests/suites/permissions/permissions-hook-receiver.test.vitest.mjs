@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:29:54-08:00 (1794882594)
+ *	@Last modified time: 2026-11-24T08:08:48-08:00 (1795536528)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -23,7 +23,6 @@
  * Fixture: `api_tests/api_test_self_write_reach` — `base/`, `victim/`, `guest/`.
  */
 import { describe, it, expect, afterEach } from "vitest";
-import path from "node:path";
 import slothletInstance from "@cldmv/slothlet";
 
 /**
@@ -36,7 +35,7 @@ import slothletInstance from "@cldmv/slothlet";
  */
 const slothlet = (config) =>
 	slothletInstance(config?.permissions ? { ...config, permissions: { caller: { provenance: false }, ...config.permissions } } : config);
-import { TEST_DIRS } from "../../setup/vitest-helper.mjs";
+import { TEST_DIRS, apiPart } from "../../setup/vitest-helper.mjs";
 
 const FIXTURE = TEST_DIRS.API_TEST_SELF_WRITE_REACH;
 const PROBE = "slothlet.test.i625.hookReceiver";
@@ -61,9 +60,9 @@ describe.each(CONFIGS)("hook handler receiver (#625) — $mode / $runtime", ({ m
 		["permissions on", { permissions: { policy: "allow" } }],
 		["permissions off", {}]
 	])("calls a module's handler with no receiver, so it cannot change its own registration (%s)", async (_label, options) => {
-		api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, hook: { enabled: true }, ...options });
-		await api.slothlet.api.add("victim", path.join(FIXTURE, "victim"), { id: "victim" });
-		await api.slothlet.api.add("guest", path.join(FIXTURE, "guest"), { id: "guest" });
+		api = await slothlet({ base: apiPart(FIXTURE), mode, runtime, silent: true, hook: { enabled: true }, ...options });
+		await api.slothlet.api.add("victim", apiPart(FIXTURE, "victim"), { id: "victim" });
+		await api.slothlet.api.add("guest", apiPart(FIXTURE, "guest"), { id: "guest" });
 		const seen = [];
 		let handedApi = null;
 		globalThis[Symbol.for(PROBE)] = (self) => {

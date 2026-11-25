@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-21T22:22:29-08:00 (1795328549)
+ *	@Last modified time: 2026-11-24T08:08:56-08:00 (1795536536)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -24,7 +24,7 @@
 import { describe, it, expect, afterEach } from "vitest";
 import path from "node:path";
 import slothlet from "@cldmv/slothlet";
-import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
+import { getMatrixConfigs, TEST_DIRS, apiPart } from "../../setup/vitest-helper.mjs";
 
 const DIR = TEST_DIRS.API_TEST_CALLER_SUPPLIED_ROUND7;
 const DIR5 = TEST_DIRS.API_TEST_CALLER_SUPPLIED_ROUND5;
@@ -52,8 +52,8 @@ describe.each(getMatrixConfigs())("Permissions > a reload's build gives module c
 	});
 
 	it("a module's top level is refused at its first build and again when a reload builds it", async () => {
-		api = await slothlet({ ...config, base: path.join(DIR, "base"), hook: true, permissions: PERMISSIONS });
-		await api.slothlet.api.add("rebuilt", path.join(DIR, "rebuilt"), { id: "rebuilt-mod" });
+		api = await slothlet({ ...config, base: apiPart(DIR), hook: true, permissions: PERMISSIONS });
+		await api.slothlet.api.add("rebuilt", apiPart(DIR, "rebuilt"), { id: "rebuilt-mod" });
 		await settle();
 		const first = await api.rebuilt.probe.taken();
 		await api.slothlet.reload();

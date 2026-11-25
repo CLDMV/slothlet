@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:25:59-08:00 (1794882359)
+ *	@Last modified time: 2026-11-24T08:05:29-08:00 (1795536329)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -24,7 +24,7 @@ import vm from "node:vm";
 import { invoke as packageInvoke } from "ext-pkg";
 import { load } from "load-pkg";
 import { run as runSource } from "write-pkg";
-import { open as openOutside } from "../../module-scope/index.mjs";
+import { open as openOutside } from "../../lib/module-scope/index.mjs";
 import { self } from "@cldmv/slothlet/runtime";
 
 /**
@@ -51,7 +51,7 @@ export const viaPkg = () => packageInvoke(self.store, "partition");
  * await api.ext.b.prepare(); // "prepared"
  */
 export async function prepare() {
-	prepared.loaded = await load(new URL("../../outside/loaded.mjs", import.meta.url));
+	prepared.loaded = await load(new URL("../../lib/outside/loaded.mjs", import.meta.url));
 	prepared.written = await runSource("export function open(store) {\n\treturn store.partition();\n}\n");
 	prepared.copy = await load(new URL("./b.mjs?copy", import.meta.url));
 	self.made = {

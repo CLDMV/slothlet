@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:28:09-08:00 (1794882489)
+ *	@Last modified time: 2026-11-24T08:07:28-08:00 (1795536448)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -16,12 +16,12 @@
 /**
  * @fileoverview In a browser, a module's `self` takes the form the page's `api` takes (#803): callable for a function
  * root, an object for an object root. Each operation is run on `self` inside a module and on `api` on the page, and
- * the answers are compared row by row (see `api_tests/api_test_self_parity/shape.mjs`).
+ * the answers are compared row by row (see `api_tests/api_test_self_parity/lib/shape.mjs`).
  */
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { selfFnManifest, selfFnRel, selfObjManifest, selfObjRel } from "virtual:browser-fixture-manifest";
-import { shape } from "../../api_tests/api_test_self_parity/host/shape.mjs";
+import { shape } from "../../api_tests/api_test_self_parity/lib/host/shape.mjs";
 
 /**
  * Boot an instance in browser mode over a served fixture folder.

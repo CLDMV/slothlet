@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-11T13:14:42-08:00 (1794431682)
+ *	@Last modified time: 2026-11-24T08:08:36-08:00 (1795536516)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -30,7 +30,7 @@ import { describe, it, expect } from "vitest";
 import { execFileSync } from "node:child_process";
 import { resolve } from "node:path";
 
-const PROBE = resolve("api_tests/api_test_crossing_rules/promise-probe.mjs");
+const PROBE = resolve("api_tests/api_test_crossing_rules/lib/promise-probe.mjs");
 
 /**
  * Run one case in a process of its own.

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:30:03-08:00 (1794882603)
+ *	@Last modified time: 2026-11-24T08:08:54-08:00 (1795536534)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -33,7 +33,7 @@ import slothlet from "@cldmv/slothlet";
 import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
 const HERE = fileURLToPath(import.meta.url);
-const CODER = path.resolve(path.dirname(HERE), "../../../../api_tests/api_test_code_strings/coder");
+const CODER = path.resolve(path.dirname(HERE), "../../../../api_tests/api_test_code_strings_coder/api");
 const OWN = pathToFileURL(path.join(CODER, "probe.mjs")).href;
 const ROUTES = ["compileFunction", "runInThisContext", "script", "moduleCompile"];
 const OPEN = { caller: "**", target: "**", effect: "allow" };

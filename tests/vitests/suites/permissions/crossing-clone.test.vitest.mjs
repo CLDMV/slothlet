@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:29:35-08:00 (1794882575)
+ *	@Last modified time: 2026-11-24T08:08:35-08:00 (1795536515)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -28,6 +28,7 @@ import { describe, it, expect, afterEach, beforeAll } from "vitest";
 import { resolve, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import slothlet from "@cldmv/slothlet";
+import { apiPart } from "../../setup/vitest-helper.mjs";
 
 const FIXTURE = resolve("api_tests/api_test_crossing_rules");
 const WATERMARK = Symbol.for("slothlet.clone.original");
@@ -48,9 +49,9 @@ const matrix = ["eager", "lazy"].flatMap((mode) =>
  * @returns {Promise<object>} The api.
  */
 async function mount(options) {
-	const api = await slothlet({ base: join(FIXTURE, "host"), silent: true, ...options });
-	await api.slothlet.api.add("owner", join(FIXTURE, "owner"), { id: "owner" });
-	await api.slothlet.api.add("reader", join(FIXTURE, "reader"), { id: "reader" });
+	const api = await slothlet({ base: apiPart(FIXTURE), silent: true, ...options });
+	await api.slothlet.api.add("owner", apiPart(FIXTURE, "owner"), { id: "owner" });
+	await api.slothlet.api.add("reader", apiPart(FIXTURE, "reader"), { id: "reader" });
 	await api.owner;
 	await api.reader;
 	return api;
@@ -60,8 +61,8 @@ async function mount(options) {
 let plain;
 
 beforeAll(async () => {
-	const owner = await import(`${pathToFileURL(join(FIXTURE, "owner", "owner.mjs")).href}?plain-twin`);
-	const reader = await import(`${pathToFileURL(join(FIXTURE, "reader", "reader.mjs")).href}?plain-twin`);
+	const owner = await import(`${pathToFileURL(join(apiPart(FIXTURE, "owner"), "owner.mjs")).href}?plain-twin`);
+	const reader = await import(`${pathToFileURL(join(apiPart(FIXTURE, "reader"), "reader.mjs")).href}?plain-twin`);
 	plain = await reader.clones(owner);
 });
 

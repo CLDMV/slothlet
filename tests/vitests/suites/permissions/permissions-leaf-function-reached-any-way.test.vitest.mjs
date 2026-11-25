@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-23T08:14:39-08:00 (1795450479)
+ *	@Last modified time: 2026-11-24T10:24:21-08:00 (1795544661)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -17,15 +17,17 @@
  * @fileoverview A node's rules decide a call of its leaf's own function however that function is reached.
  *
  * @description
- * `cyc.fnmod` is a node built from `cyc/fnmod.mjs`. Another module (`carrier`) imports that file itself and hands the
- * function it holds to other modules: returned as it is, inside a returned object, after an `await`, and as the
+ * `cyc.fnmod` is a node built from `cyc/fnmod.mjs`. Another module (`carrier`) reads that function through `self` and
+ * hands it to other modules: returned as it is, inside a returned object, after an `await`, and as the
  * argument of a call into the reader (`self.reader.run(fnmod)`). Each of those is the node's function, so calling it is a call of
  * `cyc.fnmod`: a rule denying the reader `cyc.fnmod` refuses it as it refuses `self.cyc.fnmod()`, a module the rules
  * allow still calls it, and the host, which no rule matches, calls it as before. The same holds for a CommonJS leaf
- * (`cjs/fnmod.cjs`, required by `carrier/cjs.cjs`).
+ * (`cjs/fnmod.cjs`, read through `self` by `carrier/cjs.cjs`). A module that imports the leaf's file itself
+ * (`importer/esm.mjs`, `importer/cjs.cjs`) is refused with MODULE_LEAF_IMPORT_REFUSED as it loads.
  *
  * Fixtures (written to tmp/): `base/root.mjs`, `cyc/fnmod.mjs` + `cyc/dn.mjs`, `cjs/fnmod.cjs` + `cjs/dn.cjs`,
- * `carrier/esm.mjs` + `carrier/cjs.cjs` (hand the function out), `reader/reader.mjs` and `friend/friend.mjs`
+ * `carrier/esm.mjs` + `carrier/cjs.cjs` (hand the function out), `importer/esm.mjs` + `importer/cjs.cjs` (import the
+ * leaf files), `reader/reader.mjs` and `friend/friend.mjs`
  * (call what they are handed; the rules deny `reader` and leave `friend` alone).
  * @module tests/vitests/suites/permissions/permissions-leaf-function-reached-any-way
  */
@@ -90,28 +92,31 @@ beforeAll(() => {
 	write("cjs/dn.cjs", ["module.exports = function dn(x) {", '\treturn "dn:" + x;', "};"]);
 	write("carrier/esm.mjs", [
 		'import { self } from "@cldmv/slothlet/runtime";',
-		'import fnmod from "../cyc/fnmod.mjs";',
 		"export function give() {",
-		"\treturn fnmod;",
+		"\treturn self.cyc.fnmod;",
 		"}",
 		"export function boxed() {",
-		"\treturn { fn: fnmod };",
+		"\treturn { fn: self.cyc.fnmod };",
 		"}",
 		"export async function later() {",
 		"\tawait null;",
-		"\treturn fnmod;",
+		"\treturn self.cyc.fnmod;",
 		"}",
 		"export function withCallback(callback) {",
-		"\treturn callback(fnmod);",
+		"\treturn callback(self.cyc.fnmod);",
 		"}",
 		"export function handTo(name) {",
-		"\treturn self[name].run(fnmod);",
-		"}",
-		"export function same(fn) {",
-		"\treturn fn === fnmod;",
+		"\treturn self[name].run(self.cyc.fnmod);",
 		"}"
 	]);
-	write("carrier/cjs.cjs", ['const fnmod = require("../cjs/fnmod.cjs");', "exports.give = function give() {", "\treturn fnmod;", "};"]);
+	write("carrier/cjs.cjs", [
+		"exports.give = async function give() {",
+		'\tconst { self } = await import("@cldmv/slothlet/runtime");',
+		"\treturn self.cjs.fnmod;",
+		"};"
+	]);
+	write("importer/esm.mjs", ['import fnmod from "../cyc/fnmod.mjs";', "export function give() {", "\treturn fnmod;", "}"]);
+	write("importer/cjs.cjs", ['const fnmod = require("../cjs/fnmod.cjs");', "exports.give = function give() {", "\treturn fnmod;", "};"]);
 	write("reader/reader.mjs", callerSource("reader"));
 	write("friend/friend.mjs", callerSource("friend"));
 });
@@ -178,9 +183,18 @@ describe.each(getMatrixConfigs())("Permissions > a leaf's function reached any w
 		expect((await api.carrier.cjs.give())("x")).toBe("cjs:x");
 	});
 
-	it("the module that imports the file still holds the function itself", async () => {
+	it.each(["esm", "cjs"])("a module that imports the leaf's file is refused (%s)", async (format) => {
 		api = await build(config, DENY_READER);
-		expect(await api.carrier.esm.same(await api.carrier.esm.give())).toBe(true);
+		let thrown = null;
+		try {
+			await api.slothlet.api.add("importer", path.join(ROOT, "importer"), { id: "importer" });
+			await api.importer[format].give();
+		} catch (error) {
+			thrown = error;
+		}
+		const causes = [];
+		for (let at = thrown; at && causes.length < 10; at = at.cause) causes.push(at?.code);
+		expect(causes).toContain("MODULE_LEAF_IMPORT_REFUSED");
 	});
 
 	it("with no rules every module calls the node's function by every route", async () => {

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:30:02-08:00 (1794882602)
+ *	@Last modified time: 2026-11-24T08:08:52-08:00 (1795536532)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -31,14 +31,13 @@
  * Fixture: `api_tests/api_test_self_write_reach` — `base/`, `victim/`, `guest/`, and `holder/`.
  */
 import { describe, it, expect, afterEach } from "vitest";
-import path from "node:path";
 import slothlet from "@cldmv/slothlet";
-import { TEST_DIRS, withSuppressedSlothletErrorOutput } from "../../setup/vitest-helper.mjs";
+import { TEST_DIRS, withSuppressedSlothletErrorOutput, apiPart } from "../../setup/vitest-helper.mjs";
 
 const FIXTURE = TEST_DIRS.API_TEST_SELF_WRITE_REACH;
-const GUEST = path.join(FIXTURE, "guest");
-const VICTIM = path.join(FIXTURE, "victim");
-const HOLDER = path.join(FIXTURE, "holder");
+const GUEST = apiPart(FIXTURE, "guest");
+const VICTIM = apiPart(FIXTURE, "victim");
+const HOLDER = apiPart(FIXTURE, "holder");
 
 const CONFIGS = [
 	{ mode: "eager", runtime: "async" },
@@ -71,7 +70,7 @@ describe.each(CONFIGS)("aliases a module stores (#625) — $mode / $runtime", ({
 		 */
 		async function load() {
 			api = await slothlet({
-				base: path.join(FIXTURE, "base"),
+				base: apiPart(FIXTURE),
 				mode,
 				runtime,
 				silent: true,

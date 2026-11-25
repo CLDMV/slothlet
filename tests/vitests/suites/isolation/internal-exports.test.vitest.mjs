@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:29:20-08:00 (1794882560)
+ *	@Last modified time: 2026-11-24T08:08:23-08:00 (1795536503)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -46,10 +46,10 @@ import {
 	collect,
 	holdAll,
 	hostUse
-} from "../../../../api_tests/api_test_internal_exports/table.mjs";
+} from "../../../../api_tests/api_test_internal_exports/lib/table.mjs";
 
 const REFUSED = "MODULE_INTERNAL_NOT_IMPORTABLE";
-const PROBE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../../api_tests/api_test_internal_exports/probe.mjs");
+const PROBE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../../api_tests/api_test_internal_exports/lib/probe.mjs");
 
 const MATRIX = [];
 for (const mode of ["eager", "lazy"])

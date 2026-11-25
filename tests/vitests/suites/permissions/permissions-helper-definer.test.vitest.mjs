@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:29:53-08:00 (1794882593)
+ *	@Last modified time: 2026-11-24T08:08:48-08:00 (1795536528)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -18,7 +18,7 @@
  *
  * @description
  * Fixture `api_test_helper_identity`. A helper file is a file an api file imports that is no api file itself, so it
- * has no leaf. `helpers/shared.mjs` is imported by `alpha.mjs` and `beta.mjs`; `helpers/solo.mjs` by `alpha.mjs`
+ * has no leaf. `lib/shared.mjs` is imported by `alpha.mjs` and `beta.mjs`; `lib/solo.mjs` by `alpha.mjs`
  * alone. Leaves of both files return the helpers' own functions, as they are or inside plain data, and the host or
  * another module (`runner`) runs them.
  *

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-12T01:56:34-08:00 (1794477394)
+ *	@Last modified time: 2026-11-24T08:05:30-08:00 (1795536330)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -20,13 +20,13 @@
  * @memberof module:api_test_import_record
  */
 import { fileURLToPath } from "node:url";
-import { read, last, reset } from "../helpers/reader.mjs";
+import { read, last, reset } from "../lib/reader.mjs";
 
 const OWN = new URL(import.meta.url);
 const INSTANCE = OWN.searchParams.get("slothlet_instance");
 const slashPath = (relative) => fileURLToPath(new URL(relative, OWN)).replace(/\\/g, "/");
-const HELPER = slashPath("../helpers/reader.mjs");
-const TAGGED = slashPath("../helpers/tagged.mjs");
+const HELPER = slashPath("../lib/reader.mjs");
+const TAGGED = slashPath("../lib/tagged.mjs");
 const TRUSTED = slashPath("./trusted.mjs");
 
 /** @type {{last: function(): string}|null} The copy of `tagged.mjs` this file loaded. */
@@ -126,7 +126,7 @@ export const peek = () => last();
  * (await api.guest.boxTagged()).run();
  */
 export const boxTagged = async () => {
-	const target = new URL("../helpers/tagged.mjs", OWN);
+	const target = new URL("../lib/tagged.mjs", OWN);
 	target.searchParams.set("slothlet_instance", INSTANCE);
 	target.searchParams.set("slothlet_helpers", "module");
 	target.searchParams.set("slothlet_for", TRUSTED);

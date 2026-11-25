@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-10-26T02:52:53-07:00 (1793008373)
+ *	@Last modified time: 2026-11-24T08:08:53-08:00 (1795536533)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -25,13 +25,17 @@
  * Fixture: `api_tests/api_test_self_write_reach` — `base/`, `victim/`, `guest/`.
  */
 import { describe, it, expect, afterEach } from "vitest";
-import path from "node:path";
 import slothlet from "@cldmv/slothlet";
-import { TEST_DIRS, withSuppressedSlothletErrorOutput, withSuppressedSlothletErrorOutputSync } from "../../setup/vitest-helper.mjs";
+import {
+	TEST_DIRS,
+	withSuppressedSlothletErrorOutput,
+	withSuppressedSlothletErrorOutputSync,
+	apiPart
+} from "../../setup/vitest-helper.mjs";
 
 const FIXTURE = TEST_DIRS.API_TEST_SELF_WRITE_REACH;
-const GUEST = path.join(FIXTURE, "guest");
-const VICTIM = path.join(FIXTURE, "victim");
+const GUEST = apiPart(FIXTURE, "guest");
+const VICTIM = apiPart(FIXTURE, "victim");
 
 const CONFIGS = [
 	{ mode: "eager", runtime: "async" },
@@ -56,7 +60,7 @@ describe.each(CONFIGS)("a removed module's callbacks (#625) — $mode / $runtime
 	 * @returns {Promise<object>} The composed api.
 	 */
 	async function load(options) {
-		api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, hook: { enabled: true }, ...options });
+		api = await slothlet({ base: apiPart(FIXTURE), mode, runtime, silent: true, hook: { enabled: true }, ...options });
 		await api.slothlet.api.add("victim", VICTIM, { id: "victim" });
 		await api.slothlet.api.add("g", GUEST, { id: "gA" });
 		api.g.x.takeLifecycleSeen();
@@ -101,7 +105,7 @@ describe.each(CONFIGS)("a removed module's callbacks (#625) — $mode / $runtime
 
 	it("leaves a removed module's kept code without standing while another removal is held open", async () => {
 		api = await slothlet({
-			base: path.join(FIXTURE, "base"),
+			base: apiPart(FIXTURE),
 			mode,
 			runtime,
 			silent: true,

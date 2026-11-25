@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:30:39-08:00 (1794882639)
+ *	@Last modified time: 2026-11-24T08:08:53-08:00 (1795536533)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -31,7 +31,12 @@ import { describe, it, expect, afterEach } from "vitest";
 import path from "node:path";
 import slothlet from "@cldmv/slothlet";
 import { self } from "@cldmv/slothlet/runtime";
-import { TEST_DIRS, withSuppressedSlothletErrorOutput, withSuppressedSlothletErrorOutputSync } from "../../setup/vitest-helper.mjs";
+import {
+	TEST_DIRS,
+	withSuppressedSlothletErrorOutput,
+	withSuppressedSlothletErrorOutputSync,
+	apiPart
+} from "../../setup/vitest-helper.mjs";
 
 const FIXTURE = TEST_DIRS.API_TEST_SELF_WRITE_REACH;
 
@@ -68,9 +73,9 @@ describe.each(CONFIGS)("module rule integrity (#625) — $mode / $runtime", ({ m
 	 * @returns {Promise<object>} The composed api.
 	 */
 	async function load(options = { permissions: { policy: "allow", rules: [HOST_DENY] } }) {
-		api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, ...options });
-		await api.slothlet.api.add("victim", path.join(FIXTURE, "victim"), { id: "victim" });
-		for (const name of ["guest", "mgr"]) await api.slothlet.api.add(name, path.join(FIXTURE, "guest"), { id: name });
+		api = await slothlet({ base: apiPart(FIXTURE), mode, runtime, silent: true, ...options });
+		await api.slothlet.api.add("victim", apiPart(FIXTURE, "victim"), { id: "victim" });
+		for (const name of ["guest", "mgr"]) await api.slothlet.api.add(name, apiPart(FIXTURE, "guest"), { id: name });
 		return api;
 	}
 
@@ -100,7 +105,7 @@ describe.each(CONFIGS)("module rule integrity (#625) — $mode / $runtime", ({ m
 
 		it.each([["array"], ["entry"]])("refuses an api.add whose permissions option changes after the check (%s)", async (how) => {
 			await load();
-			const outcome = await withSuppressedSlothletErrorOutput(() => api.guest.x.mountShifting(path.join(FIXTURE, "guest"), how));
+			const outcome = await withSuppressedSlothletErrorOutput(() => api.guest.x.mountShifting(apiPart(FIXTURE, "guest"), how));
 			expect(["done", "PERMISSION_RULE_INVALID"]).toContain(outcome);
 			expect(api.slothlet.permissions.global.rules.path("victim.v.secret").some((rule) => rule.effect === "allow")).toBe(false);
 			expect(withSuppressedSlothletErrorOutputSync(() => api.guest.x.callVictimSecret())).toBe("PERMISSION_DENIED");
@@ -154,7 +159,7 @@ describe.each(CONFIGS)("module rule integrity (#625) — $mode / $runtime", ({ m
 				return true;
 			};
 			const permissions = { allow: [{ target: "guest.**", condition }] };
-			expect(await api.guest.x.addAt("guest.sub", path.join(FIXTURE, "victim"), { id: "gsub", permissions })).toBe("done");
+			expect(await api.guest.x.addAt("guest.sub", apiPart(FIXTURE, "victim"), { id: "gsub", permissions })).toBe("done");
 			await withSuppressedSlothletErrorOutput(() => api.guest.sub.v.callAt("guest.x.listSelf"));
 			expect(writes.length).toBeGreaterThan(0);
 			expect([...new Set(writes)]).toEqual(["LOOSE_SET_NOT_OWNED"]);
@@ -162,8 +167,8 @@ describe.each(CONFIGS)("module rule integrity (#625) — $mode / $runtime", ({ m
 		});
 
 		it("stops running it once that module is removed, even when another module takes its moduleID", async () => {
-			api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, permissions: {} });
-			await api.slothlet.api.add("g", path.join(FIXTURE, "guest"), { id: "gA" });
+			api = await slothlet({ base: apiPart(FIXTURE), mode, runtime, silent: true, permissions: {} });
+			await api.slothlet.api.add("g", apiPart(FIXTURE, "guest"), { id: "gA" });
 			const runs = [];
 			const condition = () => {
 				try {
@@ -175,9 +180,9 @@ describe.each(CONFIGS)("module rule integrity (#625) — $mode / $runtime", ({ m
 				return true;
 			};
 			const permissions = { allow: [{ target: "g.kid.**:write", condition }] };
-			expect(await api.g.x.addAt("g.kid", path.join(FIXTURE, "guest"), { id: "kid", permissions })).toBe("done");
+			expect(await api.g.x.addAt("g.kid", apiPart(FIXTURE, "guest"), { id: "kid", permissions })).toBe("done");
 			await api.slothlet.api.remove("gA");
-			await api.slothlet.api.add("z", path.join(FIXTURE, "victim"), { id: "gA" });
+			await api.slothlet.api.add("z", apiPart(FIXTURE, "victim"), { id: "gA" });
 			await withSuppressedSlothletErrorOutput(() => api.g.kid.x.writeAt("g.kid.x"));
 			expect(runs).not.toContain("done");
 			expect(api.z.v.viaStale).toBeUndefined();
@@ -381,9 +386,9 @@ describe.each(CONFIGS)("module rule integrity (#625) — $mode / $runtime", ({ m
 		 * @returns {Promise<object>} The composed api.
 		 */
 		async function nest() {
-			api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true, permissions: { policy: "allow" } });
-			await api.slothlet.api.add("outer", path.join(FIXTURE, "guest"), { id: "outer" });
-			await api.slothlet.api.add("outer.inner", path.join(FIXTURE, "guest"), { id: "inner" });
+			api = await slothlet({ base: apiPart(FIXTURE), mode, runtime, silent: true, permissions: { policy: "allow" } });
+			await api.slothlet.api.add("outer", apiPart(FIXTURE, "guest"), { id: "outer" });
+			await api.slothlet.api.add("outer.inner", apiPart(FIXTURE, "guest"), { id: "inner" });
 			return api;
 		}
 
@@ -407,9 +412,9 @@ describe.each(CONFIGS)("module rule integrity (#625) — $mode / $runtime", ({ m
 		});
 
 		it("leaves two modules mounted at the same point sharing it", async () => {
-			api = await slothlet({ base: path.join(FIXTURE, "base"), mode, runtime, silent: true });
-			await api.slothlet.api.add("co", path.join(FIXTURE, "guest"), { id: "co-guest" });
-			await api.slothlet.api.add("co", path.join(FIXTURE, "victim"), { id: "co-victim" });
+			api = await slothlet({ base: apiPart(FIXTURE), mode, runtime, silent: true });
+			await api.slothlet.api.add("co", apiPart(FIXTURE, "guest"), { id: "co-guest" });
+			await api.slothlet.api.add("co", apiPart(FIXTURE, "victim"), { id: "co-victim" });
 			const report = await api.co.x.writeAt("co.v");
 			expect(report).toEqual(every(report, "done"));
 		});

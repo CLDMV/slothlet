@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-15T09:00:00-08:00 (1794762000)
+ *	@Last modified time: 2026-11-24T08:04:59-08:00 (1795536299)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -18,7 +18,7 @@
  * @module api_test_browser_internal_helper.porter
  */
 import { useInternal as inside } from "./__door.mjs";
-import { useInternal as outside } from "../shared/door.mjs";
+import { useInternal as outside } from "../lib/door.mjs";
 
 /**
  * Have the helper inside the module's folder use one of slothlet's internal exports.

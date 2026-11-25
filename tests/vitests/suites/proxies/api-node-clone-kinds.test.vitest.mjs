@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:30:16-08:00 (1794882616)
+ *	@Last modified time: 2026-11-24T08:09:05-08:00 (1795536545)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -30,9 +30,16 @@ import { resolve, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import v8 from "node:v8";
 import slothlet from "@cldmv/slothlet";
-import { shape } from "../../../../api_tests/api_test_api_node_clone_kinds/shape.mjs";
+import { shape } from "../../../../api_tests/api_test_api_node_clone_kinds/lib/shape.mjs";
 
 const FIXTURE = resolve("api_tests/api_test_api_node_clone_kinds");
+
+/**
+ * The api folder of one of the fixture's modules: the host's is the fixture's own, each other is a fixture of its own.
+ * @param {string} name - `host`, `owner`, `single` or `reader`.
+ * @returns {string} The folder.
+ */
+const part = (name) => join(name === "host" ? FIXTURE : `${FIXTURE}_${name}`, "api");
 
 const MODES = ["eager", "lazy"];
 const RUNTIMES = ["async", "live"];
@@ -71,10 +78,10 @@ let twins = 0;
 
 /**
  * A fresh copy of one of the fixture's files, imported as a plain module.
- * @param {string} file - The file, relative to the fixture.
+ * @param {string} file - The file, as `<module>/<file>`.
  * @returns {Promise<object>} Its namespace.
  */
-const twin = (file) => import(`${pathToFileURL(join(FIXTURE, file)).href}?plain-twin-${++twins}`);
+const twin = (file) => import(`${pathToFileURL(join(part(file.split("/")[0]), file.split("/")[1])).href}?plain-twin-${++twins}`);
 
 /**
  * Run a check, answering what it returned or the name of what it threw.
@@ -145,13 +152,13 @@ describe.each(matrix)(
 		 */
 		const mount = async (rules = []) => {
 			api = await slothlet({
-				base: join(FIXTURE, "host"),
+				base: part("host"),
 				silent: true,
 				mode,
 				runtime,
 				...(permissions ? { permissions: { ...permissions, rules } } : {})
 			});
-			for (const name of ["owner", "single", "reader"]) await api.slothlet.api.add(name, join(FIXTURE, name), { id: name });
+			for (const name of ["owner", "single", "reader"]) await api.slothlet.api.add(name, part(name), { id: name });
 			for (const node of [api.owner, api.single, api.reader]) await node;
 			for (const key of OWNER_KEYS) await api.owner[key];
 			for (const key of SINGLE_KEYS) await api.single[key];
@@ -237,13 +244,13 @@ describe.each(guarded)(
 		 */
 		const mount = async (rules) => {
 			api = await slothlet({
-				base: join(FIXTURE, "host"),
+				base: part("host"),
 				silent: true,
 				mode,
 				runtime,
 				permissions: { policy: "allow", caller: { attribution }, rules }
 			});
-			for (const name of ["owner", "single", "reader"]) await api.slothlet.api.add(name, join(FIXTURE, name), { id: name });
+			for (const name of ["owner", "single", "reader"]) await api.slothlet.api.add(name, part(name), { id: name });
 			for (const node of [api.owner, api.single, api.reader, api.owner.sharedMemory, api.owner.sharedBytes, api.single.derror]) await node;
 			return api;
 		};

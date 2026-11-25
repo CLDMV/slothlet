@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:30:46-08:00 (1794882646)
+ *	@Last modified time: 2026-11-24T08:08:59-08:00 (1795536539)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -59,7 +59,7 @@ const matrix = ["eager", "lazy"].flatMap((mode) =>
  * @returns {object} The answers.
  */
 function child(args) {
-	const result = spawnSync(process.execPath, ["--conditions=slothlet-dev", path.join(FIXTURE, "child-fixed.mjs"), ...args], {
+	const result = spawnSync(process.execPath, ["--conditions=slothlet-dev", path.join(FIXTURE, "lib", "child-fixed.mjs"), ...args], {
 		encoding: "utf8",
 		timeout: 120_000
 	});
@@ -105,7 +105,7 @@ function lateCallsFixed() {
 			path.join(ROOT, "node_modules", "vitest", "vitest.mjs"),
 			"run",
 			"--config",
-			path.join(LATE_FIXTURE, "vitest", "vitest.fixed.config.mjs")
+			path.join(LATE_FIXTURE, "lib", "vitest", "vitest.fixed.config.mjs")
 		],
 		{ cwd: ROOT, env, encoding: "utf8", timeout: 300_000 }
 	);

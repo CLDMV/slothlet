@@ -146,6 +146,24 @@ await api.slothlet.context.scope({ context: {}, isolation: "partial", fn: () => 
 
 State a run needs to hand back belongs in its return value, not in `self`.
 
+### Module code cannot import leaf files
+
+An api file, or a lib file it loads, that imports, re-exports or requires another file of an api tree (a sibling, a file in another folder of the tree, a file of an `api.add()` mount) is refused with `MODULE_LEAF_IMPORT_REFUSED`, whatever the permission mode. In v3 the import loaded a second copy of the file, with its own module state. Move code two leaves share into a lib folder outside the api tree, and reach another leaf through `self`:
+
+```javascript
+// v3: api/report/report.mjs
+import { make } from "../point/point.mjs";
+export const report = (x) => make(x);
+
+// v4: shared code in lib/, or the leaf through self
+import { self } from "@cldmv/slothlet/runtime";
+export const report = (x) => self.point.make(x);
+```
+
+The host's own imports of leaf files are unchanged. See [MODULE-STRUCTURE.md](./MODULE-STRUCTURE.md#leaf-files-are-not-imported).
+
+In the browser no import is seen, so the refusal does not apply there: a module that imports a leaf file still gets a copy of the file of its own, as in v3, and that copy is never the leaf. The same code is refused under Node and under vite or vitest, so move it to `self` or a lib folder even when the browser build works.
+
 ### Lazy mode under vitest needs the plugin
 
 Under vitest, api files are loaded by vite, not by Node. Add the plugin from `@cldmv/slothlet/vite` to the vitest config so each instance gets its own copy of every api file and slothlet can tell which module loaded which file. Without it a test using lazy mode, or a module's helper outside its api folder, is refused, and `permissions.mode: "strict"` reports the `vitest-plugin` baseline check as unmet. The plugin is supported with the forks pool; the threads pool is refused. The setup is in [TESTING.md](./TESTING.md#per-instance-helpers-under-vitest-the-cldmvslothletvite-plugin).

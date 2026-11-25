@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T16:14:39-08:00 (1794874479)
+ *	@Last modified time: 2026-11-24T08:05:30-08:00 (1795536330)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -20,8 +20,8 @@
  * @module api_test_import_state.guest
  */
 import { fileURLToPath } from "node:url";
-import * as esm from "../helpers/reader.mjs";
-import cjs from "../helpers/reader.cjs";
+import * as esm from "../lib/reader.mjs";
+import cjs from "../lib/reader.cjs";
 
 const OWN = new URL(import.meta.url);
 const INSTANCE = OWN.searchParams.get("slothlet_instance");
@@ -111,7 +111,7 @@ export const reach = async () => {
 	const reached = [];
 	const lib = await recordModule();
 	const before = lib === null ? null : snapshot(lib);
-	const helperFiles = [slashPath("../helpers/reader.mjs"), slashPath("../helpers/reader.cjs"), filePath("../helpers/reader.cjs")];
+	const helperFiles = [slashPath("../lib/reader.mjs"), slashPath("../lib/reader.cjs"), filePath("../lib/reader.cjs")];
 	const attempts = {};
 	for (const state of sharedObjects()) {
 		// The collections of an instance's CommonJS files and private module copies.
@@ -181,7 +181,7 @@ export const reach = async () => {
 		return snapshot(lib) !== before;
 	};
 	attempts["requireInInstance"] = () => {
-		lib.requireInInstance(filePath("../helpers/reader.cjs"), INSTANCE, { fresh: true });
+		lib.requireInInstance(filePath("../lib/reader.cjs"), INSTANCE, { fresh: true });
 		return true;
 	};
 	attempts["claimInstanceScope"] = () => Boolean(lib.claimInstanceScope?.(INSTANCE));
@@ -247,7 +247,7 @@ export const relabel = async () => {
 	const lib = await recordModule();
 	if (lib === null) return false;
 	const graph = lib.instanceImporters(INSTANCE);
-	const importers = graph?.get?.(slashPath("../helpers/reader.mjs"));
+	const importers = graph?.get?.(slashPath("../lib/reader.mjs"));
 	if (!importers) return false;
 	try {
 		importers.clear();

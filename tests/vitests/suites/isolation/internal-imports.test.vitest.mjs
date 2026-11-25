@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:29:20-08:00 (1794882560)
+ *	@Last modified time: 2026-11-24T08:08:23-08:00 (1795536503)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -22,8 +22,8 @@
  * so the instance's copy; one required through a `require` made from a plain path, so one module of the process), load
  * files of slothlet's by every route a file has (`import()`, `import.meta.resolve`, `require` from the file's URL and
  * from its plain path, `require.resolve`, a `require` made from one of slothlet's own paths) and by every spelling
- * (package subpaths, a `#imports` specifier, a file URL, an absolute and a relative path). `host/host.mjs` and
- * `host/host.cjs` make the same loads as files of the host.
+ * (package subpaths, a `#imports` specifier, a file URL, an absolute and a relative path). `lib/host.mjs` and
+ * `lib/host.cjs` make the same loads as files of the host.
  *
  * The expected values come from the host's twin: where the host's load resolves the file, a module's load of one of
  * slothlet's own files is refused with MODULE_INTERNAL_NOT_IMPORTABLE; where the host's load fails before that (a
@@ -41,10 +41,10 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import slothlet from "@cldmv/slothlet";
-import { API_DIR, REFUSED_DIR, collect } from "../../../../api_tests/api_test_internal_imports/table.mjs";
+import { API_DIR, REFUSED_DIR, collect } from "../../../../api_tests/api_test_internal_imports/lib/table.mjs";
 
 const REFUSED = "MODULE_INTERNAL_NOT_IMPORTABLE";
-const PROBE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../../api_tests/api_test_internal_imports/probe.mjs");
+const PROBE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../../api_tests/api_test_internal_imports/lib/probe.mjs");
 
 const MATRIX = [];
 for (const mode of ["eager", "lazy"])

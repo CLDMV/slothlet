@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:30:11-08:00 (1794882611)
+ *	@Last modified time: 2026-11-24T11:41:13-08:00 (1795549273)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -18,14 +18,15 @@
  * its definer may do. It never runs as the host, and never as one of the calls it could be.
  *
  * @description
- * Fixture `api_test_unknown_caller`: `ext.start` and `ext.peer.wait` are two api paths of one module, and both import
- * `resume.mjs`, where `ext.start`'s work resumes after its gate. With both suspended, the live runtime's stack cannot
+ * Fixtures `api_test_unknown_caller` (the host's base, `api/`, and its `lib/`) and `api_test_unknown_caller_ext` (the
+ * extension, `api/` mounted as `ext`, and its `lib/`): `ext.start` and `ext.peer.wait` are two api paths of one module,
+ * and both import the lib file `lib/resume.mjs`, where `ext.start`'s work resumes after its gate. With both suspended, the live runtime's stack cannot
  * tell which of them is running there, so the caller is unknown:
  *
- * - **`self`** — `resume.mjs` reaches `ext.views.running.render` and `ext.cache.context.subscribe` through `self`. Its definer
- *   (`ext.resume.afterGate`) may call both; the caller is unknown, so each call is refused.
+ * - **`self`** — `resume.mjs` reaches `ext.views.running.render` and `ext.cache.context.subscribe` through `self`. Its definers
+ *   (`ext.start`, `ext.peer.wait`, the api files importing it) may call both; the caller is unknown, so each call is refused.
  * - **`handed`** — the host reads `ext` and hands it in; `resume.mjs` calls `views.running.render` on it (not loaded yet
- *   under lazy) through a helper in a hidden folder, whose frames name no definer. The call is refused. Under lazy the node
+ *   under lazy) through a lib helper resume.mjs imports, whose code is the same two calls'. The call is refused. Under lazy the node
  *   loads after `ext.peer.wait` has settled, when nothing is left to tell the call apart from: the load does not make
  *   the host its caller.
  *
@@ -40,7 +41,9 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import slothlet from "@cldmv/slothlet";
 
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../../api_tests/api_test_unknown_caller");
+const API_TESTS = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../../api_tests");
+const ROOT = path.join(API_TESTS, "api_test_unknown_caller", "api");
+const EXT = path.join(API_TESTS, "api_test_unknown_caller_ext", "api");
 
 /** Deny by default; the extension may reach its own leaves, and anyone may start it. */
 const RULES = [
@@ -89,11 +92,10 @@ describe.each(MATRIX)("Permissions > a caller that cannot be determined is refus
 			base: ROOT,
 			mode,
 			runtime,
-			hidden: ["ext", "shared"],
 			silent: true,
 			permissions: { policy: "deny", caller: { attribution }, rules: RULES }
 		});
-		await api.slothlet.api.add(["ext"], `${ROOT}/ext/api`);
+		await api.slothlet.api.add(["ext"], EXT);
 		return api;
 	};
 

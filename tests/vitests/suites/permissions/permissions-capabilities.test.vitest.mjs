@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:30:24-08:00 (1794882624)
+ *	@Last modified time: 2026-11-24T08:08:43-08:00 (1795536523)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -36,7 +36,7 @@ import Module from "node:module";
 import { fileURLToPath } from "node:url";
 import slothlet from "@cldmv/slothlet";
 import { getMatrixConfigs, withSuppressedSlothletErrorOutput } from "../../setup/vitest-helper.mjs";
-import { routes } from "../../../../api_tests/api_test_code_strings/routes.mjs";
+import { routes } from "../../../../api_tests/api_test_code_strings/lib/routes.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../../api_tests/api_test_code_strings");
 
@@ -128,9 +128,9 @@ describe.each(getMatrixConfigs())("Permissions > built-in capabilities > $name",
 		 * @returns {Promise<object>} The api.
 		 */
 		const build = async (permissions = { policy: "deny", rules: [OPEN], caller: { attribution } }) => {
-			api = await slothlet({ ...config, silent: true, base: path.join(ROOT, "base"), permissions });
-			await api.slothlet.api.add("coder", path.join(ROOT, "coder"), { id: "coder" });
-			await api.slothlet.api.add("other", path.join(ROOT, "other"), { id: "other" });
+			api = await slothlet({ ...config, silent: true, base: path.join(ROOT, "api"), permissions });
+			await api.slothlet.api.add("coder", path.join(`${ROOT}_coder`, "api"), { id: "coder" });
+			await api.slothlet.api.add("other", path.join(`${ROOT}_other`, "api"), { id: "other" });
 			return api;
 		};
 
@@ -224,11 +224,11 @@ describe.each(getMatrixConfigs())("Permissions > built-in capabilities > $name",
 			api = await slothlet({
 				...config,
 				silent: true,
-				base: path.join(ROOT, "base"),
+				base: path.join(ROOT, "api"),
 				permissions: { policy: "deny", rules: [OPEN, ...extra], caller: { attribution } }
 			});
-			await api.slothlet.api.add("coder", path.join(ROOT, "coder"), { id: "coder" });
-			await api.slothlet.api.add("toplevel", path.join(ROOT, "toplevel"), { id: "toplevel" });
+			await api.slothlet.api.add("coder", path.join(`${ROOT}_coder`, "api"), { id: "coder" });
+			await api.slothlet.api.add("toplevel", path.join(`${ROOT}_toplevel`, "api"), { id: "toplevel" });
 			expect(await api.toplevel.boot.result()).toEqual(outcome);
 		});
 
@@ -246,11 +246,11 @@ describe.each(getMatrixConfigs())("Permissions > built-in capabilities > $name",
 			api = await slothlet({
 				...config,
 				silent: true,
-				base: path.join(ROOT, "base"),
+				base: path.join(ROOT, "api"),
 				permissions: { policy: "deny", rules: [OPEN, ...extra], caller: { attribution } }
 			});
-			await api.slothlet.api.add("coder", path.join(ROOT, "coder"), { id: "coder" });
-			await api.slothlet.api.add("helpertop", path.join(ROOT, "helpertop"), { id: "helpertop" });
+			await api.slothlet.api.add("coder", path.join(`${ROOT}_coder`, "api"), { id: "coder" });
+			await api.slothlet.api.add("helpertop", path.join(`${ROOT}_helpertop`, "api"), { id: "helpertop" });
 			expect(await api.helpertop.user.result()).toEqual(REFUSED);
 		});
 
@@ -266,11 +266,11 @@ describe.each(getMatrixConfigs())("Permissions > built-in capabilities > $name",
 			api = await slothlet({
 				...config,
 				silent: true,
-				base: path.join(ROOT, "base"),
+				base: path.join(ROOT, "api"),
 				permissions: { policy: "deny", rules: [OPEN, ...extra], caller: { attribution } }
 			});
 			const loading = (async () => {
-				await api.slothlet.api.add("staticdata", path.join(ROOT, "staticdata"), { id: "staticdata" });
+				await api.slothlet.api.add("staticdata", path.join(`${ROOT}_staticdata`, "api"), { id: "staticdata" });
 				return api.staticdata.inline.value();
 			})();
 			const outcome = await withSuppressedSlothletErrorOutput(() =>
@@ -320,12 +320,12 @@ describe("Permissions > built-in capabilities > a static data: import and a help
 		const out = {};
 		for (const mode of ["eager", "lazy"]) for (const runtime of ["async", "live"]) for (const attribution of ["precise", "fast"]) {
 			for (const [name, extra] of Object.entries(SCENARIOS)) {
-				const api = await slothlet({ mode, runtime, silent: true, base: path.join(ROOT, "base"),
+				const api = await slothlet({ mode, runtime, silent: true, base: path.join(ROOT, "api"),
 					permissions: { policy: "deny", rules: [{ caller: "**", target: "**", effect: "allow" }, ...extra], caller: { attribution } } });
-				await api.slothlet.api.add("coder", path.join(ROOT, "coder"), { id: "coder" });
+				await api.slothlet.api.add("coder", path.join(ROOT + "_coder", "api"), { id: "coder" });
 				let outcome;
 				try {
-					await api.slothlet.api.add("staticdata", path.join(ROOT, "staticdata"), { id: "staticdata" });
+					await api.slothlet.api.add("staticdata", path.join(ROOT + "_staticdata", "api"), { id: "staticdata" });
 					outcome = await api.staticdata.inline.value();
 				} catch (error) {
 					outcome = String(error?.message).includes("PERMISSION_CAPABILITY_REFUSED") ? "PERMISSION_CAPABILITY_REFUSED" : String(error?.code);
@@ -333,10 +333,10 @@ describe("Permissions > built-in capabilities > a static data: import and a help
 				out[mode + "/" + runtime + "/" + attribution + "/" + name] = outcome;
 				await api.shutdown();
 				const helperRules = name === "own" ? [{ caller: "helpertop.user", target: "capability:code", effect: "allow" }] : name === "sibling" ? [{ caller: "coder.**", target: "capability:code", effect: "allow" }] : [];
-				const helperApi = await slothlet({ mode, runtime, silent: true, base: path.join(ROOT, "base"),
+				const helperApi = await slothlet({ mode, runtime, silent: true, base: path.join(ROOT, "api"),
 					permissions: { policy: "deny", rules: [{ caller: "**", target: "**", effect: "allow" }, ...helperRules], caller: { attribution } } });
-				await helperApi.slothlet.api.add("coder", path.join(ROOT, "coder"), { id: "coder" });
-				await helperApi.slothlet.api.add("helpertop", path.join(ROOT, "helpertop"), { id: "helpertop" });
+				await helperApi.slothlet.api.add("coder", path.join(ROOT + "_coder", "api"), { id: "coder" });
+				await helperApi.slothlet.api.add("helpertop", path.join(ROOT + "_helpertop", "api"), { id: "helpertop" });
 				const helper = await helperApi.helpertop.user.result();
 				out[mode + "/" + runtime + "/" + attribution + "/helper/" + name] = helper.ok ? helper.value : helper.code;
 				await helperApi.shutdown();
