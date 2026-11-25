@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T13:35:21-08:00 (1794951321)
+ *	@Last modified time: 2026-11-25T11:44:43-08:00 (1795635883)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -344,8 +344,7 @@ async function loadJsonBrowser(ref) {
 		// `mod.default` is never nullish here; the `?? null` only upholds the documented `object | null`
 		// return contract and is therefore unreachable, so its arm is honestly ignored (no contrived
 		// null-JSON fixture needed). A failed import is handled by the catch below.
-		/* v8 ignore next */
-		return mod.default ?? null;
+		return /* v8 ignore next */ mod.default ?? null;
 	} catch {
 		return null;
 	}
