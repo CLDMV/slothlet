@@ -83,6 +83,7 @@ import { RunLayer } from "#handlers/unified-wrapper/run";
 import { ViewsLayer } from "#handlers/unified-wrapper/views";
 import { MembraneLayer } from "#handlers/unified-wrapper/membrane";
 import { RootLayer } from "#handlers/unified-wrapper/root";
+import { RuntimeBridgeLayer } from "#handlers/unified-wrapper/runtime-bridge";
 import { WaitingLayer } from "#handlers/unified-wrapper/waiting";
 import { MaterializeLayer } from "#handlers/unified-wrapper/materialize";
 import { TrapsLayer } from "#handlers/unified-wrapper/traps";
@@ -323,21 +324,6 @@ function moduleMakerCount(slothlet) {
 	return WeakMapMethods.get(MAKERS, slothlet)?.byID.size ?? 0;
 }
 
-/**
- * Record a runtime's `self` for the context manager it reads its context from: a read of `self` made while no call
- * runs is read through the `self` of the runtime the definer's instance runs, whichever runtime's `self` it was made
- * through (#726). With no call running, the runtime-agnostic `self` hands every read to the async runtime's.
- * @param {object} contextManager - The runtime's context manager.
- * @param {object} selfProxy - The runtime's `self`.
- * @param {Function|null} [callableSelf=null] - The runtime's callable `self` (#803).
- * @returns {void}
- * @internal
- */
-function registerRuntimeSelf(contextManager, selfProxy, callableSelf = null) {
-	MapMethods.set(RUNTIME_SELVES, contextManager, selfProxy);
-	if (callableSelf !== null) MapMethods.set(RUNTIME_CALLABLE_SELVES, contextManager, callableSelf);
-}
-
 // Only an instance of a class some module wrote gets the async runtime's context wrapper (#328): a `URL`, a `Response`
 // or an `Intl.NumberFormat` a module returns is the object itself.
 setModuleInstanceCheck((value) => runtime_isCodeObject(value));
@@ -363,20 +349,6 @@ setInboundOriginal((value) => {
 	const behind = runtime_uncross(value);
 	return typeof behind === "object" && behind !== null ? (WeakMapMethods.get(INBOUND_VIEWS, behind)?.original ?? behind) : behind;
 });
-
-/**
- * Register a runtime's `context`.
- * @param {object} contextManager - The runtime's context manager.
- * @param {object} contextProxy - Its `context`.
- * @returns {void}
- * @internal
- *
- * @example
- * registerRuntimeContext(asyncRuntime, context);
- */
-function registerRuntimeContext(contextManager, contextProxy) {
-	MapMethods.set(RUNTIME_CONTEXTS, contextManager, contextProxy);
-}
 
 /**
  * The node fronting each function of a module's, per instance (#667): a class's base class is reported as the node
@@ -719,13 +691,10 @@ let runtime_isPrototypeHandle,
 	MAKERS,
 	STAND_IN_RECORDS,
 	INBOUND_VIEWS,
-	RUNTIME_SELVES,
-	RUNTIME_CALLABLE_SELVES,
 	runtime_isCodeObject,
 	runtime_attributeResult,
 	runtime_nodeAtPath,
 	runtime_adoptedImpl,
-	RUNTIME_CONTEXTS,
 	runtime_knownPrototype,
 	CROSSINGS,
 	runtime_uncross,
@@ -1336,6 +1305,15 @@ function runtime_rootProxy(slothlet, records, instanceApi, closeSelf) {
 }
 
 /**
+ * Forwards to the Bridge layer's `runtime_runtimeTraps`: this file hands it out (see {@link internals}) before the chain may exist.
+ * @returns {*} What it returns.
+ * @internal
+ */
+function runtime_runtimeTraps(contextManager, runtime) {
+	return M.bridge.runtime_runtimeTraps(contextManager, runtime);
+}
+
+/**
  * Unified wrapper class that handles all proxy concerns in one place:
  * - ____impl pattern for reload support
  * - Lazy/eager mode materialization
@@ -1347,7 +1325,9 @@ function runtime_rootProxy(slothlet, records, instanceApi, closeSelf) {
  * @public
  */
 class UnifiedWrapper extends TrapsLayer(
-	MaterializeLayer(WaitingLayer(RootLayer(MembraneLayer(ViewsLayer(RunLayer(RulesLayer(NodesLayer(ValuesLayer(WrapperBase)))))))))
+	MaterializeLayer(
+		WaitingLayer(RuntimeBridgeLayer(RootLayer(MembraneLayer(ViewsLayer(RunLayer(RulesLayer(NodesLayer(ValuesLayer(WrapperBase)))))))))
+	)
 ) {
 	static {
 		WrapperBase.define("uw", {
@@ -1403,16 +1383,13 @@ class UnifiedWrapper extends TrapsLayer(
 			runtime_nodeAtPath = methods.nodes.runtime_nodeAtPath;
 			runtime_nodeHarborsCode = methods.nodes.runtime_nodeHarborsCode;
 			runtime_viewedNodeWrapper = methods.nodes.runtime_viewedNodeWrapper;
-			RUNTIME_CONTEXTS = methods.rules.RUNTIME_CONTEXTS;
 			runtime_hasOwnMember = methods.rules.runtime_hasOwnMember;
 			runtime_registerLeafFunction = methods.rules.runtime_registerLeafFunction;
 			runtime_fillPrototype = methods.run.runtime_fillPrototype;
 			capturedViewTargets = methods.views.capturedViewTargets;
 			RUN_VIEWS = methods.views.RUN_VIEWS;
 			runtime_behindMemberView = methods.views.runtime_behindMemberView;
-			RUNTIME_CALLABLE_SELVES = methods.views.RUNTIME_CALLABLE_SELVES;
 			runtime_functionOf = methods.views.runtime_functionOf;
-			RUNTIME_SELVES = methods.views.RUNTIME_SELVES;
 			SELF_MEMBER_VIEWS = methods.views.SELF_MEMBER_VIEWS;
 			STAND_INS = methods.views.STAND_INS;
 			CROSSINGS = methods.membrane.CROSSINGS;
@@ -2067,8 +2044,6 @@ export function internals(consumer) {
 		get UnifiedWrapper() {
 			return UnifiedWrapper;
 		},
-		registerRuntimeContext,
-		registerRuntimeSelf,
 		releaseModuleMakers,
 		releaseStandInChanges,
 		resolveWrapper,
@@ -2138,7 +2113,8 @@ export function internals(consumer) {
 		runtime_selfView,
 		runtime_unwrapSelfView,
 		settleStandInChanges,
-		runtime_rootProxy
+		runtime_rootProxy,
+		runtime_runtimeTraps
 	};
 }
 

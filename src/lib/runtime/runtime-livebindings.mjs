@@ -49,26 +49,12 @@ import { SlothletError } from "#errors";
 import { internals as unifiedWrapperInternals } from "#handlers/unified-wrapper";
 import { internals as trustedRootInternals } from "#handlers/trusted-root";
 import { internals as frameworkInternalsInternals } from "#handlers/framework-internals";
-import { FunctionMethods, NativeProxy, Objects, Reflect, setFrom, SetMethods, String, SymbolMethods } from "#helpers/intrinsics";
+import { Objects, String, SymbolMethods } from "#helpers/intrinsics";
 import { resolvedAccess } from "#helpers/access-record";
 const { registerOwnModule, registerSelfForms, bindInstanceSelf, SELF_BIND_KEY } =
 	instanceImportsInternals("lib/runtime/runtime-livebindings");
-const {
-	runtime_assertFrameworkRootChange,
-	runtime_selfChangeTarget,
-	runtime_selfFrameworkView,
-	runtime_selfView,
-	runtime_unwrapSelfView,
-	runtime_selfReadAsDefiner,
-	runtime_selfToJSON,
-	runtime_contextRead,
-	runtime_contextWritten,
-	runtime_contextReadAsDefiner,
-	registerRuntimeContext,
-	registerRuntimeSelf
-} = unifiedWrapperInternals("lib/runtime/runtime-livebindings");
+const { runtime_runtimeTraps } = unifiedWrapperInternals("lib/runtime/runtime-livebindings");
 const trustedRootOwn = trustedRootInternals("lib/runtime/runtime-livebindings");
-const { enforceContextKeyWrite, readProtectedContextValue, writersOf } = trustedRootOwn;
 const { markSlothletProxy } = frameworkInternalsInternals("lib/runtime/runtime-livebindings");
 const { liveRuntime } = contextInternals("lib/runtime/runtime-livebindings");
 
@@ -90,7 +76,6 @@ function activeContext() {
 
 // Active-store resolver threaded into protected context views (see readProtectedContextValue):
 // hoisted so the hot get-trap path passes one stable function instead of allocating an arrow per read.
-const resolveActiveContext = activeContext;
 
 /**
  * Resolve the active store, but only while a module is actually executing.
@@ -176,259 +161,27 @@ function runtime_refuseUnknownCaller(prop) {
 	throw new SlothletError("PERMISSION_DENIED", { caller: null, target: segmentsOf(target) });
 }
 
-/**
- * Members of `self` that are the framework's own namespace and functions rather than nodes of the api.
- * @type {Set<string>}
- * @private
- */
-const FRAMEWORK_SELF_ROOTS = setFrom(["slothlet", "shutdown", "destroy"]);
-
-/**
- * What a read of `self` hands a module: a node of the api comes back as a view that keeps who read it (#625),
- * so a node a module keeps and writes into later, outside any call, is held to that module's ownership rather
- * than taking the host's. The framework's own members come back as a view that runs what the module later does
- * with them, outside any call, as that module. Everything else is returned as is.
- *
- * @param {string|symbol} prop - Member read.
- * @param {*} value - Its value.
- * @param {{store?: object, identity?: object}|null} [resolved=null] - Who is making this read, when the read
- *   resolved it already (see runtime_resolveExecutingContext).
- * @returns {*} The value, or a view of the node.
- * @private
- */
-function runtime_selfMember(prop, value, resolved = null) {
-	if (typeof prop !== "string") return value;
-	if (SetMethods.has(FRAMEWORK_SELF_ROOTS, prop)) return runtime_selfFrameworkView(value);
-	// The reader of the view is the code whose identity this same read just resolved.
-	const access = resolved?.identity ? resolvedAccess(liveRuntime, resolved.store, resolved.identity) : null;
-	return runtime_selfView(value, undefined, null, access);
-}
-
-/**
- * Bind an instance's file's `self` to the instance's form, for this runtime file (#803, see `bindInstanceSelf` in
- * `helpers/instance-imports`).
- * @param {string} instanceID - The instance.
- * @param {function(object): void} assign - Sets the binding.
- * @returns {void}
- * @private
- */
 const bindHere = (instanceID, assign) => bindInstanceSelf(import.meta.url, instanceID, assign);
 
 /**
- * The traps both forms of `self` share: each resolves to the active instance's API.
- * @type {ProxyHandler<object>}
+ * This runtime's `self` (an object form for an api whose root is an object, a callable one for a function root, #803)
+ * and `context`, built by the wrapper's runtime bridge over how this runtime reads its stores.
  * @private
  */
-const selfTraps = {
-	get(_, prop) {
-		// The binder an instance's file is given its own `self` through (#803), answered whoever reads it.
-		if (prop === SELF_BIND_KEY) return bindHere;
-		const resolved = {};
-		const ctx = runtime_resolveExecutingContext(resolved);
-		if (!ctx || !ctx.self) {
-			// Code a module handed out, run while no call runs, reads `self` as its definer, told by its frames (#726).
-			const read = runtime_selfReadAsDefiner(objectSelf, prop);
-			if (read) return read.value;
-		}
-		if (!ctx) {
-			runtime_refuseUnknownCaller(prop);
-			throw new SlothletError("CONTEXT_NOT_ACTIVE_SELF", {});
-		}
-		// A flow the host opened (`run()` / `scope()`) names no module. A module's code running in it (a function it
-		// handed out, run by the host there) still reads `self` as its definer; the host's own code reads it as the host.
-		if (resolved.identity && !resolved.identity.currentWrapper && !resolved.identity.unresolved && ctx.parentInstanceID) {
-			const read = runtime_selfReadAsDefiner(objectSelf, prop, null, ctx.parentInstanceID);
-			if (read) return read.value;
-		}
-		const value = ctx.self[prop];
-		// An object root with no `toJSON` of its own serializes as `api` does for the host, less what the reader is refused,
-		// which is left out rather than thrown for (#803).
-		if (prop === "toJSON" && value === undefined && typeof ctx.self !== "function") return runtime_selfToJSON;
-		return runtime_selfMember(prop, value, resolved);
-	},
-	// The enumeration traps answer on the same condition as `get`. A proxy that refuses reads but
-	// still answers `ownKeys` / `in` / `getOwnPropertyDescriptor` discloses the shape of the api to
-	// a caller with no standing to see it — the same trap-by-trap inconsistency that once left
-	// denied leaves enumerable.
-	ownKeys() {
-		const ctx = runtime_resolveExecutingContext();
-		if (!ctx) return [];
-		return Reflect.ownKeys(ctx.self);
-	},
-	has(_, prop) {
-		const ctx = runtime_resolveExecutingContext();
-		if (!ctx) return false;
-		return prop in ctx.self;
-	},
-	getOwnPropertyDescriptor(_, prop) {
-		const ctx = runtime_resolveExecutingContext();
-		if (!ctx) return undefined;
-		const desc = Reflect.getOwnPropertyDescriptor(ctx.self, prop);
-		// If the property exists, return a descriptor that's always configurable
-		// to avoid proxy invariant violations (since the proxy target is an empty object)
-		if (desc) {
-			return "value" in desc
-				? { __proto__: null, ...desc, value: runtime_selfMember(prop, desc.value), configurable: true }
-				: { __proto__: null, ...desc, configurable: true };
-		}
-		return undefined;
-	},
-	// A change to `self` itself follows the rule a top-level `self.X = …` does and lands on the running
-	// instance's api, never on the object behind `self`, which every module of every instance shares (#625).
-	deleteProperty(_, prop) {
-		const ctx = runtime_resolveExecutingContext();
-		if (!ctx || !ctx.self) {
-			throw new SlothletError("CONTEXT_NOT_ACTIVE_SELF", {});
-		}
-		return Reflect.deleteProperty(runtime_selfChangeTarget(ctx, prop), prop);
-	},
-	defineProperty(_, prop, descriptor) {
-		const ctx = runtime_resolveExecutingContext();
-		if (!ctx || !ctx.self) {
-			throw new SlothletError("CONTEXT_NOT_ACTIVE_SELF", {});
-		}
-		const target = runtime_selfChangeTarget(ctx, prop);
-		// A member `self` reported fixed would have to be fixed on that shared object: such a definition is refused.
-		if (descriptor.configurable === false) return false;
-		if ("value" in descriptor) descriptor = { __proto__: null, ...descriptor, value: runtime_unwrapSelfView(descriptor.value) };
-		return Reflect.defineProperty(target, prop, descriptor);
-	},
-	// `self` keeps its prototype and stays extensible: it is shared, so neither change could be confined to
-	// one instance. The change is refused, after the rule for `self` as a whole has been applied.
-	setPrototypeOf() {
-		const ctx = runtime_resolveExecutingContext();
-		if (ctx?.self) runtime_selfChangeTarget(ctx, null);
-		return false;
-	},
-	preventExtensions() {
-		const ctx = runtime_resolveExecutingContext();
-		if (ctx?.self) runtime_selfChangeTarget(ctx, null);
-		return false;
-	},
-	set(_, prop, value) {
-		// A view `self` handed out stands for its node: the node is what is stored (#625).
-		value = runtime_unwrapSelfView(value);
-		// Route through `apiManager.setOwnedProperty` so the assignment is
-		// validated against the caller's owned apiPath. Falls back to a
-		// direct `ctx.self[prop] = value` (Stage 1 behavior) if the slothlet
-		// reference isn't available.
-		// Gated exactly like the read traps, and for a sharper reason: a write claims ownership of the
-		// path it lands on, attributed to the module making it. With no module executing there is nobody
-		// to attribute it to, and letting it through would let any script holding the runtime import
-		// reshape the api tree of a running instance.
-		const ctx = runtime_resolveExecutingContext();
-		if (!ctx) {
-			throw new SlothletError("CONTEXT_NOT_ACTIVE_SELF", {});
-		}
-		// Symbol-keyed writes (`self[sym] = …`) are never apiPaths — apiPaths
-		// are dotted strings and ownership is path-based. Routing a symbol
-		// through `setOwnedProperty(String(prop), …)` would stringify it to
-		// "Symbol(…)" and set THAT string key instead of the symbol-keyed
-		// property the assignment targeted. Write straight to `ctx.self` (a
-		// full-isolation run's own api, or `boundApi`) so ordinary
-		// JS semantics hold. A symbol is no api path of its own: the write is
-		// held to the root of the tree, as a change to `self` as a whole is (#625).
-		if (typeof prop === "symbol") {
-			runtime_selfChangeTarget(ctx, prop);
-			ctx.self[prop] = value;
-			return true;
-		}
-		// A module never replaces the framework's namespace or root functions, isolated scope or not (#625).
-		if (ctx.slothlet) runtime_assertFrameworkRootChange(ctx.slothlet, prop);
-		// In a full-isolation run (`run()` / `scope()` with `isolation: "full"`, the default) `ctx.self` is the run's own
-		// api (`makeRunSelf` in builders/api_builder): the write goes to it, which makes it through
-		// `apiManager.setOwnedProperty` with every check the write below meets, and keeps it in the run.
-		if (ctx.slothlet?.boundApi && ctx.self !== ctx.slothlet.boundApi) {
-			ctx.self[prop] = value;
-			return true;
-		}
-		const apiManager = ctx.slothlet?.handlers?.apiManager;
-		if (apiManager && typeof apiManager.setOwnedProperty === "function") {
-			// `currentWrapper` is the module currently executing — that's
-			// the writer for ownership purposes.
-			// Per-flow identity: the writer decides ownership of owner-locked keys, so a stale
-			// shared field would attribute this write to another module.
-			// Code a caller supplied to another module's call writes as the supplier and every call of its ceiling,
-			// and each of them has to own the path (#597).
-			apiManager.setOwnedProperty(String(prop), value, writersOf(ctx));
-		} else {
-			/* v8 ignore next */
-			ctx.self[prop] = value;
-		}
-		return true;
-	}
-};
-
-/**
- * Use the api root `self` stands for now, as `get` reads a member of it (#803): in the running call's context, or, for
- * code a module handed out run while no call runs, as its definer.
- * @param {function(object): *} use - What is done with it.
- * @returns {*} What `use` returned.
- * @throws {SlothletError} CONTEXT_NOT_ACTIVE_SELF outside any context, with no definer to run as.
- * @private
- */
-function runtime_selfUse(use) {
-	const resolved = {};
-	const ctx = runtime_resolveExecutingContext(resolved);
-	if (!ctx || !ctx.self) {
-		const read = runtime_selfReadAsDefiner(objectSelf, "", null, null, use);
-		if (read) return read.value;
-	}
-	if (!ctx) {
-		runtime_refuseUnknownCaller("");
-		throw new SlothletError("CONTEXT_NOT_ACTIVE_SELF", {});
-	}
-	if (resolved.identity && !resolved.identity.currentWrapper && !resolved.identity.unresolved && ctx.parentInstanceID) {
-		const read = runtime_selfReadAsDefiner(objectSelf, "", null, ctx.parentInstanceID, use);
-		if (read) return read.value;
-	}
-	return use(ctx.self);
-}
-
-/**
- * `self` for an api whose root is an object: an object target, as the api root's own is.
- * @type {Proxy}
- * @private
- */
-const objectSelf = new NativeProxy(
-	{},
-	{
-		...selfTraps,
-		// The prototype the running call's api root reports, as `api` reports it to the host (#914); with no call running,
-		// the target's own.
-		getPrototypeOf(target) {
-			const ctx = runtime_resolveExecutingContext();
-			return ctx?.self ? Reflect.getPrototypeOf(ctx.self) : Reflect.getPrototypeOf(target);
-		}
-	}
-);
-
-/**
- * The target of {@link callableSelf}: a bound function, as the api root's own target is when its root is a function,
- * so it is callable and constructible and has no `prototype` of its own to report.
- * @type {Function}
- * @private
- */
-const callableTarget = FunctionMethods.bind(function () {});
-
-/**
- * `self` for an api whose root is a function (#803): a call or construction of it is one of the api root, held to the
- * root's call rule as `self.call()` is, and it reports the root's prototype.
- * @type {Proxy}
- * @private
- */
-const callableSelf = new NativeProxy(callableTarget, {
-	...selfTraps,
-	apply(_, thisArg, args) {
-		return runtime_selfUse((root) => Reflect.apply(root, thisArg, args));
-	},
-	construct(_, args) {
-		return runtime_selfUse((root) => Reflect.construct(root, args));
-	},
-	getPrototypeOf() {
-		const ctx = runtime_resolveExecutingContext();
-		return ctx?.self ? Reflect.getPrototypeOf(ctx.self) : Reflect.getPrototypeOf(callableTarget);
-	}
+const {
+	objectSelf,
+	callableSelf,
+	context: contextProxy
+} = runtime_runtimeTraps(liveRuntime, {
+	current: (resolved) => runtime_resolveExecutingContext(resolved),
+	store: activeContext,
+	loadingInstance: () => null,
+	refuseUnknown: runtime_refuseUnknownCaller,
+	hostFlow: (ctx, resolved) =>
+		!!(resolved.identity && !resolved.identity.currentWrapper && !resolved.identity.unresolved && ctx.parentInstanceID),
+	access: (resolved) => (resolved.identity ? resolvedAccess(liveRuntime, resolved.store, resolved.identity) : null),
+	bindKey: SELF_BIND_KEY,
+	bind: bindHere
 });
 
 /**
@@ -467,53 +220,7 @@ export let self = objectSelf;
  *   };
  * }
  */
-export const context = new NativeProxy(
-	{},
-	{
-		get(_, prop) {
-			const ctx = activeContext();
-			if (!ctx || !ctx.context) {
-				// Code a module handed out, run while no call runs, reads the context of its definer's instance (#726).
-				return runtime_contextReadAsDefiner(context, prop);
-			}
-			// Owner-locked keys (scope({ protect, owners })) read back as a recursive protected view so
-			// nested writes stay enforced (#207); every other key returns the raw value unchanged. The
-			// resolver lets the view identify the WRITER from the store active at write time rather
-			// than a stale wrap-time snapshot.
-			// What a module stored there reaches another module as values one module hands another do.
-			return runtime_contextRead(ctx, readProtectedContextValue(ctx, prop, resolveActiveContext));
-		},
-		set(_, prop, value) {
-			const ctx = activeContext();
-			if (!ctx || !ctx.context) {
-				throw new SlothletError("CONTEXT_NOT_ACTIVE_WRITE", {});
-			}
-			// Owner-locked context keys (opt-in via scope({ protect, owners })): reject a write the
-			// current caller doesn't own before mutating the context.
-			enforceContextKeyWrite(ctx, prop);
-			runtime_contextWritten(ctx, value);
-			ctx.context[prop] = value;
-			return true;
-		},
-		ownKeys() {
-			const ctx = activeContext();
-			if (!ctx || !ctx.context) return [];
-			return Reflect.ownKeys(ctx.context);
-		},
-		has(_, prop) {
-			const ctx = activeContext();
-			if (!ctx || !ctx.context) return false;
-			return prop in ctx.context;
-		},
-		getOwnPropertyDescriptor(_, prop) {
-			const ctx = activeContext();
-			if (!ctx || !ctx.context) return undefined;
-			const descriptor = Reflect.getOwnPropertyDescriptor(ctx.context, prop);
-			if (!descriptor || !("value" in descriptor)) return descriptor;
-			return { __proto__: null, ...descriptor, value: runtime_contextRead(ctx, descriptor.value) };
-		}
-	}
-);
+export const context = contextProxy;
 
 /**
  * The id of the store the running code's flow is on, as the async runtime's `instanceID` reads it from its store: the
@@ -566,13 +273,10 @@ for (let ofIndex = 0, ofList = [objectSelf, callableSelf, context]; ofIndex < of
 	const proxy = ofList[ofIndex];
 	markSlothletProxy(proxy);
 }
-// A read of `self` made while no call runs, through any runtime's `self`, reads through this one for a live instance (#726).
-registerRuntimeSelf(liveRuntime, objectSelf, callableSelf);
 // Each instance's files get the form of `self` its api root takes (#803).
 registerSelfForms(import.meta.url, ownNamespace, { object: objectSelf, callable: callableSelf }, (form) => {
 	self = form;
 });
-registerRuntimeContext(liveRuntime, context);
 
 // One runtime per process: a second loader asked for this file is given this module (#760).
 registerOwnModule(import.meta.url, ownNamespace);
