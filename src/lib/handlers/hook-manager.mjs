@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-22T23:40:25-08:00 (1795419625)
+ *	@Last modified time: 2026-11-25T08:58:23-08:00 (1795625903)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -401,6 +401,18 @@ const VERSION_BINDING = Symbol("@cldmv/slothlet/hook-version-binding");
  * @extends ComponentBase
  */
 /**
+ * An empty hook index: type → subset → pattern → hooks. Every level has no prototype, so a pattern is only ever an own
+ * key: one named like an `Object.prototype` member (`constructor`, `toString`, `__proto__`) finds no inherited value and
+ * gets its own slot like any other pattern.
+ * @returns {Record<string, Record<string, Record<string, object[]>>>} The index.
+ * @private
+ */
+function emptyHookIndex() {
+	const subsets = () => ({ __proto__: null, before: { __proto__: null }, primary: { __proto__: null }, after: { __proto__: null } });
+	return { __proto__: null, before: subsets(), after: subsets(), always: subsets(), error: subsets(), around: subsets() };
+}
+
+/**
  * The manager {@link HookManager#[FORK]} is copying, read once by the constructor it calls; null otherwise.
  * @type {HookManager|null}
  * @private
@@ -420,13 +432,7 @@ export class HookManager extends ComponentBase {
 	 * @type {object}
 	 * @private
 	 */
-	#hooks = {
-		before: { before: {}, primary: {}, after: {} },
-		after: { before: {}, primary: {}, after: {} },
-		always: { before: {}, primary: {}, after: {} },
-		error: { before: {}, primary: {}, after: {} },
-		around: { before: {}, primary: {}, after: {} }
-	};
+	#hooks = emptyHookIndex();
 
 	/**
 	 * Hook lookup by ID
@@ -2349,13 +2355,7 @@ export class HookManager extends ComponentBase {
 		// The instance's teardown of its own handler: the copies that hold it keep theirs.
 		writeTarget(this, true);
 		// Clear all hooks
-		this.#hooks = {
-			before: { before: {}, primary: {}, after: {} },
-			after: { before: {}, primary: {}, after: {} },
-			always: { before: {}, primary: {}, after: {} },
-			error: { before: {}, primary: {}, after: {} },
-			around: { before: {}, primary: {}, after: {} }
-		};
+		this.#hooks = emptyHookIndex();
 		MapMethods.clear(this.#byId);
 		this.#idCounter = 0;
 	}
