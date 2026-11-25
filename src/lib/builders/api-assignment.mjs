@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-25T12:25:35-08:00 (1795638335)
+ *	@Last modified time: 2026-11-25T13:26:48-08:00 (1795642008)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -792,8 +792,10 @@ export class ApiAssignment extends ComponentBase {
 				} else if (!existingIsWrapper && valueIsWrapper) {
 					// A primitive leaf holds no members to merge, so under merge it is a conflict like any other
 					// and the first loaded keeps it (O01): a file's `version = "file"` beside its folder's
-					// `version = "dir"` stays "file" (#1002). merge-replace falls through to replace.
-					if (!isMergeReplace && typeof existing !== "object" && typeof existing !== "function") {
+					// `version = "dir"` stays "file" (#1002). merge-replace falls through to replace. Only a member
+					// the target really holds counts: a node answers `name` and `length` itself when no member
+					// sits there, and that answer is not a first-loaded leaf (a self-named file's `name` export).
+					if (!isMergeReplace && typeof existing !== "object" && typeof existing !== "function" && Objects.hasOwn(targetApi, key)) {
 						return false;
 					}
 					// Existing is a plain object, new value is wrapper - can't merge into plain object
