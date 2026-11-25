@@ -27,7 +27,7 @@ import { isNode, util } from "#helpers/platform";
 import { SlothletError } from "#errors";
 import { identityCeilings } from "#handlers/trusted-root";
 import { handsOutAsModule } from "#handlers/frame-placement";
-import { isFrameworkInternal } from "#handlers/framework-internals";
+import { absorbsFrameworkName, isFrameworkInternal } from "#handlers/framework-internals";
 import { isSharedExport } from "#handlers/shared-values";
 import { engineThenOf } from "#helpers/promise-context";
 import { isFunctionSourcePatch } from "#helpers/function-source-context";
@@ -446,6 +446,9 @@ function givenView(gate, node, value, reader, assertWrite) {
 		},
 		defineProperty: (_, prop, descriptor) => {
 			assertWrite();
+			// A name with the framework's prefix is absorbed as the node's own definition absorbs it (see absorbsFrameworkName).
+			const absorbed = absorbsFrameworkName(_, prop, descriptor);
+			if (absorbed !== undefined) return absorbed;
 			// The view holds nothing fixed: a definition that would fix a member is made on the object itself, not here.
 			if (descriptor.configurable !== true && !Reflect.getOwnPropertyDescriptor(value, prop)?.configurable) return false;
 			return Reflect.defineProperty(value, prop, descriptor);
@@ -1192,6 +1195,8 @@ function inboundView(maker, value, owner = maker.owner) {
 			return { __proto__: null, ...descriptor, value: handIn(maker, descriptor.value) };
 		},
 		defineProperty: (target, prop, descriptor) =>
+			// A name with the framework's prefix is absorbed as the node's own definition absorbs it (see absorbsFrameworkName).
+			absorbsFrameworkName(target, prop, descriptor) ??
 			Reflect.defineProperty(
 				target,
 				prop,
@@ -1577,6 +1582,9 @@ function membrane(maker, owner, original, asNode = false, made = maker.made) {
 			return result;
 		},
 		defineProperty: (_shadow, prop, descriptor) => {
+			// A name with the framework's prefix is absorbed as the node's own definition absorbs it (see absorbsFrameworkName).
+			const absorbed = absorbsFrameworkName(_shadow, prop, descriptor);
+			if (absorbed !== undefined) return absorbed;
 			const into = { ...descriptor };
 			if ("value" in descriptor) into.value = handIn(maker, descriptor.value);
 			if ("get" in descriptor) into.get = handIn(maker, descriptor.get);
@@ -3043,6 +3051,9 @@ const CROSSING_HANDLER = {
 	defineProperty(shadow, prop, descriptor) {
 		const state = WeakMapMethods.get(CROSSING_STATES, shadow);
 		crossAssertWrite(state, prop, "define");
+		// A name with the framework's prefix is absorbed as the node's own definition absorbs it (see absorbsFrameworkName).
+		const absorbed = absorbsFrameworkName(shadow, prop, descriptor);
+		if (absorbed !== undefined) return absorbed;
 		const into = { ...descriptor };
 		if ("value" in descriptor) into.value = crossIn(state, descriptor.value);
 		if ("get" in descriptor) into.get = crossIn(state, descriptor.get);

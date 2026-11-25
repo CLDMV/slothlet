@@ -64,6 +64,7 @@ import { pinToCurrentCaller } from "#helpers/caller-pinning";
 import { anyRunOpen, builtinCopy, builtinKind, handOutRaw } from "#helpers/run-snapshot";
 
 import { ownBindingsRefusal } from "#helpers/instance-imports";
+import { absorbsFrameworkName } from "#handlers/framework-internals";
 
 /**
  * Bindings of the other parts of the wrapper this file uses, taken from the wrapper's method table when the chain is
@@ -689,6 +690,9 @@ export function WaitingLayer(Base) {
 						return changeThroughStandIn("set", prop, value);
 					},
 					defineProperty(target, prop, descriptor) {
+						// A name with the framework's prefix is absorbed as the node's own definition absorbs it (see absorbsFrameworkName).
+						const absorbed = absorbsFrameworkName(target, prop, descriptor);
+						if (absorbed !== undefined) return absorbed;
 						// A callable `then` would make the node awaitable (#571): refused at once and first, as a loaded node refuses it.
 						if (prop === "then" && isAwaitableThen(descriptor)) {
 							throw new wrapper.SlothletError("API_MEMBER_THEN_RESERVED", { path: segmentsOf(nodePath()) });

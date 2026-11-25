@@ -34,7 +34,7 @@ import { isCompositionLayer, layerForwards, layerHeldKeys, layerUnderlying } fro
 import { SlothletError } from "#errors";
 import { isFrameworkReservedKey } from "#helpers/reserved-keys";
 import { combineCeilings, identityCeilings } from "#handlers/trusted-root";
-import { isFrameworkInternal, isFrameworkMarkerKey } from "#handlers/framework-internals";
+import { absorbsFrameworkName, isFrameworkInternal, isFrameworkMarkerKey } from "#handlers/framework-internals";
 import {
 	ArrayMethods,
 	Arrays,
@@ -435,6 +435,9 @@ function frameworkViewOf(member, slothlet, reader, path) {
 		defineProperty(target, prop, descriptor) {
 			refuseEnded();
 			refuseChange(prop);
+			// A name with the framework's prefix is absorbed as the node's own definition absorbs it (see absorbsFrameworkName).
+			const absorbed = absorbsFrameworkName(target, prop, descriptor);
+			if (absorbed !== undefined) return absorbed;
 			return asReader(() => Reflect.defineProperty(target, prop, descriptor));
 		},
 		deleteProperty(target, prop) {

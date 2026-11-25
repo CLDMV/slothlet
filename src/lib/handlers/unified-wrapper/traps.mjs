@@ -68,6 +68,7 @@ import { anyRunOpen, runsOpen, domainOf } from "#helpers/run-snapshot";
 
 import { ownBindingsRefusal } from "#helpers/instance-imports";
 import { handsOutAsModule } from "#handlers/frame-placement";
+import { absorbsFrameworkName, isFrameworkInternal, isFrameworkMarkerKey } from "#handlers/framework-internals";
 
 /**
  * Bindings of the other parts of the wrapper this file uses, taken from the wrapper's method table when the chain is
@@ -3196,7 +3197,9 @@ export function TrapsLayer(Base) {
 					// Module code meets the write rules first, so an assignment is refused as a definition is (#625).
 					if (
 						(SetMethods.has(UnifiedWrapper.INTERNAL_KEYS, prop) ||
-							(isFrameworkName(prop) && !SetMethods.has(reservedKeysOwn.IMPL_METADATA_KEYS, prop))) &&
+							(isFrameworkName(prop) &&
+								!SetMethods.has(reservedKeysOwn.IMPL_METADATA_KEYS, prop) &&
+								!(isFrameworkMarkerKey(prop) && isFrameworkInternal(wrapper)))) &&
 						prop !== "___materialize"
 					) {
 						assertOwnedWrite(wrapper, prop);
@@ -4070,6 +4073,10 @@ export function TrapsLayer(Base) {
 							if ("value" in descriptor) descriptor = { __proto__: null, ...descriptor, value: unwrapSelfView(descriptor.value) };
 							// An object defined after the api was built is data, as one assigned is (#826).
 							if ("value" in descriptor) wrapper.___markAssignedData(descriptor.value);
+							// A name with the framework's prefix is never a member: a definition is absorbed as an assignment is, so nothing
+							// is stored and nothing reads back (the framework's own `___materialize`, metadata and branded markers excepted).
+							const absorbed = absorbsFrameworkName(target, prop, descriptor, wrapper);
+							if (absorbed !== undefined) return absorbed;
 							// A framework-reserved key never reads through the node, so it stays off the wrapper's own state.
 							if (isFrameworkReservedKey(prop)) return Reflect.defineProperty(target, prop, descriptor);
 							// A member fixed in one step holding an object would be handed out as it is: refused while permissions are on.

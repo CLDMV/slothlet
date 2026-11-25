@@ -23,7 +23,7 @@
 
 import { util } from "#helpers/platform";
 import { isCompositionLayer, layerMethodOriginal, layerUnderlying } from "#helpers/composition";
-import { isFrameworkReservedKey } from "#helpers/reserved-keys";
+import { isFrameworkMemberName, isFrameworkReservedKey } from "#helpers/reserved-keys";
 import {
 	listPush,
 	Map,
@@ -45,6 +45,7 @@ import {
 import { ownBindingsRefusal } from "#helpers/instance-imports";
 import { codeLabel, isLanguageNameDescriptor } from "#helpers/builtin-forms";
 import { anyRunOpen, beforeChange, domainOf, shallowCopy } from "#helpers/run-snapshot";
+import { absorbsFrameworkName } from "#handlers/framework-internals";
 
 /**
  * Bindings of the other parts of the wrapper this file uses, taken from the wrapper's method table when the chain is
@@ -700,6 +701,9 @@ function rootDefine(slothlet, target, prop, descriptor) {
 	// A definition that changes nothing (freezing a root already frozen) is no write, as on a node (#667).
 	if (!Reflect.isExtensible(target) && isUnchangingDefinition(target, prop, descriptor)) return true;
 	assertRootChange(slothlet, prop);
+	// A name with the framework's prefix is absorbed as a node's definition absorbs it (see absorbsFrameworkName).
+	const absorbed = absorbsFrameworkName(target, prop, descriptor);
+	if (absorbed !== undefined) return absorbed;
 	if ("value" in descriptor) descriptor = { __proto__: null, ...descriptor, value: unwrapSelfView(descriptor.value) };
 	// A key only the target holds (its inspect hook) is the target's own.
 	if (!hasOwn(api, prop) && hasOwn(target, prop)) return Reflect.defineProperty(target, prop, descriptor);
@@ -736,6 +740,8 @@ function rootDefine(slothlet, target, prop, descriptor) {
  */
 function rootAssign(slothlet, target, prop, value) {
 	assertRootChange(slothlet, prop);
+	// A name with the framework's prefix is absorbed as a node's assignment absorbs it.
+	if (isFrameworkMemberName(prop)) return true;
 	if (!rootTakesKey(target, prop)) return false;
 	value = unwrapSelfView(value);
 	const stored = rootMemberNode(slothlet, prop, value) ?? value;

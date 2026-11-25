@@ -57,6 +57,7 @@ import {
 import { anyRunOpen, domainOf, runsOpen, beforeChange } from "#helpers/run-snapshot";
 
 import { ownBindingsRefusal } from "#helpers/instance-imports";
+import { isFrameworkInternal, isFrameworkMarkerKey } from "#handlers/framework-internals";
 
 /**
  * Bindings of the other parts of the wrapper this file uses, taken from the wrapper's method table when the chain is
@@ -1820,7 +1821,7 @@ export function MaterializeLayer(Base) {
 					// A name with the framework's prefix (`___` / `____`) is never a member: the wrapper's own members carry it,
 					// and a child under such a name would stand in for one of them. An object's own member leaves it as an
 					// adopted one does, so no read or listing of the node reaches it through the impl either.
-					if (isFrameworkName(key)) {
+					if (isFrameworkName(key) && !(isFrameworkMarkerKey(key) && isFrameworkInternal(this))) {
 						if (typeof this.____slothletInternal.impl === "object" && !uw_isLayer) {
 							const reservedDescriptor = Objects.getOwnPropertyDescriptor(this.____slothletInternal.impl, key);
 							if (reservedDescriptor?.configurable) delete this.____slothletInternal.impl[key];

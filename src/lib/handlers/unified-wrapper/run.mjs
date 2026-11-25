@@ -25,8 +25,8 @@
 
 import { util } from "#helpers/platform";
 import { isCompositionLayer, layerUnderlying } from "#helpers/composition";
-import { isFrameworkReservedKey } from "#helpers/reserved-keys";
-import { isFrameworkInternal, internals as frameworkInternalsInternals } from "#handlers/framework-internals";
+import { isFrameworkMemberName, isFrameworkReservedKey } from "#helpers/reserved-keys";
+import { absorbsFrameworkName, internals as frameworkInternalsInternals, isFrameworkInternal } from "#handlers/framework-internals";
 import { failureRecord, rememberFailure, rememberedFailure, unwrapThrown } from "#handlers/hook-manager";
 import { isSharedExport } from "#handlers/shared-values";
 import {
@@ -2256,6 +2256,8 @@ function makeRunSelf(slothlet, parentSelf, record) {
 				// An outer view of the namespace: the change is this view's, as the language sends it to the receiver.
 				if (receiver !== view) return Reflect.set(real, prop, value, receiver);
 				guard(prop);
+				// A name with the framework's prefix is absorbed as the node's own assignment absorbs it.
+				if (isFrameworkMemberName(prop)) return true;
 				let held = attributes(prop);
 				if (held === undefined) {
 					// Inherited: a setter or a read-only member on the prototype decides it, as on an ordinary object.
@@ -2288,6 +2290,9 @@ function makeRunSelf(slothlet, parentSelf, record) {
 				if (closed()) return Reflect.defineProperty(shell, prop, descriptor);
 				if (forked()) return Reflect.defineProperty(current(), prop, descriptor);
 				guard(prop);
+				// A name with the framework's prefix is absorbed as the node's own definition absorbs it (see absorbsFrameworkName).
+				const absorbed = absorbsFrameworkName(_t, prop, descriptor);
+				if (absorbed !== undefined) return absorbed;
 				return define(prop, descriptor);
 			},
 			deleteProperty(_t, prop) {

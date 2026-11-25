@@ -135,6 +135,23 @@ export function isFrameworkName(name) {
 }
 
 /**
+ * Whether a member a write would create on a node (a set, a definition through any trap, a member of a value adopted
+ * as the node's) carries the framework's prefix, so the node must not take it.
+ *
+ * @param {string|symbol} name - The member's name.
+ * @returns {boolean} True for every name with the prefix but the impl metadata (`____filePath` and the like), which the
+ *   framework itself carries on a module's value.
+ * @package
+ *
+ * @example
+ * isFrameworkMemberName("___createChildWrapper"); // true
+ * isFrameworkMemberName("____filePath"); // false — impl metadata
+ */
+export function isFrameworkMemberName(name) {
+	return isFrameworkName(name) && !SetMethods.has(IMPL_METADATA_KEYS, name);
+}
+
+/**
  * The framework's root members (`slothlet`, `shutdown`, `destroy`), which only the host's write rules may name (#625).
  * @type {ReadonlySet<string>}
  * @private

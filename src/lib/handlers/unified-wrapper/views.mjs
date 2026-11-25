@@ -75,7 +75,7 @@ import { builtinKind } from "#helpers/run-snapshot";
 import { ownBindingsRefusal } from "#helpers/instance-imports";
 import { internals as callerPinningInternals } from "#helpers/caller-pinning";
 import { internals as capabilityContextInternals } from "#helpers/capability-context";
-import { isFrameworkInternal } from "#handlers/framework-internals";
+import { absorbsFrameworkName, isFrameworkInternal } from "#handlers/framework-internals";
 const { UNATTRIBUTED_READER } = capabilityContextInternals("lib/handlers/unified-wrapper/views");
 const { markCallerLocked, isCallerLocked } = callerPinningInternals("lib/handlers/unified-wrapper/views");
 
@@ -214,6 +214,9 @@ function selfViewWriteTraps(raw, shadow, assertWrite, mirror, mirrorClosed) {
 			mirrorClosed();
 			if (!Reflect.isExtensible(raw) && isUnchangingDefinition(raw, prop, descriptor)) return true;
 			assertWrite(prop);
+			// A name with the framework's prefix is absorbed as the node's own definition absorbs it (see absorbsFrameworkName).
+			const absorbed = absorbsFrameworkName(shadow, prop, descriptor);
+			if (absorbed !== undefined) return absorbed;
 			const stored = "value" in descriptor ? { __proto__: null, ...descriptor, value: unwrapSelfView(descriptor.value) } : descriptor;
 			if (!Reflect.defineProperty(raw, prop, stored)) return false;
 			// A member defined fixed is fixed on the shadow as defined, which is what the engine checks it against.
@@ -2016,6 +2019,9 @@ function selfRootView(slothlet, reader) {
 		},
 		defineProperty(target, prop, descriptor) {
 			assertChange(prop);
+			// A name with the framework's prefix is absorbed as the node's own definition absorbs it (see absorbsFrameworkName).
+			const absorbed = absorbsFrameworkName(target, prop, descriptor);
+			if (absorbed !== undefined) return absorbed;
 			if ("value" in descriptor) descriptor = { __proto__: null, ...descriptor, value: unwrapSelfView(descriptor.value) };
 			return Reflect.defineProperty(target, prop, descriptor);
 		},
