@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-22T23:31:44-08:00 (1795419104)
+ *	@Last modified time: 2026-11-25T02:12:33-08:00 (1795601553)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -41,6 +41,7 @@ import { translate } from "#i18n";
 import { ComponentBase } from "#factories/component-base";
 import {
 	readApiMember,
+	holdsApiMembers,
 	loadApiMember,
 	isWrapperAnsweredName,
 	isLazyStandIn,
@@ -3001,9 +3002,12 @@ export class ApiManager extends ComponentBase {
 		};
 		for (let i = stack.length - 1; i >= 0; i -= 1) {
 			const { parent, key } = stack[i];
-			const value = parent[key];
+			// The node itself, and whether it still holds anything, as the node holds it: never a listing made through the
+			// view a module's read hands back, which hides what that module may not read and, in the live runtime, reads
+			// the stack again for every member it describes.
+			const value = readApiMember(parent, key);
 			if (holdsHidden(value)) break;
-			if (value && (typeof value === "object" || typeof value === "function") && Objects.keys(value).length === 0) {
+			if (value && (typeof value === "object" || typeof value === "function") && !holdsApiMembers(value)) {
 				// Same as the detach above: a frozen parent answers `false` rather than throwing (#485).
 				this.#beforeRootChange(parent);
 				runtime_frameworkWrite(parent, () => Reflect.deleteProperty(parent, key));
