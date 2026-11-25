@@ -121,7 +121,8 @@ let trustedRootOwn,
 	runtime_isPosition,
 	runtime_standInNode,
 	isClassInstance,
-	resolveWrapper;
+	resolveWrapper,
+	registeredWrapper;
 /** The registered `UnifiedWrapper`: the only class this layer's constructor builds for. @type {Function|undefined} */
 let realClass;
 
@@ -1623,7 +1624,7 @@ const CLASS_INSTANCES = new WeakMap();
 function runtime_viewedNodeWrapper(value) {
 	let current = value;
 	for (let depth = 0; depth < 4 && current !== null && (typeof current === "object" || typeof current === "function"); depth++) {
-		const wrapper = WeakMapMethods.get(_proxyRegistry, current);
+		const wrapper = registeredWrapper(current);
 		if (wrapper) return wrapper;
 		current = WeakMapMethods.get(capturedViewNodes, current) ?? WeakMapMethods.get(SELF_VIEW_NODES, current);
 	}
@@ -2033,13 +2034,6 @@ function runtime_cycleNode(wrapper, member, walkUp = true) {
 const capturedViewNodes = new WeakMap();
 
 /**
- * Module-level registry mapping each proxy to its backing UnifiedWrapper.
- * Populated by createProxy() and queried by resolveWrapper().
- * @private
- */
-const _proxyRegistry = new WeakMap();
-
-/**
  * Whether an api node holds code that the paths running a module's code as that module do not reach (#597): an
  * accessor its impl holds that adoption did not put on the node, or a function under a symbol on the node or its
  * impl — an iterator a spread runs returns a generator whose body resumes as whoever iterates it — or an impl that is a
@@ -2051,7 +2045,7 @@ const _proxyRegistry = new WeakMap();
  * @private
  */
 function runtime_nodeHarborsCode(value) {
-	const wrapper = WeakMapMethods.get(_proxyRegistry, WeakMapMethods.get(capturedViewNodes, value) ?? value);
+	const wrapper = registeredWrapper(WeakMapMethods.get(capturedViewNodes, value) ?? value);
 	if (!wrapper) return false;
 	const holdsSymbolFunction = (holder) => {
 		for (let ofIndex = 0, ofList = Objects.getOwnPropertySymbols(holder); ofIndex < ofList.length; ofIndex++) {
@@ -2105,7 +2099,7 @@ function runtime_liveThis(value) {
 		const live = runtime_liveThis(node);
 		return live === node ? value : runtime_selfView(live, WeakMapMethods.get(SELF_VIEW_READERS, value));
 	}
-	const wrapper = WeakMapMethods.get(_proxyRegistry, value);
+	const wrapper = registeredWrapper(value);
 	// A stand-in for a chain below the wrapper resolves to the chain's live end (`new.target` of a construction
 	// through one, #685).
 	if (wrapper && runtime_isRestartStale(wrapper)) return runtime_resolveRestartTarget(wrapper, WeakMapMethods.get(WAITING_CHAINS, value));
@@ -2343,7 +2337,6 @@ export function NodesLayer(Base) {
 					runtime_loadedAsNamespace,
 					runtime_cycleNode,
 					capturedViewNodes,
-					_proxyRegistry,
 					runtime_nodeHarborsCode,
 					runtime_liveThis,
 					WAITING_CHAINS,
@@ -2409,6 +2402,7 @@ export function NodesLayer(Base) {
 					markFrameworkInternal = methods.uw.markFrameworkInternal;
 					resolveWrapper = methods.uw.resolveWrapper;
 					trustedRootOwn = methods.uw.trustedRootOwn;
+					registeredWrapper = methods.values.registeredWrapper;
 				});
 			}
 

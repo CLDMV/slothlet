@@ -121,7 +121,7 @@ import { codeLabel, isLanguageNameDescriptor } from "#helpers/builtin-forms";
  * Bindings of the other parts of the wrapper this file uses, taken from the wrapper's method table when the chain is
  * registered (see `WrapperBase.link`), before any wrapper exists.
  *
- * Upward (from layers above this one): hasOwn, SELF_VIEW_NODES, INSPECT_CUSTOM, PROTOTYPE_HANDLE_READER, SELF_MEMBER_VIEWS, NODE_MEMBER, FRAMEWORK_MEMBERS, FRAMEWORK_VIEW_TARGETS, CALLER_LOCKED, runtime_nodeWrapperOf, runtime_startPrototypes, runtime_sameLookup, resolveEnforcedCaller, runtime_readGateDecision, runtime_enforceCodeMember, runtime_recordedPrototype, runtime_moduleObjectOf, runtime_originalAccessor, STAND_IN_RECORDS, INBOUND_VIEWS, runtime_memberHoldsCode, searchDepth, searchBudget, runtime_nodeAtPath, runtime_readerHoldsPrototype, runtime_knownPrototype, runtime_prototypeHandleOf, CROSSINGS, CROSSING_ORIGINS, runtime_moduleKey, runtime_asOneModule, runtime_crossSubject, runtime_functionOf, runtime_hasOwnMember, runtime_prototypeChain, ANY_MEMBER_SEGMENT, runtime_readsNothingBeneath, runtime_memberPathOf, capturedViewChildren, _proxyRegistry, WAITING_CHAINS, runtime_rootInspectShown.
+ * Upward (from layers above this one): hasOwn, SELF_VIEW_NODES, INSPECT_CUSTOM, PROTOTYPE_HANDLE_READER, SELF_MEMBER_VIEWS, NODE_MEMBER, FRAMEWORK_MEMBERS, FRAMEWORK_VIEW_TARGETS, CALLER_LOCKED, runtime_nodeWrapperOf, runtime_startPrototypes, runtime_sameLookup, resolveEnforcedCaller, runtime_readGateDecision, runtime_enforceCodeMember, runtime_recordedPrototype, runtime_moduleObjectOf, runtime_originalAccessor, STAND_IN_RECORDS, INBOUND_VIEWS, runtime_memberHoldsCode, searchDepth, searchBudget, runtime_nodeAtPath, runtime_readerHoldsPrototype, runtime_knownPrototype, runtime_prototypeHandleOf, CROSSINGS, CROSSING_ORIGINS, runtime_moduleKey, runtime_asOneModule, runtime_crossSubject, runtime_functionOf, runtime_hasOwnMember, runtime_prototypeChain, ANY_MEMBER_SEGMENT, runtime_readsNothingBeneath, runtime_memberPathOf, capturedViewChildren, WAITING_CHAINS, runtime_rootInspectShown.
  */
 let trustedRootOwn,
 	leafOfCopy,
@@ -165,11 +165,12 @@ let trustedRootOwn,
 	runtime_memberPathOf,
 	capturedViewChildren,
 	TYPE_STATES,
-	_proxyRegistry,
 	WAITING_CHAINS,
 	runtime_rootInspectShown,
 	isClassInstance,
 	resolveWrapper;
+/** The proxy registry's accessors (see `Values.#proxyRegistry`), set when the class is defined. */
+let registeredWrapper, isRegisteredProxy, registerProxy;
 /** The registered `UnifiedWrapper`: the only class this layer's constructor builds for. @type {Function|undefined} */
 let realClass;
 
@@ -1656,7 +1657,7 @@ function runtime_holdsOnlySharedCode(value, budget, seen) {
  */
 function runtime_isSlothletValue(value) {
 	return (
-		WeakMapMethods.has(_proxyRegistry, value) ||
+		isRegisteredProxy(value) ||
 		WeakSetMethods.has(capturedViewSet, value) ||
 		WeakMapMethods.has(STAND_IN_RECORDS, value) ||
 		WeakMapMethods.has(INBOUND_VIEWS, value) ||
@@ -2750,14 +2751,14 @@ function runtime_unwrapLeafValue(value) {
 	// Bounded: wrapper nesting is shallow, and the bound stops a cyclic impl from spinning.
 	for (let depth = 0; depth < 8; depth++) {
 		if (!current || (typeof current !== "object" && typeof current !== "function")) return current;
-		// A wrapper is identified through `_proxyRegistry`, not `instanceof`: the proxy's
+		// A wrapper is identified through the proxy registry, not `instanceof`: the proxy's
 		// getPrototypeOf trap reports `null` for every non-array wrapper, so an instanceof check
 		// silently misses them. `____slothletInternal` is likewise filtered on the proxy.
 		// The hasOwn arm accepts a RAW (unproxied) wrapper. Everything reaching this walk came from the
 		// registry, since wrappers are handed out only as proxies; the arm is a backstop for an internal
 		// construction that has not been proxied yet.
 		/* v8 ignore next */
-		const inner = WeakMapMethods.get(_proxyRegistry, current) ?? (hasOwn(current, "____slothletInternal") ? current : null);
+		const inner = registeredWrapper(current) ?? (hasOwn(current, "____slothletInternal") ? current : null);
 		if (!inner) return current;
 		current = inner.____slothletInternal?.impl;
 	}
@@ -3345,8 +3346,22 @@ export function ValuesLayer(Base) {
 	built = true;
 	return Base.layer(
 		class Values extends Base {
+			/**
+			 * Proxy -> wrapper registry used by resolveWrapper() and by every layer that finds the wrapper behind a node's
+			 * proxy. Held here, as a static private of the bottom layer, so only the table entries this class defines over it
+			 * (`registeredWrapper`, `isRegisteredProxy`, `registerProxy`) read or write it.
+			 * @type {WeakMap<object, object>}
+			 */
+			static #proxyRegistry = new WeakMap();
+
 			static {
+				registeredWrapper = (value) => WeakMapMethods.get(Values.#proxyRegistry, value);
+				isRegisteredProxy = (value) => WeakMapMethods.has(Values.#proxyRegistry, value);
+				registerProxy = (proxy, wrapper) => WeakMapMethods.set(Values.#proxyRegistry, proxy, wrapper);
 				Base.define("values", {
+					registeredWrapper,
+					isRegisteredProxy,
+					registerProxy,
 					runtime_isUnchangingDefinition,
 					runtime_isPrototypeHandle,
 					runtime_isIntrinsic,
@@ -3444,7 +3459,6 @@ export function ValuesLayer(Base) {
 				Base.define("brand", { isWrapper: (value) => value !== null && typeof value === "object" && #brand in value });
 				Base.linkLayer(this, (methods, registered) => {
 					realClass = registered;
-					_proxyRegistry = methods.nodes._proxyRegistry;
 					runtime_moduleKey = methods.nodes.runtime_moduleKey;
 					runtime_moduleObjectOf = methods.nodes.runtime_moduleObjectOf;
 					runtime_nodeAtPath = methods.nodes.runtime_nodeAtPath;

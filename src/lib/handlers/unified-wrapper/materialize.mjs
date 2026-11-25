@@ -91,7 +91,6 @@ let trustedRootOwn,
 	runtime_cycleNode,
 	wrapperDebugEnabled,
 	createNamedProxyTarget,
-	_proxyRegistry,
 	isAwaitableThen,
 	hasThenMember,
 	thenableExportError,
@@ -102,7 +101,8 @@ let trustedRootOwn,
 	runtime_defineProxyInspect,
 	UnifiedWrapper,
 	isClassInstance,
-	resolveWrapper;
+	resolveWrapper,
+	registerProxy;
 /** The registered `UnifiedWrapper`: the only class this layer's constructor builds for. @type {Function|undefined} */
 let realClass;
 
@@ -408,7 +408,6 @@ export function MaterializeLayer(Base) {
 					runtime_isErrorValue = methods.values.runtime_isErrorValue;
 					runtime_isModuleProxy = methods.values.runtime_isModuleProxy;
 					runtime_isPosition = methods.values.runtime_isPosition;
-					_proxyRegistry = methods.nodes._proxyRegistry;
 					ADOPTED_ACCESSORS = methods.nodes.ADOPTED_ACCESSORS;
 					RECONSTRUCTED_FROM = methods.nodes.RECONSTRUCTED_FROM;
 					runtime_cycleNode = methods.nodes.runtime_cycleNode;
@@ -442,6 +441,7 @@ export function MaterializeLayer(Base) {
 					thenableExportError = methods.uw.thenableExportError;
 					trustedRootOwn = methods.uw.trustedRootOwn;
 					wrapperDebugEnabled = methods.uw.wrapperDebugEnabled;
+					registerProxy = methods.values.registerProxy;
 				});
 			}
 
@@ -973,7 +973,7 @@ export function MaterializeLayer(Base) {
 				internal.proxyTraps = null;
 				// A callable node keeps its callable proxy through a reset; the lazy proxy a settle kept is not taken back (#811).
 				internal.settledFrom = null;
-				WeakMapMethods.set(_proxyRegistry, newProxy, wrapper);
+				registerProxy(newProxy, wrapper);
 
 				// The old proxy stays registered for this wrapper (resolveWrapper keeps working on a held
 				// reference) and forwards everything to whichever proxy is current.
@@ -1019,7 +1019,7 @@ export function MaterializeLayer(Base) {
 				const newProxy = new NativeProxy(target, traps);
 				internal.proxy = newProxy;
 				if (Arrays.isArray(target)) runtime_adoptArrayIntegrity(wrapper);
-				WeakMapMethods.set(_proxyRegistry, newProxy, wrapper);
+				registerProxy(newProxy, wrapper);
 				// Like a non-callable proxy createProxy() builds, an object-shell node can still become callable.
 				if (!Arrays.isArray(target)) {
 					internal.proxyHandler = handler;

@@ -125,13 +125,13 @@ let trustedRootOwn,
 	runtime_heldValue,
 	capturedViewShadows,
 	runtime_capturedView,
-	_proxyRegistry,
 	runtime_isRestartStale,
 	runtime_isArrayIndex,
 	SlothletTypeError,
 	RESTART_FORWARD_TRAPS,
 	UnifiedWrapper,
-	resolveWrapper;
+	resolveWrapper,
+	registeredWrapper;
 /** The registered `UnifiedWrapper`: the only class this layer's constructor builds for. @type {Function|undefined} */
 let realClass;
 
@@ -2474,7 +2474,7 @@ function runtime_resolveRestartTarget(wrapper, propChain = []) {
 	if (node === null || node === undefined) fail();
 	// What the reader's tree holds at the path is a node of yet another tree (an alias stored across trees): it has no
 	// node of its own there to forward to.
-	const found = WeakMapMethods.get(_proxyRegistry, node);
+	const found = registeredWrapper(node);
 	if (found !== undefined && runtime_isRestartStale(found)) fail();
 	return node;
 }
@@ -2846,7 +2846,6 @@ export function RulesLayer(Base) {
 					runtime_isSharedValue = methods.values.runtime_isSharedValue;
 					runtime_isSlothletValue = methods.values.runtime_isSlothletValue;
 					runtime_isTerminalData = methods.values.runtime_isTerminalData;
-					_proxyRegistry = methods.nodes._proxyRegistry;
 					ADOPTED_ACCESSORS = methods.nodes.ADOPTED_ACCESSORS;
 					NO_NODE_PRIMITIVE = methods.nodes.NO_NODE_PRIMITIVE;
 					runtime_makerInstanceID = methods.nodes.runtime_makerInstanceID;
@@ -2895,6 +2894,7 @@ export function RulesLayer(Base) {
 					runtime_codeWritersOnStack = methods.uw.runtime_codeWritersOnStack;
 					SlothletTypeError = methods.uw.SlothletTypeError;
 					trustedRootOwn = methods.uw.trustedRootOwn;
+					registeredWrapper = methods.values.registeredWrapper;
 				});
 			}
 

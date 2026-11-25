@@ -519,7 +519,7 @@ function createNamedProxyTarget(nameHint, fallback) {
 }
 
 // A composition layer hands an api node back as it is instead of binding it as a method.
-setApiNodeCheck((value) => WeakMapMethods.has(_proxyRegistry, value));
+setApiNodeCheck((value) => isRegisteredProxy(value));
 
 /**
  * The `then` an `await` of `value` would read: the first property named `then` along its prototype
@@ -704,9 +704,10 @@ let runtime_isPrototypeHandle,
 	runtime_registerLeafFunction,
 	capturedViewTargets,
 	capturedViewSet,
-	_proxyRegistry,
 	runtime_nodeHarborsCode,
-	runtime_followPosition;
+	runtime_followPosition,
+	registeredWrapper,
+	isRegisteredProxy;
 
 /**
  * Forwards to the Nodes layer's `runtime_nodeReport`: this file hands it out (see {@link internals}) before the chain may exist.
@@ -966,7 +967,6 @@ class UnifiedWrapper extends TrapsLayer(
 			runtime_inherits = methods.values.runtime_inherits;
 			runtime_isCodeObject = methods.values.runtime_isCodeObject;
 			runtime_isPrototypeHandle = methods.values.runtime_isPrototypeHandle;
-			_proxyRegistry = methods.nodes._proxyRegistry;
 			MAKERS = methods.nodes.MAKERS;
 			runtime_followPosition = methods.nodes.runtime_followPosition;
 			runtime_moduleObjectFor = methods.nodes.runtime_moduleObjectFor;
@@ -992,6 +992,8 @@ class UnifiedWrapper extends TrapsLayer(
 			REFUSED_CHANGES = methods.waiting.REFUSED_CHANGES;
 			runtime_standInPath = methods.waiting.runtime_standInPath;
 			runtime_adoptedImpl = methods.materialize.runtime_adoptedImpl;
+			registeredWrapper = methods.values.registeredWrapper;
+			isRegisteredProxy = methods.values.isRegisteredProxy;
 		});
 		WrapperBase.register(this, WRAPPER_TOKEN);
 	}
@@ -1387,7 +1389,7 @@ class UnifiedWrapper extends TrapsLayer(
 		// finds this method and skips installing the closure own-property. Node then calls this
 		// prototype method with `this` = proxy, where ____slothletInternal is blocked by getTrap.
 		// Resolve the real wrapper instance via the proxy registry to handle that case.
-		const w = WeakMapMethods.get(_proxyRegistry, this) ?? this;
+		const w = registeredWrapper(this) ?? this;
 		// Show children from wrapper (filter internal properties starting with _ or __)
 		const childKeys = filterList(Objects.keys(w), (k) => !isFrameworkReservedKey(k));
 		if (childKeys.length > 0 && !w.____slothletInternal?.isCallable) {
@@ -1428,10 +1430,7 @@ setResultAttributor(runtime_attributeResult);
 setModuleNodeResolver(runtime_nodeAtPath);
 
 // An api node or a per-reader view handed to a leaf carries no code of its caller's (#597).
-setApiValueCheck(
-	(value) => WeakMapMethods.has(_proxyRegistry, value) || WeakSetMethods.has(capturedViewSet, value),
-	runtime_nodeHarborsCode
-);
+setApiValueCheck((value) => isRegisteredProxy(value) || WeakSetMethods.has(capturedViewSet, value), runtime_nodeHarborsCode);
 
 // Wire Node's `util.inspect.custom` hook to the (internal) `____inspectCustom`
 // method. Keeping the symbol off the class body prevents tsc from emitting a
@@ -1483,7 +1482,7 @@ function resolveWrapper(value) {
 	// Check registry first - handles all proxies created by createProxy().
 	// A Proxy wrapping a UnifiedWrapper target passes instanceof UnifiedWrapper (via prototype
 	// chain delegation), but the getTrap blocks ____slothletInternal, so registry must come first.
-	const registered = WeakMapMethods.get(_proxyRegistry, value);
+	const registered = registeredWrapper(value);
 	if (registered) return registered;
 	// Raw UnifiedWrapper instances (not proxies): the class's own brand, so a Proxy's traps never run to tell (#632),
 	// and the prototype getter works, so ____slothletInternal is non-null. Proxies of wrappers return undefined for it

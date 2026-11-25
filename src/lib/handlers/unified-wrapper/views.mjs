@@ -161,9 +161,9 @@ let runtime_unwrapClassInstance,
 	capturedViewNodes,
 	runtime_enforceCapturedPair,
 	runtime_isConstructor,
-	_proxyRegistry,
 	isClassInstance,
-	resolveWrapper;
+	resolveWrapper,
+	registerProxy;
 /** The registered `UnifiedWrapper`: the only class this layer's constructor builds for. @type {Function|undefined} */
 let realClass;
 
@@ -1730,7 +1730,7 @@ function runtime_selfView(node, reader, from = null, access = null) {
 	WeakMapMethods.set(SELF_VIEW_READERS, view, reader);
 	// The framework treats the view as the node it stands for (metadata, hooks, permissions), and a view of a
 	// dispatcher as a dispatcher.
-	if (inner) WeakMapMethods.set(_proxyRegistry, view, inner);
+	if (inner) registerProxy(view, inner);
 	else markFrameworkInternal(view);
 	return view;
 }
@@ -3268,7 +3268,6 @@ export function ViewsLayer(Base) {
 					runtime_jsonSnapshot = methods.values.runtime_jsonSnapshot;
 					runtime_ownsPrototype = methods.values.runtime_ownsPrototype;
 					SNAPSHOT_OMIT = methods.values.SNAPSHOT_OMIT;
-					_proxyRegistry = methods.nodes._proxyRegistry;
 					capturedViewNodes = methods.nodes.capturedViewNodes;
 					FUNCTION_NODES = methods.nodes.FUNCTION_NODES;
 					LAYER_FRONTS = methods.nodes.LAYER_FRONTS;
@@ -3334,6 +3333,7 @@ export function ViewsLayer(Base) {
 					runtime_unwrapClassInstance = methods.uw.runtime_unwrapClassInstance;
 					trustedRootOwn = methods.uw.trustedRootOwn;
 					versionDispatcherRecord = methods.uw.versionDispatcherRecord;
+					registerProxy = methods.values.registerProxy;
 				});
 			}
 

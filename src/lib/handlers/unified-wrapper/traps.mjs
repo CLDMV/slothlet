@@ -212,7 +212,6 @@ let reservedKeysOwn,
 	runtime_readTargetFailure,
 	unwrapError,
 	createNamedProxyTarget,
-	_proxyRegistry,
 	findThen,
 	isAwaitableThen,
 	runtime_isFixedOnTarget,
@@ -237,7 +236,8 @@ let reservedKeysOwn,
 	runtime_defineProxyInspect,
 	UnifiedWrapper,
 	isClassInstance,
-	resolveWrapper;
+	resolveWrapper,
+	registerProxy;
 /** The registered `UnifiedWrapper`: the only class this layer's constructor builds for. @type {Function|undefined} */
 let realClass;
 
@@ -293,7 +293,6 @@ export function TrapsLayer(Base) {
 					runtime_redactSerialized = methods.values.runtime_redactSerialized;
 					runtime_redactToJSONResult = methods.values.runtime_redactToJSONResult;
 					runtime_valueHoldsName = methods.values.runtime_valueHoldsName;
-					_proxyRegistry = methods.nodes._proxyRegistry;
 					FUNCTION_NODES = methods.nodes.FUNCTION_NODES;
 					NO_NODE_PRIMITIVE = methods.nodes.NO_NODE_PRIMITIVE;
 					NODE_TARGETS = methods.nodes.NODE_TARGETS;
@@ -430,6 +429,7 @@ export function TrapsLayer(Base) {
 					trustedRootOwn = methods.uw.trustedRootOwn;
 					UNLOADED_HAS_INSTANCE = methods.uw.UNLOADED_HAS_INSTANCE;
 					WRAPPER_ANSWERED_PROPS = methods.uw.WRAPPER_ANSWERED_PROPS;
+					registerProxy = methods.values.registerProxy;
 				});
 			}
 
@@ -3530,7 +3530,7 @@ export function TrapsLayer(Base) {
 					wrapper.____slothletInternal.lazyProxyTraps = proxyTraps;
 				}
 
-				WeakMapMethods.set(_proxyRegistry, wrapper.____slothletInternal.proxy, wrapper);
+				registerProxy(wrapper.____slothletInternal.proxy, wrapper);
 				runtime_recordFunctionNode(wrapper);
 				// Register this wrapper instance as genuine so permission enforcement can distinguish a real
 				// caller identity (`ctx.currentWrapper`) from a forged object and fail closed on the latter.

@@ -93,7 +93,6 @@ let trustedRootOwn,
 	runtime_enforceCapturedPair,
 	runtime_capturedView,
 	createNamedProxyTarget,
-	_proxyRegistry,
 	isAwaitableThen,
 	runtime_liveThis,
 	WAITING_CHAINS,
@@ -107,7 +106,8 @@ let trustedRootOwn,
 	runtime_inspectSafe,
 	runtime_inspectReaderIsModule,
 	resolveWrapper,
-	runtime_nodeBehind;
+	runtime_nodeBehind,
+	registerProxy;
 /** The registered `UnifiedWrapper`: the only class this layer's constructor builds for. @type {Function|undefined} */
 let realClass;
 
@@ -627,7 +627,6 @@ export function WaitingLayer(Base) {
 					runtime_isFixedReadOnly = methods.values.runtime_isFixedReadOnly;
 					runtime_isTerminalData = methods.values.runtime_isTerminalData;
 					runtime_markAssignedData = methods.values.runtime_markAssignedData;
-					_proxyRegistry = methods.nodes._proxyRegistry;
 					runtime_cycleNode = methods.nodes.runtime_cycleNode;
 					runtime_liveThis = methods.nodes.runtime_liveThis;
 					runtime_makerOf = methods.nodes.runtime_makerOf;
@@ -661,6 +660,7 @@ export function WaitingLayer(Base) {
 					resolveWrapper = methods.uw.resolveWrapper;
 					STAND_IN_OWN_READS = methods.uw.STAND_IN_OWN_READS;
 					trustedRootOwn = methods.uw.trustedRootOwn;
+					registerProxy = methods.values.registerProxy;
 				});
 			}
 
@@ -788,7 +788,7 @@ export function WaitingLayer(Base) {
 				// Its `name` is writable, as a bound function's `length` and `name` are not, so that only a freeze makes the target
 				// read as frozen: a seal or a preventExtensions leaves it as it was (#653, see runtime_lockAsStandIn).
 				Reflect.defineProperty(waitingTarget, "name", { __proto__: null, writable: true });
-				// Note: wrapper lookup is via _proxyRegistry (set below) - do NOT attach ____slothletInternal
+				// Note: wrapper lookup is via the proxy registry (registerProxy below) - do NOT attach ____slothletInternal
 				// as an own property on waitingTarget; that was the attack vector we closed in step 2.
 
 				// A change through the stand-in is a change at the path it stands for (#625, #653): judged at once, by the rule a
@@ -1865,7 +1865,7 @@ export function WaitingLayer(Base) {
 				// Register waiting proxy in the global registry so resolveWrapper() can find the
 				// root wrapper from it - mirrors the old .____slothletInternal.wrapper path that
 				// worked on waiting proxies before step 2 blocked the property on regular proxies.
-				WeakMapMethods.set(_proxyRegistry, waitingProxy, wrapper);
+				registerProxy(waitingProxy, wrapper);
 				WeakMapMethods.set(WAITING_CHAINS, waitingProxy, propChain);
 				WeakSetMethods.add(STAND_INS, waitingProxy);
 
