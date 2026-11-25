@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-25T00:00:00-08:00 (1795593600)
+ *	@Last modified time: 2026-11-25T13:24:02-08:00 (1795641842)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -302,6 +302,28 @@ function givenReadDecision(record, prop, target = memberPathOf(record.gate, prop
 }
 
 /**
+ * Whether the rules leave the reader nothing to read at an object member of a given prototype: a read of the member's
+ * path is refused, and so is a read of any member beneath it, with no more specific allow beneath it, as
+ * {@link readsNothingBeneath} decides for the same member of a node's own.
+ * @param {{gate: object, reader: object}} record - The view's record.
+ * @param {string} prop - The member's key.
+ * @returns {boolean} Whether the reader may read nothing there.
+ * @private
+ *
+ * @example
+ * // rule: allow reader.** → owner.config.partly.a; the prototype holds { nothing: {...}, partly: {...} }
+ * Object.keys(Object.getPrototypeOf(self.owner.config)); // ["partly"]
+ */
+function givenReadsNothingBeneath(record, prop) {
+	const targetPath = memberPathOf(record.gate, prop);
+	if (givenReadDecision(record, prop, targetPath).allowed) return false;
+	const probePath = `${targetPath}.${ANY_MEMBER_SEGMENT}`;
+	const beneath = givenReadDecision(record, prop, probePath);
+	if (beneath.allowed) return false;
+	return !record.gate.slothlet.handlers.permissionManager.allowsBeneath(beneath.caller, targetPath, probePath);
+}
+
+/**
  * Whether a member a given prototype holds is left out of what its view lists and describes: data the reader may not
  * read, and a getter whose path it may not read, as a node leaves them out of its own listing (see
  * {@link isReadRedacted}), and, from a listing, an object member the reader may read nothing beneath, as a node
@@ -314,28 +336,6 @@ function givenReadDecision(record, prop, target = memberPathOf(record.gate, prop
  * @private
  */
 function givenWithheld(record, prop, listing = false) {
-	/**
-	 * Whether the rules leave the reader nothing to read at an object member of a given prototype: a read of the member's
-	 * path is refused, and so is a read of any member beneath it, with no more specific allow beneath it, as
-	 * {@link readsNothingBeneath} decides for the same member of a node's own.
-	 * @param {{gate: object, reader: object}} record - The view's record.
-	 * @param {string} prop - The member's key.
-	 * @returns {boolean} Whether the reader may read nothing there.
-	 * @private
-	 *
-	 * @example
-	 * // rule: allow reader.** → owner.config.partly.a; the prototype holds { nothing: {...}, partly: {...} }
-	 * Object.keys(Object.getPrototypeOf(self.owner.config)); // ["partly"]
-	 */
-	function givenReadsNothingBeneath(record, prop) {
-		const targetPath = memberPathOf(record.gate, prop);
-		if (givenReadDecision(record, prop, targetPath).allowed) return false;
-		const probePath = `${targetPath}.${ANY_MEMBER_SEGMENT}`;
-		const beneath = givenReadDecision(record, prop, probePath);
-		if (beneath.allowed) return false;
-		return !record.gate.slothlet.handlers.permissionManager.allowsBeneath(beneath.caller, targetPath, probePath);
-	}
-
 	const descriptor = Reflect.getOwnPropertyDescriptor(record.value, prop);
 	if (!descriptor) return false;
 	const isData = "value" in descriptor;
@@ -664,6 +664,259 @@ const searchDepth = (slothlet) => slothlet?.config?.permissions?.search?.depth ?
 const searchBudget = (slothlet) => ({ remaining: slothlet?.config?.permissions?.search?.properties ?? DEFAULT_SEARCH_PROPERTIES });
 
 /**
+ * Whether a value is a promise of the engine's own, with nothing of a module's on it: its prototype is the
+ * intrinsic one and it has no members of its own that reading what it settles to could reach, so that read runs none
+ * of a module's code. Members under symbols of no registry and none of the language's are left out: `then` reads none
+ * of them, its stand-in carries none of them, and Node keeps its own there on every promise made while an
+ * `AsyncLocalStorage` runs on async hooks (Node 22's async ids and stores).
+ * @param {object} value - An object that is not a Proxy.
+ * @returns {boolean} True for such a promise.
+ * @private
+ */
+function isPlainPromise(value) {
+	if (!util.types.isPromise(value) || Reflect.getPrototypeOf(value) !== Promise.prototype) return false;
+	for (let ofIndex = 0, ofList = Reflect.ownKeys(value); ofIndex < ofList.length; ofIndex++) {
+		const key = ofList[ofIndex];
+		if (typeof key !== "symbol" || Symbols.keyFor(key) !== undefined || SetMethods.has(WELL_KNOWN_SYMBOLS, key)) return false;
+	}
+	return true;
+}
+
+/**
+ * Whether plain data a module hands out holds a node's own function, or a module's copy of one (see
+ * {@link gateLeafCopy}), within the bounds given: plain objects and arrays are looked into, by their
+ * descriptors, so nothing of the data runs. Only while the instance's permission system is on: otherwise no call is
+ * refused, and the data passes as itself.
+ * @param {object} slothlet - The instance.
+ * @param {object} value - The data.
+ * @param {number} depth - Levels still allowed, this one included.
+ * @param {{remaining: number}} budget - Properties still allowed.
+ * @returns {boolean} True when it holds such a function.
+ * @private
+ */
+function dataHoldsLeafFunction(slothlet, value, depth, budget) {
+	if (depth <= 0 || !slothlet?.handlers?.permissionManager?.isEnabled?.()) return false;
+	try {
+		if (util.types.isProxy(value)) return false;
+		const prototype = Reflect.getPrototypeOf(value);
+		if (prototype !== null && prototype !== Objects.prototype && prototype !== Arrays.prototype) return false;
+		if (Arrays.isArray(value) && value.length > budget.remaining) return false;
+		const keys = Reflect.ownKeys(value);
+		budget.remaining -= keys.length;
+		if (budget.remaining < 0) return false;
+		for (let ofIndex = 0, ofList = keys; ofIndex < ofList.length; ofIndex++) {
+			const descriptor = Reflect.getOwnPropertyDescriptor(value, ofList[ofIndex]);
+			if (!descriptor || !("value" in descriptor)) continue;
+			const member = descriptor.value;
+			if (typeof member === "function") {
+				if (util.types.isProxy(member)) continue;
+				const leaf = WeakMapMethods.get(trustedRootOwn.implWrappers, member);
+				if (
+					(leaf && WeakSetMethods.has(trustedRootOwn.genuineWrappers, leaf) && leaf.slothlet === slothlet) ||
+					leafOfCopy(slothlet, member) !== null
+				)
+					return true;
+				continue;
+			}
+			if (member !== null && typeof member === "object" && dataHoldsLeafFunction(slothlet, member, depth - 1, budget)) return true;
+		}
+	} catch {
+		// Data that refuses to be described is handed out as it is.
+	}
+	return false;
+}
+
+/**
+ * The stand-in of a generator or async generator object a module made (#597): a generator of the same kind with the
+ * same prototype — so its steps are the intrinsic `next`, `return` and `throw` — delegating each step to the
+ * original, run as the module. The original is not changed, so one that cannot be extended is handled alike.
+ * @param {object} maker - The module's record.
+ * @param {object} owner - The wrapper it runs as.
+ * @param {object} original - The generator object.
+ * @returns {object} The stand-in, the same one for the same generator and module every time.
+ * @private
+ */
+function generatorStandIn(maker, owner, original) {
+	const existing = WeakMapMethods.get(maker.made, original);
+	if (existing) return existing;
+	const isAsync = FunctionMethods.call(PrototypeFunctions.Object.isPrototypeOf, GENERATOR_PROTOTYPES.asyncGenerator, original);
+	const steps = isAsync ? GENERATOR_PROTOTYPES.asyncGenerator : GENERATOR_PROTOTYPES.generator;
+	// A step's result is no one's value (R3-D17): the step runs as the module and the value in it is handed out as the
+	// module's, while the `{ value, done }` around it is a plain result, as the engine makes one (#758). An async step's
+	// promise settles to such a result.
+	const step = (name) => (value) => {
+		const box = { step: false, done: false };
+		const take = (result) => {
+			box.step = isStepResult(result);
+			if (!box.step) return result;
+			box.done = result.done;
+			return result.value;
+		};
+		const handed = runAsMaker(
+			owner,
+			(input) => {
+				const result = Reflect.apply(steps[name], original, [input]);
+				return isAsync ? Reflect.apply(SLOT_READERS.then, result, [take]) : take(result);
+			},
+			undefined,
+			[handIn(maker, value)]
+		);
+		const wrap = (given) => (box.step ? { value: given, done: box.done } : given);
+		return isAsync ? Reflect.apply(SLOT_READERS.then, handed, [wrap]) : wrap(handed);
+	};
+	const driver = { next: step("next"), return: step("return"), throw: step("throw") };
+	driver[isAsync ? Symbol.asyncIterator : Symbol.iterator] = () => driver;
+	const standIn = isAsync
+		? (async function* () {
+				return yield* driver;
+			})()
+		: (function* () {
+				return yield* driver;
+			})();
+	Reflect.setPrototypeOf(standIn, Reflect.getPrototypeOf(original));
+	if (Objects.isFrozen(original)) Objects.freeze(standIn);
+	else if (Objects.isSealed(original)) Objects.seal(standIn);
+	else if (!Objects.isExtensible(original)) Objects.preventExtensions(standIn);
+	WeakMapMethods.set(maker.made, original, standIn);
+	WeakMapMethods.set(STAND_IN_RECORDS, standIn, { maker, owner, original });
+	return standIn;
+}
+
+/**
+ * The stand-in of a promise a module made (#597): a promise settling as it does, with what it settles to — a value or
+ * a rejection — handed out as the module's (see {@link handOut}). A promise of a module's own class, or with
+ * members of its own, is the module's code and is handed out as any other object is.
+ * @param {object} maker - The module's record.
+ * @param {object} owner - The wrapper it runs as.
+ * @param {Promise} original - The promise.
+ * @returns {Promise} The stand-in, the same one for the same promise and module every time.
+ * @private
+ */
+function promiseStandIn(maker, owner, original) {
+	const existing = WeakMapMethods.get(maker.made, original);
+	if (existing) return existing;
+	const standIn = new Promise((resolve, reject) => {
+		Reflect.apply(SLOT_READERS.then, original, [
+			(value) => resolve(handOut(maker, owner, value)),
+			(reason) => reject(handOut(maker, owner, reason))
+		]);
+	});
+	WeakMapMethods.set(maker.made, original, standIn);
+	WeakMapMethods.set(STAND_IN_RECORDS, standIn, { maker, owner, original });
+	return standIn;
+}
+
+/**
+ * Where the stand-ins a leaf makes of functions another leaf of its module handed out first are kept (#726), or null
+ * when the stand-in already made is the one to hand out: the value is not a plain function, the same leaf made it, it
+ * is a leaf's own function (which runs as that leaf whoever hands it out), it was not made as a stand-in, or it is
+ * written in a leaf's file (its frames name its definer when it runs, so one stand-in serves every leaf, and a class
+ * or closure two leaves return stays one value). What is left is code the stack cannot place on a leaf, a helper
+ * file's own function above all: each leaf handing it out gets a stand-in recording that leaf.
+ * @param {object} maker - The module's record.
+ * @param {object} owner - The wrapper handing the value out.
+ * @param {*} value - The value.
+ * @param {object} made - The stand-in the module made of it first.
+ * @returns {WeakMap<object, object>|null} The leaf's own stand-ins by original, or null.
+ * @private
+ */
+function ownStandIns(maker, owner, value, made) {
+	if (typeof value !== "function" || util.types.isProxy(value) || WeakMapMethods.has(trustedRootOwn.implWrappers, value)) return null;
+	const record = WeakMapMethods.get(STAND_IN_RECORDS, made);
+	if (!record || record.maker !== maker || record.original !== value || record.owner === owner) return null;
+	if (isLeafFileFunction(value, [record.owner, owner])) return null;
+	maker.madeBy ??= new WeakMap();
+	let own = WeakMapMethods.get(maker.madeBy, owner);
+	if (!own) WeakMapMethods.set(maker.madeBy, owner, (own = new WeakMap()));
+	return own;
+}
+
+/**
+ * {@link handOut} for an object or function, without noting where its stand-in goes.
+ * @param {object} maker - The module's record.
+ * @param {object} owner - The wrapper a new stand-in runs as.
+ * @param {object|Function} value - The value.
+ * @returns {*} What is handed out.
+ * @private
+ */
+function handOutValue(maker, owner, value) {
+	const inbound = WeakMapMethods.get(INBOUND_VIEWS, value);
+	if (inbound) return inbound.original;
+	// A crossing view the module was handed is another module's value: handed on as it is, decided for whoever it
+	// reaches.
+	if (WeakMapMethods.has(CROSSINGS, value)) return value;
+	// A view handed out for a holder not known yet is slothlet's, decided for the holder it reaches (#667).
+	const handedRecord = WeakMapMethods.get(SELF_MEMBER_VIEWS, value);
+	if (handedRecord?.reader === SEALED_SHELL_READER || handedRecord?.reader === PROTOTYPE_HANDLE_READER) return value;
+	// A prototype of a module's class, however the module holds it, is handed out for a holder not known yet: a view
+	// deciding each write when it is made, which a holder reading it through `self` gets as reading it would (#667).
+	const prototype = typeof value === "object" ? prototypeHandedTo(value, SEALED_SHELL_READER, owner.slothlet) : value;
+	if (prototype !== value) return prototype;
+	if (isSlothletValue(value) || WeakSetMethods.has(INTRINSICS, value) || isSharedValue(value) || WeakSetMethods.has(maker.handedIn, value))
+		return value;
+	// A prototype of a class the module exports is handed out as it is (#597).
+	if (WeakSetMethods.has(maker.exposed, value)) return value;
+	// A class instance a method got as its receiver stands for its node (#625): it comes back as it is, so a view
+	// hands it to the reader as the node, whose own write rule holds.
+	if (WeakMapMethods.has(SELF_INSTANCE_NODES, value)) return value;
+	const made = WeakMapMethods.get(maker.made, value);
+	// A function a leaf hands out records that leaf (#726): when another leaf of the module hands the same function out,
+	// it gets a stand-in of its own, so code the stack cannot place on a leaf (a helper file's own function) runs as
+	// the leaf that handed it out, each time.
+	const own = made ? ownStandIns(maker, owner, value, made) : null;
+	if (made && !own) return made;
+	try {
+		if (own) {
+			const mine = WeakMapMethods.get(own, value);
+			if (mine) return mine;
+			if (util.types.isGeneratorFunction(value) || util.types.isAsyncFunction(value)) return kindStandIn(maker, owner, value, own);
+			return membrane(maker, owner, value, false, own);
+		}
+		if (util.types.isProxy(value)) return isModuleProxy(value) ? membrane(maker, owner, value) : value;
+		if (typeof value === "function") {
+			// The live runtime's `then` over the engine's is the engine's, as a built-in is.
+			if (isFrameworkInternal(value) || isBuiltinFunction(value) || engineThenOf(value)) return value;
+			// A leaf's own function is its module's and runs as that leaf, whichever module handed it out.
+			const leaf = WeakMapMethods.get(trustedRootOwn.implWrappers, value);
+			// Handed out as it is, it is that leaf's node: running it is a call of the node, which whoever runs it has
+			// to be allowed, and it runs with the leaf's rights, as it does when the node is read from `self` (#726).
+			// The node's rules decide its function however it is reached: a module that imports the leaf's file itself
+			// holds a copy of the function, whose stand-in below is checked as a call of the node each time it runs (see
+			// gateLeafCopy).
+			const node =
+				leaf && WeakSetMethods.has(trustedRootOwn.genuineWrappers, leaf) && leaf.slothlet === owner.slothlet
+					? leaf.____slothletInternal.proxy
+					: null;
+			if (node && typeof node === "function") return node;
+			const leafMaker = leaf ? makerOf(leaf) : maker;
+			if (leafMaker !== maker && WeakMapMethods.has(leafMaker.made, value)) return WeakMapMethods.get(leafMaker.made, value);
+			if (util.types.isGeneratorFunction(value) || util.types.isAsyncFunction(value)) return kindStandIn(leafMaker, leaf ?? owner, value);
+			return membrane(leafMaker, leaf ?? owner, value);
+		}
+		if (util.types.isGeneratorObject(value)) return generatorStandIn(maker, owner, value);
+		if (isPlainPromise(value)) return promiseStandIn(maker, owner, value);
+		// Only a value that is itself code is a stand-in: data — plain objects and arrays, the language's and Node's own
+		// objects — passes as itself however deep it nests, unsearched, and code nested in it is told by its frames when
+		// it runs (#726).
+		if (owner.slothlet?.config?.permissions?.caller?.provenance !== false) {
+			if (!isCodeObject(value)) {
+				// Data holding a node's own function, or a module's copy of it, is handed out as a view, so a call of the
+				// function read from it is the node's call (see gateLeafCopy) and not a call of the bare function.
+				if (!dataHoldsLeafFunction(owner.slothlet, value, searchDepth(owner.slothlet), searchBudget(owner.slothlet))) return value;
+			}
+			return membrane(maker, owner, value);
+		}
+		// With `provenance` off no frames are read, so nothing would tell code nested in data from its caller's: the
+		// value is searched instead, as far as the code search reaches, and one holding code is handed out as the module's.
+		if (!holdsCode(value, searchDepth(owner.slothlet), searchBudget(owner.slothlet))) return value;
+		return membrane(maker, owner, value);
+	} catch {
+		// A value that refuses to be described is handed out as it is.
+		return value;
+	}
+}
+
+/**
  * What a module's code hands out, as whoever receives it gets it (#597): code the module made — a function, a
  * Proxy, a generator, and any object holding code — comes as a stand-in that runs it as the module (see
  * {@link runAsMaker}); a value handed to the module from outside, plain data, the language's own objects and
@@ -676,268 +929,81 @@ const searchBudget = (slothlet) => ({ remaining: slothlet?.config?.permissions?.
  * @private
  */
 function handOut(maker, owner, value) {
-	/**
-	 * Whether a value is a promise of the engine's own, with nothing of a module's on it: its prototype is the
-	 * intrinsic one and it has no members of its own that reading what it settles to could reach, so that read runs none
-	 * of a module's code. Members under symbols of no registry and none of the language's are left out: `then` reads none
-	 * of them, its stand-in carries none of them, and Node keeps its own there on every promise made while an
-	 * `AsyncLocalStorage` runs on async hooks (Node 22's async ids and stores).
-	 * @param {object} value - An object that is not a Proxy.
-	 * @returns {boolean} True for such a promise.
-	 * @private
-	 */
-	function isPlainPromise(value) {
-		if (!util.types.isPromise(value) || Reflect.getPrototypeOf(value) !== Promise.prototype) return false;
-		for (let ofIndex = 0, ofList = Reflect.ownKeys(value); ofIndex < ofList.length; ofIndex++) {
-			const key = ofList[ofIndex];
-			if (typeof key !== "symbol" || Symbols.keyFor(key) !== undefined || SetMethods.has(WELL_KNOWN_SYMBOLS, key)) return false;
-		}
-		return true;
-	}
-
-	/**
-	 * Whether plain data a module hands out holds a node's own function, or a module's copy of one (see
-	 * {@link gateLeafCopy}), within the bounds given: plain objects and arrays are looked into, by their
-	 * descriptors, so nothing of the data runs. Only while the instance's permission system is on: otherwise no call is
-	 * refused, and the data passes as itself.
-	 * @param {object} slothlet - The instance.
-	 * @param {object} value - The data.
-	 * @param {number} depth - Levels still allowed, this one included.
-	 * @param {{remaining: number}} budget - Properties still allowed.
-	 * @returns {boolean} True when it holds such a function.
-	 * @private
-	 */
-	function dataHoldsLeafFunction(slothlet, value, depth, budget) {
-		if (depth <= 0 || !slothlet?.handlers?.permissionManager?.isEnabled?.()) return false;
-		try {
-			if (util.types.isProxy(value)) return false;
-			const prototype = Reflect.getPrototypeOf(value);
-			if (prototype !== null && prototype !== Objects.prototype && prototype !== Arrays.prototype) return false;
-			if (Arrays.isArray(value) && value.length > budget.remaining) return false;
-			const keys = Reflect.ownKeys(value);
-			budget.remaining -= keys.length;
-			if (budget.remaining < 0) return false;
-			for (let ofIndex = 0, ofList = keys; ofIndex < ofList.length; ofIndex++) {
-				const descriptor = Reflect.getOwnPropertyDescriptor(value, ofList[ofIndex]);
-				if (!descriptor || !("value" in descriptor)) continue;
-				const member = descriptor.value;
-				if (typeof member === "function") {
-					if (util.types.isProxy(member)) continue;
-					const leaf = WeakMapMethods.get(trustedRootOwn.implWrappers, member);
-					if (
-						(leaf && WeakSetMethods.has(trustedRootOwn.genuineWrappers, leaf) && leaf.slothlet === slothlet) ||
-						leafOfCopy(slothlet, member) !== null
-					)
-						return true;
-					continue;
-				}
-				if (member !== null && typeof member === "object" && dataHoldsLeafFunction(slothlet, member, depth - 1, budget)) return true;
-			}
-		} catch {
-			// Data that refuses to be described is handed out as it is.
-		}
-		return false;
-	}
-
-	/**
-	 * The stand-in of a generator or async generator object a module made (#597): a generator of the same kind with the
-	 * same prototype — so its steps are the intrinsic `next`, `return` and `throw` — delegating each step to the
-	 * original, run as the module. The original is not changed, so one that cannot be extended is handled alike.
-	 * @param {object} maker - The module's record.
-	 * @param {object} owner - The wrapper it runs as.
-	 * @param {object} original - The generator object.
-	 * @returns {object} The stand-in, the same one for the same generator and module every time.
-	 * @private
-	 */
-	function generatorStandIn(maker, owner, original) {
-		const existing = WeakMapMethods.get(maker.made, original);
-		if (existing) return existing;
-		const isAsync = FunctionMethods.call(PrototypeFunctions.Object.isPrototypeOf, GENERATOR_PROTOTYPES.asyncGenerator, original);
-		const steps = isAsync ? GENERATOR_PROTOTYPES.asyncGenerator : GENERATOR_PROTOTYPES.generator;
-		// A step's result is no one's value (R3-D17): the step runs as the module and the value in it is handed out as the
-		// module's, while the `{ value, done }` around it is a plain result, as the engine makes one (#758). An async step's
-		// promise settles to such a result.
-		const step = (name) => (value) => {
-			const box = { step: false, done: false };
-			const take = (result) => {
-				box.step = isStepResult(result);
-				if (!box.step) return result;
-				box.done = result.done;
-				return result.value;
-			};
-			const handed = runAsMaker(
-				owner,
-				(input) => {
-					const result = Reflect.apply(steps[name], original, [input]);
-					return isAsync ? Reflect.apply(SLOT_READERS.then, result, [take]) : take(result);
-				},
-				undefined,
-				[handIn(maker, value)]
-			);
-			const wrap = (given) => (box.step ? { value: given, done: box.done } : given);
-			return isAsync ? Reflect.apply(SLOT_READERS.then, handed, [wrap]) : wrap(handed);
-		};
-		const driver = { next: step("next"), return: step("return"), throw: step("throw") };
-		driver[isAsync ? Symbol.asyncIterator : Symbol.iterator] = () => driver;
-		const standIn = isAsync
-			? (async function* () {
-					return yield* driver;
-				})()
-			: (function* () {
-					return yield* driver;
-				})();
-		Reflect.setPrototypeOf(standIn, Reflect.getPrototypeOf(original));
-		if (Objects.isFrozen(original)) Objects.freeze(standIn);
-		else if (Objects.isSealed(original)) Objects.seal(standIn);
-		else if (!Objects.isExtensible(original)) Objects.preventExtensions(standIn);
-		WeakMapMethods.set(maker.made, original, standIn);
-		WeakMapMethods.set(STAND_IN_RECORDS, standIn, { maker, owner, original });
-		return standIn;
-	}
-
-	/**
-	 * The stand-in of a promise a module made (#597): a promise settling as it does, with what it settles to — a value or
-	 * a rejection — handed out as the module's (see {@link handOut}). A promise of a module's own class, or with
-	 * members of its own, is the module's code and is handed out as any other object is.
-	 * @param {object} maker - The module's record.
-	 * @param {object} owner - The wrapper it runs as.
-	 * @param {Promise} original - The promise.
-	 * @returns {Promise} The stand-in, the same one for the same promise and module every time.
-	 * @private
-	 */
-	function promiseStandIn(maker, owner, original) {
-		const existing = WeakMapMethods.get(maker.made, original);
-		if (existing) return existing;
-		const standIn = new Promise((resolve, reject) => {
-			Reflect.apply(SLOT_READERS.then, original, [
-				(value) => resolve(handOut(maker, owner, value)),
-				(reason) => reject(handOut(maker, owner, reason))
-			]);
-		});
-		WeakMapMethods.set(maker.made, original, standIn);
-		WeakMapMethods.set(STAND_IN_RECORDS, standIn, { maker, owner, original });
-		return standIn;
-	}
-
-	/**
-	 * Where the stand-ins a leaf makes of functions another leaf of its module handed out first are kept (#726), or null
-	 * when the stand-in already made is the one to hand out: the value is not a plain function, the same leaf made it, it
-	 * is a leaf's own function (which runs as that leaf whoever hands it out), it was not made as a stand-in, or it is
-	 * written in a leaf's file (its frames name its definer when it runs, so one stand-in serves every leaf, and a class
-	 * or closure two leaves return stays one value). What is left is code the stack cannot place on a leaf, a helper
-	 * file's own function above all: each leaf handing it out gets a stand-in recording that leaf.
-	 * @param {object} maker - The module's record.
-	 * @param {object} owner - The wrapper handing the value out.
-	 * @param {*} value - The value.
-	 * @param {object} made - The stand-in the module made of it first.
-	 * @returns {WeakMap<object, object>|null} The leaf's own stand-ins by original, or null.
-	 * @private
-	 */
-	function ownStandIns(maker, owner, value, made) {
-		if (typeof value !== "function" || util.types.isProxy(value) || WeakMapMethods.has(trustedRootOwn.implWrappers, value)) return null;
-		const record = WeakMapMethods.get(STAND_IN_RECORDS, made);
-		if (!record || record.maker !== maker || record.original !== value || record.owner === owner) return null;
-		if (isLeafFileFunction(value, [record.owner, owner])) return null;
-		maker.madeBy ??= new WeakMap();
-		let own = WeakMapMethods.get(maker.madeBy, owner);
-		if (!own) WeakMapMethods.set(maker.madeBy, owner, (own = new WeakMap()));
-		return own;
-	}
-
-	/**
-	 * {@link handOut} for an object or function, without noting where its stand-in goes.
-	 * @param {object} maker - The module's record.
-	 * @param {object} owner - The wrapper a new stand-in runs as.
-	 * @param {object|Function} value - The value.
-	 * @returns {*} What is handed out.
-	 * @private
-	 */
-	function handOutValue(maker, owner, value) {
-		const inbound = WeakMapMethods.get(INBOUND_VIEWS, value);
-		if (inbound) return inbound.original;
-		// A crossing view the module was handed is another module's value: handed on as it is, decided for whoever it
-		// reaches.
-		if (WeakMapMethods.has(CROSSINGS, value)) return value;
-		// A view handed out for a holder not known yet is slothlet's, decided for the holder it reaches (#667).
-		const handedRecord = WeakMapMethods.get(SELF_MEMBER_VIEWS, value);
-		if (handedRecord?.reader === SEALED_SHELL_READER || handedRecord?.reader === PROTOTYPE_HANDLE_READER) return value;
-		// A prototype of a module's class, however the module holds it, is handed out for a holder not known yet: a view
-		// deciding each write when it is made, which a holder reading it through `self` gets as reading it would (#667).
-		const prototype = typeof value === "object" ? prototypeHandedTo(value, SEALED_SHELL_READER, owner.slothlet) : value;
-		if (prototype !== value) return prototype;
-		if (
-			isSlothletValue(value) ||
-			WeakSetMethods.has(INTRINSICS, value) ||
-			isSharedValue(value) ||
-			WeakSetMethods.has(maker.handedIn, value)
-		)
-			return value;
-		// A prototype of a class the module exports is handed out as it is (#597).
-		if (WeakSetMethods.has(maker.exposed, value)) return value;
-		// A class instance a method got as its receiver stands for its node (#625): it comes back as it is, so a view
-		// hands it to the reader as the node, whose own write rule holds.
-		if (WeakMapMethods.has(SELF_INSTANCE_NODES, value)) return value;
-		const made = WeakMapMethods.get(maker.made, value);
-		// A function a leaf hands out records that leaf (#726): when another leaf of the module hands the same function out,
-		// it gets a stand-in of its own, so code the stack cannot place on a leaf (a helper file's own function) runs as
-		// the leaf that handed it out, each time.
-		const own = made ? ownStandIns(maker, owner, value, made) : null;
-		if (made && !own) return made;
-		try {
-			if (own) {
-				const mine = WeakMapMethods.get(own, value);
-				if (mine) return mine;
-				if (util.types.isGeneratorFunction(value) || util.types.isAsyncFunction(value)) return kindStandIn(maker, owner, value, own);
-				return membrane(maker, owner, value, false, own);
-			}
-			if (util.types.isProxy(value)) return isModuleProxy(value) ? membrane(maker, owner, value) : value;
-			if (typeof value === "function") {
-				// The live runtime's `then` over the engine's is the engine's, as a built-in is.
-				if (isFrameworkInternal(value) || isBuiltinFunction(value) || engineThenOf(value)) return value;
-				// A leaf's own function is its module's and runs as that leaf, whichever module handed it out.
-				const leaf = WeakMapMethods.get(trustedRootOwn.implWrappers, value);
-				// Handed out as it is, it is that leaf's node: running it is a call of the node, which whoever runs it has
-				// to be allowed, and it runs with the leaf's rights, as it does when the node is read from `self` (#726).
-				// The node's rules decide its function however it is reached: a module that imports the leaf's file itself
-				// holds a copy of the function, whose stand-in below is checked as a call of the node each time it runs (see
-				// gateLeafCopy).
-				const node =
-					leaf && WeakSetMethods.has(trustedRootOwn.genuineWrappers, leaf) && leaf.slothlet === owner.slothlet
-						? leaf.____slothletInternal.proxy
-						: null;
-				if (node && typeof node === "function") return node;
-				const leafMaker = leaf ? makerOf(leaf) : maker;
-				if (leafMaker !== maker && WeakMapMethods.has(leafMaker.made, value)) return WeakMapMethods.get(leafMaker.made, value);
-				if (util.types.isGeneratorFunction(value) || util.types.isAsyncFunction(value)) return kindStandIn(leafMaker, leaf ?? owner, value);
-				return membrane(leafMaker, leaf ?? owner, value);
-			}
-			if (util.types.isGeneratorObject(value)) return generatorStandIn(maker, owner, value);
-			if (isPlainPromise(value)) return promiseStandIn(maker, owner, value);
-			// Only a value that is itself code is a stand-in: data — plain objects and arrays, the language's and Node's own
-			// objects — passes as itself however deep it nests, unsearched, and code nested in it is told by its frames when
-			// it runs (#726).
-			if (owner.slothlet?.config?.permissions?.caller?.provenance !== false) {
-				if (!isCodeObject(value)) {
-					// Data holding a node's own function, or a module's copy of it, is handed out as a view, so a call of the
-					// function read from it is the node's call (see gateLeafCopy) and not a call of the bare function.
-					if (!dataHoldsLeafFunction(owner.slothlet, value, searchDepth(owner.slothlet), searchBudget(owner.slothlet))) return value;
-				}
-				return membrane(maker, owner, value);
-			}
-			// With `provenance` off no frames are read, so nothing would tell code nested in data from its caller's: the
-			// value is searched instead, as far as the code search reaches, and one holding code is handed out as the module's.
-			if (!holdsCode(value, searchDepth(owner.slothlet), searchBudget(owner.slothlet))) return value;
-			return membrane(maker, owner, value);
-		} catch {
-			// A value that refuses to be described is handed out as it is.
-			return value;
-		}
-	}
-
 	if (value === null || (typeof value !== "object" && typeof value !== "function")) return value;
 	noteMoved(value);
 	const handed = handOutValue(maker, owner, value);
 	if (handed !== value) noteMoved(handed);
+	return handed;
+}
+
+/**
+ * Whether an instance a module constructs through a node is handed out as the node's module's, under `"fast"` as under
+ * `"precise"`: its `constructor` is the node's function, whose members the rules could refuse the module a read of
+ * (see {@link constructorReadMayRefuse}), so the instance has to hand back the node, not the function. The host
+ * constructing, and a module no read beneath the node could be refused to, get the instance itself.
+ * @param {object} wrapper - The node's wrapper.
+ * @returns {boolean} True when the instance is handed out as the module's.
+ * @private
+ */
+/**
+ * Whether an object's prototype chain holds a `constructor` that is a function an api node stands for whose members
+ * the rules could refuse `reader` a read of (see {@link constructorReadMayRefuse}). Found by descriptors alone.
+ * @param {object} slothlet - The instance.
+ * @param {object|null} reader - The module the object reaches.
+ * @param {object} value - The object.
+ * @returns {boolean} True when a read could be refused.
+ * @private
+ */
+function instanceReadMayRefuse(slothlet, reader, value) {
+	if (!reader?.____slothletInternal) return false;
+	const readerPath = String(reader.____slothletInternal.apiPath ?? "");
+	for (let link = Reflect.getPrototypeOf(value), depth = 0; link !== null && depth < 64; depth++) {
+		// A Proxy on the chain runs code of its own to answer: what lies beyond it cannot be told without running it.
+		if (util.types.isProxy(link)) return false;
+		if (constructorReadMayRefuse(slothlet, readerPath, link)) return true;
+		link = Reflect.getPrototypeOf(link);
+	}
+	return false;
+}
+
+/**
+ * {@link attributeResult} once the receiver is set.
+ * @param {object} owner - The wrapper whose call returned the value.
+ * @param {object|Function} value - What the call returned.
+ * @param {boolean} callerIsHost - Whether the host made the call.
+ * @param {object|null} caller - The wrapper of the module that made the call, when one did.
+ * @returns {*} What the caller gets.
+ * @private
+ */
+function attributeResultTo(owner, value, callerIsHost, caller) {
+	if (callerIsHost && typeof value === "object") {
+		const behind = behindMemberView(value);
+		if (knownPrototype(owner.slothlet, behind) !== undefined) return behind;
+	}
+	const toModule = !callerIsHost && Boolean(caller?.____slothletInternal);
+	// A crossing view the module was handed and hands back stands for another module's value: the host gets that value,
+	// a module gets it as the guard decides for it.
+	if (WeakMapMethods.has(CROSSINGS, value)) return toModule ? crossTo(value, caller, owner.slothlet, owner) : uncross(value);
+	let handed = value;
+	if (!handsOutAsModule(owner)) {
+		if (!permissionsOn(owner)) return value;
+		// `"fast"` wraps nothing it hands out, but a node's own Proxy export handed back is still that node's member, run
+		// as a call of the node, as under `"precise"` (#726).
+		if (util.types.isProxy(value)) handed = WeakMapMethods.get(makerOf(owner).made, value) ?? value;
+		// An instance whose `constructor` is a function an api node stands for, whose members the rules could refuse the
+		// module it reaches, is the module's, as under `"precise"`: its `constructor` is then that node.
+		else if (toModule && typeof value === "object" && instanceReadMayRefuse(owner.slothlet, caller, value))
+			handed = handOut(makerOf(owner), owner, value);
+	} else handed = handOut(makerOf(owner), owner, value);
+	// What a module's call hands another module, a stand-in of its code included, reaches it through the class prototype
+	// guard.
+	if (toModule) return crossTo(handed, caller, owner.slothlet, owner);
+	// The host holds it as it is; where it came from is kept for when the host hands it on.
+	if (permissionsOn(owner) && !WeakMapMethods.has(HOST_HANDED, handed) && !isShared(handed)) {
+		WeakMapMethods.set(HOST_HANDED, handed, owner);
+		// The value a stand-in stands for is what the module itself holds once the host hands the stand-in back to it.
+		if (handed !== value && !WeakMapMethods.has(HOST_HANDED, value) && !isShared(value)) WeakMapMethods.set(HOST_HANDED, value, owner);
+	}
 	return handed;
 }
 
@@ -955,77 +1021,6 @@ function handOut(maker, owner, value) {
  * @private
  */
 function attributeResult(owner, value, callerIsHost = false, caller = null, receiver = null) {
-	/**
-	 * Whether an instance a module constructs through a node is handed out as the node's module's, under `"fast"` as under
-	 * `"precise"`: its `constructor` is the node's function, whose members the rules could refuse the module a read of
-	 * (see {@link constructorReadMayRefuse}), so the instance has to hand back the node, not the function. The host
-	 * constructing, and a module no read beneath the node could be refused to, get the instance itself.
-	 * @param {object} wrapper - The node's wrapper.
-	 * @returns {boolean} True when the instance is handed out as the module's.
-	 * @private
-	 */
-	/**
-	 * Whether an object's prototype chain holds a `constructor` that is a function an api node stands for whose members
-	 * the rules could refuse `reader` a read of (see {@link constructorReadMayRefuse}). Found by descriptors alone.
-	 * @param {object} slothlet - The instance.
-	 * @param {object|null} reader - The module the object reaches.
-	 * @param {object} value - The object.
-	 * @returns {boolean} True when a read could be refused.
-	 * @private
-	 */
-	function instanceReadMayRefuse(slothlet, reader, value) {
-		if (!reader?.____slothletInternal) return false;
-		const readerPath = String(reader.____slothletInternal.apiPath ?? "");
-		for (let link = Reflect.getPrototypeOf(value), depth = 0; link !== null && depth < 64; depth++) {
-			// A Proxy on the chain runs code of its own to answer: what lies beyond it cannot be told without running it.
-			if (util.types.isProxy(link)) return false;
-			if (constructorReadMayRefuse(slothlet, readerPath, link)) return true;
-			link = Reflect.getPrototypeOf(link);
-		}
-		return false;
-	}
-
-	/**
-	 * {@link attributeResult} once the receiver is set.
-	 * @param {object} owner - The wrapper whose call returned the value.
-	 * @param {object|Function} value - What the call returned.
-	 * @param {boolean} callerIsHost - Whether the host made the call.
-	 * @param {object|null} caller - The wrapper of the module that made the call, when one did.
-	 * @returns {*} What the caller gets.
-	 * @private
-	 */
-	function attributeResultTo(owner, value, callerIsHost, caller) {
-		if (callerIsHost && typeof value === "object") {
-			const behind = behindMemberView(value);
-			if (knownPrototype(owner.slothlet, behind) !== undefined) return behind;
-		}
-		const toModule = !callerIsHost && Boolean(caller?.____slothletInternal);
-		// A crossing view the module was handed and hands back stands for another module's value: the host gets that value,
-		// a module gets it as the guard decides for it.
-		if (WeakMapMethods.has(CROSSINGS, value)) return toModule ? crossTo(value, caller, owner.slothlet, owner) : uncross(value);
-		let handed = value;
-		if (!handsOutAsModule(owner)) {
-			if (!permissionsOn(owner)) return value;
-			// `"fast"` wraps nothing it hands out, but a node's own Proxy export handed back is still that node's member, run
-			// as a call of the node, as under `"precise"` (#726).
-			if (util.types.isProxy(value)) handed = WeakMapMethods.get(makerOf(owner).made, value) ?? value;
-			// An instance whose `constructor` is a function an api node stands for, whose members the rules could refuse the
-			// module it reaches, is the module's, as under `"precise"`: its `constructor` is then that node.
-			else if (toModule && typeof value === "object" && instanceReadMayRefuse(owner.slothlet, caller, value))
-				handed = handOut(makerOf(owner), owner, value);
-		} else handed = handOut(makerOf(owner), owner, value);
-		// What a module's call hands another module, a stand-in of its code included, reaches it through the class prototype
-		// guard.
-		if (toModule) return crossTo(handed, caller, owner.slothlet, owner);
-		// The host holds it as it is; where it came from is kept for when the host hands it on.
-		if (permissionsOn(owner) && !WeakMapMethods.has(HOST_HANDED, handed) && !isShared(handed)) {
-			WeakMapMethods.set(HOST_HANDED, handed, owner);
-			// The value a stand-in stands for is what the module itself holds once the host hands the stand-in back to it.
-			if (handed !== value && !WeakMapMethods.has(HOST_HANDED, value) && !isShared(value)) WeakMapMethods.set(HOST_HANDED, value, owner);
-		}
-		return handed;
-	}
-
 	if (value === null || (typeof value !== "object" && typeof value !== "function")) return value;
 	if (!owner?.slothlet?.instanceID || !owner.slothlet.contextManager?.runInContext) return value;
 	const previous = handOutReceiver;
@@ -1036,6 +1031,34 @@ function attributeResult(owner, value, callerIsHost = false, caller = null, rece
 	} finally {
 		handOutReceiver = previous;
 	}
+}
+
+/**
+ * What a module is handed for a node's own function, or a module's copy of one (see {@link gateLeafCopy}),
+ * another module passes it: the node, for the node's own function (as handing it out gives, #726), and for a copy a
+ * stand-in checked as a call of the node each time it runs. Null when the function is neither, belongs to the
+ * receiving module itself, or the permission system is off or disabled: the function is then handed in as it is.
+ * @param {object} maker - The receiving module's record.
+ * @param {object} owner - The wrapper of the module's leaf it is handed to.
+ * @param {Function} value - The function.
+ * @returns {Function|null} What the module gets, or null.
+ * @private
+ */
+function leafFunctionHandedIn(maker, owner, value) {
+	const slothlet = owner?.slothlet ?? maker?.owner?.slothlet;
+	if (!slothlet?.handlers?.permissionManager?.isEnabled?.() || util.types.isProxy(value)) return null;
+	const leaf = WeakMapMethods.get(trustedRootOwn.implWrappers, value);
+	if (leaf !== undefined) {
+		if (!WeakSetMethods.has(trustedRootOwn.genuineWrappers, leaf) || leaf.slothlet !== slothlet || makerOf(leaf) === maker) return null;
+		const node = leaf.____slothletInternal.proxy;
+		return typeof node === "function" ? node : null;
+	}
+	const node = leafOfCopy(slothlet, value);
+	if (node === null) return null;
+	const nodeMaker = makerOf(node);
+	if (nodeMaker === maker) return null;
+	if (util.types.isGeneratorFunction(value) || util.types.isAsyncFunction(value)) return kindStandIn(nodeMaker, node, value);
+	return membrane(nodeMaker, node, value);
 }
 
 /**
@@ -1050,34 +1073,6 @@ function attributeResult(owner, value, callerIsHost = false, caller = null, rece
  * @private
  */
 function handIn(maker, value, owner = maker.owner) {
-	/**
-	 * What a module is handed for a node's own function, or a module's copy of one (see {@link gateLeafCopy}),
-	 * another module passes it: the node, for the node's own function (as handing it out gives, #726), and for a copy a
-	 * stand-in checked as a call of the node each time it runs. Null when the function is neither, belongs to the
-	 * receiving module itself, or the permission system is off or disabled: the function is then handed in as it is.
-	 * @param {object} maker - The receiving module's record.
-	 * @param {object} owner - The wrapper of the module's leaf it is handed to.
-	 * @param {Function} value - The function.
-	 * @returns {Function|null} What the module gets, or null.
-	 * @private
-	 */
-	function leafFunctionHandedIn(maker, owner, value) {
-		const slothlet = owner?.slothlet ?? maker?.owner?.slothlet;
-		if (!slothlet?.handlers?.permissionManager?.isEnabled?.() || util.types.isProxy(value)) return null;
-		const leaf = WeakMapMethods.get(trustedRootOwn.implWrappers, value);
-		if (leaf !== undefined) {
-			if (!WeakSetMethods.has(trustedRootOwn.genuineWrappers, leaf) || leaf.slothlet !== slothlet || makerOf(leaf) === maker) return null;
-			const node = leaf.____slothletInternal.proxy;
-			return typeof node === "function" ? node : null;
-		}
-		const node = leafOfCopy(slothlet, value);
-		if (node === null) return null;
-		const nodeMaker = makerOf(node);
-		if (nodeMaker === maker) return null;
-		if (util.types.isGeneratorFunction(value) || util.types.isAsyncFunction(value)) return kindStandIn(nodeMaker, node, value);
-		return membrane(nodeMaker, node, value);
-	}
-
 	if (value === null || (typeof value !== "object" && typeof value !== "function")) return value;
 	// A crossing view handed in stands for a value: this module's own comes back as itself, another module's stays a
 	// view, decided for this module.
@@ -1138,6 +1133,33 @@ function handInAll(maker, args, owner = maker.owner) {
 const INBOUND_BY_MAKER = new WeakMap();
 
 /**
+ * Whether a caller's plain array or object holds a stand-in of the module's own, within the code search ({@link searchDepth}).
+ * @param {object} maker - The module's record.
+ * @param {object} value - The value.
+ * @param {number} depth - Levels still allowed.
+ * @param {{remaining: number}} budget - Properties still allowed.
+ * @returns {boolean} True when it does.
+ * @private
+ */
+function holdsOwnStandIn(maker, value, depth, budget) {
+	if (depth <= 0 || util.types.isProxy(value)) return false;
+	const prototype = Reflect.getPrototypeOf(value);
+	if (prototype !== Objects.prototype && prototype !== Arrays.prototype && prototype !== null) return false;
+	if (Arrays.isArray(value) && value.length > budget.remaining) return false;
+	const keys = Reflect.ownKeys(value);
+	budget.remaining -= keys.length;
+	if (budget.remaining < 0) return false;
+	for (let ofIndex = 0, ofList = keys; ofIndex < ofList.length; ofIndex++) {
+		const key = ofList[ofIndex];
+		const member = Reflect.getOwnPropertyDescriptor(value, key)?.value;
+		if (member === null || (typeof member !== "object" && typeof member !== "function")) continue;
+		if (WeakMapMethods.get(STAND_IN_RECORDS, member)?.maker === maker) return true;
+		if (typeof member === "object" && holdsOwnStandIn(maker, member, depth - 1, budget)) return true;
+	}
+	return false;
+}
+
+/**
  * A caller's plain array or object handed to a module, as the module sees it (#597): when it holds a stand-in of the
  * module's own value, a view of it reading each such stand-in as the value itself (`list.includes(own)`), and
  * writing what the module puts in it as the module hands it out. Anything else is the value itself. A member the
@@ -1149,33 +1171,6 @@ const INBOUND_BY_MAKER = new WeakMap();
  * @private
  */
 function inboundView(maker, value, owner = maker.owner) {
-	/**
-	 * Whether a caller's plain array or object holds a stand-in of the module's own, within the code search ({@link searchDepth}).
-	 * @param {object} maker - The module's record.
-	 * @param {object} value - The value.
-	 * @param {number} depth - Levels still allowed.
-	 * @param {{remaining: number}} budget - Properties still allowed.
-	 * @returns {boolean} True when it does.
-	 * @private
-	 */
-	function holdsOwnStandIn(maker, value, depth, budget) {
-		if (depth <= 0 || util.types.isProxy(value)) return false;
-		const prototype = Reflect.getPrototypeOf(value);
-		if (prototype !== Objects.prototype && prototype !== Arrays.prototype && prototype !== null) return false;
-		if (Arrays.isArray(value) && value.length > budget.remaining) return false;
-		const keys = Reflect.ownKeys(value);
-		budget.remaining -= keys.length;
-		if (budget.remaining < 0) return false;
-		for (let ofIndex = 0, ofList = keys; ofIndex < ofList.length; ofIndex++) {
-			const key = ofList[ofIndex];
-			const member = Reflect.getOwnPropertyDescriptor(value, key)?.value;
-			if (member === null || (typeof member !== "object" && typeof member !== "function")) continue;
-			if (WeakMapMethods.get(STAND_IN_RECORDS, member)?.maker === maker) return true;
-			if (typeof member === "object" && holdsOwnStandIn(maker, member, depth - 1, budget)) return true;
-		}
-		return false;
-	}
-
 	if (typeof value !== "object") return value;
 	let views = WeakMapMethods.get(INBOUND_BY_MAKER, maker);
 	const existing = views == null ? undefined : WeakMapMethods.get(views, value);
@@ -1716,6 +1711,23 @@ function frontingNodeNow(slothlet, fn) {
 }
 
 /**
+ * The instance whose node fronts the class a prototype is the `prototype` of, found by descriptors (see
+ * {@link CLASS_INSTANCES}), or null.
+ * @param {object} prototype - The prototype.
+ * @returns {object|null} The instance.
+ * @private
+ */
+function classInstanceOf(prototype) {
+	if (util.types.isProxy(prototype)) return null;
+	const owner = Reflect.getOwnPropertyDescriptor(prototype, "constructor")?.value;
+	return typeof owner === "function"
+		? ((WeakMapMethods.get(CLASS_INSTANCES, owner) == null
+				? undefined
+				: WeakRefMethods.deref(WeakMapMethods.get(CLASS_INSTANCES, owner))) ?? null)
+		: null;
+}
+
+/**
  * Where a prototype of a module's is known to be read (#667): every path recorded for it, and the `prototype` of the
  * class it is the prototype of at every name a node exports the class as, found by descriptors so none of the module's
  * code runs to find it, whether or not anything read it yet. `undefined` for any other value.
@@ -1725,23 +1737,6 @@ function frontingNodeNow(slothlet, fn) {
  * @private
  */
 function knownPrototype(slothlet, value) {
-	/**
-	 * The instance whose node fronts the class a prototype is the `prototype` of, found by descriptors (see
-	 * {@link CLASS_INSTANCES}), or null.
-	 * @param {object} prototype - The prototype.
-	 * @returns {object|null} The instance.
-	 * @private
-	 */
-	function classInstanceOf(prototype) {
-		if (util.types.isProxy(prototype)) return null;
-		const owner = Reflect.getOwnPropertyDescriptor(prototype, "constructor")?.value;
-		return typeof owner === "function"
-			? ((WeakMapMethods.get(CLASS_INSTANCES, owner) == null
-					? undefined
-					: WeakRefMethods.deref(WeakMapMethods.get(CLASS_INSTANCES, owner))) ?? null)
-			: null;
-	}
-
 	if (value === null || typeof value !== "object") return undefined;
 	const record = WeakMapMethods.get(PROTOTYPE_PATHS, value);
 	const instance = record?.slothlet ?? slothlet ?? classInstanceOf(value);
@@ -1764,6 +1759,83 @@ function knownPrototype(slothlet, value) {
 const CARRIER_VIEWS = new WeakMap();
 
 /**
+ * A carrier as it reaches `reader` (see {@link carryTo}): a view handing each data member on as the reader would
+ * get it, writing through to the carrier. A frozen carrier holds nothing a write could change, so the reader is handed a
+ * frozen copy of it instead, each member carried, which the engine then checks the view's answers against. The same
+ * view each time, for the same carrier and reader.
+ * @param {object} value - The carrier.
+ * @param {object} reader - Who it reaches.
+ * @param {object|null} slothlet - The instance it crosses in, when known.
+ * @returns {object} The view.
+ * @private
+ */
+function carrierView(value, reader, slothlet) {
+	let byReader = WeakMapMethods.get(CARRIER_VIEWS, value);
+	const existing = byReader == null ? undefined : WeakMapMethods.get(byReader, reader);
+	if (existing) return existing;
+	const carry = (member) => carryTo(member, reader, slothlet);
+	let view;
+	if (Objects.isFrozen(value)) {
+		view = Arrays.isArray(value) ? [] : Objects.create(Reflect.getPrototypeOf(value));
+		for (let ofIndex = 0, ofList = Reflect.ownKeys(value); ofIndex < ofList.length; ofIndex++) {
+			const key = ofList[ofIndex];
+			const descriptor = Reflect.getOwnPropertyDescriptor(value, key);
+			Reflect.defineProperty(
+				view,
+				key,
+				"value" in descriptor ? { __proto__: null, ...descriptor, value: carry(descriptor.value) } : descriptor
+			);
+		}
+		Objects.freeze(view);
+	} else {
+		// A member held read-only and non-configurable must be reported as it is (proxy invariant).
+		const fixed = (descriptor) => descriptor && "value" in descriptor && !descriptor.configurable && !descriptor.writable;
+		view = new NativeProxy(value, {
+			get: (target, prop, receiver) => {
+				const member = Reflect.get(target, prop, receiver === view ? target : receiver);
+				return fixed(Reflect.getOwnPropertyDescriptor(target, prop)) ? member : carry(member);
+			},
+			set: (target, prop, next, receiver) => Reflect.set(target, prop, next, receiver === view ? target : receiver),
+			getOwnPropertyDescriptor: (target, prop) => {
+				const descriptor = Reflect.getOwnPropertyDescriptor(target, prop);
+				return !descriptor || !("value" in descriptor) || fixed(descriptor)
+					? descriptor
+					: { __proto__: null, ...descriptor, value: carry(descriptor.value) };
+			}
+		});
+	}
+	if (!byReader) WeakMapMethods.set(CARRIER_VIEWS, value, (byReader = new WeakMap()));
+	WeakMapMethods.set(byReader, reader, view);
+	return view;
+}
+
+/**
+ * Whether a carrier ({@link isCarrier}) holds a prototype of a module's as a data member, at any depth within
+ * the code search ({@link searchDepth}). Nothing of the value runs to decide: an accessor is passed over.
+ * @param {object|null} slothlet - The instance it crossed in, when known.
+ * @param {object} value - The carrier.
+ * @param {number} depth - Levels still allowed.
+ * @param {{remaining: number}} budget - Properties still allowed.
+ * @returns {boolean} True when it does.
+ * @private
+ */
+function carriesPrototype(slothlet, value, depth, budget) {
+	if (depth <= 0) return false;
+	if (Arrays.isArray(value) && value.length > budget.remaining) return false;
+	const keys = Reflect.ownKeys(value);
+	budget.remaining -= keys.length;
+	if (budget.remaining < 0) return false;
+	for (let ofIndex = 0, ofList = keys; ofIndex < ofList.length; ofIndex++) {
+		const key = ofList[ofIndex];
+		const member = Reflect.getOwnPropertyDescriptor(value, key)?.value;
+		if (member === null || typeof member !== "object" || util.types.isProxy(member)) continue;
+		if (knownPrototype(slothlet, member) !== undefined) return true;
+		if (isCarrier(member) && carriesPrototype(slothlet, member, depth - 1, budget)) return true;
+	}
+	return false;
+}
+
+/**
  * What a value reaches `reader` as when it crosses from one module to another through slothlet (#667): an argument, an
  * error a call threw or rejected with, a hook's payload, or an event's payload ({@link eventPayloadFor}). A
  * prototype of a module's reaches it as reading it at its path would
@@ -1778,83 +1850,6 @@ const CARRIER_VIEWS = new WeakMap();
  * @private
  */
 function carryTo(value, reader, slothlet) {
-	/**
-	 * A carrier as it reaches `reader` (see {@link carryTo}): a view handing each data member on as the reader would
-	 * get it, writing through to the carrier. A frozen carrier holds nothing a write could change, so the reader is handed a
-	 * frozen copy of it instead, each member carried, which the engine then checks the view's answers against. The same
-	 * view each time, for the same carrier and reader.
-	 * @param {object} value - The carrier.
-	 * @param {object} reader - Who it reaches.
-	 * @param {object|null} slothlet - The instance it crosses in, when known.
-	 * @returns {object} The view.
-	 * @private
-	 */
-	function carrierView(value, reader, slothlet) {
-		let byReader = WeakMapMethods.get(CARRIER_VIEWS, value);
-		const existing = byReader == null ? undefined : WeakMapMethods.get(byReader, reader);
-		if (existing) return existing;
-		const carry = (member) => carryTo(member, reader, slothlet);
-		let view;
-		if (Objects.isFrozen(value)) {
-			view = Arrays.isArray(value) ? [] : Objects.create(Reflect.getPrototypeOf(value));
-			for (let ofIndex = 0, ofList = Reflect.ownKeys(value); ofIndex < ofList.length; ofIndex++) {
-				const key = ofList[ofIndex];
-				const descriptor = Reflect.getOwnPropertyDescriptor(value, key);
-				Reflect.defineProperty(
-					view,
-					key,
-					"value" in descriptor ? { __proto__: null, ...descriptor, value: carry(descriptor.value) } : descriptor
-				);
-			}
-			Objects.freeze(view);
-		} else {
-			// A member held read-only and non-configurable must be reported as it is (proxy invariant).
-			const fixed = (descriptor) => descriptor && "value" in descriptor && !descriptor.configurable && !descriptor.writable;
-			view = new NativeProxy(value, {
-				get: (target, prop, receiver) => {
-					const member = Reflect.get(target, prop, receiver === view ? target : receiver);
-					return fixed(Reflect.getOwnPropertyDescriptor(target, prop)) ? member : carry(member);
-				},
-				set: (target, prop, next, receiver) => Reflect.set(target, prop, next, receiver === view ? target : receiver),
-				getOwnPropertyDescriptor: (target, prop) => {
-					const descriptor = Reflect.getOwnPropertyDescriptor(target, prop);
-					return !descriptor || !("value" in descriptor) || fixed(descriptor)
-						? descriptor
-						: { __proto__: null, ...descriptor, value: carry(descriptor.value) };
-				}
-			});
-		}
-		if (!byReader) WeakMapMethods.set(CARRIER_VIEWS, value, (byReader = new WeakMap()));
-		WeakMapMethods.set(byReader, reader, view);
-		return view;
-	}
-
-	/**
-	 * Whether a carrier ({@link isCarrier}) holds a prototype of a module's as a data member, at any depth within
-	 * the code search ({@link searchDepth}). Nothing of the value runs to decide: an accessor is passed over.
-	 * @param {object|null} slothlet - The instance it crossed in, when known.
-	 * @param {object} value - The carrier.
-	 * @param {number} depth - Levels still allowed.
-	 * @param {{remaining: number}} budget - Properties still allowed.
-	 * @returns {boolean} True when it does.
-	 * @private
-	 */
-	function carriesPrototype(slothlet, value, depth, budget) {
-		if (depth <= 0) return false;
-		if (Arrays.isArray(value) && value.length > budget.remaining) return false;
-		const keys = Reflect.ownKeys(value);
-		budget.remaining -= keys.length;
-		if (budget.remaining < 0) return false;
-		for (let ofIndex = 0, ofList = keys; ofIndex < ofList.length; ofIndex++) {
-			const key = ofList[ofIndex];
-			const member = Reflect.getOwnPropertyDescriptor(value, key)?.value;
-			if (member === null || typeof member !== "object" || util.types.isProxy(member)) continue;
-			if (knownPrototype(slothlet, member) !== undefined) return true;
-			if (isCarrier(member) && carriesPrototype(slothlet, member, depth - 1, budget)) return true;
-		}
-		return false;
-	}
-
 	if (value === null || typeof value !== "object" || reader === null || reader === HOST_READER) return value;
 	if (slothlet && !slothlet.handlers?.permissionManager?.isEnabled()) return value;
 	try {
@@ -1908,22 +1903,22 @@ function guardOn(slothlet) {
 }
 
 /**
+ * Whether a value is a crossing view.
+ * @param {*} value - The value.
+ * @returns {boolean} True for one.
+ * @private
+ */
+function isCrossing(value) {
+	return value !== null && (typeof value === "object" || typeof value === "function") && WeakMapMethods.has(CROSSINGS, value);
+}
+
+/**
  * The value a crossing view stands over, or the value itself.
  * @param {*} value - The value.
  * @returns {*} What it stands over.
  * @private
  */
 function uncross(value) {
-	/**
-	 * Whether a value is a crossing view.
-	 * @param {*} value - The value.
-	 * @returns {boolean} True for one.
-	 * @private
-	 */
-	function isCrossing(value) {
-		return value !== null && (typeof value === "object" || typeof value === "function") && WeakMapMethods.has(CROSSINGS, value);
-	}
-
 	return isCrossing(value) ? WeakMapMethods.get(CROSSINGS, value).original : value;
 }
 
@@ -1945,6 +1940,19 @@ const CROSSING_ORIGINS = new WeakMap();
 const CROSSED_PROTOTYPE_PATHS = new WeakMap();
 
 /**
+ * Whether a module's record (see {@link makerOf}) is held for a wrapper, without making one.
+ * @param {object} wrapper - A module's wrapper.
+ * @returns {boolean} True when it is.
+ * @private
+ */
+function hasMaker(wrapper) {
+	const makers = WeakMapMethods.get(MAKERS, wrapper.slothlet);
+	if (!makers) return false;
+	const moduleID = wrapper.____slothletInternal?.moduleID;
+	return moduleID ? MapMethods.has(makers.byID, moduleID) : WeakMapMethods.has(makers.byWrapper, wrapper);
+}
+
+/**
  * What the views made for a reader are kept under: its module's record (see {@link makerOf}), one per module of
  * an instance, or the reader itself when it is no module's wrapper, or one of a module removed since (its removal under
  * way included), whose record is gone and is not made again for it.
@@ -1953,19 +1961,6 @@ const CROSSED_PROTOTYPE_PATHS = new WeakMap();
  * @private
  */
 function crossKey(reader) {
-	/**
-	 * Whether a module's record (see {@link makerOf}) is held for a wrapper, without making one.
-	 * @param {object} wrapper - A module's wrapper.
-	 * @returns {boolean} True when it is.
-	 * @private
-	 */
-	function hasMaker(wrapper) {
-		const makers = WeakMapMethods.get(MAKERS, wrapper.slothlet);
-		if (!makers) return false;
-		const moduleID = wrapper.____slothletInternal?.moduleID;
-		return moduleID ? MapMethods.has(makers.byID, moduleID) : WeakMapMethods.has(makers.byWrapper, wrapper);
-	}
-
 	if (!reader?.____slothletInternal || !reader.slothlet) return reader;
 	if (!hasMaker(reader) && reader.slothlet.handlers?.apiManager?.isRemovedCaller?.(reader) === true) return reader;
 	return viewGroup(reader);
@@ -2108,6 +2103,125 @@ function mayWriteFrom(slothlet, reader, from) {
 }
 
 /**
+ * Whether a value inherits, from a prototype of a module's class, a member private to that module that privacy keeps
+ * from `reader` ({@link readerHoldsPrototype}): held as itself, the value would hand it over unchecked. Found by
+ * descriptors alone.
+ * @param {object} slothlet - The instance.
+ * @param {object} reader - A module's wrapper.
+ * @param {*} value - The value, a stand-in or the async runtime's context wrapper standing for the value behind it.
+ * @returns {boolean} True when it does.
+ * @private
+ */
+function inheritsPrivateKept(slothlet, reader, value) {
+	if (value === null || (typeof value !== "object" && typeof value !== "function")) return false;
+	const subject = crossSubject(value);
+	if (util.types.isProxy(subject)) return false;
+	for (let holder = Reflect.getPrototypeOf(subject), depth = 0; holder !== null && depth < 64; depth++) {
+		if (util.types.isProxy(holder) || WeakSetMethods.has(INTRINSICS, holder) || isSharedValue(holder)) return false;
+		if (knownPrototype(slothlet, holder) !== undefined) {
+			const keys = Reflect.ownKeys(holder);
+			for (let ofIndex = 0; ofIndex < keys.length; ofIndex++) {
+				const key = keys[ofIndex];
+				if (typeof key === "string" && StringMethods.charCodeAt(key, 0) === 95) return !readerHoldsPrototype(slothlet, reader, holder);
+			}
+		}
+		holder = Reflect.getPrototypeOf(holder);
+	}
+	return false;
+}
+
+/**
+ * Whether a value holds none of a module's code, as far as the code search ({@link searchDepth}) reaches: no function, no Proxy, no class
+ * instance, no prototype a module wrote, at any depth. A stand-in and the async runtime's context wrapper stand for the
+ * value behind them. Nothing of the value runs to decide.
+ * @param {*} value - The value.
+ * @param {object|null} slothlet - The instance, whose `permissions.search` bounds the search.
+ * @returns {boolean} True for plain data.
+ * @private
+ */
+function holdsNoCode(value, slothlet) {
+	if (value === null || (typeof value !== "object" && typeof value !== "function")) return true;
+	const subject = crossSubject(value);
+	if (typeof subject === "function" || util.types.isProxy(subject)) return false;
+	try {
+		return !isCodeObject(subject) && !memberHoldsCode(subject, searchDepth(slothlet) + 1, searchBudget(slothlet));
+	} catch {
+		// A value that refuses to be described is taken to hold code.
+		return false;
+	}
+}
+
+/**
+ * Whether a carrier ({@link isCarrier}) holds, as a data member at any depth within the code search ({@link searchDepth}), a
+ * function that runs for the module handing it on ({@link runsForHander}).
+ * @param {object} value - The carrier.
+ * @param {object} from - The wrapper of the module handing it on.
+ * @param {number} depth - Levels still allowed.
+ * @param {{remaining: number}} budget - Properties still allowed.
+ * @returns {boolean} True when it does.
+ * @private
+ */
+function carriesHanded(value, from, depth, budget) {
+	if (depth <= 0) return false;
+	if (Arrays.isArray(value) && value.length > budget.remaining) return false;
+	const keys = Reflect.ownKeys(value);
+	budget.remaining -= keys.length;
+	if (budget.remaining < 0) return false;
+	for (let ofIndex = 0, ofList = keys; ofIndex < ofList.length; ofIndex++) {
+		const member = Reflect.getOwnPropertyDescriptor(value, ofList[ofIndex])?.value;
+		if (member === null || (typeof member !== "object" && typeof member !== "function")) continue;
+		if (runsForHander(member, from)) return true;
+		if (typeof member === "object" && isCarrier(member) && carriesHanded(member, from, depth - 1, budget)) return true;
+	}
+	return false;
+}
+
+/**
+ * Whether a value a module hands on stays a view for every other module, however much the receiver may write: a
+ * function that runs for the module handing it ({@link runsForHander}), and plain data holding one as a member
+ * of its own at any depth within the code search ({@link searchDepth}) (`{ fn: Reflect.set, target }`), whose member reaches the receiver
+ * as that function's view ({@link crossHandedMember}). Nothing of the value runs to decide: an accessor is passed
+ * over.
+ * @param {*} value - The value handed on.
+ * @param {object|null} from - The wrapper of the module handing it on.
+ * @returns {boolean} True when it stays a view.
+ * @private
+ */
+function viewedForHander(value, from) {
+	if (runsForHander(value, from)) return true;
+	if (value === null || typeof value !== "object" || !from?.____slothletInternal || !isCarrier(value)) return false;
+	try {
+		return carriesHanded(value, from, searchDepth(from.slothlet), searchBudget(from.slothlet));
+	} catch {
+		// A value that refuses to be described is viewed.
+		return true;
+	}
+}
+
+/**
+ * Whether, and why, a value reaches `reader` as itself by write rights. `"writer"`: the reader may make every write at
+ * the path the value comes from ({@link mayWriteFrom}), as the owner may. `"written"`: the module the value
+ * comes from may make every write at the reader's path, and the value holds none of that module's code
+ * ({@link holdsNoCode}): what the reader hands back, or stores where that module reads it as itself, stays the
+ * value, and there is no code of the module's in it for the reader to change. Neither holds across a write rule that
+ * refuses the other side: a module refused a write to the other is handed views of the other's values and has its own
+ * handed on as views, since what the other stores into a value it holds as itself comes back.
+ * @param {object} slothlet - The instance.
+ * @param {object} reader - A module's wrapper.
+ * @param {object|null} from - The wrapper of the module the value comes from.
+ * @param {*} value - The value.
+ * @returns {"writer"|"written"|null} Why it is handed as itself, or `null` when it is viewed.
+ * @private
+ */
+function handedAsItself(slothlet, reader, from, value) {
+	if (!from?.____slothletInternal) return null;
+	if (mayWriteFrom(slothlet, reader, from)) return writeDeniedWithin(slothlet, from, reader) ? null : "writer";
+	if (mayWriteFrom(slothlet, from, reader) && holdsNoCode(value, slothlet))
+		return writeDeniedWithin(slothlet, reader, from) ? null : "written";
+	return null;
+}
+
+/**
  * {@link handedAsItself} for a value: a value that stays a view for every module it is handed to
  * ({@link viewedForHander}) never reaches one as itself, and nor does an instance inheriting members private to
  * a module that privacy keeps from the reader ({@link inheritsPrivateKept}), however much it may write.
@@ -2119,125 +2233,6 @@ function mayWriteFrom(slothlet, reader, from) {
  * @private
  */
 function handedAsItselfFor(value, slothlet, reader, from) {
-	/**
-	 * Whether a value inherits, from a prototype of a module's class, a member private to that module that privacy keeps
-	 * from `reader` ({@link readerHoldsPrototype}): held as itself, the value would hand it over unchecked. Found by
-	 * descriptors alone.
-	 * @param {object} slothlet - The instance.
-	 * @param {object} reader - A module's wrapper.
-	 * @param {*} value - The value, a stand-in or the async runtime's context wrapper standing for the value behind it.
-	 * @returns {boolean} True when it does.
-	 * @private
-	 */
-	function inheritsPrivateKept(slothlet, reader, value) {
-		if (value === null || (typeof value !== "object" && typeof value !== "function")) return false;
-		const subject = crossSubject(value);
-		if (util.types.isProxy(subject)) return false;
-		for (let holder = Reflect.getPrototypeOf(subject), depth = 0; holder !== null && depth < 64; depth++) {
-			if (util.types.isProxy(holder) || WeakSetMethods.has(INTRINSICS, holder) || isSharedValue(holder)) return false;
-			if (knownPrototype(slothlet, holder) !== undefined) {
-				const keys = Reflect.ownKeys(holder);
-				for (let ofIndex = 0; ofIndex < keys.length; ofIndex++) {
-					const key = keys[ofIndex];
-					if (typeof key === "string" && StringMethods.charCodeAt(key, 0) === 95) return !readerHoldsPrototype(slothlet, reader, holder);
-				}
-			}
-			holder = Reflect.getPrototypeOf(holder);
-		}
-		return false;
-	}
-
-	/**
-	 * Whether a value holds none of a module's code, as far as the code search ({@link searchDepth}) reaches: no function, no Proxy, no class
-	 * instance, no prototype a module wrote, at any depth. A stand-in and the async runtime's context wrapper stand for the
-	 * value behind them. Nothing of the value runs to decide.
-	 * @param {*} value - The value.
-	 * @param {object|null} slothlet - The instance, whose `permissions.search` bounds the search.
-	 * @returns {boolean} True for plain data.
-	 * @private
-	 */
-	function holdsNoCode(value, slothlet) {
-		if (value === null || (typeof value !== "object" && typeof value !== "function")) return true;
-		const subject = crossSubject(value);
-		if (typeof subject === "function" || util.types.isProxy(subject)) return false;
-		try {
-			return !isCodeObject(subject) && !memberHoldsCode(subject, searchDepth(slothlet) + 1, searchBudget(slothlet));
-		} catch {
-			// A value that refuses to be described is taken to hold code.
-			return false;
-		}
-	}
-
-	/**
-	 * Whether a value a module hands on stays a view for every other module, however much the receiver may write: a
-	 * function that runs for the module handing it ({@link runsForHander}), and plain data holding one as a member
-	 * of its own at any depth within the code search ({@link searchDepth}) (`{ fn: Reflect.set, target }`), whose member reaches the receiver
-	 * as that function's view ({@link crossHandedMember}). Nothing of the value runs to decide: an accessor is passed
-	 * over.
-	 * @param {*} value - The value handed on.
-	 * @param {object|null} from - The wrapper of the module handing it on.
-	 * @returns {boolean} True when it stays a view.
-	 * @private
-	 */
-	function viewedForHander(value, from) {
-		/**
-		 * Whether a carrier ({@link isCarrier}) holds, as a data member at any depth within the code search ({@link searchDepth}), a
-		 * function that runs for the module handing it on ({@link runsForHander}).
-		 * @param {object} value - The carrier.
-		 * @param {object} from - The wrapper of the module handing it on.
-		 * @param {number} depth - Levels still allowed.
-		 * @param {{remaining: number}} budget - Properties still allowed.
-		 * @returns {boolean} True when it does.
-		 * @private
-		 */
-		function carriesHanded(value, from, depth, budget) {
-			if (depth <= 0) return false;
-			if (Arrays.isArray(value) && value.length > budget.remaining) return false;
-			const keys = Reflect.ownKeys(value);
-			budget.remaining -= keys.length;
-			if (budget.remaining < 0) return false;
-			for (let ofIndex = 0, ofList = keys; ofIndex < ofList.length; ofIndex++) {
-				const member = Reflect.getOwnPropertyDescriptor(value, ofList[ofIndex])?.value;
-				if (member === null || (typeof member !== "object" && typeof member !== "function")) continue;
-				if (runsForHander(member, from)) return true;
-				if (typeof member === "object" && isCarrier(member) && carriesHanded(member, from, depth - 1, budget)) return true;
-			}
-			return false;
-		}
-
-		if (runsForHander(value, from)) return true;
-		if (value === null || typeof value !== "object" || !from?.____slothletInternal || !isCarrier(value)) return false;
-		try {
-			return carriesHanded(value, from, searchDepth(from.slothlet), searchBudget(from.slothlet));
-		} catch {
-			// A value that refuses to be described is viewed.
-			return true;
-		}
-	}
-
-	/**
-	 * Whether, and why, a value reaches `reader` as itself by write rights. `"writer"`: the reader may make every write at
-	 * the path the value comes from ({@link mayWriteFrom}), as the owner may. `"written"`: the module the value
-	 * comes from may make every write at the reader's path, and the value holds none of that module's code
-	 * ({@link holdsNoCode}): what the reader hands back, or stores where that module reads it as itself, stays the
-	 * value, and there is no code of the module's in it for the reader to change. Neither holds across a write rule that
-	 * refuses the other side: a module refused a write to the other is handed views of the other's values and has its own
-	 * handed on as views, since what the other stores into a value it holds as itself comes back.
-	 * @param {object} slothlet - The instance.
-	 * @param {object} reader - A module's wrapper.
-	 * @param {object|null} from - The wrapper of the module the value comes from.
-	 * @param {*} value - The value.
-	 * @returns {"writer"|"written"|null} Why it is handed as itself, or `null` when it is viewed.
-	 * @private
-	 */
-	function handedAsItself(slothlet, reader, from, value) {
-		if (!from?.____slothletInternal) return null;
-		if (mayWriteFrom(slothlet, reader, from)) return writeDeniedWithin(slothlet, from, reader) ? null : "writer";
-		if (mayWriteFrom(slothlet, from, reader) && holdsNoCode(value, slothlet))
-			return writeDeniedWithin(slothlet, reader, from) ? null : "written";
-		return null;
-	}
-
 	if (viewedForHander(value, from)) return null;
 	const itself = handedAsItself(slothlet, reader, from, value);
 	return itself !== null && inheritsPrivateKept(slothlet, reader, value) ? null : itself;
@@ -2280,6 +2275,129 @@ function asOneModule(slothlet, a, b) {
 }
 
 /**
+ * Whether an object whose internal data holds no references ({@link isOpaqueData}) holds nothing else either,
+ * so it can be handed on as it is: its prototype is the language's or Node's own, and it has no member of its own beyond
+ * what its kind gives it. A typed array's members under string keys are read only where `permissions.gating.buffers`
+ * asks for it: listing them lists every index, which costs milliseconds on a buffer of any size. Otherwise only its
+ * prototype and its symbol keys are checked.
+ * @param {object} value - Such an object.
+ * @param {object|null} slothlet - The instance it crosses in.
+ * @returns {boolean} True when nothing but its own data can be reached through it.
+ * @private
+ */
+function isPristineData(value, slothlet) {
+	const prototype = Reflect.getPrototypeOf(value);
+	if (prototype !== null && !WeakSetMethods.has(INTRINSICS, prototype) && !isSharedValue(prototype)) return false;
+	const types = util.types;
+	if (types.isArrayBufferView(value) && !types.isDataView(value)) {
+		if (Objects.getOwnPropertySymbols(value).length !== 0) return false;
+		const listed = slothlet?.config?.permissions?.gating?.buffers;
+		if (listed !== true && typeof listed !== "number") return true;
+		// Past the cap the array is not listed, as with the option off.
+		if (listed !== true && Reflect.apply(TYPED_ARRAY_BYTE_LENGTH, value, []) > listed * 1024) return true;
+		// Its own keys are its indices, then any member stored under another name.
+		return Reflect.ownKeys(value).length === Reflect.apply(TYPED_ARRAY_LENGTH, value, []);
+	}
+	const keys = Reflect.ownKeys(value);
+	if (keys.length === 0) return true;
+	if (types.isRegExp(value)) return keys.length === 1 && keys[0] === "lastIndex";
+	if (types.isBoxedPrimitive(value) && typeof ObjectMethods.valueOf(value) === "string") {
+		// A boxed string's own keys are its indices and its length.
+		return keys.length === ObjectMethods.valueOf(value).length + 1 && keys[keys.length - 1] === "length";
+	}
+	return false;
+}
+
+/**
+ * Whether an object's internal data holds no reference to another object: a date, a regular expression, a buffer, a
+ * typed array, a `DataView`, or a boxed primitive.
+ * @param {object} value - An object that is not a Proxy.
+ * @returns {boolean} True for one.
+ * @private
+ */
+function isOpaqueData(value) {
+	const types = util.types;
+	return (
+		types.isDate(value) ||
+		types.isRegExp(value) ||
+		types.isAnyArrayBuffer(value) ||
+		types.isArrayBufferView(value) ||
+		types.isBoxedPrimitive(value)
+	);
+}
+
+/**
+ * Whether an object is the own prototype of a class some module or the host wrote (`C.prototype`), told by
+ * descriptors alone: its `constructor` is a function whose `prototype` is the object. The language's and packages'
+ * own prototypes are not.
+ * @param {object} value - An object that is not a Proxy.
+ * @returns {boolean} True for such a prototype.
+ * @private
+ */
+function isWrittenClassPrototype(value) {
+	if (WeakSetMethods.has(INTRINSICS, value) || isSharedValue(value) || isSlothletValue(value)) return false;
+	const constructor = Reflect.getOwnPropertyDescriptor(value, "constructor")?.value;
+	return typeof constructor === "function" && Reflect.getOwnPropertyDescriptor(constructor, "prototype")?.value === value;
+}
+
+/**
+ * The guard's promise of a plain promise another module handed on: it settles as the promise does, with what it
+ * settles to crossed for the reader. The same promise for the same module every time.
+ * @param {Promise} promise - The promise.
+ * @param {object} reader - Who it reaches.
+ * @param {object} slothlet - The instance.
+ * @param {object|null} from - The wrapper of the module it comes from.
+ * @returns {Promise} The guard's promise.
+ * @private
+ */
+function crossPromise(promise, reader, slothlet, from) {
+	const key = crossKey(reader);
+	let byKey = WeakMapMethods.get(CROSSED_PROMISES, promise);
+	const existing = byKey == null ? undefined : MapMethods.get(byKey, key);
+	if (existing) return existing;
+	const crossed = Reflect.apply(SLOT_READERS.then, promise, [
+		(settled) => crossTo(settled, reader, slothlet, from),
+		(reason) => {
+			throw crossTo(reason, reader, slothlet, from);
+		}
+	]);
+	if (!byKey) WeakMapMethods.set(CROSSED_PROMISES, promise, (byKey = new Map()));
+	MapMethods.set(byKey, key, crossed);
+	return crossed;
+}
+
+/**
+ * Whether a value another module hands on is seen by its reader through a crossing view while the permission system is
+ * on: any object or function that holds, or can later be given, a reference to another object. Primitives, the
+ * language's own objects and functions, packages' and slothlet's own values, slothlet's views, and objects whose
+ * internal data holds no references and that hold nothing else (dates, regular expressions, buffers, typed arrays, boxed
+ * primitives, see {@link isPristineData}) pass as they are. A stand-in of another module's code is viewed like
+ * the code it stands for.
+ * @param {object|Function} value - The value.
+ * @param {object|null} [slothlet] - The instance it crosses in, whose `permissions.gating.buffers` decides whether a
+ *   typed array's own keys are listed.
+ * @returns {boolean} True when it is viewed.
+ * @private
+ */
+function needsCrossing(value, slothlet = null) {
+	if (typeof value === "object" && runtime_unwrapClassInstance(value) !== value) return true;
+	if (WeakMapMethods.has(STAND_IN_RECORDS, value)) return true;
+	if (WeakSetMethods.has(INTRINSICS, value) || isSlothletValue(value) || isSharedValue(value)) return false;
+	if (
+		WeakMapMethods.has(SELF_MEMBER_VIEWS, value) ||
+		WeakMapMethods.has(SELF_VIEW_NODES, value) ||
+		WeakSetMethods.has(GUARD_VIEWS, value) ||
+		WeakMapMethods.has(INBOUND_VIEWS, value)
+	)
+		return false;
+	if (resolveWrapper(value) !== null || WeakMapMethods.has(capturedViewChildren, value) || isFrameworkInternal(value)) return false;
+	if (typeof value === "function") return util.types.isProxy(value) || !isBuiltinFunction(value);
+	if (util.types.isProxy(value)) return true;
+	if (isOpaqueData(value)) return !isPristineData(value, slothlet);
+	return true;
+}
+
+/**
  * What a value reaches `reader` as when another module hands it on while the permission system is on (the class
  * prototype guard): the reader may change data it is handed, but never the code of a module it may not write, however
  * it gets to it. A prototype a module wrote is checked ({@link writtenPrototypeFor}); any other object or
@@ -2298,129 +2416,6 @@ function asOneModule(slothlet, a, b) {
  * @private
  */
 function crossTo(value, reader, slothlet, from = null) {
-	/**
-	 * Whether an object whose internal data holds no references ({@link isOpaqueData}) holds nothing else either,
-	 * so it can be handed on as it is: its prototype is the language's or Node's own, and it has no member of its own beyond
-	 * what its kind gives it. A typed array's members under string keys are read only where `permissions.gating.buffers`
-	 * asks for it: listing them lists every index, which costs milliseconds on a buffer of any size. Otherwise only its
-	 * prototype and its symbol keys are checked.
-	 * @param {object} value - Such an object.
-	 * @param {object|null} slothlet - The instance it crosses in.
-	 * @returns {boolean} True when nothing but its own data can be reached through it.
-	 * @private
-	 */
-	function isPristineData(value, slothlet) {
-		const prototype = Reflect.getPrototypeOf(value);
-		if (prototype !== null && !WeakSetMethods.has(INTRINSICS, prototype) && !isSharedValue(prototype)) return false;
-		const types = util.types;
-		if (types.isArrayBufferView(value) && !types.isDataView(value)) {
-			if (Objects.getOwnPropertySymbols(value).length !== 0) return false;
-			const listed = slothlet?.config?.permissions?.gating?.buffers;
-			if (listed !== true && typeof listed !== "number") return true;
-			// Past the cap the array is not listed, as with the option off.
-			if (listed !== true && Reflect.apply(TYPED_ARRAY_BYTE_LENGTH, value, []) > listed * 1024) return true;
-			// Its own keys are its indices, then any member stored under another name.
-			return Reflect.ownKeys(value).length === Reflect.apply(TYPED_ARRAY_LENGTH, value, []);
-		}
-		const keys = Reflect.ownKeys(value);
-		if (keys.length === 0) return true;
-		if (types.isRegExp(value)) return keys.length === 1 && keys[0] === "lastIndex";
-		if (types.isBoxedPrimitive(value) && typeof ObjectMethods.valueOf(value) === "string") {
-			// A boxed string's own keys are its indices and its length.
-			return keys.length === ObjectMethods.valueOf(value).length + 1 && keys[keys.length - 1] === "length";
-		}
-		return false;
-	}
-
-	/**
-	 * Whether an object's internal data holds no reference to another object: a date, a regular expression, a buffer, a
-	 * typed array, a `DataView`, or a boxed primitive.
-	 * @param {object} value - An object that is not a Proxy.
-	 * @returns {boolean} True for one.
-	 * @private
-	 */
-	function isOpaqueData(value) {
-		const types = util.types;
-		return (
-			types.isDate(value) ||
-			types.isRegExp(value) ||
-			types.isAnyArrayBuffer(value) ||
-			types.isArrayBufferView(value) ||
-			types.isBoxedPrimitive(value)
-		);
-	}
-
-	/**
-	 * Whether an object is the own prototype of a class some module or the host wrote (`C.prototype`), told by
-	 * descriptors alone: its `constructor` is a function whose `prototype` is the object. The language's and packages'
-	 * own prototypes are not.
-	 * @param {object} value - An object that is not a Proxy.
-	 * @returns {boolean} True for such a prototype.
-	 * @private
-	 */
-	function isWrittenClassPrototype(value) {
-		if (WeakSetMethods.has(INTRINSICS, value) || isSharedValue(value) || isSlothletValue(value)) return false;
-		const constructor = Reflect.getOwnPropertyDescriptor(value, "constructor")?.value;
-		return typeof constructor === "function" && Reflect.getOwnPropertyDescriptor(constructor, "prototype")?.value === value;
-	}
-
-	/**
-	 * The guard's promise of a plain promise another module handed on: it settles as the promise does, with what it
-	 * settles to crossed for the reader. The same promise for the same module every time.
-	 * @param {Promise} promise - The promise.
-	 * @param {object} reader - Who it reaches.
-	 * @param {object} slothlet - The instance.
-	 * @param {object|null} from - The wrapper of the module it comes from.
-	 * @returns {Promise} The guard's promise.
-	 * @private
-	 */
-	function crossPromise(promise, reader, slothlet, from) {
-		const key = crossKey(reader);
-		let byKey = WeakMapMethods.get(CROSSED_PROMISES, promise);
-		const existing = byKey == null ? undefined : MapMethods.get(byKey, key);
-		if (existing) return existing;
-		const crossed = Reflect.apply(SLOT_READERS.then, promise, [
-			(settled) => crossTo(settled, reader, slothlet, from),
-			(reason) => {
-				throw crossTo(reason, reader, slothlet, from);
-			}
-		]);
-		if (!byKey) WeakMapMethods.set(CROSSED_PROMISES, promise, (byKey = new Map()));
-		MapMethods.set(byKey, key, crossed);
-		return crossed;
-	}
-
-	/**
-	 * Whether a value another module hands on is seen by its reader through a crossing view while the permission system is
-	 * on: any object or function that holds, or can later be given, a reference to another object. Primitives, the
-	 * language's own objects and functions, packages' and slothlet's own values, slothlet's views, and objects whose
-	 * internal data holds no references and that hold nothing else (dates, regular expressions, buffers, typed arrays, boxed
-	 * primitives, see {@link isPristineData}) pass as they are. A stand-in of another module's code is viewed like
-	 * the code it stands for.
-	 * @param {object|Function} value - The value.
-	 * @param {object|null} [slothlet] - The instance it crosses in, whose `permissions.gating.buffers` decides whether a
-	 *   typed array's own keys are listed.
-	 * @returns {boolean} True when it is viewed.
-	 * @private
-	 */
-	function needsCrossing(value, slothlet = null) {
-		if (typeof value === "object" && runtime_unwrapClassInstance(value) !== value) return true;
-		if (WeakMapMethods.has(STAND_IN_RECORDS, value)) return true;
-		if (WeakSetMethods.has(INTRINSICS, value) || isSlothletValue(value) || isSharedValue(value)) return false;
-		if (
-			WeakMapMethods.has(SELF_MEMBER_VIEWS, value) ||
-			WeakMapMethods.has(SELF_VIEW_NODES, value) ||
-			WeakSetMethods.has(GUARD_VIEWS, value) ||
-			WeakMapMethods.has(INBOUND_VIEWS, value)
-		)
-			return false;
-		if (resolveWrapper(value) !== null || WeakMapMethods.has(capturedViewChildren, value) || isFrameworkInternal(value)) return false;
-		if (typeof value === "function") return util.types.isProxy(value) || !isBuiltinFunction(value);
-		if (util.types.isProxy(value)) return true;
-		if (isOpaqueData(value)) return !isPristineData(value, slothlet);
-		return true;
-	}
-
 	if (value === null || (typeof value !== "object" && typeof value !== "function")) return value;
 	const crossing = WeakMapMethods.get(CROSSINGS, value);
 	if (crossing) {
@@ -2521,6 +2516,29 @@ function crossTo(value, reader, slothlet, from = null) {
 }
 
 /**
+ * Record the prototypes some module wrote in the chain of a value crossing between modules (see
+ * {@link MODULE_PROTOTYPES}). Only the chain is read, which runs none of the value's code; a Proxy in it, the
+ * language's own prototypes and those of Node's and slothlet's own values end the walk.
+ * @param {object|Function} value - The value crossing, not a Proxy.
+ * @returns {void}
+ * @private
+ */
+function notePrototypes(value) {
+	for (let link = Reflect.getPrototypeOf(value), depth = 0; link !== null && depth < 64; depth++) {
+		if (
+			WeakSetMethods.has(INTRINSICS, link) ||
+			WeakSetMethods.has(MODULE_PROTOTYPES, link) ||
+			util.types.isProxy(link) ||
+			isSharedExport(link)
+		)
+			return;
+		if (isSlothletValue(link)) return;
+		WeakSetMethods.add(MODULE_PROTOTYPES, link);
+		link = Reflect.getPrototypeOf(link);
+	}
+}
+
+/**
  * A crossing view (see {@link crossTo}): the value to every reflection, read and written through, with every
  * value read from it — a member, a prototype, a call's result or error, a member of a `Map` or `Set`, a `WeakRef`'s
  * target — reaching the reader as values another module hands on do, and every value the reader puts into it reaching
@@ -2537,29 +2555,6 @@ function crossTo(value, reader, slothlet, from = null) {
  * @private
  */
 function crossView(original, reader, slothlet, from, handed = false) {
-	/**
-	 * Record the prototypes some module wrote in the chain of a value crossing between modules (see
-	 * {@link MODULE_PROTOTYPES}). Only the chain is read, which runs none of the value's code; a Proxy in it, the
-	 * language's own prototypes and those of Node's and slothlet's own values end the walk.
-	 * @param {object|Function} value - The value crossing, not a Proxy.
-	 * @returns {void}
-	 * @private
-	 */
-	function notePrototypes(value) {
-		for (let link = Reflect.getPrototypeOf(value), depth = 0; link !== null && depth < 64; depth++) {
-			if (
-				WeakSetMethods.has(INTRINSICS, link) ||
-				WeakSetMethods.has(MODULE_PROTOTYPES, link) ||
-				util.types.isProxy(link) ||
-				isSharedExport(link)
-			)
-				return;
-			if (isSlothletValue(link)) return;
-			WeakSetMethods.add(MODULE_PROTOTYPES, link);
-			link = Reflect.getPrototypeOf(link);
-		}
-	}
-
 	// The views of a value: its first module's held inline, any other module's in a map made only then.
 	const key = crossKey(reader);
 	const views = handed ? null : WeakMapMethods.get(CROSSING_VIEWS, original);
@@ -2744,6 +2739,40 @@ function crossSettle(shadow, state) {
 }
 
 /**
+ * Whether the language's and Node's own methods read through a crossing view run on the value itself rather than on the
+ * view: an object with internal slots (a `Map`, a `Set`, a `WeakRef`, a date, an iterator, a boxed primitive), whose
+ * methods work only on the object, and an instance of a class no module wrote (a `URL`, an emitter, a stream), whose
+ * methods check the object they are called on. A plain object, an array and a function take them through the view.
+ * @param {object} state - The view's state.
+ * @returns {boolean} True when they run on the value.
+ * @private
+ */
+function crossRunsOnOriginal(state) {
+	if (state.onOriginal !== null) return state.onOriginal;
+	const { original } = state;
+	let answer = false;
+	if (typeof original !== "function" && !util.types.isProxy(original)) {
+		const types = util.types;
+		answer =
+			hasInternalSlots(original) ||
+			isNativeIterator(original) ||
+			types.isMapIterator(original) ||
+			types.isSetIterator(original) ||
+			types.isGeneratorObject(original) ||
+			types.isBoxedPrimitive(original);
+		// A prototype of the language's or Node's own other than a plain object's or an array's: a class no module wrote,
+		// or a module's subclass of one.
+		for (let link = Reflect.getPrototypeOf(original), depth = 0; !answer && link !== null && depth < 64; depth++) {
+			if (util.types.isProxy(link) || link === Objects.prototype || link === Arrays.prototype) break;
+			if (WeakSetMethods.has(INTRINSICS, link) || isSharedValue(link)) answer = true;
+			link = Reflect.getPrototypeOf(link);
+		}
+	}
+	state.onOriginal = answer;
+	return answer;
+}
+
+/**
  * One of the language's or Node's own methods read through a crossing view of a value they run on
  * ({@link crossRunsOnOriginal}): it runs on the value itself, its results handed on to the reader and what the
  * reader passes it handed to the module the value came from. A callback the engine calls back with what the value holds
@@ -2754,40 +2783,6 @@ function crossSettle(shadow, state) {
  * @private
  */
 function crossEngineMethod(state, fn) {
-	/**
-	 * Whether the language's and Node's own methods read through a crossing view run on the value itself rather than on the
-	 * view: an object with internal slots (a `Map`, a `Set`, a `WeakRef`, a date, an iterator, a boxed primitive), whose
-	 * methods work only on the object, and an instance of a class no module wrote (a `URL`, an emitter, a stream), whose
-	 * methods check the object they are called on. A plain object, an array and a function take them through the view.
-	 * @param {object} state - The view's state.
-	 * @returns {boolean} True when they run on the value.
-	 * @private
-	 */
-	function crossRunsOnOriginal(state) {
-		if (state.onOriginal !== null) return state.onOriginal;
-		const { original } = state;
-		let answer = false;
-		if (typeof original !== "function" && !util.types.isProxy(original)) {
-			const types = util.types;
-			answer =
-				hasInternalSlots(original) ||
-				isNativeIterator(original) ||
-				types.isMapIterator(original) ||
-				types.isSetIterator(original) ||
-				types.isGeneratorObject(original) ||
-				types.isBoxedPrimitive(original);
-			// A prototype of the language's or Node's own other than a plain object's or an array's: a class no module wrote,
-			// or a module's subclass of one.
-			for (let link = Reflect.getPrototypeOf(original), depth = 0; !answer && link !== null && depth < 64; depth++) {
-				if (util.types.isProxy(link) || link === Objects.prototype || link === Arrays.prototype) break;
-				if (WeakSetMethods.has(INTRINSICS, link) || isSharedValue(link)) answer = true;
-				link = Reflect.getPrototypeOf(link);
-			}
-		}
-		state.onOriginal = answer;
-		return answer;
-	}
-
 	if (typeof fn !== "function" || util.types.isProxy(fn)) return null;
 	if (!(WeakSetMethods.has(INTRINSICS, fn) || isBuiltinFunction(fn) || isSharedExport(fn))) return null;
 	if (!crossRunsOnOriginal(state)) return null;
@@ -2858,6 +2853,24 @@ function crossSubject(original) {
 }
 
 /**
+ * Whether a member of the value behind a crossing view is code of the module the value came from: a function, or an
+ * accessor, that the reader's module did not put there itself.
+ * @param {object} state - The view's state.
+ * @param {PropertyDescriptor} descriptor - The member's descriptor on the value.
+ * @returns {boolean} True for the owner's code.
+ * @private
+ */
+function crossIsOwnersCode(state, descriptor) {
+	if (!("value" in descriptor)) return true;
+	const held = descriptor.value;
+	if (typeof held !== "function") return false;
+	// A function the reader's module stored there is the reader's to replace.
+	const crossing = WeakMapMethods.get(CROSSINGS, held);
+	if (crossing) return !(crossing.from !== null && state.reader?.____slothletInternal && sameModule(crossing.from, state.reader));
+	return !isOwnOrigin(held, state.reader);
+}
+
+/**
  * Refuse a change through a crossing view that would change code of the module the value came from, unless whoever
  * makes it may write that module's path: the view's reader and the module executing both have to be allowed, so a
  * function another module runs for the reader gets it nothing. Data stays the reader's to change. Code is:
@@ -2879,24 +2892,6 @@ function crossSubject(original) {
  * @private
  */
 function crossAssertWrite(state, prop, change) {
-	/**
-	 * Whether a member of the value behind a crossing view is code of the module the value came from: a function, or an
-	 * accessor, that the reader's module did not put there itself.
-	 * @param {object} state - The view's state.
-	 * @param {PropertyDescriptor} descriptor - The member's descriptor on the value.
-	 * @returns {boolean} True for the owner's code.
-	 * @private
-	 */
-	function crossIsOwnersCode(state, descriptor) {
-		if (!("value" in descriptor)) return true;
-		const held = descriptor.value;
-		if (typeof held !== "function") return false;
-		// A function the reader's module stored there is the reader's to replace.
-		const crossing = WeakMapMethods.get(CROSSINGS, held);
-		if (crossing) return !(crossing.from !== null && state.reader?.____slothletInternal && sameModule(crossing.from, state.reader));
-		return !isOwnOrigin(held, state.reader);
-	}
-
 	const { original, slothlet } = state;
 	if (!slothlet?.handlers?.apiManager?.ownershipEnforced?.()) return;
 	// A stand-in, and the async runtime's context wrapper, stand for the value whose members decide.
@@ -3156,6 +3151,26 @@ function memberPathOf(wrapper, prop) {
 let built = false;
 
 /**
+ * Whether an instance a module constructs through a node is handed out as the node's module's under `"fast"`, as
+ * under `"precise"` (see {@link instanceHoldsReads}).
+ * @param {object} wrapper - The node's wrapper.
+ * @returns {boolean} True when the instance is handed out as the module's.
+ * @private
+ */
+function instanceHoldsReads(wrapper) {
+	const slothlet = wrapper.slothlet;
+	const permissionManager = slothlet.handlers?.permissionManager;
+	if (!permissionManager?.isEnabled?.()) return false;
+	const reader = selfModuleReader(slothlet);
+	if (reader === null) return false;
+	if (!reader?.____slothletInternal) return true;
+	return permissionManager.readMayRefuseBeneath(
+		String(reader.____slothletInternal.apiPath ?? ""),
+		String(wrapper.____slothletInternal.apiPath ?? "")
+	);
+}
+
+/**
  * Build this layer of the wrapper class over `Base`, once (see `unified-wrapper.mjs`).
  * @param {Function} Base - The class below this layer.
  * @returns {Function} The layer's class.
@@ -3315,25 +3330,6 @@ export function MembraneLayer(Base) {
 			___constructAsNode(constructor, args, newTarget) {
 				if (!isWrapper(this)) throw ownBindingsRefusal("lib/handlers/unified-wrapper/membrane", import.meta.url);
 				const wrapper = this;
-				/**
-				 * Whether an instance a module constructs through a node is handed out as the node's module's under `"fast"`, as
-				 * under `"precise"` (see {@link instanceHoldsReads}).
-				 * @param {object} wrapper - The node's wrapper.
-				 * @returns {boolean} True when the instance is handed out as the module's.
-				 * @private
-				 */
-				function instanceHoldsReads(wrapper) {
-					const slothlet = wrapper.slothlet;
-					const permissionManager = slothlet.handlers?.permissionManager;
-					if (!permissionManager?.isEnabled?.()) return false;
-					const reader = selfModuleReader(slothlet);
-					if (reader === null) return false;
-					if (!reader?.____slothletInternal) return true;
-					return permissionManager.readMayRefuseBeneath(
-						String(reader.____slothletInternal.apiPath ?? ""),
-						String(wrapper.____slothletInternal.apiPath ?? "")
-					);
-				}
 
 				if (!wrapper?.slothlet?.instanceID || !wrapper.slothlet.contextManager?.runInContext)
 					return Reflect.construct(constructor, args, newTarget);

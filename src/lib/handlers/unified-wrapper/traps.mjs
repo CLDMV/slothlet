@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-25T00:00:00-08:00 (1795593600)
+ *	@Last modified time: 2026-11-25T13:24:03-08:00 (1795641843)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -223,6 +223,868 @@ let realClass;
 let built = false;
 
 /**
+ * The `Symbol.hasInstance` a loaded callable node answers (#632): the language's own test against its function, which
+ * walks the instance's prototype chain to the function's `prototype` without running any of the module's code.
+ * @param {Function} fn - The node's function.
+ * @returns {Function} The test.
+ * @private
+ */
+function hasInstanceOf(fn) {
+	let test = WeakMapMethods.get(HAS_INSTANCE_BY_IMPL, fn);
+	if (!test) {
+		// A class extending the node's view inherits from the member view a reader got of `prototype`, which counts as it
+		// (see selfHasInstance); a function with no `prototype` of its own (a bound one) answers as the language does.
+		test = (value) => {
+			const prototype = fn.prototype;
+			return prototype !== null && typeof prototype === "object"
+				? selfHasInstance(prototype, value)
+				: Reflect.apply(FUNCTION_HAS_INSTANCE, fn, [value]);
+		};
+		WeakMapMethods.set(HAS_INSTANCE_BY_IMPL, fn, test);
+	}
+	return test;
+}
+
+/**
+ * Take the pending engine read {@link PENDING_INVARIANT_READ} when it is this one.
+ *
+ * @param {object} wrapper - The node's wrapper whose descriptor is read.
+ * @param {string|symbol} prop - The key read.
+ * @returns {boolean} Whether this read is the engine's check after a view's definition.
+ * @private
+ */
+function takeInvariantRead(wrapper, prop) {
+	const pending = PENDING_INVARIANT_READ;
+	PENDING_INVARIANT_READ = null;
+	return pending !== null && pending.wrapper === wrapper && pending.prop === prop;
+}
+
+/**
+ * Whether a node holds a member fixed (non-configurable): on its target, on its wrapper, or on the value behind it.
+ * @param {object} wrapper - The node's wrapper.
+ * @param {object} target - The proxy's target.
+ * @param {string|symbol} prop - The member.
+ * @returns {boolean} True when the member cannot be removed.
+ * @private
+ */
+function holdsFixed(wrapper, target, prop) {
+	if (isFixedOnTarget(target, prop)) return true;
+	if (target !== wrapper && isFixedOnTarget(wrapper, prop)) return true;
+	const impl = wrapper.____slothletInternal.impl;
+	return impl !== null && typeof impl === "object" && !util.types.isProxy(impl) && isFixedOnTarget(impl, prop);
+}
+
+/**
+ * A serialized snapshot of the wrapper tree with the terminal leaves the reader may not read left out.
+ *
+ * `toJSON` reconstructs the underlying data directly from the impl tree, so it bypasses the
+ * proxy traps entirely — without this, `JSON.stringify(namespace)` would hand a gated caller
+ * every terminal value beneath a namespace it cannot read. The snapshot shares the module's own objects, so
+ * an object that loses a leaf, or holds an array, is copied rather than changed: serializing never edits a
+ * module's data, frozen or not. Plain objects are recursed into, as their traversal is ungated by design. An
+ * array in the snapshot is the module's own array (#602): the copy holds its api node instead, so
+ * `JSON.stringify` reads each element through the node, gated as the value it reads at that moment, as
+ * `JSON.stringify` of the array member does (#603 review).
+ *
+ * @param {object} wrapper - Wrapper the snapshot was extracted from.
+ * @param {*} data - Extracted snapshot; never changed.
+ * @param {string} basePath - Api path corresponding to `data`.
+ * @param {object} node - The api node corresponding to `data`.
+ * @param {WeakSet<object>} seen - The objects on the current path: an object the snapshot holds at two
+ *   keys is redacted at each, and a cycle still stops.
+ * @param {{currentWrapper: object, context: object}} [callerOverride] - The reader to redact for, when it is not
+ *   the one reading now (a module serializing a node it kept, see {@link capturedView}).
+ * @param {{wrapper: object, reader: object}|null} [kept] - The access a node a module kept is making (see
+ *   {@link resolveEnforcedCaller}), for the reader reading now.
+ * @returns {*} `data`, or a copy of it with what the reader may not read left out.
+ * @private
+ */
+function redactSerialized(wrapper, data, basePath, node, seen, callerOverride, kept = null) {
+	if (!data || typeof data !== "object" || Arrays.isArray(data) || WeakSetMethods.has(seen, data)) return data;
+	WeakSetMethods.add(seen, data);
+	let copy = null;
+	// The copy keeps the object's prototype, so a `toJSON` it inherits still serializes it.
+	const own = () => (copy ??= Objects.assign(Objects.create(Objects.getPrototypeOf(data)), data));
+	for (let ofIndex = 0, ofList = Objects.keys(data); ofIndex < ofList.length; ofIndex++) {
+		const key = ofList[ofIndex];
+		const value = data[key];
+		const targetPath = `${basePath}.${key}`;
+		if (isTerminalData(value)) {
+			if (!readGateDecision(wrapper, targetPath, callerOverride, kept).allowed) delete own()[key];
+		} else if (value !== null && typeof value === "object" && readsNothingBeneath(wrapper, targetPath, callerOverride, kept, null, value)) {
+			// An object member the rules leave the reader nothing of is left out, as a value it may not read is.
+			delete own()[key];
+		} else if (Arrays.isArray(value)) {
+			own()[key] = node[key];
+		} else if (serializesItself(value)) {
+			own()[key] = wrapper.___serializedHolder(value, targetPath, callerOverride, kept);
+		} else {
+			const redacted = redactSerialized(wrapper, value, targetPath, node[key], seen, callerOverride, kept);
+			if (redacted !== value) own()[key] = redacted;
+		}
+	}
+	WeakSetMethods.delete(seen, data);
+	return copy ?? data;
+}
+
+/**
+ * Keep the node made for a member a node inherits (see {@link inheritedMemberNode}).
+ * @param {object} wrapper - The node's wrapper.
+ * @param {PropertyKey} prop - The member's key.
+ * @param {*} value - The member's value.
+ * @param {*} node - The node made for it.
+ * @returns {*} `node`.
+ * @private
+ */
+function keepInheritedMemberNode(wrapper, prop, value, node) {
+	let byKey = WeakMapMethods.get(INHERITED_MEMBER_NODES, wrapper);
+	if (byKey === undefined) WeakMapMethods.set(INHERITED_MEMBER_NODES, wrapper, (byKey = new Map()));
+	MapMethods.set(byKey, prop, { value, node });
+	return node;
+}
+
+/**
+ * The node a node made before for a member it inherits, while that member still has the same value.
+ * @param {object} wrapper - The node's wrapper.
+ * @param {PropertyKey} prop - The member's key.
+ * @param {*} value - The member's value now.
+ * @returns {*} The node, or `undefined`.
+ * @private
+ */
+function inheritedMemberNode(wrapper, prop, value) {
+	const held = MapMethods.get(WeakMapMethods.get(INHERITED_MEMBER_NODES, wrapper) ?? EMPTY_INHERITED_NODES, prop);
+	return held !== undefined && held.value === value ? held.node : undefined;
+}
+
+/**
+ * Whether a node inherits a member by a symbol key from the prototype on its record (see {@link ownsPrototype}).
+ * @param {object} wrapper - The node's wrapper.
+ * @param {symbol} prop - The key.
+ * @returns {boolean} Whether it does.
+ * @private
+ */
+function inheritsSymbol(wrapper, prop) {
+	const prototype = wrapper.___nodeInherits(prop);
+	return prototype !== undefined && prototype !== null && Reflect.has(prototype, prop);
+}
+
+/**
+ * Whether a node fronts a value a module keeps whole and live (a class instance, an emitter, a value grafted at
+ * runtime), whose members the node reads from the value itself.
+ * @param {UnifiedWrapper} wrapper - The node's wrapper.
+ * @returns {boolean} True for such a node.
+ * @private
+ */
+function frontsLiveValue(wrapper) {
+	const internal = wrapper.____slothletInternal;
+	const impl = internal.impl;
+	if (impl === null || (typeof impl !== "object" && typeof impl !== "function")) return false;
+	return internal.deferChildAdopt || (EventEmitter && inherits(impl, EventEmitter)) || isClassInstance(impl);
+}
+
+/**
+ * Run a hooked call whose path has around hooks.
+ *
+ * @param {object} wrapper - The UnifiedWrapper being invoked.
+ * @param {object} hookManager - The instance's HookManager.
+ * @param {Array<object>} arounds - Around hooks that fire for this call (already permission-filtered).
+ * @param {{asyncBefore: boolean, asyncAfter: boolean, asyncAround: boolean}} strategy - The path's dispatch strategy.
+ * @param {*} thisArg - Receiver for the target.
+ * @param {Array} callArgs - Arguments the caller passed.
+ * @param {object} api - Bound API handed to hooks.
+ * @param {object} ctx - User context handed to hooks.
+ * @param {{store: object|null, identity: object}|null} [entryIdentity=null] - The caller identity the permission
+ *   gate resolved, which the target is entered with (see enforcePermission).
+ * @returns {*} The call's result — a plain value on the synchronous pipeline, a Promise on the
+ *   asynchronous one (guarded when a synchronous target was promoted).
+ * @private
+ *
+ * @description
+ * Pipeline order, outermost first: `always`/`error` observers → around hooks (highest priority
+ * outermost) → before hooks → the function → after hooks. The observers sit outside the around
+ * chain, so they see exactly what the caller receives: an error an around hook rethrows reaches the
+ * error hooks (with the source of wherever it was first thrown), one it swallows does not, and
+ * `always` fires once after the chain settles. `suppressErrors` likewise applies to what escapes the
+ * chain — inside it, failures propagate through `next()` so an around hook can handle them.
+ *
+ * The synchronous pipeline is kept when every matching before/after/around handler is synchronous
+ * and the target is not declared `async` (and, in lazy mode, is already materialized); otherwise the
+ * whole call runs asynchronously, with the same promotion guard as a call promoted by an async
+ * before/after hook.
+ */
+function runAroundPipeline(wrapper, hookManager, arounds, strategy, thisArg, callArgs, api, ctx, entryIdentity = null) {
+	const internal = wrapper.____slothletInternal;
+	const path = internal.apiPath;
+	const contextManager = wrapper.slothlet.contextManager;
+	const instanceID = wrapper.slothlet.instanceID;
+
+	// Who is calling: the same resolution that makes `metadata.caller()` inside the target null —
+	// the target's execution store takes its caller from the wrapper active in THIS instance's flow
+	// at the moment of the call.
+	const callerWrapper = contextManager.getCallerIdentity(instanceID)?.currentWrapper ?? null;
+	const entry = !callerWrapper;
+	// The same `caller` object a version dispatcher and a permission record get: { path, module, metadata, version }.
+	const caller = callerWrapper ? (wrapper.slothlet.handlers.versionManager?.buildCallerArg(callerWrapper) ?? null) : null;
+
+	// Only a pinned (module-registered) around hook runs under a different identity than the call, so
+	// only then is the call's own flow captured for its next() to restore.
+	const flow = ArrayMethods.some(arounds, (hook) => isCallerLocked(hook.handler)) ? contextManager.captureFlow(instanceID) : null;
+	const runInCallerFlow = flow ? (fn) => contextManager.runInFlow(flow, fn) : null;
+
+	// First record wins: an error rethrown by an around hook keeps the source it was first thrown
+	// from; an error an around hook throws itself is recorded as an `around` failure. Matched with
+	// Object.is, so a rejection value not equal to itself (NaN) still finds its record.
+	const sources = [];
+	const errorSink = (error, source) => {
+		if (!ArrayMethods.some(sources, (entryRecord) => Objects.is(entryRecord.error, error))) listPush(sources, { error, source });
+	};
+	// The stage to report a rejection nothing recorded as; see AroundChainOptions.onUnobserved.
+	let unobserved = null;
+	const onUnobserved = (source) => {
+		unobserved = source;
+	};
+	const functionSource = (error) => failureSource({ type: "function", at: wrapper.clock.now() }, wrapper.___readTargetFailure(error));
+
+	const invokeTarget = (targetArgs) => {
+		const impl = internal.impl;
+		// rawErrors: a leaf's throw is application data — never re-typed (#252).
+		if (typeof impl === "function") {
+			return contextManager.runInContext(wrapper.instanceID, impl, thisArg, targetArgs, wrapper, true, false, null, entryIdentity, true);
+		}
+		if (impl && typeof impl === "object" && typeof impl.default === "function") {
+			return contextManager.runInContext(
+				wrapper.instanceID,
+				impl.default,
+				impl,
+				targetArgs,
+				wrapper,
+				true,
+				false,
+				null,
+				entryIdentity,
+				true
+			);
+		}
+		throw new wrapper.SlothletError("API_PATH_NOT_CALLABLE", { path: segmentsOf(path), received: typeof impl });
+	};
+
+	// Observers, run once per call on the way out.
+	const settleValue = (value) => {
+		hookManager.executeAlwaysHooks(path, callArgs, value, false, [], api, ctx);
+		return value;
+	};
+	const settleError = (error) => {
+		// Every rejection is recorded on its way out except one of a thenable no view could be put on (a frozen
+		// `then`); that one is the target's, so it is classified as the target before anything reads it (#599).
+		const recordedSource = ArrayMethods.find(sources, (record) => Objects.is(record.error, error))?.source;
+		const unrecorded = recordedSource === undefined && unobserved ? wrapper.___readTargetFailure(error) : null;
+		const originalError = unrecorded ? unrecorded.originalError() : unwrapError(error);
+		// A failure an inner hooked call already reported is not reported again (same rule as the
+		// pipeline without around hooks); `always` still observes this call.
+		if (!isHookProcessed(error)) {
+			const recorded = recordedSource ?? failureSource({ ...unobserved }, unrecorded ?? hookManager.failureOf(error));
+			hookManager.executeErrorHooks(path, originalError, recorded, callArgs, api, ctx);
+		}
+		hookManager.executeAlwaysHooks(path, callArgs, undefined, true, [originalError], api, ctx);
+		if (wrapper.slothlet.config?.hook?.errors === "suppress") return undefined;
+		throw error;
+	};
+
+	const leafIsAsync = util.types.isAsyncFunction(internal.impl) || util.types.isAsyncFunction(internal.impl?.default);
+	const lazyPending = internal.mode === "lazy" && !internal.state.materialized;
+	const promoted = strategy.asyncBefore || strategy.asyncAfter || strategy.asyncAround;
+	const options = { caller, entry, errorSink, runInCallerFlow, onUnobserved };
+
+	if (promoted || leafIsAsync || lazyPending) {
+		const core = async (coreArgs) => {
+			const beforeResult = await hookManager.executeBeforeHooksAsync(path, coreArgs, api, ctx, errorSink);
+			if (beforeResult.shortCircuit) return beforeResult.value;
+			coreArgs = beforeResult.args;
+			let settled;
+			try {
+				if (internal.mode === "lazy" && !internal.state.materialized) {
+					await wrapper.___materialize();
+				}
+				const raw = invokeTarget(coreArgs);
+				settled = raw && typeof raw === "object" && typeof raw.then === "function" ? await raw : raw;
+			} catch (error) {
+				errorSink(error, functionSource(error));
+				throw error;
+			}
+			const afterResult = await hookManager.executeAfterHooksAsync(path, settled, coreArgs, api, ctx, errorSink);
+			return afterResult.modified ? afterResult.result : settled;
+		};
+		const run = pinnedThen(
+			hookManager.executeAroundChain(arounds, path, callArgs, api, ctx, { ...options, core, isAsync: true }),
+			settleValue,
+			settleError
+		);
+		// Same contract as a call promoted by an async before/after hook: a target declared `async`
+		// already hands its callers a Promise; a promoted synchronous one hands back a guarded one.
+		return promoted && !leafIsAsync ? guardPromotedResult(run, path, wrapper.SlothletError) : run;
+	}
+
+	const core = (coreArgs) => {
+		const beforeResult = hookManager.executeBeforeHooks(path, coreArgs, api, ctx, errorSink);
+		if (beforeResult.shortCircuit) return beforeResult.value;
+		coreArgs = beforeResult.args;
+		let result;
+		try {
+			result = invokeTarget(coreArgs);
+		} catch (error) {
+			errorSink(error, functionSource(error));
+			throw error;
+		}
+		// A plain (not `async`-declared) target returning a Promise: after hooks attach to it, exactly
+		// as on the pipeline without around hooks.
+		if (result && typeof result === "object" && typeof result.then === "function") {
+			const afterReaction = (resolved) => {
+				const afterResult = hookManager.executeAfterHooks(path, resolved, coreArgs, api, ctx, errorSink);
+				return afterResult.modified ? afterResult.result : resolved;
+			};
+			const recordAsTarget = (error) => errorSink(error, functionSource(error));
+			// A promise of the engine's own is reacted to with the language's `then`, as `await` reacts to it; one of a
+			// module's class through its own `then`, as `await` calls it.
+			const react = isEnginePromise(result)
+				? FunctionMethods.bind(pinnedThen, null, result)
+				: inherits(result, Promise)
+					? FunctionMethods.bind(result.then, result)
+					: null;
+			if (react !== null) {
+				return react(afterReaction, (error) => {
+					recordAsTarget(error);
+					throw error;
+				});
+			}
+			// A hand-written thenable is reacted to as `await` would, its rejections recorded as the target's however
+			// its `then` delivers them (see HookManager#observeThenable).
+			return hookManager.observeThenable(result, afterReaction, recordAsTarget, () =>
+				onUnobserved({ type: "function", timestamp: wrapper.clock.now() })
+			);
+		}
+		const afterResult = hookManager.executeAfterHooks(path, result, coreArgs, api, ctx, errorSink);
+		return afterResult.modified ? afterResult.result : result;
+	};
+
+	let value;
+	try {
+		value = hookManager.executeAroundChain(arounds, path, callArgs, api, ctx, { ...options, core, isAsync: false });
+	} catch (error) {
+		return settleError(error);
+	}
+	// The only thenable an around hook may return on this pipeline is one `next()` returned, passed
+	// through or derived from (`next().then(check)`); observe it when it settles.
+	if (value && typeof value === "object" && typeof value.then === "function") {
+		if (isEnginePromise(value)) return pinnedThen(value, settleValue, settleError);
+		return inherits(value, Promise) ? value.then(settleValue, settleError) : settleThenable(value, settleValue, settleError);
+	}
+	return settleValue(value);
+}
+
+/**
+ * Whether a node of a run's tree holds a member it was given in the run on its wrapper, over the live value it fronts
+ * (a class instance, an emitter): the value is the module's, which the instance's tree fronts too.
+ * @param {UnifiedWrapper} wrapper - The node's wrapper.
+ * @param {string|symbol} prop - The member.
+ * @returns {boolean} True when the node's own member answers.
+ * @private
+ */
+function runTreeHolds(wrapper, prop) {
+	const held = wrapper.____slothletInternal.runHeldKeys;
+	return held !== undefined && SetMethods.has(held, prop);
+}
+
+/**
+ * What a caller is handed for a promise a call returned while a run is open: a promise of the same value, which is
+ * saved for the runs open before the caller has it (see {@link checkpointHandout}), the same one each time for
+ * the same promise. A rejection is handed on as it is.
+ * @param {object} slothlet - The instance.
+ * @param {Promise<*>} promise - The promise.
+ * @returns {Promise<*>} The promise the caller is handed.
+ * @private
+ */
+function checkpointSettled(slothlet, promise) {
+	if (!runsOpen(domainOf(slothlet)) || RUN_VIEW_ACCESS !== 0) return promise;
+	let handed = WeakMapMethods.get(SETTLED_CHECKPOINTS, promise);
+	if (handed === undefined) {
+		handed = PromiseMethods.then(promise, (value) => {
+			checkpointHandout(slothlet, value);
+			return value;
+		});
+		WeakMapMethods.set(SETTLED_CHECKPOINTS, promise, handed);
+	}
+	return handed;
+}
+
+/**
+ * Apply a definition to a sealed node's shell target (see the preventExtensions trap), and to the module's
+ * array for an array member, so both answer as the array itself would (#603, #609).
+ *
+ * @description
+ * A sealed shell holds each data member as a data property, so the node reports the same attributes a sealed
+ * or frozen object of its own would. A writable member's value is not pinned by the proxy invariants, so reads
+ * keep going through the node and its permission check; a value defined on it goes through the node's own
+ * write. A member made read-only is pinned for every reader: the shell takes the member's value as the node
+ * holds it at that moment, and a read the rules deny is refused rather than answered (see
+ * {@link gateFixedValue}). A member the module's array holds as an accessor stays an accessor that
+ * reads and writes through the node. Each change is applied to the module's array as well when it holds the
+ * key, after both accept it, so freezing the node freezes the array's elements as freezing the array would.
+ *
+ * @param {UnifiedWrapper} wrapper - The node's wrapper.
+ * @param {object|Function|Array} target - The sealed shell.
+ * @param {string|symbol} prop - Property key.
+ * @param {PropertyDescriptor} descriptor - Descriptor to define.
+ * @returns {boolean} Whether the definition was applied.
+ * @private
+ *
+ * @example
+ * defineOnSealedShell(wrapper, shell, "0", { configurable: false, writable: false }); // what Object.freeze sends
+ */
+function defineOnSealedShell(wrapper, target, prop, descriptor) {
+	const current = Reflect.getOwnPropertyDescriptor(target, prop);
+	// A non-extensible node takes no new key, as on the object itself.
+	if (!current) return false;
+	const impl = wrapper.____slothletInternal.impl;
+	// A node fronting a module's own object defines on that object too, as freezing the object would (#757).
+	const holder = Arrays.isArray(impl)
+		? arrayKeyHolder(impl, prop)
+		: MapMethods.has(FRAMEWORK_WRITES, wrapper)
+			? null
+			: moduleObjectOf(wrapper, prop);
+	const mirrors = holder !== null && hasOwn(holder, prop);
+	let attributes = descriptor;
+	let mirrored = descriptor;
+	if (!("value" in current)) {
+		// An accessor that reads through the node: only its attributes change.
+		if ("get" in descriptor || "set" in descriptor || "value" in descriptor || "writable" in descriptor) return false;
+	} else if (!("get" in descriptor) && !("set" in descriptor)) {
+		attributes = { ...descriptor };
+		mirrored = { ...descriptor };
+		// A member made read-only is pinned as the node holds it now: an earlier write through the node reached the
+		// module's value, not the shell's copy. The module's array keeps its own value, not the api node.
+		if (current.writable && descriptor.writable === false && !("value" in descriptor)) {
+			attributes.value = shellValue(wrapper, prop);
+			// A function node's own member holding the module's code is held as a stand-in every holder may be described
+			// (see pinnedCodeMember).
+			if (functionOf(impl) !== null && !hasOwn(wrapper, prop) && pinsAsCode(attributes.value, wrapper.slothlet))
+				attributes.value = pinnedCodeMember(wrapper, attributes.value);
+			if (mirrors) delete mirrored.value;
+		}
+		// The shell holds a module object's accessor as data (see sealShell): the object's accessor takes only the
+		// attributes an accessor has, as freezing the object itself defines it (#757).
+		const held = mirrors && !Arrays.isArray(impl) ? Reflect.getOwnPropertyDescriptor(holder, prop) : undefined;
+		if (held !== undefined && !("value" in held)) {
+			if ("value" in descriptor) return false;
+			mirrored = { ...mirrored };
+			delete mirrored.value;
+			delete mirrored.writable;
+		}
+	}
+	// Both are checked before either changes, so a refusal by one leaves the other as it was.
+	if (!canDefine(target, prop, attributes) || (mirrors && !canDefine(holder, prop, mirrored))) return false;
+	// A value goes through the node's own write while the member is writable, so the module's value takes it.
+	if ("value" in descriptor && current.writable && !Reflect.set(wrapper.____slothletInternal.proxy, prop, descriptor.value)) return false;
+	if (mirrors) Reflect.defineProperty(holder, prop, mirrored);
+	Reflect.defineProperty(target, prop, attributes);
+	return true;
+}
+
+/**
+ * An impl's own accessor descriptor as the node describes it (#597): each half the node did not adopt is adopted
+ * (see {@link adoptAccessor}), so a getter or setter taken from the description and run anywhere runs as the
+ * module the node belongs to. A data descriptor is returned as it is.
+ * @param {object} wrapper - The node's wrapper.
+ * @param {PropertyDescriptor|undefined} descriptor - The impl's descriptor.
+ * @returns {PropertyDescriptor|undefined} The descriptor to report.
+ * @private
+ */
+function describeImplMember(wrapper, descriptor) {
+	if (!descriptor || (typeof descriptor.get !== "function" && typeof descriptor.set !== "function")) return descriptor;
+	const adopted = adoptAccessor(wrapper, descriptor);
+	return { __proto__: null, ...descriptor, get: adopted.get, set: adopted.set };
+}
+
+/**
+ * Write a member of the module's object a node fronts, as the same assignment to the object does (#746). Only the
+ * object's own members are touched: a new key becomes an ordinary member of it, and a setter the module has put there
+ * since the node was built runs on the object as the module the node belongs to, never as the writer (#597).
+ * @param {UnifiedWrapper} wrapper - The node's wrapper.
+ * @param {object} object - The module's object (see {@link moduleObjectOf}).
+ * @param {PropertyKey} prop - The member's key.
+ * @param {*} value - What to write.
+ * @returns {boolean} Whether the object took the write.
+ * @private
+ */
+function writeModuleObject(wrapper, object, prop, value) {
+	const held = Reflect.getOwnPropertyDescriptor(object, prop);
+	if (held === undefined) {
+		const added =
+			Reflect.isExtensible(object) &&
+			Reflect.defineProperty(object, prop, { __proto__: null, value, writable: true, enumerable: true, configurable: true });
+		if (added && typeof prop === "string") SetMethods.add(moduleObjectKeys(object), prop);
+		return added;
+	}
+	if ("value" in held) return held.writable === true && Reflect.defineProperty(object, prop, { __proto__: null, value });
+	if (typeof held.set !== "function") return false;
+	wrapper.___runAccessor(held.set, object, [value]);
+	return true;
+}
+
+/**
+ * The reader of an access, resolved now, for a read answered once the access has ended (an `await` of a lazy node,
+ * answered after the load). Null while permissions or read gating are off.
+ * @param {UnifiedWrapper} wrapper - The node's wrapper.
+ * @param {object|null} access - The access.
+ * @returns {{store: object|null|undefined, identity: object|undefined}|null} The reader.
+ * @private
+ */
+function pinReader(wrapper, access) {
+	const pm = wrapper.slothlet.handlers?.permissionManager;
+	if (!pm || !pm.isEnabled() || !pm.isReadGatingEnabled()) return null;
+	const entry = accessEntry(access, wrapper);
+	if (entry) return entry;
+	const contextManager = wrapper.slothlet.contextManager;
+	const instanceID = wrapper.slothlet.instanceID;
+	return {
+		store: contextManager?.tryGetContext?.(instanceID),
+		identity: contextManager?.getCallerIdentity?.(instanceID)
+	};
+}
+
+/**
+ * Check a member read through a node that holds built-in data or an error (a file's default export that is a `Map`, a
+ * `Date`, an error, …) as a read of that value at the node's path: the node is the value there, as the same value
+ * exported by name is, so a read rule naming the path refuses every member read through it, a getter of the engine's
+ * and a method alike. The framework's own keys, and `then` (which `await` asks for), are no member reads.
+ * @param {UnifiedWrapper} wrapper - The node's wrapper.
+ * @param {PropertyKey} prop - The member read.
+ * @param {{wrapper: object, reader: object}|null} kept - The access a node a module kept is making.
+ * @param {object|null} access - The read of `self` this is part of, when it was resolved already.
+ * @returns {void}
+ * @throws {SlothletError} `PERMISSION_DENIED` when the reader may not read the value.
+ * @private
+ *
+ * @example
+ * // single/derror.mjs: export default new RangeError("bad"); rule: deny reader.** → single.derror
+ * self.single.derror.message; // PERMISSION_DENIED, as self.owner.failure.message is under a rule on owner.failure
+ */
+function gateDataNodeMember(wrapper, prop, kept, access) {
+	if (prop === "then" || isFrameworkReservedKey(prop)) return;
+	const permissionManager = wrapper.slothlet.handlers?.permissionManager;
+	if (!permissionManager || !permissionManager.isEnabled() || !permissionManager.isReadGatingEnabled()) return;
+	const impl = wrapper.____slothletInternal.impl;
+	// A primitive a loaded node holds (a lazy folder kept before it loaded as one) is data like a built-in (#797).
+	if (nodePrimitive(wrapper) !== NO_NODE_PRIMITIVE) {
+		wrapper.___gateNodeValue(kept, access);
+		return;
+	}
+	if (impl === null || typeof impl !== "object") return;
+	let isData = WeakMapMethods.get(DATA_NODE_IMPLS, impl);
+	if (isData === undefined) {
+		isData = !util.types.isProxy(impl) && isTerminalData(impl);
+		WeakMapMethods.set(DATA_NODE_IMPLS, impl, isData);
+	}
+	if (!isData) return;
+	wrapper.___gateNodeValue(kept, access);
+}
+
+/**
+ * The prototype a node fronting an instance of a class of the module's reports, by `Object.getPrototypeOf` and through
+ * `__proto__` (#667): the instance's own, its class's `prototype`. It holds the class's methods and `constructor`, so
+ * reaching it is checked as a call of the class's node (see instanceClassFront), whoever holds the instance's
+ * node — read through `self` or handed to the module as an argument — exactly as reading the class's `prototype` is. A
+ * reader the class is closed to is refused it: the prototype is never stood in for by another, so no write meant for
+ * the class lands on a prototype every value shares.
+ * @param {UnifiedWrapper} wrapper - The instance's node's wrapper.
+ * @param {{wrapper: object, reader: object}|null} [kept] - The access a node a module kept is making into the instance.
+ * @returns {object|undefined} The prototype, or `undefined` for a node fronting no such instance.
+ * @throws {SlothletError} PERMISSION_DENIED when the reader may not call the class's node.
+ * @private
+ */
+function instanceClassPrototype(wrapper, kept = null) {
+	const classNode = wrapper.___instanceClassFront();
+	if (!classNode) return undefined;
+	const classWrapper = resolveWrapper(classNode);
+	const prototype = Reflect.getPrototypeOf(wrapper.____slothletInternal.impl);
+	enforceCodeMember(classWrapper, prototype, kept);
+	return atClassSite(wrapper.slothlet, prototypeForReader(classWrapper, classWrapper.___exposePrototype(prototype), "prototype"));
+}
+
+/**
+ * What a node whose own prototype holds the module's code (an emitter of a class of the module's) reports to a reader
+ * that may not call it (#632, #667): an object inheriting from the nearest prototype above it holding none of the
+ * module's code, so `instanceof` against the language's or Node's own classes still holds, by `Object.getPrototypeOf`
+ * and through `__proto__` alike. It holds nothing of its own and takes no change: a write meant for the module's class
+ * is refused, never landing on a prototype other values share. The same object each time, for the same node and
+ * nearest prototype.
+ * @param {UnifiedWrapper} wrapper - The node's wrapper.
+ * @param {object|null} nearest - The nearest prototype holding none of the module's code.
+ * @returns {object|null} The stand-in, or `null` when there is no such prototype.
+ * @private
+ */
+function withheldPrototype(wrapper, nearest) {
+	if (nearest === null) return null;
+	const held = WeakMapMethods.get(WITHHELD_PROTOTYPES, wrapper);
+	if (held?.nearest === nearest) return held.standIn;
+	// A change through it is checked as a call of the node, so a reader it was withheld from is refused as reading the
+	// prototype itself would refuse it; any other reader finds it closed, as a frozen object is.
+	const refuse = () => {
+		enforcePermission(wrapper, [], false);
+		return false;
+	};
+	const standIn = new NativeProxy(Objects.freeze(Objects.create(nearest)), {
+		set: (target, prop, value, receiver) => (receiver === standIn ? refuse() : Reflect.set(target, prop, value, receiver)),
+		defineProperty: refuse,
+		deleteProperty: refuse,
+		setPrototypeOf: refuse,
+		preventExtensions: (target) => {
+			refuse();
+			return Reflect.preventExtensions(target);
+		}
+	});
+	markFrameworkInternal(standIn);
+	WeakMapMethods.set(WITHHELD_PROTOTYPES, wrapper, { nearest, standIn });
+	return standIn;
+}
+
+/**
+ * The prototype a closed node holding a class instance keeps on its shell (#725). A closed node reports its shell's
+ * prototype to every holder, so the shell holds the instance's prototype as a view standing as the node does, at the
+ * path reading it is checked at: a write through it is decided when it is made, so turning the permission system on
+ * later still holds a module not allowed the write to it. A prototype made by no module is held as it is.
+ * @param {UnifiedWrapper} wrapper - The node's wrapper.
+ * @returns {object|null|undefined} What the shell holds, or `undefined` for a node holding no such instance.
+ * @private
+ */
+function instanceShellPrototype(wrapper) {
+	const site = wrapper.___instancePrototypeSite();
+	if (site === undefined) return undefined;
+	const { prototype, checked } = site;
+	if (prototype === null || WeakSetMethods.has(INTRINSICS, prototype) || isSharedValue(prototype) || !wrapper.slothlet) return prototype;
+	recordPrototypePath(wrapper.slothlet, checked.___exposePrototype(prototype), site.site);
+	return prototypeHandleOf(wrapper.slothlet, prototype);
+}
+
+/**
+ * The prototype a closed emitter's shell holds (#667). A closed node reports its shell's prototype to every holder of
+ * the node, for as long as the node lives: the host, and each module the host or another module hands the node to. The
+ * shell therefore holds a view standing as the node does whenever the prototype is the module's code, whether the
+ * permission system is on now or not: a write through it is decided when it is made, so turning the system on later
+ * still holds a module not owning the emitter to it. A prototype made by no module is held as it is.
+ * @param {UnifiedWrapper} wrapper - The emitter's node's wrapper.
+ * @param {object} prototype - The emitter's own prototype.
+ * @returns {object} What the shell holds.
+ * @private
+ */
+function sealedShellPrototype(wrapper, prototype) {
+	if (!wrapper.slothlet || WeakSetMethods.has(INTRINSICS, prototype) || isSharedValue(prototype)) return prototype;
+	recordPrototypePath(wrapper.slothlet, prototype, prototypeSiteOf(wrapper, null));
+	return prototypeHandleOf(wrapper.slothlet, prototype);
+}
+
+/**
+ * Record `node` as the one fronting `fn` behind its layer, unless another live node of the instance already does.
+ * @param {object} slothlet - The instance.
+ * @param {*} fn - The function behind the layer.
+ * @param {Function} node - The node.
+ * @returns {void}
+ * @private
+ */
+function recordLayerFront(slothlet, fn, node) {
+	if (typeof fn !== "function") return;
+	let byFunction = WeakMapMethods.get(LAYER_FRONTS, slothlet);
+	if (!byFunction) WeakMapMethods.set(LAYER_FRONTS, slothlet, (byFunction = new WeakMap()));
+	if ((WeakMapMethods.get(byFunction, fn) == null ? undefined : WeakRefMethods.deref(WeakMapMethods.get(byFunction, fn))) === undefined)
+		WeakMapMethods.set(byFunction, fn, new WeakRef(node));
+}
+
+/**
+ * Record `wrapper`'s node as the one fronting its function, when its file exports that function, unless another node of
+ * the instance already does.
+ * @param {UnifiedWrapper} wrapper - The node's wrapper, whose proxy exists.
+ * @returns {void}
+ * @private
+ */
+function recordFunctionNode(wrapper) {
+	const { impl, proxy, filePath } = wrapper.____slothletInternal;
+	if (typeof impl !== "function" || !wrapper.slothlet) return;
+	// A function node built over a folder's or a mount's default function holds slothlet's layer over it: the function
+	// behind the layer is the one its `prototype.constructor` names, so it is fronted by this node too.
+	if (isCompositionLayer(impl)) recordLayerFront(wrapper.slothlet, layerUnderlying(impl), proxy);
+	// Only a function its file exports stands for it: a node built for one the module did not export (a class reached
+	// through an instance's members) is a member of that instance, not the class's own node.
+	if (!filePath || !wrapper.slothlet.handlers?.ownership?.resolveExportPath?.(filePath, impl)) return;
+	let byFunction = WeakMapMethods.get(FUNCTION_NODES, wrapper.slothlet);
+	if (!byFunction) WeakMapMethods.set(FUNCTION_NODES, wrapper.slothlet, (byFunction = new WeakMap()));
+	if ((WeakMapMethods.get(byFunction, impl) == null ? undefined : WeakRefMethods.deref(WeakMapMethods.get(byFunction, impl))) === undefined)
+		WeakMapMethods.set(byFunction, impl, new WeakRef(proxy));
+	WeakMapMethods.set(CLASS_INSTANCES, impl, new WeakRef(wrapper.slothlet));
+	// Every node fronting it, for a class exported under more than one name (#667).
+	let everyFunction = WeakMapMethods.get(FUNCTION_NODE_SETS, wrapper.slothlet);
+	if (!everyFunction) WeakMapMethods.set(FUNCTION_NODE_SETS, wrapper.slothlet, (everyFunction = new WeakMap()));
+	const live = filterList(WeakMapMethods.get(everyFunction, impl) ?? [], (ref) => WeakRefMethods.deref(ref) !== undefined);
+	if (!ArrayMethods.some(live, (ref) => WeakRefMethods.deref(ref) === proxy)) listPush(live, new WeakRef(proxy));
+	WeakMapMethods.set(everyFunction, impl, live);
+}
+
+/**
+ * Record a value written onto a module's node as handed to that module (#597), unless the module itself writes it:
+ * handed back out, it is the writer's value as it was, never the module's code.
+ * @param {object} wrapper - The node's wrapper.
+ * @param {*} value - The value written.
+ * @returns {void}
+ * @private
+ */
+function markWritten(wrapper, value) {
+	if (value === null || (typeof value !== "object" && typeof value !== "function")) return;
+	if (!wrapper?.slothlet?.instanceID || !wrapper.slothlet.contextManager?.runInContext || !handsOutAsModule(wrapper)) return;
+	if (isSlothletValue(value) || WeakSetMethods.has(INTRINSICS, value)) return;
+	const maker = makerOf(wrapper);
+	if (WeakMapMethods.has(maker.made, value)) return;
+	const writer = wrapper.slothlet.contextManager.tryGetContext?.(wrapper.slothlet.instanceID)?.currentWrapper ?? null;
+	if (writer && WeakSetMethods.has(trustedRootOwn.genuineWrappers, writer) && makerOf(writer) === maker) return;
+	WeakSetMethods.add(maker.handedIn, value);
+}
+
+/**
+ * Whether a prototype set on a node would be set on a value the module holds (its own object, its array, a class
+ * instance or emitter it exports) rather than on the node's own record (see the node's setPrototypeOf trap).
+ * @param {UnifiedWrapper} wrapper - The node's wrapper.
+ * @returns {boolean} True when the module's value takes it.
+ * @private
+ */
+function prototypeOnSharedValue(wrapper) {
+	if (MapMethods.has(FRAMEWORK_WRITES, wrapper)) return false;
+	const internal = wrapper.____slothletInternal;
+	const impl = internal.impl;
+	if (moduleObjectOf(wrapper) !== null || Arrays.isArray(impl)) return true;
+	return (
+		impl !== null &&
+		typeof impl === "object" &&
+		!util.types.isProxy(impl) &&
+		hasOwn(internal, "sourceValue") &&
+		internal.sourceValue === impl
+	);
+}
+
+/**
+ * The arguments a call from one module into another is handed while the permission system is on (the class prototype
+ * guard, see {@link crossTo}): each object of the caller's reaches the callee as a crossing view, so what the
+ * callee stores into it (one of its class's instances, say) reaches the caller as values the callee hands on do. A call
+ * from the host, or from a module into itself, is handed its arguments as they are.
+ * @param {object} wrapper - The wrapper being called.
+ * @param {ArrayLike<*>} args - The call's arguments.
+ * @returns {ArrayLike<*>} The arguments, the same list when nothing changed.
+ * @private
+ */
+function crossArguments(wrapper, args) {
+	const slothlet = wrapper?.slothlet;
+	if (!args?.length || !slothlet?.handlers?.permissionManager?.isEnabled?.()) return args;
+	return wrapper.___crossArgumentsFrom(args, callingModule(slothlet));
+}
+
+/**
+ * The prototype a closed node's shell holds when the node was given one: a view standing for every holder of the node
+ * (the host too), since a closed node reports its shell's prototype to all of them, whether the permission system is on
+ * now or not; each read through it is decided for whoever makes it. The language's own prototypes are held as they are.
+ * @param {object} wrapper - The node's wrapper.
+ * @param {object|Function|null} prototype - The prototype the node was given.
+ * @returns {object|Function|null} What the shell holds.
+ * @private
+ */
+function givenShellPrototype(wrapper, prototype) {
+	if (givenAsIs(prototype)) return prototype;
+	return givenViewOn(wrapper.____slothletInternal, wrapper, wrapper, prototype, SEALED_SHELL_READER, () => assertOwnedWrite(wrapper, null));
+}
+
+/**
+ * The node a data definition on a node holds in place of the object or function it defines, as a value assigned to
+ * the node is held (wrap-on-set): `null` for a value held as it is (a primitive, a built-in data object, a proxy, a
+ * node), for any definition during a build, and for a member the definition leaves fixed (read-only and
+ * non-configurable), which JavaScript requires the node to report and hand out as the value defined. A definition of
+ * a member with the value it holds already keeps that member's node.
+ * @param {object} wrapper - The node's wrapper.
+ * @param {object} target - The node's proxy target.
+ * @param {string|symbol} prop - The member.
+ * @param {PropertyDescriptor} descriptor - The definition.
+ * @returns {object|null} The node to hold, or `null`.
+ * @private
+ *
+ * @example
+ * Object.defineProperty(self.secret.holder, "late", { value: { hidden: "H" }, writable: true });
+ * self.secret.holder.late.hidden; // read through the node at secret.holder.late.hidden, gated as any member
+ */
+function definedValueNode(wrapper, target, prop, descriptor) {
+	if (!("value" in descriptor) || wrapper.slothlet.____buildDepth > 0) return null;
+	const value = descriptor.value;
+	if (value === null || (typeof value !== "object" && typeof value !== "function")) return null;
+	if (util.types.isProxy(value) || resolveWrapper(value) !== null) return null;
+	if (wrapper.___definitionFixes(target, prop, descriptor)) return null;
+	const current = Reflect.getOwnPropertyDescriptor(wrapper, prop);
+	const currentNode = current && "value" in current ? resolveWrapper(current.value) : null;
+	if (currentNode && hasOwn(currentNode.____slothletInternal, "sourceValue") && currentNode.____slothletInternal.sourceValue === value)
+		return current.value;
+	const wrapped = wrapper.___createChildWrapper(prop, value, null, true);
+	const wrappedInternal = wrapped === null || wrapped === undefined ? null : resolveWrapper(wrapped);
+	if (!wrappedInternal) return null;
+	wrappedInternal.____slothletInternal.userAssigned = true;
+	return wrapped;
+}
+
+/**
+ * Give an object node the integrity of the object it was built from (#667): a node of an object its module froze,
+ * sealed or closed to new members when it loaded is frozen, sealed or closed the same way, as the framework's write, so
+ * `Object.isFrozen` answers as on the object and a write the object refuses is refused through the node. The node is
+ * built from a copy of the object (see copyForComposition), which is open, so the integrity is read off the object
+ * itself. Only a node built from a value it was handed (an export, a member of one): an unloaded lazy node has no value
+ * yet, and is closed once it loads.
+ * @param {UnifiedWrapper} wrapper - The node's wrapper, whose proxy exists.
+ * @returns {void}
+ * @private
+ *
+ * @example
+ * adoptObjectIntegrity(wrapper); // wrapper built from Object.freeze({ a: 1 }): Object.isFrozen(proxy) is now true
+ */
+function adoptObjectIntegrity(wrapper) {
+	const internal = wrapper.____slothletInternal;
+	if (!hasOwn(internal, "sourceValue")) return;
+	const source = internal.sourceValue;
+	if (source === null || typeof source !== "object" || Arrays.isArray(source) || util.types.isProxy(source)) return;
+	if (Reflect.isExtensible(source)) return;
+	if (internal.mode === "lazy" && !internal.state.materialized) return;
+	const { proxy } = internal;
+	const syncing = internal.integritySyncing;
+	internal.integritySyncing = true;
+	try {
+		frameworkWrite(wrapper, () => {
+			if (Objects.isFrozen(source)) Objects.freeze(proxy);
+			else if (Objects.isSealed(source)) Objects.seal(proxy);
+			else Objects.preventExtensions(proxy);
+		});
+	} finally {
+		internal.integritySyncing = syncing;
+	}
+}
+
+/**
+ * An accessor descriptor defined on an api node at runtime, with its getter and setter adopted as the node's (#597):
+ * defined by `Object.defineProperty` after the module loaded, it runs as an exported one does, never as whoever
+ * reads it. A data descriptor, or a partial one changing only attributes, is returned as it is.
+ * @param {object} wrapper - The node's wrapper.
+ * @param {PropertyDescriptor} descriptor - The descriptor being defined.
+ * @returns {PropertyDescriptor} The descriptor to define.
+ * @private
+ */
+function adoptDefinedAccessor(wrapper, descriptor) {
+	if (typeof descriptor?.get !== "function" && typeof descriptor?.set !== "function") return descriptor;
+	const adopted = adoptAccessor(wrapper, descriptor);
+	const result = { ...descriptor };
+	if ("get" in descriptor) result.get = adopted.get ?? descriptor.get;
+	if ("set" in descriptor) result.set = adopted.set ?? descriptor.set;
+	return result;
+}
+
+/**
  * Build this layer of the wrapper class over `Base`, once (see `unified-wrapper.mjs`).
  * @param {Function} Base - The class below this layer.
  * @returns {Function} The layer's class.
@@ -398,898 +1260,6 @@ export function TrapsLayer(Base) {
 			 * @public
 			 */
 			createProxy() {
-				/**
-				 * The `Symbol.hasInstance` a loaded callable node answers (#632): the language's own test against its function, which
-				 * walks the instance's prototype chain to the function's `prototype` without running any of the module's code.
-				 * @param {Function} fn - The node's function.
-				 * @returns {Function} The test.
-				 * @private
-				 */
-				function hasInstanceOf(fn) {
-					let test = WeakMapMethods.get(HAS_INSTANCE_BY_IMPL, fn);
-					if (!test) {
-						// A class extending the node's view inherits from the member view a reader got of `prototype`, which counts as it
-						// (see selfHasInstance); a function with no `prototype` of its own (a bound one) answers as the language does.
-						test = (value) => {
-							const prototype = fn.prototype;
-							return prototype !== null && typeof prototype === "object"
-								? selfHasInstance(prototype, value)
-								: Reflect.apply(FUNCTION_HAS_INSTANCE, fn, [value]);
-						};
-						WeakMapMethods.set(HAS_INSTANCE_BY_IMPL, fn, test);
-					}
-					return test;
-				}
-
-				/**
-				 * Take the pending engine read {@link PENDING_INVARIANT_READ} when it is this one.
-				 *
-				 * @param {object} wrapper - The node's wrapper whose descriptor is read.
-				 * @param {string|symbol} prop - The key read.
-				 * @returns {boolean} Whether this read is the engine's check after a view's definition.
-				 * @private
-				 */
-				function takeInvariantRead(wrapper, prop) {
-					const pending = PENDING_INVARIANT_READ;
-					PENDING_INVARIANT_READ = null;
-					return pending !== null && pending.wrapper === wrapper && pending.prop === prop;
-				}
-
-				/**
-				 * Whether a node holds a member fixed (non-configurable): on its target, on its wrapper, or on the value behind it.
-				 * @param {object} wrapper - The node's wrapper.
-				 * @param {object} target - The proxy's target.
-				 * @param {string|symbol} prop - The member.
-				 * @returns {boolean} True when the member cannot be removed.
-				 * @private
-				 */
-				function holdsFixed(wrapper, target, prop) {
-					if (isFixedOnTarget(target, prop)) return true;
-					if (target !== wrapper && isFixedOnTarget(wrapper, prop)) return true;
-					const impl = wrapper.____slothletInternal.impl;
-					return impl !== null && typeof impl === "object" && !util.types.isProxy(impl) && isFixedOnTarget(impl, prop);
-				}
-
-				/**
-				 * A serialized snapshot of the wrapper tree with the terminal leaves the reader may not read left out.
-				 *
-				 * `toJSON` reconstructs the underlying data directly from the impl tree, so it bypasses the
-				 * proxy traps entirely — without this, `JSON.stringify(namespace)` would hand a gated caller
-				 * every terminal value beneath a namespace it cannot read. The snapshot shares the module's own objects, so
-				 * an object that loses a leaf, or holds an array, is copied rather than changed: serializing never edits a
-				 * module's data, frozen or not. Plain objects are recursed into, as their traversal is ungated by design. An
-				 * array in the snapshot is the module's own array (#602): the copy holds its api node instead, so
-				 * `JSON.stringify` reads each element through the node, gated as the value it reads at that moment, as
-				 * `JSON.stringify` of the array member does (#603 review).
-				 *
-				 * @param {object} wrapper - Wrapper the snapshot was extracted from.
-				 * @param {*} data - Extracted snapshot; never changed.
-				 * @param {string} basePath - Api path corresponding to `data`.
-				 * @param {object} node - The api node corresponding to `data`.
-				 * @param {WeakSet<object>} seen - The objects on the current path: an object the snapshot holds at two
-				 *   keys is redacted at each, and a cycle still stops.
-				 * @param {{currentWrapper: object, context: object}} [callerOverride] - The reader to redact for, when it is not
-				 *   the one reading now (a module serializing a node it kept, see {@link capturedView}).
-				 * @param {{wrapper: object, reader: object}|null} [kept] - The access a node a module kept is making (see
-				 *   {@link resolveEnforcedCaller}), for the reader reading now.
-				 * @returns {*} `data`, or a copy of it with what the reader may not read left out.
-				 * @private
-				 */
-				function redactSerialized(wrapper, data, basePath, node, seen, callerOverride, kept = null) {
-					if (!data || typeof data !== "object" || Arrays.isArray(data) || WeakSetMethods.has(seen, data)) return data;
-					WeakSetMethods.add(seen, data);
-					let copy = null;
-					// The copy keeps the object's prototype, so a `toJSON` it inherits still serializes it.
-					const own = () => (copy ??= Objects.assign(Objects.create(Objects.getPrototypeOf(data)), data));
-					for (let ofIndex = 0, ofList = Objects.keys(data); ofIndex < ofList.length; ofIndex++) {
-						const key = ofList[ofIndex];
-						const value = data[key];
-						const targetPath = `${basePath}.${key}`;
-						if (isTerminalData(value)) {
-							if (!readGateDecision(wrapper, targetPath, callerOverride, kept).allowed) delete own()[key];
-						} else if (
-							value !== null &&
-							typeof value === "object" &&
-							readsNothingBeneath(wrapper, targetPath, callerOverride, kept, null, value)
-						) {
-							// An object member the rules leave the reader nothing of is left out, as a value it may not read is.
-							delete own()[key];
-						} else if (Arrays.isArray(value)) {
-							own()[key] = node[key];
-						} else if (serializesItself(value)) {
-							own()[key] = wrapper.___serializedHolder(value, targetPath, callerOverride, kept);
-						} else {
-							const redacted = redactSerialized(wrapper, value, targetPath, node[key], seen, callerOverride, kept);
-							if (redacted !== value) own()[key] = redacted;
-						}
-					}
-					WeakSetMethods.delete(seen, data);
-					return copy ?? data;
-				}
-
-				/**
-				 * Keep the node made for a member a node inherits (see {@link inheritedMemberNode}).
-				 * @param {object} wrapper - The node's wrapper.
-				 * @param {PropertyKey} prop - The member's key.
-				 * @param {*} value - The member's value.
-				 * @param {*} node - The node made for it.
-				 * @returns {*} `node`.
-				 * @private
-				 */
-				function keepInheritedMemberNode(wrapper, prop, value, node) {
-					let byKey = WeakMapMethods.get(INHERITED_MEMBER_NODES, wrapper);
-					if (byKey === undefined) WeakMapMethods.set(INHERITED_MEMBER_NODES, wrapper, (byKey = new Map()));
-					MapMethods.set(byKey, prop, { value, node });
-					return node;
-				}
-
-				/**
-				 * The node a node made before for a member it inherits, while that member still has the same value.
-				 * @param {object} wrapper - The node's wrapper.
-				 * @param {PropertyKey} prop - The member's key.
-				 * @param {*} value - The member's value now.
-				 * @returns {*} The node, or `undefined`.
-				 * @private
-				 */
-				function inheritedMemberNode(wrapper, prop, value) {
-					const held = MapMethods.get(WeakMapMethods.get(INHERITED_MEMBER_NODES, wrapper) ?? EMPTY_INHERITED_NODES, prop);
-					return held !== undefined && held.value === value ? held.node : undefined;
-				}
-
-				/**
-				 * Whether a node inherits a member by a symbol key from the prototype on its record (see {@link ownsPrototype}).
-				 * @param {object} wrapper - The node's wrapper.
-				 * @param {symbol} prop - The key.
-				 * @returns {boolean} Whether it does.
-				 * @private
-				 */
-				function inheritsSymbol(wrapper, prop) {
-					const prototype = wrapper.___nodeInherits(prop);
-					return prototype !== undefined && prototype !== null && Reflect.has(prototype, prop);
-				}
-
-				/**
-				 * Whether a node fronts a value a module keeps whole and live (a class instance, an emitter, a value grafted at
-				 * runtime), whose members the node reads from the value itself.
-				 * @param {UnifiedWrapper} wrapper - The node's wrapper.
-				 * @returns {boolean} True for such a node.
-				 * @private
-				 */
-				function frontsLiveValue(wrapper) {
-					const internal = wrapper.____slothletInternal;
-					const impl = internal.impl;
-					if (impl === null || (typeof impl !== "object" && typeof impl !== "function")) return false;
-					return internal.deferChildAdopt || (EventEmitter && inherits(impl, EventEmitter)) || isClassInstance(impl);
-				}
-
-				/**
-				 * Run a hooked call whose path has around hooks.
-				 *
-				 * @param {object} wrapper - The UnifiedWrapper being invoked.
-				 * @param {object} hookManager - The instance's HookManager.
-				 * @param {Array<object>} arounds - Around hooks that fire for this call (already permission-filtered).
-				 * @param {{asyncBefore: boolean, asyncAfter: boolean, asyncAround: boolean}} strategy - The path's dispatch strategy.
-				 * @param {*} thisArg - Receiver for the target.
-				 * @param {Array} callArgs - Arguments the caller passed.
-				 * @param {object} api - Bound API handed to hooks.
-				 * @param {object} ctx - User context handed to hooks.
-				 * @param {{store: object|null, identity: object}|null} [entryIdentity=null] - The caller identity the permission
-				 *   gate resolved, which the target is entered with (see enforcePermission).
-				 * @returns {*} The call's result — a plain value on the synchronous pipeline, a Promise on the
-				 *   asynchronous one (guarded when a synchronous target was promoted).
-				 * @private
-				 *
-				 * @description
-				 * Pipeline order, outermost first: `always`/`error` observers → around hooks (highest priority
-				 * outermost) → before hooks → the function → after hooks. The observers sit outside the around
-				 * chain, so they see exactly what the caller receives: an error an around hook rethrows reaches the
-				 * error hooks (with the source of wherever it was first thrown), one it swallows does not, and
-				 * `always` fires once after the chain settles. `suppressErrors` likewise applies to what escapes the
-				 * chain — inside it, failures propagate through `next()` so an around hook can handle them.
-				 *
-				 * The synchronous pipeline is kept when every matching before/after/around handler is synchronous
-				 * and the target is not declared `async` (and, in lazy mode, is already materialized); otherwise the
-				 * whole call runs asynchronously, with the same promotion guard as a call promoted by an async
-				 * before/after hook.
-				 */
-				function runAroundPipeline(wrapper, hookManager, arounds, strategy, thisArg, callArgs, api, ctx, entryIdentity = null) {
-					const internal = wrapper.____slothletInternal;
-					const path = internal.apiPath;
-					const contextManager = wrapper.slothlet.contextManager;
-					const instanceID = wrapper.slothlet.instanceID;
-
-					// Who is calling: the same resolution that makes `metadata.caller()` inside the target null —
-					// the target's execution store takes its caller from the wrapper active in THIS instance's flow
-					// at the moment of the call.
-					const callerWrapper = contextManager.getCallerIdentity(instanceID)?.currentWrapper ?? null;
-					const entry = !callerWrapper;
-					// The same `caller` object a version dispatcher and a permission record get: { path, module, metadata, version }.
-					const caller = callerWrapper ? (wrapper.slothlet.handlers.versionManager?.buildCallerArg(callerWrapper) ?? null) : null;
-
-					// Only a pinned (module-registered) around hook runs under a different identity than the call, so
-					// only then is the call's own flow captured for its next() to restore.
-					const flow = ArrayMethods.some(arounds, (hook) => isCallerLocked(hook.handler)) ? contextManager.captureFlow(instanceID) : null;
-					const runInCallerFlow = flow ? (fn) => contextManager.runInFlow(flow, fn) : null;
-
-					// First record wins: an error rethrown by an around hook keeps the source it was first thrown
-					// from; an error an around hook throws itself is recorded as an `around` failure. Matched with
-					// Object.is, so a rejection value not equal to itself (NaN) still finds its record.
-					const sources = [];
-					const errorSink = (error, source) => {
-						if (!ArrayMethods.some(sources, (entryRecord) => Objects.is(entryRecord.error, error))) listPush(sources, { error, source });
-					};
-					// The stage to report a rejection nothing recorded as; see AroundChainOptions.onUnobserved.
-					let unobserved = null;
-					const onUnobserved = (source) => {
-						unobserved = source;
-					};
-					const functionSource = (error) =>
-						failureSource({ type: "function", at: wrapper.clock.now() }, wrapper.___readTargetFailure(error));
-
-					const invokeTarget = (targetArgs) => {
-						const impl = internal.impl;
-						// rawErrors: a leaf's throw is application data — never re-typed (#252).
-						if (typeof impl === "function") {
-							return contextManager.runInContext(
-								wrapper.instanceID,
-								impl,
-								thisArg,
-								targetArgs,
-								wrapper,
-								true,
-								false,
-								null,
-								entryIdentity,
-								true
-							);
-						}
-						if (impl && typeof impl === "object" && typeof impl.default === "function") {
-							return contextManager.runInContext(
-								wrapper.instanceID,
-								impl.default,
-								impl,
-								targetArgs,
-								wrapper,
-								true,
-								false,
-								null,
-								entryIdentity,
-								true
-							);
-						}
-						throw new wrapper.SlothletError("API_PATH_NOT_CALLABLE", { path: segmentsOf(path), received: typeof impl });
-					};
-
-					// Observers, run once per call on the way out.
-					const settleValue = (value) => {
-						hookManager.executeAlwaysHooks(path, callArgs, value, false, [], api, ctx);
-						return value;
-					};
-					const settleError = (error) => {
-						// Every rejection is recorded on its way out except one of a thenable no view could be put on (a frozen
-						// `then`); that one is the target's, so it is classified as the target before anything reads it (#599).
-						const recordedSource = ArrayMethods.find(sources, (record) => Objects.is(record.error, error))?.source;
-						const unrecorded = recordedSource === undefined && unobserved ? wrapper.___readTargetFailure(error) : null;
-						const originalError = unrecorded ? unrecorded.originalError() : unwrapError(error);
-						// A failure an inner hooked call already reported is not reported again (same rule as the
-						// pipeline without around hooks); `always` still observes this call.
-						if (!isHookProcessed(error)) {
-							const recorded = recordedSource ?? failureSource({ ...unobserved }, unrecorded ?? hookManager.failureOf(error));
-							hookManager.executeErrorHooks(path, originalError, recorded, callArgs, api, ctx);
-						}
-						hookManager.executeAlwaysHooks(path, callArgs, undefined, true, [originalError], api, ctx);
-						if (wrapper.slothlet.config?.hook?.errors === "suppress") return undefined;
-						throw error;
-					};
-
-					const leafIsAsync = util.types.isAsyncFunction(internal.impl) || util.types.isAsyncFunction(internal.impl?.default);
-					const lazyPending = internal.mode === "lazy" && !internal.state.materialized;
-					const promoted = strategy.asyncBefore || strategy.asyncAfter || strategy.asyncAround;
-					const options = { caller, entry, errorSink, runInCallerFlow, onUnobserved };
-
-					if (promoted || leafIsAsync || lazyPending) {
-						const core = async (coreArgs) => {
-							const beforeResult = await hookManager.executeBeforeHooksAsync(path, coreArgs, api, ctx, errorSink);
-							if (beforeResult.shortCircuit) return beforeResult.value;
-							coreArgs = beforeResult.args;
-							let settled;
-							try {
-								if (internal.mode === "lazy" && !internal.state.materialized) {
-									await wrapper.___materialize();
-								}
-								const raw = invokeTarget(coreArgs);
-								settled = raw && typeof raw === "object" && typeof raw.then === "function" ? await raw : raw;
-							} catch (error) {
-								errorSink(error, functionSource(error));
-								throw error;
-							}
-							const afterResult = await hookManager.executeAfterHooksAsync(path, settled, coreArgs, api, ctx, errorSink);
-							return afterResult.modified ? afterResult.result : settled;
-						};
-						const run = pinnedThen(
-							hookManager.executeAroundChain(arounds, path, callArgs, api, ctx, { ...options, core, isAsync: true }),
-							settleValue,
-							settleError
-						);
-						// Same contract as a call promoted by an async before/after hook: a target declared `async`
-						// already hands its callers a Promise; a promoted synchronous one hands back a guarded one.
-						return promoted && !leafIsAsync ? guardPromotedResult(run, path, wrapper.SlothletError) : run;
-					}
-
-					const core = (coreArgs) => {
-						const beforeResult = hookManager.executeBeforeHooks(path, coreArgs, api, ctx, errorSink);
-						if (beforeResult.shortCircuit) return beforeResult.value;
-						coreArgs = beforeResult.args;
-						let result;
-						try {
-							result = invokeTarget(coreArgs);
-						} catch (error) {
-							errorSink(error, functionSource(error));
-							throw error;
-						}
-						// A plain (not `async`-declared) target returning a Promise: after hooks attach to it, exactly
-						// as on the pipeline without around hooks.
-						if (result && typeof result === "object" && typeof result.then === "function") {
-							const afterReaction = (resolved) => {
-								const afterResult = hookManager.executeAfterHooks(path, resolved, coreArgs, api, ctx, errorSink);
-								return afterResult.modified ? afterResult.result : resolved;
-							};
-							const recordAsTarget = (error) => errorSink(error, functionSource(error));
-							// A promise of the engine's own is reacted to with the language's `then`, as `await` reacts to it; one of a
-							// module's class through its own `then`, as `await` calls it.
-							const react = isEnginePromise(result)
-								? FunctionMethods.bind(pinnedThen, null, result)
-								: inherits(result, Promise)
-									? FunctionMethods.bind(result.then, result)
-									: null;
-							if (react !== null) {
-								return react(afterReaction, (error) => {
-									recordAsTarget(error);
-									throw error;
-								});
-							}
-							// A hand-written thenable is reacted to as `await` would, its rejections recorded as the target's however
-							// its `then` delivers them (see HookManager#observeThenable).
-							return hookManager.observeThenable(result, afterReaction, recordAsTarget, () =>
-								onUnobserved({ type: "function", timestamp: wrapper.clock.now() })
-							);
-						}
-						const afterResult = hookManager.executeAfterHooks(path, result, coreArgs, api, ctx, errorSink);
-						return afterResult.modified ? afterResult.result : result;
-					};
-
-					let value;
-					try {
-						value = hookManager.executeAroundChain(arounds, path, callArgs, api, ctx, { ...options, core, isAsync: false });
-					} catch (error) {
-						return settleError(error);
-					}
-					// The only thenable an around hook may return on this pipeline is one `next()` returned, passed
-					// through or derived from (`next().then(check)`); observe it when it settles.
-					if (value && typeof value === "object" && typeof value.then === "function") {
-						if (isEnginePromise(value)) return pinnedThen(value, settleValue, settleError);
-						return inherits(value, Promise) ? value.then(settleValue, settleError) : settleThenable(value, settleValue, settleError);
-					}
-					return settleValue(value);
-				}
-
-				/**
-				 * Whether a node of a run's tree holds a member it was given in the run on its wrapper, over the live value it fronts
-				 * (a class instance, an emitter): the value is the module's, which the instance's tree fronts too.
-				 * @param {UnifiedWrapper} wrapper - The node's wrapper.
-				 * @param {string|symbol} prop - The member.
-				 * @returns {boolean} True when the node's own member answers.
-				 * @private
-				 */
-				function runTreeHolds(wrapper, prop) {
-					const held = wrapper.____slothletInternal.runHeldKeys;
-					return held !== undefined && SetMethods.has(held, prop);
-				}
-
-				/**
-				 * What a caller is handed for a promise a call returned while a run is open: a promise of the same value, which is
-				 * saved for the runs open before the caller has it (see {@link checkpointHandout}), the same one each time for
-				 * the same promise. A rejection is handed on as it is.
-				 * @param {object} slothlet - The instance.
-				 * @param {Promise<*>} promise - The promise.
-				 * @returns {Promise<*>} The promise the caller is handed.
-				 * @private
-				 */
-				function checkpointSettled(slothlet, promise) {
-					if (!runsOpen(domainOf(slothlet)) || RUN_VIEW_ACCESS !== 0) return promise;
-					let handed = WeakMapMethods.get(SETTLED_CHECKPOINTS, promise);
-					if (handed === undefined) {
-						handed = PromiseMethods.then(promise, (value) => {
-							checkpointHandout(slothlet, value);
-							return value;
-						});
-						WeakMapMethods.set(SETTLED_CHECKPOINTS, promise, handed);
-					}
-					return handed;
-				}
-
-				/**
-				 * Apply a definition to a sealed node's shell target (see the preventExtensions trap), and to the module's
-				 * array for an array member, so both answer as the array itself would (#603, #609).
-				 *
-				 * @description
-				 * A sealed shell holds each data member as a data property, so the node reports the same attributes a sealed
-				 * or frozen object of its own would. A writable member's value is not pinned by the proxy invariants, so reads
-				 * keep going through the node and its permission check; a value defined on it goes through the node's own
-				 * write. A member made read-only is pinned for every reader: the shell takes the member's value as the node
-				 * holds it at that moment, and a read the rules deny is refused rather than answered (see
-				 * {@link gateFixedValue}). A member the module's array holds as an accessor stays an accessor that
-				 * reads and writes through the node. Each change is applied to the module's array as well when it holds the
-				 * key, after both accept it, so freezing the node freezes the array's elements as freezing the array would.
-				 *
-				 * @param {UnifiedWrapper} wrapper - The node's wrapper.
-				 * @param {object|Function|Array} target - The sealed shell.
-				 * @param {string|symbol} prop - Property key.
-				 * @param {PropertyDescriptor} descriptor - Descriptor to define.
-				 * @returns {boolean} Whether the definition was applied.
-				 * @private
-				 *
-				 * @example
-				 * defineOnSealedShell(wrapper, shell, "0", { configurable: false, writable: false }); // what Object.freeze sends
-				 */
-				function defineOnSealedShell(wrapper, target, prop, descriptor) {
-					const current = Reflect.getOwnPropertyDescriptor(target, prop);
-					// A non-extensible node takes no new key, as on the object itself.
-					if (!current) return false;
-					const impl = wrapper.____slothletInternal.impl;
-					// A node fronting a module's own object defines on that object too, as freezing the object would (#757).
-					const holder = Arrays.isArray(impl)
-						? arrayKeyHolder(impl, prop)
-						: MapMethods.has(FRAMEWORK_WRITES, wrapper)
-							? null
-							: moduleObjectOf(wrapper, prop);
-					const mirrors = holder !== null && hasOwn(holder, prop);
-					let attributes = descriptor;
-					let mirrored = descriptor;
-					if (!("value" in current)) {
-						// An accessor that reads through the node: only its attributes change.
-						if ("get" in descriptor || "set" in descriptor || "value" in descriptor || "writable" in descriptor) return false;
-					} else if (!("get" in descriptor) && !("set" in descriptor)) {
-						attributes = { ...descriptor };
-						mirrored = { ...descriptor };
-						// A member made read-only is pinned as the node holds it now: an earlier write through the node reached the
-						// module's value, not the shell's copy. The module's array keeps its own value, not the api node.
-						if (current.writable && descriptor.writable === false && !("value" in descriptor)) {
-							attributes.value = shellValue(wrapper, prop);
-							// A function node's own member holding the module's code is held as a stand-in every holder may be described
-							// (see pinnedCodeMember).
-							if (functionOf(impl) !== null && !hasOwn(wrapper, prop) && pinsAsCode(attributes.value, wrapper.slothlet))
-								attributes.value = pinnedCodeMember(wrapper, attributes.value);
-							if (mirrors) delete mirrored.value;
-						}
-						// The shell holds a module object's accessor as data (see sealShell): the object's accessor takes only the
-						// attributes an accessor has, as freezing the object itself defines it (#757).
-						const held = mirrors && !Arrays.isArray(impl) ? Reflect.getOwnPropertyDescriptor(holder, prop) : undefined;
-						if (held !== undefined && !("value" in held)) {
-							if ("value" in descriptor) return false;
-							mirrored = { ...mirrored };
-							delete mirrored.value;
-							delete mirrored.writable;
-						}
-					}
-					// Both are checked before either changes, so a refusal by one leaves the other as it was.
-					if (!canDefine(target, prop, attributes) || (mirrors && !canDefine(holder, prop, mirrored))) return false;
-					// A value goes through the node's own write while the member is writable, so the module's value takes it.
-					if ("value" in descriptor && current.writable && !Reflect.set(wrapper.____slothletInternal.proxy, prop, descriptor.value))
-						return false;
-					if (mirrors) Reflect.defineProperty(holder, prop, mirrored);
-					Reflect.defineProperty(target, prop, attributes);
-					return true;
-				}
-
-				/**
-				 * An impl's own accessor descriptor as the node describes it (#597): each half the node did not adopt is adopted
-				 * (see {@link adoptAccessor}), so a getter or setter taken from the description and run anywhere runs as the
-				 * module the node belongs to. A data descriptor is returned as it is.
-				 * @param {object} wrapper - The node's wrapper.
-				 * @param {PropertyDescriptor|undefined} descriptor - The impl's descriptor.
-				 * @returns {PropertyDescriptor|undefined} The descriptor to report.
-				 * @private
-				 */
-				function describeImplMember(wrapper, descriptor) {
-					if (!descriptor || (typeof descriptor.get !== "function" && typeof descriptor.set !== "function")) return descriptor;
-					const adopted = adoptAccessor(wrapper, descriptor);
-					return { __proto__: null, ...descriptor, get: adopted.get, set: adopted.set };
-				}
-
-				/**
-				 * Write a member of the module's object a node fronts, as the same assignment to the object does (#746). Only the
-				 * object's own members are touched: a new key becomes an ordinary member of it, and a setter the module has put there
-				 * since the node was built runs on the object as the module the node belongs to, never as the writer (#597).
-				 * @param {UnifiedWrapper} wrapper - The node's wrapper.
-				 * @param {object} object - The module's object (see {@link moduleObjectOf}).
-				 * @param {PropertyKey} prop - The member's key.
-				 * @param {*} value - What to write.
-				 * @returns {boolean} Whether the object took the write.
-				 * @private
-				 */
-				function writeModuleObject(wrapper, object, prop, value) {
-					const held = Reflect.getOwnPropertyDescriptor(object, prop);
-					if (held === undefined) {
-						const added =
-							Reflect.isExtensible(object) &&
-							Reflect.defineProperty(object, prop, { __proto__: null, value, writable: true, enumerable: true, configurable: true });
-						if (added && typeof prop === "string") SetMethods.add(moduleObjectKeys(object), prop);
-						return added;
-					}
-					if ("value" in held) return held.writable === true && Reflect.defineProperty(object, prop, { __proto__: null, value });
-					if (typeof held.set !== "function") return false;
-					wrapper.___runAccessor(held.set, object, [value]);
-					return true;
-				}
-
-				/**
-				 * The reader of an access, resolved now, for a read answered once the access has ended (an `await` of a lazy node,
-				 * answered after the load). Null while permissions or read gating are off.
-				 * @param {UnifiedWrapper} wrapper - The node's wrapper.
-				 * @param {object|null} access - The access.
-				 * @returns {{store: object|null|undefined, identity: object|undefined}|null} The reader.
-				 * @private
-				 */
-				function pinReader(wrapper, access) {
-					const pm = wrapper.slothlet.handlers?.permissionManager;
-					if (!pm || !pm.isEnabled() || !pm.isReadGatingEnabled()) return null;
-					const entry = accessEntry(access, wrapper);
-					if (entry) return entry;
-					const contextManager = wrapper.slothlet.contextManager;
-					const instanceID = wrapper.slothlet.instanceID;
-					return {
-						store: contextManager?.tryGetContext?.(instanceID),
-						identity: contextManager?.getCallerIdentity?.(instanceID)
-					};
-				}
-
-				/**
-				 * Check a member read through a node that holds built-in data or an error (a file's default export that is a `Map`, a
-				 * `Date`, an error, …) as a read of that value at the node's path: the node is the value there, as the same value
-				 * exported by name is, so a read rule naming the path refuses every member read through it, a getter of the engine's
-				 * and a method alike. The framework's own keys, and `then` (which `await` asks for), are no member reads.
-				 * @param {UnifiedWrapper} wrapper - The node's wrapper.
-				 * @param {PropertyKey} prop - The member read.
-				 * @param {{wrapper: object, reader: object}|null} kept - The access a node a module kept is making.
-				 * @param {object|null} access - The read of `self` this is part of, when it was resolved already.
-				 * @returns {void}
-				 * @throws {SlothletError} `PERMISSION_DENIED` when the reader may not read the value.
-				 * @private
-				 *
-				 * @example
-				 * // single/derror.mjs: export default new RangeError("bad"); rule: deny reader.** → single.derror
-				 * self.single.derror.message; // PERMISSION_DENIED, as self.owner.failure.message is under a rule on owner.failure
-				 */
-				function gateDataNodeMember(wrapper, prop, kept, access) {
-					if (prop === "then" || isFrameworkReservedKey(prop)) return;
-					const permissionManager = wrapper.slothlet.handlers?.permissionManager;
-					if (!permissionManager || !permissionManager.isEnabled() || !permissionManager.isReadGatingEnabled()) return;
-					const impl = wrapper.____slothletInternal.impl;
-					// A primitive a loaded node holds (a lazy folder kept before it loaded as one) is data like a built-in (#797).
-					if (nodePrimitive(wrapper) !== NO_NODE_PRIMITIVE) {
-						wrapper.___gateNodeValue(kept, access);
-						return;
-					}
-					if (impl === null || typeof impl !== "object") return;
-					let isData = WeakMapMethods.get(DATA_NODE_IMPLS, impl);
-					if (isData === undefined) {
-						isData = !util.types.isProxy(impl) && isTerminalData(impl);
-						WeakMapMethods.set(DATA_NODE_IMPLS, impl, isData);
-					}
-					if (!isData) return;
-					wrapper.___gateNodeValue(kept, access);
-				}
-
-				/**
-				 * The prototype a node fronting an instance of a class of the module's reports, by `Object.getPrototypeOf` and through
-				 * `__proto__` (#667): the instance's own, its class's `prototype`. It holds the class's methods and `constructor`, so
-				 * reaching it is checked as a call of the class's node (see instanceClassFront), whoever holds the instance's
-				 * node — read through `self` or handed to the module as an argument — exactly as reading the class's `prototype` is. A
-				 * reader the class is closed to is refused it: the prototype is never stood in for by another, so no write meant for
-				 * the class lands on a prototype every value shares.
-				 * @param {UnifiedWrapper} wrapper - The instance's node's wrapper.
-				 * @param {{wrapper: object, reader: object}|null} [kept] - The access a node a module kept is making into the instance.
-				 * @returns {object|undefined} The prototype, or `undefined` for a node fronting no such instance.
-				 * @throws {SlothletError} PERMISSION_DENIED when the reader may not call the class's node.
-				 * @private
-				 */
-				function instanceClassPrototype(wrapper, kept = null) {
-					const classNode = wrapper.___instanceClassFront();
-					if (!classNode) return undefined;
-					const classWrapper = resolveWrapper(classNode);
-					const prototype = Reflect.getPrototypeOf(wrapper.____slothletInternal.impl);
-					enforceCodeMember(classWrapper, prototype, kept);
-					return atClassSite(wrapper.slothlet, prototypeForReader(classWrapper, classWrapper.___exposePrototype(prototype), "prototype"));
-				}
-
-				/**
-				 * What a node whose own prototype holds the module's code (an emitter of a class of the module's) reports to a reader
-				 * that may not call it (#632, #667): an object inheriting from the nearest prototype above it holding none of the
-				 * module's code, so `instanceof` against the language's or Node's own classes still holds, by `Object.getPrototypeOf`
-				 * and through `__proto__` alike. It holds nothing of its own and takes no change: a write meant for the module's class
-				 * is refused, never landing on a prototype other values share. The same object each time, for the same node and
-				 * nearest prototype.
-				 * @param {UnifiedWrapper} wrapper - The node's wrapper.
-				 * @param {object|null} nearest - The nearest prototype holding none of the module's code.
-				 * @returns {object|null} The stand-in, or `null` when there is no such prototype.
-				 * @private
-				 */
-				function withheldPrototype(wrapper, nearest) {
-					if (nearest === null) return null;
-					const held = WeakMapMethods.get(WITHHELD_PROTOTYPES, wrapper);
-					if (held?.nearest === nearest) return held.standIn;
-					// A change through it is checked as a call of the node, so a reader it was withheld from is refused as reading the
-					// prototype itself would refuse it; any other reader finds it closed, as a frozen object is.
-					const refuse = () => {
-						enforcePermission(wrapper, [], false);
-						return false;
-					};
-					const standIn = new NativeProxy(Objects.freeze(Objects.create(nearest)), {
-						set: (target, prop, value, receiver) => (receiver === standIn ? refuse() : Reflect.set(target, prop, value, receiver)),
-						defineProperty: refuse,
-						deleteProperty: refuse,
-						setPrototypeOf: refuse,
-						preventExtensions: (target) => {
-							refuse();
-							return Reflect.preventExtensions(target);
-						}
-					});
-					markFrameworkInternal(standIn);
-					WeakMapMethods.set(WITHHELD_PROTOTYPES, wrapper, { nearest, standIn });
-					return standIn;
-				}
-
-				/**
-				 * The prototype a closed node holding a class instance keeps on its shell (#725). A closed node reports its shell's
-				 * prototype to every holder, so the shell holds the instance's prototype as a view standing as the node does, at the
-				 * path reading it is checked at: a write through it is decided when it is made, so turning the permission system on
-				 * later still holds a module not allowed the write to it. A prototype made by no module is held as it is.
-				 * @param {UnifiedWrapper} wrapper - The node's wrapper.
-				 * @returns {object|null|undefined} What the shell holds, or `undefined` for a node holding no such instance.
-				 * @private
-				 */
-				function instanceShellPrototype(wrapper) {
-					const site = wrapper.___instancePrototypeSite();
-					if (site === undefined) return undefined;
-					const { prototype, checked } = site;
-					if (prototype === null || WeakSetMethods.has(INTRINSICS, prototype) || isSharedValue(prototype) || !wrapper.slothlet)
-						return prototype;
-					recordPrototypePath(wrapper.slothlet, checked.___exposePrototype(prototype), site.site);
-					return prototypeHandleOf(wrapper.slothlet, prototype);
-				}
-
-				/**
-				 * The prototype a closed emitter's shell holds (#667). A closed node reports its shell's prototype to every holder of
-				 * the node, for as long as the node lives: the host, and each module the host or another module hands the node to. The
-				 * shell therefore holds a view standing as the node does whenever the prototype is the module's code, whether the
-				 * permission system is on now or not: a write through it is decided when it is made, so turning the system on later
-				 * still holds a module not owning the emitter to it. A prototype made by no module is held as it is.
-				 * @param {UnifiedWrapper} wrapper - The emitter's node's wrapper.
-				 * @param {object} prototype - The emitter's own prototype.
-				 * @returns {object} What the shell holds.
-				 * @private
-				 */
-				function sealedShellPrototype(wrapper, prototype) {
-					if (!wrapper.slothlet || WeakSetMethods.has(INTRINSICS, prototype) || isSharedValue(prototype)) return prototype;
-					recordPrototypePath(wrapper.slothlet, prototype, prototypeSiteOf(wrapper, null));
-					return prototypeHandleOf(wrapper.slothlet, prototype);
-				}
-
-				/**
-				 * Record `wrapper`'s node as the one fronting its function, when its file exports that function, unless another node of
-				 * the instance already does.
-				 * @param {UnifiedWrapper} wrapper - The node's wrapper, whose proxy exists.
-				 * @returns {void}
-				 * @private
-				 */
-				function recordFunctionNode(wrapper) {
-					/**
-					 * Record `node` as the one fronting `fn` behind its layer, unless another live node of the instance already does.
-					 * @param {object} slothlet - The instance.
-					 * @param {*} fn - The function behind the layer.
-					 * @param {Function} node - The node.
-					 * @returns {void}
-					 * @private
-					 */
-					function recordLayerFront(slothlet, fn, node) {
-						if (typeof fn !== "function") return;
-						let byFunction = WeakMapMethods.get(LAYER_FRONTS, slothlet);
-						if (!byFunction) WeakMapMethods.set(LAYER_FRONTS, slothlet, (byFunction = new WeakMap()));
-						if (
-							(WeakMapMethods.get(byFunction, fn) == null ? undefined : WeakRefMethods.deref(WeakMapMethods.get(byFunction, fn))) ===
-							undefined
-						)
-							WeakMapMethods.set(byFunction, fn, new WeakRef(node));
-					}
-
-					const { impl, proxy, filePath } = wrapper.____slothletInternal;
-					if (typeof impl !== "function" || !wrapper.slothlet) return;
-					// A function node built over a folder's or a mount's default function holds slothlet's layer over it: the function
-					// behind the layer is the one its `prototype.constructor` names, so it is fronted by this node too.
-					if (isCompositionLayer(impl)) recordLayerFront(wrapper.slothlet, layerUnderlying(impl), proxy);
-					// Only a function its file exports stands for it: a node built for one the module did not export (a class reached
-					// through an instance's members) is a member of that instance, not the class's own node.
-					if (!filePath || !wrapper.slothlet.handlers?.ownership?.resolveExportPath?.(filePath, impl)) return;
-					let byFunction = WeakMapMethods.get(FUNCTION_NODES, wrapper.slothlet);
-					if (!byFunction) WeakMapMethods.set(FUNCTION_NODES, wrapper.slothlet, (byFunction = new WeakMap()));
-					if (
-						(WeakMapMethods.get(byFunction, impl) == null ? undefined : WeakRefMethods.deref(WeakMapMethods.get(byFunction, impl))) ===
-						undefined
-					)
-						WeakMapMethods.set(byFunction, impl, new WeakRef(proxy));
-					WeakMapMethods.set(CLASS_INSTANCES, impl, new WeakRef(wrapper.slothlet));
-					// Every node fronting it, for a class exported under more than one name (#667).
-					let everyFunction = WeakMapMethods.get(FUNCTION_NODE_SETS, wrapper.slothlet);
-					if (!everyFunction) WeakMapMethods.set(FUNCTION_NODE_SETS, wrapper.slothlet, (everyFunction = new WeakMap()));
-					const live = filterList(WeakMapMethods.get(everyFunction, impl) ?? [], (ref) => WeakRefMethods.deref(ref) !== undefined);
-					if (!ArrayMethods.some(live, (ref) => WeakRefMethods.deref(ref) === proxy)) listPush(live, new WeakRef(proxy));
-					WeakMapMethods.set(everyFunction, impl, live);
-				}
-
-				/**
-				 * Record a value written onto a module's node as handed to that module (#597), unless the module itself writes it:
-				 * handed back out, it is the writer's value as it was, never the module's code.
-				 * @param {object} wrapper - The node's wrapper.
-				 * @param {*} value - The value written.
-				 * @returns {void}
-				 * @private
-				 */
-				function markWritten(wrapper, value) {
-					if (value === null || (typeof value !== "object" && typeof value !== "function")) return;
-					if (!wrapper?.slothlet?.instanceID || !wrapper.slothlet.contextManager?.runInContext || !handsOutAsModule(wrapper)) return;
-					if (isSlothletValue(value) || WeakSetMethods.has(INTRINSICS, value)) return;
-					const maker = makerOf(wrapper);
-					if (WeakMapMethods.has(maker.made, value)) return;
-					const writer = wrapper.slothlet.contextManager.tryGetContext?.(wrapper.slothlet.instanceID)?.currentWrapper ?? null;
-					if (writer && WeakSetMethods.has(trustedRootOwn.genuineWrappers, writer) && makerOf(writer) === maker) return;
-					WeakSetMethods.add(maker.handedIn, value);
-				}
-
-				/**
-				 * Whether a prototype set on a node would be set on a value the module holds (its own object, its array, a class
-				 * instance or emitter it exports) rather than on the node's own record (see the node's setPrototypeOf trap).
-				 * @param {UnifiedWrapper} wrapper - The node's wrapper.
-				 * @returns {boolean} True when the module's value takes it.
-				 * @private
-				 */
-				function prototypeOnSharedValue(wrapper) {
-					if (MapMethods.has(FRAMEWORK_WRITES, wrapper)) return false;
-					const internal = wrapper.____slothletInternal;
-					const impl = internal.impl;
-					if (moduleObjectOf(wrapper) !== null || Arrays.isArray(impl)) return true;
-					return (
-						impl !== null &&
-						typeof impl === "object" &&
-						!util.types.isProxy(impl) &&
-						hasOwn(internal, "sourceValue") &&
-						internal.sourceValue === impl
-					);
-				}
-
-				/**
-				 * The arguments a call from one module into another is handed while the permission system is on (the class prototype
-				 * guard, see {@link crossTo}): each object of the caller's reaches the callee as a crossing view, so what the
-				 * callee stores into it (one of its class's instances, say) reaches the caller as values the callee hands on do. A call
-				 * from the host, or from a module into itself, is handed its arguments as they are.
-				 * @param {object} wrapper - The wrapper being called.
-				 * @param {ArrayLike<*>} args - The call's arguments.
-				 * @returns {ArrayLike<*>} The arguments, the same list when nothing changed.
-				 * @private
-				 */
-				function crossArguments(wrapper, args) {
-					const slothlet = wrapper?.slothlet;
-					if (!args?.length || !slothlet?.handlers?.permissionManager?.isEnabled?.()) return args;
-					return wrapper.___crossArgumentsFrom(args, callingModule(slothlet));
-				}
-
-				/**
-				 * The prototype a closed node's shell holds when the node was given one: a view standing for every holder of the node
-				 * (the host too), since a closed node reports its shell's prototype to all of them, whether the permission system is on
-				 * now or not; each read through it is decided for whoever makes it. The language's own prototypes are held as they are.
-				 * @param {object} wrapper - The node's wrapper.
-				 * @param {object|Function|null} prototype - The prototype the node was given.
-				 * @returns {object|Function|null} What the shell holds.
-				 * @private
-				 */
-				function givenShellPrototype(wrapper, prototype) {
-					if (givenAsIs(prototype)) return prototype;
-					return givenViewOn(wrapper.____slothletInternal, wrapper, wrapper, prototype, SEALED_SHELL_READER, () =>
-						assertOwnedWrite(wrapper, null)
-					);
-				}
-
-				/**
-				 * The node a data definition on a node holds in place of the object or function it defines, as a value assigned to
-				 * the node is held (wrap-on-set): `null` for a value held as it is (a primitive, a built-in data object, a proxy, a
-				 * node), for any definition during a build, and for a member the definition leaves fixed (read-only and
-				 * non-configurable), which JavaScript requires the node to report and hand out as the value defined. A definition of
-				 * a member with the value it holds already keeps that member's node.
-				 * @param {object} wrapper - The node's wrapper.
-				 * @param {object} target - The node's proxy target.
-				 * @param {string|symbol} prop - The member.
-				 * @param {PropertyDescriptor} descriptor - The definition.
-				 * @returns {object|null} The node to hold, or `null`.
-				 * @private
-				 *
-				 * @example
-				 * Object.defineProperty(self.secret.holder, "late", { value: { hidden: "H" }, writable: true });
-				 * self.secret.holder.late.hidden; // read through the node at secret.holder.late.hidden, gated as any member
-				 */
-				function definedValueNode(wrapper, target, prop, descriptor) {
-					if (!("value" in descriptor) || wrapper.slothlet.____buildDepth > 0) return null;
-					const value = descriptor.value;
-					if (value === null || (typeof value !== "object" && typeof value !== "function")) return null;
-					if (util.types.isProxy(value) || resolveWrapper(value) !== null) return null;
-					if (wrapper.___definitionFixes(target, prop, descriptor)) return null;
-					const current = Reflect.getOwnPropertyDescriptor(wrapper, prop);
-					const currentNode = current && "value" in current ? resolveWrapper(current.value) : null;
-					if (
-						currentNode &&
-						hasOwn(currentNode.____slothletInternal, "sourceValue") &&
-						currentNode.____slothletInternal.sourceValue === value
-					)
-						return current.value;
-					const wrapped = wrapper.___createChildWrapper(prop, value, null, true);
-					const wrappedInternal = wrapped === null || wrapped === undefined ? null : resolveWrapper(wrapped);
-					if (!wrappedInternal) return null;
-					wrappedInternal.____slothletInternal.userAssigned = true;
-					return wrapped;
-				}
-
-				/**
-				 * Give an object node the integrity of the object it was built from (#667): a node of an object its module froze,
-				 * sealed or closed to new members when it loaded is frozen, sealed or closed the same way, as the framework's write, so
-				 * `Object.isFrozen` answers as on the object and a write the object refuses is refused through the node. The node is
-				 * built from a copy of the object (see copyForComposition), which is open, so the integrity is read off the object
-				 * itself. Only a node built from a value it was handed (an export, a member of one): an unloaded lazy node has no value
-				 * yet, and is closed once it loads.
-				 * @param {UnifiedWrapper} wrapper - The node's wrapper, whose proxy exists.
-				 * @returns {void}
-				 * @private
-				 *
-				 * @example
-				 * adoptObjectIntegrity(wrapper); // wrapper built from Object.freeze({ a: 1 }): Object.isFrozen(proxy) is now true
-				 */
-				function adoptObjectIntegrity(wrapper) {
-					const internal = wrapper.____slothletInternal;
-					if (!hasOwn(internal, "sourceValue")) return;
-					const source = internal.sourceValue;
-					if (source === null || typeof source !== "object" || Arrays.isArray(source) || util.types.isProxy(source)) return;
-					if (Reflect.isExtensible(source)) return;
-					if (internal.mode === "lazy" && !internal.state.materialized) return;
-					const { proxy } = internal;
-					const syncing = internal.integritySyncing;
-					internal.integritySyncing = true;
-					try {
-						frameworkWrite(wrapper, () => {
-							if (Objects.isFrozen(source)) Objects.freeze(proxy);
-							else if (Objects.isSealed(source)) Objects.seal(proxy);
-							else Objects.preventExtensions(proxy);
-						});
-					} finally {
-						internal.integritySyncing = syncing;
-					}
-				}
-
-				/**
-				 * An accessor descriptor defined on an api node at runtime, with its getter and setter adopted as the node's (#597):
-				 * defined by `Object.defineProperty` after the module loaded, it runs as an exported one does, never as whoever
-				 * reads it. A data descriptor, or a partial one changing only attributes, is returned as it is.
-				 * @param {object} wrapper - The node's wrapper.
-				 * @param {PropertyDescriptor} descriptor - The descriptor being defined.
-				 * @returns {PropertyDescriptor} The descriptor to define.
-				 * @private
-				 */
-				function adoptDefinedAccessor(wrapper, descriptor) {
-					if (typeof descriptor?.get !== "function" && typeof descriptor?.set !== "function") return descriptor;
-					const adopted = adoptAccessor(wrapper, descriptor);
-					const result = { ...descriptor };
-					if ("get" in descriptor) result.get = adopted.get ?? descriptor.get;
-					if ("set" in descriptor) result.set = adopted.set ?? descriptor.set;
-					return result;
-				}
-
 				const wrapper = this;
 				if (wrapper.____slothletInternal.proxy) {
 					return wrapper.____slothletInternal.proxy;

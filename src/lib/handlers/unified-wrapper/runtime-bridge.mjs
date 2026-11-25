@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-25T00:00:00-08:00 (1795593600)
+ *	@Last modified time: 2026-11-25T13:24:03-08:00 (1795641843)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -102,6 +102,185 @@ let realClass;
 const FRAMEWORK_SELF_ROOTS = setFrom(["slothlet", "shutdown", "destroy"]);
 
 /**
+ * The plain data `JSON.stringify` writes for a value read through `self`, as the reader may read it (#803): each
+ * member the reader is refused (its read, its description, or the `toJSON` the serialization looks up on it) is left
+ * out, as a listing leaves it out, and never thrown for. An array element refused is written as `null`, where JSON
+ * writes a member with no value. Everything else is what JSON does: `toJSON` is called with the member's key, a
+ * function, a symbol and `undefined` are left out, a boxed primitive and a primitive are kept for JSON to write, and a
+ * cycle throws the `TypeError` JSON throws.
+ * @param {*} value - The value.
+ * @param {string} key - Its key in its holder.
+ * @param {Array<object>} stack - The objects being written, outermost first.
+ * @param {boolean} [skipToJSON=false] - Do not look up `toJSON` on the value itself (it is the root being written).
+ * @returns {*} The data, or {@link SNAPSHOT_OMIT}.
+ * @private
+ */
+function jsonSnapshot(value, key, stack, skipToJSON = false) {
+	if (!skipToJSON && value !== null && (typeof value === "object" || typeof value === "function")) {
+		let toJSON;
+		try {
+			toJSON = value.toJSON;
+		} catch (error) {
+			if (!isRefusal(error)) throw error;
+		}
+		if (typeof toJSON === "function") {
+			try {
+				value = Reflect.apply(toJSON, value, [key]);
+			} catch (error) {
+				if (!isRefusal(error)) throw error;
+				return SNAPSHOT_OMIT;
+			}
+		}
+	}
+	if (value === undefined || typeof value === "function" || typeof value === "symbol") return SNAPSHOT_OMIT;
+	if (value === null || typeof value !== "object" || isBoxedPrimitive(value)) return value;
+	if (ArrayMethods.includes(stack, value)) throw new TypeError("Converting circular structure to JSON");
+	listPush(stack, value);
+	try {
+		if (Arrays.isArray(value)) {
+			const out = [];
+			const length = value.length;
+			for (let i = 0; i < length; i++) {
+				let element;
+				try {
+					element = jsonSnapshot(value[i], String(i), stack);
+				} catch (error) {
+					if (!isRefusal(error)) throw error;
+					element = SNAPSHOT_OMIT;
+				}
+				listPush(out, element === SNAPSHOT_OMIT ? null : element);
+			}
+			return out;
+		}
+		const out = {};
+		for (let ofIndex = 0, ofList = Reflect.ownKeys(value); ofIndex < ofList.length; ofIndex++) {
+			const name = ofList[ofIndex];
+			if (typeof name !== "string") continue;
+			let member;
+			try {
+				const descriptor = Reflect.getOwnPropertyDescriptor(value, name);
+				if (!descriptor?.enumerable) continue;
+				member = jsonSnapshot(value[name], name, stack);
+			} catch (error) {
+				if (!isRefusal(error)) throw error;
+				continue;
+			}
+			if (member !== SNAPSHOT_OMIT) out[name] = member;
+		}
+		return out;
+	} finally {
+		ArrayMethods.pop(stack);
+	}
+}
+
+/**
+ * The `toJSON` `self` answers for an api whose root is an object and has no `toJSON` member of its own (#803): it
+ * gives the data `JSON.stringify(api)` gives the host, less what the reader is refused (see
+ * {@link jsonSnapshot}). A refusal of a member the reader did not name never throws here; a read of that
+ * member by name still does.
+ * @this {object} The `self` being written.
+ * @param {string} [key] - The key JSON passes.
+ * @returns {*} The data.
+ * @internal
+ */
+function selfToJSON(key) {
+	const data = jsonSnapshot(this, typeof key === "string" ? key : "", [], true);
+	return data === SNAPSHOT_OMIT ? undefined : data;
+}
+
+/**
+ * Record the module storing a value in the runtime `context`, so another module reading it gets it as a value that
+ * module handed it ({@link contextRead}). What the host stores, and what a module stores again after reading it
+ * from the host, is the host's and is recorded for no one.
+ * @param {object} ctx - The active context store.
+ * @param {*} value - The value being stored.
+ * @returns {void}
+ * @internal
+ *
+ * @example
+ * contextWritten(ctx, value);
+ * ctx.context[prop] = value;
+ */
+function contextWritten(ctx, value) {
+	if (value === null || (typeof value !== "object" && typeof value !== "function")) return;
+	const writer = ctx?.currentWrapper;
+	if (!writer?.____slothletInternal || !WeakSetMethods.has(trustedRootOwn.genuineWrappers, writer)) return;
+	// A view keeps where its value came from; slothlet's own values are handed out their own way.
+	if (WeakMapMethods.has(CROSSINGS, value) || isSlothletValue(value)) return;
+	if (WeakSetMethods.has(CONTEXT_HOST_VALUES, value) || WeakMapMethods.has(CONTEXT_WRITERS, value)) return;
+	WeakMapMethods.set(CONTEXT_WRITERS, value, writer);
+}
+
+/**
+ * A member of the runtime `context` read by code a module handed out while no call runs (the host running a closure, a
+ * method of returned data, a generator): read in the context of the instance its definer belongs to, as `self` is
+ * ({@link selfReadAsDefiner}), so the code reads the context it was made in instead of nothing. Code whose
+ * definer the frames cannot tell, the host's own code, and any code while `provenance` is off, read nothing.
+ * @param {object} contextProxy - The runtime's `context`.
+ * @param {string|symbol} prop - The member read.
+ * @returns {*} The member, or undefined.
+ * @internal
+ *
+ * @example
+ * if (!ctx) return contextReadAsDefiner(context, prop);
+ */
+function contextReadAsDefiner(contextProxy, prop) {
+	const definer = frameDefiner();
+	if (definer === null || definer.unplaced) return undefined;
+	const leaf = definer.wrapper ?? definer.leaves[0];
+	const slothlet = leaf?.slothlet;
+	if (slothlet?.handlers?.permissionManager?.isEnabled?.() && slothlet.config?.permissions?.caller?.provenance === false) return undefined;
+	const contextManager = slothlet?.contextManager;
+	const instanceID = contextManager?.runInContext ? makerInstanceID(slothlet) : null;
+	if (instanceID === null) return undefined;
+	const read = MapMethods.get(RUNTIME_CONTEXTS, contextManager) ?? contextProxy;
+	return readOnBehalf(undefined, () =>
+		contextManager.runInContext(instanceID, () => read[prop], undefined, [], leaf, true, false, null, null, false, true)
+	);
+}
+
+/**
+ * Refuse replacing one of the framework's root members (`self.slothlet`, `self.shutdown`, `self.destroy`)
+ * through the runtime `self` (#625); a definition or deletion goes through {@link selfChangeTarget}.
+ * While the permission system is on, module code meets the write rules first; the names are reserved for
+ * everyone, so the assignment is refused either way, in an isolated scope as outside one.
+ *
+ * @param {object} slothlet - Instance the change is made on.
+ * @param {string|symbol} prop - Member of `self` changed.
+ * @returns {void}
+ * @throws {SlothletError} `PERMISSION_DENIED` when module code changes a framework root member the write
+ *   rules protect, `LOOSE_SET_UNATTRIBUTED` when the live runtime cannot tell which call is executing, and
+ *   `API_PATH_INVALID` for the reserved name otherwise.
+ * @internal
+ *
+ * @example
+ * assertFrameworkRootChange(ctx.slothlet, "slothlet"); // throws inside a module call
+ */
+function assertFrameworkRootChange(slothlet, prop) {
+	if (typeof prop !== "string" || !SetMethods.has(SELF_FRAMEWORK_ROOTS, prop)) return;
+	if (slothlet.handlers.apiManager.frameworkProtected()) {
+		const identity = slothlet.contextManager?.getCallerIdentity?.(slothlet.instanceID);
+		if (identity?.unresolved) {
+			throw new slothlet.SlothletError("LOOSE_SET_UNATTRIBUTED", { path: segmentsOf(prop) });
+		}
+		// Code a caller supplied to another module's call changes it only where every module it acts for may (#597).
+		if (identity?.currentWrapper) {
+			for (
+				let ofIndex = 0, ofList = concatLists([identity.currentWrapper], identityCeilings(identity));
+				ofIndex < ofList.length;
+				ofIndex++
+			) {
+				const writer = ofList[ofIndex];
+				slothlet.handlers.apiManager.assertOwnedWrite([prop], writer);
+			}
+		}
+	}
+	// A reserved name, refused whoever assigns it, including inside an isolated scope, whose `self` takes the
+	// assignment without reaching the api.
+	slothlet.handlers.apiManager.normalizeApiPath([prop]);
+}
+
+/**
  * Build a runtime's `self` (both forms) and `context`, and register them for reads made while no call runs (#726).
  * @param {object} contextManager - The runtime's context manager.
  * @param {RuntimeAccess} runtime - How the runtime reads its stores.
@@ -112,186 +291,6 @@ const FRAMEWORK_SELF_ROOTS = setFrom(["slothlet", "shutdown", "destroy"]);
  * const { objectSelf, callableSelf, context } = runtimeTraps(asyncRuntime, access);
  */
 function runtimeTraps(contextManager, runtime) {
-	/**
-	 * The `toJSON` `self` answers for an api whose root is an object and has no `toJSON` member of its own (#803): it
-	 * gives the data `JSON.stringify(api)` gives the host, less what the reader is refused (see
-	 * {@link jsonSnapshot}). A refusal of a member the reader did not name never throws here; a read of that
-	 * member by name still does.
-	 * @this {object} The `self` being written.
-	 * @param {string} [key] - The key JSON passes.
-	 * @returns {*} The data.
-	 * @internal
-	 */
-	function selfToJSON(key) {
-		/**
-		 * The plain data `JSON.stringify` writes for a value read through `self`, as the reader may read it (#803): each
-		 * member the reader is refused (its read, its description, or the `toJSON` the serialization looks up on it) is left
-		 * out, as a listing leaves it out, and never thrown for. An array element refused is written as `null`, where JSON
-		 * writes a member with no value. Everything else is what JSON does: `toJSON` is called with the member's key, a
-		 * function, a symbol and `undefined` are left out, a boxed primitive and a primitive are kept for JSON to write, and a
-		 * cycle throws the `TypeError` JSON throws.
-		 * @param {*} value - The value.
-		 * @param {string} key - Its key in its holder.
-		 * @param {Array<object>} stack - The objects being written, outermost first.
-		 * @param {boolean} [skipToJSON=false] - Do not look up `toJSON` on the value itself (it is the root being written).
-		 * @returns {*} The data, or {@link SNAPSHOT_OMIT}.
-		 * @private
-		 */
-		function jsonSnapshot(value, key, stack, skipToJSON = false) {
-			if (!skipToJSON && value !== null && (typeof value === "object" || typeof value === "function")) {
-				let toJSON;
-				try {
-					toJSON = value.toJSON;
-				} catch (error) {
-					if (!isRefusal(error)) throw error;
-				}
-				if (typeof toJSON === "function") {
-					try {
-						value = Reflect.apply(toJSON, value, [key]);
-					} catch (error) {
-						if (!isRefusal(error)) throw error;
-						return SNAPSHOT_OMIT;
-					}
-				}
-			}
-			if (value === undefined || typeof value === "function" || typeof value === "symbol") return SNAPSHOT_OMIT;
-			if (value === null || typeof value !== "object" || isBoxedPrimitive(value)) return value;
-			if (ArrayMethods.includes(stack, value)) throw new TypeError("Converting circular structure to JSON");
-			listPush(stack, value);
-			try {
-				if (Arrays.isArray(value)) {
-					const out = [];
-					const length = value.length;
-					for (let i = 0; i < length; i++) {
-						let element;
-						try {
-							element = jsonSnapshot(value[i], String(i), stack);
-						} catch (error) {
-							if (!isRefusal(error)) throw error;
-							element = SNAPSHOT_OMIT;
-						}
-						listPush(out, element === SNAPSHOT_OMIT ? null : element);
-					}
-					return out;
-				}
-				const out = {};
-				for (let ofIndex = 0, ofList = Reflect.ownKeys(value); ofIndex < ofList.length; ofIndex++) {
-					const name = ofList[ofIndex];
-					if (typeof name !== "string") continue;
-					let member;
-					try {
-						const descriptor = Reflect.getOwnPropertyDescriptor(value, name);
-						if (!descriptor?.enumerable) continue;
-						member = jsonSnapshot(value[name], name, stack);
-					} catch (error) {
-						if (!isRefusal(error)) throw error;
-						continue;
-					}
-					if (member !== SNAPSHOT_OMIT) out[name] = member;
-				}
-				return out;
-			} finally {
-				ArrayMethods.pop(stack);
-			}
-		}
-
-		const data = jsonSnapshot(this, typeof key === "string" ? key : "", [], true);
-		return data === SNAPSHOT_OMIT ? undefined : data;
-	}
-
-	/**
-	 * Record the module storing a value in the runtime `context`, so another module reading it gets it as a value that
-	 * module handed it ({@link contextRead}). What the host stores, and what a module stores again after reading it
-	 * from the host, is the host's and is recorded for no one.
-	 * @param {object} ctx - The active context store.
-	 * @param {*} value - The value being stored.
-	 * @returns {void}
-	 * @internal
-	 *
-	 * @example
-	 * contextWritten(ctx, value);
-	 * ctx.context[prop] = value;
-	 */
-	function contextWritten(ctx, value) {
-		if (value === null || (typeof value !== "object" && typeof value !== "function")) return;
-		const writer = ctx?.currentWrapper;
-		if (!writer?.____slothletInternal || !WeakSetMethods.has(trustedRootOwn.genuineWrappers, writer)) return;
-		// A view keeps where its value came from; slothlet's own values are handed out their own way.
-		if (WeakMapMethods.has(CROSSINGS, value) || isSlothletValue(value)) return;
-		if (WeakSetMethods.has(CONTEXT_HOST_VALUES, value) || WeakMapMethods.has(CONTEXT_WRITERS, value)) return;
-		WeakMapMethods.set(CONTEXT_WRITERS, value, writer);
-	}
-
-	/**
-	 * A member of the runtime `context` read by code a module handed out while no call runs (the host running a closure, a
-	 * method of returned data, a generator): read in the context of the instance its definer belongs to, as `self` is
-	 * ({@link selfReadAsDefiner}), so the code reads the context it was made in instead of nothing. Code whose
-	 * definer the frames cannot tell, the host's own code, and any code while `provenance` is off, read nothing.
-	 * @param {object} contextProxy - The runtime's `context`.
-	 * @param {string|symbol} prop - The member read.
-	 * @returns {*} The member, or undefined.
-	 * @internal
-	 *
-	 * @example
-	 * if (!ctx) return contextReadAsDefiner(context, prop);
-	 */
-	function contextReadAsDefiner(contextProxy, prop) {
-		const definer = frameDefiner();
-		if (definer === null || definer.unplaced) return undefined;
-		const leaf = definer.wrapper ?? definer.leaves[0];
-		const slothlet = leaf?.slothlet;
-		if (slothlet?.handlers?.permissionManager?.isEnabled?.() && slothlet.config?.permissions?.caller?.provenance === false)
-			return undefined;
-		const contextManager = slothlet?.contextManager;
-		const instanceID = contextManager?.runInContext ? makerInstanceID(slothlet) : null;
-		if (instanceID === null) return undefined;
-		const read = MapMethods.get(RUNTIME_CONTEXTS, contextManager) ?? contextProxy;
-		return readOnBehalf(undefined, () =>
-			contextManager.runInContext(instanceID, () => read[prop], undefined, [], leaf, true, false, null, null, false, true)
-		);
-	}
-
-	/**
-	 * Refuse replacing one of the framework's root members (`self.slothlet`, `self.shutdown`, `self.destroy`)
-	 * through the runtime `self` (#625); a definition or deletion goes through {@link selfChangeTarget}.
-	 * While the permission system is on, module code meets the write rules first; the names are reserved for
-	 * everyone, so the assignment is refused either way, in an isolated scope as outside one.
-	 *
-	 * @param {object} slothlet - Instance the change is made on.
-	 * @param {string|symbol} prop - Member of `self` changed.
-	 * @returns {void}
-	 * @throws {SlothletError} `PERMISSION_DENIED` when module code changes a framework root member the write
-	 *   rules protect, `LOOSE_SET_UNATTRIBUTED` when the live runtime cannot tell which call is executing, and
-	 *   `API_PATH_INVALID` for the reserved name otherwise.
-	 * @internal
-	 *
-	 * @example
-	 * assertFrameworkRootChange(ctx.slothlet, "slothlet"); // throws inside a module call
-	 */
-	function assertFrameworkRootChange(slothlet, prop) {
-		if (typeof prop !== "string" || !SetMethods.has(SELF_FRAMEWORK_ROOTS, prop)) return;
-		if (slothlet.handlers.apiManager.frameworkProtected()) {
-			const identity = slothlet.contextManager?.getCallerIdentity?.(slothlet.instanceID);
-			if (identity?.unresolved) {
-				throw new slothlet.SlothletError("LOOSE_SET_UNATTRIBUTED", { path: segmentsOf(prop) });
-			}
-			// Code a caller supplied to another module's call changes it only where every module it acts for may (#597).
-			if (identity?.currentWrapper) {
-				for (
-					let ofIndex = 0, ofList = concatLists([identity.currentWrapper], identityCeilings(identity));
-					ofIndex < ofList.length;
-					ofIndex++
-				) {
-					const writer = ofList[ofIndex];
-					slothlet.handlers.apiManager.assertOwnedWrite([prop], writer);
-				}
-			}
-		}
-		// A reserved name, refused whoever assigns it, including inside an isolated scope, whose `self` takes the
-		// assignment without reaching the api.
-		slothlet.handlers.apiManager.normalizeApiPath([prop]);
-	}
-
 	const { current, store, loadingInstance, refuseUnknown, hostFlow, access, bindKey, bind } = runtime;
 
 	/**

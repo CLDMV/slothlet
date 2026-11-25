@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-25T00:00:00-08:00 (1795593600)
+ *	@Last modified time: 2026-11-25T13:24:03-08:00 (1795641843)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -534,6 +534,22 @@ const ENGINE_DATA_PROTOTYPES = setFrom(
 );
 
 /**
+ * Whether `fn` is one of the engine's own functions: its source is not code, and it is no bound function, which
+ * reports itself the same way.
+ * @param {Function} fn - A function.
+ * @returns {boolean} Whether it is native.
+ * @private
+ */
+function isNativeFunction(fn) {
+	try {
+		const source = functionSource(fn);
+		return RegExpMethods.exec(/\{\s*\[native code\]\s*\}$/, source) !== null && !StringMethods.startsWith(String(fn.name), "bound ");
+	} catch {
+		return false;
+	}
+}
+
+/**
  * Whether the member `prop` a data object answers comes from the engine: the prototype in its chain that holds it is
  * one of {@link ENGINE_DATA_PROTOTYPES}.
  * @param {object} value - The data object.
@@ -542,22 +558,6 @@ const ENGINE_DATA_PROTOTYPES = setFrom(
  * @private
  */
 function isEngineMember(value, prop) {
-	/**
-	 * Whether `fn` is one of the engine's own functions: its source is not code, and it is no bound function, which
-	 * reports itself the same way.
-	 * @param {Function} fn - A function.
-	 * @returns {boolean} Whether it is native.
-	 * @private
-	 */
-	function isNativeFunction(fn) {
-		try {
-			const source = functionSource(fn);
-			return RegExpMethods.exec(/\{\s*\[native code\]\s*\}$/, source) !== null && !StringMethods.startsWith(String(fn.name), "bound ");
-		} catch {
-			return false;
-		}
-	}
-
 	for (let proto = value; proto !== null; proto = Reflect.getPrototypeOf(proto)) {
 		if (!hasOwn(proto, prop)) continue;
 		if (SetMethods.has(ENGINE_DATA_PROTOTYPES, proto)) return true;
@@ -1272,6 +1272,46 @@ function recordNodeStreamState() {
 if (isNode) recordNodeStreamState();
 
 /**
+ * Whether every function a value reaches — through own members, accessors and prototypes, everything up to
+ * {@link SHARED_SEARCH_PROPERTIES} properties — is made by no module, the engine's own, or slothlet's: so handing the
+ * value out as it is hands out none of a module's code, however deep a module put one. Read by descriptor; nothing of
+ * the value runs. The realm's intrinsics end the walk. A Proxy, or what is too large to read, counts as holding code.
+ * @param {*} value - The value.
+ * @param {{remaining: number}} budget - Properties still allowed.
+ * @param {Set<object>} seen - Values already read.
+ * @returns {boolean} True when it holds only such code.
+ * @private
+ */
+function holdsOnlySharedCode(value, budget, seen) {
+	const pending = [value];
+	try {
+		while (pending.length) {
+			const member = ArrayMethods.pop(pending);
+			if (member === null || (typeof member !== "object" && typeof member !== "function") || SetMethods.has(seen, member)) continue;
+			SetMethods.add(seen, member);
+			if (WeakSetMethods.has(INTRINSICS, member) || isSlothletValue(member)) continue;
+			if (util.types.isProxy(member)) return false;
+			if (typeof member === "function" && !isBuiltinFunction(member) && !isSharedExport(member)) return false;
+			const keys = Reflect.ownKeys(member);
+			budget.remaining -= keys.length;
+			if (budget.remaining < 0) return false;
+			for (let ofIndex = 0, ofList = keys; ofIndex < ofList.length; ofIndex++) {
+				const key = ofList[ofIndex];
+				const descriptor = Reflect.getOwnPropertyDescriptor(member, key);
+				if (!descriptor) continue;
+				if ("value" in descriptor) listPush(pending, descriptor.value);
+				else listPush(pending, descriptor.get, descriptor.set);
+			}
+			listPush(pending, Reflect.getPrototypeOf(member));
+		}
+		return true;
+	} catch {
+		// A value that refuses to be described is taken to hold code.
+		return false;
+	}
+}
+
+/**
  * Whether a value is made by no module (#597) and can be handed out as it is: a built-in's export or slothlet's
  * runtime. A package's export is not: anyone can put code under `node_modules`, a plugin shipping its own dependency
  * among them, so it is handed out as the module's like the module's own code. Everything callable the value reaches,
@@ -1282,46 +1322,6 @@ if (isNode) recordNodeStreamState();
  * @private
  */
 function isSharedValue(value) {
-	/**
-	 * Whether every function a value reaches — through own members, accessors and prototypes, everything up to
-	 * {@link SHARED_SEARCH_PROPERTIES} properties — is made by no module, the engine's own, or slothlet's: so handing the
-	 * value out as it is hands out none of a module's code, however deep a module put one. Read by descriptor; nothing of
-	 * the value runs. The realm's intrinsics end the walk. A Proxy, or what is too large to read, counts as holding code.
-	 * @param {*} value - The value.
-	 * @param {{remaining: number}} budget - Properties still allowed.
-	 * @param {Set<object>} seen - Values already read.
-	 * @returns {boolean} True when it holds only such code.
-	 * @private
-	 */
-	function holdsOnlySharedCode(value, budget, seen) {
-		const pending = [value];
-		try {
-			while (pending.length) {
-				const member = ArrayMethods.pop(pending);
-				if (member === null || (typeof member !== "object" && typeof member !== "function") || SetMethods.has(seen, member)) continue;
-				SetMethods.add(seen, member);
-				if (WeakSetMethods.has(INTRINSICS, member) || isSlothletValue(member)) continue;
-				if (util.types.isProxy(member)) return false;
-				if (typeof member === "function" && !isBuiltinFunction(member) && !isSharedExport(member)) return false;
-				const keys = Reflect.ownKeys(member);
-				budget.remaining -= keys.length;
-				if (budget.remaining < 0) return false;
-				for (let ofIndex = 0, ofList = keys; ofIndex < ofList.length; ofIndex++) {
-					const key = ofList[ofIndex];
-					const descriptor = Reflect.getOwnPropertyDescriptor(member, key);
-					if (!descriptor) continue;
-					if ("value" in descriptor) listPush(pending, descriptor.value);
-					else listPush(pending, descriptor.get, descriptor.set);
-				}
-				listPush(pending, Reflect.getPrototypeOf(member));
-			}
-			return true;
-		} catch {
-			// A value that refuses to be described is taken to hold code.
-			return false;
-		}
-	}
-
 	if (!isSharedExport(value)) return false;
 	return holdsOnlySharedCode(value, { remaining: SHARED_SEARCH_PROPERTIES }, new Set());
 }
@@ -1518,6 +1518,18 @@ const VM_NATIVE_SCRIPT = (() => {
 })();
 
 /**
+ * Whether a member of an emitter of Node's own class is state Node keeps for it (see
+ * {@link NODE_STREAM_STATE_PROTOTYPES}), which is not read for code (#708).
+ * @param {*} member - The member's value.
+ * @returns {boolean} True for Node's state of a stream.
+ * @private
+ */
+function isNodeStreamState(member) {
+	if (member === null || typeof member !== "object" || util.types.isProxy(member)) return false;
+	return WeakSetMethods.has(NODE_STREAM_STATE_PROTOTYPES, Reflect.getPrototypeOf(member));
+}
+
+/**
  * Whether an object with internal slots (see {@link isSlotObject}) carries a module's code (#597): a class of
  * a module's anywhere in its prototype chain (a `Map` subclass, an `Error` subclass, a key given another prototype) —
  * every prototype below the language's own has to be one made by no module, holding none of a module's code — or a
@@ -1532,18 +1544,6 @@ const VM_NATIVE_SCRIPT = (() => {
  * @private
  */
 function slotHoldsCode(value, depth, budget) {
-	/**
-	 * Whether a member of an emitter of Node's own class is state Node keeps for it (see
-	 * {@link NODE_STREAM_STATE_PROTOTYPES}), which is not read for code (#708).
-	 * @param {*} member - The member's value.
-	 * @returns {boolean} True for Node's state of a stream.
-	 * @private
-	 */
-	function isNodeStreamState(member) {
-		if (member === null || typeof member !== "object" || util.types.isProxy(member)) return false;
-		return WeakSetMethods.has(NODE_STREAM_STATE_PROTOTYPES, Reflect.getPrototypeOf(member));
-	}
-
 	for (
 		let link = Reflect.getPrototypeOf(value);
 		link !== null && !WeakSetMethods.has(INTRINSICS, link);
@@ -1590,6 +1590,140 @@ function slotHoldsCode(value, depth, budget) {
 }
 
 /**
+ * Whether copying an error of the language's own with `structuredClone` runs none of a module's code: the copy reads
+ * its own `message` (a string), its `name` (a data property on it or up its chain), its `stack` (the engine's getter,
+ * whose formatting {@link keepsHiddenState} holds, or a data property) and its own `cause` (a value whose copy
+ * runs no code either). Other members of its own, `errors` of an `AggregateError` among them, are not copied.
+ * @param {Error} error - The error ({@link isEngineError}).
+ * @param {number} depth - Levels still allowed, this one included.
+ * @returns {boolean} True when it does.
+ * @private
+ */
+function errorCopyRunsNoCode(error, depth) {
+	const message = Reflect.getOwnPropertyDescriptor(error, "message");
+	if (message !== undefined && (!("value" in message) || typeof message.value !== "string")) return false;
+	const cause = Reflect.getOwnPropertyDescriptor(error, "cause");
+	if (cause !== undefined && (!("value" in cause) || !copyRunsNoCode(cause.value, depth - 1))) return false;
+	let name = null;
+	let stack = null;
+	for (let link = error; link !== null && (name === null || stack === null); link = Reflect.getPrototypeOf(link)) {
+		name ??= Reflect.getOwnPropertyDescriptor(link, "name") ?? null;
+		stack ??= Reflect.getOwnPropertyDescriptor(link, "stack") ?? null;
+	}
+	if (name !== null && !("value" in name)) return false;
+	return stack === null || "value" in stack || isEngineStackAccessor(stack.get);
+}
+
+/**
+ * Whether a value is an error of the language's own, told by the engine's brand check ({@link isBrandedError};
+ * where the engine has none, nothing is), with one of the language's own error
+ * prototypes. A look-alike (an object of another kind given an error's prototype, or posing as one by its members)
+ * is not, and neither is an error whose prototype was replaced.
+ * @param {object} value - An object that is not a Proxy.
+ * @returns {boolean} True for such an error.
+ * @private
+ */
+function isEngineError(value) {
+	if (!isNode && typeof Errors.isError !== "function") return false;
+	return isBrandedError(value) && SetMethods.has(ERROR_PROTOTYPES, Reflect.getPrototypeOf(value));
+}
+
+/**
+ * Whether a boxed primitive is a boxed symbol, which `structuredClone` refuses.
+ * @param {object} value - A boxed primitive.
+ * @returns {boolean} True for a boxed symbol.
+ * @private
+ */
+function isBoxedSymbol(value) {
+	try {
+		Reflect.apply(SYMBOL_VALUE_OF, value, []);
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+/**
+ * Whether copying a value with `structuredClone` runs none of a module's code and can be refused only for what kind of
+ * object something in it is: every member the copy reads (each enumerable own string-keyed member, at every depth) is a
+ * data property holding a primitive other than a symbol, an array or an object with the prototype of plain data (or
+ * none), a date, a regular expression, a buffer, a typed array, a boxed primitive other than a symbol, or a `Map` or
+ * `Set` whose entries are such values. Read from descriptors alone; members the copy skips (symbol keys, members that
+ * are not enumerable) are not looked at.
+ * @param {*} value - The value.
+ * @param {number} depth - Levels still allowed, this one included.
+ * @returns {boolean} True when it is.
+ * @private
+ */
+function copyRunsNoCode(value, depth) {
+	if (value === null || typeof value !== "object") return typeof value !== "symbol" && typeof value !== "function";
+	if (depth <= 0 || util.types.isProxy(value)) return false;
+	const types = util.types;
+	if (types.isDate(value) || types.isRegExp(value) || types.isAnyArrayBuffer(value) || types.isArrayBufferView(value)) return true;
+	if (types.isBoxedPrimitive(value)) return !isBoxedSymbol(value);
+	// An error is copied from its `message`, `name`, `stack` and `cause`, whatever its prototype: one whose prototype is
+	// not the language's own may hand the copy a getter of a module's to run.
+	if (isEngineError(value)) return errorCopyRunsNoCode(value, depth);
+	if (isBrandedError(value)) return false;
+	if (types.isMap(value) || types.isSet(value)) {
+		// Read with the forEach taken at load: the map or set itself, not its iterator.
+		const entries = types.isMap(value) ? mapEntriesToArray(value) : setToArray(value);
+		for (let i = 0; i < entries.length; i++) {
+			const members = types.isMap(value) ? entries[i] : [entries[i]];
+			for (let m = 0; m < members.length; m++) if (!copyRunsNoCode(members[m], depth - 1)) return false;
+		}
+		return true;
+	}
+	const prototype = Reflect.getPrototypeOf(value);
+	if (!Arrays.isArray(value) && prototype !== null && prototype !== Objects.prototype) return false;
+	for (let ofIndex = 0, ofList = Reflect.ownKeys(value); ofIndex < ofList.length; ofIndex++) {
+		const key = ofList[ofIndex];
+		if (typeof key === "symbol") continue;
+		const descriptor = Reflect.getOwnPropertyDescriptor(value, key);
+		if (!descriptor || !descriptor.enumerable) continue;
+		if (!("value" in descriptor) || !copyRunsNoCode(descriptor.value, depth - 1)) return false;
+	}
+	return true;
+}
+
+/**
+ * Whether an object with the prototype of plain data (or none, or another of the language's own), not an array, may
+ * keep internal state of the engine's that holds a module's code where no member shows it: one of the language's
+ * iterators (an array's, a string's, an iterator helper, the wrapper `Iterator.from` makes) given such a prototype
+ * yields what it holds only when stepped, and no check of what kind of object it is runs without stepping it. A copy
+ * with `structuredClone` tells it, refusing such an object before it reads any member; the copy is made only where it
+ * runs none of a module's code and can be refused for nothing else ({@link copyRunsNoCode}). An object it
+ * cannot be made for, or that the copy refuses, cannot be told from such an iterator and is taken to keep such state.
+ * Objects found ordinary are remembered ({@link ORDINARY_OBJECTS}).
+ * @param {object} value - The object, not a Proxy and not an array.
+ * @param {number} depth - Levels still allowed, this one included.
+ * @returns {boolean} True when it may keep such state.
+ * @private
+ */
+function keepsHiddenState(value, depth) {
+	if (WeakSetMethods.has(ORDINARY_OBJECTS, value)) return false;
+	const types = util.types;
+	if (types.isModuleNamespaceObject?.(value) || types.isArgumentsObject?.(value)) return false;
+	if (typeof structuredClone !== "function") return true;
+	// The copy reads the object's members as they are now; whatever it finds, it is the object's own kind that decides.
+	const prototype = Reflect.getPrototypeOf(value);
+	if (prototype !== null && prototype !== Objects.prototype) return true;
+	for (let ofIndex = 0, ofList = Reflect.ownKeys(value); ofIndex < ofList.length; ofIndex++) {
+		const key = ofList[ofIndex];
+		if (typeof key === "symbol") continue;
+		const descriptor = Reflect.getOwnPropertyDescriptor(value, key);
+		if (!descriptor || !descriptor.enumerable) continue;
+		if (!("value" in descriptor) || !copyRunsNoCode(descriptor.value, depth - 1)) return true;
+	}
+	// An error's stack not read yet is not formatted for the copy: the copy stops there, past the check of the
+	// object's own kind, and the stack is left to be formatted when it is first read.
+	const copy = runUnformatted(() => structuredClone(value));
+	if (!copy.held || (Objects.hasOwn(copy, "error") && !copy.unformatted)) return true;
+	WeakSetMethods.add(ORDINARY_OBJECTS, value);
+	return false;
+}
+
+/**
  * Whether an object can hold code of the module that made it — a function, an accessor, a Proxy, a generator, a
  * prototype of its own (a class instance, `Object.create(proto)`) — anywhere within the code search ({@link searchDepth}). Plain data
  * (primitives, the language's own objects, slothlet's own values, values made by no module) holds none. Decided from
@@ -1601,140 +1735,6 @@ function slotHoldsCode(value, depth, budget) {
  * @private
  */
 function holdsCode(value, depth, budget) {
-	/**
-	 * Whether an object with the prototype of plain data (or none, or another of the language's own), not an array, may
-	 * keep internal state of the engine's that holds a module's code where no member shows it: one of the language's
-	 * iterators (an array's, a string's, an iterator helper, the wrapper `Iterator.from` makes) given such a prototype
-	 * yields what it holds only when stepped, and no check of what kind of object it is runs without stepping it. A copy
-	 * with `structuredClone` tells it, refusing such an object before it reads any member; the copy is made only where it
-	 * runs none of a module's code and can be refused for nothing else ({@link copyRunsNoCode}). An object it
-	 * cannot be made for, or that the copy refuses, cannot be told from such an iterator and is taken to keep such state.
-	 * Objects found ordinary are remembered ({@link ORDINARY_OBJECTS}).
-	 * @param {object} value - The object, not a Proxy and not an array.
-	 * @param {number} depth - Levels still allowed, this one included.
-	 * @returns {boolean} True when it may keep such state.
-	 * @private
-	 */
-	function keepsHiddenState(value, depth) {
-		/**
-		 * Whether copying a value with `structuredClone` runs none of a module's code and can be refused only for what kind of
-		 * object something in it is: every member the copy reads (each enumerable own string-keyed member, at every depth) is a
-		 * data property holding a primitive other than a symbol, an array or an object with the prototype of plain data (or
-		 * none), a date, a regular expression, a buffer, a typed array, a boxed primitive other than a symbol, or a `Map` or
-		 * `Set` whose entries are such values. Read from descriptors alone; members the copy skips (symbol keys, members that
-		 * are not enumerable) are not looked at.
-		 * @param {*} value - The value.
-		 * @param {number} depth - Levels still allowed, this one included.
-		 * @returns {boolean} True when it is.
-		 * @private
-		 */
-		function copyRunsNoCode(value, depth) {
-			/**
-			 * Whether copying an error of the language's own with `structuredClone` runs none of a module's code: the copy reads
-			 * its own `message` (a string), its `name` (a data property on it or up its chain), its `stack` (the engine's getter,
-			 * whose formatting {@link keepsHiddenState} holds, or a data property) and its own `cause` (a value whose copy
-			 * runs no code either). Other members of its own, `errors` of an `AggregateError` among them, are not copied.
-			 * @param {Error} error - The error ({@link isEngineError}).
-			 * @param {number} depth - Levels still allowed, this one included.
-			 * @returns {boolean} True when it does.
-			 * @private
-			 */
-			function errorCopyRunsNoCode(error, depth) {
-				const message = Reflect.getOwnPropertyDescriptor(error, "message");
-				if (message !== undefined && (!("value" in message) || typeof message.value !== "string")) return false;
-				const cause = Reflect.getOwnPropertyDescriptor(error, "cause");
-				if (cause !== undefined && (!("value" in cause) || !copyRunsNoCode(cause.value, depth - 1))) return false;
-				let name = null;
-				let stack = null;
-				for (let link = error; link !== null && (name === null || stack === null); link = Reflect.getPrototypeOf(link)) {
-					name ??= Reflect.getOwnPropertyDescriptor(link, "name") ?? null;
-					stack ??= Reflect.getOwnPropertyDescriptor(link, "stack") ?? null;
-				}
-				if (name !== null && !("value" in name)) return false;
-				return stack === null || "value" in stack || isEngineStackAccessor(stack.get);
-			}
-
-			/**
-			 * Whether a value is an error of the language's own, told by the engine's brand check ({@link isBrandedError};
-			 * where the engine has none, nothing is), with one of the language's own error
-			 * prototypes. A look-alike (an object of another kind given an error's prototype, or posing as one by its members)
-			 * is not, and neither is an error whose prototype was replaced.
-			 * @param {object} value - An object that is not a Proxy.
-			 * @returns {boolean} True for such an error.
-			 * @private
-			 */
-			function isEngineError(value) {
-				if (!isNode && typeof Errors.isError !== "function") return false;
-				return isBrandedError(value) && SetMethods.has(ERROR_PROTOTYPES, Reflect.getPrototypeOf(value));
-			}
-
-			/**
-			 * Whether a boxed primitive is a boxed symbol, which `structuredClone` refuses.
-			 * @param {object} value - A boxed primitive.
-			 * @returns {boolean} True for a boxed symbol.
-			 * @private
-			 */
-			function isBoxedSymbol(value) {
-				try {
-					Reflect.apply(SYMBOL_VALUE_OF, value, []);
-					return true;
-				} catch {
-					return false;
-				}
-			}
-
-			if (value === null || typeof value !== "object") return typeof value !== "symbol" && typeof value !== "function";
-			if (depth <= 0 || util.types.isProxy(value)) return false;
-			const types = util.types;
-			if (types.isDate(value) || types.isRegExp(value) || types.isAnyArrayBuffer(value) || types.isArrayBufferView(value)) return true;
-			if (types.isBoxedPrimitive(value)) return !isBoxedSymbol(value);
-			// An error is copied from its `message`, `name`, `stack` and `cause`, whatever its prototype: one whose prototype is
-			// not the language's own may hand the copy a getter of a module's to run.
-			if (isEngineError(value)) return errorCopyRunsNoCode(value, depth);
-			if (isBrandedError(value)) return false;
-			if (types.isMap(value) || types.isSet(value)) {
-				// Read with the forEach taken at load: the map or set itself, not its iterator.
-				const entries = types.isMap(value) ? mapEntriesToArray(value) : setToArray(value);
-				for (let i = 0; i < entries.length; i++) {
-					const members = types.isMap(value) ? entries[i] : [entries[i]];
-					for (let m = 0; m < members.length; m++) if (!copyRunsNoCode(members[m], depth - 1)) return false;
-				}
-				return true;
-			}
-			const prototype = Reflect.getPrototypeOf(value);
-			if (!Arrays.isArray(value) && prototype !== null && prototype !== Objects.prototype) return false;
-			for (let ofIndex = 0, ofList = Reflect.ownKeys(value); ofIndex < ofList.length; ofIndex++) {
-				const key = ofList[ofIndex];
-				if (typeof key === "symbol") continue;
-				const descriptor = Reflect.getOwnPropertyDescriptor(value, key);
-				if (!descriptor || !descriptor.enumerable) continue;
-				if (!("value" in descriptor) || !copyRunsNoCode(descriptor.value, depth - 1)) return false;
-			}
-			return true;
-		}
-
-		if (WeakSetMethods.has(ORDINARY_OBJECTS, value)) return false;
-		const types = util.types;
-		if (types.isModuleNamespaceObject?.(value) || types.isArgumentsObject?.(value)) return false;
-		if (typeof structuredClone !== "function") return true;
-		// The copy reads the object's members as they are now; whatever it finds, it is the object's own kind that decides.
-		const prototype = Reflect.getPrototypeOf(value);
-		if (prototype !== null && prototype !== Objects.prototype) return true;
-		for (let ofIndex = 0, ofList = Reflect.ownKeys(value); ofIndex < ofList.length; ofIndex++) {
-			const key = ofList[ofIndex];
-			if (typeof key === "symbol") continue;
-			const descriptor = Reflect.getOwnPropertyDescriptor(value, key);
-			if (!descriptor || !descriptor.enumerable) continue;
-			if (!("value" in descriptor) || !copyRunsNoCode(descriptor.value, depth - 1)) return true;
-		}
-		// An error's stack not read yet is not formatted for the copy: the copy stops there, past the check of the
-		// object's own kind, and the stack is left to be formatted when it is first read.
-		const copy = runUnformatted(() => structuredClone(value));
-		if (!copy.held || (Objects.hasOwn(copy, "error") && !copy.unformatted)) return true;
-		WeakSetMethods.add(ORDINARY_OBJECTS, value);
-		return false;
-	}
-
 	if (depth <= 0) return true;
 	try {
 		if (util.types.isGeneratorObject(value)) return true;
@@ -1966,6 +1966,33 @@ function isArrayMember(array, prop) {
 }
 
 /**
+ * Whether `value` is a lazy node that has not loaded yet: a folder whose files are not read, so nothing is known of
+ * what it holds until it loads. A stand-in for a chain below one is not the node.
+ * @param {*} value - A member's value.
+ * @returns {boolean} True for such a node.
+ * @private
+ */
+function isUnloadedLazyNode(value) {
+	if (value === null || (typeof value !== "object" && typeof value !== "function") || WeakMapMethods.has(WAITING_CHAINS, value))
+		return false;
+	const internal = resolveWrapper(value)?.____slothletInternal;
+	return !!internal && internal.mode === "lazy" && !internal.state.materialized && (internal.impl === null || internal.impl === undefined);
+}
+
+/**
+ * Whether a member value is a module's own Proxy, or the stand-in slothlet hands one out as (#597), directly or as the
+ * value behind its node: reading through it runs the module's traps (#632).
+ * @param {*} value - The member's value.
+ * @returns {boolean} Whether it answers with the module's code.
+ * @private
+ */
+function answersWithModuleCode(value) {
+	const inner = resolveWrapper(value);
+	const held = inner ? inner.____slothletInternal.impl : value;
+	return util.types.isProxy(held) && (isModuleProxy(held) || isModuleStandIn(held));
+}
+
+/**
  * True when reading `prop` off `wrapper` would be denied, so the key must be redacted from
  * enumeration and serialization rather than disclosed.
  *
@@ -1993,35 +2020,6 @@ function isArrayMember(array, prop) {
  * @private
  */
 function isReadRedacted(wrapper, prop, kept = null, access = null, listing = false) {
-	/**
-	 * Whether `value` is a lazy node that has not loaded yet: a folder whose files are not read, so nothing is known of
-	 * what it holds until it loads. A stand-in for a chain below one is not the node.
-	 * @param {*} value - A member's value.
-	 * @returns {boolean} True for such a node.
-	 * @private
-	 */
-	function isUnloadedLazyNode(value) {
-		if (value === null || (typeof value !== "object" && typeof value !== "function") || WeakMapMethods.has(WAITING_CHAINS, value))
-			return false;
-		const internal = resolveWrapper(value)?.____slothletInternal;
-		return (
-			!!internal && internal.mode === "lazy" && !internal.state.materialized && (internal.impl === null || internal.impl === undefined)
-		);
-	}
-
-	/**
-	 * Whether a member value is a module's own Proxy, or the stand-in slothlet hands one out as (#597), directly or as the
-	 * value behind its node: reading through it runs the module's traps (#632).
-	 * @param {*} value - The member's value.
-	 * @returns {boolean} Whether it answers with the module's code.
-	 * @private
-	 */
-	function answersWithModuleCode(value) {
-		const inner = resolveWrapper(value);
-		const held = inner ? inner.____slothletInternal.impl : value;
-		return util.types.isProxy(held) && (isModuleProxy(held) || isModuleStandIn(held));
-	}
-
 	const pm = wrapper.slothlet.handlers?.permissionManager;
 	if (!pm || !pm.isEnabled() || !pm.isReadGatingEnabled()) return false;
 	// A function's own `name` and `length` are never withheld (see isBuiltinFunctionMember).
@@ -2450,6 +2448,37 @@ function defineProxyInspect(wrapper, target) {
 let built = false;
 
 /**
+ * Whether the rules leave the reader nothing at a path that names no node (a member of what a module's `toJSON`
+ * gave): the path is denied and nothing beneath it is allowed, as {@link readsNothingBeneath} answers for a
+ * member of a node's data.
+ * @param {object} wrapper - The node being serialized.
+ * @param {string} targetPath - The member's api path.
+ * @param {{currentWrapper: object, context: object}|undefined} callerOverride - The reader, when it is not the one
+ *   reading now.
+ * @param {{wrapper: object, reader: object}|null} kept - The access a node a module kept is making.
+ * @returns {boolean} Whether the reader may read nothing there.
+ * @private
+ */
+function deniedWithNothingBeneath(wrapper, targetPath, callerOverride, kept) {
+	if (readGateDecision(wrapper, targetPath, callerOverride, kept).allowed) return false;
+	const probePath = `${targetPath}.${ANY_MEMBER_SEGMENT}`;
+	const beneath = readGateDecision(wrapper, probePath, callerOverride, kept);
+	if (beneath.allowed) return false;
+	return !wrapper.slothlet.handlers.permissionManager.allowsBeneath(beneath.caller, targetPath, probePath);
+}
+
+/**
+ * What `util.inspect` shows for an accessor, as it shows one of a plain object: `[Getter]`, `[Setter]` or
+ * `[Getter/Setter]`, without running it.
+ * @param {PropertyDescriptor} descriptor - The accessor's descriptor.
+ * @returns {object} A value `util.inspect` shows as that text.
+ * @private
+ */
+function accessorLabel(descriptor) {
+	return inspectLabel(descriptor.get && descriptor.set ? "[Getter/Setter]" : descriptor.get ? "[Getter]" : "[Setter]");
+}
+
+/**
  * Build this layer of the wrapper class over `Base`, once (see `unified-wrapper.mjs`).
  * @param {Function} Base - The class below this layer.
  * @returns {Function} The layer's class.
@@ -2813,25 +2842,6 @@ export function ValuesLayer(Base) {
 			___redactSerializedResult(data, basePath, seen, callerOverride, kept = null) {
 				if (!(#brand in this)) throw ownBindingsRefusal("lib/handlers/unified-wrapper/values", import.meta.url);
 				const wrapper = this;
-				/**
-				 * Whether the rules leave the reader nothing at a path that names no node (a member of what a module's `toJSON`
-				 * gave): the path is denied and nothing beneath it is allowed, as {@link readsNothingBeneath} answers for a
-				 * member of a node's data.
-				 * @param {object} wrapper - The node being serialized.
-				 * @param {string} targetPath - The member's api path.
-				 * @param {{currentWrapper: object, context: object}|undefined} callerOverride - The reader, when it is not the one
-				 *   reading now.
-				 * @param {{wrapper: object, reader: object}|null} kept - The access a node a module kept is making.
-				 * @returns {boolean} Whether the reader may read nothing there.
-				 * @private
-				 */
-				function deniedWithNothingBeneath(wrapper, targetPath, callerOverride, kept) {
-					if (readGateDecision(wrapper, targetPath, callerOverride, kept).allowed) return false;
-					const probePath = `${targetPath}.${ANY_MEMBER_SEGMENT}`;
-					const beneath = readGateDecision(wrapper, probePath, callerOverride, kept);
-					if (beneath.allowed) return false;
-					return !wrapper.slothlet.handlers.permissionManager.allowsBeneath(beneath.caller, targetPath, probePath);
-				}
 
 				if (!data || typeof data !== "object" || WeakSetMethods.has(seen, data) || isTerminalData(data) || resolveWrapper(data) !== null)
 					return data;
@@ -2901,16 +2911,6 @@ export function ValuesLayer(Base) {
 			___inspectMembers() {
 				if (!(#brand in this)) throw ownBindingsRefusal("lib/handlers/unified-wrapper/values", import.meta.url);
 				const wrapper = this;
-				/**
-				 * What `util.inspect` shows for an accessor, as it shows one of a plain object: `[Getter]`, `[Setter]` or
-				 * `[Getter/Setter]`, without running it.
-				 * @param {PropertyDescriptor} descriptor - The accessor's descriptor.
-				 * @returns {object} A value `util.inspect` shows as that text.
-				 * @private
-				 */
-				function accessorLabel(descriptor) {
-					return inspectLabel(descriptor.get && descriptor.set ? "[Getter/Setter]" : descriptor.get ? "[Getter]" : "[Setter]");
-				}
 
 				const node = wrapper.____slothletInternal.proxy;
 				const shown = {};

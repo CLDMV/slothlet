@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-25T00:00:00-08:00 (1795593600)
+ *	@Last modified time: 2026-11-25T13:24:02-08:00 (1795641842)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -830,6 +830,26 @@ const RUN_VIEW_FUNCTIONS = new WeakMap();
 const RUN_VIEW_NODE_CHANGES = new WeakMap();
 
 /**
+ * The receiver a function a run's view handed out runs with when it is called on the run's view of a node fronting an
+ * instance of a class that declares `#private` fields: the instance itself, where its private fields are, once the
+ * node's file is saved for the runs open (see {@link checkpointFile}), as before a call through the node. Null
+ * for any other node.
+ * @param {*} node - The node the view reads through.
+ * @returns {object|null} The instance.
+ * @internal
+ */
+function privateCallReceiver(node) {
+	const wrapper = nodeWrapperOf(node);
+	const impl = wrapper?.____slothletInternal?.impl;
+	if (impl === null || impl === undefined || typeof impl !== "object") return null;
+	const instance = layerUnderlying(impl);
+	// A Proxy is asked nothing: reading its prototype would run its traps.
+	if (instance === null || typeof instance !== "object" || util.types.isProxy(instance) || !declaresPrivate(instance)) return null;
+	wrapper.___checkpointFile();
+	return instance;
+}
+
+/**
  * The receiver a method read through a run's view runs with: the view itself, so what it reads and writes is the
  * run's, except for an instance of a class that declares `#private` fields, whose methods run on the instance itself
  * (the object the node the view reads through fronts), where the private fields are: whichever version of the method
@@ -840,26 +860,6 @@ const RUN_VIEW_NODE_CHANGES = new WeakMap();
  * @private
  */
 function runViewReceiver(thisArg) {
-	/**
-	 * The receiver a function a run's view handed out runs with when it is called on the run's view of a node fronting an
-	 * instance of a class that declares `#private` fields: the instance itself, where its private fields are, once the
-	 * node's file is saved for the runs open (see {@link checkpointFile}), as before a call through the node. Null
-	 * for any other node.
-	 * @param {*} node - The node the view reads through.
-	 * @returns {object|null} The instance.
-	 * @internal
-	 */
-	function privateCallReceiver(node) {
-		const wrapper = nodeWrapperOf(node);
-		const impl = wrapper?.____slothletInternal?.impl;
-		if (impl === null || impl === undefined || typeof impl !== "object") return null;
-		const instance = layerUnderlying(impl);
-		// A Proxy is asked nothing: reading its prototype would run its traps.
-		if (instance === null || typeof instance !== "object" || util.types.isProxy(instance) || !declaresPrivate(instance)) return null;
-		wrapper.___checkpointFile();
-		return instance;
-	}
-
 	if (thisArg === null || (typeof thisArg !== "object" && typeof thisArg !== "function")) return thisArg;
 	if (!WeakMapMethods.has(RUN_VIEW_REALS, thisArg)) return thisArg;
 	return privateCallReceiver(WeakMapMethods.get(RUN_VIEW_REALS, thisArg)) ?? thisArg;
@@ -885,6 +885,180 @@ function runViewShell(shell, parentSelf) {
 		configurable: true
 	});
 	return shell;
+}
+
+/**
+ * Load the node a stand-in stands for (see {@link isLazyStandIn}), without reading the member it stands for: a run's view
+ * over a stand-in reads that member through its own views once the node has loaded, so a getter on the path runs once
+ * (see `makeRunSelf` in `handlers/unified-wrapper/run`). A change queued through a stand-in that the node refused fails it, as
+ * awaiting the stand-in does.
+ * @param {object} standIn - The stand-in.
+ * @returns {Promise<void>} Settles once the node has loaded.
+ * @internal
+ */
+async function loadStandIn(standIn) {
+	const wrapper = resolveWrapper(standIn);
+	if (wrapper === null) return;
+	if (!wrapper.____slothletInternal.state.materialized) await wrapper.___materialize();
+	const refused = takeRefusedChange(wrapper, WeakMapMethods.get(WAITING_CHAINS, standIn) ?? []);
+	if (refused) throw refused;
+}
+
+/**
+ * Record a stand-in for one of the framework's root members (a view of the
+ * `slothlet` namespace) as that member, so module code reading it through the scope's `self` is handed the same
+ * view of it as outside the scope ({@link selfFrameworkView}). Anything else is left unrecorded.
+ *
+ * @param {object} copy - The stand-in.
+ * @param {*} member - The value it stands in for.
+ * @returns {object} `copy`.
+ * @internal
+ *
+ * @example
+ * registerFrameworkMemberCopy(viewOf(api.slothlet), api.slothlet);
+ */
+function registerFrameworkMemberCopy(copy, member) {
+	const slothlet = WeakMapMethods.get(FRAMEWORK_MEMBERS, member);
+	if (slothlet) registerFrameworkMember(copy, slothlet, WeakMapMethods.get(FRAMEWORK_MEMBER_NAMES, member));
+	return copy;
+}
+
+/**
+ * Whether a value read through a node now is the member a node's saved version holds: the same child node (or a view of
+ * it), the node fronting the same object, or the same value.
+ * @param {*} live - What the node hands out now.
+ * @param {*} held - What the version holds.
+ * @returns {boolean} True when they are one.
+ * @internal
+ */
+function sameSnapshotMember(live, held) {
+	if (live === held) return true;
+	if (live === null || (typeof live !== "object" && typeof live !== "function")) return false;
+	if (held === null || (typeof held !== "object" && typeof held !== "function")) return false;
+	const liveWrapper = nodeWrapperOf(live);
+	if (liveWrapper === null) return false;
+	const heldWrapper = nodeWrapperOf(held);
+	if (heldWrapper !== null) return heldWrapper === liveWrapper;
+	const internal = liveWrapper.____slothletInternal;
+	return internal.impl === held || internal.sourceValue === held || internal.moduleObject === held;
+}
+
+/**
+ * The content a node had when a run started, when the instance has changed it since (see {@link captureNode}),
+ * or null when the node is as it was.
+ * @param {*} node - The node, as the run's view reads through it.
+ * @param {object|null|undefined} snap - The run's snapshot (see `helpers/run-snapshot`).
+ * @returns {{members: Map<PropertyKey, (object|symbol)>}|null} The content.
+ * @internal
+ */
+function nodeVersion(node, snap) {
+	if (snap === null || snap === undefined || snap.closed) return null;
+	const wrapper = nodeWrapperOf(node);
+	if (wrapper === null) return null;
+	const held = versionAt(snap.instance, wrapper, snap.base);
+	return held === CURRENT ? null : held;
+}
+
+/**
+ * The prototype of a class a function node fronts (its function's own `prototype`), as the module holds it, or null.
+ * @param {*} node - The node.
+ * @returns {object|null} The prototype.
+ * @internal
+ */
+function classPrototypeOf(node) {
+	const wrapper = nodeWrapperOf(node);
+	return wrapper === null ? null : wrapper.___wrapperClassPrototype();
+}
+
+/**
+ * Whether a saved version of an object holds other than the object does now: other members, other attributes, or
+ * another prototype. Read by descriptors only.
+ * @param {object} content - The version (or the object itself).
+ * @param {object} raw - The object.
+ * @returns {boolean} True when it does.
+ * @private
+ */
+function contentChanged(content, raw) {
+	if (content === raw) return false;
+	if (Reflect.getPrototypeOf(content) !== Reflect.getPrototypeOf(raw)) return true;
+	const keys = Reflect.ownKeys(raw);
+	if (Reflect.ownKeys(content).length !== keys.length) return true;
+	for (let index = 0; index < keys.length; index++) {
+		const now = Reflect.getOwnPropertyDescriptor(raw, keys[index]);
+		const then = Reflect.getOwnPropertyDescriptor(content, keys[index]);
+		if (then === undefined || !sameLookup({ from: content, described: then }, { from: raw, described: now })) return true;
+	}
+	return false;
+}
+
+/**
+ * The prototype a run reads a node as inheriting from, when that differs from what the node reports now: the one it
+ * held when the run started, when the instance set another on it since, or the run's view of it, when the instance
+ * changed that prototype of a module's own since (see {@link inheritedAtStart}). Undefined when the run reads
+ * the node's prototype as the node reports it.
+ * @param {*} node - The node, as the run's view reads through it.
+ * @param {{prototype?: (object|null|symbol)}|null} version - The node's saved version, if any.
+ * @param {object} snap - The run's snapshot.
+ * @returns {{prototype: (object|null)}|undefined} The prototype.
+ * @internal
+ */
+function prototypeAtStart(node, version, snap) {
+	const wrapper = nodeWrapperOf(node);
+	if (wrapper === null || snap === null || snap === undefined || snap.closed) return undefined;
+	const held = wrapper.___startPrototypes(version);
+	if (held === undefined) return undefined;
+	const { start, now } = held;
+	if (start === null || isLanguagePrototype(start) || resolveWrapper(start) !== null)
+		return start === now ? undefined : { prototype: start };
+	if (start === now && !contentChanged(rawContent(snap, start), start)) return undefined;
+	return { prototype: handOutRaw(snap, start) };
+}
+
+/**
+ * Whether `node.__proto__ = x` on a node runs the language's own `__proto__` setter, as the set trap does for a node
+ * fronting a module's own object that holds no `__proto__` member (#757); any other node takes it as a member write.
+ * @param {*} node - The node, as a run's view reads through it.
+ * @returns {boolean} True when the assignment sets the prototype.
+ * @internal
+ */
+function protoAssignSetsPrototype(node) {
+	const wrapper = nodeWrapperOf(node);
+	return wrapper !== null && !hasOwn(wrapper, "__proto__") && moduleObjectOf(wrapper) !== null;
+}
+
+/**
+ * Whether a node fronts a live object a run shares with the instance (an `EventEmitter`, an `EventTarget`): a run is
+ * handed the node itself, so its listeners and what it emits or sets work both ways (see `isSharedLive` in
+ * `helpers/run-snapshot`).
+ * @param {*} value - The node, as read.
+ * @returns {boolean} True for one.
+ * @private
+ */
+function frontsSharedLive(value) {
+	if (typeof value !== "object" || value === null) return false;
+	const impl = nodeWrapperOf(value)?.____slothletInternal?.impl;
+	return impl !== null && typeof impl === "object" && !util.types.isProxy(impl) && isSharedLive(impl);
+}
+
+/**
+ * A function read through a run's view, as handed out: called with one of the run's views as its receiver, it runs on
+ * the node the view reads through, as it would when read off that node.
+ * @param {Function} fn - The function.
+ * @returns {Function} The function as handed out.
+ * @private
+ */
+function runViewFunction(fn) {
+	let handed = WeakMapMethods.get(RUN_VIEW_FUNCTIONS, fn);
+	if (handed === undefined) {
+		// Called with one of the run's views as its receiver, it runs on that view: what it reads is what the run reads,
+		// and what it writes stays in the run, as a method called on a copy of an object works on the copy.
+		handed = new NativeProxy(fn, {
+			__proto__: null,
+			apply: (target, thisArg, args) => Reflect.apply(target, runViewReceiver(thisArg), args)
+		});
+		WeakMapMethods.set(RUN_VIEW_FUNCTIONS, fn, handed);
+	}
+	return handed;
 }
 
 /**
@@ -926,180 +1100,6 @@ function runViewShell(shell, parentSelf) {
  * @private
  */
 function makeRunSelf(slothlet, parentSelf, record) {
-	/**
-	 * Load the node a stand-in stands for (see {@link isLazyStandIn}), without reading the member it stands for: a run's view
-	 * over a stand-in reads that member through its own views once the node has loaded, so a getter on the path runs once
-	 * (see `makeRunSelf` in `handlers/unified-wrapper/run`). A change queued through a stand-in that the node refused fails it, as
-	 * awaiting the stand-in does.
-	 * @param {object} standIn - The stand-in.
-	 * @returns {Promise<void>} Settles once the node has loaded.
-	 * @internal
-	 */
-	async function loadStandIn(standIn) {
-		const wrapper = resolveWrapper(standIn);
-		if (wrapper === null) return;
-		if (!wrapper.____slothletInternal.state.materialized) await wrapper.___materialize();
-		const refused = takeRefusedChange(wrapper, WeakMapMethods.get(WAITING_CHAINS, standIn) ?? []);
-		if (refused) throw refused;
-	}
-
-	/**
-	 * Record a stand-in for one of the framework's root members (a view of the
-	 * `slothlet` namespace) as that member, so module code reading it through the scope's `self` is handed the same
-	 * view of it as outside the scope ({@link selfFrameworkView}). Anything else is left unrecorded.
-	 *
-	 * @param {object} copy - The stand-in.
-	 * @param {*} member - The value it stands in for.
-	 * @returns {object} `copy`.
-	 * @internal
-	 *
-	 * @example
-	 * registerFrameworkMemberCopy(viewOf(api.slothlet), api.slothlet);
-	 */
-	function registerFrameworkMemberCopy(copy, member) {
-		const slothlet = WeakMapMethods.get(FRAMEWORK_MEMBERS, member);
-		if (slothlet) registerFrameworkMember(copy, slothlet, WeakMapMethods.get(FRAMEWORK_MEMBER_NAMES, member));
-		return copy;
-	}
-
-	/**
-	 * Whether a value read through a node now is the member a node's saved version holds: the same child node (or a view of
-	 * it), the node fronting the same object, or the same value.
-	 * @param {*} live - What the node hands out now.
-	 * @param {*} held - What the version holds.
-	 * @returns {boolean} True when they are one.
-	 * @internal
-	 */
-	function sameSnapshotMember(live, held) {
-		if (live === held) return true;
-		if (live === null || (typeof live !== "object" && typeof live !== "function")) return false;
-		if (held === null || (typeof held !== "object" && typeof held !== "function")) return false;
-		const liveWrapper = nodeWrapperOf(live);
-		if (liveWrapper === null) return false;
-		const heldWrapper = nodeWrapperOf(held);
-		if (heldWrapper !== null) return heldWrapper === liveWrapper;
-		const internal = liveWrapper.____slothletInternal;
-		return internal.impl === held || internal.sourceValue === held || internal.moduleObject === held;
-	}
-
-	/**
-	 * The content a node had when a run started, when the instance has changed it since (see {@link captureNode}),
-	 * or null when the node is as it was.
-	 * @param {*} node - The node, as the run's view reads through it.
-	 * @param {object|null|undefined} snap - The run's snapshot (see `helpers/run-snapshot`).
-	 * @returns {{members: Map<PropertyKey, (object|symbol)>}|null} The content.
-	 * @internal
-	 */
-	function nodeVersion(node, snap) {
-		if (snap === null || snap === undefined || snap.closed) return null;
-		const wrapper = nodeWrapperOf(node);
-		if (wrapper === null) return null;
-		const held = versionAt(snap.instance, wrapper, snap.base);
-		return held === CURRENT ? null : held;
-	}
-
-	/**
-	 * The prototype of a class a function node fronts (its function's own `prototype`), as the module holds it, or null.
-	 * @param {*} node - The node.
-	 * @returns {object|null} The prototype.
-	 * @internal
-	 */
-	function classPrototypeOf(node) {
-		const wrapper = nodeWrapperOf(node);
-		return wrapper === null ? null : wrapper.___wrapperClassPrototype();
-	}
-
-	/**
-	 * The prototype a run reads a node as inheriting from, when that differs from what the node reports now: the one it
-	 * held when the run started, when the instance set another on it since, or the run's view of it, when the instance
-	 * changed that prototype of a module's own since (see {@link inheritedAtStart}). Undefined when the run reads
-	 * the node's prototype as the node reports it.
-	 * @param {*} node - The node, as the run's view reads through it.
-	 * @param {{prototype?: (object|null|symbol)}|null} version - The node's saved version, if any.
-	 * @param {object} snap - The run's snapshot.
-	 * @returns {{prototype: (object|null)}|undefined} The prototype.
-	 * @internal
-	 */
-	function prototypeAtStart(node, version, snap) {
-		/**
-		 * Whether a saved version of an object holds other than the object does now: other members, other attributes, or
-		 * another prototype. Read by descriptors only.
-		 * @param {object} content - The version (or the object itself).
-		 * @param {object} raw - The object.
-		 * @returns {boolean} True when it does.
-		 * @private
-		 */
-		function contentChanged(content, raw) {
-			if (content === raw) return false;
-			if (Reflect.getPrototypeOf(content) !== Reflect.getPrototypeOf(raw)) return true;
-			const keys = Reflect.ownKeys(raw);
-			if (Reflect.ownKeys(content).length !== keys.length) return true;
-			for (let index = 0; index < keys.length; index++) {
-				const now = Reflect.getOwnPropertyDescriptor(raw, keys[index]);
-				const then = Reflect.getOwnPropertyDescriptor(content, keys[index]);
-				if (then === undefined || !sameLookup({ from: content, described: then }, { from: raw, described: now })) return true;
-			}
-			return false;
-		}
-
-		const wrapper = nodeWrapperOf(node);
-		if (wrapper === null || snap === null || snap === undefined || snap.closed) return undefined;
-		const held = wrapper.___startPrototypes(version);
-		if (held === undefined) return undefined;
-		const { start, now } = held;
-		if (start === null || isLanguagePrototype(start) || resolveWrapper(start) !== null)
-			return start === now ? undefined : { prototype: start };
-		if (start === now && !contentChanged(rawContent(snap, start), start)) return undefined;
-		return { prototype: handOutRaw(snap, start) };
-	}
-
-	/**
-	 * Whether `node.__proto__ = x` on a node runs the language's own `__proto__` setter, as the set trap does for a node
-	 * fronting a module's own object that holds no `__proto__` member (#757); any other node takes it as a member write.
-	 * @param {*} node - The node, as a run's view reads through it.
-	 * @returns {boolean} True when the assignment sets the prototype.
-	 * @internal
-	 */
-	function protoAssignSetsPrototype(node) {
-		const wrapper = nodeWrapperOf(node);
-		return wrapper !== null && !hasOwn(wrapper, "__proto__") && moduleObjectOf(wrapper) !== null;
-	}
-
-	/**
-	 * Whether a node fronts a live object a run shares with the instance (an `EventEmitter`, an `EventTarget`): a run is
-	 * handed the node itself, so its listeners and what it emits or sets work both ways (see `isSharedLive` in
-	 * `helpers/run-snapshot`).
-	 * @param {*} value - The node, as read.
-	 * @returns {boolean} True for one.
-	 * @private
-	 */
-	function frontsSharedLive(value) {
-		if (typeof value !== "object" || value === null) return false;
-		const impl = nodeWrapperOf(value)?.____slothletInternal?.impl;
-		return impl !== null && typeof impl === "object" && !util.types.isProxy(impl) && isSharedLive(impl);
-	}
-
-	/**
-	 * A function read through a run's view, as handed out: called with one of the run's views as its receiver, it runs on
-	 * the node the view reads through, as it would when read off that node.
-	 * @param {Function} fn - The function.
-	 * @returns {Function} The function as handed out.
-	 * @private
-	 */
-	function runViewFunction(fn) {
-		let handed = WeakMapMethods.get(RUN_VIEW_FUNCTIONS, fn);
-		if (handed === undefined) {
-			// Called with one of the run's views as its receiver, it runs on that view: what it reads is what the run reads,
-			// and what it writes stays in the run, as a method called on a copy of an object works on the copy.
-			handed = new NativeProxy(fn, {
-				__proto__: null,
-				apply: (target, thisArg, args) => Reflect.apply(target, runViewReceiver(thisArg), args)
-			});
-			WeakMapMethods.set(RUN_VIEW_FUNCTIONS, fn, handed);
-		}
-		return handed;
-	}
-
 	// The run's snapshot (see helpers/run-snapshot): what it reads of the instance is the instance as of its start.
 	const snap = record?.snap ?? null;
 	const run = {

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-25T00:00:00-08:00 (1795593600)
+ *	@Last modified time: 2026-11-25T13:24:02-08:00 (1795641842)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -258,6 +258,25 @@ function metadataNodeOf(value) {
 }
 
 /**
+ * The api path of the node a view of `self` stands over: the node's own, or for a stand-in kept from before its folder
+ * loaded, its node's path and the chain read off it.
+ * @param {object} child - The view's child: a node or a stand-in.
+ * @param {object} inner - The child's wrapper.
+ * @returns {string} The api path.
+ * @private
+ *
+ * @example
+ * viewNodePath(standIn, wrapper); // "d.fn"
+ */
+function viewNodePath(child, inner) {
+	const chain = WeakMapMethods.get(WAITING_CHAINS, child);
+	const base = inner.____slothletInternal.apiPath;
+	if (!chain || chain.length === 0) return base;
+	const tail = ArrayMethods.join(mapList(chain, String), ".");
+	return base ? base + "." + tail : tail;
+}
+
+/**
  * `slothlet.node(target)`: one frozen report of what slothlet knows about an api node.
  *
  * @description
@@ -279,25 +298,6 @@ function metadataNodeOf(value) {
  * nodeReport(slothlet, api.math.add).path; // ["math", "add"]
  */
 function nodeReport(slothlet, target) {
-	/**
-	 * The api path of the node a view of `self` stands over: the node's own, or for a stand-in kept from before its folder
-	 * loaded, its node's path and the chain read off it.
-	 * @param {object} child - The view's child: a node or a stand-in.
-	 * @param {object} inner - The child's wrapper.
-	 * @returns {string} The api path.
-	 * @private
-	 *
-	 * @example
-	 * viewNodePath(standIn, wrapper); // "d.fn"
-	 */
-	function viewNodePath(child, inner) {
-		const chain = WeakMapMethods.get(WAITING_CHAINS, child);
-		const base = inner.____slothletInternal.apiPath;
-		if (!chain || chain.length === 0) return base;
-		const tail = ArrayMethods.join(mapList(chain, String), ".");
-		return base ? base + "." + tail : tail;
-	}
-
 	// A segment array names a path; an array-backed node (its proxy is an array too) is a node.
 	if (typeof target === "string" || (Arrays.isArray(target) && resolveWrapper(reportedNode(target)) === null)) {
 		const segments = typeof target === "string" ? (target === "" ? [] : splitText(target, ".")) : target;
@@ -1345,6 +1345,72 @@ function nodeBehind(value) {
 let built = false;
 
 /**
+ * Whether what a node holds under a key is what the module's object holds there now (#757): the same primitive or
+ * built-in value, a child node built from the same object, or an adoption of the same accessor.
+ * @param {PropertyDescriptor} mine - The node's own member.
+ * @param {PropertyDescriptor} held - The module's object's member.
+ * @returns {boolean} True when the node is in step with the object for this member.
+ * @private
+ */
+function holdsModuleMember(mine, held) {
+	if (!("value" in held)) {
+		if ("value" in mine) return false;
+		const original = originalAccessor(mine);
+		return original.get === held.get && original.set === held.set;
+	}
+	if (!("value" in mine)) return false;
+	if (Objects.is(mine.value, held.value)) return true;
+	const child = resolveWrapper(mine.value);
+	if (child === null) return false;
+	// A child node that keeps no record of what it was built from is not one this follows.
+	const internal = child.____slothletInternal;
+	if (!hasOwn(internal, "sourceValue")) return true;
+	// A child a reload reused fronts the reloaded value through its impl or its module object, not what it was built from.
+	return (
+		internal.sourceValue === held.value ||
+		internal.moduleObject === held.value ||
+		internal.impl === held.value ||
+		(internal.impl !== null && typeof internal.impl === "object" && layerUnderlying(internal.impl) === held.value)
+	);
+}
+
+/**
+ * Whether the module has changed a member of its object since the node last saw it (see {@link MODULE_OBJECT_SEEN}),
+ * recording what the object holds now.
+ * @param {UnifiedWrapper} wrapper - The node's wrapper.
+ * @param {object} object - The module's object.
+ * @param {string} key - The member's key.
+ * @param {PropertyDescriptor|undefined} held - The object's member now.
+ * @returns {boolean} True when the member was added, replaced, redefined or deleted.
+ * @private
+ */
+function moduleMemberChanged(wrapper, object, key, held) {
+	let seen = WeakMapMethods.get(MODULE_OBJECT_SEEN, wrapper);
+	if (seen === undefined || seen.object !== object) {
+		// A node handed another node's object (a reload reusing it) was just built from that object as it is.
+		seen = { object, members: moduleObjectMembers(object) };
+		WeakMapMethods.set(MODULE_OBJECT_SEEN, wrapper, seen);
+		return false;
+	}
+	const before = MapMethods.get(seen.members, key);
+	if (held === undefined) {
+		if (before === undefined) return false;
+		MapMethods.delete(seen.members, key);
+		return true;
+	}
+	if (
+		before !== undefined &&
+		before.enumerable === held.enumerable &&
+		"value" in before === "value" in held &&
+		("value" in held ? Objects.is(before.value, held.value) : before.get === held.get && before.set === held.set)
+	) {
+		return false;
+	}
+	MapMethods.set(seen.members, key, held);
+	return true;
+}
+
+/**
  * Build this layer of the wrapper class over `Base`, once (see `unified-wrapper.mjs`).
  * @param {Function} Base - The class below this layer.
  * @returns {Function} The layer's class.
@@ -1541,71 +1607,6 @@ export function NodesLayer(Base) {
 			___followModuleMember(object, seen, key) {
 				if (!isWrapper(this)) throw ownBindingsRefusal("lib/handlers/unified-wrapper/nodes", import.meta.url);
 				const wrapper = this;
-				/**
-				 * Whether what a node holds under a key is what the module's object holds there now (#757): the same primitive or
-				 * built-in value, a child node built from the same object, or an adoption of the same accessor.
-				 * @param {PropertyDescriptor} mine - The node's own member.
-				 * @param {PropertyDescriptor} held - The module's object's member.
-				 * @returns {boolean} True when the node is in step with the object for this member.
-				 * @private
-				 */
-				function holdsModuleMember(mine, held) {
-					if (!("value" in held)) {
-						if ("value" in mine) return false;
-						const original = originalAccessor(mine);
-						return original.get === held.get && original.set === held.set;
-					}
-					if (!("value" in mine)) return false;
-					if (Objects.is(mine.value, held.value)) return true;
-					const child = resolveWrapper(mine.value);
-					if (child === null) return false;
-					// A child node that keeps no record of what it was built from is not one this follows.
-					const internal = child.____slothletInternal;
-					if (!hasOwn(internal, "sourceValue")) return true;
-					// A child a reload reused fronts the reloaded value through its impl or its module object, not what it was built from.
-					return (
-						internal.sourceValue === held.value ||
-						internal.moduleObject === held.value ||
-						internal.impl === held.value ||
-						(internal.impl !== null && typeof internal.impl === "object" && layerUnderlying(internal.impl) === held.value)
-					);
-				}
-
-				/**
-				 * Whether the module has changed a member of its object since the node last saw it (see {@link MODULE_OBJECT_SEEN}),
-				 * recording what the object holds now.
-				 * @param {UnifiedWrapper} wrapper - The node's wrapper.
-				 * @param {object} object - The module's object.
-				 * @param {string} key - The member's key.
-				 * @param {PropertyDescriptor|undefined} held - The object's member now.
-				 * @returns {boolean} True when the member was added, replaced, redefined or deleted.
-				 * @private
-				 */
-				function moduleMemberChanged(wrapper, object, key, held) {
-					let seen = WeakMapMethods.get(MODULE_OBJECT_SEEN, wrapper);
-					if (seen === undefined || seen.object !== object) {
-						// A node handed another node's object (a reload reusing it) was just built from that object as it is.
-						seen = { object, members: moduleObjectMembers(object) };
-						WeakMapMethods.set(MODULE_OBJECT_SEEN, wrapper, seen);
-						return false;
-					}
-					const before = MapMethods.get(seen.members, key);
-					if (held === undefined) {
-						if (before === undefined) return false;
-						MapMethods.delete(seen.members, key);
-						return true;
-					}
-					if (
-						before !== undefined &&
-						before.enumerable === held.enumerable &&
-						"value" in before === "value" in held &&
-						("value" in held ? Objects.is(before.value, held.value) : before.get === held.get && before.set === held.set)
-					) {
-						return false;
-					}
-					MapMethods.set(seen.members, key, held);
-					return true;
-				}
 
 				if (isFrameworkReservedKey(key)) return;
 				const internal = wrapper.____slothletInternal;

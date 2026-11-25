@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-25T00:00:00-08:00 (1795593600)
+ *	@Last modified time: 2026-11-25T13:24:02-08:00 (1795641842)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -300,6 +300,22 @@ function registerFrameworkMember(member, slothlet, name) {
 }
 
 /**
+ * Run `use` as a framework view's use on behalf of `reader`, made with no caller of its own.
+ * @param {object} reader - The reader the view belongs to.
+ * @param {Function} use - The use.
+ * @returns {*} What `use` returns.
+ * @private
+ */
+function asViewReader(reader, use) {
+	listPush(VIEW_READER_RUNS, reader);
+	try {
+		return use();
+	} finally {
+		ArrayMethods.pop(VIEW_READER_RUNS);
+	}
+}
+
+/**
  * Build (or reuse) a reader's view of a member of the framework's namespace; see {@link selfFrameworkView}.
  *
  * @param {*} member - The member.
@@ -310,22 +326,6 @@ function registerFrameworkMember(member, slothlet, name) {
  * @private
  */
 function frameworkViewOf(member, slothlet, reader, path) {
-	/**
-	 * Run `use` as a framework view's use on behalf of `reader`, made with no caller of its own.
-	 * @param {object} reader - The reader the view belongs to.
-	 * @param {Function} use - The use.
-	 * @returns {*} What `use` returns.
-	 * @private
-	 */
-	function asViewReader(reader, use) {
-		listPush(VIEW_READER_RUNS, reader);
-		try {
-			return use();
-		} finally {
-			ArrayMethods.pop(VIEW_READER_RUNS);
-		}
-	}
-
 	if (member === null || (typeof member !== "object" && typeof member !== "function")) return member;
 	if (WeakMapMethods.has(FRAMEWORK_VIEW_TARGETS, member)) return member;
 	let byReader = WeakMapMethods.get(FRAMEWORK_VIEWS, member);
@@ -1329,6 +1329,20 @@ function contextRead(ctx, value) {
 }
 
 /**
+ * One value as a module gets it handed as a call's argument by `caller` (see {@link crossArgumentsFrom},
+ * {@link ownArguments}, {@link ownInstances}): another module's as a view while the permission system
+ * is on, its own as itself.
+ * @param {object} wrapper - The wrapper of the module handed the value.
+ * @param {*} value - The value.
+ * @param {object|null} caller - The wrapper of the module handing it over, or null for the host.
+ * @returns {*} What the module gets.
+ * @private
+ */
+function handedAsArgument(wrapper, value, caller) {
+	return wrapper.___ownInstances(wrapper.___ownArguments(wrapper.___crossArgumentsFrom([value], caller)))[0];
+}
+
+/**
  * What an event's payload reaches a listener as (#667): slothlet's event dispatcher hands it from the module that
  * emitted it to the module that registered the listener, so it crosses between modules as an argument does
  * ({@link carryTo}). A listener the host registered, and one of the emitting module's own, gets it as it was
@@ -1341,20 +1355,6 @@ function contextRead(ctx, value) {
  * @public
  */
 function eventPayloadFor(payload, listener, emitter, slothlet) {
-	/**
-	 * One value as a module gets it handed as a call's argument by `caller` (see {@link crossArgumentsFrom},
-	 * {@link ownArguments}, {@link ownInstances}): another module's as a view while the permission system
-	 * is on, its own as itself.
-	 * @param {object} wrapper - The wrapper of the module handed the value.
-	 * @param {*} value - The value.
-	 * @param {object|null} caller - The wrapper of the module handing it over, or null for the host.
-	 * @returns {*} What the module gets.
-	 * @private
-	 */
-	function handedAsArgument(wrapper, value, caller) {
-		return wrapper.___ownInstances(wrapper.___ownArguments(wrapper.___crossArgumentsFrom([value], caller)))[0];
-	}
-
 	if (payload === null || (typeof payload !== "object" && typeof payload !== "function") || !listener?.____slothletInternal) return payload;
 	const caller = emitter?.____slothletInternal ? emitter : null;
 	if (caller !== null && makerOf(caller) === makerOf(listener)) return payload;
@@ -1407,6 +1407,19 @@ function hasOwnMember(wrapper, prop) {
 }
 
 /**
+ * Whether a value is plain data: an object whose prototype is `Object.prototype` or null, or an array, and no Proxy.
+ * @param {*} value - The value.
+ * @returns {boolean} True when it is.
+ * @private
+ */
+function isPlainData(value) {
+	if (value === null || typeof value !== "object" || util.types.isProxy(value)) return false;
+	if (Arrays.isArray(value)) return true;
+	const prototype = Objects.getPrototypeOf(value);
+	return prototype === Objects.prototype || prototype === null;
+}
+
+/**
  * Whether the rules leave a reader nothing to read at the path of an object member of a module's data (see
  * {@link isDataMemberNode}): a read there is refused, and so is a
  * read of any member beneath it (`config.nested.**`, or a deny on `config.nested` alone, which covers what a member of a
@@ -1428,19 +1441,6 @@ function hasOwnMember(wrapper, prop) {
  * Object.keys(self.owner.config); // ["prim", "open"], as for a denied primitive member
  */
 function readsNothingBeneath(wrapper, targetPath, callerOverride, kept = null, access = null, member = undefined) {
-	/**
-	 * Whether a value is plain data: an object whose prototype is `Object.prototype` or null, or an array, and no Proxy.
-	 * @param {*} value - The value.
-	 * @returns {boolean} True when it is.
-	 * @private
-	 */
-	function isPlainData(value) {
-		if (value === null || typeof value !== "object" || util.types.isProxy(value)) return false;
-		if (Arrays.isArray(value)) return true;
-		const prototype = Objects.getPrototypeOf(value);
-		return prototype === Objects.prototype || prototype === null;
-	}
-
 	if (readGateDecision(wrapper, targetPath, callerOverride, kept, access).allowed) return false;
 	// Only a member of a module's data: a folder, a file or a function is listed whatever the rules on its path say. An
 	// object written to the api after it was built is data too, and so is a plain object or array no node stands for

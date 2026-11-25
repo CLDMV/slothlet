@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-25T00:00:00-08:00 (1795593600)
+ *	@Last modified time: 2026-11-25T13:24:02-08:00 (1795641842)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -262,6 +262,41 @@ function noteRootFile(slothlet, filePath, moduleID) {
 }
 
 /**
+ * The leaf the api root's function runs as: a node of the base module at the root's path (`""`), built from the root
+ * file, so a call of the root enters it as a call of a function node enters the node. The root's own code then runs
+ * as the root (rules whose caller pattern matches `""`, `**` among them, and `policy`), whoever called it. It
+ * has no Proxy of its own and is reached only as the identity of the root's calls. Null when the api root is no
+ * function.
+ * @param {object} slothlet - The instance.
+ * @returns {UnifiedWrapper|null} The leaf.
+ * @private
+ */
+function rootLeaf(slothlet) {
+	const root = slothlet.api;
+	if (typeof root !== "function") return null;
+	const fn = layerUnderlying(root);
+	const held = WeakMapMethods.get(ROOT_LEAVES, slothlet);
+	if (held !== undefined && held.____slothletInternal.impl === fn) return held;
+	const source = WeakMapMethods.get(ROOT_FILES, slothlet) ?? null;
+	const leaf = new UnifiedWrapper(slothlet, {
+		mode: "eager",
+		apiPath: "",
+		initialImpl: fn,
+		isCallable: true,
+		deferChildAdopt: true,
+		exportPath: ["default"],
+		moduleID: source?.moduleID ?? null
+	});
+	// The file is recorded after construction, so building the leaf announces no node of the tree; its code is indexed
+	// as this leaf's, as a node's is.
+	leaf.____slothletInternal.filePath = source?.filePath ?? null;
+	WeakSetMethods.add(trustedRootOwn.genuineWrappers, leaf);
+	if (source?.filePath) registerLeafFile(leaf);
+	WeakMapMethods.set(ROOT_LEAVES, slothlet, leaf);
+	return leaf;
+}
+
+/**
  * Run the api root's function, its call checked already (see {@link rootCallCheck}), as a call of the root's
  * leaf ({@link rootLeaf}): its own `self` reads are the root's, whoever called it. What it returns is handed out
  * as a function node's result is. A construction runs the same way.
@@ -273,41 +308,6 @@ function noteRootFile(slothlet, filePath, moduleID) {
  * @internal
  */
 function rootCall(slothlet, thisArg, args, construct = false) {
-	/**
-	 * The leaf the api root's function runs as: a node of the base module at the root's path (`""`), built from the root
-	 * file, so a call of the root enters it as a call of a function node enters the node. The root's own code then runs
-	 * as the root (rules whose caller pattern matches `""`, `**` among them, and `policy`), whoever called it. It
-	 * has no Proxy of its own and is reached only as the identity of the root's calls. Null when the api root is no
-	 * function.
-	 * @param {object} slothlet - The instance.
-	 * @returns {UnifiedWrapper|null} The leaf.
-	 * @private
-	 */
-	function rootLeaf(slothlet) {
-		const root = slothlet.api;
-		if (typeof root !== "function") return null;
-		const fn = layerUnderlying(root);
-		const held = WeakMapMethods.get(ROOT_LEAVES, slothlet);
-		if (held !== undefined && held.____slothletInternal.impl === fn) return held;
-		const source = WeakMapMethods.get(ROOT_FILES, slothlet) ?? null;
-		const leaf = new UnifiedWrapper(slothlet, {
-			mode: "eager",
-			apiPath: "",
-			initialImpl: fn,
-			isCallable: true,
-			deferChildAdopt: true,
-			exportPath: ["default"],
-			moduleID: source?.moduleID ?? null
-		});
-		// The file is recorded after construction, so building the leaf announces no node of the tree; its code is indexed
-		// as this leaf's, as a node's is.
-		leaf.____slothletInternal.filePath = source?.filePath ?? null;
-		WeakSetMethods.add(trustedRootOwn.genuineWrappers, leaf);
-		if (source?.filePath) registerLeafFile(leaf);
-		WeakMapMethods.set(ROOT_LEAVES, slothlet, leaf);
-		return leaf;
-	}
-
 	const root = slothlet.api;
 	const contextManager = slothlet.contextManager;
 	const leaf = contextManager?.runInContext && slothlet.instanceID ? rootLeaf(slothlet) : null;
@@ -362,6 +362,31 @@ const FUNCTION_INVOKERS = Objects.freeze({
 const ROOT_INVOKERS = new WeakMap();
 
 /**
+ * The api root's `call`, `apply` or `bind`, where its function inherits the language's: run on the api root, so the
+ * call goes through the root's call check (see {@link rootCallCheck}), as `call` on a function node calls the
+ * node. What the root's file layer hands out instead runs the module's function itself, past the check. Any other value
+ * (a member of the root's own by that name) is answered as it is.
+ * @param {object} slothlet - The instance.
+ * @param {string|symbol} prop - The key read.
+ * @param {*} value - What the root answered for it.
+ * @returns {*} The value to hand out.
+ * @private
+ */
+function rootInvoker(slothlet, prop, value) {
+	if (typeof slothlet.api !== "function" || typeof prop !== "string" || !(prop in FUNCTION_INVOKERS)) return value;
+	const invoker = FUNCTION_INVOKERS[prop];
+	if ((layerMethodOriginal(value) ?? value) !== invoker) return value;
+	let made = WeakMapMethods.get(ROOT_INVOKERS, slothlet);
+	if (made === undefined) WeakMapMethods.set(ROOT_INVOKERS, slothlet, (made = new Map()));
+	let fn = MapMethods.get(made, prop);
+	if (fn === undefined) {
+		fn = { [prop]: (...args) => Reflect.apply(invoker, slothlet.boundApi, args) }[prop];
+		MapMethods.set(made, prop, fn);
+	}
+	return fn;
+}
+
+/**
  * A read of a member of the api root, answered as a node answers a read of its member: a file's primitive default
  * export is its value, and a value the reader may not read is refused, by the same gate at the member's name.
  * @param {object} slothlet - The instance.
@@ -372,31 +397,6 @@ const ROOT_INVOKERS = new WeakMap();
  * @internal
  */
 function rootMemberRead(slothlet, prop, value) {
-	/**
-	 * The api root's `call`, `apply` or `bind`, where its function inherits the language's: run on the api root, so the
-	 * call goes through the root's call check (see {@link rootCallCheck}), as `call` on a function node calls the
-	 * node. What the root's file layer hands out instead runs the module's function itself, past the check. Any other value
-	 * (a member of the root's own by that name) is answered as it is.
-	 * @param {object} slothlet - The instance.
-	 * @param {string|symbol} prop - The key read.
-	 * @param {*} value - What the root answered for it.
-	 * @returns {*} The value to hand out.
-	 * @private
-	 */
-	function rootInvoker(slothlet, prop, value) {
-		if (typeof slothlet.api !== "function" || typeof prop !== "string" || !(prop in FUNCTION_INVOKERS)) return value;
-		const invoker = FUNCTION_INVOKERS[prop];
-		if ((layerMethodOriginal(value) ?? value) !== invoker) return value;
-		let made = WeakMapMethods.get(ROOT_INVOKERS, slothlet);
-		if (made === undefined) WeakMapMethods.set(ROOT_INVOKERS, slothlet, (made = new Map()));
-		let fn = MapMethods.get(made, prop);
-		if (fn === undefined) {
-			fn = { [prop]: (...args) => Reflect.apply(invoker, slothlet.boundApi, args) }[prop];
-			MapMethods.set(made, prop, fn);
-		}
-		return fn;
-	}
-
 	if (value !== null && (typeof value === "object" || typeof value === "function")) {
 		const node = resolveWrapper(value);
 		if (node !== null) {
@@ -577,6 +577,202 @@ function rootFixedMember(slothlet, prop, fixed, described) {
 }
 
 /**
+ * A member of the api root as its hook shows it to a module: the framework's namespace as its own hook shows it (only
+ * what the module may read), a function of the framework's by the form of the function behind the module's view of it,
+ * and anything else as {@link inspectSafe} shows it, a form shown unquoted as `util.inspect` shows one.
+ * @param {*} value - The member, read through the module's view of the root.
+ * @param {Array<*>} args - The hook's arguments.
+ * @param {object} slothlet - The instance.
+ * @returns {*} What is shown.
+ * @private
+ */
+function rootMemberShown(value, args, slothlet) {
+	const behind =
+		value !== null && (typeof value === "object" || typeof value === "function")
+			? WeakMapMethods.get(FRAMEWORK_VIEW_TARGETS, value)
+			: undefined;
+	if (behind !== undefined && typeof value === "object") return value;
+	const safe = inspectSafe(value, args, true, slothlet);
+	if (typeof safe !== "string" || safe === value) return safe;
+	return inspectLabel(typeof behind === "function" ? codeLabel(behind) : safe);
+}
+
+/**
+ * What the api root shows to `util.inspect`, as a node shows its own: its members, read through the root as the reader
+ * may read them (a member it may not read left out; to a module, its code by its form), and for a function root its
+ * function's form beside them, a label that runs nothing.
+ * @param {object} slothlet - The instance.
+ * @param {Array<*>} args - The hook's arguments (`depth`, `options`, `inspect`).
+ * @returns {*} What is shown.
+ * @private
+ */
+function rootInspectShown(slothlet, args) {
+	// A module is shown the root as its own view of it reads it, and the module's code by its form (as a node shows it),
+	// so the hook, which a read of the root hands out, gives the module nothing it could not read.
+	const reader = selfModuleReader(slothlet);
+	const root = reader ? selfRootView(slothlet, reader) : slothlet.boundApi;
+	const shown = {};
+	for (let ofIndex = 0, ofList = Objects.keys(root); ofIndex < ofList.length; ofIndex++) {
+		const key = ofList[ofIndex];
+		try {
+			shown[key] = reader ? rootMemberShown(root[key], args, slothlet) : root[key];
+		} catch (error) {
+			if (error?.code !== "PERMISSION_DENIED") throw error;
+		}
+	}
+	const api = slothlet.api;
+	if (typeof api !== "function") return shown;
+	const label = codeLabel(isCompositionLayer(api) ? layerUnderlying(api) : api);
+	if (Objects.keys(shown).length === 0) return label;
+	const options = args[1],
+		inspect = args[2];
+	return `${label} ${(typeof inspect === "function" ? inspect : util.inspect)(shown, options)}`;
+}
+
+/**
+ * Give the api root proxy's target the `util.inspect` hook a node's target has (see {@link defineProxyInspect}):
+ * Node inspects a Proxy's target, not what its traps report, so without it the root shows as its empty stand-in.
+ * @param {object} slothlet - The instance.
+ * @param {object|Function} target - The root proxy's target.
+ * @returns {void}
+ * @internal
+ */
+function defineRootInspect(slothlet, target) {
+	Objects.defineProperty(target, util.inspect.custom, {
+		__proto__: null,
+		value: registerInspectHook(function (...args) {
+			return rootInspectShown(slothlet, args);
+		}),
+		writable: false,
+		enumerable: false,
+		configurable: true
+	});
+}
+
+/**
+ * Close the api root (`Object.preventExtensions`, and so `Object.seal` / `Object.freeze`), as closing the api object:
+ * the api itself is closed, and each member it holds is copied onto the root proxy's target, which is closed too, so the
+ * root lists, describes and reads them as the invariants then require. Only the root closes: its members, slothlet's
+ * namespace and every prototype stay as they are. Module code may not close it: closing it pins slothlet's own members.
+ * @param {object} slothlet - The instance.
+ * @param {object|Function} target - The root proxy's target.
+ * @param {boolean} isCallable - Whether the root is a function, whose prototype the root reports as its own.
+ * @param {object|Function|null} [prototype] - A function root's prototype, which its target takes.
+ * @returns {boolean} Whether the root is closed.
+ * @throws {SlothletError} When module code may not change the root (see {@link assertRootChange}).
+ * @internal
+ */
+function rootClose(slothlet, target, isCallable, prototype) {
+	// Closing a root already closed changes nothing, as on a plain object.
+	if (!Reflect.isExtensible(target)) return true;
+	assertRootChange(slothlet, null);
+	const api = slothlet.api;
+	// The root holds slothlet's namespace and root functions, which closing it would pin with it: module code may not
+	// change them (the built-in write rules), so it may not close the root. Refused before anything closes.
+	for (const name of setValues(SELF_FRAMEWORK_ROOTS)) if (hasOwn(api, name)) assertRootChange(slothlet, name);
+	// A function root's api is a layer over its module's function, kept open so the function is not changed: the target
+	// alone closes then, and from then on holds the keys the root has (see rootTakesKey).
+	if (!Reflect.preventExtensions(api) && !isCompositionLayer(api)) return false;
+	// A closed root reports its target's prototype (invariant): a function root's is its function's, or the one the
+	// root was given, which an object root's target holds already. One it was given is held as the view every holder of
+	// the closed root reads it through (see rootPrototypeFor).
+	if (isCallable || prototype !== undefined) Reflect.setPrototypeOf(target, prototype);
+	for (let ofIndex = 0, ofList = Reflect.ownKeys(api); ofIndex < ofList.length; ofIndex++) {
+		const key = ofList[ofIndex];
+		Reflect.defineProperty(target, key, rootShellDescriptor(Reflect.getOwnPropertyDescriptor(api, key), slothlet, key));
+	}
+	return Reflect.preventExtensions(target);
+}
+
+/**
+ * Define a member of the api root, as a definition on the api object: on the api itself, and on the root proxy's target
+ * too where the invariants bind it (a member made non-configurable, and every member once the root is closed).
+ * @param {object} slothlet - The instance.
+ * @param {object|Function} target - The root proxy's target.
+ * @param {string|symbol} prop - The member's key.
+ * @param {PropertyDescriptor} descriptor - The definition.
+ * @returns {boolean} Whether it was defined.
+ * @throws {SlothletError} When module code may not change the member (see {@link assertRootChange}).
+ * @internal
+ */
+function rootDefine(slothlet, target, prop, descriptor) {
+	const api = slothlet.api;
+	// A definition that changes nothing (freezing a root already frozen) is no write, as on a node (#667).
+	if (!Reflect.isExtensible(target) && isUnchangingDefinition(target, prop, descriptor)) return true;
+	assertRootChange(slothlet, prop);
+	if ("value" in descriptor) descriptor = { __proto__: null, ...descriptor, value: unwrapSelfView(descriptor.value) };
+	// A key only the target holds (its inspect hook) is the target's own.
+	if (!hasOwn(api, prop) && hasOwn(target, prop)) return Reflect.defineProperty(target, prop, descriptor);
+	if (!rootTakesKey(target, prop)) return false;
+	// An object or function defined on the root is held as a node, as one assigned to it is, unless the definition fixes
+	// it (read-only and non-configurable): the language requires the root to hand that value out as it was defined.
+	if ("value" in descriptor) {
+		const current = Reflect.getOwnPropertyDescriptor(api, prop);
+		const configurable = "configurable" in descriptor ? descriptor.configurable : (current?.configurable ?? false);
+		const writable = "writable" in descriptor ? descriptor.writable : current && "value" in current ? current.writable : false;
+		if (!configurable && !writable) refuseFixedObjectDefinition(slothlet, "", prop, descriptor.value);
+		const node = configurable || writable ? rootMemberNode(slothlet, prop, descriptor.value) : null;
+		if (node !== null) descriptor = { __proto__: null, ...descriptor, value: node };
+	}
+	// A full-isolation run's `self` keeps what it defines on the root in its own record (see runWrite).
+	const runSink = takeRunWrite(slothlet.boundApi, prop);
+	if (runSink !== null) return runSink({ op: "define", descriptor });
+	if (!Reflect.defineProperty(api, prop, descriptor)) return false;
+	const held = Reflect.getOwnPropertyDescriptor(api, prop);
+	if (held.configurable && Reflect.isExtensible(target)) return true;
+	return Reflect.defineProperty(target, prop, rootShellDescriptor(held, slothlet, prop));
+}
+
+/**
+ * Assign a member of the api root, as an assignment on the api object: an object or function the host assigns is held
+ * as a node (see {@link rootMemberNode}).
+ * @param {object} slothlet - The instance.
+ * @param {object|Function} target - The root proxy's target.
+ * @param {string|symbol} prop - The member's key.
+ * @param {*} value - The value assigned.
+ * @returns {boolean} Whether it was assigned.
+ * @throws {SlothletError} When module code may not change the member (see {@link assertRootChange}).
+ * @internal
+ */
+function rootAssign(slothlet, target, prop, value) {
+	assertRootChange(slothlet, prop);
+	if (!rootTakesKey(target, prop)) return false;
+	value = unwrapSelfView(value);
+	const stored = rootMemberNode(slothlet, prop, value) ?? value;
+	// A full-isolation run's `self` keeps what it writes on the root in its own record (see runWrite).
+	const runSink = takeRunWrite(slothlet.boundApi, prop);
+	if (runSink !== null) return runSink({ op: "set", value: stored });
+	return Reflect.set(slothlet.api, prop, stored);
+}
+
+/**
+ * The keys of the api root a reader is given, as a node's listing gives its own: what the reader may not read is left
+ * out (see {@link isReadRedacted}). A key the root's target holds fixed stays, as the invariants require.
+ * @param {object} slothlet - The instance.
+ * @param {object|Function} target - The root proxy's target.
+ * @param {Array<string|symbol>} keys - The keys the api root holds.
+ * @returns {Array<string|symbol>} The keys listed.
+ * @internal
+ */
+function rootListing(slothlet, target, keys) {
+	if (!readsGated(slothlet)) return keys;
+	const gate = rootGate(slothlet);
+	// The reader is the same for every key of one listing, so it is resolved once.
+	const host = isHostRead(gate);
+	const listed = [];
+	for (let ofIndex = 0, ofList = keys; ofIndex < ofList.length; ofIndex++) {
+		const key = ofList[ofIndex];
+		if (host && !slothlet.handlers.permissionManager.isPrivateTarget(String(key))) {
+			listPush(listed, key);
+			continue;
+		}
+		const fixed = Reflect.getOwnPropertyDescriptor(target, key);
+		if ((fixed && !fixed.configurable) || !isReadRedacted(gate, key, null, null, true)) listPush(listed, key);
+	}
+	return listed;
+}
+
+/**
  * Build an instance's api root: the Proxy `api` is, over a target of its own (a bound function for a callable root, a
  * plain object otherwise), whose traps read and change the instance's current api under the rules a node's do. Called
  * once per instance, on its first load: the root keeps its identity across reloads.
@@ -593,202 +789,6 @@ function rootFixedMember(slothlet, prop, fixed, described) {
  * @internal
  */
 function rootProxy(slothlet, records, instanceApi, closeSelf) {
-	/**
-	 * Give the api root proxy's target the `util.inspect` hook a node's target has (see {@link defineProxyInspect}):
-	 * Node inspects a Proxy's target, not what its traps report, so without it the root shows as its empty stand-in.
-	 * @param {object} slothlet - The instance.
-	 * @param {object|Function} target - The root proxy's target.
-	 * @returns {void}
-	 * @internal
-	 */
-	function defineRootInspect(slothlet, target) {
-		/**
-		 * What the api root shows to `util.inspect`, as a node shows its own: its members, read through the root as the reader
-		 * may read them (a member it may not read left out; to a module, its code by its form), and for a function root its
-		 * function's form beside them, a label that runs nothing.
-		 * @param {object} slothlet - The instance.
-		 * @param {Array<*>} args - The hook's arguments (`depth`, `options`, `inspect`).
-		 * @returns {*} What is shown.
-		 * @private
-		 */
-		function rootInspectShown(slothlet, args) {
-			/**
-			 * A member of the api root as its hook shows it to a module: the framework's namespace as its own hook shows it (only
-			 * what the module may read), a function of the framework's by the form of the function behind the module's view of it,
-			 * and anything else as {@link inspectSafe} shows it, a form shown unquoted as `util.inspect` shows one.
-			 * @param {*} value - The member, read through the module's view of the root.
-			 * @param {Array<*>} args - The hook's arguments.
-			 * @param {object} slothlet - The instance.
-			 * @returns {*} What is shown.
-			 * @private
-			 */
-			function rootMemberShown(value, args, slothlet) {
-				const behind =
-					value !== null && (typeof value === "object" || typeof value === "function")
-						? WeakMapMethods.get(FRAMEWORK_VIEW_TARGETS, value)
-						: undefined;
-				if (behind !== undefined && typeof value === "object") return value;
-				const safe = inspectSafe(value, args, true, slothlet);
-				if (typeof safe !== "string" || safe === value) return safe;
-				return inspectLabel(typeof behind === "function" ? codeLabel(behind) : safe);
-			}
-
-			// A module is shown the root as its own view of it reads it, and the module's code by its form (as a node shows it),
-			// so the hook, which a read of the root hands out, gives the module nothing it could not read.
-			const reader = selfModuleReader(slothlet);
-			const root = reader ? selfRootView(slothlet, reader) : slothlet.boundApi;
-			const shown = {};
-			for (let ofIndex = 0, ofList = Objects.keys(root); ofIndex < ofList.length; ofIndex++) {
-				const key = ofList[ofIndex];
-				try {
-					shown[key] = reader ? rootMemberShown(root[key], args, slothlet) : root[key];
-				} catch (error) {
-					if (error?.code !== "PERMISSION_DENIED") throw error;
-				}
-			}
-			const api = slothlet.api;
-			if (typeof api !== "function") return shown;
-			const label = codeLabel(isCompositionLayer(api) ? layerUnderlying(api) : api);
-			if (Objects.keys(shown).length === 0) return label;
-			const options = args[1],
-				inspect = args[2];
-			return `${label} ${(typeof inspect === "function" ? inspect : util.inspect)(shown, options)}`;
-		}
-
-		Objects.defineProperty(target, util.inspect.custom, {
-			__proto__: null,
-			value: registerInspectHook(function (...args) {
-				return rootInspectShown(slothlet, args);
-			}),
-			writable: false,
-			enumerable: false,
-			configurable: true
-		});
-	}
-
-	/**
-	 * Close the api root (`Object.preventExtensions`, and so `Object.seal` / `Object.freeze`), as closing the api object:
-	 * the api itself is closed, and each member it holds is copied onto the root proxy's target, which is closed too, so the
-	 * root lists, describes and reads them as the invariants then require. Only the root closes: its members, slothlet's
-	 * namespace and every prototype stay as they are. Module code may not close it: closing it pins slothlet's own members.
-	 * @param {object} slothlet - The instance.
-	 * @param {object|Function} target - The root proxy's target.
-	 * @param {boolean} isCallable - Whether the root is a function, whose prototype the root reports as its own.
-	 * @param {object|Function|null} [prototype] - A function root's prototype, which its target takes.
-	 * @returns {boolean} Whether the root is closed.
-	 * @throws {SlothletError} When module code may not change the root (see {@link assertRootChange}).
-	 * @internal
-	 */
-	function rootClose(slothlet, target, isCallable, prototype) {
-		// Closing a root already closed changes nothing, as on a plain object.
-		if (!Reflect.isExtensible(target)) return true;
-		assertRootChange(slothlet, null);
-		const api = slothlet.api;
-		// The root holds slothlet's namespace and root functions, which closing it would pin with it: module code may not
-		// change them (the built-in write rules), so it may not close the root. Refused before anything closes.
-		for (const name of setValues(SELF_FRAMEWORK_ROOTS)) if (hasOwn(api, name)) assertRootChange(slothlet, name);
-		// A function root's api is a layer over its module's function, kept open so the function is not changed: the target
-		// alone closes then, and from then on holds the keys the root has (see rootTakesKey).
-		if (!Reflect.preventExtensions(api) && !isCompositionLayer(api)) return false;
-		// A closed root reports its target's prototype (invariant): a function root's is its function's, or the one the
-		// root was given, which an object root's target holds already. One it was given is held as the view every holder of
-		// the closed root reads it through (see rootPrototypeFor).
-		if (isCallable || prototype !== undefined) Reflect.setPrototypeOf(target, prototype);
-		for (let ofIndex = 0, ofList = Reflect.ownKeys(api); ofIndex < ofList.length; ofIndex++) {
-			const key = ofList[ofIndex];
-			Reflect.defineProperty(target, key, rootShellDescriptor(Reflect.getOwnPropertyDescriptor(api, key), slothlet, key));
-		}
-		return Reflect.preventExtensions(target);
-	}
-
-	/**
-	 * Define a member of the api root, as a definition on the api object: on the api itself, and on the root proxy's target
-	 * too where the invariants bind it (a member made non-configurable, and every member once the root is closed).
-	 * @param {object} slothlet - The instance.
-	 * @param {object|Function} target - The root proxy's target.
-	 * @param {string|symbol} prop - The member's key.
-	 * @param {PropertyDescriptor} descriptor - The definition.
-	 * @returns {boolean} Whether it was defined.
-	 * @throws {SlothletError} When module code may not change the member (see {@link assertRootChange}).
-	 * @internal
-	 */
-	function rootDefine(slothlet, target, prop, descriptor) {
-		const api = slothlet.api;
-		// A definition that changes nothing (freezing a root already frozen) is no write, as on a node (#667).
-		if (!Reflect.isExtensible(target) && isUnchangingDefinition(target, prop, descriptor)) return true;
-		assertRootChange(slothlet, prop);
-		if ("value" in descriptor) descriptor = { __proto__: null, ...descriptor, value: unwrapSelfView(descriptor.value) };
-		// A key only the target holds (its inspect hook) is the target's own.
-		if (!hasOwn(api, prop) && hasOwn(target, prop)) return Reflect.defineProperty(target, prop, descriptor);
-		if (!rootTakesKey(target, prop)) return false;
-		// An object or function defined on the root is held as a node, as one assigned to it is, unless the definition fixes
-		// it (read-only and non-configurable): the language requires the root to hand that value out as it was defined.
-		if ("value" in descriptor) {
-			const current = Reflect.getOwnPropertyDescriptor(api, prop);
-			const configurable = "configurable" in descriptor ? descriptor.configurable : (current?.configurable ?? false);
-			const writable = "writable" in descriptor ? descriptor.writable : current && "value" in current ? current.writable : false;
-			if (!configurable && !writable) refuseFixedObjectDefinition(slothlet, "", prop, descriptor.value);
-			const node = configurable || writable ? rootMemberNode(slothlet, prop, descriptor.value) : null;
-			if (node !== null) descriptor = { __proto__: null, ...descriptor, value: node };
-		}
-		// A full-isolation run's `self` keeps what it defines on the root in its own record (see runWrite).
-		const runSink = takeRunWrite(slothlet.boundApi, prop);
-		if (runSink !== null) return runSink({ op: "define", descriptor });
-		if (!Reflect.defineProperty(api, prop, descriptor)) return false;
-		const held = Reflect.getOwnPropertyDescriptor(api, prop);
-		if (held.configurable && Reflect.isExtensible(target)) return true;
-		return Reflect.defineProperty(target, prop, rootShellDescriptor(held, slothlet, prop));
-	}
-
-	/**
-	 * Assign a member of the api root, as an assignment on the api object: an object or function the host assigns is held
-	 * as a node (see {@link rootMemberNode}).
-	 * @param {object} slothlet - The instance.
-	 * @param {object|Function} target - The root proxy's target.
-	 * @param {string|symbol} prop - The member's key.
-	 * @param {*} value - The value assigned.
-	 * @returns {boolean} Whether it was assigned.
-	 * @throws {SlothletError} When module code may not change the member (see {@link assertRootChange}).
-	 * @internal
-	 */
-	function rootAssign(slothlet, target, prop, value) {
-		assertRootChange(slothlet, prop);
-		if (!rootTakesKey(target, prop)) return false;
-		value = unwrapSelfView(value);
-		const stored = rootMemberNode(slothlet, prop, value) ?? value;
-		// A full-isolation run's `self` keeps what it writes on the root in its own record (see runWrite).
-		const runSink = takeRunWrite(slothlet.boundApi, prop);
-		if (runSink !== null) return runSink({ op: "set", value: stored });
-		return Reflect.set(slothlet.api, prop, stored);
-	}
-
-	/**
-	 * The keys of the api root a reader is given, as a node's listing gives its own: what the reader may not read is left
-	 * out (see {@link isReadRedacted}). A key the root's target holds fixed stays, as the invariants require.
-	 * @param {object} slothlet - The instance.
-	 * @param {object|Function} target - The root proxy's target.
-	 * @param {Array<string|symbol>} keys - The keys the api root holds.
-	 * @returns {Array<string|symbol>} The keys listed.
-	 * @internal
-	 */
-	function rootListing(slothlet, target, keys) {
-		if (!readsGated(slothlet)) return keys;
-		const gate = rootGate(slothlet);
-		// The reader is the same for every key of one listing, so it is resolved once.
-		const host = isHostRead(gate);
-		const listed = [];
-		for (let ofIndex = 0, ofList = keys; ofIndex < ofList.length; ofIndex++) {
-			const key = ofList[ofIndex];
-			if (host && !slothlet.handlers.permissionManager.isPrivateTarget(String(key))) {
-				listPush(listed, key);
-				continue;
-			}
-			const fixed = Reflect.getOwnPropertyDescriptor(target, key);
-			if ((fixed && !fixed.configurable) || !isReadRedacted(gate, key, null, null, true)) listPush(listed, key);
-		}
-		return listed;
-	}
-
 	// V8 fork-pool coverage gaps with isCallable cond-expr; proxy trap null guards are defensive dead code.
 	/* v8 ignore start */
 	// Determine proxy target type based on slothlet.api (like UnifiedWrapper does)

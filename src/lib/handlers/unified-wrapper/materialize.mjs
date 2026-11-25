@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-25T00:00:00-08:00 (1795593600)
+ *	@Last modified time: 2026-11-25T13:24:02-08:00 (1795641842)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -262,6 +262,82 @@ function syncArrayIntegrity(wrapper, target) {
 
 /** Whether {@link MaterializeLayer} has built its class: it builds one, for the wrapper's chain. @type {boolean} */
 let built = false;
+
+/**
+ * Make the changes queued through stand-ins for a wrapper that has just loaded, in the order they were made, each as
+ * the code that made it (#653). One the node refuses is kept for the next await or call through that node (see
+ * {@link takeRefusedChange}); the rest still land.
+ * @param {object} wrapper - The wrapper, loaded.
+ * @param {number} generation - Its change generation when the load started.
+ * @returns {void}
+ * @private
+ */
+function replayStandInChanges(wrapper, generation) {
+	const pending = wrapper.____slothletInternal.pendingChanges;
+	if (!pending) return;
+	wrapper.____slothletInternal.pendingChanges = null;
+	WeakMapMethods.get(PENDING_CHANGES, wrapper.slothlet) == null
+		? undefined
+		: SetMethods.delete(WeakMapMethods.get(PENDING_CHANGES, wrapper.slothlet), wrapper);
+	for (let i = 0; i < pending.length; i++) wrapper.___makeQueuedChange(pending[i], generation);
+}
+
+/**
+ * Save a lazy node that has just loaded, and every node and built-in below it, for the runs open (see
+ * `helpers/run-snapshot`): a change made through a stand-in for it while it loaded, which is made once it has, then
+ * does not reach a run that started before the change.
+ * @param {UnifiedWrapper} wrapper - The node that loaded.
+ * @returns {void}
+ * @private
+ */
+function checkpointLoaded(wrapper) {
+	const slothlet = wrapper.slothlet;
+	const domain = domainOf(slothlet);
+	if (!runsOpen(domain)) return;
+	const seen = new Set();
+	const walk = (node) => {
+		if (SetMethods.has(seen, node) || node.slothlet !== slothlet) return;
+		SetMethods.add(seen, node);
+		const internal = node.____slothletInternal;
+		if (internal.invalid || (internal.mode === "lazy" && !internal.state.materialized)) return;
+		beforeChange(domain, node, captureNode);
+		checkpointNodeBuiltins(domain, node);
+		checkpointNodePrototypes(domain, node);
+		const keys = Reflect.ownKeys(node);
+		for (let index = 0; index < keys.length; index++) {
+			if (isFrameworkReservedKey(keys[index])) continue;
+			const described = Reflect.getOwnPropertyDescriptor(node, keys[index]);
+			const value = described !== undefined && "value" in described ? described.value : undefined;
+			if (value === null || (typeof value !== "object" && typeof value !== "function")) continue;
+			const child = resolveWrapper(value);
+			if (child !== null) walk(child);
+		}
+	};
+	walk(wrapper);
+}
+
+/**
+ * Run a lazy node's load apart from every instance's flow (#726): what the load runs is the module's own code, as an
+ * eager tree's build runs it before any call, so it never runs inside the call that asked for the load.
+ * @param {object} slothlet - The instance.
+ * @param {function(): Promise<*>} load - The load.
+ * @returns {Promise<*>} What it resolves to.
+ * @private
+ */
+function loadApart(slothlet, load, wrapper) {
+	const contextManager = slothlet?.contextManager;
+	// The live runtime keeps, apart from every flow, the marks the asking flow carries (a load into a run's tree is that
+	// tree's build): it carries them with its flows, which a detached load would leave.
+	const apart = () =>
+		typeof contextManager?.runLoadApart === "function"
+			? contextManager.runLoadApart(load)
+			: typeof contextManager?.runDetached === "function"
+				? contextManager.runDetached(load, undefined, [])
+				: load();
+	// A node of a copy a run keeps across a reload loads as that copy did (see Slothlet#loadID), and a node of a tree a
+	// run owns loads into that tree's own handlers.
+	return typeof slothlet?.loadAsCaller === "function" ? slothlet.loadAsCaller(apart, wrapper) : apart();
+}
 
 /**
  * Build this layer of the wrapper class over `Base`, once (see `unified-wrapper.mjs`).
@@ -1171,82 +1247,6 @@ export function MaterializeLayer(Base) {
 			 * @private
 			 */
 			async ___materialize() {
-				/**
-				 * Make the changes queued through stand-ins for a wrapper that has just loaded, in the order they were made, each as
-				 * the code that made it (#653). One the node refuses is kept for the next await or call through that node (see
-				 * {@link takeRefusedChange}); the rest still land.
-				 * @param {object} wrapper - The wrapper, loaded.
-				 * @param {number} generation - Its change generation when the load started.
-				 * @returns {void}
-				 * @private
-				 */
-				function replayStandInChanges(wrapper, generation) {
-					const pending = wrapper.____slothletInternal.pendingChanges;
-					if (!pending) return;
-					wrapper.____slothletInternal.pendingChanges = null;
-					WeakMapMethods.get(PENDING_CHANGES, wrapper.slothlet) == null
-						? undefined
-						: SetMethods.delete(WeakMapMethods.get(PENDING_CHANGES, wrapper.slothlet), wrapper);
-					for (let i = 0; i < pending.length; i++) wrapper.___makeQueuedChange(pending[i], generation);
-				}
-
-				/**
-				 * Save a lazy node that has just loaded, and every node and built-in below it, for the runs open (see
-				 * `helpers/run-snapshot`): a change made through a stand-in for it while it loaded, which is made once it has, then
-				 * does not reach a run that started before the change.
-				 * @param {UnifiedWrapper} wrapper - The node that loaded.
-				 * @returns {void}
-				 * @private
-				 */
-				function checkpointLoaded(wrapper) {
-					const slothlet = wrapper.slothlet;
-					const domain = domainOf(slothlet);
-					if (!runsOpen(domain)) return;
-					const seen = new Set();
-					const walk = (node) => {
-						if (SetMethods.has(seen, node) || node.slothlet !== slothlet) return;
-						SetMethods.add(seen, node);
-						const internal = node.____slothletInternal;
-						if (internal.invalid || (internal.mode === "lazy" && !internal.state.materialized)) return;
-						beforeChange(domain, node, captureNode);
-						checkpointNodeBuiltins(domain, node);
-						checkpointNodePrototypes(domain, node);
-						const keys = Reflect.ownKeys(node);
-						for (let index = 0; index < keys.length; index++) {
-							if (isFrameworkReservedKey(keys[index])) continue;
-							const described = Reflect.getOwnPropertyDescriptor(node, keys[index]);
-							const value = described !== undefined && "value" in described ? described.value : undefined;
-							if (value === null || (typeof value !== "object" && typeof value !== "function")) continue;
-							const child = resolveWrapper(value);
-							if (child !== null) walk(child);
-						}
-					};
-					walk(wrapper);
-				}
-
-				/**
-				 * Run a lazy node's load apart from every instance's flow (#726): what the load runs is the module's own code, as an
-				 * eager tree's build runs it before any call, so it never runs inside the call that asked for the load.
-				 * @param {object} slothlet - The instance.
-				 * @param {function(): Promise<*>} load - The load.
-				 * @returns {Promise<*>} What it resolves to.
-				 * @private
-				 */
-				function loadApart(slothlet, load, wrapper) {
-					const contextManager = slothlet?.contextManager;
-					// The live runtime keeps, apart from every flow, the marks the asking flow carries (a load into a run's tree is that
-					// tree's build): it carries them with its flows, which a detached load would leave.
-					const apart = () =>
-						typeof contextManager?.runLoadApart === "function"
-							? contextManager.runLoadApart(load)
-							: typeof contextManager?.runDetached === "function"
-								? contextManager.runDetached(load, undefined, [])
-								: load();
-					// A node of a copy a run keeps across a reload loads as that copy did (see Slothlet#loadID), and a node of a tree a
-					// run owns loads into that tree's own handlers.
-					return typeof slothlet?.loadAsCaller === "function" ? slothlet.loadAsCaller(apart, wrapper) : apart();
-				}
-
 				// If already materialized, return immediately
 				if (this.____slothletInternal.state.materialized) {
 					return;
