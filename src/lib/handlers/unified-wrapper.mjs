@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-24T12:25:58-08:00 (1795551958)
+ *	@Last modified time: 2026-11-25T01:43:59-08:00 (1795599839)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -20672,13 +20672,16 @@ class UnifiedWrapper extends ComponentBase {
 					// starts as `wrapper` and the walk only ever reassigns it to a truthy resolveWrapper()
 					// result — the non-wrapper arm returns undefined above), and a wrapper's prototype is
 					// the framework's, which `in` would wrongly reach into.
+					// The member is read through the node, as a read of its path answers once the folder has loaded: the raw
+					// wrapper's own slot holds a primitive member's child node, not the primitive.
 					const isFinalInternal = isFrameworkReservedKey(prop);
 					if (!isFinalInternal && hasOwn(current, prop)) {
-						if (!kept) return current[prop];
+						const node = current.____slothletInternal.proxy;
+						if (!kept) return node[prop];
 						const previous = keptAccessorRead;
 						keptAccessorRead = { wrapper: current, reader: kept.reader };
 						try {
-							return current[prop];
+							return node[prop];
 						} finally {
 							keptAccessorRead = previous;
 						}
