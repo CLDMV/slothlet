@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-22T23:31:44-08:00 (1795419104)
+ *	@Last modified time: 2026-11-25T09:07:45-08:00 (1795626465)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -3725,6 +3725,16 @@ export class ApiManager extends ComponentBase {
 				});
 			}
 			const versionTag = StringMethods.trim(String(versionConfig.version));
+			// A tag already registered at this path fails registration once the add has mounted, and the rollback that
+			// then undoes the mount goes by module id: an add reusing the registered module's id would take that module
+			// with it (#986). Refused here, before anything changes. An add that loses a race to the same tag still
+			// fails at registration and rolls back.
+			if (this.slothlet.handlers.versionManager?.getVersionMetadataByPath(normalizedPath, versionTag) !== undefined) {
+				throw new this.SlothletError("VERSION_REGISTER_DUPLICATE", {
+					version: versionTag,
+					path: segmentsOf(normalizedPath)
+				});
+			}
 			// Build effectiveParts as [versionTag, ...parts] rather than splitting effectivePath
 			// on ".". Splitting would fragment version tags that contain dots (e.g. "2.3.0" →
 			// ["2","3","0"]) creating unintended nested namespaces. Using the pre-split `parts`
@@ -4581,6 +4591,9 @@ export class ApiManager extends ComponentBase {
 		// review). A PARTIAL root-level success still records the op: replay re-derives the same
 		// per-key split from the same folderPath/options, which is how the succeeded keys survive a
 		// reload at all.
+		// The history entries this add records, so a rollback scrubs these and no other entry of the same module (#986).
+		let recordedAdd = null;
+		let recordedOperation = null;
 		if (anyAssignmentSucceeded && this.slothlet.handlers.ownership) {
 			if (restOptions.recordHistory !== false) {
 				// For a synthetic / in-memory add there is no file to re-read: record the ORIGINAL inline
@@ -4591,24 +4604,26 @@ export class ApiManager extends ComponentBase {
 				// The history of the api manager the instance has now, which is not this one when a full reload swapped
 				// in its new copy while this add loaded: recorded here, the add would be lost at the next reload.
 				const history = this._historyState();
-				listPush(history.addHistory, {
+				recordedAdd = {
 					apiPath: normalizedPath,
 					folderPath: historyFolderPath,
 					options: { ...restOptions, metadata, moduleID, [PERMISSION_RULE_LAYERS]: ruleLayers, [MOUNTED_BY]: mountedBy },
 					moduleID,
 					versionConfig: versionConfig || null
-				});
+				};
+				listPush(history.addHistory, recordedAdd);
 
 				// Track in operation history for reload replay
 				// Use normalizedPath (not effectivePath) so replay can re-apply versionConfig correctly
-				listPush(history.operationHistory, {
+				recordedOperation = {
 					type: "add",
 					apiPath: normalizedPath,
 					folderPath: historyFolderPath,
 					options: { ...restOptions, metadata, moduleID, [PERMISSION_RULE_LAYERS]: ruleLayers, [MOUNTED_BY]: mountedBy },
 					moduleID,
 					versionConfig: versionConfig || null
-				});
+				};
+				listPush(history.operationHistory, recordedOperation);
 			}
 		}
 
@@ -4630,7 +4645,8 @@ export class ApiManager extends ComponentBase {
 				await this._rollbackFailedVersionedAdd({
 					moduleID,
 					effectivePath,
-					normalizedPath
+					recordedAdd,
+					recordedOperation
 				});
 				throw error;
 			}
@@ -4700,7 +4716,7 @@ export class ApiManager extends ComponentBase {
 	 * @description
 	 * Called when `versionManager.registerVersion()` throws after the API tree, cache,
 	 * ownership, and history have already been mutated by `addApiComponent()`. Scrubs
-	 * the orphaned "add" entry from `operationHistory`, then delegates tree/cache/ownership
+	 * the "add" entries this add recorded (and no other) from the history, then delegates tree/cache/ownership
 	 * and `addHistory` cleanup to `removeApiComponent({ recordHistory: false })` so that
 	 * no spurious "remove" entry is pushed into `operationHistory`.
 	 *
@@ -4710,43 +4726,31 @@ export class ApiManager extends ComponentBase {
 	 * @param {object} opts - Rollback context.
 	 * @param {string} opts.moduleID - The moduleID of the just-added component.
 	 * @param {string} opts.effectivePath - The effective (versioned) mount path, e.g. "v1.auth".
-	 * @param {string} opts.normalizedPath - The logical path, e.g. "auth".
+	 * @param {object|null} [opts.recordedAdd=null] - The `addHistory` entry the add pushed, or null when it pushed none.
+	 * @param {object|null} [opts.recordedOperation=null] - The `operationHistory` entry the add pushed, or null when it
+	 *   pushed none.
 	 * @returns {Promise<void>}
 	 * @package
 	 *
 	 * @example
-	 * await this._rollbackFailedVersionedAdd({ moduleID, effectivePath, normalizedPath });
+	 * await this._rollbackFailedVersionedAdd({ moduleID, effectivePath, recordedAdd, recordedOperation });
 	 */
-	async _rollbackFailedVersionedAdd({ moduleID, effectivePath, normalizedPath }) {
+	async _rollbackFailedVersionedAdd({ moduleID, effectivePath, recordedAdd = null, recordedOperation = null }) {
 		// The history the add was recorded in (see _historyState).
 		const history = this._historyState();
 		// --- Step 1: Scrub operationHistory ---
 		// removeApiComponent does not touch operationHistory. When called with
 		// { recordHistory: false } it suppresses its own "remove" push but leaves the "add"
-		// entry we already recorded. Remove it explicitly so no orphaned add survives.
-		// Use a manual reverse loop for Node 16 compatibility.
-		let addIndex = -1;
-		for (let i = history.operationHistory.length - 1; i >= 0; i--) {
-			const entry = history.operationHistory[i];
-			// The orphaned 'add' is the just-pushed tip, so this reverse scan matches on the first iteration;
-			// the non-match (false) arm is unreachable (same invariant as the addIndex guard below).
-			/* v8 ignore next */
-			if (entry?.type === "add" && entry?.apiPath === normalizedPath && entry?.moduleID === moduleID) {
-				addIndex = i;
-				break;
-			}
-		}
-		// The orphaned 'add' was just pushed by addApiComponent before registerVersion threw, so addIndex is always found; the -1 guard is defensive against a corrupted history.
-		/* v8 ignore next */
-		if (addIndex !== -1) {
-			listSplice(history.operationHistory, addIndex, 1);
-		}
+		// entry we already recorded. Remove that entry explicitly so no orphaned add survives. Only the entry this add
+		// pushed is removed, matched by identity: an add run with `replay: false` pushed none (null matches nothing), and an
+		// earlier add of the same module at the same path must stay (#986).
+		history.operationHistory = filterList(history.operationHistory, (entry) => entry !== recordedOperation);
 
 		// --- Step 2: Scrub addHistory ---
 		// removeApiComponent also filters addHistory internally, but only when it succeeds.
 		// Doing it here unconditionally ensures no orphaned addHistory entry remains even if
-		// the teardown call below throws.
-		history.addHistory = filterList(history.addHistory, (entry) => entry?.moduleID !== moduleID);
+		// the teardown call below throws. As above, only the entry this add pushed.
+		history.addHistory = filterList(history.addHistory, (entry) => entry !== recordedAdd);
 
 		// --- Step 3: Tear down the mounted subtree, cache, and ownership ---
 		// { recordHistory: false } prevents removeApiComponent from pushing a "remove" entry.
