@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-22T23:50:44-08:00 (1795420244)
+ *	@Last modified time: 2026-11-25T03:47:08-08:00 (1795607228)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -1232,6 +1232,13 @@ function makeRunSelf(slothlet, parentSelf, record) {
 				} else if ("value" in held && held.value !== Reflect.getOwnPropertyDescriptor(slothlet.api, prop)?.value) {
 					runtime_enforceReadGate(runtime_rootGate(slothlet), prop, runtime_unwrapSelfView(held.value));
 					return handOut(prop, runtime_selfView(held.value), local);
+				} else if (!("value" in held)) {
+					// An accessor the root held then that it holds no longer, or holds another way now, runs as it was then.
+					const now = Reflect.getOwnPropertyDescriptor(slothlet.api, prop);
+					if (now === undefined || "value" in now || now.get !== held.get) {
+						runtime_enforceReadGate(runtime_rootGate(slothlet), prop, undefined);
+						return typeof held.get === "function" ? handOut(prop, Reflect.apply(held.get, receiver, []), local) : undefined;
+					}
 				}
 			}
 			// A getter the module's object holds runs with the view as `this`, so it reads what the run wrote.
@@ -1257,6 +1264,17 @@ function makeRunSelf(slothlet, parentSelf, record) {
 						gateShadow(prop, undefined);
 						return undefined;
 					}
+				} else if (held.accessor !== undefined && !runtime_holdsOwnMember(real, prop)) {
+					// An accessor the node held then and the instance deleted since runs as it was then.
+					const gate = runtime_nodeWrapperOf(real);
+					if (gate) runtime_enforceReadGate(gate, prop, undefined);
+					const getter = held.accessor.get;
+					if (typeof getter !== "function") return undefined;
+					return handOut(
+						prop,
+						gate ? runtime_runViewAccessor({ wrapper: gate }, getter, receiver, []) : Reflect.apply(getter, receiver, []),
+						local
+					);
 				} else if (!held.live) {
 					const live = runtime_throughRunView(() => Reflect.get(real, prop));
 					if (runtime_sameSnapshotMember(live, held.value)) return handOut(prop, live, local);
@@ -1537,11 +1555,13 @@ function makeRunSelf(slothlet, parentSelf, record) {
 					}
 					const atStart = forked() ? null : rootVersion();
 					if (atStart !== null) {
-						// The root lists the members its api held when the run started, and the framework's own.
-						for (const name of setValues(setFrom(keys)))
-							if (rootMember(name) && Objects.hasOwn(slothlet.api, name) && !Objects.hasOwn(atStart, name)) SetMethods.delete(keys, name);
+						// The root lists the members its api held when the run started, in their order then, and the framework's own.
+						const listed = new Set();
 						for (let index = 0, names = Reflect.ownKeys(atStart); index < names.length; index++)
-							if (rootMember(names[index])) SetMethods.add(keys, names[index]);
+							if (rootMember(names[index]) || SetMethods.has(keys, names[index])) SetMethods.add(listed, names[index]);
+						for (const name of setValues(keys))
+							if (!SetMethods.has(listed, name) && !(rootMember(name) && Objects.hasOwn(slothlet.api, name))) SetMethods.add(listed, name);
+						keys = listed;
 					}
 					if (!forked()) {
 						const members = outerHeld(MapMethods.get(run.entries, key));
@@ -1599,13 +1619,16 @@ function makeRunSelf(slothlet, parentSelf, record) {
 									enumerable: held.enumerable === true,
 									configurable: true
 								};
-							}
+							} else return { __proto__: null, ...held, configurable: true };
 						}
 						const version = snapshotOf();
 						if (version !== null) {
 							const held = MapMethods.get(version.members, prop);
 							if (held === undefined) {
 								if (runtime_holdsOwnMember(real, prop)) return undefined;
+							} else if (held.accessor !== undefined && !runtime_holdsOwnMember(real, prop)) {
+								const { get, set, enumerable } = held.accessor;
+								return { __proto__: null, get, set, enumerable, configurable: true };
 							} else if (!held.live) {
 								return {
 									__proto__: null,

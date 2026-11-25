@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-23T00:08:30-08:00 (1795421310)
+ *	@Last modified time: 2026-11-25T03:47:15-08:00 (1795607235)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -812,12 +812,14 @@ function inherits(value, ctor) {
 
 /**
  * A shallow copy of an object's own state, keeping its prototype: a built-in of the same kind holding the same entries,
- * or an object holding the same own members (data members as values, accessors as they are).
+ * or an object holding the same own members (data members as values, accessors as they are), each with the attributes
+ * it has, and closed to new members when the object is.
  * @param {object} raw - The object.
+ * @param {object|null} [prototype] - The prototype the copy has, when it is not the object's own.
  * @returns {object} The copy.
  * @internal
  */
-export function shallowCopy(raw) {
+export function shallowCopy(raw, prototype = Reflect.getPrototypeOf(raw)) {
 	const kind = builtinKind(raw);
 	let copy;
 	if (kind === "map") {
@@ -837,11 +839,8 @@ export function shallowCopy(raw) {
 		const length = FunctionMethods.call(PrototypeFunctions.DataView.byteLength, raw);
 		copy = new DataView(ArrayBufferMethods.slice(FunctionMethods.call(PrototypeFunctions.DataView.buffer, raw), offset, offset + length));
 	} else if (Arrays.isArray(raw)) copy = [];
-	else copy = Objects.create(Reflect.getPrototypeOf(raw));
-	if (kind !== null) {
-		const prototype = Reflect.getPrototypeOf(raw);
-		if (Reflect.getPrototypeOf(copy) !== prototype) Reflect.setPrototypeOf(copy, prototype);
-	}
+	else copy = Objects.create(prototype);
+	if (Reflect.getPrototypeOf(copy) !== prototype) Reflect.setPrototypeOf(copy, prototype);
 	if (kind === null || kind === "map" || kind === "set" || kind === "date" || kind === "regexp") {
 		const keys = Reflect.ownKeys(raw);
 		for (let index = 0; index < keys.length; index++) {
@@ -851,11 +850,13 @@ export function shallowCopy(raw) {
 			if (kind === "regexp" && key === "lastIndex") continue;
 			if (Arrays.isArray(copy) && key === "length") {
 				copy.length = described.value;
+				if (described.writable === false) Reflect.defineProperty(copy, "length", { __proto__: null, writable: false });
 				continue;
 			}
-			Reflect.defineProperty(copy, key, { __proto__: null, ...described, configurable: true });
+			Reflect.defineProperty(copy, key, { __proto__: null, ...described });
 		}
 	}
+	if (!Reflect.isExtensible(raw)) Reflect.preventExtensions(copy);
 	return copy;
 }
 
@@ -1006,7 +1007,12 @@ function saveMembers(domain, raw, work) {
 	let content = last === null ? null : last.content;
 	let others = null;
 	if (content !== null) {
-		if (Reflect.getPrototypeOf(raw) !== Reflect.getPrototypeOf(content) || Arrays.isArray(raw) !== Arrays.isArray(content)) content = null;
+		if (
+			Reflect.getPrototypeOf(raw) !== Reflect.getPrototypeOf(content) ||
+			Arrays.isArray(raw) !== Arrays.isArray(content) ||
+			Reflect.isExtensible(raw) !== Reflect.isExtensible(content)
+		)
+			content = null;
 		else {
 			others = Reflect.ownKeys(content);
 			if (others.length !== keys.length) content = null;
@@ -1027,15 +1033,14 @@ function saveMembers(domain, raw, work) {
 }
 
 /**
- * Whether two own members are one: the same value or accessors, with the same attributes (all but `configurable`,
- * which a version's copy always has).
+ * Whether two own members are one: the same value or accessors, with the same attributes.
  * @param {PropertyDescriptor} mine - The object's member.
  * @param {PropertyDescriptor|undefined} theirs - The version's.
  * @returns {boolean} True when they are.
  * @private
  */
 function sameMember(mine, theirs) {
-	if (theirs === undefined || mine.enumerable !== theirs.enumerable) return false;
+	if (theirs === undefined || mine.enumerable !== theirs.enumerable || mine.configurable !== theirs.configurable) return false;
 	if ("value" in mine) return "value" in theirs && mine.writable === theirs.writable && Objects.is(mine.value, theirs.value);
 	return !("value" in theirs) && mine.get === theirs.get && mine.set === theirs.set;
 }

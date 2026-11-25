@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-25T03:11:41-08:00 (1795605101)
+ *	@Last modified time: 2026-11-25T03:47:10-08:00 (1795607230)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -4056,7 +4056,7 @@ const SNAPSHOT_LIVE_MEMBER = Objects.freeze({ __proto__: null, live: true });
  * What a node holds now, as a run that started before its next change reads it (see `helpers/run-snapshot`): each
  * member the node holds on itself (a child node, or a value it keeps) and each its value holds, with the attributes it
  * has, as the node's own traps would find it. Accessors and the members of a module's own Proxy are left to be read
- * live. Nothing runs: only the node's own store and its value are read, by their descriptors.
+ * live; an accessor is kept as well, for a run to read once the node no longer holds it. Nothing runs: only the node's own store and its value are read, by their descriptors.
  * @param {UnifiedWrapper} wrapper - The node's wrapper.
  * @returns {{members: Map<PropertyKey, (object|symbol)>, extensible: boolean}} The content.
  * @private
@@ -4066,7 +4066,13 @@ function runtime_captureNode(wrapper) {
 	const keep = (key, described) => {
 		if (described === undefined || isFrameworkReservedKey(key) || MapMethods.has(members, key)) return;
 		if (!("value" in described)) {
-			MapMethods.set(members, key, SNAPSHOT_LIVE_MEMBER);
+			// Read live while the node holds it; kept as it was, for a run to read once the instance deletes it.
+			const original = runtime_originalAccessor(described);
+			MapMethods.set(members, key, {
+				__proto__: null,
+				live: true,
+				accessor: { __proto__: null, get: original.get, set: original.set, enumerable: described.enumerable === true }
+			});
 			return;
 		}
 		// A child node answering a value in its place (a primitive a file exports) is kept as that value.
