@@ -76,8 +76,8 @@ Every feature is covered by a comprehensive test suite: over **TODO(release): N 
 
 ### ⚡ Performance Excellence
 
-- **Startup Performance**: about 2x faster startup in lazy mode (16.5ms vs 32.2ms to create an instance, v4.0.0)
-- **Runtime Performance**: Function calls cost a few microseconds in either mode once a module is materialized (`math.add`: 5.9–6.2μs eager, 6.7–7.5μs lazy, v4.0.0)
+- **Startup Performance**: about 2x faster startup in lazy mode (15.0ms vs 29.4ms to create an instance, v4.0.0)
+- **Runtime Performance**: Function calls cost a few microseconds in either mode once a module is materialized (`math.add`: 5.5μs eager, 7.6μs lazy, v4.0.0)
 - **Copy-left materialization**: Once loaded, modules stay materialized - no re-processing overhead
 - **Zero dependencies**: Pure Node.js implementation
 - **Memory efficiency**: Lazy mode loads modules on-demand, eager mode optimizes for predictable behavior
