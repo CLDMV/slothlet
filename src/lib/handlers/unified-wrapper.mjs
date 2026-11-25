@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-24T12:25:58-08:00 (1795551958)
+ *	@Last modified time: 2026-11-25T03:03:18-08:00 (1795604598)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -6151,17 +6151,18 @@ const ADOPTED_ACCESSORS = new WeakMap();
  * @param {object} wrapper - The wrapper to hold the member.
  * @param {PropertyKey} key - The member's key.
  * @param {{get?: Function, set?: Function}} accessor - The module's own getter and setter.
+ * @param {boolean} [enumerable=true] - Whether the member is enumerable, as it is on the object it came from.
  * @returns {void}
  * @private
  *
  * @example
  * runtime_defineAdoptedAccessor(wrapper, "total", descriptor);
  */
-function runtime_defineAdoptedAccessor(wrapper, key, accessor) {
+function runtime_defineAdoptedAccessor(wrapper, key, accessor, enumerable = true) {
 	Objects.defineProperty(wrapper, key, {
 		__proto__: null,
 		...runtime_adoptAccessor(wrapper, accessor),
-		enumerable: true,
+		enumerable,
 		configurable: true
 	});
 }
@@ -19258,6 +19259,8 @@ class UnifiedWrapper extends ComponentBase {
 			if (typeof this.____slothletInternal.impl === "function" && !descriptor.enumerable) {
 				continue;
 			}
+			// An object's non-enumerable own member is still its member: it is adopted, and keeps its enumerability, so
+			// `Object.keys()`, `JSON.stringify()` and its descriptor report what they report for the object (#964).
 			// An accessor becomes an accessor on the wrapper that runs the impl's own getter on every read and
 			// its setter on every write, as in plain JavaScript; adopting its value would store what it returned
 			// at load (#590), and drop the setter. It stays on the
@@ -19276,7 +19279,7 @@ class UnifiedWrapper extends ComponentBase {
 					delete this.____slothletInternal.impl[key];
 					continue;
 				}
-				runtime_defineAdoptedAccessor(this, key, descriptor);
+				runtime_defineAdoptedAccessor(this, key, descriptor, descriptor.enumerable);
 				continue;
 			}
 			const value = this.____slothletInternal.impl[key];
@@ -19364,7 +19367,7 @@ class UnifiedWrapper extends ComponentBase {
 					__proto__: null,
 					value: cycleNode.createProxy(),
 					writable: false,
-					enumerable: true,
+					enumerable: descriptor.enumerable,
 					configurable: true
 				});
 				continue;
@@ -19545,7 +19548,13 @@ class UnifiedWrapper extends ComponentBase {
 							propKey: key
 						});
 					}
-					Objects.defineProperty(this, key, { __proto__: null, value: wrapped, writable: false, enumerable: true, configurable: true });
+					Objects.defineProperty(this, key, {
+						__proto__: null,
+						value: wrapped,
+						writable: false,
+						enumerable: descriptor.enumerable,
+						configurable: true
+					});
 					// Symbol keys are not used as API module names in practice.
 					/* v8 ignore next */
 					if (typeof key !== "symbol") {
@@ -19597,7 +19606,7 @@ class UnifiedWrapper extends ComponentBase {
 						const currentImpl = this.____slothletInternal.impl;
 						if (currentImpl) currentImpl[key] = newValue;
 					},
-					enumerable: true,
+					enumerable: descriptor.enumerable,
 					configurable: true
 				});
 			} else if (wrapped === null) {
@@ -19605,7 +19614,13 @@ class UnifiedWrapper extends ComponentBase {
 				// explicit `null` value — both are stored unwrapped. Object identity itself keeps a
 				// builtin live (mutating the same Map is visible from every reference to it); nothing
 				// further is needed the way the primitive branch above needs a live accessor.
-				Objects.defineProperty(this, key, { __proto__: null, value: value, writable: false, enumerable: true, configurable: true });
+				Objects.defineProperty(this, key, {
+					__proto__: null,
+					value: value,
+					writable: false,
+					enumerable: descriptor.enumerable,
+					configurable: true
+				});
 				// `keepImplProperties` is always false when called from ___setImpl; this guard is unreachable.
 				/* v8 ignore next */
 				if (descriptor.configurable && !keepImplProperties && this.____slothletInternal.impl) {
@@ -19613,7 +19628,13 @@ class UnifiedWrapper extends ComponentBase {
 				}
 			} else {
 				// wrapped is falsy but not null - shouldn't happen, but define value anyway
-				Objects.defineProperty(this, key, { __proto__: null, value: value, writable: false, enumerable: true, configurable: true });
+				Objects.defineProperty(this, key, {
+					__proto__: null,
+					value: value,
+					writable: false,
+					enumerable: descriptor.enumerable,
+					configurable: true
+				});
 				// wrapped=false (shouldn't happen) — `keepImplProperties` is always false when called from ___setImpl; guard is unreachable.
 				/* v8 ignore next */
 				if (descriptor.configurable && !keepImplProperties && this.____slothletInternal.impl) {
