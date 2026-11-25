@@ -15,6 +15,15 @@
 
 /**
  * @fileoverview Nodes layer of the wrapper: node identity, versions and reports, module objects and what a module made, instance-class nodes and prototype handles.
+ *
+ * Upward services (from layers above this one, reached through the method table): FRAMEWORK_WRITES (rules),
+ *  HOST_READER (views), PROTOTYPE_HANDLE_READER (views), PROTOTYPE_PATHS (views), SELF_MEMBER_VIEWS (views),
+ *  SELF_VIEW_NODES (views), SELF_VIEW_READERS (views), STAND_INS (views), capturedViewChildren (views),
+ *  capturedViewTargets (views), defineAdoptedAccessor (materialize), emitterOwnPrototype (views),
+ *  enforceNodeReportRead (rules), frameworkWrite (rules), guardOn (membrane), hasOwn (views), holderFilePath
+ *  (views), implDefault (rules), knownPrototype (membrane), memberHoldsCode (rules), recordedPrototype (run),
+ *  resolveRestartTarget (rules), retireChanges (waiting), searchBudget (membrane), searchDepth (membrane),
+ *  selfMemberView (views), selfModuleReader (views), selfView (views), standInNode (waiting).
  * @module @cldmv/slothlet/handlers/unified-wrapper/nodes
  * @internal
  */
@@ -58,8 +67,6 @@ import { ownBindingsRefusal } from "#helpers/instance-imports";
 /**
  * Bindings of the other parts of the wrapper this file uses, taken from the wrapper's method table when the chain is
  * registered (see `WrapperBase.link`), before any wrapper exists.
- *
- * Upward (from layers above this one): hasOwn, FRAMEWORK_WRITES, frameworkWrite, SELF_VIEW_NODES, SELF_VIEW_READERS, HOST_READER, PROTOTYPE_HANDLE_READER, selfModuleReader, SELF_MEMBER_VIEWS, selfMemberView, holderFilePath, selfView, startPrototypes, checkpointFile, STAND_INS, retireChanges, enforceNodeReportRead, defineAdoptedAccessor, enforceCodeMember, recordedPrototype, memberHoldsCode, searchDepth, searchBudget, membrane, kindStandIn, atClassSite, PROTOTYPE_PATHS, knownPrototype, guardOn, emitterOwnPrototype, enforcePermission, implDefault, capturedViewChildren, capturedViewTargets, resolveRestartTarget, standInNode.
  */
 let trustedRootOwn,
 	hasOwn,

@@ -21,7 +21,8 @@
  * same for both; what differs is how a runtime finds the store a trap reads and who it reads as, which the runtime hands
  * in as a {@link RuntimeAccess}. A runtime takes its finished Proxies from {@link runtimeTraps}.
  *
- * Upward services this layer uses: none (it sits above the views, rules and membrane it reads through).
+ *
+ * Upward services: none; this layer reads only layers below it and the table's own entries.
  * @module @cldmv/slothlet/handlers/unified-wrapper/runtime-bridge
  * @internal
  */

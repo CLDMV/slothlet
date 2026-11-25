@@ -15,6 +15,16 @@
 
 /**
  * @fileoverview Values layer of the wrapper: value predicates (`is*`, `holds*`), data kinds and their readers, inherited and built-in lookups, the realm's intrinsics and inspect labels.
+ *
+ * Upward services (from layers above this one, reached through the method table): ANY_MEMBER_SEGMENT (membrane),
+ *  CROSSINGS (membrane), CROSSING_ORIGINS (membrane), INBOUND_VIEWS (membrane), INSPECT_CUSTOM (membrane),
+ *  NODE_MEMBER (views), PROTOTYPE_HANDLE_READER (views), SELF_MEMBER_VIEWS (views), SELF_VIEW_NODES (views),
+ *  STAND_IN_RECORDS (membrane), WAITING_CHAINS (nodes), asOneModule (membrane), capturedViewChildren (views),
+ *  enforceCodeMember (rules), functionOf (views), hasOwn (views), hasOwnMember (rules), memberHoldsCode (rules),
+ *  memberPathOf (membrane), moduleKey (nodes), moduleObjectOf (nodes), nodeAtPath (nodes), nodeWrapperOf (nodes),
+ *  prototypeChain (nodes), prototypeHandleOf (nodes), readGateDecision (rules), readsNothingBeneath (rules),
+ *  recordedPrototype (run), resolveEnforcedCaller (rules), sameLookup (nodes), searchBudget (membrane), searchDepth
+ *  (membrane), startPrototypes (run).
  * @module @cldmv/slothlet/handlers/unified-wrapper/values
  * @internal
  */
@@ -119,8 +129,6 @@ import { codeLabel, isLanguageNameDescriptor } from "#helpers/builtin-forms";
 /**
  * Bindings of the other parts of the wrapper this file uses, taken from the wrapper's method table when the chain is
  * registered (see `WrapperBase.link`), before any wrapper exists.
- *
- * Upward (from layers above this one): hasOwn, SELF_VIEW_NODES, INSPECT_CUSTOM, PROTOTYPE_HANDLE_READER, SELF_MEMBER_VIEWS, NODE_MEMBER, FRAMEWORK_MEMBERS, FRAMEWORK_VIEW_TARGETS, CALLER_LOCKED, nodeWrapperOf, startPrototypes, sameLookup, resolveEnforcedCaller, readGateDecision, enforceCodeMember, recordedPrototype, moduleObjectOf, originalAccessor, STAND_IN_RECORDS, INBOUND_VIEWS, memberHoldsCode, searchDepth, searchBudget, nodeAtPath, readerHoldsPrototype, knownPrototype, prototypeHandleOf, CROSSINGS, CROSSING_ORIGINS, moduleKey, asOneModule, crossSubject, functionOf, hasOwnMember, prototypeChain, ANY_MEMBER_SEGMENT, readsNothingBeneath, memberPathOf, capturedViewChildren, WAITING_CHAINS, rootInspectShown.
  */
 let trustedRootOwn,
 	hasOwn,

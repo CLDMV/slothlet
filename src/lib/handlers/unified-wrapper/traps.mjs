@@ -15,6 +15,8 @@
 
 /**
  * @fileoverview Traps layer of the wrapper: the node's Proxy and its traps.
+ *
+ * Upward services: none; this layer reads only layers below it and the table's own entries.
  * @module @cldmv/slothlet/handlers/unified-wrapper/traps
  * @internal
  */

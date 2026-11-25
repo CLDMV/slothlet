@@ -15,6 +15,8 @@
 
 /**
  * @fileoverview Waiting layer of the wrapper: the waiting proxy of a lazy node and the queue of changes made through its stand-ins.
+ *
+ * Upward services: none; this layer reads only layers below it and the table's own entries.
  * @module @cldmv/slothlet/handlers/unified-wrapper/waiting
  * @internal
  */

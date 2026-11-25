@@ -15,6 +15,8 @@
 
 /**
  * @fileoverview Root layer of the wrapper: the api root's services (gate, calls, listing, reads and changes of its members).
+ *
+ * Upward services: none; this layer reads only layers below it and the table's own entries.
  * @module @cldmv/slothlet/handlers/unified-wrapper/root
  * @internal
  */

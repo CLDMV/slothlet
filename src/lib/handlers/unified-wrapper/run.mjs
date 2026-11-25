@@ -15,6 +15,10 @@
 
 /**
  * @fileoverview Run layer of the wrapper: run views, checkpoints and run snapshots, and the run write.
+ *
+ * Upward services (from layers above this one, reached through the method table): FRAMEWORK_MEMBERS (views),
+ *  builtinBehind (views), hasOwn (views), heldValue (root), rootGate (root), selfView (views), unwrapSelfView
+ *  (views).
  * @module @cldmv/slothlet/handlers/unified-wrapper/run
  * @internal
  */
@@ -92,8 +96,6 @@ const { isCallerLocked } = callerPinningInternals("lib/handlers/unified-wrapper/
 /**
  * Bindings of the other parts of the wrapper this file uses, taken from the wrapper's method table when the chain is
  * registered (see `WrapperBase.link`), before any wrapper exists.
- *
- * Upward (from layers above this one): hasOwn, carriesHanded, searchDepth, searchBudget, heldValue.
  */
 let trustedRootOwn,
 	fileNodes,

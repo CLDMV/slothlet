@@ -15,6 +15,8 @@
 
 /**
  * @fileoverview Membrane layer of the wrapper: crossings between modules, carrying values across, hand-outs and given views.
+ *
+ * Upward services: none; this layer reads only layers below it and the table's own entries.
  * @module @cldmv/slothlet/handlers/unified-wrapper/membrane
  * @internal
  */

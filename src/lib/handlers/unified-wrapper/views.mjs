@@ -15,6 +15,11 @@
 
 /**
  * @fileoverview Views layer of the wrapper: the per-reader views `self` hands out, member and data views, and captured views.
+ *
+ * Upward services (from layers above this one, reached through the method table): CROSSINGS (membrane),
+ *  CROSSING_ORIGINS (membrane), HOST_HANDED (membrane), INSPECT_CUSTOM (membrane), SEALED_SHELL_READER (membrane),
+ *  STAND_IN_RECORDS (membrane), checkedStandIn (waiting), crossTo (membrane), frontingNodeNow (membrane),
+ *  knownPrototype (membrane), ownArguments (membrane), recordOrigin (membrane).
  * @module @cldmv/slothlet/handlers/unified-wrapper/views
  * @internal
  */
@@ -77,8 +82,6 @@ const { markCallerLocked, isCallerLocked } = callerPinningInternals("lib/handler
 /**
  * Bindings of the other parts of the wrapper this file uses, taken from the wrapper's method table when the chain is
  * registered (see `WrapperBase.link`), before any wrapper exists.
- *
- * Upward (from layers above this one): INSPECT_CUSTOM, SEALED_SHELL_READER, checkedStandIn, STAND_IN_RECORDS, HOST_HANDED, ownArguments, frontingNodeNow, knownPrototype, CROSSINGS, CROSSING_ORIGINS, recordOrigin, crossTo.
  */
 let runtime_unwrapClassInstance,
 	runtime_classInstanceCreator,

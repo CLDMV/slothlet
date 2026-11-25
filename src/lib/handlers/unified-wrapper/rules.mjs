@@ -15,6 +15,15 @@
 
 /**
  * @fileoverview Rules layer of the wrapper: read gates, capabilities, ownership and standing checks, the framework's own writes and members, and access attribution.
+ *
+ * Upward services (from layers above this one, reached through the method table): ANY_MEMBER_SEGMENT (membrane),
+ *  CROSSINGS (membrane), FRAMEWORK_MEMBERS (views), HOST_READER (views), PINNED_CODE_MEMBERS (views),
+ *  PROTOTYPE_HANDLE_READER (views), RESTART_FORWARD_TRAPS (waiting), RUN_VIEWS (views), SELF_FRAMEWORK_ROOTS
+ *  (views), asOneModule (membrane), behindPinnedCode (root), capturedView (views), capturedViewShadows (views),
+ *  carryTo (membrane), checkedStandIn (waiting), crossArgumentsFrom (membrane), crossTo (membrane), functionOf
+ *  (views), hasOwn (views), heldValue (root), memberPathOf (membrane), ownArguments (membrane), ownInstances
+ *  (views), rootGate (root), runAsMaker (run), searchBudget (membrane), searchDepth (membrane), selfModuleCeilings
+ *  (views), selfWriteHasStanding (views), uncross (membrane).
  * @module @cldmv/slothlet/handlers/unified-wrapper/rules
  * @internal
  */
@@ -61,8 +70,6 @@ const { UNATTRIBUTED_READER } = capabilityContextInternals("lib/handlers/unified
 /**
  * Bindings of the other parts of the wrapper this file uses, taken from the wrapper's method table when the chain is
  * registered (see `WrapperBase.link`), before any wrapper exists.
- *
- * Upward (from layers above this one): hasOwn, HOST_READER, PROTOTYPE_HANDLE_READER, RUN_VIEWS, runtime_runnerCompilesLoad, runtime_namesHelperCopy, runtime_runnerCompilesHelper, selfModuleCeilings, selfWriteHasStanding, FRAMEWORK_MEMBERS, SELF_FRAMEWORK_ROOTS, adoptAccessor, PINNED_CODE_MEMBERS, checkedStandIn, behindPinnedCode, pinsAsCode, runAsMaker, searchDepth, searchBudget, carryTo, handedAsArgument, CROSSINGS, uncross, asOneModule, crossTo, functionOf, ANY_MEMBER_SEGMENT, memberPathOf, rootGate, heldValue, capturedViewShadows, capturedView, RESTART_FORWARD_TRAPS.
  */
 let trustedRootOwn,
 	handedLeafFunctions,

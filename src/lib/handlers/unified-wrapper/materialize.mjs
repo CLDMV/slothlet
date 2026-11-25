@@ -15,6 +15,8 @@
 
 /**
  * @fileoverview Materialize layer of the wrapper: implementation cloning and extraction, lazy materialization, adoption of a module's members and child wrappers.
+ *
+ * Upward services: none; this layer reads only layers below it and the table's own entries.
  * @module @cldmv/slothlet/handlers/unified-wrapper/materialize
  * @internal
  */
