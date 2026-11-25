@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-01T21:20:38-08:00 (1793596838)
+ *	@Last modified time: 2026-11-25T11:41:27-08:00 (1795635687)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -209,6 +209,23 @@ const PER_FILE_HEAP_OVERRIDES = [
 	// its LAZY_LIVE config (passes 176/176 in isolation). Headroom is the remaining lever.
 	{ pattern: "metadata/metadata-edge-cases", heapMb: 6144 }
 ];
+
+/**
+ * Time limit per test file, in ms, for @cldmv/vitest-runner's watchdog (`VITEST_FILE_TIMEOUT`, in
+ * seconds, overrides). The runner's own default of 30 minutes is too close for the slowest suites on a
+ * 4-core CI runner: in a plain (no coverage) Node 22 run on next, all-api-structures took 23.5 minutes and
+ * api-root-integrity, reload-held-code and permissions-sync-leaf-thenable 12–15, and coverage runs are
+ * slower. The idle limit stays at the runner's 10 minutes: every file prints as its tests finish, and the
+ * longest silence inside one file in that run was under 3 minutes.
+ * @type {number}
+ */
+const FILE_TIMEOUT_MS = 60 * 60 * 1000;
+
+/**
+ * Per-file watchdog limits for files that outgrow {@link FILE_TIMEOUT_MS}.
+ * @type {Array<{ pattern: string, timeoutMs?: number, idleTimeoutMs?: number }>}
+ */
+const PER_FILE_TIMEOUT_OVERRIDES = [{ pattern: "api-structures/all-api-structures.test.vitest.mjs", timeoutMs: 120 * 60 * 1000 }];
 
 // Scratch dirs (gitignored, same pair the repo's own eslint/prettier ignores use) that test
 // discovery must never enter. `tmp/` holds per-agent git worktrees (tmp/agents/*/wt) and staged
@@ -477,9 +494,15 @@ function buildRunOptions(parsed) {
 		earlyRunPatterns: parsed.earlyRunPatterns,
 		exclude: parsed.excludePatterns,
 		perFileHeapOverrides: PER_FILE_HEAP_OVERRIDES,
+		perFileTimeoutOverrides: PER_FILE_TIMEOUT_OVERRIDES,
 		conditions: ["slothlet-dev"],
 		nodeEnv: process.env.NODE_ENV || "development"
 	};
+
+	// An explicit option would shadow VITEST_FILE_TIMEOUT, so only set it when the env var is absent.
+	if (!process.env.VITEST_FILE_TIMEOUT) {
+		runOptions.fileTimeoutMs = FILE_TIMEOUT_MS;
+	}
 
 	if (maxOldSpaceMb && Number.isFinite(maxOldSpaceMb)) {
 		runOptions.maxOldSpaceMb = maxOldSpaceMb;
