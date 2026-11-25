@@ -34,11 +34,15 @@ import {
 	String,
 	WeakMap,
 	WeakMapMethods,
-	WeakSetMethods
+	WeakSetMethods,
+	FunctionMethods,
+	Functions,
+	NativeProxy
 } from "#helpers/intrinsics";
 
 import { ownBindingsRefusal } from "#helpers/instance-imports";
 import { codeLabel, isLanguageNameDescriptor } from "#helpers/builtin-forms";
+import { anyRunOpen, beforeChange, domainOf, shallowCopy } from "#helpers/run-snapshot";
 
 /**
  * Bindings of the other parts of the wrapper this file uses, taken from the wrapper's method table when the chain is
@@ -85,7 +89,9 @@ let trustedRootOwn,
 	runtime_inspectLabel,
 	runtime_inspectSafe,
 	UnifiedWrapper,
-	resolveWrapper;
+	resolveWrapper,
+	runtime_behindGivenView,
+	runtime_defineRootInspect;
 /** The registered `UnifiedWrapper`: the only class this layer's constructor builds for. @type {Function|undefined} */
 let realClass;
 
@@ -761,6 +767,237 @@ function runtime_rootMemberShown(value, args, slothlet) {
 	return runtime_inspectLabel(typeof behind === "function" ? codeLabel(behind) : safe);
 }
 
+/**
+ * Build an instance's api root: the Proxy `api` is, over a target of its own (a bound function for a callable root, a
+ * plain object otherwise), whose traps read and change the instance's current api under the rules a node's do. Called
+ * once per instance, on its first load: the root keeps its identity across reloads.
+ *
+ * Also gives the instance what a run's view of the root and the framework's own changes to it use: `____rootPrototypes`
+ * (the prototype the root holds and reports) and `____rootBarrier` (save the root's members before a change while a run
+ * is open).
+ * @param {object} slothlet - The instance.
+ * @param {WeakMap<object, {given: boolean, prototype: (object|null)}>} records - The instance's record of a function
+ *   root's prototype, per api the root reads.
+ * @param {function(): object} instanceApi - The instance's own api (not a run's tree).
+ * @param {function(object): void} closeSelf - Close the instance's `self` as the root target closes.
+ * @returns {Function|object} The root proxy.
+ * @internal
+ */
+function runtime_rootProxy(slothlet, records, instanceApi, closeSelf) {
+	// V8 fork-pool coverage gaps with isCallable cond-expr; proxy trap null guards are defensive dead code.
+	/* v8 ignore start */
+	// Determine proxy target type based on slothlet.api (like UnifiedWrapper does)
+	const isCallable = typeof slothlet.api === "function" || (slothlet.api && typeof slothlet.api.default === "function");
+	// A bound function for a callable root, as an api node's own target is: callable and constructible, with no
+	// `prototype` of its own, so the traps report the root's function as it is (an async function, an arrow, a
+	// bound function or a method has none) without breaking an invariant of the target's.
+	const proxyTarget = isCallable ? FunctionMethods.bind(function () {}) : {};
+	// A function root's prototype, on a record of the root's own as a function node's is on its node's: the root
+	// file's function's until the root is given one (`Object.setPrototypeOf(api, …)`), which the record then holds,
+	// so the function is never changed through the root. A load that gives the root a value starts it again.
+	// One record per api the root reads (the instance's, a run's own tree's), so a run's root keeps its own.
+	const rootRecord = () => {
+		let record = WeakMapMethods.get(records, slothlet.api);
+		if (record === undefined) {
+			record = { given: false, prototype: null };
+			WeakMapMethods.set(records, slothlet.api, record);
+		}
+		return record;
+	};
+	// The root's record, its prototype brought up to date: the root file's function's until the root is given one.
+	const rootRecordNow = () => {
+		const rootPrototype = rootRecord();
+		if (!rootPrototype.given) rootPrototype.prototype = Reflect.getPrototypeOf(slothlet.api);
+		return rootPrototype;
+	};
+	const rootPrototypeNow = () => rootRecordNow().prototype;
+	// Whether the root reads a tree a run has of its own: the root's target is shared with the instance.
+	const inRunTree = () => slothlet.api !== instanceApi();
+	// A run that started before a change to the root reads the root as it was (see helpers/run-snapshot): the root's
+	// members are saved before every change to it, once per window, while a run is open.
+	const rootBarrier = () => {
+		if (anyRunOpen() && slothlet.api && !inRunTree()) beforeChange(domainOf(slothlet), slothlet.api, rootCapture);
+	};
+	// The root's members as they are, inheriting from the prototype the root has (a function root's is on its record).
+	const rootCapture = (api) => {
+		const copy = shallowCopy(api);
+		const held = rootHeld();
+		if (Reflect.getPrototypeOf(copy) !== held) Reflect.setPrototypeOf(copy, held);
+		return copy;
+	};
+	// Whether a member is read from a prototype the function root was given: one the root does not hold itself.
+	const rootInherits = (prop) => {
+		if (!isCallable) return false;
+		return rootRecordNow().given && !Objects.hasOwn(slothlet.api, prop);
+	};
+	// The prototype the root has now, as the root itself holds it: an object root's is its api's.
+	const rootHeld = () => (isCallable ? rootPrototypeNow() : Reflect.getPrototypeOf(slothlet.api));
+	// Whether the root has a prototype it was given (an object root starts with `Object.prototype`).
+	const rootGiven = () => (isCallable ? rootRecordNow().given : Reflect.getPrototypeOf(slothlet.api) !== Objects.prototype);
+	// The views module code is handed of a prototype the root was given, kept for as long as the root has it, and
+	// the prototype as whoever reads the root now is handed it: the host the object, a module its own view.
+	const rootViews = { prototypeViews: null };
+	const rootReported = (target) => {
+		if (!slothlet.api || !Reflect.isExtensible(target)) return Reflect.getPrototypeOf(target);
+		return rootGiven() ? runtime_rootPrototypeFor(slothlet, rootViews, rootHeld()) : rootHeld();
+	};
+	// A run's view of the root reads the prototype the root had when the run started (see makeRunSelf): the one the root
+	// has now, as the root holds it, and a prototype as whoever reads the root is handed it.
+	slothlet.____rootPrototypes = {
+		held: () => (slothlet.api ? rootHeld() : null),
+		reported: (held) =>
+			held === null ||
+			held === Objects.prototype ||
+			held === Functions.prototype ||
+			(isCallable && held === Reflect.getPrototypeOf(slothlet.api))
+				? held
+				: runtime_rootPrototypeFor(slothlet, rootViews, held)
+	};
+	// The framework's own changes to the root object (an add() or remove() placing or dropping a member on it, not
+	// through the proxy) save it the same way first (see ApiManager#beforeRootChange).
+	slothlet.____rootBarrier = rootBarrier;
+	// Node inspects a Proxy's target: the target shows the root as a node's shows the node.
+	runtime_defineRootInspect(slothlet, proxyTarget);
+
+	return runtime_registerRoot(
+		new NativeProxy(proxyTarget, {
+			// A member is read as a node reads its own: the same gate, at the member's name (see unified-wrapper.mjs).
+			// A member the target holds fixed is read as the target holds it (proxy invariant).
+			get: (target, prop) => {
+				if (!slothlet.api) return undefined;
+				const fixed = Reflect.getOwnPropertyDescriptor(target, prop);
+				if (fixed && !fixed.configurable) return runtime_rootFixedMember(slothlet, prop, fixed, false);
+				// A key only the target holds (its inspect hook, which `util.inspect` reads through the proxy when the root
+				// is the target of another proxy) is the target's.
+				if (fixed && typeof prop === "symbol" && !(prop in slothlet.api)) return fixed.value;
+				// The root's `__proto__` is the prototype it reports, as an object's or a function's is.
+				if (prop === "__proto__" && !Objects.hasOwn(slothlet.api, prop)) {
+					const from = rootHeld();
+					return from === null ? undefined : Reflect.get(from, prop, slothlet.boundApi);
+				}
+				// A member a function root inherits from a prototype it was given is read from there, on the root, and
+				// one an object root inherits from one through its api: either under the rules a member of the root is.
+				if (rootInherits(prop)) {
+					const from = rootRecord().prototype;
+					if (from === null) return runtime_rootMemberRead(slothlet, prop, undefined);
+					return runtime_rootInheritedRead(slothlet, rootViews, from, prop, Reflect.get(from, prop, slothlet.boundApi));
+				}
+				if (!isCallable && rootGiven() && !Objects.hasOwn(slothlet.api, prop)) {
+					const from = rootHeld();
+					if (from !== null) return runtime_rootInheritedRead(slothlet, rootViews, from, prop, slothlet.api[prop]);
+				}
+				return runtime_rootMemberRead(slothlet, prop, slothlet.api[prop]);
+			},
+			// A change to the root is a change to the api, held to the rules the same change at a node is held to.
+			set: (target, prop, value) => {
+				if (!slothlet.api) return true;
+				rootBarrier();
+				return runtime_rootAssign(slothlet, target, prop, value);
+			},
+			has: (target, prop) => {
+				if (!slothlet.api) return false;
+				if (rootInherits(prop)) {
+					const from = rootRecord().prototype;
+					if (from !== null && Reflect.has(from, prop)) return true;
+				} else if (prop in slothlet.api) return true;
+				const fixed = Reflect.getOwnPropertyDescriptor(target, prop);
+				return fixed !== undefined && (!fixed.configurable || !Reflect.isExtensible(target));
+			},
+			// The root lists what a node lists of its own: a member the reader may not read is left out. A closed root
+			// lists what it holds, to every reader (proxy invariant).
+			ownKeys: (target) => {
+				if (!slothlet.api) return [];
+				if (!Reflect.isExtensible(target)) return Reflect.ownKeys(target);
+				return runtime_rootListing(slothlet, target, Reflect.ownKeys(slothlet.api));
+			},
+			defineProperty: (target, prop, descriptor) => {
+				if (!slothlet.api) return false;
+				rootBarrier();
+				return runtime_rootDefine(slothlet, target, prop, descriptor);
+			},
+			deleteProperty: (target, prop) => {
+				if (!slothlet.api) return true;
+				rootBarrier();
+				runtime_assertRootChange(slothlet, prop);
+				// A full-isolation run's `self` keeps a removal on the root in its own record (see runtime_runWrite).
+				const runSink = runtime_takeRunWrite(slothlet.boundApi, prop);
+				if (runSink !== null) return runSink({ op: "delete" });
+				const held = Objects.hasOwn(slothlet.api, prop);
+				if (!Reflect.deleteProperty(slothlet.api, prop)) return false;
+				if (!held && Reflect.isExtensible(target)) return true;
+				return Reflect.deleteProperty(target, prop);
+			},
+			// A call of the root's function is checked as a call of a function node is.
+			apply: (target, thisArg, args) => {
+				if (!slothlet.api) return undefined;
+				runtime_rootCallCheck(slothlet, args);
+				return runtime_rootCall(slothlet, thisArg, args);
+			},
+			construct: (target, args) => {
+				if (!slothlet.api) return {};
+				runtime_rootCallCheck(slothlet, args);
+				return runtime_rootCall(slothlet, undefined, args, true);
+			},
+			// The root's function's own prototype (an async function's `AsyncFunction.prototype`), as its api node reports it,
+			// or the one the root was given.
+			getPrototypeOf: (target) => rootReported(target),
+			// A prototype set on an object root is set on the api, whose members inherit from it, and on its target, which
+			// reports it. A function root takes it on its own record, and its function keeps the one it has.
+			setPrototypeOf: (target, proto) => {
+				if (!slothlet.api) return Reflect.setPrototypeOf(target, proto);
+				runtime_assertRootChange(slothlet, null);
+				rootBarrier();
+				if (!Reflect.isExtensible(target)) return Reflect.getPrototypeOf(target) === proto;
+				proto = runtime_behindGivenView(runtime_unwrapSelfView(proto));
+				if (isCallable) {
+					rootPrototypeNow();
+					const rootPrototype = rootRecord();
+					rootPrototype.given = proto !== Reflect.getPrototypeOf(slothlet.api);
+					rootPrototype.prototype = proto;
+					return true;
+				}
+				// A run's tree takes it on its own api: the target, which reports it, is the instance's too.
+				if (inRunTree()) return Reflect.setPrototypeOf(slothlet.api, proto);
+				return Reflect.setPrototypeOf(slothlet.api, proto) && Reflect.setPrototypeOf(target, proto);
+			},
+			// Closing the root closes the api (see runtime_rootClose).
+			preventExtensions: (target) => {
+				if (!slothlet.api) return Reflect.preventExtensions(target);
+				// The root's target is the instance's as well: a run reading a tree of its own cannot close it.
+				if (inRunTree()) return false;
+				rootBarrier();
+				const closed = runtime_rootClose(
+					slothlet,
+					target,
+					isCallable,
+					rootGiven() ? runtime_rootPrototypeFor(slothlet, rootViews, rootHeld(), true) : rootHeld()
+				);
+				// A module's `self` is closed as the root it stands for is (#827).
+				if (closed) closeSelf(target);
+				return closed;
+			},
+			getOwnPropertyDescriptor: (target, prop) => {
+				const fixed = Reflect.getOwnPropertyDescriptor(target, prop);
+				if (fixed && !fixed.configurable) return runtime_rootFixedMember(slothlet, prop, fixed, true);
+				if (slothlet.api && prop in slothlet.api) {
+					const desc = Objects.getOwnPropertyDescriptor(slothlet.api, prop);
+					const described = desc ? runtime_rootMemberDescriptor(slothlet, prop, desc) : undefined;
+					if (described) return { __proto__: null, ...described, configurable: true };
+				}
+				// A closed root reports every member it holds (proxy invariant): one the reader may not read is described
+				// with its value withheld (#825).
+				if (fixed && !Reflect.isExtensible(target)) {
+					if (runtime_rootWithheld(slothlet, prop)) return { __proto__: null, ...fixed, value: undefined };
+					runtime_rootMemberRead(slothlet, prop, slothlet.api?.[prop]);
+					return fixed;
+				}
+				return undefined;
+			}
+		})
+	);
+	/* v8 ignore stop */
+}
+
 /** Whether {@link RootLayer} has built its class: it builds one, for the wrapper's chain. @type {boolean} */
 let built = false;
 
@@ -797,7 +1034,8 @@ export function RootLayer(Base) {
 					runtime_rootDefine,
 					runtime_rootClose,
 					runtime_rootFixedMember,
-					runtime_rootInspectShown
+					runtime_rootInspectShown,
+					runtime_rootProxy
 				});
 				Base.linkLayer(this, (methods, registered) => {
 					realClass = registered;
@@ -843,6 +1081,8 @@ export function RootLayer(Base) {
 					registerLeafFile = methods.uw.registerLeafFile;
 					resolveWrapper = methods.uw.resolveWrapper;
 					trustedRootOwn = methods.uw.trustedRootOwn;
+					runtime_behindGivenView = methods.membrane.runtime_behindGivenView;
+					runtime_defineRootInspect = methods.values.runtime_defineRootInspect;
 				});
 			}
 

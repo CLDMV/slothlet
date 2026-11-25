@@ -1327,6 +1327,15 @@ function runtime_unwrapSelfView(value) {
 }
 
 /**
+ * Forwards to the Root layer's `runtime_rootProxy`: this file hands it out (see {@link internals}) before the chain may exist.
+ * @returns {*} What it returns.
+ * @internal
+ */
+function runtime_rootProxy(slothlet, records, instanceApi, closeSelf) {
+	return M.root.runtime_rootProxy(slothlet, records, instanceApi, closeSelf);
+}
+
+/**
  * Unified wrapper class that handles all proxy concerns in one place:
  * - ____impl pattern for reload support
  * - Lazy/eager mode materialization
@@ -2128,7 +2137,8 @@ export function internals(consumer) {
 		runtime_selfRootView,
 		runtime_selfView,
 		runtime_unwrapSelfView,
-		settleStandInChanges
+		settleStandInChanges,
+		runtime_rootProxy
 	};
 }
 
