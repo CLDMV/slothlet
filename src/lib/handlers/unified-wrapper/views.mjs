@@ -70,6 +70,7 @@ import { builtinKind } from "#helpers/run-snapshot";
 import { ownBindingsRefusal } from "#helpers/instance-imports";
 import { internals as callerPinningInternals } from "#helpers/caller-pinning";
 import { internals as capabilityContextInternals } from "#helpers/capability-context";
+import { isFrameworkInternal } from "#handlers/framework-internals";
 const { UNATTRIBUTED_READER } = capabilityContextInternals("lib/handlers/unified-wrapper/views");
 const { markCallerLocked, isCallerLocked } = callerPinningInternals("lib/handlers/unified-wrapper/views");
 
@@ -94,13 +95,10 @@ let runtime_unwrapClassInstance,
 	runtime_hasInternalSlots,
 	runtime_inherits,
 	runtime_dataKind,
-	runtime_isPlainMember,
 	ACTING_FOR,
 	runtime_assertReaderWrite,
 	runtime_isEngineMember,
-	runtime_isDataReader,
 	runtime_holdsDataKind,
-	runtime_holdsMember,
 	FRAMEWORK_MEMBER_NAMES,
 	runtime_frameworkViewOf,
 	runtime_nodeWrapperOf,
@@ -120,11 +118,7 @@ let runtime_unwrapClassInstance,
 	STAND_IN_RECORDS,
 	INTRINSICS,
 	runtime_isSharedValue,
-	runtime_heldPrototypeOf,
 	runtime_makerOf,
-	SNAPSHOT_OMIT,
-	runtime_jsonSnapshot,
-	runtime_callAsDefiner,
 	runtime_makerInstanceID,
 	runtime_nodeAtPath,
 	HOST_HANDED,
@@ -150,7 +144,6 @@ let runtime_unwrapClassInstance,
 	runtime_emitterPrototypeHandle,
 	runtime_instancePrototypeSite,
 	runtime_prototypeCheckedBy,
-	runtime_closedPrototypeHandle,
 	runtime_unclassedInstancePrototype,
 	runtime_instanceClassFront,
 	runtime_isArrayMember,
@@ -163,7 +156,17 @@ let runtime_unwrapClassInstance,
 	runtime_isConstructor,
 	isClassInstance,
 	resolveWrapper,
-	registerProxy;
+	registerProxy,
+	nodesShared,
+	runtime_recordPrototypePath,
+	rulesShared,
+	runtime_hostRunDefiner,
+	runtime_isIntrinsic,
+	FRAMEWORK_VIEW_TARGETS,
+	COMMON_READERS,
+	TYPED_ARRAY_READERS,
+	DATA_READERS,
+	MEMBER_HOLDERS;
 /** The registered `UnifiedWrapper`: the only class this layer's constructor builds for. @type {Function|undefined} */
 let realClass;
 
@@ -198,20 +201,6 @@ const SELF_VIEW_NODES = new WeakMap();
  * @private
  */
 let PENDING_INVARIANT_READ = null;
-
-/**
- * Take the pending engine read {@link PENDING_INVARIANT_READ} when it is this one.
- *
- * @param {object} wrapper - The node's wrapper whose descriptor is read.
- * @param {string|symbol} prop - The key read.
- * @returns {boolean} Whether this read is the engine's check after a view's definition.
- * @private
- */
-function runtime_takeInvariantRead(wrapper, prop) {
-	const pending = PENDING_INVARIANT_READ;
-	PENDING_INVARIANT_READ = null;
-	return pending !== null && pending.wrapper === wrapper && pending.prop === prop;
-}
 
 /**
  * The traps a self data view and a self member view change their value through (see {@link runtime_selfDataView},
@@ -394,6 +383,29 @@ function runtime_selfModuleCeilings(slothlet, writer) {
  * @private
  */
 function runtime_selfWriteHasStanding(slothlet) {
+	/**
+	 * Whether the code running now inside a flow the host opened is a module's rather than the host's: its frames place
+	 * it in a module's file, as {@link runtime_selfReadAsDefiner} reads them for a `self` read made there. Evaluated code
+	 * whose definer the frames cannot tell stays the host's, as it does for that read; code of a file several running
+	 * instances hold untold apart, or code at an instance's file running in a script that is not the file's, is not the
+	 * host's. With the permission system on and `provenance` or `capture` off, no code is told by its frames and the
+	 * flow's code is the host's.
+	 *
+	 * @param {object} slothlet - Instance the flow belongs to.
+	 * @param {string} hostFlowInstanceID - The instance whose flow the host opened.
+	 * @returns {boolean} True for a module's code.
+	 * @private
+	 */
+	function runtime_hostFlowRunsModuleCode(slothlet, hostFlowInstanceID) {
+		if (slothlet.handlers?.permissionManager?.isEnabled?.()) {
+			const callerConfig = slothlet.config?.permissions?.caller;
+			if (callerConfig?.provenance === false || callerConfig?.capture === false) return false;
+		}
+		const definer = frameDefiner(hostFlowInstanceID);
+		if (definer === null) return false;
+		return !(definer.unplaced && !definer.shared && !definer.foreign);
+	}
+
 	const contextManager = slothlet.contextManager;
 	const identity = contextManager?.getCallerIdentity?.(slothlet.instanceID);
 	if (identity?.currentWrapper || identity?.unresolved) return true;
@@ -409,43 +421,6 @@ function runtime_selfWriteHasStanding(slothlet) {
 	)
 		return false;
 	return !runtime_hostFlowRunsModuleCode(slothlet, store.parentInstanceID);
-}
-
-/**
- * Whether the code running now inside a flow the host opened is a module's rather than the host's: its frames place
- * it in a module's file, as {@link runtime_selfReadAsDefiner} reads them for a `self` read made there. Evaluated code
- * whose definer the frames cannot tell stays the host's, as it does for that read; code of a file several running
- * instances hold untold apart, or code at an instance's file running in a script that is not the file's, is not the
- * host's. With the permission system on and `provenance` or `capture` off, no code is told by its frames and the
- * flow's code is the host's.
- *
- * @param {object} slothlet - Instance the flow belongs to.
- * @param {string} hostFlowInstanceID - The instance whose flow the host opened.
- * @returns {boolean} True for a module's code.
- * @private
- */
-function runtime_hostFlowRunsModuleCode(slothlet, hostFlowInstanceID) {
-	if (slothlet.handlers?.permissionManager?.isEnabled?.()) {
-		const callerConfig = slothlet.config?.permissions?.caller;
-		if (callerConfig?.provenance === false || callerConfig?.capture === false) return false;
-	}
-	const definer = frameDefiner(hostFlowInstanceID);
-	if (definer === null) return false;
-	return !(definer.unplaced && !definer.shared && !definer.foreign);
-}
-
-/**
- * A view handed to another reader: that reader's view of the same node. Anything that is not a view is
- * returned as is.
- *
- * @param {*} value - A receiver.
- * @param {object} reader - The reader it is handed to.
- * @returns {*} The reader's view, or `value`.
- * @private
- */
-function runtime_selfViewFor(value, reader) {
-	if (value === null || (typeof value !== "object" && typeof value !== "function")) return value;
-	return WeakMapMethods.has(SELF_VIEW_NODES, value) ? runtime_selfView(value, reader) : value;
 }
 
 /**
@@ -516,30 +491,6 @@ const SELF_MEMBER_VIEW_CACHE = new WeakMap();
 const SELF_MEMBER_VIEWS = new WeakMap();
 
 /**
- * The view a member read walking back into a value already on the walk hands out (#688): that value's view, the one
- * the walk went through. Following `conn.self = conn` round its cycle therefore hands back the same view on every
- * lap, so the cycle closes through the views as on the value, and deep equality finds it. A lap is held to the
- * path of that earlier view, the shorter one. A value at two paths that are no cycle keeps a view per path.
- *
- * Each view links to the one it was read through weakly, so the walk keeps no value alive that the views it went
- * through would not.
- *
- * @param {object} record - Record of the view the member is read through.
- * @param {object|Function} value - The member read.
- * @returns {object|null} The view of `value` on the walk, or null when `value` is not on it.
- * @private
- *
- * @example
- * runtime_selfLap(SELF_MEMBER_VIEWS.get(conn), raw.self); // conn's view, when raw.self === raw
- */
-function runtime_selfLap(record, value) {
-	for (let step = record; step !== undefined; step = step.parent == null ? undefined : WeakRefMethods.deref(step.parent)) {
-		if (step.value === value) return step.view;
-	}
-	return null;
-}
-
-/**
  * The well-known symbols (`Symbol.iterator`, `Symbol.hasInstance`, …) and Node's inspect hook. What a member
  * holds under one of them is the language's protocol, not data of the member, and is read as is.
  * @type {Set<symbol>}
@@ -579,6 +530,69 @@ const INTRINSIC_HAS_INSTANCE = PrototypeFunctions.Function.hasInstance;
  * @private
  */
 function runtime_selfMemberOf(value, reader, slothlet, parts, prop, through) {
+	/**
+	 * Whether `value` is a plain value of the api rather than a node: no node, view, version dispatcher, or
+	 * framework member, each of which is handed out its own way.
+	 * @param {object} value - An object or function.
+	 * @returns {boolean} Whether it is plain.
+	 * @private
+	 */
+	function runtime_isPlainMember(value) {
+		return (
+			!runtime_isIntrinsic(value) &&
+			!runtime_hasInternalSlots(value) &&
+			!WeakMapMethods.has(SELF_VIEW_NODES, value) &&
+			!WeakMapMethods.has(SELF_MEMBER_VIEWS, value) &&
+			!WeakMapMethods.has(FRAMEWORK_VIEW_TARGETS, value) &&
+			!WeakMapMethods.has(FRAMEWORK_MEMBERS, value) &&
+			resolveWrapper(value) === null &&
+			versionDispatcherRecord(value) === null &&
+			!WeakMapMethods.has(capturedViewChildren, value) &&
+			!isFrameworkInternal(value)
+		);
+	}
+
+	/**
+	 * The api node a module's function stands for, as a reader reaching the function through a value of the module's (a
+	 * prototype's `constructor`, an instance's) is handed it, so its members are read through the node's rules, as
+	 * `fn.prototype.constructor === fn` reads them in plain JS: the api root for the root file's function, the node fronting
+	 * it for any other, and `undefined` for a function no node of the instance fronts.
+	 * @param {object} slothlet - The instance.
+	 * @param {Function} fn - The function.
+	 * @param {object} reader - Who reads it.
+	 * @returns {Function|object|undefined} What the reader is handed, or `undefined`.
+	 * @private
+	 */
+	function runtime_frontedFunctionView(slothlet, fn, reader) {
+		if (!slothlet || reader === HOST_READER) return undefined;
+		const node = runtime_frontingNodeNow(slothlet, fn);
+		return node === undefined || node === slothlet.boundApi ? node : runtime_selfView(node, reader);
+	}
+
+	/**
+	 * The view a member read walking back into a value already on the walk hands out (#688): that value's view, the one
+	 * the walk went through. Following `conn.self = conn` round its cycle therefore hands back the same view on every
+	 * lap, so the cycle closes through the views as on the value, and deep equality finds it. A lap is held to the
+	 * path of that earlier view, the shorter one. A value at two paths that are no cycle keeps a view per path.
+	 *
+	 * Each view links to the one it was read through weakly, so the walk keeps no value alive that the views it went
+	 * through would not.
+	 *
+	 * @param {object} record - Record of the view the member is read through.
+	 * @param {object|Function} value - The member read.
+	 * @returns {object|null} The view of `value` on the walk, or null when `value` is not on it.
+	 * @private
+	 *
+	 * @example
+	 * runtime_selfLap(SELF_MEMBER_VIEWS.get(conn), raw.self); // conn's view, when raw.self === raw
+	 */
+	function runtime_selfLap(record, value) {
+		for (let step = record; step !== undefined; step = step.parent == null ? undefined : WeakRefMethods.deref(step.parent)) {
+			if (step.value === value) return step.view;
+		}
+		return null;
+	}
+
 	if (value === null || (typeof value !== "object" && typeof value !== "function")) return value;
 	// A reader's view of a prototype a node was given, and a stand-in a closed node holds for its code, are handed on
 	// as they are: each checks every read and change itself.
@@ -616,23 +630,6 @@ const SET_COMPARISONS = setFrom([
 ]);
 
 /**
- * Whether `reader` may write the api path `parts` now: the write a change through it would be, judged as one.
- * @param {object} slothlet - Instance the api belongs to.
- * @param {object} reader - The module that read it.
- * @param {string[]} parts - The api path.
- * @returns {boolean} Whether the write would be allowed.
- * @private
- */
-function runtime_readerMayWrite(slothlet, reader, parts) {
-	try {
-		slothlet.handlers.apiManager.assertOwnedWrite(parts, reader);
-		return true;
-	} catch {
-		return false;
-	}
-}
-
-/**
  * The data views {@link runtime_selfDataView} built: per value, per reader, per api path.
  * @type {WeakMap<object, WeakMap<object, Map<string, object>>>}
  * @private
@@ -667,6 +664,49 @@ const SELF_DATA_VIEW_CACHE = new WeakMap();
  * @private
  */
 function runtime_selfDataView(value, reader, slothlet, parts, through) {
+	/**
+	 * Whether the engine's method `name` of the data object `value` only reads it: on its kind's list, or every
+	 * object's; a `Date`'s `get…` and `to…` methods and its primitive conversion; a `DataView`'s `get…` methods.
+	 * @param {object} value - The data object.
+	 * @param {PropertyKey} name - The method's key.
+	 * @returns {boolean} Whether calling it only reads the object.
+	 * @private
+	 */
+	function runtime_isDataReader(value, name) {
+		if (SetMethods.has(COMMON_READERS, name)) return true;
+		const kind = runtime_dataKind(value);
+		if (kind === "date")
+			return (
+				name === Symbol.toPrimitive ||
+				(typeof name === "string" && (StringMethods.startsWith(name, "get") || StringMethods.startsWith(name, "to")))
+			);
+		if (kind === "dataview") return typeof name === "string" && StringMethods.startsWith(name, "get");
+		if (kind === "typedarray") return SetMethods.has(TYPED_ARRAY_READERS, name);
+		// A boxed primitive never changes: every method of its kind reads it.
+		if (kind === "boxed") return true;
+		{
+			const readers = MapMethods.get(DATA_READERS, kind);
+			return readers ? SetMethods.has(readers, name) : false;
+		}
+	}
+
+	/**
+	 * Whether `reader` may write the api path `parts` now: the write a change through it would be, judged as one.
+	 * @param {object} slothlet - Instance the api belongs to.
+	 * @param {object} reader - The module that read it.
+	 * @param {string[]} parts - The api path.
+	 * @returns {boolean} Whether the write would be allowed.
+	 * @private
+	 */
+	function runtime_readerMayWrite(slothlet, reader, parts) {
+		try {
+			slothlet.handlers.apiManager.assertOwnedWrite(parts, reader);
+			return true;
+		} catch {
+			return false;
+		}
+	}
+
 	// The host owns the whole tree: it is handed the value itself, as is a module that may change it.
 	if (reader === HOST_READER) return value;
 	if (reader !== UNATTRIBUTED_READER && runtime_readerMayWrite(slothlet, reader, parts)) return value;
@@ -910,6 +950,16 @@ const NODE_MEMBER = Symbol("slothlet.nodeMember");
  * self.single.dmap.get("one").n = 5; // LOOSE_SET_NOT_OWNED, as self.owner.dmap.get("one").n = 5 is
  */
 function runtime_selfDataMember(inner, reader, slothlet, prop) {
+	/**
+	 * The api path of a node, as its segments.
+	 * @param {object} node - The node, or its wrapper.
+	 * @returns {string[]} The path's segments.
+	 * @private
+	 */
+	function runtime_apiPathParts(node) {
+		return filterList(splitText(String(resolveWrapper(node)?.____slothletInternal.apiPath ?? ""), "."), Boolean);
+	}
+
 	if (inner === null || reader === HOST_READER || prop === "constructor") return NODE_MEMBER;
 	const impl = inner.____slothletInternal.impl;
 	if (!runtime_holdsDataKind(impl) || !runtime_isEngineMember(impl, prop)) return NODE_MEMBER;
@@ -949,6 +999,34 @@ function runtime_selfDataMember(inner, reader, slothlet, prop) {
  * @private
  */
 function runtime_selfMemberView(value, reader, slothlet, parts, through) {
+	/**
+	 * Whether `value` holds `fn` as a member — its own, or inherited, as a method, a getter, or a setter.
+	 * @param {object|Function} value - The value.
+	 * @param {Function} fn - The function.
+	 * @returns {boolean} Whether `fn` is one of its members.
+	 * @private
+	 */
+	function runtime_holdsMember(value, fn) {
+		if (WeakMapMethods.get(MEMBER_HOLDERS, fn) == null ? undefined : WeakSetMethods.has(WeakMapMethods.get(MEMBER_HOLDERS, fn), value))
+			return true;
+		for (
+			let proto = value;
+			proto !== null && (typeof proto === "object" || typeof proto === "function");
+			proto = Reflect.getPrototypeOf(proto)
+		) {
+			for (let ofIndex = 0, ofList = Reflect.ownKeys(proto); ofIndex < ofList.length; ofIndex++) {
+				const key = ofList[ofIndex];
+				const descriptor = Reflect.getOwnPropertyDescriptor(proto, key);
+				if (descriptor && (descriptor.value === fn || descriptor.get === fn || descriptor.set === fn)) {
+					if (!WeakMapMethods.has(MEMBER_HOLDERS, fn)) WeakMapMethods.set(MEMBER_HOLDERS, fn, new WeakSet());
+					WeakSetMethods.add(WeakMapMethods.get(MEMBER_HOLDERS, fn), value);
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+
 	// The host owns the whole tree: it is handed the value itself.
 	if (reader === HOST_READER) return value;
 	let byReader = WeakMapMethods.get(SELF_MEMBER_VIEW_CACHE, value);
@@ -1398,6 +1476,20 @@ function runtime_selfHasInstance(prototype, instance) {
  * ops.note = "x"; // inside a call: the node's own ownership rule decides
  */
 function runtime_selfView(node, reader, from = null, access = null) {
+	/**
+	 * A view handed to another reader: that reader's view of the same node. Anything that is not a view is
+	 * returned as is.
+	 *
+	 * @param {*} value - A receiver.
+	 * @param {object} reader - The reader it is handed to.
+	 * @returns {*} The reader's view, or `value`.
+	 * @private
+	 */
+	function runtime_selfViewFor(value, reader) {
+		if (value === null || (typeof value !== "object" && typeof value !== "function")) return value;
+		return WeakMapMethods.has(SELF_VIEW_NODES, value) ? runtime_selfView(value, reader) : value;
+	}
+
 	if (node === null || (typeof node !== "object" && typeof node !== "function")) return node;
 	// A prototype's handle is the same object to every reader, as a node is: each access through it is decided for whoever
 	// makes it.
@@ -1998,6 +2090,31 @@ const SELF_HOOK_VIEWED = new WeakSet();
  * hook.handler = runtime_selfHookHandler(pinned, slothlet, ownerWrapper);
  */
 function runtime_selfHookHandler(handler, slothlet, reader) {
+	/**
+	 * The module a value in a hooked call's arguments comes from, as far as slothlet saw: the module whose call returned
+	 * it to the host, the module whose stand-in or wrapped instance it is, a module seen holding it as itself, the module
+	 * called when it made the value, and otherwise the module making the call. Null for a value the host built itself.
+	 * @param {*} value - The value, as the function called holds it.
+	 * @param {object|null} caller - The wrapper of the module making the call, or null for the host.
+	 * @param {object|null} called - The wrapper of the node called.
+	 * @returns {object|null} The wrapper of the module it comes from.
+	 * @private
+	 */
+	function runtime_argumentSource(value, caller, called) {
+		if (value === null || (typeof value !== "object" && typeof value !== "function")) return null;
+		const behind = typeof value === "object" ? runtime_unwrapClassInstance(value) : value;
+		const relayed = WeakMapMethods.get(HOST_HANDED, value) ?? WeakMapMethods.get(HOST_HANDED, behind);
+		if (relayed) return relayed;
+		const standIn = WeakMapMethods.get(STAND_IN_RECORDS, value);
+		if (standIn) return standIn.owner;
+		const creator = typeof value === "object" ? runtime_classInstanceCreator(value) : null;
+		if (creator) return creator;
+		const origin = WeakMapMethods.get(CROSSING_ORIGINS, value);
+		if (origin) return origin.wrapper;
+		if (called?.____slothletInternal && called.slothlet && WeakMapMethods.has(runtime_makerOf(called).made, value)) return called;
+		return caller;
+	}
+
 	if (WeakSetMethods.has(SELF_HOOK_VIEWED, handler)) return handler;
 	const viewed = function slothlet_viewedHook(payload, ...rest) {
 		if (payload === null || typeof payload !== "object") return Reflect.apply(handler, this, concatLists([payload], rest));
@@ -2252,21 +2369,6 @@ function runtime_selfReadAsDefiner(selfProxy, prop, loadingInstanceID = null, ho
 }
 
 /**
- * The `toJSON` `self` answers for an api whose root is an object and has no `toJSON` member of its own (#803): it
- * gives the data `JSON.stringify(api)` gives the host, less what the reader is refused (see
- * {@link runtime_jsonSnapshot}). A refusal of a member the reader did not name never throws here; a read of that
- * member by name still does.
- * @this {object} The `self` being written.
- * @param {string} [key] - The key JSON passes.
- * @returns {*} The data.
- * @internal
- */
-function runtime_selfToJSON(key) {
-	const data = runtime_jsonSnapshot(this, typeof key === "string" ? key : "", [], true);
-	return data === SNAPSHOT_OMIT ? undefined : data;
-}
-
-/**
  * Whether the permission system of a wrapper's instance is on.
  * @param {object|null|undefined} wrapper - A wrapper.
  * @returns {boolean} True while it is.
@@ -2311,23 +2413,6 @@ function runtime_ownInstances(wrapper, args) {
 }
 
 /**
- * The api node a module's function stands for, as a reader reaching the function through a value of the module's (a
- * prototype's `constructor`, an instance's) is handed it, so its members are read through the node's rules, as
- * `fn.prototype.constructor === fn` reads them in plain JS: the api root for the root file's function, the node fronting
- * it for any other, and `undefined` for a function no node of the instance fronts.
- * @param {object} slothlet - The instance.
- * @param {Function} fn - The function.
- * @param {object} reader - Who reads it.
- * @returns {Function|object|undefined} What the reader is handed, or `undefined`.
- * @private
- */
-function runtime_frontedFunctionView(slothlet, fn, reader) {
-	if (!slothlet || reader === HOST_READER) return undefined;
-	const node = runtime_frontingNodeNow(slothlet, fn);
-	return node === undefined || node === slothlet.boundApi ? node : runtime_selfView(node, reader);
-}
-
-/**
  * The api node standing for a module's function: the api root for the root file's function, the node fronting it for
  * any other (see {@link FUNCTION_NODES} and {@link LAYER_FRONTS}), or `undefined` when no node of the instance does.
  * @param {object} slothlet - The instance.
@@ -2340,16 +2425,6 @@ function runtime_frontingNode(slothlet, fn) {
 	const root = slothlet.api;
 	if (typeof root === "function" && slothlet.boundApi && (root === fn || layerUnderlying(root) === fn)) return slothlet.boundApi;
 	return nodeRefOf(FUNCTION_NODES, slothlet, fn) ?? nodeRefOf(LAYER_FRONTS, slothlet, fn);
-}
-
-/**
- * The api path of a node, as its segments.
- * @param {object} node - The node, or its wrapper.
- * @returns {string[]} The path's segments.
- * @private
- */
-function runtime_apiPathParts(node) {
-	return filterList(splitText(String(resolveWrapper(node)?.____slothletInternal.apiPath ?? ""), "."), Boolean);
 }
 
 /**
@@ -2377,31 +2452,6 @@ function runtime_atClassSite(slothlet, shown) {
  * @private
  */
 const PROTOTYPE_PATHS = new WeakMap();
-
-/**
- * The module a value in a hooked call's arguments comes from, as far as slothlet saw: the module whose call returned
- * it to the host, the module whose stand-in or wrapped instance it is, a module seen holding it as itself, the module
- * called when it made the value, and otherwise the module making the call. Null for a value the host built itself.
- * @param {*} value - The value, as the function called holds it.
- * @param {object|null} caller - The wrapper of the module making the call, or null for the host.
- * @param {object|null} called - The wrapper of the node called.
- * @returns {object|null} The wrapper of the module it comes from.
- * @private
- */
-function runtime_argumentSource(value, caller, called) {
-	if (value === null || (typeof value !== "object" && typeof value !== "function")) return null;
-	const behind = typeof value === "object" ? runtime_unwrapClassInstance(value) : value;
-	const relayed = WeakMapMethods.get(HOST_HANDED, value) ?? WeakMapMethods.get(HOST_HANDED, behind);
-	if (relayed) return relayed;
-	const standIn = WeakMapMethods.get(STAND_IN_RECORDS, value);
-	if (standIn) return standIn.owner;
-	const creator = typeof value === "object" ? runtime_classInstanceCreator(value) : null;
-	if (creator) return creator;
-	const origin = WeakMapMethods.get(CROSSING_ORIGINS, value);
-	if (origin) return origin.wrapper;
-	if (called?.____slothletInternal && called.slothlet && WeakMapMethods.has(runtime_makerOf(called).made, value)) return called;
-	return caller;
-}
 
 /**
  * Whether two wrappers are of the same module, told without making any record of either.
@@ -2477,29 +2527,6 @@ function runtime_functionOf(impl) {
  * @private
  */
 const HAS_INSTANCE_BY_IMPL = new WeakMap();
-
-/**
- * The `Symbol.hasInstance` a loaded callable node answers (#632): the language's own test against its function, which
- * walks the instance's prototype chain to the function's `prototype` without running any of the module's code.
- * @param {Function} fn - The node's function.
- * @returns {Function} The test.
- * @private
- */
-function runtime_hasInstanceOf(fn) {
-	let test = WeakMapMethods.get(HAS_INSTANCE_BY_IMPL, fn);
-	if (!test) {
-		// A class extending the node's view inherits from the member view a reader got of `prototype`, which counts as it
-		// (see runtime_selfHasInstance); a function with no `prototype` of its own (a bound one) answers as the language does.
-		test = (value) => {
-			const prototype = fn.prototype;
-			return prototype !== null && typeof prototype === "object"
-				? runtime_selfHasInstance(prototype, value)
-				: Reflect.apply(FUNCTION_HAS_INSTANCE, fn, [value]);
-		};
-		WeakMapMethods.set(HAS_INSTANCE_BY_IMPL, fn, test);
-	}
-	return test;
-}
 
 /**
  * The language's own `Function.prototype[Symbol.hasInstance]`, taken before any module runs.
@@ -2622,27 +2649,6 @@ const capturedViewShadows = new WeakMap();
 const FUNCTION_OWN_KEYS = setFrom(["name", "length", "prototype", "arguments", "caller"]);
 
 /**
- * An empty function named as `fn` is: what `util.inspect` shows of a function, to hold the members a reader may read.
- * @param {Function} fn - The function.
- * @returns {Function} An empty function of the same name.
- * @private
- *
- * @example
- * runtime_namedFunction(function load() {}).name; // "load"
- */
-function runtime_namedFunction(fn) {
-	const name = typeof fn.name === "string" ? fn.name : "";
-	// A class shows as a class, an async or generator function as one, and a function with no `prototype` (an arrow,
-	// a method) shows none.
-	if (RegExpMethods.exec(/^class\b/, functionSource(fn)) !== null) return { [name]: class {} }[name];
-	if (util.types.isAsyncFunction(fn) && util.types.isGeneratorFunction(fn)) return { [name]: async function* () {} }[name];
-	if (util.types.isAsyncFunction(fn)) return { [name]: async () => {} }[name];
-	if (util.types.isGeneratorFunction(fn)) return { [name]: function* () {} }[name];
-	if (!Objects.hasOwn(fn, "prototype")) return { [name]: () => {} }[name];
-	return { [name]: function () {} }[name];
-}
-
-/**
  * Build (or reuse) the view of a child wrapper that remembers who read it.
  *
  * Only `apply`, `construct`, and `get` are trapped; every other operation falls through to the child
@@ -2671,6 +2677,96 @@ function runtime_namedFunction(fn) {
  * @private
  */
 function runtime_capturedView(child, capturedCaller, gated = true, ceiling = null) {
+	/**
+	 * A call made through a node a module read while no call runs (#726): when the code making it is a module's (see
+	 * {@link runtime_hostRunDefiner}), the call is entered as that code's definer, as the `self` read that reached the node
+	 * was, so the target's `metadata.caller()` names the identity its checks used. Anywhere else the call is made as it is.
+	 * @param {object} target - The wrapper of the node called.
+	 * @param {Function} call - Makes the call.
+	 * @returns {Function} What makes the call.
+	 * @private
+	 */
+	function runtime_callAsDefiner(target, call) {
+		return () => {
+			const slothlet = target.slothlet;
+			// A caller identity already handed to the call (one resolved before an await) stands.
+			const resolved = rulesShared.handedEntry !== null && rulesShared.handedEntry.wrapper === target ? null : {};
+			const held = {};
+			const leaf = runtime_hostRunDefiner(slothlet, false, resolved, held);
+			const instanceID = leaf ? runtime_makerInstanceID(slothlet) : null;
+			// The call is made as it is, by the code whose identity was just read: the target's gate takes that identity
+			// as it starts, with nothing but slothlet's own code run in between, instead of reading the stack again.
+			if (instanceID === null) return resolved?.identity ? runtime_applyWithEntry(target, resolved, call) : call();
+			return slothlet.contextManager.runInContext(
+				instanceID,
+				call,
+				undefined,
+				[],
+				leaf,
+				true,
+				false,
+				held.ceiling ?? null,
+				null,
+				false,
+				true
+			);
+		};
+	}
+
+	/**
+	 * The prototype a closed node's captured view fixes on its shadow (#667, #725): the handle of an emitter's own prototype,
+	 * or of a class instance's, the same one every holder of the node is handed.
+	 * @param {UnifiedWrapper} wrapper - The node's wrapper.
+	 * @param {object} prototype - The prototype, as the module holds it.
+	 * @returns {object} What the view fixes.
+	 * @private
+	 */
+	function runtime_closedPrototypeHandle(wrapper, prototype) {
+		const found = runtime_instancePrototypeSite(wrapper);
+		if (found === undefined || found.prototype !== prototype) return runtime_emitterPrototypeHandle(wrapper, prototype);
+		runtime_recordPrototypePath(wrapper.slothlet, prototype, found.site);
+		return runtime_prototypeHandleOf(wrapper.slothlet, prototype);
+	}
+
+	/**
+	 * The prototype a node holds, read by slothlet itself without the reader's check (#632): a view mirroring a closed
+	 * node onto its shadow has to hold what the node holds. Only the node's own trap runs for the read, so no module code
+	 * can run while it is unchecked.
+	 * @param {object} node - A node's proxy.
+	 * @returns {object|null} Its prototype.
+	 * @private
+	 */
+	function runtime_heldPrototypeOf(node) {
+		const previous = nodesShared.heldPrototypeRead;
+		nodesShared.heldPrototypeRead = resolveWrapper(node);
+		try {
+			return Reflect.getPrototypeOf(node);
+		} finally {
+			nodesShared.heldPrototypeRead = previous;
+		}
+	}
+
+	/**
+	 * An empty function named as `fn` is: what `util.inspect` shows of a function, to hold the members a reader may read.
+	 * @param {Function} fn - The function.
+	 * @returns {Function} An empty function of the same name.
+	 * @private
+	 *
+	 * @example
+	 * runtime_namedFunction(function load() {}).name; // "load"
+	 */
+	function runtime_namedFunction(fn) {
+		const name = typeof fn.name === "string" ? fn.name : "";
+		// A class shows as a class, an async or generator function as one, and a function with no `prototype` (an arrow,
+		// a method) shows none.
+		if (RegExpMethods.exec(/^class\b/, functionSource(fn)) !== null) return { [name]: class {} }[name];
+		if (util.types.isAsyncFunction(fn) && util.types.isGeneratorFunction(fn)) return { [name]: async function* () {} }[name];
+		if (util.types.isAsyncFunction(fn)) return { [name]: async () => {} }[name];
+		if (util.types.isGeneratorFunction(fn)) return { [name]: function* () {} }[name];
+		if (!Objects.hasOwn(fn, "prototype")) return { [name]: () => {} }[name];
+		return { [name]: function () {} }[name];
+	}
+
 	// One ceiling per set of calls, without the reader's own: the cache key below.
 	ceiling = Reflect.apply(combineCeilings, undefined, identityCeilings({ currentWrapper: capturedCaller, ceiling }));
 	const views = gated === "held" ? heldViews : gated ? capturedViews : guardViews;
@@ -3191,7 +3287,6 @@ export function ViewsLayer(Base) {
 				Base.define("views", {
 					hasOwn,
 					SELF_VIEW_NODES,
-					runtime_takeInvariantRead,
 					SELF_VIEW_READERS,
 					SELF_INSTANCE_NODES,
 					HOST_READER,
@@ -3224,7 +3319,6 @@ export function ViewsLayer(Base) {
 					RUNTIME_SELVES,
 					RUNTIME_CALLABLE_SELVES,
 					runtime_selfReadAsDefiner,
-					runtime_selfToJSON,
 					runtime_permissionsOn,
 					runtime_callingModule,
 					runtime_ownInstances,
@@ -3236,7 +3330,6 @@ export function ViewsLayer(Base) {
 					runtime_emitterOwnPrototype,
 					runtime_readsEngineProto,
 					runtime_functionOf,
-					runtime_hasInstanceOf,
 					runtime_hasOwnSymbolMember,
 					SERIALIZERS,
 					GUARD_VIEWS,
@@ -3245,7 +3338,11 @@ export function ViewsLayer(Base) {
 					capturedViewShadows,
 					runtime_capturedView,
 					runtime_capturedReader,
-					runtime_sameValue
+					runtime_sameValue,
+					PENDING_INVARIANT_READ,
+					HAS_INSTANCE_BY_IMPL,
+					runtime_selfHasInstance,
+					FUNCTION_HAS_INSTANCE
 				});
 				Base.linkLayer(this, (methods, registered) => {
 					realClass = registered;
@@ -3254,28 +3351,21 @@ export function ViewsLayer(Base) {
 					runtime_dataKind = methods.values.runtime_dataKind;
 					runtime_hasInternalSlots = methods.values.runtime_hasInternalSlots;
 					runtime_holdsDataKind = methods.values.runtime_holdsDataKind;
-					runtime_holdsMember = methods.values.runtime_holdsMember;
 					runtime_inherits = methods.values.runtime_inherits;
 					runtime_isArrayMember = methods.values.runtime_isArrayMember;
 					runtime_isConstructor = methods.values.runtime_isConstructor;
-					runtime_isDataReader = methods.values.runtime_isDataReader;
 					runtime_isEngineMember = methods.values.runtime_isEngineMember;
-					runtime_isPlainMember = methods.values.runtime_isPlainMember;
 					runtime_isPrototypeHandle = methods.values.runtime_isPrototypeHandle;
 					runtime_isSharedValue = methods.values.runtime_isSharedValue;
 					runtime_isTerminalData = methods.values.runtime_isTerminalData;
 					runtime_isUnchangingDefinition = methods.values.runtime_isUnchangingDefinition;
-					runtime_jsonSnapshot = methods.values.runtime_jsonSnapshot;
 					runtime_ownsPrototype = methods.values.runtime_ownsPrototype;
-					SNAPSHOT_OMIT = methods.values.SNAPSHOT_OMIT;
 					capturedViewNodes = methods.nodes.capturedViewNodes;
 					FUNCTION_NODES = methods.nodes.FUNCTION_NODES;
 					LAYER_FRONTS = methods.nodes.LAYER_FRONTS;
 					nodeRefOf = methods.nodes.nodeRefOf;
 					runtime_classSiteOf = methods.nodes.runtime_classSiteOf;
-					runtime_closedPrototypeHandle = methods.nodes.runtime_closedPrototypeHandle;
 					runtime_emitterPrototypeHandle = methods.nodes.runtime_emitterPrototypeHandle;
-					runtime_heldPrototypeOf = methods.nodes.runtime_heldPrototypeOf;
 					runtime_instanceClassFront = methods.nodes.runtime_instanceClassFront;
 					runtime_instancePrototypeSite = methods.nodes.runtime_instancePrototypeSite;
 					runtime_makerInstanceID = methods.nodes.runtime_makerInstanceID;
@@ -3298,7 +3388,6 @@ export function ViewsLayer(Base) {
 					runtime_applyWithEntry = methods.rules.runtime_applyWithEntry;
 					runtime_assertReaderWrite = methods.rules.runtime_assertReaderWrite;
 					runtime_beginAccess = methods.rules.runtime_beginAccess;
-					runtime_callAsDefiner = methods.rules.runtime_callAsDefiner;
 					runtime_describeAsHeld = methods.rules.runtime_describeAsHeld;
 					runtime_describeWithAccess = methods.rules.runtime_describeWithAccess;
 					runtime_endAccess = methods.rules.runtime_endAccess;
@@ -3334,6 +3423,16 @@ export function ViewsLayer(Base) {
 					trustedRootOwn = methods.uw.trustedRootOwn;
 					versionDispatcherRecord = methods.uw.versionDispatcherRecord;
 					registerProxy = methods.values.registerProxy;
+					nodesShared = methods.nodes.nodesShared;
+					runtime_recordPrototypePath = methods.nodes.runtime_recordPrototypePath;
+					rulesShared = methods.rules.rulesShared;
+					runtime_hostRunDefiner = methods.rules.runtime_hostRunDefiner;
+					runtime_isIntrinsic = methods.values.runtime_isIntrinsic;
+					FRAMEWORK_VIEW_TARGETS = methods.rules.FRAMEWORK_VIEW_TARGETS;
+					COMMON_READERS = methods.values.COMMON_READERS;
+					TYPED_ARRAY_READERS = methods.values.TYPED_ARRAY_READERS;
+					DATA_READERS = methods.values.DATA_READERS;
+					MEMBER_HOLDERS = methods.values.MEMBER_HOLDERS;
 				});
 			}
 

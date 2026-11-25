@@ -112,23 +112,6 @@ let trustedRootOwn,
 let realClass;
 
 /**
- * Load the node a stand-in stands for (see {@link isLazyStandIn}), without reading the member it stands for: a run's view
- * over a stand-in reads that member through its own views once the node has loaded, so a getter on the path runs once
- * (see `makeRunSelf` in `handlers/unified-wrapper/run`). A change queued through a stand-in that the node refused fails it, as
- * awaiting the stand-in does.
- * @param {object} standIn - The stand-in.
- * @returns {Promise<void>} Settles once the node has loaded.
- * @internal
- */
-async function runtime_loadStandIn(standIn) {
-	const wrapper = resolveWrapper(standIn);
-	if (wrapper === null) return;
-	if (!wrapper.____slothletInternal.state.materialized) await wrapper.___materialize();
-	const refused = runtime_takeRefusedChange(wrapper, WeakMapMethods.get(WAITING_CHAINS, standIn) ?? []);
-	if (refused) throw refused;
-}
-
-/**
  * The changes queued through stand-ins that their loaded node refused, per instance (#653): each fails the next await
  * or call made through a stand-in at or below the node it was made on, once, while that node is the one the change was
  * made on. `holders` are the nodes the change was queued on, from the first to the one that refused it, each with its
@@ -172,6 +155,76 @@ function runtime_standInPath(wrapper, chain) {
  * @private
  */
 function runtime_applyStandInChange(wrapper, change, replayed, holders = null) {
+	/**
+	 * Close a node the way a stand-in for it was closed (#653): frozen when the stand-in's target reads as frozen, sealed
+	 * when it reads as sealed, and closed to extension otherwise. The target's own members are fixed so that only a
+	 * freeze reads as one (see ___createWaitingProxy). The node closes through its own traps, as a node closed directly.
+	 * @param {object} node - The node.
+	 * @param {Function} target - The stand-in's target, closed.
+	 * @returns {void}
+	 * @throws {TypeError} When the node refuses to close.
+	 * @private
+	 */
+	function runtime_lockAsStandIn(node, target) {
+		if (Objects.isFrozen(target)) Objects.freeze(node);
+		else if (Objects.isSealed(target)) Objects.seal(node);
+		else Objects.preventExtensions(node);
+	}
+
+	/**
+	 * Make a change through a stand-in on the node it stands for (see {@link runtime_applyStandInChange}).
+	 * @param {object} wrapper - The wrapper the stand-in waits for, loaded.
+	 * @param {{chain: Array<string|symbol>, op: string, prop: string|symbol|null, payload: *}} change - The change.
+	 * @param {boolean} replayed - Whether the change is replayed after the node loaded.
+	 * @param {Array<{owner: object, generation: number}>|null} holders - The nodes a replayed change was queued on.
+	 * @returns {boolean} Whether the node took the change.
+	 * @throws {TypeError} When the chain does not reach an object (as in eager mode), or a replayed change is refused.
+	 * @private
+	 */
+	function runtime_makeStandInChange(wrapper, change, replayed, holders) {
+		let node = wrapper.createProxy();
+		for (let ofIndex = 0, ofList = change.chain; ofIndex < ofList.length; ofIndex++) {
+			const key = ofList[ofIndex];
+			node = node[key];
+		}
+		// The node itself, as a module's change through `self` reaches it, rather than the view the walk hands the module
+		// reading: the node's own traps judge the change as the module making it (#625).
+		node = runtime_nodeBehind(node);
+		const { op, prop, payload } = change;
+		// A node further down that has not loaded either takes the change once it has: made on it now, the module's own
+		// members it adopts as it loads would replace what was written (#653).
+		const standIn = WeakSetMethods.has(STAND_INS, node);
+		const nodeWrapper = standIn ? null : resolveWrapper(node);
+		if (nodeWrapper && nodeWrapper.____slothletInternal.mode === "lazy" && !nodeWrapper.____slothletInternal.state.materialized) {
+			replayHolders = holders;
+			try {
+				runtime_queueStandInChange(nodeWrapper, { chain: [], op, prop, payload });
+			} finally {
+				replayHolders = null;
+			}
+			if (!nodeWrapper.____slothletInternal.state.inFlight) PromiseMethods.catch(nodeWrapper.___materialize(), () => {});
+			return true;
+		}
+		// Handed to a stand-in, the change is queued, or made at once through runtime_applyStandInChange if its node loaded
+		// since: either keeps the holders. Made on the node, it runs the node's code, which hands nothing on.
+		if (standIn) replayHolders = holders;
+		if (op === "lock") {
+			runtime_lockAsStandIn(node, payload);
+			return true;
+		}
+		if (replayed) {
+			if (op === "set") node[prop] = payload;
+			else if (op === "defineProperty") Objects.defineProperty(node, prop, payload);
+			else if (op === "deleteProperty") delete node[prop];
+			else Objects.setPrototypeOf(node, payload);
+			return true;
+		}
+		if (op === "set") return Reflect.set(node, prop, payload);
+		if (op === "defineProperty") return Reflect.defineProperty(node, prop, payload);
+		if (op === "deleteProperty") return Reflect.deleteProperty(node, prop);
+		return Reflect.setPrototypeOf(node, payload);
+	}
+
 	// No code the walk or the change runs (a getter, a setter, a trap of the module's) hands a change on as this one.
 	const outer = replayHolders;
 	replayHolders = null;
@@ -180,76 +233,6 @@ function runtime_applyStandInChange(wrapper, change, replayed, holders = null) {
 	} finally {
 		replayHolders = outer;
 	}
-}
-
-/**
- * Make a change through a stand-in on the node it stands for (see {@link runtime_applyStandInChange}).
- * @param {object} wrapper - The wrapper the stand-in waits for, loaded.
- * @param {{chain: Array<string|symbol>, op: string, prop: string|symbol|null, payload: *}} change - The change.
- * @param {boolean} replayed - Whether the change is replayed after the node loaded.
- * @param {Array<{owner: object, generation: number}>|null} holders - The nodes a replayed change was queued on.
- * @returns {boolean} Whether the node took the change.
- * @throws {TypeError} When the chain does not reach an object (as in eager mode), or a replayed change is refused.
- * @private
- */
-function runtime_makeStandInChange(wrapper, change, replayed, holders) {
-	let node = wrapper.createProxy();
-	for (let ofIndex = 0, ofList = change.chain; ofIndex < ofList.length; ofIndex++) {
-		const key = ofList[ofIndex];
-		node = node[key];
-	}
-	// The node itself, as a module's change through `self` reaches it, rather than the view the walk hands the module
-	// reading: the node's own traps judge the change as the module making it (#625).
-	node = runtime_nodeBehind(node);
-	const { op, prop, payload } = change;
-	// A node further down that has not loaded either takes the change once it has: made on it now, the module's own
-	// members it adopts as it loads would replace what was written (#653).
-	const standIn = WeakSetMethods.has(STAND_INS, node);
-	const nodeWrapper = standIn ? null : resolveWrapper(node);
-	if (nodeWrapper && nodeWrapper.____slothletInternal.mode === "lazy" && !nodeWrapper.____slothletInternal.state.materialized) {
-		replayHolders = holders;
-		try {
-			runtime_queueStandInChange(nodeWrapper, { chain: [], op, prop, payload });
-		} finally {
-			replayHolders = null;
-		}
-		if (!nodeWrapper.____slothletInternal.state.inFlight) PromiseMethods.catch(nodeWrapper.___materialize(), () => {});
-		return true;
-	}
-	// Handed to a stand-in, the change is queued, or made at once through runtime_applyStandInChange if its node loaded
-	// since: either keeps the holders. Made on the node, it runs the node's code, which hands nothing on.
-	if (standIn) replayHolders = holders;
-	if (op === "lock") {
-		runtime_lockAsStandIn(node, payload);
-		return true;
-	}
-	if (replayed) {
-		if (op === "set") node[prop] = payload;
-		else if (op === "defineProperty") Objects.defineProperty(node, prop, payload);
-		else if (op === "deleteProperty") delete node[prop];
-		else Objects.setPrototypeOf(node, payload);
-		return true;
-	}
-	if (op === "set") return Reflect.set(node, prop, payload);
-	if (op === "defineProperty") return Reflect.defineProperty(node, prop, payload);
-	if (op === "deleteProperty") return Reflect.deleteProperty(node, prop);
-	return Reflect.setPrototypeOf(node, payload);
-}
-
-/**
- * Close a node the way a stand-in for it was closed (#653): frozen when the stand-in's target reads as frozen, sealed
- * when it reads as sealed, and closed to extension otherwise. The target's own members are fixed so that only a
- * freeze reads as one (see ___createWaitingProxy). The node closes through its own traps, as a node closed directly.
- * @param {object} node - The node.
- * @param {Function} target - The stand-in's target, closed.
- * @returns {void}
- * @throws {TypeError} When the node refuses to close.
- * @private
- */
-function runtime_lockAsStandIn(node, target) {
-	if (Objects.isFrozen(target)) Objects.freeze(node);
-	else if (Objects.isSealed(target)) Objects.seal(node);
-	else Objects.preventExtensions(node);
 }
 
 /**
@@ -334,22 +317,6 @@ function runtime_makeQueuedChange(wrapper, change, generation) {
 }
 
 /**
- * Take the refusal of a queued change made on a node at or above `path`, still current (#653).
- * @param {object} slothlet - The instance.
- * @param {string} path - The api path an await or call goes through.
- * @returns {Error|null} The `LAZY_WRITE_REFUSED` error, or null.
- * @private
- */
-function runtime_takeRefusalAt(slothlet, path) {
-	const refused = WeakMapMethods.get(REFUSED_CHANGES, slothlet);
-	if (!refused?.length) return null;
-	// A refusal made on a node since replaced (reloaded or removed) is not this node's.
-	runtime_pruneRefusedChanges(refused);
-	const index = ArrayMethods.findIndex(refused, (entry) => path === entry.path || StringMethods.startsWith(path, `${entry.path}.`));
-	return index === -1 ? null : listSplice(refused, index, 1)[0].error;
-}
-
-/**
  * Keep only the refusals whose nodes are all still the nodes the change was queued on (#653).
  * @param {Array<{path: string, error: Error, holders: Array<{owner: object, generation: number}>}>} refused - The
  *   instance's refusals, pruned in place.
@@ -402,25 +369,6 @@ function runtime_queueStandInChange(wrapper, change) {
 }
 
 /**
- * Make the changes queued through stand-ins for a wrapper that has just loaded, in the order they were made, each as
- * the code that made it (#653). One the node refuses is kept for the next await or call through that node (see
- * {@link runtime_takeRefusedChange}); the rest still land.
- * @param {object} wrapper - The wrapper, loaded.
- * @param {number} generation - Its change generation when the load started.
- * @returns {void}
- * @private
- */
-function runtime_replayStandInChanges(wrapper, generation) {
-	const pending = wrapper.____slothletInternal.pendingChanges;
-	if (!pending) return;
-	wrapper.____slothletInternal.pendingChanges = null;
-	WeakMapMethods.get(PENDING_CHANGES, wrapper.slothlet) == null
-		? undefined
-		: SetMethods.delete(WeakMapMethods.get(PENDING_CHANGES, wrapper.slothlet), wrapper);
-	for (let i = 0; i < pending.length; i++) runtime_makeQueuedChange(wrapper, pending[i], generation);
-}
-
-/**
  * Retire the refusals of a node a reload rebuilt away, and of the loaded nodes below it (#653): the node built in
  * its place is another, so a refusal a load of the old one records later is not its own.
  * @param {object} wrapper - The replaced node's wrapper.
@@ -448,6 +396,22 @@ function runtime_retireChanges(wrapper, seen = new Set()) {
  * @private
  */
 function runtime_takeRefusedChange(wrapper, chain) {
+	/**
+	 * Take the refusal of a queued change made on a node at or above `path`, still current (#653).
+	 * @param {object} slothlet - The instance.
+	 * @param {string} path - The api path an await or call goes through.
+	 * @returns {Error|null} The `LAZY_WRITE_REFUSED` error, or null.
+	 * @private
+	 */
+	function runtime_takeRefusalAt(slothlet, path) {
+		const refused = WeakMapMethods.get(REFUSED_CHANGES, slothlet);
+		if (!refused?.length) return null;
+		// A refusal made on a node since replaced (reloaded or removed) is not this node's.
+		runtime_pruneRefusedChanges(refused);
+		const index = ArrayMethods.findIndex(refused, (entry) => path === entry.path || StringMethods.startsWith(path, `${entry.path}.`));
+		return index === -1 ? null : listSplice(refused, index, 1)[0].error;
+	}
+
 	return runtime_takeRefusalAt(wrapper.slothlet, runtime_standInPath(wrapper, chain));
 }
 
@@ -606,12 +570,10 @@ export function WaitingLayer(Base) {
 		class Waiting extends Base {
 			static {
 				Base.define("waiting", {
-					runtime_loadStandIn,
 					REFUSED_CHANGES,
 					PENDING_CHANGES,
 					runtime_standInPath,
 					runtime_dropRefusedChanges,
-					runtime_replayStandInChanges,
 					runtime_retireChanges,
 					runtime_checkedStandIn,
 					RESTART_FORWARD_TRAPS,

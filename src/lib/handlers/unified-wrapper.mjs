@@ -70,7 +70,9 @@ import {
 	TypeError,
 	WeakMap,
 	WeakMapMethods,
-	WeakSetMethods
+	WeakSetMethods,
+	generatorSteps,
+	Number
 } from "#helpers/intrinsics";
 import { isRawRunView, setKindCheck, setProxyCheck } from "#helpers/run-snapshot";
 import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "#helpers/instance-imports";
@@ -167,41 +169,6 @@ const SNAPSHOT_KINDS = Objects.freeze({
  */
 export function isLazyStandIn(value) {
 	return WeakSetMethods.has(STAND_INS, value);
-}
-
-/**
- * Make the changes queued through stand-ins of an instance by loading the nodes that hold them (#653), as a module
- * reload is about to rebuild those nodes: in eager mode the changes were already made, and the reload keeps them as it
- * keeps any change made on a node. A node that fails to load drops its changes, as its load does.
- * @param {object} slothlet - The instance.
- * @param {string|null} [scope=null] - The api path reloaded; only changes made at or below it are made. Null, or `"."`,
- *   for the whole instance.
- * @returns {Promise<void>}
- * @internal
- * @example
- * await settleStandInChanges(slothlet);
- */
-async function settleStandInChanges(slothlet, scope = null) {
-	const pending = WeakMapMethods.get(PENDING_CHANGES, slothlet);
-	if (!pending) return;
-	const whole = !scope || scope === ".";
-	const within = (path) => path === scope || StringMethods.startsWith(path, `${scope}.`);
-	// A holder qualifies when one of its changes is made at or below the reloaded path; loading it makes them all.
-	const qualifies = (holder) =>
-		whole ||
-		ArrayMethods.some(holder.____slothletInternal.pendingChanges ?? [], (change) => within(runtime_standInPath(holder, change.chain)));
-	const tried = new Set();
-	// Each pass loads the nodes holding changes; a change a pass makes on a node further down that has not loaded is
-	// queued there and made by the next. Each holder is loaded once.
-	for (;;) {
-		const holders = filterList(setToArray(pending), (holder) => !SetMethods.has(tried, holder) && qualifies(holder));
-		if (holders.length === 0) return;
-		for (let ofIndex = 0, ofList = holders; ofIndex < ofList.length; ofIndex++) {
-			const holder = ofList[ofIndex];
-			SetMethods.add(tried, holder);
-		}
-		await promiseAll(mapList(holders, (holder) => PromiseMethods.catch(holder.___materialize(), () => {})));
-	}
 }
 
 /**
@@ -482,22 +449,6 @@ export const TYPE_STATES = {
 };
 
 /**
- * Build a safe function name for debugging and inspection output.
- * @param {string} apiPath - API path to derive a name from.
- * @param {string} fallback - Fallback name when a safe name cannot be derived.
- * @returns {string} Safe function name.
- */
-function getSafeFunctionName(apiPath, fallback) {
-	const parts = filterList(splitText(String(apiPath || ""), "."), (part) => part && part !== "null");
-	const baseName = parts.length > 0 ? parts[parts.length - 1] : "";
-	let safeName = regExpReplace(/[^A-Za-z0-9_$]/g, String(baseName || ""), "_");
-	if (!safeName || !(RegExpMethods.exec(/^[A-Za-z_$]/, safeName[0]) !== null)) {
-		safeName = safeName ? `_${safeName}` : "";
-	}
-	return safeName || fallback;
-}
-
-/**
  * Create a named proxy target function for clearer debug output.
  *
  * @description
@@ -510,6 +461,22 @@ function getSafeFunctionName(apiPath, fallback) {
  * @returns {Function} Named proxy target function.
  */
 function createNamedProxyTarget(nameHint, fallback) {
+	/**
+	 * Build a safe function name for debugging and inspection output.
+	 * @param {string} apiPath - API path to derive a name from.
+	 * @param {string} fallback - Fallback name when a safe name cannot be derived.
+	 * @returns {string} Safe function name.
+	 */
+	function getSafeFunctionName(apiPath, fallback) {
+		const parts = filterList(splitText(String(apiPath || ""), "."), (part) => part && part !== "null");
+		const baseName = parts.length > 0 ? parts[parts.length - 1] : "";
+		let safeName = regExpReplace(/[^A-Za-z0-9_$]/g, String(baseName || ""), "_");
+		if (!safeName || !(RegExpMethods.exec(/^[A-Za-z_$]/, safeName[0]) !== null)) {
+			safeName = safeName ? `_${safeName}` : "";
+		}
+		return safeName || fallback;
+	}
+
 	const safeName = getSafeFunctionName(nameHint, fallback);
 	return Objects.defineProperty(
 		FunctionMethods.bind(function () {}),
@@ -705,9 +672,12 @@ let runtime_isPrototypeHandle,
 	capturedViewTargets,
 	capturedViewSet,
 	runtime_nodeHarborsCode,
-	runtime_followPosition,
 	registeredWrapper,
-	isRegisteredProxy;
+	isRegisteredProxy,
+	runtime_prototypeChain,
+	runtime_isPosition,
+	runtime_elementAt,
+	runtime_elementDescriptor;
 
 /**
  * Forwards to the Nodes layer's `runtime_nodeReport`: this file hands it out (see {@link internals}) before the chain may exist.
@@ -968,7 +938,6 @@ class UnifiedWrapper extends TrapsLayer(
 			runtime_isCodeObject = methods.values.runtime_isCodeObject;
 			runtime_isPrototypeHandle = methods.values.runtime_isPrototypeHandle;
 			MAKERS = methods.nodes.MAKERS;
-			runtime_followPosition = methods.nodes.runtime_followPosition;
 			runtime_moduleObjectFor = methods.nodes.runtime_moduleObjectFor;
 			runtime_nodeAtPath = methods.nodes.runtime_nodeAtPath;
 			runtime_nodeHarborsCode = methods.nodes.runtime_nodeHarborsCode;
@@ -994,6 +963,10 @@ class UnifiedWrapper extends TrapsLayer(
 			runtime_adoptedImpl = methods.materialize.runtime_adoptedImpl;
 			registeredWrapper = methods.values.registeredWrapper;
 			isRegisteredProxy = methods.values.isRegisteredProxy;
+			runtime_prototypeChain = methods.nodes.runtime_prototypeChain;
+			runtime_isPosition = methods.values.runtime_isPosition;
+			runtime_elementAt = methods.nodes.runtime_elementAt;
+			runtime_elementDescriptor = methods.nodes.runtime_elementDescriptor;
 		});
 		WrapperBase.register(this, WRAPPER_TOKEN);
 	}
@@ -1111,6 +1084,87 @@ class UnifiedWrapper extends TrapsLayer(
 			nullishDefault = null
 		}
 	) {
+		/**
+		 * Make a child wrapper's api path follow its position (#603 review). For an array element, the path
+		 * names the index the element sits at now: its recorded index while the element is still there, the
+		 * first index holding it after an array method moved it, and the array's own path once it has left the
+		 * array. A wrapper below an element extends its parent's current path. Permission checks, hooks and
+		 * `slothlet.node` all read this path, so a rule for `arr.0` applies to whatever sits at `arr[0]`,
+		 * including through a reference taken before the element moved there.
+		 *
+		 * @param {object} internal - The child wrapper's internal state.
+		 * @param {UnifiedWrapper} parent - The wrapper it was created under.
+		 * @param {PropertyKey} key - The child's key under `parent`.
+		 * @param {boolean} byIndex - True when `parent` is an array and `key` an index.
+		 * @returns {void}
+		 * @private
+		 *
+		 * @example
+		 * runtime_followPosition(internal, arrayWrapper, "1", true);
+		 */
+		function runtime_followPosition(internal, parent, key, byIndex) {
+			/**
+			 * The first index whose plain value is `value`, found from the array's own descriptors: neither an
+			 * `indexOf` the array holds nor an element's getter runs.
+			 * @param {Array} array - The array.
+			 * @param {unknown} value - The element.
+			 * @returns {string|null} The index, or `null` when no index holds it.
+			 * @private
+			 *
+			 * @example
+			 * runtime_indexOfElement(["a", "b"], "b"); // "1"
+			 */
+			function runtime_indexOfElement(array, value) {
+				// The positions the array holds and those its prototypes supply, lowest first; each is read as the array
+				// reads it, so a position an earlier object shadows answers with the shadowing value.
+				const keys = new Set();
+				for (const holder of generatorSteps(runtime_prototypeChain(array))) {
+					for (let ofIndex = 0, ofList = Reflect.ownKeys(holder); ofIndex < ofList.length; ofIndex++) {
+						const key = ofList[ofIndex];
+						if (runtime_isPosition(key)) SetMethods.add(keys, key);
+					}
+				}
+				for (
+					let ofIndex = 0, ofList = ArrayMethods.sort(setToArray(keys), (a, b) => Number(a) - Number(b));
+					ofIndex < ofList.length;
+					ofIndex++
+				) {
+					const key = ofList[ofIndex];
+					if (runtime_elementAt(array, key) === value) return key;
+				}
+				return null;
+			}
+
+			internal.followsPosition = true;
+			let index = key;
+			// An element the array holds no descriptor for at its index (a proxy's get trap supplied it) keeps the index it was
+			// read at once nothing else holds it. Recorded now, from what the array holds, not rediscovered by proxy detection.
+			const parentArray = parent.____slothletInternal.impl;
+			const isVirtual = byIndex && Arrays.isArray(parentArray) && runtime_elementAt(parentArray, key) !== internal.sourceValue;
+			Objects.defineProperty(internal, "apiPath", {
+				__proto__: null,
+				configurable: true,
+				enumerable: true,
+				get() {
+					const base = parent.____slothletInternal.apiPath;
+					if (!byIndex) return `${base}.${typeof key === "symbol" ? String(key) : key}`;
+					const array = parent.____slothletInternal.impl;
+					// The array is read through its own descriptors, so resolving a path never runs the array's code:
+					// not an `indexOf` it holds, nor an element's getter (#603 review). An element held through a getter
+					// keeps the index it was read at.
+					if (Arrays.isArray(array) && runtime_elementAt(array, index) !== internal.sourceValue) {
+						const current = runtime_elementDescriptor(array, index);
+						if (current && !("value" in current)) return `${base}.${index}`;
+						const found = runtime_indexOfElement(array, internal.sourceValue);
+						// Resolving a path runs none of the array's code: an element it supplied from a trap keeps its index.
+						if (found === null) return isVirtual ? `${base}.${index}` : base;
+						index = found;
+					}
+					return `${base}.${index}`;
+				}
+			});
+		}
+
 		super(slothlet);
 
 		// Centralized internal state container - all wrapper metadata lives here.
@@ -1609,6 +1663,60 @@ export async function isCallableValue(value) {
  * @internal
  */
 export function internals(consumer) {
+	/**
+	 * Whether a file may take this file's bindings: it is one of those listed, and has not taken them yet. Reads no import
+	 * and no built-in a module can replace, so it answers the same before this file's imports are ready and after.
+	 * @param {string} consumer - The file asking.
+	 * @param {string[]} consumers - The files that take them.
+	 * @returns {boolean} True, once, for each file listed.
+	 * @private
+	 */
+	function mayTakeInternals(consumer, consumers) {
+		if (internalsTaken === undefined) internalsTaken = { __proto__: null };
+		let listed = false;
+		for (let i = 0; i < consumers.length; i++) if (consumers[i] === consumer) listed = true;
+		if (!listed || typeof consumer !== "string") return false;
+		// Taken already: only a second evaluation of that very file, at its own top level, takes them again.
+		if (internalsTaken[consumer] === true) return isOwnTopLevelOf(consumer);
+		internalsTaken[consumer] = true;
+		return true;
+	}
+
+	/**
+	 * Make the changes queued through stand-ins of an instance by loading the nodes that hold them (#653), as a module
+	 * reload is about to rebuild those nodes: in eager mode the changes were already made, and the reload keeps them as it
+	 * keeps any change made on a node. A node that fails to load drops its changes, as its load does.
+	 * @param {object} slothlet - The instance.
+	 * @param {string|null} [scope=null] - The api path reloaded; only changes made at or below it are made. Null, or `"."`,
+	 *   for the whole instance.
+	 * @returns {Promise<void>}
+	 * @internal
+	 * @example
+	 * await settleStandInChanges(slothlet);
+	 */
+	async function settleStandInChanges(slothlet, scope = null) {
+		const pending = WeakMapMethods.get(PENDING_CHANGES, slothlet);
+		if (!pending) return;
+		const whole = !scope || scope === ".";
+		const within = (path) => path === scope || StringMethods.startsWith(path, `${scope}.`);
+		// A holder qualifies when one of its changes is made at or below the reloaded path; loading it makes them all.
+		const qualifies = (holder) =>
+			whole ||
+			ArrayMethods.some(holder.____slothletInternal.pendingChanges ?? [], (change) => within(runtime_standInPath(holder, change.chain)));
+		const tried = new Set();
+		// Each pass loads the nodes holding changes; a change a pass makes on a node further down that has not loaded is
+		// queued there and made by the next. Each holder is loaded once.
+		for (;;) {
+			const holders = filterList(setToArray(pending), (holder) => !SetMethods.has(tried, holder) && qualifies(holder));
+			if (holders.length === 0) return;
+			for (let ofIndex = 0, ofList = holders; ofIndex < ofList.length; ofIndex++) {
+				const holder = ofList[ofIndex];
+				SetMethods.add(tried, holder);
+			}
+			await promiseAll(mapList(holders, (holder) => PromiseMethods.catch(holder.___materialize(), () => {})));
+		}
+	}
+
 	if (
 		!mayTakeInternals(consumer, [
 			"lib/builders/api-assignment",
@@ -1750,25 +1858,6 @@ export function internals(consumer) {
  * @private
  */
 var internalsTaken;
-
-/**
- * Whether a file may take this file's bindings: it is one of those listed, and has not taken them yet. Reads no import
- * and no built-in a module can replace, so it answers the same before this file's imports are ready and after.
- * @param {string} consumer - The file asking.
- * @param {string[]} consumers - The files that take them.
- * @returns {boolean} True, once, for each file listed.
- * @private
- */
-function mayTakeInternals(consumer, consumers) {
-	if (internalsTaken === undefined) internalsTaken = { __proto__: null };
-	let listed = false;
-	for (let i = 0; i < consumers.length; i++) if (consumers[i] === consumer) listed = true;
-	if (!listed || typeof consumer !== "string") return false;
-	// Taken already: only a second evaluation of that very file, at its own top level, takes them again.
-	if (internalsTaken[consumer] === true) return isOwnTopLevelOf(consumer);
-	internalsTaken[consumer] = true;
-	return true;
-}
 
 // The exports below answer slothlet's own files and the host only (see `guardInternal` in `helpers/instance-imports`).
 /** @type {typeof refusedChangeCount} */

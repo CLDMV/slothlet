@@ -69,7 +69,6 @@ import {
 	NativeObject,
 	NativeProxy,
 	Number,
-	ObjectMethods,
 	Objects,
 	Processes,
 	Promise,
@@ -124,16 +123,12 @@ import { codeLabel, isLanguageNameDescriptor } from "#helpers/builtin-forms";
  * Upward (from layers above this one): hasOwn, SELF_VIEW_NODES, INSPECT_CUSTOM, PROTOTYPE_HANDLE_READER, SELF_MEMBER_VIEWS, NODE_MEMBER, FRAMEWORK_MEMBERS, FRAMEWORK_VIEW_TARGETS, CALLER_LOCKED, runtime_nodeWrapperOf, runtime_startPrototypes, runtime_sameLookup, resolveEnforcedCaller, runtime_readGateDecision, runtime_enforceCodeMember, runtime_recordedPrototype, runtime_moduleObjectOf, runtime_originalAccessor, STAND_IN_RECORDS, INBOUND_VIEWS, runtime_memberHoldsCode, searchDepth, searchBudget, runtime_nodeAtPath, runtime_readerHoldsPrototype, runtime_knownPrototype, runtime_prototypeHandleOf, CROSSINGS, CROSSING_ORIGINS, runtime_moduleKey, runtime_asOneModule, runtime_crossSubject, runtime_functionOf, runtime_hasOwnMember, runtime_prototypeChain, ANY_MEMBER_SEGMENT, runtime_readsNothingBeneath, runtime_memberPathOf, capturedViewChildren, WAITING_CHAINS, runtime_rootInspectShown.
  */
 let trustedRootOwn,
-	leafOfCopy,
-	versionDispatcherRecord,
 	hasOwn,
 	SELF_VIEW_NODES,
 	INSPECT_CUSTOM,
 	PROTOTYPE_HANDLE_READER,
 	SELF_MEMBER_VIEWS,
 	NODE_MEMBER,
-	FRAMEWORK_MEMBERS,
-	FRAMEWORK_VIEW_TARGETS,
 	runtime_nodeWrapperOf,
 	runtime_startPrototypes,
 	runtime_sameLookup,
@@ -142,21 +137,17 @@ let trustedRootOwn,
 	runtime_enforceCodeMember,
 	runtime_recordedPrototype,
 	runtime_moduleObjectOf,
-	runtime_originalAccessor,
 	STAND_IN_RECORDS,
 	INBOUND_VIEWS,
 	runtime_memberHoldsCode,
 	searchDepth,
 	searchBudget,
 	runtime_nodeAtPath,
-	runtime_readerHoldsPrototype,
-	runtime_knownPrototype,
 	runtime_prototypeHandleOf,
 	CROSSINGS,
 	CROSSING_ORIGINS,
 	runtime_moduleKey,
 	runtime_asOneModule,
-	runtime_crossSubject,
 	runtime_functionOf,
 	runtime_hasOwnMember,
 	runtime_prototypeChain,
@@ -166,8 +157,6 @@ let trustedRootOwn,
 	capturedViewChildren,
 	TYPE_STATES,
 	WAITING_CHAINS,
-	runtime_rootInspectShown,
-	isClassInstance,
 	resolveWrapper;
 /** The proxy registry's accessors (see `Values.#proxyRegistry`), set when the class is defined. */
 let registeredWrapper, isRegisteredProxy, registerProxy;
@@ -410,28 +399,6 @@ function runtime_dataKind(value) {
 }
 
 /**
- * Whether `value` is a plain value of the api rather than a node: no node, view, version dispatcher, or
- * framework member, each of which is handed out its own way.
- * @param {object} value - An object or function.
- * @returns {boolean} Whether it is plain.
- * @private
- */
-function runtime_isPlainMember(value) {
-	return (
-		!runtime_isIntrinsic(value) &&
-		!runtime_hasInternalSlots(value) &&
-		!WeakMapMethods.has(SELF_VIEW_NODES, value) &&
-		!WeakMapMethods.has(SELF_MEMBER_VIEWS, value) &&
-		!WeakMapMethods.has(FRAMEWORK_VIEW_TARGETS, value) &&
-		!WeakMapMethods.has(FRAMEWORK_MEMBERS, value) &&
-		resolveWrapper(value) === null &&
-		versionDispatcherRecord(value) === null &&
-		!WeakMapMethods.has(capturedViewChildren, value) &&
-		!isFrameworkInternal(value)
-	);
-}
-
-/**
  * The methods of each kind of data object that only read it (#625). Every other method the engine gives the kind,
  * one it adds later included, counts as a write when called through a view: a method changing the object
  * cannot slip past by being new. `RegExp#exec` and `#test` move `lastIndex` as using a regular expression does,
@@ -570,6 +537,22 @@ const ENGINE_DATA_PROTOTYPES = setFrom(
  * @private
  */
 function runtime_isEngineMember(value, prop) {
+	/**
+	 * Whether `fn` is one of the engine's own functions: its source is not code, and it is no bound function, which
+	 * reports itself the same way.
+	 * @param {Function} fn - A function.
+	 * @returns {boolean} Whether it is native.
+	 * @private
+	 */
+	function runtime_isNativeFunction(fn) {
+		try {
+			const source = functionSource(fn);
+			return RegExpMethods.exec(/\{\s*\[native code\]\s*\}$/, source) !== null && !StringMethods.startsWith(String(fn.name), "bound ");
+		} catch {
+			return false;
+		}
+	}
+
 	for (let proto = value; proto !== null; proto = Reflect.getPrototypeOf(proto)) {
 		if (!hasOwn(proto, prop)) continue;
 		if (SetMethods.has(ENGINE_DATA_PROTOTYPES, proto)) return true;
@@ -624,22 +607,6 @@ const NODE_VALUE_OFS = new WeakSet();
 /** The engine's prototypes every api node's value inherits from. @type {ReadonlyArray<object>} @private */
 const INHERITED_HOLDERS = Objects.freeze([Objects.prototype, Functions.prototype]);
 
-/**
- * Whether `fn` is one of the engine's own functions: its source is not code, and it is no bound function, which
- * reports itself the same way.
- * @param {Function} fn - A function.
- * @returns {boolean} Whether it is native.
- * @private
- */
-function runtime_isNativeFunction(fn) {
-	try {
-		const source = functionSource(fn);
-		return RegExpMethods.exec(/\{\s*\[native code\]\s*\}$/, source) !== null && !StringMethods.startsWith(String(fn.name), "bound ");
-	} catch {
-		return false;
-	}
-}
-
 /** Methods every object has that only read it. @type {ReadonlySet<string|symbol>} @private */
 const COMMON_READERS = setFrom([
 	"hasOwnProperty",
@@ -651,32 +618,6 @@ const COMMON_READERS = setFrom([
 	"__lookupGetter__",
 	"__lookupSetter__"
 ]);
-
-/**
- * Whether the engine's method `name` of the data object `value` only reads it: on its kind's list, or every
- * object's; a `Date`'s `get…` and `to…` methods and its primitive conversion; a `DataView`'s `get…` methods.
- * @param {object} value - The data object.
- * @param {PropertyKey} name - The method's key.
- * @returns {boolean} Whether calling it only reads the object.
- * @private
- */
-function runtime_isDataReader(value, name) {
-	if (SetMethods.has(COMMON_READERS, name)) return true;
-	const kind = runtime_dataKind(value);
-	if (kind === "date")
-		return (
-			name === Symbol.toPrimitive ||
-			(typeof name === "string" && (StringMethods.startsWith(name, "get") || StringMethods.startsWith(name, "to")))
-		);
-	if (kind === "dataview") return typeof name === "string" && StringMethods.startsWith(name, "get");
-	if (kind === "typedarray") return SetMethods.has(TYPED_ARRAY_READERS, name);
-	// A boxed primitive never changes: every method of its kind reads it.
-	if (kind === "boxed") return true;
-	{
-		const readers = MapMethods.get(DATA_READERS, kind);
-		return readers ? SetMethods.has(readers, name) : false;
-	}
-}
 
 /**
  * Whether `value` is a built-in data object, decided once per value: what a value is does not change, and every read
@@ -781,34 +722,6 @@ function runtime_inheritedPrivate(slothlet, value, prop) {
  * @private
  */
 const MEMBER_HOLDERS = new WeakMap();
-
-/**
- * Whether `value` holds `fn` as a member — its own, or inherited, as a method, a getter, or a setter.
- * @param {object|Function} value - The value.
- * @param {Function} fn - The function.
- * @returns {boolean} Whether `fn` is one of its members.
- * @private
- */
-function runtime_holdsMember(value, fn) {
-	if (WeakMapMethods.get(MEMBER_HOLDERS, fn) == null ? undefined : WeakSetMethods.has(WeakMapMethods.get(MEMBER_HOLDERS, fn), value))
-		return true;
-	for (
-		let proto = value;
-		proto !== null && (typeof proto === "object" || typeof proto === "function");
-		proto = Reflect.getPrototypeOf(proto)
-	) {
-		for (let ofIndex = 0, ofList = Reflect.ownKeys(proto); ofIndex < ofList.length; ofIndex++) {
-			const key = ofList[ofIndex];
-			const descriptor = Reflect.getOwnPropertyDescriptor(proto, key);
-			if (descriptor && (descriptor.value === fn || descriptor.get === fn || descriptor.set === fn)) {
-				if (!WeakMapMethods.has(MEMBER_HOLDERS, fn)) WeakMapMethods.set(MEMBER_HOLDERS, fn, new WeakSet());
-				WeakSetMethods.add(WeakMapMethods.get(MEMBER_HOLDERS, fn), value);
-				return true;
-			}
-		}
-	}
-	return false;
-}
 
 /**
  * Whether a value read off the api is a node of it as a reader is handed one: a wrapper's proxy, a view `self` handed out
@@ -1072,19 +985,6 @@ function runtime_markAssignedData(wrapper, value) {
 }
 
 /**
- * Whether a value is plain data: an object whose prototype is `Object.prototype` or null, or an array, and no Proxy.
- * @param {*} value - The value.
- * @returns {boolean} True when it is.
- * @private
- */
-function runtime_isPlainData(value) {
-	if (value === null || typeof value !== "object" || util.types.isProxy(value)) return false;
-	if (Arrays.isArray(value)) return true;
-	const prototype = Objects.getPrototypeOf(value);
-	return prototype === Objects.prototype || prototype === null;
-}
-
-/**
  * Whether a node holds data written to the api after it was built, or data such a value holds (see
  * {@link ASSIGNED_DATA}).
  * @param {object} wrapper - The node's wrapper.
@@ -1213,20 +1113,6 @@ function runtime_isCodeMemberWithheld(wrapper, descriptor, kept = null) {
 }
 
 /**
- * Whether a node fronts a value a module keeps whole and live (a class instance, an emitter, a value grafted at
- * runtime), whose members the node reads from the value itself.
- * @param {UnifiedWrapper} wrapper - The node's wrapper.
- * @returns {boolean} True for such a node.
- * @private
- */
-function runtime_frontsLiveValue(wrapper) {
-	const internal = wrapper.____slothletInternal;
-	const impl = internal.impl;
-	if (impl === null || (typeof impl !== "object" && typeof impl !== "function")) return false;
-	return internal.deferChildAdopt || (EventEmitter && runtime_inherits(impl, EventEmitter)) || isClassInstance(impl);
-}
-
-/**
  * Whether a node's prototype is the one its record holds (see {@link runtime_fillPrototype}): a function node, whose
  * function is the module's and is never changed through the node, and a namespace slothlet composed, which is no value
  * of a module's. Any other node fronts a value a module holds as it is (its own object, an array, an emitter, a class
@@ -1279,18 +1165,6 @@ function runtime_inheritsFrom(wrapper, prop) {
 }
 
 /**
- * Whether a node inherits a member by a symbol key from the prototype on its record (see {@link runtime_ownsPrototype}).
- * @param {object} wrapper - The node's wrapper.
- * @param {symbol} prop - The key.
- * @returns {boolean} Whether it does.
- * @private
- */
-function runtime_inheritsSymbol(wrapper, prop) {
-	const prototype = runtime_inheritsFrom(wrapper, prop);
-	return prototype !== undefined && prototype !== null && Reflect.has(prototype, prop);
-}
-
-/**
  * Whether a node's value holds or inherits a member, as `in` asks it: from the prototype on the node's record when that
  * is the node's (see {@link runtime_ownsPrototype}).
  * @param {object} wrapper - The node's wrapper.
@@ -1314,67 +1188,8 @@ function runtime_implHas(wrapper, impl, prop) {
  */
 const INHERITED_MEMBER_NODES = new WeakMap();
 
-/**
- * The node a node made before for a member it inherits, while that member still has the same value.
- * @param {object} wrapper - The node's wrapper.
- * @param {PropertyKey} prop - The member's key.
- * @param {*} value - The member's value now.
- * @returns {*} The node, or `undefined`.
- * @private
- */
-function runtime_inheritedMemberNode(wrapper, prop, value) {
-	const held = MapMethods.get(WeakMapMethods.get(INHERITED_MEMBER_NODES, wrapper) ?? EMPTY_INHERITED_NODES, prop);
-	return held !== undefined && held.value === value ? held.node : undefined;
-}
-
-/**
- * Keep the node made for a member a node inherits (see {@link runtime_inheritedMemberNode}).
- * @param {object} wrapper - The node's wrapper.
- * @param {PropertyKey} prop - The member's key.
- * @param {*} value - The member's value.
- * @param {*} node - The node made for it.
- * @returns {*} `node`.
- * @private
- */
-function runtime_keepInheritedMemberNode(wrapper, prop, value, node) {
-	let byKey = WeakMapMethods.get(INHERITED_MEMBER_NODES, wrapper);
-	if (byKey === undefined) WeakMapMethods.set(INHERITED_MEMBER_NODES, wrapper, (byKey = new Map()));
-	MapMethods.set(byKey, prop, { value, node });
-	return node;
-}
-
 /** An empty map, read when a node has made no node for an inherited member. @type {Map} @private */
 const EMPTY_INHERITED_NODES = new Map();
-
-/**
- * Whether what a node holds under a key is what the module's object holds there now (#757): the same primitive or
- * built-in value, a child node built from the same object, or an adoption of the same accessor.
- * @param {PropertyDescriptor} mine - The node's own member.
- * @param {PropertyDescriptor} held - The module's object's member.
- * @returns {boolean} True when the node is in step with the object for this member.
- * @private
- */
-function runtime_holdsModuleMember(mine, held) {
-	if (!("value" in held)) {
-		if ("value" in mine) return false;
-		const original = runtime_originalAccessor(mine);
-		return original.get === held.get && original.set === held.set;
-	}
-	if (!("value" in mine)) return false;
-	if (Objects.is(mine.value, held.value)) return true;
-	const child = resolveWrapper(mine.value);
-	if (child === null) return false;
-	// A child node that keeps no record of what it was built from is not one this follows.
-	const internal = child.____slothletInternal;
-	if (!hasOwn(internal, "sourceValue")) return true;
-	// A child a reload reused fronts the reloaded value through its impl or its module object, not what it was built from.
-	return (
-		internal.sourceValue === held.value ||
-		internal.moduleObject === held.value ||
-		internal.impl === held.value ||
-		(internal.impl !== null && typeof internal.impl === "object" && layerUnderlying(internal.impl) === held.value)
-	);
-}
 
 /**
  * The language's own objects — every global constructor and its prototype, and the prototypes of functions,
@@ -1574,18 +1389,6 @@ function runtime_recordNodeStreamState() {
 if (isNode) runtime_recordNodeStreamState();
 
 /**
- * Whether a member of an emitter of Node's own class is state Node keeps for it (see
- * {@link NODE_STREAM_STATE_PROTOTYPES}), which is not read for code (#708).
- * @param {*} member - The member's value.
- * @returns {boolean} True for Node's state of a stream.
- * @private
- */
-function runtime_isNodeStreamState(member) {
-	if (member === null || typeof member !== "object" || util.types.isProxy(member)) return false;
-	return WeakSetMethods.has(NODE_STREAM_STATE_PROTOTYPES, Reflect.getPrototypeOf(member));
-}
-
-/**
  * Whether a value is made by no module (#597) and can be handed out as it is: a built-in's export or slothlet's
  * runtime. A package's export is not: anyone can put code under `node_modules`, a plugin shipping its own dependency
  * among them, so it is handed out as the module's like the module's own code. Everything callable the value reaches,
@@ -1596,6 +1399,46 @@ function runtime_isNodeStreamState(member) {
  * @private
  */
 function runtime_isSharedValue(value) {
+	/**
+	 * Whether every function a value reaches — through own members, accessors and prototypes, everything up to
+	 * {@link SHARED_SEARCH_PROPERTIES} properties — is made by no module, the engine's own, or slothlet's: so handing the
+	 * value out as it is hands out none of a module's code, however deep a module put one. Read by descriptor; nothing of
+	 * the value runs. The realm's intrinsics end the walk. A Proxy, or what is too large to read, counts as holding code.
+	 * @param {*} value - The value.
+	 * @param {{remaining: number}} budget - Properties still allowed.
+	 * @param {Set<object>} seen - Values already read.
+	 * @returns {boolean} True when it holds only such code.
+	 * @private
+	 */
+	function runtime_holdsOnlySharedCode(value, budget, seen) {
+		const pending = [value];
+		try {
+			while (pending.length) {
+				const member = ArrayMethods.pop(pending);
+				if (member === null || (typeof member !== "object" && typeof member !== "function") || SetMethods.has(seen, member)) continue;
+				SetMethods.add(seen, member);
+				if (WeakSetMethods.has(INTRINSICS, member) || runtime_isSlothletValue(member)) continue;
+				if (util.types.isProxy(member)) return false;
+				if (typeof member === "function" && !runtime_isBuiltinFunction(member) && !isSharedExport(member)) return false;
+				const keys = Reflect.ownKeys(member);
+				budget.remaining -= keys.length;
+				if (budget.remaining < 0) return false;
+				for (let ofIndex = 0, ofList = keys; ofIndex < ofList.length; ofIndex++) {
+					const key = ofList[ofIndex];
+					const descriptor = Reflect.getOwnPropertyDescriptor(member, key);
+					if (!descriptor) continue;
+					if ("value" in descriptor) listPush(pending, descriptor.value);
+					else listPush(pending, descriptor.get, descriptor.set);
+				}
+				listPush(pending, Reflect.getPrototypeOf(member));
+			}
+			return true;
+		} catch {
+			// A value that refuses to be described is taken to hold code.
+			return false;
+		}
+	}
+
 	if (!isSharedExport(value)) return false;
 	return runtime_holdsOnlySharedCode(value, { remaining: SHARED_SEARCH_PROPERTIES }, new Set());
 }
@@ -1607,46 +1450,6 @@ function runtime_isSharedValue(value) {
  * @private
  */
 const SHARED_SEARCH_PROPERTIES = 20000;
-
-/**
- * Whether every function a value reaches — through own members, accessors and prototypes, everything up to
- * {@link SHARED_SEARCH_PROPERTIES} properties — is made by no module, the engine's own, or slothlet's: so handing the
- * value out as it is hands out none of a module's code, however deep a module put one. Read by descriptor; nothing of
- * the value runs. The realm's intrinsics end the walk. A Proxy, or what is too large to read, counts as holding code.
- * @param {*} value - The value.
- * @param {{remaining: number}} budget - Properties still allowed.
- * @param {Set<object>} seen - Values already read.
- * @returns {boolean} True when it holds only such code.
- * @private
- */
-function runtime_holdsOnlySharedCode(value, budget, seen) {
-	const pending = [value];
-	try {
-		while (pending.length) {
-			const member = ArrayMethods.pop(pending);
-			if (member === null || (typeof member !== "object" && typeof member !== "function") || SetMethods.has(seen, member)) continue;
-			SetMethods.add(seen, member);
-			if (WeakSetMethods.has(INTRINSICS, member) || runtime_isSlothletValue(member)) continue;
-			if (util.types.isProxy(member)) return false;
-			if (typeof member === "function" && !runtime_isBuiltinFunction(member) && !isSharedExport(member)) return false;
-			const keys = Reflect.ownKeys(member);
-			budget.remaining -= keys.length;
-			if (budget.remaining < 0) return false;
-			for (let ofIndex = 0, ofList = keys; ofIndex < ofList.length; ofIndex++) {
-				const key = ofList[ofIndex];
-				const descriptor = Reflect.getOwnPropertyDescriptor(member, key);
-				if (!descriptor) continue;
-				if ("value" in descriptor) listPush(pending, descriptor.value);
-				else listPush(pending, descriptor.get, descriptor.set);
-			}
-			listPush(pending, Reflect.getPrototypeOf(member));
-		}
-		return true;
-	} catch {
-		// A value that refuses to be described is taken to hold code.
-		return false;
-	}
-}
 
 /**
  * Whether a value is one slothlet hands out on its own account, already attributed: an api node, a per-reader view,
@@ -1678,19 +1481,6 @@ function runtime_isSlothletValue(value) {
 function runtime_isModuleStandIn(value) {
 	const underlying = isCompositionLayer(value) ? layerUnderlying(value) : value;
 	return util.types.isProxy(underlying) && (WeakMapMethods.has(STAND_IN_RECORDS, underlying) || runtime_isWrappedClassInstance(underlying));
-}
-
-/**
- * Whether a member value is a module's own Proxy, or the stand-in slothlet hands one out as (#597), directly or as the
- * value behind its node: reading through it runs the module's traps (#632).
- * @param {*} value - The member's value.
- * @returns {boolean} Whether it answers with the module's code.
- * @private
- */
-function runtime_answersWithModuleCode(value) {
-	const inner = resolveWrapper(value);
-	const held = inner ? inner.____slothletInternal.impl : value;
-	return util.types.isProxy(held) && (runtime_isModuleProxy(held) || runtime_isModuleStandIn(held));
 }
 
 /**
@@ -1739,78 +1529,6 @@ const SNAPSHOT_OMIT = Symbol("slothlet.snapshotOmit");
  */
 function runtime_isRefusal(error) {
 	return error instanceof SlothletError && error.code === "PERMISSION_DENIED";
-}
-
-/**
- * The plain data `JSON.stringify` writes for a value read through `self`, as the reader may read it (#803): each
- * member the reader is refused (its read, its description, or the `toJSON` the serialization looks up on it) is left
- * out, as a listing leaves it out, and never thrown for. An array element refused is written as `null`, where JSON
- * writes a member with no value. Everything else is what JSON does: `toJSON` is called with the member's key, a
- * function, a symbol and `undefined` are left out, a boxed primitive and a primitive are kept for JSON to write, and a
- * cycle throws the `TypeError` JSON throws.
- * @param {*} value - The value.
- * @param {string} key - Its key in its holder.
- * @param {Array<object>} stack - The objects being written, outermost first.
- * @param {boolean} [skipToJSON=false] - Do not look up `toJSON` on the value itself (it is the root being written).
- * @returns {*} The data, or {@link SNAPSHOT_OMIT}.
- * @private
- */
-function runtime_jsonSnapshot(value, key, stack, skipToJSON = false) {
-	if (!skipToJSON && value !== null && (typeof value === "object" || typeof value === "function")) {
-		let toJSON;
-		try {
-			toJSON = value.toJSON;
-		} catch (error) {
-			if (!runtime_isRefusal(error)) throw error;
-		}
-		if (typeof toJSON === "function") {
-			try {
-				value = Reflect.apply(toJSON, value, [key]);
-			} catch (error) {
-				if (!runtime_isRefusal(error)) throw error;
-				return SNAPSHOT_OMIT;
-			}
-		}
-	}
-	if (value === undefined || typeof value === "function" || typeof value === "symbol") return SNAPSHOT_OMIT;
-	if (value === null || typeof value !== "object" || isBoxedPrimitive(value)) return value;
-	if (ArrayMethods.includes(stack, value)) throw new TypeError("Converting circular structure to JSON");
-	listPush(stack, value);
-	try {
-		if (Arrays.isArray(value)) {
-			const out = [];
-			const length = value.length;
-			for (let i = 0; i < length; i++) {
-				let element;
-				try {
-					element = runtime_jsonSnapshot(value[i], String(i), stack);
-				} catch (error) {
-					if (!runtime_isRefusal(error)) throw error;
-					element = SNAPSHOT_OMIT;
-				}
-				listPush(out, element === SNAPSHOT_OMIT ? null : element);
-			}
-			return out;
-		}
-		const out = {};
-		for (let ofIndex = 0, ofList = Reflect.ownKeys(value); ofIndex < ofList.length; ofIndex++) {
-			const name = ofList[ofIndex];
-			if (typeof name !== "string") continue;
-			let member;
-			try {
-				const descriptor = Reflect.getOwnPropertyDescriptor(value, name);
-				if (!descriptor?.enumerable) continue;
-				member = runtime_jsonSnapshot(value[name], name, stack);
-			} catch (error) {
-				if (!runtime_isRefusal(error)) throw error;
-				continue;
-			}
-			if (member !== SNAPSHOT_OMIT) out[name] = member;
-		}
-		return out;
-	} finally {
-		ArrayMethods.pop(stack);
-	}
 }
 
 /**
@@ -1931,6 +1649,18 @@ const VM_NATIVE_SCRIPT = (() => {
  * @private
  */
 function runtime_slotHoldsCode(value, depth, budget) {
+	/**
+	 * Whether a member of an emitter of Node's own class is state Node keeps for it (see
+	 * {@link NODE_STREAM_STATE_PROTOTYPES}), which is not read for code (#708).
+	 * @param {*} member - The member's value.
+	 * @returns {boolean} True for Node's state of a stream.
+	 * @private
+	 */
+	function runtime_isNodeStreamState(member) {
+		if (member === null || typeof member !== "object" || util.types.isProxy(member)) return false;
+		return WeakSetMethods.has(NODE_STREAM_STATE_PROTOTYPES, Reflect.getPrototypeOf(member));
+	}
+
 	for (
 		let link = Reflect.getPrototypeOf(value);
 		link !== null && !WeakSetMethods.has(INTRINSICS, link);
@@ -1989,6 +1719,140 @@ function runtime_slotHoldsCode(value, depth, budget) {
  * @private
  */
 function runtime_holdsCode(value, depth, budget) {
+	/**
+	 * Whether an object with the prototype of plain data (or none, or another of the language's own), not an array, may
+	 * keep internal state of the engine's that holds a module's code where no member shows it: one of the language's
+	 * iterators (an array's, a string's, an iterator helper, the wrapper `Iterator.from` makes) given such a prototype
+	 * yields what it holds only when stepped, and no check of what kind of object it is runs without stepping it. A copy
+	 * with `structuredClone` tells it, refusing such an object before it reads any member; the copy is made only where it
+	 * runs none of a module's code and can be refused for nothing else ({@link runtime_copyRunsNoCode}). An object it
+	 * cannot be made for, or that the copy refuses, cannot be told from such an iterator and is taken to keep such state.
+	 * Objects found ordinary are remembered ({@link ORDINARY_OBJECTS}).
+	 * @param {object} value - The object, not a Proxy and not an array.
+	 * @param {number} depth - Levels still allowed, this one included.
+	 * @returns {boolean} True when it may keep such state.
+	 * @private
+	 */
+	function runtime_keepsHiddenState(value, depth) {
+		/**
+		 * Whether copying a value with `structuredClone` runs none of a module's code and can be refused only for what kind of
+		 * object something in it is: every member the copy reads (each enumerable own string-keyed member, at every depth) is a
+		 * data property holding a primitive other than a symbol, an array or an object with the prototype of plain data (or
+		 * none), a date, a regular expression, a buffer, a typed array, a boxed primitive other than a symbol, or a `Map` or
+		 * `Set` whose entries are such values. Read from descriptors alone; members the copy skips (symbol keys, members that
+		 * are not enumerable) are not looked at.
+		 * @param {*} value - The value.
+		 * @param {number} depth - Levels still allowed, this one included.
+		 * @returns {boolean} True when it is.
+		 * @private
+		 */
+		function runtime_copyRunsNoCode(value, depth) {
+			/**
+			 * Whether copying an error of the language's own with `structuredClone` runs none of a module's code: the copy reads
+			 * its own `message` (a string), its `name` (a data property on it or up its chain), its `stack` (the engine's getter,
+			 * whose formatting {@link runtime_keepsHiddenState} holds, or a data property) and its own `cause` (a value whose copy
+			 * runs no code either). Other members of its own, `errors` of an `AggregateError` among them, are not copied.
+			 * @param {Error} error - The error ({@link runtime_isEngineError}).
+			 * @param {number} depth - Levels still allowed, this one included.
+			 * @returns {boolean} True when it does.
+			 * @private
+			 */
+			function runtime_errorCopyRunsNoCode(error, depth) {
+				const message = Reflect.getOwnPropertyDescriptor(error, "message");
+				if (message !== undefined && (!("value" in message) || typeof message.value !== "string")) return false;
+				const cause = Reflect.getOwnPropertyDescriptor(error, "cause");
+				if (cause !== undefined && (!("value" in cause) || !runtime_copyRunsNoCode(cause.value, depth - 1))) return false;
+				let name = null;
+				let stack = null;
+				for (let link = error; link !== null && (name === null || stack === null); link = Reflect.getPrototypeOf(link)) {
+					name ??= Reflect.getOwnPropertyDescriptor(link, "name") ?? null;
+					stack ??= Reflect.getOwnPropertyDescriptor(link, "stack") ?? null;
+				}
+				if (name !== null && !("value" in name)) return false;
+				return stack === null || "value" in stack || isEngineStackAccessor(stack.get);
+			}
+
+			/**
+			 * Whether a value is an error of the language's own, told by the engine's brand check ({@link runtime_isBrandedError};
+			 * where the engine has none, nothing is), with one of the language's own error
+			 * prototypes. A look-alike (an object of another kind given an error's prototype, or posing as one by its members)
+			 * is not, and neither is an error whose prototype was replaced.
+			 * @param {object} value - An object that is not a Proxy.
+			 * @returns {boolean} True for such an error.
+			 * @private
+			 */
+			function runtime_isEngineError(value) {
+				if (!isNode && typeof Errors.isError !== "function") return false;
+				return runtime_isBrandedError(value) && SetMethods.has(ERROR_PROTOTYPES, Reflect.getPrototypeOf(value));
+			}
+
+			/**
+			 * Whether a boxed primitive is a boxed symbol, which `structuredClone` refuses.
+			 * @param {object} value - A boxed primitive.
+			 * @returns {boolean} True for a boxed symbol.
+			 * @private
+			 */
+			function runtime_isBoxedSymbol(value) {
+				try {
+					Reflect.apply(SYMBOL_VALUE_OF, value, []);
+					return true;
+				} catch {
+					return false;
+				}
+			}
+
+			if (value === null || typeof value !== "object") return typeof value !== "symbol" && typeof value !== "function";
+			if (depth <= 0 || util.types.isProxy(value)) return false;
+			const types = util.types;
+			if (types.isDate(value) || types.isRegExp(value) || types.isAnyArrayBuffer(value) || types.isArrayBufferView(value)) return true;
+			if (types.isBoxedPrimitive(value)) return !runtime_isBoxedSymbol(value);
+			// An error is copied from its `message`, `name`, `stack` and `cause`, whatever its prototype: one whose prototype is
+			// not the language's own may hand the copy a getter of a module's to run.
+			if (runtime_isEngineError(value)) return runtime_errorCopyRunsNoCode(value, depth);
+			if (runtime_isBrandedError(value)) return false;
+			if (types.isMap(value) || types.isSet(value)) {
+				// Read with the forEach taken at load: the map or set itself, not its iterator.
+				const entries = types.isMap(value) ? mapEntriesToArray(value) : setToArray(value);
+				for (let i = 0; i < entries.length; i++) {
+					const members = types.isMap(value) ? entries[i] : [entries[i]];
+					for (let m = 0; m < members.length; m++) if (!runtime_copyRunsNoCode(members[m], depth - 1)) return false;
+				}
+				return true;
+			}
+			const prototype = Reflect.getPrototypeOf(value);
+			if (!Arrays.isArray(value) && prototype !== null && prototype !== Objects.prototype) return false;
+			for (let ofIndex = 0, ofList = Reflect.ownKeys(value); ofIndex < ofList.length; ofIndex++) {
+				const key = ofList[ofIndex];
+				if (typeof key === "symbol") continue;
+				const descriptor = Reflect.getOwnPropertyDescriptor(value, key);
+				if (!descriptor || !descriptor.enumerable) continue;
+				if (!("value" in descriptor) || !runtime_copyRunsNoCode(descriptor.value, depth - 1)) return false;
+			}
+			return true;
+		}
+
+		if (WeakSetMethods.has(ORDINARY_OBJECTS, value)) return false;
+		const types = util.types;
+		if (types.isModuleNamespaceObject?.(value) || types.isArgumentsObject?.(value)) return false;
+		if (typeof structuredClone !== "function") return true;
+		// The copy reads the object's members as they are now; whatever it finds, it is the object's own kind that decides.
+		const prototype = Reflect.getPrototypeOf(value);
+		if (prototype !== null && prototype !== Objects.prototype) return true;
+		for (let ofIndex = 0, ofList = Reflect.ownKeys(value); ofIndex < ofList.length; ofIndex++) {
+			const key = ofList[ofIndex];
+			if (typeof key === "symbol") continue;
+			const descriptor = Reflect.getOwnPropertyDescriptor(value, key);
+			if (!descriptor || !descriptor.enumerable) continue;
+			if (!("value" in descriptor) || !runtime_copyRunsNoCode(descriptor.value, depth - 1)) return true;
+		}
+		// An error's stack not read yet is not formatted for the copy: the copy stops there, past the check of the
+		// object's own kind, and the stack is left to be formatted when it is first read.
+		const copy = runUnformatted(() => structuredClone(value));
+		if (!copy.held || (Objects.hasOwn(copy, "error") && !copy.unformatted)) return true;
+		WeakSetMethods.add(ORDINARY_OBJECTS, value);
+		return false;
+	}
+
 	if (depth <= 0) return true;
 	try {
 		if (util.types.isGeneratorObject(value)) return true;
@@ -2061,21 +1925,6 @@ const ORDINARY_OBJECTS = new WeakSet();
 const SYMBOL_VALUE_OF = PrototypeFunctions.Symbol.valueOf;
 
 /**
- * Whether a boxed primitive is a boxed symbol, which `structuredClone` refuses.
- * @param {object} value - A boxed primitive.
- * @returns {boolean} True for a boxed symbol.
- * @private
- */
-function runtime_isBoxedSymbol(value) {
-	try {
-		Reflect.apply(SYMBOL_VALUE_OF, value, []);
-		return true;
-	} catch {
-		return false;
-	}
-}
-
-/**
  * The prototypes of the language's own errors, taken when slothlet loaded.
  * @type {Set<object>}
  * @private
@@ -2091,20 +1940,6 @@ const ERROR_PROTOTYPES = setFrom(
 );
 
 /**
- * Whether a value is an error of the language's own, told by the engine's brand check ({@link runtime_isBrandedError};
- * where the engine has none, nothing is), with one of the language's own error
- * prototypes. A look-alike (an object of another kind given an error's prototype, or posing as one by its members)
- * is not, and neither is an error whose prototype was replaced.
- * @param {object} value - An object that is not a Proxy.
- * @returns {boolean} True for such an error.
- * @private
- */
-function runtime_isEngineError(value) {
-	if (!isNode && typeof Errors.isError !== "function") return false;
-	return runtime_isBrandedError(value) && SetMethods.has(ERROR_PROTOTYPES, Reflect.getPrototypeOf(value));
-}
-
-/**
  * Whether the engine's brand check tells a value to be an error, whatever its prototype: Node's `util.types`, or
  * `Error.isError` where the engine has it. Where it has neither, an object is taken to be one.
  * @param {object} value - An object that is not a Proxy.
@@ -2114,155 +1949,6 @@ function runtime_isEngineError(value) {
 function runtime_isBrandedError(value) {
 	if (isNode) return util.types.isNativeError(value);
 	return typeof Errors.isError === "function" ? Errors.isError(value) : true;
-}
-
-/**
- * Whether copying an error of the language's own with `structuredClone` runs none of a module's code: the copy reads
- * its own `message` (a string), its `name` (a data property on it or up its chain), its `stack` (the engine's getter,
- * whose formatting {@link runtime_keepsHiddenState} holds, or a data property) and its own `cause` (a value whose copy
- * runs no code either). Other members of its own, `errors` of an `AggregateError` among them, are not copied.
- * @param {Error} error - The error ({@link runtime_isEngineError}).
- * @param {number} depth - Levels still allowed, this one included.
- * @returns {boolean} True when it does.
- * @private
- */
-function runtime_errorCopyRunsNoCode(error, depth) {
-	const message = Reflect.getOwnPropertyDescriptor(error, "message");
-	if (message !== undefined && (!("value" in message) || typeof message.value !== "string")) return false;
-	const cause = Reflect.getOwnPropertyDescriptor(error, "cause");
-	if (cause !== undefined && (!("value" in cause) || !runtime_copyRunsNoCode(cause.value, depth - 1))) return false;
-	let name = null;
-	let stack = null;
-	for (let link = error; link !== null && (name === null || stack === null); link = Reflect.getPrototypeOf(link)) {
-		name ??= Reflect.getOwnPropertyDescriptor(link, "name") ?? null;
-		stack ??= Reflect.getOwnPropertyDescriptor(link, "stack") ?? null;
-	}
-	if (name !== null && !("value" in name)) return false;
-	return stack === null || "value" in stack || isEngineStackAccessor(stack.get);
-}
-
-/**
- * Whether copying a value with `structuredClone` runs none of a module's code and can be refused only for what kind of
- * object something in it is: every member the copy reads (each enumerable own string-keyed member, at every depth) is a
- * data property holding a primitive other than a symbol, an array or an object with the prototype of plain data (or
- * none), a date, a regular expression, a buffer, a typed array, a boxed primitive other than a symbol, or a `Map` or
- * `Set` whose entries are such values. Read from descriptors alone; members the copy skips (symbol keys, members that
- * are not enumerable) are not looked at.
- * @param {*} value - The value.
- * @param {number} depth - Levels still allowed, this one included.
- * @returns {boolean} True when it is.
- * @private
- */
-function runtime_copyRunsNoCode(value, depth) {
-	if (value === null || typeof value !== "object") return typeof value !== "symbol" && typeof value !== "function";
-	if (depth <= 0 || util.types.isProxy(value)) return false;
-	const types = util.types;
-	if (types.isDate(value) || types.isRegExp(value) || types.isAnyArrayBuffer(value) || types.isArrayBufferView(value)) return true;
-	if (types.isBoxedPrimitive(value)) return !runtime_isBoxedSymbol(value);
-	// An error is copied from its `message`, `name`, `stack` and `cause`, whatever its prototype: one whose prototype is
-	// not the language's own may hand the copy a getter of a module's to run.
-	if (runtime_isEngineError(value)) return runtime_errorCopyRunsNoCode(value, depth);
-	if (runtime_isBrandedError(value)) return false;
-	if (types.isMap(value) || types.isSet(value)) {
-		// Read with the forEach taken at load: the map or set itself, not its iterator.
-		const entries = types.isMap(value) ? mapEntriesToArray(value) : setToArray(value);
-		for (let i = 0; i < entries.length; i++) {
-			const members = types.isMap(value) ? entries[i] : [entries[i]];
-			for (let m = 0; m < members.length; m++) if (!runtime_copyRunsNoCode(members[m], depth - 1)) return false;
-		}
-		return true;
-	}
-	const prototype = Reflect.getPrototypeOf(value);
-	if (!Arrays.isArray(value) && prototype !== null && prototype !== Objects.prototype) return false;
-	for (let ofIndex = 0, ofList = Reflect.ownKeys(value); ofIndex < ofList.length; ofIndex++) {
-		const key = ofList[ofIndex];
-		if (typeof key === "symbol") continue;
-		const descriptor = Reflect.getOwnPropertyDescriptor(value, key);
-		if (!descriptor || !descriptor.enumerable) continue;
-		if (!("value" in descriptor) || !runtime_copyRunsNoCode(descriptor.value, depth - 1)) return false;
-	}
-	return true;
-}
-
-/**
- * Whether an object with the prototype of plain data (or none, or another of the language's own), not an array, may
- * keep internal state of the engine's that holds a module's code where no member shows it: one of the language's
- * iterators (an array's, a string's, an iterator helper, the wrapper `Iterator.from` makes) given such a prototype
- * yields what it holds only when stepped, and no check of what kind of object it is runs without stepping it. A copy
- * with `structuredClone` tells it, refusing such an object before it reads any member; the copy is made only where it
- * runs none of a module's code and can be refused for nothing else ({@link runtime_copyRunsNoCode}). An object it
- * cannot be made for, or that the copy refuses, cannot be told from such an iterator and is taken to keep such state.
- * Objects found ordinary are remembered ({@link ORDINARY_OBJECTS}).
- * @param {object} value - The object, not a Proxy and not an array.
- * @param {number} depth - Levels still allowed, this one included.
- * @returns {boolean} True when it may keep such state.
- * @private
- */
-function runtime_keepsHiddenState(value, depth) {
-	if (WeakSetMethods.has(ORDINARY_OBJECTS, value)) return false;
-	const types = util.types;
-	if (types.isModuleNamespaceObject?.(value) || types.isArgumentsObject?.(value)) return false;
-	if (typeof structuredClone !== "function") return true;
-	// The copy reads the object's members as they are now; whatever it finds, it is the object's own kind that decides.
-	const prototype = Reflect.getPrototypeOf(value);
-	if (prototype !== null && prototype !== Objects.prototype) return true;
-	for (let ofIndex = 0, ofList = Reflect.ownKeys(value); ofIndex < ofList.length; ofIndex++) {
-		const key = ofList[ofIndex];
-		if (typeof key === "symbol") continue;
-		const descriptor = Reflect.getOwnPropertyDescriptor(value, key);
-		if (!descriptor || !descriptor.enumerable) continue;
-		if (!("value" in descriptor) || !runtime_copyRunsNoCode(descriptor.value, depth - 1)) return true;
-	}
-	// An error's stack not read yet is not formatted for the copy: the copy stops there, past the check of the
-	// object's own kind, and the stack is left to be formatted when it is first read.
-	const copy = runUnformatted(() => structuredClone(value));
-	if (!copy.held || (Objects.hasOwn(copy, "error") && !copy.unformatted)) return true;
-	WeakSetMethods.add(ORDINARY_OBJECTS, value);
-	return false;
-}
-
-/**
- * Whether plain data a module hands out holds a node's own function, or a module's copy of one (see
- * {@link runtime_gateLeafCopy}), within the bounds given: plain objects and arrays are looked into, by their
- * descriptors, so nothing of the data runs. Only while the instance's permission system is on: otherwise no call is
- * refused, and the data passes as itself.
- * @param {object} slothlet - The instance.
- * @param {object} value - The data.
- * @param {number} depth - Levels still allowed, this one included.
- * @param {{remaining: number}} budget - Properties still allowed.
- * @returns {boolean} True when it holds such a function.
- * @private
- */
-function runtime_dataHoldsLeafFunction(slothlet, value, depth, budget) {
-	if (depth <= 0 || !slothlet?.handlers?.permissionManager?.isEnabled?.()) return false;
-	try {
-		if (util.types.isProxy(value)) return false;
-		const prototype = Reflect.getPrototypeOf(value);
-		if (prototype !== null && prototype !== Objects.prototype && prototype !== Arrays.prototype) return false;
-		if (Arrays.isArray(value) && value.length > budget.remaining) return false;
-		const keys = Reflect.ownKeys(value);
-		budget.remaining -= keys.length;
-		if (budget.remaining < 0) return false;
-		for (let ofIndex = 0, ofList = keys; ofIndex < ofList.length; ofIndex++) {
-			const descriptor = Reflect.getOwnPropertyDescriptor(value, ofList[ofIndex]);
-			if (!descriptor || !("value" in descriptor)) continue;
-			const member = descriptor.value;
-			if (typeof member === "function") {
-				if (util.types.isProxy(member)) continue;
-				const leaf = WeakMapMethods.get(trustedRootOwn.implWrappers, member);
-				if (
-					(leaf && WeakSetMethods.has(trustedRootOwn.genuineWrappers, leaf) && leaf.slothlet === slothlet) ||
-					leafOfCopy(slothlet, member) !== null
-				)
-					return true;
-				continue;
-			}
-			if (member !== null && typeof member === "object" && runtime_dataHoldsLeafFunction(slothlet, member, depth - 1, budget)) return true;
-		}
-	} catch {
-		// Data that refuses to be described is handed out as it is.
-	}
-	return false;
 }
 
 /**
@@ -2302,25 +1988,6 @@ function runtime_isCodeObject(value) {
 }
 
 /**
- * Whether a value is a promise of the engine's own, with nothing of a module's on it: its prototype is the
- * intrinsic one and it has no members of its own that reading what it settles to could reach, so that read runs none
- * of a module's code. Members under symbols of no registry and none of the language's are left out: `then` reads none
- * of them, its stand-in carries none of them, and Node keeps its own there on every promise made while an
- * `AsyncLocalStorage` runs on async hooks (Node 22's async ids and stores).
- * @param {object} value - An object that is not a Proxy.
- * @returns {boolean} True for such a promise.
- * @private
- */
-function runtime_isPlainPromise(value) {
-	if (!util.types.isPromise(value) || Reflect.getPrototypeOf(value) !== Promise.prototype) return false;
-	for (let ofIndex = 0, ofList = Reflect.ownKeys(value); ofIndex < ofList.length; ofIndex++) {
-		const key = ofList[ofIndex];
-		if (typeof key !== "symbol" || Symbols.keyFor(key) !== undefined || SetMethods.has(WELL_KNOWN_SYMBOLS, key)) return false;
-	}
-	return true;
-}
-
-/**
  * Whether a value is one no module made (the language's own, a built-in's export, a node or a view of slothlet's): what
  * the host is handed of these comes from no module.
  * @param {object|Function} value - The value.
@@ -2330,33 +1997,6 @@ function runtime_isPlainPromise(value) {
 function runtime_isShared(value) {
 	if (WeakSetMethods.has(INTRINSICS, value) || runtime_isSharedValue(value)) return true;
 	return !WeakMapMethods.has(STAND_IN_RECORDS, value) && runtime_isSlothletValue(value);
-}
-
-/**
- * Whether a caller's plain array or object holds a stand-in of the module's own, within the code search ({@link searchDepth}).
- * @param {object} maker - The module's record.
- * @param {object} value - The value.
- * @param {number} depth - Levels still allowed.
- * @param {{remaining: number}} budget - Properties still allowed.
- * @returns {boolean} True when it does.
- * @private
- */
-function runtime_holdsOwnStandIn(maker, value, depth, budget) {
-	if (depth <= 0 || util.types.isProxy(value)) return false;
-	const prototype = Reflect.getPrototypeOf(value);
-	if (prototype !== Objects.prototype && prototype !== Arrays.prototype && prototype !== null) return false;
-	if (Arrays.isArray(value) && value.length > budget.remaining) return false;
-	const keys = Reflect.ownKeys(value);
-	budget.remaining -= keys.length;
-	if (budget.remaining < 0) return false;
-	for (let ofIndex = 0, ofList = keys; ofIndex < ofList.length; ofIndex++) {
-		const key = ofList[ofIndex];
-		const member = Reflect.getOwnPropertyDescriptor(value, key)?.value;
-		if (member === null || (typeof member !== "object" && typeof member !== "function")) continue;
-		if (WeakMapMethods.get(STAND_IN_RECORDS, member)?.maker === maker) return true;
-		if (typeof member === "object" && runtime_holdsOwnStandIn(maker, member, depth - 1, budget)) return true;
-	}
-	return false;
 }
 
 /**
@@ -2372,16 +2012,6 @@ function runtime_isCarrier(value) {
 	if (Arrays.isArray(value)) return true;
 	const prototype = Reflect.getPrototypeOf(value);
 	return prototype === Objects.prototype || prototype === null || runtime_isErrorValue(value);
-}
-
-/**
- * Whether a value is a crossing view.
- * @param {*} value - The value.
- * @returns {boolean} True for one.
- * @private
- */
-function runtime_isCrossing(value) {
-	return value !== null && (typeof value === "object" || typeof value === "function") && WeakMapMethods.has(CROSSINGS, value);
 }
 
 /**
@@ -2409,38 +2039,6 @@ function runtime_isOwnOrigin(value, reader) {
 }
 
 /**
- * Whether an object is the own prototype of a class some module or the host wrote (`C.prototype`), told by
- * descriptors alone: its `constructor` is a function whose `prototype` is the object. The language's and packages'
- * own prototypes are not.
- * @param {object} value - An object that is not a Proxy.
- * @returns {boolean} True for such a prototype.
- * @private
- */
-function runtime_isWrittenClassPrototype(value) {
-	if (WeakSetMethods.has(INTRINSICS, value) || runtime_isSharedValue(value) || runtime_isSlothletValue(value)) return false;
-	const constructor = Reflect.getOwnPropertyDescriptor(value, "constructor")?.value;
-	return typeof constructor === "function" && Reflect.getOwnPropertyDescriptor(constructor, "prototype")?.value === value;
-}
-
-/**
- * Whether an object's internal data holds no reference to another object: a date, a regular expression, a buffer, a
- * typed array, a `DataView`, or a boxed primitive.
- * @param {object} value - An object that is not a Proxy.
- * @returns {boolean} True for one.
- * @private
- */
-function runtime_isOpaqueData(value) {
-	const types = util.types;
-	return (
-		types.isDate(value) ||
-		types.isRegExp(value) ||
-		types.isAnyArrayBuffer(value) ||
-		types.isArrayBufferView(value) ||
-		types.isBoxedPrimitive(value)
-	);
-}
-
-/**
  * The engine's own `byteLength` and `length` of a typed array, taken when slothlet loaded.
  * @type {Function}
  * @private
@@ -2448,90 +2046,6 @@ function runtime_isOpaqueData(value) {
 const TYPED_ARRAY_BYTE_LENGTH = PrototypeFunctions.TypedArray.byteLength;
 
 const TYPED_ARRAY_LENGTH = PrototypeFunctions.TypedArray.length;
-
-/**
- * Whether an object whose internal data holds no references ({@link runtime_isOpaqueData}) holds nothing else either,
- * so it can be handed on as it is: its prototype is the language's or Node's own, and it has no member of its own beyond
- * what its kind gives it. A typed array's members under string keys are read only where `permissions.gating.buffers`
- * asks for it: listing them lists every index, which costs milliseconds on a buffer of any size. Otherwise only its
- * prototype and its symbol keys are checked.
- * @param {object} value - Such an object.
- * @param {object|null} slothlet - The instance it crosses in.
- * @returns {boolean} True when nothing but its own data can be reached through it.
- * @private
- */
-function runtime_isPristineData(value, slothlet) {
-	const prototype = Reflect.getPrototypeOf(value);
-	if (prototype !== null && !WeakSetMethods.has(INTRINSICS, prototype) && !runtime_isSharedValue(prototype)) return false;
-	const types = util.types;
-	if (types.isArrayBufferView(value) && !types.isDataView(value)) {
-		if (Objects.getOwnPropertySymbols(value).length !== 0) return false;
-		const listed = slothlet?.config?.permissions?.gating?.buffers;
-		if (listed !== true && typeof listed !== "number") return true;
-		// Past the cap the array is not listed, as with the option off.
-		if (listed !== true && Reflect.apply(TYPED_ARRAY_BYTE_LENGTH, value, []) > listed * 1024) return true;
-		// Its own keys are its indices, then any member stored under another name.
-		return Reflect.ownKeys(value).length === Reflect.apply(TYPED_ARRAY_LENGTH, value, []);
-	}
-	const keys = Reflect.ownKeys(value);
-	if (keys.length === 0) return true;
-	if (types.isRegExp(value)) return keys.length === 1 && keys[0] === "lastIndex";
-	if (types.isBoxedPrimitive(value) && typeof ObjectMethods.valueOf(value) === "string") {
-		// A boxed string's own keys are its indices and its length.
-		return keys.length === ObjectMethods.valueOf(value).length + 1 && keys[keys.length - 1] === "length";
-	}
-	return false;
-}
-
-/**
- * Whether a value holds none of a module's code, as far as the code search ({@link searchDepth}) reaches: no function, no Proxy, no class
- * instance, no prototype a module wrote, at any depth. A stand-in and the async runtime's context wrapper stand for the
- * value behind them. Nothing of the value runs to decide.
- * @param {*} value - The value.
- * @param {object|null} slothlet - The instance, whose `permissions.search` bounds the search.
- * @returns {boolean} True for plain data.
- * @private
- */
-function runtime_holdsNoCode(value, slothlet) {
-	if (value === null || (typeof value !== "object" && typeof value !== "function")) return true;
-	const subject = runtime_crossSubject(value);
-	if (typeof subject === "function" || util.types.isProxy(subject)) return false;
-	try {
-		return !runtime_isCodeObject(subject) && !runtime_memberHoldsCode(subject, searchDepth(slothlet) + 1, searchBudget(slothlet));
-	} catch {
-		// A value that refuses to be described is taken to hold code.
-		return false;
-	}
-}
-
-/**
- * Whether a value inherits, from a prototype of a module's class, a member private to that module that privacy keeps
- * from `reader` ({@link runtime_readerHoldsPrototype}): held as itself, the value would hand it over unchecked. Found by
- * descriptors alone.
- * @param {object} slothlet - The instance.
- * @param {object} reader - A module's wrapper.
- * @param {*} value - The value, a stand-in or the async runtime's context wrapper standing for the value behind it.
- * @returns {boolean} True when it does.
- * @private
- */
-function runtime_inheritsPrivateKept(slothlet, reader, value) {
-	if (value === null || (typeof value !== "object" && typeof value !== "function")) return false;
-	const subject = runtime_crossSubject(value);
-	if (util.types.isProxy(subject)) return false;
-	for (let holder = Reflect.getPrototypeOf(subject), depth = 0; holder !== null && depth < 64; depth++) {
-		if (util.types.isProxy(holder) || WeakSetMethods.has(INTRINSICS, holder) || runtime_isSharedValue(holder)) return false;
-		if (runtime_knownPrototype(slothlet, holder) !== undefined) {
-			const keys = Reflect.ownKeys(holder);
-			for (let ofIndex = 0; ofIndex < keys.length; ofIndex++) {
-				const key = keys[ofIndex];
-				if (typeof key === "string" && StringMethods.charCodeAt(key, 0) === 95)
-					return !runtime_readerHoldsPrototype(slothlet, reader, holder);
-			}
-		}
-		holder = Reflect.getPrototypeOf(holder);
-	}
-	return false;
-}
 
 /**
  * Whether a value is the result the engine makes for one step of an iterator: a plain object holding `value` and
@@ -2576,20 +2090,6 @@ function runtime_isArrayMember(array, prop) {
 }
 
 /**
- * Whether `value` is a lazy node that has not loaded yet: a folder whose files are not read, so nothing is known of
- * what it holds until it loads. A stand-in for a chain below one is not the node.
- * @param {*} value - A member's value.
- * @returns {boolean} True for such a node.
- * @private
- */
-function runtime_isUnloadedLazyNode(value) {
-	if (value === null || (typeof value !== "object" && typeof value !== "function") || WeakMapMethods.has(WAITING_CHAINS, value))
-		return false;
-	const internal = resolveWrapper(value)?.____slothletInternal;
-	return !!internal && internal.mode === "lazy" && !internal.state.materialized && (internal.impl === null || internal.impl === undefined);
-}
-
-/**
  * True when reading `prop` off `wrapper` would be denied, so the key must be redacted from
  * enumeration and serialization rather than disclosed.
  *
@@ -2617,6 +2117,35 @@ function runtime_isUnloadedLazyNode(value) {
  * @private
  */
 function runtime_isReadRedacted(wrapper, prop, kept = null, access = null, listing = false) {
+	/**
+	 * Whether `value` is a lazy node that has not loaded yet: a folder whose files are not read, so nothing is known of
+	 * what it holds until it loads. A stand-in for a chain below one is not the node.
+	 * @param {*} value - A member's value.
+	 * @returns {boolean} True for such a node.
+	 * @private
+	 */
+	function runtime_isUnloadedLazyNode(value) {
+		if (value === null || (typeof value !== "object" && typeof value !== "function") || WeakMapMethods.has(WAITING_CHAINS, value))
+			return false;
+		const internal = resolveWrapper(value)?.____slothletInternal;
+		return (
+			!!internal && internal.mode === "lazy" && !internal.state.materialized && (internal.impl === null || internal.impl === undefined)
+		);
+	}
+
+	/**
+	 * Whether a member value is a module's own Proxy, or the stand-in slothlet hands one out as (#597), directly or as the
+	 * value behind its node: reading through it runs the module's traps (#632).
+	 * @param {*} value - The member's value.
+	 * @returns {boolean} Whether it answers with the module's code.
+	 * @private
+	 */
+	function runtime_answersWithModuleCode(value) {
+		const inner = resolveWrapper(value);
+		const held = inner ? inner.____slothletInternal.impl : value;
+		return util.types.isProxy(held) && (runtime_isModuleProxy(held) || runtime_isModuleStandIn(held));
+	}
+
 	const pm = wrapper.slothlet.handlers?.permissionManager;
 	if (!pm || !pm.isEnabled() || !pm.isReadGatingEnabled()) return false;
 	// A function's own `name` and `length` are never withheld (see runtime_isBuiltinFunctionMember).
@@ -2767,63 +2296,6 @@ function runtime_unwrapLeafValue(value) {
 }
 
 /**
- * A serialized snapshot of the wrapper tree with the terminal leaves the reader may not read left out.
- *
- * `toJSON` reconstructs the underlying data directly from the impl tree, so it bypasses the
- * proxy traps entirely — without this, `JSON.stringify(namespace)` would hand a gated caller
- * every terminal value beneath a namespace it cannot read. The snapshot shares the module's own objects, so
- * an object that loses a leaf, or holds an array, is copied rather than changed: serializing never edits a
- * module's data, frozen or not. Plain objects are recursed into, as their traversal is ungated by design. An
- * array in the snapshot is the module's own array (#602): the copy holds its api node instead, so
- * `JSON.stringify` reads each element through the node, gated as the value it reads at that moment, as
- * `JSON.stringify` of the array member does (#603 review).
- *
- * @param {object} wrapper - Wrapper the snapshot was extracted from.
- * @param {*} data - Extracted snapshot; never changed.
- * @param {string} basePath - Api path corresponding to `data`.
- * @param {object} node - The api node corresponding to `data`.
- * @param {WeakSet<object>} seen - The objects on the current path: an object the snapshot holds at two
- *   keys is redacted at each, and a cycle still stops.
- * @param {{currentWrapper: object, context: object}} [callerOverride] - The reader to redact for, when it is not
- *   the one reading now (a module serializing a node it kept, see {@link runtime_capturedView}).
- * @param {{wrapper: object, reader: object}|null} [kept] - The access a node a module kept is making (see
- *   {@link resolveEnforcedCaller}), for the reader reading now.
- * @returns {*} `data`, or a copy of it with what the reader may not read left out.
- * @private
- */
-function runtime_redactSerialized(wrapper, data, basePath, node, seen, callerOverride, kept = null) {
-	if (!data || typeof data !== "object" || Arrays.isArray(data) || WeakSetMethods.has(seen, data)) return data;
-	WeakSetMethods.add(seen, data);
-	let copy = null;
-	// The copy keeps the object's prototype, so a `toJSON` it inherits still serializes it.
-	const own = () => (copy ??= Objects.assign(Objects.create(Objects.getPrototypeOf(data)), data));
-	for (let ofIndex = 0, ofList = Objects.keys(data); ofIndex < ofList.length; ofIndex++) {
-		const key = ofList[ofIndex];
-		const value = data[key];
-		const targetPath = `${basePath}.${key}`;
-		if (runtime_isTerminalData(value)) {
-			if (!runtime_readGateDecision(wrapper, targetPath, callerOverride, kept).allowed) delete own()[key];
-		} else if (
-			value !== null &&
-			typeof value === "object" &&
-			runtime_readsNothingBeneath(wrapper, targetPath, callerOverride, kept, null, value)
-		) {
-			// An object member the rules leave the reader nothing of is left out, as a value it may not read is.
-			delete own()[key];
-		} else if (Arrays.isArray(value)) {
-			own()[key] = node[key];
-		} else if (runtime_serializesItself(value)) {
-			own()[key] = runtime_serializedHolder(wrapper, value, targetPath, callerOverride, kept);
-		} else {
-			const redacted = runtime_redactSerialized(wrapper, value, targetPath, node[key], seen, callerOverride, kept);
-			if (redacted !== value) own()[key] = redacted;
-		}
-	}
-	WeakSetMethods.delete(seen, data);
-	return copy ?? data;
-}
-
-/**
  * Whether a value of a module's data serializes through a `toJSON` of its own (own or inherited), which
  * `JSON.stringify` calls in place of reading its members. Slothlet's own nodes and the language's own data (a `Date`)
  * are not: a node serializes through its own `toJSON`, and data is read as a value.
@@ -2877,6 +2349,26 @@ function runtime_serializedHolder(wrapper, value, path, callerOverride, kept) {
  * JSON.stringify(self.owner.cfg); // '{"pub":1}'
  */
 function runtime_redactSerializedResult(wrapper, data, basePath, seen, callerOverride, kept = null) {
+	/**
+	 * Whether the rules leave the reader nothing at a path that names no node (a member of what a module's `toJSON`
+	 * gave): the path is denied and nothing beneath it is allowed, as {@link runtime_readsNothingBeneath} answers for a
+	 * member of a node's data.
+	 * @param {object} wrapper - The node being serialized.
+	 * @param {string} targetPath - The member's api path.
+	 * @param {{currentWrapper: object, context: object}|undefined} callerOverride - The reader, when it is not the one
+	 *   reading now.
+	 * @param {{wrapper: object, reader: object}|null} kept - The access a node a module kept is making.
+	 * @returns {boolean} Whether the reader may read nothing there.
+	 * @private
+	 */
+	function runtime_deniedWithNothingBeneath(wrapper, targetPath, callerOverride, kept) {
+		if (runtime_readGateDecision(wrapper, targetPath, callerOverride, kept).allowed) return false;
+		const probePath = `${targetPath}.${ANY_MEMBER_SEGMENT}`;
+		const beneath = runtime_readGateDecision(wrapper, probePath, callerOverride, kept);
+		if (beneath.allowed) return false;
+		return !wrapper.slothlet.handlers.permissionManager.allowsBeneath(beneath.caller, targetPath, probePath);
+	}
+
 	if (!data || typeof data !== "object" || WeakSetMethods.has(seen, data) || runtime_isTerminalData(data) || resolveWrapper(data) !== null)
 		return data;
 	WeakSetMethods.add(seen, data);
@@ -2903,26 +2395,6 @@ function runtime_redactSerializedResult(wrapper, data, basePath, seen, callerOve
 	}
 	WeakSetMethods.delete(seen, data);
 	return copy ?? data;
-}
-
-/**
- * Whether the rules leave the reader nothing at a path that names no node (a member of what a module's `toJSON`
- * gave): the path is denied and nothing beneath it is allowed, as {@link runtime_readsNothingBeneath} answers for a
- * member of a node's data.
- * @param {object} wrapper - The node being serialized.
- * @param {string} targetPath - The member's api path.
- * @param {{currentWrapper: object, context: object}|undefined} callerOverride - The reader, when it is not the one
- *   reading now.
- * @param {{wrapper: object, reader: object}|null} kept - The access a node a module kept is making.
- * @returns {boolean} Whether the reader may read nothing there.
- * @private
- */
-function runtime_deniedWithNothingBeneath(wrapper, targetPath, callerOverride, kept) {
-	if (runtime_readGateDecision(wrapper, targetPath, callerOverride, kept).allowed) return false;
-	const probePath = `${targetPath}.${ANY_MEMBER_SEGMENT}`;
-	const beneath = runtime_readGateDecision(wrapper, probePath, callerOverride, kept);
-	if (beneath.allowed) return false;
-	return !wrapper.slothlet.handlers.permissionManager.allowsBeneath(beneath.caller, targetPath, probePath);
 }
 
 /**
@@ -3034,21 +2506,6 @@ function runtime_isFixedOnTarget(target, prop) {
 }
 
 /**
- * Whether a node holds a member fixed (non-configurable): on its target, on its wrapper, or on the value behind it.
- * @param {object} wrapper - The node's wrapper.
- * @param {object} target - The proxy's target.
- * @param {string|symbol} prop - The member.
- * @returns {boolean} True when the member cannot be removed.
- * @private
- */
-function runtime_holdsFixed(wrapper, target, prop) {
-	if (runtime_isFixedOnTarget(target, prop)) return true;
-	if (target !== wrapper && runtime_isFixedOnTarget(wrapper, prop)) return true;
-	const impl = wrapper.____slothletInternal.impl;
-	return impl !== null && typeof impl === "object" && !util.types.isProxy(impl) && runtime_isFixedOnTarget(impl, prop);
-}
-
-/**
  * Whether `prop` is a canonical non-negative integer key (`"0"`, `"12"`), the keys an array-backed
  * wrapper answers from its current array rather than from the element wrappers it caches (#602).
  * Keys from `"4294967295"` up are not array indices, but the array holds them as ordinary own
@@ -3151,6 +2608,17 @@ function runtime_isFixedReadOnly(target, prop) {
  * util.inspect(api.config); // { host: 'db', port: 5432 }
  */
 function runtime_inspectMembers(wrapper) {
+	/**
+	 * What `util.inspect` shows for an accessor, as it shows one of a plain object: `[Getter]`, `[Setter]` or
+	 * `[Getter/Setter]`, without running it.
+	 * @param {PropertyDescriptor} descriptor - The accessor's descriptor.
+	 * @returns {object} A value `util.inspect` shows as that text.
+	 * @private
+	 */
+	function runtime_accessorLabel(descriptor) {
+		return runtime_inspectLabel(descriptor.get && descriptor.set ? "[Getter/Setter]" : descriptor.get ? "[Getter]" : "[Setter]");
+	}
+
 	const node = wrapper.____slothletInternal.proxy;
 	const shown = {};
 	for (let ofIndex = 0, ofList = Objects.keys(node); ofIndex < ofList.length; ofIndex++) {
@@ -3166,17 +2634,6 @@ function runtime_inspectMembers(wrapper) {
 		}
 	}
 	return shown;
-}
-
-/**
- * What `util.inspect` shows for an accessor, as it shows one of a plain object: `[Getter]`, `[Setter]` or
- * `[Getter/Setter]`, without running it.
- * @param {PropertyDescriptor} descriptor - The accessor's descriptor.
- * @returns {object} A value `util.inspect` shows as that text.
- * @private
- */
-function runtime_accessorLabel(descriptor) {
-	return runtime_inspectLabel(descriptor.get && descriptor.set ? "[Getter/Setter]" : descriptor.get ? "[Getter]" : "[Setter]");
 }
 
 /**
@@ -3312,26 +2769,6 @@ function runtime_defineProxyInspect(wrapper, target) {
 	}
 }
 
-/**
- * Give the api root proxy's target the `util.inspect` hook a node's target has (see {@link runtime_defineProxyInspect}):
- * Node inspects a Proxy's target, not what its traps report, so without it the root shows as its empty stand-in.
- * @param {object} slothlet - The instance.
- * @param {object|Function} target - The root proxy's target.
- * @returns {void}
- * @internal
- */
-function runtime_defineRootInspect(slothlet, target) {
-	Objects.defineProperty(target, util.inspect.custom, {
-		__proto__: null,
-		value: runtime_registerInspectHook(function (...args) {
-			return runtime_rootInspectShown(slothlet, args);
-		}),
-		writable: false,
-		enumerable: false,
-		configurable: true
-	});
-}
-
 /** Whether {@link ValuesLayer} has built its class: it builds one, for the wrapper's chain. @type {boolean} */
 let built = false;
 
@@ -3370,15 +2807,12 @@ export function ValuesLayer(Base) {
 					runtime_isEnginePromise,
 					runtime_isErrorValue,
 					runtime_dataKind,
-					runtime_isPlainMember,
 					runtime_isEngineMember,
 					runtime_inheritedEngineMember,
 					NODE_VALUE_OFS,
-					runtime_isDataReader,
 					runtime_holdsDataKind,
 					runtime_frontedDataMember,
 					runtime_inheritedPrivate,
-					runtime_holdsMember,
 					runtime_isApiNode,
 					runtime_inheritedAtStart,
 					runtime_holdsOwnMember,
@@ -3387,20 +2821,14 @@ export function ValuesLayer(Base) {
 					runtime_dataReadOptions,
 					ASSIGNED_DATA,
 					runtime_markAssignedData,
-					runtime_isPlainData,
 					runtime_holdsAssignedData,
 					runtime_isDataMemberNode,
 					runtime_valueHoldsName,
 					runtime_isBuiltinFunctionMember,
 					runtime_isCodeMemberWithheld,
-					runtime_frontsLiveValue,
 					runtime_ownsPrototype,
 					runtime_inheritsFrom,
-					runtime_inheritsSymbol,
 					runtime_implHas,
-					runtime_inheritedMemberNode,
-					runtime_keepInheritedMemberNode,
-					runtime_holdsModuleMember,
 					INTRINSICS,
 					runtime_isBindingMethod,
 					runtime_isSharedValue,
@@ -3409,26 +2837,16 @@ export function ValuesLayer(Base) {
 					runtime_isModuleProxy,
 					runtime_isBuiltinFunction,
 					SNAPSHOT_OMIT,
-					runtime_jsonSnapshot,
 					runtime_isSlotObject,
 					runtime_isNativeIterator,
 					VM_SCRIPT,
 					VM_NATIVE_SCRIPT,
 					runtime_holdsCode,
-					runtime_dataHoldsLeafFunction,
 					runtime_isCodeObject,
-					runtime_isPlainPromise,
 					runtime_isShared,
-					runtime_holdsOwnStandIn,
 					runtime_isCarrier,
-					runtime_isCrossing,
 					runtime_holdsSlottedData,
 					runtime_isOwnOrigin,
-					runtime_isWrittenClassPrototype,
-					runtime_isOpaqueData,
-					runtime_isPristineData,
-					runtime_holdsNoCode,
-					runtime_inheritsPrivateKept,
 					runtime_isStepResult,
 					runtime_isArrayMember,
 					runtime_isReadRedacted,
@@ -3436,14 +2854,12 @@ export function ValuesLayer(Base) {
 					runtime_holdsValue,
 					runtime_isRootFunctionAnswer,
 					runtime_isHostRead,
-					runtime_redactSerialized,
 					runtime_redactToJSONResult,
 					capturedViewSet,
 					runtime_isConstructor,
 					INSPECT_HOOKS,
 					runtime_isRestartStale,
 					runtime_isFixedOnTarget,
-					runtime_holdsFixed,
 					runtime_isArrayIndex,
 					runtime_isPosition,
 					runtime_isPastFixedLength,
@@ -3454,7 +2870,19 @@ export function ValuesLayer(Base) {
 					runtime_inspectSafe,
 					runtime_inspectReaderIsModule,
 					runtime_defineProxyInspect,
-					runtime_defineRootInspect
+					COMMON_READERS,
+					TYPED_ARRAY_READERS,
+					DATA_READERS,
+					MEMBER_HOLDERS,
+					INHERITED_MEMBER_NODES,
+					EMPTY_INHERITED_NODES,
+					runtime_isRefusal,
+					WELL_KNOWN_SYMBOLS,
+					TYPED_ARRAY_BYTE_LENGTH,
+					TYPED_ARRAY_LENGTH,
+					runtime_serializesItself,
+					runtime_serializedHolder,
+					runtime_registerInspectHook
 				});
 				Base.define("brand", { isWrapper: (value) => value !== null && typeof value === "object" && #brand in value });
 				Base.linkLayer(this, (methods, registered) => {
@@ -3463,13 +2891,10 @@ export function ValuesLayer(Base) {
 					runtime_moduleObjectOf = methods.nodes.runtime_moduleObjectOf;
 					runtime_nodeAtPath = methods.nodes.runtime_nodeAtPath;
 					runtime_nodeWrapperOf = methods.nodes.runtime_nodeWrapperOf;
-					runtime_originalAccessor = methods.nodes.runtime_originalAccessor;
 					runtime_prototypeChain = methods.nodes.runtime_prototypeChain;
 					runtime_prototypeHandleOf = methods.nodes.runtime_prototypeHandleOf;
-					runtime_readerHoldsPrototype = methods.nodes.runtime_readerHoldsPrototype;
 					runtime_sameLookup = methods.nodes.runtime_sameLookup;
 					WAITING_CHAINS = methods.nodes.WAITING_CHAINS;
-					FRAMEWORK_VIEW_TARGETS = methods.rules.FRAMEWORK_VIEW_TARGETS;
 					resolveEnforcedCaller = methods.rules.resolveEnforcedCaller;
 					runtime_enforceCodeMember = methods.rules.runtime_enforceCodeMember;
 					runtime_hasOwnMember = methods.rules.runtime_hasOwnMember;
@@ -3479,7 +2904,6 @@ export function ValuesLayer(Base) {
 					runtime_recordedPrototype = methods.run.runtime_recordedPrototype;
 					runtime_startPrototypes = methods.run.runtime_startPrototypes;
 					capturedViewChildren = methods.views.capturedViewChildren;
-					FRAMEWORK_MEMBERS = methods.views.FRAMEWORK_MEMBERS;
 					hasOwn = methods.views.hasOwn;
 					NODE_MEMBER = methods.views.NODE_MEMBER;
 					PROTOTYPE_HANDLE_READER = methods.views.PROTOTYPE_HANDLE_READER;
@@ -3492,19 +2916,13 @@ export function ValuesLayer(Base) {
 					INBOUND_VIEWS = methods.membrane.INBOUND_VIEWS;
 					INSPECT_CUSTOM = methods.membrane.INSPECT_CUSTOM;
 					runtime_asOneModule = methods.membrane.runtime_asOneModule;
-					runtime_crossSubject = methods.membrane.runtime_crossSubject;
-					runtime_knownPrototype = methods.membrane.runtime_knownPrototype;
 					runtime_memberPathOf = methods.membrane.runtime_memberPathOf;
 					searchBudget = methods.membrane.searchBudget;
 					searchDepth = methods.membrane.searchDepth;
 					STAND_IN_RECORDS = methods.membrane.STAND_IN_RECORDS;
-					runtime_rootInspectShown = methods.root.runtime_rootInspectShown;
-					isClassInstance = methods.uw.isClassInstance;
-					leafOfCopy = methods.uw.leafOfCopy;
 					resolveWrapper = methods.uw.resolveWrapper;
 					trustedRootOwn = methods.uw.trustedRootOwn;
 					TYPE_STATES = methods.uw.TYPE_STATES;
-					versionDispatcherRecord = methods.uw.versionDispatcherRecord;
 				});
 			}
 

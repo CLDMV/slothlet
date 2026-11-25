@@ -19,22 +19,12 @@
  * @internal
  */
 
-import { segmentsOf } from "#helpers/segments";
 import { util } from "#helpers/platform";
 import { isCompositionLayer, layerUnderlying } from "#helpers/composition";
 import { isFrameworkReservedKey } from "#helpers/reserved-keys";
 import { isFrameworkInternal, internals as frameworkInternalsInternals } from "#handlers/framework-internals";
-import {
-	settleThenable,
-	isHookProcessed,
-	failureRecord,
-	failureSource,
-	rememberFailure,
-	rememberedFailure,
-	unwrapThrown
-} from "#handlers/hook-manager";
+import { failureRecord, rememberFailure, rememberedFailure, unwrapThrown } from "#handlers/hook-manager";
 import { isSharedExport } from "#handlers/shared-values";
-import { pinnedThen } from "#helpers/promise-context";
 import {
 	ArrayMethods,
 	Arrays,
@@ -45,7 +35,6 @@ import {
 	MapMethods,
 	NativeProxy,
 	Objects,
-	Promise,
 	PromiseMethods,
 	Reflect,
 	RegExpMethods,
@@ -90,7 +79,8 @@ import {
 	handOutRaw,
 	handOutSettled,
 	rawBehind,
-	rawContent
+	rawContent,
+	declaresPrivate
 } from "#helpers/run-snapshot";
 import { RUN_COPY, RUN_SELF } from "#helpers/flow-stores";
 
@@ -110,9 +100,6 @@ let trustedRootOwn,
 	outerCallerCeiling,
 	hasOwn,
 	FRAMEWORK_WRITES,
-	runtime_inherits,
-	runtime_isEnginePromise,
-	runtime_carriesHanded,
 	runtime_holdsDataKind,
 	runtime_assertOwnedWrite,
 	runtime_nodeWrapperOf,
@@ -126,20 +113,10 @@ let trustedRootOwn,
 	runtime_isSlothletValue,
 	runtime_makerOf,
 	runtime_makerInstanceID,
-	searchDepth,
-	searchBudget,
-	runtime_isCarrier,
 	runtime_holdsValue,
 	runtime_heldValue,
 	resolveWrapper,
-	runtime_privateCallReceiver,
-	runtime_nodeVersion,
-	runtime_classPrototypeOf,
 	runtime_viewAccessor,
-	runtime_sameSnapshotMember,
-	runtime_protoAssignSetsPrototype,
-	runtime_prototypeAtStart,
-	runtime_loadStandIn,
 	runtime_unwrapSelfView,
 	runtime_selfView,
 	runtime_builtinBehind,
@@ -147,11 +124,16 @@ let trustedRootOwn,
 	runtime_inheritedAtStart,
 	runtime_holdsOwnMember,
 	runtime_hasInternalSlots,
-	runtime_registerFrameworkMemberCopy,
 	runtime_enforceReadGate,
 	runtime_registerRunView,
 	isLazyStandIn,
-	runtime_rootGate;
+	runtime_rootGate,
+	runtime_sameLookup,
+	FRAMEWORK_MEMBERS,
+	runtime_registerFrameworkMember,
+	FRAMEWORK_MEMBER_NAMES,
+	runtime_takeRefusedChange,
+	WAITING_CHAINS;
 /** The registered `UnifiedWrapper`: the only class this layer's constructor builds for. @type {Function|undefined} */
 let realClass;
 
@@ -183,28 +165,6 @@ function runtime_runsForHander(value, from) {
 	if (typeof value !== "function" || !from?.____slothletInternal || util.types.isProxy(value)) return false;
 	if (runtime_isSlothletValue(value) || isFrameworkInternal(value)) return false;
 	return WeakSetMethods.has(INTRINSICS, value) || isSharedExport(value) || runtime_runsNoModuleCode(value);
-}
-
-/**
- * Whether a value a module hands on stays a view for every other module, however much the receiver may write: a
- * function that runs for the module handing it ({@link runtime_runsForHander}), and plain data holding one as a member
- * of its own at any depth within the code search ({@link searchDepth}) (`{ fn: Reflect.set, target }`), whose member reaches the receiver
- * as that function's view ({@link runtime_crossHandedMember}). Nothing of the value runs to decide: an accessor is passed
- * over.
- * @param {*} value - The value handed on.
- * @param {object|null} from - The wrapper of the module handing it on.
- * @returns {boolean} True when it stays a view.
- * @private
- */
-function runtime_viewedForHander(value, from) {
-	if (runtime_runsForHander(value, from)) return true;
-	if (value === null || typeof value !== "object" || !from?.____slothletInternal || !runtime_isCarrier(value)) return false;
-	try {
-		return runtime_carriesHanded(value, from, searchDepth(from.slothlet), searchBudget(from.slothlet));
-	} catch {
-		// A value that refuses to be described is viewed.
-		return true;
-	}
 }
 
 /**
@@ -560,28 +520,6 @@ function runtime_checkpointBuiltin(domain, value) {
 const SETTLED_CHECKPOINTS = new WeakMap();
 
 /**
- * What a caller is handed for a promise a call returned while a run is open: a promise of the same value, which is
- * saved for the runs open before the caller has it (see {@link runtime_checkpointHandout}), the same one each time for
- * the same promise. A rejection is handed on as it is.
- * @param {object} slothlet - The instance.
- * @param {Promise<*>} promise - The promise.
- * @returns {Promise<*>} The promise the caller is handed.
- * @private
- */
-function runtime_checkpointSettled(slothlet, promise) {
-	if (!runsOpen(domainOf(slothlet)) || RUN_VIEW_ACCESS !== 0) return promise;
-	let handed = WeakMapMethods.get(SETTLED_CHECKPOINTS, promise);
-	if (handed === undefined) {
-		handed = PromiseMethods.then(promise, (value) => {
-			runtime_checkpointHandout(slothlet, value);
-			return value;
-		});
-		WeakMapMethods.set(SETTLED_CHECKPOINTS, promise, handed);
-	}
-	return handed;
-}
-
-/**
  * Before a file's code runs while a run is open: save every node of the file once per window (see
  * `checkpointOnce` in `helpers/run-snapshot`), so a change the code makes to what the file exports through its own
  * variables does not reach the runs open.
@@ -610,40 +548,6 @@ function runtime_checkpointFile(wrapper) {
 			runtime_checkpointNodePrototypes(domain, node);
 		}
 	});
-}
-
-/**
- * Save a lazy node that has just loaded, and every node and built-in below it, for the runs open (see
- * `helpers/run-snapshot`): a change made through a stand-in for it while it loaded, which is made once it has, then
- * does not reach a run that started before the change.
- * @param {UnifiedWrapper} wrapper - The node that loaded.
- * @returns {void}
- * @private
- */
-function runtime_checkpointLoaded(wrapper) {
-	const slothlet = wrapper.slothlet;
-	const domain = domainOf(slothlet);
-	if (!runsOpen(domain)) return;
-	const seen = new Set();
-	const walk = (node) => {
-		if (SetMethods.has(seen, node) || node.slothlet !== slothlet) return;
-		SetMethods.add(seen, node);
-		const internal = node.____slothletInternal;
-		if (internal.invalid || (internal.mode === "lazy" && !internal.state.materialized)) return;
-		beforeChange(domain, node, runtime_captureNode);
-		runtime_checkpointNodeBuiltins(domain, node);
-		runtime_checkpointNodePrototypes(domain, node);
-		const keys = Reflect.ownKeys(node);
-		for (let index = 0; index < keys.length; index++) {
-			if (isFrameworkReservedKey(keys[index])) continue;
-			const described = Reflect.getOwnPropertyDescriptor(node, keys[index]);
-			const value = described !== undefined && "value" in described ? described.value : undefined;
-			if (value === null || (typeof value !== "object" && typeof value !== "function")) continue;
-			const child = resolveWrapper(value);
-			if (child !== null) walk(child);
-		}
-	};
-	walk(wrapper);
 }
 
 /**
@@ -775,19 +679,6 @@ function runtime_ownRunTreeArray(wrapper) {
 	if (Reflect.getPrototypeOf(copy) !== Reflect.getPrototypeOf(array)) Reflect.setPrototypeOf(copy, Reflect.getPrototypeOf(array));
 	WeakSetMethods.add(RUN_TREE_ARRAYS, copy);
 	internal.impl = copy;
-}
-
-/**
- * Whether a node of a run's tree holds a member it was given in the run on its wrapper, over the live value it fronts
- * (a class instance, an emitter): the value is the module's, which the instance's tree fronts too.
- * @param {UnifiedWrapper} wrapper - The node's wrapper.
- * @param {string|symbol} prop - The member.
- * @returns {boolean} True when the node's own member answers.
- * @private
- */
-function runtime_runTreeHolds(wrapper, prop) {
-	const held = wrapper.____slothletInternal.runHeldKeys;
-	return held !== undefined && SetMethods.has(held, prop);
 }
 
 /**
@@ -977,205 +868,6 @@ function runtime_guardPromotedResult(promise, path, SlothletErrorCtor) {
 }
 
 /**
- * Run a hooked call whose path has around hooks.
- *
- * @param {object} wrapper - The UnifiedWrapper being invoked.
- * @param {object} hookManager - The instance's HookManager.
- * @param {Array<object>} arounds - Around hooks that fire for this call (already permission-filtered).
- * @param {{asyncBefore: boolean, asyncAfter: boolean, asyncAround: boolean}} strategy - The path's dispatch strategy.
- * @param {*} thisArg - Receiver for the target.
- * @param {Array} callArgs - Arguments the caller passed.
- * @param {object} api - Bound API handed to hooks.
- * @param {object} ctx - User context handed to hooks.
- * @param {{store: object|null, identity: object}|null} [entryIdentity=null] - The caller identity the permission
- *   gate resolved, which the target is entered with (see enforcePermission).
- * @returns {*} The call's result — a plain value on the synchronous pipeline, a Promise on the
- *   asynchronous one (guarded when a synchronous target was promoted).
- * @private
- *
- * @description
- * Pipeline order, outermost first: `always`/`error` observers → around hooks (highest priority
- * outermost) → before hooks → the function → after hooks. The observers sit outside the around
- * chain, so they see exactly what the caller receives: an error an around hook rethrows reaches the
- * error hooks (with the source of wherever it was first thrown), one it swallows does not, and
- * `always` fires once after the chain settles. `suppressErrors` likewise applies to what escapes the
- * chain — inside it, failures propagate through `next()` so an around hook can handle them.
- *
- * The synchronous pipeline is kept when every matching before/after/around handler is synchronous
- * and the target is not declared `async` (and, in lazy mode, is already materialized); otherwise the
- * whole call runs asynchronously, with the same promotion guard as a call promoted by an async
- * before/after hook.
- */
-function runtime_runAroundPipeline(wrapper, hookManager, arounds, strategy, thisArg, callArgs, api, ctx, entryIdentity = null) {
-	const internal = wrapper.____slothletInternal;
-	const path = internal.apiPath;
-	const contextManager = wrapper.slothlet.contextManager;
-	const instanceID = wrapper.slothlet.instanceID;
-
-	// Who is calling: the same resolution that makes `metadata.caller()` inside the target null —
-	// the target's execution store takes its caller from the wrapper active in THIS instance's flow
-	// at the moment of the call.
-	const callerWrapper = contextManager.getCallerIdentity(instanceID)?.currentWrapper ?? null;
-	const entry = !callerWrapper;
-	// The same `caller` object a version dispatcher and a permission record get: { path, module, metadata, version }.
-	const caller = callerWrapper ? (wrapper.slothlet.handlers.versionManager?.buildCallerArg(callerWrapper) ?? null) : null;
-
-	// Only a pinned (module-registered) around hook runs under a different identity than the call, so
-	// only then is the call's own flow captured for its next() to restore.
-	const flow = ArrayMethods.some(arounds, (hook) => isCallerLocked(hook.handler)) ? contextManager.captureFlow(instanceID) : null;
-	const runInCallerFlow = flow ? (fn) => contextManager.runInFlow(flow, fn) : null;
-
-	// First record wins: an error rethrown by an around hook keeps the source it was first thrown
-	// from; an error an around hook throws itself is recorded as an `around` failure. Matched with
-	// Object.is, so a rejection value not equal to itself (NaN) still finds its record.
-	const sources = [];
-	const errorSink = (error, source) => {
-		if (!ArrayMethods.some(sources, (entryRecord) => Objects.is(entryRecord.error, error))) listPush(sources, { error, source });
-	};
-	// The stage to report a rejection nothing recorded as; see AroundChainOptions.onUnobserved.
-	let unobserved = null;
-	const onUnobserved = (source) => {
-		unobserved = source;
-	};
-	const functionSource = (error) => failureSource({ type: "function", at: wrapper.clock.now() }, runtime_readTargetFailure(wrapper, error));
-
-	const invokeTarget = (targetArgs) => {
-		const impl = internal.impl;
-		// rawErrors: a leaf's throw is application data — never re-typed (#252).
-		if (typeof impl === "function") {
-			return contextManager.runInContext(wrapper.instanceID, impl, thisArg, targetArgs, wrapper, true, false, null, entryIdentity, true);
-		}
-		if (impl && typeof impl === "object" && typeof impl.default === "function") {
-			return contextManager.runInContext(
-				wrapper.instanceID,
-				impl.default,
-				impl,
-				targetArgs,
-				wrapper,
-				true,
-				false,
-				null,
-				entryIdentity,
-				true
-			);
-		}
-		throw new wrapper.SlothletError("API_PATH_NOT_CALLABLE", { path: segmentsOf(path), received: typeof impl });
-	};
-
-	// Observers, run once per call on the way out.
-	const settleValue = (value) => {
-		hookManager.executeAlwaysHooks(path, callArgs, value, false, [], api, ctx);
-		return value;
-	};
-	const settleError = (error) => {
-		// Every rejection is recorded on its way out except one of a thenable no view could be put on (a frozen
-		// `then`); that one is the target's, so it is classified as the target before anything reads it (#599).
-		const recordedSource = ArrayMethods.find(sources, (record) => Objects.is(record.error, error))?.source;
-		const unrecorded = recordedSource === undefined && unobserved ? runtime_readTargetFailure(wrapper, error) : null;
-		const originalError = unrecorded ? unrecorded.originalError() : unwrapError(error);
-		// A failure an inner hooked call already reported is not reported again (same rule as the
-		// pipeline without around hooks); `always` still observes this call.
-		if (!isHookProcessed(error)) {
-			const recorded = recordedSource ?? failureSource({ ...unobserved }, unrecorded ?? hookManager.failureOf(error));
-			hookManager.executeErrorHooks(path, originalError, recorded, callArgs, api, ctx);
-		}
-		hookManager.executeAlwaysHooks(path, callArgs, undefined, true, [originalError], api, ctx);
-		if (wrapper.slothlet.config?.hook?.errors === "suppress") return undefined;
-		throw error;
-	};
-
-	const leafIsAsync = util.types.isAsyncFunction(internal.impl) || util.types.isAsyncFunction(internal.impl?.default);
-	const lazyPending = internal.mode === "lazy" && !internal.state.materialized;
-	const promoted = strategy.asyncBefore || strategy.asyncAfter || strategy.asyncAround;
-	const options = { caller, entry, errorSink, runInCallerFlow, onUnobserved };
-
-	if (promoted || leafIsAsync || lazyPending) {
-		const core = async (coreArgs) => {
-			const beforeResult = await hookManager.executeBeforeHooksAsync(path, coreArgs, api, ctx, errorSink);
-			if (beforeResult.shortCircuit) return beforeResult.value;
-			coreArgs = beforeResult.args;
-			let settled;
-			try {
-				if (internal.mode === "lazy" && !internal.state.materialized) {
-					await wrapper.___materialize();
-				}
-				const raw = invokeTarget(coreArgs);
-				settled = raw && typeof raw === "object" && typeof raw.then === "function" ? await raw : raw;
-			} catch (error) {
-				errorSink(error, functionSource(error));
-				throw error;
-			}
-			const afterResult = await hookManager.executeAfterHooksAsync(path, settled, coreArgs, api, ctx, errorSink);
-			return afterResult.modified ? afterResult.result : settled;
-		};
-		const run = pinnedThen(
-			hookManager.executeAroundChain(arounds, path, callArgs, api, ctx, { ...options, core, isAsync: true }),
-			settleValue,
-			settleError
-		);
-		// Same contract as a call promoted by an async before/after hook: a target declared `async`
-		// already hands its callers a Promise; a promoted synchronous one hands back a guarded one.
-		return promoted && !leafIsAsync ? runtime_guardPromotedResult(run, path, wrapper.SlothletError) : run;
-	}
-
-	const core = (coreArgs) => {
-		const beforeResult = hookManager.executeBeforeHooks(path, coreArgs, api, ctx, errorSink);
-		if (beforeResult.shortCircuit) return beforeResult.value;
-		coreArgs = beforeResult.args;
-		let result;
-		try {
-			result = invokeTarget(coreArgs);
-		} catch (error) {
-			errorSink(error, functionSource(error));
-			throw error;
-		}
-		// A plain (not `async`-declared) target returning a Promise: after hooks attach to it, exactly
-		// as on the pipeline without around hooks.
-		if (result && typeof result === "object" && typeof result.then === "function") {
-			const afterReaction = (resolved) => {
-				const afterResult = hookManager.executeAfterHooks(path, resolved, coreArgs, api, ctx, errorSink);
-				return afterResult.modified ? afterResult.result : resolved;
-			};
-			const recordAsTarget = (error) => errorSink(error, functionSource(error));
-			// A promise of the engine's own is reacted to with the language's `then`, as `await` reacts to it; one of a
-			// module's class through its own `then`, as `await` calls it.
-			const react = runtime_isEnginePromise(result)
-				? FunctionMethods.bind(pinnedThen, null, result)
-				: runtime_inherits(result, Promise)
-					? FunctionMethods.bind(result.then, result)
-					: null;
-			if (react !== null) {
-				return react(afterReaction, (error) => {
-					recordAsTarget(error);
-					throw error;
-				});
-			}
-			// A hand-written thenable is reacted to as `await` would, its rejections recorded as the target's however
-			// its `then` delivers them (see HookManager#observeThenable).
-			return hookManager.observeThenable(result, afterReaction, recordAsTarget, () =>
-				onUnobserved({ type: "function", timestamp: wrapper.clock.now() })
-			);
-		}
-		const afterResult = hookManager.executeAfterHooks(path, result, coreArgs, api, ctx, errorSink);
-		return afterResult.modified ? afterResult.result : result;
-	};
-
-	let value;
-	try {
-		value = hookManager.executeAroundChain(arounds, path, callArgs, api, ctx, { ...options, core, isAsync: false });
-	} catch (error) {
-		return settleError(error);
-	}
-	// The only thenable an around hook may return on this pipeline is one `next()` returned, passed
-	// through or derived from (`next().then(check)`); observe it when it settles.
-	if (value && typeof value === "object" && typeof value.then === "function") {
-		if (runtime_isEnginePromise(value)) return pinnedThen(value, settleValue, settleError);
-		return runtime_inherits(value, Promise) ? value.then(settleValue, settleError) : settleThenable(value, settleValue, settleError);
-	}
-	return settleValue(value);
-}
-
-/**
  * The record of a target's failure (#599): the one kept for it (the innermost code it was thrown from), or a new one that
  * reads it as the target.
  *
@@ -1301,27 +993,6 @@ const RUN_VIEW_FUNCTIONS = new WeakMap();
 const RUN_VIEW_NODE_CHANGES = new WeakMap();
 
 /**
- * A function read through a run's view, as handed out: called with one of the run's views as its receiver, it runs on
- * the node the view reads through, as it would when read off that node.
- * @param {Function} fn - The function.
- * @returns {Function} The function as handed out.
- * @private
- */
-function runViewFunction(fn) {
-	let handed = WeakMapMethods.get(RUN_VIEW_FUNCTIONS, fn);
-	if (handed === undefined) {
-		// Called with one of the run's views as its receiver, it runs on that view: what it reads is what the run reads,
-		// and what it writes stays in the run, as a method called on a copy of an object works on the copy.
-		handed = new NativeProxy(fn, {
-			__proto__: null,
-			apply: (target, thisArg, args) => Reflect.apply(target, runViewReceiver(thisArg), args)
-		});
-		WeakMapMethods.set(RUN_VIEW_FUNCTIONS, fn, handed);
-	}
-	return handed;
-}
-
-/**
  * The receiver a method read through a run's view runs with: the view itself, so what it reads and writes is the
  * run's, except for an instance of a class that declares `#private` fields, whose methods run on the instance itself
  * (the object the node the view reads through fronts), where the private fields are: whichever version of the method
@@ -1332,23 +1003,29 @@ function runViewFunction(fn) {
  * @private
  */
 function runViewReceiver(thisArg) {
+	/**
+	 * The receiver a function a run's view handed out runs with when it is called on the run's view of a node fronting an
+	 * instance of a class that declares `#private` fields: the instance itself, where its private fields are, once the
+	 * node's file is saved for the runs open (see {@link runtime_checkpointFile}), as before a call through the node. Null
+	 * for any other node.
+	 * @param {*} node - The node the view reads through.
+	 * @returns {object|null} The instance.
+	 * @internal
+	 */
+	function runtime_privateCallReceiver(node) {
+		const wrapper = runtime_nodeWrapperOf(node);
+		const impl = wrapper?.____slothletInternal?.impl;
+		if (impl === null || impl === undefined || typeof impl !== "object") return null;
+		const instance = layerUnderlying(impl);
+		// A Proxy is asked nothing: reading its prototype would run its traps.
+		if (instance === null || typeof instance !== "object" || util.types.isProxy(instance) || !declaresPrivate(instance)) return null;
+		runtime_checkpointFile(wrapper);
+		return instance;
+	}
+
 	if (thisArg === null || (typeof thisArg !== "object" && typeof thisArg !== "function")) return thisArg;
 	if (!WeakMapMethods.has(RUN_VIEW_REALS, thisArg)) return thisArg;
 	return runtime_privateCallReceiver(WeakMapMethods.get(RUN_VIEW_REALS, thisArg)) ?? thisArg;
-}
-
-/**
- * Whether a node fronts a live object a run shares with the instance (an `EventEmitter`, an `EventTarget`): a run is
- * handed the node itself, so its listeners and what it emits or sets work both ways (see `isSharedLive` in
- * `helpers/run-snapshot`).
- * @param {*} value - The node, as read.
- * @returns {boolean} True for one.
- * @private
- */
-function frontsSharedLive(value) {
-	if (typeof value !== "object" || value === null) return false;
-	const impl = runtime_nodeWrapperOf(value)?.____slothletInternal?.impl;
-	return impl !== null && typeof impl === "object" && !util.types.isProxy(impl) && isSharedLive(impl);
 }
 
 /**
@@ -1412,6 +1089,180 @@ function runViewShell(shell, parentSelf) {
  * @private
  */
 function makeRunSelf(slothlet, parentSelf, record) {
+	/**
+	 * Load the node a stand-in stands for (see {@link isLazyStandIn}), without reading the member it stands for: a run's view
+	 * over a stand-in reads that member through its own views once the node has loaded, so a getter on the path runs once
+	 * (see `makeRunSelf` in `handlers/unified-wrapper/run`). A change queued through a stand-in that the node refused fails it, as
+	 * awaiting the stand-in does.
+	 * @param {object} standIn - The stand-in.
+	 * @returns {Promise<void>} Settles once the node has loaded.
+	 * @internal
+	 */
+	async function runtime_loadStandIn(standIn) {
+		const wrapper = resolveWrapper(standIn);
+		if (wrapper === null) return;
+		if (!wrapper.____slothletInternal.state.materialized) await wrapper.___materialize();
+		const refused = runtime_takeRefusedChange(wrapper, WeakMapMethods.get(WAITING_CHAINS, standIn) ?? []);
+		if (refused) throw refused;
+	}
+
+	/**
+	 * Record a stand-in for one of the framework's root members (a view of the
+	 * `slothlet` namespace) as that member, so module code reading it through the scope's `self` is handed the same
+	 * view of it as outside the scope ({@link runtime_selfFrameworkView}). Anything else is left unrecorded.
+	 *
+	 * @param {object} copy - The stand-in.
+	 * @param {*} member - The value it stands in for.
+	 * @returns {object} `copy`.
+	 * @internal
+	 *
+	 * @example
+	 * runtime_registerFrameworkMemberCopy(viewOf(api.slothlet), api.slothlet);
+	 */
+	function runtime_registerFrameworkMemberCopy(copy, member) {
+		const slothlet = WeakMapMethods.get(FRAMEWORK_MEMBERS, member);
+		if (slothlet) runtime_registerFrameworkMember(copy, slothlet, WeakMapMethods.get(FRAMEWORK_MEMBER_NAMES, member));
+		return copy;
+	}
+
+	/**
+	 * Whether a value read through a node now is the member a node's saved version holds: the same child node (or a view of
+	 * it), the node fronting the same object, or the same value.
+	 * @param {*} live - What the node hands out now.
+	 * @param {*} held - What the version holds.
+	 * @returns {boolean} True when they are one.
+	 * @internal
+	 */
+	function runtime_sameSnapshotMember(live, held) {
+		if (live === held) return true;
+		if (live === null || (typeof live !== "object" && typeof live !== "function")) return false;
+		if (held === null || (typeof held !== "object" && typeof held !== "function")) return false;
+		const liveWrapper = runtime_nodeWrapperOf(live);
+		if (liveWrapper === null) return false;
+		const heldWrapper = runtime_nodeWrapperOf(held);
+		if (heldWrapper !== null) return heldWrapper === liveWrapper;
+		const internal = liveWrapper.____slothletInternal;
+		return internal.impl === held || internal.sourceValue === held || internal.moduleObject === held;
+	}
+
+	/**
+	 * The content a node had when a run started, when the instance has changed it since (see {@link runtime_captureNode}),
+	 * or null when the node is as it was.
+	 * @param {*} node - The node, as the run's view reads through it.
+	 * @param {object|null|undefined} snap - The run's snapshot (see `helpers/run-snapshot`).
+	 * @returns {{members: Map<PropertyKey, (object|symbol)>}|null} The content.
+	 * @internal
+	 */
+	function runtime_nodeVersion(node, snap) {
+		if (snap === null || snap === undefined || snap.closed) return null;
+		const wrapper = runtime_nodeWrapperOf(node);
+		if (wrapper === null) return null;
+		const held = versionAt(snap.instance, wrapper, snap.base);
+		return held === CURRENT ? null : held;
+	}
+
+	/**
+	 * The prototype of a class a function node fronts (its function's own `prototype`), as the module holds it, or null.
+	 * @param {*} node - The node.
+	 * @returns {object|null} The prototype.
+	 * @internal
+	 */
+	function runtime_classPrototypeOf(node) {
+		const wrapper = runtime_nodeWrapperOf(node);
+		return wrapper === null ? null : runtime_wrapperClassPrototype(wrapper);
+	}
+
+	/**
+	 * The prototype a run reads a node as inheriting from, when that differs from what the node reports now: the one it
+	 * held when the run started, when the instance set another on it since, or the run's view of it, when the instance
+	 * changed that prototype of a module's own since (see {@link runtime_inheritedAtStart}). Undefined when the run reads
+	 * the node's prototype as the node reports it.
+	 * @param {*} node - The node, as the run's view reads through it.
+	 * @param {{prototype?: (object|null|symbol)}|null} version - The node's saved version, if any.
+	 * @param {object} snap - The run's snapshot.
+	 * @returns {{prototype: (object|null)}|undefined} The prototype.
+	 * @internal
+	 */
+	function runtime_prototypeAtStart(node, version, snap) {
+		/**
+		 * Whether a saved version of an object holds other than the object does now: other members, other attributes, or
+		 * another prototype. Read by descriptors only.
+		 * @param {object} content - The version (or the object itself).
+		 * @param {object} raw - The object.
+		 * @returns {boolean} True when it does.
+		 * @private
+		 */
+		function runtime_contentChanged(content, raw) {
+			if (content === raw) return false;
+			if (Reflect.getPrototypeOf(content) !== Reflect.getPrototypeOf(raw)) return true;
+			const keys = Reflect.ownKeys(raw);
+			if (Reflect.ownKeys(content).length !== keys.length) return true;
+			for (let index = 0; index < keys.length; index++) {
+				const now = Reflect.getOwnPropertyDescriptor(raw, keys[index]);
+				const then = Reflect.getOwnPropertyDescriptor(content, keys[index]);
+				if (then === undefined || !runtime_sameLookup({ from: content, described: then }, { from: raw, described: now })) return true;
+			}
+			return false;
+		}
+
+		const wrapper = runtime_nodeWrapperOf(node);
+		if (wrapper === null || snap === null || snap === undefined || snap.closed) return undefined;
+		const held = runtime_startPrototypes(wrapper, version);
+		if (held === undefined) return undefined;
+		const { start, now } = held;
+		if (start === null || isLanguagePrototype(start) || resolveWrapper(start) !== null)
+			return start === now ? undefined : { prototype: start };
+		if (start === now && !runtime_contentChanged(rawContent(snap, start), start)) return undefined;
+		return { prototype: handOutRaw(snap, start) };
+	}
+
+	/**
+	 * Whether `node.__proto__ = x` on a node runs the language's own `__proto__` setter, as the set trap does for a node
+	 * fronting a module's own object that holds no `__proto__` member (#757); any other node takes it as a member write.
+	 * @param {*} node - The node, as a run's view reads through it.
+	 * @returns {boolean} True when the assignment sets the prototype.
+	 * @internal
+	 */
+	function runtime_protoAssignSetsPrototype(node) {
+		const wrapper = runtime_nodeWrapperOf(node);
+		return wrapper !== null && !hasOwn(wrapper, "__proto__") && runtime_moduleObjectOf(wrapper) !== null;
+	}
+
+	/**
+	 * Whether a node fronts a live object a run shares with the instance (an `EventEmitter`, an `EventTarget`): a run is
+	 * handed the node itself, so its listeners and what it emits or sets work both ways (see `isSharedLive` in
+	 * `helpers/run-snapshot`).
+	 * @param {*} value - The node, as read.
+	 * @returns {boolean} True for one.
+	 * @private
+	 */
+	function frontsSharedLive(value) {
+		if (typeof value !== "object" || value === null) return false;
+		const impl = runtime_nodeWrapperOf(value)?.____slothletInternal?.impl;
+		return impl !== null && typeof impl === "object" && !util.types.isProxy(impl) && isSharedLive(impl);
+	}
+
+	/**
+	 * A function read through a run's view, as handed out: called with one of the run's views as its receiver, it runs on
+	 * the node the view reads through, as it would when read off that node.
+	 * @param {Function} fn - The function.
+	 * @returns {Function} The function as handed out.
+	 * @private
+	 */
+	function runViewFunction(fn) {
+		let handed = WeakMapMethods.get(RUN_VIEW_FUNCTIONS, fn);
+		if (handed === undefined) {
+			// Called with one of the run's views as its receiver, it runs on that view: what it reads is what the run reads,
+			// and what it writes stays in the run, as a method called on a copy of an object works on the copy.
+			handed = new NativeProxy(fn, {
+				__proto__: null,
+				apply: (target, thisArg, args) => Reflect.apply(target, runViewReceiver(thisArg), args)
+			});
+			WeakMapMethods.set(RUN_VIEW_FUNCTIONS, fn, handed);
+		}
+		return handed;
+	}
+
 	// The run's snapshot (see helpers/run-snapshot): what it reads of the instance is the instance as of its start.
 	const snap = record?.snap ?? null;
 	const run = {
@@ -2767,7 +2618,6 @@ export function RunLayer(Base) {
 				Base.define("run", {
 					runtime_runsNoModuleCode,
 					runtime_runsForHander,
-					runtime_viewedForHander,
 					runShared,
 					runtime_takeRunWrite,
 					runtime_wrapOnSet,
@@ -2776,15 +2626,12 @@ export function RunLayer(Base) {
 					runtime_checkpointPrototypeHandout,
 					runtime_runningRecord,
 					runtime_checkpointHandout,
-					runtime_checkpointSettled,
 					runtime_checkpointFile,
-					runtime_checkpointLoaded,
 					runtime_snapshotBarrier,
 					runtime_fillPrototype,
 					runtime_recordedPrototype,
 					runtime_inRunTree,
 					runtime_ownRunTreeArray,
-					runtime_runTreeHolds,
 					runtime_markRunTreeHeld,
 					runtime_runTreeHides,
 					runtime_runTreeHiddenFrom,
@@ -2792,19 +2639,21 @@ export function RunLayer(Base) {
 					runtime_runningLeafOf,
 					runtime_runAfterPrincipalGate,
 					runtime_guardPromotedResult,
-					runtime_runAroundPipeline,
 					runtime_readTargetFailure,
 					unwrapError,
-					makeRunSelf
+					makeRunSelf,
+					RUN_VIEW_ACCESS,
+					SETTLED_CHECKPOINTS,
+					runtime_captureNode,
+					runtime_checkpointNodeBuiltins,
+					runtime_checkpointNodePrototypes,
+					isCallerLocked
 				});
 				Base.linkLayer(this, (methods, registered) => {
 					realClass = registered;
 					INTRINSICS = methods.values.INTRINSICS;
 					runtime_holdsDataKind = methods.values.runtime_holdsDataKind;
 					runtime_holdsValue = methods.values.runtime_holdsValue;
-					runtime_inherits = methods.values.runtime_inherits;
-					runtime_isCarrier = methods.values.runtime_isCarrier;
-					runtime_isEnginePromise = methods.values.runtime_isEnginePromise;
 					runtime_isSlothletValue = methods.values.runtime_isSlothletValue;
 					runtime_ownsPrototype = methods.values.runtime_ownsPrototype;
 					runtime_makerInstanceID = methods.nodes.runtime_makerInstanceID;
@@ -2818,22 +2667,12 @@ export function RunLayer(Base) {
 					runtime_readOnBehalf = methods.rules.runtime_readOnBehalf;
 					runtime_runAccessor = methods.rules.runtime_runAccessor;
 					hasOwn = methods.views.hasOwn;
-					runtime_carriesHanded = methods.membrane.runtime_carriesHanded;
-					searchBudget = methods.membrane.searchBudget;
-					searchDepth = methods.membrane.searchDepth;
 					runtime_heldValue = methods.root.runtime_heldValue;
 					fileNodes = methods.uw.fileNodes;
 					outerCallerCeiling = methods.uw.outerCallerCeiling;
 					resolveWrapper = methods.uw.resolveWrapper;
 					trustedRootOwn = methods.uw.trustedRootOwn;
-					runtime_privateCallReceiver = methods.nodes.runtime_privateCallReceiver;
-					runtime_nodeVersion = methods.nodes.runtime_nodeVersion;
-					runtime_classPrototypeOf = methods.nodes.runtime_classPrototypeOf;
 					runtime_viewAccessor = methods.nodes.runtime_viewAccessor;
-					runtime_sameSnapshotMember = methods.nodes.runtime_sameSnapshotMember;
-					runtime_protoAssignSetsPrototype = methods.nodes.runtime_protoAssignSetsPrototype;
-					runtime_prototypeAtStart = methods.nodes.runtime_prototypeAtStart;
-					runtime_loadStandIn = methods.waiting.runtime_loadStandIn;
 					runtime_unwrapSelfView = methods.views.runtime_unwrapSelfView;
 					runtime_selfView = methods.views.runtime_selfView;
 					runtime_builtinBehind = methods.views.runtime_builtinBehind;
@@ -2841,11 +2680,16 @@ export function RunLayer(Base) {
 					runtime_inheritedAtStart = methods.values.runtime_inheritedAtStart;
 					runtime_holdsOwnMember = methods.values.runtime_holdsOwnMember;
 					runtime_hasInternalSlots = methods.values.runtime_hasInternalSlots;
-					runtime_registerFrameworkMemberCopy = methods.rules.runtime_registerFrameworkMemberCopy;
 					runtime_enforceReadGate = methods.rules.runtime_enforceReadGate;
 					runtime_registerRunView = methods.rules.runtime_registerRunView;
 					isLazyStandIn = methods.uw.isLazyStandIn;
 					runtime_rootGate = methods.root.runtime_rootGate;
+					runtime_sameLookup = methods.nodes.runtime_sameLookup;
+					FRAMEWORK_MEMBERS = methods.views.FRAMEWORK_MEMBERS;
+					runtime_registerFrameworkMember = methods.rules.runtime_registerFrameworkMember;
+					FRAMEWORK_MEMBER_NAMES = methods.rules.FRAMEWORK_MEMBER_NAMES;
+					runtime_takeRefusedChange = methods.waiting.runtime_takeRefusedChange;
+					WAITING_CHAINS = methods.nodes.WAITING_CHAINS;
 				});
 			}
 
