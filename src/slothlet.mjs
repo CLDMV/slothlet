@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-25T04:19:22-08:00 (1795609162)
+ *	@Last modified time: 2026-11-25T04:58:58-08:00 (1795611538)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -2046,7 +2046,10 @@ class Slothlet {
 			// A run that started before a change to the root reads the root as it was (see helpers/run-snapshot): the root's
 			// members are saved before every change to it, once per window, while a run is open.
 			const rootBarrier = () => {
-				if (anyRunOpen() && this.api && !inRunTree()) beforeChange(domainOf(this), this.api, rootCapture);
+				if (!anyRunOpen() || !this.api) return;
+				if (!inRunTree()) beforeChange(domainOf(this), this.api, rootCapture);
+				// The root of a run's own tree is saved for the runs opened in that run (see Slothlet#_runTreeSnapshot).
+				else beforeChange(this._runTreeSnapshot(this._treeEpoch), this.api, rootCapture);
 			};
 			// The root's members as they are, inheriting from the prototype the root has (a function root's is on its record).
 			const rootCapture = (api) => {
@@ -3321,7 +3324,7 @@ class Slothlet {
 			const kept = kind === "copy" ? this.#keptScopeOf(holder) : null;
 			// A reload after a restart of the run seals its CommonJS leaves as that restart did (see `RUN_BUILD_SEAL`).
 			const seal = kind === "reload" ? (holder.restart?.seal ?? null) : null;
-			const next = await this.#buildCopy(view, history, kind, kept?.instanceID, seal);
+			const next = await this.#buildCopy(view, history, kind, kept?.instanceID, seal, this.#startOf(holder, view, kind));
 			if (holder.torn === true) {
 				this.#retireTree(next);
 				return;
@@ -3348,6 +3351,25 @@ class Slothlet {
 			holder.treeBusy = null;
 			release();
 		}
+	}
+
+	/**
+	 * The snapshot a run's first copy of its tree is built as of (see {@link Slothlet#buildCopy}): a run that changes
+	 * the tree it started on (the instance's, or a copy kept for it when the instance changed that tree) gets the tree
+	 * as it read it, as of its start, not as the instance holds it now. Null for a kept token, a rebuild, a run that
+	 * owns a tree already, and a run reading another run's tree.
+	 * @param {object} holder - A run's record or a kept token.
+	 * @param {object} view - The set copied (see {@link Slothlet#viewOf}).
+	 * @param {"copy"|"reload"|"restart"} kind - What the build is.
+	 * @returns {object|null} The run's snapshot.
+	 * @private
+	 */
+	#startOf(holder, view, kind) {
+		if (kind !== "copy" || holder.ns === undefined || holder.ownsTree === true) return null;
+		const snap = holder.snap ?? null;
+		if (snap === null || snap.closed || snap.root === null || snap.root === undefined) return null;
+		const owner = WeakMapMethods.get(this.#treeOwners, view.api);
+		return owner === undefined || owner.ns === undefined ? snap : null;
 	}
 
 	/**
@@ -3473,10 +3495,12 @@ class Slothlet {
 	 * @param {string} [loadID] - The ID the copied tree's files were loaded under, when the instance has left it.
 	 * @param {{stamp: string}|null} [seal=null] - For a reload, the seal of the run's last restart (see
 	 *   `RUN_BUILD_SEAL`); a restart draws its own.
+	 * @param {object|null} [asOf=null] - For a run's copy, the run's snapshot: what was written into the tree is carried
+	 *   as the run read it, as of its start (see {@link Slothlet#startOf}).
 	 * @returns {Promise<object>} The new set.
 	 * @private
 	 */
-	async #buildCopy(view, history, kind, loadID, seal = null) {
+	async #buildCopy(view, history, kind, loadID, seal = null, asOf = null) {
 		const next = this.#copyOfFields(view);
 		const epoch = --this.#copyEpochs;
 		next._buildEpoch = epoch;
@@ -3493,7 +3517,7 @@ class Slothlet {
 		next._materializeCallbackCalled = true;
 		next._moduleIncarnations = kind === "restart" ? new Map() : this.#copyMap(view._moduleIncarnations);
 		next._retiredIncarnations = kind === "restart" ? new Map() : this.#copyMap(view._retiredIncarnations);
-		const mark = { copyOf: this, next, view, kind, silent: kind === "copy", bust: kind === "copy" ? null : this.#clock.now() };
+		const mark = { copyOf: this, next, view, kind, silent: kind === "copy", bust: kind === "copy" ? null : this.#clock.now(), asOf };
 		mark.seal = kind === "restart" ? Objects.freeze({ stamp: `${mark.bust}` }) : kind === "reload" ? seal : null;
 		MapMethods.set(this.#treeSets, epoch, { values: next, bust: mark.bust, seal: mark.seal });
 		const build = () => this._runAsHost(() => this.#buildCopyOnto(mark, history));
@@ -3694,7 +3718,9 @@ class Slothlet {
 		}
 		if (kind === "copy") {
 			// What code wrote into the copied tree at runtime (`self.x = …`, a member the host set) is in the copy too.
-			await handlers.apiManager?.carryRuntimeMembers?.(view.api, apiWithBuiltins, oldHandlers.ownership);
+			// A run's first copy carries it as the run read it, as of its start (see Slothlet#startOf).
+			const asOf = mark.asOf ?? null;
+			await handlers.apiManager?.carryRuntimeMembers?.(asOf?.root ?? view.api, apiWithBuiltins, oldHandlers.ownership, asOf);
 			// Which version is the default and each version's metadata are the copied set's too.
 			handlers.versionManager?.carryState?.(oldHandlers.versionManager);
 		}
@@ -3780,6 +3806,27 @@ class Slothlet {
 	_runRestart() {
 		if (this._runRestarts === 0) return null;
 		return this.#runRecord()?.restart ?? null;
+	}
+
+	/**
+	 * The snapshot of the run that owns a tree a copy built for it (see {@link Slothlet#ownTree}), by the tree's epoch:
+	 * the runs opened in that run read the tree as of their start on it, so the run saves the tree's nodes and root
+	 * before it changes them while one is open (see `helpers/run-snapshot`). Null for a tree no run owns (the
+	 * instance's, a copy kept for runs) and once the run has let it go.
+	 * @param {number} epoch - The tree's epoch.
+	 * @returns {object|null} The run's snapshot.
+	 * @internal
+	 *
+	 * @example
+	 * const snap = slothlet._runTreeSnapshot(wrapper.____slothletInternal.epoch);
+	 */
+	_runTreeSnapshot(epoch) {
+		if (this._treeCopies === 0 || typeof epoch !== "number" || epoch >= 0) return null;
+		const api = MapMethods.get(this.#treeSets, epoch)?.values?.api;
+		const owner = api === null || api === undefined ? undefined : WeakMapMethods.get(this.#treeOwners, api);
+		if (owner === undefined || owner.ns === undefined || owner.torn === true) return null;
+		const snap = owner.snap ?? null;
+		return snap === null || snap.closed ? null : snap;
 	}
 
 	/**

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-25T04:19:16-08:00 (1795609156)
+ *	@Last modified time: 2026-11-25T04:58:51-08:00 (1795611531)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -4088,8 +4088,8 @@ function runtime_captureNode(wrapper) {
 	};
 	// A node fronting a module's own object holds what that object holds (the node follows it on its next read): the
 	// object is read, so a change the module made through its own variable and the node has not followed yet is not
-	// taken for the node's.
-	const object = runtime_moduleObjectOf(wrapper);
+	// taken for the node's. A node of a run's tree holds its members itself: it does not follow the object.
+	const object = runtime_inRunTree(wrapper) ? null : runtime_moduleObjectOf(wrapper);
 	// Whether the node takes new members and the prototype it holds, as they are now.
 	const open = runtime_nodeOpen(wrapper);
 	const prototype = runtime_snapshotPrototype(wrapper);
@@ -4673,9 +4673,14 @@ function runtime_snapshotBarrier(wrapper) {
 	const domain = domainOf(slothlet);
 	if (!runsOpen(domain)) return;
 	if (RUN_WRITE !== null && RUN_WRITE.node === wrapper) return;
-	if (slothlet.____buildDepth > 0 || MapMethods.has(FRAMEWORK_WRITES, wrapper) || runtime_inRunTree(wrapper)) return;
+	if (slothlet.____buildDepth > 0 || MapMethods.has(FRAMEWORK_WRITES, wrapper)) return;
 	const internal = wrapper.____slothletInternal;
 	if (internal.mode === "lazy" && !internal.state.materialized) return;
+	// A node of a run's own tree is saved for the runs opened in that run, which read it as of their start on it.
+	if (runtime_inRunTree(wrapper)) {
+		beforeChange(slothlet._runTreeSnapshot?.(internal.epoch) ?? null, wrapper, runtime_captureNode);
+		return;
+	}
 	// Once per window: later changes in the same window find the node saved already.
 	if (!beforeChange(domain, wrapper, runtime_captureNode)) return;
 	// A node over a built-in (a `Map`) holds its entries in the built-in, which a method running on it changes as itself;
@@ -7607,6 +7612,8 @@ const DATA_NODE_IMPLS = new WeakMap();
 function runtime_followModuleObject(wrapper, target, prop, integrity = true) {
 	const internal = wrapper.____slothletInternal;
 	if (internal.moduleObject === null || internal.moduleObject === undefined) return;
+	// A node of a run's tree holds what the run reads: the tree as of the run's start and what the run wrote since.
+	if (runtime_inRunTree(wrapper)) return;
 	if (prop !== undefined && typeof prop !== "string") return;
 	if (
 		internal.followingModule ||
@@ -7649,7 +7656,7 @@ function runtime_followModuleObject(wrapper, target, prop, integrity = true) {
  */
 function runtime_followModuleIntegrity(wrapper, target) {
 	const internal = wrapper.____slothletInternal;
-	if (internal.moduleObject === null || internal.moduleObject === undefined) return;
+	if (internal.moduleObject === null || internal.moduleObject === undefined || runtime_inRunTree(wrapper)) return;
 	if (
 		internal.followingModule ||
 		internal.integritySyncing ||
