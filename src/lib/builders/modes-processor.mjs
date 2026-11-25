@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-25T12:25:35-08:00 (1795638335)
+ *	@Last modified time: 2026-11-25T13:15:52-08:00 (1795641352)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -2558,6 +2558,46 @@ export class ModesProcessor extends ComponentBase {
 							false, // rootUnwrap
 							true // transparent: the folder adds no path segment
 						);
+						continue;
+					}
+
+					// A file named like the folder placed its node at the key first (files load before folders). The
+					// single-file folder above resolves that collision as a whole, but a multi-file folder is built into
+					// the key's existing node member by member, so each member collided on its own: skip kept the folder's
+					// non-conflicting members and replace kept the file's. Settled here for the folder as a whole, as lazy
+					// mode settles it: skip leaves the file's node with nothing of the folder added, and replace builds
+					// the folder on its own and puts it in the file's place (O03/O04, #1004).
+					if (
+						(modes_effectiveCollisionMode === "skip" || modes_effectiveCollisionMode === "replace") &&
+						readApiMember(targetApi, subDirName) !== undefined
+					) {
+						if (modes_effectiveCollisionMode === "skip") continue;
+						const modes_folderHolder = {};
+						await this.processFiles(
+							modes_folderHolder,
+							subDir.children.files,
+							{ name: subDirName, path: subDir.path, children: subDir.children },
+							currentDepth + 1,
+							mode,
+							false, // Not root
+							recursive,
+							false, // populateDirectly - build the folder's own node
+							childPathPrefix,
+							collisionContext,
+							moduleID,
+							sourceFolder,
+							cacheBust,
+							collisionModeOverride,
+							false, // rootUnwrap
+							false, // transparent
+							memberPath(subDirName, subDir.path, true)
+						);
+						await this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, subDirName, modes_folderHolder[subDirName], {
+							useCollisionDetection: true,
+							config: this.slothlet.config,
+							collisionContext,
+							collisionModeOverride: modes_effectiveCollisionMode
+						});
 						continue;
 					}
 
