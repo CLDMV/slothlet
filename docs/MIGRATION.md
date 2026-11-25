@@ -327,12 +327,13 @@ A `run()` / `scope()` open across a `restart()` that fails is refused as after `
 - v3: metadata validation walked plain objects only, so a cycle through an array (or object → array → object) was accepted.
 - v4: it throws `INVALID_ARGUMENT`, like a cycle through plain objects, at every entry point (config `metadata`, `api.add` metadata, `metadata.global` / `set`).
 
-### Node 22 and the async context frame
+### Node.js 24.15 or later
 
-With permissions on, an async-runtime instance checks that Node's `AsyncContextFrame` is on (the `async-context-frame` baseline check). It is on by default from Node 24.
+slothlet requires Node.js 24.15.0 or later, to run it and to develop on it (`engines.node` and `devEngines` are both `>=24.15.0`).
 
-- v3: no such check.
-- v4 on Node 22: under `permissions.mode: "strict"` start Node with `--experimental-async-context-frame` (on the command line or in `NODE_OPTIONS`), or the instance does not start (`PERMISSION_BASELINE_UNMET`). Under `"on"` it starts and raises one `WARNING_PERMISSION_BASELINE_UNMET`. With permissions off or disabled, and on the live runtime, nothing is checked. On Node 24 and later the check fails only when Node runs with `--no-async-context-frame`.
+- v3: Node 22.15 or later to run slothlet, 22.22 or later to develop it.
+- v4: Node 24.15.0 or later. Node 22 is no longer supported; it reaches end of life in April 2027. The async runtime relies on Node's `AsyncContextFrame`, which is on by default from Node 24, and 24.15.0 is the first Node 24 release with both async hooks that leave promise jobs out (`createHook({ trackPromises: false })`) and `module.registerHooks()` asked for a `require.resolve()`, which slothlet relies on.
+- With permissions on, an async-runtime instance checks that `AsyncContextFrame` is on (the `async-context-frame` baseline check). It fails only when Node runs with `--no-async-context-frame`, on the command line or in `NODE_OPTIONS`: under `permissions.mode: "strict"` the instance then does not start (`PERMISSION_BASELINE_UNMET`), and under `"on"` it starts and raises one `WARNING_PERMISSION_BASELINE_UNMET`. With permissions off or disabled, and on the live runtime, nothing is checked.
 
 ### Reload instance IDs and `diag.inspect().runtime.running`
 
