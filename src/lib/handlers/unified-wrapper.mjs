@@ -349,12 +349,15 @@ function runtime_isUnchangingDefinition(holder, prop, descriptor) {
  * @param {object} target - The proxy target.
  * @param {string|symbol} prop - The member name.
  * @param {PropertyDescriptor} descriptor - The definition.
+ * @param {object|null} [wrapper] - The node defined on, when it is one (a branded one keeps its marker keys).
  * @returns {boolean|undefined} True when the definition is absorbed, false when it is refused, undefined when the name is not the framework's.
  * @internal
  */
-function runtime_absorbsFrameworkName(target, prop, descriptor) {
+function runtime_absorbsFrameworkName(target, prop, descriptor, wrapper = null) {
 	if (typeof prop !== "string" || !isFrameworkName(prop) || prop === "___materialize") return undefined;
 	if (SetMethods.has(reservedKeysOwn.IMPL_METADATA_KEYS, prop)) return undefined;
+	// The dispatcher marker keys, on a wrapper the framework branded for them, are the framework's own writes.
+	if (wrapper !== null && isFrameworkMarkerKey(prop) && isFrameworkInternal(wrapper)) return undefined;
 	return Reflect.isExtensible(target) && descriptor.configurable !== false;
 }
 
@@ -19254,7 +19257,7 @@ class UnifiedWrapper extends ComponentBase {
 			// A name with the framework's prefix (`___` / `____`) is never a member: the wrapper's own members carry it,
 			// and a child under such a name would stand in for one of them. An object's own member leaves it as an
 			// adopted one does, so no read or listing of the node reaches it through the impl either.
-			if (isFrameworkName(key)) {
+			if (isFrameworkName(key) && !(isFrameworkMarkerKey(key) && isFrameworkInternal(this))) {
 				if (typeof this.____slothletInternal.impl === "object" && !uw_isLayer) {
 					const reservedDescriptor = Objects.getOwnPropertyDescriptor(this.____slothletInternal.impl, key);
 					if (reservedDescriptor?.configurable) delete this.____slothletInternal.impl[key];
@@ -23173,7 +23176,9 @@ class UnifiedWrapper extends ComponentBase {
 			// Module code meets the write rules first, so an assignment is refused as a definition is (#625).
 			if (
 				(SetMethods.has(UnifiedWrapper.INTERNAL_KEYS, prop) ||
-					(isFrameworkName(prop) && !SetMethods.has(reservedKeysOwn.IMPL_METADATA_KEYS, prop))) &&
+					(isFrameworkName(prop) &&
+						!SetMethods.has(reservedKeysOwn.IMPL_METADATA_KEYS, prop) &&
+						!(isFrameworkMarkerKey(prop) && isFrameworkInternal(wrapper)))) &&
 				prop !== "___materialize"
 			) {
 				runtime_assertOwnedWrite(wrapper, prop);
@@ -24041,7 +24046,7 @@ class UnifiedWrapper extends ComponentBase {
 					if ("value" in descriptor) runtime_markAssignedData(wrapper, descriptor.value);
 					// A name with the framework's prefix is never a member: a definition is absorbed as an assignment is, so nothing
 					// is stored and nothing reads back (the framework's own `___materialize` and metadata keys excepted).
-					const absorbed = runtime_absorbsFrameworkName(target, prop, descriptor);
+					const absorbed = runtime_absorbsFrameworkName(target, prop, descriptor, wrapper);
 					if (absorbed !== undefined) return absorbed;
 					// A framework-reserved key never reads through the node, so it stays off the wrapper's own state.
 					if (isFrameworkReservedKey(prop)) return Reflect.defineProperty(target, prop, descriptor);
