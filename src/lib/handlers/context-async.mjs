@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-23T18:12:59-08:00 (1795486379)
+ *	@Last modified time: 2026-11-25T09:45:09-08:00 (1795628709)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -636,6 +636,8 @@ function storeInstanceID(store) {
  */
 export class AsyncContextManager {
 	constructor() {
+		// Runtime identity, checked instead of the class name (a minified bundle renames classes).
+		this.kind = "async";
 		// The store is made when an instance on the async runtime is created ({@link AsyncContextManager#openStore}), not
 		// here: a module-level singleton makes this manager in every host, also where only the live runtime is used.
 		this.store = null;

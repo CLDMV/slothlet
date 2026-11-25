@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-22T23:50:44-08:00 (1795420244)
+ *	@Last modified time: 2026-11-25T09:45:08-08:00 (1795628708)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -4180,7 +4180,7 @@ export class ApiBuilder extends ComponentBase {
 					});
 				}
 				// The live runtime binds through its own manager: the flow and caller bound in are what the callback runs in.
-				if (slothlet.contextManager?.constructor?.name === "LiveContextManager") return pinScopeToCurrentCaller(fn);
+				if (slothlet.contextManager?.kind === "live") return pinScopeToCurrentCaller(fn);
 				// No AsyncResource where there is no node:async_hooks, so bind is identity (`: fn`). This nested
 				// method lives outside api_builder's instrumented coverage region (the v8 map stops inside
 				// createSlothletNamespace, before its returned object's methods), so neither the node run nor
@@ -4205,7 +4205,7 @@ export class ApiBuilder extends ComponentBase {
 					// With child instance approach, we always find the right context by current instanceID
 
 					// For live mode, use currentInstanceID tracking
-					if (slothlet.contextManager.constructor.name === "LiveContextManager") {
+					if (slothlet.contextManager.kind === "live") {
 						const currentID = slothlet.contextManager.currentInstanceID;
 
 						// Check if current is this instance or a child of this instance.
@@ -4238,7 +4238,7 @@ export class ApiBuilder extends ComponentBase {
 					}
 
 					// For async mode, get current store from ALS and lookup by its instanceID
-					if (slothlet.contextManager.constructor.name === "AsyncContextManager") {
+					if (slothlet.contextManager.kind === "async") {
 						let currentStore = slothlet.contextManager.tryGetContext();
 
 						// If we're in a .run() scope, currentStore will be the child instance
@@ -4335,7 +4335,7 @@ export class ApiBuilder extends ComponentBase {
 					// The active store, when the call runs inside this instance's base or one of its run()/scope() stores:
 					// a key that store protects, or that another owner owns there, is refused as a runtime write is.
 					const active =
-						contextManager.constructor.name === "LiveContextManager"
+						contextManager.kind === "live"
 							? contextManager.currentInstanceID
 								? MapMethods.get(instances, contextManager.currentInstanceID)
 								: null
@@ -6566,7 +6566,7 @@ export class ApiBuilder extends ComponentBase {
 				const { utilities } = slothlet.helpers;
 
 				// For live binding mode, use child instance approach
-				if (contextManager.constructor.name === "LiveContextManager") {
+				if (contextManager.kind === "live") {
 					// The store of THIS instance's flow the code opening the scope is part of: a run()/scope() of it only when
 					// the code runs inside that flow, never one a sibling run() left in the active field while it waits.
 					const currentStore = contextManager.runParent(slothlet.instanceID);
@@ -6660,7 +6660,7 @@ export class ApiBuilder extends ComponentBase {
 				}
 
 				// For async mode, use child instance approach
-				if (contextManager.constructor.name === "AsyncContextManager") {
+				if (contextManager.kind === "async") {
 					// CRITICAL: Get THIS instance's store (base or child), not just any active store
 					let currentStore = null;
 
