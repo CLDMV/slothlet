@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-23T18:12:59-08:00 (1795486379)
+ *	@Last modified time: 2026-11-25T10:39:08-08:00 (1795631948)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -174,7 +174,7 @@ class Stamped {
 
 /**
  * The store each promise made while a flow ran was made in (as {@link MADE_IN} for every other resource), held in a
- * private field put on the promise: only this class reads it, nothing can forge it, and putting it costs a fraction of
+ * private field put on the promise: only this class reads it, no other code can set it, and putting it costs a fraction of
  * a `WeakMap` entry (the async hook runs for every promise a flow makes). The job Node begins for a promise runs only
  * what was fixed when it was made (an `await`'s continuation, the reaction `then()` registered, the thenable it resolves
  * to); one the flow's own code made, unmarked in {@link OUTSIDE_JOBS}, runs that code's continuation in the flow. A
@@ -426,6 +426,69 @@ function sealStore(store) {
 const unsealStore = StoreToken.storeOf;
 
 /**
+ * The token Node's storage held for an async resource as it was made, which Node copied onto it from the code making it,
+ * held in a private field put on the resource (see {@link Stamped}). While `AsyncContextFrame` is off Node reads a
+ * storage's value from a property of the running resource, and any code holding the resource (a promise it made, the
+ * one `then()` hands back, `async_hooks.executionAsyncResource()`) can write there a token it read off another resource:
+ * a promise the host's `run()` made, or one another module's call made. What Node's storage answers is therefore taken
+ * only when it is the token the resource was made with, one slothlet put there itself, or the store of the `run()`
+ * running now (see {@link SealedStorage#writtenOver}).
+ * @private
+ */
+class MadeWith extends Stamped {
+	#token;
+
+	/**
+	 * @param {object} resource - The async resource.
+	 * @param {*} token - The token Node's storage held where it was made.
+	 */
+	constructor(resource, token) {
+		super(resource);
+		this.#token = token;
+	}
+
+	/**
+	 * Whether a resource was stamped.
+	 * @param {*} value - An async resource.
+	 * @returns {boolean} True when it was.
+	 */
+	static stamped(value) {
+		return value !== null && typeof value === "object" && #token in value;
+	}
+
+	/**
+	 * The token a resource was made with.
+	 * @param {*} value - An async resource.
+	 * @returns {*} The token, or undefined.
+	 */
+	static of(value) {
+		return value !== null && typeof value === "object" && #token in value ? value.#token : undefined;
+	}
+}
+Objects.freeze(MadeWith.prototype);
+
+/**
+ * Whether what Node's storage answers has to be checked against the running resource (see {@link MadeWith}): true
+ * while Node keeps a storage's value on async resources, in a place the probe in `helpers/async-store-slot` recognised.
+ * Undefined until first asked.
+ * @type {boolean|undefined}
+ * @private
+ */
+let resourceStoreChecked;
+
+/**
+ * @returns {boolean} Whether stores are checked against the running resource.
+ * @private
+ */
+function checksResourceStore() {
+	if (resourceStoreChecked !== undefined) return resourceStoreChecked;
+	// The probe runs a storage and makes a promise, whose `init` asks again: answered false until the probe is done.
+	resourceStoreChecked = false;
+	resourceStoreChecked = executionAsyncResource !== null && resourceStoreKnown();
+	return resourceStoreChecked;
+}
+
+/**
  * Slothlet's `AsyncLocalStorage`, as {@link AsyncContextManager#als} hands it out: it takes and gives the stores
  * themselves, and holds a token for each in Node's storage (see {@link sealStore}). The Node storage carries the methods
  * taken as slothlet loaded as its own, so Node's code calling `this.getStore()` or `this.enterWith()` inside them runs
@@ -437,6 +500,8 @@ class SealedStorage {
 	// The stores this storage's `run()` entered whose callbacks are running now, innermost last: the code running inside
 	// one synchronously was called by the code slothlet ran there.
 	#entered = [];
+	// The tokens slothlet put on a resource itself, through `enterWith()` (see {@link MadeWith}).
+	#placed = new WeakMap();
 
 	constructor() {
 		const { Storage, methods } = STORAGE_METHODS;
@@ -453,6 +518,69 @@ class SealedStorage {
 	 */
 	getStore() {
 		return unsealStore(this.#storage.getStore());
+	}
+
+	/**
+	 * Whether the store Node's storage answers now was written onto the running async resource by code (see
+	 * {@link MadeWith}) rather than copied there by Node as the resource was made, entered by a `run()` running now, or
+	 * put there by slothlet. Only while Node keeps a storage's value on async resources; never otherwise.
+	 * @returns {{made: object|undefined}|undefined} Undefined when what Node answers is genuine; otherwise the store the
+	 *   code really runs in: the store of the `run()` running now, or the store the resource was made in.
+	 */
+	writtenOver() {
+		const token = this.#storage.getStore();
+		if (token === undefined || !checksResourceStore()) return undefined;
+		// Inside a `run()` running now: Node put its store on the resource for the run, and puts back what was there after.
+		const entered = this.entered();
+		if (entered !== undefined && entered !== NO_STORE && unsealStore(token) === entered) return undefined;
+		const resource = executionAsyncResource();
+		if (WeakMapMethods.get(this.#placed, resource) === token || MadeWith.of(resource) === token) return undefined;
+		if (entered !== undefined) return { made: entered === NO_STORE ? undefined : entered };
+		return { made: unsealStore(MadeWith.of(resource)) };
+	}
+
+	/**
+	 * The store the code running now really runs in: what Node's storage answers, or, where code wrote a store onto the
+	 * running resource, the one Node would have answered without it (see {@link SealedStorage#writtenOver}).
+	 * @returns {object|undefined} The store.
+	 */
+	genuineStore() {
+		const written = this.writtenOver();
+		return written === undefined ? this.getStore() : written.made;
+	}
+
+	/**
+	 * Stamp an async resource being made with the token Node copies onto it: the token of the store running where it is
+	 * made, as {@link SealedStorage#genuineStore} answers it (a token code wrote onto the resource making it is not copied
+	 * as genuine). Run from the job hook's `init`, while the code making the resource is the running one.
+	 * @param {object} resource - The resource being made.
+	 * @returns {void}
+	 */
+	stamp(resource) {
+		if (!checksResourceStore() || resource === null || typeof resource !== "object" || MadeWith.stamped(resource)) return;
+		const raw = this.#storage.getStore();
+		if (raw === undefined) return;
+		const store = this.genuineStore();
+		if (store === undefined) return;
+		// The token Node copied when it is the genuine one; otherwise a token for the store the making code really runs in.
+		try {
+			new MadeWith(resource, unsealStore(raw) === store ? raw : sealStore(store));
+		} catch {
+			// A resource that takes no private field (none Node makes) stays unstamped: a token on it is then not taken.
+		}
+	}
+
+	/**
+	 * Record a token slothlet puts on the running resource itself.
+	 * @param {*} token - The token.
+	 * @returns {void}
+	 * @private
+	 */
+	#place(token) {
+		if (!checksResourceStore()) return;
+		const resource = executionAsyncResource();
+		if (resource !== null && (typeof resource === "object" || typeof resource === "function"))
+			WeakMapMethods.set(this.#placed, resource, token);
 	}
 
 	/**
@@ -485,7 +613,9 @@ class SealedStorage {
 	 * @returns {void}
 	 */
 	enterWith(store) {
-		return this.#storage.enterWith(sealStore(store));
+		const token = sealStore(store);
+		this.#place(token);
+		return this.#storage.enterWith(token);
 	}
 
 	/**
@@ -503,6 +633,7 @@ class SealedStorage {
 		const key = storage.kResourceStore;
 		const resource = typeof key === "symbol" && executionAsyncResource !== null && resourceStoreKnown() ? executionAsyncResource() : null;
 		if (resource === null || (typeof resource !== "object" && typeof resource !== "function")) {
+			this.#place(token);
 			storage.enterWith(token);
 			return null;
 		}
@@ -511,6 +642,7 @@ class SealedStorage {
 		const before = resourceStoreHolder(resource);
 		const had = before !== null && Objects.hasOwn(before, key);
 		const previous = had ? before[key] : undefined;
+		this.#place(token);
 		storage.enterWith(token);
 		return () => {
 			const holder = resourceStoreHolder(resource);
@@ -848,6 +980,14 @@ export class AsyncContextManager {
 			if (view !== undefined) this.#adopt(view);
 			return view;
 		}
+		// Nothing of anyone's on the stack (a reaction that is an api function or a bound built-in) says nothing about
+		// whose job this is. Where the flow's store was written onto the running async resource by code (see `MadeWith`)
+		// rather than handed to it, that code entered the flow by itself: the job runs outside it, as the leaf whose
+		// store the resource was made in.
+		if (!answer.found) {
+			const written = this.store.writtenOver();
+			if (written !== undefined) return this.#writtenView(store, instanceID, written.made);
+		}
 		// Every frame of this stretch is the flow's: the rest of the stretch is told by the mark, until it ends. Code queued
 		// before now never sees the mark, and the clearing runs before anything queued after it.
 		if (answer.clean && !scoped) {
@@ -859,6 +999,23 @@ export class AsyncContextManager {
 			});
 		}
 		return store;
+	}
+
+	/**
+	 * The store code acts in where a flow's store was written onto the running async resource and no frame tells whose
+	 * code runs (see {@link AsyncContextManager#activeStore}): outside that flow, as the leaf whose store the resource
+	 * was made in; no one's when that names none.
+	 * @param {object} store - The flow written there.
+	 * @param {string} instanceID - The flow's instance.
+	 * @param {object|undefined} made - The store the code really runs in.
+	 * @returns {object|undefined} The store.
+	 * @private
+	 */
+	#writtenView(store, instanceID, made) {
+		const reader = made !== undefined && made !== null && storeInstanceID(made) === instanceID ? (made.currentWrapper ?? null) : null;
+		const view = this.outsideView(store, instanceID, reader);
+		if (view !== undefined) this.#adopt(view);
+		return view;
 	}
 
 	/**
@@ -1024,6 +1181,7 @@ export class AsyncContextManager {
 		try {
 			hook = createHook({
 				init(asyncId, type, triggerAsyncId, resource) {
+					manager.store?.stamp?.(resource);
 					if (manager.#countingWork) manager.#countWork(asyncId, type, resource);
 					if (trustedRootOwn.ACTING_FOR.length !== 0) {
 						WeakMapMethods.set(JOB_ACTING_FOR, resource, trustedRootOwn.actingForNow());
