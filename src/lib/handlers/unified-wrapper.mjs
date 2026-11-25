@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-25T02:09:34-08:00 (1795601374)
+ *	@Last modified time: 2026-11-25T02:59:04-08:00 (1795604344)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -8250,6 +8250,19 @@ function runtime_isModuleProxy(value) {
 }
 
 /**
+ * The language's `%ThrowTypeError%`: the getter and setter of a strict arguments object's `callee`, taken at load.
+ * @type {Function}
+ * @private
+ */
+const THROW_TYPE_ERROR = Reflect.getOwnPropertyDescriptor(
+	(function () {
+		"use strict";
+		return arguments;
+	})(),
+	"callee"
+).get;
+
+/**
  * Whether a function is one of the engine's own (a builtin), which runs none of a module's code. Decided from
  * `Function.prototype.toString` alone, so nothing of the function runs: a builtin reports itself as native code
  * under its own non-empty name (`function push() { [native code] }`), while a bound function — a module's function
@@ -8259,6 +8272,9 @@ function runtime_isModuleProxy(value) {
  * @private
  */
 function runtime_isBuiltinFunction(fn) {
+	// The language's own thrower behind a strict arguments object's `callee` reports native code with no name, as a bound
+	// function does; it is told by identity.
+	if (fn === THROW_TYPE_ERROR) return true;
 	// This copy's wrapper of `Function.prototype.toString` (see helpers/function-source-context) stands in for the
 	// engine's own while an instance is up, and runs none of a module's code. It is told by identity, never by its text.
 	if (isFunctionSourcePatch(fn)) return true;
