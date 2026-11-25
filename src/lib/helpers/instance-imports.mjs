@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-24T11:20:19-08:00 (1795548019)
+ *	@Last modified time: 2026-11-25T11:44:41-08:00 (1795635881)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -2498,10 +2498,11 @@ async function viteCapabilityRefusal(importer) {
 		refusal.context.reasonCode = "unattributed";
 		return refusal;
 	} catch {
-		/* v8 ignore next 4 -- slothlet's errors are loadable wherever the plugin runs; the code alone otherwise. */
+		/* v8 ignore start -- slothlet's errors are loadable wherever the plugin runs; the code alone otherwise. */
 		const error = new PristineError(`PERMISSION_CAPABILITY_REFUSED: imports (import) ${importer}`);
 		error.code = "PERMISSION_CAPABILITY_REFUSED";
 		return error;
+		/* v8 ignore stop */
 	}
 }
 
@@ -4472,7 +4473,7 @@ function holdRequireResolve(nodeModule) {
 	const { Module, createRequire } = moduleMembers(nodeModule);
 	// Node's loader state, patched on purpose: read as it is now.
 	const original = Module?._resolveFilename;
-	/* v8 ignore next -- defensive: every Node with `registerHooks()` has both; a stand-in `node:module` may not. */
+	/* v8 ignore if -- defensive: every Node with `registerHooks()` has both; a stand-in `node:module` may not. */
 	if (typeof original !== "function" || typeof createRequire !== "function") return;
 	const { fileURLToPath, pathToFileURL } = NODE.url;
 	const own = fileURLToPath(import.meta.url);
