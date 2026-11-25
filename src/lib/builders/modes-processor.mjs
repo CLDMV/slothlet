@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-22T23:31:43-08:00 (1795419103)
+ *	@Last modified time: 2026-11-25T12:25:35-08:00 (1795638335)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -128,6 +128,51 @@ export class ModesProcessor extends ComponentBase {
 		const resolved =
 			collisionModeOverride || this.slothlet.helpers.modesUtils.getOwnershipCollisionMode(this.slothlet.config, collisionContext);
 		return resolved === "replace" || resolved === "merge-replace" ? resolved : "merge";
+	}
+
+	/**
+	 * Merge a lazy folder's namespace member into the same-named member of the file it collides with.
+	 *
+	 * @description
+	 * Under merge the file (loaded first) keeps the slot's conflicting members, set on the folder's node
+	 * ahead of the folder's own. Where both sides hold a namespace at that key, the folder's members the
+	 * file's namespace lacks are added to it, as eager's wrapper merge does (#1002). The folder's value is a
+	 * node when the folder composed through processFiles, or the module's own object on the single-file path.
+	 *
+	 * @param {unknown} fileValue - The file's member, as set on the folder's node.
+	 * @param {unknown} folderValue - The folder's member at the same key.
+	 * @returns {void}
+	 * @private
+	 *
+	 * @example
+	 * this.#mergeCollisionNamespace(fileFolderCollisionImpl.inner, materialized.inner);
+	 */
+	#mergeCollisionNamespace(fileValue, folderValue) {
+		const fileWrapper = resolveWrapper(fileValue);
+		if (!fileWrapper || folderValue === null || (typeof folderValue !== "object" && typeof folderValue !== "function")) return;
+		if (fileWrapper.____slothletInternal.impl && !fileWrapper.____slothletInternal.state.childrenAdopted) {
+			fileWrapper.___adoptImplChildren();
+		}
+		const folderWrapper = resolveWrapper(folderValue);
+		if (folderWrapper) {
+			if (folderWrapper.____slothletInternal.impl && !folderWrapper.____slothletInternal.state.childrenAdopted) {
+				folderWrapper.___adoptImplChildren();
+			}
+			for (
+				let ofIndex = 0, ofList = filterList(Objects.keys(folderWrapper), (k) => !isFrameworkReservedKey(k));
+				ofIndex < ofList.length;
+				ofIndex++
+			) {
+				const key = ofList[ofIndex];
+				if (!Objects.hasOwn(fileWrapper, key)) unifiedWrapperOwn.UnifiedWrapper._copyMember(folderWrapper, fileWrapper, key);
+			}
+			return;
+		}
+		if (Arrays.isArray(folderValue)) return;
+		for (let ofIndex = 0, ofList = Objects.keys(folderValue); ofIndex < ofList.length; ofIndex++) {
+			const key = ofList[ofIndex];
+			if (!isFrameworkReservedKey(key) && !Objects.hasOwn(fileWrapper, key)) fileWrapper.___adoptForeignMember(key, folderValue);
+		}
 	}
 
 	/**
@@ -3133,6 +3178,8 @@ export class ModesProcessor extends ComponentBase {
 										...Objects.getOwnPropertyDescriptor(fileFolderCollisionImpl, k),
 										configurable: true
 									});
+								} else if (collisionMode === "merge" || collisionMode === "warn") {
+									this.#mergeCollisionNamespace(Objects.getOwnPropertyDescriptor(fileFolderCollisionImpl, k).value, implToWrap[k]);
 								}
 							}
 						} else if (fileFolderCollisionImpl && typeof implToWrap === "function") {
@@ -3197,10 +3244,10 @@ export class ModesProcessor extends ComponentBase {
 					const ofEntry = ofList[ofIndex],
 						k = ofEntry[0],
 						v = ofEntry[1];
-					// Collision impl keys never overlap with already-materialized keys in tests; false branch unreachable.
-					/* v8 ignore next */
 					if (!(k in materialized)) {
 						materialized[k] = v;
+					} else if (collisionMode === "merge" || collisionMode === "warn") {
+						this.#mergeCollisionNamespace(v, materialized[k]);
 					}
 				}
 			}
