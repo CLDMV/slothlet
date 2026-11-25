@@ -146,6 +146,49 @@ await api.slothlet.context.scope({ context: {}, isolation: "partial", fn: () => 
 
 State a run needs to hand back belongs in its return value, not in `self`.
 
+### Module code cannot import leaf files
+
+An api file, or a lib file it loads, that imports, re-exports or requires another file of an api tree (a sibling, a file in another folder of the tree, a file of an `api.add()` mount) is refused with `MODULE_LEAF_IMPORT_REFUSED`, whatever the permission mode. In v3 the import loaded a second copy of the file, with its own module state. Move code two leaves share into a lib folder outside the api tree, and reach another leaf through `self`.
+
+v3, a helper kept in the api tree and imported by its siblings:
+
+```text
+project/
+└── api/
+    ├── util/format.mjs    export const format = (p) => `${p.x},${p.y}`;
+    ├── point/point.mjs    export const make = (x, y) => ({ x, y });
+    └── report/report.mjs  import { format } from "../util/format.mjs";   // a leaf file
+                           import { make } from "../point/point.mjs";     // a leaf file
+                           export const report = (x, y) => format(make(x, y));
+```
+
+v4, the helper moved to `lib/` beside `api/`, and the sibling leaf reached through `self`:
+
+```text
+project/
+├── lib/
+│   └── format.mjs         export const format = (p) => `${p.x},${p.y}`;
+└── api/
+    ├── point/point.mjs    export const make = (x, y) => ({ x, y });
+    └── report/report.mjs  (below)
+```
+
+```javascript
+// api/report/report.mjs
+import { self } from "@cldmv/slothlet/runtime";
+import { format } from "../../lib/format.mjs"; // a lib file: loads
+
+export const report = async (x, y) => format(await self.point.make(x, y));
+```
+
+If the host still needs `api.util.format`, keep a leaf that re-exports the lib file: `api/util/format.mjs` with `export { format } from "../../lib/format.mjs";`. A leaf importing a lib file is fine; other leaves still reach it through `self.util.format`, not by importing it.
+
+- **Host code is exempt.** The host and its tests import leaf files as before, and a file no live instance composes is a lib file.
+- **Apis shipped as npm packages are held to the same rule.** A package's leaf and lib files are refused a leaf file whether they name it by a relative path, the package's own name, an `#imports` entry or another package's bare specifier. Package authors move shared code into the package's lib folder the same way.
+- **The refusal happens as the import resolves.** An eager build fails with the importing file's `MODULE_IMPORT_FAILED`, the refusal as its cause; in lazy mode the folder holding the file fails as it loads; an `import()` or `require()` inside a function fails when it runs.
+
+In the browser no import is seen, so the refusal does not apply there: a module that imports a leaf file still gets a copy of the file of its own, as in v3, and that copy is never the leaf. The same code is refused under Node and under vite or vitest, so move it to `self` or a lib folder even when the browser build works. See [MODULE-STRUCTURE.md](./MODULE-STRUCTURE.md#leaf-files-are-not-imported).
+
 ### A run reads a snapshot of the instance as of its start
 
 - v3: a `run()` / `scope()` read the instance live. A change the host or a module made after the run started (`api.x = …`, a member or a `Map` changed through the api) reached the open run, and data objects such as a `Map` or a `Date` were the instance's own objects inside it.
@@ -250,6 +293,8 @@ A rule target's suffix now names which of a call, a read and a write the rule de
 
 - v3: a target whose suffix named no level and no hook type (`secret.**:wirte`) was kept as a rule on the literal target and matched no api path.
 - v4: it throws `PERMISSION_RULE_INVALID` wherever a rule comes in: the config's `permissions.rules`, `rules.add`, a manifest, the `permissions` option of `api.add`, and rules module code registers. A `capability:` target takes no suffix check. Fix the spelling; an instance whose config carries such a rule does not start.
+- v4 also refuses, with `PERMISSION_RULE_INVALID` in the same places, a target whose path holds a `:` of its own (`vault.secret:read:write`) or names no path before its suffix (`:write`). Both were accepted before and matched nothing.
+- An `api.add` `permissions` option given as an array or a string, or with an `allow` / `deny` that is not an array, was ignored; v4 refuses it with `INVALID_ARGUMENT` before anything mounts.
 
 ### Code from before `restart()` is refused after it, with permissions on
 
@@ -269,6 +314,7 @@ A `run()` / `scope()` open across a `restart()` that fails is refused as after `
 
 - The `FOLDER_INVALID` message no longer names v3's `dir`. It reads "Configuration error: the path must be a non-empty string that points to an existing folder. Received: …", in every language. Match on `err.code`, not on the text.
 - The handler the package entry installs for an uncaught slothlet error prints the error's `cause` and `details` instead of v3's `originalError` and `context`. Update anything that parses that output.
+- v3 registered that handler as an `uncaughtException` listener that rethrew every other error, so Node exited with code 7 even when the host had a handler of its own. v4 registers it as an `uncaughtExceptionMonitor`: a host with its own `uncaughtException` handler gets every error, a `SlothletError` included, and the readable output (with exit code 1) appears only when nothing else handles the error. Any other unhandled error ends the process as it would without slothlet.
 
 ### A member a module creates at runtime is owned by that module
 
