@@ -297,7 +297,7 @@ const HOST_READER = Objects.freeze({ reader: "host" });
 const PROTOTYPE_HANDLE_READER = Objects.freeze({ reader: "prototype handle" });
 
 /**
- * The views a full-isolation run's `self` hands out (see `makeRunSelf` in `builders/api_builder`), each with what it reads
+ * The views a full-isolation run's `self` hands out (see `makeRunSelf` in `handlers/unified-wrapper/run`), each with what it reads
  * through: the node as its reader was handed it, or an outer run's view. Undefined for a namespace only the run wrote.
  * @type {WeakMap<object, *>}
  * @private

@@ -3081,7 +3081,7 @@ class Slothlet {
 			this.#adoptTree(holder, next);
 			this.#noteRunRestart(holder, kind, next);
 			// A full-isolation run's `self` writes what it kept so far into the run's new tree, as that tree's build, and
-			// from now on reads and writes that tree (see `makeRunSelf` in builders/api_builder).
+			// from now on reads and writes that tree (see `makeRunSelf` in handlers/unified-wrapper/run).
 			const runSelf = holder[RUN_SELF];
 			if (runSelf !== undefined && runSelf !== null)
 				runSelf.adopted(kind, (write) => runInReloadBuild(this, { copyOf: this, next }, write));

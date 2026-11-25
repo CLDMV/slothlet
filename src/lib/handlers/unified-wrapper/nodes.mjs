@@ -149,7 +149,7 @@ const NODE_VALUE_OF_BY_NODE = new WeakMap();
 /**
  * The module's own accessor a node holds for a member (one it adopted from the module's object), for a full-isolation
  * run's view to run with the view as `this`: what the getter reads and the setter writes is then what the run reads
- * and writes (see `makeRunSelf` in `builders/api_builder`). Null for any other member, a forward the node keeps to a
+ * and writes (see `makeRunSelf` in `handlers/unified-wrapper/run`). Null for any other member, a forward the node keeps to a
  * live value among them.
  * @param {*} node - The node, as the view reads through it.
  * @param {string|symbol} prop - The member.

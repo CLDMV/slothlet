@@ -243,6 +243,7 @@ export function internals(consumer) {
 			"lib/handlers/routine-manager",
 			"lib/handlers/trusted-root",
 			"lib/handlers/unified-wrapper",
+			"lib/handlers/unified-wrapper/run",
 			"lib/handlers/version-manager",
 			"lib/helpers/defaults",
 			"lib/runtime/runtime",

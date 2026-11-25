@@ -1314,6 +1314,15 @@ function runtime_runtimeTraps(contextManager, runtime) {
 }
 
 /**
+ * Forwards to the Run layer's `makeRunSelf`: this file hands it out (see {@link internals}) before the chain may exist.
+ * @returns {*} What it returns.
+ * @internal
+ */
+function makeRunSelf(slothlet, parentSelf, record) {
+	return M.run.makeRunSelf(slothlet, parentSelf, record);
+}
+
+/**
  * Unified wrapper class that handles all proxy concerns in one place:
  * - ____impl pattern for reload support
  * - Lazy/eager mode materialization
@@ -1366,7 +1375,8 @@ class UnifiedWrapper extends TrapsLayer(
 			STAND_IN_OWN_READS,
 			UnifiedWrapper,
 			isClassInstance,
-			resolveWrapper
+			resolveWrapper,
+			isLazyStandIn
 		});
 		WrapperBase.linkLayer(this, (methods) => {
 			M = methods;
@@ -2041,6 +2051,7 @@ export function internals(consumer) {
 	)
 		throw ownBindingsRefusal("lib/handlers/unified-wrapper", import.meta.url);
 	return {
+		makeRunSelf,
 		get UnifiedWrapper() {
 			return UnifiedWrapper;
 		},

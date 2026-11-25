@@ -182,7 +182,7 @@ const MOUNTED_BY = Symbol("mountedBy");
 
 /**
  * One change a full-isolation run's `self` kept before the run had a tree of its own (see `makeRunSelf` in
- * `builders/api_builder`), replayed by {@link ApiManager#carryRunWrites}.
+ * `handlers/unified-wrapper/run`), replayed by {@link ApiManager#carryRunWrites}.
  * @typedef {object} RunWrite
  * @property {string[]} parts - The path of the object changed, from the api root.
  * @property {string|symbol} prop - The member changed.
@@ -6417,7 +6417,7 @@ export class ApiManager extends ComponentBase {
 
 	/**
 	 * Write what a full-isolation run's `self` kept before the run had a tree of its own (see `makeRunSelf` in
-	 * `builders/api_builder`) into the tree built for the run, in the order the run made the changes, as
+	 * `handlers/unified-wrapper/run`) into the tree built for the run, in the order the run made the changes, as
 	 * {@link ApiManager#carryRuntimeMembers} carries what was written into a tree at runtime: each change was checked when
 	 * the run made it, so it is made here as the framework's own write, a node written being carried as what was written
 	 * for the copy to make its own node of. A member the run's module created is recorded as that module's.

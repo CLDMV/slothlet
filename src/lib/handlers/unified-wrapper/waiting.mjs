@@ -114,7 +114,7 @@ let realClass;
 /**
  * Load the node a stand-in stands for (see {@link isLazyStandIn}), without reading the member it stands for: a run's view
  * over a stand-in reads that member through its own views once the node has loaded, so a getter on the path runs once
- * (see `makeRunSelf` in `builders/api_builder`). A change queued through a stand-in that the node refused fails it, as
+ * (see `makeRunSelf` in `handlers/unified-wrapper/run`). A change queued through a stand-in that the node refused fails it, as
  * awaiting the stand-in does.
  * @param {object} standIn - The stand-in.
  * @returns {Promise<void>} Settles once the node has loaded.
