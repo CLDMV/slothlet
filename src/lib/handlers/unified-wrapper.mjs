@@ -1228,15 +1228,6 @@ function runtime_behindGivenView(value) {
 }
 
 /**
- * Forwards to the Root layer's `runtime_rootTakesKey`: this file hands it out (see {@link internals}) before the chain may exist.
- * @returns {*} What it returns.
- * @internal
- */
-function runtime_rootTakesKey(target, prop) {
-	return M.root.runtime_rootTakesKey(target, prop);
-}
-
-/**
  * Forwards to the Views layer's `runtime_sameValue`: this file hands it out (see {@link internals}) before the chain may exist.
  * @returns {*} What it returns.
  * @internal
@@ -2126,7 +2117,6 @@ export function internals(consumer) {
 		runtime_rootPrototypeFor,
 		runtime_rootInheritedRead,
 		runtime_behindGivenView,
-		runtime_rootTakesKey,
 		runtime_sameValue,
 		runtime_selfChangeTarget,
 		runtime_selfFrameworkView,
@@ -2171,129 +2161,18 @@ function mayTakeInternals(consumer, consumers) {
 }
 
 // The exports below answer slothlet's own files and the host only (see `guardInternal` in `helpers/instance-imports`).
-/** @type {typeof runtime_frameworkWrite} */
-const guarded_runtime_frameworkWrite = guardInternal(runtime_frameworkWrite, "runtime_frameworkWrite", import.meta.url);
-
-/** @type {typeof runtime_unwrapSelfView} */
-const guarded_runtime_unwrapSelfView = guardInternal(runtime_unwrapSelfView, "runtime_unwrapSelfView", import.meta.url);
-
-/** @type {typeof runtime_selfModuleReader} */
-const guarded_runtime_selfModuleReader = guardInternal(runtime_selfModuleReader, "runtime_selfModuleReader", import.meta.url);
-
-/** @type {typeof runtime_selfModuleCeilings} */
-const guarded_runtime_selfModuleCeilings = guardInternal(runtime_selfModuleCeilings, "runtime_selfModuleCeilings", import.meta.url);
-
-/** @type {typeof runtime_selfView} */
-const guarded_runtime_selfView = guardInternal(runtime_selfView, "runtime_selfView", import.meta.url);
-
-/** @type {typeof runtime_registerFrameworkMemberCopy} */
-const guarded_runtime_registerFrameworkMemberCopy = guardInternal(
-	runtime_registerFrameworkMemberCopy,
-	"runtime_registerFrameworkMemberCopy",
-	import.meta.url
-);
-
-/** @type {typeof runtime_registerFrameworkMember} */
-const guarded_runtime_registerFrameworkMember = guardInternal(
-	runtime_registerFrameworkMember,
-	"runtime_registerFrameworkMember",
-	import.meta.url
-);
-
-/** @type {typeof runtime_selfFrameworkView} */
-const guarded_runtime_selfFrameworkView = guardInternal(runtime_selfFrameworkView, "runtime_selfFrameworkView", import.meta.url);
-
-/** @type {typeof runtime_assertFrameworkRootChange} */
-const guarded_runtime_assertFrameworkRootChange = guardInternal(
-	runtime_assertFrameworkRootChange,
-	"runtime_assertFrameworkRootChange",
-	import.meta.url
-);
-
-/** @type {typeof runtime_selfChangeTarget} */
-const guarded_runtime_selfChangeTarget = guardInternal(runtime_selfChangeTarget, "runtime_selfChangeTarget", import.meta.url);
-
-/** @type {typeof runtime_frameworkViewCaller} */
-const guarded_runtime_frameworkViewCaller = guardInternal(runtime_frameworkViewCaller, "runtime_frameworkViewCaller", import.meta.url);
-
-/** @type {typeof runtime_selfRootView} */
-const guarded_runtime_selfRootView = guardInternal(runtime_selfRootView, "runtime_selfRootView", import.meta.url);
-
-/** @type {typeof runtime_selfHookHandler} */
-const guarded_runtime_selfHookHandler = guardInternal(runtime_selfHookHandler, "runtime_selfHookHandler", import.meta.url);
-
-/** @type {typeof settleStandInChanges} */
-const guarded_settleStandInChanges = guardInternal(settleStandInChanges, "settleStandInChanges", import.meta.url);
-
-/** @type {typeof releaseStandInChanges} */
-const guarded_releaseStandInChanges = guardInternal(releaseStandInChanges, "releaseStandInChanges", import.meta.url);
-
 /** @type {typeof refusedChangeCount} */
 const guarded_refusedChangeCount = guardInternal(refusedChangeCount, "refusedChangeCount", import.meta.url);
-
-/** @type {typeof releaseModuleMakers} */
-const guarded_releaseModuleMakers = guardInternal(releaseModuleMakers, "releaseModuleMakers", import.meta.url);
-
 /** @type {typeof moduleMakerCount} */
 const guarded_moduleMakerCount = guardInternal(moduleMakerCount, "moduleMakerCount", import.meta.url);
-
-/** @type {typeof registerRuntimeSelf} */
-const guarded_registerRuntimeSelf = guardInternal(registerRuntimeSelf, "registerRuntimeSelf", import.meta.url);
-
-/** @type {typeof runtime_selfReadAsDefiner} */
-const guarded_runtime_selfReadAsDefiner = guardInternal(runtime_selfReadAsDefiner, "runtime_selfReadAsDefiner", import.meta.url);
-
-/** @type {typeof runtime_contextReadAsDefiner} */
-const guarded_runtime_contextReadAsDefiner = guardInternal(runtime_contextReadAsDefiner, "runtime_contextReadAsDefiner", import.meta.url);
-
-/** @type {typeof registerRuntimeContext} */
-const guarded_registerRuntimeContext = guardInternal(registerRuntimeContext, "registerRuntimeContext", import.meta.url);
-
-/** @type {typeof runtime_contextWritten} */
-const guarded_runtime_contextWritten = guardInternal(runtime_contextWritten, "runtime_contextWritten", import.meta.url);
-
-/** @type {typeof runtime_contextRead} */
-const guarded_runtime_contextRead = guardInternal(runtime_contextRead, "runtime_contextRead", import.meta.url);
-
-/** @type {typeof runtime_eventPayloadFor} */
-const guarded_runtime_eventPayloadFor = guardInternal(runtime_eventPayloadFor, "runtime_eventPayloadFor", import.meta.url);
-
 /** @type {typeof UnifiedWrapper} */
 const guarded_UnifiedWrapper = guardInternal(UnifiedWrapper, "UnifiedWrapper", import.meta.url);
-
 /** @type {typeof resolveWrapper} */
 const guarded_resolveWrapper = guardInternal(resolveWrapper, "resolveWrapper", import.meta.url);
 
-/** @type {typeof runtime_nodeBehind} */
-const guarded_runtime_nodeBehind = guardInternal(runtime_nodeBehind, "runtime_nodeBehind", import.meta.url);
-
 export {
-	guarded_runtime_frameworkWrite as runtime_frameworkWrite,
-	guarded_runtime_unwrapSelfView as runtime_unwrapSelfView,
-	guarded_runtime_selfModuleReader as runtime_selfModuleReader,
-	guarded_runtime_selfModuleCeilings as runtime_selfModuleCeilings,
-	guarded_runtime_selfView as runtime_selfView,
-	guarded_runtime_registerFrameworkMemberCopy as runtime_registerFrameworkMemberCopy,
-	guarded_runtime_registerFrameworkMember as runtime_registerFrameworkMember,
-	guarded_runtime_selfFrameworkView as runtime_selfFrameworkView,
-	guarded_runtime_assertFrameworkRootChange as runtime_assertFrameworkRootChange,
-	guarded_runtime_selfChangeTarget as runtime_selfChangeTarget,
-	guarded_runtime_frameworkViewCaller as runtime_frameworkViewCaller,
-	guarded_runtime_selfRootView as runtime_selfRootView,
-	guarded_runtime_selfHookHandler as runtime_selfHookHandler,
-	guarded_settleStandInChanges as settleStandInChanges,
-	guarded_releaseStandInChanges as releaseStandInChanges,
 	guarded_refusedChangeCount as refusedChangeCount,
-	guarded_releaseModuleMakers as releaseModuleMakers,
 	guarded_moduleMakerCount as moduleMakerCount,
-	guarded_registerRuntimeSelf as registerRuntimeSelf,
-	guarded_runtime_selfReadAsDefiner as runtime_selfReadAsDefiner,
-	guarded_runtime_contextReadAsDefiner as runtime_contextReadAsDefiner,
-	guarded_registerRuntimeContext as registerRuntimeContext,
-	guarded_runtime_contextWritten as runtime_contextWritten,
-	guarded_runtime_contextRead as runtime_contextRead,
-	guarded_runtime_eventPayloadFor as runtime_eventPayloadFor,
 	guarded_UnifiedWrapper as UnifiedWrapper,
-	guarded_resolveWrapper as resolveWrapper,
-	guarded_runtime_nodeBehind as runtime_nodeBehind
+	guarded_resolveWrapper as resolveWrapper
 };
