@@ -121,6 +121,21 @@ describe("run snapshot > domains and windows", () => {
 		rs.closeRunSnapshot(older);
 	});
 
+	it("an unchanged object whose version no open run reads any more is kept again for the run open now", () => {
+		const owner = {};
+		const first = rs.openRunSnapshot(owner, null);
+		const domain = rs.instanceDomain(owner);
+		const subject = { n: 1 };
+		rs.checkpointDeep(domain, subject);
+		const second = rs.openRunSnapshot(owner, null);
+		rs.closeRunSnapshot(first);
+		rs.checkpointDeep(domain, subject);
+		subject.n = 2;
+		rs.checkpointDeep(domain, subject);
+		expect(rs.versionAt(domain, subject, second.start)).toEqual({ n: 1 });
+		rs.closeRunSnapshot(second);
+	});
+
 	it("a start no kept version spans reads the object as it is", () => {
 		const owner = {};
 		const first = rs.openRunSnapshot(owner, null);
@@ -353,6 +368,9 @@ describe("run snapshot > classes with private names", () => {
 				return this.#p;
 			}
 		}
+		class EscapedTemplate {
+			a = `\`#no`;
+		}
 		class Substituted {
 			a = `${1}`;
 			b = "#no";
@@ -361,6 +379,7 @@ describe("run snapshot > classes with private names", () => {
 		expect(rs.declaresPrivate(new Nested())).toBe(true);
 		expect(rs.declaresPrivate(new Deep())).toBe(true);
 		expect(rs.declaresPrivate(new Substituted())).toBe(false);
+		expect(rs.declaresPrivate(new EscapedTemplate())).toBe(false);
 	});
 
 	it("a run's view of such an instance runs its methods on the instance, as plain JS does", () => {
@@ -642,6 +661,7 @@ describe("run snapshot > what a run is handed", () => {
 		expect(view.z).toBe(5);
 		expect("a" in view).toBe(false);
 		expect(view.g).toBe(3);
+		expect(typeof Object.getOwnPropertyDescriptor(view, "g").get).toBe("function");
 		expect(rs.rawContent(snap, raw).d).toBe(raw.nested);
 		expect(Object.getOwnPropertyDescriptor(view, "z")).toEqual({ value: 5, writable: true, enumerable: true, configurable: true });
 		expect(Object.getOwnPropertyDescriptor(view, "missing")).toBe(undefined);
@@ -691,6 +711,8 @@ describe("run snapshot > what a run is handed", () => {
 		const innerView = rs.handOutRaw(inner, outerView);
 		expect(rs.rawBehind(innerView)).toBe(raw);
 		expect(innerView.a).toBe(1);
+		const fromSibling = rs.handOutRaw(inner, siblingView);
+		expect(fromSibling).not.toBe(siblingView);
 		const innerMap = rs.handOutRaw(inner, outerMap);
 		expect(innerMap).not.toBe(outerMap);
 		expect([...innerMap.keys()]).toEqual(["k"]);
