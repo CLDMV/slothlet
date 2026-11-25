@@ -6,6 +6,8 @@ This document provides detailed performance analysis of Slothlet's loading modes
 
 ## 📊 Executive Summary
 
+Measured on v3.0.0; the v4.0.0 numbers are in the next section.
+
 > [!NOTE]
 > **Performance Winner Depends on Your Use Case**
 >
@@ -26,6 +28,74 @@ This document provides detailed performance analysis of Slothlet's loading modes
 > - ✅ **Both modes equal at runtime** - Post-materialization performance identical (within measurement noise)
 > - ✅ **Materialization cost is one-time** - ~107–788μs per module, only on first access
 > - ✅ **Both modes are production-ready** with different optimization targets
+
+---
+
+## 📈 v4.0.0 compared with v3.24.0 and v3.0.0
+
+v4.0.0 is slower than v3 on every workload measured. Creating an instance takes about twice as long as in v3.24.0 and three and a half times as long as in v3.0.0. A call through the api costs about 1.5–2 µs more than in v3.24.0 (1.3–1.7x) and 3–4 µs more than in v3.0.0. Shutdown takes about 1.2–1.4 ms, where v3.0.0 did almost nothing on shutdown. The added cost comes from what v4 does on every call and every instance: each `run()` / `scope()` and each call is kept apart from every other flow in every permission mode, a run reads a snapshot of the instance, and the async runtime installs a process-wide hook (see [MIGRATION.md](./MIGRATION.md#process-wide-hooks-while-an-instance-exists)). For most apps a few microseconds per call and a few milliseconds per instance are small next to the work the calls do; if a hot loop calls a tiny function millions of times, measure it.
+
+Both tables come from `npm run test:performance:compare` at the v4.0.0 release commit, run in a container limited to 4 CPUs and 8 GiB, the same for both versions in a table: Node v26.13.1, Ubuntu 24.04.5 LTS (linux 7.0.0-43-generic, x64), AMD Ryzen Threadripper 9970X 32-Cores (64 logical processors, 251 GB RAM, shared with other jobs: load average about 4 throughout). 8 rounds per version, each a fresh process; iterations per round: startup 50, function calls 200, nested 200, per-module 100, realistic 500 (41 distinct calls). Both versions run their built `dist/` with their own shipped defaults. Each cell is the median over rounds, with the interquartile range in brackets. The two tables come from two separate runs, so compare within a table, not across them.
+
+The v3.0.0 run is included because the eager-versus-lazy figures in the rest of this document were measured on v3.0.0. It passes the api folder as `dir`, the option's name in v3.0.0.
+
+### v3.24.0 → v4.0.0
+
+| Workload                                                    | v3.24.0                      | v4.0.0                       | Change       |
+| ----------------------------------------------------------- | ---------------------------- | ---------------------------- | ------------ |
+| Startup, eager (create + shutdown)                          | 18.90ms (18.11ms–20.88ms)    | 33.59ms (32.45ms–36.05ms)    | 1.78x slower |
+| Startup, lazy (create + shutdown)                           | 8.45ms (7.17ms–10.41ms)      | 17.76ms (15.97ms–19.56ms)    | 2.10x slower |
+| Startup, eager (create only)                                | 18.22ms (17.44ms–20.12ms)    | 32.16ms (31.12ms–34.53ms)    | 1.77x slower |
+| Startup, lazy (create only)                                 | 7.96ms (6.67ms–9.85ms)       | 16.48ms (14.62ms–18.40ms)    | 2.07x slower |
+| Shutdown, eager                                             | 680.38μs (669.81μs–759.18μs) | 1.43ms (1.33ms–1.48ms)       | 2.09x slower |
+| Shutdown, lazy                                              | 506.66μs (478.36μs–561.30μs) | 1.29ms (1.18ms–1.34ms)       | 2.55x slower |
+| Function call `math.add`, eager                             | 4.16μs (3.21μs–5.38μs)       | 5.93μs (4.61μs–7.70μs)       | 1.42x slower |
+| Function call `math.add`, lazy first call (materialization) | 694.07μs (105.60μs–1.29ms)   | 946.82μs (185.95μs–1.72ms)   | 1.36x slower |
+| Function call `math.add`, lazy subsequent                   | 5.56μs (4.19μs–7.09μs)       | 7.54μs (5.75μs–9.08μs)       | 1.36x slower |
+| Nested `nested.date.today`, eager                           | 4.17μs (3.48μs–4.60μs)       | 5.88μs (5.05μs–8.43μs)       | 1.41x slower |
+| Nested `nested.date.today`, lazy first call                 | 2.10ms (2.06ms–2.16ms)       | 3.29ms (3.24ms–3.41ms)       | 1.56x slower |
+| Nested `nested.date.today`, lazy subsequent                 | 4.88μs (4.08μs–5.63μs)       | 6.51μs (6.05μs–7.02μs)       | 1.33x slower |
+| `math/math.mjs`, eager                                      | 3.82μs (3.44μs–4.24μs)       | 5.19μs (4.50μs–6.13μs)       | 1.36x slower |
+| `math/math.mjs`, lazy first call                            | 59.15μs (51.64μs–65.66μs)    | 91.20μs (82.67μs–96.63μs)    | 1.54x slower |
+| `math/math.mjs`, lazy subsequent                            | 4.25μs (3.26μs–5.23μs)       | 5.58μs (5.12μs–6.23μs)       | 1.31x slower |
+| `string/string.mjs`, eager                                  | 3.87μs (2.79μs–4.21μs)       | 5.15μs (4.39μs–5.98μs)       | 1.33x slower |
+| `string/string.mjs`, lazy first call                        | 461.16μs (375.29μs–520.21μs) | 675.82μs (640.92μs–735.89μs) | 1.47x slower |
+| `string/string.mjs`, lazy subsequent                        | 3.77μs (2.82μs–4.57μs)       | 5.10μs (4.56μs–5.83μs)       | 1.35x slower |
+| `funcmod/funcmod.mjs`, eager                                | 1.89μs (1.71μs–2.30μs)       | 3.10μs (2.76μs–3.35μs)       | 1.64x slower |
+| `funcmod/funcmod.mjs`, lazy first call                      | 465.73μs (433.63μs–479.13μs) | 726.40μs (718.59μs–738.44μs) | 1.56x slower |
+| `funcmod/funcmod.mjs`, lazy subsequent                      | 1.93μs (1.75μs–2.07μs)       | 3.17μs (2.96μs–3.32μs)       | 1.64x slower |
+| Realistic usage, eager                                      | 3.51μs (2.87μs–4.17μs)       | 5.26μs (4.77μs–5.75μs)       | 1.50x slower |
+| Realistic usage, lazy                                       | 3.68μs (3.14μs–4.11μs)       | 6.32μs (5.41μs–6.46μs)       | 1.72x slower |
+
+### v3.0.0 → v4.0.0
+
+| Workload                                                    | v3.0.0                       | v4.0.0                       | Change         |
+| ----------------------------------------------------------- | ---------------------------- | ---------------------------- | -------------- |
+| Startup, eager (create + shutdown)                          | 9.02ms (8.68ms–9.69ms)       | 32.48ms (30.86ms–33.97ms)    | 3.60x slower   |
+| Startup, lazy (create + shutdown)                           | 4.38ms (3.69ms–5.13ms)       | 16.36ms (14.59ms–19.11ms)    | 3.73x slower   |
+| Startup, eager (create only)                                | 9.02ms (8.67ms–9.68ms)       | 31.12ms (29.63ms–32.46ms)    | 3.45x slower   |
+| Startup, lazy (create only)                                 | 4.37ms (3.68ms–5.12ms)       | 15.21ms (13.41ms–18.02ms)    | 3.48x slower   |
+| Shutdown, eager                                             | 9.37μs (8.28μs–9.79μs)       | 1.32ms (1.23ms–1.37ms)       | 141.13x slower |
+| Shutdown, lazy                                              | 8.68μs (7.15μs–9.06μs)       | 1.15ms (1.11ms–1.19ms)       | 132.80x slower |
+| Function call `math.add`, eager                             | 2.22μs (1.59μs–2.61μs)       | 6.24μs (4.62μs–7.40μs)       | 2.81x slower   |
+| Function call `math.add`, lazy first call (materialization) | 289.34μs (67.93μs–571.04μs)  | 817.84μs (181.73μs–1.66ms)   | 2.83x slower   |
+| Function call `math.add`, lazy subsequent                   | 2.97μs (2.27μs–4.22μs)       | 6.68μs (5.45μs–8.29μs)       | 2.25x slower   |
+| Nested `nested.date.today`, eager                           | 2.99μs (2.85μs–3.10μs)       | 6.36μs (4.96μs–7.60μs)       | 2.13x slower   |
+| Nested `nested.date.today`, lazy first call                 | 1.23ms (1.17ms–1.41ms)       | 3.19ms (3.09ms–3.28ms)       | 2.59x slower   |
+| Nested `nested.date.today`, lazy subsequent                 | 2.52μs (2.42μs–2.89μs)       | 6.37μs (5.65μs–6.60μs)       | 2.53x slower   |
+| `math/math.mjs`, eager                                      | 1.85μs (1.69μs–2.15μs)       | 4.94μs (4.43μs–5.93μs)       | 2.66x slower   |
+| `math/math.mjs`, lazy first call                            | 27.89μs (25.97μs–29.62μs)    | 71.91μs (69.08μs–81.61μs)    | 2.58x slower   |
+| `math/math.mjs`, lazy subsequent                            | 2.33μs (2.16μs–2.64μs)       | 5.55μs (5.17μs–5.90μs)       | 2.38x slower   |
+| `string/string.mjs`, eager                                  | 1.67μs (1.29μs–2.05μs)       | 4.85μs (4.39μs–5.96μs)       | 2.90x slower   |
+| `string/string.mjs`, lazy first call                        | 245.23μs (239.41μs–262.69μs) | 660.34μs (586.62μs–700.04μs) | 2.69x slower   |
+| `string/string.mjs`, lazy subsequent                        | 1.80μs (1.69μs–2.43μs)       | 4.97μs (4.73μs–5.66μs)       | 2.76x slower   |
+| `funcmod/funcmod.mjs`, eager                                | 0.68μs (0.65μs–0.73μs)       | 2.77μs (2.55μs–2.94μs)       | 4.06x slower   |
+| `funcmod/funcmod.mjs`, lazy first call                      | 287.02μs (281.00μs–315.42μs) | 654.84μs (643.20μs–674.68μs) | 2.28x slower   |
+| `funcmod/funcmod.mjs`, lazy subsequent                      | 0.95μs (0.90μs–0.95μs)       | 2.96μs (2.87μs–3.17μs)       | 3.13x slower   |
+| Realistic usage, eager                                      | 2.13μs (1.73μs–2.19μs)       | 5.49μs (4.62μs–5.60μs)       | 2.57x slower   |
+| Realistic usage, lazy                                       | 2.17μs (2.09μs–2.34μs)       | 5.35μs (5.18μs–6.09μs)       | 2.46x slower   |
+
+The eager-versus-lazy analysis below was measured on v3.0.0 with `tests/performance/performance-benchmark-aggregated.mjs` and has not been re-run for v4. The trade-off it describes (lazy starts faster, both modes call at the same speed once materialized) still holds in the tables above.
 
 ---
 
