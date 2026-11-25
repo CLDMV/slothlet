@@ -7705,6 +7705,28 @@ function runtime_onImpl(wrapper, operation) {
 }
 
 /**
+ * Record a class instance a node was handed as it is (a file's default export) as the value the node was built from,
+ * as a node of a member read off another value records its own (#972): the node then answers the instance's prototype
+ * and takes one set on it as the instance does. A value the node was handed for a position of another value keeps the
+ * record that position gave it.
+ * @param {object} wrapper - The node's wrapper.
+ * @param {*} value - The value the node was handed.
+ * @returns {void}
+ * @private
+ */
+function runtime_noteInstanceSource(wrapper, value) {
+	const internal = wrapper.____slothletInternal;
+	if (hasOwn(internal, "sourceValue") && !internal.instanceSource) return;
+	if (internal.impl === value && runtime_definesOnInstance(wrapper)) {
+		internal.sourceValue = value;
+		internal.instanceSource = true;
+	} else if (internal.instanceSource) {
+		delete internal.sourceValue;
+		internal.instanceSource = false;
+	}
+}
+
+/**
  * Whether a node holds a class instance as it is, whose members a write or a definition through the node lands on, as
  * one made on the instance itself does (#589, #971): not an emitter or a live grafted object, which keep their own rules.
  * @param {object} wrapper - The node's wrapper.
@@ -17673,6 +17695,7 @@ class UnifiedWrapper extends ComponentBase {
 		internal.impl = isRootLiveIdentity ? adoptedImpl : UnifiedWrapper._cloneImpl(adoptedImpl);
 		// The module's own object, when this node is built from a copy of one its file exports (#746).
 		internal.moduleObject = isRootLiveIdentity ? null : runtime_moduleObjectFor(this, initialImpl, false);
+		runtime_noteInstanceSource(this, initialImpl);
 		runtime_fillPrototype(this);
 		runtime_registerLeafFunction(this, internal.impl);
 
@@ -18006,6 +18029,7 @@ class UnifiedWrapper extends ComponentBase {
 			sourceFolder
 		});
 		node.____slothletInternal.sourceValue = value;
+		node.____slothletInternal.instanceSource = false;
 		node.____slothletInternal.moduleObject = impl !== value ? runtime_moduleObjectFor(node, value, true) : null;
 		return node.createProxy();
 	}
@@ -18205,6 +18229,7 @@ class UnifiedWrapper extends ComponentBase {
 		// The module's own object behind the new value, when its file exports it (#746); a member's is set by the
 		// node that hands it its value (see ___adoptImplChildren).
 		this.____slothletInternal.moduleObject = runtime_moduleObjectFor(this, newImpl, false);
+		runtime_noteInstanceSource(this, newImpl);
 		// The node's members come from the new value from here on: none of them was defined read-only through the node.
 		this.____slothletInternal.readOnlyKeys = null;
 		runtime_fillPrototype(this);
@@ -20009,6 +20034,7 @@ class UnifiedWrapper extends ComponentBase {
 		// The value the child was built from (before any clone), so a parent array can tell whether the
 		// element its cached child fronts is still the one at that index (#602).
 		nestedWrapper.____slothletInternal.sourceValue = value;
+		nestedWrapper.____slothletInternal.instanceSource = false;
 		// What an object assigned to the api after it was built holds is data, as the object is (#826).
 		if (WeakSetMethods.has(ASSIGNED_DATA, value) || runtime_holdsAssignedData(this)) nestedWrapper.____slothletInternal.assignedData = true;
 		// The module's own object, when the child is built from a copy of it: writes through the node reach it (#746).
@@ -21319,7 +21345,13 @@ class UnifiedWrapper extends ComponentBase {
 					desc &&
 					"value" in desc &&
 					!desc.configurable &&
-					!(desc.writable && (runtime_hasOwnMember(wrapper, prop) || Arrays.isArray(wrapperInternal.impl)))
+					!(
+						desc.writable &&
+						(runtime_hasOwnMember(wrapper, prop) ||
+							Arrays.isArray(wrapperInternal.impl) ||
+							// A function node's `prototype` the shell holds writable is read through the node (#972).
+							prop === "prototype")
+					)
 				) {
 					// Non-configurable property on target - must return actual value
 					// But if it's a function target for callable wrapper, redirect to wrapper
@@ -22974,6 +23006,25 @@ class UnifiedWrapper extends ComponentBase {
 					runtime_functionOf(wrapper.____slothletInternal.impl) !== null
 				) {
 					const value = runtime_prototypeForReader(wrapper, runtime_exposePrototype(wrapper, implDescriptor.value), "prototype");
+					// A function's `prototype` is writable and non-configurable, as on any function (#972): the shell takes it so,
+					// which lets the node report it as it is. The shell's own value is never read: the member is described and
+					// read through the node, as the invariants allow for a writable member. A class's read-only `prototype`
+					// is described per reader, which a fixed member could not be, and stays configurable.
+					if (
+						implDescriptor.configurable === false &&
+						implDescriptor.writable === true &&
+						typeof target === "function" &&
+						Reflect.isExtensible(target) &&
+						!hasOwn(target, "prototype") &&
+						Reflect.defineProperty(target, "prototype", {
+							__proto__: null,
+							value: undefined,
+							writable: true,
+							enumerable: false,
+							configurable: false
+						})
+					)
+						return { __proto__: null, ...implDescriptor, value };
 					return virtualizeDescriptor({ __proto__: null, ...implDescriptor, value });
 				}
 				// A member that is the node's own function, or an ancestor's, is described holding that node, as reading it gives.
@@ -24195,6 +24246,21 @@ class UnifiedWrapper extends ComponentBase {
 						? null
 						: runtime_moduleObjectOf(wrapper);
 				if (moduleObject !== null && !Reflect.preventExtensions(moduleObject)) return false;
+				// So does a node over a module's own Proxy, which answers every operation on the node with its traps, behind the
+				// layer the build put over it or not: one that refuses to be closed leaves the node open, as it stays open
+				// itself (#972).
+				const closedProxy = layerUnderlying(wrapper.____slothletInternal.impl);
+				if (
+					moduleObject === null &&
+					!(wrapper.slothlet.____buildDepth > 0) &&
+					!MapMethods.has(FRAMEWORK_WRITES, wrapper) &&
+					!runtime_inRunTree(wrapper) &&
+					util.types.isProxy(closedProxy) &&
+					!runtime_isWrappedClassInstance(closedProxy) &&
+					(runtime_isModuleProxy(closedProxy) || runtime_isModuleStandIn(closedProxy)) &&
+					!runtime_onImpl(wrapper, () => Reflect.preventExtensions(closedProxy))
+				)
+					return false;
 				// Sealing reads the node's own descriptors, which must not start a sync of the half-sealed shell.
 				const internalState = wrapper.____slothletInternal;
 				const syncing = internalState.integritySyncing;
