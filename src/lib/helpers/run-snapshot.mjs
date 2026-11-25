@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-25T03:47:15-08:00 (1795607235)
+ *	@Last modified time: 2026-11-25T04:19:20-08:00 (1795609160)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -423,6 +423,12 @@ class RunSnapshot extends Domain {
 		addStart(domain, this.start);
 		/** The tick of the instance's clock the run reads the instance at: its outermost run's start. */
 		this.base = parent === null ? this.start : parent.base;
+		/**
+		 * The root of the api tree its outermost run started on, whose nodes the instance saves versions of (set by
+		 * `copyForRun` in `helpers/flow-stores`): a copy of that tree built for the run later reads as of the start
+		 * through it.
+		 */
+		this.root = parent === null ? null : parent.root;
 		if (parent !== null) addStart(instance, this.base);
 		/** Raw object → the run's own copy, made on its first change. */
 		this.copies = new WeakMap();

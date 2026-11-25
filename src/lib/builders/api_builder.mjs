@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-25T03:47:08-08:00 (1795607228)
+ *	@Last modified time: 2026-11-25T04:19:13-08:00 (1795609153)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -720,6 +720,38 @@ function frontsSharedLive(value) {
 }
 
 /**
+ * The node the instance saves versions of for a node a run's view reads (see `helpers/run-snapshot`): the node itself,
+ * or, for a node of a copy of the tree the run started on (built for the run when the instance changed that tree, see
+ * `Slothlet#copyForSharers`), the node at the same path in the tree the run started on. The view reaches a node of the
+ * copy only through members the instance has not changed since the run started, so that path holds the node the copy
+ * was made from. Read by descriptors only, so no getter or trap runs.
+ * @param {*} node - The node, as the view reads through it.
+ * @param {object} snap - The run's snapshot.
+ * @returns {*} The node whose versions answer for it.
+ * @private
+ */
+function runtime_startNodeOf(node, snap) {
+	const root = snap.root;
+	if (root === null || root === undefined || (typeof root !== "object" && typeof root !== "function")) return node;
+	const wrapper = runtime_nodeWrapperOf(node);
+	if (wrapper === null) return node;
+	const internal = wrapper.____slothletInternal;
+	// A node of the tree the run started on (or of any tree but a copy) answers for itself.
+	if ((internal.epoch ?? 0) >= 0 || typeof internal.apiPath !== "string" || internal.apiPath === "") return node;
+	const segments = splitText(internal.apiPath, ".");
+	let holder = root;
+	let found = node;
+	for (let index = 0; index < segments.length; index++) {
+		const described = Reflect.getOwnPropertyDescriptor(holder, segments[index]);
+		const child = described !== undefined && "value" in described ? resolveWrapper(described.value) : null;
+		if (child === null) return node;
+		holder = child;
+		found = described.value;
+	}
+	return found;
+}
+
+/**
  * The target of a view a full-isolation run's `self` hands out (#803), holding the hook Node's `util.inspect` reads:
  * Node shows a Proxy's target rather than what its traps report, so the hook hands it what the view reads through, which
  * shows what the reading code may read, as `self` shows outside the run. What the run wrote is not shown.
@@ -1004,14 +1036,15 @@ function makeRunSelf(slothlet, parentSelf, record) {
 		const snapshotOf = () =>
 			snap === null || local || real === undefined || real === null || atInstanceRoot || run.forked || WeakMapMethods.has(RUN_OF_VIEW, real)
 				? null
-				: runtime_nodeVersion(real, snap);
+				: runtime_nodeVersion(runtime_startNodeOf(real, snap), snap);
 		// What a saved member is handed out as: a node as `self` hands it to the reader.
 		const snapshotValue = (value) => (runtime_isApiNode(value) ? runtime_selfView(value) : value);
 		// The instance's root as of the run's start, when the instance changed it since (a member replaced, added or
 		// deleted): the members its api held then. Null while it is as it was, and for every view but the root's.
 		const rootVersion = () => {
 			if (snap === null || !atInstanceRoot || run.forked) return null;
-			const api = slothlet.api;
+			// The root the run started on: the instance saves its versions there, also once the run reads a copy of its tree.
+			const api = snap.root ?? slothlet.api;
 			if (api === null || api === undefined || (typeof api !== "object" && typeof api !== "function")) return null;
 			const held = versionAt(snap.instance, api, snap.base);
 			return held === CURRENT ? null : held;

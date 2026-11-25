@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-25T03:47:10-08:00 (1795607230)
+ *	@Last modified time: 2026-11-25T04:19:16-08:00 (1795609156)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -16238,9 +16238,13 @@ function runtime_isRestartStale(wrapper) {
 	// While copies hold trees of their own (#876), a node answers for the tree of the code reading it: the reading
 	// code's tree is the one whose epoch it reads, so a node of any other tree forwards to the node at its path there.
 	if (slothlet._treeCopies !== 0) {
-		const epoch = wrapper.____slothletInternal.epoch;
+		const internal = wrapper.____slothletInternal;
+		const epoch = internal.epoch;
 		// The tree being built for the reader's set (a restart's, while it builds) answers as itself too.
-		return epoch !== slothlet._treeEpoch && epoch !== slothlet._buildEpoch;
+		if (epoch === slothlet._treeEpoch || epoch === slothlet._buildEpoch) return false;
+		// A copy kept for runs when the instance changed their start tree in place: that tree's nodes answer the runs as
+		// themselves while they stand, and a removed one from the copy.
+		return epoch !== slothlet._startTreeEpoch || internal.invalid === true || internal.removed === true;
 	}
 	return wrapper.____slothletInternal.epoch < slothlet._liveEpoch;
 }
@@ -24583,6 +24587,7 @@ export function internals(consumer) {
 		runtime_markCallerLocked,
 		runtime_instanceEnded,
 		runtime_markInstanceEnded,
+		runtime_checkpointLoaded,
 		runtime_nodeBehind,
 		runtime_registerFrameworkMember,
 		runtime_registerFrameworkMemberCopy,
