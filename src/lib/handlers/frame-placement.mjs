@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-24T11:20:15-08:00 (1795548015)
+ *	@Last modified time: 2026-11-25T11:44:32-08:00 (1795635872)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -1325,13 +1325,11 @@ const DESCRIPTIONS = new WeakMap();
  */
 function describeCall(wrapper) {
 	// A live wrapper always carries its internals, file and api path; the fallbacks describe a partial one
-	// (a direct caller's stand-in) as having no file.
-	/* v8 ignore start */
+	// (a direct caller's stand-in) as having no file. The hints cover only the `??` fallbacks.
 	const internal = wrapper?.____slothletInternal;
 	const impl = internal?.impl;
-	const filePath = internal?.filePath ?? null;
-	const apiPath = internal?.apiPath ?? "";
-	/* v8 ignore stop */
+	const filePath = /* v8 ignore next */ internal?.filePath ?? null;
+	const apiPath = /* v8 ignore next */ internal?.apiPath ?? "";
 	const cached = WeakMapMethods.get(DESCRIPTIONS, wrapper);
 	if (cached && cached.impl === impl && cached.filePath === filePath) return cached.description;
 	const description = {
@@ -1494,10 +1492,11 @@ function runtime_candidateIndex(candidates) {
 		SetMethods.add(wrappers, wrapper);
 		// Every candidate is a live wrapper, which always reaches its instance's cache and loader; the chains guard a
 		// partially-built wrapper handed in by a direct caller.
-		/* v8 ignore next 4 */
 		const cache = wrapper?.slothlet?.handlers?.apiCacheManager;
+		/* v8 ignore else */
 		if (cache) SetMethods.add(caches, cache);
 		const loader = wrapper?.slothlet?.processors?.loader;
+		/* v8 ignore else */
 		if (loader) SetMethods.add(loaders, loader);
 	}
 
@@ -2787,7 +2786,7 @@ function runtime_isHostObjectLeaf(leaf, filePath) {
 	const { ownership, apiManager } = leaf.slothlet.handlers;
 	// A synthetic leaf always carries the moduleID of the add that built it, and its instance its handlers; the guard
 	// covers a partial wrapper handed in by a direct caller.
-	/* v8 ignore next */
+	/* v8 ignore if */
 	if (!internal?.moduleID || !ownership || !apiManager) return false;
 	// The deepest of its module's mounts that holds it, and the mounter recorded for it: null for host code, the module's
 	// id for a module's own add.
@@ -4672,12 +4671,12 @@ const RUN_IN_ASYNC_SCOPE = typeof AsyncResource?.prototype?.runInAsyncScope === 
  */
 function scopeEnteredByCode() {
 	// Only the async runtime asks, which runs only where `node:async_hooks` (and so `runInAsyncScope`) exists.
-	/* v8 ignore next */
+	/* v8 ignore if */
 	if (RUN_IN_ASYNC_SCOPE === null) return true;
 	const read = readStack(runtime_siteCount, { limit: 1, skip: RUN_IN_ASYNC_SCOPE });
 	// A read that cannot be trusted (the stack settings fixed in place where no realm of slothlet's own can be made) can
 	// happen, and counts as entered by code; the suite cannot make a realm fail to be made.
-	/* v8 ignore next */
+	/* v8 ignore if */
 	if (read === null) return true;
 	return read.value !== 0;
 }

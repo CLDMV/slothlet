@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-23T18:12:59-08:00 (1795486379)
+ *	@Last modified time: 2026-11-25T11:44:32-08:00 (1795635872)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -276,8 +276,9 @@ function takeHookMethods(hook) {
 	const proto = Objects.getPrototypeOf(hook);
 	// Node's hooks always carry both methods; the null arm is for a runtime whose async hooks are a partial stand-in.
 	hookMethods =
-		/* v8 ignore next */
-		typeof proto?.enable === "function" && typeof proto.disable === "function" ? { enable: proto.enable, disable: proto.disable } : null;
+		typeof proto?.enable === "function" && typeof proto.disable === "function"
+			? { enable: proto.enable, disable: proto.disable }
+			: /* v8 ignore next */ null;
 	return hookMethods;
 }
 
@@ -976,7 +977,7 @@ export class AsyncContextManager {
 		// Node 22 releases whose `createHook()` takes no `trackPromises` still honour the marker it sets.
 		const marker = ArrayMethods.find(Objects.getOwnPropertySymbols(hook), (symbol) => symbol.description === "kNoPromiseHook");
 		// A Node without the marker: the probe below finds promise jobs not left out, and they are told by their stack.
-		/* v8 ignore next */
+		/* v8 ignore else */
 		if (marker !== undefined) hook[marker] = true;
 		Reflect.apply(hookMethods.enable, hook, []);
 		this.#scopeHook = hook;
@@ -1066,7 +1067,7 @@ export class AsyncContextManager {
 		const methods = takeHookMethods(hook);
 		// A hook with no `enable` / `disable` (a runtime whose async hooks are a partial stand-in) tells no jobs apart. It
 		// can happen outside Node; Node's hooks always have both, so the suite cannot reach this.
-		/* v8 ignore next */
+		/* v8 ignore if */
 		if (methods === null) return;
 		Reflect.apply(methods.enable, hook, []);
 		this.#jobHook = hook;

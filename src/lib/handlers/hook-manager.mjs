@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-22T23:40:25-08:00 (1795419625)
+ *	@Last modified time: 2026-11-25T11:44:32-08:00 (1795635872)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -703,7 +703,7 @@ export class HookManager extends ComponentBase {
 				// never returns an empty versions map); the guard covers a future registry shape
 				// change, not a reachable state.
 				const defaultTag = versionManager.getDefaultVersion(logicalPath);
-				/* v8 ignore next 3 */
+				/* v8 ignore if */
 				if (defaultTag == null) {
 					throw new this.SlothletError("HOOK_VERSION_UNRESOLVED", { pattern });
 				}
@@ -2070,7 +2070,7 @@ export class HookManager extends ComponentBase {
 		// unreachable via tests (2026-03-04): #private fields prevent external
 		// mutation; on() creates the array before writing to #byId so no public
 		// path can produce a missing patternHooks key.
-		/* v8 ignore next */
+		/* v8 ignore if */
 		if (!patternHooks) {
 			throw new this.slothlet.SlothletError("INTERNAL_HOOK_STATE_CORRUPT", {
 				id: hook.id,
@@ -2088,7 +2088,7 @@ export class HookManager extends ComponentBase {
 		// unreachable via tests (2026-03-04): on() pushes the identical object
 		// reference; no public path splices the array without clearing #byId,
 		// so indexOf always finds the hook and index === -1 is never true.
-		/* v8 ignore next */
+		/* v8 ignore if */
 		if (index === -1) {
 			throw new this.slothlet.SlothletError("INTERNAL_HOOK_STATE_CORRUPT", {
 				id: hook.id,
