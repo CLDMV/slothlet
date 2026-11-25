@@ -315,6 +315,7 @@ A `run()` / `scope()` open across a `restart()` that fails is refused as after `
 - The `FOLDER_INVALID` message no longer names v3's `dir`. It reads "Configuration error: the path must be a non-empty string that points to an existing folder. Received: …", in every language. Match on `err.code`, not on the text.
 - The handler the package entry installs for an uncaught slothlet error prints the error's `cause` and `details` instead of v3's `originalError` and `context`. Update anything that parses that output.
 - v3 registered that handler as an `uncaughtException` listener that rethrew every other error, so Node exited with code 7 even when the host had a handler of its own. v4 registers it as an `uncaughtExceptionMonitor`: a host with its own `uncaughtException` handler gets every error, a `SlothletError` included, and the readable output (with exit code 1) appears only when nothing else handles the error. Any other unhandled error ends the process as it would without slothlet.
+- What to change: a supervisor, script or test that checks for exit code 7 now sees 1. An app with its own `uncaughtException` handler that used to be ended anyway now keeps running when the handler returns, as it does in plain Node; if it relied on that exit, call `process.exit()` in the handler.
 
 ### A member a module creates at runtime is owned by that module
 
