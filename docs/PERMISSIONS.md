@@ -1250,6 +1250,16 @@ export const callSelf = () => self.callers.selfCaller.helper();
 export const helper = () => ({ ok: true });
 ```
 
+The same holds for a hook. A module registering a hook on the exact path of a leaf in its own file is allowed, ahead of every rule, at registration and every time the hook fires, and the registration emits `permission:self-bypass`:
+
+```javascript
+// self-caller.mjs
+export const watch = () => self.slothlet.hook.on("callers.selfCaller.helper:before", () => {}); // ALWAYS ALLOWED (same file)
+export const watchAll = () => self.slothlet.hook.on("callers.selfCaller.*:before", () => {}); // rules decide each path
+```
+
+Only a hook on one exact path takes the bypass; a pattern hook (`*`, `**`, `?`, `{a,b}`, `!`) goes through the rules for every concrete path it matches, its own file included. The target file is the one slothlet recorded for the leaf currently at the path: a leaf removed and re-added there from another file no longer counts, and a path with no record has no bypass. The `slothlet.*` surface is never reached this way, and a [module-private](#module-private-exports) member is hooked through it only by the module that owns it. A hook registered under another module's call is also checked as that call, which takes the bypass only when the leaf is in its own file.
+
 ---
 
 ## Owner Grant
@@ -1435,6 +1445,8 @@ const api = await slothlet({
 	}
 });
 ```
+
+**Hooking your own file.** A module may always hook a leaf in its own source file, as it may always call one (see [Self-Call Bypass](#self-call-bypass)). The bypass applies to a hook on that exact path only, at registration and when it fires; a pattern hook goes through the rules for every path it matches, the module's own file included.
 
 **Force-pinned ownership.** Module-registered hooks are pinned to their owner module by default, so a hook's own `self.*` calls and permission checks run as the registering module — preventing a hook from laundering access through the bound `api`. Opt out per-instance with `hook: { pin: false }` at init, or at runtime via `api.slothlet.hook.pin.disable()` (`.enable()` re-enables, `.enabled` reads the current state).
 
