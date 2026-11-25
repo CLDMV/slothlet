@@ -406,6 +406,7 @@
 		"API_PATH_REASON_ARRAY_EMPTY_SEGMENTS": "el array contiene segmentos de cadena vacíos",
 		"API_PATH_REASON_RESERVED_NAME": "entra en conflicto con nombres reservados (slothlet, shutdown, destroy)",
 		"API_PATH_REASON_UNSAFE_SEGMENT": "contiene un segmento no seguro (__proto__, constructor, prototype) que contaminaría la cadena de prototipos",
+		"HOOK_PATTERN_REASON_UNPATHABLE_SEGMENT": "nombra un segmento que ninguna ruta de la API puede contener (__proto__, constructor, prototype)",
 		"API_PATH_REASON_THENABLE_SEGMENT": "contiene un segmento 'then', que haría que ese espacio de nombres fuera awaitable",
 		"API_PATH_REASON_INVALID_TYPE": "debe ser una cadena, un array de cadenas, cadena vacía (raíz) o null/undefined (raíz)",
 		"API_PATH_REASON_EMPTY_SEGMENTS": "contiene segmentos de ruta vacíos",

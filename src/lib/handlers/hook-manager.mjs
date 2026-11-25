@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-25T08:58:23-08:00 (1795625903)
+ *	@Last modified time: 2026-11-25T11:14:52-08:00 (1795634092)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -22,7 +22,8 @@
 import { segmentsOf } from "#helpers/segments";
 import { util, inheritsFrom } from "#helpers/platform";
 import { ComponentBase } from "#factories/component-base";
-import { compilePattern } from "#helpers/pattern-matcher";
+import { compilePattern, unsafeSegmentOf } from "#helpers/pattern-matcher";
+import { translate } from "#i18n";
 import { normalizeHookConfig } from "#helpers/config";
 import { FORK, writeTarget } from "#helpers/flow-stores";
 import { internals as unifiedWrapperInternals } from "#handlers/unified-wrapper";
@@ -484,6 +485,8 @@ export class HookManager extends ComponentBase {
 
 		this.enabled = hookConfig.enabled;
 		this.defaultPattern = hookConfig.pattern || "**";
+		// The configured path filter is a hook pattern too, so it meets the same refusal.
+		this.#assertPathablePattern(this.defaultPattern);
 		this.suppressErrors = hookConfig.errors === "suppress";
 
 		// Pin-enforcement policy. When true (default) a per-registration `pin: false` on a
@@ -640,6 +643,7 @@ export class HookManager extends ComponentBase {
 
 		// Validate pattern by compiling it (throws on errors like max nesting)
 		this.#compilePattern(pattern);
+		this.#assertPathablePattern(pattern);
 
 		// Identity of the registering module (null when registered outside a module — i.e. by the
 		// host). Used for the permission gate and pinned onto the hook for fire-time re-checks. Owner
@@ -915,6 +919,7 @@ export class HookManager extends ComponentBase {
 		const written = writeTarget(this);
 		if (written !== this) return written.remove(filter);
 		let removed = 0;
+		if (!filter.id) this.#assertPathablePattern(filter.pattern);
 
 		// Filter by ID (fast path)
 		if (filter.id) {
@@ -1046,6 +1051,7 @@ export class HookManager extends ComponentBase {
 		if (written !== this) return written.enablePattern(pattern);
 		// Validate by compiling (throws on malformed patterns, consistent with on()).
 		this.#compilePattern(pattern);
+		this.#assertPathablePattern(pattern);
 		if (!SetMethods.has(this.enabledPatterns, pattern)) {
 			SetMethods.add(this.enabledPatterns, pattern);
 			this.patternFilterActive = true;
@@ -1073,6 +1079,7 @@ export class HookManager extends ComponentBase {
 	disablePattern(pattern) {
 		const written = writeTarget(this);
 		if (written !== this) return written.disablePattern(pattern);
+		this.#assertPathablePattern(pattern);
 		const removed = SetMethods.delete(this.enabledPatterns, pattern);
 		MapMethods.delete(this.#globalFilterCache, pattern);
 		if (SetMethods.size(this.enabledPatterns) === 0) {
@@ -1150,6 +1157,7 @@ export class HookManager extends ComponentBase {
 		}
 
 		const hooks = [];
+		if (!filter.id) this.#assertPathablePattern(filter.pattern);
 
 		// Filter by ID (fast path)
 		if (filter.id) {
@@ -2004,6 +2012,25 @@ export class HookManager extends ComponentBase {
 	}
 
 	/**
+	 * Refuse a path pattern naming a segment no api path can hold (`__proto__`, `constructor`, `prototype`), the same
+	 * set a mount path refuses. Every entry point that takes a pattern calls it, so a hook can never be keyed by one.
+	 * @param {*} pattern - The pattern as given; anything that is not a string is left to the caller's own checks.
+	 * @returns {void}
+	 * @throws {SlothletError} API_PATH_INVALID naming the segment and its index.
+	 * @private
+	 */
+	#assertPathablePattern(pattern) {
+		const found = unsafeSegmentOf(pattern);
+		if (found === null) return;
+		throw new this.slothlet.SlothletError("API_PATH_INVALID", {
+			path: segmentsOf(pattern),
+			reason: translate("HOOK_PATTERN_REASON_UNPATHABLE_SEGMENT"),
+			index: found.index,
+			segment: found.segment
+		});
+	}
+
+	/**
 	 * Whether a hook path pattern contains glob/negation metacharacters (so it can match more than
 	 * one concrete path). Concrete patterns are permission-checked at registration (fail-fast); glob
 	 * patterns defer entirely to the per-path fire-time check in {@link getHooksForPath}.
@@ -2129,6 +2156,7 @@ export class HookManager extends ComponentBase {
 	#setEnabledState(filter, enabled) {
 		let affected = 0;
 		let flipped = 0;
+		if (!filter.id) this.#assertPathablePattern(filter.pattern);
 
 		// Filter by ID (fast path)
 		if (filter.id) {

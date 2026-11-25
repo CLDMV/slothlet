@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-22T23:31:44-08:00 (1795419104)
+ *	@Last modified time: 2026-11-25T11:14:51-08:00 (1795634091)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -36,7 +36,7 @@
  * 	options: { moduleID: "plugins-core", metadata: { version: "1.0.0" } }
  * });
  */
-import { segmentsOf } from "#helpers/segments";
+import { segmentsOf, UNSAFE_PATH_SEGMENTS } from "#helpers/segments";
 import { translate } from "#i18n";
 import { ComponentBase } from "#factories/component-base";
 import {
@@ -129,8 +129,6 @@ const { versionDispatcherRecord } = frameworkInternalsInternals("lib/handlers/ap
 // Rule 18 (M07): Single-file/synthetic one-key unwrap — ~L2067
 // Rule 18 (M08): Bare-function merged value → callable container — ~L2260
 // Rule 18 (M09): Removal remove-if-sole vs revert-if-shared — ~L2874 / ~L3095
-
-const UNSAFE_PATH_SEGMENTS = setFrom(["__proto__", "constructor", "prototype"]);
 
 /**
  * Root members of the api the framework itself serves: its namespace and its root functions (#625).
