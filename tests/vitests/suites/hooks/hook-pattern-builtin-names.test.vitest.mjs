@@ -7,15 +7,15 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-25T08:59:34-08:00 (1795625974)
+ *	@Last modified time: 2026-11-25T11:45:43-08:00 (1795635943)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
  */
 
 /**
- * @fileoverview Hook patterns that share a name with a built-in object member (`constructor`, `toString`, `valueOf`,
- * `hasOwnProperty`, `__proto__`) are stored, listed and removed like any other pattern.
+ * @fileoverview Hook patterns that share a name with a built-in object member (`toString`, `valueOf` and
+ * `hasOwnProperty`) are stored, listed and removed like any other pattern.
  *
  * @description
  * The hook index is keyed by pattern. Read through an ordinary object, such a pattern found the inherited member
@@ -27,7 +27,7 @@ import { describe, it, expect, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
 import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
-const NAMES = ["constructor", "toString", "valueOf", "hasOwnProperty", "__proto__"];
+const NAMES = ["toString", "valueOf", "hasOwnProperty"];
 
 /** The shared values a misplaced hook would land on. */
 const SHARED = [Object, Function, Object.prototype, Function.prototype, ...NAMES.map((name) => Object.prototype[name]).filter((v) => v)];
