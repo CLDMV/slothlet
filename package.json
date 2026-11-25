@@ -216,6 +216,7 @@
 		"coverage:merge": "node tools/coverage/merge-browser-coverage.mjs",
 		"coverage": "npm run coverage:node && npm run coverage:browser && npm run coverage:merge",
 		"coverage:analyze": "node tools/coverage/analyze-coverage.mjs",
+		"coverage:file": "node tools/coverage/coverage-file.mjs",
 		"coverage:all": "npm run coverage && npm run coverage:analyze",
 		"ci:coverage": "npm run coverage",
 		"test": "npm run test:pre-build",
