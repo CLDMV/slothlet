@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-25T03:05:32-08:00 (1795604732)
+ *	@Last modified time: 2026-11-25T08:40:37-08:00 (1795624837)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -26,9 +26,7 @@
  * mode, the async and live runtime, under either attribution, for the host and for another module, for a generator and
  * an async generator, open, frozen, sealed and closed to extension.
  *
- * On a generator object that can still be extended, the stand-in reads and writes each data member through to the
- * generator as it is now, so it holds it as an accessor: the member's kind, `writable` and `configurable` are compared
- * only for a generator object that cannot be extended, where they decide what `isFrozen` and `isSealed` answer.
+ * Each member's kind, `writable` and `configurable` are compared as well, open or closed (#965).
  * @module tests/vitests/suites/permissions/crossing-generator-own-members
  */
 
@@ -52,14 +50,6 @@ let twins = 0;
  * @returns {Promise<object>} Its namespace.
  */
 const twin = () => import(`${pathToFileURL(join(FIXTURE, "api", "gen.mjs")).href}?plain-twin-${++twins}`);
-
-/**
- * Drop what a stand-in of a generator object that can still be extended holds as accessors (see the file's notes).
- * @param {object} description - A description from the fixture's `describe`.
- * @returns {object} The description to compare.
- */
-const comparable = (description) =>
-	description.extensible ? { ...description, kinds: undefined, writable: undefined, configurable: undefined } : description;
 
 describeBlock.each(matrix)("generator object own members > $mode / $runtime / $attribution", ({ mode, runtime, attribution }) => {
 	let api;
@@ -95,7 +85,7 @@ describeBlock.each(matrix)("generator object own members > $mode / $runtime / $a
 			for (const state of STATES) {
 				const expected = describe(isAsync ? plain.makeAsync(state) : plain.make(state));
 				const actual = describe(await (isAsync ? api.gen.makeAsync(state) : api.gen.make(state)));
-				expect({ state, ...comparable(actual) }).toEqual({ state, ...comparable(expected) });
+				expect({ state, ...actual }).toEqual({ state, ...expected });
 			}
 		});
 
@@ -104,7 +94,7 @@ describeBlock.each(matrix)("generator object own members > $mode / $runtime / $a
 			await build();
 			for (const state of STATES) {
 				const expected = describe(isAsync ? plain.makeAsync(state) : plain.make(state));
-				expect({ state, ...comparable(await api.reader.look(state, isAsync)) }).toEqual({ state, ...comparable(expected) });
+				expect({ state, ...(await api.reader.look(state, isAsync)) }).toEqual({ state, ...expected });
 			}
 		});
 
