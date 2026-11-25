@@ -30,7 +30,7 @@
  * ```
  * - A top-level export with such a name is refused at load, as the listed names are.
  * - A member of an exported value with such a name is not adopted, so the node never holds it.
- * - A write of such a name through `self` is absorbed, as for the listed names.
+ * - A write of such a name through `self` is absorbed, as for the listed names, and so is a definition of it.
  * - An `api.add` mount path holding such a segment is refused.
  *
  * In every case the fixture's function is never called.
@@ -85,6 +85,22 @@ describe.each(["eager", "lazy"])("Framework member names > %s", (mode) => {
 		const target = await loaded(writer.target);
 		expect(Object.keys(target).sort()).toEqual(["first", "later"]);
 		expect(target.___createChildWrapper).toBeUndefined();
+		expect(await writer.calls()).toEqual([]);
+	});
+
+	it("absorbs a definition of a name with the prefix, and refuses one that would fix it", async () => {
+		api = await slothlet({ mode, base: `${FIXTURE}runtime` });
+		const writer = await loaded(api.probe.writer);
+		const target = await loaded(writer.target);
+		const keys = Object.keys(target).sort();
+
+		expect(Reflect.defineProperty(target, "___createChildWrapper", { value: () => 1, configurable: true, writable: true })).toBe(true);
+		expect(Reflect.defineProperty(target, "____state", { value: 1, enumerable: true })).toBe(true);
+		// A definition that fixes the member could not be reported as made on a target that does not hold it.
+		expect(Reflect.defineProperty(target, "___createChildWrapper", { value: 1, configurable: false })).toBe(false);
+		expect(target.___createChildWrapper).toBeUndefined();
+		expect(target.____state).toBeUndefined();
+		expect(Object.keys(target).sort()).toEqual(keys);
 		expect(await writer.calls()).toEqual([]);
 	});
 
