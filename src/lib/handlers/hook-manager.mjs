@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-22T23:40:25-08:00 (1795419625)
+ *	@Last modified time: 2026-11-25T01:47:43-08:00 (1795600063)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -654,7 +654,7 @@ export class HookManager extends ComponentBase {
 		// hook may intercept only what both the owner and that call may, at registration and every time it fires.
 		// Every call of the ceiling, as `{ path, filePath }` (#597).
 		const ownerCeilings = replayIdentity
-			? (replayIdentity.ownerCeilings ?? [])
+			? replayIdentity.ownerCeilings
 			: mapList(identityCeilings(ownerIdentity), (call) => ({
 					path: call.____slothletInternal?.apiPath ?? null,
 					filePath: call.____slothletInternal?.filePath ?? null
@@ -1228,7 +1228,7 @@ export class HookManager extends ComponentBase {
 					permissionManager.checkHookAccess(hook.ownerPath, apiPath, type, hook.ownerFilePath, null, runtimeContext) &&
 					// A hook registered under other modules' calls as its ceiling fires only where each of them may (#597).
 					ArrayMethods.every(
-						hook.ownerCeilings ?? [],
+						hook.ownerCeilings,
 						(ceiling) =>
 							ceiling.path === null ||
 							permissionManager.checkHookAccess(ceiling.path, apiPath, type, ceiling.filePath, null, runtimeContext)
@@ -2081,7 +2081,7 @@ export class HookManager extends ComponentBase {
 			});
 		}
 
-		const index = typeof patternHooks === "string" ? StringMethods.indexOf(patternHooks, hook) : ArrayMethods.indexOf(patternHooks, hook);
+		const index = ArrayMethods.indexOf(patternHooks, hook);
 
 		// Invariant: hook object must be in patternHooks — on() pushes the exact object
 		// reference that it stores in #byId. If not found, internal state is corrupt.
@@ -2253,7 +2253,7 @@ export class HookManager extends ComponentBase {
 				groupId: hook.groupId,
 				ownerFilePath: hook.ownerFilePath,
 				// A registration's ceiling (#597) travels with its owner, through the same private channel.
-				ownerCeilings: hook.ownerCeilings ?? [],
+				ownerCeilings: hook.ownerCeilings,
 				enabled: hook.enabled
 			});
 		}

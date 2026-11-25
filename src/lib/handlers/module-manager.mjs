@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T21:24:11-08:00 (1794979451)
+ *	@Last modified time: 2026-11-25T01:47:44-08:00 (1795600064)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -692,12 +692,7 @@ export class ModuleManager extends ComponentBase {
 		for (let i = 0; i < resolved.length; i++) {
 			const item = resolved[i];
 			try {
-				const mountResult = await this.#mountSingle(
-					item,
-					collisionMode,
-					(versionConfigs ? MapMethods.get(versionConfigs, i) : undefined) ?? null,
-					writer
-				);
+				const mountResult = await this.#mountSingle(item, collisionMode, MapMethods.get(versionConfigs, i) ?? null, writer);
 				listPush(mounted, mountResult);
 			} catch (err) {
 				if (onFailure === "throw") {
@@ -741,12 +736,7 @@ export class ModuleManager extends ComponentBase {
 				if (i >= resolved.length) return;
 				const item = resolved[i];
 				try {
-					const mountResult = await this.#mountSingle(
-						item,
-						collisionMode,
-						(versionConfigs ? MapMethods.get(versionConfigs, i) : undefined) ?? null,
-						writer
-					);
+					const mountResult = await this.#mountSingle(item, collisionMode, MapMethods.get(versionConfigs, i) ?? null, writer);
 					listPush(mounted, mountResult);
 				} catch (err) {
 					if (onFailure === "best-effort") {
