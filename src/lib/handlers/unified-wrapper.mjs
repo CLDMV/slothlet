@@ -24353,9 +24353,9 @@ function runtime_nodeBehind(value) {
 /**
  * The object a value stands for once every layer slothlet put around it is taken off: a prototype's handle, a view
  * `self` hands out, a full-isolation run's view, a crossing view, a stand-in, a view of a given prototype, a pinned code
- * member, the async runtime's context wrapper of a class instance, and a node, which stands for its module's value (the
- * function of a function node). Anything else is the value itself. Nothing of the module's code runs: only slothlet's own
- * records are read.
+ * member, the async runtime's context wrapper of a class instance, a node, which stands for its module's value (the
+ * function of a function node), and a composition layer, which stands for the module's value beneath it. Anything else
+ * is the value itself. Nothing of the module's code runs: only slothlet's own records are read.
  * @param {*} value - The value.
  * @returns {*} What it stands for.
  * @private
@@ -24377,9 +24377,14 @@ function runtime_underlyingValue(value) {
 			if (unwrapped !== next) next = unwrapped;
 			else {
 				const wrapper = resolveWrapper(next);
-				if (wrapper === null) return next;
-				const impl = wrapper.____slothletInternal.impl;
-				next = runtime_functionOf(impl) ?? impl;
+				if (wrapper !== null) {
+					const impl = wrapper.____slothletInternal.impl;
+					next = runtime_functionOf(impl) ?? impl;
+				} else if (isCompositionLayer(next)) {
+					// A composed value's layer stands for the module's own value beneath it (a default-export function the
+					// build put members on), which is what the module's code holds.
+					next = layerUnderlying(next);
+				} else return next;
 			}
 		}
 		if (next === value) return value;
