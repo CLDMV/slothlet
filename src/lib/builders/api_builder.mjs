@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-25T13:14:39-08:00 (1795641279)
+ *	@Last modified time: 2026-11-25T13:38:38-08:00 (1795642718)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -154,21 +154,6 @@ const { moduleSelfForm } = instanceImportsInternals("lib/builders/api_builder");
 /** The rule targets of `run` and of its member `run.self`. */
 const RUN_TARGET = "slothlet.context.run";
 const RUN_SELF_TARGET = "slothlet.context.run.self";
-
-/**
- * The runtime a context manager serves: its fixed `kind`. A manager without one (a hand-built stand-in) is read by
- * its class name as before, which is only a fallback: a minified bundle renames the real classes, and these carry `kind`.
- * @param {object} [manager] - The context manager.
- * @returns {"live"|"async"|undefined} The runtime, or undefined for an unrecognized manager.
- * @package
- */
-function managerKind(manager) {
-	if (manager?.kind) return manager.kind;
-	const name = manager?.constructor?.name;
-	if (name === "LiveContextManager") return "live";
-	if (name === "AsyncContextManager") return "async";
-	return undefined;
-}
 
 /**
  * The target a check of `target` is decided under for one caller. `run.self` is a path under `run`: a rule written for
@@ -4195,7 +4180,7 @@ export class ApiBuilder extends ComponentBase {
 					});
 				}
 				// The live runtime binds through its own manager: the flow and caller bound in are what the callback runs in.
-				if (managerKind(slothlet.contextManager) === "live") return pinScopeToCurrentCaller(fn);
+				if (slothlet.contextManager?.kind === "live") return pinScopeToCurrentCaller(fn);
 				// No AsyncResource where there is no node:async_hooks, so bind is identity (`: fn`). This nested
 				// method lives outside api_builder's instrumented coverage region (the v8 map stops inside
 				// createSlothletNamespace, before its returned object's methods), so neither the node run nor
@@ -4220,7 +4205,7 @@ export class ApiBuilder extends ComponentBase {
 					// With child instance approach, we always find the right context by current instanceID
 
 					// For live mode, use currentInstanceID tracking
-					if (managerKind(slothlet.contextManager) === "live") {
+					if (slothlet.contextManager?.kind === "live") {
 						const currentID = slothlet.contextManager.currentInstanceID;
 
 						// Check if current is this instance or a child of this instance.
@@ -4253,7 +4238,7 @@ export class ApiBuilder extends ComponentBase {
 					}
 
 					// For async mode, get current store from ALS and lookup by its instanceID
-					if (managerKind(slothlet.contextManager) === "async") {
+					if (slothlet.contextManager?.kind === "async") {
 						let currentStore = slothlet.contextManager.tryGetContext();
 
 						// If we're in a .run() scope, currentStore will be the child instance
@@ -4350,7 +4335,7 @@ export class ApiBuilder extends ComponentBase {
 					// The active store, when the call runs inside this instance's base or one of its run()/scope() stores:
 					// a key that store protects, or that another owner owns there, is refused as a runtime write is.
 					const active =
-						managerKind(contextManager) === "live"
+						contextManager?.kind === "live"
 							? contextManager.currentInstanceID
 								? MapMethods.get(instances, contextManager.currentInstanceID)
 								: null
@@ -6581,7 +6566,7 @@ export class ApiBuilder extends ComponentBase {
 				const { utilities } = slothlet.helpers;
 
 				// For live binding mode, use child instance approach
-				if (managerKind(contextManager) === "live") {
+				if (contextManager?.kind === "live") {
 					// The store of THIS instance's flow the code opening the scope is part of: a run()/scope() of it only when
 					// the code runs inside that flow, never one a sibling run() left in the active field while it waits.
 					const currentStore = contextManager.runParent(slothlet.instanceID);
@@ -6675,7 +6660,7 @@ export class ApiBuilder extends ComponentBase {
 				}
 
 				// For async mode, use child instance approach
-				if (managerKind(contextManager) === "async") {
+				if (contextManager?.kind === "async") {
 					// CRITICAL: Get THIS instance's store (base or child), not just any active store
 					let currentStore = null;
 
