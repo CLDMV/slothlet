@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-24T12:25:58-08:00 (1795551958)
+ *	@Last modified time: 2026-11-25T02:09:34-08:00 (1795601374)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -10208,7 +10208,9 @@ function runtime_membrane(maker, owner, original, asNode = false, made = maker.m
 		ownKeys: () => {
 			if (!exec(() => Reflect.isExtensible(original))) settle();
 			const keys = exec(() => Reflect.ownKeys(original));
-			if (!Reflect.isExtensible(shadow)) return Reflect.ownKeys(shadow);
+			// The shadow was just settled to hold exactly these keys; they are listed in the original's order, as the
+			// original lists them, not in the order the shadow came to hold them.
+			if (!Reflect.isExtensible(shadow)) return keys;
 			// Every member the shadow holds fixed is still the original's; the language requires it be listed.
 			for (let ofIndex = 0, ofList = Reflect.ownKeys(shadow); ofIndex < ofList.length; ofIndex++) {
 				const key = ofList[ofIndex];
