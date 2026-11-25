@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-25T02:12:40-08:00 (1795601560)
+ *	@Last modified time: 2026-11-25T13:44:17-08:00 (1795643057)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -40,7 +40,7 @@ import {
 } from "#helpers/composition";
 import { SlothletError } from "#errors";
 import { ComponentBase } from "#factories/component-base";
-import { isFrameworkReservedKey, internals as reservedKeysInternals } from "#helpers/reserved-keys";
+import { isFrameworkName, isFrameworkReservedKey, internals as reservedKeysInternals } from "#helpers/reserved-keys";
 import { runtime_isWrappedClassInstance, internals as classInstanceWrapperInternals } from "#helpers/class-instance-wrapper";
 import { combineCeilings, identityCeilings, internals as trustedRootInternals } from "#handlers/trusted-root";
 import { handsOutAsModule, toComparablePath, internals as framePlacementInternals } from "#handlers/frame-placement";
@@ -19219,6 +19219,16 @@ class UnifiedWrapper extends ComponentBase {
 			if (SetMethods.has(internalKeys, key)) {
 				continue;
 			}
+			// A name with the framework's prefix (`___` / `____`) is never a member: the wrapper's own members carry it,
+			// and a child under such a name would stand in for one of them. An object's own member leaves it as an
+			// adopted one does, so no read or listing of the node reaches it through the impl either.
+			if (isFrameworkName(key)) {
+				if (typeof this.____slothletInternal.impl === "object" && !uw_isLayer) {
+					const reservedDescriptor = Objects.getOwnPropertyDescriptor(this.____slothletInternal.impl, key);
+					if (reservedDescriptor?.configurable) delete this.____slothletInternal.impl[key];
+				}
+				continue;
+			}
 			// Skip metadata/helper keys
 			if (typeof key === "string" && SetMethods.has(metadataKeys, key)) {
 				continue;
@@ -23124,12 +23134,16 @@ class UnifiedWrapper extends ComponentBase {
 			// A node of a run's tree changes values the instance's tree shares: what it writes stays on the node itself.
 			const runTreeNode = runtime_inRunTree(wrapper);
 			if (runTreeNode) runtime_ownRunTreeArray(wrapper);
-			// Keys that must not be settable from outside — they shadow private state or are
-			// read-only informational accessors whose values come from ____slothletInternal.
-			// Silently absorb the write so no TypeError leaks key existence.
+			// Keys that must not be settable from outside — every name with the framework's prefix, which would shadow
+			// the wrapper's own members and state, or read-only informational accessors whose values come from
+			// ____slothletInternal. Silently absorb the write so no TypeError leaks key existence.
 			// ___materialize is exempted: the framework writes it directly on the target.
 			// Module code meets the write rules first, so an assignment is refused as a definition is (#625).
-			if (SetMethods.has(UnifiedWrapper.INTERNAL_KEYS, prop) && prop !== "___materialize") {
+			if (
+				(SetMethods.has(UnifiedWrapper.INTERNAL_KEYS, prop) ||
+					(isFrameworkName(prop) && !SetMethods.has(reservedKeysOwn.IMPL_METADATA_KEYS, prop))) &&
+				prop !== "___materialize"
+			) {
 				runtime_assertOwnedWrite(wrapper, prop);
 				return true;
 			}

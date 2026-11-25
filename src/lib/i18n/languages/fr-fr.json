@@ -407,6 +407,7 @@
 		"API_PATH_REASON_RESERVED_NAME": "entre en conflit avec les noms réservés (slothlet, shutdown, destroy)",
 		"API_PATH_REASON_UNSAFE_SEGMENT": "contient un segment non sécurisé (__proto__, constructor, prototype) qui polluerait la chaîne de prototypes",
 		"API_PATH_REASON_THENABLE_SEGMENT": "contient un segment 'then', qui rendrait cet espace de noms awaitable",
+		"API_PATH_REASON_FRAMEWORK_SEGMENT": "contient un segment commençant par trois traits de soulignement, un nom réservé aux membres propres du framework",
 		"API_PATH_REASON_INVALID_TYPE": "doit être une chaîne, un tableau de chaînes, une chaîne vide (racine) ou null/undefined (racine)",
 		"API_PATH_REASON_EMPTY_SEGMENTS": "contient des segments de chemin vides",
 		"API_PATH_REASON_COLLISION_ERROR": "le chemin existe déjà et le mode de collision est 'error'",
