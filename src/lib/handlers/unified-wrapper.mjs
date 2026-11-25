@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-24T12:25:58-08:00 (1795551958)
+ *	@Last modified time: 2026-11-25T03:11:41-08:00 (1795605101)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -2113,8 +2113,14 @@ function runtime_frontedDataMember(wrapper, prop) {
 		WeakMapMethods.set(SELF_DATA_METHODS, impl, byObject);
 	}
 	let method = MapMethods.get(byObject, prop);
-	if (method?.fn !== member) {
-		method = { fn: member, call: (...args) => Reflect.apply(member, impl, args) };
+	if (method?.fn !== member || method.wrapper !== wrapper) {
+		// A method running on the object can change it: while a run is open, the node and the object are saved first, as
+		// before any other change to the node (see runtime_snapshotBarrier).
+		const call = (...args) => {
+			if (anyRunOpen()) runtime_snapshotBarrier(wrapper);
+			return Reflect.apply(member, impl, args);
+		};
+		method = { fn: member, wrapper, call };
 		MapMethods.set(byObject, prop, method);
 	}
 	return method.call;
@@ -2129,7 +2135,7 @@ const SELF_DATA_VALUES = new WeakMap();
 
 /**
  * The methods {@link runtime_frontedDataMember} made to run on a data object itself, per object and key.
- * @type {WeakMap<object, Map<string|symbol, {fn: Function, call: Function}>>}
+ * @type {WeakMap<object, Map<string|symbol, {fn: Function, wrapper: object, call: Function}>>}
  * @private
  */
 const SELF_DATA_METHODS = new WeakMap();
@@ -4549,6 +4555,20 @@ function runtime_checkpointFile(wrapper) {
 }
 
 /**
+ * Before a function a node's impl holds is handed out as it is rather than as a node of its own (a named export beside
+ * a file's default export that is a `Map`, which the node's composition layer holds): while a run is open, the node's
+ * file is saved for the runs open (see {@link runtime_checkpointFile}), as before a call through a node, since the
+ * caller runs the file's code with it.
+ * @param {UnifiedWrapper} wrapper - The node.
+ * @param {*} value - What is handed out.
+ * @returns {void}
+ * @private
+ */
+function runtime_checkpointCodeHandout(wrapper, value) {
+	if (typeof value === "function" && anyRunOpen()) runtime_checkpointFile(wrapper);
+}
+
+/**
  * Save a lazy node that has just loaded, and every node and built-in below it, for the runs open (see
  * `helpers/run-snapshot`): a change made through a stand-in for it while it loaded, which is made once it has, then
  * does not reach a run that started before the change.
@@ -4599,7 +4619,9 @@ function runtime_checkpointNodeBuiltins(domain, node) {
 		if (described !== undefined && "value" in described && builtinKind(described.value) !== null)
 			runtime_checkpointBuiltin(domain, described.value);
 	}
-	const impl = node.____slothletInternal.impl;
+	// A composed node (a file's default export with named exports beside it) holds its value under the framework's layer
+	// (see helpers/composition): the value itself is what is saved. A module's own Proxy is left alone.
+	const impl = layerUnderlying(node.____slothletInternal.impl);
 	if (impl === null || typeof impl !== "object" || util.types.isProxy(impl)) return;
 	// A node over a built-in (a `Map` a file exports) holds its entries in the built-in itself.
 	if (builtinKind(impl) !== null) runtime_checkpointBuiltin(domain, impl);
@@ -4650,8 +4672,9 @@ function runtime_snapshotBarrier(wrapper) {
 	if (internal.mode === "lazy" && !internal.state.materialized) return;
 	// Once per window: later changes in the same window find the node saved already.
 	if (!beforeChange(domain, wrapper, runtime_captureNode)) return;
-	// A node over a built-in (a `Map`) holds its entries in the built-in, which a method running on it changes as itself.
-	const impl = internal.impl;
+	// A node over a built-in (a `Map`) holds its entries in the built-in, which a method running on it changes as itself;
+	// a composed node holds it under the framework's layer.
+	const impl = layerUnderlying(internal.impl);
 	if (impl !== null && typeof impl === "object" && !util.types.isProxy(impl) && builtinKind(impl) !== null)
 		runtime_checkpointBuiltin(domain, impl);
 }
@@ -21843,6 +21866,7 @@ class UnifiedWrapper extends ComponentBase {
 					// A layer hands a method of the value under it out bound to that value: the method is what decides, so
 					// a built-in's (a Map's `get`) is the language's, not the module's.
 					runtime_enforceCodeMember(wrapper, layerMethodOriginal(proxied) ?? proxied, kept);
+					runtime_checkpointCodeHandout(wrapper, proxied);
 					return proxied;
 				}
 
