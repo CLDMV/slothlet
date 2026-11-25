@@ -575,7 +575,9 @@ export function WaitingLayer(Base) {
 					dropRefusedChanges,
 					retireChanges,
 					checkedStandIn,
-					RESTART_FORWARD_TRAPS
+					RESTART_FORWARD_TRAPS,
+					makeQueuedChange,
+					takeRefusedChange
 				});
 				Base.define("stand", { inPath: standInPath, inNode: standInNode, inMember: standInMember });
 				Base.linkLayer(this, (methods, registered) => {
