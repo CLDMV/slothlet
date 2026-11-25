@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-25T03:03:18-08:00 (1795604598)
+ *	@Last modified time: 2026-11-25T03:45:39-08:00 (1795607139)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -10360,7 +10360,22 @@ function runtime_generatorStandIn(maker, owner, original) {
 	// A step's result is no one's value (R3-D17): the step runs as the module and the value in it is handed out as the
 	// module's, while the `{ value, done }` around it is a plain result, as the engine makes one (#758). An async step's
 	// promise settles to such a result.
+	// A writable data member of a generator object that cannot be extended is a data member of the stand-in too, so
+	// `Object.isFrozen()` / `isSealed()` answer as for the original; it is carried across around every step (#965).
+	const carried = [];
+	const shown = new Map();
+	const carry = () => {
+		for (let ofIndex = 0; ofIndex < carried.length; ofIndex++) {
+			const key = carried[ofIndex];
+			const held = Reflect.get(standIn, key);
+			if (MapMethods.has(shown, key) && held !== MapMethods.get(shown, key)) Reflect.set(original, key, runtime_handIn(maker, held));
+			const current = runtime_handOut(maker, owner, Reflect.get(original, key));
+			MapMethods.set(shown, key, current);
+			Reflect.set(standIn, key, current);
+		}
+	};
 	const step = (name) => (value) => {
+		carry();
 		const box = { step: false, done: false };
 		const take = (result) => {
 			box.step = runtime_isStepResult(result);
@@ -10377,7 +10392,10 @@ function runtime_generatorStandIn(maker, owner, original) {
 			undefined,
 			[runtime_handIn(maker, value)]
 		);
-		const wrap = (given) => (box.step ? { value: given, done: box.done } : given);
+		const wrap = (given) => {
+			carry();
+			return box.step ? { value: given, done: box.done } : given;
+		};
 		return isAsync ? Reflect.apply(SLOT_READERS.then, handed, [wrap]) : wrap(handed);
 	};
 	const driver = { next: step("next"), return: step("return"), throw: step("throw") };
@@ -10390,9 +10408,57 @@ function runtime_generatorStandIn(maker, owner, original) {
 				return yield* driver;
 			})();
 	Reflect.setPrototypeOf(standIn, Reflect.getPrototypeOf(original));
-	if (Objects.isFrozen(original)) Objects.freeze(standIn);
-	else if (Objects.isSealed(original)) Objects.seal(standIn);
-	else if (!Objects.isExtensible(original)) Objects.preventExtensions(standIn);
+	// The generator object's own members are the stand-in's, in its order and with its enumerability (#965). On one that
+	// can be extended each is read and written through; on one that cannot, each keeps its kind, writability and
+	// configurability, and the stand-in is closed alike, so it is frozen, sealed or closed exactly when the original is.
+	const extensible = Objects.isExtensible(original);
+	for (let ofIndex = 0, ofList = Reflect.ownKeys(original); ofIndex < ofList.length; ofIndex++) {
+		const key = ofList[ofIndex];
+		const descriptor = Reflect.getOwnPropertyDescriptor(original, key);
+		// A key `ownKeys` just listed has a descriptor; a Proxy cannot be a generator object, so nothing reports otherwise.
+		/* v8 ignore next */
+		if (!descriptor) continue;
+		const accessor = !("value" in descriptor);
+		if (extensible || accessor) {
+			Reflect.defineProperty(standIn, key, {
+				__proto__: null,
+				// The module's getter or setter can read or write other members, so the carried ones are carried around it.
+				get:
+					!accessor || descriptor.get
+						? () => {
+								carry();
+								const read = runtime_handOut(maker, owner, Reflect.get(original, key));
+								carry();
+								return read;
+							}
+						: undefined,
+				set:
+					!accessor || descriptor.set
+						? (given) => {
+								carry();
+								Reflect.set(original, key, runtime_handIn(maker, given));
+								carry();
+							}
+						: undefined,
+				enumerable: descriptor.enumerable,
+				configurable: extensible || descriptor.configurable
+			});
+			continue;
+		}
+		const shownValue = runtime_handOut(maker, owner, descriptor.value);
+		Reflect.defineProperty(standIn, key, {
+			__proto__: null,
+			value: shownValue,
+			writable: descriptor.writable,
+			enumerable: descriptor.enumerable,
+			configurable: descriptor.configurable
+		});
+		if (descriptor.writable) {
+			listPush(carried, key);
+			MapMethods.set(shown, key, shownValue);
+		}
+	}
+	if (!extensible) Objects.preventExtensions(standIn);
 	WeakMapMethods.set(maker.made, original, standIn);
 	WeakMapMethods.set(STAND_IN_RECORDS, standIn, { maker, owner, original });
 	return standIn;
