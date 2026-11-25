@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-24T12:25:58-08:00 (1795551958)
+ *	@Last modified time: 2026-11-25T03:24:47-08:00 (1795605887)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -22843,12 +22843,16 @@ class UnifiedWrapper extends ComponentBase {
 					const node = wrapper.____slothletInternal.proxy;
 					// The reader's identity travels with the getter: called later with no caller of its own, it still reads as that module.
 					const reader = runtime_capturedReader(wrapper);
+					// A half the array's accessor lacks is lacking here too, as the array describes it (#970).
 					return {
 						__proto__: null,
-						get: () => runtime_readAsReader(wrapper, prop, node[prop], reader),
-						set: (value) => {
-							node[prop] = value;
-						},
+						get: typeof current.get === "function" ? () => runtime_readAsReader(wrapper, prop, node[prop], reader) : undefined,
+						set:
+							typeof current.set === "function"
+								? (value) => {
+										node[prop] = value;
+									}
+								: undefined,
 						enumerable: current.enumerable,
 						configurable: true
 					};
@@ -23865,15 +23869,33 @@ class UnifiedWrapper extends ComponentBase {
 					// array holds stays an accessor that reads and writes through the node.
 					// So does an accessor of a module's own object the node fronts, as freezing the object keeps it one (#757).
 					const isArrayAccessor = (Arrays.isArray(target) || frontsModuleObject) && !("value" in descriptor);
+					// Any other node's accessor, one a module exported or one defined on the node, stays the accessor it is, as
+					// closing an object keeps its getters and setters (#970): the halves the node describes, which run as the
+					// node's module. A member the node only reads through to its value (a field of a class instance written
+					// through the node) is described by halves of the framework's own, and is the data it reads.
+					const isNodeAccessor =
+						!isArrayAccessor &&
+						!("value" in descriptor) &&
+						(WeakMapMethods.has(ADOPTED_ACCESSORS, descriptor.get) || WeakMapMethods.has(ADOPTED_ACCESSORS, descriptor.set));
+					if (isNodeAccessor) {
+						Reflect.defineProperty(target, key, {
+							__proto__: null,
+							get: descriptor.get,
+							set: descriptor.set,
+							enumerable: descriptor.enumerable,
+							configurable: true
+						});
+						continue;
+					}
 					Reflect.defineProperty(
 						target,
 						key,
 						isArrayAccessor
 							? {
 									__proto__: null,
-									get: frontsModuleObject && typeof descriptor.get !== "function" ? undefined : () => node[key],
+									get: typeof descriptor.get !== "function" ? undefined : () => node[key],
 									set:
-										frontsModuleObject && typeof descriptor.set !== "function"
+										typeof descriptor.set !== "function"
 											? undefined
 											: (value) => {
 													node[key] = value;
