@@ -80,7 +80,7 @@ import {
 	WeakMap,
 	WeakMapMethods
 } from "#helpers/intrinsics";
-const { runtime_eventPayloadFor } = unifiedWrapperInternals("lib/handlers/event-manager");
+const { eventPayloadFor } = unifiedWrapperInternals("lib/handlers/event-manager");
 
 /** The functions the dispatcher uses, taken when slothlet loaded. */
 const promiseThen = PrototypeFunctions.Promise.then;
@@ -491,7 +491,7 @@ export class EventManager extends ComponentBase {
 	 * @private
 	 */
 	#payloadFor(payload, sub, emitter) {
-		return runtime_eventPayloadFor(payload, sub.ownerWrapper, emitter, this.slothlet);
+		return eventPayloadFor(payload, sub.ownerWrapper, emitter, this.slothlet);
 	}
 
 	/**

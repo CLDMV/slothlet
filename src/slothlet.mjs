@@ -174,8 +174,7 @@ import {
 	WeakMapMethods
 } from "#helpers/intrinsics";
 import { segmentsOf } from "#helpers/segments";
-const { resolveWrapper, releaseModuleMakers, releaseStandInChanges, runtime_frameworkWrite, runtime_rootProxy } =
-	unifiedWrapperInternals("slothlet");
+const { resolveWrapper, releaseModuleMakers, releaseStandInChanges, frameworkWrite, rootProxy } = unifiedWrapperInternals("slothlet");
 const { markSlothletProxy } = frameworkInternalsInternals("slothlet");
 const trustedRootOwn = trustedRootInternals("slothlet");
 const { initI18n } = translationsInternals("slothlet");
@@ -1999,7 +1998,7 @@ class Slothlet {
 		// Create boundApi proxy if first load (preserves reference across reloads)
 		if (!this.boundApi) {
 			this.boundApi = markSlothletProxy(
-				runtime_rootProxy(
+				rootProxy(
 					this,
 					this.#rootPrototypes,
 					() => this[INSTANCE_FIELD]("api"),
@@ -2021,7 +2020,7 @@ class Slothlet {
 		// TODO: Merge reference object using add API system for ownership tracking
 		// For now, directly assign to boundApi (will be replaced with proper add API)
 		if (this.reference && typeof this.reference === "object") {
-			runtime_frameworkWrite(this.boundApi, () => Objects.assign(this.boundApi, this.reference));
+			frameworkWrite(this.boundApi, () => Objects.assign(this.boundApi, this.reference));
 		}
 
 		// Stackable lifecycle routines (#341): fold every mounted module's contribution to a
@@ -3409,7 +3408,7 @@ class Slothlet {
 		}
 		this.reference = kind === "restart" ? this.config.reference : view.reference;
 		if (this.reference && typeof this.reference === "object") {
-			runtime_frameworkWrite(this.boundApi, () => Objects.assign(this.boundApi, this.reference));
+			frameworkWrite(this.boundApi, () => Objects.assign(this.boundApi, this.reference));
 		}
 		if (kind === "reload") {
 			const savedMetadataState = oldHandlers.metadata?.exportUserState?.();
@@ -4567,7 +4566,7 @@ class Slothlet {
 			cleanupEventEmitterResources();
 		}
 
-		// From here on, an api node a module was handed reads nothing for it (see runtime_refuseEndedAccess): the context
+		// From here on, an api node a module was handed reads nothing for it (see refuseEndedAccess): the context
 		// and the permission rules its accesses were decided against go now. A restart brings the instance back.
 		this.#ended = true;
 

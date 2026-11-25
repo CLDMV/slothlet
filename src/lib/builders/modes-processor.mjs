@@ -2723,7 +2723,7 @@ export class ModesProcessor extends ComponentBase {
 				// reached at, so hooks, rules and metadata answer for it as for any other node. A member that stays a
 				// value there (data, an error, a primitive) stays one here, and an accessor stays an accessor.
 				// The base load's root function runs as a leaf of its own at the root's path, built from this file.
-				if (!apiPathPrefix && !file.synthetic) unifiedWrapperOwn.runtime_noteRootFile(this.slothlet, file.path, moduleID || file.moduleID);
+				if (!apiPathPrefix && !file.synthetic) unifiedWrapperOwn.noteRootFile(this.slothlet, file.path, moduleID || file.moduleID);
 				if (!apiPathPrefix && shouldWrap) {
 					for (let ofIndex = 0, ofList = Objects.keys(defaultFunc); ofIndex < ofList.length; ofIndex++) {
 						const key = ofList[ofIndex];

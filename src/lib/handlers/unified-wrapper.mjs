@@ -131,14 +131,14 @@ const ____COLLISION_MERGED_PROPERTY = Symbol("collisionMergedProperty");
  * The modules a function handed over between modules is running for, innermost last (see `ACTING_FOR` in
  * `handlers/trusted-root`): while one runs through its crossing view, a write it makes through a prototype's handle or to
  * an api node has to be that module's to make as well as the executing module's, as a write through a view the module
- * held would be ({@link runtime_assertReaderWrite}).
+ * held would be ({@link assertReaderWrite}).
  * @type {object[]}
  * @private
  */
 const ACTING_FOR = trustedRootOwn.ACTING_FOR;
 
 /**
- * The kinds of built-in a run copies, by the name {@link runtime_dataKind} gives them, as `helpers/run-snapshot` names them.
+ * The kinds of built-in a run copies, by the name {@link dataKind} gives them, as `helpers/run-snapshot` names them.
  * @type {Record<string, string>}
  * @private
  */
@@ -187,7 +187,7 @@ function releaseStandInChanges(slothlet) {
 }
 
 /**
- * How many refusals of queued changes an instance holds (see {@link runtime_takeRefusedChange}).
+ * How many refusals of queued changes an instance holds (see {@link takeRefusedChange}).
  * @param {object} slothlet - The instance.
  * @returns {number} The count.
  * @internal
@@ -278,7 +278,7 @@ function releaseModuleMakers(slothlet, moduleID) {
 }
 
 /**
- * How many module records an instance holds (see {@link runtime_makerOf}).
+ * How many module records an instance holds (see {@link makerOf}).
  * @param {object} slothlet - The instance.
  * @returns {number} The count.
  * @internal
@@ -291,27 +291,27 @@ function moduleMakerCount(slothlet) {
 
 // Only an instance of a class some module wrote gets the async runtime's context wrapper (#328): a `URL`, a `Response`
 // or an `Intl.NumberFormat` a module returns is the object itself.
-setModuleInstanceCheck((value) => runtime_isCodeObject(value));
+setModuleInstanceCheck((value) => isCodeObject(value));
 
 setHostPrototypeCheck(
 	(owner, value) =>
 		value !== null &&
 		typeof value === "object" &&
 		Boolean(owner?.slothlet) &&
-		runtime_knownPrototype(owner.slothlet, runtime_behindMemberView(value)) !== undefined
+		knownPrototype(owner.slothlet, behindMemberView(value)) !== undefined
 );
 
 setHandedOutCheck(
 	(value) =>
 		value !== null &&
 		(typeof value === "object" || typeof value === "function") &&
-		(WeakMapMethods.has(STAND_IN_RECORDS, value) || WeakMapMethods.has(CROSSINGS, value) || runtime_isPrototypeHandle(value))
+		(WeakMapMethods.has(STAND_IN_RECORDS, value) || WeakMapMethods.has(CROSSINGS, value) || isPrototypeHandle(value))
 );
 
 // A crossing view of the class prototype guard stands for the value too: what the caller handed is what is looked into.
 setInboundOriginal((value) => {
 	if (value === null || (typeof value !== "object" && typeof value !== "function")) return value;
-	const behind = runtime_uncross(value);
+	const behind = uncross(value);
 	return typeof behind === "object" && behind !== null ? (WeakMapMethods.get(INBOUND_VIEWS, behind)?.original ?? behind) : behind;
 });
 
@@ -333,7 +333,7 @@ function setFromNames(names) {
 }
 
 // The run snapshot tells the built-ins it copies apart by the same checks the handlers use (see helpers/run-snapshot).
-setKindCheck((value) => SNAPSHOT_KINDS[runtime_dataKind(value) ?? ""] ?? null);
+setKindCheck((value) => SNAPSHOT_KINDS[dataKind(value) ?? ""] ?? null);
 
 // The run snapshot hands out and saves a Proxy as it is, never reading through its traps (see helpers/run-snapshot).
 setProxyCheck((value) => value !== null && (typeof value === "object" || typeof value === "function") && util.types.isProxy(value));
@@ -353,11 +353,11 @@ setCloneViewReader((value) => {
 // Only the function is told here; the patch reads its text and hands nothing out.
 setFunctionSourceReader((value) => {
 	if (typeof value !== "function") return undefined;
-	const wrapper = runtime_viewedNodeWrapper(value);
+	const wrapper = viewedNodeWrapper(value);
 	if (wrapper !== null) {
 		const internal = wrapper.____slothletInternal;
 		if (internal.invalid || (internal.mode === "lazy" && !internal.state.materialized)) return undefined;
-		const fn = runtime_functionOf(internal.impl);
+		const fn = functionOf(internal.impl);
 		// A function default with named exports beside it is held under a layer: the module's function is the one under it.
 		return fn ? layerUnderlying(fn) : undefined;
 	}
@@ -378,10 +378,10 @@ setCloneNodeReader((value) => {
 	const record = WeakMapMethods.get(SELF_MEMBER_VIEWS, value);
 	if (record !== undefined) {
 		const data = record.value;
-		if (data === null || typeof data !== "object" || !runtime_holdsSlottedData(data)) return undefined;
+		if (data === null || typeof data !== "object" || !holdsSlottedData(data)) return undefined;
 		return record.slothlet?.handlers?.permissionManager?.isEnabled?.() ? { slots: data, members: value } : { value: data };
 	}
-	const wrapper = runtime_viewedNodeWrapper(value);
+	const wrapper = viewedNodeWrapper(value);
 	if (wrapper === null) return undefined;
 	const internal = wrapper.____slothletInternal;
 	// A node with no value yet (lazy, not loaded) or no longer one has nothing to copy: the platform's refusal stands.
@@ -389,7 +389,7 @@ setCloneNodeReader((value) => {
 	const impl = internal.impl;
 	if (impl === null || impl === undefined) return undefined;
 	// A function is refused by the platform, as the module's function is; a primitive is copied as itself.
-	const fn = runtime_functionOf(impl);
+	const fn = functionOf(impl);
 	if (fn) return { value: fn };
 	if (typeof impl !== "object") return { value: impl };
 	if (Arrays.isArray(impl)) return { list: true };
@@ -399,7 +399,7 @@ setCloneNodeReader((value) => {
 	// engine reads. While the permission system is on, the copy is made from reads of it, its members read through the
 	// node or view the caller holds; off, the platform clones it as it is.
 	const data = layerUnderlying(impl);
-	if (runtime_holdsSlottedData(data)) {
+	if (holdsSlottedData(data)) {
 		return wrapper.slothlet.handlers?.permissionManager?.isEnabled?.() ? { slots: data, members: value } : { value: data };
 	}
 	return { list: false };
@@ -642,230 +642,230 @@ const WRAPPER_TOKEN = Symbol("slothlet.wrapperToken");
 var M;
 
 /** Bindings of the layers this file's own code uses, taken from the method table when the chain is registered. */
-let runtime_isPrototypeHandle,
+let isPrototypeHandle,
 	RUN_VIEWS,
 	SELF_MEMBER_VIEWS,
-	runtime_inherits,
-	runtime_dataKind,
+	inherits,
+	dataKind,
 	STAND_INS,
 	REFUSED_CHANGES,
 	PENDING_CHANGES,
-	runtime_standInPath,
-	runtime_fillPrototype,
-	runtime_moduleObjectFor,
+	standInPath,
+	fillPrototype,
+	moduleObjectFor,
 	MAKERS,
 	STAND_IN_RECORDS,
 	INBOUND_VIEWS,
-	runtime_isCodeObject,
-	runtime_attributeResult,
-	runtime_nodeAtPath,
-	runtime_adoptedImpl,
-	runtime_knownPrototype,
+	isCodeObject,
+	attributeResult,
+	nodeAtPath,
+	implToAdopt,
+	knownPrototype,
 	CROSSINGS,
-	runtime_uncross,
-	runtime_viewedNodeWrapper,
-	runtime_holdsSlottedData,
-	runtime_behindMemberView,
-	runtime_functionOf,
-	runtime_hasOwnMember,
-	runtime_registerLeafFunction,
+	uncross,
+	viewedNodeWrapper,
+	holdsSlottedData,
+	behindMemberView,
+	functionOf,
+	hasOwnMember,
+	registerLeafFunction,
 	capturedViewTargets,
 	capturedViewSet,
-	runtime_nodeHarborsCode,
+	nodeHarborsCode,
 	registeredWrapper,
 	isRegisteredProxy,
-	runtime_prototypeChain,
-	runtime_isPosition,
-	runtime_elementAt,
-	runtime_elementDescriptor;
+	prototypeChain,
+	isPosition,
+	elementAt,
+	elementDescriptor;
 
 /**
- * Forwards to the Nodes layer's `runtime_nodeReport`: this file hands it out (see {@link internals}) before the chain may exist.
+ * Forwards to the Nodes layer's `nodeReport`: this file hands it out (see {@link internals}) before the chain may exist.
  * @returns {*} What it returns.
  * @internal
  */
-function runtime_nodeReport(slothlet, target) {
-	return M.nodes.runtime_nodeReport(slothlet, target);
+function nodeReport(slothlet, target) {
+	return M.node.report(slothlet, target);
 }
 
 /**
- * Forwards to the Nodes layer's `runtime_metadataNodeOf`: this file hands it out (see {@link internals}) before the chain may exist.
+ * Forwards to the Nodes layer's `metadataNodeOf`: this file hands it out (see {@link internals}) before the chain may exist.
  * @returns {*} What it returns.
  * @internal
  */
-function runtime_metadataNodeOf(value) {
-	return M.nodes.runtime_metadataNodeOf(value);
+function metadataNodeOf(value) {
+	return M.nodes.metadataNodeOf(value);
 }
 
 /**
- * Forwards to the Values layer's `runtime_dataReadOptions`: this file hands it out (see {@link internals}) before the chain may exist.
+ * Forwards to the Values layer's `dataReadOptions`: this file hands it out (see {@link internals}) before the chain may exist.
  * @returns {*} What it returns.
  * @internal
  */
-function runtime_dataReadOptions(slothlet) {
-	return M.values.runtime_dataReadOptions(slothlet);
+function dataReadOptions(slothlet) {
+	return M.values.dataReadOptions(slothlet);
 }
 
 /**
- * Forwards to the Rules layer's `runtime_eventPayloadFor`: this file hands it out (see {@link internals}) before the chain may exist.
+ * Forwards to the Rules layer's `eventPayloadFor`: this file hands it out (see {@link internals}) before the chain may exist.
  * @returns {*} What it returns.
  * @internal
  */
-function runtime_eventPayloadFor(payload, listener, emitter, slothlet) {
-	return M.rules.runtime_eventPayloadFor(payload, listener, emitter, slothlet);
+function eventPayloadFor(payload, listener, emitter, slothlet) {
+	return M.rules.eventPayloadFor(payload, listener, emitter, slothlet);
 }
 
 /**
- * Forwards to the Rules layer's `runtime_frameworkViewCaller`: this file hands it out (see {@link internals}) before the chain may exist.
+ * Forwards to the Rules layer's `frameworkViewCaller`: this file hands it out (see {@link internals}) before the chain may exist.
  * @returns {*} What it returns.
  * @internal
  */
-function runtime_frameworkViewCaller(slothlet) {
-	return M.rules.runtime_frameworkViewCaller(slothlet);
+function frameworkViewCaller(slothlet) {
+	return M.framework.viewCaller(slothlet);
 }
 
 /**
- * Forwards to the Rules layer's `runtime_frameworkWrite`: this file hands it out (see {@link internals}) before the chain may exist.
+ * Forwards to the Rules layer's `frameworkWrite`: this file hands it out (see {@link internals}) before the chain may exist.
  * @returns {*} What it returns.
  * @internal
  */
-function runtime_frameworkWrite(node, write) {
-	return M.rules.runtime_frameworkWrite(node, write);
+function frameworkWrite(node, write) {
+	return M.framework.write(node, write);
 }
 
 /**
- * Forwards to the Nodes layer's `runtime_nodeBehind`: this file hands it out (see {@link internals}) before the chain may exist.
+ * Forwards to the Nodes layer's `nodeBehind`: this file hands it out (see {@link internals}) before the chain may exist.
  * @returns {*} What it returns.
  * @internal
  */
-function runtime_nodeBehind(value) {
-	return M.nodes.runtime_nodeBehind(value);
+function nodeBehind(value) {
+	return M.node.behind(value);
 }
 
 /**
- * Forwards to the Rules layer's `runtime_registerFrameworkMember`: this file hands it out (see {@link internals}) before the chain may exist.
+ * Forwards to the Rules layer's `registerFrameworkMember`: this file hands it out (see {@link internals}) before the chain may exist.
  * @returns {*} What it returns.
  * @internal
  */
-function runtime_registerFrameworkMember(member, slothlet, name) {
-	return M.rules.runtime_registerFrameworkMember(member, slothlet, name);
+function registerFrameworkMember(member, slothlet, name) {
+	return M.rules.registerFrameworkMember(member, slothlet, name);
 }
 
 /**
- * Forwards to the Run layer's `runtime_takeRunWrite`: this file hands it out (see {@link internals}) before the chain may exist.
+ * Forwards to the Run layer's `takeRunWrite`: this file hands it out (see {@link internals}) before the chain may exist.
  * @returns {*} What it returns.
  * @internal
  */
-function runtime_takeRunWrite(node, prop) {
-	return M.run.runtime_takeRunWrite(node, prop);
+function takeRunWrite(node, prop) {
+	return M.run.takeRunWrite(node, prop);
 }
 
 /**
- * Forwards to the Root layer's `runtime_noteRootFile`: this file hands it out (see {@link internals}) before the chain may exist.
+ * Forwards to the Root layer's `noteRootFile`: this file hands it out (see {@link internals}) before the chain may exist.
  * @returns {*} What it returns.
  * @internal
  */
-function runtime_noteRootFile(slothlet, filePath, moduleID) {
-	return M.root.runtime_noteRootFile(slothlet, filePath, moduleID);
+function noteRootFile(slothlet, filePath, moduleID) {
+	return M.root.noteRootFile(slothlet, filePath, moduleID);
 }
 
 /**
- * Forwards to the Root layer's `runtime_rootFileOf`: this file hands it out (see {@link internals}) before the chain may exist.
+ * Forwards to the Root layer's `rootFileOf`: this file hands it out (see {@link internals}) before the chain may exist.
  * @returns {*} What it returns.
  * @internal
  */
-function runtime_rootFileOf(slothlet) {
-	return M.root.runtime_rootFileOf(slothlet);
+function rootFileOf(slothlet) {
+	return M.root.fileOf(slothlet);
 }
 
 /**
- * Forwards to the Views layer's `runtime_sameValue`: this file hands it out (see {@link internals}) before the chain may exist.
+ * Forwards to the Views layer's `sameValue`: this file hands it out (see {@link internals}) before the chain may exist.
  * @returns {*} What it returns.
  * @internal
  */
-function runtime_sameValue(a, b) {
-	return M.views.runtime_sameValue(a, b);
+function sameValue(a, b) {
+	return M.views.sameValue(a, b);
 }
 
 /**
- * Forwards to the Views layer's `runtime_selfFrameworkView`: this file hands it out (see {@link internals}) before the chain may exist.
+ * Forwards to the Views layer's `selfFrameworkView`: this file hands it out (see {@link internals}) before the chain may exist.
  * @returns {*} What it returns.
  * @internal
  */
-function runtime_selfFrameworkView(member, reader, slothlet) {
-	return M.views.runtime_selfFrameworkView(member, reader, slothlet);
+function selfFrameworkView(member, reader, slothlet) {
+	return M.self.frameworkView(member, reader, slothlet);
 }
 
 /**
- * Forwards to the Views layer's `runtime_selfHookHandler`: this file hands it out (see {@link internals}) before the chain may exist.
+ * Forwards to the Views layer's `selfHookHandler`: this file hands it out (see {@link internals}) before the chain may exist.
  * @returns {*} What it returns.
  * @internal
  */
-function runtime_selfHookHandler(handler, slothlet, reader) {
-	return M.views.runtime_selfHookHandler(handler, slothlet, reader);
+function selfHookHandler(handler, slothlet, reader) {
+	return M.self.hookHandler(handler, slothlet, reader);
 }
 
 /**
- * Forwards to the Views layer's `runtime_selfModuleCeilings`: this file hands it out (see {@link internals}) before the chain may exist.
+ * Forwards to the Views layer's `selfModuleCeilings`: this file hands it out (see {@link internals}) before the chain may exist.
  * @returns {*} What it returns.
  * @internal
  */
-function runtime_selfModuleCeilings(slothlet, writer) {
-	return M.views.runtime_selfModuleCeilings(slothlet, writer);
+function selfModuleCeilings(slothlet, writer) {
+	return M.self.moduleCeilings(slothlet, writer);
 }
 
 /**
- * Forwards to the Views layer's `runtime_selfModuleReader`: this file hands it out (see {@link internals}) before the chain may exist.
+ * Forwards to the Views layer's `selfModuleReader`: this file hands it out (see {@link internals}) before the chain may exist.
  * @returns {*} What it returns.
  * @internal
  */
-function runtime_selfModuleReader(slothlet) {
-	return M.views.runtime_selfModuleReader(slothlet);
+function selfModuleReader(slothlet) {
+	return M.self.moduleReader(slothlet);
 }
 
 /**
- * Forwards to the Views layer's `runtime_selfRootView`: this file hands it out (see {@link internals}) before the chain may exist.
+ * Forwards to the Views layer's `selfRootView`: this file hands it out (see {@link internals}) before the chain may exist.
  * @returns {*} What it returns.
  * @internal
  */
-function runtime_selfRootView(slothlet, reader) {
-	return M.views.runtime_selfRootView(slothlet, reader);
+function selfRootView(slothlet, reader) {
+	return M.self.rootView(slothlet, reader);
 }
 
 /**
- * Forwards to the Views layer's `runtime_selfView`: this file hands it out (see {@link internals}) before the chain may exist.
+ * Forwards to the Views layer's `selfView`: this file hands it out (see {@link internals}) before the chain may exist.
  * @returns {*} What it returns.
  * @internal
  */
-function runtime_selfView(node, reader, from, access) {
-	return M.views.runtime_selfView(node, reader, from, access);
+function selfView(node, reader, from, access) {
+	return M.self.view(node, reader, from, access);
 }
 
 /**
- * Forwards to the Views layer's `runtime_unwrapSelfView`: this file hands it out (see {@link internals}) before the chain may exist.
+ * Forwards to the Views layer's `unwrapSelfView`: this file hands it out (see {@link internals}) before the chain may exist.
  * @returns {*} What it returns.
  * @internal
  */
-function runtime_unwrapSelfView(value) {
-	return M.views.runtime_unwrapSelfView(value);
+function unwrapSelfView(value) {
+	return M.views.unwrapSelfView(value);
 }
 
 /**
- * Forwards to the Root layer's `runtime_rootProxy`: this file hands it out (see {@link internals}) before the chain may exist.
+ * Forwards to the Root layer's `rootProxy`: this file hands it out (see {@link internals}) before the chain may exist.
  * @returns {*} What it returns.
  * @internal
  */
-function runtime_rootProxy(slothlet, records, instanceApi, closeSelf) {
-	return M.root.runtime_rootProxy(slothlet, records, instanceApi, closeSelf);
+function rootProxy(slothlet, records, instanceApi, closeSelf) {
+	return M.root.proxy(slothlet, records, instanceApi, closeSelf);
 }
 
 /**
- * Forwards to the Bridge layer's `runtime_runtimeTraps`: this file hands it out (see {@link internals}) before the chain may exist.
+ * Forwards to the Bridge layer's `runtimeTraps`: this file hands it out (see {@link internals}) before the chain may exist.
  * @returns {*} What it returns.
  * @internal
  */
-function runtime_runtimeTraps(contextManager, runtime) {
-	return M.bridge.runtime_runtimeTraps(contextManager, runtime);
+function runtimeTraps(contextManager, runtime) {
+	return M.bridge.runtimeTraps(contextManager, runtime);
 }
 
 /**
@@ -904,7 +904,6 @@ class UnifiedWrapper extends TrapsLayer(
 			registerLeafFile,
 			frameDefiner,
 			runtime_codeWritersOnStack,
-			isLeafFileFunction,
 			leafOfCopy,
 			outerCallerCeiling,
 			markFrameworkInternal,
@@ -915,58 +914,61 @@ class UnifiedWrapper extends TrapsLayer(
 			OBJECT_PROTO_SETTER,
 			setFromNames,
 			UNLOADED_HAS_INSTANCE,
-			wrapperDebugEnabled,
 			TYPE_STATES,
 			createNamedProxyTarget,
 			findThen,
-			isAwaitableThen,
-			hasThenMember,
 			thenableExportError,
-			isThenableModuleValue,
 			SlothletTypeError,
 			STAND_IN_OWN_READS,
-			isClassInstance,
-			resolveWrapper,
-			isLazyStandIn
+			resolveWrapper
 		});
+		WrapperBase.define("is", {
+			leafFileFunction: isLeafFileFunction,
+			awaitableThen: isAwaitableThen,
+			thenableModuleValue: isThenableModuleValue,
+			classInstance: isClassInstance,
+			lazyStandIn: isLazyStandIn
+		});
+		WrapperBase.define("wrapper", { debugEnabled: wrapperDebugEnabled });
+		WrapperBase.define("has", { thenMember: hasThenMember });
 		WrapperBase.linkLayer(this, (methods) => {
 			M = methods;
-			capturedViewSet = methods.values.capturedViewSet;
-			runtime_dataKind = methods.values.runtime_dataKind;
-			runtime_holdsSlottedData = methods.values.runtime_holdsSlottedData;
-			runtime_inherits = methods.values.runtime_inherits;
-			runtime_isCodeObject = methods.values.runtime_isCodeObject;
-			runtime_isPrototypeHandle = methods.values.runtime_isPrototypeHandle;
+			capturedViewSet = methods.captured.viewSet;
+			dataKind = methods.values.dataKind;
+			holdsSlottedData = methods.holds.slottedData;
+			inherits = methods.values.inherits;
+			isCodeObject = methods.is.codeObject;
+			isPrototypeHandle = methods.is.prototypeHandle;
 			MAKERS = methods.nodes.MAKERS;
-			runtime_moduleObjectFor = methods.nodes.runtime_moduleObjectFor;
-			runtime_nodeAtPath = methods.nodes.runtime_nodeAtPath;
-			runtime_nodeHarborsCode = methods.nodes.runtime_nodeHarborsCode;
-			runtime_viewedNodeWrapper = methods.nodes.runtime_viewedNodeWrapper;
-			runtime_hasOwnMember = methods.rules.runtime_hasOwnMember;
-			runtime_registerLeafFunction = methods.rules.runtime_registerLeafFunction;
-			runtime_fillPrototype = methods.run.runtime_fillPrototype;
-			capturedViewTargets = methods.views.capturedViewTargets;
+			moduleObjectFor = methods.module.objectFor;
+			nodeAtPath = methods.node.atPath;
+			nodeHarborsCode = methods.node.harborsCode;
+			viewedNodeWrapper = methods.nodes.viewedNodeWrapper;
+			hasOwnMember = methods.has.ownMember;
+			registerLeafFunction = methods.rules.registerLeafFunction;
+			fillPrototype = methods.run.fillPrototype;
+			capturedViewTargets = methods.captured.viewTargets;
 			RUN_VIEWS = methods.views.RUN_VIEWS;
-			runtime_behindMemberView = methods.views.runtime_behindMemberView;
-			runtime_functionOf = methods.views.runtime_functionOf;
+			behindMemberView = methods.views.behindMemberView;
+			functionOf = methods.function.of;
 			SELF_MEMBER_VIEWS = methods.views.SELF_MEMBER_VIEWS;
 			STAND_INS = methods.views.STAND_INS;
 			CROSSINGS = methods.membrane.CROSSINGS;
 			INBOUND_VIEWS = methods.membrane.INBOUND_VIEWS;
-			runtime_attributeResult = methods.membrane.runtime_attributeResult;
-			runtime_knownPrototype = methods.membrane.runtime_knownPrototype;
-			runtime_uncross = methods.membrane.runtime_uncross;
+			attributeResult = methods.membrane.attributeResult;
+			knownPrototype = methods.membrane.knownPrototype;
+			uncross = methods.membrane.uncross;
 			STAND_IN_RECORDS = methods.membrane.STAND_IN_RECORDS;
 			PENDING_CHANGES = methods.waiting.PENDING_CHANGES;
 			REFUSED_CHANGES = methods.waiting.REFUSED_CHANGES;
-			runtime_standInPath = methods.waiting.runtime_standInPath;
-			runtime_adoptedImpl = methods.materialize.runtime_adoptedImpl;
+			standInPath = methods.stand.inPath;
+			implToAdopt = methods.impl.toAdopt;
 			registeredWrapper = methods.values.registeredWrapper;
-			isRegisteredProxy = methods.values.isRegisteredProxy;
-			runtime_prototypeChain = methods.nodes.runtime_prototypeChain;
-			runtime_isPosition = methods.values.runtime_isPosition;
-			runtime_elementAt = methods.nodes.runtime_elementAt;
-			runtime_elementDescriptor = methods.nodes.runtime_elementDescriptor;
+			isRegisteredProxy = methods.is.registeredProxy;
+			prototypeChain = methods.prototype.chain;
+			isPosition = methods.is.position;
+			elementAt = methods.nodes.elementAt;
+			elementDescriptor = methods.nodes.elementDescriptor;
 		});
 		WrapperBase.register(this, WRAPPER_TOKEN);
 	}
@@ -1080,7 +1082,7 @@ class UnifiedWrapper extends TrapsLayer(
 			// child's own members are built under the position-following path too.
 			__position = null,
 			// `{ value }` for a node built from a file whose module value is `null` or `undefined` (#792): a read of
-			// the node answers that value (see runtime_holdsNullish). initialImpl alone cannot say which it was.
+			// the node answers that value (see holdsNullish). initialImpl alone cannot say which it was.
 			nullishDefault = null
 		}
 	) {
@@ -1100,9 +1102,9 @@ class UnifiedWrapper extends TrapsLayer(
 		 * @private
 		 *
 		 * @example
-		 * runtime_followPosition(internal, arrayWrapper, "1", true);
+		 * followPosition(internal, arrayWrapper, "1", true);
 		 */
-		function runtime_followPosition(internal, parent, key, byIndex) {
+		function followPosition(internal, parent, key, byIndex) {
 			/**
 			 * The first index whose plain value is `value`, found from the array's own descriptors: neither an
 			 * `indexOf` the array holds nor an element's getter runs.
@@ -1112,16 +1114,16 @@ class UnifiedWrapper extends TrapsLayer(
 			 * @private
 			 *
 			 * @example
-			 * runtime_indexOfElement(["a", "b"], "b"); // "1"
+			 * indexOfElement(["a", "b"], "b"); // "1"
 			 */
-			function runtime_indexOfElement(array, value) {
+			function indexOfElement(array, value) {
 				// The positions the array holds and those its prototypes supply, lowest first; each is read as the array
 				// reads it, so a position an earlier object shadows answers with the shadowing value.
 				const keys = new Set();
-				for (const holder of generatorSteps(runtime_prototypeChain(array))) {
+				for (const holder of generatorSteps(prototypeChain(array))) {
 					for (let ofIndex = 0, ofList = Reflect.ownKeys(holder); ofIndex < ofList.length; ofIndex++) {
 						const key = ofList[ofIndex];
-						if (runtime_isPosition(key)) SetMethods.add(keys, key);
+						if (isPosition(key)) SetMethods.add(keys, key);
 					}
 				}
 				for (
@@ -1130,7 +1132,7 @@ class UnifiedWrapper extends TrapsLayer(
 					ofIndex++
 				) {
 					const key = ofList[ofIndex];
-					if (runtime_elementAt(array, key) === value) return key;
+					if (elementAt(array, key) === value) return key;
 				}
 				return null;
 			}
@@ -1140,7 +1142,7 @@ class UnifiedWrapper extends TrapsLayer(
 			// An element the array holds no descriptor for at its index (a proxy's get trap supplied it) keeps the index it was
 			// read at once nothing else holds it. Recorded now, from what the array holds, not rediscovered by proxy detection.
 			const parentArray = parent.____slothletInternal.impl;
-			const isVirtual = byIndex && Arrays.isArray(parentArray) && runtime_elementAt(parentArray, key) !== internal.sourceValue;
+			const isVirtual = byIndex && Arrays.isArray(parentArray) && elementAt(parentArray, key) !== internal.sourceValue;
 			Objects.defineProperty(internal, "apiPath", {
 				__proto__: null,
 				configurable: true,
@@ -1152,10 +1154,10 @@ class UnifiedWrapper extends TrapsLayer(
 					// The array is read through its own descriptors, so resolving a path never runs the array's code:
 					// not an `indexOf` it holds, nor an element's getter (#603 review). An element held through a getter
 					// keeps the index it was read at.
-					if (Arrays.isArray(array) && runtime_elementAt(array, index) !== internal.sourceValue) {
-						const current = runtime_elementDescriptor(array, index);
+					if (Arrays.isArray(array) && elementAt(array, index) !== internal.sourceValue) {
+						const current = elementDescriptor(array, index);
 						if (current && !("value" in current)) return `${base}.${index}`;
-						const found = runtime_indexOfElement(array, internal.sourceValue);
+						const found = indexOfElement(array, internal.sourceValue);
 						// Resolving a path runs none of the array's code: an element it supplied from a trap keeps its index.
 						if (found === null) return isVirtual ? `${base}.${index}` : base;
 						index = found;
@@ -1185,7 +1187,7 @@ class UnifiedWrapper extends TrapsLayer(
 		internal.apiPath = apiPath;
 		if (__position) {
 			internal.sourceValue = __position.sourceValue;
-			runtime_followPosition(internal, __position.parent, __position.key, __position.byIndex);
+			followPosition(internal, __position.parent, __position.key, __position.byIndex);
 		}
 		// `loader.materialize` is the one switch for background loading: every lazy wrapper built while it is on
 		// (true, or a callback) loads itself in the background once it is constructed (see the end of this constructor).
@@ -1312,13 +1314,13 @@ class UnifiedWrapper extends TrapsLayer(
 		// a "namespace container" the way a plain mounted config object is, so it never needs the
 		// delete-on-adopt protection the clone exists for in the first place.
 		// A module's Proxy is held as its stand-in, so every touch of it runs its traps as the module (#597).
-		const adoptedImpl = runtime_adoptedImpl(this, initialImpl);
-		const isRootLiveIdentity = deferChildAdopt || (EventEmitter && runtime_inherits(adoptedImpl, EventEmitter));
+		const adoptedImpl = implToAdopt(this, initialImpl);
+		const isRootLiveIdentity = deferChildAdopt || (EventEmitter && inherits(adoptedImpl, EventEmitter));
 		internal.impl = isRootLiveIdentity ? adoptedImpl : UnifiedWrapper._cloneImpl(adoptedImpl);
 		// The module's own object, when this node is built from a copy of one its file exports (#746).
-		internal.moduleObject = isRootLiveIdentity ? null : runtime_moduleObjectFor(this, initialImpl, false);
-		runtime_fillPrototype(this);
-		runtime_registerLeafFunction(this, internal.impl);
+		internal.moduleObject = isRootLiveIdentity ? null : moduleObjectFor(this, initialImpl, false);
+		fillPrototype(this);
+		registerLeafFunction(this, internal.impl);
 
 		internal.materializeFunc = materializeFunc;
 
@@ -1479,12 +1481,12 @@ class UnifiedWrapper extends TrapsLayer(
 	}
 }
 
-setResultAttributor(runtime_attributeResult);
+setResultAttributor(attributeResult);
 
-setModuleNodeResolver(runtime_nodeAtPath);
+setModuleNodeResolver(nodeAtPath);
 
 // An api node or a per-reader view handed to a leaf carries no code of its caller's (#597).
-setApiValueCheck((value) => isRegisteredProxy(value) || WeakSetMethods.has(capturedViewSet, value), runtime_nodeHarborsCode);
+setApiValueCheck((value) => isRegisteredProxy(value) || WeakSetMethods.has(capturedViewSet, value), nodeHarborsCode);
 
 // Wire Node's `util.inspect.custom` hook to the (internal) `____inspectCustom`
 // method. Keeping the symbol off the class body prevents tsc from emitting a
@@ -1583,7 +1585,7 @@ export function isWrapperAnsweredName(key) {
  */
 export function readApiMember(container, key) {
 	const wrapper = resolveWrapper(container);
-	if (wrapper && SetMethods.has(WRAPPER_ANSWERED_PROPS, key) && !runtime_hasOwnMember(wrapper, key)) {
+	if (wrapper && SetMethods.has(WRAPPER_ANSWERED_PROPS, key) && !hasOwnMember(wrapper, key)) {
 		const { mode, state } = wrapper.____slothletInternal;
 		if (mode !== "lazy" || state.materialized) return undefined;
 	}
@@ -1701,8 +1703,7 @@ export function internals(consumer) {
 		const within = (path) => path === scope || StringMethods.startsWith(path, `${scope}.`);
 		// A holder qualifies when one of its changes is made at or below the reloaded path; loading it makes them all.
 		const qualifies = (holder) =>
-			whole ||
-			ArrayMethods.some(holder.____slothletInternal.pendingChanges ?? [], (change) => within(runtime_standInPath(holder, change.chain)));
+			whole || ArrayMethods.some(holder.____slothletInternal.pendingChanges ?? [], (change) => within(standInPath(holder, change.chain)));
 		const tried = new Set();
 		// Each pass loads the nodes holding changes; a change a pass makes on a node further down that has not loaded is
 		// queued there and made by the next. Each holder is loaded once.
@@ -1746,24 +1747,24 @@ export function internals(consumer) {
 					return UnifiedWrapper;
 				},
 				resolveWrapper,
-				runtime_frameworkWrite
+				frameworkWrite
 			};
 		case "lib/builders/api_builder":
 			return {
 				resolveWrapper,
 				makeRunSelf,
-				runtime_frameworkViewCaller,
-				runtime_metadataNodeOf,
-				runtime_nodeBehind,
-				runtime_nodeReport,
-				runtime_registerFrameworkMember,
-				runtime_sameValue,
-				runtime_selfFrameworkView,
-				runtime_selfModuleCeilings,
-				runtime_selfModuleReader,
-				runtime_selfRootView,
-				runtime_selfView,
-				runtime_unwrapSelfView
+				frameworkViewCaller,
+				metadataNodeOf,
+				nodeBehind,
+				nodeReport,
+				registerFrameworkMember,
+				sameValue,
+				selfFrameworkView,
+				selfModuleCeilings,
+				selfModuleReader,
+				selfRootView,
+				selfView,
+				unwrapSelfView
 			};
 		case "lib/builders/modes-processor":
 			return {
@@ -1771,7 +1772,7 @@ export function internals(consumer) {
 					return UnifiedWrapper;
 				},
 				resolveWrapper,
-				runtime_noteRootFile
+				noteRootFile
 			};
 		case "lib/handlers/api-manager":
 			return {
@@ -1780,36 +1781,36 @@ export function internals(consumer) {
 				},
 				resolveWrapper,
 				releaseModuleMakers,
-				runtime_dataReadOptions,
-				runtime_frameworkWrite,
-				runtime_nodeBehind,
-				runtime_selfModuleCeilings,
-				runtime_selfModuleReader,
-				runtime_takeRunWrite,
-				runtime_unwrapSelfView,
+				dataReadOptions,
+				frameworkWrite,
+				nodeBehind,
+				selfModuleCeilings,
+				selfModuleReader,
+				takeRunWrite,
+				unwrapSelfView,
 				settleStandInChanges
 			};
 		case "lib/handlers/event-manager":
 			return {
-				runtime_eventPayloadFor
+				eventPayloadFor
 			};
 		case "lib/handlers/hook-manager":
 			return {
-				runtime_selfHookHandler
+				selfHookHandler
 			};
 		case "lib/handlers/lifecycle":
 			return {
-				runtime_selfModuleReader,
-				runtime_selfView
+				selfModuleReader,
+				selfView
 			};
 		case "lib/handlers/metadata":
 			return {
 				resolveWrapper,
-				runtime_metadataNodeOf
+				metadataNodeOf
 			};
 		case "lib/handlers/module-manager":
 			return {
-				runtime_selfModuleReader
+				selfModuleReader
 			};
 		case "lib/handlers/ownership":
 			return {
@@ -1817,26 +1818,26 @@ export function internals(consumer) {
 			};
 		case "lib/handlers/permission-manager":
 			return {
-				runtime_selfModuleCeilings,
-				runtime_selfModuleReader
+				selfModuleCeilings,
+				selfModuleReader
 			};
 		case "lib/handlers/routine-manager":
 			return {
 				resolveWrapper,
-				runtime_frameworkWrite
+				frameworkWrite
 			};
 		case "lib/processors/type-generator":
 			return {
 				resolveWrapper,
-				runtime_rootFileOf
+				rootFileOf
 			};
 		case "lib/runtime/runtime-asynclocalstorage":
 			return {
-				runtime_runtimeTraps
+				runtimeTraps
 			};
 		case "lib/runtime/runtime-livebindings":
 			return {
-				runtime_runtimeTraps
+				runtimeTraps
 			};
 		// "slothlet", the last listed
 		default:
@@ -1844,8 +1845,8 @@ export function internals(consumer) {
 				resolveWrapper,
 				releaseModuleMakers,
 				releaseStandInChanges,
-				runtime_frameworkWrite,
-				runtime_rootProxy
+				frameworkWrite,
+				rootProxy
 			};
 	}
 }

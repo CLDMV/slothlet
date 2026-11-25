@@ -62,7 +62,7 @@ const { UNATTRIBUTED_READER } = capabilityContextInternals("lib/handlers/unified
  * Bindings of the other parts of the wrapper this file uses, taken from the wrapper's method table when the chain is
  * registered (see `WrapperBase.link`), before any wrapper exists.
  *
- * Upward (from layers above this one): hasOwn, HOST_READER, PROTOTYPE_HANDLE_READER, RUN_VIEWS, runtime_runnerCompilesLoad, runtime_namesHelperCopy, runtime_runnerCompilesHelper, runtime_selfModuleCeilings, runtime_selfWriteHasStanding, FRAMEWORK_MEMBERS, SELF_FRAMEWORK_ROOTS, runtime_adoptAccessor, PINNED_CODE_MEMBERS, runtime_checkedStandIn, runtime_behindPinnedCode, runtime_pinsAsCode, runtime_runAsMaker, searchDepth, searchBudget, runtime_carryTo, runtime_handedAsArgument, CROSSINGS, runtime_uncross, runtime_asOneModule, runtime_crossTo, runtime_functionOf, ANY_MEMBER_SEGMENT, runtime_memberPathOf, runtime_rootGate, runtime_heldValue, capturedViewShadows, runtime_capturedView, RESTART_FORWARD_TRAPS.
+ * Upward (from layers above this one): hasOwn, HOST_READER, PROTOTYPE_HANDLE_READER, RUN_VIEWS, runtime_runnerCompilesLoad, runtime_namesHelperCopy, runtime_runnerCompilesHelper, selfModuleCeilings, selfWriteHasStanding, FRAMEWORK_MEMBERS, SELF_FRAMEWORK_ROOTS, adoptAccessor, PINNED_CODE_MEMBERS, checkedStandIn, behindPinnedCode, pinsAsCode, runAsMaker, searchDepth, searchBudget, carryTo, handedAsArgument, CROSSINGS, uncross, asOneModule, crossTo, functionOf, ANY_MEMBER_SEGMENT, memberPathOf, rootGate, heldValue, capturedViewShadows, capturedView, RESTART_FORWARD_TRAPS.
  */
 let trustedRootOwn,
 	handedLeafFunctions,
@@ -73,66 +73,66 @@ let trustedRootOwn,
 	HOST_READER,
 	PROTOTYPE_HANDLE_READER,
 	RUN_VIEWS,
-	runtime_selfModuleCeilings,
-	runtime_selfWriteHasStanding,
+	selfModuleCeilings,
+	selfWriteHasStanding,
 	ACTING_FOR,
 	FRAMEWORK_MEMBERS,
 	SELF_FRAMEWORK_ROOTS,
-	runtime_isTerminalData,
-	runtime_dataReadOptions,
-	runtime_holdsAssignedData,
-	runtime_isDataMemberNode,
-	runtime_isBuiltinFunctionMember,
+	isTerminalData,
+	dataReadOptions,
+	holdsAssignedData,
+	isDataMemberNode,
+	isBuiltinFunctionMember,
 	ADOPTED_ACCESSORS,
-	runtime_moduleInheritance,
+	moduleInheritance,
 	PINNED_CODE_MEMBERS,
-	runtime_checkedStandIn,
-	runtime_behindPinnedCode,
-	runtime_prototypeGiven,
-	runtime_inheritsFrom,
+	checkedStandIn,
+	behindPinnedCode,
+	prototypeGiven,
+	nodeInherits,
 	INTRINSICS,
-	runtime_isSharedValue,
-	runtime_isSlothletValue,
-	runtime_isModuleStandIn,
-	runtime_isModuleProxy,
-	runtime_isBuiltinFunction,
-	runtime_makerOf,
-	runtime_runAsMaker,
+	isSharedValue,
+	isSlothletValue,
+	isModuleStandIn,
+	isModuleProxy,
+	isBuiltinFunction,
+	makerOf,
+	runAsMaker,
 	searchDepth,
 	searchBudget,
-	runtime_holdsCode,
-	runtime_nodeAtPath,
-	runtime_carryTo,
+	holdsCode,
+	nodeAtPath,
+	carryTo,
 	CROSSINGS,
-	runtime_uncross,
-	runtime_asOneModule,
-	runtime_crossTo,
-	runtime_functionOf,
-	runtime_isArrayMember,
+	uncross,
+	asOneModule,
+	crossTo,
+	functionOf,
+	isArrayMember,
 	ANY_MEMBER_SEGMENT,
-	runtime_memberPathOf,
-	runtime_rootGate,
-	runtime_holdsValue,
-	runtime_heldValue,
+	memberPathOf,
+	rootGate,
+	holdsValue,
+	heldValue,
 	capturedViewShadows,
-	runtime_capturedView,
-	runtime_isRestartStale,
-	runtime_isArrayIndex,
+	capturedView,
+	isRestartStale,
+	isArrayIndex,
 	SlothletTypeError,
 	RESTART_FORWARD_TRAPS,
 	UnifiedWrapper,
 	resolveWrapper,
 	registeredWrapper,
-	runtime_ownInstances,
-	runtime_ownArguments,
-	runtime_crossArgumentsFrom;
+	ownInstances,
+	ownArguments,
+	crossArgumentsFrom;
 /** The registered `UnifiedWrapper`: the only class this layer's constructor builds for. @type {Function|undefined} */
 let realClass;
 
 /**
  * Nodes the framework itself is writing right now, each with how many of its writes to it are open.
  *
- * Held only for the synchronous extent of one write (see {@link runtime_frameworkWrite}), never across an
+ * Held only for the synchronous extent of one write (see {@link frameworkWrite}), never across an
  * `await`, so no module code that runs while a framework operation is suspended — the module that started
  * it, another call of the same leaf, or any other module — can find it set.
  * @type {Map<UnifiedWrapper|object, number>}
@@ -141,7 +141,7 @@ let realClass;
 const FRAMEWORK_WRITES = new Map();
 
 /**
- * The instances' api root proxies ({@link runtime_registerRoot}).
+ * The instances' api root proxies ({@link registerRoot}).
  * @type {WeakSet<object>}
  * @private
  */
@@ -153,7 +153,7 @@ const ROOT_PROXIES = new WeakSet();
  *
  * Such a write runs through the same traps a module's `self.X.Y = …` reaches, and in whatever context the
  * operation was started from, often a module's. It is not that module's write, so the ownership rule
- * ({@link runtime_assertOwnedWrite}) lets it through, for this node and only while `write` runs.
+ * ({@link assertOwnedWrite}) lets it through, for this node and only while `write` runs.
  *
  * @param {object} node - The node written: a wrapper proxy or wrapper, or an instance's api root. Anything else needs
  *   no exemption.
@@ -162,10 +162,10 @@ const ROOT_PROXIES = new WeakSet();
  * @internal
  *
  * @example
- * runtime_frameworkWrite(parent, () => { parent[key] = value; });
+ * frameworkWrite(parent, () => { parent[key] = value; });
  */
-function runtime_frameworkWrite(node, write) {
-	// The api root has no wrapper: its proxy stands for itself (see runtime_assertRootChange).
+function frameworkWrite(node, write) {
+	// The api root has no wrapper: its proxy stands for itself (see assertRootChange).
 	const wrapper = resolveWrapper(node) ?? (WeakSetMethods.has(ROOT_PROXIES, node) ? node : null);
 	if (!wrapper) return write();
 	MapMethods.set(FRAMEWORK_WRITES, wrapper, (MapMethods.get(FRAMEWORK_WRITES, wrapper) ?? 0) + 1);
@@ -188,7 +188,7 @@ function runtime_frameworkWrite(node, write) {
  * @throws {SlothletError} CONTEXT_NOT_ACTIVE_SELF once the instance has shut down, as a read of `self` then is.
  * @private
  */
-function runtime_refuseEndedAccess(slothlet, reader) {
+function refuseEndedAccess(slothlet, reader) {
 	if (reader === HOST_READER || slothlet?.____ended !== true) return;
 	// A prototype's handle is the same object to every reader, and no call runs once the instance has shut down: whose
 	// code makes the access is read from the stack, as for a capability (see runtime_assertCapability). The host's own
@@ -202,19 +202,19 @@ function runtime_refuseEndedAccess(slothlet, reader) {
 
 /**
  * Record a full-isolation run's view of a node with what it reads through, so a view written into the api is stored as
- * that node, as a view `self` hands out outside a run is ({@link runtime_unwrapSelfView}).
+ * that node, as a view `self` hands out outside a run is ({@link unwrapSelfView}).
  * @param {object} view - The run's view.
  * @param {*} real - What it reads through.
  * @returns {object} `view`.
  * @internal
  */
-function runtime_registerRunView(view, real) {
+function registerRunView(view, real) {
 	WeakMapMethods.set(RUN_VIEWS, view, real);
 	return view;
 }
 
 /**
- * Refuse a change a reader's view makes to a node with no standing of its own ({@link runtime_selfWriteHasStanding}):
+ * Refuse a change a reader's view makes to a node with no standing of its own ({@link selfWriteHasStanding}):
  * such a change is the reader's, and goes through only under a path the reader owns and may write. The host owns
  * the whole tree; code that could not be attributed owns none of it.
  *
@@ -227,12 +227,12 @@ function runtime_registerRunView(view, real) {
  *   the reader's write rules throw.
  * @private
  */
-function runtime_refuseWriteWithoutStanding(slothlet, owner, reader, prop) {
+function refuseWriteWithoutStanding(slothlet, owner, reader, prop) {
 	const parts = owner ? filterList(splitText(String(owner.____slothletInternal.apiPath), "."), Boolean) : [];
 	if (owner && typeof prop === "string") listPush(parts, prop);
 	// With the system off only a change to the framework's own is checked (its keys on the node); disabled, none.
 	// The host's reader goes through either way, so its write skips the frame read standing may make.
-	if (!slothlet.handlers.apiManager.writeChecked(parts) || reader === HOST_READER || runtime_selfWriteHasStanding(slothlet)) return;
+	if (!slothlet.handlers.apiManager.writeChecked(parts) || reader === HOST_READER || selfWriteHasStanding(slothlet)) return;
 	if (reader !== UNATTRIBUTED_READER && owner) {
 		// Held to the reader, the write meets the reader's write rules as well as its ownership (#625).
 		if (slothlet.handlers.apiManager.mayWrite(parts, reader)) return slothlet.handlers.apiManager.assertOwnedWrite(parts, reader);
@@ -253,9 +253,9 @@ function runtime_refuseWriteWithoutStanding(slothlet, owner, reader, prop) {
  * @throws {SlothletError} `LOOSE_SET_NOT_OWNED` or `PERMISSION_DENIED` when the reader may not make the write.
  * @private
  */
-function runtime_assertReaderWrite(slothlet, reader, writer, parts) {
+function assertReaderWrite(slothlet, reader, writer, parts) {
 	if (!reader?.____slothletInternal || reader === writer) return;
-	if (writer !== null && runtime_asOneModule(slothlet, writer, reader)) return;
+	if (writer !== null && asOneModule(slothlet, writer, reader)) return;
 	if (!slothlet.handlers.apiManager.ownershipEnforced()) return;
 	slothlet.handlers.apiManager.assertOwnedWrite(parts, reader);
 }
@@ -268,7 +268,7 @@ function runtime_assertReaderWrite(slothlet, reader, writer, parts) {
 const FRAMEWORK_MEMBER_NAMES = new WeakMap();
 
 /**
- * The views {@link runtime_selfFrameworkView} built, per member and per reader, and the member behind each.
+ * The views {@link selfFrameworkView} built, per member and per reader, and the member behind each.
  * @type {WeakMap<object, WeakMap<object, object>>}
  * @private
  */
@@ -279,7 +279,7 @@ const FRAMEWORK_VIEW_TARGETS = new WeakMap();
 
 /**
  * Record one of the framework's own root members of an instance's api, so module code reading it through
- * `self` is handed a view of it ({@link runtime_selfFrameworkView}).
+ * `self` is handed a view of it ({@link selfFrameworkView}).
  *
  * @param {object|Function} member - The `slothlet` namespace, `shutdown`, or `destroy`.
  * @param {object} slothlet - Instance it belongs to.
@@ -288,9 +288,9 @@ const FRAMEWORK_VIEW_TARGETS = new WeakMap();
  * @internal
  *
  * @example
- * runtime_registerFrameworkMember(slothletNamespace, this.slothlet, "slothlet");
+ * registerFrameworkMember(slothletNamespace, this.slothlet, "slothlet");
  */
-function runtime_registerFrameworkMember(member, slothlet, name) {
+function registerFrameworkMember(member, slothlet, name) {
 	if (member !== null && (typeof member === "object" || typeof member === "function")) {
 		WeakMapMethods.set(FRAMEWORK_MEMBERS, member, slothlet);
 		WeakMapMethods.set(FRAMEWORK_MEMBER_NAMES, member, name);
@@ -299,7 +299,7 @@ function runtime_registerFrameworkMember(member, slothlet, name) {
 }
 
 /**
- * Build (or reuse) a reader's view of a member of the framework's namespace; see {@link runtime_selfFrameworkView}.
+ * Build (or reuse) a reader's view of a member of the framework's namespace; see {@link selfFrameworkView}.
  *
  * @param {*} member - The member.
  * @param {object} slothlet - Instance it belongs to.
@@ -308,7 +308,7 @@ function runtime_registerFrameworkMember(member, slothlet, name) {
  * @returns {*} The view, or `member` when it is no object.
  * @private
  */
-function runtime_frameworkViewOf(member, slothlet, reader, path) {
+function frameworkViewOf(member, slothlet, reader, path) {
 	/**
 	 * Run `use` as a framework view's use on behalf of `reader`, made with no caller of its own.
 	 * @param {object} reader - The reader the view belongs to.
@@ -316,7 +316,7 @@ function runtime_frameworkViewOf(member, slothlet, reader, path) {
 	 * @returns {*} What `use` returns.
 	 * @private
 	 */
-	function runtime_asViewReader(reader, use) {
+	function asViewReader(reader, use) {
 		listPush(VIEW_READER_RUNS, reader);
 		try {
 			return use();
@@ -338,11 +338,11 @@ function runtime_frameworkViewOf(member, slothlet, reader, path) {
 	// Made with no standing of its own, a use of the view is the reader's: it runs as that module. Run that
 	// way it has no caller, yet it is no host call either: what pins "the caller" pins the reader instead.
 	const asReader = (use) => {
-		if (runtime_selfWriteHasStanding(slothlet)) return use();
+		if (selfWriteHasStanding(slothlet)) return use();
 		if (reader === UNATTRIBUTED_READER) {
 			throw new slothlet.SlothletError("CONTEXT_NOT_ACTIVE_SELF", {});
 		}
-		return slothlet.contextManager.runInContext(slothlet.instanceID, () => runtime_asViewReader(reader, use), undefined, [], reader, true);
+		return slothlet.contextManager.runInContext(slothlet.instanceID, () => asViewReader(reader, use), undefined, [], reader, true);
 	};
 	const unwrap = (value) =>
 		value !== null && (typeof value === "object" || typeof value === "function")
@@ -359,7 +359,7 @@ function runtime_frameworkViewOf(member, slothlet, reader, path) {
 			throw new slothlet.SlothletError("LOOSE_SET_UNATTRIBUTED", { path: segmentsOf(ArrayMethods.join(parts, ".")) });
 		}
 		if (identity?.currentWrapper) return identity.currentWrapper;
-		if (runtime_selfWriteHasStanding(slothlet)) return null;
+		if (selfWriteHasStanding(slothlet)) return null;
 		if (reader === UNATTRIBUTED_READER) {
 			throw new slothlet.SlothletError("CONTEXT_NOT_ACTIVE_SELF", {});
 		}
@@ -373,11 +373,7 @@ function runtime_frameworkViewOf(member, slothlet, reader, path) {
 		const writer = changeWriter(parts);
 		// Code a caller supplied to another module's call changes it only where every module it acts for may (#597).
 		if (writer !== null) {
-			for (
-				let ofIndex = 0, ofList = concatLists([writer], runtime_selfModuleCeilings(slothlet, writer));
-				ofIndex < ofList.length;
-				ofIndex++
-			) {
+			for (let ofIndex = 0, ofList = concatLists([writer], selfModuleCeilings(slothlet, writer)); ofIndex < ofList.length; ofIndex++) {
 				const call = ofList[ofIndex];
 				slothlet.handlers.apiManager.assertOwnedWrite(parts, call);
 			}
@@ -386,7 +382,7 @@ function runtime_frameworkViewOf(member, slothlet, reader, path) {
 	};
 	// Once the instance has shut down, the view reads, lists, describes, calls and changes nothing: it is only ever handed
 	// to module code.
-	const refuseEnded = () => runtime_refuseEndedAccess(slothlet, reader);
+	const refuseEnded = () => refuseEndedAccess(slothlet, reader);
 	const view = new NativeProxy(member, {
 		get(target, prop) {
 			refuseEnded();
@@ -399,7 +395,7 @@ function runtime_frameworkViewOf(member, slothlet, reader, path) {
 				// What the language's own prototypes give every object or function (`constructor`, `toString`) is no member of
 				// the namespace: it reads as it is, as at an api node.
 				if (inheritsBuiltin(target, prop)) return value;
-				return runtime_frameworkViewOf(value, slothlet, reader, childPath(prop));
+				return frameworkViewOf(value, slothlet, reader, childPath(prop));
 			});
 		},
 		getOwnPropertyDescriptor(target, prop) {
@@ -413,11 +409,11 @@ function runtime_frameworkViewOf(member, slothlet, reader, path) {
 					return {
 						__proto__: null,
 						...descriptor,
-						get: runtime_frameworkViewOf(descriptor.get, slothlet, reader, childPath(prop)),
-						set: runtime_frameworkViewOf(descriptor.set, slothlet, reader, childPath(prop))
+						get: frameworkViewOf(descriptor.get, slothlet, reader, childPath(prop)),
+						set: frameworkViewOf(descriptor.set, slothlet, reader, childPath(prop))
 					};
 				}
-				return { __proto__: null, ...descriptor, value: runtime_frameworkViewOf(descriptor.value, slothlet, reader, childPath(prop)) };
+				return { __proto__: null, ...descriptor, value: frameworkViewOf(descriptor.value, slothlet, reader, childPath(prop)) };
 			});
 		},
 		apply(target, thisArg, args) {
@@ -478,7 +474,7 @@ function runtime_frameworkViewOf(member, slothlet, reader, path) {
 
 /**
  * The readers a framework view is running a use for right now, with no caller of its own
- * ({@link runtime_frameworkViewOf}); innermost last.
+ * ({@link frameworkViewOf}); innermost last.
  * @type {object[]}
  * @private
  */
@@ -496,9 +492,9 @@ const VIEW_READER_RUNS = [];
  * @internal
  *
  * @example
- * const pinned = metadata.callerWrapper() ?? runtime_frameworkViewCaller(slothlet);
+ * const pinned = metadata.callerWrapper() ?? frameworkViewCaller(slothlet);
  */
-function runtime_frameworkViewCaller(slothlet) {
+function frameworkViewCaller(slothlet) {
 	if (VIEW_READER_RUNS.length === 0) return null;
 	const reader = VIEW_READER_RUNS[VIEW_READER_RUNS.length - 1];
 	// Only while the reader is what executes: a callback pinned to the host that the use runs is the host.
@@ -506,7 +502,7 @@ function runtime_frameworkViewCaller(slothlet) {
 }
 
 /**
- * What a definition's `valueOf` gives for an accessor definition, which stores no value (see {@link runtime_placingTrap}).
+ * What a definition's `valueOf` gives for an accessor definition, which stores no value (see {@link placingTrap}).
  * @type {symbol}
  * @private
  */
@@ -526,9 +522,9 @@ const NO_STORED_VALUE = Symbol("slothlet.noStoredValue");
  * @private
  *
  * @example
- * const set = runtime_placingTrap(wrapper, setTrap, (args) => args[2]);
+ * const set = placingTrap(wrapper, setTrap, (args) => args[2]);
  */
-function runtime_placingTrap(wrapper, trap, valueOf) {
+function placingTrap(wrapper, trap, valueOf) {
 	return (...args) => {
 		const prop = args[1];
 		const slothlet = wrapper.slothlet;
@@ -578,7 +574,7 @@ function runtime_placingTrap(wrapper, trap, valueOf) {
  * `self.X.Y = …` reaches the wrapper at `self.X`, not the runtime `self` set trap, so the ownership rule
  * the top-level write follows ({@link ApiManager#assertOwnedWrite}) is applied here to the member's full
  * api path — or, for a change to the node itself (its prototype, its extensibility), to the node's own
- * path. The caller is the module executing now. Host code owns the whole tree, and a write the framework makes itself ({@link runtime_frameworkWrite})
+ * path. The caller is the module executing now. Host code owns the whole tree, and a write the framework makes itself ({@link frameworkWrite})
  * is not the module's. A symbol key is never an api path of its own, but it is held to the same rule as a
  * string key: a change under one meets the rule of the node it is made on, so a module writes symbol-keyed
  * members only on nodes it owns.
@@ -590,25 +586,25 @@ function runtime_placingTrap(wrapper, trap, valueOf) {
  *   `LOOSE_SET_UNATTRIBUTED` when the live runtime cannot tell which call is executing.
  * @private
  */
-function runtime_assertOwnedWrite(wrapper, prop) {
+function assertOwnedWrite(wrapper, prop) {
 	if (MapMethods.has(FRAMEWORK_WRITES, wrapper)) return;
 	const parts = filterList(splitText(String(wrapper.____slothletInternal.apiPath), "."), Boolean);
 	if (typeof prop === "string") listPush(parts, prop);
-	runtime_assertOwnedWriteAt(wrapper, parts);
+	assertOwnedWriteAt(wrapper, parts);
 }
 
 /**
- * The rule {@link runtime_assertOwnedWrite} applies, for a change at a full api path: the one a loaded node applies to
+ * The rule {@link assertOwnedWrite} applies, for a change at a full api path: the one a loaded node applies to
  * a change to its member, and a lazy stand-in to a change at the path it stands for, before the node has loaded (#653).
  *
  * @param {object} wrapper - A wrapper of the instance the change is made in.
  * @param {string[]} parts - Segments of the api path changed.
  * @returns {void}
  * @throws {SlothletError} `LOOSE_SET_NOT_OWNED`, `LOOSE_SET_UNATTRIBUTED`, or `PERMISSION_DENIED`, as
- *   {@link runtime_assertOwnedWrite}.
+ *   {@link assertOwnedWrite}.
  * @private
  */
-function runtime_assertOwnedWriteAt(wrapper, parts) {
+function assertOwnedWriteAt(wrapper, parts) {
 	const slothlet = wrapper.slothlet;
 	if (!slothlet.handlers.apiManager.writeChecked(parts)) return;
 	// The executing call's identity, never the store's own caller field: under the live runtime that field
@@ -630,7 +626,7 @@ function runtime_assertOwnedWriteAt(wrapper, parts) {
 	// write for that module too, which has to be allowed it.
 	for (let actIndex = 0; actIndex < ACTING_FOR.length; actIndex++) {
 		const actor = ACTING_FOR[actIndex];
-		if (actor !== caller && actor.slothlet === slothlet) runtime_assertReaderWrite(slothlet, actor, caller, parts);
+		if (actor !== caller && actor.slothlet === slothlet) assertReaderWrite(slothlet, actor, caller, parts);
 	}
 }
 
@@ -663,9 +659,9 @@ const rulesShared = {
  * @private
  *
  * @example
- * const kept = runtime_takeCapturedAccess(wrapper);
+ * const kept = takeCapturedAccess(wrapper);
  */
-function runtime_takeCapturedAccess(wrapper) {
+function takeCapturedAccess(wrapper) {
 	if (rulesShared.capturedAccess?.wrapper !== wrapper) return null;
 	const kept = rulesShared.capturedAccess;
 	rulesShared.capturedAccess = null;
@@ -682,9 +678,9 @@ function runtime_takeCapturedAccess(wrapper) {
  * @private
  *
  * @example
- * runtime_accessAsKept(inner, capturedCaller, () => Reflect.get(child, "n"));
+ * accessAsKept(inner, capturedCaller, () => Reflect.get(child, "n"));
  */
-function runtime_accessAsKept(wrapper, reader, access) {
+function accessAsKept(wrapper, reader, access) {
 	const previous = rulesShared.capturedAccess;
 	rulesShared.capturedAccess = { wrapper, reader };
 	try {
@@ -695,7 +691,7 @@ function runtime_accessAsKept(wrapper, reader, access) {
 }
 
 /**
- * The node or view the next trap is entered on with an access handed to it (see {@link runtime_readWithAccess}).
+ * The node or view the next trap is entered on with an access handed to it (see {@link readWithAccess}).
  * @type {object|null}
  * @private
  */
@@ -716,22 +712,22 @@ let handedAccess = null;
  * One access runs several of slothlet's traps, one inside another: the view of `self`, the view that keeps its reader,
  * the node. The code making the access is the same for all of them, as only slothlet's own code runs between the
  * outermost trap and each check. The answer never leaves the access: it travels only in the traps' own variables and
- * through a hand-over the next trap takes as it starts ({@link runtime_takeAccess}), so code that runs inside the
+ * through a hand-over the next trap takes as it starts ({@link takeAccess}), so code that runs inside the
  * access (a getter, a module's Proxy, a listener) and makes an access of its own starts a new one, and the answer is
- * dropped when the trap that began the access returns ({@link runtime_endAccess}), so nothing kept from it answers
+ * dropped when the trap that began the access returns ({@link endAccess}), so nothing kept from it answers
  * for a later access.
  * @returns {{filled: boolean, done: boolean, manager: object|null, store: object|null|undefined, identity: object|undefined}} The access.
  * @private
  *
  * @example
- * const access = runtime_beginAccess();
+ * const access = beginAccess();
  * try {
- * 	return runtime_readWithAccess(access, inner, child, prop, child);
+ * 	return readWithAccess(access, inner, child, prop, child);
  * } finally {
- * 	runtime_endAccess(access);
+ * 	endAccess(access);
  * }
  */
-function runtime_beginAccess() {
+function beginAccess() {
 	return { filled: false, done: false, manager: null, store: undefined, identity: undefined };
 }
 
@@ -741,7 +737,7 @@ function runtime_beginAccess() {
  * @returns {void}
  * @private
  */
-function runtime_endAccess(access) {
+function endAccess(access) {
 	if (access !== null) access.done = true;
 }
 
@@ -752,7 +748,7 @@ function runtime_endAccess(access) {
  * @returns {object|null} The access, or null when none was handed to this trap.
  * @private
  */
-function runtime_takeAccess(key) {
+function takeAccess(key) {
 	if (handedAccessKey === null) return null;
 	const access = handedAccessKey === key ? handedAccess : null;
 	handedAccessKey = null;
@@ -769,7 +765,7 @@ function runtime_takeAccess(key) {
  * @returns {object|undefined} The identity.
  * @private
  */
-function runtime_accessIdentity(access, contextManager, instanceID) {
+function accessIdentity(access, contextManager, instanceID) {
 	if (access === null || access.done || !contextManager?.tryGetContext || !contextManager.getCallerIdentity)
 		return contextManager?.getCallerIdentity?.(instanceID);
 	const store = contextManager.tryGetContext(instanceID);
@@ -792,12 +788,12 @@ function runtime_accessIdentity(access, contextManager, instanceID) {
  * @returns {{store: object|null|undefined, identity: object|undefined}|null} The resolved identity.
  * @private
  */
-function runtime_accessEntry(access, wrapper) {
+function accessEntry(access, wrapper) {
 	if (access === null || access.done) return null;
 	const contextManager = wrapper.slothlet.contextManager;
 	if (!contextManager?.tryGetContext || !contextManager.getCallerIdentity) return null;
 	const instanceID = wrapper.slothlet.instanceID;
-	const identity = runtime_accessIdentity(access, contextManager, instanceID);
+	const identity = accessIdentity(access, contextManager, instanceID);
 	if (access.manager !== contextManager || access.identity !== identity) return null;
 	const store = contextManager.tryGetContext(instanceID);
 	return access.store === store ? { store, identity } : null;
@@ -814,8 +810,8 @@ function runtime_accessEntry(access, wrapper) {
  * @returns {*} The member.
  * @private
  */
-function runtime_readWithAccess(access, key, target, prop, receiver) {
-	if (access === null || access.done || !runtime_takesAccess(key, target)) return Reflect.get(target, prop, receiver);
+function readWithAccess(access, key, target, prop, receiver) {
+	if (access === null || access.done || !takesAccess(key, target)) return Reflect.get(target, prop, receiver);
 	handedAccessKey = key;
 	handedAccess = access;
 	try {
@@ -828,7 +824,7 @@ function runtime_readWithAccess(access, key, target, prop, receiver) {
 
 /**
  * Describe a member of a node for an access, handing the access to the node's own trap (see
- * {@link runtime_readWithAccess}).
+ * {@link readWithAccess}).
  * @param {object|null} access - The access.
  * @param {object} key - The wrapper of the node, or the view, whose trap takes it.
  * @param {object} target - The node or view described.
@@ -836,8 +832,8 @@ function runtime_readWithAccess(access, key, target, prop, receiver) {
  * @returns {PropertyDescriptor|undefined} The descriptor.
  * @private
  */
-function runtime_describeWithAccess(access, key, target, prop) {
-	if (access === null || access.done || !runtime_takesAccess(key, target)) return Reflect.getOwnPropertyDescriptor(target, prop);
+function describeWithAccess(access, key, target, prop) {
+	if (access === null || access.done || !takesAccess(key, target)) return Reflect.getOwnPropertyDescriptor(target, prop);
 	handedAccessKey = key;
 	handedAccess = access;
 	try {
@@ -856,7 +852,7 @@ function runtime_describeWithAccess(access, key, target, prop) {
  * @returns {boolean} True when it is.
  * @private
  */
-function runtime_takesAccess(key, target) {
+function takesAccess(key, target) {
 	if (key === target) return WeakMapMethods.has(capturedViewShadows, target);
 	return key.____slothletInternal?.proxy === target;
 }
@@ -880,7 +876,7 @@ function runtime_takesAccess(key, target) {
  *   (the read gate's waiting-proxy snapshot; `null` means "captured no caller"). Omitted for the live
  *   getContext() path.
  * @param {{wrapper: object, reader: object}|null} [kept] - The access a node a module kept is making into this
- *   node, taken by the trap making the check (see {@link runtime_takeCapturedAccess}).
+ *   node, taken by the trap making the check (see {@link takeCapturedAccess}).
  * @param {{store: object|null, identity: object}|null} [preResolved=null] - A caller identity already resolved
  *   for this call, with the store it was read on; taken instead of reading either again.
  * @returns {{verdict: "allow"|"deny", identity?: object, ctx?: object}|{verdict: "enforce", callerWrapper: object, ceilings: ReadonlyArray<object>, ctx: object, identity: object}}
@@ -894,7 +890,7 @@ function resolveEnforcedCaller(wrapper, ctxOverride, kept = null, preResolved = 
 	// this instance's rules — a cross-instance contamination the isolation contract forbids (#290).
 	const ownInstanceID = wrapper.slothlet.instanceID;
 	// A caller identity resolved earlier in this same call, before an await that would lose it (see
-	// runtime_applyWithEntry), is taken as it was resolved.
+	// applyWithEntry), is taken as it was resolved.
 	const ctx = preResolved
 		? preResolved.store
 		: ctxOverride !== undefined
@@ -967,12 +963,12 @@ function resolveEnforcedCaller(wrapper, ctxOverride, kept = null, preResolved = 
  * @private
  *
  * @example
- * runtime_enforceNodeReportRead(inner, "d.fn", { currentWrapper: reader, ceiling: null, context });
+ * enforceNodeReportRead(inner, "d.fn", { currentWrapper: reader, ceiling: null, context });
  */
-function runtime_enforceNodeReportRead(wrapper, nodePath, callerOverride) {
+function enforceNodeReportRead(wrapper, nodePath, callerOverride) {
 	const pm = wrapper.slothlet.handlers?.permissionManager;
 	if (!pm || !pm.isEnabled() || !pm.isReadGatingEnabled()) return;
-	const decision = runtime_readGateDecision(wrapper, nodePath, callerOverride);
+	const decision = readGateDecision(wrapper, nodePath, callerOverride);
 	if (decision.allowed) return;
 	throw new wrapper.SlothletError("PERMISSION_DENIED", {
 		caller: decision.caller,
@@ -1008,16 +1004,16 @@ function runtime_enforceNodeReportRead(wrapper, nodePath, callerOverride) {
  * @throws {SlothletError} PERMISSION_DENIED when the read is denied by a rule.
  * @private
  */
-function runtime_enforceReadGate(wrapper, prop, resolvedValue, callerOverride, kept = null, access = null) {
+function enforceRead(wrapper, prop, resolvedValue, callerOverride, kept = null, access = null) {
 	const pm = wrapper.slothlet.handlers?.permissionManager;
 	// Cheap short-circuit first: skip all classification work when gating is off.
 	if (!pm || !pm.isEnabled() || !pm.isReadGatingEnabled()) return;
-	if (!runtime_isTerminalData(resolvedValue)) return;
+	if (!isTerminalData(resolvedValue)) return;
 	// A function's own `name` and `length` are read as plain JS reads them, whatever the rules say of the function.
-	if (runtime_isBuiltinFunctionMember(wrapper, prop)) return;
+	if (isBuiltinFunctionMember(wrapper, prop)) return;
 
-	const targetPath = runtime_memberPathOf(wrapper, prop);
-	const decision = runtime_readGateDecision(wrapper, targetPath, callerOverride, kept, access);
+	const targetPath = memberPathOf(wrapper, prop);
+	const decision = readGateDecision(wrapper, targetPath, callerOverride, kept, access);
 	if (decision.allowed) return;
 	throw new wrapper.SlothletError("PERMISSION_DENIED", {
 		caller: decision.caller,
@@ -1041,13 +1037,13 @@ function runtime_enforceReadGate(wrapper, prop, resolvedValue, callerOverride, k
  *   {@link resolveEnforcedCaller}).
  * @param {object|null} [access] - The access the read is part of.
  * @param {{store: object|null|undefined, identity: object|undefined}|null} [pinned] - The reader resolved earlier,
- *   when the read is answered after the access that made it has ended (see {@link runtime_pinReader}).
+ *   when the read is answered after the access that made it has ended (see {@link pinReader}).
  * @param {"read"|"call"} [operation="read"] - The operation decided, by the rules whose access level covers it: a
  *   read, or the call running a getter is.
  * @returns {{allowed: boolean, caller: string|null}} Verdict and the resolved caller path.
  * @private
  */
-function runtime_readGateDecision(wrapper, targetPath, callerOverride, kept = null, access = null, pinned = null, operation = "read") {
+function readGateDecision(wrapper, targetPath, callerOverride, kept = null, access = null, pinned = null, operation = "read") {
 	// #283: slothlet's OWN reserved marker keys (____isVersionDispatcher/____logicalPath) are framework
 	// machinery, not a consumer's module-private member. When they are carried by a branded
 	// framework-internal wrapper (a version dispatcher, or a wrapper it merged into), exempt reads of
@@ -1064,7 +1060,7 @@ function runtime_readGateDecision(wrapper, targetPath, callerOverride, kept = nu
 		wrapper,
 		callerOverride,
 		kept,
-		callerOverride === undefined ? (pinned ?? runtime_accessEntry(access, wrapper)) : null
+		callerOverride === undefined ? (pinned ?? accessEntry(access, wrapper)) : null
 	);
 	if (decision.verdict === "allow") {
 		// Host-initiated, normally exempt — but a module-private target still routes through
@@ -1084,12 +1080,12 @@ function runtime_readGateDecision(wrapper, targetPath, callerOverride, kept = nu
 	if (wrapper.slothlet.handlers.apiManager.isRemovedCaller(callerWrapper)) {
 		return { allowed: false, caller: String(callerWrapper.____slothletInternal.apiPath ?? "") };
 	}
-	let verdict = runtime_readGateFor(wrapper, targetPath, callerWrapper, ctx, operation);
+	let verdict = readGateFor(wrapper, targetPath, callerWrapper, ctx, operation);
 	// Both the supplier of the code reading and every call of its ceiling have to be allowed (#597).
 	for (let i = 0; i < ceilings.length; i++) {
 		const ceiling = ceilings[i];
 		if (!verdict.allowed) return verdict;
-		verdict = runtime_readGateFor(wrapper, targetPath, ceiling, ctx, operation);
+		verdict = readGateFor(wrapper, targetPath, ceiling, ctx, operation);
 	}
 	return verdict;
 }
@@ -1100,11 +1096,11 @@ function runtime_readGateDecision(wrapper, targetPath, callerOverride, kept = nu
  * @param {string} targetPath - Fully-qualified api path of the value being read.
  * @param {object} callerWrapper - The caller to check.
  * @param {object|null} ctx - The caller's context store.
- * @param {"read"|"call"} [operation="read"] - The operation decided (see {@link runtime_readGateDecision}).
+ * @param {"read"|"call"} [operation="read"] - The operation decided (see {@link readGateDecision}).
  * @returns {{allowed: boolean, caller: string|null}} Verdict and the caller's path.
  * @private
  */
-function runtime_readGateFor(wrapper, targetPath, callerWrapper, ctx, operation = "read") {
+function readGateFor(wrapper, targetPath, callerWrapper, ctx, operation = "read") {
 	// The ?./?? fallbacks are defensive — apiPath/filePath are always set on live wrappers.
 	/* v8 ignore start */
 	const callerPath = callerWrapper.____slothletInternal?.apiPath ?? "";
@@ -1123,7 +1119,7 @@ function runtime_readGateFor(wrapper, targetPath, callerWrapper, ctx, operation 
 		/* v8 ignore next */
 		ctx.context ?? null,
 		null,
-		operation === "read" ? runtime_dataReadOptions(wrapper.slothlet) : null
+		operation === "read" ? dataReadOptions(wrapper.slothlet) : null
 	);
 	return { allowed, caller: callerPath };
 }
@@ -1145,7 +1141,7 @@ let accessorReader = undefined;
  * @returns {T} What the read returned.
  * @private
  */
-function runtime_readOnBehalf(reader, read) {
+function readOnBehalf(reader, read) {
 	const previous = accessorReader;
 	accessorReader = reader;
 	try {
@@ -1158,18 +1154,18 @@ function runtime_readOnBehalf(reader, read) {
 /**
  * Run a module's getter or setter as the module it belongs to, the way a call to one of its functions through `self`
  * runs (#597): the reader has to be allowed to call the node holding it, and the node is who runs, with no ceiling
- * from whoever reads or writes (see {@link runtime_runAsMaker}).
+ * from whoever reads or writes (see {@link runAsMaker}).
  *
  * @param {object} wrapper - The wrapper holding the accessor.
  * @param {Function} accessor - The getter or setter.
  * @param {*} thisArg - Its receiver.
  * @param {Array<*>} args - Its arguments.
- * @param {boolean} [attribute=true] - Hand what it returns back as the module's (see {@link runtime_attributeResult}).
+ * @param {boolean} [attribute=true] - Hand what it returns back as the module's (see {@link attributeResult}).
  * @returns {*} What it returned.
  * @throws {SlothletError} PERMISSION_DENIED when who is reading cannot be told.
  * @private
  */
-function runtime_runAccessor(wrapper, accessor, thisArg, args, attribute = true) {
+function runAccessor(wrapper, accessor, thisArg, args, attribute = true) {
 	const contextManager = wrapper.slothlet.contextManager;
 	if (!contextManager?.runInContext || !wrapper.slothlet.instanceID) return Reflect.apply(accessor, thisArg, args);
 	const reader = accessorReader !== undefined ? accessorReader : contextManager.getCallerIdentity?.(wrapper.slothlet.instanceID);
@@ -1179,7 +1175,7 @@ function runtime_runAccessor(wrapper, accessor, thisArg, args, attribute = true)
 		if (rulesShared.keptAccessorRead?.wrapper === wrapper) {
 			kept = rulesShared.keptAccessorRead;
 			rulesShared.keptAccessorRead = null;
-		} else kept = runtime_takeCapturedAccess(wrapper);
+		} else kept = takeCapturedAccess(wrapper);
 	}
 	if (reader?.unresolved && !kept) {
 		throw new wrapper.SlothletError("PERMISSION_DENIED", { caller: null, target: segmentsOf(wrapper.____slothletInternal.apiPath) });
@@ -1187,8 +1183,8 @@ function runtime_runAccessor(wrapper, accessor, thisArg, args, attribute = true)
 	// Running it is calling the module's code, so the reader has to be allowed to call the node, as a call through
 	// `self` is checked (a reader completed on behalf of is checked as that reader).
 	if (accessorReader === undefined) enforcePermission(wrapper, args, false, kept);
-	else if (accessorReader?.currentWrapper) runtime_enforceAccessorReader(wrapper, accessorReader, args);
-	return runtime_runAsMaker(wrapper, accessor, thisArg, args, attribute, true);
+	else if (accessorReader?.currentWrapper) enforceAccessorReader(wrapper, accessorReader, args);
+	return runAsMaker(wrapper, accessor, thisArg, args, attribute, true);
 }
 
 /**
@@ -1201,14 +1197,14 @@ function runtime_runAccessor(wrapper, accessor, thisArg, args, attribute = true)
  * @throws {SlothletError} PERMISSION_DENIED when it may not.
  * @private
  */
-function runtime_enforceAccessorReader(wrapper, reader, args) {
+function enforceAccessorReader(wrapper, reader, args) {
 	const permissionManager = wrapper.slothlet.handlers?.permissionManager;
 	if (!permissionManager?.isEnabled()) return;
 	const targetPath = wrapper.____slothletInternal.apiPath;
 	const runtimeContext = reader.context ?? null;
 	for (let ofIndex = 0, ofList = concatLists([reader.currentWrapper], identityCeilings(reader)); ofIndex < ofList.length; ofIndex++) {
 		const caller = ofList[ofIndex];
-		runtime_enforceCallAs(wrapper, permissionManager, caller, targetPath, runtimeContext, { args, target: targetPath }, false);
+		enforceCallAs(wrapper, permissionManager, caller, targetPath, runtimeContext, { args, target: targetPath }, false);
 	}
 }
 
@@ -1216,7 +1212,7 @@ function runtime_enforceAccessorReader(wrapper, reader, args) {
  * Check that whoever reads a member of a node holding the module's code — a static method, a function's own
  * `prototype` and the methods on it, a member the module defined on its function — may call the node (#632). The
  * member is handed out as it is, not as a node of its own, so it carries no gate when it is called: reading it is
- * where the node's own call check is made, as running one of the node's getters is (see {@link runtime_runAccessor}).
+ * where the node's own call check is made, as running one of the node's getters is (see {@link runAccessor}).
  * Data, the language's own values and slothlet's own nodes are read as before.
  * @param {object} wrapper - The node's wrapper.
  * @param {*} value - The member read.
@@ -1226,12 +1222,12 @@ function runtime_enforceAccessorReader(wrapper, reader, args) {
  * @throws {SlothletError} PERMISSION_DENIED when the reader may not call the node.
  * @private
  */
-function runtime_enforceCodeMember(wrapper, value, kept = null) {
+function enforceCodeMember(wrapper, value, kept = null) {
 	const permissionManager = wrapper.slothlet.handlers?.permissionManager;
 	if (!permissionManager?.isEnabled()) return;
-	if (!runtime_memberHoldsCode(value, searchDepth(wrapper.slothlet) + 1, searchBudget(wrapper.slothlet))) return;
+	if (!memberHoldsCode(value, searchDepth(wrapper.slothlet) + 1, searchBudget(wrapper.slothlet))) return;
 	if (accessorReader === undefined) enforcePermission(wrapper, [], false, kept);
-	else if (accessorReader?.currentWrapper) runtime_enforceAccessorReader(wrapper, accessorReader, []);
+	else if (accessorReader?.currentWrapper) enforceAccessorReader(wrapper, accessorReader, []);
 }
 
 /**
@@ -1245,7 +1241,7 @@ function runtime_enforceCodeMember(wrapper, value, kept = null) {
  *   receiver an accessor runs on.
  * @private
  */
-function runtime_implAccessor(wrapper, prop) {
+function implAccessor(wrapper, prop) {
 	// What the accessor runs on: the impl, or the value under a composition layer that answers the key (see
 	// layerForwards), as plain JS would read the key there.
 	let receiver = wrapper.____slothletInternal.impl;
@@ -1258,7 +1254,7 @@ function runtime_implAccessor(wrapper, prop) {
 			// A module's own Proxy, or the stand-in slothlet hands it out as (#597), behind a composition layer or not, answers
 			// with the module's traps: reading through it is a run of the module's code (#632).
 			if (util.types.isProxy(holder)) {
-				if (runtime_isModuleProxy(holder) || runtime_isModuleStandIn(holder)) return { proxy: true };
+				if (isModuleProxy(holder) || isModuleStandIn(holder)) return { proxy: true };
 				// A composition layer over a plain value (named exports put onto a module's instance) answers a key it
 				// neither holds nor hides from that value, which its getters and setters then run on, as on the value
 				// itself (#632).
@@ -1288,7 +1284,7 @@ function runtime_implAccessor(wrapper, prop) {
  * description had to be refused to a reader that may not call the node, and the listing with it. The stand-in can be
  * described to anyone: the host and a module that may call the node use it as the value, and a module that may not is
  * refused each read, call or change made through it, as it is refused reading the member.
- * @param {object} gate - The node's wrapper, or the api root's stand-in for the gate (see {@link runtime_rootGate}).
+ * @param {object} gate - The node's wrapper, or the api root's stand-in for the gate (see {@link rootGate}).
  * @param {object|Function} value - The member's value.
  * @returns {object|Function} The stand-in.
  * @private
@@ -1298,41 +1294,39 @@ function runtime_implAccessor(wrapper, prop) {
  * Object.keys(self.math.Calc); // [] to a module that may not call it, no longer refused
  * self.math.Calc.prototype; // still refused
  */
-function runtime_pinnedCodeMember(gate, value) {
-	return runtime_checkedStandIn(() => runtime_enforceCodeMember(gate, value), value);
+function pinnedCodeMember(gate, value) {
+	return checkedStandIn(() => enforceCodeMember(gate, value), value);
 }
 
 /**
  * Read a member of a wrapper's impl, running an accessor it holds or inherits as the module the node belongs to (see
- * {@link runtime_runAccessor}) rather than as whoever reads it (#597), and a module's Proxy among them likewise.
+ * {@link runAccessor}) rather than as whoever reads it (#597), and a module's Proxy among them likewise.
  * @param {object} wrapper - The node's wrapper.
  * @param {PropertyKey} prop - The member's key.
  * @returns {*} The member's value.
  * @private
  */
-function runtime_readImplMember(wrapper, prop) {
+function readImplMember(wrapper, prop) {
 	const impl = wrapper.____slothletInternal.impl;
 	// A member the module's object inherits from a prototype set on it is read as the object reads it (#757).
-	const inherited = runtime_moduleInheritance(wrapper, prop);
+	const inherited = moduleInheritance(wrapper, prop);
 	if (inherited !== null) return Reflect.get(inherited, prop, wrapper.____slothletInternal.proxy ?? wrapper);
 	// A member the node inherits from a prototype given to it is read from there, on the node, as plain JS reads it.
 	// While the node's prototype is its value's own, the value answers for what it inherits, below.
-	const prototype = runtime_prototypeGiven(wrapper) ? runtime_inheritsFrom(wrapper, prop) : undefined;
+	const prototype = prototypeGiven(wrapper) ? nodeInherits(wrapper, prop) : undefined;
 	if (prototype !== undefined) {
 		return prototype === null ? undefined : Reflect.get(prototype, prop, wrapper.____slothletInternal.proxy ?? wrapper);
 	}
-	const accessor = runtime_implAccessor(wrapper, prop);
-	if (accessor?.proxy) return runtime_runAccessor(wrapper, () => impl[prop], undefined, [], true);
+	const accessor = implAccessor(wrapper, prop);
+	if (accessor?.proxy) return runAccessor(wrapper, () => impl[prop], undefined, [], true);
 	if (accessor)
-		return typeof accessor.descriptor.get === "function"
-			? runtime_runAccessor(wrapper, accessor.descriptor.get, accessor.receiver, [])
-			: undefined;
+		return typeof accessor.descriptor.get === "function" ? runAccessor(wrapper, accessor.descriptor.get, accessor.receiver, []) : undefined;
 	return impl[prop];
 }
 
 /**
  * Write a member of a wrapper's impl, running a setter it holds or inherits as the module the node belongs to (see
- * {@link runtime_runAccessor}) rather than as whoever writes (#597), and a module's Proxy among them likewise. An
+ * {@link runAccessor}) rather than as whoever writes (#597), and a module's Proxy among them likewise. An
  * accessor with no setter refuses the write, as on the object.
  * @param {object} wrapper - The node's wrapper.
  * @param {PropertyKey} prop - The member's key.
@@ -1340,13 +1334,13 @@ function runtime_readImplMember(wrapper, prop) {
  * @returns {boolean} Whether the write succeeded.
  * @private
  */
-function runtime_writeImplMember(wrapper, prop, value) {
+function writeImplMember(wrapper, prop, value) {
 	const impl = wrapper.____slothletInternal.impl;
-	const accessor = runtime_implAccessor(wrapper, prop);
-	if (accessor?.proxy) return runtime_runAccessor(wrapper, () => Reflect.set(impl, prop, value), undefined, []);
+	const accessor = implAccessor(wrapper, prop);
+	if (accessor?.proxy) return runAccessor(wrapper, () => Reflect.set(impl, prop, value), undefined, []);
 	if (!accessor) return Reflect.set(impl, prop, value);
 	if (typeof accessor.descriptor.set !== "function") return false;
-	runtime_runAccessor(wrapper, accessor.descriptor.set, accessor.receiver, [value]);
+	runAccessor(wrapper, accessor.descriptor.set, accessor.receiver, [value]);
 	return true;
 }
 
@@ -1355,20 +1349,20 @@ function runtime_writeImplMember(wrapper, prop, value) {
  * @param {UnifiedWrapper} wrapper - The node's wrapper.
  * @param {{wrapper: object, reader: object}|null} kept - The access a node a module kept is making.
  * @param {object|null} access - The access the read is part of.
- * @param {object|null} [pinned] - The reader resolved earlier (see {@link runtime_pinReader}).
+ * @param {object|null} [pinned] - The reader resolved earlier (see {@link pinReader}).
  * @returns {void}
  * @throws {SlothletError} PERMISSION_DENIED when the rules deny the reader the node.
  * @private
  */
-function runtime_gateNodeValue(wrapper, kept, access, pinned = null) {
+function gateNodeValue(wrapper, kept, access, pinned = null) {
 	const targetPath = wrapper.____slothletInternal.apiPath;
-	const decision = runtime_readGateDecision(wrapper, targetPath, undefined, kept, access, pinned);
+	const decision = readGateDecision(wrapper, targetPath, undefined, kept, access, pinned);
 	if (decision.allowed) return;
 	throw new wrapper.SlothletError("PERMISSION_DENIED", { caller: decision.caller, target: segmentsOf(targetPath) });
 }
 
 /**
- * Whether each value a node holds is built-in data or an error ({@link runtime_gateDataNodeMember}), decided once per
+ * Whether each value a node holds is built-in data or an error ({@link gateDataNodeMember}), decided once per
  * value: what a value is does not change.
  * @type {WeakMap<object, boolean>}
  * @private
@@ -1384,9 +1378,9 @@ const DATA_NODE_IMPLS = new WeakMap();
  * @returns {T} What it returned.
  * @private
  */
-function runtime_onImpl(wrapper, operation) {
+function onImpl(wrapper, operation) {
 	const impl = wrapper.____slothletInternal.impl;
-	return runtime_isModuleProxy(impl) ? runtime_runAccessor(wrapper, () => operation(impl), undefined, [], true) : operation(impl);
+	return isModuleProxy(impl) ? runAccessor(wrapper, () => operation(impl), undefined, [], true) : operation(impl);
 }
 
 /**
@@ -1397,14 +1391,14 @@ function runtime_onImpl(wrapper, operation) {
  * @param {object} slothlet - The instance of the node called.
  * @param {boolean} [unaccounted=false] - Read code no call accounts for by its frames too.
  * @param {{store?: object|null, identity?: object}|null} [resolved=null] - Receives the caller identity this read
- *   resolved and the store it resolved it on, as {@link runtime_liveEntry} gives them, so a call made right after
+ *   resolved and the store it resolved it on, as {@link liveEntry} gives them, so a call made right after
  *   takes it instead of reading it again.
  * @param {{ceiling?: object|ReadonlyArray<object>|null}|null} [held=resolved] - Receives, as `ceiling`, who else the
  *   code is held to.
  * @returns {object|null} The definer's wrapper.
  * @private
  */
-function runtime_hostRunDefiner(slothlet, unaccounted = false, resolved = null, held = resolved) {
+function hostRunDefiner(slothlet, unaccounted = false, resolved = null, held = resolved) {
 	const contextManager = slothlet?.contextManager;
 	if (!contextManager?.runInContext || !slothlet.handlers?.permissionManager?.isEnabled?.()) return null;
 	if (slothlet.config?.permissions?.caller?.provenance === false) return null;
@@ -1427,19 +1421,19 @@ function runtime_hostRunDefiner(slothlet, unaccounted = false, resolved = null, 
 }
 
 /**
- * Whether a member of a value can hold a module's code, as {@link runtime_holdsCode} reads one.
+ * Whether a member of a value can hold a module's code, as {@link holdsCode} reads one.
  * @param {*} member - The member.
  * @param {number} depth - Levels still allowed below the value.
  * @param {{remaining: number}} budget - Properties still allowed.
  * @returns {boolean} True when it can hold code.
  * @private
  */
-function runtime_memberHoldsCode(member, depth, budget) {
+function memberHoldsCode(member, depth, budget) {
 	if (member === null || (typeof member !== "object" && typeof member !== "function")) return false;
-	if (runtime_isSlothletValue(member) || WeakSetMethods.has(INTRINSICS, member) || runtime_isSharedValue(member)) return false;
+	if (isSlothletValue(member) || WeakSetMethods.has(INTRINSICS, member) || isSharedValue(member)) return false;
 	if (util.types.isProxy(member)) return true;
-	if (typeof member === "function") return !runtime_isBuiltinFunction(member);
-	return runtime_holdsCode(member, depth - 1, budget);
+	if (typeof member === "function") return !isBuiltinFunction(member);
+	return holdsCode(member, depth - 1, budget);
 }
 
 /**
@@ -1459,7 +1453,7 @@ function runtime_memberHoldsCode(member, depth, budget) {
  * @throws {SlothletError} `PERMISSION_DENIED` when the node's rules refuse the call.
  * @private
  */
-function runtime_gateLeafCopy(slothlet, original, args, thisArg, ownToo = false) {
+function gateLeafCopy(slothlet, original, args, thisArg, ownToo = false) {
 	if (typeof original !== "function" || !slothlet?.handlers?.permissionManager?.isEnabled?.()) return;
 	const leaf = WeakMapMethods.get(trustedRootOwn.implWrappers, original);
 	if (leaf !== undefined) {
@@ -1480,7 +1474,7 @@ function runtime_gateLeafCopy(slothlet, original, args, thisArg, ownToo = false)
 const RUNTIME_CONTEXTS = new Map();
 
 /**
- * The module that stored each object or function in the runtime `context` (see {@link runtime_contextWritten}).
+ * The module that stored each object or function in the runtime `context` (see {@link contextWritten}).
  * @type {WeakMap<object, object>}
  * @private
  */
@@ -1497,7 +1491,7 @@ const CONTEXT_HOST_VALUES = new WeakSet();
 /**
  * A value read from the runtime `context`, as whoever reads it gets it: what the host stored is the value itself, shared
  * as the host meant it to be; what a module stored reaches another module through the class prototype guard
- * ({@link runtime_crossTo}), and the host and the module that stored it as itself. Only the value stored under a key is
+ * ({@link crossTo}), and the host and the module that stored it as itself. Only the value stored under a key is
  * covered: what a module puts into an object the host shares there is plain JavaScript between the modules holding it.
  * @param {object} ctx - The active context store.
  * @param {*} value - The value read.
@@ -1505,27 +1499,26 @@ const CONTEXT_HOST_VALUES = new WeakSet();
  * @internal
  *
  * @example
- * return runtime_contextRead(ctx, ctx.context[prop]);
+ * return contextRead(ctx, ctx.context[prop]);
  */
-function runtime_contextRead(ctx, value) {
+function contextRead(ctx, value) {
 	if (value === null || (typeof value !== "object" && typeof value !== "function")) return value;
 	const reader = ctx?.currentWrapper;
 	const isModule = Boolean(reader?.____slothletInternal) && WeakSetMethods.has(trustedRootOwn.genuineWrappers, reader);
-	if (WeakMapMethods.has(CROSSINGS, value))
-		return isModule ? runtime_crossTo(value, reader, reader.slothlet, null) : runtime_uncross(value);
+	if (WeakMapMethods.has(CROSSINGS, value)) return isModule ? crossTo(value, reader, reader.slothlet, null) : uncross(value);
 	if (!isModule) return value;
 	const writer = WeakMapMethods.get(CONTEXT_WRITERS, value);
 	if (writer === undefined) {
-		if (!runtime_isSlothletValue(value)) WeakSetMethods.add(CONTEXT_HOST_VALUES, value);
+		if (!isSlothletValue(value)) WeakSetMethods.add(CONTEXT_HOST_VALUES, value);
 		return value;
 	}
-	return runtime_crossTo(value, reader, reader.slothlet, writer);
+	return crossTo(value, reader, reader.slothlet, writer);
 }
 
 /**
  * What an event's payload reaches a listener as (#667): slothlet's event dispatcher hands it from the module that
  * emitted it to the module that registered the listener, so it crosses between modules as an argument does
- * ({@link runtime_carryTo}). A listener the host registered, and one of the emitting module's own, gets it as it was
+ * ({@link carryTo}). A listener the host registered, and one of the emitting module's own, gets it as it was
  * emitted, as does everyone while the permission system is off.
  * @param {*} payload - The payload.
  * @param {object|null} listener - The wrapper of the module that registered the listener, or null for the host.
@@ -1534,10 +1527,10 @@ function runtime_contextRead(ctx, value) {
  * @returns {*} What the listener is handed.
  * @public
  */
-function runtime_eventPayloadFor(payload, listener, emitter, slothlet) {
+function eventPayloadFor(payload, listener, emitter, slothlet) {
 	/**
-	 * One value as a module gets it handed as a call's argument by `caller` (see {@link runtime_crossArgumentsFrom},
-	 * {@link runtime_ownArguments}, {@link runtime_ownInstances}): another module's as a view while the permission system
+	 * One value as a module gets it handed as a call's argument by `caller` (see {@link crossArgumentsFrom},
+	 * {@link ownArguments}, {@link ownInstances}): another module's as a view while the permission system
 	 * is on, its own as itself.
 	 * @param {object} wrapper - The wrapper of the module handed the value.
 	 * @param {*} value - The value.
@@ -1545,18 +1538,18 @@ function runtime_eventPayloadFor(payload, listener, emitter, slothlet) {
 	 * @returns {*} What the module gets.
 	 * @private
 	 */
-	function runtime_handedAsArgument(wrapper, value, caller) {
-		return runtime_ownInstances(wrapper, runtime_ownArguments(wrapper, runtime_crossArgumentsFrom(wrapper, [value], caller)))[0];
+	function handedAsArgument(wrapper, value, caller) {
+		return ownInstances(wrapper, ownArguments(wrapper, crossArgumentsFrom(wrapper, [value], caller)))[0];
 	}
 
 	if (payload === null || (typeof payload !== "object" && typeof payload !== "function") || !listener?.____slothletInternal) return payload;
 	const caller = emitter?.____slothletInternal ? emitter : null;
-	if (caller !== null && runtime_makerOf(caller) === runtime_makerOf(listener)) return payload;
+	if (caller !== null && makerOf(caller) === makerOf(listener)) return payload;
 	// It is handed over as a call's argument is: what a module's call returned to the host and the host emits as it is
 	// still comes from that module, and the listener's own module's value comes back to it as itself.
-	const handed = runtime_handedAsArgument(listener, payload, caller);
+	const handed = handedAsArgument(listener, payload, caller);
 	// What the host emits of its own is handed on as it is, a prototype of a module's as reading it would (#667).
-	if (handed === payload && caller === null) return runtime_carryTo(payload, listener, slothlet);
+	if (handed === payload && caller === null) return carryTo(payload, listener, slothlet);
 	return handed;
 }
 
@@ -1580,7 +1573,7 @@ function runtime_eventPayloadFor(payload, listener, emitter, slothlet) {
  * @returns {boolean} True when the read must resolve to the member.
  * @private
  */
-function runtime_hasOwnMember(wrapper, prop) {
+function hasOwnMember(wrapper, prop) {
 	if (typeof prop !== "string") return false;
 	if (hasOwn(wrapper, prop)) return true;
 	const internal = wrapper.____slothletInternal;
@@ -1596,13 +1589,13 @@ function runtime_hasOwnMember(wrapper, prop) {
 	// A member a callable's composition layer holds is the module's (a named export that won the slot of
 	// the function's own `name` or `length`), not the function's built-in (#585 review).
 	if (typeof impl === "function" && isCompositionLayer(impl) && ArrayMethods.includes(layerHeldKeys(impl), prop)) return true;
-	if (Arrays.isArray(impl)) return runtime_isArrayMember(impl, prop) && hasOwn(impl, prop);
+	if (Arrays.isArray(impl)) return isArrayMember(impl, prop) && hasOwn(impl, prop);
 	return impl !== null && typeof impl === "object" && hasOwn(impl, prop);
 }
 
 /**
  * Whether the rules leave a reader nothing to read at the path of an object member of a module's data (see
- * {@link runtime_isDataMemberNode}): a read there is refused, and so is a
+ * {@link isDataMemberNode}): a read there is refused, and so is a
  * read of any member beneath it (`config.nested.**`, or a deny on `config.nested` alone, which covers what a member of a
  * module's data holds). Such a member is no data the reader may see, and is left out of what lists or serializes the
  * object holding it, as a member holding a value the reader may not read is. A more specific allow beneath it
@@ -1621,30 +1614,30 @@ function runtime_hasOwnMember(wrapper, prop) {
  * // rule: deny reader.** → owner.config.nested.**
  * Object.keys(self.owner.config); // ["prim", "open"], as for a denied primitive member
  */
-function runtime_readsNothingBeneath(wrapper, targetPath, callerOverride, kept = null, access = null, member = undefined) {
+function readsNothingBeneath(wrapper, targetPath, callerOverride, kept = null, access = null, member = undefined) {
 	/**
 	 * Whether a value is plain data: an object whose prototype is `Object.prototype` or null, or an array, and no Proxy.
 	 * @param {*} value - The value.
 	 * @returns {boolean} True when it is.
 	 * @private
 	 */
-	function runtime_isPlainData(value) {
+	function isPlainData(value) {
 		if (value === null || typeof value !== "object" || util.types.isProxy(value)) return false;
 		if (Arrays.isArray(value)) return true;
 		const prototype = Objects.getPrototypeOf(value);
 		return prototype === Objects.prototype || prototype === null;
 	}
 
-	if (runtime_readGateDecision(wrapper, targetPath, callerOverride, kept, access).allowed) return false;
+	if (readGateDecision(wrapper, targetPath, callerOverride, kept, access).allowed) return false;
 	// Only a member of a module's data: a folder, a file or a function is listed whatever the rules on its path say. An
 	// object written to the api after it was built is data too, and so is a plain object or array no node stands for
 	// yet, which only data holds (#826).
 	const memberNode =
-		runtime_nodeAtPath(wrapper.slothlet, targetPath) ?? (member !== null && typeof member === "object" ? resolveWrapper(member) : null);
-	const unwrappedData = memberNode === null && (runtime_holdsAssignedData(wrapper) || runtime_isPlainData(member));
-	if (!runtime_isDataMemberNode(memberNode) && !unwrappedData) return false;
+		nodeAtPath(wrapper.slothlet, targetPath) ?? (member !== null && typeof member === "object" ? resolveWrapper(member) : null);
+	const unwrappedData = memberNode === null && (holdsAssignedData(wrapper) || isPlainData(member));
+	if (!isDataMemberNode(memberNode) && !unwrappedData) return false;
 	const probePath = `${targetPath}.${ANY_MEMBER_SEGMENT}`;
-	const beneath = runtime_readGateDecision(wrapper, probePath, callerOverride, kept, access);
+	const beneath = readGateDecision(wrapper, probePath, callerOverride, kept, access);
 	if (beneath.allowed) return false;
 	// A more specific allow beneath the member lets what it names through, so the member is listed with just that.
 	return !wrapper.slothlet.handlers.permissionManager.allowsBeneath(beneath.caller, targetPath, probePath);
@@ -1661,9 +1654,9 @@ function runtime_readsNothingBeneath(wrapper, targetPath, callerOverride, kept =
  * @throws {SlothletError} `LOOSE_SET_NOT_OWNED`, `LOOSE_SET_UNATTRIBUTED` or `PERMISSION_DENIED`, as at a node.
  * @internal
  */
-function runtime_assertRootChange(slothlet, prop) {
+function assertRootChange(slothlet, prop) {
 	if (slothlet.____buildDepth > 0 || MapMethods.has(FRAMEWORK_WRITES, slothlet.boundApi)) return;
-	runtime_assertOwnedWriteAt(runtime_rootGate(slothlet), typeof prop === "string" ? [prop] : []);
+	assertOwnedWriteAt(rootGate(slothlet), typeof prop === "string" ? [prop] : []);
 	if (!SetMethods.has(SELF_FRAMEWORK_ROOTS, prop)) return;
 	const identity = slothlet.contextManager?.getCallerIdentity?.(slothlet.instanceID);
 	if (identity?.currentWrapper || identity?.unresolved) slothlet.handlers.apiManager.normalizeApiPath([prop]);
@@ -1683,13 +1676,13 @@ function runtime_assertRootChange(slothlet, prop) {
  * @throws {SlothletError} PERMISSION_DENIED when the caller may not read the member.
  * @private
  */
-function runtime_gateFixedValue(wrapper, prop, value, kept = null) {
+function gateFixedValue(wrapper, prop, value, kept = null) {
 	const impl = wrapper.____slothletInternal.impl;
-	const isMember = Arrays.isArray(impl) ? runtime_isArrayMember(impl, prop) : runtime_hasOwnMember(wrapper, prop);
-	if (isMember) runtime_enforceReadGate(wrapper, prop, value, undefined, kept);
+	const isMember = Arrays.isArray(impl) ? isArrayMember(impl, prop) : hasOwnMember(wrapper, prop);
+	if (isMember) enforceRead(wrapper, prop, value, undefined, kept);
 	// A frozen function node holds its function's own members on its shell — a static method, its `prototype` — and
 	// hands them out from there: the module's code among them is checked as a call of the node, as when unfrozen (#632).
-	if (runtime_functionOf(impl) !== null) runtime_enforceCodeMember(wrapper, runtime_behindPinnedCode(value), kept);
+	if (functionOf(impl) !== null) enforceCodeMember(wrapper, behindPinnedCode(value), kept);
 }
 
 /**
@@ -1699,17 +1692,17 @@ function runtime_gateFixedValue(wrapper, prop, value, kept = null) {
  * @param {string|symbol} prop - The key.
  * @param {PropertyDescriptor|undefined} descriptor - The target's own descriptor.
  * @param {boolean} [asHeld=false] - Whether a view is asking for the member as it is held (see
- *   {@link runtime_describeAsHeld}), which no reader's rules decide.
+ *   {@link describeAsHeld}), which no reader's rules decide.
  * @param {{wrapper: object, reader: object}|null} [kept] - The access a node a module kept is making (see
  *   {@link resolveEnforcedCaller}).
  * @returns {PropertyDescriptor|undefined} The descriptor.
  * @throws {SlothletError} PERMISSION_DENIED for a read-only value the caller may not read.
  * @private
  */
-function runtime_fixedDescriptor(wrapper, prop, descriptor, asHeld = false, kept = null) {
-	// A view mirroring this member onto its shadow asks for it as it is held (see runtime_describeAsHeld).
+function fixedDescriptor(wrapper, prop, descriptor, asHeld = false, kept = null) {
+	// A view mirroring this member onto its shadow asks for it as it is held (see describeAsHeld).
 	if (asHeld) return descriptor;
-	// A stand-in for the module's code is described to anyone: each use of it is checked (see runtime_pinnedCodeMember).
+	// A stand-in for the module's code is described to anyone: each use of it is checked (see pinnedCodeMember).
 	if (
 		descriptor &&
 		"value" in descriptor &&
@@ -1717,7 +1710,7 @@ function runtime_fixedDescriptor(wrapper, prop, descriptor, asHeld = false, kept
 		!descriptor.writable &&
 		!WeakMapMethods.has(PINNED_CODE_MEMBERS, descriptor.value)
 	)
-		runtime_gateFixedValue(wrapper, prop, descriptor.value, kept);
+		gateFixedValue(wrapper, prop, descriptor.value, kept);
 	return descriptor;
 }
 
@@ -1735,18 +1728,18 @@ function runtime_fixedDescriptor(wrapper, prop, descriptor, asHeld = false, kept
  * @param {object} wrapper - The node's wrapper.
  * @param {object} node - The node.
  * @param {string|symbol} prop - The member.
- * @param {object|null} [access=null] - The access the description is part of (see {@link runtime_beginAccess}).
+ * @param {object|null} [access=null] - The access the description is part of (see {@link beginAccess}).
  * @returns {PropertyDescriptor|undefined} The descriptor.
  * @private
  *
  * @example
- * runtime_describeAsHeld(inner, child, "secret"); // { value: "…", writable: false, configurable: false, … }
+ * describeAsHeld(inner, child, "secret"); // { value: "…", writable: false, configurable: false, … }
  */
-function runtime_describeAsHeld(wrapper, node, prop, access = null) {
+function describeAsHeld(wrapper, node, prop, access = null) {
 	const previous = rulesShared.describingAsHeld;
 	rulesShared.describingAsHeld = { wrapper, prop };
 	try {
-		return runtime_describeWithAccess(access, wrapper, node, prop);
+		return describeWithAccess(access, wrapper, node, prop);
 	} finally {
 		rulesShared.describingAsHeld = previous;
 	}
@@ -1761,7 +1754,7 @@ function runtime_describeAsHeld(wrapper, node, prop, access = null) {
  * @returns {Array<*>} The object to change.
  * @private
  */
-function runtime_arrayKeyHolder(impl, prop) {
+function arrayKeyHolder(impl, prop) {
 	return isCompositionLayer(impl) && !ArrayMethods.includes(layerHeldKeys(impl), prop) ? layerUnderlying(impl) : impl;
 }
 
@@ -1775,7 +1768,7 @@ function runtime_arrayKeyHolder(impl, prop) {
  * @throws {SlothletError} `PERMISSION_DENIED` when the caller's module is gone.
  * @private
  */
-function runtime_refuseRemovedCaller(wrapper, callerWrapper, targetPath) {
+function refuseRemovedCaller(wrapper, callerWrapper, targetPath) {
 	if (!wrapper.slothlet.handlers.apiManager.isRemovedCaller(callerWrapper)) return;
 	throw new wrapper.SlothletError("PERMISSION_DENIED", {
 		caller: String(callerWrapper.____slothletInternal.apiPath ?? ""),
@@ -1803,7 +1796,7 @@ function runtime_refuseRemovedCaller(wrapper, callerWrapper, targetPath) {
  * @param {{store?: object|null, identity?: object}|null} [resolved=null] - Receives the caller identity the gate
  *   resolved and the store it resolved it on, so the call can be entered with it instead of reading it again.
  * @param {{store: object|null, identity: object}|null} [preResolved=null] - A caller identity resolved for this
- *   call before an await (see runtime_applyWithEntry), enforced instead of reading the identity again.
+ *   call before an await (see applyWithEntry), enforced instead of reading the identity again.
  * @returns {Promise<void>|undefined} `undefined` when the gate was decided synchronously; a Promise
  *   when `promote` is set and a required principal is stale — it resolves once the principals are
  *   current and the call is allowed, and rejects with PERMISSION_DENIED otherwise.
@@ -1848,7 +1841,7 @@ function enforcePermission(wrapper, callArgs, promote = false, kept = null, reso
 	}
 	const { callerWrapper, ceilings, ctx } = decision;
 	// Code of a module that is gone is allowed no call: the rules naming its old path are another module's now (#625).
-	runtime_refuseRemovedCaller(wrapper, callerWrapper, targetPath);
+	refuseRemovedCaller(wrapper, callerWrapper, targetPath);
 	const runtimeContext = ctx?.context ?? null;
 	// A leaf's own function handed over as a value (imported raw from its file) is gated for the caller as though
 	// it had called it through `self` (#597): the call it is handed to would otherwise run it with its own rights.
@@ -1859,20 +1852,18 @@ function enforcePermission(wrapper, callArgs, promote = false, kept = null, reso
 			const leafPath = leaf.____slothletInternal.apiPath;
 			for (let ofIndex = 0, ofList = concatLists([callerWrapper], ceilings); ofIndex < ofList.length; ofIndex++) {
 				const caller = ofList[ofIndex];
-				runtime_enforceCallAs(leaf, permissionManager, caller, leafPath, runtimeContext, { args: [], target: leafPath }, false);
+				enforceCallAs(leaf, permissionManager, caller, leafPath, runtimeContext, { args: [], target: leafPath }, false);
 			}
 		}
 	}
-	let gate = runtime_enforceCallAs(wrapper, permissionManager, callerWrapper, targetPath, runtimeContext, callMeta, promote);
+	let gate = enforceCallAs(wrapper, permissionManager, callerWrapper, targetPath, runtimeContext, callMeta, promote);
 	// Code a caller supplied to another call runs as the supplier, and every call of its ceiling has to allow
 	// the access as well (#597) — checked after the supplier, never instead of it.
 	for (let i = 0; i < ceilings.length; i++) {
 		const ceiling = ceilings[i];
 		gate = gate
-			? PromiseMethods.then(gate, () =>
-					runtime_enforceCallAs(wrapper, permissionManager, ceiling, targetPath, runtimeContext, callMeta, true)
-				)
-			: runtime_enforceCallAs(wrapper, permissionManager, ceiling, targetPath, runtimeContext, callMeta, promote);
+			? PromiseMethods.then(gate, () => enforceCallAs(wrapper, permissionManager, ceiling, targetPath, runtimeContext, callMeta, true))
+			: enforceCallAs(wrapper, permissionManager, ceiling, targetPath, runtimeContext, callMeta, promote);
 	}
 	return gate;
 }
@@ -1891,7 +1882,7 @@ function enforcePermission(wrapper, callArgs, promote = false, kept = null, reso
  * @throws {SlothletError} PERMISSION_DENIED when the caller is denied.
  * @private
  */
-function runtime_enforceCallAs(wrapper, permissionManager, callerWrapper, targetPath, runtimeContext, callMeta, promote) {
+function enforceCallAs(wrapper, permissionManager, callerWrapper, targetPath, runtimeContext, callMeta, promote) {
 	// The ?? fallbacks are defensive — .apiPath and .filePath are always set on live wrappers.
 	/* v8 ignore start */
 	const callerPath = callerWrapper.____slothletInternal?.apiPath ?? "";
@@ -1904,7 +1895,7 @@ function runtime_enforceCallAs(wrapper, permissionManager, callerWrapper, target
 	// cannot flip the verdict (the epoch must still match; only the age check is waived).
 	let enforceOptions = null;
 	if (promote) {
-		const pending = runtime_deferForPrincipals(
+		const pending = deferForPrincipals(
 			wrapper,
 			permissionManager,
 			callerPath,
@@ -1946,16 +1937,7 @@ function runtime_enforceCallAs(wrapper, permissionManager, callerWrapper, target
  *   otherwise a Promise that resolves when the call is allowed and rejects with PERMISSION_DENIED.
  * @private
  */
-function runtime_deferForPrincipals(
-	wrapper,
-	permissionManager,
-	callerPath,
-	targetPath,
-	callerFilePath,
-	targetFilePath,
-	runtimeContext,
-	callMeta
-) {
+function deferForPrincipals(wrapper, permissionManager, callerPath, targetPath, callerFilePath, targetFilePath, runtimeContext, callMeta) {
 	// Optional call: a partial permission manager (a stub, or one from an older build) has no principals.
 	const stale = permissionManager.stalePrincipals?.(callerPath, targetPath, callerFilePath, targetFilePath, runtimeContext);
 	if (!stale || stale.length === 0) return null;
@@ -1976,7 +1958,7 @@ function runtime_deferForPrincipals(
 const PRINCIPAL_GRACE = Objects.freeze({ principalGrace: true });
 
 /**
- * A caller identity handed to the next call of one wrapper (see {@link runtime_applyWithEntry}).
+ * A caller identity handed to the next call of one wrapper (see {@link applyWithEntry}).
  * @type {{wrapper: object, entry: {store: object|null, identity: object}}|null}
  * @private
  */
@@ -1991,7 +1973,7 @@ const PRINCIPAL_GRACE = Objects.freeze({ principalGrace: true });
  * @returns {*} The call's result.
  * @private
  */
-function runtime_applyWithEntry(wrapper, entry, apply) {
+function applyWithEntry(wrapper, entry, apply) {
 	const previous = rulesShared.handedEntry;
 	rulesShared.handedEntry = entry ? { wrapper, entry } : null;
 	try {
@@ -2010,7 +1992,7 @@ function runtime_applyWithEntry(wrapper, entry, apply) {
  * @returns {void}
  * @private
  */
-function runtime_registerLeafFunction(wrapper, impl) {
+function registerLeafFunction(wrapper, impl) {
 	if (typeof impl === "function") {
 		WeakMapMethods.set(trustedRootOwn.implWrappers, impl, wrapper);
 		// A composition layer stands over the module's own function, which is what the module's code holds and hands out.
@@ -2019,7 +2001,7 @@ function runtime_registerLeafFunction(wrapper, impl) {
 		return;
 	}
 	if (!isNode) return;
-	const fallback = runtime_implDefault(impl);
+	const fallback = implDefault(impl);
 	if (typeof fallback === "function") WeakMapMethods.set(trustedRootOwn.implWrappers, fallback, wrapper);
 }
 
@@ -2029,7 +2011,7 @@ function runtime_registerLeafFunction(wrapper, impl) {
  * @returns {*} Its `default` data value, or undefined for a function, a Proxy, an accessor or no `default`.
  * @private
  */
-function runtime_implDefault(impl) {
+function implDefault(impl) {
 	if (impl === null || typeof impl !== "object" || util.types.isProxy(impl)) return undefined;
 	try {
 		return Objects.getOwnPropertyDescriptor(impl, "default")?.value;
@@ -2046,20 +2028,20 @@ function runtime_implDefault(impl) {
  * @param {object} wrapper - Target UnifiedWrapper being invoked.
  * @param {object} capturedCaller - Module that read the reference out of the api.
  * @param {object|ReadonlyArray<object>|null} ceiling - The calls the reading code ran inside, when it was not the reader's own.
- * @param {string|undefined} targetPathOverride - Resolved target path (see runtime_enforceCapturedCaller).
+ * @param {string|undefined} targetPathOverride - Resolved target path (see enforceCapturedCaller).
  * @param {Array<*>} callArgs - Arguments of the invocation being gated.
  * @param {boolean} [promote=false] - Whether the gate may defer to an async principal resolve (#459).
  * @returns {Promise<void>|undefined} `undefined` when decided synchronously; a Promise when deferred.
  * @throws {SlothletError} PERMISSION_DENIED when either may not reach the target.
  * @private
  */
-function runtime_enforceCapturedPair(wrapper, capturedCaller, ceiling, targetPathOverride, callArgs, promote = false) {
-	let gate = runtime_enforceCapturedCaller(wrapper, capturedCaller, targetPathOverride, callArgs, promote);
+function enforceCapturedPair(wrapper, capturedCaller, ceiling, targetPathOverride, callArgs, promote = false) {
+	let gate = enforceCapturedCaller(wrapper, capturedCaller, targetPathOverride, callArgs, promote);
 	for (let i = 0, calls = identityCeilings({ currentWrapper: capturedCaller, ceiling }); i < calls.length; i++) {
 		const call = calls[i];
 		gate = gate
-			? PromiseMethods.then(gate, () => runtime_enforceCapturedCaller(wrapper, call, targetPathOverride, callArgs, true))
-			: runtime_enforceCapturedCaller(wrapper, call, targetPathOverride, callArgs, promote);
+			? PromiseMethods.then(gate, () => enforceCapturedCaller(wrapper, call, targetPathOverride, callArgs, true))
+			: enforceCapturedCaller(wrapper, call, targetPathOverride, callArgs, promote);
 	}
 	return gate;
 }
@@ -2086,7 +2068,7 @@ function runtime_enforceCapturedPair(wrapper, capturedCaller, ceiling, targetPat
  * @throws {SlothletError} PERMISSION_DENIED when the capturing module may not reach the target.
  * @private
  */
-function runtime_enforceCapturedCaller(wrapper, capturedCaller, targetPathOverride, callArgs, promote = false) {
+function enforceCapturedCaller(wrapper, capturedCaller, targetPathOverride, callArgs, promote = false) {
 	const permissionManager = wrapper.slothlet.handlers?.permissionManager;
 	/* v8 ignore next -- a view is only ever built while permissions are enabled, so this cannot be hit
 	   unless enforcement is torn down between the read and the call; harmless either way. */
@@ -2095,7 +2077,7 @@ function runtime_enforceCapturedCaller(wrapper, capturedCaller, targetPathOverri
 	// Lazy composition resolves a chained path only at invocation, so the caller supplies the resolved
 	// target rather than it being readable off the wrapper the chain started from.
 	const targetPath = targetPathOverride ?? wrapper.____slothletInternal.apiPath;
-	runtime_refuseRemovedCaller(wrapper, capturedCaller, targetPath);
+	refuseRemovedCaller(wrapper, capturedCaller, targetPath);
 	// The ?? fallbacks mirror enforcePermission: apiPath/filePath are always set on live wrappers.
 	/* v8 ignore start */
 	const callerPath = capturedCaller.____slothletInternal?.apiPath ?? "";
@@ -2109,7 +2091,7 @@ function runtime_enforceCapturedCaller(wrapper, capturedCaller, targetPathOverri
 	// Same scan-then-enforce grace as enforcePermission (#459).
 	let enforceOptions = null;
 	if (promote) {
-		const pending = runtime_deferForPrincipals(
+		const pending = deferForPrincipals(
 			wrapper,
 			permissionManager,
 			callerPath,
@@ -2137,18 +2119,18 @@ function runtime_enforceCapturedCaller(wrapper, capturedCaller, targetPathOverri
  * @param {string|symbol} prop - The member read.
  * @param {*} value - What the read returned.
  * @param {{wrapper: object, ceiling: object|null}|null} reader - The module that took the function (see
- *   {@link runtime_capturedReader}).
+ *   {@link capturedReader}).
  * @returns {*} The value, or a captured view of it.
  * @private
  */
-function runtime_readAsReader(wrapper, prop, value, reader) {
+function readAsReader(wrapper, prop, value, reader) {
 	if (!reader || value === undefined) return value;
-	if (runtime_isTerminalData(value)) {
+	if (isTerminalData(value)) {
 		const context = wrapper.slothlet.contextManager?.tryGetContext?.()?.context ?? null;
-		runtime_enforceReadGate(wrapper, prop, value, { currentWrapper: reader.wrapper, ceiling: reader.ceiling, context });
+		enforceRead(wrapper, prop, value, { currentWrapper: reader.wrapper, ceiling: reader.ceiling, context });
 		return value;
 	}
-	return resolveWrapper(value) === null ? value : runtime_capturedView(value, reader.wrapper, true, reader.ceiling);
+	return resolveWrapper(value) === null ? value : capturedView(value, reader.wrapper, true, reader.ceiling);
 }
 
 /**
@@ -2166,11 +2148,11 @@ function runtime_readAsReader(wrapper, prop, value, reader) {
  * @param {object} wrapper - Parent wrapper whose property was read.
  * @param {string|symbol} prop - The member read.
  * @param {*} value - Value the `get` trap resolved.
- * @param {object|null} [access=null] - The access the read is part of (see {@link runtime_beginAccess}).
+ * @param {object|null} [access=null] - The access the read is part of (see {@link beginAccess}).
  * @returns {*} The value, or a per-reader view of it.
  * @private
  */
-function runtime_bindCapturedIdentity(wrapper, prop, value, access = null) {
+function bindCapturedIdentity(wrapper, prop, value, access = null) {
 	if (typeof prop !== "string" && typeof prop !== "symbol") return value;
 	if (value === null || (typeof value !== "object" && typeof value !== "function")) return value;
 	const permissionManager = wrapper.slothlet.handlers?.permissionManager;
@@ -2205,12 +2187,12 @@ function runtime_bindCapturedIdentity(wrapper, prop, value, access = null) {
 	)
 		return value;
 
-	const capturedIdentity = runtime_accessIdentity(access, wrapper.slothlet.contextManager);
+	const capturedIdentity = accessIdentity(access, wrapper.slothlet.contextManager);
 	const capturedCaller = capturedIdentity?.currentWrapper;
 	if (!capturedCaller) return value;
 	// A reader that is code supplied to another call keeps that call as its ceiling, so the reference cannot
 	// carry the supplier past what the call it read inside may do (#597).
-	return runtime_capturedView(value, capturedCaller, true, capturedIdentity.ceiling ?? null);
+	return capturedView(value, capturedCaller, true, capturedIdentity.ceiling ?? null);
 }
 
 /**
@@ -2230,9 +2212,9 @@ function runtime_bindCapturedIdentity(wrapper, prop, value, access = null) {
  * @private
  *
  * @example
- * const live = runtime_resolveRestartTarget(wrapper, ["handlers"]);
+ * const live = resolveRestartTarget(wrapper, ["handlers"]);
  */
-function runtime_resolveRestartTarget(wrapper, propChain = []) {
+function resolveRestartTarget(wrapper, propChain = []) {
 	const apiPath = wrapper.____slothletInternal.apiPath;
 	const segments = concatLists(apiPath ? splitText(String(apiPath), ".") : [], mapList(propChain, String));
 	const fail = () => {
@@ -2250,7 +2232,7 @@ function runtime_resolveRestartTarget(wrapper, propChain = []) {
 	// What the reader's tree holds at the path is a node of yet another tree (an alias stored across trees): it has no
 	// node of its own there to forward to.
 	const found = registeredWrapper(node);
-	if (found !== undefined && runtime_isRestartStale(found)) fail();
+	if (found !== undefined && isRestartStale(found)) fail();
 	return node;
 }
 
@@ -2267,9 +2249,9 @@ function runtime_resolveRestartTarget(wrapper, propChain = []) {
  * @private
  *
  * @example
- * runtime_canDefine(Object.freeze([1]), "0", { value: 2 }); // false
+ * canDefine(Object.freeze([1]), "0", { value: 2 }); // false
  */
-function runtime_canDefine(object, prop, descriptor) {
+function canDefine(object, prop, descriptor) {
 	const current = Reflect.getOwnPropertyDescriptor(object, prop);
 	if (current === undefined) return Reflect.isExtensible(object);
 	if (Arrays.isArray(object) && prop === "length" && "value" in descriptor) {
@@ -2277,7 +2259,7 @@ function runtime_canDefine(object, prop, descriptor) {
 		for (let ofIndex = 0, ofList = Reflect.ownKeys(object); ofIndex < ofList.length; ofIndex++) {
 			const key = ofList[ofIndex];
 			if (
-				runtime_isArrayIndex(key) &&
+				isArrayIndex(key) &&
 				// Keys from 2^32 - 1 up are ordinary properties, which a shorter length does not remove.
 				Number(key) < 4294967295 &&
 				Number(key) >= descriptor.value &&
@@ -2310,7 +2292,7 @@ function runtime_canDefine(object, prop, descriptor) {
  * @returns {*} The value to hold.
  * @private
  */
-function runtime_shellValue(wrapper, prop) {
+function shellValue(wrapper, prop) {
 	const { impl, proxy } = wrapper.____slothletInternal;
 	const held = () => (hasOwn(wrapper, prop) ? Objects.getOwnPropertyDescriptor(wrapper, prop) : undefined);
 	let raw;
@@ -2319,9 +2301,9 @@ function runtime_shellValue(wrapper, prop) {
 		// A member's node is unwrapped only to the primitive it holds; a lazy node not loaded yet holds nothing
 		// yet and is kept as the node it is.
 		const node = resolveWrapper(held().value);
-		raw = node && runtime_holdsValue(node) ? runtime_heldValue(node) : held().value;
-	} else if (impl !== null && (typeof impl === "object" || typeof impl === "function")) raw = runtime_readImplMember(wrapper, prop);
-	if (runtime_isTerminalData(raw) || raw === undefined) return raw;
+		raw = node && holdsValue(node) ? heldValue(node) : held().value;
+	} else if (impl !== null && (typeof impl === "object" || typeof impl === "function")) raw = readImplMember(wrapper, prop);
+	if (isTerminalData(raw) || raw === undefined) return raw;
 	// An array's element or member gets its node from a read, which leaves it cached on the wrapper; the cache is
 	// the node itself, where the read hands a module a view bound to it.
 	if (Arrays.isArray(impl) && !held()) Reflect.get(proxy, prop);
@@ -2349,7 +2331,7 @@ function runtime_shellValue(wrapper, prop) {
  * self.box.late = { a: 1 };
  * Object.defineProperty(self.box, "late", { writable: false, configurable: false }); // fixed, still checked beneath
  */
-function runtime_refuseFixedObjectDefinition(slothlet, apiPath, prop, value) {
+function refuseFixedObjectDefinition(slothlet, apiPath, prop, value) {
 	if (!slothlet.handlers?.permissionManager?.isEnabled()) return;
 	if (slothlet.____buildDepth > 0 || MapMethods.has(FRAMEWORK_WRITES, slothlet.boundApi)) return;
 	if (value === null || (typeof value !== "object" && typeof value !== "function")) return;
@@ -2373,9 +2355,9 @@ function runtime_refuseFixedObjectDefinition(slothlet, apiPath, prop, value) {
  * @private
  *
  * @example
- * new Proxy(target, runtime_withRestartForwarding({ get, apply }, wrapper));
+ * new Proxy(target, withRestartForwarding({ get, apply }, wrapper));
  */
-function runtime_withRestartForwarding(handler, wrapper, propChain = []) {
+function withRestartForwarding(handler, wrapper, propChain = []) {
 	const wrapped = {};
 	for (let ofIndex = 0, ofList = Objects.entries(handler); ofIndex < ofList.length; ofIndex++) {
 		const ofEntry = ofList[ofIndex],
@@ -2385,12 +2367,12 @@ function runtime_withRestartForwarding(handler, wrapper, propChain = []) {
 		// Fixed arity (no rest/spread): these traps sit on every property access and call, so the
 		// common, non-stale path must not allocate. No trap takes more than four arguments.
 		wrapped[trap] = function slothlet_restartForwardingTrap(a, b, c, d) {
-			if (runtime_isRestartStale(wrapper)) {
+			if (isRestartStale(wrapper)) {
 				// An access or a caller identity handed to this node is not handed on to the node it forwards to.
 				handedAccessKey = null;
 				handedAccess = null;
 				rulesShared.handedEntry = null;
-				return forward(runtime_resolveRestartTarget(wrapper, propChain), a, b, c, d);
+				return forward(resolveRestartTarget(wrapper, propChain), a, b, c, d);
 			}
 			return FunctionMethods.call(original, handler, a, b, c, d);
 		};
@@ -2418,9 +2400,9 @@ function runtime_withRestartForwarding(handler, wrapper, propChain = []) {
  * @private
  *
  * @example
- * runtime_forwardHandlerTo(internal.proxyTraps, () => internal.proxy);
+ * forwardHandlerTo(internal.proxyTraps, () => internal.proxy);
  */
-function runtime_forwardHandlerTo(trapHandler, resolveLive) {
+function forwardHandlerTo(trapHandler, resolveLive) {
 	for (let ofIndex = 0, ofList = Objects.entries(RESTART_FORWARD_TRAPS); ofIndex < ofList.length; ofIndex++) {
 		const ofEntry = ofList[ofIndex],
 			trap = ofEntry[0],
@@ -2453,126 +2435,123 @@ export function RulesLayer(Base) {
 				Base.define("rules", {
 					FRAMEWORK_WRITES,
 					ROOT_PROXIES,
-					runtime_frameworkWrite,
-					runtime_refuseEndedAccess,
-					runtime_registerRunView,
-					runtime_refuseWriteWithoutStanding,
-					runtime_assertReaderWrite,
+					refuseEndedAccess,
+					registerRunView,
+					refuseWriteWithoutStanding,
+					assertReaderWrite,
 					FRAMEWORK_MEMBER_NAMES,
 					FRAMEWORK_VIEW_TARGETS,
-					runtime_registerFrameworkMember,
-					runtime_frameworkViewOf,
-					runtime_frameworkViewCaller,
+					registerFrameworkMember,
 					NO_STORED_VALUE,
-					runtime_placingTrap,
-					runtime_assertOwnedWrite,
-					runtime_assertOwnedWriteAt,
+					placingTrap,
+					assertOwnedWrite,
+					assertOwnedWriteAt,
 					rulesShared,
-					runtime_takeCapturedAccess,
-					runtime_accessAsKept,
-					runtime_beginAccess,
-					runtime_endAccess,
-					runtime_takeAccess,
-					runtime_accessIdentity,
-					runtime_readWithAccess,
-					runtime_describeWithAccess,
+					takeCapturedAccess,
+					beginAccess,
+					endAccess,
+					takeAccess,
+					describeWithAccess,
 					resolveEnforcedCaller,
-					runtime_enforceNodeReportRead,
-					runtime_enforceReadGate,
-					runtime_readGateDecision,
-					runtime_readGateFor,
-					runtime_readOnBehalf,
-					runtime_runAccessor,
-					runtime_enforceCodeMember,
-					runtime_implAccessor,
-					runtime_pinnedCodeMember,
-					runtime_readImplMember,
-					runtime_writeImplMember,
-					runtime_gateNodeValue,
-					runtime_onImpl,
-					runtime_hostRunDefiner,
-					runtime_memberHoldsCode,
-					runtime_gateLeafCopy,
+					enforceNodeReportRead,
+					enforceRead,
+					enforceCodeMember,
+					pinnedCodeMember,
+					writeImplMember,
+					gateNodeValue,
+					onImpl,
+					hostRunDefiner,
+					memberHoldsCode,
+					gateLeafCopy,
 					RUNTIME_CONTEXTS,
-					runtime_contextRead,
-					runtime_eventPayloadFor,
-					runtime_hasOwnMember,
-					runtime_readsNothingBeneath,
-					runtime_assertRootChange,
-					runtime_gateFixedValue,
-					runtime_fixedDescriptor,
-					runtime_describeAsHeld,
-					runtime_arrayKeyHolder,
+					contextRead,
+					eventPayloadFor,
+					readsNothingBeneath,
+					assertRootChange,
+					gateFixedValue,
+					fixedDescriptor,
+					describeAsHeld,
+					arrayKeyHolder,
 					enforcePermission,
-					runtime_applyWithEntry,
-					runtime_registerLeafFunction,
-					runtime_implDefault,
-					runtime_enforceCapturedPair,
-					runtime_readAsReader,
-					runtime_bindCapturedIdentity,
-					runtime_resolveRestartTarget,
-					runtime_canDefine,
-					runtime_shellValue,
-					runtime_refuseFixedObjectDefinition,
-					runtime_withRestartForwarding,
-					runtime_forwardHandlerTo,
+					applyWithEntry,
+					registerLeafFunction,
+					enforceCapturedPair,
+					bindCapturedIdentity,
+					resolveRestartTarget,
+					canDefine,
+					shellValue,
+					refuseFixedObjectDefinition,
+					withRestartForwarding,
+					forwardHandlerTo,
 					DATA_NODE_IMPLS,
-					runtime_accessEntry,
 					CONTEXT_HOST_VALUES,
 					CONTEXT_WRITERS
 				});
+				Base.define("framework", { write: frameworkWrite, viewOf: frameworkViewOf, viewCaller: frameworkViewCaller });
+				Base.define("access", { asKept: accessAsKept, identity: accessIdentity, entry: accessEntry });
+				Base.define("read", {
+					withAccess: readWithAccess,
+					gateDecision: readGateDecision,
+					gateFor: readGateFor,
+					onBehalf: readOnBehalf,
+					implMember: readImplMember,
+					asReader: readAsReader
+				});
+				Base.define("run", { accessor: runAccessor });
+				Base.define("impl", { accessor: implAccessor, default: implDefault });
+				Base.define("has", { ownMember: hasOwnMember });
 				Base.linkLayer(this, (methods, registered) => {
 					realClass = registered;
 					UnifiedWrapper = registered;
 					INTRINSICS = methods.values.INTRINSICS;
-					runtime_dataReadOptions = methods.values.runtime_dataReadOptions;
-					runtime_holdsAssignedData = methods.values.runtime_holdsAssignedData;
-					runtime_holdsCode = methods.values.runtime_holdsCode;
-					runtime_holdsValue = methods.values.runtime_holdsValue;
-					runtime_inheritsFrom = methods.values.runtime_inheritsFrom;
-					runtime_isArrayIndex = methods.values.runtime_isArrayIndex;
-					runtime_isArrayMember = methods.values.runtime_isArrayMember;
-					runtime_isBuiltinFunction = methods.values.runtime_isBuiltinFunction;
-					runtime_isBuiltinFunctionMember = methods.values.runtime_isBuiltinFunctionMember;
-					runtime_isDataMemberNode = methods.values.runtime_isDataMemberNode;
-					runtime_isModuleProxy = methods.values.runtime_isModuleProxy;
-					runtime_isModuleStandIn = methods.values.runtime_isModuleStandIn;
-					runtime_isRestartStale = methods.values.runtime_isRestartStale;
-					runtime_isSharedValue = methods.values.runtime_isSharedValue;
-					runtime_isSlothletValue = methods.values.runtime_isSlothletValue;
-					runtime_isTerminalData = methods.values.runtime_isTerminalData;
+					dataReadOptions = methods.values.dataReadOptions;
+					holdsAssignedData = methods.holds.assignedData;
+					holdsCode = methods.holds.code;
+					holdsValue = methods.holds.value;
+					nodeInherits = methods.node.inherits;
+					isArrayIndex = methods.is.arrayIndex;
+					isArrayMember = methods.is.arrayMember;
+					isBuiltinFunction = methods.is.builtinFunction;
+					isBuiltinFunctionMember = methods.is.builtinFunctionMember;
+					isDataMemberNode = methods.is.dataMemberNode;
+					isModuleProxy = methods.is.moduleProxy;
+					isModuleStandIn = methods.is.moduleStandIn;
+					isRestartStale = methods.is.restartStale;
+					isSharedValue = methods.is.sharedValue;
+					isSlothletValue = methods.is.slothletValue;
+					isTerminalData = methods.is.terminalData;
 					ADOPTED_ACCESSORS = methods.nodes.ADOPTED_ACCESSORS;
-					runtime_makerOf = methods.nodes.runtime_makerOf;
-					runtime_moduleInheritance = methods.nodes.runtime_moduleInheritance;
-					runtime_nodeAtPath = methods.nodes.runtime_nodeAtPath;
-					runtime_prototypeGiven = methods.nodes.runtime_prototypeGiven;
-					runtime_runAsMaker = methods.run.runtime_runAsMaker;
-					capturedViewShadows = methods.views.capturedViewShadows;
+					makerOf = methods.nodes.makerOf;
+					moduleInheritance = methods.module.inheritance;
+					nodeAtPath = methods.node.atPath;
+					prototypeGiven = methods.prototype.given;
+					runAsMaker = methods.run.asMaker;
+					capturedViewShadows = methods.captured.viewShadows;
 					FRAMEWORK_MEMBERS = methods.views.FRAMEWORK_MEMBERS;
-					hasOwn = methods.views.hasOwn;
+					hasOwn = methods.has.own;
 					HOST_READER = methods.views.HOST_READER;
 					PINNED_CODE_MEMBERS = methods.views.PINNED_CODE_MEMBERS;
 					PROTOTYPE_HANDLE_READER = methods.views.PROTOTYPE_HANDLE_READER;
 					RUN_VIEWS = methods.views.RUN_VIEWS;
-					runtime_capturedView = methods.views.runtime_capturedView;
-					runtime_functionOf = methods.views.runtime_functionOf;
-					runtime_selfModuleCeilings = methods.views.runtime_selfModuleCeilings;
-					runtime_selfWriteHasStanding = methods.views.runtime_selfWriteHasStanding;
+					capturedView = methods.captured.view;
+					functionOf = methods.function.of;
+					selfModuleCeilings = methods.self.moduleCeilings;
+					selfWriteHasStanding = methods.self.writeHasStanding;
 					SELF_FRAMEWORK_ROOTS = methods.views.SELF_FRAMEWORK_ROOTS;
 					ANY_MEMBER_SEGMENT = methods.membrane.ANY_MEMBER_SEGMENT;
 					CROSSINGS = methods.membrane.CROSSINGS;
-					runtime_asOneModule = methods.membrane.runtime_asOneModule;
-					runtime_carryTo = methods.membrane.runtime_carryTo;
-					runtime_crossTo = methods.membrane.runtime_crossTo;
-					runtime_memberPathOf = methods.membrane.runtime_memberPathOf;
-					runtime_uncross = methods.membrane.runtime_uncross;
+					asOneModule = methods.membrane.asOneModule;
+					carryTo = methods.membrane.carryTo;
+					crossTo = methods.membrane.crossTo;
+					memberPathOf = methods.membrane.memberPathOf;
+					uncross = methods.membrane.uncross;
 					searchBudget = methods.membrane.searchBudget;
 					searchDepth = methods.membrane.searchDepth;
-					runtime_behindPinnedCode = methods.root.runtime_behindPinnedCode;
-					runtime_heldValue = methods.root.runtime_heldValue;
-					runtime_rootGate = methods.root.runtime_rootGate;
+					behindPinnedCode = methods.root.behindPinnedCode;
+					heldValue = methods.root.heldValue;
+					rootGate = methods.root.gate;
 					RESTART_FORWARD_TRAPS = methods.waiting.RESTART_FORWARD_TRAPS;
-					runtime_checkedStandIn = methods.waiting.runtime_checkedStandIn;
+					checkedStandIn = methods.waiting.checkedStandIn;
 					ACTING_FOR = methods.uw.ACTING_FOR;
 					frameDefiner = methods.uw.frameDefiner;
 					handedLeafFunctions = methods.uw.handedLeafFunctions;
@@ -2582,9 +2561,9 @@ export function RulesLayer(Base) {
 					SlothletTypeError = methods.uw.SlothletTypeError;
 					trustedRootOwn = methods.uw.trustedRootOwn;
 					registeredWrapper = methods.values.registeredWrapper;
-					runtime_ownInstances = methods.views.runtime_ownInstances;
-					runtime_ownArguments = methods.membrane.runtime_ownArguments;
-					runtime_crossArgumentsFrom = methods.membrane.runtime_crossArgumentsFrom;
+					ownInstances = methods.views.ownInstances;
+					ownArguments = methods.membrane.ownArguments;
+					crossArgumentsFrom = methods.membrane.crossArgumentsFrom;
 				});
 			}
 

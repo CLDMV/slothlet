@@ -53,7 +53,7 @@ import { Objects, String, SymbolMethods } from "#helpers/intrinsics";
 import { resolvedAccess } from "#helpers/access-record";
 const { registerOwnModule, registerSelfForms, bindInstanceSelf, SELF_BIND_KEY } =
 	instanceImportsInternals("lib/runtime/runtime-livebindings");
-const { runtime_runtimeTraps } = unifiedWrapperInternals("lib/runtime/runtime-livebindings");
+const { runtimeTraps } = unifiedWrapperInternals("lib/runtime/runtime-livebindings");
 const trustedRootOwn = trustedRootInternals("lib/runtime/runtime-livebindings");
 const { markSlothletProxy } = frameworkInternalsInternals("lib/runtime/runtime-livebindings");
 const { liveRuntime } = contextInternals("lib/runtime/runtime-livebindings");
@@ -172,7 +172,7 @@ const {
 	objectSelf,
 	callableSelf,
 	context: contextProxy
-} = runtime_runtimeTraps(liveRuntime, {
+} = runtimeTraps(liveRuntime, {
 	current: (resolved) => runtime_resolveExecutingContext(resolved),
 	store: activeContext,
 	loadingInstance: () => null,

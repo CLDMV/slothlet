@@ -85,74 +85,74 @@ let runtime_unwrapClassInstance,
 	SELF_INSTANCE_NODES,
 	HOST_READER,
 	PROTOTYPE_HANDLE_READER,
-	runtime_isPrototypeHandle,
-	runtime_unwrapSelfView,
-	runtime_selfReader,
-	runtime_selfModuleReader,
+	isPrototypeHandle,
+	unwrapSelfView,
+	selfReader,
+	selfModuleReader,
 	SELF_MEMBER_VIEWS,
-	runtime_hasInternalSlots,
-	runtime_inherits,
-	runtime_selfMemberOf,
+	hasInternalSlots,
+	inherits,
+	selfMemberOf,
 	ACTING_FOR,
-	runtime_runsNoModuleCode,
-	runtime_runsForHander,
-	runtime_inheritedPrivate,
-	runtime_selfView,
-	runtime_assertOwnedWrite,
-	runtime_isTerminalData,
-	runtime_readGateDecision,
-	runtime_readGateFor,
+	runsNoModuleCode,
+	runsForHander,
+	inheritedPrivate,
+	selfView,
+	assertOwnedWrite,
+	isTerminalData,
+	readGateDecision,
+	readGateFor,
 	GIVEN_VIEWS,
-	runtime_recordedPrototype,
-	runtime_prototypeGiven,
-	runtime_ownsPrototype,
+	recordedPrototype,
+	prototypeGiven,
+	ownsPrototype,
 	MAKERS,
 	INTRINSICS,
-	runtime_isBindingMethod,
-	runtime_isSharedValue,
-	runtime_isSlothletValue,
-	runtime_isModuleProxy,
-	runtime_isBuiltinFunction,
-	runtime_makerOf,
-	runtime_runAsMaker,
-	runtime_isSlotObject,
-	runtime_isNativeIterator,
+	isBindingMethod,
+	isSharedValue,
+	isSlothletValue,
+	isModuleProxy,
+	isBuiltinFunction,
+	makerOf,
+	runAsMaker,
+	isSlotObject,
+	isNativeIterator,
 	VM_SCRIPT,
 	VM_NATIVE_SCRIPT,
-	runtime_memberHoldsCode,
-	runtime_holdsCode,
-	runtime_gateLeafCopy,
-	runtime_isCodeObject,
-	runtime_isShared,
-	runtime_permissionsOn,
-	runtime_runningLeafOf,
-	runtime_exposePrototype,
+	memberHoldsCode,
+	holdsCode,
+	gateLeafCopy,
+	isCodeObject,
+	isShared,
+	permissionsOn,
+	runningLeafOf,
+	exposePrototype,
 	FUNCTION_NODES,
 	nodeRefOf,
-	runtime_frontingNode,
-	runtime_classPrototypeSites,
-	runtime_prototypeForHolder,
-	runtime_atClassSite,
+	frontingNode,
+	classPrototypeSites,
+	prototypeForHolder,
+	atClassSite,
 	PROTOTYPE_PATHS,
-	runtime_prototypeHandedTo,
-	runtime_isCarrier,
-	runtime_moduleKey,
-	runtime_sameModule,
-	runtime_isOwnOrigin,
-	runtime_isStepResult,
-	runtime_behindMemberView,
+	prototypeHandedTo,
+	isCarrier,
+	moduleKey,
+	sameModule,
+	isOwnOrigin,
+	isStepResult,
+	behindMemberView,
 	GUARD_VIEWS,
 	capturedViewChildren,
-	runtime_isConstructor,
-	runtime_capturedView,
+	isConstructor,
+	capturedView,
 	resolveWrapper,
 	leafOfCopy,
-	runtime_constructorReadMayRefuse,
+	constructorReadMayRefuse,
 	CLASS_INSTANCES,
 	WELL_KNOWN_SYMBOLS,
 	TYPED_ARRAY_BYTE_LENGTH,
 	TYPED_ARRAY_LENGTH,
-	runtime_readerHoldsPrototype;
+	readerHoldsPrototype;
 /** The registered `UnifiedWrapper`: the only class this layer's constructor builds for. @type {Function|undefined} */
 let realClass;
 
@@ -182,8 +182,8 @@ const SEALED_SHELL_READER = Objects.freeze({ reader: "sealed shell" });
  * @returns {*} What it returned.
  * @private
  */
-function runtime_crossRun(state, run) {
-	if (!runtime_crossRunsForHander(state)) return run();
+function crossRun(state, run) {
+	if (!crossRunsForHander(state)) return run();
 	listPush(ACTING_FOR, state.from);
 	try {
 		return run();
@@ -193,19 +193,19 @@ function runtime_crossRun(state, run) {
 }
 
 /**
- * Whether a crossing view's function runs for the module that handed it over ({@link runtime_crossRun}).
+ * Whether a crossing view's function runs for the module that handed it over ({@link crossRun}).
  * @param {object} state - The crossing view's state.
  * @returns {boolean} True when it does.
  * @private
  */
-function runtime_crossRunsForHander(state) {
+function crossRunsForHander(state) {
 	if (!state.from?.____slothletInternal || typeof state.original !== "function") return false;
-	return state.handed || runtime_runsNoModuleCode(state.original);
+	return state.handed || runsNoModuleCode(state.original);
 }
 
 /**
  * A member of its own a crossing view hands its reader, when it is a function that runs for the module the value came
- * from ({@link runtime_runsForHander}): its view, which runs it for that module ({@link runtime_handedView}), as when the
+ * from ({@link runsForHander}): its view, which runs it for that module ({@link handedView}), as when the
  * module hands it over as an argument. `undefined` for any other member.
  * @param {object} state - The crossing view's state.
  * @param {string|symbol} prop - The member.
@@ -213,16 +213,16 @@ function runtime_crossRunsForHander(state) {
  * @returns {Function|undefined} The view, or `undefined`.
  * @private
  */
-function runtime_crossHandedMember(state, prop, value) {
+function crossHandedMember(state, prop, value) {
 	if (typeof value !== "function" || WeakMapMethods.has(CROSSINGS, value) || !state.reader?.____slothletInternal) return undefined;
-	if (!runtime_runsForHander(value, state.from) || !runtime_guardOn(state.slothlet)) return undefined;
+	if (!runsForHander(value, state.from) || !guardOn(state.slothlet)) return undefined;
 	const own = Reflect.getOwnPropertyDescriptor(state.original, prop);
 	if (!own || !("value" in own) || own.value !== value) return undefined;
-	return runtime_handedView(value, state.reader, state.slothlet, state.from);
+	return handedView(value, state.reader, state.slothlet, state.from);
 }
 
 /**
- * The views of functions of the language's and Node's own that modules handed to others ({@link runtime_handedView}):
+ * The views of functions of the language's and Node's own that modules handed to others ({@link handedView}):
  * by function, then by the module handing it, then by the reader. One function is handed by many modules, and each view
  * runs for the module that handed it.
  * @type {WeakMap<Function, WeakMap<object, Map<*, Function>>>}
@@ -232,7 +232,7 @@ const HANDED_VIEWS = new WeakMap();
 
 /**
  * A function of the language's or Node's own (`Reflect.set`, `util._extend`) that one module hands another as an
- * argument, as the other gets it: a view that runs it for the module that handed it ({@link runtime_crossRun}), with
+ * argument, as the other gets it: a view that runs it for the module that handed it ({@link crossRun}), with
  * what the reader calls it with reaching that module, so a target the reader holds as itself is the handing module's
  * view of it again. Such a function shared by everyone passes between modules as itself everywhere else.
  * @param {Function} fn - The function.
@@ -242,27 +242,27 @@ const HANDED_VIEWS = new WeakMap();
  * @returns {Function} The view, the same one for the same function, module and reader every time.
  * @private
  */
-function runtime_handedView(fn, reader, slothlet, from) {
+function handedView(fn, reader, slothlet, from) {
 	let byFrom = WeakMapMethods.get(HANDED_VIEWS, fn);
 	if (!byFrom) WeakMapMethods.set(HANDED_VIEWS, fn, (byFrom = new WeakMap()));
 	let byReader = WeakMapMethods.get(byFrom, from);
 	if (!byReader) WeakMapMethods.set(byFrom, from, (byReader = new Map()));
-	const key = runtime_crossKey(reader);
+	const key = crossKey(reader);
 	const held = MapMethods.get(byReader, key);
 	if (held) return held;
-	const view = runtime_crossView(fn, reader, slothlet, from, true);
+	const view = crossView(fn, reader, slothlet, from, true);
 	MapMethods.set(byReader, key, view);
 	return view;
 }
 
 /**
- * The object a view of a given prototype stands for ({@link runtime_givenView}), or the value itself when it is no
+ * The object a view of a given prototype stands for ({@link givenView}), or the value itself when it is no
  * such view: a view handed back in (`Object.setPrototypeOf(node, view)`) is the object.
  * @param {*} value - The value.
  * @returns {*} What is behind it.
  * @private
  */
-function runtime_behindGivenView(value) {
+function behindGivenView(value) {
 	return WeakMapMethods.get(GIVEN_VIEWS, value)?.value ?? value;
 }
 
@@ -273,9 +273,9 @@ function runtime_behindGivenView(value) {
  * @returns {boolean} True when it is.
  * @private
  */
-function runtime_givenAsIs(value) {
+function givenAsIs(value) {
 	if (value === null || (typeof value !== "object" && typeof value !== "function")) return true;
-	return WeakSetMethods.has(INTRINSICS, value) || runtime_isSlothletValue(value) || WeakMapMethods.has(GIVEN_VIEWS, value);
+	return WeakSetMethods.has(INTRINSICS, value) || isSlothletValue(value) || WeakMapMethods.has(GIVEN_VIEWS, value);
 }
 
 /**
@@ -288,23 +288,23 @@ function runtime_givenAsIs(value) {
  * @returns {{allowed: boolean, caller: string|null, target: string}} The verdict, with the path decided.
  * @private
  */
-function runtime_givenReadDecision(record, prop, target = runtime_memberPathOf(record.gate, prop)) {
+function givenReadDecision(record, prop, target = memberPathOf(record.gate, prop)) {
 	const { gate, reader } = record;
 	const pm = gate.slothlet.handlers?.permissionManager;
 	if (!pm || !pm.isEnabled() || !pm.isReadGatingEnabled()) return { allowed: true, caller: null, target };
-	const live = runtime_readGateDecision(gate, target, undefined);
+	const live = readGateDecision(gate, target, undefined);
 	if (!live.allowed || live.caller !== null || !reader?.____slothletInternal) return { ...live, target };
 	if (gate.slothlet.handlers.apiManager.isRemovedCaller(reader)) {
 		return { allowed: false, caller: String(reader.____slothletInternal.apiPath ?? ""), target };
 	}
-	return { ...runtime_readGateFor(gate, target, reader, { context: null }), target };
+	return { ...readGateFor(gate, target, reader, { context: null }), target };
 }
 
 /**
  * Whether a member a given prototype holds is left out of what its view lists and describes: data the reader may not
  * read, and a getter whose path it may not read, as a node leaves them out of its own listing (see
- * {@link runtime_isReadRedacted}), and, from a listing, an object member the reader may read nothing beneath, as a node
- * leaves out the same member of its own (see {@link runtime_givenReadsNothingBeneath}). Read by descriptor: nothing of
+ * {@link isReadRedacted}), and, from a listing, an object member the reader may read nothing beneath, as a node
+ * leaves out the same member of its own (see {@link givenReadsNothingBeneath}). Read by descriptor: nothing of
  * the prototype runs.
  * @param {{value: object, gate: object, reader: object}} record - The view's record.
  * @param {string|symbol} prop - The member's key.
@@ -312,11 +312,11 @@ function runtime_givenReadDecision(record, prop, target = runtime_memberPathOf(r
  * @returns {boolean} True when it is left out.
  * @private
  */
-function runtime_givenWithheld(record, prop, listing = false) {
+function givenWithheld(record, prop, listing = false) {
 	/**
 	 * Whether the rules leave the reader nothing to read at an object member of a given prototype: a read of the member's
 	 * path is refused, and so is a read of any member beneath it, with no more specific allow beneath it, as
-	 * {@link runtime_readsNothingBeneath} decides for the same member of a node's own.
+	 * {@link readsNothingBeneath} decides for the same member of a node's own.
 	 * @param {{gate: object, reader: object}} record - The view's record.
 	 * @param {string} prop - The member's key.
 	 * @returns {boolean} Whether the reader may read nothing there.
@@ -326,11 +326,11 @@ function runtime_givenWithheld(record, prop, listing = false) {
 	 * // rule: allow reader.** → owner.config.partly.a; the prototype holds { nothing: {...}, partly: {...} }
 	 * Object.keys(Object.getPrototypeOf(self.owner.config)); // ["partly"]
 	 */
-	function runtime_givenReadsNothingBeneath(record, prop) {
-		const targetPath = runtime_memberPathOf(record.gate, prop);
-		if (runtime_givenReadDecision(record, prop, targetPath).allowed) return false;
+	function givenReadsNothingBeneath(record, prop) {
+		const targetPath = memberPathOf(record.gate, prop);
+		if (givenReadDecision(record, prop, targetPath).allowed) return false;
 		const probePath = `${targetPath}.${ANY_MEMBER_SEGMENT}`;
-		const beneath = runtime_givenReadDecision(record, prop, probePath);
+		const beneath = givenReadDecision(record, prop, probePath);
 		if (beneath.allowed) return false;
 		return !record.gate.slothlet.handlers.permissionManager.allowsBeneath(beneath.caller, targetPath, probePath);
 	}
@@ -342,11 +342,11 @@ function runtime_givenWithheld(record, prop, listing = false) {
 	// own is. What slothlet hands out as it is (a node, a view) is listed whatever the rules on its path say.
 	if (listing && isData && typeof prop === "string") {
 		const member = descriptor.value;
-		if (member !== null && typeof member === "object" && !runtime_isTerminalData(member) && !runtime_givenAsIs(member))
-			return runtime_givenReadsNothingBeneath(record, prop);
+		if (member !== null && typeof member === "object" && !isTerminalData(member) && !givenAsIs(member))
+			return givenReadsNothingBeneath(record, prop);
 	}
-	if (isData ? !runtime_isTerminalData(descriptor.value) : typeof descriptor.get !== "function") return false;
-	return !runtime_givenReadDecision(record, prop).allowed;
+	if (isData ? !isTerminalData(descriptor.value) : typeof descriptor.get !== "function") return false;
+	return !givenReadDecision(record, prop).allowed;
 }
 
 /**
@@ -360,18 +360,18 @@ function runtime_givenWithheld(record, prop, listing = false) {
  * @throws {SlothletError} PERMISSION_DENIED when the reader may not read the member.
  * @private
  */
-function runtime_givenMember(record, prop, value) {
+function givenMember(record, prop, value) {
 	if (value === undefined) return undefined;
-	if (runtime_isTerminalData(value)) {
-		const decision = runtime_givenReadDecision(record, prop);
+	if (isTerminalData(value)) {
+		const decision = givenReadDecision(record, prop);
 		if (!decision.allowed)
 			throw new record.gate.SlothletError("PERMISSION_DENIED", { caller: decision.caller, target: segmentsOf(decision.target) });
 		return value;
 	}
-	if (runtime_givenAsIs(value)) return value;
+	if (givenAsIs(value)) return value;
 	if (typeof value === "function") {
 		// The engine's own functions are no one's code; any other is read as a member of the node is.
-		if (runtime_isBuiltinFunction(value) || record.node === null || typeof record.node.___createChildWrapper !== "function") return value;
+		if (isBuiltinFunction(value) || record.node === null || typeof record.node.___createChildWrapper !== "function") return value;
 		return record.node.___createChildWrapper(prop, value) ?? value;
 	}
 	const held = MapMethods.get(record.members, prop);
@@ -380,9 +380,9 @@ function runtime_givenMember(record, prop, value) {
 	const beneath = {
 		slothlet: gate.slothlet,
 		SlothletError: gate.SlothletError,
-		____slothletInternal: { apiPath: runtime_memberPathOf(gate, prop), filePath: gate.____slothletInternal.filePath ?? null, impl: value }
+		____slothletInternal: { apiPath: memberPathOf(gate, prop), filePath: gate.____slothletInternal.filePath ?? null, impl: value }
 	};
-	const view = runtime_givenView(beneath, null, value, record.reader, record.assertWrite);
+	const view = givenView(beneath, null, value, record.reader, record.assertWrite);
 	MapMethods.set(record.members, prop, { value, view });
 	return view;
 }
@@ -394,7 +394,7 @@ function runtime_givenMember(record, prop, value) {
  * the rules of a write at the node's path. The host is handed the object itself, and so is everyone while the
  * permission system is off. A prototype further up the chain is viewed the same way, at the same path.
  * @param {object} gate - What the read gate decides against: the node's wrapper, or a stand-in holding the path
- *   (see {@link runtime_rootGate}).
+ *   (see {@link rootGate}).
  * @param {object|null} node - The node's wrapper, which hands out the functions the prototype holds; null beneath it
  *   and at the root.
  * @param {object|Function} value - The prototype.
@@ -403,19 +403,19 @@ function runtime_givenMember(record, prop, value) {
  * @returns {object} The view.
  * @private
  */
-function runtime_givenView(gate, node, value, reader, assertWrite) {
+function givenView(gate, node, value, reader, assertWrite) {
 	const record = { value, gate, node, reader, assertWrite, members: new Map(), link: null };
 	const shadow = {};
 	const view = new NativeProxy(shadow, {
-		get: (_, prop, receiver) => runtime_givenMember(record, prop, Reflect.get(value, prop, receiver === view ? view : receiver)),
+		get: (_, prop, receiver) => givenMember(record, prop, Reflect.get(value, prop, receiver === view ? view : receiver)),
 		has: (_, prop) => Reflect.has(value, prop),
-		ownKeys: () => filterList(Reflect.ownKeys(value), (key) => !runtime_givenWithheld(record, key, true)),
+		ownKeys: () => filterList(Reflect.ownKeys(value), (key) => !givenWithheld(record, key, true)),
 		getOwnPropertyDescriptor: (_, prop) => {
 			const descriptor = Reflect.getOwnPropertyDescriptor(value, prop);
-			if (!descriptor || runtime_givenWithheld(record, prop)) return undefined;
+			if (!descriptor || givenWithheld(record, prop)) return undefined;
 			// The view holds nothing fixed, so each member is described as one that can still change.
 			if ("value" in descriptor)
-				return { __proto__: null, ...descriptor, value: runtime_givenMember(record, prop, descriptor.value), configurable: true };
+				return { __proto__: null, ...descriptor, value: givenMember(record, prop, descriptor.value), configurable: true };
 			return {
 				__proto__: null,
 				get: typeof descriptor.get === "function" ? () => view[prop] : undefined,
@@ -431,9 +431,9 @@ function runtime_givenView(gate, node, value, reader, assertWrite) {
 		},
 		getPrototypeOf: () => {
 			const link = Reflect.getPrototypeOf(value);
-			if (runtime_givenAsIs(link)) return link;
+			if (givenAsIs(link)) return link;
 			if (record.link === null || record.link.value !== link) {
-				record.link = { value: link, view: runtime_givenView(gate, node, link, reader, assertWrite) };
+				record.link = { value: link, view: givenView(gate, node, link, reader, assertWrite) };
 			}
 			return record.link.view;
 		},
@@ -441,7 +441,7 @@ function runtime_givenView(gate, node, value, reader, assertWrite) {
 			// A write reaching the view from an object that inherits from it lands on that object, as plain JS has it.
 			if (receiver !== view) return Reflect.set(value, prop, written, receiver);
 			assertWrite();
-			return Reflect.set(value, prop, runtime_behindGivenView(runtime_unwrapSelfView(written)));
+			return Reflect.set(value, prop, behindGivenView(unwrapSelfView(written)));
 		},
 		defineProperty: (_, prop, descriptor) => {
 			assertWrite();
@@ -455,7 +455,7 @@ function runtime_givenView(gate, node, value, reader, assertWrite) {
 		},
 		setPrototypeOf: (_, prototype) => {
 			assertWrite();
-			return Reflect.setPrototypeOf(value, runtime_behindGivenView(runtime_unwrapSelfView(prototype)));
+			return Reflect.setPrototypeOf(value, behindGivenView(unwrapSelfView(prototype)));
 		},
 		// A view stays open: the object is closed on the object itself.
 		preventExtensions: () => {
@@ -468,7 +468,7 @@ function runtime_givenView(gate, node, value, reader, assertWrite) {
 }
 
 /**
- * The prototype a node was given, as whoever reads the node now is handed it (see {@link runtime_givenView}): the
+ * The prototype a node was given, as whoever reads the node now is handed it (see {@link givenView}): the
  * object itself to the host and while the permission system is off, and to module code its own view, the same one on
  * every read, kept on the node's record for as long as the node has that prototype.
  * @param {object} wrapper - The node's wrapper.
@@ -477,15 +477,13 @@ function runtime_givenView(gate, node, value, reader, assertWrite) {
  * @returns {object|Function|null} What the reader is handed.
  * @private
  */
-function runtime_givenPrototypeFor(wrapper, prototype, kept = null) {
-	if (runtime_givenAsIs(prototype)) return prototype;
+function givenPrototypeFor(wrapper, prototype, kept = null) {
+	if (givenAsIs(prototype)) return prototype;
 	const slothlet = wrapper.slothlet;
 	if (!slothlet?.handlers?.permissionManager?.isEnabled()) return prototype;
-	const reader = runtime_selfModuleReader(slothlet) ?? kept?.reader ?? null;
+	const reader = selfModuleReader(slothlet) ?? kept?.reader ?? null;
 	if (reader === null || reader === HOST_READER) return prototype;
-	return runtime_givenViewOn(wrapper.____slothletInternal, wrapper, wrapper, prototype, reader, () =>
-		runtime_assertOwnedWrite(wrapper, null)
-	);
+	return givenViewOn(wrapper.____slothletInternal, wrapper, wrapper, prototype, reader, () => assertOwnedWrite(wrapper, null));
 }
 
 /**
@@ -500,7 +498,7 @@ function runtime_givenPrototypeFor(wrapper, prototype, kept = null) {
  * @returns {object} The view.
  * @private
  */
-function runtime_givenViewOn(holder, gate, node, prototype, reader, assertWrite) {
+function givenViewOn(holder, gate, node, prototype, reader, assertWrite) {
 	let views = holder.prototypeViews;
 	if (views === undefined || views === null || views.of !== prototype) {
 		views = { of: prototype, byReader: new WeakMap() };
@@ -508,7 +506,7 @@ function runtime_givenViewOn(holder, gate, node, prototype, reader, assertWrite)
 	}
 	let view = WeakMapMethods.get(views.byReader, reader);
 	if (view === undefined) {
-		view = runtime_givenView(gate, node, prototype, reader, assertWrite);
+		view = givenView(gate, node, prototype, reader, assertWrite);
 		WeakMapMethods.set(views.byReader, reader, view);
 	}
 	return view;
@@ -525,7 +523,7 @@ const STAND_IN_RECORDS = new WeakMap();
 /**
  * For each stand-in of a function made for what a call returned to a call's own code (see `ownReceiver`), that call,
  * or {@link MOVED} once slothlet has seen the stand-in handed anywhere else: handed out again, handed in to a call,
- * returned by a call. Read by {@link runtime_originOf}.
+ * returned by a call. Read by {@link originOf}.
  * @type {WeakMap<object, object|symbol>}
  * @private
  */
@@ -539,7 +537,7 @@ const STAND_IN_ORIGINS = new WeakMap();
 const MOVED = Symbol("moved");
 
 /**
- * The call whose own code receives what is being handed out right now (see {@link runtime_attributeResult}), or null.
+ * The call whose own code receives what is being handed out right now (see {@link attributeResult}), or null.
  * @type {object|null}
  * @private
  */
@@ -551,19 +549,19 @@ let handOutReceiver = null;
  * @returns {void}
  * @private
  */
-function runtime_recordStandInOrigin(standIn) {
+function recordStandInOrigin(standIn) {
 	if (handOutReceiver !== null) WeakMapMethods.set(STAND_IN_ORIGINS, standIn, handOutReceiver);
 }
 
 /**
  * Note that slothlet sees a value handed on: a stand-in recorded as handed to one call (see
- * {@link runtime_recordStandInOrigin}) is no longer that call's alone, unless it is being handed out to that call again.
+ * {@link recordStandInOrigin}) is no longer that call's alone, unless it is being handed out to that call again.
  * A crossing view stands for the value behind it.
  * @param {*} value - The value.
  * @returns {void}
  * @private
  */
-function runtime_noteMoved(value) {
+function noteMoved(value) {
 	if (value === null || (typeof value !== "object" && typeof value !== "function")) return;
 	const behind = WeakMapMethods.get(CROSSINGS, value)?.original ?? value;
 	const origin = WeakMapMethods.get(STAND_IN_ORIGINS, behind);
@@ -580,7 +578,7 @@ function runtime_noteMoved(value) {
  * @returns {object|null} The call, or null.
  * @private
  */
-function runtime_originOf(standIn) {
+function originOf(standIn) {
 	const origin = WeakMapMethods.get(STAND_IN_ORIGINS, standIn);
 	return origin === undefined || origin === MOVED ? null : origin;
 }
@@ -594,7 +592,7 @@ function runtime_originOf(standIn) {
 const METHOD_RECEIVERS = new WeakMap();
 
 /**
- * The call a stand-in being run was handed to alone, for {@link runtime_runAsMaker} (see {@link runtime_originOf}). A
+ * The call a stand-in being run was handed to alone, for {@link runAsMaker} (see {@link originOf}). A
  * method read through an object's stand-in answers for that object: run on it, the object's call; run with any other
  * receiver (another object, a method of another object called on this one, the class's own method read through the
  * class), none.
@@ -603,15 +601,15 @@ const METHOD_RECEIVERS = new WeakMap();
  * @returns {object|null} The call, or null.
  * @private
  */
-function runtime_callOrigin(standIn, receiver) {
+function callOrigin(standIn, receiver) {
 	const bound = WeakMapMethods.get(METHOD_RECEIVERS, standIn);
-	if (bound === undefined) return runtime_originOf(standIn);
-	return receiver === bound.instance ? runtime_originOf(bound.holder) : null;
+	if (bound === undefined) return originOf(standIn);
+	return receiver === bound.instance ? originOf(bound.holder) : null;
 }
 
 /**
  * The views a module is handed of a caller's plain array or object holding the module's own stand-ins (see
- * {@link runtime_inboundView}), with the caller's value behind each.
+ * {@link inboundView}), with the caller's value behind each.
  * @type {WeakMap<object, {maker: object, original: object}>}
  * @private
  */
@@ -630,7 +628,7 @@ const GENERATOR_PROTOTYPES = {
 /**
  * The engine's methods that call a callback with what an object holds in its internal slots (a `Map`'s entries, what
  * a promise settles to, the values an iterator steps through), taken before any module's code runs. Called on a
- * stand-in, their callbacks get those values handed out as the module's (see runtime_membrane).
+ * stand-in, their callbacks get those values handed out as the module's (see membrane).
  * @type {Set<Function>}
  * @private
  */
@@ -686,16 +684,16 @@ const searchBudget = (slothlet) => ({ remaining: slothlet?.config?.permissions?.
 /**
  * What a module's code hands out, as whoever receives it gets it (#597): code the module made — a function, a
  * Proxy, a generator, and any object holding code — comes as a stand-in that runs it as the module (see
- * {@link runtime_runAsMaker}); a value handed to the module from outside, plain data, the language's own objects and
+ * {@link runAsMaker}); a value handed to the module from outside, plain data, the language's own objects and
  * slothlet's own values come as they are. The same value from the same module is the same stand-in every time.
  * Nothing of the value runs to decide.
- * @param {object} maker - The module's record (see {@link runtime_makerOf}).
+ * @param {object} maker - The module's record (see {@link makerOf}).
  * @param {object} owner - The wrapper a new stand-in runs as.
  * @param {*} value - The value.
  * @returns {*} What is handed out.
  * @private
  */
-function runtime_handOut(maker, owner, value) {
+function handOut(maker, owner, value) {
 	/**
 	 * Whether a value is a promise of the engine's own, with nothing of a module's on it: its prototype is the
 	 * intrinsic one and it has no members of its own that reading what it settles to could reach, so that read runs none
@@ -706,7 +704,7 @@ function runtime_handOut(maker, owner, value) {
 	 * @returns {boolean} True for such a promise.
 	 * @private
 	 */
-	function runtime_isPlainPromise(value) {
+	function isPlainPromise(value) {
 		if (!util.types.isPromise(value) || Reflect.getPrototypeOf(value) !== Promise.prototype) return false;
 		for (let ofIndex = 0, ofList = Reflect.ownKeys(value); ofIndex < ofList.length; ofIndex++) {
 			const key = ofList[ofIndex];
@@ -717,7 +715,7 @@ function runtime_handOut(maker, owner, value) {
 
 	/**
 	 * Whether plain data a module hands out holds a node's own function, or a module's copy of one (see
-	 * {@link runtime_gateLeafCopy}), within the bounds given: plain objects and arrays are looked into, by their
+	 * {@link gateLeafCopy}), within the bounds given: plain objects and arrays are looked into, by their
 	 * descriptors, so nothing of the data runs. Only while the instance's permission system is on: otherwise no call is
 	 * refused, and the data passes as itself.
 	 * @param {object} slothlet - The instance.
@@ -727,7 +725,7 @@ function runtime_handOut(maker, owner, value) {
 	 * @returns {boolean} True when it holds such a function.
 	 * @private
 	 */
-	function runtime_dataHoldsLeafFunction(slothlet, value, depth, budget) {
+	function dataHoldsLeafFunction(slothlet, value, depth, budget) {
 		if (depth <= 0 || !slothlet?.handlers?.permissionManager?.isEnabled?.()) return false;
 		try {
 			if (util.types.isProxy(value)) return false;
@@ -751,8 +749,7 @@ function runtime_handOut(maker, owner, value) {
 						return true;
 					continue;
 				}
-				if (member !== null && typeof member === "object" && runtime_dataHoldsLeafFunction(slothlet, member, depth - 1, budget))
-					return true;
+				if (member !== null && typeof member === "object" && dataHoldsLeafFunction(slothlet, member, depth - 1, budget)) return true;
 			}
 		} catch {
 			// Data that refuses to be described is handed out as it is.
@@ -770,7 +767,7 @@ function runtime_handOut(maker, owner, value) {
 	 * @returns {object} The stand-in, the same one for the same generator and module every time.
 	 * @private
 	 */
-	function runtime_generatorStandIn(maker, owner, original) {
+	function generatorStandIn(maker, owner, original) {
 		const existing = WeakMapMethods.get(maker.made, original);
 		if (existing) return existing;
 		const isAsync = FunctionMethods.call(PrototypeFunctions.Object.isPrototypeOf, GENERATOR_PROTOTYPES.asyncGenerator, original);
@@ -781,19 +778,19 @@ function runtime_handOut(maker, owner, value) {
 		const step = (name) => (value) => {
 			const box = { step: false, done: false };
 			const take = (result) => {
-				box.step = runtime_isStepResult(result);
+				box.step = isStepResult(result);
 				if (!box.step) return result;
 				box.done = result.done;
 				return result.value;
 			};
-			const handed = runtime_runAsMaker(
+			const handed = runAsMaker(
 				owner,
 				(input) => {
 					const result = Reflect.apply(steps[name], original, [input]);
 					return isAsync ? Reflect.apply(SLOT_READERS.then, result, [take]) : take(result);
 				},
 				undefined,
-				[runtime_handIn(maker, value)]
+				[handIn(maker, value)]
 			);
 			const wrap = (given) => (box.step ? { value: given, done: box.done } : given);
 			return isAsync ? Reflect.apply(SLOT_READERS.then, handed, [wrap]) : wrap(handed);
@@ -818,7 +815,7 @@ function runtime_handOut(maker, owner, value) {
 
 	/**
 	 * The stand-in of a promise a module made (#597): a promise settling as it does, with what it settles to — a value or
-	 * a rejection — handed out as the module's (see {@link runtime_handOut}). A promise of a module's own class, or with
+	 * a rejection — handed out as the module's (see {@link handOut}). A promise of a module's own class, or with
 	 * members of its own, is the module's code and is handed out as any other object is.
 	 * @param {object} maker - The module's record.
 	 * @param {object} owner - The wrapper it runs as.
@@ -826,13 +823,13 @@ function runtime_handOut(maker, owner, value) {
 	 * @returns {Promise} The stand-in, the same one for the same promise and module every time.
 	 * @private
 	 */
-	function runtime_promiseStandIn(maker, owner, original) {
+	function promiseStandIn(maker, owner, original) {
 		const existing = WeakMapMethods.get(maker.made, original);
 		if (existing) return existing;
 		const standIn = new Promise((resolve, reject) => {
 			Reflect.apply(SLOT_READERS.then, original, [
-				(value) => resolve(runtime_handOut(maker, owner, value)),
-				(reason) => reject(runtime_handOut(maker, owner, reason))
+				(value) => resolve(handOut(maker, owner, value)),
+				(reason) => reject(handOut(maker, owner, reason))
 			]);
 		});
 		WeakMapMethods.set(maker.made, original, standIn);
@@ -854,7 +851,7 @@ function runtime_handOut(maker, owner, value) {
 	 * @returns {WeakMap<object, object>|null} The leaf's own stand-ins by original, or null.
 	 * @private
 	 */
-	function runtime_ownStandIns(maker, owner, value, made) {
+	function ownStandIns(maker, owner, value, made) {
 		if (typeof value !== "function" || util.types.isProxy(value) || WeakMapMethods.has(trustedRootOwn.implWrappers, value)) return null;
 		const record = WeakMapMethods.get(STAND_IN_RECORDS, made);
 		if (!record || record.maker !== maker || record.original !== value || record.owner === owner) return null;
@@ -866,14 +863,14 @@ function runtime_handOut(maker, owner, value) {
 	}
 
 	/**
-	 * {@link runtime_handOut} for an object or function, without noting where its stand-in goes.
+	 * {@link handOut} for an object or function, without noting where its stand-in goes.
 	 * @param {object} maker - The module's record.
 	 * @param {object} owner - The wrapper a new stand-in runs as.
 	 * @param {object|Function} value - The value.
 	 * @returns {*} What is handed out.
 	 * @private
 	 */
-	function runtime_handOutValue(maker, owner, value) {
+	function handOutValue(maker, owner, value) {
 		const inbound = WeakMapMethods.get(INBOUND_VIEWS, value);
 		if (inbound) return inbound.original;
 		// A crossing view the module was handed is another module's value: handed on as it is, decided for whoever it
@@ -884,12 +881,12 @@ function runtime_handOut(maker, owner, value) {
 		if (handedRecord?.reader === SEALED_SHELL_READER || handedRecord?.reader === PROTOTYPE_HANDLE_READER) return value;
 		// A prototype of a module's class, however the module holds it, is handed out for a holder not known yet: a view
 		// deciding each write when it is made, which a holder reading it through `self` gets as reading it would (#667).
-		const prototype = typeof value === "object" ? runtime_prototypeHandedTo(value, SEALED_SHELL_READER, owner.slothlet) : value;
+		const prototype = typeof value === "object" ? prototypeHandedTo(value, SEALED_SHELL_READER, owner.slothlet) : value;
 		if (prototype !== value) return prototype;
 		if (
-			runtime_isSlothletValue(value) ||
+			isSlothletValue(value) ||
 			WeakSetMethods.has(INTRINSICS, value) ||
-			runtime_isSharedValue(value) ||
+			isSharedValue(value) ||
 			WeakSetMethods.has(maker.handedIn, value)
 		)
 			return value;
@@ -902,56 +899,53 @@ function runtime_handOut(maker, owner, value) {
 		// A function a leaf hands out records that leaf (#726): when another leaf of the module hands the same function out,
 		// it gets a stand-in of its own, so code the stack cannot place on a leaf (a helper file's own function) runs as
 		// the leaf that handed it out, each time.
-		const own = made ? runtime_ownStandIns(maker, owner, value, made) : null;
+		const own = made ? ownStandIns(maker, owner, value, made) : null;
 		if (made && !own) return made;
 		try {
 			if (own) {
 				const mine = WeakMapMethods.get(own, value);
 				if (mine) return mine;
-				if (util.types.isGeneratorFunction(value) || util.types.isAsyncFunction(value))
-					return runtime_kindStandIn(maker, owner, value, own);
-				return runtime_membrane(maker, owner, value, false, own);
+				if (util.types.isGeneratorFunction(value) || util.types.isAsyncFunction(value)) return kindStandIn(maker, owner, value, own);
+				return membrane(maker, owner, value, false, own);
 			}
-			if (util.types.isProxy(value)) return runtime_isModuleProxy(value) ? runtime_membrane(maker, owner, value) : value;
+			if (util.types.isProxy(value)) return isModuleProxy(value) ? membrane(maker, owner, value) : value;
 			if (typeof value === "function") {
 				// The live runtime's `then` over the engine's is the engine's, as a built-in is.
-				if (isFrameworkInternal(value) || runtime_isBuiltinFunction(value) || engineThenOf(value)) return value;
+				if (isFrameworkInternal(value) || isBuiltinFunction(value) || engineThenOf(value)) return value;
 				// A leaf's own function is its module's and runs as that leaf, whichever module handed it out.
 				const leaf = WeakMapMethods.get(trustedRootOwn.implWrappers, value);
 				// Handed out as it is, it is that leaf's node: running it is a call of the node, which whoever runs it has
 				// to be allowed, and it runs with the leaf's rights, as it does when the node is read from `self` (#726).
 				// The node's rules decide its function however it is reached: a module that imports the leaf's file itself
 				// holds a copy of the function, whose stand-in below is checked as a call of the node each time it runs (see
-				// runtime_gateLeafCopy).
+				// gateLeafCopy).
 				const node =
 					leaf && WeakSetMethods.has(trustedRootOwn.genuineWrappers, leaf) && leaf.slothlet === owner.slothlet
 						? leaf.____slothletInternal.proxy
 						: null;
 				if (node && typeof node === "function") return node;
-				const leafMaker = leaf ? runtime_makerOf(leaf) : maker;
+				const leafMaker = leaf ? makerOf(leaf) : maker;
 				if (leafMaker !== maker && WeakMapMethods.has(leafMaker.made, value)) return WeakMapMethods.get(leafMaker.made, value);
-				if (util.types.isGeneratorFunction(value) || util.types.isAsyncFunction(value))
-					return runtime_kindStandIn(leafMaker, leaf ?? owner, value);
-				return runtime_membrane(leafMaker, leaf ?? owner, value);
+				if (util.types.isGeneratorFunction(value) || util.types.isAsyncFunction(value)) return kindStandIn(leafMaker, leaf ?? owner, value);
+				return membrane(leafMaker, leaf ?? owner, value);
 			}
-			if (util.types.isGeneratorObject(value)) return runtime_generatorStandIn(maker, owner, value);
-			if (runtime_isPlainPromise(value)) return runtime_promiseStandIn(maker, owner, value);
+			if (util.types.isGeneratorObject(value)) return generatorStandIn(maker, owner, value);
+			if (isPlainPromise(value)) return promiseStandIn(maker, owner, value);
 			// Only a value that is itself code is a stand-in: data — plain objects and arrays, the language's and Node's own
 			// objects — passes as itself however deep it nests, unsearched, and code nested in it is told by its frames when
 			// it runs (#726).
 			if (owner.slothlet?.config?.permissions?.caller?.provenance !== false) {
-				if (!runtime_isCodeObject(value)) {
+				if (!isCodeObject(value)) {
 					// Data holding a node's own function, or a module's copy of it, is handed out as a view, so a call of the
-					// function read from it is the node's call (see runtime_gateLeafCopy) and not a call of the bare function.
-					if (!runtime_dataHoldsLeafFunction(owner.slothlet, value, searchDepth(owner.slothlet), searchBudget(owner.slothlet)))
-						return value;
+					// function read from it is the node's call (see gateLeafCopy) and not a call of the bare function.
+					if (!dataHoldsLeafFunction(owner.slothlet, value, searchDepth(owner.slothlet), searchBudget(owner.slothlet))) return value;
 				}
-				return runtime_membrane(maker, owner, value);
+				return membrane(maker, owner, value);
 			}
 			// With `provenance` off no frames are read, so nothing would tell code nested in data from its caller's: the
 			// value is searched instead, as far as the code search reaches, and one holding code is handed out as the module's.
-			if (!runtime_holdsCode(value, searchDepth(owner.slothlet), searchBudget(owner.slothlet))) return value;
-			return runtime_membrane(maker, owner, value);
+			if (!holdsCode(value, searchDepth(owner.slothlet), searchBudget(owner.slothlet))) return value;
+			return membrane(maker, owner, value);
 		} catch {
 			// A value that refuses to be described is handed out as it is.
 			return value;
@@ -959,14 +953,14 @@ function runtime_handOut(maker, owner, value) {
 	}
 
 	if (value === null || (typeof value !== "object" && typeof value !== "function")) return value;
-	runtime_noteMoved(value);
-	const handed = runtime_handOutValue(maker, owner, value);
-	if (handed !== value) runtime_noteMoved(handed);
+	noteMoved(value);
+	const handed = handOutValue(maker, owner, value);
+	if (handed !== value) noteMoved(handed);
 	return handed;
 }
 
 /**
- * What a module's call hands its caller (#597): see {@link runtime_handOut}. A prototype of a module's class returned
+ * What a module's call hands its caller (#597): see {@link handOut}. A prototype of a module's class returned
  * to the host is the object itself, as the host reading it gets it (#667): the call's caller receives the value, and
  * here it is known.
  * @param {object} owner - The wrapper whose call returned the value.
@@ -978,11 +972,11 @@ function runtime_handOut(maker, owner, value) {
  * @returns {*} What the caller gets.
  * @private
  */
-function runtime_attributeResult(owner, value, callerIsHost = false, caller = null, receiver = null) {
+function attributeResult(owner, value, callerIsHost = false, caller = null, receiver = null) {
 	/**
 	 * Whether an instance a module constructs through a node is handed out as the node's module's, under `"fast"` as under
 	 * `"precise"`: its `constructor` is the node's function, whose members the rules could refuse the module a read of
-	 * (see {@link runtime_constructorReadMayRefuse}), so the instance has to hand back the node, not the function. The host
+	 * (see {@link constructorReadMayRefuse}), so the instance has to hand back the node, not the function. The host
 	 * constructing, and a module no read beneath the node could be refused to, get the instance itself.
 	 * @param {object} wrapper - The node's wrapper.
 	 * @returns {boolean} True when the instance is handed out as the module's.
@@ -990,27 +984,27 @@ function runtime_attributeResult(owner, value, callerIsHost = false, caller = nu
 	 */
 	/**
 	 * Whether an object's prototype chain holds a `constructor` that is a function an api node stands for whose members
-	 * the rules could refuse `reader` a read of (see {@link runtime_constructorReadMayRefuse}). Found by descriptors alone.
+	 * the rules could refuse `reader` a read of (see {@link constructorReadMayRefuse}). Found by descriptors alone.
 	 * @param {object} slothlet - The instance.
 	 * @param {object|null} reader - The module the object reaches.
 	 * @param {object} value - The object.
 	 * @returns {boolean} True when a read could be refused.
 	 * @private
 	 */
-	function runtime_instanceReadMayRefuse(slothlet, reader, value) {
+	function instanceReadMayRefuse(slothlet, reader, value) {
 		if (!reader?.____slothletInternal) return false;
 		const readerPath = String(reader.____slothletInternal.apiPath ?? "");
 		for (let link = Reflect.getPrototypeOf(value), depth = 0; link !== null && depth < 64; depth++) {
 			// A Proxy on the chain runs code of its own to answer: what lies beyond it cannot be told without running it.
 			if (util.types.isProxy(link)) return false;
-			if (runtime_constructorReadMayRefuse(slothlet, readerPath, link)) return true;
+			if (constructorReadMayRefuse(slothlet, readerPath, link)) return true;
 			link = Reflect.getPrototypeOf(link);
 		}
 		return false;
 	}
 
 	/**
-	 * {@link runtime_attributeResult} once the receiver is set.
+	 * {@link attributeResult} once the receiver is set.
 	 * @param {object} owner - The wrapper whose call returned the value.
 	 * @param {object|Function} value - What the call returned.
 	 * @param {boolean} callerIsHost - Whether the host made the call.
@@ -1018,36 +1012,34 @@ function runtime_attributeResult(owner, value, callerIsHost = false, caller = nu
 	 * @returns {*} What the caller gets.
 	 * @private
 	 */
-	function runtime_attributeResultTo(owner, value, callerIsHost, caller) {
+	function attributeResultTo(owner, value, callerIsHost, caller) {
 		if (callerIsHost && typeof value === "object") {
-			const behind = runtime_behindMemberView(value);
-			if (runtime_knownPrototype(owner.slothlet, behind) !== undefined) return behind;
+			const behind = behindMemberView(value);
+			if (knownPrototype(owner.slothlet, behind) !== undefined) return behind;
 		}
 		const toModule = !callerIsHost && Boolean(caller?.____slothletInternal);
 		// A crossing view the module was handed and hands back stands for another module's value: the host gets that value,
 		// a module gets it as the guard decides for it.
-		if (WeakMapMethods.has(CROSSINGS, value))
-			return toModule ? runtime_crossTo(value, caller, owner.slothlet, owner) : runtime_uncross(value);
+		if (WeakMapMethods.has(CROSSINGS, value)) return toModule ? crossTo(value, caller, owner.slothlet, owner) : uncross(value);
 		let handed = value;
 		if (!handsOutAsModule(owner)) {
-			if (!runtime_permissionsOn(owner)) return value;
+			if (!permissionsOn(owner)) return value;
 			// `"fast"` wraps nothing it hands out, but a node's own Proxy export handed back is still that node's member, run
 			// as a call of the node, as under `"precise"` (#726).
-			if (util.types.isProxy(value)) handed = WeakMapMethods.get(runtime_makerOf(owner).made, value) ?? value;
+			if (util.types.isProxy(value)) handed = WeakMapMethods.get(makerOf(owner).made, value) ?? value;
 			// An instance whose `constructor` is a function an api node stands for, whose members the rules could refuse the
 			// module it reaches, is the module's, as under `"precise"`: its `constructor` is then that node.
-			else if (toModule && typeof value === "object" && runtime_instanceReadMayRefuse(owner.slothlet, caller, value))
-				handed = runtime_handOut(runtime_makerOf(owner), owner, value);
-		} else handed = runtime_handOut(runtime_makerOf(owner), owner, value);
+			else if (toModule && typeof value === "object" && instanceReadMayRefuse(owner.slothlet, caller, value))
+				handed = handOut(makerOf(owner), owner, value);
+		} else handed = handOut(makerOf(owner), owner, value);
 		// What a module's call hands another module, a stand-in of its code included, reaches it through the class prototype
 		// guard.
-		if (toModule) return runtime_crossTo(handed, caller, owner.slothlet, owner);
+		if (toModule) return crossTo(handed, caller, owner.slothlet, owner);
 		// The host holds it as it is; where it came from is kept for when the host hands it on.
-		if (runtime_permissionsOn(owner) && !WeakMapMethods.has(HOST_HANDED, handed) && !runtime_isShared(handed)) {
+		if (permissionsOn(owner) && !WeakMapMethods.has(HOST_HANDED, handed) && !isShared(handed)) {
 			WeakMapMethods.set(HOST_HANDED, handed, owner);
 			// The value a stand-in stands for is what the module itself holds once the host hands the stand-in back to it.
-			if (handed !== value && !WeakMapMethods.has(HOST_HANDED, value) && !runtime_isShared(value))
-				WeakMapMethods.set(HOST_HANDED, value, owner);
+			if (handed !== value && !WeakMapMethods.has(HOST_HANDED, value) && !isShared(value)) WeakMapMethods.set(HOST_HANDED, value, owner);
 		}
 		return handed;
 	}
@@ -1057,8 +1049,8 @@ function runtime_attributeResult(owner, value, callerIsHost = false, caller = nu
 	const previous = handOutReceiver;
 	handOutReceiver = !callerIsHost && caller?.____slothletInternal ? receiver : null;
 	try {
-		runtime_noteMoved(value);
-		return runtime_attributeResultTo(owner, value, callerIsHost, caller);
+		noteMoved(value);
+		return attributeResultTo(owner, value, callerIsHost, caller);
 	} finally {
 		handOutReceiver = previous;
 	}
@@ -1067,7 +1059,7 @@ function runtime_attributeResult(owner, value, callerIsHost = false, caller = nu
 /**
  * What a module is handed (#597): a stand-in of its own value comes back as the value itself, as in plain
  * JavaScript; a caller's plain array or object holding such stand-ins comes as a view showing them as the module's
- * values (see {@link runtime_inboundView}); anything else as it is, recorded as handed to the module, so the module
+ * values (see {@link inboundView}); anything else as it is, recorded as handed to the module, so the module
  * handing it back hands back the very value.
  * @param {object} maker - The module's record.
  * @param {*} value - The value.
@@ -1075,9 +1067,9 @@ function runtime_attributeResult(owner, value, callerIsHost = false, caller = nu
  * @returns {*} What the module gets.
  * @private
  */
-function runtime_handIn(maker, value, owner = maker.owner) {
+function handIn(maker, value, owner = maker.owner) {
 	/**
-	 * What a module is handed for a node's own function, or a module's copy of one (see {@link runtime_gateLeafCopy}),
+	 * What a module is handed for a node's own function, or a module's copy of one (see {@link gateLeafCopy}),
 	 * another module passes it: the node, for the node's own function (as handing it out gives, #726), and for a copy a
 	 * stand-in checked as a call of the node each time it runs. Null when the function is neither, belongs to the
 	 * receiving module itself, or the permission system is off or disabled: the function is then handed in as it is.
@@ -1087,22 +1079,21 @@ function runtime_handIn(maker, value, owner = maker.owner) {
 	 * @returns {Function|null} What the module gets, or null.
 	 * @private
 	 */
-	function runtime_leafFunctionHandedIn(maker, owner, value) {
+	function leafFunctionHandedIn(maker, owner, value) {
 		const slothlet = owner?.slothlet ?? maker?.owner?.slothlet;
 		if (!slothlet?.handlers?.permissionManager?.isEnabled?.() || util.types.isProxy(value)) return null;
 		const leaf = WeakMapMethods.get(trustedRootOwn.implWrappers, value);
 		if (leaf !== undefined) {
-			if (!WeakSetMethods.has(trustedRootOwn.genuineWrappers, leaf) || leaf.slothlet !== slothlet || runtime_makerOf(leaf) === maker)
-				return null;
+			if (!WeakSetMethods.has(trustedRootOwn.genuineWrappers, leaf) || leaf.slothlet !== slothlet || makerOf(leaf) === maker) return null;
 			const node = leaf.____slothletInternal.proxy;
 			return typeof node === "function" ? node : null;
 		}
 		const node = leafOfCopy(slothlet, value);
 		if (node === null) return null;
-		const nodeMaker = runtime_makerOf(node);
+		const nodeMaker = makerOf(node);
 		if (nodeMaker === maker) return null;
-		if (util.types.isGeneratorFunction(value) || util.types.isAsyncFunction(value)) return runtime_kindStandIn(nodeMaker, node, value);
-		return runtime_membrane(nodeMaker, node, value);
+		if (util.types.isGeneratorFunction(value) || util.types.isAsyncFunction(value)) return kindStandIn(nodeMaker, node, value);
+		return membrane(nodeMaker, node, value);
 	}
 
 	if (value === null || (typeof value !== "object" && typeof value !== "function")) return value;
@@ -1114,42 +1105,42 @@ function runtime_handIn(maker, value, owner = maker.owner) {
 		const own = WeakMapMethods.get(STAND_IN_RECORDS, behind) ?? WeakMapMethods.get(INBOUND_VIEWS, behind);
 		if (own?.maker === maker) return own.original;
 		if (WeakMapMethods.has(maker.made, behind)) return behind;
-		runtime_noteMoved(value);
-		return runtime_crossTo(value, owner, crossing.slothlet, crossing.from);
+		noteMoved(value);
+		return crossTo(value, owner, crossing.slothlet, crossing.from);
 	}
 	const record = WeakMapMethods.get(STAND_IN_RECORDS, value) ?? WeakMapMethods.get(INBOUND_VIEWS, value);
 	// Back with the module that made it (a method's receiver, say), a stand-in is its value again: it went nowhere new.
 	if (record?.maker === maker) return record.original;
-	runtime_noteMoved(value);
+	noteMoved(value);
 	if (record) return value;
-	if (runtime_isSlothletValue(value) || WeakSetMethods.has(INTRINSICS, value)) return value;
+	if (isSlothletValue(value) || WeakSetMethods.has(INTRINSICS, value)) return value;
 	if (WeakMapMethods.has(maker.made, value)) return value;
 	// A node's own function, or a module's copy of it, reaches another module as a call of the node.
 	if (typeof value === "function") {
-		const asNode = runtime_leafFunctionHandedIn(maker, owner, value);
+		const asNode = leafFunctionHandedIn(maker, owner, value);
 		if (asNode !== null) return asNode;
 	}
 	// A prototype of a module's, or plain data holding one, reaches this one as reading it would (#667).
-	const carried = runtime_carryTo(value, owner, owner?.slothlet ?? null);
+	const carried = carryTo(value, owner, owner?.slothlet ?? null);
 	if (carried !== value) return carried;
 	WeakSetMethods.add(maker.handedIn, value);
-	return runtime_inboundView(maker, value, owner);
+	return inboundView(maker, value, owner);
 }
 
 /**
- * Hand a list of arguments to a module (see {@link runtime_handIn}).
+ * Hand a list of arguments to a module (see {@link handIn}).
  * @param {object} maker - The module's record.
  * @param {ArrayLike<*>} args - The arguments.
  * @param {object} [owner] - The wrapper of the module's leaf they are handed to.
  * @returns {Array<*>|ArrayLike<*>} The arguments, the same list when nothing changed.
  * @private
  */
-function runtime_handInAll(maker, args, owner = maker.owner) {
+function handInAll(maker, args, owner = maker.owner) {
 	let result = args;
 	const count = args?.length ?? 0;
 	for (let index = 0; index < count; index++) {
 		const value = args[index];
-		const handed = runtime_handIn(maker, value, owner);
+		const handed = handIn(maker, value, owner);
 		if (handed === value) continue;
 		if (result === args) result = copyList(args);
 		result[index] = handed;
@@ -1175,7 +1166,7 @@ const INBOUND_BY_MAKER = new WeakMap();
  * @returns {object|Function} What the module gets.
  * @private
  */
-function runtime_inboundView(maker, value, owner = maker.owner) {
+function inboundView(maker, value, owner = maker.owner) {
 	/**
 	 * Whether a caller's plain array or object holds a stand-in of the module's own, within the code search ({@link searchDepth}).
 	 * @param {object} maker - The module's record.
@@ -1185,7 +1176,7 @@ function runtime_inboundView(maker, value, owner = maker.owner) {
 	 * @returns {boolean} True when it does.
 	 * @private
 	 */
-	function runtime_holdsOwnStandIn(maker, value, depth, budget) {
+	function holdsOwnStandIn(maker, value, depth, budget) {
 		if (depth <= 0 || util.types.isProxy(value)) return false;
 		const prototype = Reflect.getPrototypeOf(value);
 		if (prototype !== Objects.prototype && prototype !== Arrays.prototype && prototype !== null) return false;
@@ -1198,7 +1189,7 @@ function runtime_inboundView(maker, value, owner = maker.owner) {
 			const member = Reflect.getOwnPropertyDescriptor(value, key)?.value;
 			if (member === null || (typeof member !== "object" && typeof member !== "function")) continue;
 			if (WeakMapMethods.get(STAND_IN_RECORDS, member)?.maker === maker) return true;
-			if (typeof member === "object" && runtime_holdsOwnStandIn(maker, member, depth - 1, budget)) return true;
+			if (typeof member === "object" && holdsOwnStandIn(maker, member, depth - 1, budget)) return true;
 		}
 		return false;
 	}
@@ -1208,27 +1199,27 @@ function runtime_inboundView(maker, value, owner = maker.owner) {
 	const existing = views == null ? undefined : WeakMapMethods.get(views, value);
 	if (existing) return existing;
 	try {
-		if (!runtime_holdsOwnStandIn(maker, value, searchDepth(owner?.slothlet), searchBudget(owner?.slothlet))) return value;
+		if (!holdsOwnStandIn(maker, value, searchDepth(owner?.slothlet), searchBudget(owner?.slothlet))) return value;
 	} catch {
 		return value;
 	}
 	const fixed = (target, prop) => Reflect.getOwnPropertyDescriptor(target, prop)?.configurable === false;
-	const inward = (target, prop, member) => (fixed(target, prop) ? member : runtime_handIn(maker, member));
+	const inward = (target, prop, member) => (fixed(target, prop) ? member : handIn(maker, member));
 	const view = new NativeProxy(value, {
 		get: (target, prop, receiver) => inward(target, prop, Reflect.get(target, prop, receiver === view ? target : receiver)),
 		set: (target, prop, next, receiver) =>
-			Reflect.set(target, prop, runtime_handOut(maker, runtime_runningLeafOf(maker, owner), next), receiver === view ? target : receiver),
+			Reflect.set(target, prop, handOut(maker, runningLeafOf(maker, owner), next), receiver === view ? target : receiver),
 		getOwnPropertyDescriptor: (target, prop) => {
 			const descriptor = Reflect.getOwnPropertyDescriptor(target, prop);
 			if (!descriptor || !("value" in descriptor) || !descriptor.configurable) return descriptor;
-			return { __proto__: null, ...descriptor, value: runtime_handIn(maker, descriptor.value) };
+			return { __proto__: null, ...descriptor, value: handIn(maker, descriptor.value) };
 		},
 		defineProperty: (target, prop, descriptor) =>
 			Reflect.defineProperty(
 				target,
 				prop,
 				"value" in descriptor
-					? { __proto__: null, ...descriptor, value: runtime_handOut(maker, runtime_runningLeafOf(maker, owner), descriptor.value) }
+					? { __proto__: null, ...descriptor, value: handOut(maker, runningLeafOf(maker, owner), descriptor.value) }
 					: descriptor
 			)
 	});
@@ -1247,12 +1238,12 @@ const SOURCES = new WeakMap();
 
 /**
  * The stand-in of a module's function, Proxy or object holding code (#597): the value itself to every reflection,
- * a membrane whose code runs as the module that made it (see {@link runtime_runAsMaker}) whoever runs it. Calling
+ * a membrane whose code runs as the module that made it (see {@link runAsMaker}) whoever runs it. Calling
  * or constructing it runs the original as the module; reading a member runs the module's getter as the module and
- * hands the member out as the module's (see {@link runtime_handOut}), so a function in a returned object, a getter,
+ * hands the member out as the module's (see {@link handOut}), so a function in a returned object, a getter,
  * a `then`, an iterator, a static method, a prototype's method are all the module's; a module's own Proxy has every
  * trap run as the module. What is handed in through it — arguments, a receiver, a value written — is handed to the
- * module (see {@link runtime_handIn}).
+ * module (see {@link handIn}).
  *
  * The Proxy is built over a shadow, kept in step with the original for what the language fixes (a member that
  * cannot be reconfigured, an object that cannot be extended), so a member the original holds fixed is still handed
@@ -1262,29 +1253,27 @@ const SOURCES = new WeakMap();
  * @param {Function|object} original - The value.
  * @param {boolean} [asNode=false] - Run its code as a call of its node, under no ceiling of its caller (#726).
  * @param {WeakMap<object, object>} [made=maker.made] - Where the stand-in is kept: the module's, or a leaf's own (see
- *   {@link runtime_ownStandIns}).
+ *   {@link ownStandIns}).
  * @returns {Function|object} The stand-in, the same one for the same value and module every time.
  * @private
  */
-function runtime_membrane(maker, owner, original, asNode = false, made = maker.made) {
+function membrane(maker, owner, original, asNode = false, made = maker.made) {
 	// A node's own value (a Proxy export) is checked as a call of its node, so it runs as one: under no ceiling of its
 	// caller's. A value handed out runs under whoever runs it (#726).
-	const runAs = (who, fn, thisArg = undefined, args = [], attribute = true) =>
-		runtime_runAsMaker(who, fn, thisArg, args, attribute, asNode);
+	const runAs = (who, fn, thisArg = undefined, args = [], attribute = true) => runAsMaker(who, fn, thisArg, args, attribute, asNode);
 	const existing = WeakMapMethods.get(made, original);
 	if (existing) return existing;
 	const isProxy = util.types.isProxy(original);
 	const isFunction = typeof original === "function";
-	// An object with internal slots carrying the module's code (see runtime_slotHoldsCode), or one of the language's own
+	// An object with internal slots carrying the module's code (see slotHoldsCode), or one of the language's own
 	// iterators: the engine's own methods it is read for work on its slots, so they run on the object itself, not on its
 	// stand-in.
-	const isSlot = !isProxy && !isFunction && (runtime_isSlotObject(original) || runtime_isNativeIterator(original));
+	const isSlot = !isProxy && !isFunction && (isSlotObject(original) || isNativeIterator(original));
 	// A compiled script of the module's: what its methods run is the module's code.
 	const isScript =
 		!isProxy &&
 		!isFunction &&
-		((VM_SCRIPT !== null && runtime_inherits(original, VM_SCRIPT)) ||
-			(VM_NATIVE_SCRIPT !== null && runtime_inherits(original, VM_NATIVE_SCRIPT)));
+		((VM_SCRIPT !== null && inherits(original, VM_SCRIPT)) || (VM_NATIVE_SCRIPT !== null && inherits(original, VM_NATIVE_SCRIPT)));
 	/**
 	 * The engine's methods as read from the stand-in, the same each read.
 	 * @type {WeakMap<Function, Function>}
@@ -1295,7 +1284,7 @@ function runtime_membrane(maker, owner, original, asNode = false, made = maker.m
 	 * to the object: a callback gets each of those values handed out as the module's, and the object as its stand-in.
 	 */
 	const slotArgument = (arg) => {
-		if (typeof arg !== "function") return runtime_handIn(maker, arg);
+		if (typeof arg !== "function") return handIn(maker, arg);
 		return function (...values) {
 			return Reflect.apply(
 				arg,
@@ -1315,23 +1304,23 @@ function runtime_membrane(maker, owner, original, asNode = false, made = maker.m
 		const engine = engineThenOf(value) ?? value;
 		if (!(isSlot || isScript)) {
 			// Any other object: only a binding's method, which reads nothing of the object a module's code could run in.
-			if (!runtime_isBindingMethod(engine, holder)) return value;
+			if (!isBindingMethod(engine, holder)) return value;
 		}
 		// A script's methods are Node's own, written in JavaScript.
-		else if (!runtime_isBuiltinFunction(engine) && !(isScript && isSharedExport(engine))) return value;
+		else if (!isBuiltinFunction(engine) && !(isScript && isSharedExport(engine))) return value;
 		let method = WeakMapMethods.get(slotMethods, value);
 		if (!method) {
 			const name = engine.name;
 			method = {
 				[name](...args) {
 					if (this !== standIn) return Reflect.apply(value, this, args);
-					if (isScript) return runAs(owner, value, original, runtime_handInAll(maker, args));
+					if (isScript) return runAs(owner, value, original, handInAll(maker, args));
 					const callsBack = SetMethods.has(SLOT_CALLBACK_METHODS, engine);
 					return out(
 						Reflect.apply(
 							value,
 							original,
-							mapList(args, (arg) => (callsBack ? slotArgument(arg) : runtime_handIn(maker, arg)))
+							mapList(args, (arg) => (callsBack ? slotArgument(arg) : handIn(maker, arg)))
 						)
 					);
 				}
@@ -1341,7 +1330,7 @@ function runtime_membrane(maker, owner, original, asNode = false, made = maker.m
 		return method;
 	};
 	const shadow = isFunction
-		? runtime_isConstructor(original)
+		? isConstructor(original)
 			? FunctionMethods.bind(function () {}, null)
 			: () => {}
 		: Arrays.isArray(original)
@@ -1363,7 +1352,7 @@ function runtime_membrane(maker, owner, original, asNode = false, made = maker.m
 	};
 	/** Run an operation on the original: as the module for its own Proxy. */
 	const exec = isProxy ? (operation) => asMaker(operation, false) : (operation) => operation();
-	const out = (value) => runtime_handOut(maker, owner, value);
+	const out = (value) => handOut(maker, owner, value);
 	/**
 	 * This object's own stand-ins of the methods read through it (D1), made when first read.
 	 * @type {WeakMap<Function, Function>|null}
@@ -1371,7 +1360,7 @@ function runtime_membrane(maker, owner, original, asNode = false, made = maker.m
 	let methods = null;
 	/**
 	 * A function read through this object's stand-in: when it would be handed out as a stand-in of its own, the object's
-	 * own stand-in of it, which records the object (see runtime_callOrigin). Only a method (a function with no
+	 * own stand-in of it, which records the object (see callOrigin). Only a method (a function with no
 	 * `prototype` of its own, or a generator) is: a class, a constructor function and the `constructor` member keep the
 	 * stand-in every holder shares, as do the members of a node's value, a function and a Proxy.
 	 */
@@ -1388,13 +1377,13 @@ function runtime_membrane(maker, owner, original, asNode = false, made = maker.m
 		if (existing) return existing;
 		const own =
 			util.types.isGeneratorFunction(value) || util.types.isAsyncFunction(value)
-				? runtime_kindStandIn(record.maker, record.owner, value, methods)
-				: runtime_membrane(record.maker, record.owner, value, false, methods);
+				? kindStandIn(record.maker, record.owner, value, methods)
+				: membrane(record.maker, record.owner, value, false, methods);
 		WeakMapMethods.set(METHOD_RECEIVERS, own, { instance: original, holder: standIn });
 		return own;
 	};
 	/** The receiver a reflection is made through: the stand-in or another of the module's is the value behind it. */
-	const receiverOf = (receiver) => (receiver === standIn ? original : runtime_handIn(maker, receiver));
+	const receiverOf = (receiver) => (receiver === standIn ? original : handIn(maker, receiver));
 	/**
 	 * The class a prototype is the `prototype` of, read by descriptors alone, or null.
 	 * @param {object} prototype - An object that is not a Proxy.
@@ -1418,15 +1407,15 @@ function runtime_membrane(maker, owner, original, asNode = false, made = maker.m
 		if (prototype === null || typeof prototype !== "object" || util.types.isProxy(prototype)) return out(prototype);
 		const owned = classOf(prototype);
 		// While the permission system is on, it is checked for whoever writes through it (the class prototype guard).
-		if (!owned || WeakMapMethods.has(maker.made, owned)) return runtime_atClassSite(owner.slothlet, out(prototype));
+		if (!owned || WeakMapMethods.has(maker.made, owned)) return atClassSite(owner.slothlet, out(prototype));
 		// One handed to the module (a subclass's, constructed for) is not the module's. An instance reports one prototype:
 		// the handle at its class's own name (#667), as an instance a node holds does.
 		if (WeakSetMethods.has(maker.handedIn, prototype)) return prototype;
 		// The prototype of a class a node exports is what reading the class's `prototype` gives the code asking, decided
 		// for that file: another file of the module may be refused what the class holds (a deny on its member).
-		if (runtime_knownPrototype(owner.slothlet, prototype) !== undefined)
-			return runtime_atClassSite(owner.slothlet, runtime_prototypeHandedTo(prototype, reader, owner.slothlet));
-		return runtime_atClassSite(owner.slothlet, runtime_crossTo(prototype, reader, owner.slothlet, owner));
+		if (knownPrototype(owner.slothlet, prototype) !== undefined)
+			return atClassSite(owner.slothlet, prototypeHandedTo(prototype, reader, owner.slothlet));
+		return atClassSite(owner.slothlet, crossTo(prototype, reader, owner.slothlet, owner));
 	};
 	/** A descriptor of the original's, as the stand-in reports it. */
 	const reported = (descriptor, holderIsMade = true) => {
@@ -1480,7 +1469,7 @@ function runtime_membrane(maker, owner, original, asNode = false, made = maker.m
 	const read = (prop, receiver) => {
 		for (let holder = original, depth = 0; holder !== null && holder !== undefined && depth < 64; depth++) {
 			if (util.types.isProxy(holder)) {
-				if (!runtime_isModuleProxy(holder)) return Reflect.get(holder, prop, receiver);
+				if (!isModuleProxy(holder)) return Reflect.get(holder, prop, receiver);
 				return runAs(owner, () => Reflect.get(holder, prop, receiver));
 			}
 			const descriptor = Reflect.getOwnPropertyDescriptor(holder, prop);
@@ -1489,29 +1478,21 @@ function runtime_membrane(maker, owner, original, asNode = false, made = maker.m
 				const holderIsMade = holder === original || !WeakSetMethods.has(maker.handedIn, holder);
 				if (!("value" in descriptor)) {
 					if (typeof descriptor.get !== "function") return undefined;
-					if (!holderIsMade || runtime_isBuiltinFunction(descriptor.get)) {
+					if (!holderIsMade || isBuiltinFunction(descriptor.get)) {
 						const value = Reflect.apply(descriptor.get, receiver, []);
 						return holderIsMade ? out(value) : value;
 					}
-					// A getter read on this object answers for it as its methods do (see runtime_callOrigin).
-					return runtime_runAsMaker(
-						owner,
-						descriptor.get,
-						receiver,
-						[],
-						true,
-						asNode,
-						receiver === original ? runtime_originOf(standIn) : null
-					);
+					// A getter read on this object answers for it as its methods do (see callOrigin).
+					return runAsMaker(owner, descriptor.get, receiver, [], true, asNode, receiver === original ? originOf(standIn) : null);
 				}
 				const value = descriptor.value;
 				// A native binding's method needs the object itself as its receiver, whether or not its holder was handed in (#708).
-				if (!isSlot && !isScript && typeof value === "function" && runtime_isBindingMethod(value, holder)) return slotMethod(value, holder);
+				if (!isSlot && !isScript && typeof value === "function" && isBindingMethod(value, holder)) return slotMethod(value, holder);
 				if (!holderIsMade) return value;
 				// A class's `constructor` is the class as it is unless the module handed the class out (see prototypeOut).
 				// One an api node stands for is that node, whose members are read under its own rules.
 				if (prop === "constructor" && typeof value === "function" && classOf(holder) === value && !WeakMapMethods.has(maker.made, value))
-					return runtime_frontingNodeNow(owner.slothlet, value) ?? runtime_crossTo(value, SEALED_SHELL_READER, owner.slothlet, owner);
+					return frontingNodeNow(owner.slothlet, value) ?? crossTo(value, SEALED_SHELL_READER, owner.slothlet, owner);
 				if ((value === functionToString || isFunctionSourcePatch(value)) && isFunction) {
 					let source = WeakMapMethods.get(SOURCES, original);
 					if (!source) {
@@ -1530,14 +1511,14 @@ function runtime_membrane(maker, owner, original, asNode = false, made = maker.m
 	const write = (prop, value, receiver) => {
 		for (let holder = original, depth = 0; holder !== null && holder !== undefined && depth < 64; depth++) {
 			if (util.types.isProxy(holder)) {
-				if (!runtime_isModuleProxy(holder)) return Reflect.set(holder, prop, value, receiver);
+				if (!isModuleProxy(holder)) return Reflect.set(holder, prop, value, receiver);
 				return runAs(owner, () => Reflect.set(holder, prop, value, receiver), undefined, [], false);
 			}
 			const descriptor = Reflect.getOwnPropertyDescriptor(holder, prop);
 			if (descriptor) {
 				if ("value" in descriptor) break;
 				if (typeof descriptor.set !== "function") return false;
-				if (WeakSetMethods.has(maker.handedIn, holder) || runtime_isBuiltinFunction(descriptor.set))
+				if (WeakSetMethods.has(maker.handedIn, holder) || isBuiltinFunction(descriptor.set))
 					Reflect.apply(descriptor.set, receiver, [value]);
 				else runAs(owner, descriptor.set, receiver, [value], false);
 				return true;
@@ -1549,25 +1530,20 @@ function runtime_membrane(maker, owner, original, asNode = false, made = maker.m
 	const handler = {
 		apply: (_shadow, thisArg, args) => {
 			const receiver = receiverOf(thisArg);
-			runtime_gateLeafCopy(owner.slothlet, original, args, receiver);
-			const handed = runtime_handInAll(maker, args);
-			return runtime_runAsMaker(owner, original, receiver, handed, true, asNode, runtime_callOrigin(standIn, receiver));
+			gateLeafCopy(owner.slothlet, original, args, receiver);
+			const handed = handInAll(maker, args);
+			return runAsMaker(owner, original, receiver, handed, true, asNode, callOrigin(standIn, receiver));
 		},
 		construct: (_shadow, args, newTarget) => {
-			runtime_gateLeafCopy(owner.slothlet, original, args, undefined);
-			const target = newTarget === standIn ? original : runtime_handIn(maker, newTarget);
+			gateLeafCopy(owner.slothlet, original, args, undefined);
+			const target = newTarget === standIn ? original : handIn(maker, newTarget);
 			// A subclass's prototype is the subclass's, never the module's.
 			if (target !== original && typeof target === "function") {
 				const prototype = Reflect.getOwnPropertyDescriptor(target, "prototype")?.value;
 				if (prototype !== null && typeof prototype === "object" && !WeakMapMethods.has(STAND_IN_RECORDS, prototype))
 					WeakSetMethods.add(maker.handedIn, prototype);
 			}
-			return runAs(
-				owner,
-				(...constructArgs) => Reflect.construct(original, constructArgs, target),
-				undefined,
-				runtime_handInAll(maker, args)
-			);
+			return runAs(owner, (...constructArgs) => Reflect.construct(original, constructArgs, target), undefined, handInAll(maker, args));
 		},
 		get: (_shadow, prop, receiver) => {
 			const from = receiverOf(receiver);
@@ -1579,18 +1555,18 @@ function runtime_membrane(maker, owner, original, asNode = false, made = maker.m
 			const own = Reflect.getOwnPropertyDescriptor(original, prop);
 			if (own && !own.configurable) sync(prop, reported(own));
 			// A private member the instance inherits from a module's prototype is read as through that prototype.
-			runtime_inheritedPrivate(owner.slothlet, original, prop)?.refusePrivate(prop);
+			inheritedPrivate(owner.slothlet, original, prop)?.refusePrivate(prop);
 			return fixedValue(prop, slotMethod(read(prop, from), null));
 		},
 		set: (_shadow, prop, value, receiver) => {
-			const into = runtime_handIn(maker, value);
+			const into = handIn(maker, value);
 			const from = receiverOf(receiver);
 			const done = isProxy ? asMaker(() => Reflect.set(original, prop, into, from), false) : write(prop, into, from);
 			if (from === original) sync(prop, reported(exec(() => Reflect.getOwnPropertyDescriptor(original, prop))));
 			return done;
 		},
 		has: (_shadow, prop) => {
-			if (runtime_inheritedPrivate(owner.slothlet, original, prop)?.privateHidden(prop)) return false;
+			if (inheritedPrivate(owner.slothlet, original, prop)?.privateHidden(prop)) return false;
 			return exec(() => Reflect.has(original, prop));
 		},
 		deleteProperty: (_shadow, prop) => {
@@ -1625,9 +1601,9 @@ function runtime_membrane(maker, owner, original, asNode = false, made = maker.m
 		},
 		defineProperty: (_shadow, prop, descriptor) => {
 			const into = { ...descriptor };
-			if ("value" in descriptor) into.value = runtime_handIn(maker, descriptor.value);
-			if ("get" in descriptor) into.get = runtime_handIn(maker, descriptor.get);
-			if ("set" in descriptor) into.set = runtime_handIn(maker, descriptor.set);
+			if ("value" in descriptor) into.value = handIn(maker, descriptor.value);
+			if ("get" in descriptor) into.get = handIn(maker, descriptor.get);
+			if ("set" in descriptor) into.set = handIn(maker, descriptor.set);
 			const done = exec(() => Reflect.defineProperty(original, prop, into));
 			if (done) sync(prop, reported(exec(() => Reflect.getOwnPropertyDescriptor(original, prop))));
 			return done;
@@ -1637,12 +1613,12 @@ function runtime_membrane(maker, owner, original, asNode = false, made = maker.m
 			// Reported to the code asking, as reading the class's `prototype` hands it to that code.
 			return prototypeOut(
 				exec(() => Reflect.getPrototypeOf(original)),
-				runtime_selfReader(owner.slothlet)
+				selfReader(owner.slothlet)
 			);
 		},
 		setPrototypeOf: (_shadow, prototype) => {
 			if (!Reflect.isExtensible(shadow)) return Reflect.getPrototypeOf(shadow) === prototype;
-			return exec(() => Reflect.setPrototypeOf(original, runtime_handIn(maker, prototype)));
+			return exec(() => Reflect.setPrototypeOf(original, handIn(maker, prototype)));
 		},
 		isExtensible: () => {
 			const extensible = exec(() => Reflect.isExtensible(original));
@@ -1658,7 +1634,7 @@ function runtime_membrane(maker, owner, original, asNode = false, made = maker.m
 	standIn = new NativeProxy(shadow, handler);
 	WeakMapMethods.set(made, original, standIn);
 	WeakMapMethods.set(STAND_IN_RECORDS, standIn, { maker, owner, original });
-	if (!asNode) runtime_recordStandInOrigin(standIn);
+	if (!asNode) recordStandInOrigin(standIn);
 	// A leaf's own function stays recognisable as that leaf when it is handed over (see handedLeafFunctions).
 	const leaf = WeakMapMethods.get(trustedRootOwn.implWrappers, original);
 	if (leaf) WeakMapMethods.set(trustedRootOwn.implWrappers, standIn, leaf);
@@ -1673,18 +1649,18 @@ function runtime_membrane(maker, owner, original, asNode = false, made = maker.m
  * @param {object} owner - The wrapper it runs as.
  * @param {Function} original - The function.
  * @param {WeakMap<object, object>} [made=maker.made] - Where the stand-in is kept: the module's, or a leaf's own (see
- *   {@link runtime_ownStandIns}).
+ *   {@link ownStandIns}).
  * @returns {Function} The stand-in, the same one for the same function and module every time.
  * @private
  */
-function runtime_kindStandIn(maker, owner, original, made = maker.made) {
+function kindStandIn(maker, owner, original, made = maker.made) {
 	const existing = WeakMapMethods.get(made, original);
 	if (existing) return existing;
 	const run = (thisArg, args) => {
-		const receiver = runtime_handIn(maker, thisArg);
-		runtime_gateLeafCopy(owner.slothlet, original, args, receiver);
-		const handed = runtime_handInAll(maker, args);
-		return runtime_runAsMaker(owner, original, receiver, handed, true, false, runtime_callOrigin(standIn, receiver));
+		const receiver = handIn(maker, thisArg);
+		gateLeafCopy(owner.slothlet, original, args, receiver);
+		const handed = handInAll(maker, args);
+		return runAsMaker(owner, original, receiver, handed, true, false, callOrigin(standIn, receiver));
 	};
 	const isGenerator = util.types.isGeneratorFunction(original);
 	const isAsync = util.types.isAsyncFunction(original);
@@ -1717,9 +1693,9 @@ function runtime_kindStandIn(maker, owner, original, made = maker.made) {
 		// Any other member is the original's, read and written through.
 		Reflect.defineProperty(standIn, key, {
 			__proto__: null,
-			get: () => runtime_handOut(maker, owner, Reflect.get(original, key)),
+			get: () => handOut(maker, owner, Reflect.get(original, key)),
 			set: (value) => {
-				Reflect.set(original, key, runtime_handIn(maker, value));
+				Reflect.set(original, key, handIn(maker, value));
 			},
 			enumerable: descriptor.enumerable,
 			configurable: true
@@ -1728,7 +1704,7 @@ function runtime_kindStandIn(maker, owner, original, made = maker.made) {
 	if (!Reflect.getOwnPropertyDescriptor(original, "name")) Reflect.deleteProperty(standIn, "name");
 	WeakMapMethods.set(made, original, standIn);
 	WeakMapMethods.set(STAND_IN_RECORDS, standIn, { maker, owner, original });
-	runtime_recordStandInOrigin(standIn);
+	recordStandInOrigin(standIn);
 	const leaf = WeakMapMethods.get(trustedRootOwn.implWrappers, original);
 	if (leaf) WeakMapMethods.set(trustedRootOwn.implWrappers, standIn, leaf);
 	return standIn;
@@ -1745,19 +1721,19 @@ function runtime_kindStandIn(maker, owner, original, made = maker.made) {
  * @returns {object} The instance.
  * @private
  */
-function runtime_constructAsNode(wrapper, constructor, args, newTarget) {
+function constructAsNode(wrapper, constructor, args, newTarget) {
 	/**
 	 * Whether an instance a module constructs through a node is handed out as the node's module's under `"fast"`, as
-	 * under `"precise"` (see {@link runtime_instanceHoldsReads}).
+	 * under `"precise"` (see {@link instanceHoldsReads}).
 	 * @param {object} wrapper - The node's wrapper.
 	 * @returns {boolean} True when the instance is handed out as the module's.
 	 * @private
 	 */
-	function runtime_instanceHoldsReads(wrapper) {
+	function instanceHoldsReads(wrapper) {
 		const slothlet = wrapper.slothlet;
 		const permissionManager = slothlet.handlers?.permissionManager;
 		if (!permissionManager?.isEnabled?.()) return false;
-		const reader = runtime_selfModuleReader(slothlet);
+		const reader = selfModuleReader(slothlet);
 		if (reader === null) return false;
 		if (!reader?.____slothletInternal) return true;
 		return permissionManager.readMayRefuseBeneath(
@@ -1773,30 +1749,30 @@ function runtime_constructAsNode(wrapper, constructor, args, newTarget) {
 		// Under `"fast"` the instance is handed out as it is, unless its `constructor` would hand out a function whose
 		// members the rules could refuse the module: then it is the module's, as under `"precise"`. A subclass's
 		// `super()` (another `newTarget`) gets its own instance.
-		if (newTarget !== constructor || !runtime_instanceHoldsReads(wrapper)) return instance;
-		return runtime_handOut(runtime_makerOf(wrapper), wrapper, instance);
+		if (newTarget !== constructor || !instanceHoldsReads(wrapper)) return instance;
+		return handOut(makerOf(wrapper), wrapper, instance);
 	}
-	const maker = runtime_makerOf(wrapper);
+	const maker = makerOf(wrapper);
 	// The class's prototype is what `api.x.Class.prototype` reads, so its instances report that very object.
-	runtime_exposePrototype(wrapper, Reflect.getOwnPropertyDescriptor(constructor, "prototype")?.value);
-	const target = newTarget === constructor ? constructor : runtime_handIn(maker, newTarget);
+	exposePrototype(wrapper, Reflect.getOwnPropertyDescriptor(constructor, "prototype")?.value);
+	const target = newTarget === constructor ? constructor : handIn(maker, newTarget);
 	if (target !== constructor && typeof target === "function") {
 		const prototype = Reflect.getOwnPropertyDescriptor(target, "prototype")?.value;
 		if (prototype !== null && typeof prototype === "object" && !WeakMapMethods.has(STAND_IN_RECORDS, prototype))
 			WeakSetMethods.add(maker.handedIn, prototype);
 	}
-	return runtime_runAsMaker(
+	return runAsMaker(
 		wrapper,
 		(...constructArgs) => Reflect.construct(constructor, constructArgs, target),
 		undefined,
-		runtime_handInAll(maker, args),
+		handInAll(maker, args),
 		true,
 		true
 	);
 }
 
 /**
- * {@link runtime_crossArguments} for values handed to a module by a known caller: a call's arguments, and what slothlet
+ * {@link crossArguments} for values handed to a module by a known caller: a call's arguments, and what slothlet
  * itself hands a module's code for someone else (an event's payload to a listener).
  * @param {object} wrapper - The wrapper of the module handed the values.
  * @param {ArrayLike<*>} args - The values.
@@ -1804,10 +1780,10 @@ function runtime_constructAsNode(wrapper, constructor, args, newTarget) {
  * @returns {ArrayLike<*>} The values, the same list when nothing changed.
  * @private
  */
-function runtime_crossArgumentsFrom(wrapper, args, caller) {
+function crossArgumentsFrom(wrapper, args, caller) {
 	const slothlet = wrapper?.slothlet;
 	if (!args?.length || !slothlet?.handlers?.permissionManager?.isEnabled?.()) return args;
-	if (caller !== null && runtime_asOneModule(slothlet, caller, wrapper)) return args;
+	if (caller !== null && asOneModule(slothlet, caller, wrapper)) return args;
 	let result = args;
 	for (let index = 0; index < args.length; index++) {
 		const value = args[index];
@@ -1823,17 +1799,17 @@ function runtime_crossArgumentsFrom(wrapper, args, caller) {
 			if (from === null && !WeakMapMethods.has(CROSSINGS, value)) continue;
 		} else {
 			// What the caller holds as itself is its own: handed back to it later, it is the value again.
-			runtime_recordOrigin(value, caller);
-			if (typeof value === "function" && !runtime_isSlothletValue(value)) {
+			recordOrigin(value, caller);
+			if (typeof value === "function" && !isSlothletValue(value)) {
 				const prototype = Reflect.getOwnPropertyDescriptor(value, "prototype")?.value;
-				if (prototype !== null && typeof prototype === "object") runtime_recordOrigin(prototype, caller);
+				if (prototype !== null && typeof prototype === "object") recordOrigin(prototype, caller);
 			}
 		}
 		// A function of the language's or Node's own the caller hands over runs for the caller, with its target.
 		const crossed =
-			from !== null && runtime_guardOn(slothlet) && runtime_runsForHander(value, from) && !WeakMapMethods.has(CROSSINGS, value)
-				? runtime_handedView(value, wrapper, slothlet, from)
-				: runtime_crossTo(value, wrapper, slothlet, from);
+			from !== null && guardOn(slothlet) && runsForHander(value, from) && !WeakMapMethods.has(CROSSINGS, value)
+				? handedView(value, wrapper, slothlet, from)
+				: crossTo(value, wrapper, slothlet, from);
 		if (crossed === value) continue;
 		if (result === args) result = copyList(args);
 		result[index] = crossed;
@@ -1844,14 +1820,14 @@ function runtime_crossArgumentsFrom(wrapper, args, caller) {
 /**
  * The module whose call returned each object or function to the host while the permission system was on. The host
  * holds the value itself; handed on by the host to another module as it is, it reaches that module as a value the
- * first module handed it ({@link runtime_crossArguments}), and the module it came from as itself.
+ * first module handed it ({@link crossArguments}), and the module it came from as itself.
  * @type {WeakMap<object, object>}
  * @private
  */
 const HOST_HANDED = new WeakMap();
 
 /**
- * The arguments a call into a module is handed (see {@link runtime_handIn}): a stand-in of that module's own values
+ * The arguments a call into a module is handed (see {@link handIn}): a stand-in of that module's own values
  * comes back as the value itself, as it would in plain JavaScript (`registry.remove(registry.get(name))`); a
  * stand-in of another module's value stays one.
  * @param {object} wrapper - The wrapper being called.
@@ -1859,23 +1835,23 @@ const HOST_HANDED = new WeakMap();
  * @returns {Array<*>} The arguments, the same array when nothing changed.
  * @private
  */
-function runtime_ownArguments(wrapper, args) {
+function ownArguments(wrapper, args) {
 	if (!args?.length || !wrapper?.slothlet?.instanceID || !handsOutAsModule(wrapper)) return args;
-	return runtime_handInAll(runtime_makerOf(wrapper), args, wrapper);
+	return handInAll(makerOf(wrapper), args, wrapper);
 }
 
 /**
- * {@link runtime_frontingNode}, bound to the module reading now as a read of that node is (see
- * {@link runtime_functionNodeFor}).
+ * {@link frontingNode}, bound to the module reading now as a read of that node is (see
+ * {@link functionNodeFor}).
  * @param {object} slothlet - The instance.
  * @param {Function} fn - The function.
  * @returns {Function|undefined} The node.
  * @private
  */
-function runtime_frontingNodeNow(slothlet, fn) {
-	const node = runtime_frontingNode(slothlet, fn);
+function frontingNodeNow(slothlet, fn) {
+	const node = frontingNode(slothlet, fn);
 	if (node === undefined || node === slothlet.boundApi) return node;
-	return runtime_functionNodeFor(resolveWrapper(node), fn) ?? node;
+	return functionNodeFor(resolveWrapper(node), fn) ?? node;
 }
 
 /**
@@ -1888,16 +1864,16 @@ function runtime_frontingNodeNow(slothlet, fn) {
  * @returns {object|Function|null} The prototype to report, or `null`.
  * @private
  */
-function runtime_functionNodePrototype(wrapper, fn) {
-	const prototype = runtime_ownsPrototype(wrapper) ? runtime_recordedPrototype(wrapper) : Objects.getPrototypeOf(fn);
+function functionNodePrototype(wrapper, fn) {
+	const prototype = ownsPrototype(wrapper) ? recordedPrototype(wrapper) : Objects.getPrototypeOf(fn);
 	if (prototype === null || prototype === Functions.prototype) return prototype;
 	// One given to the node is no part of the module's function: the host is handed it as it is, and module code its
-	// own view of it (see runtime_givenView).
-	if (runtime_prototypeGiven(wrapper)) return runtime_givenPrototypeFor(wrapper, prototype);
+	// own view of it (see givenView).
+	if (prototypeGiven(wrapper)) return givenPrototypeFor(wrapper, prototype);
 	if (typeof prototype !== "function") {
-		return runtime_memberHoldsCode(prototype, searchDepth(wrapper.slothlet) + 1, searchBudget(wrapper.slothlet)) ? null : prototype;
+		return memberHoldsCode(prototype, searchDepth(wrapper.slothlet) + 1, searchBudget(wrapper.slothlet)) ? null : prototype;
 	}
-	return runtime_functionNodeFor(wrapper, prototype) ?? null;
+	return functionNodeFor(wrapper, prototype) ?? null;
 }
 
 /**
@@ -1908,13 +1884,13 @@ function runtime_functionNodePrototype(wrapper, fn) {
  * @returns {Function|undefined} The node, or `undefined`.
  * @private
  */
-function runtime_functionNodeFor(wrapper, fn) {
+function functionNodeFor(wrapper, fn) {
 	const node = nodeRefOf(FUNCTION_NODES, wrapper.slothlet, fn);
 	if (node === undefined) return undefined;
 	const permissionManager = wrapper.slothlet.handlers?.permissionManager;
 	if (!permissionManager?.isEnabled() || permissionManager.isCaptureEnabled?.() === false) return node;
 	const identity = wrapper.slothlet.contextManager?.getCallerIdentity?.();
-	return identity?.currentWrapper ? runtime_capturedView(node, identity.currentWrapper, true, identity.ceiling ?? null) : node;
+	return identity?.currentWrapper ? capturedView(node, identity.currentWrapper, true, identity.ceiling ?? null) : node;
 }
 
 /**
@@ -1926,7 +1902,7 @@ function runtime_functionNodeFor(wrapper, fn) {
  * @returns {{slothlet: object, sites: Array<{parts: string[], key: string, prop: string|null}>}|undefined} The sites.
  * @private
  */
-function runtime_knownPrototype(slothlet, value) {
+function knownPrototype(slothlet, value) {
 	/**
 	 * The instance whose node fronts the class a prototype is the `prototype` of, found by descriptors (see
 	 * {@link CLASS_INSTANCES}), or null.
@@ -1934,7 +1910,7 @@ function runtime_knownPrototype(slothlet, value) {
 	 * @returns {object|null} The instance.
 	 * @private
 	 */
-	function runtime_classInstanceOf(prototype) {
+	function classInstanceOf(prototype) {
 		if (util.types.isProxy(prototype)) return null;
 		const owner = Reflect.getOwnPropertyDescriptor(prototype, "constructor")?.value;
 		return typeof owner === "function"
@@ -1946,9 +1922,9 @@ function runtime_knownPrototype(slothlet, value) {
 
 	if (value === null || typeof value !== "object") return undefined;
 	const record = WeakMapMethods.get(PROTOTYPE_PATHS, value);
-	const instance = record?.slothlet ?? slothlet ?? runtime_classInstanceOf(value);
+	const instance = record?.slothlet ?? slothlet ?? classInstanceOf(value);
 	if (!instance) return undefined;
-	const classSites = runtime_classPrototypeSites(instance, value);
+	const classSites = classPrototypeSites(instance, value);
 	if (record === undefined && classSites.length === 0) return undefined;
 	const sites = record === undefined ? [] : mapValuesToArray(record.sites);
 	for (let ofIndex = 0, ofList = classSites; ofIndex < ofList.length; ofIndex++) {
@@ -1959,7 +1935,7 @@ function runtime_knownPrototype(slothlet, value) {
 }
 
 /**
- * The views made of each carrier, per reader (see {@link runtime_carrierView}).
+ * The views made of each carrier, per reader (see {@link carrierView}).
  * @type {WeakMap<object, WeakMap<object, object>>}
  * @private
  */
@@ -1967,10 +1943,10 @@ const CARRIER_VIEWS = new WeakMap();
 
 /**
  * What a value reaches `reader` as when it crosses from one module to another through slothlet (#667): an argument, an
- * error a call threw or rejected with, a hook's payload, or an event's payload ({@link runtime_eventPayloadFor}). A
+ * error a call threw or rejected with, a hook's payload, or an event's payload ({@link eventPayloadFor}). A
  * prototype of a module's reaches it as reading it at its path would
- * ({@link runtime_prototypeHandedTo}), and a carrier holding one at any depth as a view handing each member on the same
- * way ({@link runtime_carrierView}). Anything else, and everything while the permission system is off, passes as it
+ * ({@link prototypeHandedTo}), and a carrier holding one at any depth as a view handing each member on the same
+ * way ({@link carrierView}). Anything else, and everything while the permission system is off, passes as it
  * is.
  * @param {*} value - The value.
  * @param {object|null} reader - Who it reaches: a module's wrapper, the host (`null` or {@link HOST_READER}), or
@@ -1979,9 +1955,9 @@ const CARRIER_VIEWS = new WeakMap();
  * @returns {*} What the reader gets.
  * @private
  */
-function runtime_carryTo(value, reader, slothlet) {
+function carryTo(value, reader, slothlet) {
 	/**
-	 * A carrier as it reaches `reader` (see {@link runtime_carryTo}): a view handing each data member on as the reader would
+	 * A carrier as it reaches `reader` (see {@link carryTo}): a view handing each data member on as the reader would
 	 * get it, writing through to the carrier. A frozen carrier holds nothing a write could change, so the reader is handed a
 	 * frozen copy of it instead, each member carried, which the engine then checks the view's answers against. The same
 	 * view each time, for the same carrier and reader.
@@ -1991,11 +1967,11 @@ function runtime_carryTo(value, reader, slothlet) {
 	 * @returns {object} The view.
 	 * @private
 	 */
-	function runtime_carrierView(value, reader, slothlet) {
+	function carrierView(value, reader, slothlet) {
 		let byReader = WeakMapMethods.get(CARRIER_VIEWS, value);
 		const existing = byReader == null ? undefined : WeakMapMethods.get(byReader, reader);
 		if (existing) return existing;
-		const carry = (member) => runtime_carryTo(member, reader, slothlet);
+		const carry = (member) => carryTo(member, reader, slothlet);
 		let view;
 		if (Objects.isFrozen(value)) {
 			view = Arrays.isArray(value) ? [] : Objects.create(Reflect.getPrototypeOf(value));
@@ -2032,7 +2008,7 @@ function runtime_carryTo(value, reader, slothlet) {
 	}
 
 	/**
-	 * Whether a carrier ({@link runtime_isCarrier}) holds a prototype of a module's as a data member, at any depth within
+	 * Whether a carrier ({@link isCarrier}) holds a prototype of a module's as a data member, at any depth within
 	 * the code search ({@link searchDepth}). Nothing of the value runs to decide: an accessor is passed over.
 	 * @param {object|null} slothlet - The instance it crossed in, when known.
 	 * @param {object} value - The carrier.
@@ -2041,7 +2017,7 @@ function runtime_carryTo(value, reader, slothlet) {
 	 * @returns {boolean} True when it does.
 	 * @private
 	 */
-	function runtime_carriesPrototype(slothlet, value, depth, budget) {
+	function carriesPrototype(slothlet, value, depth, budget) {
 		if (depth <= 0) return false;
 		if (Arrays.isArray(value) && value.length > budget.remaining) return false;
 		const keys = Reflect.ownKeys(value);
@@ -2051,8 +2027,8 @@ function runtime_carryTo(value, reader, slothlet) {
 			const key = ofList[ofIndex];
 			const member = Reflect.getOwnPropertyDescriptor(value, key)?.value;
 			if (member === null || typeof member !== "object" || util.types.isProxy(member)) continue;
-			if (runtime_knownPrototype(slothlet, member) !== undefined) return true;
-			if (runtime_isCarrier(member) && runtime_carriesPrototype(slothlet, member, depth - 1, budget)) return true;
+			if (knownPrototype(slothlet, member) !== undefined) return true;
+			if (isCarrier(member) && carriesPrototype(slothlet, member, depth - 1, budget)) return true;
 		}
 		return false;
 	}
@@ -2060,10 +2036,10 @@ function runtime_carryTo(value, reader, slothlet) {
 	if (value === null || typeof value !== "object" || reader === null || reader === HOST_READER) return value;
 	if (slothlet && !slothlet.handlers?.permissionManager?.isEnabled()) return value;
 	try {
-		if (runtime_knownPrototype(slothlet, value) !== undefined) return runtime_prototypeHandedTo(value, reader, slothlet);
-		if (!runtime_isCarrier(value)) return value;
-		if (!runtime_carriesPrototype(slothlet, value, searchDepth(slothlet), searchBudget(slothlet))) return value;
-		return runtime_carrierView(value, reader, slothlet);
+		if (knownPrototype(slothlet, value) !== undefined) return prototypeHandedTo(value, reader, slothlet);
+		if (!isCarrier(value)) return value;
+		if (!carriesPrototype(slothlet, value, searchDepth(slothlet), searchBudget(slothlet))) return value;
+		return carrierView(value, reader, slothlet);
 	} catch {
 		// A value that refuses to be described is handed on as it is.
 		return value;
@@ -2071,7 +2047,7 @@ function runtime_carryTo(value, reader, slothlet) {
 }
 
 /**
- * Each crossing view (see {@link runtime_crossView}), with the value it stands over, who it was handed to, and the
+ * Each crossing view (see {@link crossView}), with the value it stands over, who it was handed to, and the
  * module the value came from.
  * @type {WeakMap<object, {original: object, reader: object, from: object|null, slothlet: object}>}
  * @private
@@ -2080,7 +2056,7 @@ const CROSSINGS = new WeakMap();
 
 /**
  * The crossing views made of each value: its first module's held inline, any other module's by module (see
- * {@link runtime_crossKey}). Every leaf of one module gets the same view, so a value one module hands another is the
+ * {@link crossKey}). Every leaf of one module gets the same view, so a value one module hands another is the
  * same value in every function of the module it reaches, as it is in plain JavaScript.
  * @type {WeakMap<object, {key: object, view: object, reader: object, others: Map<object, object>|null}>}
  * @private
@@ -2103,7 +2079,7 @@ const CROSSED_PROMISES = new WeakMap();
  * @returns {boolean} True when it holds.
  * @private
  */
-function runtime_guardOn(slothlet) {
+function guardOn(slothlet) {
 	const permissionManager = slothlet?.handlers?.permissionManager;
 	if (!permissionManager) return false;
 	return permissionManager.isEnabled?.() === true || permissionManager.wasOnAtShutdown?.() === true;
@@ -2115,18 +2091,18 @@ function runtime_guardOn(slothlet) {
  * @returns {*} What it stands over.
  * @private
  */
-function runtime_uncross(value) {
+function uncross(value) {
 	/**
 	 * Whether a value is a crossing view.
 	 * @param {*} value - The value.
 	 * @returns {boolean} True for one.
 	 * @private
 	 */
-	function runtime_isCrossing(value) {
+	function isCrossing(value) {
 		return value !== null && (typeof value === "object" || typeof value === "function") && WeakMapMethods.has(CROSSINGS, value);
 	}
 
-	return runtime_isCrossing(value) ? WeakMapMethods.get(CROSSINGS, value).original : value;
+	return isCrossing(value) ? WeakMapMethods.get(CROSSINGS, value).original : value;
 }
 
 /**
@@ -2139,7 +2115,7 @@ const CROSSING_ORIGINS = new WeakMap();
 
 /**
  * The path each prototype no node exports is held to: that of the node that first handed it on (see
- * {@link runtime_writtenPrototypeFor}). One path per prototype, so a class and its instances report the same checked
+ * {@link writtenPrototypeFor}). One path per prototype, so a class and its instances report the same checked
  * view whichever of the module's functions handed each of them over.
  * @type {WeakMap<object, {parts: string[], known: boolean}>}
  * @private
@@ -2147,21 +2123,21 @@ const CROSSING_ORIGINS = new WeakMap();
 const CROSSED_PROTOTYPE_PATHS = new WeakMap();
 
 /**
- * What the views made for a reader are kept under: its module's record (see {@link runtime_makerOf}), one per module of
+ * What the views made for a reader are kept under: its module's record (see {@link makerOf}), one per module of
  * an instance, or the reader itself when it is no module's wrapper, or one of a module removed since (its removal under
  * way included), whose record is gone and is not made again for it.
  * @param {object} reader - Who a view is for.
  * @returns {object} The key.
  * @private
  */
-function runtime_crossKey(reader) {
+function crossKey(reader) {
 	/**
-	 * Whether a module's record (see {@link runtime_makerOf}) is held for a wrapper, without making one.
+	 * Whether a module's record (see {@link makerOf}) is held for a wrapper, without making one.
 	 * @param {object} wrapper - A module's wrapper.
 	 * @returns {boolean} True when it is.
 	 * @private
 	 */
-	function runtime_hasMaker(wrapper) {
+	function hasMaker(wrapper) {
 		const makers = WeakMapMethods.get(MAKERS, wrapper.slothlet);
 		if (!makers) return false;
 		const moduleID = wrapper.____slothletInternal?.moduleID;
@@ -2169,8 +2145,8 @@ function runtime_crossKey(reader) {
 	}
 
 	if (!reader?.____slothletInternal || !reader.slothlet) return reader;
-	if (!runtime_hasMaker(reader) && reader.slothlet.handlers?.apiManager?.isRemovedCaller?.(reader) === true) return reader;
-	return runtime_viewGroup(reader);
+	if (!hasMaker(reader) && reader.slothlet.handlers?.apiManager?.isRemovedCaller?.(reader) === true) return reader;
+	return viewGroup(reader);
 }
 
 /**
@@ -2179,12 +2155,12 @@ function runtime_crossKey(reader) {
  * a view, a built-in one of them hands on to run included, is held to the rules of whoever holds the view, so a view
  * is shared only where that answer is the same. Most modules have one group, the module's record itself.
  * @param {object} reader - A module's wrapper.
- * @returns {{owner: object}} The group's record: the module's record (see {@link runtime_makerOf}) for functions the
+ * @returns {{owner: object}} The group's record: the module's record (see {@link makerOf}) for functions the
  *   rules answer as the first of its wrappers, else one record per answer, whose `owner` is the first function of it.
  * @private
  */
-function runtime_viewGroup(reader) {
-	const maker = runtime_makerOf(reader);
+function viewGroup(reader) {
+	const maker = makerOf(reader);
 	if (maker.owner === reader) return maker;
 	const permissionManager = reader.slothlet.handlers?.permissionManager;
 	if (!permissionManager) return maker;
@@ -2206,10 +2182,10 @@ function runtime_viewGroup(reader) {
  * @returns {void}
  * @private
  */
-function runtime_recordOrigin(value, wrapper) {
+function recordOrigin(value, wrapper) {
 	if (value === null || (typeof value !== "object" && typeof value !== "function") || WeakMapMethods.has(CROSSINGS, value)) return;
-	if (WeakMapMethods.has(CROSSING_ORIGINS, value) || runtime_isSlothletValue(value)) return;
-	const module = runtime_moduleKey(wrapper);
+	if (WeakMapMethods.has(CROSSING_ORIGINS, value) || isSlothletValue(value)) return;
+	const module = moduleKey(wrapper);
 	if (module !== null) WeakMapMethods.set(CROSSING_ORIGINS, value, { slothlet: wrapper.slothlet, module, wrapper });
 }
 
@@ -2219,14 +2195,14 @@ function runtime_recordOrigin(value, wrapper) {
  * @returns {string[]} The segments.
  * @private
  */
-function runtime_crossFromParts(from) {
+function crossFromParts(from) {
 	return from?.____slothletInternal ? filterList(splitText(String(from.____slothletInternal.apiPath ?? ""), "."), Boolean) : [];
 }
 
 /**
  * A prototype some module wrote, reached by a reader through a value another module handed it (an instance, the class,
  * the prototype held in data), as the reader gets it while the permission system is on. One whose class a node exports
- * is handed on as reading it at that path would ({@link runtime_prototypeHandedTo}). Any other is the code of the
+ * is handed on as reading it at that path would ({@link prototypeHandedTo}). Any other is the code of the
  * module that first handed it on and is held to that module's path: the object itself to a reader that may make every
  * write there, a checked view refusing a write the reader could not make there to any other. Handed on by no known
  * module, it is held to the root, which only the host owns. Every leaf of a module gets the same view.
@@ -2237,32 +2213,32 @@ function runtime_crossFromParts(from) {
  * @returns {object} What the reader gets.
  * @private
  */
-function runtime_writtenPrototypeFor(prototype, reader, slothlet, from) {
-	if (runtime_isOwnOrigin(prototype, reader)) return prototype;
-	// One view per module, or per group of its functions the write rules answer alike ({@link runtime_viewGroup}): the
+function writtenPrototypeFor(prototype, reader, slothlet, from) {
+	if (isOwnOrigin(prototype, reader)) return prototype;
+	// One view per module, or per group of its functions the write rules answer alike ({@link viewGroup}): the
 	// first of the group stands for all of it, and each write is still decided for the module executing it. Whether the reader holds the object itself is the reader's own answer: files loaded from one
 	// folder share a module, and the one standing for it may hold what a rule refuses this one. A file a write rule
 	// keeps apart from the one standing for its module gets a view of its own, so a write through it that another
 	// module's code makes (a bound built-in it hands on) is still held to what the file may write.
-	let standing = reader?.____slothletInternal && reader.slothlet ? runtime_viewGroup(reader).owner : reader;
-	if (standing !== reader && !runtime_asOneModule(slothlet, standing, reader)) standing = reader;
-	if (runtime_knownPrototype(slothlet, prototype) !== undefined) return runtime_prototypeHandedTo(prototype, reader, slothlet);
+	let standing = reader?.____slothletInternal && reader.slothlet ? viewGroup(reader).owner : reader;
+	if (standing !== reader && !asOneModule(slothlet, standing, reader)) standing = reader;
+	if (knownPrototype(slothlet, prototype) !== undefined) return prototypeHandedTo(prototype, reader, slothlet);
 	let site = WeakMapMethods.get(CROSSED_PROTOTYPE_PATHS, prototype);
 	if (site === undefined || (!site.known && from?.____slothletInternal)) {
-		site = { parts: runtime_crossFromParts(from), known: Boolean(from?.____slothletInternal) };
+		site = { parts: crossFromParts(from), known: Boolean(from?.____slothletInternal) };
 		WeakMapMethods.set(CROSSED_PROTOTYPE_PATHS, prototype, site);
 	}
 	WeakSetMethods.add(MODULE_PROTOTYPES, prototype);
-	if (site.known && runtime_mayWritePath(slothlet, reader, site.parts)) return prototype;
+	if (site.known && mayWritePath(slothlet, reader, site.parts)) return prototype;
 	// A view the reader's module already holds of it, handed over as data before anything showed it to be a prototype,
-	// is the object the module knows: it refuses the same writes ({@link runtime_crossAssertWrite}).
+	// is the object the module knows: it refuses the same writes ({@link crossAssertWrite}).
 	const views = WeakMapMethods.get(CROSSING_VIEWS, prototype);
 	if (views !== undefined) {
-		const key = runtime_crossKey(reader);
+		const key = crossKey(reader);
 		const held = views.key === key ? views.view : views.others == null ? undefined : MapMethods.get(views.others, key);
 		if (held) return held;
 	}
-	return runtime_selfMemberOf(prototype, standing, slothlet, site.parts, null);
+	return selfMemberOf(prototype, standing, slothlet, site.parts, null);
 }
 
 /**
@@ -2283,7 +2259,7 @@ const MODULE_PROTOTYPES = new WeakSet();
  * @returns {boolean} True when it may.
  * @private
  */
-function runtime_mayWritePath(slothlet, reader, parts) {
+function mayWritePath(slothlet, reader, parts) {
 	if (!reader?.____slothletInternal || parts.length === 0) return false;
 	const verdict = slothlet.handlers.permissionManager.writeSubtree(
 		String(reader.____slothletInternal.apiPath ?? ""),
@@ -2296,23 +2272,23 @@ function runtime_mayWritePath(slothlet, reader, parts) {
 
 /**
  * Whether `reader` may make every write at the path of the module a value comes from and beneath it
- * ({@link runtime_mayWritePath}). Such a reader gets the value itself; a prototype on it of a class exported elsewhere is
- * still decided at that class's path ({@link runtime_writtenPrototypeFor}).
+ * ({@link mayWritePath}). Such a reader gets the value itself; a prototype on it of a class exported elsewhere is
+ * still decided at that class's path ({@link writtenPrototypeFor}).
  * @param {object} slothlet - The instance.
  * @param {object} reader - A module's wrapper.
  * @param {object|null} from - The wrapper of the module the value comes from.
  * @returns {boolean} True when it may.
  * @private
  */
-function runtime_mayWriteFrom(slothlet, reader, from) {
+function mayWriteFrom(slothlet, reader, from) {
 	if (!from?.____slothletInternal) return false;
-	return runtime_mayWritePath(slothlet, reader, runtime_crossFromParts(from));
+	return mayWritePath(slothlet, reader, crossFromParts(from));
 }
 
 /**
- * {@link runtime_handedAsItself} for a value: a value that stays a view for every module it is handed to
- * ({@link runtime_viewedForHander}) never reaches one as itself, and nor does an instance inheriting members private to
- * a module that privacy keeps from the reader ({@link runtime_inheritsPrivateKept}), however much it may write.
+ * {@link handedAsItself} for a value: a value that stays a view for every module it is handed to
+ * ({@link viewedForHander}) never reaches one as itself, and nor does an instance inheriting members private to
+ * a module that privacy keeps from the reader ({@link inheritsPrivateKept}), however much it may write.
  * @param {*} value - The value.
  * @param {object} slothlet - The instance.
  * @param {object} reader - A module's wrapper.
@@ -2320,10 +2296,10 @@ function runtime_mayWriteFrom(slothlet, reader, from) {
  * @returns {"writer"|"written"|null} Why it is handed as itself, or `null` when it is viewed.
  * @private
  */
-function runtime_handedAsItselfFor(value, slothlet, reader, from) {
+function handedAsItselfFor(value, slothlet, reader, from) {
 	/**
 	 * Whether a value inherits, from a prototype of a module's class, a member private to that module that privacy keeps
-	 * from `reader` ({@link runtime_readerHoldsPrototype}): held as itself, the value would hand it over unchecked. Found by
+	 * from `reader` ({@link readerHoldsPrototype}): held as itself, the value would hand it over unchecked. Found by
 	 * descriptors alone.
 	 * @param {object} slothlet - The instance.
 	 * @param {object} reader - A module's wrapper.
@@ -2331,18 +2307,17 @@ function runtime_handedAsItselfFor(value, slothlet, reader, from) {
 	 * @returns {boolean} True when it does.
 	 * @private
 	 */
-	function runtime_inheritsPrivateKept(slothlet, reader, value) {
+	function inheritsPrivateKept(slothlet, reader, value) {
 		if (value === null || (typeof value !== "object" && typeof value !== "function")) return false;
-		const subject = runtime_crossSubject(value);
+		const subject = crossSubject(value);
 		if (util.types.isProxy(subject)) return false;
 		for (let holder = Reflect.getPrototypeOf(subject), depth = 0; holder !== null && depth < 64; depth++) {
-			if (util.types.isProxy(holder) || WeakSetMethods.has(INTRINSICS, holder) || runtime_isSharedValue(holder)) return false;
-			if (runtime_knownPrototype(slothlet, holder) !== undefined) {
+			if (util.types.isProxy(holder) || WeakSetMethods.has(INTRINSICS, holder) || isSharedValue(holder)) return false;
+			if (knownPrototype(slothlet, holder) !== undefined) {
 				const keys = Reflect.ownKeys(holder);
 				for (let ofIndex = 0; ofIndex < keys.length; ofIndex++) {
 					const key = keys[ofIndex];
-					if (typeof key === "string" && StringMethods.charCodeAt(key, 0) === 95)
-						return !runtime_readerHoldsPrototype(slothlet, reader, holder);
+					if (typeof key === "string" && StringMethods.charCodeAt(key, 0) === 95) return !readerHoldsPrototype(slothlet, reader, holder);
 				}
 			}
 			holder = Reflect.getPrototypeOf(holder);
@@ -2359,12 +2334,12 @@ function runtime_handedAsItselfFor(value, slothlet, reader, from) {
 	 * @returns {boolean} True for plain data.
 	 * @private
 	 */
-	function runtime_holdsNoCode(value, slothlet) {
+	function holdsNoCode(value, slothlet) {
 		if (value === null || (typeof value !== "object" && typeof value !== "function")) return true;
-		const subject = runtime_crossSubject(value);
+		const subject = crossSubject(value);
 		if (typeof subject === "function" || util.types.isProxy(subject)) return false;
 		try {
-			return !runtime_isCodeObject(subject) && !runtime_memberHoldsCode(subject, searchDepth(slothlet) + 1, searchBudget(slothlet));
+			return !isCodeObject(subject) && !memberHoldsCode(subject, searchDepth(slothlet) + 1, searchBudget(slothlet));
 		} catch {
 			// A value that refuses to be described is taken to hold code.
 			return false;
@@ -2373,19 +2348,19 @@ function runtime_handedAsItselfFor(value, slothlet, reader, from) {
 
 	/**
 	 * Whether a value a module hands on stays a view for every other module, however much the receiver may write: a
-	 * function that runs for the module handing it ({@link runtime_runsForHander}), and plain data holding one as a member
+	 * function that runs for the module handing it ({@link runsForHander}), and plain data holding one as a member
 	 * of its own at any depth within the code search ({@link searchDepth}) (`{ fn: Reflect.set, target }`), whose member reaches the receiver
-	 * as that function's view ({@link runtime_crossHandedMember}). Nothing of the value runs to decide: an accessor is passed
+	 * as that function's view ({@link crossHandedMember}). Nothing of the value runs to decide: an accessor is passed
 	 * over.
 	 * @param {*} value - The value handed on.
 	 * @param {object|null} from - The wrapper of the module handing it on.
 	 * @returns {boolean} True when it stays a view.
 	 * @private
 	 */
-	function runtime_viewedForHander(value, from) {
+	function viewedForHander(value, from) {
 		/**
-		 * Whether a carrier ({@link runtime_isCarrier}) holds, as a data member at any depth within the code search ({@link searchDepth}), a
-		 * function that runs for the module handing it on ({@link runtime_runsForHander}).
+		 * Whether a carrier ({@link isCarrier}) holds, as a data member at any depth within the code search ({@link searchDepth}), a
+		 * function that runs for the module handing it on ({@link runsForHander}).
 		 * @param {object} value - The carrier.
 		 * @param {object} from - The wrapper of the module handing it on.
 		 * @param {number} depth - Levels still allowed.
@@ -2393,7 +2368,7 @@ function runtime_handedAsItselfFor(value, slothlet, reader, from) {
 		 * @returns {boolean} True when it does.
 		 * @private
 		 */
-		function runtime_carriesHanded(value, from, depth, budget) {
+		function carriesHanded(value, from, depth, budget) {
 			if (depth <= 0) return false;
 			if (Arrays.isArray(value) && value.length > budget.remaining) return false;
 			const keys = Reflect.ownKeys(value);
@@ -2402,16 +2377,16 @@ function runtime_handedAsItselfFor(value, slothlet, reader, from) {
 			for (let ofIndex = 0, ofList = keys; ofIndex < ofList.length; ofIndex++) {
 				const member = Reflect.getOwnPropertyDescriptor(value, ofList[ofIndex])?.value;
 				if (member === null || (typeof member !== "object" && typeof member !== "function")) continue;
-				if (runtime_runsForHander(member, from)) return true;
-				if (typeof member === "object" && runtime_isCarrier(member) && runtime_carriesHanded(member, from, depth - 1, budget)) return true;
+				if (runsForHander(member, from)) return true;
+				if (typeof member === "object" && isCarrier(member) && carriesHanded(member, from, depth - 1, budget)) return true;
 			}
 			return false;
 		}
 
-		if (runtime_runsForHander(value, from)) return true;
-		if (value === null || typeof value !== "object" || !from?.____slothletInternal || !runtime_isCarrier(value)) return false;
+		if (runsForHander(value, from)) return true;
+		if (value === null || typeof value !== "object" || !from?.____slothletInternal || !isCarrier(value)) return false;
 		try {
-			return runtime_carriesHanded(value, from, searchDepth(from.slothlet), searchBudget(from.slothlet));
+			return carriesHanded(value, from, searchDepth(from.slothlet), searchBudget(from.slothlet));
 		} catch {
 			// A value that refuses to be described is viewed.
 			return true;
@@ -2420,9 +2395,9 @@ function runtime_handedAsItselfFor(value, slothlet, reader, from) {
 
 	/**
 	 * Whether, and why, a value reaches `reader` as itself by write rights. `"writer"`: the reader may make every write at
-	 * the path the value comes from ({@link runtime_mayWriteFrom}), as the owner may. `"written"`: the module the value
+	 * the path the value comes from ({@link mayWriteFrom}), as the owner may. `"written"`: the module the value
 	 * comes from may make every write at the reader's path, and the value holds none of that module's code
-	 * ({@link runtime_holdsNoCode}): what the reader hands back, or stores where that module reads it as itself, stays the
+	 * ({@link holdsNoCode}): what the reader hands back, or stores where that module reads it as itself, stays the
 	 * value, and there is no code of the module's in it for the reader to change. Neither holds across a write rule that
 	 * refuses the other side: a module refused a write to the other is handed views of the other's values and has its own
 	 * handed on as views, since what the other stores into a value it holds as itself comes back.
@@ -2433,17 +2408,17 @@ function runtime_handedAsItselfFor(value, slothlet, reader, from) {
 	 * @returns {"writer"|"written"|null} Why it is handed as itself, or `null` when it is viewed.
 	 * @private
 	 */
-	function runtime_handedAsItself(slothlet, reader, from, value) {
+	function handedAsItself(slothlet, reader, from, value) {
 		if (!from?.____slothletInternal) return null;
-		if (runtime_mayWriteFrom(slothlet, reader, from)) return runtime_writeDeniedWithin(slothlet, from, reader) ? null : "writer";
-		if (runtime_mayWriteFrom(slothlet, from, reader) && runtime_holdsNoCode(value, slothlet))
-			return runtime_writeDeniedWithin(slothlet, reader, from) ? null : "written";
+		if (mayWriteFrom(slothlet, reader, from)) return writeDeniedWithin(slothlet, from, reader) ? null : "writer";
+		if (mayWriteFrom(slothlet, from, reader) && holdsNoCode(value, slothlet))
+			return writeDeniedWithin(slothlet, reader, from) ? null : "written";
 		return null;
 	}
 
-	if (runtime_viewedForHander(value, from)) return null;
-	const itself = runtime_handedAsItself(slothlet, reader, from, value);
-	return itself !== null && runtime_inheritsPrivateKept(slothlet, reader, value) ? null : itself;
+	if (viewedForHander(value, from)) return null;
+	const itself = handedAsItself(slothlet, reader, from, value);
+	return itself !== null && inheritsPrivateKept(slothlet, reader, value) ? null : itself;
 }
 
 /**
@@ -2456,9 +2431,9 @@ function runtime_handedAsItselfFor(value, slothlet, reader, from) {
  * @returns {boolean} True when a rule refuses it.
  * @private
  */
-function runtime_writeDeniedWithin(slothlet, reader, from) {
+function writeDeniedWithin(slothlet, reader, from) {
 	if (reader === from) return false;
-	const parts = runtime_crossFromParts(from);
+	const parts = crossFromParts(from);
 	if (parts.length === 0) return false;
 	return (
 		slothlet.handlers.permissionManager.writeSubtree(String(reader.____slothletInternal.apiPath ?? ""), ArrayMethods.join(parts, ".")) ===
@@ -2476,17 +2451,17 @@ function runtime_writeDeniedWithin(slothlet, reader, from) {
  * @returns {boolean} True when they are.
  * @private
  */
-function runtime_asOneModule(slothlet, a, b) {
+function asOneModule(slothlet, a, b) {
 	if (a === b) return true;
-	if (!runtime_sameModule(a, b)) return false;
-	return !runtime_writeDeniedWithin(slothlet, a, b) && !runtime_writeDeniedWithin(slothlet, b, a);
+	if (!sameModule(a, b)) return false;
+	return !writeDeniedWithin(slothlet, a, b) && !writeDeniedWithin(slothlet, b, a);
 }
 
 /**
  * What a value reaches `reader` as when another module hands it on while the permission system is on (the class
  * prototype guard): the reader may change data it is handed, but never the code of a module it may not write, however
- * it gets to it. A prototype a module wrote is checked ({@link runtime_writtenPrototypeFor}); any other object or
- * function, a stand-in of another module's code included, is a crossing view ({@link runtime_crossView}) through which
+ * it gets to it. A prototype a module wrote is checked ({@link writtenPrototypeFor}); any other object or
+ * function, a stand-in of another module's code included, is a crossing view ({@link crossView}) through which
  * every value read later — an instance, the class, a member the owner stored after handing the object on — reaches the
  * reader the same way. The host, the module the value came from, a module that may make every write at the path it
  * comes from, and every reader while the system is off get the value itself; a crossing view handed on again is decided
@@ -2500,9 +2475,9 @@ function runtime_asOneModule(slothlet, a, b) {
  * @returns {*} What the reader gets.
  * @private
  */
-function runtime_crossTo(value, reader, slothlet, from = null) {
+function crossTo(value, reader, slothlet, from = null) {
 	/**
-	 * Whether an object whose internal data holds no references ({@link runtime_isOpaqueData}) holds nothing else either,
+	 * Whether an object whose internal data holds no references ({@link isOpaqueData}) holds nothing else either,
 	 * so it can be handed on as it is: its prototype is the language's or Node's own, and it has no member of its own beyond
 	 * what its kind gives it. A typed array's members under string keys are read only where `permissions.gating.buffers`
 	 * asks for it: listing them lists every index, which costs milliseconds on a buffer of any size. Otherwise only its
@@ -2512,9 +2487,9 @@ function runtime_crossTo(value, reader, slothlet, from = null) {
 	 * @returns {boolean} True when nothing but its own data can be reached through it.
 	 * @private
 	 */
-	function runtime_isPristineData(value, slothlet) {
+	function isPristineData(value, slothlet) {
 		const prototype = Reflect.getPrototypeOf(value);
-		if (prototype !== null && !WeakSetMethods.has(INTRINSICS, prototype) && !runtime_isSharedValue(prototype)) return false;
+		if (prototype !== null && !WeakSetMethods.has(INTRINSICS, prototype) && !isSharedValue(prototype)) return false;
 		const types = util.types;
 		if (types.isArrayBufferView(value) && !types.isDataView(value)) {
 			if (Objects.getOwnPropertySymbols(value).length !== 0) return false;
@@ -2542,7 +2517,7 @@ function runtime_crossTo(value, reader, slothlet, from = null) {
 	 * @returns {boolean} True for one.
 	 * @private
 	 */
-	function runtime_isOpaqueData(value) {
+	function isOpaqueData(value) {
 		const types = util.types;
 		return (
 			types.isDate(value) ||
@@ -2561,8 +2536,8 @@ function runtime_crossTo(value, reader, slothlet, from = null) {
 	 * @returns {boolean} True for such a prototype.
 	 * @private
 	 */
-	function runtime_isWrittenClassPrototype(value) {
-		if (WeakSetMethods.has(INTRINSICS, value) || runtime_isSharedValue(value) || runtime_isSlothletValue(value)) return false;
+	function isWrittenClassPrototype(value) {
+		if (WeakSetMethods.has(INTRINSICS, value) || isSharedValue(value) || isSlothletValue(value)) return false;
 		const constructor = Reflect.getOwnPropertyDescriptor(value, "constructor")?.value;
 		return typeof constructor === "function" && Reflect.getOwnPropertyDescriptor(constructor, "prototype")?.value === value;
 	}
@@ -2577,15 +2552,15 @@ function runtime_crossTo(value, reader, slothlet, from = null) {
 	 * @returns {Promise} The guard's promise.
 	 * @private
 	 */
-	function runtime_crossPromise(promise, reader, slothlet, from) {
-		const key = runtime_crossKey(reader);
+	function crossPromise(promise, reader, slothlet, from) {
+		const key = crossKey(reader);
 		let byKey = WeakMapMethods.get(CROSSED_PROMISES, promise);
 		const existing = byKey == null ? undefined : MapMethods.get(byKey, key);
 		if (existing) return existing;
 		const crossed = Reflect.apply(SLOT_READERS.then, promise, [
-			(settled) => runtime_crossTo(settled, reader, slothlet, from),
+			(settled) => crossTo(settled, reader, slothlet, from),
 			(reason) => {
-				throw runtime_crossTo(reason, reader, slothlet, from);
+				throw crossTo(reason, reader, slothlet, from);
 			}
 		]);
 		if (!byKey) WeakMapMethods.set(CROSSED_PROMISES, promise, (byKey = new Map()));
@@ -2598,7 +2573,7 @@ function runtime_crossTo(value, reader, slothlet, from = null) {
 	 * on: any object or function that holds, or can later be given, a reference to another object. Primitives, the
 	 * language's own objects and functions, packages' and slothlet's own values, slothlet's views, and objects whose
 	 * internal data holds no references and that hold nothing else (dates, regular expressions, buffers, typed arrays, boxed
-	 * primitives, see {@link runtime_isPristineData}) pass as they are. A stand-in of another module's code is viewed like
+	 * primitives, see {@link isPristineData}) pass as they are. A stand-in of another module's code is viewed like
 	 * the code it stands for.
 	 * @param {object|Function} value - The value.
 	 * @param {object|null} [slothlet] - The instance it crosses in, whose `permissions.gating.buffers` decides whether a
@@ -2606,10 +2581,10 @@ function runtime_crossTo(value, reader, slothlet, from = null) {
 	 * @returns {boolean} True when it is viewed.
 	 * @private
 	 */
-	function runtime_needsCrossing(value, slothlet = null) {
+	function needsCrossing(value, slothlet = null) {
 		if (typeof value === "object" && runtime_unwrapClassInstance(value) !== value) return true;
 		if (WeakMapMethods.has(STAND_IN_RECORDS, value)) return true;
-		if (WeakSetMethods.has(INTRINSICS, value) || runtime_isSlothletValue(value) || runtime_isSharedValue(value)) return false;
+		if (WeakSetMethods.has(INTRINSICS, value) || isSlothletValue(value) || isSharedValue(value)) return false;
 		if (
 			WeakMapMethods.has(SELF_MEMBER_VIEWS, value) ||
 			WeakMapMethods.has(SELF_VIEW_NODES, value) ||
@@ -2618,9 +2593,9 @@ function runtime_crossTo(value, reader, slothlet, from = null) {
 		)
 			return false;
 		if (resolveWrapper(value) !== null || WeakMapMethods.has(capturedViewChildren, value) || isFrameworkInternal(value)) return false;
-		if (typeof value === "function") return util.types.isProxy(value) || !runtime_isBuiltinFunction(value);
+		if (typeof value === "function") return util.types.isProxy(value) || !isBuiltinFunction(value);
 		if (util.types.isProxy(value)) return true;
-		if (runtime_isOpaqueData(value)) return !runtime_isPristineData(value, slothlet);
+		if (isOpaqueData(value)) return !isPristineData(value, slothlet);
 		return true;
 	}
 
@@ -2633,37 +2608,37 @@ function runtime_crossTo(value, reader, slothlet, from = null) {
 	}
 	// A prototype's handle is the same object to every reader, and decides each access itself; code nothing could refuse
 	// an access through it, the host among them, gets the object behind it.
-	if (runtime_isPrototypeHandle(value)) return runtime_prototypeForHolder(slothlet, reader, value);
+	if (isPrototypeHandle(value)) return prototypeForHolder(slothlet, reader, value);
 	if (reader === null || reader === undefined || reader === HOST_READER) return value;
 	slothlet ??= reader?.slothlet ?? from?.slothlet ?? null;
-	if (!runtime_guardOn(slothlet)) return value;
+	if (!guardOn(slothlet)) return value;
 	const isModule = Boolean(reader.____slothletInternal);
 	// A class instance a node holds, handed back by one of its own methods, stands for its node (#625): the reader gets
 	// its view of the node, whose own write rule holds.
 	if (isModule && typeof value === "object" && WeakMapMethods.has(SELF_INSTANCE_NODES, runtime_unwrapClassInstance(value)))
-		return runtime_selfView(value, reader);
+		return selfView(value, reader);
 	// A stand-in comes from the module that made it. One of the reader's own module stays the stand-in here, as it is
-	// between two functions of one module; handed in as an argument it becomes the value again (see runtime_handIn).
+	// between two functions of one module; handed in as an argument it becomes the value again (see handIn).
 	const record = WeakMapMethods.get(STAND_IN_RECORDS, value);
 	if (record) from ??= record.owner;
 	// The async runtime's context wrapper of a class instance (#328) stands for the instance: the reader's own module's
 	// comes back as the instance it made; another module's comes from that module.
 	const creator = typeof value === "object" ? runtime_classInstanceCreator(value) : null;
 	if (creator !== null) {
-		if (isModule && runtime_asOneModule(slothlet, creator, reader)) return runtime_unwrapClassInstance(value);
+		if (isModule && asOneModule(slothlet, creator, reader)) return runtime_unwrapClassInstance(value);
 		from ??= creator;
 	}
-	if (isModule && from !== null && runtime_asOneModule(slothlet, from, reader)) return value;
+	if (isModule && from !== null && asOneModule(slothlet, from, reader)) return value;
 	// A function of the language's own a module handed over, handed on again, still runs for the module that handed it.
-	if (crossing?.handed && isModule) return runtime_handedView(value, reader, slothlet, from);
+	if (crossing?.handed && isModule) return handedView(value, reader, slothlet, from);
 	// A value the reader's own module held as itself when it handed it on comes back to it as itself.
-	if (runtime_isOwnOrigin(value, reader)) return value;
+	if (isOwnOrigin(value, reader)) return value;
 	// A view already made of it for the reader's module is what the module holds, except in a function of the module
 	// that may write everything at the path the value comes from: the view was made for another of the module's
 	// functions, and this one gets the value itself, as it would have had it read the value first.
 	const views = WeakMapMethods.get(CROSSING_VIEWS, value);
 	if (views !== undefined) {
-		const key = runtime_crossKey(reader);
+		const key = crossKey(reader);
 		const held = views.key === key ? views.view : views.others == null ? undefined : MapMethods.get(views.others, key);
 		if (held) {
 			if (!isModule) return held;
@@ -2678,9 +2653,9 @@ function runtime_crossTo(value, reader, slothlet, from = null) {
 				state.decided = null;
 			}
 			if (state.reader === reader ? state.readerDecided : state.decided ? WeakSetMethods.has(state.decided, reader) : false) return held;
-			const itself = runtime_handedAsItselfFor(value, slothlet, reader, from);
+			const itself = handedAsItselfFor(value, slothlet, reader, from);
 			if (itself !== null) {
-				if (itself === "writer") runtime_recordOrigin(value, from);
+				if (itself === "writer") recordOrigin(value, from);
 				return value;
 			}
 			if (state.reader === reader) state.readerDecided = true;
@@ -2696,54 +2671,50 @@ function runtime_crossTo(value, reader, slothlet, from = null) {
 		// decides.
 		const plain = record ? record.original : runtime_unwrapClassInstance(value);
 		if (plain !== null && typeof plain === "object" && !util.types.isProxy(plain)) {
-			if (
-				WeakSetMethods.has(MODULE_PROTOTYPES, plain) ||
-				runtime_knownPrototype(slothlet, plain) !== undefined ||
-				runtime_isWrittenClassPrototype(plain)
-			)
-				return runtime_writtenPrototypeFor(plain, reader, slothlet, from);
+			if (WeakSetMethods.has(MODULE_PROTOTYPES, plain) || knownPrototype(slothlet, plain) !== undefined || isWrittenClassPrototype(plain))
+				return writtenPrototypeFor(plain, reader, slothlet, from);
 		}
-		if (!runtime_needsCrossing(value, slothlet)) return value;
+		if (!needsCrossing(value, slothlet)) return value;
 		// A module that may write everything at the path the value comes from gets the value itself, as the owner does.
 		// Handed back to the module it came from, it is that module's own value again. A module the value's module may
 		// write gets a view all the same: the value's code is still its module's.
 		// A function that runs no module's code is the module's that hands it on, however much the reader may write: it
-		// stays a view, so what it writes is that module's to write too ({@link runtime_crossRun}).
-		const itself = isModule ? runtime_handedAsItselfFor(value, slothlet, reader, from) : null;
+		// stays a view, so what it writes is that module's to write too ({@link crossRun}).
+		const itself = isModule ? handedAsItselfFor(value, slothlet, reader, from) : null;
 		if (itself !== null) {
-			if (itself === "writer") runtime_recordOrigin(value, from);
+			if (itself === "writer") recordOrigin(value, from);
 			return value;
 		}
 		// A promise the other module holds is viewed like any other object, not followed: no reaction is added to it
 		// until the reader adds one through the view (`then`, `catch`, `await`), so whether its rejection counts as
 		// handled is what the owner and the reader made it, as in plain JavaScript.
-		if (record && typeof value === "object" && util.types.isPromise(value)) return runtime_crossPromise(value, reader, slothlet, from);
-		return runtime_crossView(value, reader, slothlet, from);
+		if (record && typeof value === "object" && util.types.isPromise(value)) return crossPromise(value, reader, slothlet, from);
+		return crossView(value, reader, slothlet, from);
 	} catch (error) {
 		// A refusal is the reader's answer. Anything else (a value that refuses to be described, a stack with no room
 		// left) leaves the value undecided: it is viewed, never handed on as it is.
-		if (runtime_inherits(error, SlothletError)) throw error;
-		return runtime_crossView(value, reader, slothlet, from);
+		if (inherits(error, SlothletError)) throw error;
+		return crossView(value, reader, slothlet, from);
 	}
 }
 
 /**
- * A crossing view (see {@link runtime_crossTo}): the value to every reflection, read and written through, with every
+ * A crossing view (see {@link crossTo}): the value to every reflection, read and written through, with every
  * value read from it — a member, a prototype, a call's result or error, a member of a `Map` or `Set`, a `WeakRef`'s
  * target — reaching the reader as values another module hands on do, and every value the reader puts into it reaching
  * the module the value came from the same way. The view is lazy: nothing is searched when it is made, so a member the
  * owner stores later is seen as well. It stands over a shadow kept in step with the value for what the language fixes.
- * Data members stay the reader's to change; the value's code does not ({@link runtime_crossAssertWrite}).
+ * Data members stay the reader's to change; the value's code does not ({@link crossAssertWrite}).
  * @param {object|Function} original - The value.
  * @param {object} reader - Who it reaches.
  * @param {object} slothlet - The instance.
  * @param {object|null} from - The wrapper of the module it comes from.
  * @param {boolean} [handed] - A function of the language's or Node's own handed on as an argument
- *   ({@link runtime_handedView}), which keeps its views itself.
+ *   ({@link handedView}), which keeps its views itself.
  * @returns {object|Function} The view, the same one for the same value and module every time.
  * @private
  */
-function runtime_crossView(original, reader, slothlet, from, handed = false) {
+function crossView(original, reader, slothlet, from, handed = false) {
 	/**
 	 * Record the prototypes some module wrote in the chain of a value crossing between modules (see
 	 * {@link MODULE_PROTOTYPES}). Only the chain is read, which runs none of the value's code; a Proxy in it, the
@@ -2752,7 +2723,7 @@ function runtime_crossView(original, reader, slothlet, from, handed = false) {
 	 * @returns {void}
 	 * @private
 	 */
-	function runtime_notePrototypes(value) {
+	function notePrototypes(value) {
 		for (let link = Reflect.getPrototypeOf(value), depth = 0; link !== null && depth < 64; depth++) {
 			if (
 				WeakSetMethods.has(INTRINSICS, link) ||
@@ -2761,14 +2732,14 @@ function runtime_crossView(original, reader, slothlet, from, handed = false) {
 				isSharedExport(link)
 			)
 				return;
-			if (runtime_isSlothletValue(link)) return;
+			if (isSlothletValue(link)) return;
 			WeakSetMethods.add(MODULE_PROTOTYPES, link);
 			link = Reflect.getPrototypeOf(link);
 		}
 	}
 
 	// The views of a value: its first module's held inline, any other module's in a map made only then.
-	const key = runtime_crossKey(reader);
+	const key = crossKey(reader);
 	const views = handed ? null : WeakMapMethods.get(CROSSING_VIEWS, original);
 	if (views != null) {
 		if (views.key === key) return views.view;
@@ -2777,9 +2748,9 @@ function runtime_crossView(original, reader, slothlet, from, handed = false) {
 	}
 	const isFunction = typeof original === "function";
 	// What the value inherits from that a module wrote is that module's code from here on, however it is reached.
-	if (!util.types.isProxy(original)) runtime_notePrototypes(original);
+	if (!util.types.isProxy(original)) notePrototypes(original);
 	const shadow = isFunction
-		? runtime_isConstructor(original)
+		? isConstructor(original)
 			? FunctionMethods.bind(function () {}, null)
 			: () => {}
 		: Arrays.isArray(original)
@@ -2820,8 +2791,8 @@ function runtime_crossView(original, reader, slothlet, from, handed = false) {
 }
 
 /**
- * The state of each crossing view, by its shadow (see {@link runtime_crossView}). `onOriginal` is whether the
- * language's and Node's own methods run on the value itself ({@link runtime_crossRunsOnOriginal}), told when first
+ * The state of each crossing view, by its shadow (see {@link crossView}). `onOriginal` is whether the
+ * language's and Node's own methods run on the value itself ({@link crossRunsOnOriginal}), told when first
  * asked; `methods` holds those methods as the view hands them out; `pinned` is whether the shadow holds anything;
  * `readerDecided` is whether the function the view was made for was found not to be handed the value itself, and
  * `decided` holds the other functions of its module found so, both under the rules as they were at `epoch` (the
@@ -2838,9 +2809,9 @@ const CROSSING_STATES = new WeakMap();
  * @returns {*} What the reader gets.
  * @private
  */
-function runtime_crossOut(state, member) {
+function crossOut(state, member) {
 	if (member === null || (typeof member !== "object" && typeof member !== "function")) return member;
-	return runtime_crossTo(member, state.reader, state.slothlet, state.from);
+	return crossTo(member, state.reader, state.slothlet, state.from);
 }
 
 /**
@@ -2851,10 +2822,10 @@ function runtime_crossOut(state, member) {
  * @returns {*} What is stored.
  * @private
  */
-function runtime_crossIn(state, member) {
+function crossIn(state, member) {
 	if (member === null || (typeof member !== "object" && typeof member !== "function")) return member;
 	if (member === state.view) return state.original;
-	return runtime_crossTo(member, state.from ?? HOST_READER, state.slothlet, state.reader?.____slothletInternal ? state.reader : null);
+	return crossTo(member, state.from ?? HOST_READER, state.slothlet, state.reader?.____slothletInternal ? state.reader : null);
 }
 
 /**
@@ -2864,13 +2835,13 @@ function runtime_crossIn(state, member) {
  * @returns {PropertyDescriptor|undefined} The reported descriptor.
  * @private
  */
-function runtime_crossDescribe(state, descriptor) {
+function crossDescribe(state, descriptor) {
 	if (!descriptor) return descriptor;
 	const result = { ...descriptor };
-	if ("value" in descriptor) result.value = runtime_crossOut(state, descriptor.value);
+	if ("value" in descriptor) result.value = crossOut(state, descriptor.value);
 	else {
-		if ("get" in descriptor) result.get = runtime_crossOut(state, descriptor.get);
-		if ("set" in descriptor) result.set = runtime_crossOut(state, descriptor.set);
+		if ("get" in descriptor) result.get = crossOut(state, descriptor.get);
+		if ("set" in descriptor) result.set = crossOut(state, descriptor.set);
 	}
 	return result;
 }
@@ -2885,7 +2856,7 @@ function runtime_crossDescribe(state, descriptor) {
  * @returns {void}
  * @private
  */
-function runtime_crossSync(shadow, state, prop, descriptor) {
+function crossSync(shadow, state, prop, descriptor) {
 	const open = Reflect.isExtensible(shadow);
 	if (!descriptor) {
 		if (!open) Reflect.deleteProperty(shadow, prop);
@@ -2898,13 +2869,13 @@ function runtime_crossSync(shadow, state, prop, descriptor) {
 
 /**
  * The prototype a crossing view reports: a prototype some module wrote is code, never data, whether or not a class
- * owns it, and reaches the reader checked ({@link runtime_writtenPrototypeFor}).
+ * owns it, and reaches the reader checked ({@link writtenPrototypeFor}).
  * @param {object} state - The view's state.
  * @param {object|null} raw - The prototype of the value behind the view.
  * @returns {object|null} What the reader gets.
  * @private
  */
-function runtime_crossPrototype(state, raw) {
+function crossPrototype(state, raw) {
 	if (raw === null || (typeof raw !== "object" && typeof raw !== "function")) return raw;
 	// A stand-in's prototype for a holder not known yet, and the context wrapper of one, stand for the prototype.
 	const sealed = WeakMapMethods.get(SELF_MEMBER_VIEWS, raw);
@@ -2915,11 +2886,11 @@ function runtime_crossPrototype(state, raw) {
 		typeof prototype === "object" &&
 		!util.types.isProxy(prototype) &&
 		!WeakSetMethods.has(INTRINSICS, prototype) &&
-		!runtime_isSharedValue(prototype) &&
-		!runtime_isSlothletValue(prototype)
+		!isSharedValue(prototype) &&
+		!isSlothletValue(prototype)
 	)
-		return runtime_atClassSite(state.slothlet, runtime_writtenPrototypeFor(prototype, state.reader, state.slothlet, state.from));
-	return runtime_crossOut(state, raw);
+		return atClassSite(state.slothlet, writtenPrototypeFor(prototype, state.reader, state.slothlet, state.from));
+	return crossOut(state, raw);
 }
 
 /**
@@ -2931,7 +2902,7 @@ function runtime_crossPrototype(state, raw) {
  * @returns {void}
  * @private
  */
-function runtime_crossSettle(shadow, state) {
+function crossSettle(shadow, state) {
 	const keys = Reflect.ownKeys(state.original);
 	const open = Reflect.isExtensible(shadow);
 	for (let ofIndex = 0, ofList = Reflect.ownKeys(shadow); ofIndex < ofList.length; ofIndex++) {
@@ -2941,18 +2912,18 @@ function runtime_crossSettle(shadow, state) {
 	for (let ofIndex = 0, ofList = keys; ofIndex < ofList.length; ofIndex++) {
 		const key = ofList[ofIndex];
 		if (!open && !Reflect.getOwnPropertyDescriptor(shadow, key)) continue;
-		const descriptor = runtime_crossDescribe(state, Reflect.getOwnPropertyDescriptor(state.original, key));
+		const descriptor = crossDescribe(state, Reflect.getOwnPropertyDescriptor(state.original, key));
 		if (descriptor) Reflect.defineProperty(shadow, key, descriptor);
 	}
 	state.pinned = true;
 	if (!open) return;
-	Reflect.setPrototypeOf(shadow, runtime_crossPrototype(state, Reflect.getPrototypeOf(state.original)));
+	Reflect.setPrototypeOf(shadow, crossPrototype(state, Reflect.getPrototypeOf(state.original)));
 	Reflect.preventExtensions(shadow);
 }
 
 /**
  * One of the language's or Node's own methods read through a crossing view of a value they run on
- * ({@link runtime_crossRunsOnOriginal}): it runs on the value itself, its results handed on to the reader and what the
+ * ({@link crossRunsOnOriginal}): it runs on the value itself, its results handed on to the reader and what the
  * reader passes it handed to the module the value came from. A callback the engine calls back with what the value holds
  * gets each of those as the reader gets it. Null for any other value read.
  * @param {object} state - The view's state.
@@ -2960,7 +2931,7 @@ function runtime_crossSettle(shadow, state) {
  * @returns {Function|null} The method, the same each read.
  * @private
  */
-function runtime_crossEngineMethod(state, fn) {
+function crossEngineMethod(state, fn) {
 	/**
 	 * Whether the language's and Node's own methods read through a crossing view run on the value itself rather than on the
 	 * view: an object with internal slots (a `Map`, a `Set`, a `WeakRef`, a date, an iterator, a boxed primitive), whose
@@ -2970,15 +2941,15 @@ function runtime_crossEngineMethod(state, fn) {
 	 * @returns {boolean} True when they run on the value.
 	 * @private
 	 */
-	function runtime_crossRunsOnOriginal(state) {
+	function crossRunsOnOriginal(state) {
 		if (state.onOriginal !== null) return state.onOriginal;
 		const { original } = state;
 		let answer = false;
 		if (typeof original !== "function" && !util.types.isProxy(original)) {
 			const types = util.types;
 			answer =
-				runtime_hasInternalSlots(original) ||
-				runtime_isNativeIterator(original) ||
+				hasInternalSlots(original) ||
+				isNativeIterator(original) ||
 				types.isMapIterator(original) ||
 				types.isSetIterator(original) ||
 				types.isGeneratorObject(original) ||
@@ -2987,7 +2958,7 @@ function runtime_crossEngineMethod(state, fn) {
 			// or a module's subclass of one.
 			for (let link = Reflect.getPrototypeOf(original), depth = 0; !answer && link !== null && depth < 64; depth++) {
 				if (util.types.isProxy(link) || link === Objects.prototype || link === Arrays.prototype) break;
-				if (WeakSetMethods.has(INTRINSICS, link) || runtime_isSharedValue(link)) answer = true;
+				if (WeakSetMethods.has(INTRINSICS, link) || isSharedValue(link)) answer = true;
 				link = Reflect.getPrototypeOf(link);
 			}
 		}
@@ -2996,8 +2967,8 @@ function runtime_crossEngineMethod(state, fn) {
 	}
 
 	if (typeof fn !== "function" || util.types.isProxy(fn)) return null;
-	if (!(WeakSetMethods.has(INTRINSICS, fn) || runtime_isBuiltinFunction(fn) || isSharedExport(fn))) return null;
-	if (!runtime_crossRunsOnOriginal(state)) return null;
+	if (!(WeakSetMethods.has(INTRINSICS, fn) || isBuiltinFunction(fn) || isSharedExport(fn))) return null;
+	if (!crossRunsOnOriginal(state)) return null;
 	const { original } = state;
 	state.methods ??= new WeakMap();
 	let method = WeakMapMethods.get(state.methods, fn);
@@ -3007,8 +2978,8 @@ function runtime_crossEngineMethod(state, fn) {
 		// A step of one of the language's own iterators answers with an object the engine makes for that step.
 		const steps =
 			(name === "next" || name === "return" || name === "throw") &&
-			(WeakSetMethods.has(INTRINSICS, fn) || runtime_isBuiltinFunction(fn)) &&
-			(runtime_isNativeIterator(original) ||
+			(WeakSetMethods.has(INTRINSICS, fn) || isBuiltinFunction(fn)) &&
+			(isNativeIterator(original) ||
 				util.types.isMapIterator(original) ||
 				util.types.isSetIterator(original) ||
 				util.types.isGeneratorObject(original));
@@ -3018,37 +2989,34 @@ function runtime_crossEngineMethod(state, fn) {
 				const handed = mapList(args, (arg) =>
 					callsBack && typeof arg === "function"
 						? function (...values) {
-								return runtime_crossIn(
+								return crossIn(
 									state,
 									Reflect.apply(
 										arg,
 										this === original ? state.view : this,
-										mapList(values, (item) => runtime_crossOut(state, item))
+										mapList(values, (item) => crossOut(state, item))
 									)
 								);
 							}
-						: runtime_crossIn(state, arg)
+						: crossIn(state, arg)
 				);
 				let result;
 				try {
 					result = Reflect.apply(fn, receiver, handed);
 				} catch (error) {
-					throw runtime_crossOut(state, error);
+					throw crossOut(state, error);
 				}
 				// The step's result is no one's value: the reader gets a result of its own, holding what the step gave as
 				// the reader gets it. Viewing the result itself would make a view for every element stepped over.
-				if (steps && runtime_isStepResult(result)) return { value: runtime_crossOut(state, result.value), done: result.done };
+				if (steps && isStepResult(result)) return { value: crossOut(state, result.value), done: result.done };
 				// An async generator's step settles to such a result: the reader's promise settles to a result of its own (#758).
 				if (steps && util.types.isPromise(result)) {
 					return Reflect.apply(SLOT_READERS.then, result, [
-						(settled) =>
-							runtime_isStepResult(settled)
-								? { value: runtime_crossOut(state, settled.value), done: settled.done }
-								: runtime_crossOut(state, settled),
-						(reason) => Promises.reject(runtime_crossOut(state, reason))
+						(settled) => (isStepResult(settled) ? { value: crossOut(state, settled.value), done: settled.done } : crossOut(state, settled)),
+						(reason) => Promises.reject(crossOut(state, reason))
 					]);
 				}
-				return runtime_crossOut(state, result);
+				return crossOut(state, result);
 			}
 		}[name];
 		WeakMapMethods.set(state.methods, fn, method);
@@ -3063,7 +3031,7 @@ function runtime_crossEngineMethod(state, fn) {
  * @returns {object|Function} The value whose members decide.
  * @private
  */
-function runtime_crossSubject(original) {
+function crossSubject(original) {
 	return WeakMapMethods.get(STAND_IN_RECORDS, original)?.original ?? runtime_unwrapClassInstance(original);
 }
 
@@ -3088,7 +3056,7 @@ function runtime_crossSubject(original) {
  *   code the live runtime cannot attribute.
  * @private
  */
-function runtime_crossAssertWrite(state, prop, change) {
+function crossAssertWrite(state, prop, change) {
 	/**
 	 * Whether a member of the value behind a crossing view is code of the module the value came from: a function, or an
 	 * accessor, that the reader's module did not put there itself.
@@ -3097,29 +3065,29 @@ function runtime_crossAssertWrite(state, prop, change) {
 	 * @returns {boolean} True for the owner's code.
 	 * @private
 	 */
-	function runtime_crossIsOwnersCode(state, descriptor) {
+	function crossIsOwnersCode(state, descriptor) {
 		if (!("value" in descriptor)) return true;
 		const held = descriptor.value;
 		if (typeof held !== "function") return false;
 		// A function the reader's module stored there is the reader's to replace.
 		const crossing = WeakMapMethods.get(CROSSINGS, held);
-		if (crossing) return !(crossing.from !== null && state.reader?.____slothletInternal && runtime_sameModule(crossing.from, state.reader));
-		return !runtime_isOwnOrigin(held, state.reader);
+		if (crossing) return !(crossing.from !== null && state.reader?.____slothletInternal && sameModule(crossing.from, state.reader));
+		return !isOwnOrigin(held, state.reader);
 	}
 
 	const { original, slothlet } = state;
 	if (!slothlet?.handlers?.apiManager?.ownershipEnforced?.()) return;
 	// A stand-in, and the async runtime's context wrapper, stand for the value whose members decide.
-	const subject = runtime_crossSubject(original);
+	const subject = crossSubject(original);
 	// A function, and an object some module uses as a prototype, are code whole: every member, new ones included.
 	let held = typeof original === "function" || change === "prototype" || WeakSetMethods.has(MODULE_PROTOTYPES, subject);
 	if (!held && !util.types.isProxy(subject)) {
 		const own = Reflect.getOwnPropertyDescriptor(subject, prop);
 		if (own) {
-			held = runtime_crossIsOwnersCode(state, own) && !(change === "set" && !("value" in own) && typeof own.set === "function");
+			held = crossIsOwnersCode(state, own) && !(change === "set" && !("value" in own) && typeof own.set === "function");
 		} else if (change !== "delete") {
 			for (let link = Reflect.getPrototypeOf(subject), depth = 0; link !== null && depth < 64; depth++) {
-				if (util.types.isProxy(link) || WeakSetMethods.has(INTRINSICS, link) || runtime_isSharedValue(link)) break;
+				if (util.types.isProxy(link) || WeakSetMethods.has(INTRINSICS, link) || isSharedValue(link)) break;
 				const inherited = Reflect.getOwnPropertyDescriptor(link, prop);
 				if (inherited) {
 					const isCode = !("value" in inherited) || typeof inherited.value === "function";
@@ -3131,7 +3099,7 @@ function runtime_crossAssertWrite(state, prop, change) {
 		}
 	}
 	if (!held) return;
-	const parts = runtime_crossFromParts(state.from);
+	const parts = crossFromParts(state.from);
 	if (typeof prop === "string") listPush(parts, prop);
 	const identity = slothlet.contextManager?.getCallerIdentity?.(slothlet.instanceID);
 	if (identity?.unresolved) {
@@ -3176,7 +3144,7 @@ const CROSSING_SHADOW_PROTOTYPE = Objects.create(
 );
 
 /**
- * The traps of every crossing view (see {@link runtime_crossView}), each finding its view's state by the shadow.
+ * The traps of every crossing view (see {@link crossView}), each finding its view's state by the shadow.
  * @type {ProxyHandler<object>}
  * @private
  */
@@ -3184,59 +3152,58 @@ const CROSSING_HANDLER = {
 	get(shadow, prop, receiver) {
 		const state = WeakMapMethods.get(CROSSING_STATES, shadow);
 		if (state.pinned) {
-			if (!Reflect.isExtensible(shadow)) runtime_crossSettle(shadow, state);
+			if (!Reflect.isExtensible(shadow)) crossSettle(shadow, state);
 			const held = Reflect.getOwnPropertyDescriptor(shadow, prop);
 			if (held && !held.configurable && "value" in held && !held.writable) return held.value;
 		}
 		const { original } = state;
 		const own = receiver === state.view;
 		// A private member the value inherits from a module's prototype is read as through that prototype.
-		runtime_inheritedPrivate(state.slothlet, runtime_crossSubject(original), prop)?.refusePrivate(prop);
+		inheritedPrivate(state.slothlet, crossSubject(original), prop)?.refusePrivate(prop);
 		const value = Reflect.get(original, prop, own ? original : receiver);
 		if (value === null || (typeof value !== "object" && typeof value !== "function")) return value;
 		const fixed = Reflect.getOwnPropertyDescriptor(original, prop);
-		if (fixed && !fixed.configurable) runtime_crossSync(shadow, state, prop, runtime_crossDescribe(state, fixed));
+		if (fixed && !fixed.configurable) crossSync(shadow, state, prop, crossDescribe(state, fixed));
 		// The prototype read by its accessor is the prototype, as `Object.getPrototypeOf` reports it.
 		if (prop === "__proto__" && !fixed) {
 			const prototype = Reflect.getPrototypeOf(original);
-			if (prototype === value || WeakMapMethods.has(STAND_IN_RECORDS, original)) return runtime_crossPrototype(state, prototype);
+			if (prototype === value || WeakMapMethods.has(STAND_IN_RECORDS, original)) return crossPrototype(state, prototype);
 		}
 		if (own) {
-			const handed = runtime_crossHandedMember(state, prop, value);
+			const handed = crossHandedMember(state, prop, value);
 			if (handed !== undefined) return handed;
 		}
-		return runtime_crossEngineMethod(state, value) ?? runtime_crossOut(state, value);
+		return crossEngineMethod(state, value) ?? crossOut(state, value);
 	},
 	set(shadow, prop, value, receiver) {
 		const state = WeakMapMethods.get(CROSSING_STATES, shadow);
 		const own = receiver === state.view;
 		if (own) {
-			if (prop === "__proto__" && !Reflect.getOwnPropertyDescriptor(state.original, prop))
-				runtime_crossAssertWrite(state, null, "prototype");
-			else runtime_crossAssertWrite(state, prop, "set");
+			if (prop === "__proto__" && !Reflect.getOwnPropertyDescriptor(state.original, prop)) crossAssertWrite(state, null, "prototype");
+			else crossAssertWrite(state, prop, "set");
 		}
-		const into = own ? state.original : runtime_crossIn(state, receiver);
-		const done = Reflect.set(state.original, prop, runtime_crossIn(state, value), into);
+		const into = own ? state.original : crossIn(state, receiver);
+		const done = Reflect.set(state.original, prop, crossIn(state, value), into);
 		const fixed = Reflect.getOwnPropertyDescriptor(state.original, prop);
-		if (fixed && (!fixed.configurable || state.pinned)) runtime_crossSync(shadow, state, prop, runtime_crossDescribe(state, fixed));
+		if (fixed && (!fixed.configurable || state.pinned)) crossSync(shadow, state, prop, crossDescribe(state, fixed));
 		return done;
 	},
 	has(shadow, prop) {
 		const state = WeakMapMethods.get(CROSSING_STATES, shadow);
-		if (state.pinned && !Reflect.isExtensible(shadow)) runtime_crossSettle(shadow, state);
-		if (runtime_inheritedPrivate(state.slothlet, runtime_crossSubject(state.original), prop)?.privateHidden(prop)) return false;
+		if (state.pinned && !Reflect.isExtensible(shadow)) crossSettle(shadow, state);
+		if (inheritedPrivate(state.slothlet, crossSubject(state.original), prop)?.privateHidden(prop)) return false;
 		return Reflect.has(state.original, prop);
 	},
 	deleteProperty(shadow, prop) {
 		const state = WeakMapMethods.get(CROSSING_STATES, shadow);
-		runtime_crossAssertWrite(state, prop, "delete");
+		crossAssertWrite(state, prop, "delete");
 		const done = Reflect.deleteProperty(state.original, prop);
 		if (done && state.pinned) Reflect.deleteProperty(shadow, prop);
 		return done;
 	},
 	ownKeys(shadow) {
 		const state = WeakMapMethods.get(CROSSING_STATES, shadow);
-		if (!Reflect.isExtensible(state.original) || !Reflect.isExtensible(shadow)) runtime_crossSettle(shadow, state);
+		if (!Reflect.isExtensible(state.original) || !Reflect.isExtensible(shadow)) crossSettle(shadow, state);
 		if (!Reflect.isExtensible(shadow)) return Reflect.ownKeys(shadow);
 		const keys = Reflect.ownKeys(state.original);
 		if (state.pinned)
@@ -3249,103 +3216,103 @@ const CROSSING_HANDLER = {
 	getOwnPropertyDescriptor(shadow, prop) {
 		const state = WeakMapMethods.get(CROSSING_STATES, shadow);
 		if (!Reflect.isExtensible(state.original) || !Reflect.isExtensible(shadow)) {
-			runtime_crossSettle(shadow, state);
+			crossSettle(shadow, state);
 			return Reflect.getOwnPropertyDescriptor(shadow, prop);
 		}
-		const result = runtime_crossDescribe(state, Reflect.getOwnPropertyDescriptor(state.original, prop));
-		runtime_crossSync(shadow, state, prop, result);
+		const result = crossDescribe(state, Reflect.getOwnPropertyDescriptor(state.original, prop));
+		crossSync(shadow, state, prop, result);
 		return result;
 	},
 	defineProperty(shadow, prop, descriptor) {
 		const state = WeakMapMethods.get(CROSSING_STATES, shadow);
-		runtime_crossAssertWrite(state, prop, "define");
+		crossAssertWrite(state, prop, "define");
 		const into = { ...descriptor };
-		if ("value" in descriptor) into.value = runtime_crossIn(state, descriptor.value);
-		if ("get" in descriptor) into.get = runtime_crossIn(state, descriptor.get);
-		if ("set" in descriptor) into.set = runtime_crossIn(state, descriptor.set);
+		if ("value" in descriptor) into.value = crossIn(state, descriptor.value);
+		if ("get" in descriptor) into.get = crossIn(state, descriptor.get);
+		if ("set" in descriptor) into.set = crossIn(state, descriptor.set);
 		const done = Reflect.defineProperty(state.original, prop, into);
-		if (done) runtime_crossSync(shadow, state, prop, runtime_crossDescribe(state, Reflect.getOwnPropertyDescriptor(state.original, prop)));
+		if (done) crossSync(shadow, state, prop, crossDescribe(state, Reflect.getOwnPropertyDescriptor(state.original, prop)));
 		return done;
 	},
 	getPrototypeOf(shadow) {
 		if (!Reflect.isExtensible(shadow)) return Reflect.getPrototypeOf(shadow);
 		const state = WeakMapMethods.get(CROSSING_STATES, shadow);
-		return runtime_crossPrototype(state, Reflect.getPrototypeOf(state.original));
+		return crossPrototype(state, Reflect.getPrototypeOf(state.original));
 	},
 	setPrototypeOf(shadow, prototype) {
 		const state = WeakMapMethods.get(CROSSING_STATES, shadow);
 		// The prototype it already reports changes nothing.
 		const reported = Reflect.isExtensible(shadow)
-			? runtime_crossPrototype(state, Reflect.getPrototypeOf(state.original))
+			? crossPrototype(state, Reflect.getPrototypeOf(state.original))
 			: Reflect.getPrototypeOf(shadow);
 		if (reported === prototype) return true;
 		if (!Reflect.isExtensible(shadow)) return false;
-		runtime_crossAssertWrite(state, null, "prototype");
-		return Reflect.setPrototypeOf(state.original, runtime_crossIn(state, prototype));
+		crossAssertWrite(state, null, "prototype");
+		return Reflect.setPrototypeOf(state.original, crossIn(state, prototype));
 	},
 	isExtensible(shadow) {
 		const state = WeakMapMethods.get(CROSSING_STATES, shadow);
-		if (!Reflect.isExtensible(state.original)) runtime_crossSettle(shadow, state);
+		if (!Reflect.isExtensible(state.original)) crossSettle(shadow, state);
 		return Reflect.isExtensible(shadow);
 	},
 	preventExtensions(shadow) {
 		const state = WeakMapMethods.get(CROSSING_STATES, shadow);
-		if (typeof state.original === "function") runtime_crossAssertWrite(state, null, "prototype");
+		if (typeof state.original === "function") crossAssertWrite(state, null, "prototype");
 		const done = Reflect.preventExtensions(state.original);
-		if (done) runtime_crossSettle(shadow, state);
+		if (done) crossSettle(shadow, state);
 		return done;
 	},
 	apply(shadow, thisArg, args) {
 		const state = WeakMapMethods.get(CROSSING_STATES, shadow);
 		let result;
 		try {
-			const receiver = runtime_crossIn(state, thisArg);
+			const receiver = crossIn(state, thisArg);
 			// A node's own function, or a module's copy of it, is a call of the node whoever runs it.
-			runtime_gateLeafCopy(state.slothlet, state.original, args, receiver, true);
+			gateLeafCopy(state.slothlet, state.original, args, receiver, true);
 			// A function of the engine's own the runner gives one that runs for the module that handed it (a scheduler, a
 			// promise's `then`) runs for that module too, whenever it is called back.
-			const forHander = runtime_crossRunsForHander(state);
+			const forHander = crossRunsForHander(state);
 			const given = mapList(args, (arg) => {
-				const behind = forHander ? runtime_uncross(arg) : arg;
-				return forHander && runtime_runsForHander(behind, state.from)
-					? runtime_handedView(behind, state.reader, state.slothlet, state.from)
-					: runtime_crossIn(state, arg);
+				const behind = forHander ? uncross(arg) : arg;
+				return forHander && runsForHander(behind, state.from)
+					? handedView(behind, state.reader, state.slothlet, state.from)
+					: crossIn(state, arg);
 			});
-			result = runtime_crossRun(state, () => Reflect.apply(state.original, receiver, given));
+			result = crossRun(state, () => Reflect.apply(state.original, receiver, given));
 		} catch (error) {
-			throw runtime_crossOut(state, error);
+			throw crossOut(state, error);
 		}
-		return runtime_crossOut(state, result);
+		return crossOut(state, result);
 	},
 	construct(shadow, args, newTarget) {
 		const state = WeakMapMethods.get(CROSSING_STATES, shadow);
-		runtime_gateLeafCopy(state.slothlet, state.original, args, undefined, true);
+		gateLeafCopy(state.slothlet, state.original, args, undefined, true);
 		let target = state.original;
 		if (newTarget !== state.view) {
 			// A class the reader constructs for is its own: what it makes the instance's prototype is the reader's.
-			target = runtime_uncross(newTarget);
+			target = uncross(newTarget);
 			if (state.reader?.____slothletInternal && typeof target === "function") {
-				runtime_recordOrigin(target, state.reader);
+				recordOrigin(target, state.reader);
 				const prototype = Reflect.getOwnPropertyDescriptor(target, "prototype")?.value;
-				if (prototype !== null && typeof prototype === "object") runtime_recordOrigin(prototype, state.reader);
+				if (prototype !== null && typeof prototype === "object") recordOrigin(prototype, state.reader);
 			}
 		}
 		let result;
 		try {
 			result = Reflect.construct(
 				state.original,
-				mapList(args, (arg) => runtime_crossIn(state, arg)),
+				mapList(args, (arg) => crossIn(state, arg)),
 				target
 			);
 		} catch (error) {
-			throw runtime_crossOut(state, error);
+			throw crossOut(state, error);
 		}
-		return runtime_crossOut(state, result);
+		return crossOut(state, result);
 	}
 };
 
 /**
- * A segment no api path holds, standing for every member beneath a path in {@link runtime_readsNothingBeneath}.
+ * A segment no api path holds, standing for every member beneath a path in {@link readsNothingBeneath}.
  * @type {string}
  * @private
  */
@@ -3353,12 +3320,12 @@ const ANY_MEMBER_SEGMENT = "\u0000member";
 
 /**
  * The api path of a node's member: the member's own name at the api root, whose path is empty.
- * @param {object} wrapper - The node's wrapper, or the api root's gate (see {@link runtime_rootGate}).
+ * @param {object} wrapper - The node's wrapper, or the api root's gate (see {@link rootGate}).
  * @param {string|symbol} prop - The member's key.
  * @returns {string} The member's path.
  * @private
  */
-function runtime_memberPathOf(wrapper, prop) {
+function memberPathOf(wrapper, prop) {
 	const base = wrapper.____slothletInternal.apiPath;
 	return base ? base + "." + String(prop) : String(prop);
 }
@@ -3381,114 +3348,110 @@ export function MembraneLayer(Base) {
 				Base.define("membrane", {
 					INSPECT_CUSTOM,
 					SEALED_SHELL_READER,
-					runtime_behindGivenView,
-					runtime_givenAsIs,
-					runtime_givenMember,
-					runtime_givenPrototypeFor,
-					runtime_givenViewOn,
+					behindGivenView,
 					STAND_IN_RECORDS,
 					INBOUND_VIEWS,
 					searchDepth,
 					searchBudget,
-					runtime_attributeResult,
-					runtime_membrane,
-					runtime_constructAsNode,
+					attributeResult,
+					membrane,
+					constructAsNode,
 					HOST_HANDED,
-					runtime_ownArguments,
-					runtime_frontingNodeNow,
-					runtime_functionNodePrototype,
-					runtime_functionNodeFor,
-					runtime_knownPrototype,
-					runtime_carryTo,
+					ownArguments,
+					frontingNodeNow,
+					knownPrototype,
+					carryTo,
 					CROSSINGS,
-					runtime_guardOn,
-					runtime_uncross,
+					guardOn,
+					uncross,
 					CROSSING_ORIGINS,
-					runtime_recordOrigin,
-					runtime_asOneModule,
-					runtime_crossTo,
+					recordOrigin,
+					asOneModule,
+					crossTo,
 					ANY_MEMBER_SEGMENT,
-					runtime_memberPathOf,
-					runtime_crossArgumentsFrom
+					memberPathOf,
+					crossArgumentsFrom
 				});
+				Base.define("given", { asIs: givenAsIs, member: givenMember, prototypeFor: givenPrototypeFor, viewOn: givenViewOn });
+				Base.define("function", { nodePrototype: functionNodePrototype, nodeFor: functionNodeFor });
 				Base.linkLayer(this, (methods, registered) => {
 					realClass = registered;
 					INTRINSICS = methods.values.INTRINSICS;
-					runtime_hasInternalSlots = methods.values.runtime_hasInternalSlots;
-					runtime_holdsCode = methods.values.runtime_holdsCode;
-					runtime_inheritedPrivate = methods.values.runtime_inheritedPrivate;
-					runtime_inherits = methods.values.runtime_inherits;
-					runtime_isBindingMethod = methods.values.runtime_isBindingMethod;
-					runtime_isBuiltinFunction = methods.values.runtime_isBuiltinFunction;
-					runtime_isCarrier = methods.values.runtime_isCarrier;
-					runtime_isCodeObject = methods.values.runtime_isCodeObject;
-					runtime_isConstructor = methods.values.runtime_isConstructor;
-					runtime_isModuleProxy = methods.values.runtime_isModuleProxy;
-					runtime_isNativeIterator = methods.values.runtime_isNativeIterator;
-					runtime_isOwnOrigin = methods.values.runtime_isOwnOrigin;
-					runtime_isPrototypeHandle = methods.values.runtime_isPrototypeHandle;
-					runtime_isShared = methods.values.runtime_isShared;
-					runtime_isSharedValue = methods.values.runtime_isSharedValue;
-					runtime_isSlothletValue = methods.values.runtime_isSlothletValue;
-					runtime_isSlotObject = methods.values.runtime_isSlotObject;
-					runtime_isStepResult = methods.values.runtime_isStepResult;
-					runtime_isTerminalData = methods.values.runtime_isTerminalData;
-					runtime_ownsPrototype = methods.values.runtime_ownsPrototype;
+					hasInternalSlots = methods.has.internalSlots;
+					holdsCode = methods.holds.code;
+					inheritedPrivate = methods.inherited.private;
+					inherits = methods.values.inherits;
+					isBindingMethod = methods.is.bindingMethod;
+					isBuiltinFunction = methods.is.builtinFunction;
+					isCarrier = methods.is.carrier;
+					isCodeObject = methods.is.codeObject;
+					isConstructor = methods.is.constructor;
+					isModuleProxy = methods.is.moduleProxy;
+					isNativeIterator = methods.is.nativeIterator;
+					isOwnOrigin = methods.is.ownOrigin;
+					isPrototypeHandle = methods.is.prototypeHandle;
+					isShared = methods.is.shared;
+					isSharedValue = methods.is.sharedValue;
+					isSlothletValue = methods.is.slothletValue;
+					isSlotObject = methods.is.slotObject;
+					isStepResult = methods.is.stepResult;
+					isTerminalData = methods.is.terminalData;
+					ownsPrototype = methods.values.ownsPrototype;
 					VM_NATIVE_SCRIPT = methods.values.VM_NATIVE_SCRIPT;
 					VM_SCRIPT = methods.values.VM_SCRIPT;
 					FUNCTION_NODES = methods.nodes.FUNCTION_NODES;
 					MAKERS = methods.nodes.MAKERS;
-					nodeRefOf = methods.nodes.nodeRefOf;
-					runtime_classPrototypeSites = methods.nodes.runtime_classPrototypeSites;
-					runtime_exposePrototype = methods.nodes.runtime_exposePrototype;
-					runtime_makerOf = methods.nodes.runtime_makerOf;
-					runtime_moduleKey = methods.nodes.runtime_moduleKey;
-					runtime_prototypeForHolder = methods.nodes.runtime_prototypeForHolder;
-					runtime_prototypeGiven = methods.nodes.runtime_prototypeGiven;
-					runtime_prototypeHandedTo = methods.nodes.runtime_prototypeHandedTo;
-					runtime_assertOwnedWrite = methods.rules.runtime_assertOwnedWrite;
-					runtime_gateLeafCopy = methods.rules.runtime_gateLeafCopy;
-					runtime_memberHoldsCode = methods.rules.runtime_memberHoldsCode;
-					runtime_readGateDecision = methods.rules.runtime_readGateDecision;
-					runtime_readGateFor = methods.rules.runtime_readGateFor;
-					runtime_recordedPrototype = methods.run.runtime_recordedPrototype;
-					runtime_runAsMaker = methods.run.runtime_runAsMaker;
-					runtime_runningLeafOf = methods.run.runtime_runningLeafOf;
-					runtime_runsForHander = methods.run.runtime_runsForHander;
-					runtime_runsNoModuleCode = methods.run.runtime_runsNoModuleCode;
-					capturedViewChildren = methods.views.capturedViewChildren;
+					nodeRefOf = methods.node.refOf;
+					classPrototypeSites = methods.nodes.classPrototypeSites;
+					exposePrototype = methods.nodes.exposePrototype;
+					makerOf = methods.nodes.makerOf;
+					moduleKey = methods.module.key;
+					prototypeForHolder = methods.prototype.forHolder;
+					prototypeGiven = methods.prototype.given;
+					prototypeHandedTo = methods.prototype.handedTo;
+					assertOwnedWrite = methods.rules.assertOwnedWrite;
+					gateLeafCopy = methods.rules.gateLeafCopy;
+					memberHoldsCode = methods.rules.memberHoldsCode;
+					readGateDecision = methods.read.gateDecision;
+					readGateFor = methods.read.gateFor;
+					recordedPrototype = methods.run.recordedPrototype;
+					runAsMaker = methods.run.asMaker;
+					runningLeafOf = methods.run.runningLeafOf;
+					runsForHander = methods.run.runsForHander;
+					runsNoModuleCode = methods.run.runsNoModuleCode;
+					capturedViewChildren = methods.captured.viewChildren;
 					GIVEN_VIEWS = methods.views.GIVEN_VIEWS;
 					GUARD_VIEWS = methods.views.GUARD_VIEWS;
 					HOST_READER = methods.views.HOST_READER;
 					PROTOTYPE_HANDLE_READER = methods.views.PROTOTYPE_HANDLE_READER;
 					PROTOTYPE_PATHS = methods.views.PROTOTYPE_PATHS;
-					runtime_atClassSite = methods.views.runtime_atClassSite;
-					runtime_behindMemberView = methods.views.runtime_behindMemberView;
-					runtime_capturedView = methods.views.runtime_capturedView;
-					runtime_frontingNode = methods.views.runtime_frontingNode;
-					runtime_permissionsOn = methods.views.runtime_permissionsOn;
-					runtime_sameModule = methods.views.runtime_sameModule;
-					runtime_selfMemberOf = methods.views.runtime_selfMemberOf;
-					runtime_selfModuleReader = methods.views.runtime_selfModuleReader;
-					runtime_selfReader = methods.views.runtime_selfReader;
-					runtime_selfView = methods.views.runtime_selfView;
-					runtime_unwrapSelfView = methods.views.runtime_unwrapSelfView;
+					atClassSite = methods.views.atClassSite;
+					behindMemberView = methods.views.behindMemberView;
+					capturedView = methods.captured.view;
+					frontingNode = methods.views.frontingNode;
+					permissionsOn = methods.views.permissionsOn;
+					sameModule = methods.views.sameModule;
+					selfMemberOf = methods.self.memberOf;
+					selfModuleReader = methods.self.moduleReader;
+					selfReader = methods.self.reader;
+					selfView = methods.self.view;
+					unwrapSelfView = methods.views.unwrapSelfView;
 					SELF_INSTANCE_NODES = methods.views.SELF_INSTANCE_NODES;
 					SELF_MEMBER_VIEWS = methods.views.SELF_MEMBER_VIEWS;
 					SELF_VIEW_NODES = methods.views.SELF_VIEW_NODES;
 					ACTING_FOR = methods.uw.ACTING_FOR;
-					isLeafFileFunction = methods.uw.isLeafFileFunction;
+					isLeafFileFunction = methods.is.leafFileFunction;
 					resolveWrapper = methods.uw.resolveWrapper;
 					runtime_classInstanceCreator = methods.uw.runtime_classInstanceCreator;
 					runtime_unwrapClassInstance = methods.uw.runtime_unwrapClassInstance;
 					trustedRootOwn = methods.uw.trustedRootOwn;
 					leafOfCopy = methods.uw.leafOfCopy;
-					runtime_constructorReadMayRefuse = methods.nodes.runtime_constructorReadMayRefuse;
+					constructorReadMayRefuse = methods.nodes.constructorReadMayRefuse;
 					CLASS_INSTANCES = methods.nodes.CLASS_INSTANCES;
 					WELL_KNOWN_SYMBOLS = methods.values.WELL_KNOWN_SYMBOLS;
 					TYPED_ARRAY_BYTE_LENGTH = methods.values.TYPED_ARRAY_BYTE_LENGTH;
 					TYPED_ARRAY_LENGTH = methods.values.TYPED_ARRAY_LENGTH;
-					runtime_readerHoldsPrototype = methods.nodes.runtime_readerHoldsPrototype;
+					readerHoldsPrototype = methods.nodes.readerHoldsPrototype;
 				});
 			}
 

@@ -64,7 +64,7 @@ import {
 	WeakSetMethods
 } from "#helpers/intrinsics";
 import { internals as callerPinningInternals } from "#helpers/caller-pinning";
-const { runtime_selfHookHandler } = unifiedWrapperInternals("lib/handlers/hook-manager");
+const { selfHookHandler } = unifiedWrapperInternals("lib/handlers/hook-manager");
 const { markCallerLocked, isCallerLocked } = callerPinningInternals("lib/handlers/hook-manager");
 const { markFrameworkInternal, markSlothletProxy } = frameworkInternalsInternals("lib/handlers/hook-manager");
 
@@ -802,7 +802,7 @@ export class HookManager extends ComponentBase {
 		let effectiveHandler = lockCaller ? this.#pinHandler(handler) : handler;
 		// A handler pinned to a module is handed its payload as that module reads the api through `self`:
 		// its own views of the call's nodes and a root view as `api`, never the values themselves (#625).
-		if (lockCaller && ownerWrapper) effectiveHandler = runtime_selfHookHandler(effectiveHandler, this.slothlet, ownerWrapper);
+		if (lockCaller && ownerWrapper) effectiveHandler = selfHookHandler(effectiveHandler, this.slothlet, ownerWrapper);
 
 		// Create hook object
 		const hook = {

@@ -65,7 +65,7 @@ import {
 	WeakSet,
 	WeakSetMethods
 } from "#helpers/intrinsics";
-const { runtime_selfModuleReader } = unifiedWrapperInternals("lib/handlers/module-manager");
+const { selfModuleReader } = unifiedWrapperInternals("lib/handlers/module-manager");
 
 /**
  * Default collision policy passed to slothlet's underlying `addApiComponent()`
@@ -290,7 +290,7 @@ export class ModuleManager extends ComponentBase {
 	 * @throws {SlothletError} `INVALID_ARGUMENT` when `nameOrResult` is an object this instance's discover() did not return.
 	 * @throws {SlothletError} `MODULE_MOUNT_COLLISION` when the exact mountPath is already occupied and `collisionMode` is `"error"`.
 	 */
-	async addModule(nameOrResult, options = {}, writer = runtime_selfModuleReader(this.slothlet)) {
+	async addModule(nameOrResult, options = {}, writer = selfModuleReader(this.slothlet)) {
 		assertOptionKeys(options, "slothlet.api.modules.add.one", "slothlet.api.modules.add");
 		const collisionMode = collisionModeOf(options);
 		const discoverResult = await this.#resolveToDiscoverResult(nameOrResult, options);
@@ -317,7 +317,7 @@ export class ModuleManager extends ComponentBase {
 	 * @param {AddModulesOptions} [options]
 	 * @returns {Promise<MountResult[] | {mounted: MountResult[], failed: FailureEntry[]}>} Plain array under `throw`/`rollback`; aggregate object under `best-effort`.
 	 */
-	async addModules(items, options = {}, writer = runtime_selfModuleReader(this.slothlet)) {
+	async addModules(items, options = {}, writer = selfModuleReader(this.slothlet)) {
 		if (!Arrays.isArray(items)) {
 			throw new SlothletError("INVALID_ARGUMENT", {
 				argument: "items",
@@ -392,7 +392,7 @@ export class ModuleManager extends ComponentBase {
 	 * @throws {SlothletError} What {@link ApiManager#assertModuleRemovalOf} throws: module code removes every match or
 	 *   none.
 	 */
-	async removeModule(name, opts = {}, writer = runtime_selfModuleReader(this.slothlet)) {
+	async removeModule(name, opts = {}, writer = selfModuleReader(this.slothlet)) {
 		assertOptionKeys(opts, "slothlet.api.modules.remove");
 		const matches = [];
 		for (const ofEntry of mapEntries(this.#mounted)) {

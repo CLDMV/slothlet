@@ -63,47 +63,47 @@ import { ownBindingsRefusal } from "#helpers/instance-imports";
 let trustedRootOwn,
 	registerLeafFile,
 	hasOwn,
-	runtime_frameworkWrite,
-	runtime_inherits,
-	runtime_isErrorValue,
-	runtime_dataKind,
-	runtime_snapshotBarrier,
+	frameworkWrite,
+	inherits,
+	isErrorValue,
+	dataKind,
+	snapshotBarrier,
 	PENDING_CHANGES,
-	runtime_dropRefusedChanges,
-	runtime_retireChanges,
+	dropRefusedChanges,
+	retireChanges,
 	ASSIGNED_DATA,
-	runtime_holdsAssignedData,
+	holdsAssignedData,
 	ADOPTED_ACCESSORS,
-	runtime_runAccessor,
-	runtime_fillPrototype,
+	runAccessor,
+	fillPrototype,
 	RECONSTRUCTED_FROM,
-	runtime_moduleObjectFor,
-	runtime_originalAccessor,
-	runtime_isModuleProxy,
-	runtime_makerOf,
-	runtime_permissionsOn,
-	runtime_membrane,
+	moduleObjectFor,
+	originalAccessor,
+	isModuleProxy,
+	makerOf,
+	permissionsOn,
+	membrane,
 	setFromNames,
-	runtime_registerLeafFunction,
-	runtime_cycleNode,
+	registerLeafFunction,
+	nodeInCycle,
 	wrapperDebugEnabled,
 	createNamedProxyTarget,
 	isAwaitableThen,
 	hasThenMember,
 	thenableExportError,
 	isThenableModuleValue,
-	runtime_isPosition,
-	runtime_withRestartForwarding,
-	runtime_forwardHandlerTo,
-	runtime_defineProxyInspect,
+	isPosition,
+	withRestartForwarding,
+	forwardHandlerTo,
+	defineProxyInspect,
 	UnifiedWrapper,
 	isClassInstance,
 	resolveWrapper,
 	registerProxy,
-	runtime_captureNode,
-	runtime_checkpointNodeBuiltins,
-	runtime_checkpointNodePrototypes,
-	runtime_makeQueuedChange;
+	captureNode,
+	checkpointNodeBuiltins,
+	checkpointNodePrototypes,
+	makeQueuedChange;
 /** The registered `UnifiedWrapper`: the only class this layer's constructor builds for. @type {Function|undefined} */
 let realClass;
 
@@ -117,12 +117,12 @@ let realClass;
  * @private
  *
  * @example
- * runtime_defineAdoptedAccessor(wrapper, "total", descriptor);
+ * defineAdoptedAccessor(wrapper, "total", descriptor);
  */
-function runtime_defineAdoptedAccessor(wrapper, key, accessor) {
+function defineAdoptedAccessor(wrapper, key, accessor) {
 	Objects.defineProperty(wrapper, key, {
 		__proto__: null,
-		...runtime_adoptAccessor(wrapper, accessor),
+		...adoptAccessor(wrapper, accessor),
 		enumerable: true,
 		configurable: true
 	});
@@ -130,7 +130,7 @@ function runtime_defineAdoptedAccessor(wrapper, key, accessor) {
 
 /**
  * The getter and setter an adoption puts on a wrapper for a module's own: each runs the module's half with the api
- * node as `this`, as the module the node belongs to (see {@link runtime_runAccessor}). A half that is already an
+ * node as `this`, as the module the node belongs to (see {@link runAccessor}). A half that is already an
  * adoption's is kept, and a half that is not a function is left out.
  * @param {object} wrapper - The wrapper to hold the member.
  * @param {{get?: Function, set?: Function}} accessor - The module's own getter and setter.
@@ -138,9 +138,9 @@ function runtime_defineAdoptedAccessor(wrapper, key, accessor) {
  * @private
  *
  * @example
- * Object.defineProperty(wrapper, "total", { ...runtime_adoptAccessor(wrapper, descriptor), enumerable: true });
+ * Object.defineProperty(wrapper, "total", { ...adoptAccessor(wrapper, descriptor), enumerable: true });
  */
-function runtime_adoptAccessor(wrapper, { get, set }) {
+function adoptAccessor(wrapper, { get, set }) {
 	const node = () => wrapper.____slothletInternal.proxy ?? wrapper;
 	let cache = WeakMapMethods.get(ADOPTIONS, wrapper);
 	if (!cache) WeakMapMethods.set(ADOPTIONS, wrapper, (cache = { get: new WeakMap(), set: new WeakMap() }));
@@ -157,8 +157,8 @@ function runtime_adoptAccessor(wrapper, { get, set }) {
 		return adopted;
 	};
 	return {
-		get: adopt(get, "get", (original) => () => runtime_runAccessor(wrapper, original, node(), [])),
-		set: adopt(set, "set", (original) => (value) => runtime_runAccessor(wrapper, original, node(), [value]))
+		get: adopt(get, "get", (original) => () => runAccessor(wrapper, original, node(), [])),
+		set: adopt(set, "set", (original) => (value) => runAccessor(wrapper, original, node(), [value]))
 	};
 }
 
@@ -178,14 +178,14 @@ const ADOPTIONS = new WeakMap();
  * @returns {*} What the node holds.
  * @private
  */
-function runtime_adoptedImpl(wrapper, impl) {
-	if (!runtime_isModuleProxy(impl)) return impl;
+function implToAdopt(wrapper, impl) {
+	if (!isModuleProxy(impl)) return impl;
 	// A node's own Proxy export is a member of the node, not a value handed out: under either attribution its traps run
 	// as a call of the node, while the permission system is on (#726).
-	if (!wrapper?.slothlet?.instanceID || !wrapper.slothlet.contextManager?.runInContext || !runtime_permissionsOn(wrapper)) return impl;
+	if (!wrapper?.slothlet?.instanceID || !wrapper.slothlet.contextManager?.runInContext || !permissionsOn(wrapper)) return impl;
 	// A layer the build laid over the module's Proxy is laid over its stand-in instead, holding what it held.
-	if (isCompositionLayer(impl)) return layerOnto(impl, runtime_adoptedImpl(wrapper, layerUnderlying(impl)));
-	return runtime_membrane(runtime_makerOf(wrapper), wrapper, impl, true);
+	if (isCompositionLayer(impl)) return layerOnto(impl, implToAdopt(wrapper, layerUnderlying(impl)));
+	return membrane(makerOf(wrapper), wrapper, impl, true);
 }
 
 /**
@@ -201,9 +201,9 @@ function runtime_adoptedImpl(wrapper, impl) {
  * @private
  *
  * @example
- * runtime_adoptArrayIntegrity(wrapper); // wrapper fronts Object.freeze([1, 2]): Object.isFrozen(proxy) is now true
+ * adoptArrayIntegrity(wrapper); // wrapper fronts Object.freeze([1, 2]): Object.isFrozen(proxy) is now true
  */
-function runtime_adoptArrayIntegrity(wrapper) {
+function adoptArrayIntegrity(wrapper) {
 	const internal = wrapper.____slothletInternal;
 	const { impl, proxy } = internal;
 	if (!Arrays.isArray(impl)) return;
@@ -216,7 +216,7 @@ function runtime_adoptArrayIntegrity(wrapper) {
 		// The node is made to match its module's own array, whoever's read noticed the change: the
 		// framework's write, never that reader's (#625). Exempted by its wrapper: while the node is built,
 		// its proxy is not yet registered to it.
-		runtime_frameworkWrite(wrapper, () => {
+		frameworkWrite(wrapper, () => {
 			// The shell takes its length from the array when it is sealed, so a read-only length is fixed last.
 			if (!Reflect.isExtensible(array)) {
 				Reflect.preventExtensions(proxy);
@@ -241,7 +241,7 @@ function runtime_adoptArrayIntegrity(wrapper) {
  * @returns {boolean} True when the member ends up fixed.
  * @private
  */
-function runtime_definitionFixes(wrapper, target, prop, descriptor) {
+function definitionFixes(wrapper, target, prop, descriptor) {
 	const current = Reflect.getOwnPropertyDescriptor(wrapper, prop);
 	const shell = target === wrapper ? undefined : Reflect.getOwnPropertyDescriptor(target, prop);
 	const known = shell ?? current;
@@ -265,7 +265,7 @@ function runtime_definitionFixes(wrapper, target, prop, descriptor) {
  * @returns {void}
  * @private
  */
-function runtime_syncArrayIntegrity(wrapper, target) {
+function syncArrayIntegrity(wrapper, target) {
 	const internal = wrapper.____slothletInternal;
 	const impl = internal.impl;
 	// Sealing or freezing the node reads its members' descriptors, which would start another sync meanwhile.
@@ -282,7 +282,7 @@ function runtime_syncArrayIntegrity(wrapper, target) {
 		lengthFixed === shellLengthFixed
 	)
 		return;
-	runtime_adoptArrayIntegrity(wrapper);
+	adoptArrayIntegrity(wrapper);
 }
 
 /** Whether {@link MaterializeLayer} has built its class: it builds one, for the wrapper's chain. @type {boolean} */
@@ -300,60 +300,54 @@ export function MaterializeLayer(Base) {
 	return Base.layer(
 		class Materialize extends Base {
 			static {
-				Base.define("materialize", {
-					runtime_defineAdoptedAccessor,
-					runtime_adoptAccessor,
-					runtime_adoptedImpl,
-					runtime_adoptArrayIntegrity,
-					runtime_definitionFixes,
-					runtime_syncArrayIntegrity
-				});
+				Base.define("materialize", { defineAdoptedAccessor, adoptAccessor, adoptArrayIntegrity, definitionFixes, syncArrayIntegrity });
+				Base.define("impl", { toAdopt: implToAdopt });
 				Base.linkLayer(this, (methods, registered) => {
 					realClass = registered;
 					UnifiedWrapper = registered;
 					ASSIGNED_DATA = methods.values.ASSIGNED_DATA;
-					runtime_dataKind = methods.values.runtime_dataKind;
-					runtime_defineProxyInspect = methods.values.runtime_defineProxyInspect;
-					runtime_holdsAssignedData = methods.values.runtime_holdsAssignedData;
-					runtime_inherits = methods.values.runtime_inherits;
-					runtime_isErrorValue = methods.values.runtime_isErrorValue;
-					runtime_isModuleProxy = methods.values.runtime_isModuleProxy;
-					runtime_isPosition = methods.values.runtime_isPosition;
+					dataKind = methods.values.dataKind;
+					defineProxyInspect = methods.values.defineProxyInspect;
+					holdsAssignedData = methods.holds.assignedData;
+					inherits = methods.values.inherits;
+					isErrorValue = methods.is.errorValue;
+					isModuleProxy = methods.is.moduleProxy;
+					isPosition = methods.is.position;
 					ADOPTED_ACCESSORS = methods.nodes.ADOPTED_ACCESSORS;
 					RECONSTRUCTED_FROM = methods.nodes.RECONSTRUCTED_FROM;
-					runtime_cycleNode = methods.nodes.runtime_cycleNode;
-					runtime_makerOf = methods.nodes.runtime_makerOf;
-					runtime_moduleObjectFor = methods.nodes.runtime_moduleObjectFor;
-					runtime_originalAccessor = methods.nodes.runtime_originalAccessor;
-					runtime_forwardHandlerTo = methods.rules.runtime_forwardHandlerTo;
-					runtime_frameworkWrite = methods.rules.runtime_frameworkWrite;
-					runtime_registerLeafFunction = methods.rules.runtime_registerLeafFunction;
-					runtime_runAccessor = methods.rules.runtime_runAccessor;
-					runtime_withRestartForwarding = methods.rules.runtime_withRestartForwarding;
-					runtime_fillPrototype = methods.run.runtime_fillPrototype;
-					runtime_snapshotBarrier = methods.run.runtime_snapshotBarrier;
-					hasOwn = methods.views.hasOwn;
-					runtime_permissionsOn = methods.views.runtime_permissionsOn;
-					runtime_membrane = methods.membrane.runtime_membrane;
+					nodeInCycle = methods.node.inCycle;
+					makerOf = methods.nodes.makerOf;
+					moduleObjectFor = methods.module.objectFor;
+					originalAccessor = methods.nodes.originalAccessor;
+					forwardHandlerTo = methods.rules.forwardHandlerTo;
+					frameworkWrite = methods.framework.write;
+					registerLeafFunction = methods.rules.registerLeafFunction;
+					runAccessor = methods.run.accessor;
+					withRestartForwarding = methods.rules.withRestartForwarding;
+					fillPrototype = methods.run.fillPrototype;
+					snapshotBarrier = methods.run.snapshotBarrier;
+					hasOwn = methods.has.own;
+					permissionsOn = methods.views.permissionsOn;
+					membrane = methods.membrane.membrane;
 					PENDING_CHANGES = methods.waiting.PENDING_CHANGES;
-					runtime_dropRefusedChanges = methods.waiting.runtime_dropRefusedChanges;
-					runtime_retireChanges = methods.waiting.runtime_retireChanges;
+					dropRefusedChanges = methods.waiting.dropRefusedChanges;
+					retireChanges = methods.waiting.retireChanges;
 					createNamedProxyTarget = methods.uw.createNamedProxyTarget;
-					hasThenMember = methods.uw.hasThenMember;
-					isAwaitableThen = methods.uw.isAwaitableThen;
-					isClassInstance = methods.uw.isClassInstance;
-					isThenableModuleValue = methods.uw.isThenableModuleValue;
+					hasThenMember = methods.has.thenMember;
+					isAwaitableThen = methods.is.awaitableThen;
+					isClassInstance = methods.is.classInstance;
+					isThenableModuleValue = methods.is.thenableModuleValue;
 					registerLeafFile = methods.uw.registerLeafFile;
 					resolveWrapper = methods.uw.resolveWrapper;
 					setFromNames = methods.uw.setFromNames;
 					thenableExportError = methods.uw.thenableExportError;
 					trustedRootOwn = methods.uw.trustedRootOwn;
-					wrapperDebugEnabled = methods.uw.wrapperDebugEnabled;
+					wrapperDebugEnabled = methods.wrapper.debugEnabled;
 					registerProxy = methods.values.registerProxy;
-					runtime_captureNode = methods.run.runtime_captureNode;
-					runtime_checkpointNodeBuiltins = methods.run.runtime_checkpointNodeBuiltins;
-					runtime_checkpointNodePrototypes = methods.run.runtime_checkpointNodePrototypes;
-					runtime_makeQueuedChange = methods.waiting.runtime_makeQueuedChange;
+					captureNode = methods.run.captureNode;
+					checkpointNodeBuiltins = methods.checkpoint.nodeBuiltins;
+					checkpointNodePrototypes = methods.checkpoint.nodePrototypes;
+					makeQueuedChange = methods.waiting.makeQueuedChange;
 				});
 			}
 
@@ -436,7 +430,7 @@ export function MaterializeLayer(Base) {
 					descriptor &&
 					(WeakMapMethods.has(ADOPTED_ACCESSORS, descriptor.get) || WeakMapMethods.has(ADOPTED_ACCESSORS, descriptor.set))
 				) {
-					runtime_defineAdoptedAccessor(target, key, runtime_originalAccessor(descriptor));
+					defineAdoptedAccessor(target, key, originalAccessor(descriptor));
 					return;
 				}
 				if (descriptor && (descriptor.get || descriptor.set)) {
@@ -471,7 +465,7 @@ export function MaterializeLayer(Base) {
 			static _memberDescriptor(source, key) {
 				const descriptor = Objects.getOwnPropertyDescriptor(source, key);
 				if (descriptor && (descriptor.get || descriptor.set)) {
-					return { __proto__: null, ...runtime_originalAccessor(descriptor), enumerable: true, configurable: true };
+					return { __proto__: null, ...originalAccessor(descriptor), enumerable: true, configurable: true };
 				}
 				return { __proto__: null, value: source[key], writable: true, enumerable: true, configurable: true };
 			}
@@ -501,7 +495,7 @@ export function MaterializeLayer(Base) {
 			 */
 			static _staysValue(value) {
 				if (value === null || (typeof value !== "object" && typeof value !== "function")) return true;
-				return runtime_dataKind(value) !== null || runtime_isErrorValue(value);
+				return dataKind(value) !== null || isErrorValue(value);
 			}
 
 			/**
@@ -523,7 +517,7 @@ export function MaterializeLayer(Base) {
 			static _memberNode(slothlet, { key, value, apiPath, filePath, moduleID, sourceFolder }) {
 				if (UnifiedWrapper._staysValue(value) || resolveWrapper(value) !== null) return null;
 				let impl = value;
-				if (typeof value === "object" && !Arrays.isArray(value) && !(EventEmitter && runtime_inherits(value, EventEmitter))) {
+				if (typeof value === "object" && !Arrays.isArray(value) && !(EventEmitter && inherits(value, EventEmitter))) {
 					impl = copyForComposition(value);
 					if (impl !== value) slothlet.handlers?.ownership?.noteClone(impl, value);
 				}
@@ -540,7 +534,7 @@ export function MaterializeLayer(Base) {
 					sourceFolder
 				});
 				node.____slothletInternal.sourceValue = value;
-				node.____slothletInternal.moduleObject = impl !== value ? runtime_moduleObjectFor(node, value, true) : null;
+				node.____slothletInternal.moduleObject = impl !== value ? moduleObjectFor(node, value, true) : null;
 				return node.createProxy();
 			}
 
@@ -732,17 +726,17 @@ export function MaterializeLayer(Base) {
 				}
 				// Clone to protect API cache from ___adoptImplChildren's delete operations.
 				// See static _cloneImpl() for full rationale.
-				this.____slothletInternal.impl = UnifiedWrapper._cloneImpl(runtime_adoptedImpl(this, newImpl));
+				this.____slothletInternal.impl = UnifiedWrapper._cloneImpl(implToAdopt(this, newImpl));
 				// A value arriving replaces a file's null or undefined (#792); null itself also passes through here for a node
 				// being cleared, which keeps what it was built from.
 				if (newImpl !== null && newImpl !== undefined) this.____slothletInternal.nullish = null;
 				// The module's own object behind the new value, when its file exports it (#746); a member's is set by the
 				// node that hands it its value (see ___adoptImplChildren).
-				this.____slothletInternal.moduleObject = runtime_moduleObjectFor(this, newImpl, false);
+				this.____slothletInternal.moduleObject = moduleObjectFor(this, newImpl, false);
 				// The node's members come from the new value from here on: none of them was defined read-only through the node.
 				this.____slothletInternal.readOnlyKeys = null;
-				runtime_fillPrototype(this);
-				runtime_registerLeafFunction(this, this.____slothletInternal.impl);
+				fillPrototype(this);
+				registerLeafFunction(this, this.____slothletInternal.impl);
 				this.____slothletInternal.invalid = false;
 
 				// Update isCallable if it's currently unlocked (false) and the new impl is callable.
@@ -838,9 +832,9 @@ export function MaterializeLayer(Base) {
 				// impl they actually supplied (their function, or their plain namespace), so removing the incoming
 				// module reverts to it.
 				this.slothlet.handlers.ownership.pinLiveEntries(internal.apiPath, this, internal.impl, resolveWrapper);
-				internal.impl = runtime_adoptedImpl(this, impl);
-				runtime_fillPrototype(this);
-				runtime_registerLeafFunction(this, internal.impl);
+				internal.impl = implToAdopt(this, impl);
+				fillPrototype(this);
+				registerLeafFunction(this, internal.impl);
 				internal.isCallable = true;
 				internal.isCallableLocked = true;
 				if (internal.proxyTraps !== null) this.___upgradeToCallableProxy();
@@ -878,8 +872,8 @@ export function MaterializeLayer(Base) {
 				internal.isCallableLocked = true;
 
 				const target = createNamedProxyTarget(internal.apiPath, "callableProxy");
-				runtime_defineProxyInspect(wrapper, target);
-				const newProxy = new NativeProxy(target, runtime_withRestartForwarding(internal.proxyHandler, wrapper));
+				defineProxyInspect(wrapper, target);
+				const newProxy = new NativeProxy(target, withRestartForwarding(internal.proxyHandler, wrapper));
 				internal.proxy = newProxy;
 				internal.proxyHandler = null;
 				internal.proxyTraps = null;
@@ -889,7 +883,7 @@ export function MaterializeLayer(Base) {
 
 				// The old proxy stays registered for this wrapper (resolveWrapper keeps working on a held
 				// reference) and forwards everything to whichever proxy is current.
-				runtime_forwardHandlerTo(oldTraps, () => internal.proxy);
+				forwardHandlerTo(oldTraps, () => internal.proxy);
 				wrapper.___replaceInParent(oldProxy, newProxy);
 			}
 
@@ -926,11 +920,11 @@ export function MaterializeLayer(Base) {
 				// The value gets a shell of its own, as createProxy() builds it: an array shell for an array (#603,
 				// #609), an empty object otherwise.
 				const target = Arrays.isArray(internal.impl) ? [] : Objects.create(null);
-				runtime_defineProxyInspect(wrapper, target);
-				const traps = runtime_withRestartForwarding(handler, wrapper);
+				defineProxyInspect(wrapper, target);
+				const traps = withRestartForwarding(handler, wrapper);
 				const newProxy = new NativeProxy(target, traps);
 				internal.proxy = newProxy;
-				if (Arrays.isArray(target)) runtime_adoptArrayIntegrity(wrapper);
+				if (Arrays.isArray(target)) adoptArrayIntegrity(wrapper);
 				registerProxy(newProxy, wrapper);
 				// Like a non-callable proxy createProxy() builds, an object-shell node can still become callable.
 				if (!Arrays.isArray(target)) {
@@ -938,7 +932,7 @@ export function MaterializeLayer(Base) {
 					internal.proxyTraps = traps;
 				}
 				internal.settledFrom = { ...lazy, settledProxy: newProxy, settledTraps: traps };
-				runtime_forwardHandlerTo(oldTraps, () => internal.proxy);
+				forwardHandlerTo(oldTraps, () => internal.proxy);
 				wrapper.___replaceInParent(oldProxy, newProxy);
 			}
 
@@ -966,7 +960,7 @@ export function MaterializeLayer(Base) {
 				internal.settledFrom = null;
 				if (settled === null) return;
 				Objects.assign(settled.traps, settled.ownTraps);
-				runtime_forwardHandlerTo(settled.settledTraps, () => internal.proxy);
+				forwardHandlerTo(settled.settledTraps, () => internal.proxy);
 				internal.proxy = settled.proxy;
 				internal.proxyHandler = null;
 				internal.proxyTraps = null;
@@ -1059,7 +1053,7 @@ export function MaterializeLayer(Base) {
 			 */
 			___setImpl(newImpl, moduleID = null, forceReuseChildren = false, attributeChildren = false) {
 				// A run that started before this change reads the node as it was (see helpers/run-snapshot).
-				runtime_snapshotBarrier(this);
+				snapshotBarrier(this);
 				// Debug block only fires when wrapperDebugEnabled AND apiPath === "string"; neither condition is met in tests.
 				/* v8 ignore start */
 				if ((wrapperDebugEnabled || this.____config?.debug?.wrapper) && this.____slothletInternal.apiPath === "string") {
@@ -1075,7 +1069,7 @@ export function MaterializeLayer(Base) {
 				// A loaded node given a new value is another node: the refusals of changes made on the old one are not its own (#653).
 				if (this.____slothletInternal.state.materialized && this.____slothletInternal.impl !== newImpl) {
 					this.____slothletInternal.changeGeneration++;
-					runtime_dropRefusedChanges(this);
+					dropRefusedChanges(this);
 				}
 
 				const priorAdoptOwner = this.____slothletInternal.adoptOwner;
@@ -1135,7 +1129,7 @@ export function MaterializeLayer(Base) {
 			___resetLazy(newMaterializeFunc, memberNames = null) {
 				// The node is about to be another; the refusals of changes made on the old one are not its own (#653).
 				this.____slothletInternal.changeGeneration++;
-				runtime_dropRefusedChanges(this);
+				dropRefusedChanges(this);
 				this.slothlet.debug("wrapper", {
 					key: "DEBUG_MODE_RESETLAZY_CALLED",
 					apiPath: this.____slothletInternal.apiPath,
@@ -1207,20 +1201,20 @@ export function MaterializeLayer(Base) {
 				/**
 				 * Make the changes queued through stand-ins for a wrapper that has just loaded, in the order they were made, each as
 				 * the code that made it (#653). One the node refuses is kept for the next await or call through that node (see
-				 * {@link runtime_takeRefusedChange}); the rest still land.
+				 * {@link takeRefusedChange}); the rest still land.
 				 * @param {object} wrapper - The wrapper, loaded.
 				 * @param {number} generation - Its change generation when the load started.
 				 * @returns {void}
 				 * @private
 				 */
-				function runtime_replayStandInChanges(wrapper, generation) {
+				function replayStandInChanges(wrapper, generation) {
 					const pending = wrapper.____slothletInternal.pendingChanges;
 					if (!pending) return;
 					wrapper.____slothletInternal.pendingChanges = null;
 					WeakMapMethods.get(PENDING_CHANGES, wrapper.slothlet) == null
 						? undefined
 						: SetMethods.delete(WeakMapMethods.get(PENDING_CHANGES, wrapper.slothlet), wrapper);
-					for (let i = 0; i < pending.length; i++) runtime_makeQueuedChange(wrapper, pending[i], generation);
+					for (let i = 0; i < pending.length; i++) makeQueuedChange(wrapper, pending[i], generation);
 				}
 
 				/**
@@ -1231,7 +1225,7 @@ export function MaterializeLayer(Base) {
 				 * @returns {void}
 				 * @private
 				 */
-				function runtime_checkpointLoaded(wrapper) {
+				function checkpointLoaded(wrapper) {
 					const slothlet = wrapper.slothlet;
 					const domain = domainOf(slothlet);
 					if (!runsOpen(domain)) return;
@@ -1241,9 +1235,9 @@ export function MaterializeLayer(Base) {
 						SetMethods.add(seen, node);
 						const internal = node.____slothletInternal;
 						if (internal.invalid || (internal.mode === "lazy" && !internal.state.materialized)) return;
-						beforeChange(domain, node, runtime_captureNode);
-						runtime_checkpointNodeBuiltins(domain, node);
-						runtime_checkpointNodePrototypes(domain, node);
+						beforeChange(domain, node, captureNode);
+						checkpointNodeBuiltins(domain, node);
+						checkpointNodePrototypes(domain, node);
 						const keys = Reflect.ownKeys(node);
 						for (let index = 0; index < keys.length; index++) {
 							if (isFrameworkReservedKey(keys[index])) continue;
@@ -1265,7 +1259,7 @@ export function MaterializeLayer(Base) {
 				 * @returns {Promise<*>} What it resolves to.
 				 * @private
 				 */
-				function runtime_loadApart(slothlet, load, wrapper) {
+				function loadApart(slothlet, load, wrapper) {
 					const contextManager = slothlet?.contextManager;
 					// The live runtime keeps, apart from every flow, the marks the asking flow carries (a load into a run's tree is that
 					// tree's build): it carries them with its flows, which a detached load would leave.
@@ -1314,7 +1308,7 @@ export function MaterializeLayer(Base) {
 				// The load runs apart from the flow of whichever call asked for it, as an eager tree's build runs before any call:
 				// the module's top level, and its exports' getters and Proxy traps as slothlet reads them, are the module's own code,
 				// never run inside that call (#726). Under the async runtime the caller's flow would otherwise carry into the load.
-				this.____slothletInternal.materializationPromise = runtime_loadApart(
+				this.____slothletInternal.materializationPromise = loadApart(
 					this.slothlet,
 					async () => {
 						this.____slothletInternal.state.inFlight = true;
@@ -1378,9 +1372,9 @@ export function MaterializeLayer(Base) {
 								// Notify Slothlet that this lazy wrapper has materialized (counted once, #588).
 								this.___trackLazyLoad("loaded");
 								// A run open now reads the node as it loaded: saved before the changes made through stand-ins for it are made.
-								if (anyRunOpen()) runtime_checkpointLoaded(this);
+								if (anyRunOpen()) checkpointLoaded(this);
 								// Changes made through stand-ins for it while it loaded, now that it has (#653).
-								runtime_replayStandInChanges(this, changeGeneration);
+								replayStandInChanges(this, changeGeneration);
 
 								if ((wrapperDebugEnabled || this.____config?.debug?.wrapper) && this.____slothletInternal.apiPath === "string") {
 									this.slothlet.debug("wrapper", {
@@ -1629,7 +1623,7 @@ export function MaterializeLayer(Base) {
 					? undefined
 					: SetMethods.delete(WeakMapMethods.get(PENDING_CHANGES, this.slothlet), this);
 				this.____slothletInternal.changeGeneration++;
-				runtime_dropRefusedChanges(this);
+				dropRefusedChanges(this);
 				this.____slothletInternal.invalid = true;
 				this.____slothletInternal.impl = null;
 				this.____slothletInternal.nullish = null;
@@ -1748,7 +1742,7 @@ export function MaterializeLayer(Base) {
 				// skipped. This also guarantees such an impl is never "depleted" by adoption's own
 				// delete-on-adopt step, which is what makes the applyTrap `thisArg` substitution below safe
 				// to extend to this same condition.
-				if (EventEmitter && runtime_inherits(this.____slothletInternal.impl, EventEmitter)) return;
+				if (EventEmitter && inherits(this.____slothletInternal.impl, EventEmitter)) return;
 				// A class instance is a live object too (#589, #590): its methods and getters live on its prototype
 				// and read and write the instance's own fields through `this`. Adopting would copy those fields
 				// onto the wrapper and empty the impl, so methods would read nothing and the api would serve
@@ -1909,7 +1903,7 @@ export function MaterializeLayer(Base) {
 							delete this.____slothletInternal.impl[key];
 							continue;
 						}
-						runtime_defineAdoptedAccessor(this, key, descriptor);
+						defineAdoptedAccessor(this, key, descriptor);
 						continue;
 					}
 					const value = this.____slothletInternal.impl[key];
@@ -1991,7 +1985,7 @@ export function MaterializeLayer(Base) {
 
 					// A function further up the tree is the node there, as in plain JS: never a new node below (its own function
 					// is skipped above, and served by the get trap).
-					const cycleNode = runtime_cycleNode(this, value, false);
+					const cycleNode = nodeInCycle(this, value, false);
 					if (cycleNode !== null) {
 						Objects.defineProperty(this, key, {
 							__proto__: null,
@@ -2106,11 +2100,7 @@ export function MaterializeLayer(Base) {
 								this.____slothletInternal.adoptOwner != null
 							);
 							// The reused node fronts the module's object its new value is, or was copied from (#746).
-							resolveWrapper(existingChild).____slothletInternal.moduleObject = runtime_moduleObjectFor(
-								resolveWrapper(existingChild),
-								value,
-								true
-							);
+							resolveWrapper(existingChild).____slothletInternal.moduleObject = moduleObjectFor(resolveWrapper(existingChild), value, true);
 							wrapped = existingChild;
 						}
 						// Symbol keys are not used as API module names in practice.
@@ -2132,7 +2122,7 @@ export function MaterializeLayer(Base) {
 						// would never fire (#340).
 						// A child wrapper this one replaces (a lazy reload builds fresh nodes) is another node from now on (#653).
 						const displaced = existingChild ? resolveWrapper(existingChild) : null;
-						if (displaced) runtime_retireChanges(displaced);
+						if (displaced) retireChanges(displaced);
 						wrapped = this.___createChildWrapper(key, value, adoptVisited, this.____slothletInternal.deferChildAdopt);
 						// Symbol keys are not used as API module names in practice.
 						/* v8 ignore next */
@@ -2329,14 +2319,14 @@ export function MaterializeLayer(Base) {
 				/* v8 ignore next */
 				if (descriptor === undefined) return;
 				if (!("value" in descriptor)) {
-					runtime_defineAdoptedAccessor(this, key, descriptor);
+					defineAdoptedAccessor(this, key, descriptor);
 					return;
 				}
 				const value = descriptor.value;
 				let stored = value;
 				// The losing function's reference to itself, or to a function further up, is the node that holds it now. A layer
 				// over the function hands it out bound to the function under it.
-				const cycle = (layerMethodOriginal(value) ?? value) === layerUnderlying(source) ? this : runtime_cycleNode(this, value);
+				const cycle = (layerMethodOriginal(value) ?? value) === layerUnderlying(source) ? this : nodeInCycle(this, value);
 				if (cycle !== null) stored = cycle.createProxy();
 				else if (
 					value !== null &&
@@ -2396,7 +2386,7 @@ export function MaterializeLayer(Base) {
 				// `net.Socket` mounted via `api.add()` — which is meant to get full slothlet treatment
 				// (self access, permission gating, hooks) same as any other mounted object, not stay
 				// raw/opaque. The cycle guard is what makes this safe now, not type-based exclusion.
-				if (runtime_dataKind(value) !== null || runtime_isErrorValue(value)) {
+				if (dataKind(value) !== null || isErrorValue(value)) {
 					return null;
 				}
 
@@ -2462,7 +2452,7 @@ export function MaterializeLayer(Base) {
 				// it), so there is nothing to protect, and the wrapper must front the module's own array so a
 				// write through the api reaches it, as a write to the array itself would (#602).
 				let childImpl = value;
-				const isChildLiveIdentity = deferChildAdopt || (EventEmitter && runtime_inherits(childImpl, EventEmitter));
+				const isChildLiveIdentity = deferChildAdopt || (EventEmitter && inherits(childImpl, EventEmitter));
 				if (!isChildLiveIdentity && childImpl && typeof childImpl === "object" && !Arrays.isArray(childImpl)) {
 					childImpl = copyForComposition(childImpl);
 					// Let an origin lookup against the clone resolve to the exported original (#484).
@@ -2593,7 +2583,7 @@ export function MaterializeLayer(Base) {
 				// An array element's path is where the element sits now, and so is the path of everything below it
 				// (#603 review): a rule for `arr.0` applies to whatever is at `arr[0]`, a held reference included.
 				// Only a canonical index below 2^32 - 1 is a position; "4294967295" and above are ordinary properties of the array.
-				const parentIsArray = Arrays.isArray(this.____slothletInternal.impl) && runtime_isPosition(key);
+				const parentIsArray = Arrays.isArray(this.____slothletInternal.impl) && isPosition(key);
 				const position =
 					parentIsArray || this.____slothletInternal.followsPosition
 						? { parent: this, key, byIndex: parentIsArray, sourceValue: value }
@@ -2629,10 +2619,9 @@ export function MaterializeLayer(Base) {
 				// element its cached child fronts is still the one at that index (#602).
 				nestedWrapper.____slothletInternal.sourceValue = value;
 				// What an object assigned to the api after it was built holds is data, as the object is (#826).
-				if (WeakSetMethods.has(ASSIGNED_DATA, value) || runtime_holdsAssignedData(this))
-					nestedWrapper.____slothletInternal.assignedData = true;
+				if (WeakSetMethods.has(ASSIGNED_DATA, value) || holdsAssignedData(this)) nestedWrapper.____slothletInternal.assignedData = true;
 				// The module's own object, when the child is built from a copy of it: writes through the node reach it (#746).
-				nestedWrapper.____slothletInternal.moduleObject = childImpl !== value ? runtime_moduleObjectFor(nestedWrapper, value, true) : null;
+				nestedWrapper.____slothletInternal.moduleObject = childImpl !== value ? moduleObjectFor(nestedWrapper, value, true) : null;
 				// Return proxy to maintain consistency with external assignments
 				// Children are stored as proxies on wrapper, getTrap returns them as-is
 				return nestedWrapper.createProxy();

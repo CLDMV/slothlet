@@ -49,7 +49,7 @@ import {
 // on Node's module object later does not run here.
 const fs = Objects.freeze({ ...nodeFs });
 const path = Objects.freeze({ ...nodePath });
-const { resolveWrapper, runtime_rootFileOf } = unifiedWrapperInternals("lib/processors/type-generator");
+const { resolveWrapper, rootFileOf } = unifiedWrapperInternals("lib/processors/type-generator");
 
 /**
  * Root keys the framework owns: typed by `SlothletAPI` (extended below), never by the generated interface.
@@ -141,7 +141,7 @@ export async function generateTypes(api, options) {
 function rootCallType(api, context) {
 	if (typeof api !== "function" || !context.ownership) return null;
 	const instance = findInstance(api);
-	const filePath = instance ? runtime_rootFileOf(instance) : null;
+	const filePath = instance ? rootFileOf(instance) : null;
 	return filePath ? originType({ filePath, exportPath: ["default"] }, context) : null;
 }
 

@@ -19,7 +19,7 @@
  * Both runtimes (async and live) export a `self` (an object form and a callable one, #803) and a `context`, Proxies
  * whose traps read the running call's store and hand what they read through the wrapper's views. The traps are the
  * same for both; what differs is how a runtime finds the store a trap reads and who it reads as, which the runtime hands
- * in as a {@link RuntimeAccess}. A runtime takes its finished Proxies from {@link runtime_runtimeTraps}.
+ * in as a {@link RuntimeAccess}. A runtime takes its finished Proxies from {@link runtimeTraps}.
  *
  * Upward services this layer uses: none (it sits above the views, rules and membrane it reads through).
  * @module @cldmv/slothlet/handlers/unified-wrapper/runtime-bridge
@@ -52,24 +52,24 @@ import { isBoxedPrimitive } from "#helpers/clone-context";
  * registered (see `WrapperBase.linkLayer`), before any wrapper exists.
  */
 let trustedRootOwn,
-	runtime_contextRead,
+	contextRead,
 	RUNTIME_CONTEXTS,
-	runtime_selfChangeTarget,
-	runtime_selfFrameworkView,
-	runtime_selfReadAsDefiner,
-	runtime_selfView,
-	runtime_unwrapSelfView,
+	selfChangeTarget,
+	selfFrameworkView,
+	selfReadAsDefiner,
+	selfView,
+	unwrapSelfView,
 	RUNTIME_CALLABLE_SELVES,
 	RUNTIME_SELVES,
 	SELF_FRAMEWORK_ROOTS,
 	frameDefiner,
-	runtime_makerInstanceID,
-	runtime_readOnBehalf,
+	makerInstanceID,
+	readOnBehalf,
 	CROSSINGS,
-	runtime_isSlothletValue,
+	isSlothletValue,
 	CONTEXT_HOST_VALUES,
 	CONTEXT_WRITERS,
-	runtime_isRefusal,
+	isRefusal,
 	SNAPSHOT_OMIT;
 /** The registered `UnifiedWrapper`: the only class this layer's constructor builds for. @type {Function|undefined} */
 let realClass;
@@ -108,20 +108,20 @@ const FRAMEWORK_SELF_ROOTS = setFrom(["slothlet", "shutdown", "destroy"]);
  * @internal
  *
  * @example
- * const { objectSelf, callableSelf, context } = runtime_runtimeTraps(asyncRuntime, access);
+ * const { objectSelf, callableSelf, context } = runtimeTraps(asyncRuntime, access);
  */
-function runtime_runtimeTraps(contextManager, runtime) {
+function runtimeTraps(contextManager, runtime) {
 	/**
 	 * The `toJSON` `self` answers for an api whose root is an object and has no `toJSON` member of its own (#803): it
 	 * gives the data `JSON.stringify(api)` gives the host, less what the reader is refused (see
-	 * {@link runtime_jsonSnapshot}). A refusal of a member the reader did not name never throws here; a read of that
+	 * {@link jsonSnapshot}). A refusal of a member the reader did not name never throws here; a read of that
 	 * member by name still does.
 	 * @this {object} The `self` being written.
 	 * @param {string} [key] - The key JSON passes.
 	 * @returns {*} The data.
 	 * @internal
 	 */
-	function runtime_selfToJSON(key) {
+	function selfToJSON(key) {
 		/**
 		 * The plain data `JSON.stringify` writes for a value read through `self`, as the reader may read it (#803): each
 		 * member the reader is refused (its read, its description, or the `toJSON` the serialization looks up on it) is left
@@ -136,19 +136,19 @@ function runtime_runtimeTraps(contextManager, runtime) {
 		 * @returns {*} The data, or {@link SNAPSHOT_OMIT}.
 		 * @private
 		 */
-		function runtime_jsonSnapshot(value, key, stack, skipToJSON = false) {
+		function jsonSnapshot(value, key, stack, skipToJSON = false) {
 			if (!skipToJSON && value !== null && (typeof value === "object" || typeof value === "function")) {
 				let toJSON;
 				try {
 					toJSON = value.toJSON;
 				} catch (error) {
-					if (!runtime_isRefusal(error)) throw error;
+					if (!isRefusal(error)) throw error;
 				}
 				if (typeof toJSON === "function") {
 					try {
 						value = Reflect.apply(toJSON, value, [key]);
 					} catch (error) {
-						if (!runtime_isRefusal(error)) throw error;
+						if (!isRefusal(error)) throw error;
 						return SNAPSHOT_OMIT;
 					}
 				}
@@ -164,9 +164,9 @@ function runtime_runtimeTraps(contextManager, runtime) {
 					for (let i = 0; i < length; i++) {
 						let element;
 						try {
-							element = runtime_jsonSnapshot(value[i], String(i), stack);
+							element = jsonSnapshot(value[i], String(i), stack);
 						} catch (error) {
-							if (!runtime_isRefusal(error)) throw error;
+							if (!isRefusal(error)) throw error;
 							element = SNAPSHOT_OMIT;
 						}
 						listPush(out, element === SNAPSHOT_OMIT ? null : element);
@@ -181,9 +181,9 @@ function runtime_runtimeTraps(contextManager, runtime) {
 					try {
 						const descriptor = Reflect.getOwnPropertyDescriptor(value, name);
 						if (!descriptor?.enumerable) continue;
-						member = runtime_jsonSnapshot(value[name], name, stack);
+						member = jsonSnapshot(value[name], name, stack);
 					} catch (error) {
-						if (!runtime_isRefusal(error)) throw error;
+						if (!isRefusal(error)) throw error;
 						continue;
 					}
 					if (member !== SNAPSHOT_OMIT) out[name] = member;
@@ -194,13 +194,13 @@ function runtime_runtimeTraps(contextManager, runtime) {
 			}
 		}
 
-		const data = runtime_jsonSnapshot(this, typeof key === "string" ? key : "", [], true);
+		const data = jsonSnapshot(this, typeof key === "string" ? key : "", [], true);
 		return data === SNAPSHOT_OMIT ? undefined : data;
 	}
 
 	/**
 	 * Record the module storing a value in the runtime `context`, so another module reading it gets it as a value that
-	 * module handed it ({@link runtime_contextRead}). What the host stores, and what a module stores again after reading it
+	 * module handed it ({@link contextRead}). What the host stores, and what a module stores again after reading it
 	 * from the host, is the host's and is recorded for no one.
 	 * @param {object} ctx - The active context store.
 	 * @param {*} value - The value being stored.
@@ -208,15 +208,15 @@ function runtime_runtimeTraps(contextManager, runtime) {
 	 * @internal
 	 *
 	 * @example
-	 * runtime_contextWritten(ctx, value);
+	 * contextWritten(ctx, value);
 	 * ctx.context[prop] = value;
 	 */
-	function runtime_contextWritten(ctx, value) {
+	function contextWritten(ctx, value) {
 		if (value === null || (typeof value !== "object" && typeof value !== "function")) return;
 		const writer = ctx?.currentWrapper;
 		if (!writer?.____slothletInternal || !WeakSetMethods.has(trustedRootOwn.genuineWrappers, writer)) return;
 		// A view keeps where its value came from; slothlet's own values are handed out their own way.
-		if (WeakMapMethods.has(CROSSINGS, value) || runtime_isSlothletValue(value)) return;
+		if (WeakMapMethods.has(CROSSINGS, value) || isSlothletValue(value)) return;
 		if (WeakSetMethods.has(CONTEXT_HOST_VALUES, value) || WeakMapMethods.has(CONTEXT_WRITERS, value)) return;
 		WeakMapMethods.set(CONTEXT_WRITERS, value, writer);
 	}
@@ -224,7 +224,7 @@ function runtime_runtimeTraps(contextManager, runtime) {
 	/**
 	 * A member of the runtime `context` read by code a module handed out while no call runs (the host running a closure, a
 	 * method of returned data, a generator): read in the context of the instance its definer belongs to, as `self` is
-	 * ({@link runtime_selfReadAsDefiner}), so the code reads the context it was made in instead of nothing. Code whose
+	 * ({@link selfReadAsDefiner}), so the code reads the context it was made in instead of nothing. Code whose
 	 * definer the frames cannot tell, the host's own code, and any code while `provenance` is off, read nothing.
 	 * @param {object} contextProxy - The runtime's `context`.
 	 * @param {string|symbol} prop - The member read.
@@ -232,9 +232,9 @@ function runtime_runtimeTraps(contextManager, runtime) {
 	 * @internal
 	 *
 	 * @example
-	 * if (!ctx) return runtime_contextReadAsDefiner(context, prop);
+	 * if (!ctx) return contextReadAsDefiner(context, prop);
 	 */
-	function runtime_contextReadAsDefiner(contextProxy, prop) {
+	function contextReadAsDefiner(contextProxy, prop) {
 		const definer = frameDefiner();
 		if (definer === null || definer.unplaced) return undefined;
 		const leaf = definer.wrapper ?? definer.leaves[0];
@@ -242,17 +242,17 @@ function runtime_runtimeTraps(contextManager, runtime) {
 		if (slothlet?.handlers?.permissionManager?.isEnabled?.() && slothlet.config?.permissions?.caller?.provenance === false)
 			return undefined;
 		const contextManager = slothlet?.contextManager;
-		const instanceID = contextManager?.runInContext ? runtime_makerInstanceID(slothlet) : null;
+		const instanceID = contextManager?.runInContext ? makerInstanceID(slothlet) : null;
 		if (instanceID === null) return undefined;
 		const read = MapMethods.get(RUNTIME_CONTEXTS, contextManager) ?? contextProxy;
-		return runtime_readOnBehalf(undefined, () =>
+		return readOnBehalf(undefined, () =>
 			contextManager.runInContext(instanceID, () => read[prop], undefined, [], leaf, true, false, null, null, false, true)
 		);
 	}
 
 	/**
 	 * Refuse replacing one of the framework's root members (`self.slothlet`, `self.shutdown`, `self.destroy`)
-	 * through the runtime `self` (#625); a definition or deletion goes through {@link runtime_selfChangeTarget}.
+	 * through the runtime `self` (#625); a definition or deletion goes through {@link selfChangeTarget}.
 	 * While the permission system is on, module code meets the write rules first; the names are reserved for
 	 * everyone, so the assignment is refused either way, in an isolated scope as outside one.
 	 *
@@ -265,9 +265,9 @@ function runtime_runtimeTraps(contextManager, runtime) {
 	 * @internal
 	 *
 	 * @example
-	 * runtime_assertFrameworkRootChange(ctx.slothlet, "slothlet"); // throws inside a module call
+	 * assertFrameworkRootChange(ctx.slothlet, "slothlet"); // throws inside a module call
 	 */
-	function runtime_assertFrameworkRootChange(slothlet, prop) {
+	function assertFrameworkRootChange(slothlet, prop) {
 		if (typeof prop !== "string" || !SetMethods.has(SELF_FRAMEWORK_ROOTS, prop)) return;
 		if (slothlet.handlers.apiManager.frameworkProtected()) {
 			const identity = slothlet.contextManager?.getCallerIdentity?.(slothlet.instanceID);
@@ -302,8 +302,8 @@ function runtime_runtimeTraps(contextManager, runtime) {
 	 */
 	const selfMember = (prop, value, resolved = null) => {
 		if (typeof prop !== "string") return value;
-		if (SetMethods.has(FRAMEWORK_SELF_ROOTS, prop)) return runtime_selfFrameworkView(value);
-		return runtime_selfView(value, undefined, null, resolved === null ? null : access(resolved));
+		if (SetMethods.has(FRAMEWORK_SELF_ROOTS, prop)) return selfFrameworkView(value);
+		return selfView(value, undefined, null, resolved === null ? null : access(resolved));
 	};
 
 	const selfTraps = {
@@ -317,7 +317,7 @@ function runtime_runtimeTraps(contextManager, runtime) {
 				// Code a file started while it loaded has a store of its own: without a module to run as, it has no `self`.
 				// Another instance's code running in that flow (a function an instance built by the loading file handed
 				// out) is not the load's: it is read as its definer, as with no store.
-				const read = runtime_selfReadAsDefiner(objectSelf, prop, loadingInstance());
+				const read = selfReadAsDefiner(objectSelf, prop, loadingInstance());
 				if (read) return read.value;
 				refuseUnknown(prop);
 				throw new SlothletError("CONTEXT_NOT_ACTIVE_SELF", {});
@@ -325,13 +325,13 @@ function runtime_runtimeTraps(contextManager, runtime) {
 			// A flow the host opened (`run()` / `scope()`) names no module. A module's code running in it (a function it
 			// handed out, run by the host there) still reads `self` as its definer; the host's own code reads it as the host.
 			if (hostFlow(ctx, resolved)) {
-				const read = runtime_selfReadAsDefiner(objectSelf, prop, null, ctx.parentInstanceID);
+				const read = selfReadAsDefiner(objectSelf, prop, null, ctx.parentInstanceID);
 				if (read) return read.value;
 			}
 			const value = ctx.self[prop];
 			// An object root with no `toJSON` of its own serializes as `api` does for the host, less what the reader is
 			// refused, which is left out rather than thrown for (#803).
-			if (prop === "toJSON" && value === undefined && typeof ctx.self !== "function") return runtime_selfToJSON;
+			if (prop === "toJSON" && value === undefined && typeof ctx.self !== "function") return selfToJSON;
 			return selfMember(prop, value, resolved);
 		},
 		ownKeys() {
@@ -364,34 +364,34 @@ function runtime_runtimeTraps(contextManager, runtime) {
 			if (!ctx) {
 				throw new SlothletError("CONTEXT_NOT_ACTIVE_SELF", {});
 			}
-			return Reflect.deleteProperty(runtime_selfChangeTarget(ctx, prop), prop);
+			return Reflect.deleteProperty(selfChangeTarget(ctx, prop), prop);
 		},
 		defineProperty(_, prop, descriptor) {
 			const ctx = current(null);
 			if (!ctx) {
 				throw new SlothletError("CONTEXT_NOT_ACTIVE_SELF", {});
 			}
-			const target = runtime_selfChangeTarget(ctx, prop);
+			const target = selfChangeTarget(ctx, prop);
 			// A member `self` reported fixed would have to be fixed on that shared object: such a definition is refused.
 			if (descriptor.configurable === false) return false;
-			if ("value" in descriptor) descriptor = { __proto__: null, ...descriptor, value: runtime_unwrapSelfView(descriptor.value) };
+			if ("value" in descriptor) descriptor = { __proto__: null, ...descriptor, value: unwrapSelfView(descriptor.value) };
 			return Reflect.defineProperty(target, prop, descriptor);
 		},
 		// `self` keeps its prototype and stays extensible: it is shared, so neither change could be confined to
 		// one instance. The change is refused, after the rule for `self` as a whole has been applied.
 		setPrototypeOf() {
 			const ctx = current(null);
-			if (ctx) runtime_selfChangeTarget(ctx, null);
+			if (ctx) selfChangeTarget(ctx, null);
 			return false;
 		},
 		preventExtensions() {
 			const ctx = current(null);
-			if (ctx) runtime_selfChangeTarget(ctx, null);
+			if (ctx) selfChangeTarget(ctx, null);
 			return false;
 		},
 		set(_, prop, value) {
 			// A view `self` handed out stands for its node: the node is what is stored (#625).
-			value = runtime_unwrapSelfView(value);
+			value = unwrapSelfView(value);
 			// Route through `apiManager.setOwnedProperty` so the assignment is
 			// validated against the caller's owned apiPath. Falls back to a
 			// direct `ctx.self[prop] = value` (Stage 1 behavior) if the slothlet
@@ -410,12 +410,12 @@ function runtime_runtimeTraps(contextManager, runtime) {
 			// JS semantics hold. A symbol is no api path of its own: the write is
 			// held to the root of the tree, as a change to `self` as a whole is (#625).
 			if (typeof prop === "symbol") {
-				runtime_selfChangeTarget(ctx, prop);
+				selfChangeTarget(ctx, prop);
 				ctx.self[prop] = value;
 				return true;
 			}
 			// A module never replaces the framework's namespace or root functions, isolated scope or not (#625).
-			if (ctx.slothlet) runtime_assertFrameworkRootChange(ctx.slothlet, prop);
+			if (ctx.slothlet) assertFrameworkRootChange(ctx.slothlet, prop);
 			// In a full-isolation run (`run()` / `scope()` with `isolation: "full"`, the default) `ctx.self` is the run's
 			// own api (see the run layer): the write goes to it, which makes it through `apiManager.setOwnedProperty`
 			// with every check the write below meets, and keeps it in the run.
@@ -450,13 +450,13 @@ function runtime_runtimeTraps(contextManager, runtime) {
 		const resolved = {};
 		const ctx = current(resolved);
 		if (!ctx) {
-			const read = runtime_selfReadAsDefiner(objectSelf, "", loadingInstance(), null, use);
+			const read = selfReadAsDefiner(objectSelf, "", loadingInstance(), null, use);
 			if (read) return read.value;
 			refuseUnknown("");
 			throw new SlothletError("CONTEXT_NOT_ACTIVE_SELF", {});
 		}
 		if (hostFlow(ctx, resolved)) {
-			const read = runtime_selfReadAsDefiner(objectSelf, "", null, ctx.parentInstanceID, use);
+			const read = selfReadAsDefiner(objectSelf, "", null, ctx.parentInstanceID, use);
 			if (read) return read.value;
 		}
 		return use(ctx.self);
@@ -504,14 +504,14 @@ function runtime_runtimeTraps(contextManager, runtime) {
 				const ctx = store();
 				if (!ctx || !ctx.context) {
 					// Code a module handed out, run while no call runs, reads the context of its definer's instance (#726).
-					return runtime_contextReadAsDefiner(context, prop);
+					return contextReadAsDefiner(context, prop);
 				}
 				// Owner-locked keys (scope({ protect, owners })) read back as a recursive protected view so
 				// nested writes stay enforced (#207); every other key returns the raw value unchanged. The
 				// resolver lets the view identify the WRITER from the store active at write time — each
 				// module call runs in its own derived store, so the wrap-time store's identity is stale.
 				// What a module stored there reaches another module as values one module hands another do.
-				return runtime_contextRead(ctx, trustedRootOwn.readProtectedContextValue(ctx, prop, store));
+				return contextRead(ctx, trustedRootOwn.readProtectedContextValue(ctx, prop, store));
 			},
 			set(_, prop, value) {
 				const ctx = store();
@@ -521,7 +521,7 @@ function runtime_runtimeTraps(contextManager, runtime) {
 				// Owner-locked context keys (opt-in via scope({ protect, owners })): reject a write the
 				// current caller doesn't own before mutating the context.
 				trustedRootOwn.enforceContextKeyWrite(ctx, prop);
-				runtime_contextWritten(ctx, value);
+				contextWritten(ctx, value);
 				ctx.context[prop] = value;
 				return true;
 			},
@@ -540,7 +540,7 @@ function runtime_runtimeTraps(contextManager, runtime) {
 				if (!ctx || !ctx.context) return undefined;
 				const descriptor = Reflect.getOwnPropertyDescriptor(ctx.context, prop);
 				if (!descriptor || !("value" in descriptor)) return descriptor;
-				return { __proto__: null, ...descriptor, value: runtime_contextRead(ctx, descriptor.value) };
+				return { __proto__: null, ...descriptor, value: contextRead(ctx, descriptor.value) };
 			}
 		}
 	);
@@ -568,28 +568,28 @@ export function RuntimeBridgeLayer(Base) {
 	return Base.layer(
 		class RuntimeBridge extends Base {
 			static {
-				Base.define("bridge", { runtime_runtimeTraps });
+				Base.define("bridge", { runtimeTraps });
 				Base.linkLayer(this, (methods, registered) => {
 					realClass = registered;
 					trustedRootOwn = methods.uw.trustedRootOwn;
-					runtime_contextRead = methods.rules.runtime_contextRead;
+					contextRead = methods.rules.contextRead;
 					RUNTIME_CONTEXTS = methods.rules.RUNTIME_CONTEXTS;
-					runtime_selfChangeTarget = methods.views.runtime_selfChangeTarget;
-					runtime_selfFrameworkView = methods.views.runtime_selfFrameworkView;
-					runtime_selfReadAsDefiner = methods.views.runtime_selfReadAsDefiner;
-					runtime_selfView = methods.views.runtime_selfView;
-					runtime_unwrapSelfView = methods.views.runtime_unwrapSelfView;
+					selfChangeTarget = methods.self.changeTarget;
+					selfFrameworkView = methods.self.frameworkView;
+					selfReadAsDefiner = methods.self.readAsDefiner;
+					selfView = methods.self.view;
+					unwrapSelfView = methods.views.unwrapSelfView;
 					RUNTIME_CALLABLE_SELVES = methods.views.RUNTIME_CALLABLE_SELVES;
 					RUNTIME_SELVES = methods.views.RUNTIME_SELVES;
 					SELF_FRAMEWORK_ROOTS = methods.views.SELF_FRAMEWORK_ROOTS;
 					frameDefiner = methods.uw.frameDefiner;
-					runtime_makerInstanceID = methods.nodes.runtime_makerInstanceID;
-					runtime_readOnBehalf = methods.rules.runtime_readOnBehalf;
+					makerInstanceID = methods.nodes.makerInstanceID;
+					readOnBehalf = methods.read.onBehalf;
 					CROSSINGS = methods.membrane.CROSSINGS;
-					runtime_isSlothletValue = methods.values.runtime_isSlothletValue;
+					isSlothletValue = methods.is.slothletValue;
 					CONTEXT_HOST_VALUES = methods.rules.CONTEXT_HOST_VALUES;
 					CONTEXT_WRITERS = methods.rules.CONTEXT_WRITERS;
-					runtime_isRefusal = methods.values.runtime_isRefusal;
+					isRefusal = methods.is.refusal;
 					SNAPSHOT_OMIT = methods.values.SNAPSHOT_OMIT;
 				});
 			}

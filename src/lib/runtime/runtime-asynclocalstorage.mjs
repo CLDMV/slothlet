@@ -52,7 +52,7 @@ import { Objects, String } from "#helpers/intrinsics";
 const { registerOwnModule, registerSelfForms, bindInstanceSelf, SELF_BIND_KEY } = instanceImportsInternals(
 	"lib/runtime/runtime-asynclocalstorage"
 );
-const { runtime_runtimeTraps } = unifiedWrapperInternals("lib/runtime/runtime-asynclocalstorage");
+const { runtimeTraps } = unifiedWrapperInternals("lib/runtime/runtime-asynclocalstorage");
 const { markSlothletProxy } = frameworkInternalsInternals("lib/runtime/runtime-asynclocalstorage");
 const { asyncRuntime } = contextInternals("lib/runtime/runtime-asynclocalstorage");
 
@@ -82,7 +82,7 @@ const {
 	objectSelf,
 	callableSelf,
 	context: contextProxy
-} = runtime_runtimeTraps(asyncRuntime, {
+} = runtimeTraps(asyncRuntime, {
 	current: () => {
 		const ctx = safeGetContext();
 		return ctx?.self ? ctx : null;

@@ -85,18 +85,18 @@ import {
 import { codeLabel, inheritsBuiltin, isLanguageNameDescriptor } from "#helpers/builtin-forms";
 const {
 	resolveWrapper,
-	runtime_metadataNodeOf,
-	runtime_sameValue,
-	runtime_selfModuleCeilings,
-	runtime_selfModuleReader,
-	runtime_selfRootView,
-	runtime_selfView,
-	runtime_registerFrameworkMember,
-	runtime_selfFrameworkView,
-	runtime_frameworkViewCaller,
-	runtime_nodeBehind,
-	runtime_nodeReport,
-	runtime_unwrapSelfView,
+	metadataNodeOf,
+	sameValue,
+	selfModuleCeilings,
+	selfModuleReader,
+	selfRootView,
+	selfView,
+	registerFrameworkMember,
+	selfFrameworkView,
+	frameworkViewCaller,
+	nodeBehind,
+	nodeReport,
+	unwrapSelfView,
 	makeRunSelf
 } = unifiedWrapperInternals("lib/builders/api_builder");
 const { markCallerLocked } = callerPinningInternals("lib/builders/api_builder");
@@ -230,7 +230,7 @@ function _resolvePathOrModuleId(slothlet, pathOrModuleId) {
  * _metadataNode(slothlet, api.auth); // api.v2.auth for a caller routed to v2
  */
 function _metadataNode(slothlet, target) {
-	const dispatcher = slothlet.handlers?.versionManager?.dispatcherOf?.(runtime_nodeBehind(target));
+	const dispatcher = slothlet.handlers?.versionManager?.dispatcherOf?.(nodeBehind(target));
 	return dispatcher ? (dispatcher.resolve() ?? target) : target;
 }
 
@@ -245,7 +245,7 @@ function _metadataNode(slothlet, target) {
  * _metadataNodePath(api.calls.ping); // "calls.ping", whether calls has loaded or not
  */
 function _metadataNodePath(target) {
-	const node = runtime_metadataNodeOf(target);
+	const node = metadataNodeOf(target);
 	if (node === null) return null;
 	const base = String(node.wrapper.____slothletInternal.apiPath);
 	if (node.chain === null) return base;
@@ -267,7 +267,7 @@ function _metadataNodePath(target) {
 function _metadataTargetPath(slothlet, target) {
 	if (typeof target === "function" || (target !== null && typeof target === "object" && !Arrays.isArray(target))) return null;
 	// An array-backed node is a node, not a segment array.
-	if (Arrays.isArray(target) && resolveWrapper(runtime_nodeBehind(target)) !== null) return null;
+	if (Arrays.isArray(target) && resolveWrapper(nodeBehind(target)) !== null) return null;
 	if (
 		Arrays.isArray(target) &&
 		target.length > 0 &&
@@ -719,7 +719,7 @@ export class ApiBuilder extends ComponentBase {
 			const ofEntry = ofList[ofIndex],
 				name = ofEntry[0],
 				member = ofEntry[1];
-			runtime_registerFrameworkMember(member, this.slothlet, name);
+			registerFrameworkMember(member, this.slothlet, name);
 		}
 
 		return userApi;
@@ -1803,8 +1803,8 @@ export class ApiBuilder extends ComponentBase {
 					const resolvedFolder = runtime_resolveAddFolder(slothlet, folderPath);
 					// The module asking for the add is read here, before the build runs as no module: the add's ownership
 					// checks are that module's (#625).
-					const writer = runtime_selfModuleReader(slothlet);
-					const writerCeilings = runtime_selfModuleCeilings(slothlet, writer);
+					const writer = selfModuleReader(slothlet);
+					const writerCeilings = selfModuleCeilings(slothlet, writer);
 					// A run() / scope() changes a tree of its own, and a copy still reading this tree gets one before it changes.
 					await treeWrite(slothlet);
 					const build = () =>
@@ -1871,7 +1871,7 @@ export class ApiBuilder extends ComponentBase {
 						});
 					}
 					// The module asking for the removal, read before anything awaits (#625).
-					const writer = runtime_selfModuleReader(slothlet);
+					const writer = selfModuleReader(slothlet);
 					// A run() / scope() changes a tree of its own, and a copy still reading this tree gets one before it changes.
 					await treeWrite(slothlet);
 					// Scoped: module `id`'s node at the path `target`. Unscoped: `target` is a path or a module id.
@@ -2068,7 +2068,7 @@ export class ApiBuilder extends ComponentBase {
 							WeakSetMethods.add(seen, node);
 							// Settling is slothlet's own bookkeeping: the node's state is read from its wrapper, not through the
 							// caller's view, where a `__`-named marker would be held to the caller's rules (#816).
-							const raw = resolveWrapper(runtime_nodeBehind(runtime_unwrapSelfView(node)));
+							const raw = resolveWrapper(nodeBehind(unwrapSelfView(node)));
 							if (raw && raw.____slothletInternal.state.materialized === false) {
 								await raw.___materialize();
 							}
@@ -2257,7 +2257,7 @@ export class ApiBuilder extends ComponentBase {
 					}
 					assertOptionKeys(options, "slothlet.api.reload");
 					// The module asking for the reload, read before anything awaits (#625).
-					const writer = runtime_selfModuleReader(slothlet);
+					const writer = selfModuleReader(slothlet);
 					// A run() / scope() changes a tree of its own, and a copy still reading this tree gets one before it changes.
 					await treeWrite(slothlet);
 
@@ -2367,7 +2367,7 @@ export class ApiBuilder extends ComponentBase {
 							throw new slothlet.SlothletError("API_MUTATION_DISABLED", { operation: ["slothlet", "api", "modules", "add"] });
 						}
 						// The calling module, read before any await (#625): see ModuleManager#addModule.
-						const writer = runtime_selfModuleReader(slothlet);
+						const writer = selfModuleReader(slothlet);
 						// A run() / scope() changes a tree of its own, and a copy still reading this tree gets one before it changes.
 						await treeWrite(slothlet);
 						const manager = slothlet.handlers.moduleManager;
@@ -2406,7 +2406,7 @@ export class ApiBuilder extends ComponentBase {
 							throw new slothlet.SlothletError("API_MUTATION_DISABLED", { operation: ["slothlet", "api", "modules", "remove"] });
 						}
 						// The calling module, read before any await (#625): see ModuleManager#removeModule.
-						const writer = runtime_selfModuleReader(slothlet);
+						const writer = selfModuleReader(slothlet);
 						// A run() / scope() changes a tree of its own, and a copy still reading this tree gets one before it changes.
 						await treeWrite(slothlet);
 						return slothlet.handlers.moduleManager.removeModule(name, opts, writer);
@@ -2488,7 +2488,7 @@ export class ApiBuilder extends ComponentBase {
 			 * self.slothlet.same(self.owner.Foo.prototype, self.owner.Alias.prototype); // true: one prototype, two handles
 			 */
 			same: function slothlet_same(a, b) {
-				return runtime_sameValue(a, b);
+				return sameValue(a, b);
 			},
 
 			/**
@@ -3130,7 +3130,7 @@ export class ApiBuilder extends ComponentBase {
 				 */
 				global: function slothlet_metadata_global(keyOrObj, value) {
 					// The calling module, checked once the arguments are valid (#625).
-					const caller = runtime_selfModuleReader(slothlet);
+					const caller = selfModuleReader(slothlet);
 					// Defensive: metadata handler is always registered during load().
 					// This guard fires only if metadata.global is called before load() completes
 					// or on an instance that explicitly omits the metadata handler.
@@ -3387,7 +3387,7 @@ export class ApiBuilder extends ComponentBase {
 			 * api.slothlet.node("math").type === "namespace"; // true
 			 */
 			node: function slothlet_node(target) {
-				return runtime_nodeReport(slothlet, target);
+				return nodeReport(slothlet, target);
 			},
 
 			/**
@@ -3841,7 +3841,7 @@ export class ApiBuilder extends ComponentBase {
 					/* v8 ignore next */
 					if (!slothlet.handlers?.versionManager) return false;
 					// The module asking for the removal, read before anything awaits (#625).
-					const writer = runtime_selfModuleReader(slothlet);
+					const writer = selfModuleReader(slothlet);
 					// A run() / scope() changes a tree of its own, and a copy still reading this tree gets one before it changes.
 					await treeWrite(slothlet);
 					// Check version exists before attempting removal
@@ -4472,7 +4472,7 @@ export class ApiBuilder extends ComponentBase {
 					if (showAll) {
 						// Return full API structure (like v2 eager mode). Module code gets its own views of the
 						// nodes, as it reads them through `self`, never the nodes themselves (#625).
-						const reader = runtime_selfModuleReader(slothlet);
+						const reader = selfModuleReader(slothlet);
 						if (!reader) return { ...root };
 						const described = {};
 						for (let ofIndex = 0, ofList = Reflect.ownKeys(root); ofIndex < ofList.length; ofIndex++) {
@@ -4482,8 +4482,8 @@ export class ApiBuilder extends ComponentBase {
 							if (Reflect.getOwnPropertyDescriptor(root, key) === undefined) continue;
 							const value = root[key];
 							if (typeof key !== "string") described[key] = value;
-							else if (SetMethods.has(SELF_FRAMEWORK_ROOT_KEYS, key)) described[key] = runtime_selfFrameworkView(value, reader, slothlet);
-							else described[key] = runtime_selfView(value, reader);
+							else if (SetMethods.has(SELF_FRAMEWORK_ROOT_KEYS, key)) described[key] = selfFrameworkView(value, reader, slothlet);
+							else described[key] = selfView(value, reader);
 						}
 						return described;
 					}
@@ -4517,9 +4517,9 @@ export class ApiBuilder extends ComponentBase {
 				 */
 				api: () => {
 					// Module code gets the api as it reads it through `self` (#625).
-					const reader = runtime_selfModuleReader(slothlet);
+					const reader = selfModuleReader(slothlet);
 					const api = slothlet.getAPI();
-					return reader ? runtime_selfRootView(slothlet, reader) : api;
+					return reader ? selfRootView(slothlet, reader) : api;
 				},
 
 				/**
@@ -4687,7 +4687,7 @@ export class ApiBuilder extends ComponentBase {
 			// is still no host, and is pinned to that module (#597).
 			const running = slothlet.contextManager?.getCallerIdentity?.(slothlet.instanceID);
 			const madeRun = running?.made === true || running?.record?.made === true;
-			const fromCaller = slothlet.handlers.metadata.callerWrapper() ?? runtime_frameworkViewCaller(slothlet);
+			const fromCaller = slothlet.handlers.metadata.callerWrapper() ?? frameworkViewCaller(slothlet);
 			const capturedCaller = fromCaller ?? (madeRun ? (running.currentWrapper ?? null) : null);
 			// A caller that was code supplied to another call keeps that call as its ceiling (#597); the module the made
 			// code runs as keeps its own.
