@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-24T12:25:58-08:00 (1795551958)
+ *	@Last modified time: 2026-11-25T12:21:42-08:00 (1795638102)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -5792,7 +5792,7 @@ function runtime_enforceReadGate(wrapper, prop, resolvedValue, callerOverride, k
 	const pm = wrapper.slothlet.handlers?.permissionManager;
 	// Cheap short-circuit first: skip all classification work when gating is off.
 	if (!pm || !pm.isEnabled() || !pm.isReadGatingEnabled()) return;
-	if (!runtime_isTerminalData(resolvedValue)) return;
+	if (!runtime_isTerminalData(resolvedValue) && !runtime_isPrivateFunctionMember(wrapper, prop, resolvedValue)) return;
 	// A function's own `name` and `length` are read as plain JS reads them, whatever the rules say of the function.
 	if (runtime_isBuiltinFunctionMember(wrapper, prop)) return;
 
@@ -5822,6 +5822,27 @@ function runtime_isTerminalData(value) {
 	if (value !== NativeObject(value)) return true;
 	if (runtime_isSlothletValue(value)) return false;
 	return runtime_dataKind(value) !== null || runtime_isErrorValue(value);
+}
+
+/**
+ * Whether a member is a module-private function (#260): a `_`/`__`-named member of a node whose value is a function, or
+ * a node standing for one. Its read is decided by module privacy as a private value's is, so another module is refused
+ * the node, and with it the function's source text and the members it carries, not only the call. A folder named that
+ * way holding no function of its own is a public mount and stays traversable.
+ * @param {object} wrapper - The node holding the member.
+ * @param {string|symbol} prop - The member's key.
+ * @param {*} value - The member's value, or the node standing for it.
+ * @returns {boolean} True for a module-private function member.
+ * @private
+ *
+ * @example
+ * // tool.mjs: export function _secret() {}
+ * runtime_isPrivateFunctionMember(toolWrapper, "_secret", toolWrapper._secret); // true
+ */
+function runtime_isPrivateFunctionMember(wrapper, prop, value) {
+	if (typeof prop !== "string" || typeof value !== "function") return false;
+	if (!wrapper.slothlet.handlers.permissionManager.isPrivateTarget?.(runtime_memberPathOf(wrapper, prop))) return false;
+	return runtime_functionOf(runtime_unwrapLeafValue(value)) !== null;
 }
 
 /**
@@ -13571,7 +13592,12 @@ function runtime_isReadRedacted(wrapper, prop, kept = null, access = null, listi
 			);
 		}
 	}
-	if (!isAccessor && (!("value" in desc) || !runtime_isTerminalData(runtime_unwrapLeafValue(desc.value)))) return false;
+	if (
+		!isAccessor &&
+		(!("value" in desc) ||
+			(!runtime_isTerminalData(runtime_unwrapLeafValue(desc.value)) && !runtime_isPrivateFunctionMember(wrapper, prop, desc.value)))
+	)
+		return false;
 	if (!runtime_readGateDecision(wrapper, targetPath, undefined, kept, access).allowed) return true;
 	// Reading a getter runs it, which is a call of the module's code: it is listed only to a caller that may also call
 	// its path, as running it is refused otherwise (a rule level with the read and not the call, such as `:write`).
