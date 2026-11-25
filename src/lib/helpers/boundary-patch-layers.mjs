@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T11:23:41-08:00 (1794943421)
+ *	@Last modified time: 2026-11-22T23:44:25-08:00 (1795419865)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -208,4 +208,31 @@ export function closeLayer(layer, identify = runtime_byValue) {
 export function holdsValue(host, key, value) {
 	const descriptor = Reflect.getOwnPropertyDescriptor(host, key);
 	return descriptor !== undefined && "value" in descriptor && descriptor.value === value;
+}
+
+/**
+ * Give a wrapper the `name` and `length` of the function it stands in for, so code that reads them (a library that
+ * checks `setTimeout.length`, a log that prints `fn.name`) sees what it sees without the patch. Defined as a function's
+ * own are: read-only, not enumerable, configurable.
+ * @param {Function} wrapper - The wrapper.
+ * @param {Function} original - The function it replaces.
+ * @returns {void}
+ * @internal
+ */
+export function matchShape(wrapper, original) {
+	// Read as code reads them, own or inherited: the wrapper answers the same.
+	Objects.defineProperty(wrapper, "name", {
+		__proto__: null,
+		value: original.name,
+		writable: false,
+		enumerable: false,
+		configurable: true
+	});
+	Objects.defineProperty(wrapper, "length", {
+		__proto__: null,
+		value: original.length,
+		writable: false,
+		enumerable: false,
+		configurable: true
+	});
 }

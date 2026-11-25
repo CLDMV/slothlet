@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-22T11:45:00-08:00 (1795376700)
+ *	@Last modified time: 2026-11-22T23:31:44-08:00 (1795419104)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -3679,7 +3679,9 @@ export class ApiManager extends ComponentBase {
 					ofIndex++
 				) {
 					const entry = ofList[ofIndex];
-					const { target } = this.#normalizePermissionShorthandEntry(entry);
+					const { target, condition } = this.#normalizePermissionShorthandEntry(entry);
+					// The rule is checked as it will be registered, before anything is mounted, so a refused one leaves the api as it was.
+					this.slothlet.handlers.permissionManager.assertRuleValid({ caller: `${normalizedPath}.**`, target, effect, condition });
 					// Placed for the module code making the add, read before the build ran as no module (#597).
 					listPush(ruleLayers[effect], this.slothlet.handlers.permissionManager.placeModuleRule({ target, effect }, writer));
 				}
@@ -4586,7 +4588,10 @@ export class ApiManager extends ComponentBase {
 				// so replay and restore re-run the identical synthetic add. `resolvedFolderPath` is only the
 				// `synthetic:<path>` sentinel, which replay would wrongly treat as a filesystem path (#117).
 				const historyFolderPath = isSynthetic ? folderPath : resolvedFolderPath;
-				listPush(this.state.addHistory, {
+				// The history of the api manager the instance has now, which is not this one when a full reload swapped
+				// in its new copy while this add loaded: recorded here, the add would be lost at the next reload.
+				const history = this._historyState();
+				listPush(history.addHistory, {
 					apiPath: normalizedPath,
 					folderPath: historyFolderPath,
 					options: { ...restOptions, metadata, moduleID, [PERMISSION_RULE_LAYERS]: ruleLayers, [MOUNTED_BY]: mountedBy },
@@ -4596,7 +4601,7 @@ export class ApiManager extends ComponentBase {
 
 				// Track in operation history for reload replay
 				// Use normalizedPath (not effectivePath) so replay can re-apply versionConfig correctly
-				listPush(this.state.operationHistory, {
+				listPush(history.operationHistory, {
 					type: "add",
 					apiPath: normalizedPath,
 					folderPath: historyFolderPath,
@@ -4675,6 +4680,21 @@ export class ApiManager extends ComponentBase {
 	}
 
 	/**
+	 * The state whose history an add records into: that of the api manager the instance (or the run's copy) has now. It
+	 * is this manager's own, except for an add that began before a full reload swapped in its new copy and finishes
+	 * after: that add mounts into the new tree, so it goes in the new copy's history, and is replayed by the reloads
+	 * after it.
+	 * @returns {{addHistory: object[], operationHistory: object[]}} The state.
+	 * @private
+	 *
+	 * @example
+	 * listPush(this._historyState().operationHistory, entry);
+	 */
+	_historyState() {
+		return this.slothlet.handlers.apiManager.state;
+	}
+
+	/**
 	 * Roll back a failed versioned add.
 	 *
 	 * @description
@@ -4698,14 +4718,16 @@ export class ApiManager extends ComponentBase {
 	 * await this._rollbackFailedVersionedAdd({ moduleID, effectivePath, normalizedPath });
 	 */
 	async _rollbackFailedVersionedAdd({ moduleID, effectivePath, normalizedPath }) {
+		// The history the add was recorded in (see _historyState).
+		const history = this._historyState();
 		// --- Step 1: Scrub operationHistory ---
 		// removeApiComponent does not touch operationHistory. When called with
 		// { recordHistory: false } it suppresses its own "remove" push but leaves the "add"
 		// entry we already recorded. Remove it explicitly so no orphaned add survives.
 		// Use a manual reverse loop for Node 16 compatibility.
 		let addIndex = -1;
-		for (let i = this.state.operationHistory.length - 1; i >= 0; i--) {
-			const entry = this.state.operationHistory[i];
+		for (let i = history.operationHistory.length - 1; i >= 0; i--) {
+			const entry = history.operationHistory[i];
 			// The orphaned 'add' is the just-pushed tip, so this reverse scan matches on the first iteration;
 			// the non-match (false) arm is unreachable (same invariant as the addIndex guard below).
 			/* v8 ignore next */
@@ -4717,14 +4739,14 @@ export class ApiManager extends ComponentBase {
 		// The orphaned 'add' was just pushed by addApiComponent before registerVersion threw, so addIndex is always found; the -1 guard is defensive against a corrupted history.
 		/* v8 ignore next */
 		if (addIndex !== -1) {
-			listSplice(this.state.operationHistory, addIndex, 1);
+			listSplice(history.operationHistory, addIndex, 1);
 		}
 
 		// --- Step 2: Scrub addHistory ---
 		// removeApiComponent also filters addHistory internally, but only when it succeeds.
 		// Doing it here unconditionally ensures no orphaned addHistory entry remains even if
 		// the teardown call below throws.
-		this.state.addHistory = filterList(this.state.addHistory, (entry) => entry?.moduleID !== moduleID);
+		history.addHistory = filterList(history.addHistory, (entry) => entry?.moduleID !== moduleID);
 
 		// --- Step 3: Tear down the mounted subtree, cache, and ownership ---
 		// { recordHistory: false } prevents removeApiComponent from pushing a "remove" entry.

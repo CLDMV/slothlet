@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-22T12:49:53-08:00 (1795380593)
+ *	@Last modified time: 2026-11-22T23:48:52-08:00 (1795420132)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -167,7 +167,11 @@ function runtime_refuseUnknownCaller(prop) {
 	const store = activeContext();
 	if (!store?.slothlet?.handlers?.permissionManager?.isEnabled?.()) return;
 	const identity = liveRuntime.getCallerIdentity?.();
-	if (!identity?.unresolved || identity.unaccounted) return;
+	if (!identity?.unresolved) return;
+	// Code no call accounts for has no module running. Code no one is named for inside a call of a module that is gone
+	// (removed, or replaced by a restart) is that module's code, which has no standing: it is refused, as the async
+	// runtime refuses it.
+	if (identity.unaccounted && identity.inCallOf?.slothlet?.handlers?.apiManager?.isRemovedCaller?.(identity.inCallOf) !== true) return;
 	const target = typeof prop === "symbol" ? String(SymbolMethods.description(prop) ?? "") : String(prop);
 	throw new SlothletError("PERMISSION_DENIED", { caller: null, target: segmentsOf(target) });
 }

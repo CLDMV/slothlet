@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-19T05:14:42-08:00 (1795094082)
+ *	@Last modified time: 2026-11-22T23:50:46-08:00 (1795420246)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -486,6 +486,25 @@ function nextEpoch() {
  * @private
  */
 let forkingFrom = null;
+
+/**
+ * The path pattern of a rule target: the target with its level suffix (`:call`, `:read`, `:access`, `:write`,
+ * `:full`) or hook-type suffix left off, as the access checks match it (see PermissionManager#parseLevelTarget and
+ * PermissionManager#parseHookTarget). A target with no such suffix is its own pattern.
+ * @param {string} target - A rule target.
+ * @returns {string} Its path pattern.
+ * @example
+ * rulePathPattern("vault.secret:call"); // "vault.secret"
+ * rulePathPattern("db.*:error"); // "db.*"
+ */
+export function rulePathPattern(target) {
+	const lastColon = StringMethods.lastIndexOf(target, ":");
+	if (lastColon <= 0) return target;
+	const suffix = StringMethods.substring(target, lastColon + 1);
+	return SetMethods.has(HOOK_TARGET_TYPES, suffix) || MapMethods.has(RULE_LEVELS, suffix)
+		? StringMethods.substring(target, 0, lastColon)
+		: target;
+}
 
 export class PermissionManager extends ComponentBase {
 	/**
@@ -2981,6 +3000,27 @@ export class PermissionManager extends ComponentBase {
 	}
 
 	/**
+	 * Whether a rule deciding calls for `callerPath` names `targetPath` apart from `broaderPath`: its path pattern (the
+	 * target without its level suffix) matches `targetPath` and not `broaderPath`. A rule that decides no call (a
+	 * `:read` or `:write` level, a hook target) plays no part.
+	 *
+	 * @param {string} callerPath - The caller's api path.
+	 * @param {string} targetPath - The path asked about.
+	 * @param {string} broaderPath - The path it would otherwise be decided under.
+	 * @returns {boolean} True when such a rule exists.
+	 * @example
+	 * pm.callRuleNamesBeyond("mod.fn", "slothlet.context.run.self", "slothlet.context.run");
+	 */
+	callRuleNamesBeyond(callerPath, targetPath, broaderPath) {
+		for (const entry of mapValues(this.#callRules)) {
+			if (!entry.call || !this.#getCompiledPattern(entry.caller)(callerPath)) continue;
+			const matcher = this.#getCompiledPattern(entry.pathPattern);
+			if (matcher(targetPath) && !matcher(broaderPath)) return true;
+		}
+		return false;
+	}
+
+	/**
 	 * Enable the permission system globally.
 	 *
 	 * @returns {void}
@@ -3516,6 +3556,22 @@ export class PermissionManager extends ComponentBase {
 							hookTypes: ArrayMethods.join(setToArray(HOOK_TARGET_TYPES), ", ")
 						}),
 						received: suffix
+					});
+				}
+				// What comes before the suffix is the api path pattern. An api path holds no `:`, so one with a `:` of its own
+				// (`vault.secret:read:write`) would match nothing, and the rule would silently not apply.
+				const pathPattern = StringMethods.substring(rule.target, 0, lastColon);
+				// A suffix with nothing before it (`:before`, `:write`, `:call`, `:hook`) names no api path either.
+				if (pathPattern.length === 0) {
+					throw new this.SlothletError("PERMISSION_RULE_INVALID", {
+						reason: translate("PERMISSION_RULE_REASON_TARGET_PATH_EMPTY"),
+						received: rule.target
+					});
+				}
+				if (StringMethods.includes(pathPattern, ":")) {
+					throw new this.SlothletError("PERMISSION_RULE_INVALID", {
+						reason: translate("PERMISSION_RULE_REASON_TARGET_PATH_INVALID"),
+						received: rule.target
 					});
 				}
 			}

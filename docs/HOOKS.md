@@ -76,7 +76,7 @@ const api = await slothlet({
 
 Error hooks **always receive errors** regardless of this setting. `errors` only controls whether the error is thrown after all error hooks have executed.
 
-> Hooks (including error hooks) only execute when `hook.enabled: true`. If hooks are disabled entirely, errors throw normally with no hook execution. With hooks disabled `api.slothlet.hook` does not exist either (it is present when hooks are enabled, or when `diagnostics: true` is set).
+> Hooks (including error hooks) only execute when `hook.enabled: true`. If hooks are disabled entirely, errors throw normally with no hook execution. `api.slothlet.hook` is present on every instance, whether or not hooks start enabled: the `hook` option only sets the starting state, and `api.slothlet.hook.enable()` turns hooks on at runtime.
 
 ```javascript
 const api = await slothlet({

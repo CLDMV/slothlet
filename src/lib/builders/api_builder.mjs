@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-22T09:18:56-08:00 (1795367936)
+ *	@Last modified time: 2026-11-22T23:50:44-08:00 (1795420244)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -40,7 +40,7 @@ import { internals as frameworkInternalsInternals } from "#handlers/framework-in
 import { ceilingMembers, combineCeilings, identityCeilings, internals as trustedRootInternals } from "#handlers/trusted-root";
 import { getLanguage, t, translate, internals as translationsInternals } from "#i18n";
 import { assertOptionKeys } from "#helpers/config-schema";
-import { compilePattern } from "#helpers/pattern-matcher";
+import { rulePathPattern } from "#handlers/permission-manager";
 import { internals as instanceImportsInternals } from "#helpers/instance-imports";
 import { copyForRun, recordOperation, releaseRunWork, RUN_COPY, RUN_SELF, trackFlowStore, treeWrite } from "#helpers/flow-stores";
 import {
@@ -159,7 +159,8 @@ const RUN_SELF_TARGET = "slothlet.context.run.self";
  * The target a check of `target` is decided under for one caller. `run.self` is a path under `run`: a rule written for
  * it (one that matches `run.self` and not `run`) is judged beside the rules on `run` and the more specific wins, as for
  * any dotted target; with none for this caller, the rules on `run` decide it, so allowing or refusing `run` allows or
- * refuses `run.self` as well.
+ * refuses `run.self` as well. A rule's target is matched by its path pattern, its level suffix left off, as the access
+ * checks match it, and only a rule that decides calls counts.
  * @param {object} permissionManager - The instance's PermissionManager.
  * @param {string} target - The target being checked.
  * @param {string} callerPath - The caller's api path.
@@ -168,12 +169,7 @@ const RUN_SELF_TARGET = "slothlet.context.run.self";
  */
 function ruleTargetFor(permissionManager, target, callerPath) {
 	if (target !== RUN_SELF_TARGET) return target;
-	const rules = permissionManager.getRulesForCaller(callerPath);
-	for (let i = 0; i < rules.length; i++) {
-		const matcher = compilePattern(rules[i].target);
-		if (matcher(RUN_SELF_TARGET) && !matcher(RUN_TARGET)) return target;
-	}
-	return RUN_TARGET;
+	return permissionManager.callRuleNamesBeyond(callerPath, RUN_SELF_TARGET, RUN_TARGET) ? target : RUN_TARGET;
 }
 
 /**
@@ -526,6 +522,24 @@ function runtime_readAddOptions(slothlet, source, options) {
 		versionConfig = { version: version.tag };
 		if (version.default !== undefined) versionConfig.default = version.default;
 		if (version.metadata !== undefined) versionConfig.metadata = version.metadata;
+	}
+	// `permissions` is `{ allow: [...], deny: [...] }`: any other shape would be ignored, so the rules it was meant to
+	// register would silently not apply. Read by descriptor, so no getter runs here; an accessor is refused where the
+	// option is read.
+	if (read.permissions != null) {
+		objectArgument(read.permissions, "options.permissions");
+		for (let ofIndex = 0, ofList = ["allow", "deny"]; ofIndex < ofList.length; ofIndex++) {
+			const effect = ofList[ofIndex];
+			const descriptor = Reflect.getOwnPropertyDescriptor(read.permissions, effect);
+			if (descriptor && "value" in descriptor && descriptor.value !== undefined && !Arrays.isArray(descriptor.value)) {
+				const value = descriptor.value;
+				throw new slothlet.SlothletError("INVALID_ARGUMENT", {
+					argument: `options.permissions.${effect}`,
+					expected: "array",
+					received: value === null ? "null" : typeof value
+				});
+			}
+		}
 	}
 	return { source: content, options: read, versionConfig };
 }
@@ -2454,18 +2468,19 @@ export class ApiBuilder extends ComponentBase {
 			for (let i = 0; i < callerRules.length; i++) {
 				const rule = callerRules[i];
 				if (!rule || rule.effect !== "allow" || typeof rule.target !== "string") continue;
+				// Matched by its path pattern, its level or hook suffix left off, as the access checks match it.
+				const pattern = rulePathPattern(rule.target);
 
-				const couldMatchDescendant = StringMethods.startsWith(rule.target, prefix) || rule.target === "**" || rule.target === "*";
+				const couldMatchDescendant = StringMethods.startsWith(pattern, prefix) || pattern === "**" || pattern === "*";
 				if (!couldMatchDescendant) continue;
 
-				if (StringMethods.startsWith(rule.target, prefix) && conditionMatches(rule.condition)) {
+				if (StringMethods.startsWith(pattern, prefix) && conditionMatches(rule.condition)) {
 					return true;
 				}
 
 				const probePaths = [`${targetPath}.__probe__`];
-				if (StringMethods.startsWith(rule.target, prefix)) {
-					const suffix =
-						typeof rule.target === "string" ? StringMethods.slice(rule.target, prefix.length) : copyList(rule.target, prefix.length);
+				if (StringMethods.startsWith(pattern, prefix)) {
+					const suffix = StringMethods.slice(pattern, prefix.length);
 					const firstSegment = splitText(suffix, ".")[0];
 					if (firstSegment && !(RegExpMethods.exec(/[*!?{}]/u, firstSegment) !== null)) {
 						listUnshift(probePaths, `${targetPath}.${firstSegment}`);
@@ -6023,11 +6038,6 @@ export class ApiBuilder extends ComponentBase {
 			}
 		};
 
-		// Remove the `hook` namespace when hooks are disabled (unless diagnostics mode)
-		if (!config.hook?.enabled && config.diagnostics !== true) {
-			delete namespace.hook;
-		}
-
 		// Add diagnostics if enabled
 		if (config.diagnostics === true) {
 			namespace.diag = {
@@ -6358,7 +6368,7 @@ export class ApiBuilder extends ComponentBase {
 	createRunFunction() {
 		const slothlet = this.slothlet;
 		// Get the scope function reference (created first)
-		const scopeFunc = this.createScopeFunction();
+		const scopeFunc = this.createScopeFunction(true);
 
 		/**
 		 * Open a run as `run()` does: validate, then delegate to scope with the config's defaults.
@@ -6412,10 +6422,12 @@ export class ApiBuilder extends ComponentBase {
 
 	/**
 	 * Create root-level scope function (structured per-request context with options)
+	 * @param {boolean} [forRun=false] - Whether it serves `run()` / `run.self()`, whose own call was already decided:
+	 *   `scope({ self: true })` called as itself is decided under the rules on `slothlet.context.run.self` as well.
 	 * @returns {Function} Scope function that executes functions with isolated context
 	 * @private
 	 */
-	createScopeFunction() {
+	createScopeFunction(forRun = false) {
 		const slothlet = this.slothlet;
 		const scopeFunction = {
 			scope: async (options) => {
@@ -6446,6 +6458,9 @@ export class ApiBuilder extends ComponentBase {
 						received: describeScopeReceived(handView)
 					});
 				}
+				// `self: true` hands over the view `run.self()` does, so it is decided as a call of `run.self` too, beside the
+				// call of `scope` itself (see ruleTargetFor).
+				if (handView && !forRun) slothlet._enforceInternalPermission?.(RUN_SELF_TARGET);
 				// Who opens the run, read in the flow that opens it: module code is handed its own `self`, the host the run's.
 				const opener = handView ? slothlet.contextManager?.getCallerIdentity?.(slothlet.instanceID) : null;
 				const callArgs = (store) => (handView ? concatLists([runViewFor(slothlet, store, opener)], args) : args);

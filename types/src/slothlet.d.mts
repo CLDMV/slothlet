@@ -233,6 +233,22 @@ export type SlothletOptions = {
      */
     rules?: object[] | undefined;
     /**
+     * - How far a value handed into a call or returned out of one is searched for
+     * code: a leaf's function nested in an argument, or code nested in returned data. Host config only. See
+     * [PERMISSIONS.md](docs/PERMISSIONS.md#how-far-values-are-searched).
+     */
+    search?: {
+        /**
+         * - Levels of objects searched, the outermost counted (1 to 64).
+         */
+        depth?: number | undefined;
+        /**
+         * - Own properties read, all values of one search counted
+         * together (1 to 65536).
+         */
+        properties?: number | undefined;
+    } | undefined;
+    /**
      * - Event-rule section (`{ policy?: "deny"|"notify"|"allow", rules?: Array<object> }`).
      */
     events?: object | undefined;
@@ -336,7 +352,7 @@ export type SlothletOptions = {
             directories: any[];
         } | undefined;
         /**
-         * - When `mode: "lazy"`, immediately begins materializing all paths in the background after init and emits `materialized:complete` once everything has loaded (the v3 `tracking: { materialization: true }` option is folded into it). A function turns it on and is called once with `{ total, timestamp }` when everything has materialized — at once when that is already so when the instance finishes loading (always in eager mode). What it throws or rejects with is reported as a `WARNING_LIFECYCLE_HANDLER_ERROR` warning.
+         * - When `mode: "lazy"`, immediately begins materializing all paths in the background after init and emits `materialized:complete` once everything has loaded (the v3 `tracking: { materialization: true }` option is folded into it). A function turns it on and is called once with `{ total, at }` (the `materialized:complete` event's payload) when everything has materialized — at once when that is already so when the instance finishes loading (always in eager mode). What it throws or rejects with is reported as a `WARNING_LIFECYCLE_HANDLER_ERROR` warning.
          */
         materialize?: boolean | Function | undefined;
         /**

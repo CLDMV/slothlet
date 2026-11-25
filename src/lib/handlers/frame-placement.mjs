@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-22T11:45:01-08:00 (1795376701)
+ *	@Last modified time: 2026-11-23T18:12:59-08:00 (1795486379)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -26,6 +26,7 @@
  * @internal
  */
 import { segmentsOf } from "#helpers/segments";
+import { DEFAULT_SEARCH_DEPTH, DEFAULT_SEARCH_PROPERTIES } from "#helpers/defaults";
 import { AsyncResource, isNode, util } from "#helpers/platform";
 import {
 	rememberNewest,
@@ -79,6 +80,7 @@ import {
 	URL,
 	URLMethods,
 	URLSearchParams,
+	URLSearchParamsMethods,
 	WeakMap,
 	WeakMapMethods,
 	WeakRef,
@@ -92,6 +94,8 @@ import { guardInternal, isOwnTopLevelOf, ownBindingsRefusal } from "#helpers/ins
 const {
 	instanceCommonJSFiles,
 	instanceCommonJSVersion,
+	instanceCopyCount,
+	instanceCopyExports,
 	instanceImporters,
 	loadedScriptLookup,
 	loadedScriptText,
@@ -2051,25 +2055,29 @@ let apiValueHarborsCode = () => false;
 
 /**
  * How many levels of objects plain data may nest, the outermost counted, before it is treated as able to carry
- * code (#597).
- * @type {number}
+ * code (#597): the instance's `permissions.search.depth`, or the default for an instance with no `permissions` config.
+ * Read as a plain number on every call.
+ * @param {object|null|undefined} slothlet - The instance.
+ * @returns {number} The levels.
  * @private
  */
-const PLAIN_DATA_DEPTH = 4;
+const searchDepth = (slothlet) => slothlet?.config?.permissions?.search?.depth ?? DEFAULT_SEARCH_DEPTH;
 
 /**
  * How many own properties, all values of one call counted together, plain data may have before it is treated
- * as able to carry code (#597). Bounds what deciding costs for a large argument.
- * @type {number}
+ * as able to carry code (#597): the instance's `permissions.search.properties`, or the default. Bounds what
+ * deciding costs for a large argument.
+ * @param {object|null|undefined} slothlet - The instance.
+ * @returns {number} The properties.
  * @private
  */
-const PLAIN_DATA_PROPERTIES = 256;
+const searchProperties = (slothlet) => slothlet?.config?.permissions?.search?.properties ?? DEFAULT_SEARCH_PROPERTIES;
 
 /**
  * Whether a value is plain data, which can run none of the caller's code when a leaf converts, reads or walks
  * it: a primitive, one of slothlet's own api values, or a frozen non-Proxy object whose prototype is
  * `Object.prototype`, `Array.prototype` or `null` and whose own properties are all data properties holding plain
- * data — within {@link PLAIN_DATA_DEPTH} and {@link PLAIN_DATA_PROPERTIES}.
+ * data — within the instance's `permissions.search` ({@link searchDepth}, {@link searchProperties}).
  *
  * Frozen, because the decision is taken once, when the call is entered, and has to hold for as long as the call
  * runs: an object that can still be changed can be given a getter, a `toString` or a prototype — or have a
@@ -2117,19 +2125,20 @@ function runtime_isPlainData(value, depth, budget) {
 
 /**
  * Whether one value can carry a caller's code into a call.
- * @param {*} value - A receiver or an argument.
+ * @param {*} raw - A receiver or an argument.
  * @param {{remaining: number}} budget - Properties still allowed for the call (see {@link runtime_isPlainData}).
+ * @param {number} depth - Levels of objects allowed (see {@link searchDepth}).
  * @returns {boolean} True for an object or function that is neither slothlet's own nor plain data.
  * @private
  */
-const carriesCode = (raw, budget) => {
+const carriesCode = (raw, budget, depth) => {
 	// A module's view of a caller's value (an inbound or crossing view) stands for what the caller handed.
 	const value = raw !== null && (typeof raw === "object" || typeof raw === "function") ? inboundOriginal(raw) : raw;
 	return (
 		value !== null &&
 		(typeof value === "object" || typeof value === "function") &&
 		!WeakSetMethods.has(trustedRootOwn.genuineWrappers, value) &&
-		!runtime_isPlainData(value, PLAIN_DATA_DEPTH, budget)
+		!runtime_isPlainData(value, depth, budget)
 	);
 };
 
@@ -2141,22 +2150,25 @@ const carriesCode = (raw, budget) => {
  *
  * @param {*} thisArg - The call's receiver.
  * @param {ArrayLike<*>|null|undefined} args - The call's arguments.
+ * @param {object|null} [slothlet=null] - The instance the call is made in, whose `permissions.search` bounds the search.
  * @returns {boolean} True when the call is to be checked for supplied code.
  * @internal
  */
-export function carriesCallerCode(thisArg, args) {
-	const budget = { remaining: PLAIN_DATA_PROPERTIES };
-	if (carriesCode(thisArg, budget)) return true;
+export function carriesCallerCode(thisArg, args, slothlet = null) {
+	const budget = { remaining: searchProperties(slothlet) };
+	const depth = searchDepth(slothlet);
+	if (carriesCode(thisArg, budget, depth)) return true;
 	// The arguments are the trap's own array, never the caller's object, so reading them runs nothing.
 	const count = args?.length ?? 0;
-	for (let index = 0; index < count; index++) if (carriesCode(args[index], budget)) return true;
+	for (let index = 0; index < count; index++) if (carriesCode(args[index], budget, depth)) return true;
 	return false;
 }
 
 /**
  * The api nodes whose own leaf functions a call is handed as values (#597): a receiver or an argument that is a leaf
  * function slothlet wraps — imported raw from its file instead of read from `self` — or one held in plain data the
- * call is handed, within {@link PLAIN_DATA_DEPTH} and {@link PLAIN_DATA_PROPERTIES}. Each is gated for the caller as
+ * call is handed, within the instance's `permissions.search` ({@link searchDepth}, {@link searchProperties}). A leaf
+ * function nested deeper than that, or past the property budget, is not found. Each is gated for the caller as
  * though it had called it through `self`.
  *
  * Decided from `typeof`, a registry lookup and property descriptors, so nothing of the caller's runs: a Proxy is not
@@ -2165,18 +2177,21 @@ export function carriesCallerCode(thisArg, args) {
  *
  * @param {*} thisArg - The call's receiver.
  * @param {ArrayLike<*>|null|undefined} args - The call's arguments.
+ * @param {object|null} [slothlet=null] - The instance whose modules' copies of its leaf files count as well (see
+ *   {@link leafOfCopy}), and whose `permissions.search` bounds the search.
  * @returns {Array<object>|null} The wrappers, or null when there are none.
  * @internal
  */
-function handedLeafFunctions(thisArg, args) {
+function handedLeafFunctions(thisArg, args, slothlet = null) {
 	let found = null;
-	const budget = { remaining: PLAIN_DATA_PROPERTIES };
+	const budget = { remaining: searchProperties(slothlet) };
 	const visit = (value, depth) => {
 		if (value === null || (typeof value !== "object" && typeof value !== "function")) return;
 		// A module's view of a caller's value holds what the caller handed: that is what is looked into.
 		value = inboundOriginal(value);
 		if (typeof value === "function") {
-			const wrapper = WeakMapMethods.get(trustedRootOwn.implWrappers, value);
+			// A module's copy of a leaf's function (see leafOfCopy) is the leaf's function as well.
+			const wrapper = WeakMapMethods.get(trustedRootOwn.implWrappers, value) ?? (slothlet === null ? null : leafOfCopy(slothlet, value));
 			if (wrapper) listPush((found ??= []), wrapper);
 			return;
 		}
@@ -2205,9 +2220,10 @@ function handedLeafFunctions(thisArg, args) {
 			// An exotic object that refuses to be read holds nothing that can be found without running its code.
 		}
 	};
-	visit(thisArg, PLAIN_DATA_DEPTH);
+	const depth = searchDepth(slothlet);
+	visit(thisArg, depth);
 	const count = args?.length ?? 0;
-	for (let index = 0; index < count; index++) visit(args[index], PLAIN_DATA_DEPTH);
+	for (let index = 0; index < count; index++) visit(args[index], depth);
 	return found;
 }
 
@@ -5620,6 +5636,191 @@ function fileNodes(slothlet, filePath) {
 }
 
 /**
+ * The functions found in the copies of an instance's leaf files that a module's own import or require loaded (see
+ * {@link leafOfCopy}), each with the file and the place in its exports it holds: a WeakRef of the instance, the file
+ * (as {@link LEAF_FILES} keys it), and the export path joined by NUL.
+ * @type {WeakMap<Function, {slothlet: WeakRef<object>, file: string, key: string}>}
+ * @private
+ */
+const COPY_FUNCTIONS = new WeakMap();
+
+/**
+ * Per instance: what {@link runtime_indexLeafCopies} last looked at — the instance ID, how many leaf files and copies
+ * there were, the size of vitest's module record — and the files whose copies could not all be read yet.
+ * @type {WeakMap<object, {instanceID: string, files: number, copies: number, runner: number, pending: Set<string>}>}
+ * @private
+ */
+const COPY_INDEX_STATES = new WeakMap();
+
+/**
+ * vitest's module record's maps, read as they are kept: the runner adds each module it evaluates to them.
+ * @type {{files: Map<string, Set<object>>|null, ids: Map<string, object>|null}}
+ * @private
+ */
+const RUNNER_MAPS = (() => {
+	const files = RUNNER_MODULES ? Reflect.getOwnPropertyDescriptor(RUNNER_MODULES, "fileToModulesMap")?.value : undefined;
+	const ids = RUNNER_MODULES ? Reflect.getOwnPropertyDescriptor(RUNNER_MODULES, "idToModuleMap")?.value : undefined;
+	return { files: util.types.isMap?.(files) ? files : null, ids: util.types.isMap?.(ids) ? ids : null };
+})();
+
+/**
+ * A data property of an object, read from its descriptor so no getter runs; undefined for an accessor or none.
+ * @param {object} holder - The object.
+ * @param {string} key - The key.
+ * @returns {*} The value.
+ * @private
+ */
+function runtime_dataOf(holder, key) {
+	const descriptor = Reflect.getOwnPropertyDescriptor(holder, key);
+	return descriptor && "value" in descriptor ? descriptor.value : undefined;
+}
+
+/**
+ * The copies vitest's runner evaluated of a file for an instance (the modules whose id carries the instance's query),
+ * as {@link instanceCopyExports} reports copies.
+ * @param {string} instanceID - The instance.
+ * @param {string} file - The file's path.
+ * @returns {Array<{commonJS: boolean, value: *, runner: true}|{pending: true}>} The copies.
+ * @private
+ */
+function runtime_runnerCopies(instanceID, file) {
+	const found = [];
+	const held = RUNNER_MAPS.files === null ? undefined : MapMethods.get(RUNNER_MAPS.files, file);
+	if (held === undefined || !util.types.isSet?.(held)) return found;
+	for (const node of setValues(held)) {
+		if (node === null || typeof node !== "object" || util.types.isProxy(node)) continue;
+		const id = runtime_dataOf(node, "id");
+		if (typeof id !== "string") continue;
+		const cut = StringMethods.indexOf(id, "?");
+		if (cut === -1) continue;
+		if (URLSearchParamsMethods.get(new URLSearchParams(StringMethods.slice(id, cut + 1)), "slothlet_instance") !== instanceID) continue;
+		const exports = runtime_dataOf(node, "exports");
+		if (runtime_dataOf(node, "evaluated") !== true || exports === null || typeof exports !== "object") listPush(found, { pending: true });
+		else listPush(found, { commonJS: false, value: exports, runner: true });
+	}
+	return found;
+}
+
+/**
+ * Record the functions one copy of a leaf file exports (see {@link COPY_FUNCTIONS}), at the export paths the loader
+ * gives a node built from the file (see `ownership.indexModuleExports`): a named export at its name, the default
+ * export at `default` (a CommonJS file's `module.exports`), and a function held directly by either at its key under it.
+ * A function a node was built from is left to that node.
+ * @param {object} slothlet - The instance.
+ * @param {string} file - The file, as {@link LEAF_FILES} keys it.
+ * @param {{commonJS: boolean, value: *, runner?: boolean}} copy - The copy's exports.
+ * @returns {void}
+ * @private
+ */
+function runtime_indexCopy(slothlet, file, copy) {
+	const reference = new WeakRef(slothlet);
+	const add = (fn, key) => {
+		if (typeof fn !== "function" || WeakMapMethods.has(trustedRootOwn.implWrappers, fn) || WeakMapMethods.has(COPY_FUNCTIONS, fn)) return;
+		WeakMapMethods.set(COPY_FUNCTIONS, fn, { slothlet: reference, file, key });
+	};
+	const members = (holder, prefix) => {
+		if (holder === null || (typeof holder !== "object" && typeof holder !== "function") || util.types.isProxy(holder)) return;
+		for (let ofIndex = 0, ofList = Reflect.ownKeys(holder); ofIndex < ofList.length; ofIndex++) {
+			const key = ofList[ofIndex];
+			if (typeof key === "string") add(runtime_dataOf(holder, key), prefix + "\u0000" + key);
+		}
+	};
+	const value = copy.value;
+	try {
+		if (copy.commonJS) {
+			add(value, "default");
+			members(value, "default");
+			return;
+		}
+		if (value === null || typeof value !== "object") return;
+		for (let ofIndex = 0, ofList = Reflect.ownKeys(value); ofIndex < ofList.length; ofIndex++) {
+			const key = ofList[ofIndex];
+			if (typeof key !== "string" || key === "module.exports") continue;
+			const descriptor = Reflect.getOwnPropertyDescriptor(value, key);
+			let binding;
+			if (descriptor && "value" in descriptor) binding = descriptor.value;
+			else if (copy.runner && typeof descriptor?.get === "function") {
+				// vite's module runner exposes each binding through the getter it writes for it.
+				try {
+					binding = Reflect.apply(descriptor.get, value, []);
+				} catch {
+					continue;
+				}
+			} else continue;
+			add(binding, key);
+			members(binding, key);
+		}
+	} catch {
+		// A namespace with a binding not initialised yet holds nothing to record past it.
+	}
+}
+
+/**
+ * Bring an instance's {@link COPY_FUNCTIONS} up to date: when a leaf file or a copy of a file was loaded since it was
+ * last done, the copies of every leaf file are read again; otherwise only the files a copy of which could not be read
+ * yet are.
+ * @param {object} slothlet - The instance.
+ * @returns {void}
+ * @private
+ */
+function runtime_indexLeafCopies(slothlet) {
+	const files = WeakMapMethods.get(LEAF_FILES, slothlet);
+	const instanceID = slothlet.instanceID;
+	if (files === undefined || typeof instanceID !== "string") return;
+	const counts = {
+		instanceID,
+		files: MapMethods.size(files),
+		copies: instanceCopyCount(instanceID),
+		runner: RUNNER_MAPS.ids === null ? 0 : MapMethods.size(RUNNER_MAPS.ids)
+	};
+	const last = WeakMapMethods.get(COPY_INDEX_STATES, slothlet);
+	const unchanged =
+		last !== undefined &&
+		last.instanceID === counts.instanceID &&
+		last.files === counts.files &&
+		last.copies === counts.copies &&
+		last.runner === counts.runner;
+	if (unchanged && !SetMethods.size(last.pending)) return;
+	const state = { ...counts, pending: new Set() };
+	WeakMapMethods.set(COPY_INDEX_STATES, slothlet, state);
+	for (const file of mapKeys(files)) {
+		if (unchanged && !SetMethods.has(last.pending, file)) continue;
+		const copies = concatLists(instanceCopyExports(instanceID, file), runtime_runnerCopies(instanceID, file));
+		for (let ofIndex = 0, ofList = copies; ofIndex < ofList.length; ofIndex++) {
+			const copy = ofList[ofIndex];
+			if (copy.pending) SetMethods.add(state.pending, file);
+			else runtime_indexCopy(slothlet, file, copy);
+		}
+	}
+}
+
+/**
+ * The node whose leaf function a function is the copy of (option a of the hand-out rule): a module that imports or
+ * requires a leaf's file itself gets a module of its own (see `propagateInstanceQuery` in `helpers/instance-imports`),
+ * so the function it holds is not the one the node was built from, though it is the same export of the same file. A
+ * call of it is a call of that node, wherever it is reached. Null for any other function, and for a node that is gone.
+ * Reads the instance's records of the copies it loaded, so nothing of the function or the copies' code runs.
+ * @param {object} slothlet - The instance.
+ * @param {*} fn - The function.
+ * @returns {object|null} The node's wrapper.
+ * @internal
+ */
+function leafOfCopy(slothlet, fn) {
+	if (typeof fn !== "function" || !slothlet) return null;
+	runtime_indexLeafCopies(slothlet);
+	const entry = WeakMapMethods.get(COPY_FUNCTIONS, fn);
+	if (entry === undefined || WeakRefMethods.deref(entry.slothlet) !== slothlet) return null;
+	for (let ofIndex = 0, ofList = fileNodes(slothlet, entry.file); ofIndex < ofList.length; ofIndex++) {
+		const wrapper = ofList[ofIndex];
+		const internal = wrapper.____slothletInternal;
+		if (typeof internal?.impl !== "function" || runtime_isGone(wrapper)) continue;
+		const exportPath = internal.exportPath;
+		if (Arrays.isArray(exportPath) && ArrayMethods.join(mapList(exportPath, String), "\u0000") === entry.key) return wrapper;
+	}
+	return null;
+}
+
+/**
  * Whose code is running while no call of an instance's is (#597): the code nearest the stack's top that is not
  * slothlet's own or Node's decides. Code written in a file a module's leaves were built from is those leaves'; code of
  * the instance no leaf accounts for (a helper file of a module's, code compiled by someone) is no one's, and is refused
@@ -6073,6 +6274,7 @@ export function internals(consumer) {
 		frameDefiner,
 		handedLeafFunctions,
 		isLeafFileFunction,
+		leafOfCopy,
 		loadOnStack,
 		outerCallerCeiling,
 		ownReceiver,

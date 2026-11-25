@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-22T03:30:33-08:00 (1795347033)
+ *	@Last modified time: 2026-11-23T18:12:59-08:00 (1795486379)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -1627,7 +1627,10 @@ export class LiveContextManager {
 		const supplier = resolveSupplier(record, capture);
 		// Code that is accounted for and refused (a leaf's own function entered by a caller that may not call it).
 		if (supplier?.refused) return { currentWrapper: null, callerWrapper, unresolved: true };
-		if (supplier?.unaccounted) return { currentWrapper: null, callerWrapper, unresolved: true, unaccounted: true };
+		// Code no one is named for, run inside a module's call: the call's leaf comes with it, so code a gone module (one
+		// removed, or replaced by a restart) made is refused as that module's code is (see runtime_refuseUnknownCaller).
+		if (supplier?.unaccounted)
+			return { currentWrapper: null, callerWrapper, unresolved: true, unaccounted: true, inCallOf: record.wrapper };
 		return {
 			currentWrapper: supplier ? supplier.wrapper : record.wrapper,
 			callerWrapper,
@@ -2888,12 +2891,16 @@ export class LiveContextManager {
 
 	/**
 	 * Whether the code running now is part of a `run()` / `scope()` store's flow: a call of the instance is executing on
-	 * it, a call waiting on it is the code that picked up, or a `run()` / `scope()` callback is on the stack.
+	 * it, a call waiting on it is the code that picked up, a `run()` / `scope()` callback is on the stack, or the store is
+	 * back for work its finished run left behind (see {@link LiveContextManager#reopenFlowStore}).
 	 * @param {object} store - The store.
 	 * @returns {boolean} True when it is.
 	 * @private
 	 */
 	#partOfFlow(store) {
+		// A store put back for work its finished run left behind is among the instances only while that work runs (see
+		// reopenFlowStore): the code running now is that work, so what it schedules, and a run() it opens, are the run's.
+		if (store[REOPENED_FLOW] === true) return true;
 		if (store.__authoritativeWrapper || ArrayMethods.some(this.#enteredFor(store), (entry) => entry !== null)) return true;
 		const suspended = this.#suspendedFor(store);
 		if (SetMethods.size(suspended)) {
@@ -3202,7 +3209,7 @@ export class LiveContextManager {
 					parent:
 						entryIdentity.record ??
 						(entryCaller ? { wrapper: entryCaller, parent: null, flagged: false, ceiling: entryIdentity.ceiling ?? null } : null),
-					flagged: madeCode || carriesCallerCode(thisArg, args),
+					flagged: madeCode || carriesCallerCode(thisArg, args, currentWrapper.slothlet),
 					// Handed a function to run, which may pick up after an `await` with nothing of the call on the stack (#917).
 					handed: Arrays.isArray(args) && ArrayMethods.some(args, (arg) => typeof arg === "function"),
 					ceiling,

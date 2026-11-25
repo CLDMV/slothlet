@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:27:39-08:00 (1794882459)
+ *	@Last modified time: 2026-11-22T23:44:18-08:00 (1795419858)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -22,12 +22,14 @@
 // node:* specifiers, safe for the browser bundle's static-import graph (#123).
 import { DEFAULT_ROUTINES, RESERVED_EXPORTS } from "#helpers/defaults";
 
-// Custom uncaught exception handler for SlothletError
+// Readable output for an uncaught SlothletError, as a monitor: it sees the error before Node handles it, and changes
+// nothing else. A host with its own `uncaughtException` handler gets every error, a SlothletError included, and Node
+// ends the process for any other error the host leaves unhandled, as it would without slothlet.
 // `process` is undefined in a browser, so define the handler unconditionally but
 // only register it under Node — keeps this entry module loadable in a browser (#123).
 const __isNode = typeof process !== "undefined" && Boolean(process?.versions?.node);
 const __slothletUncaughtHandler = (error) => {
-	if (error.name === "SlothletError") {
+	if (error?.name === "SlothletError" && process.listenerCount("uncaughtException") === 0) {
 		console.error("\n================================================================================");
 		console.error(`ERROR [${error.code}]: ${error.message}`);
 
@@ -84,11 +86,8 @@ const __slothletUncaughtHandler = (error) => {
 		console.error("================================================================================\n");
 		process.exit(1);
 	}
-
-	// Re-throw other errors to let Node.js handle them
-	throw error;
 };
-if (__isNode) process.on("uncaughtException", __slothletUncaughtHandler);
+if (__isNode) process.on("uncaughtExceptionMonitor", __slothletUncaughtHandler);
 
 /**
  * The framework surface of a composed api: `api.slothlet.*`, `api.shutdown()`, `api.destroy()`.

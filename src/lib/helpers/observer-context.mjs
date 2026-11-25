@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-21T13:05:11-08:00 (1795295111)
+ *	@Last modified time: 2026-11-22T23:44:28-08:00 (1795419868)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -46,7 +46,7 @@
 
 import { AsyncResource } from "#helpers/platform";
 import { pinToCurrentCaller, recordOfCurrentFlow } from "#helpers/caller-pinning";
-import { openLayer, closeLayer, holdsValue, markLayer } from "#helpers/boundary-patch-layers";
+import { openLayer, closeLayer, holdsValue, markLayer, matchShape } from "#helpers/boundary-patch-layers";
 import {
 	anyAsyncInstance,
 	holdRunWorkOnce,
@@ -104,8 +104,8 @@ let isPatchingEnabled = false;
  * across by descriptor, so a static a consumer reaches through the constructor they were given
  * survives being wrapped exactly as declared: `PerformanceObserver.supportedEntryTypes` is a
  * non-enumerable accessor, and copying only enumerable keys left it `undefined` while patched.
- * `length`, `name`, and `prototype` are deliberately left alone; the wrapper's own `prototype` is
- * what makes `instanceof` and subclassing keep working.
+ * `prototype` is deliberately left alone: the wrapper's own `prototype` is what makes `instanceof` and
+ * subclassing keep working. `name` and `length` are the original's, set by `matchShape`.
  *
  * @param {Function} wrapper - Replacement constructor.
  * @param {Function} original - Constructor being replaced.
@@ -273,6 +273,7 @@ function runtime_patchObserverConstructor(name) {
 	});
 	runtime_countObserving(wrapper.prototype, original.prototype);
 	runtime_carryOwnExtras(wrapper, original);
+	matchShape(wrapper, original);
 	markLayer(wrapper, layer);
 	globalThis[name] = wrapper;
 	listPush(patched, { name, layer, wrapper });
