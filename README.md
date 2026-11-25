@@ -22,7 +22,7 @@ The name might suggest we're taking it easy, but don't be fooled. **Slothlet del
 > **🚀 Production Ready Modes:**
 >
 > - **Eager Mode**: Fully stable and production-ready for immediate module loading
-> - **Lazy Mode**: Production-ready with advanced copy-left materialization and about 2x faster startup (function calls close to eager once materialized)
+> - **Lazy Mode**: Production-ready with advanced copy-left materialization and 1.96x faster startup (function calls close to eager once materialized)
 
 [![Contributors]][contributors_url] [![Sponsor shinrai]][sponsor_url]
 
@@ -66,7 +66,7 @@ Every feature is covered by a comprehensive test suite: over **TODO(release): N 
 ### 🎯 **Dual Loading Strategies**
 
 - **Eager Loading**: Immediate loading for maximum performance in production environments
-- **Lazy Loading**: Copy-left materialization with look-ahead proxies (about 2x faster startup, function calls close to eager after materialization)
+- **Lazy Loading**: Copy-left materialization with look-ahead proxies (1.96x faster startup, function calls close to eager after materialization)
 
 > [!IMPORTANT]
 > **Function Call Patterns:**
@@ -76,7 +76,7 @@ Every feature is covered by a comprehensive test suite: over **TODO(release): N 
 
 ### ⚡ Performance Excellence
 
-- **Startup Performance**: about 2x faster startup in lazy mode (15.0ms vs 29.4ms to create an instance, v4.0.0)
+- **Startup Performance**: 1.96x faster startup in lazy mode (15.0ms vs 29.4ms to create an instance, v4.0.0)
 - **Runtime Performance**: Function calls cost a few microseconds in either mode once a module is materialized (`math.add`: 5.5μs eager, 7.6μs lazy, v4.0.0)
 - **Copy-left materialization**: Once loaded, modules stay materialized - no re-processing overhead
 - **Zero dependencies**: Pure Node.js implementation
@@ -197,7 +197,7 @@ const asyncResult = await api.async.process(); // Async stays async
 
 CommonJS works the same way: `const slothlet = require("@cldmv/slothlet")`.
 
-**Lazy mode** with copy-left materialization — all calls awaited, ~2× faster startup:
+**Lazy mode** with copy-left materialization — all calls awaited, 1.96× faster startup:
 
 ```javascript
 const api = await slothlet({ mode: "lazy", base: "./api" });
@@ -231,8 +231,8 @@ Also configurable: `depth`, `hidden` (globs hiding files/folders from the API), 
 | Mode                            | Startup       | Function calls                               | Best for                                   |
 | ------------------------------- | ------------- | -------------------------------------------- | ------------------------------------------ |
 | **Eager** (default)             | Loads upfront | Sync stays sync, async stays async           | Production, predictable performance        |
-| **Lazy**                        | ~2× faster    | All calls awaited; materialized on first use | Large APIs, startup-sensitive apps         |
-| **Lazy + `loader.materialize`** | ~2× faster    | Pre-warmed by background loader              | Best of both — lazy startup, eager runtime |
+| **Lazy**                        | 1.96× faster  | All calls awaited; materialized on first use | Large APIs, startup-sensitive apps         |
+| **Lazy + `loader.materialize`** | 1.96× faster  | Pre-warmed by background loader              | Best of both — lazy startup, eager runtime |
 
 ```javascript
 // Lazy + background materialization
