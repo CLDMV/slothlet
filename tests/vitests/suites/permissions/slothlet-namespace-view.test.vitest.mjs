@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-16T18:30:15-08:00 (1794882615)
+ *	@Last modified time: 2026-11-25T11:48:14-08:00 (1795636094)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -154,7 +154,7 @@ describe.each(Object.keys(SETUPS))("self.slothlet as a module lists and inspects
 		it.each(PATHS)("reads a name %s does not hold as undefined, as at an api node", async (path) => {
 			await build();
 			if (!api.reader.reaches(path)) return;
-			// `$$typeof` and `0` are what serializers and Node 22/24's util.inspect probe an object for.
+			// `$$typeof` and `0` are what serializers and Node's util.inspect probe an object for.
 			for (const name of ["$$typeof", "0", "notAMember"]) expect(api.reader.absent(path, name), name).toBe("undefined");
 		});
 

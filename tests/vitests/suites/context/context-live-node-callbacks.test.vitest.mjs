@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T13:33:22-08:00 (1794951202)
+ *	@Last modified time: 2026-11-25T11:45:47-08:00 (1795635947)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -378,7 +378,7 @@ describe("Node callback APIs > the patch itself", () => {
 				const id = `${group}.${name}`;
 				if (covered.has(id) || notPatched.has(id)) continue;
 				if (group === "crypto" && callbackFree(name)) continue;
-				// Node 22's `diffieHellman` takes no callback.
+				// Skip `diffieHellman` where it takes no callback.
 				if (id === "crypto.diffieHellman" && crypto.diffieHellman.length < 2) continue;
 				missing.push(id);
 			}

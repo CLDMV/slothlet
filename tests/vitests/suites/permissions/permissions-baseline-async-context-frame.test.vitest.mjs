@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-17T07:26:24-08:00 (1794929184)
+ *	@Last modified time: 2026-11-25T11:47:24-08:00 (1795636044)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -17,11 +17,10 @@
  * @fileoverview The `async-context-frame` baseline check: Node's `AsyncContextFrame` is on.
  *
  * @description
- * Where the frame is off (Node 22's default, or Node 24 and later run with `--no-async-context-frame`), Node keeps what
+ * Where the frame is off (Node run with `--no-async-context-frame`), Node keeps what
  * an `AsyncLocalStorage` holds on async resources module code can reach. The check tells by trying it, never by reading
- * the flags, so a child process is started with the frame on and off on the Node running the suite (on Node 22:
- * `--experimental-async-context-frame` or nothing; on Node 24 and later: nothing or `--no-async-context-frame`, on the
- * command line and through `NODE_OPTIONS`). Under "on" a frame that is off is one warning and the instance starts;
+ * the flags, so a child process is started with the frame on and off on the Node running the suite (nothing or
+ * `--no-async-context-frame`, on the command line and through `NODE_OPTIONS`). Under "on" a frame that is off is one warning and the instance starts;
  * under "strict" it refuses with `PERMISSION_BASELINE_UNMET` naming the check; under "off" and "disabled" no check runs.
  * The check against stand-in probes runs in this process.
  * @module tests/vitests/suites/permissions/permissions-baseline-async-context-frame
@@ -40,10 +39,10 @@ const CHILD = path.join(ROOT, "child.mjs");
 const BASE = path.join(REPO, "api_tests", "api_test_stack_settings", "api");
 const MAJOR = Number(process.versions.node.split(".")[0]);
 /** Node flags for a child with the frame on, and with it off. */
-const FRAME_ON = MAJOR < 24 ? ["--experimental-async-context-frame"] : [];
-const FRAME_OFF = MAJOR < 24 ? [] : ["--no-async-context-frame"];
-/** The fix the reason names on this Node. */
-const FIX = MAJOR < 24 ? "--experimental-async-context-frame" : "--no-async-context-frame";
+const FRAME_ON = [];
+const FRAME_OFF = ["--no-async-context-frame"];
+/** The fix the reason names. */
+const FIX = "--no-async-context-frame";
 
 beforeAll(() => {
 	rmSync(ROOT, { recursive: true, force: true });
