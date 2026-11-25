@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-22T23:31:44-08:00 (1795419104)
+ *	@Last modified time: 2026-11-25T03:22:05-08:00 (1795605725)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -748,7 +748,9 @@ export class ApiManager extends ComponentBase {
 	 * @param {unknown} value - Value to write. Functions/objects are wrapped via UnifiedWrapper; primitives stored as-is.
 	 * @param {object|Array<object>|null} callerWrapper - Caller's wrapper from ALS (may be null for external code); a list,
 	 *   the executing wrapper first, when the writer acts for several modules (#597) — each has to own the path.
-	 * @returns {void}
+	 * @returns {boolean} Whether the write was made, as `Reflect.set` answers it: false when the parent refuses the member
+	 *   (a closed root or node, a read-only member), so the caller's set trap answers false and an assignment in strict
+	 *   code throws, as it would on a plain object (#960).
 	 * @throws {SlothletError} `LOOSE_SET_NOT_OWNED` when a module-bound caller
 	 *   writes outside its own namespace.
 	 * @throws {SlothletError} `LOOSE_SET_RESERVED_KEY` when any path segment is
@@ -845,8 +847,7 @@ export class ApiManager extends ComponentBase {
 		// `runtime_runWrite` in unified-wrapper): the tree it reads is left as it is, its parent namespaces included.
 		const runSink = unifiedWrapperOwn.runtime_takeRunWrite(this.slothlet.boundApi, coercedPath);
 		if (runSink !== null) {
-			runSink({ op: "set", parts, value: stored, created: placed?.created ? placed.owner : null });
-			return;
+			return runSink({ op: "set", parts, value: stored, created: placed?.created ? placed.owner : null });
 		}
 
 		// Walk to the parent container, creating namespace wrappers as needed.
@@ -855,8 +856,11 @@ export class ApiManager extends ComponentBase {
 			moduleID: callerModuleID,
 			sourceFolder: callerSourceFolder
 		});
-		parent[finalKey] = stored;
-		if (placed?.created) this.recordCreated(parts, placed.owner, value);
+		// The parent answers the write as an object does: a closed parent or a read-only member refuses it with false, which
+		// the set trap hands back, rather than a TypeError from this (strict) code whatever the caller's mode (#960).
+		const written = Reflect.set(parent, finalKey, stored);
+		if (written && placed?.created) this.recordCreated(parts, placed.owner, value);
+		return written;
 	}
 
 	/**

@@ -7,7 +7,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-11-22T12:49:53-08:00 (1795380593)
+ *	@Last modified time: 2026-11-25T03:22:13-08:00 (1795605733)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  *
@@ -232,8 +232,7 @@ const selfTraps = {
 		// held to the root of the tree, as a change to `self` as a whole is (#625).
 		if (typeof prop === "symbol") {
 			runtime_selfChangeTarget(ctx, prop);
-			ctx.self[prop] = value;
-			return true;
+			return Reflect.set(ctx.self, prop, value);
 		}
 		// A module never replaces the framework's namespace or root functions, isolated scope or not (#625).
 		if (ctx.slothlet) runtime_assertFrameworkRootChange(ctx.slothlet, prop);
@@ -241,8 +240,7 @@ const selfTraps = {
 		// api (`makeRunSelf` in builders/api_builder): the write goes to it, which makes it through
 		// `apiManager.setOwnedProperty` with every check the write below meets, and keeps it in the run.
 		if (ctx.slothlet?.boundApi && ctx.self !== ctx.slothlet.boundApi) {
-			ctx.self[prop] = value;
-			return true;
+			return Reflect.set(ctx.self, prop, value);
 		}
 		const apiManager = ctx.slothlet?.handlers?.apiManager;
 		if (apiManager && typeof apiManager.setOwnedProperty === "function") {
@@ -251,12 +249,12 @@ const selfTraps = {
 			// Ownership is anchored to the currently executing module.
 			// Code a caller supplied to another module's call writes as the supplier and every call of its ceiling,
 			// and each of them has to own the path (#597).
-			apiManager.setOwnedProperty(String(prop), value, writersOf(ctx));
+			// The write's own answer: false when the root refuses it (closed, or a read-only member), as on a plain object (#960).
+			return apiManager.setOwnedProperty(String(prop), value, writersOf(ctx));
 		} else {
 			/* v8 ignore next */
-			ctx.self[prop] = value;
+			return Reflect.set(ctx.self, prop, value);
 		}
-		return true;
 	}
 };
 
